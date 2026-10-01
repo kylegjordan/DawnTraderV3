@@ -35,6 +35,7 @@ def sim(frames, arm):
     # segment change (a run is never merged across the RTH boundary).
     best = {'rth': (0, 0.0), 'off': (0, 0.0)}
     runs_over_1h = {'rth': 0, 'off': 0}
+    over1h_runs = {'rth': [], 'off': []}  # (frames, seconds) of every run over 1 h — the density disclosure
     cur = 0; cur_t0 = None; cur_seg = None; last_t = None
 
     def close_run(t_end):
@@ -44,7 +45,9 @@ def sim(frames, arm):
             # the LONGEST stretch is the longest in TIME (Langston inc-2 Step-4 BLOCKER-1: it was chosen by frame count and
             # its duration then reported, so a dense short run could hide a sparse long one)
             if dur > best[cur_seg][1]: best[cur_seg] = (cur, dur)
-            if dur > 3600: runs_over_1h[cur_seg] += 1
+            if dur > 3600:
+                runs_over_1h[cur_seg] += 1
+                over1h_runs[cur_seg].append((cur, dur))
         cur = 0
 
     for (t, b, a) in frames:
@@ -93,15 +96,15 @@ def sim(frames, arm):
             cur += 1
         last_t = t
     if cur and last_t is not None: close_run(last_t)
-    return out, best, runs_over_1h
+    return out, best, runs_over_1h, over1h_runs
 
 
 tot = {True: collections.Counter(), False: collections.Counter()}
 per = []
 for s, f in sorted(rows.items()):
-    o1, b1, h1 = sim(f, True); o0, b0, h0 = sim(f, False)
+    o1, b1, h1, r1runs = sim(f, True); o0, b0, h0, _ = sim(f, False)
     tot[True].update(o1); tot[False].update(o0)
-    per.append((s, b1['off'], b0['off'], h1['off'], b1['rth'], h0['off']))
+    per.append((s, b1['off'], b0['off'], h1['off'], b1['rth'], h0['off'], r1runs['off']))
 
 
 def summ(c, seg):
@@ -121,7 +124,18 @@ print()
 over1h = [p for p in per if p[3] > 0]  # the direct object: symbols with >= 1 off-hours run over 1 h (runs_over_1h)
 print(f"# OFF-HOURS: symbols whose longest no-decision stretch exceeds 1 h with the arm ON: {len(over1h)} of {len(per)}"
       f" (arm OFF: {sum(1 for p in per if p[5] > 0)} of {len(per)})")
-print("symbol longest_off_arm(frames,s) longest_off_noarm(frames,s) off_runs_over_1h_arm longest_rth_arm(frames,s)")
+print("# WARNING - DENSITY BIAS (Langston inc-2 Step-4 r2): a run is counted over SAMPLED frames with no density floor, so a capture gap"
+      " can merge two sub-hour stretches into one over-hour stretch. Direction: it INFLATES the arm's overnight blindness (argues"
+      " for the hold). Read each over-1 h run with its frame count and implied seconds-per-frame below; the capture's nominal"
+      " cadence is ~4-5 s. Against it: the ticker is event-driven, so a sparse stretch can be a book that genuinely stayed blown;"
+      " the snapshot writer is time-throttled, so a brief recovery can go uncaptured. Read the headline as an UPPER bound.")
+print("symbol longest_off_arm(frames,s) longest_off_noarm(frames,s) off_runs_over_1h_arm longest_rth_arm(frames,s) | over-1h runs: frames,seconds,s/frame")
 per.sort(key=lambda x: -x[1][1])
-for s, b1, b0, h1, r1, _h0 in per:
-    print(f"{s} ({b1[0]},{b1[1]:.0f}s) ({b0[0]},{b0[1]:.0f}s) {h1} ({r1[0]},{r1[1]:.0f}s)")
+for s, b1, b0, h1, r1, _h0, runs in per:
+    dens = ' '.join(f"[{n},{d:.0f}s,{d / max(n, 1):.0f}s/f]" for n, d in sorted(runs, key=lambda x: -x[1]))
+    print(f"{s} ({b1[0]},{b1[1]:.0f}s) ({b0[0]},{b0[1]:.0f}s) {h1} ({r1[0]},{r1[1]:.0f}s){' | ' + dens if dens else ''}")
+allruns = [r for p in per for r in p[6]]
+if allruns:
+    spf = sorted(d / max(n, 1) for n, d in allruns)
+    print(f"# over-1 h runs: {len(allruns)} across {len(over1h)} symbols; seconds-per-frame median {spf[len(spf) // 2]:.0f}, "
+          f"max {spf[-1]:.0f}; {sum(1 for x in spf if x > 60)} of {len(spf)} runs average more than 60 s between frames")

@@ -19,6 +19,9 @@
 #      configuration quirk, not policy (`rotateModule: true`, `max_size 1G`; `pm2 flush` truncates it): if it SHRANK since
 #      the last run, a flush/rotation happened => warn on the reach alert and read it from the start.
 #      A run that cannot read pm2.log or the deploy record exits 3 on the gap alert.
+#   ALERT KEYS are one per condition (Langston inc-2 Step-4 r2 nit: nothing resolves these automatically, and an unresolved
+#   row silences every later mint on its key): gap-contiguity, gap-subcadence, gap-boundaries, gap-reflog, reach,
+#   reach-pm2, reach-reflog — all prefixed xs-frame-extract-.
 #      THE DEPLOY RECORD IS SELF-DATING (sha + deployed_at) and is the primary source; pm2.log restarts carry a TIME
 #      but no sha. The classifier splits runs at EVERY pm2 restart, a superset of code boundaries, so the degraded path
 #      (no record sample, no reflog line) loses the SHA ATTRIBUTION of a span, never the BOUNDARY — and it cannot be silent:
@@ -78,7 +81,7 @@ for f in $(cat "$SEEN"); do
 done
 printf '%s\n' $present > "$SEEN"
 if [ -n "$gap" ]; then
-  alert "xs-frame-extract-gap" warning "XS_FRAME archive gap: rotated error log evicted before extraction" \
+  alert "xs-frame-extract-gap-contiguity" warning "XS_FRAME archive gap: rotated error log evicted before extraction" \
     "The bid-trigger window's frame corpus lost rotated file(s):$gap. The classifier's population is incomplete for that span; state it in the read. (3n.q7 inc-2 P4)"
   status=3
 fi
@@ -90,7 +93,7 @@ if [ -n "$oldest" ]; then
   if [ "$age" -lt "$CADENCE_S" ]; then
     # Langston inc-2 Step-4 attack (3): a loss the last_seen check cannot see needs >= retain rotations inside one cadence,
     # which forces oldest-age <= cadence — so this is not a warning any more, files may ALREADY be gone unseen.
-    alert "xs-frame-extract-gap" warning "XS_FRAME archive: rotation faster than the extraction cadence"       "The oldest retained error__ file ($oldest) is only ${age}s old (< the ${CADENCE_S}s cadence): rotated files can have been evicted between two runs without either run seeing them. Treat the corpus as possibly incomplete since the last run and shorten the cadence. (3n.q7 inc-2 P4)"
+    alert "xs-frame-extract-gap-subcadence" warning "XS_FRAME archive: rotation faster than the extraction cadence"       "The oldest retained error__ file ($oldest) is only ${age}s old (< the ${CADENCE_S}s cadence): rotated files can have been evicted between two runs without either run seeing them. Treat the corpus as possibly incomplete since the last run and shorten the cadence. (3n.q7 inc-2 P4)"
     status=3
   elif [ "$age" -lt $((2 * CADENCE_S)) ]; then
     alert "xs-frame-extract-reach" warning "XS_FRAME archive reach below 2x cadence" \
@@ -102,7 +105,7 @@ fi
 
 # 4. boundaries: new pm2 restart markers + the deploy record verbatim
 if [ ! -r "$PM2_LOG" ] || [ ! -r "$DEPLOY_RECORD" ]; then
-  alert "xs-frame-extract-gap" warning "XS_FRAME archive: restart/deploy boundaries unreadable" \
+  alert "xs-frame-extract-gap-boundaries" warning "XS_FRAME archive: restart/deploy boundaries unreadable" \
     "pm2.log or the deploy record could not be read, so this run's restart/deploy boundaries were not archived. (3n.q7 inc-2 P4 r3)"
   status=3
 else
@@ -110,7 +113,7 @@ else
   off=$(cat "$PM2_OFF" 2>/dev/null || echo 0)
   first=$(head -c 20 "$PM2_LOG")
   if [ "$size" -lt "$off" ]; then
-    alert "xs-frame-extract-reach" warning "XS_FRAME archive: pm2.log shrank (flush or rotation)" \
+    alert "xs-frame-extract-reach-pm2" warning "XS_FRAME archive: pm2.log shrank (flush or rotation)" \
       "pm2.log is ${size} B, below the ${off} B already read: it was flushed or rotated. Reading from its start; restarts between the last run and the flush are lost unless the app logs recorded them. First line now starts '$first'. (3n.q7 inc-2 P4 r3)"
     off=0
   fi
@@ -125,13 +128,13 @@ fi
 
 # 5. the app clone's reflog: every deploy's sha + time (append-only; a shrink means it was rewritten)
 if [ ! -r "$REFLOG" ]; then
-  alert "xs-frame-extract-gap" warning "XS_FRAME archive: the app clone reflog is unreadable"     "$REFLOG could not be read, so this run's deploy sha/time pairs were not archived. (3n.q7 inc-2 P4 r4)"
+  alert "xs-frame-extract-gap-reflog" warning "XS_FRAME archive: the app clone reflog is unreadable"     "$REFLOG could not be read, so this run's deploy sha/time pairs were not archived. (3n.q7 inc-2 P4 r4)"
   status=3
 else
   rsize=$(stat -c %s "$REFLOG")
   roff=$(cat "$REF_OFF" 2>/dev/null || echo 0)
   if [ "$rsize" -lt "$roff" ]; then
-    alert "xs-frame-extract-reach" warning "XS_FRAME archive: the app clone reflog shrank"       "$REFLOG is ${rsize} B, below the ${roff} B already archived: it was expired or rewritten. Re-reading from its start. (3n.q7 inc-2 P4 r4)"
+    alert "xs-frame-extract-reach-reflog" warning "XS_FRAME archive: the app clone reflog shrank"       "$REFLOG is ${rsize} B, below the ${roff} B already archived: it was expired or rewritten. Re-reading from its start. (3n.q7 inc-2 P4 r4)"
     roff=0
   fi
   {
