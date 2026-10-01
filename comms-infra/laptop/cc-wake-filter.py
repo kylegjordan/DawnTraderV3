@@ -407,6 +407,7 @@ _MARK_ID = re.compile(r"\bid=([^\s\]]+)")
 _MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
 _REJECTED = [0]
 _SKIPPED_PROSE = [0]
+_SEED_LOST = [0]
 
 
 REJECTS_KEPT = 20
@@ -482,6 +483,14 @@ def record_owners(body, ts):
         try:
             _save_owners(owners)
         except OSError as _e:
+            if SEED:
+                # A seed rebuilds the whole record and has no wake to protect, so a lost marker must FAIL it. A raise would
+                # not: the per-line handler catches it and the seed went on to mark itself seeded (measured, Step 7). Count
+                # it; #@CAUGHTUP refuses to stamp seeded_at when any were lost.
+                _SEED_LOST[0] += 1
+                print(f"[cc-wake-filter] SEED: alert-owner save failed, this seed will NOT be marked seeded: {_e}",
+                      file=sys.stderr, flush=True)
+                return
             # Langston (Step 7 approval): this runs FIRST on every Langston line, inside the per-line try whose handler
             # prints LINE DROPPED and moves on — so a raise here also dropped the WAKE on the same line, and the next
             # #@POS committed past it. The owner record is advisory (it narrows the alert list); the wake is not. Name
@@ -565,6 +574,10 @@ for raw in sys.stdin:
         if line.startswith("#@CAUGHTUP"):
             # (b) (Langston): only a record that finished a whole-inbox seed may narrow the alert list. A present but
             # unseeded record (the Step-3 stray file) must never read as "every alert is unrouted".
+            if _SEED_LOST[0]:
+                print(f"[cc-wake-filter] seed FAILED: {_SEED_LOST[0]} marker save(s) lost; NOT marked seeded — run it again",
+                      file=sys.stderr)
+                sys.exit(4)
             o = _load_owners()
             o.setdefault("_meta", {})["seeded_at"] = _utc()
             _save_owners(o)

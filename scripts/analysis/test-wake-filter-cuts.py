@@ -263,6 +263,19 @@ if WIN:
     _ook = (b"owner-file wake" in _op.stdout and b"LINE DROPPED" not in _op.stderr and b"alert-owner record NOT saved" in _op.stderr
             and _op.returncode == 0)
     if not _ook: fails += 1
+    # ...but a SEED must not swallow it: it rebuilds the whole record, has no wake to protect, and a half-done seed must
+    # never be marked seeded. Same hold, --seed-owners: expect a non-zero exit and no seeded_at.
+    _EDIR = tempfile.mkdtemp(prefix="wakeseed-"); _EST = os.path.join(_EDIR, "CC-A.json"); _EOF = os.path.join(_EDIR, "CC-A.alert-owners.json")
+    open(_EOF, "w", encoding="utf-8").write('{}')
+    _eh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_EOF}'); time.sleep(7)"])
+    _t.sleep(0.4)
+    _ein = "\n".join([f"==> {LOG} <==", _orow, "#@CAUGHTUP"]) + "\n"
+    _ep = subprocess.run([sys.executable, FILTER, "CC-A", "--seed-owners", "--state", _EST], input=_ein.encode("utf-8"), capture_output=True, timeout=120)
+    _eh.wait()
+    _erec = json.load(open(_EOF, encoding="utf-8"))
+    _eok = _ep.returncode != 0 and not (_erec.get("_meta") or {}).get("seeded_at")
+    if not _eok: fails += 1
+    print(f"  {'PASS' if _eok else '** FAIL **':10} the same hold during a SEED fails the seed and leaves it unmarked (rc={_ep.returncode}, seeded={bool((_erec.get('_meta') or {}).get('seeded_at'))})")
     print(f"  {'PASS' if _ook else '** FAIL **':10} owner record held open past the retry: the wake on that line is still delivered and the lost routing named "
           f"(rc={_op.returncode}, woke={b'owner-file wake' in _op.stdout}, dropped={b'LINE DROPPED' in _op.stderr})")
 print()
