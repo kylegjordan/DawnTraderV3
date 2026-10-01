@@ -120,7 +120,9 @@ _HEARTBEAT_BAD = re.compile(
     r"|\bbridge[s]?\b[^|]{0,40}\b(?:down|dead|failed|inactive)\b"
     # B-TOKEN-BURN-CUT: a heartbeat reporting a DEAD watcher or an unanswered control is a problem
     # and must still be delivered; "not armed" and "all alive" are not verdicts of failure.
-    r"|\bwatchers:\s*[^|]*\bDEAD\b|\bcontrol:\s*NOT answered\b",
+    # STUCK (Step 7, Langston): a running watcher that cannot save — the heartbeat reports it instead of DEAD, because
+    # re-arming it adds a duplicate. It is a problem too, and the stuck session is reachable, so it must be delivered.
+    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK)\b|\bcontrol:\s*NOT answered\b",
     re.I)
 
 def is_allclear_heartbeat(sender, text):
@@ -351,13 +353,36 @@ def save_state(st):
     # transient. A save that still fails RAISES: the order is print-then-save (see #@CAUGHTUP), so a raise re-delivers
     # the wake on the next run rather than losing it — swallowing it would exit 0 having advanced nothing, silently.
     # (Corrected per Langston: this comment first said the reverse.)
+    _replace_retrying(tmp, STATE)
+
+
+def _replace_retrying(tmp, dst):
+    """os.replace, retried ~5 s on Windows' refusal while another process holds dst open; the last try raises."""
     for _attempt in range(25):
         try:
-            os.replace(tmp, STATE)
+            os.replace(tmp, dst)
             return
         except PermissionError:
             time.sleep(0.2)
-    os.replace(tmp, STATE)
+    os.replace(tmp, dst)
+
+
+def _sweep_tmp():
+    """Langston nit (Step 7 approval): a per-process temp file survives the raise path. Remove ours older than an hour —
+    a write takes milliseconds, so an hour-old one belongs to no live process."""
+    d = os.path.dirname(STATE)
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return
+    for n in names:
+        if n.startswith(ALIAS + ".") and ".tmp" in n:
+            p = os.path.join(d, n)
+            try:
+                if time.time() - os.path.getmtime(p) > 3600:
+                    os.remove(p)
+            except OSError:
+                pass
 
 
 # ── B-TOKEN-BURN-CUT amendment 1, OBJ-6 P12: THE ALERT-OWNER RECORD ──────────────────────────────────────
@@ -397,10 +422,10 @@ def _load_owners():
 
 def _save_owners(owners):
     os.makedirs(os.path.dirname(OWNERS_FILE), exist_ok=True)
-    tmp = OWNERS_FILE + ".tmp"
+    tmp = OWNERS_FILE + f".tmp.{os.getpid()}"   # per process, as save_state (Langston, Step 7 approval)
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(owners, f)
-    os.replace(tmp, OWNERS_FILE)
+    _replace_retrying(tmp, OWNERS_FILE)   # the alert hook reads this file every turn, so a hold is expected
 
 
 def record_owners(body, ts):
@@ -454,7 +479,15 @@ def record_owners(body, ts):
             owners[aid] = {"owner": own, "ts": ts, "changed_at": ts, "flips": int(prev.get("flips") or 0) + 1}
             changed = True
     if changed:
-        _save_owners(owners)
+        try:
+            _save_owners(owners)
+        except OSError as _e:
+            # Langston (Step 7 approval): this runs FIRST on every Langston line, inside the per-line try whose handler
+            # prints LINE DROPPED and moves on — so a raise here also dropped the WAKE on the same line, and the next
+            # #@POS committed past it. The owner record is advisory (it narrows the alert list); the wake is not. Name
+            # the lost routing and carry on: the marker's owner is missing until Langston states it again.
+            print(f"[cc-wake-filter] alert-owner record NOT saved, this line's routing is lost until re-stated: {_e}",
+                  file=sys.stderr, flush=True)
 
 
 if SEED:
@@ -497,6 +530,7 @@ class _Tap:
 
 
 if ONCE:
+    _sweep_tmp()
     TAP = _Tap(sys.stdout)
     sys.stdout = TAP
     STATE_NOW = load_state()
@@ -562,8 +596,9 @@ for raw in sys.stdin:
                 try:
                     with open(STATE + ".alive", "w", encoding="utf-8") as f:
                         f.write(_utc() + "\n")
-                except OSError:
-                    pass
+                except OSError as _e:
+                    # Stale is load-bearing now (Langston nit): a failed .alive write must say so, not pass silently.
+                    print(f"[cc-wake-filter] .alive NOT refreshed: {_e}", file=sys.stderr, flush=True)
         elif parts[0] == "#@CAUGHTUP" and TAP.delivered:
             _checkpoint()          # print-then-save (judgement call (a)): a kill between the two
             sys.exit(0)            # re-delivers — a duplicate wake, never a lost one

@@ -11,6 +11,8 @@ process.stdout.write(
   '   "absent" from an empty or failed read. A failed read must produce a REFUSAL, not a recollection.\n' +
   '2. WAKE WATCHER: if no WAKE events have arrived recently AND a compaction/resume just happened,\n' +
   '   re-arm the watcher per MEMORY 4.5 - a background task, NOT a Monitor (judge liveness by its file\n' +
-  '   ~/.claude/cc-wake-state/<ALIAS>.json.alive; do NOT blind-re-arm - two watchers deliver every wake twice).\n'
+  '   ~/.claude/cc-wake-state/<ALIAS>.json.alive). STALE IS NOT PROOF OF DEAD: before arming run\n' +
+  '   `bash ~/.claude/cc-wake-count.sh <ALIAS>` - 0 = re-arm; 1 = one is running, do NOT arm;\n' +
+  '   2+ = TaskStop extras (two watchers deliver every wake twice).\n'
 );
 process.exit(0);

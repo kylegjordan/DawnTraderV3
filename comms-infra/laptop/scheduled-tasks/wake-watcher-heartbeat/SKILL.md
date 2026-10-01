@@ -37,20 +37,22 @@ print(len(due),'due:',[str(o.get('id'))[:8] for o in due])"
 
 2b. WATCHER LIVENESS — read on THIS laptop, wakes nobody (B-TOKEN-BURN-CUT, #1127). Each session's event-only watcher writes C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json.alive every 300 s. For each of CC-A CC-B CC-C CC-INFRA:
    python -c "import os,time,sys; p='C:/Users/kyleg/.claude/cc-wake-state/'+sys.argv[1]+'.json.alive'; print(sys.argv[1], 'none' if not os.path.exists(p) else int(time.time()-os.path.getmtime(p)))" <ALIAS>
-   Older than 900 s = DEAD (three missed keepalives). No file = "not armed" (a session that has not switched to the event-only watcher yet, or is closed).
+   Older than 900 s is NOT yet DEAD: since cfe70f92c a watcher that runs but cannot save its position stops refreshing the file on purpose (Langston, B-TOKEN-BURN-CUT Step 7). For each stale alias, count its running watchers:
+   bash ~/.claude/cc-wake-count.sh <ALIAS>
+   0 = DEAD. 1 or more = STUCK (running but not saving; 2+ also means a duplicate watcher) — report it as "STUCK: <ALIAS> (<count> running)", never as DEAD, because the fix is the opposite: re-arming a STUCK watcher adds another. No file = "not armed" (a session that has not switched to the event-only watcher yet, or is closed).
    ⛔ A DEAD watcher CANNOT be woken by the Discord post in step 4 — it is the thing that is dead. That is why a DEAD result adds --notify (Kyle's phone) in step 4.
 
 2c. DAILY CONTROL — only on the first run at or after 09:00 local, and only if ALL FOUR .alive files exist (until then some session is still on the old watcher, which would treat the control line as a message and WAKE):
    ssh root@204.168.141.77 'for a in CC-A CC-B CC-C CC-INFRA; do echo "WATCHER-CONTROL $a $(date -u +%Y%m%d)" >> /var/log/cc-wake.log; done'
    A live watcher answers by writing C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json.control starting with that YYYYMMDD — no print, no wake. On the NEXT run, report any session whose .control does not start with today's date as "control NOT answered".
 
-3. Compose ONE plain line: "bridges active: <y/n> | inbox-log last-write: <time> | active-unacked alerts: <none / list ids> | watchers: <all alive / DEAD: names / not armed: names> | control: <answered / NOT answered: names / not run>". If a bridge is NOT active or an alert is active+unacked, say so clearly so the woken sessions act on it.
+3. Compose ONE plain line: "bridges active: <y/n> | inbox-log last-write: <time> | active-unacked alerts: <none / list ids> | watchers: <all alive / DEAD: names / STUCK: names (count) / not armed: names> | control: <answered / NOT answered: names / not run>". If a bridge is NOT active or an alert is active+unacked, say so clearly so the woken sessions act on it.
 
 4. POST that line to Discord so all three watchers fire. The message MUST name ALL FOUR sessions so none of them filter it out. ⚠️ Infra Claude was added 2026-08-26: the post named three, so his filter correctly SUPPRESSED it as "names other sessions, not me" and he sat outside this whole safety layer, and the sender MUST be "Heartbeat" — NOT any session's display name, or that session will treat it as its own post and never wake. Run:
 
    ssh root@204.168.141.77 '/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --sender "Heartbeat" --message "OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: <the line from step 3>."'
 
-   An all-clear post wakes nobody (every filter suppresses it, #995 OBJ-10). Add --notify ONLY when a watcher is DEAD or the control was NOT answered: that pings Kyle's phone, because a dead watcher cannot be reached any other way (the out-of-band wake is `B-WAKE-OUT-OF-BAND`, after live). Otherwise do NOT add --notify.
+   An all-clear post wakes nobody (every filter suppresses it, #995 OBJ-10). Add --notify ONLY when a watcher is DEAD or the control was NOT answered (NOT for STUCK: a stuck watcher is running, so this post reaches its session): that pings Kyle's phone, because a dead watcher cannot be reached any other way (the out-of-band wake is `B-WAKE-OUT-OF-BAND`, after live). Otherwise do NOT add --notify.
 
 5. Output the same one line as your result so it also shows in the run history.
 

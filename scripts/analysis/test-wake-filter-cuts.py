@@ -34,6 +34,16 @@ HB_NOT_STALE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hou
 HB_BORDERLINE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
                  "bridges active: y | inbox-log last-write: borderline stale | "
                  "active-unacked alerts: none.")
+# Step 7 (Langston): the heartbeat now reports a running-but-not-saving watcher as STUCK instead of DEAD.
+HB_STUCK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+            "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
+            "watchers: STUCK: CC-B (2 running) | control: not run.")
+HB_DEAD_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+             "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
+             "watchers: DEAD: CC-C | control: not run.")
+HB_ALIVE_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+              "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
+              "watchers: all alive | control: answered.")
 PUSH_ROUTINE = "OLD Claude / NEW Claude / ANALYST Claude — review branch moved to abc1234. Pull before you push."
 LANG_MARKER_MINE = ("NEW Claude — triage done, routing it.\n\n"
                     "[[ALERT id=deadbeef-0000-0000-0000-000000000000 owner=CC-A action=\"look at it\"]]")
@@ -77,6 +87,9 @@ CASES = [
     ("cc_outbound", "Heartbeat",   HB_REWORD,      True,  "POSITIVE CONTROL: an unrecognised heartbeat shape still wakes (fail-safe)"),
     ("cc_outbound", "Heartbeat",   HB_NOT_STALE,   False, "Q2: \"quiet but NOT stale\" is a negation, not a verdict -> SUPPRESSED"),
     ("cc_outbound", "Heartbeat",   HB_BORDERLINE,  False, "Q2: \"borderline stale\" is hedged, not a verdict -> SUPPRESSED"),
+    ("cc_outbound", "Heartbeat",   HB_STUCK,       True,  "Step 7: a heartbeat reporting a STUCK watcher (running, not saving) is a problem -> WAKES"),
+    ("cc_outbound", "Heartbeat",   HB_DEAD_W,      True,  "POSITIVE CONTROL: a heartbeat reporting a DEAD watcher -> WAKES"),
+    ("cc_outbound", "Heartbeat",   HB_ALIVE_W,     False, "REGRESSION GUARD: watchers all alive, control answered -> SUPPRESSED"),
     ("cc_outbound", "Push notice", PUSH_ROUTINE,   False, "REGRESSION GUARD: routine push notice still suppressed"),
     ("langston_outbound", None,    LANG_MARKER_MINE,       False, "marker owns me but prose names someone else -> no wake (the duplicate, cut)"),
     ("langston_outbound", None,    LANG_MARKER_MINE_NAMED, True,  "POSITIVE CONTROL: marker owns me AND he addresses me -> still wakes, with NO routing tag", ""),
@@ -189,32 +202,69 @@ _pok = (_pmeta.get("skipped_as_prose") == 3 and len(_prej) == 4
 if not _pok: fails += 1
 print(f"  {'PASS' if _pok else '** FAIL **':10} prose rule: 3 quotations skipped and counted, 4 real defects reported (incl. no-id-with-owner and a spaced id) "
       f"(skipped_as_prose={_pmeta.get('skipped_as_prose')}, rejects={len(_prej)})")
-# Step 7 finding (CC-B, 2026-10-01): Windows refuses os.replace while another process holds the state file open. Hold it
-# for 1.5 s while the filter runs a keepalive and then a wake: it must deliver the wake, exit 0 and save the position.
-_HDIR = tempfile.mkdtemp(prefix="wakehold-"); _HST = os.path.join(_HDIR, "CC-A.json")
-open(_HST, "w", encoding="utf-8").write('{"pos": {}}')
-_holder = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_HST}'); time.sleep(1.5)"])
-import time as _t; _t.sleep(0.4)
-_hin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE",
-                  "#@POS /var/log/cc-wake.log 7 0", "Claude Old: held-file wake", "#@POS /var/log/cc-wake.log 7 30"]) + "\n"
-_hp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _HST], input=_hin.encode("utf-8"), capture_output=True, timeout=120)
-_holder.wait()
-_hst = json.load(open(_HST, encoding="utf-8"))
-_hok = _hp.returncode == 0 and b"held-file wake" in _hp.stdout and b"Traceback" not in _hp.stderr and (_hst.get("pos") or {})
-if not _hok: fails += 1
-print(f"  {'PASS' if _hok else '** FAIL **':10} a state file held open by another process: the wake is delivered and the position saved (rc={_hp.returncode}, saved={bool((_hst.get('pos') or {}))})")
-# Langston (Step 7 approval): a save that keeps failing must NOT leave a fresh-and-green .alive. Hold the state file
-# open for 7 s (beyond the ~5 s retry) during a KEEPALIVE: the filter must survive, skip the save, and NOT write .alive.
-_KDIR = tempfile.mkdtemp(prefix="wakestale-"); _KST = os.path.join(_KDIR, "CC-A.json")
-open(_KST, "w", encoding="utf-8").write('{"pos": {}}')
-_kh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_KST}'); time.sleep(7)"])
-_t.sleep(0.4)
-_kin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE"]) + "\n"
-_kp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _KST], input=_kin.encode("utf-8"), capture_output=True, timeout=120)
-_kh.wait()
-_kok = (not os.path.exists(_KST + ".alive")) and b"keepalive save skipped" in _kp.stderr and b"Traceback" not in _kp.stderr
-if not _kok: fails += 1
-print(f"  {'PASS' if _kok else '** FAIL **':10} a save that keeps failing leaves .alive UNWRITTEN (stale), and the watcher survives (alive_written={os.path.exists(_KST + '.alive')})")
+# Langston nit (Step 7 approval): a per-process temp file survives the raise path. A --once start removes this alias's
+# temp files older than an hour and leaves fresh ones (a live watcher's write in progress) and other aliases' alone.
+_SDIR = tempfile.mkdtemp(prefix="wakesweep-"); _SST = os.path.join(_SDIR, "CC-A.json")
+open(_SST, "w", encoding="utf-8").write('{"pos": {}}')
+_old = [os.path.join(_SDIR, n) for n in ("CC-A.json.tmp.111", "CC-A.alert-owners.json.tmp.222")]
+_keep = [os.path.join(_SDIR, n) for n in ("CC-A.json.tmp.333", "CC-B.json.tmp.444")]
+for _f in _old + _keep: open(_f, "w").write("x")
+for _f in _old + [_keep[1]]: os.utime(_f, (os.path.getmtime(_f) - 7200,) * 2)
+subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _SST],
+               input=b"==> /var/log/cc-wake.log <==\n#@AT /var/log/cc-wake.log 7 0\n", capture_output=True, timeout=120)
+_sok = not any(os.path.exists(f) for f in _old) and all(os.path.exists(f) for f in _keep)
+if not _sok: fails += 1
+print(f"  {'PASS' if _sok else '** FAIL **':10} start-up sweep: this alias's hour-old temp files removed, a fresh one and another alias's kept "
+      f"(old_left={[os.path.basename(f) for f in _old if os.path.exists(f)]}, kept={[os.path.basename(f) for f in _keep if os.path.exists(f)]})")
+# Langston (Step 7 approval): the held-file legs below test a WINDOWS mechanism. On POSIX an open reader does not block
+# os.replace, so they cannot discriminate there (the stale leg even reads FAIL) — they SKIP, with the reason printed.
+WIN = os.name == 'nt'
+if not WIN:
+    print("  SKIP       the three held-file legs (state held / save keeps failing / owner record held): Windows-only mechanism (an open reader does not block os.replace on POSIX)")
+if WIN:
+    # Step 7 finding (CC-B, 2026-10-01): Windows refuses os.replace while another process holds the state file open. Hold it
+    # for 1.5 s while the filter runs a keepalive and then a wake: it must deliver the wake, exit 0 and save the position.
+    _HDIR = tempfile.mkdtemp(prefix="wakehold-"); _HST = os.path.join(_HDIR, "CC-A.json")
+    open(_HST, "w", encoding="utf-8").write('{"pos": {}}')
+    _holder = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_HST}'); time.sleep(1.5)"])
+    import time as _t; _t.sleep(0.4)
+    _hin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE",
+                      "#@POS /var/log/cc-wake.log 7 0", "Claude Old: held-file wake", "#@POS /var/log/cc-wake.log 7 30"]) + "\n"
+    _hp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _HST], input=_hin.encode("utf-8"), capture_output=True, timeout=120)
+    _holder.wait()
+    _hst = json.load(open(_HST, encoding="utf-8"))
+    _hok = _hp.returncode == 0 and b"held-file wake" in _hp.stdout and b"Traceback" not in _hp.stderr and (_hst.get("pos") or {})
+    if not _hok: fails += 1
+    print(f"  {'PASS' if _hok else '** FAIL **':10} a state file held open by another process: the wake is delivered and the position saved (rc={_hp.returncode}, saved={bool((_hst.get('pos') or {}))})")
+    # Langston (Step 7 approval): a save that keeps failing must NOT leave a fresh-and-green .alive. Hold the state file
+    # open for 7 s (beyond the ~5 s retry) during a KEEPALIVE: the filter must survive, skip the save, and NOT write .alive.
+    _KDIR = tempfile.mkdtemp(prefix="wakestale-"); _KST = os.path.join(_KDIR, "CC-A.json")
+    open(_KST, "w", encoding="utf-8").write('{"pos": {}}')
+    _kh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_KST}'); time.sleep(7)"])
+    _t.sleep(0.4)
+    _kin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE"]) + "\n"
+    _kp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _KST], input=_kin.encode("utf-8"), capture_output=True, timeout=120)
+    _kh.wait()
+    _kok = (not os.path.exists(_KST + ".alive")) and b"keepalive save skipped" in _kp.stderr and b"Traceback" not in _kp.stderr
+    if not _kok: fails += 1
+    print(f"  {'PASS' if _kok else '** FAIL **':10} a save that keeps failing leaves .alive UNWRITTEN (stale), and the watcher survives (alive_written={os.path.exists(_KST + '.alive')})")
+    # Langston (Step 7 approval): the alert-owner save had no retry and no handler, and a raise there dropped the WAKE on
+    # the same line. Hold the owner record open 7 s while a Langston reply addressed to me, carrying a new marker, arrives:
+    # the wake must still be delivered, the lost routing named, and no LINE DROPPED. (Control: cfe70f92c drops the line.)
+    _ODIR = tempfile.mkdtemp(prefix="wakeown-"); _OST = os.path.join(_ODIR, "CC-A.json"); _OOF = os.path.join(_ODIR, "CC-A.alert-owners.json")
+    open(_OST, "w", encoding="utf-8").write('{"pos": {}}'); open(_OOF, "w", encoding="utf-8").write('{}')
+    _oh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_OOF}'); time.sleep(7)"])
+    _t.sleep(0.4)
+    _orow = json.dumps({"ts": "2026-10-01T21:30:00+00:00", "kind": "langston_outbound",
+                        "text": "OLD Claude — owner-file wake.\n\n[[ALERT id=c244f2b8-a1eb-4d26-abf2-000000000001 owner=CC-A action=\"x\"]]"})
+    _oin = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", _orow, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
+    _op = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _OST], input=_oin.encode("utf-8"), capture_output=True, timeout=120)
+    _oh.wait()
+    _ook = (b"owner-file wake" in _op.stdout and b"LINE DROPPED" not in _op.stderr and b"alert-owner record NOT saved" in _op.stderr
+            and _op.returncode == 0)
+    if not _ook: fails += 1
+    print(f"  {'PASS' if _ook else '** FAIL **':10} owner record held open past the retry: the wake on that line is still delivered and the lost routing named "
+          f"(rc={_op.returncode}, woke={b'owner-file wake' in _op.stdout}, dropped={b'LINE DROPPED' in _op.stderr})")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")
