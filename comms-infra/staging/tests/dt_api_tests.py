@@ -478,7 +478,8 @@ check("no env file: exit 3, says the setter has not run", c == 3 and "has not be
 R.close()
 
 # ═══════════════════════════ round 3 ═══════════════════════════
-# S1: two self-healed 5xx logins more than an hour apart are NOT "the login is failing"
+# S1 as r3 built it ("two 5xx logins over an hour apart do NOT page") was a REGRESSION — Langston,
+# Gate 1-1 BLOCKER-1: nothing logged in between, so the heal was never observed (#453). It now pages.
 R = Rig()
 R.app.login_status = 500
 R.run("GET", "/api/settings")
@@ -489,7 +490,8 @@ with open(R.st("login-ledger.jsonl"), "w") as fh:
         fh.write(json.dumps(x) + chr(10))
 os.unlink(R.st("negcache.json"))
 c, o, e = R.run("GET", "/api/settings")
-check("r3 S1: two 5xx logins over an hour apart do NOT page", c == 3 and "PAGE" not in e and len(R.app.logins()) == 2, e)
+check("Gate 1-1: two 5xx logins 83 min apart, nothing between, DO page login-failing (r3's ceiling reversed)",
+      c == 5 and "login-failing" in e and len(R.app.logins()) == 2, e)
 R.close()
 
 # S1: a login answer that is none of 200/401/404/429/5xx pages at once, sticky, and is not retried
