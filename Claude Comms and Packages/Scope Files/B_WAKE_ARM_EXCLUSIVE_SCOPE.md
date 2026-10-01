@@ -135,3 +135,17 @@ Every test writes its expected result before it runs, and has a control that fai
 | (c) Windows-only | §2.6, declared limit |
 | OBJ-7 census short | OBJ-7a (repo, quoted census) / OBJ-7b (OWED rows with owners) |
 | add: the stand-down line is received and acted on | OBJ-8, 4/4 |
+
+## 7. STEP 1 APPROVED — Langston, 2026-10-01 (~22:40Z, at `9d3b4fe79`), with seven conditions. These bind Step 2 and supersede §2/§3 where they differ.
+
+He re-derived the arm command (`MEMORY.md:19`, runbook `:8`), the enumerator (`cc-wake-count.sh:18`) and the OBJ-7a census (`while :; do P=` returns exactly 3: those two plus the frozen switch script). §2.1's laptop table and `/proc/$$/winpid`: RULED ON REPORTED FACT, tolerable because both fail safe and OBJ-2/OBJ-8 exercise them live.
+
+- **C1 (binding) — OBJ-9 stays in the batch but is NOT gated on OBJ-8.** The OLD arm reads a non-zero pipeline as RETRY (`[ "${PIPESTATUS[1]}" = 0 ] && break; sleep 30`). Under a flipped OBJ-9, an old-arm session refuses at `--positions`, retries forever, and its task never completes: no notification, no stand-down line, a session that believes it is armed. ⇒ **measure that exact case (old arm text + flipped filter) and state the outcome the session experiences BEFORE the flip commit; if it is silent, the flip does not ship, and §2.5's interim (an unleased arm refuses to a live holder) is the terminal state, recorded as the batch's honest limit.**
+- **C2 (binding) — no self-exclusion.** `--positions` carries no `--once`, and the previous iteration's `--once` has exited before the next `--positions` runs (a sequential pipeline, then `sleep 30`), so nothing of ours can match the predicate at check time, by construction. An exclusion that mis-fires would exclude a real foreign reader and acquire. ⇒ drop it, write the by-construction argument into §2.2, and prove it in OBJ-3a with the real arm (the count reads 0 while our own `--positions` runs). This also closes the parent-chain hole.
+- **C3 (binding) — the `--once` backstop.** (a) The lease re-check is the FIRST thing `--once` does, before reading a byte of stdin and before any save, or a loser consumes wake bytes nobody re-sends. (b) The shell breaks on **non-zero**, not on the literal 5. Exit-code propagation through the WindowsApps `python3.exe` launcher is unverified: measure it once.
+- **C4 (binding) — one predicate, one implementation.** The filter owns the reader enumeration (`--count <ALIAS>`); `cc-wake-count.sh` becomes a wrapper (or the reverse). One home for `Name='python.exe'` and the regex.
+- **C5 (binding) — the enumerator's limits are now the ACQUIRE condition.** "A watcher under an interpreter not named python.exe is not counted" means a false zero, an acquire, and two readers. ⇒ the filter asserts `basename(sys.executable).lower() == 'python.exe'` at startup and refuses otherwise; the limit is carried in writing in §2.6/§4.
+- **C6 (non-blocking) — F1's justification was false.** `-match` is an unanchored substring, so with `--loop` appended after the mode flag, today's regex already reads 1. Either drop the regex change or state the real reason; run the OBJ-8 count control on the UNCHANGED script first.
+- **C7 (non-blocking) — OBJ-3b uses a REAL orphan** made with §2.1's procedure (loop shell killed without its tree), not a stand-in.
+
+**OBJ-7b, CC-B's row: DONE** — NEW Claude replaced the `ps | grep` reminder with a pointer to shared MEMORY 4.5 at `4a463ad0b` (to be re-read at the ref at Step 10).
