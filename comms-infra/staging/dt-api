@@ -798,20 +798,26 @@ def do_call(req):
         # "Nothing was sent" exit 3 — the r2 401-path class, on this branch. The probe is skipped
         # instead: no page on a check that did not run, the body goes back ONCE (the _emit below),
         # exit 1. A role-less row answers 403 again on the next call and pages then.
-        pst = None
+        # ⛔ r5 BLOCKER-2: the page is written INSIDE the lock, like every page() call ("Callers hold
+        # the Lock"). Written after it, the setter could clear page.json between the two and a sticky
+        # crew-role-missing would land over the clear, refusing every login for a fixed cause.
+        # page_role_missing() exits 5 through __exit__ (the lock is released); `as e` tells that
+        # apart from the lock's own refusal.
         try:
             with Lock():
                 pst, _, _ = app_request("GET", "/api/settings", token=rec["accessToken"],
                                         timeout=PROBE_TIMEOUT_S)
-        except SystemExit:
+                if pst == 403:
+                    _emit(b)
+                    sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered "
+                                     "HTTP 403 (body on stdout); the page below is why.\n")
+                    page_role_missing()                # SystemExit(5)
+        except SystemExit as e:
+            if e.code == 5:
+                raise                                  # the page — its body is already out, once
             sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP 403 "
                              "(body on stdout); the line above is about the role check after it, which "
                              "did not run, so nothing was paged and no retry was sent.\n")
-        if pst == 403:
-            _emit(b)
-            sys.stderr.write("dt-api: NOTE — your request WAS sent once and the app answered HTTP "
-                             "403 (body on stdout); the page below is why.\n")
-            page_role_missing()
     if st is None:
         die(3, "FAILED: the app did not answer (%s). For a write, check whether it took effect "
                "before retrying." % b.decode("utf-8", "replace"))

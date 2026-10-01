@@ -657,6 +657,51 @@ check("r3: a page keeps a token another caller minted meanwhile, and drops the d
       kept and not os.path.exists(R.st("token.json")))
 R.close()
 
+# Gate 1-1 r5 BLOCKER-2 (Langston): the direct-403 branch writes its crew-role-missing page UNDER
+# the lock. In-process, so the write itself can be watched: page_write is wrapped to ask, at the
+# moment of writing, whether the credential lock is held (flock is per open file — a second open
+# of the lock file conflicts with dt-api's own, in the same process).
+R = Rig()
+R.run("GET", "/api/settings")                       # a cached token, so the call goes straight out
+R.app.no_role = True                                # the call AND the probe answer the no-role 403
+spec = importlib.util.spec_from_loader("dtapi_mod2", SourceFileLoader("dtapi_mod2", R.bin))
+M = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(M)
+held_at_write = []
+_orig_pw = M.page_write
+
+
+def _watch_pw(*a, **k):
+    fd = os.open(M.LOCK_FILE, os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        held_at_write.append(False)
+    except OSError:
+        held_at_write.append(True)
+    finally:
+        os.close(fd)
+    return _orig_pw(*a, **k)
+
+
+M.page_write = _watch_pw
+import io  # noqa: E402
+_out, _err = sys.stdout, sys.stderr
+sys.stdout, sys.stderr = io.TextIOWrapper(io.BytesIO()), open(os.devnull, "w")
+code = None
+try:
+    M.do_call(M.parse(["GET", "/api/guarded/route"]))
+except SystemExit as e:
+    code = e.code
+finally:
+    sys.stdout.flush()
+    body = sys.stdout.buffer.getvalue()
+    sys.stdout, sys.stderr = _out, _err
+check("Gate 1-1 r5 BLOCKER-2: the direct-403 page is written WHILE the lock is held, exit 5, body once",
+      held_at_write == [True] and code == 5 and body.count(b"no role assigned") == 1,
+      "%s %s %r" % (held_at_write, code, body[:80]))
+R.close()
+
 # ═══════════════════════════ Gate 1-1 (Langston, 2026-10-01) ═══════════════════════════
 def ledger_rows(rig, rows):
     with open(rig.st("login-ledger.jsonl"), "w") as fh:
