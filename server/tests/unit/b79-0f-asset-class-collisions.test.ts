@@ -32,7 +32,7 @@ import {
 import { UNIVERSE_BOOTSTRAP_SET } from '../../asset_classes/xstock_spot/universe-bootstrap.js';
 
 const USD_COLLISIONS = ['CVX/USD','DASH/USD','EDU/USD','MET/USD','OPEN/USD','PEP/USD','SUI/USD','T/USD',
-  // `3n.q3` P9 / `#1145` — the 2026-10-02 re-audit
+  // `3n.q3` P9 / `#1145` — the 2026-10-01 re-audit
   'A/USD','ADI/USD','CAT/USD','ES/USD','IR/USD','STRK/USD','STX/USD','WELL/USD'];
 
 // B79.0n.UNIVERSE-DISCOVERY 2026-05-21: registry is now DB-backed + empty at
@@ -63,7 +63,7 @@ const EUR_COLLISIONS = ['CVX/EUR','DASH/EUR','EDU/EUR','MET/EUR','OPEN/EUR','PEP
   'A/EUR','ADI/EUR','CAT/EUR','ES/EUR','IR/EUR','STRK/EUR','STX/EUR','WELL/EUR'];
 
 describe('B79.0f — XSTOCK_SPOT_KRAKEN_COLLISIONS membership', () => {
-  it('contains exactly 32 entries (16 USD + 16 EUR — the 2026-10-02 re-audit added 8 of each and removed BDX/USD)', () => {
+  it('contains exactly 32 entries (16 USD + 16 EUR — the 2026-10-01 re-audit added 8 of each and removed BDX/USD)', () => {
     expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.size).toBe(32);
     // ⛔ `3n.q3` (Langston Step 4): BDX is no longer a Kraken crypto pair; BDX/USD is a live xStock.
     expect(XSTOCK_SPOT_KRAKEN_COLLISIONS.has('BDX/USD')).toBe(false);

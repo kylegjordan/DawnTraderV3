@@ -26,6 +26,6 @@ SET LOCAL lock_timeout = '5s';
 ALTER TABLE rtb_shadow_pairings ADD COLUMN IF NOT EXISTS exit_booking_arm VARCHAR(16);
 
 COMMENT ON COLUMN rtb_shadow_pairings.exit_booking_arm IS
-  'B-VTS-NO-DECISION-VALVE (3n.q3): how the shadow close was booked - bid | clamp_no_bid | clamp_no_mark; the clamp arms are unpriced closes (timeout_unpriced). NULL = written before 2026-10-02, never an arm.';
+  'B-VTS-NO-DECISION-VALVE (3n.q3): how the shadow close was booked - bid | clamp_no_bid | clamp_no_mark; the clamp arms are unpriced closes (timeout_unpriced). NULL = written before this column existed (this batch deploy), never an arm.';
 
 COMMIT;

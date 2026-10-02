@@ -2235,7 +2235,7 @@ export const rtbShadowPairings = pgTable("rtb_shadow_pairings", {
   closeReason: varchar("close_reason", { length: 40 }),                // stop_hit | target_hit | timeout | timeout_unpriced (3n.q3) | shadow_max_hold (before 3n.q3) | ...
   exitPrice: decimal("exit_price", { precision: 20, scale: 8 }),
   // `3n.q3` P5: how the close was booked — bid | clamp_no_bid | clamp_no_mark (the clamp arms are unpriced closes).
-  // ⛔ NULL = written before 2026-10-02, NEVER an arm (Langston C7).
+  // ⛔ NULL = written before this column existed (this batch's deploy), NEVER an arm (Langston C7).
   exitBookingArm: varchar("exit_booking_arm", { length: 16 }),
   holdingMs: integer("holding_ms"),
   closed: boolean("closed").notNull().default(false),

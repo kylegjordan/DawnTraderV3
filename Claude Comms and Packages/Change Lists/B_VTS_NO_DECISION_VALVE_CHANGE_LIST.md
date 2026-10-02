@@ -94,7 +94,7 @@ Migration `2026-10-02-b-vts-no-decision-valve-shadow-arm.sql` (+ rollback, both 
 
 **P8** — `_vtsExitRefusal` = the crypto selection's `tickerRefusal` (or `no_bid_side`) / the xStock guard's `reason`; the streak reason becomes `no_transactable_side (<refusal>)`; the alert body says the trade *"closes with NO recorded price (`time_stop_unpriced`)"* and that a `crossed_book` cannot be fixed by any ceiling.
 
-**P9** — the open-time friction fallback and the boot repair use `asValidAssetClass(…) ?? <ticker resolver>`; `shared/asset-classes.ts` +8 USD +8 EUR collision entries (names read from `xstock_spot_universe`, 2026-10-02).
+**P9** — the open-time friction fallback and the boot repair use `asValidAssetClass(…) ?? <ticker resolver>`; `shared/asset-classes.ts` +8 USD +8 EUR collision entries (names read from `xstock_spot_universe`, 2026-10-01).
 
 ## A second reader at `a7b54d991` (object round) — what it found, and what changed
 - **Priced closes are NOT byte-for-byte unchanged, and I said they were.** The order and awaiting hold (persist → archive → finish → log; finish = Map delete → soft-close → both cooldown keys → trailing state). The changes, all intended: the archive row's class is the carried one (collision xStocks now archive `xstock_spot`); every snapshot gains `exitBookingArm`; the priced twin clears its trailing state; and **a priced close with a valid stamp no longer calls the ticker resolver, so its per-close collision WARN and the classify-fall-through counter stop firing for those closes** (that counter's population shrinks).

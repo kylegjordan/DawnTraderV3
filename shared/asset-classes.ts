@@ -517,9 +517,9 @@ export function getXstockName(pair: string): string | null {
  *
  * STANDING RULE: re-audit this set quarterly via `/0/public/AssetPairs`.
  * Kraken adds tokens regularly; new collisions can emerge.
- * ⛔ `3n.q3` P9 (`#1075`, `#1145`) — RE-AUDITED 2026-10-02, AND THE MISS WAS REAL: the cited trigger
+ * ⛔ `3n.q3` P9 (`#1075`, `#1145`) — RE-AUDITED 2026-10-01, AND THE MISS WAS REAL: the cited trigger
  * (`MULTI_ASSET_VTS_EXPANSION_PLAN.md §10c.X`) never existed, the set went 145 days unaudited, and 8 tickers
- * (A, ADI, CAT, ES, IR, STRK, STX, WELL — all on Kraken as BASE/USD AND BASE/EUR, AssetPairs 2026-10-02) were
+ * (A, ADI, CAT, ES, IR, STRK, STX, WELL — all on Kraken as BASE/USD AND BASE/EUR, AssetPairs 2026-10-01) were
  * missing. A missing ticker resolves `xstock_spot` on `kraken`, so the VTS crypto lane stamped the STX and STRK
  * TOKENS as xStocks and judged them against the equity's price: 79 instant fake target hits since 2026-09-01.
  * ⛔ AND A RE-AUDIT RUNS IN BOTH DIRECTIONS (Langston, Step 4): `BDX/USD` was REMOVED — Kraken no longer lists a BDX
@@ -536,7 +536,7 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'PEP/USD',  // xStock: PepsiCo          | Crypto: Pepe-related
   'SUI/USD',  // xStock: Sun Communities  | Crypto: Sui Network
   'T/USD',    // xStock: AT&T             | Crypto: T
-  // `3n.q3` P9 / `#1145` — the 2026-10-02 re-audit (Kraken AssetPairs wsname BASE/USD ∩ the live xStock universe):
+  // `3n.q3` P9 / `#1145` — the 2026-10-01 re-audit (Kraken AssetPairs wsname BASE/USD ∩ the live xStock universe):
   'A/USD',    // xStock: Agilent
   'ADI/USD',  // xStock: Analog Devices
   'CAT/USD',  // xStock: Caterpillar
@@ -558,7 +558,7 @@ export const XSTOCK_SPOT_KRAKEN_COLLISIONS: ReadonlySet<string> = new Set([
   'PEP/EUR',
   'SUI/EUR',
   'T/EUR',
-  // `3n.q3` P9: the 2026-10-02 additions — all eight are also Kraken crypto /EUR pairs (AssetPairs 2026-10-02).
+  // `3n.q3` P9: the 2026-10-01 additions — all eight are also Kraken crypto /EUR pairs (AssetPairs 2026-10-01).
   'A/EUR',
   'ADI/EUR',
   'CAT/EUR',

@@ -37,7 +37,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | plan row | item | state | what it is |
 |---|---|---|---|
 | 2 | B-XSTOCK-BID-TRIGGER-RELAND | QUEUED | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
-| 4 | B-VTS-NO-DECISION-VALVE | IN FLIGHT — Step 2 APPROVED 2026-10-02; Step 3 next | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
+| 4 | B-VTS-NO-DECISION-VALVE | IN FLIGHT — Step 2 APPROVED 2026-10-01; Step 3 next | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
 | 4a | B-VTS-TELEMETRY-AGGREGATES (`#1141`) | QUEUED | after row 4: the SQE's predictive confidence counts VTS records flagged "never count" — investigation first |
 | 4b | B-VTS-NO-DECISION-VALVE increment 2 (`#1073`) | QUEUED | after row 4a: measure whether a paper maker rest fills after its deadline while a price is refused |
 | 4c | B-SHADOW-HOLD-CLOCK (`#1144`) | QUEUED | after row 4b: decide whether the shadow lane's 48 h hold pauses while xStock is shut |
