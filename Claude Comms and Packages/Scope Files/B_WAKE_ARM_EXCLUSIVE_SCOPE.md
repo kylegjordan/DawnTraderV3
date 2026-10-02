@@ -83,6 +83,7 @@ Control: my real watcher's ssh stayed ALIVE throughout test 1, so the probe can 
 - **Old arm + new filter (no `--loop`):** the filter cannot take a lease. As an interim measure it still **reads** the lease and **refuses** to a live holder (F3's free improvement), so no new failure mode appears.
 - **New arm + old filter:** an old filter silently ignores `--loop` (`_flags` membership tests), so the session would believe it is leased. The new arm command therefore checks first: `grep -q 'LEASE_V1' "$S/cc-wake-filter.py" || { echo "WAKE[WATCHER->$A]: the installed filter predates the lease — install it, then re-arm"; break; }`. The filter announces `lease taken: loop N, reader M` on stderr on every acquire.
 - **Terminal condition (F3):** OBJ-9, in this batch. Once OBJ-8 reads 4/4, no-`--loop` is flipped from read-only to **REFUSED**. Keeping it inside the batch, rather than in a follow-on row, means the batch cannot close with the mechanism still optional.
+- **OUTCOME (Step 7 measured, Step 8 CONFIRMED 2026-10-02): OBJ-9 does NOT ship.** The flip was measured inert for the OLD arm text, and its only biting form loses wakes silently. The interim above is the terminal state. Its bound: the ORPHAN refusal sits above the `_LOOP is None` return, so a second OLD arm announces the duplicate in its own output; the residual needs OLD text armed twice AND the first word ignored. Record: `Change Lists/B_WAKE_ARM_EXCLUSIVE_STEP7_VERIFICATION.md`.
 
 ### 2.6 Platform (judgement (c))
 
