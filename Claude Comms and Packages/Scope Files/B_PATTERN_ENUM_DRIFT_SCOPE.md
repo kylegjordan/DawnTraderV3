@@ -1,4 +1,4 @@
-# B-PATTERN-ENUM-DRIFT — SCOPE (hotfix path) · r2 2026-10-02 ~21:45Z: TRI_STAR added (Kyle)
+# B-PATTERN-ENUM-DRIFT — SCOPE (hotfix path) · r2 2026-10-02 ~21:45Z: TRI_STAR added (Kyle) · r3 ~21:55Z: Langston's Step-4 conditions; his objection to TRI_STAR put back to Kyle
 
 change-class: hotfix
 
@@ -31,7 +31,8 @@ change-class: hotfix
 1. `drizzle/migrations/2026-10-02-b-pattern-enum-drift-abcd.sql` — `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD';` **and the same for `'TRI_STAR'`** (idempotent; PostgreSQL 12+ allows `ADD VALUE` in a transaction block as long as the value is not used before commit; CI applies every forward migration to a PostgreSQL 17 container), registered last in `MANIFEST.txt`.
 1b. **`shared/schema.ts:111`** — `TRI_STAR` added to the declared `pgEnum` (the one code line). The column's TypeScript type widens by one value; the TypeScript baseline gate reads **339 errors against a baseline of 339**.
 2. `…-abcd-rollback.sql` — **clears the ledger row only.** PostgreSQL cannot drop an enum value; removing it would rebuild the type and rewrite three columns. Leaving the value is safe on every earlier sha, because their code already declares `ABCD`.
-3. `server/tests/unit/b-pattern-enum-drift.test.ts` — every value in the declared `pgEnum("pattern_type", …)` must be created by the initial `CREATE TYPE` or a registered forward `ADD VALUE`. **Mutation-proved:** with the migration unregistered, 3 of 4 tests fail; with only the `TRI_STAR` statement removed, 2 of 4 fail; the positive control (the initial five are seen) passes either way.
+3. **r3:** the test also checks the leg that matters on the active path — **every label the detector EMITS is in the declared `pgEnum`** (the sinks write the raw label: `signal-orchestrator.ts:2311`, `:3266` ← `hybrid-integration.ts:186`). Mutation-proved: `ABCD` removed from the declaration ⇒ that test fails. Its docblock states what it does not cover (runtime-built labels, the `'UNKNOWN'` fallback). MANIFEST read by line, not substring.
+3a. `server/tests/unit/b-pattern-enum-drift.test.ts` — every value in the declared `pgEnum("pattern_type", …)` must be created by the initial `CREATE TYPE` or a registered forward `ADD VALUE`. **Mutation-proved:** with the migration unregistered, 3 of 4 tests fail; with only the `TRI_STAR` statement removed, 2 of 4 fail; the positive control (the initial five are seen) passes either way.
 **No behaviour code changes; one declaration line.**
 
 ## 5. Where it ships, and what it splits
@@ -40,7 +41,7 @@ change-class: hotfix
 - **Observation windows `#1063` (iii) named:** `B-XSTOCK-FEE-CONTRACT` P8/Arm B — closed 2026-10-02 before this ships; `B-GEOMETRY-REACH-BASELINE` — ruled unaffected 2026-09-13 and closed; F-G-2's re-open anchor — CC-C's, and B is already a boundary for it.
 
 ## 6. Out of scope, with homes
-- **`THREE_SOLDIERS`** (a DB value the canonicaliser can never write — a data question) stays on `#1063`, `HOME: B-PATTERN-ENUM-DRIFT remainder, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 51, after this hotfix`. (`TRI_STAR` moved into scope at r2.)
+- ⛔ **CORRECTED r3: `THREE_SOLDIERS` is NOT dead** — the detector emits it raw (`pattern-recognizer.ts:301`) and the sinks write raw labels. **The remainder (Langston, r1 review): whether the sinks should write raw or canonical labels, and the `|| 'UNKNOWN'` fallback at `signal-orchestrator.ts:2350`** stays on `#1063`, `HOME: B-PATTERN-ENUM-DRIFT remainder, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 51, after this hotfix`. (`TRI_STAR` moved into scope at r2.)
 - **The re-mint loop itself** — `#1136`, row 9j. This fix removes its ABCD driver; the exposure driver remains.
 
 ## 7. Verification after deploy B — the same instruments that showed the defect
