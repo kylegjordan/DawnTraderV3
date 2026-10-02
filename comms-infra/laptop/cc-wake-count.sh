@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
-# How many wake watchers are running for one session alias — read BEFORE re-arming on a stale .alive
-# (B-TOKEN-BURN-CUT Step 7, Langston): since cfe70f92c a stale .alive means EITHER no watcher (dead) OR a watcher
-# that runs but cannot save its position — and the usual reason it cannot save is a SECOND watcher of the same alias
-# holding the file. Re-arming in that case adds a third.
-#   0  -> dead: re-arm (shared MEMORY 4.5).
-#   1  -> running: do NOT arm another. If .alive is stale too, its output says `keepalive save skipped` — find what
-#         else holds the state file.
-#   2+ -> duplicates: TaskStop all but one.
-# Counts only the interpreter (python.exe): the WindowsApps python3.exe launcher is a second process per watcher, and
-# any shell whose command line merely contains this search text (including this script's) is not a watcher.
-# Limit: a watcher started under an interpreter not named python.exe is not counted.
-# Limit 2 (Langston, Step 7): 0 is NOT proof of dead if the alias's shell loop is alive. Between a failed pipeline and
-#   the next, the arm loop sits in `sleep 30` with no filter process, so a count taken then reads 0 on a live loop —
-#   and re-arming there makes two loops. If .alive is only just stale, count again after 40 s before re-arming.
-#   (The one-per-session lease, B-WAKE-ARM-EXCLUSIVE #1140, closes this properly.)
+# How many wake-watcher READERS are running for one session alias — a diagnostic (B-TOKEN-BURN-CUT Step 7).
+# Since B-WAKE-ARM-EXCLUSIVE (#1140) the filter holds the ONE reader predicate and the lease is what prevents a second
+# reader; this script only asks the filter (`--count`), so the predicate cannot drift between two copies (Langston C4).
+#   0  -> no reader. A leased arm decides for itself whether to start (it refuses with WATCHER-* when it must not).
+#   1  -> running.
+#   2+ -> duplicates: only possible from arms older than the lease (a WATCHER-OLD-ARM refusal names them).
+# Limit (carried from the filter): readers are counted only under an interpreter named python.exe; the filter refuses
+#   to arm under any other, so the blind spot cannot hide a reader. Production readers only (a test's `--lease-root`
+#   readers are a separate domain).
+# Limit 2: between a failed pipeline and the next, a loop sleeps 30 s with no reader, so 0 is not proof the loop is dead.
 A="${1:?usage: cc-wake-count.sh <ALIAS>}"
-powershell -NoProfile -Command "@(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { \$_.CommandLine -match 'cc-wake-filter\.py $A --once' }).Count"
+python "$(dirname "$0")/cc-wake-filter.py" "$A" --count

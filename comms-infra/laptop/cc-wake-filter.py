@@ -327,6 +327,173 @@ SEED = "--seed-owners" in _flags
 STATE = (_flags[_flags.index("--state") + 1] if "--state" in _flags[:-1]
          else os.path.join(os.path.expanduser("~"), ".claude", "cc-wake-state", f"{ALIAS}.json"))
 
+# ── B-WAKE-ARM-EXCLUSIVE (#1140): ONE WATCHER PER SESSION, ENFORCED BY A LEASE ── marker: LEASE_V1
+# (the arm command checks for that marker, so a new arm on an old filter says so instead of running unleased).
+# The arm loop reads its own Windows pid ONCE, before its `while`, and passes it as `--loop <pid>` (after the mode flag).
+# The lease names that LOOP, not one run of this filter, so the loop's 30 s reconnect sleep stays covered. A newcomer
+# may take it only when the holder's loop is dead AND no reader of this alias runs: a killed loop shell leaves its
+# reader and ssh running (measured, pre-audit §2.1). A refusal prints NOTHING on stdout (the arm splices
+# --positions' stdout into a remote command), one stderr line starting with a fixed word the session acts on
+# (shared MEMORY 4.5), and exits 5. `.alive` only colours that line; it never decides acquire or refuse.
+_LOOP = int(_flags[_flags.index("--loop") + 1]) if "--loop" in _flags[:-1] else None
+_LEASE_ROOT = _flags[_flags.index("--lease-root") + 1] if "--lease-root" in _flags[:-1] else None   # tests only
+_LEASE_DIR = _LEASE_ROOT or os.path.join(os.path.expanduser("~"), ".claude", "cc-wake-state")    # FIXED: never --state
+LEASE = os.path.join(_LEASE_DIR, f"{ALIAS}.lease")
+COUNT = "--count" in _flags
+REFUSED = 5
+
+
+def _proc(pid):
+    """(alive, creation filetime) for a Windows pid; None off Windows. Fail-safe: ANY failure to read the process
+    except 'invalid parameter' (87, no such process) reads ALIVE — an unreadable process is not a dead one."""
+    if os.name != "nt" or pid is None:
+        return None
+    import ctypes, ctypes.wintypes as w
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.OpenProcess.restype = w.HANDLE
+    h = k.OpenProcess(0x1000, False, int(pid))                     # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return (False, None) if ctypes.get_last_error() == 87 else (True, None)
+    try:
+        code = w.DWORD()
+        ok = k.GetExitCodeProcess(h, ctypes.byref(code))
+        c, e, kk, u = (w.FILETIME() for _ in range(4))
+        t = k.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(kk), ctypes.byref(u))
+        created = ((c.dwHighDateTime << 32) | c.dwLowDateTime) if t else None
+        return ((not ok) or code.value == 259, created)            # 259 = STILL_ACTIVE
+    finally:
+        k.CloseHandle(h)
+
+
+def _holder_alive(lease):
+    """The lease's loop is alive AND is the same process (creation time is the primary key against pid reuse)."""
+    st = _proc(lease.get("loop"))
+    if st is None:
+        return False
+    alive, created = st
+    if not alive:
+        return False
+    return created is None or lease.get("loop_created") is None or created == lease.get("loop_created")
+
+
+def _readers():
+    """THE one reader predicate (`cc-wake-count.sh` calls `--count`, which calls this): python.exe processes whose
+    command line holds `cc-wake-filter.py <ALIAS> ` and `--once`, in the same lease domain as this process — a
+    production reader carries no `--lease-root`; a test reader carries its own. Returns [(pid, start), ...]."""
+    if os.name != "nt":
+        return []
+    import subprocess
+    # The domain's path may reach a command line with either separator (Git Bash passes `C:/…`, Python `C:\…`):
+    # match each component, joined by either slash — a string-equal match missed a real orphan in testing.
+    if _LEASE_ROOT:
+        parts = [re.escape(x) for x in re.split(r"[\\/]+", os.path.normpath(_LEASE_ROOT)) if x]
+        dom = "$_.CommandLine -match '--lease-root \"?" + r"[\\/]".join(parts) + "'"
+    else:
+        dom = "$_.CommandLine -notmatch '--lease-root'"
+    ps = ("@(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { "
+          f"$_.CommandLine -match 'cc-wake-filter\\.py {re.escape(ALIAS)} ' -and $_.CommandLine -match '--once' -and {dom}"
+          " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToString('s') }")
+    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+    out = []
+    for ln in r.stdout.splitlines():
+        p = ln.split()
+        if len(p) == 2 and p[0].isdigit():
+            out.append((int(p[0]), p[1]))
+    return out
+
+
+def _lease_read():
+    try:
+        with open(LEASE, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return None
+    except (ValueError, OSError):
+        return {"corrupt": True}            # unreadable: treated like a dead holder (the reader census still guards)
+
+
+def _alive_age():
+    try:
+        return f"{int(time.time() - os.path.getmtime(STATE + '.alive'))} s ago"
+    except OSError:
+        return "age unknown"                # never "fresh" (Langston)
+
+
+def _refuse(word, text):
+    print(f"{word}: {text}", file=sys.stderr, flush=True)
+    sys.exit(REFUSED)
+
+
+def _lease_create():
+    """Exclusive create — the ONE place a lease is taken, so two newcomers cannot both win (Langston D4)."""
+    os.makedirs(_LEASE_DIR, exist_ok=True)
+    st = _proc(_LOOP)
+    try:
+        fd = os.open(LEASE, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        _refuse("WATCHER-STAND-DOWN", "another arm took the lease at the same moment — a watcher of yours is starting; do NOT re-arm")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"loop": _LOOP, "loop_created": st[1] if st else None, "taken_at": _utc()}, f)
+    print(f"[cc-wake-filter] lease taken: loop {_LOOP}", file=sys.stderr, flush=True)
+
+
+def _lease_gate():
+    """Run FIRST in --positions. Returns only when this arm may run; otherwise refuses (exit 5, stdout empty)."""
+    if os.name != "nt":
+        return                              # declared limit: there is no POSIX armer (pre-audit A8, §2.6)
+    if os.path.basename(sys.executable).lower() != "python.exe":
+        _refuse("WATCHER-INTERPRETER", f"this filter runs under {sys.executable!r}; the reader census counts python.exe "
+                "only, so it cannot prove exclusivity — run it with python.exe")              # Langston C5
+    lease = _lease_read()
+    if _LOOP is not None and lease and lease.get("loop") == _LOOP:
+        return                              # our own loop's reconnect pass
+    if lease and not lease.get("corrupt") and _holder_alive(lease):
+        who = f"loop {lease.get('loop')}, holding since {lease.get('taken_at')}"
+        if _LOOP is None:
+            _refuse("WATCHER-OLD-ARM", f"a lease is held ({who}); this arm cannot take one — re-arm with the current "
+                    "command (shared MEMORY 4.5)")
+        age = _alive_age()
+        if age != "age unknown" and int(age.split()[0]) > 900:
+            _refuse("WATCHER-STUCK", f"a watcher of yours runs but is not saving ({who}; .alive {age}) — stop that "
+                    f"task or process {lease.get('loop')}, then re-arm")
+        _refuse("WATCHER-STAND-DOWN", f"a watcher of yours is running ({who}; .alive {age}) — do NOT re-arm")
+    readers = _readers()
+    if readers:
+        pid, start = readers[0]
+        _refuse("WATCHER-ORPHAN", f"reader process {pid} (started {start}) runs with no live loop — stop process "
+                f"{pid}, then re-arm")
+    if _LOOP is None:
+        return                              # an old arm with no holder and no reader: unleased, as before (P6 interim)
+    if lease is not None:
+        # Takeover of a dead or unreadable lease: an atomic rename decides the single winner (Langston D4).
+        aside = f"{LEASE}.stale.{os.getpid()}"
+        for _attempt in range(25):
+            try:
+                os.rename(LEASE, aside)
+                break
+            except FileNotFoundError:
+                _refuse("WATCHER-STAND-DOWN", "another arm is taking over the lease now — do NOT re-arm")
+            except PermissionError:
+                time.sleep(0.2)
+        else:
+            _refuse("WATCHER-STAND-DOWN", "the lease file is held open by another process — do NOT re-arm; if this "
+                    "repeats, count the watchers (`~/.claude/cc-wake-count.sh`)")
+        try:
+            os.remove(aside)
+        except OSError:
+            pass
+    _lease_create()
+
+
+def _lease_ours():
+    """--once's first check, before any read of stdin and any mutation (Langston C3a, D6)."""
+    if os.name != "nt":
+        return True
+    lease = _lease_read()
+    if _LOOP is not None:
+        return bool(lease) and lease.get("loop") == _LOOP
+    return not (lease and not lease.get("corrupt") and _holder_alive(lease))   # an old arm yields to a live holder
+
 
 def _utc(ts=None):
     return datetime.fromtimestamp(ts if ts is not None else time.time(), timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -408,6 +575,9 @@ _MARK_OWNER = re.compile(r"\bowner=([^\s\]]+)")
 _REJECTED = [0]
 _SKIPPED_PROSE = [0]
 _SEED_LOST = [0]
+# Langston's seed nit (Step 7 approval): a seed REBUILDS the record — it starts from empty, held in memory, and never
+# merges whatever is on disk (a stray or half-written record would otherwise survive under a fresh seeded_at).
+_SEED_OWNERS = {}
 
 
 REJECTS_KEPT = 20
@@ -437,7 +607,7 @@ def record_owners(body, ts):
         aid = mi.group(1).strip('",;') if mi else None
         own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
         if owners is None:
-            owners = _load_owners()
+            owners = _SEED_OWNERS if SEED else _load_owners()
         if (not aid and not own) or (aid and aid[0] in "<…."):
             # Langston (amendment 1, after round 3): a marker whose id is ABSENT or a placeholder (`<uuid>`, `…`, `..`)
             # is Langston QUOTING the format, not routing — skipped. Keyed on the id, never the owner: a real id with a
@@ -506,7 +676,13 @@ if SEED:
     sys.stdout = _Null()
 
 
+if COUNT:
+    print(len(_readers()))
+    sys.exit(0)
+
+
 if POSITIONS:
+    _lease_gate()            # FIRST: before the stale-reset save below can touch a live watcher's state (pre-audit A3)
     st = load_state()
     pos = st.get("pos") or {}
     saved = st.get("saved_epoch")
@@ -539,6 +715,8 @@ class _Tap:
 
 
 if ONCE:
+    if not _lease_ours():
+        sys.exit(REFUSED)    # silent: a reader that is not the lease's touches nothing (before stdin, before any mutation)
     _sweep_tmp()
     TAP = _Tap(sys.stdout)
     sys.stdout = TAP
@@ -578,7 +756,7 @@ for raw in sys.stdin:
                 print(f"[cc-wake-filter] seed FAILED: {_SEED_LOST[0]} marker save(s) lost; NOT marked seeded — run it again",
                       file=sys.stderr)
                 sys.exit(4)
-            o = _load_owners()
+            o = _SEED_OWNERS
             o.setdefault("_meta", {})["seeded_at"] = _utc()
             _save_owners(o)
             print(f"[cc-wake-filter] seed done: {OWNERS_FILE}; markers not recorded: {_REJECTED[0]}; "

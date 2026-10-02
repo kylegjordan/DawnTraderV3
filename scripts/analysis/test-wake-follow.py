@@ -36,7 +36,7 @@ def append(path, s, binary=False):
 
 
 def positions():
-    r = subprocess.run([sys.executable, FILTER, "CC-A", "--positions", "--state", STATE],
+    r = subprocess.run([sys.executable, FILTER, "CC-A", "--positions", "--state", STATE, "--lease-root", os.path.dirname(STATE)],
                        capture_output=True, text=True, env=ENV, timeout=20)
     return r.stdout.split()
 
@@ -46,7 +46,7 @@ def arm(during=None, wait=8.0):
     Returns (filter exit code or None if still running at `wait`, wake lines)."""
     args = positions()
     fol = subprocess.Popen([sys.executable, FOLLOW] + args, stdout=subprocess.PIPE, env=ENV)
-    fil = subprocess.Popen([sys.executable, FILTER, "CC-A", "--once", "--state", STATE],
+    fil = subprocess.Popen([sys.executable, FILTER, "CC-A", "--once", "--state", STATE, "--lease-root", os.path.dirname(STATE)],
                            stdin=fol.stdout, stdout=subprocess.PIPE, env=ENV)
     fol.stdout.close()
     out = []

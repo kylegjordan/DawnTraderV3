@@ -210,7 +210,7 @@ _old = [os.path.join(_SDIR, n) for n in ("CC-A.json.tmp.111", "CC-A.alert-owners
 _keep = [os.path.join(_SDIR, n) for n in ("CC-A.json.tmp.333", "CC-B.json.tmp.444")]
 for _f in _old + _keep: open(_f, "w").write("x")
 for _f in _old + [_keep[1]]: os.utime(_f, (os.path.getmtime(_f) - 7200,) * 2)
-subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _SST],
+subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _SST, "--lease-root", _SDIR],
                input=b"==> /var/log/cc-wake.log <==\n#@AT /var/log/cc-wake.log 7 0\n", capture_output=True, timeout=120)
 _sok = not any(os.path.exists(f) for f in _old) and all(os.path.exists(f) for f in _keep)
 if not _sok: fails += 1
@@ -230,7 +230,7 @@ if WIN:
     import time as _t; _t.sleep(0.4)
     _hin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE",
                       "#@POS /var/log/cc-wake.log 7 0", "Claude Old: held-file wake", "#@POS /var/log/cc-wake.log 7 30"]) + "\n"
-    _hp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _HST], input=_hin.encode("utf-8"), capture_output=True, timeout=120)
+    _hp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _HST, "--lease-root", _HDIR], input=_hin.encode("utf-8"), capture_output=True, timeout=120)
     _holder.wait()
     _hst = json.load(open(_HST, encoding="utf-8"))
     _hok = _hp.returncode == 0 and b"held-file wake" in _hp.stdout and b"Traceback" not in _hp.stderr and (_hst.get("pos") or {})
@@ -243,7 +243,7 @@ if WIN:
     _kh = subprocess.Popen([sys.executable, "-c", f"import time; f=open(r'{_KST}'); time.sleep(7)"])
     _t.sleep(0.4)
     _kin = "\n".join(["==> /var/log/cc-wake.log <==", "#@AT /var/log/cc-wake.log 7 0", "#@KEEPALIVE"]) + "\n"
-    _kp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _KST], input=_kin.encode("utf-8"), capture_output=True, timeout=120)
+    _kp = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _KST, "--lease-root", _KDIR], input=_kin.encode("utf-8"), capture_output=True, timeout=120)
     _kh.wait()
     _kok = (not os.path.exists(_KST + ".alive")) and b"keepalive save skipped" in _kp.stderr and b"Traceback" not in _kp.stderr
     if not _kok: fails += 1
@@ -258,7 +258,7 @@ if WIN:
     _orow = json.dumps({"ts": "2026-10-01T21:30:00+00:00", "kind": "langston_outbound",
                         "text": "OLD Claude — owner-file wake.\n\n[[ALERT id=c244f2b8-a1eb-4d26-abf2-000000000001 owner=CC-A action=\"x\"]]"})
     _oin = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", _orow, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
-    _op = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _OST], input=_oin.encode("utf-8"), capture_output=True, timeout=120)
+    _op = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _OST, "--lease-root", _ODIR], input=_oin.encode("utf-8"), capture_output=True, timeout=120)
     _oh.wait()
     _ook = (b"owner-file wake" in _op.stdout and b"LINE DROPPED" not in _op.stderr and b"alert-owner record NOT saved" in _op.stderr
             and _op.returncode == 0)
@@ -273,7 +273,7 @@ if WIN:
     _ep = subprocess.run([sys.executable, FILTER, "CC-A", "--seed-owners", "--state", _EST], input=_ein.encode("utf-8"), capture_output=True, timeout=120)
     _eh.wait()
     _erec = json.load(open(_EOF, encoding="utf-8"))
-    _eok = _ep.returncode != 0 and not (_erec.get("_meta") or {}).get("seeded_at")
+    _eok = _ep.returncode == 4 and not (_erec.get("_meta") or {}).get("seeded_at")
     if not _eok: fails += 1
     print(f"  {'PASS' if _eok else '** FAIL **':10} the same hold during a SEED fails the seed and leaves it unmarked (rc={_ep.returncode}, seeded={bool((_erec.get('_meta') or {}).get('seeded_at'))})")
     print(f"  {'PASS' if _ook else '** FAIL **':10} owner record held open past the retry: the wake on that line is still delivered and the lost routing named "
