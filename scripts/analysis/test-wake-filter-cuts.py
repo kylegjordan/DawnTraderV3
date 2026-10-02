@@ -339,6 +339,29 @@ _ok5 = (b"rotation wake" in _p5.stdout and os.path.isfile(_old5) and os.path.get
 if not _ok5: fails += 1
 print(f"  {'PASS' if _ok5 else '** FAIL **':10} #1142 C-2: a loss file past 1 MB is kept whole as .old and a fresh file takes the new line "
       f"(old_size={os.path.getsize(_old5) if os.path.isfile(_old5) else None}, new_lines={len(_l5)})")
+# Langston r2 CONDITION 2 — expected: the rotation FAILS (`.old` is a non-empty directory) and the append still happens:
+# the live file keeps its >1 MB prefill and gains the new line at its end; the wake prints, nothing is dropped.
+_d6 = tempfile.mkdtemp(prefix="wakelossp6-"); _s6 = os.path.join(_d6, "CC-A.json")
+open(_s6, "w", encoding="utf-8").write('{"pos": {}}')
+os.mkdir(os.path.join(_d6, "CC-A.alert-owners.json"))
+_lf6 = os.path.join(_d6, "CC-A.alert-owners.lost.jsonl")
+open(_lf6, "w", encoding="utf-8", newline="").write("x" * (1100 * 1024) + "\n")
+os.mkdir(_lf6 + ".old"); open(os.path.join(_lf6 + ".old", "keep"), "w").write("x")
+_row6 = json.dumps({"ts": "2026-10-03T09:30:00+00:00", "kind": "langston_outbound",
+                    "text": f"OLD Claude — rotate-fails wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]"})
+_in6 = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", _row6, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
+_p6 = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _s6, "--lease-root", _d6], input=_in6.encode("utf-8"),
+                     capture_output=True, timeout=120)
+_last6 = open(_lf6, encoding="utf-8").read().splitlines()[-1]
+try:
+    _rec6 = json.loads(_last6)
+except ValueError:
+    _rec6 = {}
+_ok6 = (b"rotate-fails wake" in _p6.stdout and b"LINE DROPPED" not in _p6.stderr and os.path.getsize(_lf6) > 1100 * 1024
+        and _rec6.get("ids") == [{"id": _MID, "owner": "CC-B"}])
+if not _ok6: fails += 1
+print(f"  {'PASS' if _ok6 else '** FAIL **':10} #1142 r2 C2: a FAILED rotation (.old is a non-empty directory) never suppresses the append "
+      f"(woke={b'rotate-fails wake' in _p6.stdout}, size={os.path.getsize(_lf6)}, last_line_ids={_rec6.get('ids')})")
 # P4 — expected: a READABLE record whose directory is read-only, so the temp file for the save cannot be created; the wake
 # prints, nothing is dropped, the loss line is written... to a directory that is read-only. So the append fails too, and the
 # stderr line is the record: it names the id and says the loss record could not be written. (Read-only blocks BOTH files —

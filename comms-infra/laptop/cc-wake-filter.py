@@ -649,11 +649,17 @@ def _record_loss(ts, lost_ids, lost_rejects, lost_prose, err):
     extra = (f"; also {len(lost_rejects)} rejected marker(s)" if lost_rejects else "") + \
             (f"; {lost_prose} prose skip(s)" if lost_prose else "")
     rec = {"ts": ts, "at": _utc(), "ids": lost_ids, "rejects": lost_rejects, "prose": lost_prose}
+    # Langston Step-4 C-2: one generation kept, never rewritten in place. The failure that writes this file can append on
+    # every marker line, so past ~1 MB it is set aside whole (the hook reads only the live file's tail anyway).
+    # r2 CONDITION 2: the rotation has its OWN try — it is a convenience and the line is the deliverable, so a failed
+    # rotate (e.g. `.old` is a non-empty directory) leaves the file growing past the cap this round and never suppresses
+    # the append. HYPOTHESIS, not measured: whether a Windows process holding LOST_FILE open blocks renaming the SOURCE.
     try:
-        # Langston Step-4 C-2: one generation kept, never rewritten in place. The failure that writes this file can append
-        # on every marker line, so past ~1 MB it is set aside whole (the hook reads only the live file's tail anyway).
         if os.path.isfile(LOST_FILE) and os.path.getsize(LOST_FILE) > LOST_ROTATE_BYTES:
             os.replace(LOST_FILE, LOST_FILE + ".old")
+    except OSError:
+        pass
+    try:
         with open(LOST_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
         where = f"recorded in {os.path.basename(LOST_FILE)}"

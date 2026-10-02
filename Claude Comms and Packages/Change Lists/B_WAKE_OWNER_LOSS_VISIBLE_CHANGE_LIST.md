@@ -89,3 +89,14 @@ P4 on Linux exits **1 after the wake prints**: in a read-only state directory th
 
 **Runs at r2:** `test-wake-filter-cuts.py` Windows ALL PASS (P4 SKIP); Linux as `nobody` ALL PASS incl. P4 and C-2; `test-alert-split.mjs` 40 / 40 (Windows and Linux); CI on the review ref — see the dispatch.
 **Not taken here:** Langston's §13 item (`dt-review` cannot read a batch branch) is his and Infra Claude's (`B-DT-REVIEW-BATCH-BRANCH`).
+
+## r2 APPROVED by Langston (inbox id 1555716065…) with two in-commit conditions and two nits — landed in the same commit
+
+| item | change | proof |
+|---|---|---|
+| **CONDITION 1** — the line was absent from the `0 due alerts` and `ALERT CHECK COULD NOT RUN` emits, and a lost FLIP leaves the OLD owner on record, so a quiet or unreachable window could swallow it | the alias, owner-record and lost-routing reads are hoisted above every emit (they are local, independent of staging); `lostText` is appended to all four emits (unreachable, zero due, full list, narrowed) | hook smoke with an unreachable host: `ALERT CHECK COULD NOT RUN (timeout…)` followed by `… failed to save 1 alert routing(s) … eeeeeeee → CC-C …`. The zero-due emit uses the identical append. |
+| **CONDITION 2** — the rotate shared the append's `try`, so a failed rotate suppressed the line | the rotate has its own `try/except OSError: pass`; the append follows in its own `try`. The comment marks the Windows source-rename question as a HYPOTHESIS, not measured. | new leg: `.old` is a non-empty directory, so the rotate fails; the live file keeps its 1.1 MB and gains the new line at its end — Windows and Linux PASS; **control**: the r2 filter FAILS it (`last_line_ids=None`, size unchanged) |
+| nit — "failed to save 0 alert routing(s)" | `lostReport` leads with the non-zero fact: `… failed to save its alert-owner record … — no routing was lost, but these were: <rejects / prose / unreadable lines>` | new test case |
+| nit — `fix-follows-pointer`: the sibling prototype index at `splitAlerts` | guarded the same way (own-property read); the comment now says which ids are uuid-validated (the loss file's) and which are not (staging's alert ids). **Grep: two index sites in the file (`splitAlerts`, `lostRoutings`), both guarded.** | new case: an alert id `"__proto__"` reads as unrouted |
+
+Runs: `test-wake-filter-cuts.py` Windows ALL PASS (P4 SKIP), Linux as `nobody` ALL PASS; `test-alert-split.mjs` 42 / 42 on both.

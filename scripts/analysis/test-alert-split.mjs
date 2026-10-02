@@ -129,6 +129,13 @@ ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-
   shown += rep ? 1 : 0;
   ok('B1: a failed read of the loss file says the session cannot tell', /cannot tell whether any alert routing was lost/.test(lostReport(null, 'the lost-routing record could not be read (EACCES)')));
   ok('nothing lost and no read failure → empty', lostReport(run([], {}), null) === '' && lostReport(null, null) === '');
+  // r2 nit — expected: a loss with NO routing leads with that fact, never "failed to save 0 alert routing(s)"
+  const rep0 = lostReport(run([L({ rejects: ['[[ALERT id=bad owner=CC-B]]'] })], {}), null);
+  ok('a no-routing loss says no routing was lost, and names what was', rep0.includes('no routing was lost') && rep0.includes('1 rejected marker(s)') && !rep0.includes('0 alert routing'));
+  // r2 nit (fix-follows-pointer) — expected: splitAlerts reads staging ids as own properties too: an alert whose id is
+  // "__proto__" is shown as unrouted, not looked up on the prototype
+  const sp = splitAlerts([A('__proto__')], { _meta: { seeded_at: 'x' } }, 'CC-A');
+  ok('splitAlerts: an alert id "__proto__" reads as unrouted', sp.unrouted.length === 1 && sp.others === 0);
 }
 
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);

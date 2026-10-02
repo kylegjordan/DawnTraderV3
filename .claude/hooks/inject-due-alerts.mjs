@@ -116,40 +116,9 @@ function main() {
   }
   const ms = Date.now() - t0;
 
-  const failed = !r || r.error || r.status !== 0 || typeof r.stdout !== 'string';
-  const lines = failed ? [] : r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
-  // The LAST count line: it is printed after every ALERT line, so a truncated stream cannot have
-  // it, and (belt) a forged early one could not stand in for it.
-  const countLine = [...lines].reverse().find((l) => l.startsWith('COUNT|'));
-  const alerts = lines.filter((l) => l.startsWith('ALERT|'));
-
-  if (failed || !countLine) {
-    // ⛔ VISIBLE FAILURE. This is the branch that must never be silent.
-    const why = r && r.error ? (r.error.code === 'ETIMEDOUT' || /ETIMEDOUT|timed out/i.test(String(r.error.message)) ? 'timeout' : String(r.error.code || r.error.message))
-      : r && r.status !== 0 ? `ssh exit ${r.status}` : 'no COUNT line from the remote filter';
-    note({ decided: false, reason: 'unreachable', why, ms });
-    emit(`⚠️ ALERT CHECK COULD NOT RUN (${why}, ${ms}ms). This is NOT "no alerts" — it is "not checked". ` +
-         `Do the §10.5 check by hand this turn: read the WHOLE alerts file filtered for active+unacked+due, never a tail (#980).`);
-    return;
-  }
-
-  const [, due, total] = countLine.split('|');
-  note({ decided: true, due: Number(due), total_ids: Number(total), ms });
-  // Genuine "no alerts" — the COUNT line proves the filter ran. It is SAID, not left silent
-  // (B-GOV-REPORTING r6): §10.5 treats hook silence as "did not run", so zero must be visible.
-  if (!alerts.length) {
-    emit(`§10.5: 0 due alerts (whole file, ${total} ids; ${ms}ms) — the filter ran.`);
-    return;
-  }
-
-  const parsed = alerts.map((l) => { const [, id, sev, ...rest] = l.split('|'); return { id, sev, title: rest.join('|') }; });
-  const line = (a) => `• ${a.id.slice(0, 8)}… [${a.sev}] ${a.title}  (full id: ${a.id})`;
-  const cap = (list) => {
-    const shown = list.slice(0, MAX_INJECT).map(line).join('\n');
-    return list.length > MAX_INJECT ? `${shown}\n… +${list.length - MAX_INJECT} more NOT shown (cap ${MAX_INJECT}) — read the file.` : shown;
-  };
-  const CLOSE = 'ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.';
-
+  // Langston Step-4 r2 CONDITION 1: the owner record and the lost-routing read are LOCAL and independent of both the
+  // alert count and staging, so they run BEFORE every emit. "No alerts", "not checked" and "a routing was lost" are
+  // three facts: a lost FLIP leaves the old owner on record, so a quiet or unreachable window must not swallow it.
   // B-TOKEN-BURN-CUT amendment 1, OBJ-6 (Kyle 2026-09-30): a session is shown ITS OWN due alerts, the not-yet-routed
   // ones and any critical one — the rest is a count. The owner record is written by this session's wake filter.
   // FAIL-OPEN: an unmapped clone or an unreadable owner record shows the full list, exactly as before.
@@ -165,7 +134,6 @@ function main() {
       readWhy = e && e.code === 'ENOENT' ? 'owner record not seeded yet' : `owner record unreadable (${e && e.code || 'parse error'})`;
     }
   }
-  const s = splitAlerts(parsed, owners, alias);
   // B-WAKE-OWNER-LOSS-VISIBLE (#1142): routings THIS session's wake filter failed to save. Its OWN try/catch — a
   // failure here drops only this line of output and never touches narrowing (Langston C6). The read is BOUNDED to the
   // file's last 64 KB (C5): the condition that makes a save fail can append on every marker line until it clears.
@@ -187,6 +155,42 @@ function main() {
     }
   }
   const lostText = lostReport(lost, lostWhy);   // '' when there is nothing to say
+
+  const failed = !r || r.error || r.status !== 0 || typeof r.stdout !== 'string';
+  const lines = failed ? [] : r.stdout.split('\n').map((s) => s.trim()).filter(Boolean);
+  // The LAST count line: it is printed after every ALERT line, so a truncated stream cannot have
+  // it, and (belt) a forged early one could not stand in for it.
+  const countLine = [...lines].reverse().find((l) => l.startsWith('COUNT|'));
+  const alerts = lines.filter((l) => l.startsWith('ALERT|'));
+
+  if (failed || !countLine) {
+    // ⛔ VISIBLE FAILURE. This is the branch that must never be silent.
+    const why = r && r.error ? (r.error.code === 'ETIMEDOUT' || /ETIMEDOUT|timed out/i.test(String(r.error.message)) ? 'timeout' : String(r.error.code || r.error.message))
+      : r && r.status !== 0 ? `ssh exit ${r.status}` : 'no COUNT line from the remote filter';
+    note({ decided: false, reason: 'unreachable', why, ms });
+    emit(`⚠️ ALERT CHECK COULD NOT RUN (${why}, ${ms}ms). This is NOT "no alerts" — it is "not checked". ` +
+         `Do the §10.5 check by hand this turn: read the WHOLE alerts file filtered for active+unacked+due, never a tail (#980).` + (lostText ? `\n${lostText}` : ''));
+    return;
+  }
+
+  const [, due, total] = countLine.split('|');
+  note({ decided: true, due: Number(due), total_ids: Number(total), ms });
+  // Genuine "no alerts" — the COUNT line proves the filter ran. It is SAID, not left silent
+  // (B-GOV-REPORTING r6): §10.5 treats hook silence as "did not run", so zero must be visible.
+  if (!alerts.length) {
+    emit(`§10.5: 0 due alerts (whole file, ${total} ids; ${ms}ms) — the filter ran.` + (lostText ? `\n${lostText}` : ''));
+    return;
+  }
+
+  const parsed = alerts.map((l) => { const [, id, sev, ...rest] = l.split('|'); return { id, sev, title: rest.join('|') }; });
+  const line = (a) => `• ${a.id.slice(0, 8)}… [${a.sev}] ${a.title}  (full id: ${a.id})`;
+  const cap = (list) => {
+    const shown = list.slice(0, MAX_INJECT).map(line).join('\n');
+    return list.length > MAX_INJECT ? `${shown}\n… +${list.length - MAX_INJECT} more NOT shown (cap ${MAX_INJECT}) — read the file.` : shown;
+  };
+  const CLOSE = 'ack only what you own; resolve only when fixed — with the FULL id: the CLI no-ops on a prefix.';
+
+  const s = splitAlerts(parsed, owners, alias);
   if (!s.narrowed) {
     const why = readWhy || s.why;
     note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why });

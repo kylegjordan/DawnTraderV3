@@ -40,7 +40,10 @@ export function splitAlerts(alerts, owners, alias, nowMs = Date.now()) {
   const mine = [], unrouted = [], critical = [], churning = [];
   let others = 0;
   for (const a of alerts) {
-    const rec = owners[a.id];
+    // r2 nit (Langston, fix-follows-pointer): an OWN-property read here too. These ids come from staging's alert file, not
+    // from a uuid-validated writer; the old prototype read was benign (an undefined owner reads as unrouted, i.e. shown),
+    // but the two sites now read the same way.
+    const rec = Object.prototype.hasOwnProperty.call(owners, a.id) ? owners[a.id] : undefined;
     const changedMs = rec && rec.changed_at ? Date.parse(rec.changed_at) : NaN;
     const churned = Number.isFinite(changedMs) && nowMs - changedMs < CHURN_HOURS * 3600000;
     if (churned) churning.push({ ...a, owner: rec.owner, flips: rec.flips || 0 });
@@ -88,8 +91,8 @@ export function lostRoutings(lines, owners, nowMs = Date.now(), dropFirst = fals
   const lost = [];
   for (const x of latest.values()) {
     // Langston Step-4 C-1: an OWN-property read, never prototype indexing — `owners["__proto__"]` would match an
-    // owner-less line as `undefined === undefined` and clear it silently. (Ids are uuid-validated by the writer, so this
-    // is a fence, not a live path.)
+    // owner-less line as `undefined === undefined` and clear it silently. (The LOSS FILE's ids are uuid-validated by the
+    // filter that writes them, so this is a fence, not a live path; `splitAlerts` above reads staging ids the same way.)
     const cur = owners && typeof owners === 'object' && Object.prototype.hasOwnProperty.call(owners, x.id) ? owners[x.id] : null;
     if (cur && cur.owner === x.owner) continue;                                   // C11: the routing stands
     const curMs = cur ? tsMs(cur.ts) : null, lostMs = tsMs(x.ts);
@@ -109,9 +112,14 @@ export function lostReport(lost, lostWhy) {
     const extra = [lost.rejects.length ? `${lost.rejects.length} rejected marker(s) (latest: ${lost.rejects[lost.rejects.length - 1]})` : '',
       lost.prose ? `${lost.prose} prose-skip count(s)` : '', lost.unparseable ? `${lost.unparseable} unreadable line(s) skipped` : '']
       .filter(Boolean).join('; ');
-    return `⚠ this session's wake filter failed to save ${lost.lost.length} alert routing(s) in the last ${LOST_HOURS} h`
-      + (ids ? ` — they read as unrouted here until re-stated: ${ids}` : '') + (extra ? ` (also lost: ${extra})` : '')
-      + ' — tell Langston, leading with his name, to re-state those markers.';
+    // r2 nit (Langston): lead with the non-zero fact — "failed to save 0 alert routing(s)" read as a bug.
+    if (lost.lost.length) {
+      return `⚠ this session's wake filter failed to save ${lost.lost.length} alert routing(s) in the last ${LOST_HOURS} h`
+        + ` — they read as unrouted here until re-stated: ${ids}` + (extra ? ` (also lost: ${extra})` : '')
+        + ' — tell Langston, leading with his name, to re-state those markers.';
+    }
+    return `⚠ this session's wake filter failed to save its alert-owner record in the last ${LOST_HOURS} h — no routing`
+      + ` was lost, but these were: ${extra} — tell Langston, leading with his name.`;
   }
   return lostWhy ? `⚠ ${lostWhy} — this session cannot tell whether any alert routing was lost.` : '';
 }
