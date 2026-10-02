@@ -1,4 +1,4 @@
-# B-PATTERN-ENUM-DRIFT — SCOPE (hotfix path)
+# B-PATTERN-ENUM-DRIFT — SCOPE (hotfix path) · r2 2026-10-02 ~21:45Z: TRI_STAR added (Kyle)
 
 change-class: hotfix
 
@@ -23,15 +23,16 @@ change-class: hotfix
 - **What the change writes:** one enum label on type `pattern_type`. `ADD VALUE` rewrites no rows and takes a brief lock on the type.
 - **Who uses the type (staging, `information_schema.columns`):** `active_open_positions.pattern_type`, `closed_trades.pattern_type`, `trades.pattern_type` — three columns. **Views or rules depending on the type: 0** (`pg_depend` over `pg_rewrite`).
 - **Who reads it (§9.5(a-ii)):** no raw SQL names `pattern_type` outside `shared/schema.ts` (`git grep` over `server`, `shared`, `client/src`, tests excluded — positive control: `schema.ts` itself returns four hits). All access is through the drizzle column, whose TypeScript type already includes `ABCD`, so every typed reader (63 lines naming `.patternType`; the row readers display it or pass it through — `vts-*-trades-table.tsx`, `paper-trade-adapter.ts`, `vts-runner.ts`, `export-csv.ts`) is already compiled against the value. **No `switch` on a pattern type and no `Record<…PatternType…>` exists** (`git grep` over the same trees, empty; control: the same `switch (` pattern finds 2 in `active-execution-engine.ts`).
-- **Other sites with the same defect (fix the class):** on the reachable population, none (requirement (i) above). **`TRI_STAR`** is declared in `CanonicalPatternType` and routed (`hybrid-integration.ts:225`) but **not** in the `pgEnum`, and no detector emits it — latent, not broken now, so it is **outside this hotfix** (see §6). **`THREE_SOLDIERS`** is a DB value the canonicaliser can never write — a data question, no work.
+- **Other sites with the same defect (fix the class):** on the reachable population, none (requirement (i) above). **`TRI_STAR` is the same gap, latent:** in the canonical pattern set (`canonical-regime-strategy-map.ts:79`, `:774`, and `DOJI → TRI_STAR` at `:778`) and routed to `adaptive_flow` (`hybrid-integration.ts:225`), but in neither the `pgEnum` nor the database; **0 insert failures 2026-09-19 → 10-02 against 22,368 for `ABCD`** (control). ⭐ **IN SCOPE BY KYLE'S RULING (r2, 2026-10-02):** *"It may be unlocked as we calibrate, and if/when that happens, it shouldn't be blocked by a known error we couldn't be bothered to fix when we fixed the same issue for another pattern."* **`THREE_SOLDIERS`** is a DB value the canonicaliser can never write — a data question, no work.
 - **Runner:** `scripts/db-migrate.ts` runs a file as one `client.query`; a single-statement `ALTER TYPE … ADD VALUE IF NOT EXISTS` runs standalone, as the precedent `2026-05-24a-b79-0n-strategy-enum-orb.sql` did.
 - **Larger design fault?** Only that nothing compared the declared enum with the migrations. The guard test below closes that for `pattern_type`; a general schema-vs-database enum reconciler was explicitly NOT to be built without a measured population (Langston, `#1063`).
 
 ## 4. The fix
-1. `drizzle/migrations/2026-10-02-b-pattern-enum-drift-abcd.sql` — `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD';` (single statement, idempotent), registered last in `MANIFEST.txt`.
+1. `drizzle/migrations/2026-10-02-b-pattern-enum-drift-abcd.sql` — `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD';` **and the same for `'TRI_STAR'`** (idempotent; PostgreSQL 12+ allows `ADD VALUE` in a transaction block as long as the value is not used before commit; CI applies every forward migration to a PostgreSQL 17 container), registered last in `MANIFEST.txt`.
+1b. **`shared/schema.ts:111`** — `TRI_STAR` added to the declared `pgEnum` (the one code line). The column's TypeScript type widens by one value; the TypeScript baseline gate reads **339 errors against a baseline of 339**.
 2. `…-abcd-rollback.sql` — **clears the ledger row only.** PostgreSQL cannot drop an enum value; removing it would rebuild the type and rewrite three columns. Leaving the value is safe on every earlier sha, because their code already declares `ABCD`.
-3. `server/tests/unit/b-pattern-enum-drift.test.ts` — every value in the declared `pgEnum("pattern_type", …)` must be created by the initial `CREATE TYPE` or a registered forward `ADD VALUE`. **Mutation-proved:** with the migration unregistered, 3 of 4 tests fail; the positive control (the initial five are seen) passes either way.
-**No application code changes.**
+3. `server/tests/unit/b-pattern-enum-drift.test.ts` — every value in the declared `pgEnum("pattern_type", …)` must be created by the initial `CREATE TYPE` or a registered forward `ADD VALUE`. **Mutation-proved:** with the migration unregistered, 3 of 4 tests fail; with only the `TRI_STAR` statement removed, 2 of 4 fail; the positive control (the initial five are seen) passes either way.
+**No behaviour code changes; one declaration line.**
 
 ## 5. Where it ships, and what it splits
 - **Deploy B, as migration 10** (after the VTS valve's migration 9). Undo order for B becomes **10, 9, 8, … 3**; this one's rollback is ledger-only.
@@ -39,7 +40,7 @@ change-class: hotfix
 - **Observation windows `#1063` (iii) named:** `B-XSTOCK-FEE-CONTRACT` P8/Arm B — closed 2026-10-02 before this ships; `B-GEOMETRY-REACH-BASELINE` — ruled unaffected 2026-09-13 and closed; F-G-2's re-open anchor — CC-C's, and B is already a boundary for it.
 
 ## 6. Out of scope, with homes
-- **`TRI_STAR`** per-value ruling (add to the enum, or delete from the union and the router) and **`THREE_SOLDIERS`** (dead DB value) — stay on `#1063`, `HOME: B-PATTERN-ENUM-DRIFT remainder, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 51, after this hotfix`.
+- **`THREE_SOLDIERS`** (a DB value the canonicaliser can never write — a data question) stays on `#1063`, `HOME: B-PATTERN-ENUM-DRIFT remainder, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 51, after this hotfix`. (`TRI_STAR` moved into scope at r2.)
 - **The re-mint loop itself** — `#1136`, row 9j. This fix removes its ABCD driver; the exposure driver remains.
 
 ## 7. Verification after deploy B — the same instruments that showed the defect
