@@ -80,3 +80,17 @@ Nothing in the plan is `UNAUDITED`.
 ## PLAIN-LANGUAGE SUMMARY
 
 When a session fails to save who owns an alert, it will now write a one-line note saying which alerts were affected, in a small separate file. The per-turn alert list then tells that session which alerts are showing to everyone by mistake, and to ask Langston to repeat his routing. Two leftovers are fixed alongside: a time shown in local time, and an out-of-date code comment.
+
+## STEP 2 CLEARED (Langston, 2026-10-02, inbox id 1555705491…; re-derived by him at `f8e15cfbc`) — two mandatory changes and four conditions, folded into the plan
+
+| ref | ruling | plan change |
+|---|---|---|
+| **B1** | the held-file legs are `if WIN:` and print SKIP on POSIX (`test-wake-filter-cuts.py:219-224`), so extending them proves nothing in CI | **P6a gains a POSIX-reachable forced-failure leg:** the owner-record destination is made a DIRECTORY, so the save raises `OSError` on both platforms; the sidecar line is asserted there. The Windows held-file leg stays as the fidelity case. |
+| **B2** | an unwrapped append inside the per-line try would turn a record failure into a dropped WAKE (`:696-699`) | **P1: the append has its own `try/except OSError`.** P6a adds an append-fails leg (the sidecar path is ALSO a directory): expected, stated before running — the wake prints, no `LINE DROPPED`, rc 0, and the stderr line names the ids and says the loss record could not be written. |
+| **C8** | two unleased arms for one alias are reachable, so a torn append is possible | **P3 skips and counts an unparseable line ANYWHERE in the tail**, not only a truncated first line; the count is shown. |
+| **C9** | `at` is `…Z` (second resolution) and the message `ts` is `+00:00` with microseconds; a missing `ts` is live | **P2 compares PARSED epoch ms; an absent or unparseable `ts` on either side never clears — the 24 h `at` expiry is the only exit.** Tests: same instant in the two formats clears; a null `ts` does not. |
+| **C10** | state reader coverage per alias | **MEASURED 2026-10-03: `inject-due-alerts` is wired in `settings.local.json` in all four clones (`-old`, `-new`, `-analyst`, `-infra`; 1 line each, control: 9 `"hooks"` keys each), and both hook files exist in `-infra`.** Coverage 4 of 4 (laptop, RULED ON REPORTED FACT). |
+| **C11** | carry the data, not just counts | **P1 records `{"id", "owner"}` per lost id and the reject snippets (`snip`, `:663`).** **P2 also clears an id when `owners[id].owner` equals the lost owner** (a flip back to the on-disk owner, or a re-statement of a routing that already stands). The report line names id → owner, so Langston can re-state without re-deriving. |
+| §13 | out of scope: does `-infra` lack the hook? | **Disposition 5, no work — present in all four clones (C10's measurement).** |
+
+**Residuals added:** the sidecar has no deleter in the repo; an out-of-repo deletion silently drops the report (benign consequence, stated). A closed session never reads its sidecar within 24 h, which is why P1 keeps naming the ids on stderr — the task output is the durable copy.
