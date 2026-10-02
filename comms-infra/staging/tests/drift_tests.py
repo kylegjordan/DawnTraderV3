@@ -415,7 +415,10 @@ check("Gate 1-2 r2: an orphan primary gid (no such group) is REPORTED, not skipp
       sum("PRIMARY group id 9999 resolves to NO group" in x and "dtapi" in x for x in pr) == 1, str(pr))
 _users["dtapi"].pw_gid = 2001
 # Gate 1-2 r3 (Langston): a second group NAME on dtapi's own primary gid — getgrgid() answers "dtapi",
-# so the primary check passes, while %staff resolves to the same gid and would apply
+# so the primary check passes, while %staff resolves to the same gid and would apply. ORDERING (Langston):
+# this fixture puts dtapi first, so getgrgid answers "dtapi". In the reverse /etc/group order getgrgid
+# answers "staff", prim_gid stays empty and the PRIMARY check reports "dtapi's PRIMARY group is staff"
+# instead — still exactly one true report; the first-case test above covers that path.
 _grall = [types.SimpleNamespace(gr_name="dtapi", gr_gid=2001, gr_mem=[]),
           types.SimpleNamespace(gr_name="staff", gr_gid=2001, gr_mem=[]),
           types.SimpleNamespace(gr_name="dtmint", gr_gid=2002, gr_mem=[])]
