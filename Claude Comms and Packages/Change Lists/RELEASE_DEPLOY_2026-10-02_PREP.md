@@ -82,6 +82,12 @@ r1 said "re-deploy `bc199185e`, then run the rollbacks in reverse." That puts OL
 
 **NOT delivered by either deploy:** the `comms-infra/` changes in the range. `dt-deploy` does not install them (`#1004`); Infra Claude installs its own.
 
+## ✅ DEPLOY A — DONE 2026-10-02T20:38:00Z (CC-B)
+
+Order followed: the fee window's final read recorded first (`ca7aa786e`), every A owner answered (§5), the edge block re-checked (`/api/audit` and `/api/audit//latest` 403, `/api/health` 200 at ~20:33Z), then the deploy. ✅ **HOLD ENDED 2026-10-02T20:38:00Z — deploy A `ea456ad40936b1fbde463e43e473d3ff11432ba0` (`dt-deploy --by cc-b`, record restart_time 628; migrations 1-2 applied in 961 ms; identity asserted, engine resumed).** Ancestry quoted at the release, `merge-base --is-ancestor` against A: `f07c86c37` 0 · `f33731a2f` 0 · `d7d8d509d` 0 · `94b80463f` 0 · `c7f90c2fd` 0 (the `#1066` fix and the Kraken key fix are IN A); `05715c150` 1 (the sizing batch is NOT in A, as planned). CI on A's exact sha: run `36545160580`, Test Suite / TypeScript Check / Build / Docker Build all success. **The drift gate stays UNDECIDABLE (`9acca871`) after A by construction** — it clears only when the deployed sha equals the head, which B approaches; OLD Claude disposes it and `d9caf6f5`. **Staging worktree, handled without loss:** `dt-deploy` refuses a dirty tree, and it held the live `phase9_predictive-learning.json` (`#686`, runtime-written) plus 5 untracked `reports/CSAV_Report_*.json` from 2026-09-30. Both were copied to `/home/deploy/preserved-2026-10-02-deployA/`, stashed, deployed past, and popped back; the phase9 file's sha256 matches before and after (`b3534ebf…`). Deploy B will meet the same refusal until `#686` relocates the file.
+
+**Undo A, if ever needed:** `pm2 stop dawntrader` → the HEAD copies of rollback files 2 then 1 → `dt-deploy bc199185eaab3bf429787736ec67625bf69f27c6 --by cc-b`.
+
 ## 6. Order on 10-02
 1. 20:10Z: the fee window's final reading is recorded (the `B-XSTOCK-FEE-CONTRACT` report).
 2. §5 answered for deploy A, or waived by Kyle.
