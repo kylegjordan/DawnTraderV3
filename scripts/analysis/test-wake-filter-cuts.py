@@ -296,38 +296,49 @@ if WIN:
 # A directory at the record's path fails the LOAD first (found by this test: that raise used to drop the wake too), so P1-P3
 # exercise the load-failure branch. P4 fails the SAVE with a readable record: POSIX only (a read-only directory blocks the
 # temp file); on Windows the held-file leg above is the save-failure case.
-def _forced(tag, text, lost_is_dir=False):
+def _forced(tag, text, lost_is_dir=False, prefill=0):
     d = tempfile.mkdtemp(prefix=f"wakeloss{tag}-"); st = os.path.join(d, "CC-A.json")
     open(st, "w", encoding="utf-8").write('{"pos": {}}')
     os.mkdir(os.path.join(d, "CC-A.alert-owners.json"))
     if lost_is_dir:
         os.mkdir(os.path.join(d, "CC-A.alert-owners.lost.jsonl"))
+    if prefill:
+        open(os.path.join(d, "CC-A.alert-owners.lost.jsonl"), "w", encoding="utf-8", newline="").write("x" * prefill + "\n")
     row = json.dumps({"ts": "2026-10-03T08:00:00.250000+00:00", "kind": "langston_outbound", "text": text})
     inp = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", row, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
     p = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", st, "--lease-root", d], input=inp.encode("utf-8"),
                        capture_output=True, timeout=120)
     lf = os.path.join(d, "CC-A.alert-owners.lost.jsonl")
     lines = [json.loads(x) for x in open(lf, encoding="utf-8")] if os.path.isfile(lf) else []
-    return p, lines
+    return p, lines, d
 _MID = "c244f2b8-a1eb-4d26-abf2-000000000002"
-_p1, _l1 = _forced("p1", f"OLD Claude — forced-loss wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]")
+_p1, _l1, _ = _forced("p1", f"OLD Claude — forced-loss wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]")
 _ok1 = (b"forced-loss wake" in _p1.stdout and b"LINE DROPPED" not in _p1.stderr and _p1.returncode == 0 and len(_l1) == 1
         and _l1[0].get("ids") == [{"id": _MID, "owner": "CC-B"}] and _l1[0].get("ts") == "2026-10-03T08:00:00.250000+00:00")
 if not _ok1: fails += 1
 print(f"  {'PASS' if _ok1 else '** FAIL **':10} #1142 P1: a record that cannot be read (a directory at its path) delivers the wake AND leaves one loss line with id, owner and message ts "
       f"(rc={_p1.returncode}, woke={b'forced-loss wake' in _p1.stdout}, lines={len(_l1)})")
-_p2, _l2 = _forced("p2", f"OLD Claude — forced-loss wake two.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]", lost_is_dir=True)
+_p2, _l2, _ = _forced("p2", f"OLD Claude — forced-loss wake two.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]", lost_is_dir=True)
 _ok2 = (b"forced-loss wake two" in _p2.stdout and b"LINE DROPPED" not in _p2.stderr and _p2.returncode == 0
         and b"loss record could not be written" in _p2.stderr and _MID[:8].encode() in _p2.stderr)
 if not _ok2: fails += 1
 print(f"  {'PASS' if _ok2 else '** FAIL **':10} #1142 P2 (B2): the append ALSO fails — the wake still prints, nothing is dropped, and stderr names the id "
       f"(rc={_p2.returncode}, woke={b'forced-loss wake two' in _p2.stdout}, dropped={b'LINE DROPPED' in _p2.stderr})")
-_p3, _l3 = _forced("p3", "NEW Claude — a bad marker only.\n\n[[ALERT id=badzzzzz owner=CC-B action=\"x\"]]")
+_p3, _l3, _ = _forced("p3", "NEW Claude — a bad marker only.\n\n[[ALERT id=badzzzzz owner=CC-B action=\"x\"]]")
 _ok3 = (_p3.returncode in (0, 3) and b"LINE DROPPED" not in _p3.stderr and len(_l3) == 1 and _l3[0].get("ids") == []
         and len(_l3[0].get("rejects") or []) == 1 and "badzzzzz" in _l3[0]["rejects"][0])
 if not _ok3: fails += 1
 print(f"  {'PASS' if _ok3 else '** FAIL **':10} #1142 P3 (C3): a loss with no alert id still leaves a line, carrying the reject's snippet "
       f"(rc={_p3.returncode}, lines={len(_l3)})")
+# Langston Step-4 C-2 — expected: a loss file already past 1 MB is set aside WHOLE as `.old` (same size, never rewritten),
+# and the new loss line starts a fresh file holding exactly that one line.
+_p5, _l5, _d5 = _forced("p5", f"OLD Claude — rotation wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]", prefill=1100 * 1024)
+_old5 = os.path.join(_d5, "CC-A.alert-owners.lost.jsonl.old")
+_ok5 = (b"rotation wake" in _p5.stdout and os.path.isfile(_old5) and os.path.getsize(_old5) == 1100 * 1024 + 1 and len(_l5) == 1
+        and _l5[0].get("ids") == [{"id": _MID, "owner": "CC-B"}])
+if not _ok5: fails += 1
+print(f"  {'PASS' if _ok5 else '** FAIL **':10} #1142 C-2: a loss file past 1 MB is kept whole as .old and a fresh file takes the new line "
+      f"(old_size={os.path.getsize(_old5) if os.path.isfile(_old5) else None}, new_lines={len(_l5)})")
 # P4 — expected: a READABLE record whose directory is read-only, so the temp file for the save cannot be created; the wake
 # prints, nothing is dropped, the loss line is written... to a directory that is read-only. So the append fails too, and the
 # stderr line is the record: it names the id and says the loss record could not be written. (Read-only blocks BOTH files —

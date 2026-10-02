@@ -1,7 +1,7 @@
 // B-TOKEN-BURN-CUT amendment 1, OBJ-6 — tests for .claude/hooks/alert-split.mjs (pure). Run: node scripts/analysis/test-alert-split.mjs
 // Every case states its expectation before it runs; the suite ends with a count of cases that SHOWED something, so a
 // run that shows nothing can never read as a pass.
-import { splitAlerts, capBuckets, lostRoutings, CLONE_TO_ALIAS, CHURN_HOURS } from '../../.claude/hooks/alert-split.mjs';
+import { splitAlerts, capBuckets, lostRoutings, lostReport, CLONE_TO_ALIAS, CHURN_HOURS } from '../../.claude/hooks/alert-split.mjs';
 
 let pass = 0, fail = 0, shown = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -119,6 +119,16 @@ ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-
   ok('latest loss per id wins', r.lost.length === 1 && r.lost[0].owner === 'CC-C');
   // expected: no owner record at all (null) → nothing clears, nothing throws
   ok('null owners → reported, no throw', run([lost1], null).lost.length === 1);
+  // Langston Step-4 C-1 — expected: an owner-less line for id "__proto__" is NOT cleared by prototype indexing
+  // (control: the pre-fix `owners[x.id]` read Object.prototype, whose `.owner` is undefined === the line's undefined owner)
+  ok('C-1: id "__proto__" with no owner is not silently cleared', run(['{"ts":"2026-10-03T10:00:00Z","at":"2026-10-03T10:00:05Z","ids":[{"id":"__proto__"}]}'], {}).lost.length === 1);
+  // Langston Step-4 BLOCKER-1 — the report line itself: shown with NO owner record (the load-failure case), and the
+  // could-not-read case says so; nothing to say gives ''.
+  const rep = lostReport(run([lost1], null), null);
+  ok('B1: the report names id → owner even when there is no owner record', rep.includes('aaaaaaaa → CC-A') && rep.includes('tell Langston, leading with his name'));
+  shown += rep ? 1 : 0;
+  ok('B1: a failed read of the loss file says the session cannot tell', /cannot tell whether any alert routing was lost/.test(lostReport(null, 'the lost-routing record could not be read (EACCES)')));
+  ok('nothing lost and no read failure → empty', lostReport(run([], {}), null) === '' && lostReport(null, null) === '');
 }
 
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);

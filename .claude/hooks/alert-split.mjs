@@ -87,13 +87,33 @@ export function lostRoutings(lines, owners, nowMs = Date.now(), dropFirst = fals
   });
   const lost = [];
   for (const x of latest.values()) {
-    const cur = owners && typeof owners === 'object' ? owners[x.id] : null;
+    // Langston Step-4 C-1: an OWN-property read, never prototype indexing — `owners["__proto__"]` would match an
+    // owner-less line as `undefined === undefined` and clear it silently. (Ids are uuid-validated by the writer, so this
+    // is a fence, not a live path.)
+    const cur = owners && typeof owners === 'object' && Object.prototype.hasOwnProperty.call(owners, x.id) ? owners[x.id] : null;
     if (cur && cur.owner === x.owner) continue;                                   // C11: the routing stands
     const curMs = cur ? tsMs(cur.ts) : null, lostMs = tsMs(x.ts);
     if (curMs !== null && lostMs !== null && curMs >= lostMs) continue;           // CLEARING: message clock
     lost.push(x);
   }
   return { lost, rejects, prose, unparseable };
+}
+
+// The one line the hook shows for a lost routing — pure, so the wording and both of its cases are tested. `lost` is
+// lostRoutings' result or null; `lostWhy` names a failed read of the record. Returns '' when there is nothing to say.
+// "Narrowing is off" and "these routings were destroyed" are different facts with different actions (Langston B1):
+// this line is only ever the second, and it is shown whether or not the session's list is narrowed.
+export function lostReport(lost, lostWhy) {
+  if (lost && (lost.lost.length || lost.rejects.length || lost.prose || lost.unparseable)) {
+    const ids = lost.lost.map((x) => `${String(x.id).slice(0, 8)} → ${x.owner}`).join(', ');
+    const extra = [lost.rejects.length ? `${lost.rejects.length} rejected marker(s) (latest: ${lost.rejects[lost.rejects.length - 1]})` : '',
+      lost.prose ? `${lost.prose} prose-skip count(s)` : '', lost.unparseable ? `${lost.unparseable} unreadable line(s) skipped` : '']
+      .filter(Boolean).join('; ');
+    return `⚠ this session's wake filter failed to save ${lost.lost.length} alert routing(s) in the last ${LOST_HOURS} h`
+      + (ids ? ` — they read as unrouted here until re-stated: ${ids}` : '') + (extra ? ` (also lost: ${extra})` : '')
+      + ' — tell Langston, leading with his name, to re-state those markers.';
+  }
+  return lostWhy ? `⚠ ${lostWhy} — this session cannot tell whether any alert routing was lost.` : '';
 }
 
 // Round 3 BLOCKER-2 (Langston): ONE cap, taken in PRIORITY order — critical, then unrouted, then yours — so a runaway

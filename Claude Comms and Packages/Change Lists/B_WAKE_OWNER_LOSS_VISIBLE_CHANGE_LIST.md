@@ -76,3 +76,16 @@ Own try/catch; `openSync` → `fstatSync` → `readSync` of the last `LOST_TAIL_
 
 ## A FINDING OUTSIDE THIS BATCH — for its own dispatch, not this review
 P4 on Linux exits **1 after the wake prints**: in a read-only state directory the POSITION save at `#@CAUGHTUP` (`_checkpoint` → `save_state`) raises. The arm loop reads non-zero as retry, so the task never ends and the next arm re-delivers the same message. That predates #1142 and touches the position state, not the owner record. **Proposed §9.4 disposition 4 — a scheduled review: I will put it to you as its own single question after this review, not fold it in here.**
+
+## r2 — Langston's Step-4 verdict CHANGES NEEDED (inbox id 1555710975…): BLOCKER-1 + C-1, with C-2 and the nits in the same commit
+
+| item | change | proof |
+|---|---|---|
+| **BLOCKER-1** — the hook read the loss file only when `narrowed`, and an unreadable owner record (the load failure this batch records) is exactly what makes `narrowed` false | `inject-due-alerts.mjs`: the loss read is gated on the **alias alone**; the line is built by a new pure `lostReport(lost, lostWhy)` in `alert-split.mjs` and appended to BOTH emits (the full-list path and the narrowed path). Its wording only ever says "these routings were destroyed", never "narrowing is off" — the full-list header already says that. | test-alert-split: the report names `id → owner` with NO owner record; a failed read says the session cannot tell; nothing to say → `''`. **Hook smoke with a DIRECTORY at the owner-record path** (the EISDIR state): header `full list — owner record unreadable (EISDIR)` AND the line `… failed to save 1 alert routing(s) … dddddddd → CC-B — tell Langston …`. |
+| **C-1** — `owners[x.id]` was prototype indexing; `"__proto__"` with no owner cleared silently | own-property read (`Object.prototype.hasOwnProperty.call`) at the one index site in `lostRoutings`; `splitAlerts`'s pre-existing site is out of scope, as ruled | new case passes; **control**: the pre-fix module returns 0 for that line (silently cleared), the fixed one returns 1 |
+| **C-2** — the loss file had no cap | `_record_loss`: past `LOST_ROTATE_BYTES` = 1 MB the file is set aside WHOLE with `os.replace(… , … + ".old")` before the append, inside the same `OSError` catch — never rewritten in place. `_sweep_tmp` does not match `.old`. | new leg: a 1,126,401-byte file becomes `.old` at exactly that size and the fresh file holds the one new line — Windows and Linux |
+| nit (a) | `_record_loss`'s docstring now claims what the code does: it catches every `OSError` from the file; the JSON it builds is plain strings and ints | — |
+| nit (b) — stated, not fixed | **`test-wake-lease.py` is NOT in CI** (it drives Windows processes, PowerShell and taskkill), and **P4's census stamp (`:400`) is PowerShell-only — the one behavioural change in this diff with ZERO CI reach.** Its proof is the laptop run (OBJ-4 PASS, control FAILS) and stays RULED ON REPORTED FACT. | — |
+
+**Runs at r2:** `test-wake-filter-cuts.py` Windows ALL PASS (P4 SKIP); Linux as `nobody` ALL PASS incl. P4 and C-2; `test-alert-split.mjs` 40 / 40 (Windows and Linux); CI on the review ref — see the dispatch.
+**Not taken here:** Langston's §13 item (`dt-review` cannot read a batch branch) is his and Infra Claude's (`B-DT-REVIEW-BATCH-BRANCH`).

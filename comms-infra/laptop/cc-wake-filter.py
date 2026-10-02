@@ -639,15 +639,21 @@ def _save_owners(owners):
 #             "ids": [{"id", "owner"}] — only NEW or FLIPPED ids, "rejects": [marker snippets], "prose": n}.
 # Readers: `.claude/hooks/inject-due-alerts.mjs` (tail only) via `lostRoutings` in `alert-split.mjs`. No deleter.
 LOST_FILE = os.path.join(os.path.dirname(OWNERS_FILE), f"{ALIAS}.alert-owners.lost.jsonl")
+LOST_ROTATE_BYTES = 1024 * 1024     # one generation kept as `.old` beyond this (Langston Step-4 C-2)
 
 
 def _record_loss(ts, lost_ids, lost_rejects, lost_prose, err):
-    """Never raises (Langston B2): this runs inside the per-line try whose handler drops the line — and the WAKE."""
+    """Catches every OSError from the file (Langston B2): this runs inside the per-line try whose handler drops the line —
+    and the WAKE. What it builds is plain lists of strings and ints, so the JSON encoding has nothing to fail on."""
     named = ", ".join(f"{x['id'][:8]}->{x['owner']}" for x in lost_ids) or "no alert id"
     extra = (f"; also {len(lost_rejects)} rejected marker(s)" if lost_rejects else "") + \
             (f"; {lost_prose} prose skip(s)" if lost_prose else "")
     rec = {"ts": ts, "at": _utc(), "ids": lost_ids, "rejects": lost_rejects, "prose": lost_prose}
     try:
+        # Langston Step-4 C-2: one generation kept, never rewritten in place. The failure that writes this file can append
+        # on every marker line, so past ~1 MB it is set aside whole (the hook reads only the live file's tail anyway).
+        if os.path.isfile(LOST_FILE) and os.path.getsize(LOST_FILE) > LOST_ROTATE_BYTES:
+            os.replace(LOST_FILE, LOST_FILE + ".old")
         with open(LOST_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
         where = f"recorded in {os.path.basename(LOST_FILE)}"
