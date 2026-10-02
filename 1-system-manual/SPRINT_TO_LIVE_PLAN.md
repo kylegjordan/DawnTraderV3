@@ -381,7 +381,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 |---|---|---|---|
 | B-FEED-MISMATCH-FIX | CC-B | 300 taker closes or 2026-10-10 (paused for the sprint start, Kyle 2026-09-30) | `B_FEED_MISMATCH_FIX_PROGRESS_REPORT.md` |
 | B-XSTOCK-FEE-CONTRACT | CC-B | 2026-10-02T20:09:47Z, not extended (Langston 2026-09-29) | `B_XSTOCK_FEE_CONTRACT_COMPLETION_REPORT.md` |
-| B-INSTRUMENTS-OVER-RULES | CC-A | 2026-10-02 | — |
+| B-INSTRUMENTS-OVER-RULES | CC-A | ✅ CLOSED 2026-10-01 — the usage measure was read early (verdict FAIL, fixed by the windows already closed) | `Claude Comms and Packages/Batch Completion/B_INSTRUMENTS_OVER_RULES_COMPLETION_REPORT.md` |
 
 ## 6. Who owns what — grouped so connected work stays with one session
 
