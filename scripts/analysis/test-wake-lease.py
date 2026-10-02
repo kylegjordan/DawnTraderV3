@@ -63,8 +63,8 @@ def arm_loop(lr, st, src_dir):
     out, lp = os.path.join(src_dir, "task.out"), os.path.join(src_dir, "loop.pid")
     u = lambda p: p.replace("\\", "/")
     script = (f'L=$(cat /proc/$$/winpid); echo "$L" > "{u(lp)}"; while :; do '
-              f'P=$(python "{u(FILTER)}" CC-A --positions --state "{u(st)}" --lease-root "{u(lr)}" --loop $L) || break; '
-              f'python "{u(FOLLOW)}" $P | python -u "{u(FILTER)}" CC-A --once --state "{u(st)}" --lease-root "{u(lr)}" --loop $L; '
+              f'P=$(python3 "{u(FILTER)}" CC-A --positions --state "{u(st)}" --lease-root "{u(lr)}" --loop $L) || break; '
+              f'python3 "{u(FOLLOW)}" $P | python3 -u "{u(FILTER)}" CC-A --once --state "{u(st)}" --lease-root "{u(lr)}" --loop $L; '
               '[ "${PIPESTATUS[1]}" = 0 ] && break; sleep 2; done')
     env = dict(os.environ, CC_WAKE_SOURCES=f"{u(inbox)} {u(wake)}", CC_WAKE_KEEPALIVE_S="2", PYTHONIOENCODING="utf-8")
     p = subprocess.Popen([BASH, "-c", script], stdout=open(out, "w"), stderr=subprocess.STDOUT, env=env)
@@ -153,6 +153,13 @@ say(c1.returncode == 5 and c1.stdout == "" and c1.stderr.startswith("WATCHER-CEN
     f"C1 an unrunnable census refuses by name (rc={c1.returncode}, {c1.stderr[:50]!r})")
 c1b = subprocess.run([PY, FILTER, "CC-A", "--count", "--lease-root", lr], capture_output=True, text=True, timeout=90, env=bad)
 say(c1b.returncode == 1 and c1b.stdout.startswith("unknown"), f"C1 --count reports unknown, not 0 (rc={c1b.returncode}, {c1b.stdout.strip()[:30]!r})")
+# STEP-4 r2 C1-a — expected: a census program that exits 0 and prints NOTHING (no completion marker) refuses
+# WATCHER-CENSUS: a silent success is not a measured zero.
+stub = "cmd.exe"   # with empty input it prints its banner and exits 0: a success with no completion marker
+c1a = subprocess.run([PY, FILTER, "CC-A", "--positions", "--state", st, "--lease-root", lr, "--loop", str(L11.pid)],
+                     capture_output=True, text=True, timeout=90, env=dict(os.environ, CC_WAKE_PS=stub))
+say(c1a.returncode == 5 and c1a.stdout == "" and c1a.stderr.startswith("WATCHER-CENSUS") and "no completion marker" in c1a.stderr,
+    f"C1-a a silent exit-0 census refuses, it is not a zero (rc={c1a.returncode}, {c1a.stderr[:90]!r})")
 # STEP-4 C2 — expected: TWO stray readers -> WATCHER-ORPHAN names both pids and the count 2 (one refusal, not two).
 lr, st = root()
 strays = [subprocess.Popen([PY, FILTER, "CC-A", "--once", "--state", st, "--lease-root", lr], stdin=subprocess.PIPE,

@@ -395,21 +395,28 @@ def _readers():
         dom = "$_.CommandLine -match '--lease-root \"?" + r"[\\/]".join(parts) + "'"
     else:
         dom = "$_.CommandLine -notmatch '--lease-root'"
-    ps = ("@(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { "
+    ps = ("@(Get-CimInstance -ErrorAction Stop Win32_Process -Filter \"Name='python.exe'\" | Where-Object { "
           f"$_.CommandLine -match 'cc-wake-filter\\.py {re.escape(ALIAS)} ' -and $_.CommandLine -match '--once' -and {dom}"
-          " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToString('s') }")
+          " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToString('s') }; 'CENSUS-OK'")
     ps_exe = os.environ.get("CC_WAKE_PS", "powershell")      # env: tests only (to make the census fail)
     r = None
     for _attempt in range(2):                               # Langston Step-4 C1: retry once, then refuse by name
         try:
-            r = subprocess.run([ps_exe, "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
-            if r.returncode == 0:
+            r = subprocess.run([ps_exe, "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60,
+                               stdin=subprocess.DEVNULL)
+            if r.returncode == 0 and "CENSUS-OK" in r.stdout.splitlines():
                 break
         except (subprocess.TimeoutExpired, OSError) as e:
             r = e
         time.sleep(2)
-    if not isinstance(r, subprocess.CompletedProcess) or r.returncode != 0:
+    # Langston C1-a: the census must PROVE it ran — an exit 0 with no sentinel is not a measured zero (a non-terminating
+    # WMI failure can end the pipeline successfully with no output). C1-b: the reason carries the exit code and stderr,
+    # the only diagnostic fields, on one line.
+    if not isinstance(r, subprocess.CompletedProcess):
         raise CensusFailed(repr(r)[:160])
+    if r.returncode != 0 or "CENSUS-OK" not in r.stdout.splitlines():
+        why = " ".join((r.stderr or "").split())[:120] or "no stderr"
+        raise CensusFailed(f"exit {r.returncode}, no completion marker" if r.returncode == 0 else f"exit {r.returncode}: {why}")
     out = []
     for ln in r.stdout.splitlines():
         p = ln.split()
