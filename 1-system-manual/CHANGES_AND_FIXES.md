@@ -1,5 +1,15 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-02-A — `B-PATTERN-ENUM-DRIFT` (hotfix, `#1063`, CC-B, Kyle-directed) — the ABCD pattern could not be saved, so every ABCD-confirmed signal failed at the trade insert
+
+**CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_PATTERN_ENUM_DRIFT_SCOPE.md` (r4). **Ships with deploy B (not before 2026-10-05) as migration 10.**
+**SYMPTOM (measured):** `TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"` on every ABCD-confirmed `volatility_edge` promotion — 22,368 `trade_insert_err` lines in the error logs 2026-09-19 → 10-02; after deploy A's restart (2026-10-02T20:37:49Z) the only thing reaching promotion (20 of 26 passes `failed=1`, all `QNT/USD`; 6 empty).
+**MECHANISM:** `shared/schema.ts:111` declares `pattern_type` with six values including `ABCD`; no migration ever created it (`2026-04-22-initial-schema.sql:707`, live `pg_enum`: five). The active sinks write the raw detector label (`signal-orchestrator.ts:2311`, `:3266` ← `hybrid-integration.ts:186`), and the detector emits `ABCD` (`pattern-recognizer.ts:461`). A failed insert drops the RTB row unrestored and the next cycle re-mints it (`#1136`).
+**BLAST RADIUS:** one enum value; three columns (`trades`, `closed_trades`, `active_open_positions`); 0 dependent views; no raw SQL; every label-keyed map falls back on an unknown key. `TRI_STAR` considered and left out (no sink can receive it; Langston + Kyle).
+**FIX:** `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD'` (single statement); ledger-only rollback (**IRREVERSIBLE** — PostgreSQL cannot drop an enum value; leaving it is inert). New `server/tests/unit/b-pattern-enum-drift.test.ts`: every declared value is created by a migration, and **every label the detector emits is declared** — so a new detector arm fails at CI, not at a live insert. Mutation-proved (3 of 5 / 2 of 5).
+**LANGSTON:** Step-4 approved r1 (21:41Z) and r2 (22:00Z) with conditions, all met by r4. CI: r1 `37066468305`, r2 `37067770854`, r3 `37069049895` (two-statement form) — all 4/4 per job.
+**VERIFICATION (after deploy B, the same instruments):** ABCD insert failures = 0 after B's restart (352 on 10-02); the first ABCD-confirmed open carries `pattern_type = 'ABCD'`; `pg_enum` reads the six values. **STILL OPEN:** row 51's remainder (raw-vs-canonical labels, the `'UNKNOWN'` fallback, the TRI_STAR calibration watch); `#1147` found during review.
+
 ## FIX-2026-09-29-A — `B-CHAPLET-OFF-HOTFIX` (hotfix, `#1101`, Infra Claude) — an unauthenticated route served the staging app's file tree to the public internet
 
 **CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B-CHAPLET-OFF-HOTFIX_SCOPE.md`.

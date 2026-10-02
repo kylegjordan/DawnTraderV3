@@ -231,7 +231,7 @@ Tuning, actuation, strategy drive, learning, behavioral, oversight, audit, exper
 | `tradeStatusEnum` | open, closed, cancelled | trades |
 | `tradeTypeEnum` | buy, sell | trades |
 | `signalTypeEnum` | QUANT, PATTERN, HYBRID | rtb_signals, trades |
-| `patternTypeEnum` | PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS | rtb_signals, trades |
+| `patternTypeEnum` | PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS, ABCD (declared in code since B79.0n; storable in the database only from deploy B, migration `2026-10-02-b-pattern-enum-drift-abcd.sql`, `#1063`) | trades, closed_trades, active_open_positions (corrected 2026-10-02: `rtb_signals` has no such column; the sinks write the RAW detector label) |
 | `rtbSignalStatusEnum` | queued, promoted, expired, rejected, reconfirmed, active | rtb_signals |
 | `executionDecisionEnum` | OPENED, BLOCKED | execution_attempt_audit |
 | `executionBlockReasonEnum` | KILL_SWITCH, NO_STOP_LOSS, ... (13 values) | execution_attempt_audit |
