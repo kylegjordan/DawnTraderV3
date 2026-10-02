@@ -22,7 +22,7 @@
 | ➡️ **`B-SCHEDULER-FIRST-TICK`** (`#1039`) | **HANDED to Infra Claude** — sprint plan row 73 names Infra Claude as owner | — | not mine any more; listed so the hand-off is visible |
 | ⏸ **`B-RULES-1e`** | **PAUSED at Step 2** (sprint plan §0: crew tooling, after live) | nothing until after live | pre-audit approved-with-conditions at `650dd2209`; **do NOT re-derive A1-A4** |
 | ⏸ **`B-MEASURE-GATE`** beyond leg 2 | **PAUSED at Step 2** (sprint plan §0: after live) | nothing until after live | Step 1 approved 2026-08-31; leg 2 CLOSED 2026-09-02 |
-| ⛔ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **OBJ-1 REOPENED 2026-09-11 (`#1038`); the tool LOADS since 14:12Z** | the in-session demo + a 14-day usage measure | it had never loaded (no plugin-cache copy); sessions get it on their next restart |
+| ✅ **`B-INSTRUMENTS-OVER-RULES`** (row 3.5) | **CLOSED 2026-10-01** — report `Claude Comms and Packages/Batch Completion/B_INSTRUMENTS_OVER_RULES_COMPLETION_REPORT.md` | the usage measure read FAIL (no session used the tool); OBJ-2 done; OBJ-3 moved after live with B-RULES-1e | — |
 
 ---
 
@@ -45,7 +45,7 @@
 | 12.2 | lookalike register (`#672`) | sub-item | **FIRST BREAK** |
 | 4.7 | `B-HEARTBEAT-RESCOPE` (`#999`) | batch | Langston's condition from `#995` |
 | 4.8 | `B-SLOT-PLACEMENT-CHECK` (`#1009` P2) | batch | the slot-time half, split out of 4.57 at Step 2 · input: `scripts/governance-checker/checker.mjs` `planRowsByBatch` (B-PLAN-CURRENCY-CHECK) |
-| 3.5 | `B-INSTRUMENTS-OVER-RULES` | batch | placed 2026-09-02 |
+| 3.5 | `B-INSTRUMENTS-OVER-RULES` | batch | ✅ CLOSED 2026-10-01 |
 | 4 | `B-REVIEWER-LOOP` (`#758`) | batch | placed 2026-08-28 |
 | 5 | `B-CHUNK-ADDRESSING` (`#749`/`#761`) | batch | placed 2026-08-29 |
 | 6.5 | `B-STATE-ASSERTION-LINT` | batch | placed 2026-08-31 |
@@ -109,7 +109,7 @@ On 30 August we agreed to stop adding rules and give the sessions **tools**. The
 ## 1. The governance programme — CC-A's rows, in plan order
 | # | batch | what it is FOR, plainly | how it helps (tool / format / removal) | state |
 |---|---|---|---|---|
-| — | **`B-INSTRUMENTS-OVER-RULES`** (the tools-not-rules batch Kyle remembers) | DONE: the code search server; the search habits measured. OPEN: strip a 116-line *"here is how I got this wrong"* comment out of a live source file (a comment says what the code does, not the batch's confession); change WHAT LOADS into a session so it reads the repo-wide rules plus only the rules for the area it touches, instead of everything | a tool + a removal + a loading change | **IN FLIGHT at plan row 3.5 (placed 2026-09-02).** The usage measure runs 2026-09-18 → 10-02; the comment strip and the loading change are still open. |
+| — | **`B-INSTRUMENTS-OVER-RULES`** (the tools-not-rules batch Kyle remembers) | DONE: the code search server; the search habits measured. OPEN: strip a 116-line *"here is how I got this wrong"* comment out of a live source file (a comment says what the code does, not the batch's confession); change WHAT LOADS into a session so it reads the repo-wide rules plus only the rules for the area it touches, instead of everything | a tool + a removal + a loading change | ✅ CLOSED 2026-10-01: the code search tool works and went unused (pre-registered measure FAILED); the review-history comment cleaned; path-scoped loading moved after live with B-RULES-1e |
 | 1 | `B-RULES-1e` | measure what actually loads at a session start, then reorder so the important things arrive first | a measurement then a reorder | parked at its audit step until the items Kyle placed ahead of it clear |
 | 4 | `B-REVIEWER-LOOP` (#758) | today "a fresh reader checks it before Langston" is a discipline each session must remember; this makes it ONE COMMAND that runs the reader, records the round, and refuses to send a dispatch that skipped it | a tool — **the direct fix for retract-and-re-retract chatter: the correction happens BEFORE anything is announced** | placed 08-28 |
 | 5 | `B-CHUNK-ADDRESSING` (#749/#761) | long Discord dispatches get split and lose their addressee; the 30 August comms outage is still unexplained | a fix + an investigation | placed 08-29 |

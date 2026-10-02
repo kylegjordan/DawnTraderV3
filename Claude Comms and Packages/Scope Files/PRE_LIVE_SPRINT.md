@@ -71,7 +71,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 70 (+3 struck through)
+### Crew, reviewer, governance and alert tooling — 71 (+3 struck through)
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
@@ -146,6 +146,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 12.2 lookalike register (CC-A) — one page of the pairs that already caused wrong calls — FIRST BREAK by Langston's ruling
 - 20.3 Test Infrastructure — - Add unified test runner scripts ( te (—) — test runner and frontend test tooling
 - row:1 (CC-A) — crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading
+- B-INSTRUMENTS-OVER-RULES OBJ-3 (CC-A) — change WHAT LOADS, not what exists: path-scoped rule files so a session loads the repo-wide rules plus only its own area; measured before/after from `~/.claude/instructions-loaded.jsonl` with a paired negative control (a named binding rule must still load); folded with B-RULES-1e, same subject. Moved here at the batch's close (Langston-ruled shape, 2026-10-01); the rest of the batch closed
 
 ### Legacy and dead-code cleanup (the reachability census may pull some forward) — 21
 

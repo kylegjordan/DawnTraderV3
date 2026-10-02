@@ -11,7 +11,7 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | CC-A (Old Claude) | B-GOV-REPORTING — ✅ CLOSED 2026-09-29 (Step 4 APPROVED, r8; Step 11 CONFIRMED 20:31Z) — report `Claude Comms and Packages/Batch Completion/B_GOV_REPORTING_COMPLETION_REPORT.md` | ✅ done |
 | CC-A (Old Claude) | B-RULES-1e — Step 2 | PAUSE cleanly: crew tooling, after live |
 | CC-A (Old Claude) | B-MEASURE-GATE beyond leg 2 — Step 2 | PAUSE cleanly: after live |
-| CC-A (Old Claude) | B-INSTRUMENTS-OVER-RULES — usage measure to 2026-10-02 | FINISH the measure, then close |
+| CC-A (Old Claude) | B-INSTRUMENTS-OVER-RULES — ✅ CLOSED 2026-10-01: the usage measure read FAIL (no session used the tool); report `Claude Comms and Packages/Batch Completion/B_INSTRUMENTS_OVER_RULES_COMPLETION_REPORT.md` | ✅ done |
 | CC-A (Old Claude) | B-DEPLOY-DRIFT-LINE — ✅ CLOSED 2026-09-09, all four criteria PASS (`BATCH_CATALOG.md`; report `Claude Comms and Packages/Batch Completion/B_DEPLOY_DRIFT_LINE_COMPLETION_REPORT.md`) — this line read "observation window" in error until 2026-09-30 | ✅ done |
 | CC-A (Old Claude) | B-SCHEDULER-FIRST-TICK — ✅ HANDED to Infra Claude (row 73; recorded in CC-A's task list) | ✅ done |
 | CC-A (Old Claude) | B-PLAN-CURRENCY-CHECK (row 1) — ✅ CLOSED 2026-09-30 (Step 11 CONFIRMED, Langston); report `Claude Comms and Packages/Batch Completion/B_PLAN_CURRENCY_CHECK_COMPLETION_REPORT.md` | FINISH before the sprint starts — **Kyle 2026-09-30 (Desktop): it is PRE-SPRINT work**, so the plan-row check and the weekly census are working when the sprint starts, which is when the plan starts moving fast. The exception to the no-sprint-work rule below is this one row only. |
