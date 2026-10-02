@@ -84,6 +84,8 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 113 | B-EXIT-DECISION-RUNG-STAMP | QUEUED | which price rung an exit used |
 | 118 | #1072 — batch named at Step 1 | QUEUED | the price-history recorder's frozen symbol set |
 | 124a | B-AMR-INPUT-INTEGRITY-ARC (`#600`, `#604` leg A, `#608`, `#609`, `#610`, `#611`, `#612`) | QUEUED | after row 124 |
+| 124b | P19-B-DROUGHT-2 (`PHASE_19_PLAN.md:23`) | QUEUED | after row 124a, before row 125: the drought batch two (DI recorded, spread ceiling, depth floor, volume floor, combinations study, mean-reversion decision) + the 25-5 gate's seven untriggered items, published after row 150 (placed 2026-10-02) |
+| 124c | B-NEWS-ALTDATA-LAYER (STRATEGIC_DIRECTIONS item E) | QUEUED | after row 124b: capture-only first (news + on-chain inputs per decision), the score and its IC test after row 148a (Kyle 2026-10-02) |
 | 135b | B-CONCENTRATION-SCORE-UNITS | QUEUED | after row 135a (Langston 2026-09-30, `B-SIZING-DEC-RESTORE` 2e J1b): the score mixes dollars with a 2.5 cap and is computed once at boot on an empt… |
 | 138a | B-PATTERN-SIZE-CAP-REVIEW (`#1115`) | DONE — decided (Kyle 2026-09-30: cap OFF; removed in B-SIZING-DEC-RESTORE 2e) | SUPERSEDED: |
 | 148c | `#399` (b) fractional Kelly | QUEUED | after rows 148a (B-PWIN-CALIBRATION, CC-A) and 148b: size by fractional Kelly on the calibrated pWin, Kelly and its tight cap together (placed by Langston 2026-10-02) |

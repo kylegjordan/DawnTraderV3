@@ -53,7 +53,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 18.4 Fly: ML as Primary Intelligence — - ML replaces rules-based (—) — already placed post-live in the roadmap
 - 18.5 Trend Mining Engine — parallel architecture (per Phase 17.6 (—) — already placed post-live in the roadmap
 - 19.6.4 Forward role — ML / AI conversational layer API — When the M (—) — forward role for the ML conversational layer — Phase 17/18
-- 25-1 B79.0n.ML-CALIBRATION T2 (umbrella v4 #15) Tier 2 ML calibra (—) — ML calibration tier 2 — its own row says it needs live evidence
+- ~~25-1 B79.0n.ML-CALIBRATION T2 (umbrella v4 #15) Tier 2 ML calibra (—) — ML calibration tier 2 — its own row says it needs live evidence~~ WITHDRAWN 2026-10-02: its object, the ML Calibration Service, is removed under 16.8 (Kyle: REMOVE); per-class confidence calibration is sprint row 148a
+- Periodic ML edge-scan scheduled job (`STRATEGIC_DIRECTIONS_AND_AI_EDGE.md` item F; roadmap post-live backlog) — owner CC-C — after live: re-run the HCE engine (`scripts/hce/hce_study.py`) as a scheduled weekly/monthly routine producing ranked candidate gates and a drift report; sits beside 25-22 (named 2026-10-02, Langston: "stays after-live" is not a home)
 - 25-11 Order-book / liquidity-aware position sizing + thin-market e (—) — SPLIT (Langston): the liquidity-aware sizing MODEL is Phase 25 calibration. The small fail-closed REFUSAL half is a separate MUST item (25-11a)
 - 25-22 Edge-decay monitor — selection-IC + per-strategy calibration (—) — edge-decay monitor — research idea; most valuable once live
 - 25-23 Probabilistic hidden-state (HMM-style) regime inference → re (—) — hidden-state regime inference — research idea
