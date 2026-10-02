@@ -10,4 +10,7 @@
 #   readers are a separate domain).
 # Limit 2: between a failed pipeline and the next, a loop sleeps 30 s with no reader, so 0 is not proof the loop is dead.
 A="${1:?usage: cc-wake-count.sh <ALIAS>}"
-python "$(dirname "$0")/cc-wake-filter.py" "$A" --count
+# The folder as a WINDOWS path (`pwd -W`): with MSYS_NO_PATHCONV=1 set, a `/c/...` argument reaches Windows Python
+# unconverted and opens `C:\c\...` (measured at install, 2026-10-02).
+D=$(cd "$(dirname "$0")" && pwd -W)
+python "$D/cc-wake-filter.py" "$A" --count

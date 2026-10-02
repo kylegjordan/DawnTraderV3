@@ -10,9 +10,8 @@ process.stdout.write(
   '   origin/migration/aws-supabase). An asserted ABSENCE needs presence-evidence — never infer\n' +
   '   "absent" from an empty or failed read. A failed read must produce a REFUSAL, not a recollection.\n' +
   '2. WAKE WATCHER: if no WAKE events have arrived recently AND a compaction/resume just happened,\n' +
-  '   re-arm the watcher per MEMORY 4.5 - a background task, NOT a Monitor (judge liveness by its file\n' +
-  '   ~/.claude/cc-wake-state/<ALIAS>.json.alive). STALE IS NOT PROOF OF DEAD: before arming run\n' +
-  '   `bash ~/.claude/cc-wake-count.sh <ALIAS>` - 0 = re-arm; 1 = one is running, do NOT arm;\n' +
-  '   2+ = TaskStop extras (two watchers deliver every wake twice).\n'
+  '   re-arm with the MEMORY 4.5 command - a background task, NOT a Monitor. Re-arming is SAFE: a lease\n' +
+  '   refuses a second watcher with a WATCHER- line (#1140) - act on its FIRST WORD as 4.5 lists\n' +
+  '   (STAND-DOWN = do NOT re-arm; STUCK/ORPHAN = stop what it names, then re-arm).\n'
 );
 process.exit(0);
