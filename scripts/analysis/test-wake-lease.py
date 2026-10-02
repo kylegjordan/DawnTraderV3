@@ -158,7 +158,7 @@ say(c1b.returncode == 1 and c1b.stdout.startswith("unknown"), f"C1 --count repor
 stub = "cmd.exe"   # with empty input it prints its banner and exits 0: a success with no completion marker
 c1a = subprocess.run([PY, FILTER, "CC-A", "--positions", "--state", st, "--lease-root", lr, "--loop", str(L11.pid)],
                      capture_output=True, text=True, timeout=90, env=dict(os.environ, CC_WAKE_PS=stub))
-say(c1a.returncode == 5 and c1a.stdout == "" and c1a.stderr.startswith("WATCHER-CENSUS") and "no completion marker" in c1a.stderr,
+say(c1a.returncode == 5 and c1a.stdout == "" and c1a.stderr.startswith("WATCHER-CENSUS") and "no completion marker: no stderr" in c1a.stderr,   # the stderr field is carried (cmd.exe writes none)
     f"C1-a a silent exit-0 census refuses, it is not a zero (rc={c1a.returncode}, {c1a.stderr[:90]!r})")
 # STEP-4 C2 — expected: TWO stray readers -> WATCHER-ORPHAN names both pids and the count 2 (one refusal, not two).
 lr, st = root()

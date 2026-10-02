@@ -416,7 +416,7 @@ def _readers():
         raise CensusFailed(repr(r)[:160])
     if r.returncode != 0 or "CENSUS-OK" not in r.stdout.splitlines():
         why = " ".join((r.stderr or "").split())[:120] or "no stderr"
-        raise CensusFailed(f"exit {r.returncode}, no completion marker" if r.returncode == 0 else f"exit {r.returncode}: {why}")
+        raise CensusFailed(f"exit 0, no completion marker: {why}" if r.returncode == 0 else f"exit {r.returncode}: {why}")
     out = []
     for ln in r.stdout.splitlines():
         p = ln.split()
