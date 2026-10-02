@@ -32,6 +32,8 @@
 | **OBJ-8** | The prose class gets a bounded measurement | **YES (done earlier)** | 556 IDs, 27 % multi-homed; ruled "build nothing"; spawned `#970` → `B-DISAGREEMENT-FINDER`. |
 
 ## WHAT THE BATCH ESTABLISHED, PLAINLY
+⛔ **CITE WITH ITS TAG (Langston, Step-11 condition):** the usage counts are laptop-only, unreachable by the reviewer by construction, so this verdict is **RULED ON REPORTED FACT** permanently. It was accepted only because its consequence is inaction. **Every forward citation of "availability was not the blocker" carries that tag and is never cited as a measured finding** (`#452`).
+
 
 The diagnosis was that sessions get things wrong because they lack instruments, not rules. The one instrument this batch could build — code search that understands the code — was built, fixed, proven to work, and then **not used by any session in three weeks**. That is the result, and the batch states it rather than writing a rule telling sessions to use the tool (three instruction-shaped fixes have already been measured failing, `#995`). The prose half of the problem has no such instrument; it is being measured in `B-DISAGREEMENT-FINDER`.
 
