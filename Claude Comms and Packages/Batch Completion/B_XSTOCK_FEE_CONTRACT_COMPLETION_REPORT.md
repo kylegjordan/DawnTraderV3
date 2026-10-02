@@ -8,7 +8,7 @@
 
 ## ⏳ OPEN AT CLOSE — STATED AT THE TOP, NOT BURIED
 
-**The batch is CLOSED; the QUESTION it opened is not.** Two pre-registered observation windows opened at the deploy instant and cannot be read for about three weeks.
+✅ **BOTH WINDOWS READ AND CLOSED 2026-10-02 (P8 INCONCLUSIVE as ruled; Arm B a rise) — see FINAL READ OF RECORD below; the open question moves to `#1097`.** **The batch is CLOSED; the QUESTION it opened is not.** Two pre-registered observation windows opened at the deploy instant and cannot be read for about three weeks.
 
 | open item | owner | home | closing condition | failure condition |
 |---|---|---|---|---|
@@ -39,6 +39,30 @@ Read at 2026-09-29T14:19:38Z (P8) and 14:00Z (Arm B) on staging by a read-only r
 | S5 → read 09-29 14:00Z; current code (4.97 days) | n 46,457 · 908 = 1.954 % | 173.5 |
 **Further limits on the size:** short segments are skewed by time of day (off-hours rates are flat from the deploy on, 12–17× the baseline's off-hours rate) · the row-level B1 rate overstates the loosening (setup-level 6.2 % → 42.3 %, 6.9× against 10.1×) · B2 is not independent of B1 · `3n.v` is shown inert for B1 in code (the xStock VTS reach and min-reward-to-risk gates only tag).
 **⚠️ A CORRECTION TO THE PRE-AUDIT'S REASON, not to its number:** `:264` calls 2026-09-07 "a partial Sunday"; **it was Monday, Labor Day (a US market holiday).** The stronger fact is a composition defect: **all 1,748 of that day's gate rows are the 17 alias symbols** (evaluated on crypto prices through the shared cache key, `#1024`). The alias exclusion (condition 6) **does apply to Arm B** (`:279`), so 09-07 adds nothing to B1's rate but sits inside B2's per-day baseline as a structural zero day. The registered figure stands (20.6/day; the pre-registered text is not rewritten); with 09-07 replaced by the prior trading day, 09-03, it is 31.2/day (B1 0.217 %) — the rise holds either way. Also recorded on `#1010` in `RUNNING_ISSUES`.
+
+### ✅ FINAL READ OF RECORD, 2026-10-02 — BOTH WINDOWS CLOSED AT 2026-10-02T20:09:47Z
+Run by CC-B, read-only on staging, from the `*_final.sql` copies in `B_XSTOCK_FEE_CONTRACT_EVIDENCE/` (each is the interim file with only its end bound moved to the window's close). Read instants: P8 `p8_q1_final.sql` **2026-10-02T20:26:55Z**; the rebuilt context query **20:31:41Z**; the Arm B readers ran in the same batch, 20:10Z–20:31Z, and their last window row is 20:09:44Z. **Controls first, all passed:** the frozen Step-6 Arm B baseline re-derives exactly (**100 / 54,136; 105; verdict 98 / 50,633 / 103; alias 2 / 3,503 / 2**); the frozen `p₀` rows re-derive exactly (**verdict 23 / 112 = 20.5 %, pooled 25 / 114 = 21.9 %**); the pre-deploy positive control for `r` reads 25 of 25 maker picks at r ≤ 1, as before; **VOID did not fire** — no xStock `maker_taker` row was written in the window (last write 2026-07-15), the two xStock fee rows still read `0.0010` / `-0.0002` from 2026-09-11 20:09:37Z, and the haircut as applied on every post-deploy evidence row is the same in every segment (`maker_fill_probability` 0.50, adverse selection 0.0017925).
+
+**P8 — CLOSED INCONCLUSIVE, AS LANGSTON RULED ON 2026-09-29 (15:14Z). The criterion, as pre-registered (`PRE_AUDIT:239-249`): PASS = zero class-(iii) rows AND maker share ≤ 1.0 % at n ≥ 300; NO IMPROVEMENT = share ≥ `p₀`; anything between = INCONCLUSIVE.** The final numbers, verdict population (17 alias symbols excluded):
+- **2,874 decisions, 165 maker picks = 5.74 %** (S0 2/23 · S1 12/256 · S2 35/720 · S3 none, a weekend · S4 18/232 · S5 98/1,643). Between the PASS line and every `p₀`, so INCONCLUSIVE on the share alone.
+- **Classes: (iii) 164 · (ii) 1 · (i) 0.** ★ **The one class-(ii) row is new since the interim read (S5, r = 1.2085): the first decision in the window where the corrected maker advantage beat its own threshold at its own entry.** It changes nothing in the verdict, because zero class (iii) is a condition and 164 remain.
+- **Buckets for the 164 class-(iii) rows: booked-new 6 · booked-old 0 · no position 158.** The six are the same six as at the interim read (BE, NIO, MRVL, AMC, SPCE ×2); every one booked the new rate (taker `0.001000` ×5, maker `-0.000200` on MRVL and AMC). **No decision in the window booked the old rate.**
+- **Alias rows restored: 177 / 2,956 = 5.99 %, 12 more class (iii), 0 booked — no flip.**
+- **Decision of record (Langston, 2026-09-29): INCONCLUSIVE, read as "this test could not answer", not "wait longer"; not extended on this instrument.** PASS was unreachable by construction, because class (iii) catches a thin genuine survivor too. **The successor carries the real question:** `B-FEE-BASIS-STAMP` (`#1097`), which stamps the fee rate each decision actually used.
+
+**ARM B — CLOSED. THE RESULT IS THE DIRECTION: A RISE, with no flip on restoring the alias rows. No PASS/FAIL line was registered (`PRE_AUDIT:277`), so the direction is the finding and the size is reported, not judged.** Same split as the interim table; S5 now runs to the window's close. **Trading days are counted as the interim table counted them (UTC calendar time, Saturdays and Sundays excluded; no US market holiday falls in the window); that basis reproduces the interim's S0 48.4, S2 211.7 and S4 146.0 per day.**
+| segment | B1 VTS admission: gate rows · admits = rate | B2 paper admitted per trading day |
+|---|---|---|
+| baseline (frozen Step-6) | n 50,633 · 98 = 0.194 % | 20.6 |
+| S0 → S4 | unchanged from the interim table above | unchanged |
+| **S5 `bc199185e` 09-22 14:38Z → window close (8.23 trading days)** | **n 79,085 · 1,728 = 2.185 %** | **199.6** |
+| **whole window, verdict population** | **n 151,938 · 3,054 = 2.010 %** | **194.3** (2,914 over 15.00 trading days) |
+| **whole window, alias rows restored** | **n 156,414 · 3,140 = 2.007 %** (baseline 0.185 %) | **199.7** (baseline 21.0) |
+⇒ **Direction: up on both measures, in every segment, with and without the alias rows.** The second reader's query (`rv_armb_main_7c2_final.sql`) returns the same per-segment counts. **The size is still not the fee contract's alone**: the same restart shipped `B-PRICE-SIDE-BY-JOB` OBJ-7 and reset the xStock learning epoch, so the multiple is not attributed (Langston's ruling at the interim read stands).
+
+**Context, rebuilt and still not the verdict** (`rv_context_final.sql`): the implied maker-over-taker advantage before the deploy, **113 joined decisions, 0 below 0.004, minimum 0.00464**; after it, **98 of 177 maker picks below 0.004**, and 2,514 of 2,757 taker decisions, consistent with the new 0.0012 fee gap plus slippage.
+
+**WHAT CLOSES, AND WHAT DOES NOT:** both observation windows are read and closed, so `#1010` closes. **The question P8 could not answer moves to `#1097` (`B-FEE-BASIS-STAMP`), owner CC-B, already placed.** The Arm B loosening is a sized fact that the Phase-25 calibration inherits; it is not a defect.
 
 ---
 
