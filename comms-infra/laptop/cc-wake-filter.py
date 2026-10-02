@@ -351,16 +351,17 @@ def _proc(pid):
     import ctypes, ctypes.wintypes as w
     k = ctypes.WinDLL("kernel32", use_last_error=True)
     k.OpenProcess.restype = w.HANDLE
-    h = k.OpenProcess(0x1000, False, int(pid))                     # PROCESS_QUERY_LIMITED_INFORMATION
+    h = k.OpenProcess(0x1000 | 0x00100000, False, int(pid))        # QUERY_LIMITED_INFORMATION | SYNCHRONIZE (for the wait)
     if not h:
         return (False, None) if ctypes.get_last_error() == 87 else (True, None)
     try:
-        code = w.DWORD()
-        ok = k.GetExitCodeProcess(h, ctypes.byref(code))
         c, e, kk, u = (w.FILETIME() for _ in range(4))
         t = k.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(kk), ctypes.byref(u))
         created = ((c.dwHighDateTime << 32) | c.dwLowDateTime) if t else None
-        return ((not ok) or code.value == 259, created)            # 259 = STILL_ACTIVE
+        # The exact test (Langston): WaitForSingleObject(h, 0). An exit code of 259 alone cannot tell a live process
+        # from one that exited WITH 259. Only a CONFIRMED exit reads dead — WAIT_OBJECT_0 (0) = signalled = exited;
+        # WAIT_TIMEOUT means running, and a failed wait (WAIT_FAILED) reads ALIVE, fail-safe like every unreadable case.
+        return (k.WaitForSingleObject(h, 0) != 0, created)
     finally:
         k.CloseHandle(h)
 
@@ -374,6 +375,10 @@ def _holder_alive(lease):
     if not alive:
         return False
     return created is None or lease.get("loop_created") is None or created == lease.get("loop_created")
+
+
+class CensusFailed(Exception):
+    pass
 
 
 def _readers():
@@ -393,7 +398,18 @@ def _readers():
     ps = ("@(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { "
           f"$_.CommandLine -match 'cc-wake-filter\\.py {re.escape(ALIAS)} ' -and $_.CommandLine -match '--once' -and {dom}"
           " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToString('s') }")
-    r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+    ps_exe = os.environ.get("CC_WAKE_PS", "powershell")      # env: tests only (to make the census fail)
+    r = None
+    for _attempt in range(2):                               # Langston Step-4 C1: retry once, then refuse by name
+        try:
+            r = subprocess.run([ps_exe, "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+            if r.returncode == 0:
+                break
+        except (subprocess.TimeoutExpired, OSError) as e:
+            r = e
+        time.sleep(2)
+    if not isinstance(r, subprocess.CompletedProcess) or r.returncode != 0:
+        raise CensusFailed(repr(r)[:160])
     out = []
     for ln in r.stdout.splitlines():
         p = ln.split()
@@ -456,12 +472,17 @@ def _lease_gate():
         if age != "age unknown" and int(age.split()[0]) > 900:
             _refuse("WATCHER-STUCK", f"a watcher of yours runs but is not saving ({who}; .alive {age}) — stop that "
                     f"task or process {lease.get('loop')}, then re-arm")
-        _refuse("WATCHER-STAND-DOWN", f"a watcher of yours is running ({who}; .alive {age}) — do NOT re-arm")
-    readers = _readers()
+        _refuse("WATCHER-STAND-DOWN", f"a watcher of yours is running ({who}; .alive {age}) — do NOT re-arm"
+                + (f". If no wake arrives, check that loop and the lease at {LEASE}" if age == "age unknown" else ""))
+    try:
+        readers = _readers()
+    except CensusFailed as e:
+        _refuse("WATCHER-CENSUS", f"could not list running readers ({e}), so exclusivity cannot be proven — wait a "
+                "minute and re-arm ONCE; if it repeats, do NOT re-arm again: tell Kyle the wake watcher cannot start")
     if readers:
-        pid, start = readers[0]
-        _refuse("WATCHER-ORPHAN", f"reader process {pid} (started {start}) runs with no live loop — stop process "
-                f"{pid}, then re-arm")
+        listed = ", ".join(f"{pid} (started {start})" for pid, start in readers)
+        _refuse("WATCHER-ORPHAN", f"{len(readers)} reader process(es) run with no live loop: {listed} — stop ALL of "
+                "them, then re-arm")
     if _LOOP is None:
         return                              # an old arm with no holder and no reader: unleased, as before (P6 interim)
     if lease is not None:
@@ -489,6 +510,10 @@ def _lease_ours():
     """--once's first check, before any read of stdin and any mutation (Langston C3a, D6)."""
     if os.name != "nt":
         return True
+    if os.path.basename(sys.executable).lower() != "python.exe":       # C5, in BOTH arm modes as the plan states
+        print(f"WATCHER-INTERPRETER: {sys.executable!r} is not python.exe; the reader census cannot see this reader",
+              file=sys.stderr, flush=True)
+        return False
     lease = _lease_read()
     if _LOOP is not None:
         return bool(lease) and lease.get("loop") == _LOOP
@@ -543,7 +568,7 @@ def _sweep_tmp():
     except OSError:
         return
     for n in names:
-        if n.startswith(ALIAS + ".") and ".tmp" in n:
+        if n.startswith(ALIAS + ".") and (".tmp" in n or ".lease.stale." in n):
             p = os.path.join(d, n)
             try:
                 if time.time() - os.path.getmtime(p) > 3600:
@@ -677,7 +702,14 @@ if SEED:
 
 
 if COUNT:
-    print(len(_readers()))
+    if os.name != "nt":
+        print("n/a")             # off Windows there is no census: not a measured zero (#453)
+        sys.exit(0)
+    try:
+        print(len(_readers()))
+    except CensusFailed as e:
+        print(f"unknown: {e}")
+        sys.exit(1)
     sys.exit(0)
 
 

@@ -143,6 +143,25 @@ old = os.path.join(lr, "CC-A.json.tmp.999"); open(old, "w").write("x"); os.utime
 L8 = dummy()
 q = subprocess.run([PY, FILTER, "CC-A", "--once", "--state", st, "--lease-root", lr, "--loop", str(L8.pid)], input=b"", capture_output=True, timeout=60)
 say(q.returncode == 5 and os.path.exists(old), f"P3 a non-holder --once exits 5 before any mutation (rc={q.returncode}, tmp kept={os.path.exists(old)})")
+# STEP-4 C1 — expected: a census that cannot run (no such program) refuses WATCHER-CENSUS, stdout empty, exit 5 — never a
+# crash that reads as a normal wake; and --count says "unknown", never a measured 0.
+lr, st = root(); L11 = dummy()
+bad = dict(os.environ, CC_WAKE_PS="no-such-powershell-xyz")
+c1 = subprocess.run([PY, FILTER, "CC-A", "--positions", "--state", st, "--lease-root", lr, "--loop", str(L11.pid)],
+                    capture_output=True, text=True, timeout=90, env=bad)
+say(c1.returncode == 5 and c1.stdout == "" and c1.stderr.startswith("WATCHER-CENSUS") and "Traceback" not in c1.stderr,
+    f"C1 an unrunnable census refuses by name (rc={c1.returncode}, {c1.stderr[:50]!r})")
+c1b = subprocess.run([PY, FILTER, "CC-A", "--count", "--lease-root", lr], capture_output=True, text=True, timeout=90, env=bad)
+say(c1b.returncode == 1 and c1b.stdout.startswith("unknown"), f"C1 --count reports unknown, not 0 (rc={c1b.returncode}, {c1b.stdout.strip()[:30]!r})")
+# STEP-4 C2 — expected: TWO stray readers -> WATCHER-ORPHAN names both pids and the count 2 (one refusal, not two).
+lr, st = root()
+strays = [subprocess.Popen([PY, FILTER, "CC-A", "--once", "--state", st, "--lease-root", lr], stdin=subprocess.PIPE,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for _ in range(2)]
+DUMMIES.extend(strays)
+wait_for(lambda: count(lr) == "2", 40)
+L12 = dummy(); c2 = pos(lr, st, L12.pid)
+say(c2.returncode == 5 and c2.stderr.startswith("WATCHER-ORPHAN: 2 reader") and all(str(p.pid) in c2.stderr for p in strays),
+    f"C2 every orphan is named, with the count (rc={c2.returncode}, {c2.stderr[:80]!r})")
 # OBJ-3b + OBJ-4 with the REAL arm shape (Langston C7): a live arm loop holds the lease and runs a reader.
 src = tempfile.mkdtemp(prefix="wakelease-src-"); lr, st = root()
 P1, out1, lp1, wake1 = arm_loop(lr, st, src)

@@ -37,3 +37,23 @@ Publishing the new arm before the filter is installed would make every re-arming
 - **OBJ-8** (live, four sessions): after install + re-arm, a deliberate second arm per session is refused and the session acts on the WATCHER- line; `cc-wake-count.sh` reads 1 per alias.
 - **OBJ-9 / C1:** measure the OLD arm against a filter that refuses no-`--loop` outright BEFORE any such flip; the prediction (A7) is a silent endless loop, in which case the flip does not ship and P6 is terminal.
 - **Owed:** `MEMORY_CC_C.md:108` (ANALYST Claude) describes the old arm.
+
+## STEP 4 — APPROVED by Langston (2026-10-02 ~01:15Z, at `22336156f`), three conditions; this commit discharges C1, C2 and his record items
+
+- **C1 — the census can no longer crash the gate.** `_readers()` retries once, then raises `CensusFailed`; `_lease_gate` refuses `WATCHER-CENSUS` (stdout empty, exit 5) with a bounded instruction (re-arm ONCE after a minute; if it repeats, do not re-arm, tell Kyle). `--count` prints `unknown: …` and exits 1, never a 0. Test: `CC_WAKE_PS` (env, tests only) pointed at a missing program → `WATCHER-CENSUS`, no traceback; `--count` → `unknown`.
+- **C2 — every orphan is named, with the count.** `WATCHER-ORPHAN: N reader process(es) … — stop ALL of them, then re-arm`. Test: two stray readers → one refusal naming both pids and `2`.
+- **Record items taken:** liveness by `WaitForSingleObject(h, 0)` — only a confirmed exit reads dead; this needed `SYNCHRONIZE` on the open (the first attempt without it made every live holder read dead and FAILED six cases — caught by the suite before commit); the interpreter assert now runs in `--once` too, as the plan said; `--count` prints `n/a` off Windows; the `age unknown` STAND-DOWN line names the lease path; `_sweep_tmp` also sweeps `<ALIAS>.lease.stale.*`. The unused exit-code read is removed.
+- **Tests on this commit:** `test-wake-lease.py` **ALL PASS (18)**; `test-wake-filter-cuts.py` and `test-wake-follow.py` ALL PASS; no test process left running.
+
+## C3 — THE D1 INSTALL COMMIT'S SET, from a grep of the count-first class at the ref (Langston: "grep the class and state what it returned")
+
+Pattern `cc-wake-count|count first|COUNT BEFORE|do NOT arm|1 = running|stale is not proof`, history files excluded. Live hits that teach the arm rule:
+| file | what changes in the install commit |
+|---|---|
+| `.claude/memory/MEMORY.md:20` (4.5, truth + mirror) | the text above, plus `WATCHER-CENSUS` in its first-word list |
+| **`.claude/hooks/session-reminder.mjs:14-16`** (SessionStart, the most-read copy) | "count, 1 = do NOT arm" → "re-arm with the 4.5 command; a lease refuses a second watcher with a WATCHER- line — act on its first word" |
+| `1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md:8` (the arm) and `:17` (liveness) | the new arm; the count becomes a diagnostic, the lease the guard |
+| `1-system-manual/CLAUDE_CODE_WAKE_WATCHER_RUNBOOK.md:24` (heartbeat layer) | one clause: a STUCK count of 2+ now means an arm older than the lease |
+| `comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md:41` | same clause; its counting stays (diagnostic) |
+| `1-system-manual/SYSTEM_IMPACT_MAP.md:3713, :3717` | **Step 10** (with the lease as new cross-session state and the `WATCHER-` vocabulary, per Langston) |
+Other hits are unrelated (`count before/after` in two scripts and an archive; the filter's and count script's own references).
