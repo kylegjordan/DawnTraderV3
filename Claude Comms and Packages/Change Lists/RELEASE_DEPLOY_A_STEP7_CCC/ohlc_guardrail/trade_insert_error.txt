@@ -1,0 +1,25 @@
+== error__2026-10-01_00-00-00.log TRADE_INSERT_ERROR by hour:
+     15 2026-09-30 06
+     11 2026-09-30 13
+      8 2026-09-30 17
+    131 2026-09-30 18
+     37 2026-09-30 19
+     66 2026-09-30 20
+distinct messages:
+    311 TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"
+== error__2026-10-02_00-00-00.log TRADE_INSERT_ERROR by hour:
+      4 2026-10-01 04
+distinct messages:
+      4 TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"
+== error.log TRADE_INSERT_ERROR by hour:
+    110 2026-10-02 18
+    161 2026-10-02 19
+     74 2026-10-02 20
+distinct messages:
+    345 TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"
+
+== [8.8.3-H4][GUARDRAIL_PASS] sample post-deploy:
+2026-10-02 20:39:57 +00:00: [8.8.3-I1][RTB_ATTEMPT] {"symbol":"QNT/USD","strategy":"volatility_edge","ts":"2026-10-02T20:39:57.161Z"}
+2026-10-02 20:39:57 +00:00: [8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for QNT/USD
+2026-10-02 20:40:54 +00:00: [8.8.3-I1][RTB_ATTEMPT] {"symbol":"QNT/USD","strategy":"volatility_edge","ts":"2026-10-02T20:40:54.557Z"}
+2026-10-02 20:40:54 +00:00: [8.8.3-H4][GUARDRAIL_PASS] All pre-trade checks passed for QNT/USD

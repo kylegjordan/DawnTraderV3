@@ -1,0 +1,19 @@
+=== POST-DEPLOY: captured_at >= 2026-10-02T20:38:00Z (interval_begin >= 2026-09-25 for partition pruning)
+=== NEGATIVE CONTROL: captured_at in [20:20, 20:37:49) - written by the OLD process, expect arrived_at NULL
+         tbl         |  n  | n_arrived 
+---------------------+-----+-----------
+ crypto_spot_ohlc_1m | 570 |         0
+ xstock_spot_ohlc_1m | 599 |         0
+(2 rows)
+
+=== arrived_at - captured_at lag, crypto_spot post-deploy (seconds)
+                   lag_s                   
+-------------------------------------------
+ {-6.410137,-5.489101,-1.087963,-0.016973}
+(1 row)
+
+            db_now             
+-------------------------------
+ 2026-10-02 20:47:47.241934+00
+(1 row)
+

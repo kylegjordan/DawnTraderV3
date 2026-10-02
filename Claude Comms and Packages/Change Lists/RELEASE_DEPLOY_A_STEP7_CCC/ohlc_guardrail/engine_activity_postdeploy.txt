@@ -1,0 +1,21 @@
+== out.log
+  60281 [8.8.3-I5][CACHE_UPDATE]
+   2265 [8.8.3-I6][EXIT_EVAL]
+   2264 [8.8.3-I6][ENGINE_PNL_CALC]
+   2264 [8.8.3-I6][ENGINE_LIVE_PRICE]
+   1133 [8.8.3-B][SELECTION]
+    886 [8.8.3-B][STRATEGY]
+    109 [8.8.3-I6][REST_FALLBACK]
+     52 [8.8.3-H4][GUARDRAIL_CHECK]
+     14 [8.8.3-H3][FX]
+     13 [AJ16][COOLDOWN_CHECK]
+     13 [8.8.3-I3][OPEN_FAILED]
+     13 [8.8.3-I1][RTB_ATTEMPT]
+     13 [8.8.3-H4][GUARDRAIL_PASS]
+     13 [8.8.3-F][PROCESS]
+== error.log
+     13 [RTB-Promotion:paper]
+     13 Failed to execute promoted signal: TRADE_INSERT_ERROR
+
+2026-10-02 20:47:55 +00:00: [RTB-Promotion:paper] ⚠️ Failed to execute promoted signal: TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"
+2026-10-02 20:48:25 +00:00: [RTB-Promotion:paper] ⚠️ Failed to execute promoted signal: TRADE_INSERT_ERROR: invalid input value for enum pattern_type: "ABCD"

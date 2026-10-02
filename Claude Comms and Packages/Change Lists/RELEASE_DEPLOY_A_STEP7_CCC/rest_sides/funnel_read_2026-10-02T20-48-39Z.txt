@@ -1,0 +1,13 @@
+# Level-basis funnel, GET /api/xstocks/filter-diagnostics -> vtsEvaluation.levelBasisFunnel
+# Read via Claude-in-Chrome (Kyle's staging session), server timestamp 2026-10-02T20:48:39.376Z.
+# PROCESS-LIFETIME counters: process restart 628 at 20:37:49Z, PriceCache init 20:37:53Z. Includes ~7 s before 20:38:00Z (not separable).
+# 8 rows total. No `active_entry_fill`, `rtb_refresh` or xstock rows exist (never attempted in this lifetime).
+active:crypto_spot:exit_trigger:book att=2140 acc=1846 reasons={"no_book":5,"stale_book":289} src={"book_top:kraken_ws_book":1846} bv={"book_absent":0,"book_not_eligible":0,"book_refused":0} ageN={"book":1846,"ticker":0}
+active:crypto_spot:exit_trigger:ladder att=2140 acc=2125 reasons={"stale_ticker":15} src={"ticker_bbo:rest_adapter":15,"book_top:kraken_ws_book":1846,"ticker_bbo:rest_poller":264} bv={"book_absent":5,"book_not_eligible":0,"book_refused":274} ageN={"book":1846,"ticker":279} tickAge=150,129,0,0,0,0,0,0,0,0,0,0,0,0
+vts:crypto_spot:vts_exit_trigger:book att=897 acc=56 reasons={"no_book":841} src={"book_top:kraken_ws_book":56}
+vts:crypto_spot:vts_exit_trigger:ladder att=897 acc=897 reasons={} src={"ticker_bbo:rest_poller":715,"book_top:kraken_ws_book":56,"ticker_bbo:rest_batch":100,"ticker_bbo:rest_adapter":26} bv={"book_absent":841,"book_not_eligible":0,"book_refused":0} ageN={"book":56,"ticker":841} tickAge=167,0,0,2,83,2,4,583,0,0,0,0,0,0
+vts:crypto_spot:vts_signal_birth:book att=702 acc=38 reasons={"no_book":664} src={"book_top:kraken_ws_book":38}
+vts:crypto_spot:vts_signal_birth:ladder att=702 acc=663 reasons={"stale_ticker":39} src={"ticker_bbo:rest_batch":242,"book_top:kraken_ws_book":38,"ticker_bbo:rest_adapter":3,"ticker_bbo:rest_poller":380} bv={"book_absent":625,"book_not_eligible":0,"book_refused":0} ageN={"book":38,"ticker":625} tickAge=417,8,0,0,74,1,0,125,0,0,0,0,0,0
+active:crypto_spot:active_signal_birth:book att=854 acc=15 reasons={"no_book":839} src={"book_top:kraken_ws_book":15}
+active:crypto_spot:active_signal_birth:ladder att=854 acc=839 reasons={"stale_ticker":15} src={"ticker_bbo:rest_poller":718,"ticker_bbo:rest_batch":64,"ticker_bbo:rest_adapter":42,"book_top:kraken_ws_book":15} bv={"book_absent":824,"book_not_eligible":0,"book_refused":0} ageN={"book":15,"ticker":824} tickAge=103,244,28,0,6,42,390,10,1,0,0,0,0,0
+# age bucket edges (ms): 1000,2000,5000,10000,15000,30000,45000,60000,120000,300000,900000,1800000,3600000 (+overflow)

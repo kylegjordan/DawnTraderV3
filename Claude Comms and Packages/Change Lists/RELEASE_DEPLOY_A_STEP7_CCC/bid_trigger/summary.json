@@ -1,0 +1,56 @@
+{
+ "window": [
+  "2026-10-02 20:37:49",
+  "2026-10-02 20:44:52"
+ ],
+ "xs_lines": 120,
+ "xs_lines_before_start_in_errorlog": 0,
+ "first_xs_line": "2026-10-02 20:38:03 +00:00: [3n.q7][XS_FRAME] MGM/USD pos=fe42f52a-4b27-435b-aa72-648823b1f8e5 frame=ok basis=raw_guarded mark=30.6 sl=30.1989 tp=30.9243 bid=30.5 ask=30.7 spread=0.00654 thr=0.01961 bidWouldFire=no markExit=n exitReason=none",
+ "first_xs_full_bytes": 241,
+ "first_xs_msg_bytes": 213,
+ "full_bytes": {
+  "n": 120,
+  "min": 241,
+  "median": 241.0,
+  "max": 241
+ },
+ "msg_bytes": {
+  "n": 120,
+  "min": 213,
+  "median": 213.0,
+  "max": 213
+ },
+ "over_375_msg": 0,
+ "over_375_full": 0,
+ "eval_lines": 279,
+ "eval_lines_before_start": 1,
+ "reconcile_ok": 279,
+ "reconcile_bad": 0,
+ "cycles_invoked_zero": 159,
+ "emitted_sum": 120,
+ "invoked_sum": 120,
+ "xs_lines_vs_emitted_sum": 0,
+ "invoked_matches_noTriggerByClass_xstock": true,
+ "classMismatch_sum": 0,
+ "broken": 0,
+ "partition_broken": 0,
+ "states": {
+  "ok:raw_guarded": 120
+ },
+ "frame_none_reasons": {},
+ "reason_unset_or_missing": 0,
+ "symbols": {
+  "MGM/USD": 120
+ },
+ "class_mismatch_lines": 0,
+ "bidWouldFire": {
+  "no": 120
+ },
+ "markExit_exitReason": {
+  "n/none": 120
+ },
+ "first_eval": "2026-10-02 20:37:54",
+ "last_eval": "2026-10-02 20:44:52",
+ "first_xs": "2026-10-02 20:38:03",
+ "last_xs": "2026-10-02 20:43:56"
+}

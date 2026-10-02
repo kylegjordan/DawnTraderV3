@@ -1,0 +1,9 @@
+pre-deploy lines without coalesced= field: 60
+crypto_perp: lines=42 rows=369103 first=2026-10-02 20:38:19 last=2026-10-02 20:44:29 last_coalesced=11 monotonic=True
+   transitions: 2026-10-02 20:38:19->3 | 2026-10-02 20:39:00->10 | 2026-10-02 20:39:12->11
+crypto_spot: lines=78 rows=6599 first=2026-10-02 20:38:07 last=2026-10-02 20:44:29 last_coalesced=0 monotonic=True
+   transitions: 2026-10-02 20:38:07->0
+xstock_perp: lines=12 rows=20059 first=2026-10-02 20:38:09 last=2026-10-02 20:44:04 last_coalesced=0 monotonic=True
+   transitions: 2026-10-02 20:38:09->0
+xstock_spot: lines=77 rows=798 first=2026-10-02 20:38:05 last=2026-10-02 20:44:29 last_coalesced=0 monotonic=True
+   transitions: 2026-10-02 20:38:05->0

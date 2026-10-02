@@ -1,0 +1,270 @@
+2026-10-02 20:36:02 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:36:02 +00:00: [B74][batch-writer] crypto_spot upserted 17 rows
+2026-10-02 20:36:02 +00:00: [B74][batch-writer] crypto_perp upserted 24 rows
+2026-10-02 20:36:07 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:36:07 +00:00: [B74][batch-writer] crypto_spot upserted 27 rows
+2026-10-02 20:36:07 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows
+2026-10-02 20:36:12 +00:00: [B74][batch-writer] crypto_spot upserted 13 rows
+2026-10-02 20:36:12 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:36:12 +00:00: [B74][batch-writer] crypto_perp upserted 17 rows
+2026-10-02 20:36:17 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows
+2026-10-02 20:36:17 +00:00: [B74][batch-writer] crypto_spot upserted 18 rows
+2026-10-02 20:36:22 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows
+2026-10-02 20:36:22 +00:00: [B74][batch-writer] crypto_spot upserted 31 rows
+2026-10-02 20:36:27 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows
+2026-10-02 20:36:27 +00:00: [B74][batch-writer] crypto_spot upserted 30 rows
+2026-10-02 20:36:32 +00:00: [B74][batch-writer] crypto_spot upserted 11 rows
+2026-10-02 20:36:32 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows
+2026-10-02 20:36:37 +00:00: [B74][batch-writer] xstock_spot upserted 12 rows
+2026-10-02 20:36:37 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows
+2026-10-02 20:36:42 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows
+2026-10-02 20:36:42 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows
+2026-10-02 20:36:42 +00:00: [B74][batch-writer] crypto_perp upserted 3 rows
+2026-10-02 20:36:42 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows
+2026-10-02 20:36:47 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:36:47 +00:00: [B74][batch-writer] xstock_perp upserted 9 rows
+2026-10-02 20:36:47 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows
+2026-10-02 20:36:47 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows
+2026-10-02 20:36:52 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows
+2026-10-02 20:36:52 +00:00: [B74][batch-writer] crypto_spot upserted 31 rows
+2026-10-02 20:36:52 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows
+2026-10-02 20:36:57 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows
+2026-10-02 20:36:57 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows
+2026-10-02 20:36:57 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows
+2026-10-02 20:37:02 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows
+2026-10-02 20:37:02 +00:00: [B74][batch-writer] crypto_spot upserted 45 rows
+2026-10-02 20:37:02 +00:00: [B74][batch-writer] crypto_perp upserted 28 rows
+2026-10-02 20:37:07 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:37:07 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows
+2026-10-02 20:37:07 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows
+2026-10-02 20:37:12 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows
+2026-10-02 20:37:12 +00:00: [B74][batch-writer] crypto_spot upserted 19 rows
+2026-10-02 20:37:12 +00:00: [B74][batch-writer] crypto_perp upserted 13 rows
+2026-10-02 20:37:17 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows
+2026-10-02 20:37:17 +00:00: [B74][batch-writer] xstock_spot upserted 9 rows
+2026-10-02 20:37:22 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:37:22 +00:00: [B74][batch-writer] crypto_spot upserted 27 rows
+2026-10-02 20:37:27 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows
+2026-10-02 20:37:27 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows
+2026-10-02 20:37:32 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows
+2026-10-02 20:37:32 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows
+2026-10-02 20:37:37 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows
+2026-10-02 20:37:37 +00:00: [B74][batch-writer] crypto_spot upserted 14 rows
+2026-10-02 20:37:42 +00:00: [B74][batch-writer] xstock_perp upserted 2 rows
+2026-10-02 20:37:42 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows
+2026-10-02 20:37:42 +00:00: [B74][batch-writer] crypto_perp upserted 3 rows
+2026-10-02 20:37:42 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows
+2026-10-02 20:37:47 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows
+2026-10-02 20:37:47 +00:00: [B74][batch-writer] xstock_perp upserted 8 rows
+2026-10-02 20:37:48 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows
+2026-10-02 20:37:48 +00:00: [B74][batch-writer] crypto_perp upserted 32 rows
+2026-10-02 20:37:59 +00:00: [B74][batch-writer] started (flush every 5s, max 2 concurrent inserts)
+2026-10-02 20:38:05 +00:00: [B74][batch-writer] xstock_spot upserted 471 rows (coalesced=0)
+2026-10-02 20:38:07 +00:00: [B74][batch-writer] crypto_spot upserted 4430 rows (coalesced=0)
+2026-10-02 20:38:09 +00:00: [B74][batch-writer] xstock_perp upserted 20000 rows (coalesced=0)
+2026-10-02 20:38:09 +00:00: [B74][batch-writer] xstock_spot upserted 9 rows (coalesced=0)
+2026-10-02 20:38:09 +00:00: [B74][batch-writer] crypto_spot upserted 30 rows (coalesced=0)
+2026-10-02 20:38:14 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:38:14 +00:00: [B74][batch-writer] crypto_spot upserted 24 rows (coalesced=0)
+2026-10-02 20:38:19 +00:00: [B74][batch-writer] crypto_perp upserted 64000 rows (coalesced=3)
+2026-10-02 20:38:19 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:38:19 +00:00: [B74][batch-writer] crypto_spot upserted 16 rows (coalesced=0)
+2026-10-02 20:38:24 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:38:24 +00:00: [B74][batch-writer] crypto_spot upserted 28 rows (coalesced=0)
+2026-10-02 20:38:29 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:38:29 +00:00: [B74][batch-writer] crypto_spot upserted 17 rows (coalesced=0)
+2026-10-02 20:38:34 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:38:34 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows (coalesced=0)
+2026-10-02 20:38:39 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:38:39 +00:00: [B74][batch-writer] crypto_spot upserted 34 rows (coalesced=0)
+2026-10-02 20:38:44 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:38:44 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:38:49 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:38:49 +00:00: [B74][batch-writer] crypto_spot upserted 17 rows (coalesced=0)
+2026-10-02 20:38:54 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:38:54 +00:00: [B74][batch-writer] crypto_spot upserted 24 rows (coalesced=0)
+2026-10-02 20:38:59 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:38:59 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:39:00 +00:00: [B74][batch-writer] crypto_perp upserted 238000 rows (coalesced=10)
+2026-10-02 20:39:04 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:04 +00:00: [B74][batch-writer] xstock_perp upserted 10 rows (coalesced=0)
+2026-10-02 20:39:04 +00:00: [B74][batch-writer] crypto_spot upserted 31 rows (coalesced=0)
+2026-10-02 20:39:09 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:39:09 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows (coalesced=0)
+2026-10-02 20:39:12 +00:00: [B74][batch-writer] crypto_perp upserted 66032 rows (coalesced=11)
+2026-10-02 20:39:14 +00:00: [B74][batch-writer] crypto_spot upserted 26 rows (coalesced=0)
+2026-10-02 20:39:14 +00:00: [B74][batch-writer] xstock_spot upserted 9 rows (coalesced=0)
+2026-10-02 20:39:14 +00:00: [B74][batch-writer] crypto_perp upserted 61 rows (coalesced=11)
+2026-10-02 20:39:19 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:19 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:39:19 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:39:24 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:39:24 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:39:24 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:39:29 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:29 +00:00: [B74][batch-writer] crypto_spot upserted 33 rows (coalesced=0)
+2026-10-02 20:39:29 +00:00: [B74][batch-writer] crypto_perp upserted 22 rows (coalesced=11)
+2026-10-02 20:39:34 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:39:34 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:39 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:39:39 +00:00: [B74][batch-writer] crypto_spot upserted 19 rows (coalesced=0)
+2026-10-02 20:39:44 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:44 +00:00: [B74][batch-writer] crypto_spot upserted 47 rows (coalesced=0)
+2026-10-02 20:39:49 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:39:49 +00:00: [B74][batch-writer] crypto_spot upserted 19 rows (coalesced=0)
+2026-10-02 20:39:54 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:54 +00:00: [B74][batch-writer] crypto_spot upserted 26 rows (coalesced=0)
+2026-10-02 20:39:59 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:39:59 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows (coalesced=0)
+2026-10-02 20:39:59 +00:00: [B74][batch-writer] crypto_perp upserted 1 rows (coalesced=11)
+2026-10-02 20:39:59 +00:00: [B74][batch-writer] crypto_spot upserted 35 rows (coalesced=0)
+2026-10-02 20:40:04 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:40:04 +00:00: [B74][batch-writer] xstock_perp upserted 9 rows (coalesced=0)
+2026-10-02 20:40:04 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows (coalesced=11)
+2026-10-02 20:40:04 +00:00: [B74][batch-writer] crypto_spot upserted 54 rows (coalesced=0)
+2026-10-02 20:40:09 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:40:09 +00:00: [B74][batch-writer] crypto_spot upserted 29 rows (coalesced=0)
+2026-10-02 20:40:09 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:40:14 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:40:14 +00:00: [B74][batch-writer] crypto_spot upserted 39 rows (coalesced=0)
+2026-10-02 20:40:14 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:40:19 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:40:19 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:40:19 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:40:24 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:40:24 +00:00: [B74][batch-writer] crypto_spot upserted 31 rows (coalesced=0)
+2026-10-02 20:40:24 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:40:29 +00:00: [B74][batch-writer] crypto_perp upserted 14 rows (coalesced=11)
+2026-10-02 20:40:29 +00:00: [B74][batch-writer] crypto_spot upserted 15 rows (coalesced=0)
+2026-10-02 20:40:34 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:40:34 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:40:39 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:40:39 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:40:44 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:40:44 +00:00: [B74][batch-writer] crypto_spot upserted 30 rows (coalesced=0)
+2026-10-02 20:40:49 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:40:49 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows (coalesced=0)
+2026-10-02 20:40:54 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:40:54 +00:00: [B74][batch-writer] crypto_spot upserted 24 rows (coalesced=0)
+2026-10-02 20:40:59 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows (coalesced=0)
+2026-10-02 20:40:59 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:40:59 +00:00: [B74][batch-writer] crypto_perp upserted 1 rows (coalesced=11)
+2026-10-02 20:40:59 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:41:04 +00:00: [B74][batch-writer] xstock_perp upserted 8 rows (coalesced=0)
+2026-10-02 20:41:04 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:41:04 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:41:04 +00:00: [B74][batch-writer] crypto_spot upserted 51 rows (coalesced=0)
+2026-10-02 20:41:09 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:41:09 +00:00: [B74][batch-writer] crypto_spot upserted 27 rows (coalesced=0)
+2026-10-02 20:41:09 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:41:14 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:41:14 +00:00: [B74][batch-writer] crypto_spot upserted 33 rows (coalesced=0)
+2026-10-02 20:41:14 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:41:19 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows (coalesced=0)
+2026-10-02 20:41:19 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:41:19 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:41:24 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:41:24 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:41:24 +00:00: [B74][batch-writer] crypto_spot upserted 62 rows (coalesced=0)
+2026-10-02 20:41:29 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:41:29 +00:00: [B74][batch-writer] crypto_spot upserted 48 rows (coalesced=0)
+2026-10-02 20:41:29 +00:00: [B74][batch-writer] crypto_perp upserted 13 rows (coalesced=11)
+2026-10-02 20:41:34 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:41:34 +00:00: [B74][batch-writer] crypto_spot upserted 59 rows (coalesced=0)
+2026-10-02 20:41:39 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows (coalesced=0)
+2026-10-02 20:41:39 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:41:44 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:41:44 +00:00: [B74][batch-writer] crypto_spot upserted 36 rows (coalesced=0)
+2026-10-02 20:41:49 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:41:49 +00:00: [B74][batch-writer] crypto_spot upserted 27 rows (coalesced=0)
+2026-10-02 20:41:54 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:41:54 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows (coalesced=0)
+2026-10-02 20:41:59 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:41:59 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows (coalesced=0)
+2026-10-02 20:41:59 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:41:59 +00:00: [B74][batch-writer] crypto_perp upserted 1 rows (coalesced=11)
+2026-10-02 20:42:04 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:42:04 +00:00: [B74][batch-writer] xstock_perp upserted 9 rows (coalesced=0)
+2026-10-02 20:42:04 +00:00: [B74][batch-writer] crypto_spot upserted 41 rows (coalesced=0)
+2026-10-02 20:42:04 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:42:09 +00:00: [B74][batch-writer] crypto_spot upserted 27 rows (coalesced=0)
+2026-10-02 20:42:09 +00:00: [B74][batch-writer] xstock_spot upserted 17 rows (coalesced=0)
+2026-10-02 20:42:09 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows (coalesced=11)
+2026-10-02 20:42:14 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:42:14 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows (coalesced=0)
+2026-10-02 20:42:14 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows (coalesced=11)
+2026-10-02 20:42:19 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:42:19 +00:00: [B74][batch-writer] crypto_spot upserted 31 rows (coalesced=0)
+2026-10-02 20:42:19 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:42:24 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:42:24 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows (coalesced=0)
+2026-10-02 20:42:24 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:42:29 +00:00: [B74][batch-writer] crypto_spot upserted 24 rows (coalesced=0)
+2026-10-02 20:42:29 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:42:29 +00:00: [B74][batch-writer] crypto_perp upserted 15 rows (coalesced=11)
+2026-10-02 20:42:34 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:42:34 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:42:39 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:42:39 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:42:44 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:42:44 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:42:49 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:42:49 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows (coalesced=0)
+2026-10-02 20:42:54 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:42:54 +00:00: [B74][batch-writer] crypto_spot upserted 21 rows (coalesced=0)
+2026-10-02 20:42:59 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows (coalesced=0)
+2026-10-02 20:42:59 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:42:59 +00:00: [B74][batch-writer] crypto_perp upserted 1 rows (coalesced=11)
+2026-10-02 20:42:59 +00:00: [B74][batch-writer] crypto_spot upserted 37 rows (coalesced=0)
+2026-10-02 20:43:04 +00:00: [B74][batch-writer] xstock_spot upserted 11 rows (coalesced=0)
+2026-10-02 20:43:04 +00:00: [B74][batch-writer] xstock_perp upserted 10 rows (coalesced=0)
+2026-10-02 20:43:04 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows (coalesced=11)
+2026-10-02 20:43:04 +00:00: [B74][batch-writer] crypto_spot upserted 43 rows (coalesced=0)
+2026-10-02 20:43:09 +00:00: [B74][batch-writer] xstock_spot upserted 4 rows (coalesced=0)
+2026-10-02 20:43:09 +00:00: [B74][batch-writer] crypto_spot upserted 30 rows (coalesced=0)
+2026-10-02 20:43:09 +00:00: [B74][batch-writer] crypto_perp upserted 32 rows (coalesced=11)
+2026-10-02 20:43:14 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:43:14 +00:00: [B74][batch-writer] crypto_spot upserted 28 rows (coalesced=0)
+2026-10-02 20:43:14 +00:00: [B74][batch-writer] crypto_perp upserted 32 rows (coalesced=11)
+2026-10-02 20:43:19 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:43:19 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows (coalesced=0)
+2026-10-02 20:43:19 +00:00: [B74][batch-writer] crypto_perp upserted 31 rows (coalesced=11)
+2026-10-02 20:43:24 +00:00: [B74][batch-writer] crypto_spot upserted 28 rows (coalesced=0)
+2026-10-02 20:43:24 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:43:24 +00:00: [B74][batch-writer] crypto_perp upserted 31 rows (coalesced=11)
+2026-10-02 20:43:29 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:43:29 +00:00: [B74][batch-writer] crypto_spot upserted 26 rows (coalesced=0)
+2026-10-02 20:43:29 +00:00: [B74][batch-writer] crypto_perp upserted 25 rows (coalesced=11)
+2026-10-02 20:43:34 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:43:34 +00:00: [B74][batch-writer] crypto_spot upserted 34 rows (coalesced=0)
+2026-10-02 20:43:39 +00:00: [B74][batch-writer] crypto_spot upserted 16 rows (coalesced=0)
+2026-10-02 20:43:39 +00:00: [B74][batch-writer] xstock_spot upserted 1 rows (coalesced=0)
+2026-10-02 20:43:44 +00:00: [B74][batch-writer] xstock_spot upserted 7 rows (coalesced=0)
+2026-10-02 20:43:44 +00:00: [B74][batch-writer] crypto_spot upserted 54 rows (coalesced=0)
+2026-10-02 20:43:49 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:43:49 +00:00: [B74][batch-writer] crypto_spot upserted 52 rows (coalesced=0)
+2026-10-02 20:43:54 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:43:54 +00:00: [B74][batch-writer] crypto_spot upserted 25 rows (coalesced=0)
+2026-10-02 20:43:59 +00:00: [B74][batch-writer] xstock_perp upserted 1 rows (coalesced=0)
+2026-10-02 20:43:59 +00:00: [B74][batch-writer] xstock_spot upserted 6 rows (coalesced=0)
+2026-10-02 20:43:59 +00:00: [B74][batch-writer] crypto_perp upserted 1 rows (coalesced=11)
+2026-10-02 20:43:59 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:44:04 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:44:04 +00:00: [B74][batch-writer] xstock_perp upserted 8 rows (coalesced=0)
+2026-10-02 20:44:04 +00:00: [B74][batch-writer] crypto_spot upserted 23 rows (coalesced=0)
+2026-10-02 20:44:04 +00:00: [B74][batch-writer] crypto_perp upserted 33 rows (coalesced=11)
+2026-10-02 20:44:09 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:44:09 +00:00: [B74][batch-writer] crypto_spot upserted 14 rows (coalesced=0)
+2026-10-02 20:44:09 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:44:14 +00:00: [B74][batch-writer] xstock_spot upserted 3 rows (coalesced=0)
+2026-10-02 20:44:14 +00:00: [B74][batch-writer] crypto_spot upserted 22 rows (coalesced=0)
+2026-10-02 20:44:14 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:44:19 +00:00: [B74][batch-writer] crypto_spot upserted 19 rows (coalesced=0)
+2026-10-02 20:44:19 +00:00: [B74][batch-writer] xstock_spot upserted 8 rows (coalesced=0)
+2026-10-02 20:44:19 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:44:24 +00:00: [B74][batch-writer] xstock_spot upserted 5 rows (coalesced=0)
+2026-10-02 20:44:24 +00:00: [B74][batch-writer] crypto_spot upserted 34 rows (coalesced=0)
+2026-10-02 20:44:24 +00:00: [B74][batch-writer] crypto_perp upserted 34 rows (coalesced=11)
+2026-10-02 20:44:29 +00:00: [B74][batch-writer] crypto_spot upserted 20 rows (coalesced=0)
+2026-10-02 20:44:29 +00:00: [B74][batch-writer] xstock_spot upserted 2 rows (coalesced=0)
+2026-10-02 20:44:29 +00:00: [B74][batch-writer] crypto_perp upserted 13 rows (coalesced=11)
