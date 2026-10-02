@@ -57,3 +57,19 @@
 3. **Correct the 14 contradictions** through their owners; correct the dormant-gate claim in row 148's pre-audit now (it misstates what row 148 leaves behind).
 
 REVIEWER: claim-only (the SQE-reach claim) · "what other states are consistent?" · found the xStock route and the AMR gate · re-derived y (code + staging `amr_runtime.mode`)
+
+## 8. Kyle's calibration-set check (2026-10-02 ~22:20Z) — which deferred calibration items have NO sprint row
+**Kyle:** *"dig in through the batch history … going back to May to make sure those items are included in our calibration set of tasks within this sprint"* — the now-vs-later investigation (many items waited for paper mode, which simulates live more closely than the VTS), and the news component for confidence/ranking.
+**Read at `ad661db58`; searches named so the absences can be checked:** `SPRINT_TO_LIVE_PLAN.md` and `Scope Files/PRE_LIVE_SPRINT.md` (the after-live list), case-insensitive, for `news|sentiment|on-chain|alt-data|STRATEGIC|LLM|earnings`, `25-5|19\.4\.5|observational|ladder|DROUGHT-2`, `edge.scan|HCE`, `#399|pWin|kelly|selection-IC` (the last set positive-controlled: it returns rows 4a/58/145/146 before this record's placements).
+**The now-vs-later list itself:** Kyle's 2026-05-27 split (commit `7ab09cac3`) — "now" became Phase 19, "later" (needs paper-active wins/losses) became Phase 25 items 25-1 … 25-10 (`POST_AUDIT_ROADMAP.md:306-315`). Coverage today:
+
+| item | sprint row today |
+|---|---|
+| 25-2 regime confidence chain · 25-3 sustainability gate · 25-4 SQE recalibration · 25-7 xStock macro modifiers · 25-9 pair correlation · 25-10 crypto modifiers | rows 145 · 151 · 150 · 147 · 105 · 146 |
+| 25-8 xStock pattern size cap | closed 2026-09-30 (cap removed, row 138a) |
+| **25-1 ML calibration tier 2** — *"confidence-chain calibration against active-paper outcomes"* | **none in the sprint; on the after-live list (`PRE_LIVE_SPRINT.md:56`, "needs live evidence")** — its own text names ACTIVE-PAPER outcomes |
+| **25-5 the observational decision gate (§19.4.5)** — *"pre-launch reordering decision based on 1-2 weeks of clean active-paper outcomes"*; 9 items, 2 run partially (`PHASE_25_5_PARTIAL_DECISIONS_2026-08.md`), **the SEVEN untriggered remain** (`PHASE_19_PLAN.md:23`, scratch checklist D9) | **NONE in either list** — a PRE-launch gate with a STAY verdict (`POST_AUDIT_ROADMAP.md:1129`) and no row |
+| 25-6 AMR learned model | after-live list `:63` |
+
+**The news item (`STRATEGIC_DIRECTIONS_AND_AI_EDGE.md` item E, 2026-06-05):** AI scoring of xStock news/earnings and crypto on-chain flows *"feeding … signal confidence/ranking"*, xStock first, homed *"Phase 25+ data layer"*; today only in the roadmap's post-live backlog (`POST_AUDIT_ROADMAP.md:1063`). **No row in either list.** Its sibling F (the scheduled ML edge-scan) is likewise backlog-only.
+**Fit with the ratified blueprint:** §8's MODEL layer admits any feature that earns its seat with measured IC > 0 — a news score is a candidate feature of row 148a's ensemble, which is how it would reach confidence and ranking without a hand-weighted bolt-on.
