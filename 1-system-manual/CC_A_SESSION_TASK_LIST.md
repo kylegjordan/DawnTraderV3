@@ -76,8 +76,8 @@
 
 ### ➕ IN FLIGHT AND SLOTTED — the pre-sprint pair and their homes (2026-09-30 / 10-01; order is the sprint plan's, which is the authority)
 - ✅ **`B-TOKEN-BURN-CUT` CLOSED 2026-10-01** (`#1127`, sprint row 1h; Step 8 CONFIRMED by Langston, Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_TOKEN_BURN_CUT_COMPLETION_REPORT.md`). Sessions are woken only by a message for them.
-- ⏳ **IN FLIGHT: `B-WAKE-ARM-EXCLUSIVE`** (`#1140`) — sprint row 1o, after 1h: one wake watcher per session, enforced by a lease. Installed and verified live in all four sessions; Step 8 CONFIRMED by Langston 2026-10-02; Step 10 governance landed, Step 11 next.
-- ▶ **QUEUED: `B-WAKE-OWNER-LOSS-VISIBLE`** (`#1142`) — sprint row 1p, after 1o: a lost alert routing is counted into the owner record where the alert list can show it. **Also carries, from `B-WAKE-ARM-EXCLUSIVE`:** the ORPHAN line's local-time stamp (to UTC) and the filter's stale "the Monitor treats stdout" comment.
+- ✅ **`B-WAKE-ARM-EXCLUSIVE` CLOSED 2026-10-02** (`#1140`, sprint row 1o; Step 8 and Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_WAKE_ARM_EXCLUSIVE_COMPLETION_REPORT.md`). One wake watcher per session, enforced by a lease.
+- ▶ **QUEUED: `B-WAKE-OWNER-LOSS-VISIBLE`** (`#1142`) — sprint row 1p, after 1o: a lost alert routing is counted into the owner record where the alert list can show it. **Also carries, from `B-WAKE-ARM-EXCLUSIVE`, as stated objectives checked at close:** the ORPHAN line's local-time stamp (to UTC) and the filter's stale "the Monitor treats stdout" comment (a grep for the string).
 - ▶ **QUEUED: `B-ALERT-OWNER-ON-ROW`** (`#1137`) — sprint row 1l: each alert's owner on the alert record itself, so Langston stops re-guessing it.
 - ▶ **QUEUED: `B-FEATURE-WATCH-ROUTING`** (`#1128`) — sprint row 1i: a feature-watch finding that changes how sessions operate gets a disposition the day it is surfaced.
 - ▶ **QUEUED: `B-GOV-ENROLMENT-WINDOW-OBJECT`** (`#1133`) — sprint row 1j: the checker's enrolment window becomes a chosen object, not the last 300 commits.

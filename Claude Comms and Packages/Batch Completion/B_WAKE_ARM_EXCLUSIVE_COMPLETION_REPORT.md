@@ -1,4 +1,4 @@
-# B-WAKE-ARM-EXCLUSIVE (#1140) — COMPLETION REPORT
+# B-WAKE-ARM-EXCLUSIVE (#1140) — COMPLETION REPORT — ✅ CLOSED 2026-10-02
 
 > **Row 1o, `SPRINT_TO_LIVE_PLAN.md`** (after row 1h, `B-TOKEN-BURN-CUT`). Owner CC-A. **change-class: `non_architecture`.**
 > Scope `Scope Files/B_WAKE_ARM_EXCLUSIVE_SCOPE.md` · pre-audit `Scope Files/B_WAKE_ARM_EXCLUSIVE_PRE_AUDIT.md` ·
@@ -44,6 +44,8 @@ one commit, D1). Installed copies re-checked equal to the blobs at the head at c
 | OBJ-8 live, all four sessions | **YES — RULED ON REPORTED FACT** | Step-7 record: each re-armed, a deliberate second arm got `WATCHER-STAND-DOWN`, none re-armed; count 1 after in all four |
 | OBJ-9 no-`--loop` refused outright | **NO — by decision** | C1 measurement (`scripts/analysis/b-wake-arm-exclusive-c1-measure.py`, run twice, identical); Langston CONFIRMED Step 8 |
 
+★ **WHICH LEGS ARE CODE-VERIFIED, NOT REPORTED (Langston re-derived each at the ref at Step 11 — Step 11 condition 2):** `_lease_gate()` runs before any state load or save in `--positions`, and `--once` refuses before stdin and before any mutation (OBJ-4/5); the own-loop reconnect pass and the live-holder refusal are keyed on the LOOP pid, not a reader (OBJ-1/2); a dead lease is taken over by an atomic rename and an exclusive create whose collision is a STAND-DOWN, so there is one winner by construction (OBJ-3a/6b); the ORPHAN refusal sits above the `_LOOP is None` return; the `.alive` age never reads fresh on an error. **What stays RULED ON REPORTED FACT is narrower: that Windows behaved as this code says in the four live arms, and the 19 cases' results.**
+
 ⛔ **OBJ-8 IS PERMANENTLY `RULED ON REPORTED FACT`:** it is behavioural on Kyle's laptop, which Langston cannot reach.
 Its proven invariant is **"no second watcher was added"**, not "exactly one throughout" — "count before" read 0 in all
 four, because each old watcher had just ended by delivering the request. The C1 disposition does not rest on OBJ-8:
@@ -66,6 +68,8 @@ of its own output; no repo copy carries the old text (OBJ-7a). **The lease prote
 | `eae780d17` (filter) | 36952390808 | success | success | success | success |
 | `555c1ce19` (install, D1) | 36952744874 | success | success | success | success |
 | `2715460c2` (head when this report was written) | 37062089287 | success | success | success | success |
+
+All three runs re-derived per job by Langston at Step 11; `990efe4b9`'s cancelled run was not (documents only).
 
 The Step-7, -8 and -10 commits are documents only. `990efe4b9`'s own run was cancelled by a later push; the head's run
 above covers it.
@@ -115,6 +119,6 @@ heartbeat `SKILL.md` (installed, sha verified).
 
 Step 1 APPROVED (seven conditions, scope §7) · Step 2 ruled (D1–D6) · **Step 4 APPROVED at `22336156f`**, conditions at
 `6233125b9`, r2 `ab946879a`, r3 `eae780d17` · install `555c1ce19` · Step 7 `1f8b1c137` · **Step 8 CONFIRMED by Langston
-2026-10-02** (inbox id 1555401835894804482), conditions applied at `9d3dd8eb5` · Step 10 `990efe4b9`.
+2026-10-02** (inbox id 1555401835894804482), conditions applied at `9d3dd8eb5` · Step 10 `990efe4b9` · **Step 11 CONFIRMED by Langston 2026-10-02** (inbox id 1555690612496269425; read at `852335a8d`), three conditions applied in the close commit: (A) the stale comment is a stated objective of row 1p with a grep-for-the-string check; (B) his memory's batch line prefixed CLOSED in place, no new block; (C) the catalog, history and plan state cells flipped to CLOSED with the report linked, and read back.
 `REVIEWER:` no fresh reader was spawned in this batch's Steps 7-11; the C1 mechanism was re-derived by Langston at the
 ref. **NOT RE-READ:** none of this report's claims was routed to a separate reader.
