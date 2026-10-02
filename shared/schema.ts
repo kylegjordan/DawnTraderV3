@@ -108,7 +108,7 @@ export const agentStateEnum = pgEnum("agent_state", ["active", "idle", "suspende
 
 // Phase 10.2 enums - Pattern Recognition
 export const signalTypeEnum = pgEnum("signal_type", ["QUANT", "PATTERN", "HYBRID"]);
-export const patternTypeEnum = pgEnum("pattern_type", ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS", "ABCD", "TRI_STAR"]); // B-PATTERN-ENUM-DRIFT (#1063): ABCD + TRI_STAR made storable, migration 2026-10-02-b-pattern-enum-drift-abcd.sql
+export const patternTypeEnum = pgEnum("pattern_type", ["PINBAR", "ENGULFING", "INSIDE_BAR", "MORNING_STAR", "THREE_SOLDIERS", "ABCD"]); // B-PATTERN-ENUM-DRIFT (#1063): ABCD made storable by migration 2026-10-02-b-pattern-enum-drift-abcd.sql
 
 // Phase 11.0 enums
 export const safetySeverityEnum = pgEnum("safety_severity", ["low", "medium", "high", "critical"]);

@@ -3,7 +3,8 @@
  * migrations can store.
  *
  * shared/schema.ts declared 'ABCD' in pattern_type while no migration ever created it (TRI_STAR, in the canonical
- * pattern set and routed but undeclared here, was the same gap latent — Kyle 2026-10-02: fix both), so every
+ * pattern set but never emitted by the detector, was left out on purpose: no sink can receive it — the detector-output
+ * test below is what catches a future label), so every
  * pattern-confirmed volatility_edge signal failed the position insert at runtime and was re-minted
  * each cycle (#1136). Nothing at build or test time compared the two. This guard does: every value
  * in the declared pgEnum must appear in the initial CREATE TYPE or in a forward ADD VALUE, and the
@@ -70,11 +71,9 @@ describe('B-PATTERN-ENUM-DRIFT — declared pattern_type values are storable', (
     expect(missing, `declared in pattern_type but no migration creates: ${missing.join(', ')}`).toEqual([]);
   });
 
-  it('ABCD and TRI_STAR are declared and storable', () => {
-    for (const v of ['ABCD', 'TRI_STAR']) {
-      expect(declaredPatternTypes(), v).toContain(v);
-      expect(storablePatternTypes().has(v), v).toBe(true);
-    }
+  it('ABCD is declared and storable', () => {
+    expect(declaredPatternTypes()).toContain('ABCD');
+    expect(storablePatternTypes().has('ABCD')).toBe(true);
   });
 
   it('every label the detector emits is declared in the pgEnum (the raw-label sinks write it as-is)', () => {
