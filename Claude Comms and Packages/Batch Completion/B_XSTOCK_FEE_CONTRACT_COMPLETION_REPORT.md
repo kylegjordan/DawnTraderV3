@@ -195,6 +195,22 @@ He rejected a judgement call of mine, and he was right on all three points. **My
 | **T2** | `CLAUDE.md` / `CONDUCT.md` | **N/A** | No stable rule changed. |
 | **T2** | `BUILD_METHOD_PLAYBOOK.md` · `LANGSTON_ARCHITECTURE.md` · `ALERT_HANDLING_PROTOCOL.md` · `DELIVERY_BOARD_PROTOCOL.md` · `CLAUDE_CODE_FEATURE_WATCH.md` | **N/A** | The method, the reviewer's build, the alert process, the board's fields and the model watch are all unchanged by this batch. |
 
+### ★ CLOSE EVENT, 2026-10-02 — the ledger re-ticked for the observation's close (Langston's Step-11 condition)
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| **T1** | `BATCH_CATALOG.md` | ✅ | Heading flipped from `⏳ OBSERVATION` to CLOSED with the outcome and the successor. |
+| **T1** | `PHASE_HISTORY.md` | ✅ | Same flip on the dated entry. |
+| **T1** | `PHASE_19_PLAN.md` | ✅ | Row 2.4-FEE stamped OBSERVATION CLOSED (`ca7aa786e`). |
+| **T1** | shared `MEMORY.md` + `MEMORY_CC_B.md` | ✅ mine / N/A shared | My position block carries the close; no shared consensus truth changed (the per-class FEE REALITY line still stands). |
+| **T1** | the batch `SCOPE` / `PRE_AUDIT` | N/A | Unchanged at close; the pre-registered criteria were read, never rewritten. |
+| **T1** | this `COMPLETION_REPORT` | ✅ | FINAL READ OF RECORD + this table. |
+| **T1** | ★ **THE FOUR SESSION TASK LISTS** — `CC_A` · `CC_B` · `CC_C` · `CC_INFRA` | **✅ mine / N/A ×3** | The batch's row left my OPEN AND STALLED table; the successor `#1097` already sits at row 107a. |
+| **T1** | Langston's `/home/langston/MEMORY.md` | ✅ | Written by him at the confirm (`00-legacy.md` efaf0a91→3cc4a620). |
+| **T2** | `RUNNING_ISSUES.md` | ✅ | `#1010` CLOSED with the outcome (`ca7aa786e`). |
+| **T2** | evidence folder `B_XSTOCK_FEE_CONTRACT_EVIDENCE/` | ✅ | `*_final.sql` copies and the rebuilt context query (`a9392ceff`, `b398f5fb1`). |
+| **T2** | `SYSTEM_MANUAL.md` · `SYSTEM_IMPACT_MAP.md` · every other T2 row | N/A | The close changes no architecture, component or rule; it records a reading. |
+
 ---
 
 ## 10. HONEST RESIDUAL — WHAT THIS BATCH DID NOT ESTABLISH

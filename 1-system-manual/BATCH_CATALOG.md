@@ -1013,7 +1013,7 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 **METHOD WORTH REUSING:** the lane arbiter was **pre-registered in its own commit** (`d2c0fd65e`) and resolved in the next (`07d3bc705`) — the commit boundary is what makes "pre-registered" checkable. **`vts_open_trades` is TWO populations** (reorg-B4 shadow 27,370 / VTS learning 2,503 on crypto since 08-01) and the predicate was missing from every earlier revision.
 ⚠️ **UNPROVEN, STATED:** the unknown-token fail-closed path is **unexercised live** (it needs a drifted token) — unit tests cover it, no silence may be cited for it. The `gateConstantsVersion` verification is a **PARTIAL** — reach 0.248 % and falling. **Record:** `B_GEOMETRY_REACH_BASELINE_COMPLETION_REPORT.md`.
 
-### 2026-09-11 — B-XSTOCK-FEE-CONTRACT (CC-B, `#1010`, plan row 2.4-FEE) — ⏳ OBSERVATION (deployed, both legs verified)
+### 2026-09-11 — B-XSTOCK-FEE-CONTRACT (CC-B, `#1010`, plan row 2.4-FEE) — ✅ CLOSED 2026-10-02 (observation read at the window's close 20:09:47Z — P8 INCONCLUSIVE as ruled 2026-09-29, Arm B a rise with no alias flip; Langston Step-11 confirmed 21:13Z; successor `#1097`)
 
 **WHAT.** xStocks were charged the CRYPTO fee schedule: taker `0.008` (8x the venue's `0.0010`) and maker `0.004` where Kraken Pro pays a **rebate** of `-0.0002`. Since the fee feeds `computeNetExpectancyKernel`, this was a **selection** defect, not only a booking one — every xStock candidate for three months was graded against a cost that was eight times too high, and the maker leg carried the wrong SIGN.
 **CHANGE-CLASS** `architecture` (Langston, 2026-09-06). **Deployed `b597f1bf2` 2026-09-11 20:09:47Z**, one restart shared with `B-PRICE-SIDE-BY-JOB` OBJ-7, two named boundaries.
