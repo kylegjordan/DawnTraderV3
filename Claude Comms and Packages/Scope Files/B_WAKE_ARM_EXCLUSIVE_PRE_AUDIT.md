@@ -68,3 +68,31 @@ change-class: non_architecture · **Owner:** CC-A · **Plan row:** `SPRINT_TO_LI
 ## IN PLAIN LANGUAGE
 
 The audit confirmed the design holds on this machine: an exit code survives the Python launcher, and the Windows process check reads a running watcher, a finished one and a protected one correctly. It found three things the plan now handles: the existing tests run without the new loop flag; the old arm command would loop silently forever under the strict "refuse old arms" switch, so that switch waits for a measurement; and the lock file must not follow a test's private state folder. The plan is eleven items, each tied to what the audit found.
+
+## STEP 2 RULED — PROCEED (Langston, 2026-10-02 ~00:50Z, at `3ac7123b6`), six conditions. They bind Step 3 and supersede the plan above where they differ.
+
+He re-derived A1-A3, C6's substring reasoning and A8's census at the ref; A5/A6 were RULED ON REPORTED FACT, converted below to measurements.
+
+**D1 (BLOCKING on P5) — the re-arm rule changes in the SAME commit as the command.** Today shared MEMORY 4.5 says the completion IS the wake, then RE-ARM. A refusal ends the task, which wakes the session, which re-arms, which is refused: a treadmill, one turn per cycle. ⇒ **P5′:** the refusal prints a fixed machine-matchable first word, and 4.5 reconciles its instructions in that commit:
+- `WATCHER-STAND-DOWN` — a watcher of yours is live: do NOT re-arm.
+- `WATCHER-STUCK <pid>` — stop that task or process, then re-arm.
+- `WATCHER-ORPHAN <pid>` — stop that process, then re-arm.
+- `WATCHER-UPGRADE` — the installed filter predates the lease: install it, then re-arm.
+- Anything else is a normal wake: act, then re-arm.
+The count-first dance becomes a DIAGNOSTIC for sessions still on an old arm (P6), not the rule for a leased one. (Byte budget: 4.5's truth file is ~10 B under its cap; the count-first sentence is replaced, not added to.)
+
+**D2 — MEASURED (2026-10-02 ~00:52Z).** Through the WindowsApps `python3` launcher, `sys.executable` is `C:\Python313\python.exe` and its lowercased basename is `python.exe` — identical to calling `python` directly. ⇒ the A12 interpreter check passes on the live arm; it does not refuse every session.
+
+**D3 — MEASURED.** In a fresh `bash -c`, `cat /proc/$$/winpid` returns a value (`ls` reports the file as size 0, so "non-empty" is checked by READING it, never by size); `OpenProcess(0x1000)` on that pid opens, exit code 259, and the creation time is identical across two reads one second apart. `$$` stays the top shell's pid inside subshells (`BASHPID` changes), which is why `$$` is deliberate: it names the loop shell from anywhere in the pipeline. ⇒ P5′ computes `L` ONCE, before the `while`.
+
+**D4 — takeover is decided by an atomic operation, not by read-back timing.** P7 is replaced. A newcomer that finds a dead holder first RENAMES the stale lease to `<ALIAS>.lease.stale.<own pid>` (only one rename of the same source can succeed; the loser gets file-not-found and refuses), then creates the new lease with `O_CREAT|O_EXCL`. Both the absent case and the takeover therefore end in an exclusive create. **OBJ-6b asserts exactly one winner by the create, not merely "one reader".**
+
+**D5 — the reader fields are DROPPED from P1.** Nothing would write them: P2 runs before the reader exists and the dead-holder test uses the enumerator. The lease holds the loop pid, its creation time and `taken_at` only.
+
+**D6 — P3 reads "before any mutation".** The lease check sits above `_sweep_tmp()`, so a refused `--once` provably touches nothing in the state directory.
+
+**(a) — both bounds published.** When `--once` refuses in a race, the follower already started has empty `$P`, so it sends its first keepalive on its first pass (`cc-wake-follow.py` starts `last_keepalive = 0.0` deliberately) and the pipe breaks there. **Expected: one pass. Ceiling: one keepalive interval (5 min).** No position is consumed either way.
+
+**(b) — `.alive` is diagnostic text only.** It feeds the stand-down line's age ("age unknown" when missing, never "fresh") and NEVER enters the acquire/refuse predicate. The follower's own comment records that `.alive` proves the pipeline started, not that it can deliver.
+
+**P6, priced (Langston).** An old arm under the interim refuses at `--positions` with empty `$P`, so its follower runs with no sources: one ssh handshake per 30 s, no replay, and the session is not deaf because the live holder delivers. Acceptable, stated. ⇒ the no-`--loop` refusal prints its own stderr line (`WATCHER-OLD-ARM: a lease is held by loop N; this arm cannot take one — re-arm with the current command`) so the task output carries a reason. **Known exposure, named here rather than only as an owed row:** `MEMORY_CC_C.md:108` is the one live source that can still mint an old arm, until ANALYST Claude updates it.
