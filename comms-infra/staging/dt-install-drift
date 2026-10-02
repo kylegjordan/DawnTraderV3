@@ -320,11 +320,28 @@ def check_extra(name, box):
             out("STATE", "cannot read the shadow file: %s" % e, "ACCOUNT", "shadow")
         # r3: a %group sudoers rule reaches a MEMBER without naming it — dtapi and dtmint must be in
         # no supplementary group, so no group rule can ever apply to them
+        # Gate 1-2 r3 (Langston): getgrgid() returns ONE entry per gid, so a second group NAME sharing an
+        # account's primary gid (`dtapi:x:1001:` + `staff:x:1001:`) passed the primary check below while a
+        # %staff rule resolves to gid 1001 and applies. Every entry carrying that gid is compared here.
+        # (The same trap is written at langston-privacy-check's group_members(); it did not travel.)
+        # Only when the gid's own entry IS the account's group: a foreign or orphan primary is reported once,
+        # by the primary check below, not twice.
+        prim_gid = {}
+        for who in ("dtapi", "dtmint"):
+            try:
+                gid0 = pwd.getpwnam(who).pw_gid
+                if grp.getgrgid(gid0).gr_name == who:
+                    prim_gid[who] = gid0
+            except KeyError:
+                pass                                       # missing account / orphan gid: reported elsewhere
         for g in grp.getgrall():
             for who in ("dtapi", "dtmint"):
                 if who in g.gr_mem:
                     out("STATE", "%s is a member of group %s — a %%%s sudoers rule would apply to it"
                         % (who, g.gr_name, g.gr_name), "SUDO", who)
+                if prim_gid.get(who) == g.gr_gid and g.gr_name != who:
+                    out("STATE", "%s's PRIMARY gid %d is ALSO named %s — a %%%s sudoers rule would apply to it"
+                        % (who, g.gr_gid, g.gr_name, g.gr_name), "SUDO", who)
         # Gate 1-2 (Langston, an enumerator-blind-spot): gr_mem does NOT list PRIMARY-group members,
         # so `usermod -g staff dtapi` was invisible above. Each account's primary group must be its own.
         for who in ("dtapi", "dtmint"):

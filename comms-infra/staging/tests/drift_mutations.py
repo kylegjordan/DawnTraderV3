@@ -56,6 +56,8 @@ MUTATIONS = [
     ("session", "one agent's failure stops the other", "        except Exception as e:\n            failed.append(agent)", "        except ZeroDivisionError as e:\n            failed.append(agent)"),
     ("session", "short token accepted", "    if exp - time.time() < MIN_EXP_LEFT_S:", "    if False:"),
     ("drift", "Gate 1-2: the primary group is not checked", "            if prim != who:", "            if False:"),
+    ("drift", "Gate 1-2 r3: a second name on the primary gid is not compared",
+     "                if prim_gid.get(who) == g.gr_gid and g.gr_name != who:", "                if False:"),
     ("drift", "Gate 1-2 r2: an orphan primary gid is skipped", "                    \"apply to it\" % (who, gid, gid), \"SUDO\", who)\n                continue",
      "                    \"apply to it\" % (who, gid, gid), \"SUDO\", who) if False else None\n                continue"),
 ]

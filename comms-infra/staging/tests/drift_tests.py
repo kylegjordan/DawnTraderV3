@@ -414,6 +414,20 @@ pr = _accounts_problems()
 check("Gate 1-2 r2: an orphan primary gid (no such group) is REPORTED, not skipped",
       sum("PRIMARY group id 9999 resolves to NO group" in x and "dtapi" in x for x in pr) == 1, str(pr))
 _users["dtapi"].pw_gid = 2001
+# Gate 1-2 r3 (Langston): a second group NAME on dtapi's own primary gid — getgrgid() answers "dtapi",
+# so the primary check passes, while %staff resolves to the same gid and would apply
+_grall = [types.SimpleNamespace(gr_name="dtapi", gr_gid=2001, gr_mem=[]),
+          types.SimpleNamespace(gr_name="staff", gr_gid=2001, gr_mem=[]),
+          types.SimpleNamespace(gr_name="dtmint", gr_gid=2002, gr_mem=[])]
+DM.grp.getgrall = lambda: _grall
+pr = _accounts_problems()
+check("Gate 1-2 r3: a second group name (staff) sharing dtapi's primary gid is REPORTED, once",
+      sum("PRIMARY gid 2001 is ALSO named staff" in x and "dtapi" in x for x in pr) == 1
+      and not any("dtmint" in x and "ALSO named" in x for x in pr), str(pr))
+_grall[1] = types.SimpleNamespace(gr_name="staff", gr_gid=3000, gr_mem=[])
+pr = _accounts_problems()
+check("... and with staff on its own gid nothing is reported (control)", not any("ALSO named" in x for x in pr), str(pr))
+DM.grp.getgrall = lambda: []
 shutil.rmtree(_root)
 
 print("drift suite: %d passed, %d failed" % (PASS, FAIL))
