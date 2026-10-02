@@ -16,7 +16,7 @@
 | `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
 | `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
 
-## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (60)
+## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (61)
 
 **Wave 0 — before the sprint:** 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`), switch on the feed-liveness grade after row 3's startup-cache fix; Step 1 settles the xStock weekend window and whether its alerts clear on recovery (accepted 2026-09-30).
 
@@ -24,7 +24,7 @@
 
 **Wave A1 — foundations:** 39a `B-CRYPTO-BIRTH-FEED` (⭐ Kyle decision rides `#977`) · 46 `#972` xStock ATR empty around the open and close · 47 `#566` volatility measured with a lag.
 
-**Wave A2 — mechanics, stage by stage:** 49 `#233` drift and volume inputs fed as fixed defaults (+ `#514`) · 50 `#199` xStock volume confirmation · 51 `3m-ENUM` volatility_edge's pattern path (⚡ ABCD pulled forward as hotfix `B-PATTERN-ENUM-DRIFT`, rides deploy B, Kyle 2026-10-02; remainder re-pointed) · 51a `B-HEALTH-CHECK-REMOVAL` (`#1147`) ⚡ IN FLIGHT, delete the System Health Check, rides deploy B (Kyle 2026-10-02) · ~~51b~~ withdrawn, duplicate of row 73 `#1039` (Infra Claude) · · 52 `B-SILENT-STRATEGY-CENSUS` (`#1070`) · 54 `#574` a made-up volatility input in the ranker · 55 `B-RTB-REFRESH-CONSOLIDATE` · 56 `#570` a refresh bucket that does not refresh · 57 `#699` does promotion evict · 58 ~~roadmap 19.2 verify every score~~ SUBSUMED by rows 148/148a (Langston 2026-10-02 22:29Z; struck, not deleted) · 59 `B-ENTRY-LEVEL-RECHECK` · 80 `B-SQE-DEADCODE-PURGE` · 80a `B-NORMALIZER-RETIRE` (`#371` family) · 97a `B-PAPER-LEGACY-TABLE-REWIRE` (`#573`) · 99 `B-EPOCH-PARITY-FENCE` · 100 row 9, the learning-record restart.
+**Wave A2 — mechanics, stage by stage:** 49 `#233` drift and volume inputs fed as fixed defaults (+ `#514`) · 50 `#199` xStock volume confirmation · 51 `3m-ENUM` volatility_edge's pattern path (⚡ ABCD pulled forward as hotfix `B-PATTERN-ENUM-DRIFT`, rides deploy B, Kyle 2026-10-02; remainder re-pointed) · 51a `B-HEALTH-CHECK-REMOVAL` (`#1147`) ⚡ IN FLIGHT, delete the System Health Check, rides deploy B (Kyle 2026-10-02) · ~~51b~~ withdrawn, duplicate of row 73 `#1039` (Infra Claude) · 51c `B-DUP-ROUTE-SHADOW` (`#1150`) duplicate API registrations leave dead handlers · · 52 `B-SILENT-STRATEGY-CENSUS` (`#1070`) · 54 `#574` a made-up volatility input in the ranker · 55 `B-RTB-REFRESH-CONSOLIDATE` · 56 `#570` a refresh bucket that does not refresh · 57 `#699` does promotion evict · 58 ~~roadmap 19.2 verify every score~~ SUBSUMED by rows 148/148a (Langston 2026-10-02 22:29Z; struck, not deleted) · 59 `B-ENTRY-LEVEL-RECHECK` · 80 `B-SQE-DEADCODE-PURGE` · 80a `B-NORMALIZER-RETIRE` (`#371` family) · 97a `B-PAPER-LEGACY-TABLE-REWIRE` (`#573`) · 99 `B-EPOCH-PARITY-FENCE` · 100 row 9, the learning-record restart.
 
 **Wave A3 — learning data:** 103 `B-OUTCOME-CORPUS-CAPTURE` · 104 `B-EXCURSION-RECORD` · 106 `B-PAPER-LANE-PROVENANCE` (`#1059`) · 107 `T-W20C-SCALAR-LEG` · 107a `B-FEE-BASIS-STAMP` (`#1097`) · 108 `#515` · 109 `#631` · 110 `#504` · 114 `B-TRADE-RECORD-JOINABILITY` · 115 `B-VPNL-WRITER-BOUND` · 116 `#658` · 117 `#220` · 119 `B-ARCHIVE-WRITER-LIFECYCLE` (+ `#1062`) · 120 `B-ARCHIVE-FLUSH-DRAIN-ORDER` (`#1078`) · 121 `B-ROLLBACK-EPOCH-FORWARD` · 122 `#590` · 123 `B-PROVENANCE-LOSS-CENSUS` · 124 `#231`.
 

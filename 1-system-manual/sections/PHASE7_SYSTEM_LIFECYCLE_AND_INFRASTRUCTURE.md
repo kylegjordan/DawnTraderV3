@@ -383,13 +383,13 @@ interface ScheduledTask {
 }
 ```
 
-### Registered Tasks (13 total, registered in index.ts)
+### Registered Tasks (12 total, registered in index.ts — System Health Check deleted 2026-10-02, `#1147`)
 | # | Task | Module |
 |---|------|--------|
 | 1 | Screener Recalibration | screener-recalibration-task |
 | 2 | Market Scan | market-scan-task |
 | 3 | AI Summary | ai-summary-task |
-| 4 | System Health Check | system-health-check-task |
+| 4 | ~~System Health Check~~ — **DELETED 2026-10-02** (B-HEALTH-CHECK-REMOVAL, `#1147`) | ~~system-health-check-task~~ |
 | 5 | CLE (Continuous Learning Engine) | cle-task |
 | 6 | CWA (Cognitive Weight Adjustment) | cwa-task |
 | 7 | Cache Purge | cache-purge-task |

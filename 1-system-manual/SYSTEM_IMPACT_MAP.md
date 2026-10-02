@@ -865,7 +865,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **File**: `server/services/scheduler-registry.ts` (~134 lines)
 - **What**: Registry for all scheduled tasks. Manages task queues and health.
 - **Blast Radius**: **LOW** — administrative tracking
-- ⚠️ **Known defect, `#1039` (`B-SCHEDULER-FIRST-TICK`, row 73, Infra Claude):** `startTask` (:26-52) arms a first-run `setTimeout` and a `setInterval` at the same delay, so every task without `getInitialDelay` (36 of the 39 registered) runs twice on its first cycle after each restart; `executeTask` has no overlap guard. Measured harm per task is recorded on `#1039` (2026-10-02).
+- ⚠️ **Known defect, `#1039` (`B-SCHEDULER-FIRST-TICK`, row 73, Infra Claude):** `startTask` (:26-52) arms a first-run `setTimeout` and a `setInterval` at the same delay, so every task without `getInitialDelay` runs twice on its first cycle after each restart — **35 of the 38 registered after `B-HEALTH-CHECK-REMOVAL`** (36 of 39 when measured at `e9c243986`, before the System Health Check was deleted); `executeTask` has no overlap guard. Measured harm per task is recorded on `#1039` (2026-10-02).
 - **2026-10-02:** the `System Health Check` task was DELETED (`#1147`, `DELETED_COMPONENTS_LOG.md`); `server/index.ts` now registers 12 tasks, `autonomy-scheduler.ts` 25, `learning-feedback.ts` 1.
 
 ### 9.9 Stage-3 Emitter
