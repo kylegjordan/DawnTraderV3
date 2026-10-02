@@ -52,8 +52,8 @@
 - **The dormant SQE ROI gate and the dead `getAdjustedMinROI`/`getAdaptiveExpectancy`:** outcome (3), legacy that no longer fits — its future is a rebuild-time decision (reconnect to the calibrated pWin, or delete under rule 18).
 
 ## 7. Proposal (for Langston to place; Kyle owns any change to the ratified blueprint)
-1. **Give the ratified rebuild a real row:** `B-PWIN-CALIBRATION` (`#399a` + (d) + (e)) — the predictive confidence rebuilt as a calibrated probability of winning, per class, on the ACTIVE population (Kyle 05-21), after row 125 with the other Phase-25 calibrations (it needs accumulated active outcomes). Owner to be agreed (the 25-x confidence rows are CC-A's).
-2. **Withdraw row 4a; fold `#1141` into that rebuild** as its input-hygiene item (stop counting "never count" records, key by class, evict stale cells, fix the `SKIPPED` fallback, delete the dead `simulateTrade`), with this record's measurement attached.
+1. **Give the ratified rebuild a real row — PLACED 2026-10-02 (Langston 22:12Z + 22:24Z):** `B-PWIN-CALIBRATION` at sprint row 148a, owner CC-A — (a) + (e) plus the MODEL layer it calibrates (§8: one deliverable), cell = asset class with EB-shrunk refinements, population ACTIVE, owns pWin only (pFill is row 154a). (d) selection-IC at row 148b (CC-A), (b) fractional Kelly at row 148c (CC-C), (c) the xStock DBS-score gap at row 144a (CC-A, before the live switch).
+2. **`#1141` — RULED DIFFERENTLY (Langston 22:04Z):** the never-count + class-pooling item went to row 58 (CC-B) with this record's measurement, as the rebuild's input hygiene; row 4a was struck-not-deleted and narrowed to the `SKIPPED` fallback, eviction (outcome-1 defects true whether or not the scale is calibrated), the two rule-18 deletions and one comment record-fix.
 3. **Correct the 14 contradictions** through their owners; correct the dormant-gate claim in row 148's pre-audit now (it misstates what row 148 leaves behind).
 
 REVIEWER: claim-only (the SQE-reach claim) · "what other states are consistent?" · found the xStock route and the AMR gate · re-derived y (code + staging `amr_runtime.mode`)

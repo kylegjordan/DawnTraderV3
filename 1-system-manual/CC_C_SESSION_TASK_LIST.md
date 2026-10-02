@@ -86,6 +86,8 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 124a | B-AMR-INPUT-INTEGRITY-ARC (`#600`, `#604` leg A, `#608`, `#609`, `#610`, `#611`, `#612`) | QUEUED | after row 124 |
 | 135b | B-CONCENTRATION-SCORE-UNITS | QUEUED | after row 135a (Langston 2026-09-30, `B-SIZING-DEC-RESTORE` 2e J1b): the score mixes dollars with a 2.5 cap and is computed once at boot on an empt… |
 | 138a | B-PATTERN-SIZE-CAP-REVIEW (`#1115`) | DONE — decided (Kyle 2026-09-30: cap OFF; removed in B-SIZING-DEC-RESTORE 2e) | SUPERSEDED: |
+| 148c | `#399` (b) fractional Kelly | QUEUED | after rows 148a (B-PWIN-CALIBRATION, CC-A) and 148b: size by fractional Kelly on the calibrated pWin, Kelly and its tight cap together (placed by Langston 2026-10-02) |
+| 154a | B-MAKER-PFILL-CALIBRATION (`#738`) | QUEUED | after row 154: the maker fill probability (pFill) — owns pFill; row 148a owns pWin (Langston 2026-10-02 boundary) |
 | 166 | #692 — batch named at Step 1 | QUEUED | operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options |
 | 176 | #296 — batch named at Step 1 | QUEUED | one rate-limited path for placing and cancelling orders |
 | 183a | B-MAKER-CANCEL-ON-DROP (`#1103`) | QUEUED | after row 183, with row 176 (#296): in live mode a dropped resting buy must be cancelled at Kraken, or it can fill into a position nothing tracks (… |
