@@ -24,13 +24,13 @@
 // due-ness is `triggers_at`, so the OLDEST due items are the ones a tail is most likely to miss.
 // The filter runs ON STAGING (python3 there), so only the due rows cross the wire.
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, openSync, fstatSync, readSync, closeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { basename } from 'node:path';
-import { splitAlerts, capBuckets, CLONE_TO_ALIAS, CHURN_HOURS } from './alert-split.mjs';
+import { splitAlerts, capBuckets, lostRoutings, CLONE_TO_ALIAS, CHURN_HOURS, LOST_HOURS } from './alert-split.mjs';
 
 const HOST = process.env.DT_ALERT_HOST || 'root@188.245.193.8';
 const TIMEOUT_MS = 3000;
@@ -94,6 +94,7 @@ const REMOTE = [
 // Injected-count bound. The file holds ~770 ids and grows; a runaway queue must not become a
 // runaway context injection. Everything past this is summarised as a count, never dropped silently.
 const MAX_INJECT = 25;
+const LOST_TAIL_BYTES = 64 * 1024;   // #1142 (Langston C5): the lost-routing record is read from its tail only
 
 function main() {
   const t0 = Date.now();
@@ -165,6 +166,24 @@ function main() {
     }
   }
   const s = splitAlerts(parsed, owners, alias);
+  // B-WAKE-OWNER-LOSS-VISIBLE (#1142): routings THIS session's wake filter failed to save. Its OWN try/catch — a
+  // failure here drops only this line of output and never touches narrowing (Langston C6). The read is BOUNDED to the
+  // file's last 64 KB (C5): the condition that makes a save fail can append on every marker line until it clears.
+  let lost = null, lostWhy = null;
+  if (alias && s.narrowed) {
+    let fd = null;
+    try {
+      const dir = process.env.CC_WAKE_STATE_DIR || join(homedir(), '.claude', 'cc-wake-state'); // env: tests only
+      fd = openSync(join(dir, `${alias}.alert-owners.lost.jsonl`), 'r');
+      const size = fstatSync(fd).size, want = Math.min(size, LOST_TAIL_BYTES), buf = Buffer.alloc(want);
+      readSync(fd, buf, 0, want, size - want);
+      lost = lostRoutings(buf.toString('utf8').split(/\r?\n/), owners, Date.now(), size > want);
+    } catch (e) {
+      if (!(e && e.code === 'ENOENT')) lostWhy = `the lost-routing record could not be read (${e && e.code || 'error'})`;
+    } finally {
+      if (fd !== null) { try { closeSync(fd); } catch { /* nothing to do */ } }
+    }
+  }
   if (!s.narrowed) {
     const why = readWhy || s.why;
     note({ decided: true, due: Number(due), total_ids: Number(total), ms, narrowed: false, why });
@@ -189,6 +208,17 @@ function main() {
   const rejects = (alias === 'CC-A' && owners._meta && Array.isArray(owners._meta.rejects))
     ? owners._meta.rejects.filter((r) => Date.now() - Date.parse(r.ts || 0) < 86400000) : [];
   if (rejects.length) parts.push(`⚠ ${rejects.length} alert marker(s) Langston wrote in the last 24 h could not be recorded (no 36-char id, or an owner outside the set) — tell him, leading with his name. Latest: ${rejects[rejects.length - 1].marker}`);
+  if (lost && (lost.lost.length || lost.rejects.length || lost.prose || lost.unparseable)) {
+    const ids = lost.lost.map((x) => `${String(x.id).slice(0, 8)} → ${x.owner}`).join(', ');
+    const extra = [lost.rejects.length ? `${lost.rejects.length} rejected marker(s) (latest: ${lost.rejects[lost.rejects.length - 1]})` : '',
+      lost.prose ? `${lost.prose} prose-skip count(s)` : '', lost.unparseable ? `${lost.unparseable} unreadable line(s) skipped` : '']
+      .filter(Boolean).join('; ');
+    parts.push(`⚠ this session's wake filter failed to save ${lost.lost.length} alert routing(s) in the last ${LOST_HOURS} h`
+      + (ids ? ` — they read as unrouted here until re-stated: ${ids}` : '') + (extra ? ` (also lost: ${extra})` : '')
+      + ' — tell Langston, leading with his name, to re-state those markers.');
+  } else if (lostWhy) {
+    parts.push(`⚠ ${lostWhy} — this session cannot tell whether any alert routing was lost.`);
+  }
   const rest = s.others ? `${s.others} other due alert${s.others === 1 ? ' is' : 's are'} routed to other sessions or to Kyle — not yours to raise.` : '';
   if (!parts.length) {
     emit(`§10.5 (${alias}): ${due} due alerts, none of them yours — ${rest || 'all routed elsewhere.'} (whole file, ${total} ids; ${ms}ms — the filter ran.)`);

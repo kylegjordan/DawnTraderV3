@@ -53,6 +53,49 @@ export function splitAlerts(alerts, owners, alias, nowMs = Date.now()) {
   return { narrowed: true, mine, unrouted, critical, others, churning };
 }
 
+// B-WAKE-OWNER-LOSS-VISIBLE (#1142): which routings THIS session's wake filter failed to save are still lost.
+// `lines` are the RAW text lines of the tail of <ALIAS>.alert-owners.lost.jsonl (the filter's `_record_loss` appends one
+// per failed save); `dropFirst` is true when the tail was read from an offset, so its first line may be cut.
+// TWO CLOCKS, and each rule names the one it reads (Langston C1/C9):
+//   EXPIRY reads `at` — the WALL-CLOCK time the loss was written. A line 24 h old or more is dropped.
+//   CLEARING reads `ts` — the MESSAGE time — on both sides: a lost id is cleared when the owner record holds an entry
+//     for it whose message ts is the same instant or later (`>=`: a replay of the lost message IS the repair), or whose
+//     owner equals the lost owner (C11: the routing already stands). Compared as PARSED epoch ms, never as strings —
+//     `at` is `…Z` to the second, a message ts is `+00:00` with microseconds. An absent or unparseable ts on EITHER side
+//     never clears; only expiry ends it.
+// C8: two unleased arms can append at once, so a torn line can sit ANYWHERE in the tail — skipped and COUNTED.
+export const LOST_HOURS = 24;
+export function lostRoutings(lines, owners, nowMs = Date.now(), dropFirst = false) {
+  const tsMs = (v) => { const n = typeof v === 'string' ? Date.parse(v) : NaN; return Number.isFinite(n) ? n : null; };
+  const latest = new Map();          // id -> { id, owner, ts } — the most recent loss per id wins
+  const rejects = [];
+  let prose = 0, unparseable = 0;
+  (lines || []).forEach((raw, i) => {
+    if (i === 0 && dropFirst) return;                       // a cut first line, from reading at an offset — expected
+    const text = String(raw).trim();
+    if (!text) return;
+    let rec;
+    try { rec = JSON.parse(text); } catch { unparseable += 1; return; }
+    const atMs = rec && tsMs(rec.at);
+    if (atMs === null || !rec || typeof rec !== 'object') { unparseable += 1; return; }
+    if (nowMs - atMs >= LOST_HOURS * 3600000) return;       // EXPIRY: wall clock
+    for (const x of Array.isArray(rec.ids) ? rec.ids : []) {
+      if (x && typeof x.id === 'string') latest.set(x.id, { id: x.id, owner: x.owner, ts: rec.ts });
+    }
+    for (const r of Array.isArray(rec.rejects) ? rec.rejects : []) rejects.push(String(r));
+    prose += Number(rec.prose) || 0;
+  });
+  const lost = [];
+  for (const x of latest.values()) {
+    const cur = owners && typeof owners === 'object' ? owners[x.id] : null;
+    if (cur && cur.owner === x.owner) continue;                                   // C11: the routing stands
+    const curMs = cur ? tsMs(cur.ts) : null, lostMs = tsMs(x.ts);
+    if (curMs !== null && lostMs !== null && curMs >= lostMs) continue;           // CLEARING: message clock
+    lost.push(x);
+  }
+  return { lost, rejects, prose, unparseable };
+}
+
 // Round 3 BLOCKER-2 (Langston): ONE cap, taken in PRIORITY order — critical, then unrouted, then yours — so a runaway
 // of one's own alerts can never push a critical or an unrouted one out of view; the cut is named per group.
 export function capBuckets(s, max) {

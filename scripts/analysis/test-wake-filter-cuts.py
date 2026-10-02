@@ -260,8 +260,13 @@ if WIN:
     _oin = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", _orow, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
     _op = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _OST, "--lease-root", _ODIR], input=_oin.encode("utf-8"), capture_output=True, timeout=120)
     _oh.wait()
+    # #1142 (Langston C7): the SAME run must also leave the in-band loss record — id, owner, the message ts, a wall-clock at.
+    _olost = os.path.join(_ODIR, "CC-A.alert-owners.lost.jsonl")
+    _olines = [json.loads(x) for x in open(_olost, encoding="utf-8")] if os.path.exists(_olost) else []
     _ook = (b"owner-file wake" in _op.stdout and b"LINE DROPPED" not in _op.stderr and b"alert-owner record NOT saved" in _op.stderr
-            and _op.returncode == 0)
+            and _op.returncode == 0 and len(_olines) == 1
+            and _olines[0].get("ids") == [{"id": "c244f2b8-a1eb-4d26-abf2-000000000001", "owner": "CC-A"}]
+            and _olines[0].get("ts") == "2026-10-01T21:30:00+00:00" and str(_olines[0].get("at", "")).endswith("Z"))
     if not _ook: fails += 1
     # ...but a SEED must not swallow it: it rebuilds the whole record, has no wake to protect, and a half-done seed must
     # never be marked seeded. Same hold, --seed-owners: expect a non-zero exit and no seeded_at.
@@ -273,11 +278,82 @@ if WIN:
     _ep = subprocess.run([sys.executable, FILTER, "CC-A", "--seed-owners", "--state", _EST], input=_ein.encode("utf-8"), capture_output=True, timeout=120)
     _eh.wait()
     _erec = json.load(open(_EOF, encoding="utf-8"))
-    _eok = _ep.returncode == 4 and not (_erec.get("_meta") or {}).get("seeded_at")
+    # #1142 (Langston C6): the seed path is untouched — it writes NO loss record (its own refusal is the signal).
+    _eok = (_ep.returncode == 4 and not (_erec.get("_meta") or {}).get("seeded_at")
+            and not os.path.exists(os.path.join(_EDIR, "CC-A.alert-owners.lost.jsonl")))
     if not _eok: fails += 1
     print(f"  {'PASS' if _eok else '** FAIL **':10} the same hold during a SEED fails the seed and leaves it unmarked (rc={_ep.returncode}, seeded={bool((_erec.get('_meta') or {}).get('seeded_at'))})")
     print(f"  {'PASS' if _ook else '** FAIL **':10} owner record held open past the retry: the wake on that line is still delivered and the lost routing named "
-          f"(rc={_op.returncode}, woke={b'owner-file wake' in _op.stdout}, dropped={b'LINE DROPPED' in _op.stderr})")
+          f"(rc={_op.returncode}, woke={b'owner-file wake' in _op.stdout}, dropped={b'LINE DROPPED' in _op.stderr}, loss_lines={len(_olines)})")
+
+# #1142 (Langston B1): forced-failure legs that run on EVERY platform, so CI evaluates the new write path. The owner
+# record's destination is made a DIRECTORY, so the save raises OSError on POSIX and on Windows alike (on Windows only after
+# the ~5 s replace retry). Expectations, stated before running:
+#   P1 — the wake prints, no LINE DROPPED, rc 0, and ONE loss line names the marker's id and owner with the message ts.
+#   P2 (B2) — the loss file is ALSO a directory, so the append fails: the wake STILL prints, no LINE DROPPED, rc 0, and
+#        stderr says the loss record could not be written either, naming the id.
+#   P3 (C3) — the only edit is a reject (no id): the loss line has ids [] and the reject's snippet.
+# A directory at the record's path fails the LOAD first (found by this test: that raise used to drop the wake too), so P1-P3
+# exercise the load-failure branch. P4 fails the SAVE with a readable record: POSIX only (a read-only directory blocks the
+# temp file); on Windows the held-file leg above is the save-failure case.
+def _forced(tag, text, lost_is_dir=False):
+    d = tempfile.mkdtemp(prefix=f"wakeloss{tag}-"); st = os.path.join(d, "CC-A.json")
+    open(st, "w", encoding="utf-8").write('{"pos": {}}')
+    os.mkdir(os.path.join(d, "CC-A.alert-owners.json"))
+    if lost_is_dir:
+        os.mkdir(os.path.join(d, "CC-A.alert-owners.lost.jsonl"))
+    row = json.dumps({"ts": "2026-10-03T08:00:00.250000+00:00", "kind": "langston_outbound", "text": text})
+    inp = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", row, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
+    p = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", st, "--lease-root", d], input=inp.encode("utf-8"),
+                       capture_output=True, timeout=120)
+    lf = os.path.join(d, "CC-A.alert-owners.lost.jsonl")
+    lines = [json.loads(x) for x in open(lf, encoding="utf-8")] if os.path.isfile(lf) else []
+    return p, lines
+_MID = "c244f2b8-a1eb-4d26-abf2-000000000002"
+_p1, _l1 = _forced("p1", f"OLD Claude — forced-loss wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]")
+_ok1 = (b"forced-loss wake" in _p1.stdout and b"LINE DROPPED" not in _p1.stderr and _p1.returncode == 0 and len(_l1) == 1
+        and _l1[0].get("ids") == [{"id": _MID, "owner": "CC-B"}] and _l1[0].get("ts") == "2026-10-03T08:00:00.250000+00:00")
+if not _ok1: fails += 1
+print(f"  {'PASS' if _ok1 else '** FAIL **':10} #1142 P1: a record that cannot be read (a directory at its path) delivers the wake AND leaves one loss line with id, owner and message ts "
+      f"(rc={_p1.returncode}, woke={b'forced-loss wake' in _p1.stdout}, lines={len(_l1)})")
+_p2, _l2 = _forced("p2", f"OLD Claude — forced-loss wake two.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]", lost_is_dir=True)
+_ok2 = (b"forced-loss wake two" in _p2.stdout and b"LINE DROPPED" not in _p2.stderr and _p2.returncode == 0
+        and b"loss record could not be written" in _p2.stderr and _MID[:8].encode() in _p2.stderr)
+if not _ok2: fails += 1
+print(f"  {'PASS' if _ok2 else '** FAIL **':10} #1142 P2 (B2): the append ALSO fails — the wake still prints, nothing is dropped, and stderr names the id "
+      f"(rc={_p2.returncode}, woke={b'forced-loss wake two' in _p2.stdout}, dropped={b'LINE DROPPED' in _p2.stderr})")
+_p3, _l3 = _forced("p3", "NEW Claude — a bad marker only.\n\n[[ALERT id=badzzzzz owner=CC-B action=\"x\"]]")
+_ok3 = (_p3.returncode in (0, 3) and b"LINE DROPPED" not in _p3.stderr and len(_l3) == 1 and _l3[0].get("ids") == []
+        and len(_l3[0].get("rejects") or []) == 1 and "badzzzzz" in _l3[0]["rejects"][0])
+if not _ok3: fails += 1
+print(f"  {'PASS' if _ok3 else '** FAIL **':10} #1142 P3 (C3): a loss with no alert id still leaves a line, carrying the reject's snippet "
+      f"(rc={_p3.returncode}, lines={len(_l3)})")
+# P4 — expected: a READABLE record whose directory is read-only, so the temp file for the save cannot be created; the wake
+# prints, nothing is dropped, the loss line is written... to a directory that is read-only. So the append fails too, and the
+# stderr line is the record: it names the id and says the loss record could not be written. (Read-only blocks BOTH files —
+# that is the honest shape of a permissions break, and exactly the case B2 guards.) The exit code is NOT asserted: in a
+# read-only directory the POSITION save at #@CAUGHTUP fails too and exits 1 after the wake has printed (measured on Linux,
+# 2026-10-03) — a pre-existing behaviour outside #1142, put to Langston at this batch's Step 4.
+if os.name != "nt" and os.geteuid() != 0:
+    _d4 = tempfile.mkdtemp(prefix="wakelossp4-"); _s4 = os.path.join(_d4, "CC-A.json")
+    open(_s4, "w", encoding="utf-8").write('{"pos": {}}')
+    open(os.path.join(_d4, "CC-A.alert-owners.json"), "w", encoding="utf-8").write('{"_meta": {"seeded_at": "x"}}')
+    os.chmod(_d4, 0o500)
+    try:
+        _row4 = json.dumps({"ts": "2026-10-03T09:00:00+00:00", "kind": "langston_outbound",
+                            "text": f"OLD Claude — read-only wake.\n\n[[ALERT id={_MID} owner=CC-B action=\"x\"]]"})
+        _in4 = "\n".join([f"==> {LOG} <==", f"#@AT {LOG} 7 0", f"#@POS {LOG} 7 0", _row4, f"#@POS {LOG} 7 400", "#@CAUGHTUP"]) + "\n"
+        _p4 = subprocess.run([sys.executable, FILTER, "CC-A", "--once", "--state", _s4, "--lease-root", _d4], input=_in4.encode("utf-8"),
+                             capture_output=True, timeout=120)
+    finally:
+        os.chmod(_d4, 0o700)
+    _ok4 = (b"read-only wake" in _p4.stdout and b"LINE DROPPED" not in _p4.stderr and b"alert-owner record NOT saved" in _p4.stderr
+            and _MID[:8].encode() in _p4.stderr)
+    if not _ok4: fails += 1
+    print(f"  {'PASS' if _ok4 else '** FAIL **':10} #1142 P4: the SAVE fails on a readable record (read-only directory) — the wake prints and stderr names the lost id "
+          f"(rc={_p4.returncode}, woke={b'read-only wake' in _p4.stdout}, dropped={b'LINE DROPPED' in _p4.stderr})")
+else:
+    print("  SKIP       #1142 P4 (read-only directory): POSIX non-root only; on Windows the held-file leg is the save-failure case")
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")

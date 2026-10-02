@@ -194,6 +194,19 @@ L10 = dummy()
 r10 = pos(lr2, st2, L10.pid)
 say(orphan == "1" and r10.returncode == 5 and r10.stderr.startswith("WATCHER-ORPHAN"),
     f"OBJ-3b a real orphan (loop shell {loop_pid} killed, readers={orphan}) is refused (rc={r10.returncode}, {r10.stderr[:70]!r})")
+# #1142 OBJ-4 — expected: the orphan's start stamp is UTC with a `Z`, matching the lease's `taken_at`, and lies within ten
+# minutes before now in UTC (the reader started moments ago). Control: the pre-#1142 filter printed LOCAL time, no zone,
+# which is two hours off on this laptop and fails the `Z` test.
+import re as _re
+from datetime import datetime as _dt, timezone as _tz
+_m = _re.search(r"\(started (\S+)\)", r10.stderr)
+_stamp = _m.group(1) if _m else ""
+try:
+    _age = (_dt.now(_tz.utc) - _dt.strptime(_stamp, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)).total_seconds()
+except ValueError:
+    _age = None
+say(_stamp.endswith("Z") and _age is not None and -60 <= _age <= 600,
+    f"#1142 OBJ-4 the orphan's start stamp is UTC (stamp={_stamp!r}, age_s={_age})")
 # cleanup: the orphan reader and its follower
 subprocess.run(["powershell", "-NoProfile", "-Command",
                 f"Get-CimInstance Win32_Process | Where-Object {{ ($_.CommandLine -match '{os.path.basename(lr2)}' -or $_.CommandLine -match '{os.path.basename(src2)}') -and $_.CommandLine -notmatch 'Get-CimInstance' }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }}"],  # by folder NAME: either slash form

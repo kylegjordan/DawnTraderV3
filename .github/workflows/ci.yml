@@ -146,6 +146,18 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/governance-checker/census.test.mjs
 
+      # B-WAKE-OWNER-LOSS-VISIBLE (#1142, Langston Step-2 B1): the wake filter's forced-failure legs and the alert hook's
+      # pure split logic, so the lost-routing record's write AND read paths are evaluated on every push, not only on the
+      # laptop. Same P30/Q33 form: a step inside Test Suite, its own `if`, no npm ci or Postgres needed. The filter
+      # suite's Windows-only held-file legs print SKIP here by design; the directory and read-only legs run.
+      - name: Wake filter tests (owner record, lost routing)
+        if: ${{ !cancelled() }}
+        run: python3 scripts/analysis/test-wake-filter-cuts.py
+
+      - name: Alert hook tests (split, lost routing)
+        if: ${{ !cancelled() }}
+        run: node scripts/analysis/test-alert-split.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest

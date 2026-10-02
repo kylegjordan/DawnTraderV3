@@ -1,7 +1,7 @@
 // B-TOKEN-BURN-CUT amendment 1, OBJ-6 — tests for .claude/hooks/alert-split.mjs (pure). Run: node scripts/analysis/test-alert-split.mjs
 // Every case states its expectation before it runs; the suite ends with a count of cases that SHOWED something, so a
 // run that shows nothing can never read as a pass.
-import { splitAlerts, capBuckets, CLONE_TO_ALIAS, CHURN_HOURS } from '../../.claude/hooks/alert-split.mjs';
+import { splitAlerts, capBuckets, lostRoutings, CLONE_TO_ALIAS, CHURN_HOURS } from '../../.claude/hooks/alert-split.mjs';
 
 let pass = 0, fail = 0, shown = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -75,6 +75,50 @@ ok('the clone map covers the four sessions', ['DawnTraderV3-old', 'DawnTraderV3-
   const per = ['CC-A', 'CC-B', 'CC-C', 'CC-INFRA'].map((al) => splitAlerts(rows, o, al));
   ok('owner=Langston: counted away (not shown) in all four sessions', per.every((s) => s.others === 1 && s.mine.length === 0 && s.unrouted.length === 0));
   ok('owner=Langston + critical: one line, owner named, in all four', per.every((s) => s.critical.length === 1 && s.critical[0].owner === 'Langston'));
+}
+
+// ── B-WAKE-OWNER-LOSS-VISIBLE (#1142): lostRoutings. Expectations stated per case (Langston C1, C8, C9, C11).
+{
+  const NOW = Date.parse('2026-10-03T12:00:00Z');
+  const ID1 = 'aaaaaaaa-0000-4000-8000-000000000001', ID2 = 'bbbbbbbb-0000-4000-8000-000000000002';
+  const L = (o) => JSON.stringify({ ts: '2026-10-03T10:00:00.123456+00:00', at: '2026-10-03T10:00:05Z', ids: [], rejects: [], prose: 0, ...o });
+  const lost1 = L({ ids: [{ id: ID1, owner: 'CC-A' }] });
+  const run = (lines, owners, dropFirst = false) => lostRoutings(lines, owners, NOW, dropFirst);
+  // expected: no owner entry → still lost, owner carried (C11)
+  let r = run([lost1], {});
+  ok('a lost id with no owner entry is reported, with its owner', r.lost.length === 1 && r.lost[0].id === ID1 && r.lost[0].owner === 'CC-A');
+  shown += r.lost.length;
+  // expected: an owner entry with a LATER message ts clears it
+  ok('cleared by a later owner entry (message clock)', run([lost1], { [ID1]: { owner: 'CC-B', ts: '2026-10-03T11:00:00+00:00' } }).lost.length === 0);
+  // expected: the SAME instant, written in the other format (Z, no fraction vs +00:00 with micro) — does NOT clear when the
+  // instants differ by the fraction; DOES clear when they are the same instant (C9: parsed epoch ms, never strings)
+  ok('same instant, other format, clears (>=, parsed)', run([L({ ts: '2026-10-03T10:00:00+00:00', ids: [{ id: ID1, owner: 'CC-A' }] })],
+    { [ID1]: { owner: 'CC-B', ts: '2026-10-03T10:00:00Z' } }).lost.length === 0);
+  // expected: an OLDER owner entry (a replay of an earlier message) does NOT clear (C1)
+  ok('an older owner entry does not clear', run([lost1], { [ID1]: { owner: 'CC-B', ts: '2026-10-03T09:00:00+00:00' } }).lost.length === 1);
+  // expected: a missing/unparseable ts on either side never clears; only expiry ends it (C9)
+  ok('null ts on the loss never clears', run([L({ ts: null, ids: [{ id: ID1, owner: 'CC-A' }] })], { [ID1]: { owner: 'CC-B', ts: '2026-10-03T11:00:00Z' } }).lost.length === 1);
+  ok('unparseable owner ts never clears', run([lost1], { [ID1]: { owner: 'CC-B', ts: 'garbage' } }).lost.length === 1);
+  // expected: the owner on record equals the lost owner → the routing stands, cleared (C11)
+  ok('owner on record equals the lost owner → cleared', run([lost1], { [ID1]: { owner: 'CC-A', ts: '2026-10-01T00:00:00Z' } }).lost.length === 0);
+  // expected: expiry reads `at` (wall clock), not the message ts: an old message ts with a fresh `at` is kept; a fresh ts
+  // with an `at` 24 h old is dropped
+  ok('expiry reads at, not ts (old ts, fresh at → kept)', run([L({ ts: '2026-09-20T00:00:00Z', at: '2026-10-03T11:00:00Z', ids: [{ id: ID1, owner: 'CC-A' }] })], {}).lost.length === 1);
+  ok('expiry reads at (at 24 h old → dropped)', run([L({ at: '2026-10-02T12:00:00Z', ids: [{ id: ID1, owner: 'CC-A' }] })], {}).lost.length === 0);
+  // expected: a no-id loss still reports, as rejects + prose (C3)
+  r = run([L({ rejects: ['[[ALERT id=bad owner=CC-B]]'], prose: 2 })], {});
+  ok('a no-id loss reports its rejects and prose', r.lost.length === 0 && r.rejects.length === 1 && r.prose === 2);
+  shown += r.rejects.length;
+  // expected: a torn line ANYWHERE is skipped and counted (C8); a cut FIRST line from an offset read is skipped, not counted
+  r = run(['{"ts": "2026-10-03T1', lost1, '{not json', L({ ids: [{ id: ID2, owner: 'Kyle' }] })], {}, true);
+  ok('torn line mid-tail counted; offset-cut first line not counted', r.unparseable === 1 && r.lost.length === 2);
+  r = run(['{not json', lost1], {}, false);
+  ok('torn FIRST line counted when the read was not from an offset', r.unparseable === 1 && r.lost.length === 1);
+  // expected: the latest loss per id wins (two losses for one id → one entry, the later owner)
+  r = run([lost1, L({ ts: '2026-10-03T10:30:00Z', ids: [{ id: ID1, owner: 'CC-C' }] })], {});
+  ok('latest loss per id wins', r.lost.length === 1 && r.lost[0].owner === 'CC-C');
+  // expected: no owner record at all (null) → nothing clears, nothing throws
+  ok('null owners → reported, no throw', run([lost1], null).lost.length === 1);
 }
 
 console.log(`\nAlert split tests: ${pass} passed, ${fail} failed (${shown} alerts shown across the cases — the instrument speaks)`);

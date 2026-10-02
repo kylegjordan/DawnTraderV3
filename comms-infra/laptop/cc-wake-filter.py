@@ -397,7 +397,7 @@ def _readers():
         dom = "$_.CommandLine -notmatch '--lease-root'"
     ps = ("@(Get-CimInstance -ErrorAction Stop Win32_Process -Filter \"Name='python.exe'\" | Where-Object { "
           f"$_.CommandLine -match 'cc-wake-filter\\.py {re.escape(ALIAS)} ' -and $_.CommandLine -match '--once' -and {dom}"
-          " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, $_.CreationDate.ToString('s') }; 'CENSUS-OK'")
+          " }) | ForEach-Object { '{0} {1}' -f $_.ProcessId, ($_.CreationDate.ToUniversalTime().ToString('s') + 'Z') }; 'CENSUS-OK'")
     ps_exe = os.environ.get("CC_WAKE_PS", "powershell")      # env: tests only (to make the census fail)
     r = None
     for _attempt in range(2):                               # Langston Step-4 C1: retry once, then refuse by name
@@ -631,15 +631,56 @@ def _save_owners(owners):
     _replace_retrying(tmp, OWNERS_FILE)   # the alert hook reads this file every turn, so a hold is expected
 
 
+# B-WAKE-OWNER-LOSS-VISIBLE (#1142): a failed owner-record save leaves an IN-BAND record of what was lost, so the per-turn
+# alert hook can show it. A plain append to a SEPARATE file — no rename, so it does not depend on the next save, which a
+# delivering `--once` run never reaches (it exits at the first #@CAUGHTUP after its wake). It carries only the fact of
+# the loss: never the dict (Langston: carrying unsaved state forward trades a named loss for a silent clobber).
+# Each line: {"ts": MESSAGE ts (compared with an owner entry's ts), "at": wall-clock UTC (24 h expiry),
+#             "ids": [{"id", "owner"}] — only NEW or FLIPPED ids, "rejects": [marker snippets], "prose": n}.
+# Readers: `.claude/hooks/inject-due-alerts.mjs` (tail only) via `lostRoutings` in `alert-split.mjs`. No deleter.
+LOST_FILE = os.path.join(os.path.dirname(OWNERS_FILE), f"{ALIAS}.alert-owners.lost.jsonl")
+
+
+def _record_loss(ts, lost_ids, lost_rejects, lost_prose, err):
+    """Never raises (Langston B2): this runs inside the per-line try whose handler drops the line — and the WAKE."""
+    named = ", ".join(f"{x['id'][:8]}->{x['owner']}" for x in lost_ids) or "no alert id"
+    extra = (f"; also {len(lost_rejects)} rejected marker(s)" if lost_rejects else "") + \
+            (f"; {lost_prose} prose skip(s)" if lost_prose else "")
+    rec = {"ts": ts, "at": _utc(), "ids": lost_ids, "rejects": lost_rejects, "prose": lost_prose}
+    try:
+        with open(LOST_FILE, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
+        where = f"recorded in {os.path.basename(LOST_FILE)}"
+    except OSError as _e2:
+        where = f"AND the loss record could not be written either ({_e2})"
+    # stderr stays the durable copy: a session closed for a day never reads the sidecar inside its 24 h window.
+    print(f"[cc-wake-filter] alert-owner record NOT saved, this line's routing is lost until re-stated "
+          f"({named}{extra}) — {where}: {err}", file=sys.stderr, flush=True)
+
+
 def record_owners(body, ts):
     owners, changed = None, False
+    mutated, lost_rejects, lost_prose = [], [], 0      # what THIS call changed — the loss set if the save fails (C2/C3)
+    load_err = None
     for mk in MARKER_FULL.finditer(body or ""):
         s = mk.group(0)
         mi, mo_ = _MARK_ID.search(s), _MARK_OWNER.search(s)
         aid = mi.group(1).strip('",;') if mi else None
         own = OWNER_CANON.get(mo_.group(1).strip('",;').upper()) if mo_ else None
         if owners is None:
-            owners = _SEED_OWNERS if SEED else _load_owners()
+            if SEED:
+                owners = _SEED_OWNERS
+            else:
+                try:
+                    owners = _load_owners()
+                except OSError as _le:
+                    # #1142 (found by its B1 test): a record that EXISTS but cannot be read (not ENOENT — e.g. a directory
+                    # at that path, or a permissions break) raised here, inside the per-line try, and dropped the WAKE.
+                    # Build in memory from empty so the line's markers are still parsed, but NEVER save that over the
+                    # unreadable record (it would clobber every routing in it): the edits are reported as a loss instead.
+                    # Every marker then reads as NEW, so an unchanged re-statement is listed too; the hook clears those
+                    # once the record is readable again, because the owner on record equals the lost owner (C11).
+                    owners, load_err = {}, _le
         if (not aid and not own) or (aid and aid[0] in "<…."):
             # Langston (amendment 1, after round 3): a marker whose id is ABSENT or a placeholder (`<uuid>`, `…`, `..`)
             # is Langston QUOTING the format, not routing — skipped. Keyed on the id, never the owner: a real id with a
@@ -650,6 +691,7 @@ def record_owners(body, ts):
             _SKIPPED_PROSE[0] += 1
             meta = owners.setdefault("_meta", {})
             meta["skipped_as_prose"] = int(meta.get("skipped_as_prose") or 0) + 1
+            lost_prose += 1
             changed = True
             continue
         if not own or not aid or not _UUID.match(aid):
@@ -669,18 +711,24 @@ def record_owners(body, ts):
                 rej = [r for r in rej if r.get("marker") != snip]
                 rej.append({"ts": ts, "marker": snip})
                 meta["rejects"] = rej[-REJECTS_KEPT:]
+                lost_rejects.append(snip)
                 changed = True
             continue
         prev = owners.get(aid)
         if not prev:
             owners[aid] = {"owner": own, "ts": ts, "flips": 0}      # a first routing is not a change
+            mutated.append({"id": aid, "owner": own})
             changed = True
         elif prev.get("owner") != own:
             # round 3 BLOCKER-3 (Langston): his routing is re-guessed per invoke — 17 of 96 ids since 09-23 were routed
             # to more than one owner (191 flips). The record keeps WHEN the owner last changed and how often; the hook
             # reads a recently-changed owner as UNROUTED (shown to everyone) instead of trusting the latest guess.
             owners[aid] = {"owner": own, "ts": ts, "changed_at": ts, "flips": int(prev.get("flips") or 0) + 1}
+            mutated.append({"id": aid, "owner": own})
             changed = True
+    if changed and load_err is not None:
+        _record_loss(ts, mutated, lost_rejects, lost_prose, load_err)
+        return
     if changed:
         try:
             _save_owners(owners)
@@ -697,8 +745,8 @@ def record_owners(body, ts):
             # prints LINE DROPPED and moves on — so a raise here also dropped the WAKE on the same line, and the next
             # #@POS committed past it. The owner record is advisory (it narrows the alert list); the wake is not. Name
             # the lost routing and carry on: the marker's owner is missing until Langston states it again.
-            print(f"[cc-wake-filter] alert-owner record NOT saved, this line's routing is lost until re-stated: {_e}",
-                  file=sys.stderr, flush=True)
+            # #1142: the loss is now also recorded IN BAND, with the ids and owners it concerned (`_record_loss`).
+            _record_loss(ts, mutated, lost_rejects, lost_prose, _e)
 
 
 if SEED:
@@ -1065,9 +1113,10 @@ for raw in sys.stdin:
             # A procedure caught it; a procedure is exactly what gets skipped under time
             # pressure, which is #623 leg 2 — convert the control into a MECHANISM. So the
             # harness now announces itself instead of impersonating a clean result.
-            # STDERR, deliberately: the Monitor treats stdout as the event stream, so a stdout
-            # line here would forge a wake. stderr lands in the task's output file — visible to
-            # anyone testing, invisible to the wake channel.
+            # STDERR, deliberately: stdout carries only the WAKE[ lines a session acts on, so a
+            # diagnostic there would read as a wake. Both streams land in the task's output file,
+            # which is why every diagnostic leads with [cc-wake-filter] (#1142; the reason this
+            # comment gave before named the retired Monitor form, #1127).
             print(f"[cc-wake-filter] UNROUTED LINE (cur={cur!r}) — no '==> file <==' header seen, "
                   f"so this line matched no branch and was DROPPED. If you are testing by piping "
                   f"lines in, prepend: ==> /var/log/cc-discord-inbox.jsonl <==  — otherwise a "
