@@ -683,7 +683,6 @@ app.use((req, res, next) => {
       const { screenerRecalibrationTask } = await import('./services/screener-recalibration-task');
       const { marketScanTask } = await import('./services/market-scan-task');
       const { aiSummaryTask } = await import('./services/ai-summary-task');
-      const { systemHealthCheckTask } = await import('./services/system-health-check-task');
       const { cleTask } = await import('./services/cle-task');
       const { cwaTask } = await import('./services/cwa-task');
       const { cachePurgeTask } = await import('./services/cache-purge-task');
@@ -729,17 +728,6 @@ app.use((req, res, next) => {
         frequency: aiSummaryTask.frequency,
         intervalMs: aiSummaryTask.intervalMs,
         run: aiSummaryTask.run.bind(aiSummaryTask),
-        lastRun: null,
-        nextRun: null,
-        status: 'idle'
-      });
-      
-      schedulerRegistry.registerTask({
-        name: systemHealthCheckTask.name,
-        description: systemHealthCheckTask.description,
-        frequency: systemHealthCheckTask.frequency,
-        intervalMs: systemHealthCheckTask.intervalMs,
-        run: systemHealthCheckTask.run.bind(systemHealthCheckTask),
         lastRun: null,
         nextRun: null,
         status: 'idle'

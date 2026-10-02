@@ -15959,7 +15959,7 @@ Provide specific, actionable recommendations.`,
           // Verify scheduler cadence per task (Milestone 12: each task runs ≤ 4 hours)
           scheduler_cadence: await (async () => {
             const schedulerLogs = await storage.getSystemSchedulerLogs(200);
-            const taskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration', 'System Health Check'];
+            const taskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration']; // 'System Health Check' removed 2026-10-02 (B-HEALTH-CHECK-REMOVAL, #1147)
             const perTask: any[] = [];
 
             for (const taskName of taskNames) {

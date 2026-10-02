@@ -2132,8 +2132,8 @@ export class DatabaseStorage implements IStorage {
 
   async getSystemSchedulerLogs(limit = 50): Promise<AITransparencyLog[]> {
     // Fetch only system-wide scheduler logs from the scheduler registry
-    // Known scheduler tasks: AI Summary, Market Scan, Screener Recalibration, System Health Check
-    const schedulerTaskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration', 'System Health Check'];
+    // Known scheduler tasks: AI Summary, Market Scan, Screener Recalibration (System Health Check removed 2026-10-02, #1147)
+    const schedulerTaskNames = ['AI Summary', 'Market Scan', 'Screener Recalibration'];
     
     return await db
       .select()
