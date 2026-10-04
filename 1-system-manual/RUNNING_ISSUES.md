@@ -10202,6 +10202,7 @@ HOME: B-GOV-LEDGER-GRADE, owner CC-A, placed in `Claude Comms and Packages/Scope
 ---
 
 ### #1102 OPEN 2026-09-29 (CC-INFRA; B-CREDENTIALS-PRIVATE-REPO Step-2 audit) — ⛔ **THE STAGING APP'S OWN ACCOUNT (`deploy`) HAS PASSWORDLESS ROOT, AND NOTHING RECORDS IT**
+➕ **2026-10-04 (CC-INFRA, `B-CREDENTIALS-PRIVATE-REPO` Step 6) — measured on staging: `/etc/sudoers.d/deploy` is `0644 root:root` (31 B, dated 2026-03-30)**; `visudo -c` reports "bad permissions, should be mode 0440" for it on every whole-set check. Not touched by OBJ-1 (it is the file this issue is about); §9.4 disposition 2 — added to this issue, fixed with the `deploy` rule itself.
 
 **Measured:** `/etc/sudoers.d/deploy` reads `deploy ALL=(ALL) NOPASSWD: ALL` (mode 0644, dated 2026-03-30); `sudo -l -U deploy` confirms it. The web app runs as `deploy` (pm2), and **three SSH keys log in as `deploy`** (`#924`), so each of them is effectively root on the trading server. **Actual use, 2026-08-30 → 09-29:** 15 `sudo` calls by `deploy`, all interactive (bash, find, head, journalctl, ls, python3, true); **no automated path depends on it** (none of `deploy`'s units, no crontab, and `dt-deploy` has no `sudo`).
 **Contradicts a written premise:** `B_NEW_41_SCOPE.md:21` described `deploy` as a *"least-privilege posture"*; the sudoers file predated that text (2026-03-30 vs 2026-05-17).

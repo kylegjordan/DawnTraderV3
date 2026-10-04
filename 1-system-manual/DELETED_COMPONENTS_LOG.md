@@ -1147,3 +1147,10 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS:** `git grep wake-watcher-heartbeat-cc-a` at the ref returns only history (issue entries, change lists, the B-WAKE-QUIET scope, the feature-watch ledger, CC-A's memory); no runtime reader; the task was never scheduled, so no run stops.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/wake-watcher-heartbeat-cc-a.SKILL.20261001-B-TOKEN-BURN-CUT.md.removed`.
 **COMMIT:** the `B-TOKEN-BURN-CUT` Step-10 governance commit that adds this entry.
+
+## 2026-10-04 — the two Helsinki staging password files `/etc/langston/staging.env` and `/etc/coltrane/staging.env` — B-CREDENTIALS-PRIVATE-REPO (OBJ-1, #1023), CC-INFRA
+**WHAT:** both root `0600`, 53 B, last written 2026-09-09; each held `STAGING_USER=testuser123` and a password the old `agent-staging-session` read to log the agents' browsers in to staging.
+**WHY:** OBJ-1 replaces password logins with a token minted on staging by `dt-api mint` through the forced-command `dtmint` key; the installed `agent-staging-session` (the reviewed `8e165d1d6` blob) reads neither file — its one mention of the paths is the header comment saying it used to (`agent-staging-session:17`). The value they hold is also dead since Kyle's OBJ-0 rotation (2026-09-29), and the crew password was set anew by the setter on 2026-10-04 11:40Z, held only by `dtapi`.
+**BLAST RADIUS:** after the move, `agent-staging-session --check` = SESSION OK for both coltrane and langston; the mint already ran under the new script at 11:41:52Z as the unit (`Result=success`); `dt-install-drift` on Helsinki PASS.
+**ARCHIVE:** MOVED, not deleted — `/root/b-cred-rollback-20261004T114140Z/etc-langston/staging.env` and `…/etc-coltrane/staging.env` on Helsinki (root `0700` dir), beside the pre-install `agent-staging-session` + its units.
+**COMMIT:** the `B-CREDENTIALS-PRIVATE-REPO` Step-6 record commit that adds this entry.
