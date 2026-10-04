@@ -35,5 +35,11 @@ change-class: hotfix
 - `#902` → unchanged and still masked (§3); finding added: its two display components are unmounted — rule-18 candidates for `B-EPOCH-PARITY-FENCE` (row 99, CC-B) to settle before scoping the readers.
 
 ## 6. Verify once, after deploy B (same instruments)
-- Paper Trading → Earnings → "Day" on a window with no closes: both lifetime rows show values; the analytics response for `range=24h` carries `lifetime`.
+- Paper Trading → Earnings → "Day": both lifetime rows show values, AND the same `range=24h` analytics response has `analytics.totalOpened === 0` **and** carries `lifetime` (Langston condition 1: only an EMPTY window exercises the fixed branch; if the window holds a close at check time the check is **NOT YET RUN**, never a pass).
 - Main Dashboard → Portfolio Value shows a balance; network: `/api/portfolio/overview?mode=paper` → 200.
+
+## 7. Langston gate — APPROVED 2026-10-04 10:54Z at `8e165d1d6`
+- Condition 1 (binding, on the verify): §6's first check rewritten — an empty window or it is NOT YET RUN.
+- Condition 2: the fence's reach is stated beside it (a later `lifetime` key below an early return, before the next return, would satisfy it).
+- Note A: the LIVE arm (`dashboard.tsx:43`, `use-trading.tsx:228`) now reaches `?mode=live`, which calls Kraken `getAccountBalance()` per poll (15 s and 60 s). Inert in paper; recorded on the live-balance-reads row (`SPRINT_TO_LIVE_PLAN` row 9c) as a go-live rate item.
+- Note B (pre-existing, untouched): the paper queries in `dashboard.tsx` (15 s) and `use-trading.tsx` (60 s) share the key `['portfolio-overview','paper']` with different intervals.

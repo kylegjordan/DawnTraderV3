@@ -8,7 +8,9 @@
  * (2) The main Dashboard's Portfolio Value card never loaded: it called the authenticateToken-gated
  *     `/api/portfolio/overview` with a bare fetch (no Bearer token), so every call got 401. Fence: neither
  *     caller reaches that route except through `apiFetch`.
- * NOT COVERED, stated: other bare fetches to other gated routes (a separate census, own issue).
+ * NOT COVERED, stated: other bare fetches to other gated routes (a separate census, own issue). REACH of fence 1 (Langston):
+ * each segment runs from one `res.json({` to the next, so it includes the code BELOW a return — a future early return that omits
+ * `lifetime` still passes if a `lifetime:`/`lifetime,` key appears below it before the next `res.json({`.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
