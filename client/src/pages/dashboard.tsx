@@ -21,6 +21,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, lazy, Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiFetch } from "@/lib/api";
 import { useWebSocket } from "@/hooks/use-websocket";
 
 // Directive 11.8B-B: DashboardLATTiWidget removed - parallel adaptive systems eliminated
@@ -37,11 +38,9 @@ export default function Dashboard() {
   // Nov 6-15 truth: Normal polling (15s) + WebSocket for instant updates
   const { data: livePortfolioData } = useQuery<PortfolioOverview>({
     queryKey: ['portfolio-overview', 'live'],
-    queryFn: async () => {
-      const res = await fetch('/api/portfolio/overview?mode=live');
-      if (!res.ok) throw new Error('Failed to fetch live portfolio');
-      return res.json();
-    },
+    // B-DASHBOARD-STATS-BLANK (2026-10-04): apiFetch, not bare fetch — /api/portfolio/overview is
+    // authenticateToken-gated (routes.ts), so a bare fetch got 401 and the Portfolio Value card never loaded.
+    queryFn: () => apiFetch('/api/portfolio/overview?mode=live'),
     enabled: !isPaper,
     refetchInterval: 15000,
     staleTime: 15000
@@ -49,11 +48,7 @@ export default function Dashboard() {
   
   const { data: paperPortfolioData } = useQuery<PortfolioOverview>({
     queryKey: ['portfolio-overview', 'paper'],
-    queryFn: async () => {
-      const res = await fetch('/api/portfolio/overview?mode=paper');
-      if (!res.ok) throw new Error('Failed to fetch paper portfolio');
-      return res.json();
-    },
+    queryFn: () => apiFetch('/api/portfolio/overview?mode=paper'),
     enabled: isPaper,
     refetchInterval: 15000,
     staleTime: 15000

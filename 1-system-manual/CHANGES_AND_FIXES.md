@@ -1,5 +1,14 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-04-A — `B-DASHBOARD-STATS-BLANK` (hotfix, `#903`, CC-B, Kyle-reported) — two blank figures on the staging dashboards
+
+**CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_DASHBOARD_STATS_BLANK_SCOPE.md`. **Ships with deploy B (not before 2026-10-05); no migration.**
+**SYMPTOM (measured in Claude-in-Chrome, 2026-10-04):** Paper Trading → Earnings, "Day" window: *Lifetime Net P/L* and *Lifetime return* show "—" (`range=24h` response has no `lifetime`; 7d/30d/all do). Main Dashboard → Portfolio Value stuck on placeholders: `/api/portfolio/overview?mode=paper` → 401 (200 with the Bearer token).
+**MECHANISM:** (a) `/active-engine/trades/analytics`'s empty-window early return (`routes.ts:12990`) never added `lifetime`, which `567385eae` (OBJ-4) put on the main return only. (b) `authenticateToken` reads only the `Authorization` header (`routes.ts:181-186`); `dashboard.tsx:41,:53` and `use-trading.tsx:226` bare-`fetch`ed the gated route (since `da4ff901c`). `#903`'s "race" diagnosis corrected: it is deterministic.
+**BLAST RADIUS:** one response key (one client reader, optional-chained); three call sites to `apiFetch`, same URL and query keys; four callers of the route in total. `#902`'s unscoped fields are not unmasked (their display components are unmounted). The other bare fetches to gated routes stay with row 175.
+**FIX:** `lifetime: _lifetime` on the early return; `apiFetch` at the three sites; new fence test `server/tests/unit/b-dashboard-stats-blank.test.ts` (fails on the reverted sources, passes on the fix). tsc 338 = 338.
+**LANGSTON:** pending. **VERIFICATION (after deploy B, the same instruments):** both lifetime rows filled on an empty window; Portfolio Value renders and the request returns 200.
+
 ## FIX-2026-10-02-A — `B-PATTERN-ENUM-DRIFT` (hotfix, `#1063`, CC-B, Kyle-directed) — the ABCD pattern could not be saved, so every ABCD-confirmed signal failed at the trade insert
 
 **CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_PATTERN_ENUM_DRIFT_SCOPE.md` (r4). **Ships with deploy B (not before 2026-10-05) as migration 10.**

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from '@/lib/queryClient';
+import { apiFetch } from '@/lib/api';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTradingMode } from '@/contexts/trading-mode-context';
 import { toast } from '@/hooks/use-toast';
@@ -222,11 +223,9 @@ export function useTrading() {
   // Portfolio data - use canonical tuple key format
   const { data: portfolioMetrics, isLoading: portfolioLoading } = useQuery<PortfolioMetrics>({
     queryKey: ['portfolio-overview', mode],
-    queryFn: async () => {
-      const res = await fetch(`/api/portfolio/overview?mode=${mode}`);
-      if (!res.ok) throw new Error('Failed to fetch portfolio overview');
-      return res.json();
-    },
+    // B-DASHBOARD-STATS-BLANK (2026-10-04): apiFetch, not bare fetch — /api/portfolio/overview is
+    // authenticateToken-gated (routes.ts), so a bare fetch got 401 and the Portfolio Value card never loaded.
+    queryFn: () => apiFetch(`/api/portfolio/overview?mode=${mode}`),
     enabled: !!mode,
     refetchInterval: 60000,
     staleTime: 60000,

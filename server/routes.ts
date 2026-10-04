@@ -13027,6 +13027,11 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
             // Same class as the two stale comments corrected earlier today: a comment describing
             // code that is not there, defending the very thing it got wrong.
             earnings: computeRollingEarnings(validTrades, now, _epoch),
+            // B-DASHBOARD-STATS-BLANK (2026-10-04): the LIFETIME scoreboard (OBJ-4, Kyle 2026-08-21) is
+            // window-independent, so it belongs on THIS branch too. It was added only to the main return
+            // below, so any selected window with no closes ("Day" on a quiet day, the default view)
+            // rendered the Earnings card's two lifetime rows as "—". `_lifetime` is resolved above.
+            lifetime: _lifetime,
             avgAmountInvested: 0
           }
         });
