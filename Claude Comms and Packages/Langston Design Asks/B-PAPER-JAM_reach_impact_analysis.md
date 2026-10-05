@@ -23,7 +23,7 @@
 | net P&L, closed | **−$121.13** | **−$9.83** (+$6.81 unrealised on the 6 open) |
 | mean net per trade | −0.91 % | −0.04 % |
 | capital-time used ($ × hours) | 65,793 | **255,431 (3.9×)** |
-| net per $10k-hour | −18.4 | −0.6 |
+| net per $10k-hour (**closed-only** denominator: 159,775 after) | −18.4 | −0.6 |
 
 **By strategy, after:** `strong_bull_trend` **23 trades** (3 open), median hold **30.5 h** (incl. open), win 40 %, net **−$2.09**, median target **14.7 %**. `morning_star` 33 trades, 4.4 h, win 36 %, −$7.87. `reverse_impulse` 6, +$5.67 · `inside_bar_reversal` 4, +$6.28 · `pivot_shift` 3, −$5.53.
 **Before, for comparison:** `morning_star` 47 (−$52.08) · `sma_trend_ride` 20 (**−$66.25**) · `inside_bar_reversal` 8 (+$17.37) · `pivot_shift` 7 · `reverse_impulse` 6.
@@ -40,10 +40,10 @@
 ## 3. What this says — plainly
 1. **Yes, the batch slowed paper trading, and by roughly what its own evidence predicted for the strategy it unblocked.** `strong_bull_trend` holds ~18-20 h at the median in the VTS both before and after the batch (it was already being simulated there); in paper it is ~19 h for the trades that closed (Langston's figure) and ~30 h counting the three still open. Paper's overall median went 5.9 h → 9.7 h and the share of trades held over two days went 0 % → 20 %.
 2. **What was NOT anticipated is the effect on how many trades the book can run.** Paper has a fixed amount of money; `strong_bull_trend` trades are full-size (~$160) and stay ~3× longer, so they used **3.9× the capital-time**. Opens fell from 6.2 to 4.9 a day, and to zero once every place was held by a slow trade.
-3. **Outcomes improved overall, but not because of `strong_bull_trend`.** Paper went from losing $121 to roughly break-even over the same length of time, and the win rate rose 35 % → 40 %. But `strong_bull_trend` itself is **break-even (−$2.09 over 23 trades)**; most of the improvement is `morning_star` losing less (−$52 → −$8) and `sma_trend_ride` no longer trading (−$66 before). **With 23 trades the strategy's own result is too small to call either way.**
+3. **Outcomes improved overall, but not because of `strong_bull_trend`.** Paper went from losing $121 to roughly break-even over the same length of time, and the win rate rose 35 % → 40 %. But `strong_bull_trend` itself is **break-even (−$2.09 over 23 trades)**; most of the improvement is `morning_star` losing less (−$52 → −$8) and `sma_trend_ride` trading far less (20 trades, −$66.25 before; **1 trade, −$6.28 after** — ~~"no longer trading"~~ corrected r2). **With 23 trades the strategy's own result is too small to call either way.**
 4. **So, today: the batch bought a lot of slower capital-time for no measured gain from the strategy it added — yet.** Not a loss, not a win.
 
-## 4. Recommendation
+## 4. Recommendation — ⛔ r1's test REJECTED by Langston; §7 replaces it
 - **Keep it through Monday's reset, and judge it on results, not speed** (Kyle: no limits based on how fast a strategy trades). The reset gives ~20 places instead of 5, so one slow strategy can no longer stop the book.
 - **Pre-register the test now, before the data:** after **50 closed paper `strong_bull_trend` trades or 21 days after the reset, whichever first**, compare its **net profit per $10k-hour** with the rest of the book over the same period. **If it is below the rest, its reach ceiling goes back to the class default; if above, it stays.** That is an outcome rule, not a speed rule — a slow strategy that earns more per unit of money-time is welcome.
 - **The bad-print fix (`#1153`) still comes first**: two of the seven stuck trades have targets set off a single bad price, which no strategy setting explains.
@@ -54,3 +54,19 @@ Paper: `closed_trades` with `extract(epoch from coalesce(closed_at, now()) - ope
 
 ## 6. For Langston
 Re-derive §1 (paper) and §2's hold columns; rule on §4's pre-registered test (object, population, threshold, consequence). Two things I did not do: an xStock read (too few trades), and a per-trade view of whether the six `min_rr`/reach rows *other than* `strong_bull_trend` changed anything in paper (the weekly read of 09-30 found two of them never opened a trade).
+
+## 7. r2 — Langston's re-derivation (2026-10-05), corrections and the replacement test
+`REVIEWER: Langston · object (staging, his own queries rederive_reach.sql, rd2-rd6) · §1 and §2 holds reproduce to the decimal · corrections below adopted`
+
+**7a — The batch slowed the strategies it did NOT unblock, too (answers §6's open item).** Non-SBT paper: median closed hold **5.94 → 7.21 h (+21 %)**; median target distance up in every one (morning_star 5.98 → 6.72 %, inside_bar_reversal 6.52 → 12.11 %, reverse_impulse 6.84 → 9.67 %, pivot_shift 6.40 → 8.71 %); net **−$121.13 → −$7.74** on 48 trades; average notional $92.84 → $63.27. ⇒ §3 bullet 1 overstated SBT's share: **SBT is 72.7 % of the after window's capital-time, but only 6 of the 14 trades held over 48 h (43 %).** ⚠️ **HYPOTHESIS, UNMEASURED:** why non-SBT targets widened, and whether the wider targets are what improved non-SBT P&L.
+**7b — Full enumeration (r1 listed only the big ones).** After (71): strong_bull_trend 23, morning_star 33, reverse_impulse 6, inside_bar_reversal 4, pivot_shift 3, plus sma_trend_ride 1 and defensive_hedge (GBP/USD, still open). Before (91): morning_star 47, sma_trend_ride 20, inside_bar_reversal 8, pivot_shift 7, reverse_impulse 6, plus vwap_pullback, mean_reversion, defensive_hedge.
+**7c — The after window is two populations:** deploy A (`ea456ad40`, 2026-10-02 20:37:49Z) sits inside it and carries the `3n.l` REST-key fix that changes GBP/USD and ETC/USD mark resolution. Discharge or split before any verdict.
+**7d — §4's test is wrong-signed and is withdrawn.** For a losing strategy, holding longer moves net-per-capital-time toward zero, i.e. "better": today SBT scores −0.18 per $10k-hour against the rest's −1.70 and would PASS on 20 closed trades. **Replacement (Langston), to pre-register:**
+- **LEG 1 — the gate (Kyle's "results"):** mean net per trade after friction, **closed SBT rows only**: FAIL if the 95 % upper bound < 0, PASS if the lower bound > 0, otherwise INCONCLUSIVE-EXTEND. (n=20 today: sd 15.92 pp; at n=50 the 95 % interval on a zero mean is ±4.4 pp.)
+- **LEG 2 — net per $10k-hour: reported, gating only where both sides are ≥ 0.** Comparator enumerated by strategy and published, n ≥ 5 or excluded.
+- **Open rows:** verdict on closed rows only; open set reported as count + capital-time + mark; > 20 % open ⇒ INCONCLUSIVE.
+- **Clock:** 50 closed SBT trades or 21 days after the reset; at 21 days with n < 50 extend once, then to Kyle as a judgment, never a mechanical revert.
+- **VOID/SPLIT on:** `#1153` landing, a `#1095` un-hold, an 8 % kill-switch trip, any exit-mark cadence change (`3n.l` / `8a`), a slot change beyond Monday's reset.
+- **A PASS does not discharge the missing hold-time expectation** (pre-audit `:90`) — that stays owed.
+- ⚠️ §4's "~20 places" is from `B_SIZING_DEC_RESTORE_SCOPE.md` obj-2 (`slots = min(floor(e / effectiveP), postureSlotCap)` ⇒ 20 at e = 100, p = 5, normal posture), not yet measured live.
+**7e — Found outside scope (Langston, §9.4 disposition 2 → CC-C's fiat line `#937`/`#966`, `PHASE_19_PLAN` 5.a):** the `defensive_hedge` **GBP/USD** paper position, open since 09-23 (278 h, $14,737 of capital-time = 5.8 % of the book on $52.98), has target +5.42 % / stop −3.25 % on a fiat pair: crypto-calibrated ATR geometry on a fiat base. Not a reach-batch effect. It inflates the "19.7 % held over 48 h" figure the batch is charged with.
