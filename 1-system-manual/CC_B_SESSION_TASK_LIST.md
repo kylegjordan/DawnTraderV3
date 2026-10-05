@@ -16,8 +16,9 @@
 | `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
 | `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
 
-## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (62)
+## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (63)
 
+- 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
 **Wave 0 — before the sprint:** 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`), switch on the feed-liveness grade after row 3's startup-cache fix; Step 1 settles the xStock weekend window and whether its alerts clear on recovery (accepted 2026-09-30).
 - 3c `B-DISPLAY-TRIGGER-PRICE` (`#1152`, Kyle 2026-10-04): show the price that decides the trade (crypto exits fire on the bid; the screen shows the midpoint) — after 3b.
 
