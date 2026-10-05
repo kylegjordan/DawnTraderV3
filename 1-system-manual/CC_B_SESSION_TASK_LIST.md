@@ -19,7 +19,7 @@
 ## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (63)
 
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
-- 2b `B-CROWDING-CRITERION-OBJECT` (`#1095`, widened to throughput, moved up from 135a by Langston 2026-10-05): the paper jam — bound one strategy's share of opens and of money-hours, govern trades per day; Kyle: top priority, pre-sprint.
+- 2b `B-CROWDING-CRITERION-OBJECT` (`#1095`) — **HELD (Kyle 2026-10-05: no limits based on how fast a strategy trades); scope re-decided after the reach-batch outcome analysis.**
 **Wave 0 — before the sprint:** 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`), switch on the feed-liveness grade after row 3's startup-cache fix; Step 1 settles the xStock weekend window and whether its alerts clear on recovery (accepted 2026-09-30).
 - 3c `B-DISPLAY-TRIGGER-PRICE` (`#1152`, Kyle 2026-10-04): show the price that decides the trade (crypto exits fire on the bid; the screen shows the midpoint) — after 3b.
 
