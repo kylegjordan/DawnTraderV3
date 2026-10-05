@@ -19,6 +19,7 @@
 ## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (63)
 
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
+- 2b `B-CROWDING-CRITERION-OBJECT` (`#1095`, widened to throughput, moved up from 135a by Langston 2026-10-05): the paper jam — bound one strategy's share of opens and of money-hours, govern trades per day; Kyle: top priority, pre-sprint.
 **Wave 0 — before the sprint:** 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`), switch on the feed-liveness grade after row 3's startup-cache fix; Step 1 settles the xStock weekend window and whether its alerts clear on recovery (accepted 2026-09-30).
 - 3c `B-DISPLAY-TRIGGER-PRICE` (`#1152`, Kyle 2026-10-04): show the price that decides the trade (crypto exits fire on the bid; the screen shows the midpoint) — after 3b.
 
@@ -34,7 +35,7 @@
 
 **Wave B2 — risk controls and restart safety:** 166a `B-EXIT-SKIP-ALERT-CLEAR` (`#638`, with `#572`), the exit-skip operator alert that never clears · 166b `B-XSTOCK-WEEKEND-POSTURE` (`#531`), stop opening xStock positions before a scheduled closure.
 
-**Wave A4 — tuning (after the accumulation gate):** 125 the accumulation gate · 129 roadmap 25-17 target geometry · 130 25-17b crypto reach ceilings · 131 25-20 per-strategy minimum reward-to-risk (+ `#372`) · 132 `B-TARGET-MULTIPLE-VS-HORIZON` · 133 25-26 hold-time study · 133a `B-BLUECHIP-TRADEABILITY` (`#1149`) why the large coins never pass the profit check · 134 `B-EXIT-MAKER-VS-TAKER-REVIEW` · 134a `#1124` should shadow-trade outcomes carry trading costs (before 135, which is judged by reading that sink) · 135 `#221` ranking · 135a `B-CROWDING-CRITERION-OBJECT` (`#1095`) · 136 `#149` · 137 `B-FAMILY-POOL-REACHABILITY` · 138 `B-IDEAL-POOL-STARVATION` · 139 `#648` · 140 `#201` · 141 `#529`.
+**Wave A4 — tuning (after the accumulation gate):** 125 the accumulation gate · 129 roadmap 25-17 target geometry · 130 25-17b crypto reach ceilings · 131 25-20 per-strategy minimum reward-to-risk (+ `#372`) · 132 `B-TARGET-MULTIPLE-VS-HORIZON` · 133 25-26 hold-time study · 133a `B-BLUECHIP-TRADEABILITY` (`#1149`) why the large coins never pass the profit check · 134 `B-EXIT-MAKER-VS-TAKER-REVIEW` · 134a `#1124` should shadow-trade outcomes carry trading costs (before 135, which is judged by reading that sink) · 135 `#221` ranking · ~~135a~~ moved to 2b (2026-10-05) · 136 `#149` · 137 `B-FAMILY-POOL-REACHABILITY` · 138 `B-IDEAL-POOL-STARVATION` · 139 `#648` · 140 `#201` · 141 `#529`.
 
 ## My issues that now sit in another session's row (homed 2026-09-29; `RUNNING_ISSUES` "HOMING 2026-09-29")
 `#569` → row 9 · `#567` (mark plausibility) → row 17 · `#635` → row 34 · `#684`, `#393` → row 40 · `#641` → row 69 · `#1041` → row 196 (all CC-C) · `#662`, `#682`, `#675` → row 93 and `#1013` → row 160a (Infra, confirmed) · `#370`, `#375` → row 153 (CC-A).
