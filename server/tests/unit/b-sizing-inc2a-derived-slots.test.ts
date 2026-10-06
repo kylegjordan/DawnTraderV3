@@ -62,7 +62,8 @@ describe('deriveSlotCount — floor(100 / effectiveP)', () => {
   });
 
   // §14.4 D4: p = 0.5 is FINITE and the loops do NOT halt on it — 200 slots. Increment 2b's entry floor of 1 was
-  // WITHDRAWN in 2e (Kyle: no limit on the max position %): p = 0.5 is a legal setting; the size band alert sees it.
+  // WITHDRAWN in 2e (Kyle: no limit on the max position %): p = 0.5 is a legal setting.
+  // The size band alert that saw it is REMOVED (Kyle 2026-10-06); nothing standing sees it until #1155.
   it('p = 0.5 ⇒ 200 slots, the loops do not halt — and RULE_012 accepts it (no floor above 0)', () => {
     expect(deriveSlotCount(0.5)).toBe(200);
     expect(loopsHalt(deriveSlotCount(0.5))).toBe(false);

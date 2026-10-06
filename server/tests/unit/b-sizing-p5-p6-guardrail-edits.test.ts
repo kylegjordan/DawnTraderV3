@@ -31,7 +31,8 @@ describe('P5 — the sizing percentages are bounded: 0 < p <= 100 (RULE_012), 0 
   it.each([[0.5], [0.99], [1], [100]])('position % %s is accepted — 0 < p <= 100, no floor above 0', (v) => {
     expect(fails({ maxPositionPercentPct: v })).not.toContain('RULE_012');
   });
-  // RULE_013 keeps its > 0 floor (an exposure typo is loud: the budget collapses and the band alert fires).
+  // RULE_013 keeps its > 0 floor (an exposure typo is loud: the budget collapses).
+  // The size band alert that also fired is REMOVED (Kyle 2026-10-06); a standing slip detector is #1155.
   it('exposure % 0.5 is accepted — RULE_013 has no floor of 1', () => {
     expect(fails({ maxTotalExposurePct: 0.5 })).not.toContain('RULE_013');
   });

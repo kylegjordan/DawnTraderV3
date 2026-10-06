@@ -16,15 +16,19 @@
  * route exists — a reset endpoint left behind would be a re-runnable destructive affordance.
  *
  * RUNS: on staging, once, by CC-C, on Kyle's go, immediately after the window's deploy (increments 2a-2e and 3):
- *   set -a && . ./.env && set +a && DT_API_TOKEN=<crew login token> npx tsx server/scripts/paper-reset-3000.ts --balance 820
+ *   set -a && . ./.env && set +a && DT_API_TOKEN=<crew login token> npx tsx server/scripts/paper-reset-3000.ts \
+ *     --balance 820 --expect-position-pct 5 --expect-kill-pct 15
  * ⛔ The token comes from the server-held crew login (B-CREDENTIALS-PRIVATE-REPO OBJ-1) at run time. It is never
  *    typed into this file, never committed, never printed.
- * ⛔ `--balance` is REQUIRED and has no default: a missing or non-positive value is a refusal before anything changes.
+ * ⛔ All three flags are REQUIRED and have no default: a missing or non-positive value is a refusal before anything changes.
+ *    The two `--expect-*` values are what the operator set on the Guardrails screen; the script only CHECKS them against
+ *    what the app reads (step 0 and step 7), so a forgotten setting or a 0.5-for-5 slip stops the reset (Langston r6 C2).
  *
  * ORDER, and it stops at the FIRST failure (no retry). Every refusal and every crash names the step AND the state it
  * leaves (engine stopped? anchor written?):
  *   (0) preconditions — the window's two migrations in the db:migrate ledger, increment 1's position-% range at the
- *       object, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, no
+ *       object, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, the max
+ *       position % and the kill switch the app reads EQUAL the operator's --expect-* values, no
  *       open closed_trades row without a position
  *   (1) the READ-ONLY pre-check — every open paper position is closable (priced, or a pending maker)
  *   (2) POST /active-engine/stop { reason: 'reset' } — the engine blocks new trades FIRST, then flattens (race-free,
@@ -40,7 +44,8 @@
  *   (6) POST /active-engine/start { mode: 'continue' } — NEVER 'new' (it hard-resets the tables). Engine re-checked
  *       STOPPED first, so a start somebody else made in steps 3-5 is caught rather than reported as ours.
  *   (7) the read-back, FROM THE APP: its portfolio summary (the starting balance is PRINTED for the operator's own look —
- *       Kyle 2026-10-06 — and a session that began at our start), the kill switch still clear; plus the anchor, the
+ *       Kyle 2026-10-06 — and a session that began at our start), the kill switch still clear, the two settings still
+ *       equal to the --expect-* values; plus the anchor, the
  *       'reset' closes and NOTHING DELETED (the paper rows opened before the run, counted at step 0 and again now)
  * ⚠️ RESUME POINT (A1): re-runnable up to and including the flatten; NOT after step 3 — the re-anchor mints a version,
  *    and step 0 refuses on its note. A run that stops after step 2 leaves the engine stopped; finishing it is a manual
@@ -73,14 +78,32 @@ const API = (process.env.DT_API_BASE || 'http://localhost:5000/api').replace(/\/
 const TOKEN = process.env.DT_API_TOKEN || '';
 const RUN_ID = `paper-reset-3000-${new Date().toISOString()}`;
 
-/** The reset balance, from `--balance <amount>` — required, no default (Kyle 2026-10-06: no amount lives in the code). */
-export function parseBalanceArg(argv: readonly string[]): number | null {
-  const i = argv.indexOf('--balance');
+/** A positive number from `<flag> <value>` — required, no default (Kyle 2026-10-06: no amount lives in the code). */
+export function parsePositiveArg(argv: readonly string[], flag: string): number | null {
+  const i = argv.indexOf(flag);
   if (i < 0 || i + 1 >= argv.length) return null;
   const v = Number(argv[i + 1]);
   return Number.isFinite(v) && v > 0 ? v : null;
 }
-const BALANCE = parseBalanceArg(process.argv);
+// The reset balance, and the two settings the OPERATOR says they set on the Guardrails screen (Langston r6 condition 2:
+// the script writes neither, so it checks both against what the app reads — at step 0, before anything changes, and
+// again at step 7). A forgotten setting would otherwise restart trading at the old % with every check green, and a
+// 0.5-for-5 slip has no other detector (#1155).
+const BALANCE = parsePositiveArg(process.argv, '--balance');
+const EXPECT_POSITION_PCT = parsePositiveArg(process.argv, '--expect-position-pct');
+const EXPECT_KILL_PCT = parsePositiveArg(process.argv, '--expect-kill-pct');
+
+/** The two settings as the app reads them, and whether they match what the operator said they set. */
+async function settingsMismatch(expectP: number, expectKill: number): Promise<string | null> {
+  const g = await api('GET', '/guardrails-v2?mode=paper');
+  if (g.status !== 200) return `the guardrails could not be read (HTTP ${g.status})`;
+  const p = parseFloat(String(g.json?.data?.maxPositionPercentPct));
+  const k = parseFloat(String(g.json?.data?.dailyLossKillSwitchPct));
+  const bad: string[] = [];
+  if (!(Math.abs(p - expectP) < 1e-9)) bad.push(`max position % reads ${g.json?.data?.maxPositionPercentPct}, expected ${expectP}`);
+  if (!(Math.abs(k - expectKill) < 1e-9)) bad.push(`the kill switch reads ${g.json?.data?.dailyLossKillSwitchPct}%, expected ${expectKill}%`);
+  return bad.length ? `${bad.join('; ')} — set them on the Guardrails screen (or correct the expectation)` : null;
+}
 
 // What the run has done so far, so every exit — a refusal or a crash — says what state it leaves.
 const state = { step: '0', stopRequested: false, engineStopped: false, anchorWritten: false, epochSet: false, started: false };
@@ -139,7 +162,12 @@ async function main() {
   log(`run id ${RUN_ID}; API ${API}`);
   if (!TOKEN) refuse('DT_API_TOKEN is not set (the crew login token, B-CREDENTIALS-PRIVATE-REPO OBJ-1)');
   if (BALANCE === null) refuse('--balance <amount> is required (a positive number; Kyle 2026-10-06: $820, the real Kraken balance)');
+  if (EXPECT_POSITION_PCT === null || EXPECT_KILL_PCT === null) {
+    refuse('--expect-position-pct <p> and --expect-kill-pct <k> are required: the values you set on the Guardrails screen (Kyle 2026-10-06: 5 and 15)');
+  }
   const balance: number = BALANCE;
+  const expectP: number = EXPECT_POSITION_PCT;
+  const expectKill: number = EXPECT_KILL_PCT;
 
   // ── (0) preconditions ────────────────────────────────────────────────────────────────────────────────────────
   // The migration ledger for both increments. 2a is checked ONLY here: its database half drops the retired
@@ -163,6 +191,8 @@ async function main() {
   if (await killSwitchTripped()) {
     refuse('the paper KILL SWITCH IS TRIPPED — a reset would finish with every read-back green and nothing trading. Clear it (or decide not to) first.');
   }
+  const settingsBefore = await settingsMismatch(expectP, expectKill);
+  if (settingsBefore) refuse(settingsBefore);
   const anchorBefore = await getAnchorState('paper');
   if (!anchorBefore) refuse('no paper anchor state');
   // An open closed_trades row with no position is a stale row: the stop's reconciler would book it, and the engine's
@@ -308,6 +338,8 @@ async function main() {
   if (rowsAfter !== rowsBefore) problems.push(`paper rows opened before the run: ${rowsBefore} at step 0, ${rowsAfter} now — rows were deleted, or a close route that inserts at close ran mid-reset`);
   if (resetAfter !== resetCount) problems.push(`'reset' closes moved from ${resetCount} to ${resetAfter} after the stop`);
   if (killSwitchAfter) problems.push('the paper KILL SWITCH IS TRIPPED — the engine is running but will not trade');
+  const settingsAfter = await settingsMismatch(expectP, expectKill);
+  if (settingsAfter) problems.push(`the settings changed during the reset: ${settingsAfter}`);
   if (problems.length) {
     console.error(`[${RESET_TAG}][7] READ-BACK MISMATCH — ${problems.join('; ')}. The reset ran and the engine is running; report this, do not re-run.`);
     process.exit(2);
@@ -316,7 +348,7 @@ async function main() {
   process.exit(0);
 }
 
-// Runs only when executed directly, so a test can import parseBalanceArg without starting a reset.
+// Runs only when executed directly, so a test can import parsePositiveArg without starting a reset.
 if (process.argv[1] && /paper-reset-3000\.[tj]s$/.test(process.argv[1])) {
   main().catch((err) => {
     console.error(`[${RESET_TAG}][${state.step}] CRASHED — ${err instanceof Error ? err.message : err}`);

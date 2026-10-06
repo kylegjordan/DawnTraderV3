@@ -67,8 +67,8 @@ export function getMaxPositionBufferFactor(): number {
 
 /**
  * B-SIZING-DEC-RESTORE increment 2c (PRE_AUDIT §17 P-4): THE size of a normal trade — balance × exposure % × max
- * position % × the buffer factor. The ONE formula, in two forms: `tradeNotional` takes the buffer as an argument (pure —
- * the paper size band, whose inputs are passed in for testing), `bufferedTradeNotional` reads it fail-hard from the DB (the
+ * position % × the buffer factor. The ONE formula, in two forms: `tradeNotional` takes the buffer as an argument (pure, for
+ * callers that pass their inputs in), `bufferedTradeNotional` reads it fail-hard from the DB (the
  * sizer above, the max-position check's missing-notional branch, the pre-execution validator's estimate). Before 2c those
  * callers either re-derived it or fell back to risk ÷ stop distance.
  * Pre-covariance and pre-pattern-cap for a caller that passes the raw `maxPositionPct` — say which in the caller.

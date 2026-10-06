@@ -271,7 +271,7 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
 describe("6 — the reset writes NO setting and carries NO amount; the size band is gone (Kyle 2026-10-06)", () => {
   const SCRIPT = readFileSync(join(__dirname, '../../scripts/paper-reset-3000.ts'), 'utf8');
   it('the balance comes from a REQUIRED --balance argument, not a constant in the file', () => {
-    expect(SCRIPT).toMatch(/const BALANCE = parseBalanceArg\(process\.argv\);/);
+    expect(SCRIPT).toMatch(/const BALANCE = parsePositiveArg\(process\.argv, '--balance'\);/);
     expect(SCRIPT).toMatch(/if \(BALANCE === null\) refuse\(/);
     expect(SCRIPT).toMatch(/newBalance: balance,/);
     expect(SCRIPT).not.toMatch(/TARGET_BALANCE|TARGET_P\b|TARGET_SLOTS|TARGET_KILL_PCT/);
@@ -280,11 +280,28 @@ describe("6 — the reset writes NO setting and carries NO amount; the size band
     expect(SCRIPT).not.toMatch(/api\('PUT'/);
     expect(SCRIPT).toMatch(/api\('GET', '\/guardrails-v2\?mode=paper'\)/);
   });
+  it('the two settings are CHECKED, never written: required --expect-* flags, compared at step 0 and again at step 7 (Langston r6 C2)', () => {
+    expect(SCRIPT).toMatch(/const EXPECT_POSITION_PCT = parsePositiveArg\(process\.argv, '--expect-position-pct'\);/);
+    expect(SCRIPT).toMatch(/const EXPECT_KILL_PCT = parsePositiveArg\(process\.argv, '--expect-kill-pct'\);/);
+    expect(SCRIPT).toMatch(/if \(EXPECT_POSITION_PCT === null \|\| EXPECT_KILL_PCT === null\) \{\s*refuse\(/);
+    expect(SCRIPT).toMatch(/const settingsBefore = await settingsMismatch\(expectP, expectKill\);\s*if \(settingsBefore\) refuse\(settingsBefore\);/);
+    expect(SCRIPT).toMatch(/const settingsAfter = await settingsMismatch\(expectP, expectKill\);/);
+  });
+
   it('the size band is gone: no module, no reader, no hook, no boot check, no migration', () => {
     expect(existsSync(join(__dirname, '../../services/paper-size-band.ts'))).toBe(false);
     expect(existsSync(join(__dirname, '../../scripts/lib/app-log-reader.ts'))).toBe(false);
     for (const f of ['../../index.ts', '../../services/active-engine-service.ts', '../../services/active-execution-engine.ts', '../../startup/b72-warmup.ts']) {
       expect(readFileSync(join(__dirname, f), 'utf8')).not.toMatch(/paper-size-band|paper_size_band|PaperSizeBand/);
+    }
+    // Langston r6 C1: the SPACE form too — a comment claiming "the band alert catches it" is a stale justification for
+    // leaving p unbounded. Every mention left must say the band is REMOVED.
+    for (const f of ['../../services/guardrail-policy.ts', '../../services/active-position-sizing.ts', '../../../audit/coherency_rules.yaml',
+      './b-sizing-p5-p6-guardrail-edits.test.ts', './b-sizing-inc2a-derived-slots.test.ts']) {
+      const text = readFileSync(join(__dirname, f), 'utf8');
+      for (const line of text.split('\n').filter((l) => /size band|band alert/i.test(l))) {
+        expect(`${f}: ${line}`).toMatch(/REMOVED/);
+      }
     }
     expect(readFileSync(join(__dirname, '../../../drizzle/migrations/MANIFEST.txt'), 'utf8')).not.toMatch(/paper-size-band/);
     // CONTROL: the daily-loss hook beside it on the close path is untouched.

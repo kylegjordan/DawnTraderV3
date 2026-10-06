@@ -333,8 +333,10 @@ class GuardrailPolicyService {
 
     // RULE_012 / RULE_013 (B-SIZING-DEC-RESTORE P5): 0 < p <= 100 and 0 < e <= 100 — a percentage, nothing more.
     // Increment 2b's floor of 1 was WITHDRAWN before it ever deployed (increment 2e, PRE_AUDIT §20.4 Pe1; Kyle 2026-09-30:
-    // no limit on the max position %). A decimal slip (0.5 for 5) derives 200 slots; the paper size band alert is what
-    // catches it, in dollars. An e typo is loud (the budget collapses; the band fires).
+    // no limit on the max position %). A decimal slip (0.5 for 5) derives 200 slots, and NOTHING STANDING CATCHES IT in
+    // either mode: the paper size band alert that did was REMOVED before deploy (Kyle 2026-10-06). The paper reset checks
+    // the % once against the operator's --expect-position-pct; the standing detector is #1155 B-SIZING-SLIP-DETECTOR
+    // (sprint row 183c). An e typo is loud in the sizing itself (the budget collapses).
     // Nothing refused a mistyped value before: 50 typed for 5 saved (trades 10x larger), an emptied box
     // saved 0 (the sizer then refuses every open, active-position-sizing.ts:180-184). The sizer is
     // B x e x p (:225-227), so p above e is coherent and NOT refused (PRE_AUDIT §13 F13). Same
