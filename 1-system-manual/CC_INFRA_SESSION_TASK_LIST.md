@@ -75,7 +75,7 @@
 | 164 | P19-B12 | the deploy tool's own executable comes from the reviewed code |
 | 165 | B-VENUE-QUIET-ALERTING | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) |
 | 172 | B-TEC-PRIME-BOOT-RACE | restarts: the exit loop throws for a tick on open positions |
-| 173 | B-ENGINE-STOP-DURATION-COLUMN | an engine stop reports failure when it worked |
+| ~~173~~ | ~~B-ENGINE-STOP-DURATION-COLUMN~~ | moved to CC-B (row 2a0) 2026-10-06 — Langston asked the lists be reconciled; `PHASE_19_PLAN` 3n.u4 named CC-B |
 | 174 | #619 | a restore from backup lacks seeded config |
 | 175 | B-DASHBOARD-AUTH-RACE | the portfolio card never recovers from a 401 |
 | 178 | Resize the staging server one step up before live | before the split (Infra condition): one server size up, a second program needs the memory |

@@ -16,8 +16,9 @@
 | `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
 | `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
 
-## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (65)
+## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (66)
 
+- 2a0 `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`, moved from Infra's row 173): an engine stop crashes on a session older than ~24.8 days — it halted the 10-06 reset. Stop storing elapsed (both write sites), no migration. FIRST, after the 24 h no-deploy window.
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
 - 2a1 `B-ADX-TRUE-RANGE-SHARED`: the regime's ADX takes 2a's shared true range (Langston 10-06).
 - 2a2 `B-VOLATILITY-CACHE-RETIRE`: retire the dead volatility cache (was only on PHASE_19_PLAN's board).
