@@ -43,3 +43,16 @@ Corpora searched: `git log -S` unpathed (`simulation_heartbeat`, `recoverSession
 2. Delete the auto-test harness here, or place it separately?
 3. Retention: schedule the existing `cleanup()`, or remove it?
 4. Change-class stays `non_architecture`?
+
+## 6. Step 1 — APPROVED (Langston, 2026-10-06 ~20:55Z) · four rulings · five conditions folded before Step 2
+Re-derived by him at `0c3ab7c48` + staging (268,668 rows / 107 MB; heartbeat pair 268,646 = 242,035 + 26,611; other writers exactly 22; 2,881 in 24 h). Not `RULED ON REPORTED FACT`.
+- **Q1 — the bus event goes (his 2a0 "keep" reversed):** its only reader, `auto_test_harness.ts` `verify_cluster_bus_events`, asserts `events.length >= 0` — a tautology; nothing has ever asserted on the rows. Obj 2 as written.
+- **Q2 — the harness goes in this batch:** it is the event's only reader; splitting them leaves a route querying rows that no longer exist. Census: one import (`routes.ts:5543`), one route (`:5537`), zero client callers.
+- **Q3 — REMOVE `cleanup()` and `getRecentEvents()`, do not schedule them** (zero callers each; scheduling would build a second retention path with a hardcoded literal). Instead put `cluster_bus_event` on `b75-retention-sweep.ts`'s simple-table list (the `:147`/`:156` shape — unpartitioned, `created_at`) with a `cluster_bus_event.hot_retention_days` constant.
+- **Q4 — `non_architecture` stands.** SIM is owed on the merits (a component removed, a cross-cutting state read re-keyed) — **name SIM explicitly as owed**; System Manual has no applicable content.
+**Conditions (all §9.4 disposition 1, folded):**
+1. **The heal leaks a running engine — fix it in obj 1.** `clearGlobalActiveEngineManager` is a bare `Map.delete`; the heartbeat calls it with no `.stop()` (where `resetActiveEngineService` stops first). Measured: the heal fired 0 times in 14 days of error-log retention (against a 40,321-line positive control) — latent; so verify it by UNIT TEST, not live silence. Same edit: `getRunningEngineSessions()` is mode-agnostic while the manager lookup takes the `'paper'` default — make the heal mode-specific.
+2. **State the end shape and the liveness bound.** After obj 1+2, `runHeartbeatCheck` = fetch running rows; if none and a manager exists, heal; return. Its only stderr line today is the dead warn, so afterwards a stalled loop is silent (#520/#1067 class) — state the bound or name an instrument.
+3. **Obj 4: the 22 rows are NOT "kept"** — newest non-heartbeat row is 2025-11-06, so any window under eleven months sweeps them all; say so. After obj 2+3 the table has zero programmatic readers with ~10 live writers — `STORAGE_POLICY` must say it is a write-only audit log.
+4. **Obj 3 census missed `scripts/classify-baseline.mjs:145`** (names `auto_test_harness` in a path regex) — check whether the baseline moves.
+5. **Step 2 owes TIER-1 provenance rows for `getActiveEngineStatus` and the `setEngineActive` flag write.** Obj 5: the census states, per consumer, what changes in the (row, no manager) case. Obj 6: dedupe-keyed alert, lifecycle `resolve`, not `ack`.
