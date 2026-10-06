@@ -180,3 +180,11 @@ The step-7 log read now lives in `server/scripts/lib/app-log-reader.ts`: it read
 - **15:52:56Z → 15:53:00Z second run — COMPLETE, exit 0.** 0 open (a clean zero), stop in 403 ms, anchor v4 $824.11 → **v5 $820.00**, dashboard epoch **15:52:57.213Z**, engine restarted, session start 15:52:58.205Z. App read-back: starting balance **$820.00**, max position **5%**, exposure 100%, **20 derived slots**, kill switch **15%**, not tripped; 938 pre-run paper rows unchanged.
 - **The 9 `'reset'` closes (15:45:49Z) sit before the new session start**, so the kill switch's 24-hour window leaves them out. **No restart or deploy before 2026-10-07T15:53Z** (`#1154`).
 - ⚠️ **Attribution gap (Langston C4):** the guardrails save and the reset's stop/start POSTs appear in the app's audit as the crew login's user and in no `dt-api` `calls.log` record.
+
+## r9 — the full-book log (`#698` amendment 5; Langston, deploy-B Step 8, 2026-10-06 22:39Z)
+**Why:** the slot ceiling bound live at exactly 20, but the continuous promotion loop (`active-execution-engine.ts`, every 30 s) runs `checkRtbPromotion` only `if (openSlots > 0 && rtbCount > 0)`, so while the book is full it wrote nothing and the `At capacity` line inside `checkRtbPromotion` is unreachable from it — a full book read like a dead loop.
+**Change:**
+- `server/services/active-position-sizing.ts` — new pure `nextBookFullLog(prev, openSlots, openCount, maxTrades, now, reminderMs)` (+ `BookFullState`): returns the one line to write, if any — on entering a full book, every `reminderMs` while it stays full, on leaving it.
+- `server/services/active-execution-engine.ts` — the loop holds a `BookFullState` per engine and prints `[698][<mode>] BOOK_FULL …` / `… still full … — loop alive` / `BOOK_SLOT_FREE …`; reminder 10 min. No decision changes — it only logs.
+- `server/tests/unit/b-sizing-book-full-log.test.ts` (4): entry once, reminder, exit once, control (never full → nothing). Mutation: drop the reminder branch → test 2 fails; drop the exit branch → test 3 fails.
+- vitest sizing family 104/104; `tsc` 337 = 337. Deploys after the `#1154` hold (not before 2026-10-07T15:53Z). Step 7 reading: a `BOOK_FULL` line within 30 s of the book filling, a `still full` line every 10 min, a `BOOK_SLOT_FREE` line on the next close.

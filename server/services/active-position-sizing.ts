@@ -60,6 +60,34 @@ export function deriveSlotCount(effectivePositionPct: number): number {
   return Math.floor(100 / effectivePositionPct);
 }
 
+/** #698 amendment 5: the promotion loop's full-book state. `since` = when the book filled (null = not full). */
+export interface BookFullState { since: number | null; lastLogAt: number }
+
+/**
+ * #698 amendment 5 (B-SIZING-DEC-RESTORE inc3 r9, Langston deploy-B Step 8): the continuous promotion loop skips its
+ * promotion step while the book is full and wrote nothing, so a full book read exactly like a dead loop. This decides
+ * the one line to write, if any: on entering a full book, every `reminderMs` while it stays full, and on leaving it.
+ * Pure — the caller holds the state and prints the line.
+ */
+export function nextBookFullLog(
+  prev: BookFullState, openSlots: number, openCount: number, maxTrades: number, now: number, reminderMs: number,
+): { state: BookFullState; line: string | null } {
+  const mins = (since: number) => Math.round((now - since) / 60_000);
+  if (openSlots <= 0) {
+    if (prev.since === null) {
+      return { state: { since: now, lastLogAt: now }, line: `BOOK_FULL ${openCount}/${maxTrades} open — promotion paused until a slot frees` };
+    }
+    if (now - prev.lastLogAt >= reminderMs) {
+      return { state: { since: prev.since, lastLogAt: now }, line: `BOOK_FULL still full ${openCount}/${maxTrades} for ${mins(prev.since)} min — loop alive` };
+    }
+    return { state: prev, line: null };
+  }
+  if (prev.since !== null) {
+    return { state: { since: null, lastLogAt: prev.lastLogAt }, line: `BOOK_SLOT_FREE ${openSlots} slot(s) free after ${mins(prev.since)} min full` };
+  }
+  return { state: prev, line: null };
+}
+
 export function getMaxPositionBufferFactor(): number {
   return getCachedNumberRequired('active_sizing', 'max_position_buffer_factor',
     { exchange: '*', assetClass: '*', strategy: '*', regime: '*' });

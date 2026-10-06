@@ -385,7 +385,7 @@ import { buildSettingsFromGuardrails, getPortfolioBalanceV2 } from './guardrail-
 import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
-import { validateActivePortfolioValue, type StrategyType } from './active-position-sizing';
+import { validateActivePortfolioValue, nextBookFullLog, type BookFullState, type StrategyType } from './active-position-sizing';
 // B67.3 follow-up: re-export the cohort-hash function under a clearer name for use
 // at trade-open. Same FNV-1a hash the admission gate uses — keeping a single source.
 import { assignCohortHash as assignCohortHashForPersistence } from './per-underlying-cap';
@@ -907,6 +907,10 @@ export class ActiveExecutionEngine {
   // I7-ROOT-FIX: minimal engine status diagnostics
   private lastEvaluateAt: number | null = null;
   private lastCycleAt: number | null = null; // Phase 8.8.3-I7-PM-FOCUS: Track monitoring cycle tick
+  // #698 amendment 5 (B-SIZING-DEC-RESTORE inc3 r9): the continuous promotion loop's full-book state, so a full book is
+  // visible in the log (on entry, on exit, and every BOOK_FULL_REMINDER_MS while it lasts) instead of a silence.
+  private promotionBookFull: BookFullState = { since: null, lastLogAt: 0 };
+  private static readonly BOOK_FULL_REMINDER_MS = 10 * 60_000;
   private lastExitChecks: {
     symbol: string;
     slotNumber?: number;
@@ -1006,6 +1010,13 @@ export class ActiveExecutionEngine {
         return;
       }
       const openSlots = maxTrades - openPositions.length;
+
+      // #698 amendment 5 (Langston, deploy-B Step 8): the promotion step below is skipped while the book is full, and the
+      // `At capacity` line inside it is unreachable from here — so without this a full book reads exactly like a dead loop.
+      const bookLog = nextBookFullLog(this.promotionBookFull, openSlots, openPositions.length, maxTrades, Date.now(),
+        ActiveExecutionEngine.BOOK_FULL_REMINDER_MS);
+      this.promotionBookFull = bookLog.state;
+      if (bookLog.line) console.log(`[698][${this.mode}] ${bookLog.line}`);
 
       const rtbCount = await readyToBuyService.getPoolSize(this.mode);
 
