@@ -20,6 +20,7 @@
 
 - 2a0 `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`, moved from Infra's row 173): an engine stop crashes on a session older than ~24.8 days — it halted the 10-06 reset. Stop storing elapsed (both write sites), no migration. FIRST, after the 24 h no-deploy window.
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
+- 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 2a1 `B-ADX-TRUE-RANGE-SHARED`: the regime's ADX takes 2a's shared true range (Langston 10-06).
 - 2a1a `B-RISK-INDEX-ORPHAN-REMOVAL` (`#1157`): delete the orphaned `risk_index.ts` and the docs calling it active (Langston 10-06).
 - 2a2 `B-VOLATILITY-CACHE-RETIRE`: retire the dead volatility cache (was only on PHASE_19_PLAN's board).
