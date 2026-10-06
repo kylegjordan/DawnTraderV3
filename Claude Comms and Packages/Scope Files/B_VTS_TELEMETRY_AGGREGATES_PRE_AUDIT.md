@@ -1,0 +1,43 @@
+# B-VTS-TELEMETRY-AGGREGATES — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2, r1)
+
+Row 4a · `#1141` · owner CC-C · change-class `non_architecture` (scope r1 `c0045ae5a`, Langston APPROVED for Step 2 with six conditions, 2026-10-06 ~17:00Z). Code read at `a632bc9ac`; staging read 2026-10-06 ~17:15Z.
+
+## PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED (scope §0 (b)): "missing cells read neutral 0.5, so evicting is the safe direction." NOW: eviction moves 167 of the 224 stale cell-instances UP (winRate < 0.5 → confidence rises to 0.5), 47 DOWN, 10 unchanged. REASON:** Langston C1 — `sigmoid((w − 0.5)·6)` is 0.5 at the midpoint, so a stale loser gains confidence when evicted. Measured below (A2).
+- **PREVIOUSLY STATED: "170 of 926 snapshots (18%)". NOW: "18% of RETAINED snapshots", a lower bound on runs. REASON:** Langston C6 — the filename is `regime_performance_<date>_VTS_<totalProcessed>.json`, so two same-day runs with the same count overwrite one another.
+
+## A. AUDIT
+**A1 — the store (code, `server/core/logging/vts-telemetry.ts`).** In memory (`let vtsTelemetry`, `:61`); rebuilt at boot because `vts_telemetry_aggregation` runs immediately (`autonomy-scheduler.ts:1061`) and then every 6 h. The ONLY cell write is `:219`, keyed by `strategy` iterated from `metrics[regime]`, which is built solely from the executed trade files' `strategy` field (`:146-160`); `metricsSkipped` is regime-keyed and never becomes a strategy key (`:167-180`). **⇒ a `SKIPPED` cell requires a trade record whose strategy is literally `"SKIPPED"` — UNREACHABLE by construction (Langston C5).** Corroborating arm: no `SKIPPED` cell in the snapshot after the latest run, `"SKIPPED"` in 0 trade files (control: `strong_bull_trend` in 168). Snapshots serialise the whole store (`:251`).
+
+**A2 — what eviction does to confidence (staging, every retained snapshot 2026-04-12 → 2026-10-06, 926 files; a cell is stale when its `updatedAt` predates the run that wrote the snapshot).** 224 stale cell-instances over 27 distinct regime × strategy cells: **winRate < 0.5 — 167 (confidence would RISE to 0.5); > 0.5 — 47 (would FALL); = 0.5 — 10.**
+
+**A3 — does any decision read it today? (census by a fresh reader at `a632bc9ac`, re-checked here; staging DB read 17:15Z).** Predictive confidence is read on ONE active lane, xStock (`eval-cycle.ts:671` → `active-dispatch.ts:205` → `quality_index.ts` confidence → the RTB row). Crypto active signals never read it (`getPredictiveConfidence` call sites: `eval-cycle.ts:671`, `signal_quality_evaluator.ts:375` — never reached, `vts-runner.ts:1944` — VTS). Uses that compare it to a floor:
+- the **AMR `confidence_floor`** at SQE admission (`signal_quality_evaluator.ts:422-433`, re-run at RTB refresh) and execution entry (`active-execution-engine.ts:6112-6122`) — **live only when `module_constants amr_runtime.mode` = `active`; read on staging today: `"shadow"` for BOTH classes** (`b5-amr-shadow-flip`, 2026-06-11);
+- the HF9 governance gate and the retired finalScore floor — shadow (`gateShadowMode: true`, Kyle 2026-09-12);
+- `min_queue_confidence` 0.55 (`ready_to_buy_service.ts:1631-1643`) — LIVE, but only through the manual `POST /api/diagnostics/rtb-queue/force-refresh`.
+- Ranking does NOT read it (R-multiple from `chosenNetEv`/`evaluateTradeExpectancy`, neither takes confidence).
+**⇒ Eviction changes no automatic decision today.** It becomes live the day the AMR goes `active` for xStock — the same re-arm condition already written on row 148a.
+
+**A4 — the write-back (`score-calculator.ts:215-217`).** `getPredictiveConfidence` writes its result into the store cell; readers of the store: `score-calculator.ts` itself and the display endpoints `routes/vts.ts:1202`, `:1218`, plus the snapshots. Replace wipes it each run; it is rewritten on the next computation (cache TTL). Display-only consequence.
+
+**A5 — the deletion set, census at the ref (tests excluded).** `getAdjustedMinROI` (`expectancy.ts:448`) — 0 callers; `getAdaptiveExpectancy` (`:413`) — only caller `getAdjustedMinROI`; `checkExpectancyDrift` (`:480`) — 0 callers; `checkConfidenceDrift` (`vts-telemetry.ts:286`) — only caller `checkExpectancyDrift` (so Directive 11.7B's drift guard has been dead all along; this batch makes that visible, not causes it); `clearPredictiveConfidenceCache` (`score-calculator.ts:226`) — 0 callers; `vtsService.simulateTrade` (`vts-service.ts:328`) — 0 callers. **State they write:** `checkConfidenceDrift` appends to its drift log (no reader — never called); the others write nothing. **Readers they leave behind:** module `expectancy_tuning` (3 rows) is read ONLY by `getAdjustedMinROI` (`:457-459`) and prefetched by `b72-warmup.ts:36` → the prefetch line goes in this commit; the rows go in `#1156` (row 4a2).
+
+**A6 — governed documents that name the deleted code (Langston C4).** `SYSTEM_MANUAL.md:421` lists `getAdjustedMinROI` among the per-class ROI resolution functions; `LEVER_INVENTORY.md:60-62` (B72-CORE-008/009/010) points at `expectancy.ts:344/347/350` (drifted; live `:457-459`). **Both declared REQUIRED for this batch's Step 10** (not left conditional under `non_architecture`).
+
+**A7 — the skip ratio (b2).** After A5's deletion, `skipRatio`/`illiquidRatio` feed only the archive (`regime-archiver.ts:309/330`, `archive-regime-metrics.ts:224`) and the ML page (`machine-learning.tsx:77`). Re-keying the archive column per strategy would silently change the meaning of historical rows (Langston C6).
+
+**A8 — provenance.** Directive 11.7B (commit `5c95f5612`, 2026-01-22, attached `Pasted--Directive-11-7B-Predictive-Learning-Telemetry-Enhancem_1769106873093.txt`): Task 1 computes per-regime × strategy metrics; Task 4 *"const perf = telemetry.regimePerformance[regime] ? (telemetry.regimePerformance[regime][strategy] \|\| telemetry.regimePerformance[regime].SKIPPED) : null;"*; Task 5 the drift guard. Its verification plan step 4 reads *"Validate SKIPPED data — Skip ratios update without biasing win rates"*: the SKIPPED key was meant as a skip-data bucket that Task 1 never built. `bridge/canonical/`: no coverage of the telemetry store found (searched `regimePerformance`, `vts-telemetry`, `11.7B`) — itself a finding.
+
+## B. PLAN (each item points to its audit finding)
+| # | change | from |
+|---|---|---|
+| P1 | `getRegimePerformance` returns the strategy's own cell or null — the `SKIPPED` fallback deleted. Test: a regime holding only other strategies returns null for an absent one. | A1, A8 |
+| P2 | Each run REPLACES the store: build the new `regimePerformance` from this run's `metrics` and swap it in under the lock (a regime × strategy with no trade in the window has no cell → 0.5). **Verification:** (i) DEPLOYMENT PROOF, stated as such (it cannot fail once shipped): the next snapshot has 0 stale cells by the A2 scan; (ii) THE EVIDENCE: before/after predictive confidence on a NAMED set — the cells stale in the last pre-deploy snapshot, each with its winRate and the confidence change (Langston C2). | A2, A3, A4 |
+| P3 | Skip ratio: **relabel only** — the type comment and the ML page say "regime-level (all strategies in the regime)"; the archive column is NOT re-keyed, so no historical row changes meaning. | A7 |
+| P4 | Rule 18: delete `getAdjustedMinROI`, `getAdaptiveExpectancy`, `checkExpectancyDrift`, `checkConfidenceDrift` (+ its log path constant), `clearPredictiveConfidenceCache`, `simulateTrade`; remove `'expectancy_tuning'` from `b72-warmup.ts:36`; restate `vts-service.ts:951`'s comment. `DELETED_COMPONENTS_LOG` + `_archive/deleted-code/*.removed`. Fence test: none of the names remain under `server/`. | A5 |
+| P5 | Restate `ready_to_buy_service.ts:1112` ("the ★third call site") as history: P19-B8.5a counted three SQE input sites; `B-RTB-REFRESH-CONSOLIDATE` merged the two refresh paths; two today (`signal-orchestrator.ts:1132`, `ready_to_buy_service.ts:1090`). | scope obj 5 |
+| P6 | Step 10 REQUIRED rows: `SYSTEM_MANUAL.md:421`, `LEVER_INVENTORY.md:60-62`, plus the standing set for the class. | A6 |
+
+**Deploy note:** P2 changes no automatic decision while the AMR is in shadow (A3); it rides the next normal deploy, **not before 2026-10-07T15:53Z** (`#1154`).
+**UNAUDITED:** none.
+**Reviewer record:** `REVIEWER: claim-only · "where does xStock predictive confidence reach a floor, and is it live?" · one live-if-active gate (AMR), shadow today; one manual-only live gate · re-derived y (staging amr_runtime read 17:15Z)`.
