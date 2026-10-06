@@ -58,8 +58,12 @@ export function computeRealHybridScore(
   // measurement. On the xStock lane the score is archived to signal_eval_archive even on rows the gate then
   // drops as invalid_atr, so the fabrication was persisted. Now: the THREE branches that read the ATR
   // (vwap_pullback, vwap_bounce, mean_reversion) score the neutral 0.50 when it is unusable — scoped to
-  // them, so the sixteen ATR-independent branches keep their real scores; the four range readers already
+  // them, so the other switch arms (15 case labels + default; eleven SSOT strategies have no case and fall to
+  // default) keep their real scores; the four range readers already
   // carry a `range24h > 0 ? … : 0.5` neutral, which can now actually fire.
+  // ⚠️ Langston R2 (record): 0.50 is inside the real [0.10, 0.95] range, so a refusal is not observable from
+  // the number alone. A 0.50 spike in a score-distribution read means one of THREE things: no price, fewer
+  // than 5 bars (the guard above), or an unusable ATR in one of these three branches.
   const atrUsable = Number.isFinite(atr) && atr > 0;
   const range24h = high24h - low24h;
 

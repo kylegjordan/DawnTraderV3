@@ -168,7 +168,7 @@ function readClosedTrades(files: string[], startMs: number, endMs: number): Clos
         // the VTS analytics route does (routes/vts.ts '/analytics'). Maker/taker TWINS and never_filled rows carry
         // countsInAggregates=false and must never enter win rate or trade counts. Measured on staging, last 30
         // daily files: 1,266 of 7,160 closed rows (17.7 %) were these, all without signal.entryPrice — so the
-        // `entryPrice ?? 0` below was counting them in as 0 % trades.
+        // old default-to-zero entry price was counting them in as 0 % trades (removed; see the % averages).
         if (t.countsInAggregates === false || t.mtTwin === true || t.shadow === true || t.resultType === 'never_filled') continue;
         const exitTime = t.exitTime;
         if (typeof exitTime !== 'number') continue;
@@ -321,6 +321,11 @@ function aggregateRegimeMetrics(startMs: number, endMs: number): {
 
 function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, StrategyStats[]> {
   const buckets: Record<string, Map<string, StrategyStats>> = {};
+  // B-ATR-BAD-PRINT (Langston R1): the % average divides over rows that CARRY an entry price, never the
+  // full trade count — a row without one would otherwise add 0 to the numerator and 1 to the denominator
+  // and drag the average toward zero silently. Rows without one are counted and announced below.
+  const pctRows = new Map<StrategyStats, number>();
+  let missingEntryPrice = 0;
   for (const r of REGIMES) buckets[r] = new Map();
   for (const t of trades) {
     const regime = t.regime as RegimeName;
@@ -335,9 +340,13 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     const net = typeof t.netProfit === 'number' ? t.netProfit : 0;
     if (net > 0) s.winCount += 1;
     // Use gross % from entry vs exit if available; fallback to net dollar sign as win flag
-    const entryPrice = t.signal?.entryPrice ?? 0;
-    const netPct = entryPrice > 0 ? (net / entryPrice) * 100 : 0;
-    s.sumNetPct += netPct;
+    const entryPrice = t.signal?.entryPrice;
+    if (typeof entryPrice === 'number' && entryPrice > 0) {
+      s.sumNetPct += (net / entryPrice) * 100;
+      pctRows.set(s, (pctRows.get(s) ?? 0) + 1);
+    } else {
+      missingEntryPrice++;
+    }
     s.sumNetValue += net;
   }
   const out = {} as Record<RegimeName, StrategyStats[]>;
@@ -346,7 +355,8 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     const arr: StrategyStats[] = [];
     for (const s of buckets[r].values()) {
       s.winRate = s.tradeCount > 0 ? +(s.winCount / s.tradeCount * 100).toFixed(2) : 0;
-      s.avgNetPct = s.tradeCount > 0 ? +(s.sumNetPct / s.tradeCount).toFixed(4) : 0;
+      const n = pctRows.get(s) ?? 0;
+      s.avgNetPct = n > 0 ? +(s.sumNetPct / n).toFixed(4) : 0;
       s.avgNetValue = s.tradeCount > 0 ? +(s.sumNetValue / s.tradeCount).toFixed(2) : 0;
       s.sumNetValue = +s.sumNetValue.toFixed(2);
       s.sumNetPct = +s.sumNetPct.toFixed(2);
@@ -354,6 +364,9 @@ function aggregateStrategyByRegime(trades: ClosedTrade[]): Record<RegimeName, St
     }
     arr.sort((a, b) => b.tradeCount - a.tradeCount);
     out[r] = arr;
+  }
+  if (missingEntryPrice > 0) {
+    console.warn(`[B-ATR-BAD-PRINT][DRIFT_DASHBOARD_MISSING_ENTRY_PRICE] ${missingEntryPrice} counted trade(s) carry no entry price — excluded from the % averages`);
   }
   return out;
 }
@@ -373,16 +386,20 @@ export function computeDriftDashboard(window: DashboardWindow): DriftDashboardRe
   // Trade tallies
   let wins = 0;
   let sumNetPct = 0;
+  let pctRowCount = 0; // Langston R1: the % average's own denominator
   for (const t of trades) {
     const net = typeof t.netProfit === 'number' ? t.netProfit : 0;
     if (net > 0) wins += 1;
-    const entryPrice = t.signal?.entryPrice ?? 0;
-    if (entryPrice > 0) sumNetPct += (net / entryPrice) * 100;
+    const entryPrice = t.signal?.entryPrice;
+    if (typeof entryPrice === 'number' && entryPrice > 0) {
+      sumNetPct += (net / entryPrice) * 100;
+      pctRowCount++;
+    }
   }
   const total = trades.length;
   const losses = total - wins;
   const winRate = total > 0 ? +(wins / total * 100).toFixed(2) : 0;
-  const avgNetPct = total > 0 ? +(sumNetPct / total).toFixed(4) : 0;
+  const avgNetPct = pctRowCount > 0 ? +(sumNetPct / pctRowCount).toFixed(4) : 0;
 
   // Global DBS current snapshot
   const snap = directionalBiasStore.getLatestSnapshot();

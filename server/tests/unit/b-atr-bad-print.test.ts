@@ -201,6 +201,11 @@ describe('fence — every ATR call site uses the shared function (two named carv
     expect(read('server/core/utils/vts-real-score.ts')).not.toMatch(/:\s*currentPrice\s*\*\s*0\.0[12];/); // code form, not the comment naming it
     // the drift dashboard honours the typed exclusion flag, as the VTS analytics route does
     expect(read('server/services/drift-dashboard-aggregator.ts')).toMatch(/t\.countsInAggregates === false/);
+    // Langston R1: the % averages divide over rows carrying an entry price, not the full count
+    const dd = read('server/services/drift-dashboard-aggregator.ts');
+    expect(dd).not.toMatch(/sumNetPct \/ total\)/);
+    expect(dd).not.toMatch(/sumNetPct \/ s\.tradeCount\)/);
+    expect(dd).not.toMatch(/entryPrice \?\? 0/);
     expect(read('server/services/strategy-engine.ts')).not.toMatch(/c\['atr_fallback_daily_range_frac'\]/);
     // the old ternary fallback form `atr > 0 ? atr * 1.5 : currentPrice * …` (code, not the comment naming it)
     expect(read('server/services/pattern-recognizer.ts')).not.toMatch(/\?\s*atr\s*\*\s*1\.5\s*:\s*currentPrice/);
