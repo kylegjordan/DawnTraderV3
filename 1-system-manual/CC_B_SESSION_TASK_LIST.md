@@ -21,6 +21,7 @@
 - 2a0 `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`, moved from Infra's row 173): an engine stop crashes on a session older than ~24.8 days — it halted the 10-06 reset. Stop storing elapsed (both write sites), no migration. FIRST, after the 24 h no-deploy window.
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
+- 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
 - 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`): keep or remove the cluster-bus persistence layer (Langston 10-06).
 - 2a1 `B-ADX-TRUE-RANGE-SHARED`: the regime's ADX takes 2a's shared true range (Langston 10-06).
 - 2a1a `B-RISK-INDEX-ORPHAN-REMOVAL` (`#1157`): delete the orphaned `risk_index.ts` and the docs calling it active (Langston 10-06).

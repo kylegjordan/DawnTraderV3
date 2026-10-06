@@ -73,7 +73,7 @@
 | 162 | #681 | a deploy must not outrun CI |
 | 163 | #168 | with #681: CI catches a build that crashes on boot |
 | 164 | P19-B12 | the deploy tool's own executable comes from the reviewed code |
-| 165 | B-VENUE-QUIET-ALERTING | operator alert: a venue has gone quiet (Kyle 2026-09-28: operator alerting joins the sprint) |
+| ~~165~~ | ~~B-VENUE-QUIET-ALERTING~~ | **MOVED 2026-10-06 to CC-B, plan row 3a1, paired with 3a (Kyle).** Not yours any more — written here by CC-B so this list does not carry a stale row. |
 | 172 | B-TEC-PRIME-BOOT-RACE | restarts: the exit loop throws for a tick on open positions |
 | ~~173~~ | ~~B-ENGINE-STOP-DURATION-COLUMN~~ | moved to CC-B (row 2a0) 2026-10-06 — Langston asked the lists be reconciled; `PHASE_19_PLAN` 3n.u4 named CC-B |
 | 174 | #619 | a restore from backup lacks seeded config |
