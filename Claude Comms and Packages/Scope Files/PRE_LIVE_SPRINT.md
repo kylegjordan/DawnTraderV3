@@ -73,6 +73,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
 ### Crew, reviewer, governance and alert tooling — 71 (+3 struck through)
+- #565 (—) — B-COMMS-RESTART-DURABILITY: a Discord message group lost when the bridge restarts (CC-C) — crew tooling, after live (W41 homing 2026-10-06)
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
 - 2.4b B-ALERT-QUEUE-INTEGRITY (CC-B) — #647 (no claim or lock discipline on the alert file; the watchdog appends outside the lock; rewrites drop malformed rows) + #1074 (open-batch backstop alerts have no resolve edge) + #654 (the checker ignores open-retired rows and treats any COMPLETION filename as a close) — alert tooling (added 2026-09-29)
@@ -150,6 +151,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-INSTRUMENTS-OVER-RULES OBJ-3 (CC-A) — change WHAT LOADS, not what exists: path-scoped rule files so a session loads the repo-wide rules plus only its own area; measured before/after from `~/.claude/instructions-loaded.jsonl` with a paired negative control (a named binding rule must still load); folded with B-RULES-1e, same subject. Moved here at the batch's close (Langston-ruled shape, 2026-10-01); the rest of the batch closed
 
 ### Legacy and dead-code cleanup (the reachability census may pull some forward) — 21
+- #1086 (—) — B-GUARDRAIL-POLICY-ORPHAN: a dead block-code list and an orphan import (CC-C) — no live path reaches it (W41 homing 2026-10-06)
 
 - B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
 - #422 (CC-B) — `/api/active-engine/diagnostics/scan-24h` has no client consumer; the reachability census rules on it (added 2026-09-30, W40 census)
@@ -256,6 +258,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 ### Perpetual futures — 5
 
 - #144 (—) — perpetual-futures activation checklist — perps come after live
+- #703 (—) — capture six commodity perpetuals as an asset class (CC-C) — perps come after live (W41 homing 2026-10-06)
 - #155 (—) — perp reason truncated in a diagnostic endpoint
 - #687 (CC-C) — equity-perp universe file stale — perps are after live (merges into P19-B-PERPFEED)
 - B-FUNNEL-PERP-CLASSES (CC-C) — open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)
