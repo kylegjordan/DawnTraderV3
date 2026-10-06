@@ -214,8 +214,9 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
       // It used to MERGE (assign only the cells present), so a regime × strategy with no trade in the 7-day window kept its
       // last win rate until the next restart — 224 such cell-instances in 170 of 926 retained snapshots (2026-04-12 →
       // 10-06). A missing cell reads 0.5 at `getPredictiveConfidence`, so the value moves TOWARD neutral in both
-      // directions (167 of the 224 up). At the confidence FLOORS (0.55-0.80, all above 0.5) that can only refuse; every
-      // other reader (finalScore, the ROI threshold) is shadow, log-only or unreachable today — pre-audit r3 §B1.
+      // directions (167 of the 224 up), and so does everything built from it (the xStock composite confidence, finalScore,
+      // the ROI threshold). No live decision reads any of them today — every reader is shadow, log-only, manual or
+      // unreachable (pre-audit r3 §B1).
       const next: VTSTelemetry['regimePerformance'] = {};
       for (const regime in metrics) {
         next[regime] = {};
