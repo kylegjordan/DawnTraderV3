@@ -967,17 +967,6 @@ export class ActiveExecutionEngine {
           .catch((err: any) => console.error('[DailyLossBudget] hook dispatch error:', err?.message ?? err));
       });
 
-      // B-SIZING-DEC-RESTORE increment 3 (P4 / obj-14): the paper size band, on every paper close — the balance moves
-      // only when a trade closes (F10). Same shape as the daily-loss hook: tick-deferred, fire-and-forget, LOGS a
-      // failure and never throws into the close path (its fail-hard is at boot, PRE_AUDIT §16.4 C1).
-      if (_dlbMode === 'paper') {
-        setImmediate(() => {
-          void import('./paper-size-band.js')
-            .then(({ checkPaperSizeBand }) => checkPaperSizeBand('close'))
-            .catch((err: any) => console.error('[PaperSizeBand] close hook error:', err?.message ?? err));
-        });
-      }
-
       await this.checkRtbPromotion();
     };
 

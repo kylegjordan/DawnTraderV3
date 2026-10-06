@@ -443,18 +443,6 @@ app.use((req, res, next) => {
     process.exit(1);
   }
 
-  // B-SIZING-DEC-RESTORE increment 3 (P4 / obj-14; PRE_AUDIT §16.4 C1): the paper size band's three rows, read
-  // FAIL-HARD at boot — a missing row is a refusal to start, never a silent default. On the close seam the check only
-  // logs a failure, so this is the one place a missing band can stop anything.
-  try {
-    const { readPaperSizeBand } = await import('./services/paper-size-band.js');
-    const band = readPaperSizeBand();
-    console.log(`[B-SIZING-DEC-RESTORE][BOOT] paper size band loaded: low=$${band.low} high=$${band.high} target=$${band.target}`);
-  } catch (bandErr) {
-    console.error('[B-SIZING-DEC-RESTORE][BOOT_FAIL] paper_size_band rows missing (low/high/target):', bandErr);
-    console.error('[B-SIZING-DEC-RESTORE][BOOT_FAIL] Cannot start without the paper size band rows. Exiting.');
-    process.exit(1);
-  }
   
   /**
    * 8.8.4-L1: Initialize Data Aggregator for learning data capture

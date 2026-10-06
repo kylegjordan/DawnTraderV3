@@ -83,7 +83,6 @@ const PREFETCH_MODULES = [
   // B72.1 — carry-over source-side wiring (rows pre-seeded under B72 main):
   'adaptive_weights',     // adaptive-manager.ts default_decay_rate (lazy getter)
   'concentration_risk',   // risk-concentration.ts Directive 9.4 covariance guards
-  'paper_size_band',     // B-SIZING-DEC-RESTORE inc 3: the paper $140-150 band (low/high/target), read sync at boot + on close
   'guardrail_defaults',   // trade-safety.ts fallback (max total exposure pct; the max-open-trades default row was removed by B-SIZING-DEC-RESTORE obj-4)
   'goal_alignment',       // pre-execution-validator.ts atomic 4-weight alignment block + thresholds
   'strategy_profiles',    // pre-execution-validator.ts per-strategy risk/consistency profile

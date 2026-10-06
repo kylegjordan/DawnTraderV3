@@ -2,98 +2,95 @@
  * B-SIZING-DEC-RESTORE increment 3 — P1: KYLE'S PAPER-RESET-3000, RUN ONCE.
  *
  * Plan: Claude Comms and Packages/Scope Files/B_SIZING_DEC_RESTORE_PRE_AUDIT.md §13.2 P1 (what), §16.4 (how; Langston's
- * ruling at 66da5e666) and §16.5 (as built). One shared paper pot is reset to $820 (Kyle 2026-10-06, replacing the $3,000 of
- * 09-29: the real Kraken balance, so paper starts the way live mode will); every open paper position is
+ * ruling at 66da5e666) and §16.5 (as built). One shared paper pot is reset to the balance given on the command line
+ * (Kyle 2026-10-06: the real Kraken balance, $820 — replacing the $3,000 of 09-29); every open paper position is
  * closed and labelled `close_reason = 'reset'` (a resting maker order that never filled is dropped as `never_filled`,
- * #1100); the max-position % goes to 5 (≈ $39.77 a trade, 20 slots) and the paper daily-loss kill switch to 8% (≈ $65.60
- * a day; Kyle 2026-10-05, #618); the Paper Trading dashboard counts from the
- * reset; nothing is deleted.
+ * #1100); the Paper Trading dashboard counts from the reset; nothing is deleted.
+ * ⛔ THE SCRIPT WRITES NO SETTING (Kyle 2026-10-06: "it should be a database field that we can update"). The max-position %
+ *    (5 ⇒ 20 slots) and the paper daily-loss kill switch (15%) are set on the Guardrails screen BEFORE the run; step 4
+ *    only prints what the app reads, so the operator sees them beside the balance. No amount is written into this file.
  *
  * HOW: this script drives the app's OWN authenticated API for everything that lives inside the running app (the
- * price cache, the canonical close, the engine stop/start, the guardrail save, the balance the app sizes from), and
- * calls the ledger's single writers directly for the two database-only steps (the re-anchor, the dashboard epoch).
- * No in-process reset route exists — a reset endpoint left behind would be a re-runnable destructive affordance.
+ * price cache, the canonical close, the engine stop/start, the balance the app sizes from), and calls the ledger's
+ * single writers directly for the two database-only steps (the re-anchor, the dashboard epoch). No in-process reset
+ * route exists — a reset endpoint left behind would be a re-runnable destructive affordance.
  *
  * RUNS: on staging, once, by CC-C, on Kyle's go, immediately after the window's deploy (increments 2a-2e and 3):
- *   set -a && . ./.env && set +a && DT_API_TOKEN=<crew login token> npx tsx server/scripts/paper-reset-3000.ts
+ *   set -a && . ./.env && set +a && DT_API_TOKEN=<crew login token> npx tsx server/scripts/paper-reset-3000.ts --balance 820
  * ⛔ The token comes from the server-held crew login (B-CREDENTIALS-PRIVATE-REPO OBJ-1) at run time. It is never
- *    typed into this file, never committed, never printed. The reset's own guardrail write therefore signs as the
- *    CREW LOGIN's user id, not Kyle's — it must not be read later as his edit (§16.4 D).
+ *    typed into this file, never committed, never printed.
+ * ⛔ `--balance` is REQUIRED and has no default: a missing or non-positive value is a refusal before anything changes.
  *
  * ORDER, and it stops at the FIRST failure (no retry). Every refusal and every crash names the step AND the state it
  * leaves (engine stopped? anchor written?):
- *   (0) preconditions — the window's three migrations in the db:migrate ledger, increment 1's position-% range and 3's band rows at the
- *       objects, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, no
+ *   (0) preconditions — the window's two migrations in the db:migrate ledger, increment 1's position-% range at the
+ *       object, no earlier PAPER-RESET-3000 anchor (A1), the engine running, the paper KILL SWITCH NOT TRIPPED, no
  *       open closed_trades row without a position
  *   (1) the READ-ONLY pre-check — every open paper position is closable (priced, or a pending maker)
  *   (2) POST /active-engine/stop { reason: 'reset' } — the engine blocks new trades FIRST, then flattens (race-free,
  *       §16.4 B1). REFUSES unless the stop's own flatten report is clean (ran, no throw, no failure, nothing left open,
  *       nothing deleted by the orphan cleanup), nothing is open, no open closed_trades row remains, and no close since
  *       the stop began carries 'manual_stop' or 'engine_stop_cleanup'
- *   (3) executeReanchor → TARGET_BALANCE ($820), measurement_override, a note citing PAPER-RESET-3000 — engine re-checked
+ *   (3) executeReanchor → the --balance amount, measurement_override, a note citing PAPER-RESET-3000 — engine re-checked
  *       STOPPED first
- *   (4) PUT /guardrails-v2 { maxPositionPercentPct: 5, dailyLossKillSwitchPct: 8 } — REFUSE to start unless the app reads
- *       back BOTH (§16.4 D; the kill switch added 2026-10-06 with Kyle's 10-05 decision)
+ *   (4) PRINT the settings the app reads (max position %, exposure, derived slots, kill switch) — no write, no refusal:
+ *       they are the operator's, set on the Guardrails screen before the run (Kyle 2026-10-06)
  *   (5) the dashboard epoch = the moment the stop RETURNED (so a position opened in the last instant before the stop
  *       counts as pre-reset, not post-); the previous epoch row is printed first
  *   (6) POST /active-engine/start { mode: 'continue' } — NEVER 'new' (it hard-resets the tables). Engine re-checked
  *       STOPPED first, so a start somebody else made in steps 3-5 is caught rather than reported as ours.
- *   (7) the read-back, FROM THE APP: its portfolio summary (starting balance = TARGET_BALANCE and a session that began at our
- *       start), the kill switch still clear, and THE LIVE BAND MONITOR'S OWN VERDICT at the start (the `[PaperSizeBand]`
- *       line the start hook logs — it resolves its inputs the way it will on every close); plus the anchor, the 'reset'
- *       closes and NOTHING DELETED (the paper rows opened before the run, counted at step 0 and again now)
+ *   (7) the read-back, FROM THE APP: its portfolio summary (the starting balance is PRINTED for the operator's own look —
+ *       Kyle 2026-10-06 — and a session that began at our start), the kill switch still clear; plus the anchor, the
+ *       'reset' closes and NOTHING DELETED (the paper rows opened before the run, counted at step 0 and again now)
  * ⚠️ RESUME POINT (A1): re-runnable up to and including the flatten; NOT after step 3 — the re-anchor mints a version,
  *    and step 0 refuses on its note. A run that stops after step 2 leaves the engine stopped; finishing it is a manual
  *    operator step (§16.5), never a re-run.
  * ⚠️ A closed_trades row is WRITTEN AT OPEN and UPDATED at close on the engine's path, so the flatten adds no row;
  *    "nothing deleted" is the pre-run population counted twice. Two operator routes (close-trade/:id,
  *    force-clear-stranded) do insert at close — this run calls neither, and one called by hand mid-run would show here.
+ * ⚠️ RESIDUAL, NAMED (Langston, 2026-10-06): the 'reset' closes are left out of the kill switch's 24-hour loss count ONLY
+ *    because the start opens a new session. A process restart inside 24 h that lands without a session (#585) brings
+ *    them back into the count. Until B-LOSS-WINDOW-OPERATOR-CLOSES lands: no restart or deploy within 24 h after the reset.
  */
-import { join } from 'node:path';
 import { db } from '../db.js';
-import { logOffsets, readLogsSince, type LogReadReport } from './lib/app-log-reader.js';
 import { sql } from 'drizzle-orm';
 import { executeReanchor, getAnchorState } from '../services/portfolio-anchor-service.js';
-import { evaluatePaperSizeBand } from '../services/paper-size-band.js';
 import { storage } from '../storage.js';
 
-// Kyle 2026-10-06 (was 3000, 2026-09-29): reset to the real Kraken balance, about $820, 20 slots at 5% (#698).
-const TARGET_BALANCE = 820;
-const TARGET_P = 5;
-const TARGET_SLOTS = 20;
-// Kyle 2026-10-05 (#618, obj-13): the paper daily-loss kill switch 20 → 8, applied with the reset (~$65.60 a day on $820).
-const TARGET_KILL_PCT = 8;
 // ⚠️ The tag keeps its 09-29 name although the amount changed: step 0's A1 check and the engine's 'reset' close reason both
 // match this exact string, and renaming it would let a run of the old name pass A1.
 const RESET_TAG = 'PAPER-RESET-3000';
-// The three migrations the reset depends on, as the db:migrate ledger names them: increment 1's position-% range,
-// 2a's retired slot column, 3's size band. (2b's floor migration was WITHDRAWN before deploy — increment 2e, PRE_AUDIT §20.4.)
+// The two migrations the reset depends on, as the db:migrate ledger names them: increment 1's position-% range and
+// 2a's retired slot column. (2b's floor migration was WITHDRAWN before deploy — increment 2e, PRE_AUDIT §20.4; 3's size
+// band was REMOVED before deploy — Kyle 2026-10-06, DELETED_COMPONENTS_LOG.)
 const MIGRATIONS = [
   '2026-09-29-b-sizing-p5-guardrail-pct-range.sql',
   '2026-09-29-b-sizing-inc2a-retire-max-open-positions.sql',
-  '2026-09-29-b-sizing-inc3-paper-size-band.sql',
 ] as const;
 // A close that lands between the stop request and the engine blocking new work is legitimate; these may appear.
 const REASONS_ALLOWED_AT_STOP = new Set(['reset', 'never_filled', 'stop_hit', 'target_hit', 'trailing_stop_hit', 'max_holding_period', 'guardrail']);
 const API = (process.env.DT_API_BASE || 'http://localhost:5000/api').replace(/\/$/, '');
 const TOKEN = process.env.DT_API_TOKEN || '';
 const RUN_ID = `paper-reset-3000-${new Date().toISOString()}`;
-// PM2 splits the app's streams: console.log → out.log, console.warn/error → error.log. The band monitor's IN/LOW/HIGH
-// lines are console.log and its UNREADABLE line is console.error, so both files are read.
-const APP_LOG_DIR = process.env.DT_APP_LOG_DIR || '/var/log/dawntrader';
-const APP_LOGS = ['out.log', 'error.log'].map((f) => join(APP_LOG_DIR, f));
+
+/** The reset balance, from `--balance <amount>` — required, no default (Kyle 2026-10-06: no amount lives in the code). */
+export function parseBalanceArg(argv: readonly string[]): number | null {
+  const i = argv.indexOf('--balance');
+  if (i < 0 || i + 1 >= argv.length) return null;
+  const v = Number(argv[i + 1]);
+  return Number.isFinite(v) && v > 0 ? v : null;
+}
+const BALANCE = parseBalanceArg(process.argv);
 
 // What the run has done so far, so every exit — a refusal or a crash — says what state it leaves.
-const state = { step: '0', stopRequested: false, engineStopped: false, anchorWritten: false, pSet: false, killSet: false, epochSet: false, started: false };
+const state = { step: '0', stopRequested: false, engineStopped: false, anchorWritten: false, epochSet: false, started: false };
 const log = (msg: string) => console.log(`[${RESET_TAG}][${state.step}] ${msg}`);
 
 function stateLine(): string {
   if (!state.stopRequested) return 'Nothing was changed: the engine was not asked to stop.';
   const parts = [
     state.engineStopped ? 'the paper engine is STOPPED' : 'the stop was requested and its outcome is NOT confirmed — read GET /active-engine/status and the open positions before anything else',
-    state.anchorWritten ? `the $${TARGET_BALANCE} anchor IS written (this run cannot be repeated — A1)` : 'the anchor is NOT written',
-    state.pSet ? `max position % IS ${TARGET_P}` : 'max position % is NOT changed',
-    state.killSet ? `the paper kill switch IS ${TARGET_KILL_PCT}%` : 'the paper kill switch is NOT changed',
+    state.anchorWritten ? `the $${BALANCE} anchor IS written (this run cannot be repeated — A1)` : 'the anchor is NOT written',
     state.epochSet ? 'the dashboard epoch IS set' : 'the dashboard epoch is NOT set',
     state.started ? 'the engine WAS restarted' : 'the engine was NOT restarted',
   ];
@@ -131,20 +128,6 @@ async function engineRunning(): Promise<boolean> {
   return s.json.isRunning;
 }
 
-/** The band's three rows at the global key — three distinct names, each a finite positive number, or a refusal. */
-async function readBand(): Promise<{ low: number; high: number; target: number }> {
-  const r = await rows<{ constant_name: string; v: string }>(sql`
-    SELECT constant_name, value #>> '{}' AS v FROM module_constants
-     WHERE module_name = 'paper_size_band' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
-       AND constant_name IN ('low', 'high', 'target')`);
-  const m = new Map(r.map((x) => [x.constant_name, Number(x.v)]));
-  const band = { low: m.get('low'), high: m.get('high'), target: m.get('target') };
-  const ok = m.size === 3 && [band.low, band.high, band.target].every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0)
-    && (band.low as number) < (band.high as number);
-  if (!ok) refuse(`the paper_size_band rows are not three finite values with low < high (read: ${JSON.stringify(Object.fromEntries(m))})`);
-  return band as { low: number; high: number; target: number };
-}
-
 /** The paper kill switch, as the app reads it (Langston condition 2: a reset must not finish with trading latched shut). */
 async function killSwitchTripped(): Promise<boolean> {
   const g = await api('GET', '/guardrails-v2?mode=paper');
@@ -155,13 +138,15 @@ async function killSwitchTripped(): Promise<boolean> {
 async function main() {
   log(`run id ${RUN_ID}; API ${API}`);
   if (!TOKEN) refuse('DT_API_TOKEN is not set (the crew login token, B-CREDENTIALS-PRIVATE-REPO OBJ-1)');
+  if (BALANCE === null) refuse('--balance <amount> is required (a positive number; Kyle 2026-10-06: $820, the real Kraken balance)');
+  const balance: number = BALANCE;
 
   // ── (0) preconditions ────────────────────────────────────────────────────────────────────────────────────────
-  // The migration ledger for all three increments. 2a is checked ONLY here: its database half drops the retired
+  // The migration ledger for both increments. 2a is checked ONLY here: its database half drops the retired
   // open-slots column, whose name the legacy-deletion fence bans from source (rightly — a reference that keeps the name
-  // alive is how a dead mechanism comes back). Increment 1's range and 3's band are ALSO checked at their objects.
+  // alive is how a dead mechanism comes back). Increment 1's range is ALSO checked at its object.
   const migrated = new Set((await rows<{ name: string }>(sql`
-    SELECT name FROM _migrations WHERE name IN (${MIGRATIONS[0]}, ${MIGRATIONS[1]}, ${MIGRATIONS[2]})`)).map((r) => r.name));
+    SELECT name FROM _migrations WHERE name IN (${MIGRATIONS[0]}, ${MIGRATIONS[1]})`)).map((r) => r.name));
   const notMigrated = MIGRATIONS.filter((m) => !migrated.has(m));
   if (notMigrated.length) refuse(`not in the migration ledger: ${notMigrated.join(', ')} — the window's deploy has not run here`);
   const floor = (await rows<{ def: string }>(sql`
@@ -169,7 +154,6 @@ async function main() {
   if (!floor?.def || !/max_position_percent_pct\s*>\s*\(?0\b/.test(floor.def) || !/<=\s*\(?100\b/.test(floor.def)) {
     refuse(`increment 1's position-% range (0 < p <= 100) is not in place (reads: ${floor?.def ?? 'absent'})`);
   }
-  const band = await readBand();
   if (await count(sql`SELECT count(*)::int AS n FROM portfolio_anchor_events WHERE mode = 'paper' AND note LIKE ${'%' + RESET_TAG + '%'}`) > 0) {
     refuse(`a ${RESET_TAG} anchor already exists — this reset has run past step 3; it is NOT re-runnable (A1)`);
   }
@@ -190,7 +174,7 @@ async function main() {
   // The "nothing deleted" population: every paper row opened before this run began. Counted again at step 7.
   const runStart = new Date();
   const rowsBefore = await count(sql`SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND opened_at < ${runStart}`);
-  log(`ok — ledger has 1/2a/3; range ${floor.def}; band $${band.low}-$${band.high} (target $${band.target}); engine running; kill switch clear; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}`);
+  log(`ok — ledger has 1/2a; range ${floor.def}; engine running; kill switch clear; anchor v${anchorBefore.anchorVersion} $${anchorBefore.balance}; 0 stale rows; paper rows opened before ${runStart.toISOString()}: ${rowsBefore}; reset balance $${balance}`);
 
   // ── (1) the read-only pre-check ───────────────────────────────────────────────────────────────────────────────
   state.step = '1';
@@ -201,7 +185,7 @@ async function main() {
   if (notClosable.length > 0) refuse(`no observed price for ${notClosable.map((p) => p.symbol).join(', ')} — the flatten would leave them open`);
   const n = positions.length;
   const pending = positions.filter((p) => p.state === 'pending').length;
-  log(`ok — ${n} open paper position(s): ${n - pending} priced, ${pending} pending maker(s) (dropped as never_filled)`);
+  log(`ok — ${n} open paper position(s): ${n - pending} priced, ${pending} pending maker(s) (dropped as never_filled)${n === 0 ? ' — a CLEAN ZERO: the flatten will close nothing' : ''}`);
 
   // ── (2) stop, flattening under close_reason 'reset' ───────────────────────────────────────────────────────────
   state.step = '2';
@@ -246,32 +230,27 @@ async function main() {
   if (await engineRunning()) refuse('the engine is RUNNING again before the re-anchor — somebody started it; nothing re-anchored');
   const { anchorVersion } = await executeReanchor({
     mode: 'paper',
-    newBalance: TARGET_BALANCE,
+    newBalance: balance,
     reason: 'measurement_override',
-    note: `Kyle-directed ${RESET_TAG} (2026-09-29; amount 2026-10-06): one shared paper pot reset to $${TARGET_BALANCE}, the real `
-      + `Kraken balance, for 20 trades at ~$39.77; kill switch ${TARGET_KILL_PCT}%; every open paper position closed as 'reset' by `
-      + `the engine stop; nothing deleted. Prior anchored balance `
+    note: `Kyle-directed ${RESET_TAG} (2026-09-29; amount 2026-10-06): one shared paper pot reset to $${balance}, the real `
+      + `Kraken balance; every open paper position closed as 'reset' by the engine stop; nothing deleted. Prior anchored balance `
       + `$${Number(anchorBefore.balance).toFixed(2)} (v${anchorBefore.anchorVersion}). Run ${RUN_ID}. Plan: B-SIZING-DEC-RESTORE PRE_AUDIT §13.2 P1 + §16.4.`,
   });
   state.anchorWritten = true;
   if (anchorVersion !== anchorBefore.anchorVersion + 1) refuse(`anchor version ${anchorVersion}, expected ${anchorBefore.anchorVersion + 1}`);
-  log(`ok — paper anchor v${anchorVersion} = $${TARGET_BALANCE}`);
+  log(`ok — paper anchor v${anchorVersion} = $${balance}`);
 
-  // ── (4) p = 5 and the kill switch = 8, through the governed path, read back FROM THE APP before any start ─────────
-  // One PUT carries both, so the coherency validator judges them together and neither lands without the other.
+  // ── (4) the settings, as the app reads them — PRINTED, not written (Kyle 2026-10-06: they are the operator's) ────
   state.step = '4';
-  const put = await api('PUT', '/guardrails-v2?mode=paper', { maxPositionPercentPct: TARGET_P, dailyLossKillSwitchPct: TARGET_KILL_PCT });
-  if (put.status !== 200) refuse(`guardrails save failed (HTTP ${put.status}: ${put.json?.detail ?? put.json?.error ?? 'no body'})`);
-  state.pSet = true;
-  state.killSet = true;
   const g = await api('GET', '/guardrails-v2?mode=paper');
-  const p = parseFloat(String(g.json?.data?.maxPositionPercentPct));
-  const e = parseFloat(String(g.json?.data?.maxTotalExposurePct));
-  if (g.status !== 200 || p !== TARGET_P) refuse(`the app reads max position % as ${g.json?.data?.maxPositionPercentPct}, not ${TARGET_P} — NOT starting (it would size at the old %)`);
-  if (g.json?.derivedSlots !== TARGET_SLOTS) refuse(`the app derives ${g.json?.derivedSlots} slots at p=${p}, not ${TARGET_SLOTS}`);
-  const k = parseFloat(String(g.json?.data?.dailyLossKillSwitchPct));
-  if (k !== TARGET_KILL_PCT) refuse(`the app reads the paper kill switch as ${g.json?.data?.dailyLossKillSwitchPct}, not ${TARGET_KILL_PCT} — NOT starting (it would run under the old loss budget)`);
-  log(`ok — the app reads max position % ${p}, exposure ${e}%, ${g.json.derivedSlots} slots, kill switch ${k}%`);
+  const settings = {
+    httpStatus: g.status,
+    maxPositionPct: g.json?.data?.maxPositionPercentPct ?? null,
+    maxTotalExposurePct: g.json?.data?.maxTotalExposurePct ?? null,
+    derivedSlots: g.json?.derivedSlots ?? null,
+    dailyLossKillSwitchPct: g.json?.data?.dailyLossKillSwitchPct ?? null,
+  };
+  log(`the app reads: max position % ${settings.maxPositionPct}, exposure ${settings.maxTotalExposurePct}%, ${settings.derivedSlots} slots, kill switch ${settings.dailyLossKillSwitchPct}% — set on the Guardrails screen, not by this script`);
 
   // ── (5) the dashboard epoch = the moment the stop returned ────────────────────────────────────────────────────
   state.step = '5';
@@ -290,7 +269,6 @@ async function main() {
   // ── (6) start, continuing ────────────────────────────────────────────────────────────────────────────────────
   state.step = '6';
   if (await engineRunning()) refuse('the engine is RUNNING already — somebody started it during the reset, at whatever size was set then');
-  const logsBeforeStart = logOffsets(APP_LOGS);
   const startRequestedAt = new Date();
   const start = await api('POST', '/active-engine/start', { mode: 'continue' });
   if (start.status !== 200 || !start.json?.success) refuse(`start failed (HTTP ${start.status}: ${start.json?.error ?? 'no body'})`);
@@ -309,26 +287,6 @@ async function main() {
   const resetAfter = await count(sql`
     SELECT count(*)::int AS n FROM closed_trades WHERE mode = 'paper' AND close_reason = 'reset' AND closed_at >= ${resetInstant}`);
   const killSwitchAfter = await killSwitchTripped();
-  // THE LIVE BAND MONITOR'S OWN VERDICT (Langston's nit, taken): the start hook runs `checkPaperSizeBand` inside the app
-  // — resolving its inputs exactly as it will on every close — and logs one `[PaperSizeBand][<VERDICT>] trigger=engine_start`
-  // line. That line is what is asserted. It is fire-and-forget after the start, so it is waited for (up to 60 s).
-  // The reader takes the NEWEST bytes when more than its cap was written, and follows a rotation into the rotated file
-  // (Langston's re-grade condition: out.log grows 13-22 MB a minute and rotates at 1 GB); its report says which.
-  let bandLine: string | null = null;
-  let logReport: LogReadReport[] = [];
-  for (let waited = 0; waited <= 60_000 && !bandLine; waited += 2_000) {
-    const read = readLogsSince(logsBeforeStart);
-    logReport = read.report;
-    const m = read.text.match(/\[PaperSizeBand\]\[(IN|LOW|HIGH|UNREADABLE)\] trigger=engine_start[^\n]*/);
-    if (m) bandLine = m[0];
-    else await new Promise((r) => setTimeout(r, 2_000));
-  }
-  // The formula at the app's balance, reported beside it (a stated cross-check, not the assertion).
-  const buf = Number((await rows<{ v: string }>(sql`
-    SELECT value #>> '{}' AS v FROM module_constants
-     WHERE module_name = 'active_sizing' AND constant_name = 'max_position_buffer_factor'
-       AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*' LIMIT 1`))[0]?.v);
-  const verdict = evaluatePaperSizeBand({ balance: appBalance, e, p, buffer: buf }, band);
   const readBack = {
     runId: RUN_ID,
     stopRequestedAt: resetInstant.toISOString(),
@@ -337,39 +295,32 @@ async function main() {
     closesSinceStop: byReason,
     appPortfolioSummary: { httpStatus: sum.status, startingBalance, cashBalance: appBalance, sessionStart: sessionStart?.toISOString() ?? null },
     anchor: { before: anchorBefore.anchorVersion, after: anchorAfter?.anchorVersion, balance: anchorAfter?.balance },
-    maxPositionPct: p,
-    maxTotalExposurePct: e,
-    derivedSlots: g.json.derivedSlots,
+    settingsAtStep4: settings,
     rowsOpenedBeforeRun: { atStep0: rowsBefore, now: rowsAfter },
     resetCloses: { atStep2: resetCount, now: resetAfter },
     killSwitchTripped: killSwitchAfter,
-    band,
-    bandMonitorLine: bandLine,
-    bandMonitorLogRead: logReport.map((r) => ({ file: r.file, bytesSinceOffset: r.bytesSinceOffset, capped: r.capped, rotated: r.rotated, rotatedFrom: r.rotatedFrom, error: r.error })),
-    bandFormulaCrossCheck: { status: verdict.status, size: Number.isFinite(verdict.size) ? Number(verdict.size.toFixed(2)) : null },
   };
   console.log(`[${RESET_TAG}][7] READ-BACK ${JSON.stringify(readBack)}`);
   const problems: string[] = [];
   if (sum.status !== 200) problems.push(`the app's portfolio summary did not load (HTTP ${sum.status})`);
-  if (Math.abs(startingBalance - TARGET_BALANCE) > 0.005) problems.push(`the app's starting balance reads ${startingBalance}, not ${TARGET_BALANCE}`);
-  if (!sessionStart || sessionStart.getTime() < startRequestedAt.getTime()) problems.push(`the app's session began ${sessionStart?.toISOString() ?? 'never'}, before our start — its balance adds P&L from before the reset`);
+  if (!sessionStart || sessionStart.getTime() < startRequestedAt.getTime()) problems.push(`the app's session began ${sessionStart?.toISOString() ?? 'never'}, before our start — its balance adds P&L from before the reset, and the kill switch's loss count would include the reset's closes`);
   if (anchorAfter?.anchorVersion !== anchorVersion) problems.push('the anchor version moved after step 3');
   if (rowsAfter !== rowsBefore) problems.push(`paper rows opened before the run: ${rowsBefore} at step 0, ${rowsAfter} now — rows were deleted, or a close route that inserts at close ran mid-reset`);
   if (resetAfter !== resetCount) problems.push(`'reset' closes moved from ${resetCount} to ${resetAfter} after the stop`);
   if (killSwitchAfter) problems.push('the paper KILL SWITCH IS TRIPPED — the engine is running but will not trade');
-  if (!bandLine) problems.push(`no band-monitor verdict line (trigger=engine_start) within 60 s of the start — read: ${JSON.stringify(logReport.map((r) => ({ f: r.file, bytes: r.bytesSinceOffset, capped: r.capped, rotated: r.rotated, err: r.error })))}`);
-  else if (!bandLine.startsWith('[PaperSizeBand][IN]')) problems.push(`the live band monitor says: ${bandLine}`);
-  if (verdict.status !== 'in') problems.push(`the band formula at the app's balance says ${verdict.status} ($${verdict.size})`);
   if (problems.length) {
     console.error(`[${RESET_TAG}][7] READ-BACK MISMATCH — ${problems.join('; ')}. The reset ran and the engine is running; report this, do not re-run.`);
     process.exit(2);
   }
-  log('ok — every read-back matches. PAPER-RESET-3000 complete.');
+  log(`ok — PAPER-RESET-3000 complete. The app's starting balance reads $${startingBalance.toFixed(2)} (asked for $${balance}) — check it on the Paper Trading screen.`);
   process.exit(0);
 }
 
-main().catch((err) => {
-  console.error(`[${RESET_TAG}][${state.step}] CRASHED — ${err instanceof Error ? err.message : err}`);
-  console.error(`[${RESET_TAG}][${state.step}] ${stateLine()}`);
-  process.exit(1);
-});
+// Runs only when executed directly, so a test can import parseBalanceArg without starting a reset.
+if (process.argv[1] && /paper-reset-3000\.[tj]s$/.test(process.argv[1])) {
+  main().catch((err) => {
+    console.error(`[${RESET_TAG}][${state.step}] CRASHED — ${err instanceof Error ? err.message : err}`);
+    console.error(`[${RESET_TAG}][${state.step}] ${stateLine()}`);
+    process.exit(1);
+  });
+}

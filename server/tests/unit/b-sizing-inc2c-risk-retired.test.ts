@@ -20,7 +20,6 @@ vi.mock('../../services/system-alerts.js', () => ({ addAlert: vi.fn(async () => 
 vi.mock('../../services/module-constants-service.js', () => ({ getCachedNumberRequired: vi.fn(() => 0.97) }));
 
 import { tradeNotional, bufferedTradeNotional, sizeActivePositionForSignal } from '../../services/active-position-sizing.js';
-import { evaluatePaperSizeBand } from '../../services/paper-size-band.js';
 
 const REPO = resolve(__dirname, '../../..');
 const stripComments = (src: string) => src.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -45,10 +44,6 @@ describe('1 — one trade-size formula', () => {
     expect(r.estimatedValue).toBeCloseTo(bufferedTradeNotional(3000, 100, 5), 6);
   });
 
-  it('the band monitor uses the same formula', () => {
-    const v = evaluatePaperSizeBand({ balance: 3000, e: 100, p: 5, buffer: 0.97 }, { low: 140, high: 150, target: 145 });
-    expect(v.size).toBeCloseTo(tradeNotional(3000, 100, 5, 0.97), 10);
-  });
 
   it('the max-position check and the validator size an unsized candidate through the shared helper', () => {
     expect(code('server/services/trade-safety.ts')).toContain('bufferedTradeNotional(portfolioValue, maxTotalExposurePct, maxPositionPercent)');

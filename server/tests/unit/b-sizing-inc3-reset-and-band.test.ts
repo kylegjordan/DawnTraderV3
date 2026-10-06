@@ -1,11 +1,10 @@
 /**
- * B-SIZING-DEC-RESTORE increment 3 — the PAPER-RESET-3000 plumbing (P1) and the paper size band (P4 / obj-14).
+ * B-SIZING-DEC-RESTORE increment 3 — the PAPER-RESET-3000 plumbing (P1). The paper size band (P4 / obj-14) was REMOVED
+ * before deploy (Kyle 2026-10-06: the goal is 20 slots, which the 5% position size gives at any balance), and with it its
+ * tests; §6 proves it is gone.
  *
  * Plan: Claude Comms and Packages/Scope Files/B_SIZING_DEC_RESTORE_PRE_AUDIT.md §16.4 (Langston's ruling at 66da5e666).
- * Four things are proved here, each with a CONTROL on the unchanged path:
- *   1. the band's verdict and its suggested p* (pure) — including the undone reset (tripwire A) and the upper typo;
- *   2. the band alert: one per anchor version and direction, nothing when in band or when an input is unreadable,
- *      fail-hard on a missing band row;
+ * Proved here, each with a CONTROL on the unchanged path:
  *   3. the reset label travels the stop path: stop → flatten → forceClosePosition → the exit condition's type, which
  *      the close writes to `close_reason` — so CC-B's 3n.u exclusion is a query on 'reset';
  *   4. the read-only pre-check and the flatten share ONE price resolver, and the pre-check closes nothing.
@@ -73,27 +72,20 @@ vi.mock('../../storage.js', async (orig) => {
   };
 });
 
-import { evaluatePaperSizeBand, checkPaperSizeBand, readPaperSizeBand, bandDedupeKey } from '../../services/paper-size-band.js';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager.js';
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
-import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { logOffsets, readLogsSince } from '../../scripts/lib/app-log-reader.js';
 
-const BAND = { low: 38, high: 41, target: 39.77 };
 const PROV = { producer: 'crypto_ws_book_walk' as const, source: 'kraken_ws', observedAtMs: 1 };
 
-function seedBand() {
-  h.constants.set('paper_size_band.low', 38);
-  h.constants.set('paper_size_band.high', 41);
-  h.constants.set('paper_size_band.target', 39.77);
+function seedConstants() {
   h.constants.set('active_sizing.max_position_buffer_factor', 0.97);
 }
 
 beforeEach(() => {
   h.constants.clear();
-  seedBand();
+  seedConstants();
   h.balance = 820;
   h.guardrails = { maxTotalExposurePct: '100.00', maxPositionPercentPct: '5.00' };
   h.anchorVersion = 7;
@@ -104,124 +96,6 @@ beforeEach(() => {
   h.positionById = null;
   h.updateClosedTrade.mockClear();
   h.deleteActiveOpenPosition.mockClear();
-});
-
-describe('1 — evaluatePaperSizeBand (pure)', () => {
-  it('at the reset — $820 x 100% x 5% x 0.97 = $39.77 is IN the band (Kyle 2026-10-06)', () => {
-    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 0.97 }, BAND);
-    expect(r.status).toBe('in');
-    expect(r.size).toBeCloseTo(39.77, 10);
-    // p* puts the normal size exactly on the target: 39.77 / (820 x 1 x 0.97) x 100 = 5
-    expect(r.pStar).toBeCloseTo((39.77 / (820 * 0.97)) * 100, 10);
-    expect(r.pStar).toBeCloseTo(5, 10);
-  });
-
-  it('a reset that left p at 20 — $820 at p=20 reads ~$159.08 and fires HIGH (replaces the retired tripwire A)', () => {
-    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 20, buffer: 0.97 }, BAND);
-    expect(r.status).toBe('high');
-    expect(r.size).toBeCloseTo(159.08, 2);
-  });
-
-  it('the upper typo — 50 for 5 reads ~$397.70 and fires HIGH (nothing else refuses it)', () => {
-    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 50, buffer: 0.97 }, BAND);
-    expect(r.status).toBe('high');
-    expect(r.size).toBeCloseTo(397.7, 10);
-  });
-
-  it('the band is closed at both ends — exactly low and exactly high are IN', () => {
-    // size = balance x 1 x 0.05 x 1 with buffer 1, so the balance sets the size directly (x 20)
-    expect(evaluatePaperSizeBand({ balance: 760, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $38
-    expect(evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $41
-    expect(evaluatePaperSizeBand({ balance: 759.8, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('low');
-    expect(evaluatePaperSizeBand({ balance: 820.2, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('high');
-  });
-
-  it('TARGET IS NOT A BAND MEMBER — moving it changes p* and never the verdict (§16.4 C2)', () => {
-    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 0.97 }, { ...BAND, target: 500 });
-    expect(r.status).toBe('in');
-    expect(r.pStar).toBeCloseTo((500 / (820 * 0.97)) * 100, 10);
-  });
-
-  it('any non-finite or non-positive input is UNREADABLE — never guessed into a verdict', () => {
-    for (const bad of [
-      { balance: NaN, e: 100, p: 5, buffer: 0.97 },
-      { balance: 3000, e: 0, p: 5, buffer: 0.97 },
-      { balance: 3000, e: 100, p: -5, buffer: 0.97 },
-      { balance: 3000, e: 100, p: 5, buffer: Number.POSITIVE_INFINITY },
-    ]) {
-      expect(evaluatePaperSizeBand(bad, BAND).status).toBe('unreadable');
-    }
-  });
-});
-
-describe('2 — checkPaperSizeBand (the alert)', () => {
-  it('CONTROL — in band raises nothing', async () => {
-    const r = await checkPaperSizeBand('close');
-    expect(r.status).toBe('in');
-    expect(h.addAlert).not.toHaveBeenCalled();
-  });
-
-  it('below the band raises ONE alert keyed to the anchor version and direction, naming p*', async () => {
-    h.balance = 700.5; // ~$33.98 at p=5, below the $38 floor
-    const r = await checkPaperSizeBand('engine_start');
-    expect(r.status).toBe('low');
-    expect(h.addAlert).toHaveBeenCalledTimes(1);
-    const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toBe(bandDedupeKey(7, 'low', r.pStar, BAND));
-    expect(arg.dedupe_key).toMatch(/^paper-size-band:7:low:p\d+$/);
-    expect(arg.category).toBe('reminder');
-    expect(arg.severity).toBe('warning');
-    expect(String(arg.title)).toContain(`set max position % to ${r.pStar.toFixed(2)}`);
-    expect(String(arg.body)).toContain('Trigger: engine_start');
-    // Langston condition 1: the suggestion is stamped with the instant and the balance it was computed at
-    expect(String(arg.body)).toMatch(/^As at \d{4}-\d{2}-\d{2}T[\d:.]+Z, balance \$700\.50:/);
-  });
-
-  it('above the band keys the OTHER direction — a low alert cannot silence a high one', async () => {
-    h.guardrails = { maxTotalExposurePct: '100.00', maxPositionPercentPct: '50.00' };
-    await checkPaperSizeBand('close');
-    const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toMatch(/^paper-size-band:7:high:p\d+$/);
-  });
-
-  it('a NEW anchor version gets a NEW key — the reset re-arms the alarm', async () => {
-    h.balance = 700.5; // ~$33.98 at p=5, below the $38 floor
-    h.anchorVersion = 8;
-    await checkPaperSizeBand('close');
-    const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
-    expect(arg.dedupe_key).toMatch(/^paper-size-band:8:low:p\d+$/);
-  });
-
-  // Langston condition 1: without the bucket a dedupe hit returned the FIRST alert unchanged, so its p* froze.
-  // MUTATION: drop the bucket from bandDedupeKey and the two keys below become equal.
-  it('the key moves when p* moves materially (his example: $3,100 vs $4,000 ⇒ 4.82% vs 3.74%)', () => {
-    const pStarAt = (balance: number) => evaluatePaperSizeBand({ balance, e: 100, p: 5, buffer: 0.97 }, BAND).pStar;
-    expect(bandDedupeKey(9, 'high', pStarAt(3100), BAND)).not.toBe(bandDedupeKey(9, 'high', pStarAt(4000), BAND));
-  });
-
-  it('CONTROL — a small move keeps the same key (3,093 vs 3,100: p* 4.83% vs 4.82%) — no alert storm', () => {
-    const pStarAt = (balance: number) => evaluatePaperSizeBand({ balance, e: 100, p: 5, buffer: 0.97 }, BAND).pStar;
-    expect(bandDedupeKey(9, 'high', pStarAt(3093), BAND)).toBe(bandDedupeKey(9, 'high', pStarAt(3100), BAND));
-  });
-
-  it('the bucket width is the band\'s own width (no new constant): a wider band gives coarser buckets', () => {
-    const narrow = [4.0, 4.2, 4.4, 4.6].map((ps) => bandDedupeKey(1, 'low', ps, BAND));
-    const wide = [4.0, 4.2, 4.4, 4.6].map((ps) => bandDedupeKey(1, 'low', ps, { low: 100, high: 200, target: 145 }));
-    expect(new Set(narrow).size).toBeGreaterThan(new Set(wide).size);
-  });
-
-  it('an unreadable guardrail raises NOTHING (it is the guardrail readers\' alarm, not this one)', async () => {
-    h.guardrails = null;
-    const r = await checkPaperSizeBand('close');
-    expect(r.status).toBe('unreadable');
-    expect(h.addAlert).not.toHaveBeenCalled();
-  });
-
-  it('FAIL-HARD — a missing band row throws (boot turns this into a refusal to start)', async () => {
-    h.constants.delete('paper_size_band.target');
-    expect(() => readPaperSizeBand()).toThrow(/paper_size_band\.target/);
-    await expect(checkPaperSizeBand('close')).rejects.toThrow(/paper_size_band\.target/);
-  });
 });
 
 describe('3 — the reset label travels the stop path', () => {
@@ -394,66 +268,26 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
   });
 });
 
-describe('6 — the app-log reader finds a line written at the NEW end (Langston re-grade condition)', () => {
-  const LINE = '2026-10-02 20:16:03 +00:00: [PaperSizeBand][IN] trigger=engine_start size=$145.50\n';
-  const junk = (n: number) => 'x'.repeat(n - 1) + '\n';
-  let dir: string;
-  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'inc3-logs-')); });
-
-  it('a small write: the line is read, nothing capped', () => {
-    const f = join(dir, 'out.log');
-    writeFileSync(f, junk(500));
-    const off = logOffsets([f]);
-    appendFileSync(f, LINE);
-    const { text, report } = readLogsSince(off, 1024);
-    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
-    expect(report[0]).toMatchObject({ capped: false, rotated: false, bytesSinceOffset: Buffer.byteLength(LINE), error: null });
-  });
-
-  // MUTATION: read from the offset forward (the head) instead of the tail and this line — written after more than the
-  // cap — is never reached; on staging the cap is consumed in ~23-38 s of the 60 s wait.
-  it('more than the cap written, the line at the end: the TAIL is read, and the report says capped', () => {
-    const f = join(dir, 'out.log');
-    writeFileSync(f, junk(100));
-    const off = logOffsets([f]);
-    appendFileSync(f, junk(5000));
-    appendFileSync(f, LINE);
-    const { text, report } = readLogsSince(off, 1024);
-    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
-    expect(report[0].capped).toBe(true);
-    expect(report[0].bytesSinceOffset).toBe(5000 + Buffer.byteLength(LINE));
-  });
-
-  // MUTATION: drop the rotated-sibling read and the line — written before the rotation — is lost.
-  it('a rotation after the offset (pm2-logrotate copies, then truncates): the line is found in the rotated file', () => {
-    const f = join(dir, 'out.log');
-    writeFileSync(f, junk(800));
-    const off = logOffsets([f]);
-    appendFileSync(f, LINE);
-    copyFileSync(f, join(dir, 'out__2026-10-02_20-16-05.log'));
-    writeFileSync(f, junk(50)); // truncated, then new writes
-    const { text, report } = readLogsSince(off, 4096);
-    expect(text).toContain('[PaperSizeBand][IN] trigger=engine_start');
-    expect(report[0].rotated).toBe(true);
-    expect(report[0].rotatedFrom).toMatch(/out__2026-10-02_20-16-05\.log$/);
-  });
-
-  it('a file that could not be read when the offset was taken is reported, not silently skipped', () => {
-    const off = logOffsets([join(dir, 'missing.log')]);
-    const { report } = readLogsSince(off);
-    expect(report[0].error).toMatch(/unreadable/);
-  });
-});
-
-describe("6 — the reset script carries Kyle's 2026-10-05/06 numbers (#698, #618)", () => {
+describe("6 — the reset writes NO setting and carries NO amount; the size band is gone (Kyle 2026-10-06)", () => {
   const SCRIPT = readFileSync(join(__dirname, '../../scripts/paper-reset-3000.ts'), 'utf8');
-  it('re-anchors to $820 (the real Kraken balance), not $3,000', () => {
-    expect(SCRIPT).toMatch(/^const TARGET_BALANCE = 820;$/m);
-    expect(SCRIPT).not.toMatch(/^const TARGET_BALANCE = 3000;$/m);
+  it('the balance comes from a REQUIRED --balance argument, not a constant in the file', () => {
+    expect(SCRIPT).toMatch(/const BALANCE = parseBalanceArg\(process\.argv\);/);
+    expect(SCRIPT).toMatch(/if \(BALANCE === null\) refuse\(/);
+    expect(SCRIPT).toMatch(/newBalance: balance,/);
+    expect(SCRIPT).not.toMatch(/TARGET_BALANCE|TARGET_P\b|TARGET_SLOTS|TARGET_KILL_PCT/);
   });
-  it('sets the paper kill switch to 8 in the SAME guardrails PUT as p = 5, and refuses to start unless the app reads 8 back', () => {
-    expect(SCRIPT).toMatch(/^const TARGET_KILL_PCT = 8;$/m);
-    expect(SCRIPT).toMatch(/PUT', '\/guardrails-v2\?mode=paper', \{ maxPositionPercentPct: TARGET_P, dailyLossKillSwitchPct: TARGET_KILL_PCT \}/);
-    expect(SCRIPT).toMatch(/if \(k !== TARGET_KILL_PCT\) refuse\(/);
+  it('the script never writes a guardrail: no PUT anywhere (the settings are the Guardrails screen\'s)', () => {
+    expect(SCRIPT).not.toMatch(/api\('PUT'/);
+    expect(SCRIPT).toMatch(/api\('GET', '\/guardrails-v2\?mode=paper'\)/);
+  });
+  it('the size band is gone: no module, no reader, no hook, no boot check, no migration', () => {
+    expect(existsSync(join(__dirname, '../../services/paper-size-band.ts'))).toBe(false);
+    expect(existsSync(join(__dirname, '../../scripts/lib/app-log-reader.ts'))).toBe(false);
+    for (const f of ['../../index.ts', '../../services/active-engine-service.ts', '../../services/active-execution-engine.ts', '../../startup/b72-warmup.ts']) {
+      expect(readFileSync(join(__dirname, f), 'utf8')).not.toMatch(/paper-size-band|paper_size_band|PaperSizeBand/);
+    }
+    expect(readFileSync(join(__dirname, '../../../drizzle/migrations/MANIFEST.txt'), 'utf8')).not.toMatch(/paper-size-band/);
+    // CONTROL: the daily-loss hook beside it on the close path is untouched.
+    expect(readFileSync(join(__dirname, '../../services/active-execution-engine.ts'), 'utf8')).toMatch(/evaluateDailyLossBudgetOnClose\(_dlbMode\)/);
   });
 });

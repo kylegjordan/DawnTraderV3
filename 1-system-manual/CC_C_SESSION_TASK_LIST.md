@@ -93,6 +93,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 166 | #692 — batch named at Step 1 | QUEUED | operator alert: no new trade has opened for a set time because the allowance is full, with manual close / prompt-exit options |
 | 176 | #296 — batch named at Step 1 | QUEUED | one rate-limited path for placing and cancelling orders |
 | 183a | B-MAKER-CANCEL-ON-DROP (`#1103`) | QUEUED | after row 183, with row 176 (#296): in live mode a dropped resting buy must be cancelled at Kraken, or it can fill into a position nothing tracks (… |
+| 183b | B-LOSS-WINDOW-OPERATOR-CLOSES (`#1154`) | QUEUED | after row 183a: the kill switch's loss count should leave out operator closes by label; interim no restart within 24 h of the paper reset |
 | 192 | B-KRAKEN-FEE-WATCH | QUEUED | notice when the exchange changes fees |
 | 194 | — batch named at Step 1 | QUEUED | after KRAKEN-LIVE-KEY: confirm live fees |
 

@@ -1,9 +1,8 @@
 /**
- * B-SIZING-DEC-RESTORE increment 3 — the two DATABASE legs of PAPER-RESET-3000, ON REAL POSTGRES.
+ * B-SIZING-DEC-RESTORE increment 3 — the DATABASE leg of PAPER-RESET-3000, ON REAL POSTGRES. (The size band's seed leg
+ * was removed with the band itself before deploy — Kyle 2026-10-06.)
  *
- * (1) The band's three rows exist after `db:migrate` with the values Kyle set — 140 / 150 / 145 — because the server
- *     refuses to boot without them (server/index.ts) and a CI database that lacked them would hide that refusal.
- * (2) `storage.setScoreboardEpoch` — the ONE named writer of the dashboard epoch — writes the instant it is given,
+ * `storage.setScoreboardEpoch` — the ONE named writer of the dashboard epoch — writes the instant it is given,
  *     stamps `updated_by`, updates the single row IN PLACE (the six-column primary key), reads back what it wrote, and
  *     refuses an invalid date or an anonymous writer. The row that was there before the test is restored after it.
  */
@@ -54,15 +53,6 @@ afterAll(async () => {
 describe('increment 3 — database legs', () => {
   it('in CI this runs against the test database (not skipped)', () => {
     if (IS_CI) expect(isTestDb && dbReachable).toBe(true);
-  });
-
-  it('the band migration seeded exactly low 38, high 41, target 39.77 (Kyle 2026-10-06, $820)', async (ctx) => {
-    if (!dbReachable || !isTestDb) ctx.skip();
-    const got = rows(await db.execute(sql`
-      SELECT constant_name, (value #>> '{}')::numeric AS v FROM module_constants
-       WHERE module_name = 'paper_size_band' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
-       ORDER BY constant_name`));
-    expect(got.map((r) => [r.constant_name, Number(r.v)])).toEqual([['high', 41], ['low', 38], ['target', 39.77]]);
   });
 
   it('setScoreboardEpoch writes the instant, stamps updated_by, and reads it back', async (ctx) => {

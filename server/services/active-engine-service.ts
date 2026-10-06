@@ -743,14 +743,6 @@ export async function startActiveEngine(
         
         // Phase 8.8.3-C5-1: Balance Reconciliation at session start
         await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'session_start');
-
-        // B-SIZING-DEC-RESTORE increment 3 (P4 / obj-14): the paper size band, once at engine start (the balance
-        // changes at a start: F2). Fire-and-forget; never blocks or throws into the start.
-        setImmediate(() => {
-          void import('./paper-size-band.js')
-            .then(({ checkPaperSizeBand }) => checkPaperSizeBand('engine_start'))
-            .catch((err: any) => console.error('[PaperSizeBand] start hook error:', err?.message ?? err));
-        });
         
         return {
           success: true,
