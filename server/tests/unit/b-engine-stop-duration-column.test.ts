@@ -130,13 +130,17 @@ describe('objective 3 — a failed session write no longer skips the teardown (C
   it('teardown runs to the end, the engine flag is cleared, the stop fails loudly with an alert', async () => {
     m.getRunningEngineSession.mockResolvedValue({ ...OLD_ROW, startedAt: new Date(Date.now() - 2 * DAY) });
     m.updateActiveEngineSession.mockRejectedValueOnce(new Error('value out of range for type integer'));
-    // The flag clear must have COMPLETED before the stop returns (in-queue, awaited) — the start-new flow calls
-    // startActiveEngine immediately after a stop and must read it off. The outer block only STARTS a clear
-    // (fire-and-forget), so a slow mock discriminates: completed-at-return is 1 with the fix, 0 without.
-    let flagClearsCompleted = 0;
-    m.setEngineActive.mockImplementation(() => new Promise<void>((r) => setTimeout(() => { flagClearsCompleted++; r(); }, 20)));
+    // The flag's DB write must have COMPLETED before the stop returns (in-queue, awaited; Langston condition 2:
+    // the plain updateSystemContext, not the broadcasting setEngineActive) — the start-new flow calls
+    // startActiveEngine immediately after a stop and must read it off. A slow mock discriminates.
+    let flagWritesCompleted = 0;
+    m.updateSystemContext.mockImplementation((mode: string, patch: any) => new Promise<void>((r) => setTimeout(() => {
+      if (mode === 'paper' && patch?.isEngineActive === false) flagWritesCompleted++;
+      r();
+    }, 20)));
     const res = await stopActiveEngine('u1');
-    expect(flagClearsCompleted).toBe(1);
+    expect(flagWritesCompleted).toBe(1);
+    expect(res.data?.flagCleared).toBe(true);
     await new Promise((r) => setTimeout(r, 40));
     // fails loudly, naming the session write
     expect(res.success).toBe(false);
@@ -150,7 +154,19 @@ describe('objective 3 — a failed session write no longer skips the teardown (C
     expect(m.setEngineActive).toHaveBeenCalledWith('u1', false, 'paper');
     // one breakage alert naming the session
     expect(m.addAlert).toHaveBeenCalledTimes(1);
-    expect(m.addAlert.mock.calls[0][0]).toMatchObject({ category: 'breakage', dedupe_key: 'engine-stop-session-write-failed-paper', metadata: { sessionId: 'paper_OLD' } });
+    expect(m.addAlert.mock.calls[0][0]).toMatchObject({ category: 'breakage', severity: 'warning', dedupe_key: 'engine-stop-session-write-failed-paper', metadata: { sessionId: 'paper_OLD', flagCleared: true } });
+  });
+
+  it('if the in-queue flag clear ALSO fails, the alert says so (critical) — the protection is conditional (Langston condition 3)', async () => {
+    m.getRunningEngineSession.mockResolvedValue({ ...OLD_ROW, startedAt: new Date(Date.now() - 2 * DAY) });
+    m.updateActiveEngineSession.mockRejectedValueOnce(new Error('value out of range for type integer'));
+    m.updateSystemContext.mockRejectedValue(new Error('db down'));
+    const res = await stopActiveEngine('u1');
+    expect(res.success).toBe(false);
+    expect(res.data?.flagCleared).toBe(false);
+    const alert = m.addAlert.mock.calls[0][0];
+    expect(alert).toMatchObject({ severity: 'critical', metadata: { flagCleared: false } });
+    expect(alert.body).toMatch(/ADOPT/);
   });
 });
 

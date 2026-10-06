@@ -1054,21 +1054,7 @@ export async function stopActiveEngine(
           console.log(`[41E-S][TIMING] DB session update completed in ${Date.now() - t1}ms`);
         } catch (writeErr: any) {
           sessionWriteError = writeErr?.message ?? String(writeErr);
-          console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] session ${existingSession.sessionId}: ${sessionWriteError} — teardown continues; the row stays 'running' and the next start closes it`);
-          try {
-            const { addAlert } = await import('./system-alerts.js');
-            await addAlert({
-              triggers_at: new Date(),
-              title: 'Engine stop could not record the session as stopped',
-              body: `The paper engine stopped (positions flattened, engine flag cleared) but writing session ${existingSession.sessionId} as stopped failed: ${sessionWriteError}. The row still reads 'running'; the next start closes it before creating a new session.`,
-              severity: 'warning',
-              category: 'breakage',
-              metadata: { sessionId: existingSession.sessionId },
-              dedupe_key: 'engine-stop-session-write-failed-paper',
-            });
-          } catch (alertErr: any) {
-            console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] alert write failed: ${alertErr?.message}`);
-          }
+          console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] session ${existingSession.sessionId}: ${sessionWriteError} — teardown continues; the row stays 'running' (alert raised below, after the in-queue flag clear)`);
         }
 
         // REB 2.8.5C: Reset 24h window and hourly scan history on ACTIVE → STOPPED
@@ -1105,11 +1091,33 @@ export async function stopActiveEngine(
           // Clear the engine flag INSIDE the queue job, before returning. The normal path clears it outside the
           // queue, asynchronously; here the row is still `running`, and the start-new flow (routes.ts B8.2 START)
           // calls startActiveEngine straight after this stop — it must see the flag OFF, or it would adopt the
-          // leftover row instead of closing it. The outer block clears it again (idempotent).
+          // leftover row instead of closing it. ONLY the DB write runs in-queue (Langston Step-4 condition 2): the
+          // broadcast fan-out stays outside the queue job (Phase 41F-B) — the queue has no per-job timeout, so a
+          // hung broadcast here would hold the start behind it. The outer setEngineActive still runs on
+          // shouldBroadcast:true and does the fan-out. CONDITIONAL (condition 3): if THIS write also fails, an
+          // immediate start reads the flag ON and adopts the leftover — so the alert states which happened.
+          let flagCleared = false;
           try {
-            await tradingStateSync.setEngineActive(userId, false, 'paper');
+            await storage.updateSystemContext('paper', { isEngineActive: false });
+            flagCleared = true;
           } catch (flagErr: any) {
             console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] in-queue flag clear failed: ${flagErr?.message}`);
+          }
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              title: 'Engine stop could not record the session as stopped',
+              body: flagCleared
+                ? `The paper engine stopped (positions flattened, engine flag cleared) but writing session ${existingSession.sessionId} as stopped failed: ${sessionWriteError}. The row still reads 'running'; the next start closes it before creating a new session.`
+                : `The paper engine stopped (positions flattened) but writing session ${existingSession.sessionId} as stopped failed (${sessionWriteError}) AND clearing the engine flag failed. The row reads 'running' and the flag reads ON, so a start will ADOPT this stale session instead of closing it — close the row by hand (status 'stopped') before starting.`,
+              severity: flagCleared ? 'warning' : 'critical',
+              category: 'breakage',
+              metadata: { sessionId: existingSession.sessionId, flagCleared },
+              dedupe_key: 'engine-stop-session-write-failed-paper',
+            });
+          } catch (alertErr: any) {
+            console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] alert write failed: ${alertErr?.message}`);
           }
           return {
             success: false,
@@ -1121,6 +1129,7 @@ export async function stopActiveEngine(
               runDurationMs: runDuration,
               flatten: flattenReport,
               sessionWriteFailed: true,
+              flagCleared,
             },
             shouldBroadcast: true, // still clear the engine flag below — the engine IS stopped
           };
