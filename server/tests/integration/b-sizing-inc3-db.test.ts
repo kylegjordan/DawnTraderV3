@@ -56,13 +56,13 @@ describe('increment 3 — database legs', () => {
     if (IS_CI) expect(isTestDb && dbReachable).toBe(true);
   });
 
-  it('the band migration seeded exactly low 140, high 150, target 145', async (ctx) => {
+  it('the band migration seeded exactly low 38, high 41, target 39.77 (Kyle 2026-10-06, $820)', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
     const got = rows(await db.execute(sql`
       SELECT constant_name, (value #>> '{}')::numeric AS v FROM module_constants
        WHERE module_name = 'paper_size_band' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
        ORDER BY constant_name`));
-    expect(got.map((r) => [r.constant_name, Number(r.v)])).toEqual([['high', 150], ['low', 140], ['target', 145]]);
+    expect(got.map((r) => [r.constant_name, Number(r.v)])).toEqual([['high', 41], ['low', 38], ['target', 39.77]]);
   });
 
   it('setScoreboardEpoch writes the instant, stamps updated_by, and reads it back', async (ctx) => {

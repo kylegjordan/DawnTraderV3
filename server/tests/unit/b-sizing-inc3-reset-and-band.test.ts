@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const h = vi.hoisted(() => ({
   constants: new Map<string, number>(),
-  balance: 3000,
+  balance: 820,
   guardrails: { maxTotalExposurePct: '100.00', maxPositionPercentPct: '5.00' } as Record<string, unknown> | null,
   anchorVersion: 7 as number | null,
   addAlert: vi.fn(async () => ({ id: 'alert-1' })),
@@ -76,25 +76,25 @@ vi.mock('../../storage.js', async (orig) => {
 import { evaluatePaperSizeBand, checkPaperSizeBand, readPaperSizeBand, bandDedupeKey } from '../../services/paper-size-band.js';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager.js';
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
-import { appendFileSync, copyFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { logOffsets, readLogsSince } from '../../scripts/lib/app-log-reader.js';
 
-const BAND = { low: 140, high: 150, target: 145 };
+const BAND = { low: 38, high: 41, target: 39.77 };
 const PROV = { producer: 'crypto_ws_book_walk' as const, source: 'kraken_ws', observedAtMs: 1 };
 
 function seedBand() {
-  h.constants.set('paper_size_band.low', 140);
-  h.constants.set('paper_size_band.high', 150);
-  h.constants.set('paper_size_band.target', 145);
+  h.constants.set('paper_size_band.low', 38);
+  h.constants.set('paper_size_band.high', 41);
+  h.constants.set('paper_size_band.target', 39.77);
   h.constants.set('active_sizing.max_position_buffer_factor', 0.97);
 }
 
 beforeEach(() => {
   h.constants.clear();
   seedBand();
-  h.balance = 3000;
+  h.balance = 820;
   h.guardrails = { maxTotalExposurePct: '100.00', maxPositionPercentPct: '5.00' };
   h.anchorVersion = 7;
   h.addAlert.mockClear();
@@ -107,38 +107,39 @@ beforeEach(() => {
 });
 
 describe('1 — evaluatePaperSizeBand (pure)', () => {
-  it('at the reset — $3,000 x 100% x 5% x 0.97 = $145.50 is IN the band', () => {
-    const r = evaluatePaperSizeBand({ balance: 3000, e: 100, p: 5, buffer: 0.97 }, BAND);
+  it('at the reset — $820 x 100% x 5% x 0.97 = $39.77 is IN the band (Kyle 2026-10-06)', () => {
+    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 0.97 }, BAND);
     expect(r.status).toBe('in');
-    expect(r.size).toBeCloseTo(145.5, 10);
-    // p* puts the normal size exactly on the target: 145 / (3000 x 1 x 0.97) x 100
-    expect(r.pStar).toBeCloseTo((145 / (3000 * 0.97)) * 100, 10);
+    expect(r.size).toBeCloseTo(39.77, 10);
+    // p* puts the normal size exactly on the target: 39.77 / (820 x 1 x 0.97) x 100 = 5
+    expect(r.pStar).toBeCloseTo((39.77 / (820 * 0.97)) * 100, 10);
+    expect(r.pStar).toBeCloseTo(5, 10);
   });
 
-  it('tripwire A — an UNDONE reset (the old $824.11 anchor at p=5) reads ~$39.97 and fires LOW', () => {
-    const r = evaluatePaperSizeBand({ balance: 824.11, e: 100, p: 5, buffer: 0.97 }, BAND);
-    expect(r.status).toBe('low');
-    expect(r.size).toBeCloseTo(39.97, 2);
-  });
-
-  it('the upper typo — 50 for 5 reads $1,455 and fires HIGH (nothing else refuses it)', () => {
-    const r = evaluatePaperSizeBand({ balance: 3000, e: 100, p: 50, buffer: 0.97 }, BAND);
+  it('a reset that left p at 20 — $820 at p=20 reads ~$159.08 and fires HIGH (replaces the retired tripwire A)', () => {
+    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 20, buffer: 0.97 }, BAND);
     expect(r.status).toBe('high');
-    expect(r.size).toBeCloseTo(1455, 10);
+    expect(r.size).toBeCloseTo(159.08, 2);
+  });
+
+  it('the upper typo — 50 for 5 reads ~$397.70 and fires HIGH (nothing else refuses it)', () => {
+    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 50, buffer: 0.97 }, BAND);
+    expect(r.status).toBe('high');
+    expect(r.size).toBeCloseTo(397.7, 10);
   });
 
   it('the band is closed at both ends — exactly low and exactly high are IN', () => {
     // size = balance x 1 x 0.05 x 1 with buffer 1, so the balance sets the size directly (x 20)
-    expect(evaluatePaperSizeBand({ balance: 2800, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $140
-    expect(evaluatePaperSizeBand({ balance: 3000, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $150
-    expect(evaluatePaperSizeBand({ balance: 2799.8, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('low');
-    expect(evaluatePaperSizeBand({ balance: 3000.2, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('high');
+    expect(evaluatePaperSizeBand({ balance: 760, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $38
+    expect(evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('in'); // $41
+    expect(evaluatePaperSizeBand({ balance: 759.8, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('low');
+    expect(evaluatePaperSizeBand({ balance: 820.2, e: 100, p: 5, buffer: 1 }, BAND).status).toBe('high');
   });
 
   it('TARGET IS NOT A BAND MEMBER — moving it changes p* and never the verdict (§16.4 C2)', () => {
-    const r = evaluatePaperSizeBand({ balance: 3000, e: 100, p: 5, buffer: 0.97 }, { ...BAND, target: 500 });
+    const r = evaluatePaperSizeBand({ balance: 820, e: 100, p: 5, buffer: 0.97 }, { ...BAND, target: 500 });
     expect(r.status).toBe('in');
-    expect(r.pStar).toBeCloseTo((500 / (3000 * 0.97)) * 100, 10);
+    expect(r.pStar).toBeCloseTo((500 / (820 * 0.97)) * 100, 10);
   });
 
   it('any non-finite or non-positive input is UNREADABLE — never guessed into a verdict', () => {
@@ -161,7 +162,7 @@ describe('2 — checkPaperSizeBand (the alert)', () => {
   });
 
   it('below the band raises ONE alert keyed to the anchor version and direction, naming p*', async () => {
-    h.balance = 824.11;
+    h.balance = 700.5; // ~$33.98 at p=5, below the $38 floor
     const r = await checkPaperSizeBand('engine_start');
     expect(r.status).toBe('low');
     expect(h.addAlert).toHaveBeenCalledTimes(1);
@@ -173,7 +174,7 @@ describe('2 — checkPaperSizeBand (the alert)', () => {
     expect(String(arg.title)).toContain(`set max position % to ${r.pStar.toFixed(2)}`);
     expect(String(arg.body)).toContain('Trigger: engine_start');
     // Langston condition 1: the suggestion is stamped with the instant and the balance it was computed at
-    expect(String(arg.body)).toMatch(/^As at \d{4}-\d{2}-\d{2}T[\d:.]+Z, balance \$824\.11:/);
+    expect(String(arg.body)).toMatch(/^As at \d{4}-\d{2}-\d{2}T[\d:.]+Z, balance \$700\.50:/);
   });
 
   it('above the band keys the OTHER direction — a low alert cannot silence a high one', async () => {
@@ -184,7 +185,7 @@ describe('2 — checkPaperSizeBand (the alert)', () => {
   });
 
   it('a NEW anchor version gets a NEW key — the reset re-arms the alarm', async () => {
-    h.balance = 824.11;
+    h.balance = 700.5; // ~$33.98 at p=5, below the $38 floor
     h.anchorVersion = 8;
     await checkPaperSizeBand('close');
     const arg = (h.addAlert.mock.calls[0] as unknown as [Record<string, unknown>])[0];
@@ -441,5 +442,18 @@ describe('6 — the app-log reader finds a line written at the NEW end (Langston
     const off = logOffsets([join(dir, 'missing.log')]);
     const { report } = readLogsSince(off);
     expect(report[0].error).toMatch(/unreadable/);
+  });
+});
+
+describe("6 — the reset script carries Kyle's 2026-10-05/06 numbers (#698, #618)", () => {
+  const SCRIPT = readFileSync(join(__dirname, '../../scripts/paper-reset-3000.ts'), 'utf8');
+  it('re-anchors to $820 (the real Kraken balance), not $3,000', () => {
+    expect(SCRIPT).toMatch(/^const TARGET_BALANCE = 820;$/m);
+    expect(SCRIPT).not.toMatch(/^const TARGET_BALANCE = 3000;$/m);
+  });
+  it('sets the paper kill switch to 8 in the SAME guardrails PUT as p = 5, and refuses to start unless the app reads 8 back', () => {
+    expect(SCRIPT).toMatch(/^const TARGET_KILL_PCT = 8;$/m);
+    expect(SCRIPT).toMatch(/PUT', '\/guardrails-v2\?mode=paper', \{ maxPositionPercentPct: TARGET_P, dailyLossKillSwitchPct: TARGET_KILL_PCT \}/);
+    expect(SCRIPT).toMatch(/if \(k !== TARGET_KILL_PCT\) refuse\(/);
   });
 });
