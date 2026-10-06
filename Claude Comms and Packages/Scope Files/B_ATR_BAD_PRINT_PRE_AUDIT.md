@@ -21,7 +21,7 @@ change-class: architecture · Step 2 of 11 · owner CC-B · scope `B_ATR_BAD_PRI
 
 *(Audit and plan follow below; this section is not edited after the first run.)*
 
-## 1. ROUND 1 RESULTS against §0, as pre-registered (run 2026-10-06 ~16:40Z; script `scratchpad/est.py`, to be copied into the evidence folder at Step 3)
+## 1. ROUND 1 RESULTS against §0, as pre-registered (run 2026-10-06 ~15:30Z; script `scratchpad/est.py`, to be copied into the evidence folder at Step 3)
 **Measured 149 of the 163** (14 of the earliest opens fall outside the 720 bars Kraken's 60-minute endpoint returns): **6 spiked, 143 control.** E1 scale factor (from the control): 1.135.
 
 | | criterion 1 — the 6 to ≤ 1.5× clean | criterion 2 — control median ≤ 2 % and p95 ≤ 10 % | criterion 3 — fixtures (a) suppress, (b)/(c) ≥ 80 % of E0's rise |
@@ -34,7 +34,7 @@ change-class: architecture · Step 2 of 11 · owner CC-B · scope `B_ATR_BAD_PRI
 
 **What the two E3 "misses" are (inspected after the run, criteria NOT changed):** both are genuine one-hour moves whose close moved and held — **LIGHTER `reverse_impulse`, opened 09-30 01:54Z: the 09-29 23:00Z bar `o 4.451 h 4.641 l 3.598 c 3.93` (close −12.0 % vs the prior close, next close 3.899)**; **GNOT `strong_bull_trend`, opened 09-23 22:37Z: the 21:00Z bar `o 0.07036 h 0.09899 l 0.06929 c 0.09499` (close +33.1 %)**. The suppressed ones are returned wicks — GBP/USD `h 1.70000` with the close back at 1.32399; LIGHTER (open) `l 0.110` with the close at 3.728. ⇒ **§0's spike definition (one bar's share of the true-range sum) captures genuine single-bar moves as well as off-market prints, so criteria 1 and 3 conflict on exactly these two rows: criterion 3 says a moved-and-held close must pass through; criterion 1 counts them as spikes to suppress.** That conflict is mine, in the pre-registration, and is put to Langston as found — the remedy is a ruling, not a quiet re-definition.
 
-## 1b. ROUND-1 RE-SCORE PREDICATE — Langston ruling (c), 2026-10-06 ~16:00Z. Registered and committed BEFORE re-scoring. §0's criterion text is unchanged; only crit1's MEMBERSHIP predicate is registered here, and no estimator is re-run.
+## 1b. ROUND-1 RE-SCORE PREDICATE — Langston ruling (c), 2026-10-06. Registered and committed BEFORE re-scoring. §0's criterion text is unchanged; only crit1's MEMBERSHIP predicate is registered here, and no estimator is re-run.
 **A labelling instrument for grading this study only.** It reads the NEXT bar's close, so it is never a term in any estimator (E3 stays next-bar-free).
 For every one of the **149** measurable opens, take its **largest-true-range bar** among the 14 and compute:
 - **Excursion** = the bar's extreme on the side of its largest true-range leg, minus the prior close (`high − prevClose` if `|high − prevClose| ≥ |low − prevClose|`, else `low − prevClose`).
@@ -44,7 +44,7 @@ For every one of the **149** measurable opens, take its **largest-true-range bar
 **Classes:** **OFF-MARKET** = material spike AND S− AND P−. **GENUINE** = material spike AND S+ AND P+. **UNDETERMINED** = material spike with any other leg combination, **including the disagreement cells S−/P+ and S+/P−** (a bad print with a crowd, or a quiet sustained move) — **reported on its own line, never inside a sum.** **NO SPIKE** = not material.
 **Populations for the re-score:** criterion 1's population = the **OFF-MARKET** opens; criterion 2's control = **NO SPIKE** ∪ **GENUINE**; **UNDETERMINED** opens graded by neither, listed by name. Reported: the class count over all 149, how many of round 1's 143 controls and 6 spiked move class, and — per Langston — **if OFF-MARKET ∪ GENUINE amounts to exactly GNOT and LIGHTER 09-30 01:54Z moving out and nothing else, the predicate is a carve-out and is rejected.** If E3's two round-1 misses land UNDETERMINED, the result is **INCONCLUSIVE and E3 does not ship.** Every crit2 figure states its denominator; the 14 opens outside Kraken's 720-bar window are instrument-blind, not clean. AKE/USD (E3's 21.60 % control) is checked against this predicate before crit2 is published.
 
-## 1c. RE-SCORE RESULTS under §1b (run 2026-10-06 ~16:20Z, `scratchpad/rescore.py`; round 1's estimator values unchanged, only the grouping)
+## 1c. RE-SCORE RESULTS under §1b (run 2026-10-06 ~15:40Z, `scratchpad/rescore.py`; round 1's estimator values unchanged, only the grouping)
 **All 149:** NO SPIKE 110 · GENUINE 18 · UNDETERMINED 20 · OFF-MARKET 1. **Round-1 spiked (6):** UNDETERMINED 3 · GENUINE 2 (GNOT 09-23, LIGHTER 09-30 01:54Z) · OFF-MARKET 1 (GBP/USD). **Round-1 controls (143):** NO SPIKE 110 · GENUINE 16 · UNDETERMINED 17.
 **Carve-out test (Langston condition 2): NOT a carve-out** — GENUINE holds 18 opens (VVV, SPX, UNI, AERO, ENA, SUI, DRV, GNOT, NEAR, ONDO, WLD ×2, FIL, FOLD, SHX, LIGHTER 09-30 01:54Z, KNTQ, ZEC 10-02), 16 of them round-1 controls; E3 leaves every GENUINE row at 1.16-1.65× clean (unchanged from E0).
 **Criterion 1 (OFF-MARKET, E3 ≤ 1.5× clean): PASS — but on n = 1:** GBP/USD 09-23 20:00Z (S−/P−, retention −0.00/−0.00, participation 1.0×) 13.36× → **1.15×**.
@@ -54,7 +54,7 @@ For every one of the **149** measurable opens, take its **largest-true-range bar
 
 **Timestamp convention (Langston r-c item 6, folded in):** in §1-§1c an open is named by its **OPEN time** (e.g. LIGHTER `reverse_impulse` opened 09-30 01:54Z) and a candle by its **BAR time**, always labelled "bar" (e.g. GBP/USD's spike bar 09-23 20:00Z; the trade opened 21:12Z).
 
-## 1d. ESTIMATOR RULING — Langston, 2026-10-06 ~16:00Z: **E3 SHIPS; not INCONCLUSIVE.**
+## 1d. ESTIMATOR RULING — Langston, 2026-10-06: **E3 SHIPS; not INCONCLUSIVE.**
 - Re-derived by him: §0-§1b byte-identical at `0c4c9adf1` and `206fa26a5` (the predicate was registered before the re-score).
 - **Why n = 1 does not decide it:** criterion 1 discriminates nothing — E1 and E2 fail criteria 2 and 3 at n = 143 and on fixtures, independent of criterion 1; the only surviving alternative to E3 is E0, the defect itself.
 - **What carries E3 is the harm arm, and it is powered:** criterion 2 n = 128, max 1.34 %; 18 GENUINE rows unchanged from E0 at 1.16-1.65×; fixtures (b)/(c) 100 %. By construction a clip that never touches the close cannot attenuate a close that moved and held.
