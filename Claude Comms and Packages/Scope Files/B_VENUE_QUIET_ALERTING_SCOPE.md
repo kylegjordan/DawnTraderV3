@@ -1,4 +1,4 @@
-# B-VENUE-QUIET-ALERTING — SCOPE (Step 1, r1)
+# B-VENUE-QUIET-ALERTING — SCOPE (Step 1, r1a)
 
 change-class: non_architecture
 
@@ -34,3 +34,10 @@ The freshness standard, the ceilings, entries, exits, any trading behaviour (Kyl
 1. Fold `#638` (row 166a) here — it is the same alert's clear path.
 2. Objective 2's default-to-page when the cohort cannot discriminate.
 3. Objective 5 — remove the 40 default in this batch (it is the same function).
+
+## 6. Added while at Step 1 (r1a, 2026-10-07 — §9.4 disposition 2, items added to this batch; Langston's triage of the 2026-10-06 after-hours rows)
+1. **ALERT-REACH GAP — the longest staleness is the least reported.** `_recordPriceSkip` mints on strict `streak === threshold`, so one unbroken streak alerts exactly once, and a resolved row re-arms only on a NEW streak. Measured by Langston 2026-10-06: `HUT/USD`'s position row last stamped 20:48:32Z, its only two mints (20:16Z, 20:17Z) both resolved, nothing since while the mark stayed stale — 2 h 46 m, zero rows. ⇒ **Objective 1's standing per-class record must carry each skipping position's current staleness (not only a count), and objective 3's escalation fires on DURATION, not on the count crossing the threshold once.** *Verify:* a unit test where one streak runs far past the threshold with its row resolved mid-streak still surfaces in the standing record and escalates on duration.
+2. **HYPOTHESIS, labelled (rule 29(c), not measured): the ceiling may amplify the volume.** PDD's stated ceiling moved 128 s → 78 s between the 21:54Z and 23:08Z rows. If the σ-derived ceiling (`P19-B8.5e`, `#548`) tightens as the quiet-hours sample narrows, the ceiling itself raises the mint rate. **Step 2 reads the ceiling's input window before any notify cut is sized** — and if it is so, it is a finding for the ceiling's owner, not a threshold change here (the freshness standard does not move, Kyle 09-03).
+3. **Re-dispatching a resolved row is notify churn.** `price-skip-paper-PDD/USD` minted 7 times on 2026-10-06 and a row Langston had already resolved (`d5f259c9`, 21:59Z) was dispatched again. Step 2 traces where a resolved row is re-routed and whether the standing record removes it.
+4. **Recorded rulings (Langston, row 3a Step-1 r1, 2026-10-07):** `#638` folds here (Ask 3 APPROVED). **Class fix:** before this batch closes, grep for every `getActive*AlertId()` recovery predicate whose setter is only ever called with null, and state what the grep returned (row 3a removes the feed-health one).
+5. **Constraints that travel with it (Langston, 2026-10-06):** keep the EMIT, cut only the NOTIFY; do not ack these rows while this batch is in flight (an acked same-key row blocks every future occurrence, `system-alerts.ts` dedupe on non-resolved state); the exit freshness standard is unchanged round the clock.
