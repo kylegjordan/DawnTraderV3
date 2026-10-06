@@ -9,7 +9,7 @@ Every citation below was read at `origin/migration/aws-supabase` (`cd311fcc5`) u
 | check | result |
 |---|---|
 | **SIM / System Manual** | No component changes. Read per issue only, to tell whether the thing an issue describes still exists. Neither doc changes in this batch. |
-| **Files written** | `1-system-manual/RUNNING_ISSUES.md` (60 entries, in place), `1-system-manual/SPRINT_TO_LIVE_PLAN.md` (items added to existing rows; no new row), `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` (two after-live lines, §3 below), `1-system-manual/POST_AUDIT_ROADMAP.md` (none — `#174` is already on roadmap 16.8). |
+| **Files written** | (+ §5 if accepted: `scripts/governance-checker/census.mjs`, `census.test.mjs`) `1-system-manual/RUNNING_ISSUES.md` (60 entries, in place), `1-system-manual/SPRINT_TO_LIVE_PLAN.md` (items added to existing rows; no new row), `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` (two after-live lines, §3 below), `1-system-manual/POST_AUDIT_ROADMAP.md` (none — `#174` is already on roadmap 16.8). |
 | **The grader** | `scripts/governance-checker/census.mjs` — `ownerOfIssue` and `placement`, unchanged. OBJ-2 is graded by running them over the ledger and plan at the close commit. |
 | **Ledger search (§9.5(b-ii))** | Done per issue: the entry's whole text, `git log -S "#<n>"`, and the batch records it names. The citations column is the result. |
 | **Doc set for the declared class** (`config.mjs` `CLASS_DOCSET.non_architecture`) | scope ✅ present · pre-audit = this file · completion report, BATCH_CATALOG, PHASE_HISTORY at Step 10. |
@@ -126,3 +126,12 @@ Owner groups per scope §2: prices/exit price path → CC-C; signals, strategies
 2. **`#331` on row 157.** A regime-flip exit is a decision before it is a build. Is an exit-path row the right place, or does it belong with Kyle as a decision item?
 3. **`#232` CLOSED on the site comment.** The value's intent is written at the constant; nobody re-confirmed it after active paper turned on.
 4. **Items to other sessions' rows** (10 CC-B, 3 Infra, 1 CC-C) — handed over by number; each owner may refuse.
+
+## 5. FOUND WHILE BUILDING THE STEP-3 CHECK — THE CENSUS CANNOT SEE 9 PLAN ROWS (§9.4 disposition 1 proposed)
+
+**Symptom, measured.** `census.mjs` `parsePlan` takes a §4 line as a row only when its first cell matches `/^\d+[a-z]?$/`. At `a6ff8f316` the plan's §4 holds **278** row ids; `parsePlan` returns **269**. The 9 it drops are all valid 7-cell rows: `2a0`, `2a0b`, `2a0c`, `2a0d`, `2a1`, `2a1a`, `2a2`, `3a1` (CC-B) and `4a2` (CC-C). Control: `1e` and `144a` parse (`ids.has('1e') === true`).
+**Reach.** Everything that reads `plan.s4`: placement (an issue on one of these rows reads as unplaced), the §6 recount (8 CC-B rows and 1 CC-C row uncounted), lists (d), (e), (f). `AFTER_ROW` has the same narrow shape (`after row 2a0b` would not resolve). The plan's own §6 rule says *"a table line of exactly 7 cells whose first cell is a row id"* — the code is narrower than the rule it implements.
+**History.** The regex is from `fc2f88112` (B-PLAN-CURRENCY-CHECK, 2026-09-30, mine); the first row id it rejects (`2a0`) was added 2026-10-06 (`0c36dde0c`). So it has been wrong for one day, and only since the plan started using deeper ids.
+**Why this batch depends on it.** `#214` and `#404` are placed on row `2a0b` (B-ENGINE-HEARTBEAT-DEAD-PATHS). OBJ-2 cannot pass for them while the grader cannot see that row.
+**Proposed fold-in (one leg, code):** widen both patterns to `\d+[a-z0-9]*`; add tests to `census.test.mjs` (a `2a0b` row parses, places an issue by number, counts in the recount, resolves an `after row 2a0b`); recount §6 in the same commit (the recount moves CC-B +8, CC-C +1, so the table must move with it or the §6 alert fires). The class stays `non_architecture` (governance tooling, no engine path). The live checker picks it up at the next deploy — not this batch's deploy to make, and none is needed for OBJ-2, which is graded by a dry run at the close commit.
+**If you would rather it be its own hotfix:** it then lands before this batch's Step 3, and `#214`/`#404` wait for it.
