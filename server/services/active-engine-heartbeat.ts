@@ -1,325 +1,70 @@
 /**
- * Paper Simulation Heartbeat & Recovery Service
- * Phase 23 - Simulation Heartbeat & Recovery
- * 
- * Provides:
- * 1. Heartbeat scheduler (every 30s) to monitor running simulations
- * 2. Recovery logic on application startup
- * 3. Auto-resume functionality for interrupted sessions
- * 4. State consistency checks
+ * Active-engine heartbeat — the 30-second orphan-manager backstop.
+ *
+ * ★ NOT THE CENTRAL CLOCK. The Central Clock (`central-clock.ts`, the locked 1-second tick that the
+ *   FX5 scanner, the xStock scanner, RTB refresh, the TCL watchdog and the market-event scheduler
+ *   subscribe to) never references this module and this module never references it. This is its own
+ *   `setInterval` (B-ENGINE-HEARTBEAT-DEAD-PATHS pre-audit §1b).
+ *
+ * WHAT IT DOES, all of it: every 30 s, if a paper engine manager is mapped in memory but no `running`
+ * session row exists, it STOPS that manager and clears it — through `healOrphanManagerQueued`, so it is
+ * serialized with every start and stop on the paper operation queue and re-reads the row inside the job.
+ *
+ * WHAT WAS REMOVED (B-ENGINE-HEARTBEAT-DEAD-PATHS, `#1158` merged into `#521`, 2026-10-06 — archived at
+ * `1-system-manual/_archive/deleted-code/active-engine-heartbeat.pre-B-ENGINE-HEARTBEAT-DEAD-PATHS.ts.removed`):
+ *   - `checkSession` and `recoverSessions` (+ the boot `recoverSessions(AUTO_RESUME_SIMULATIONS)` call):
+ *     dead three ways — they gated on `session.userId` (column dropped in Phase 2C), wrote with the
+ *     `paper_x` id where storage keys by row UUID, and started the engine with no starting balance. The
+ *     boot call was also a SECOND boot-time path beside `resumeActiveEngines` (the one boot owner since
+ *     `#520`); deleting it removes that concurrency hazard by construction — do not re-add it.
+ *   - the per-cycle `clusterBus.publish('task_completed', { taskType: 'simulation_heartbeat' })`: 2,880
+ *     `cluster_bus_event` rows a day, ~99.99 % of that table, read only by the deleted auto-test harness.
+ *   - `getStatus()`: read only by the harness.
+ *
+ * LIVENESS BOUND (stated, not instrumented — Langston Step 2): a stalled heartbeat costs only a delayed
+ * orphan clean-up. The paths that matter clear orphans themselves: the stop path (awaits stop, then clears),
+ * the boot reset (`resetActiveEngineService`: stops, then clears) and the start path (`stopAndClearOrphanManager`).
+ * Engine-stopped detection lives out of process (B-STAGING-LIVENESS-WATCH).
  */
 
-import { storage } from '../storage';
-import { clusterBus } from './cluster-bus';
+import { healOrphanManagerQueued } from './active-engine-service';
 
 class ActiveEngineHeartbeatService {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private readonly HEARTBEAT_INTERVAL_MS = 30 * 1000; // 30 seconds
   private isRunning = false;
 
-  /**
-   * Start the heartbeat scheduler
-   */
+  /** Start the 30-second backstop. */
   start(): void {
     if (this.isRunning) {
       console.log('[ActiveEngineHeartbeat] Already running');
       return;
     }
-
-    console.log('[ActiveEngineHeartbeat] Starting heartbeat scheduler (interval: 30s)');
-    
+    console.log('[ActiveEngineHeartbeat] Starting orphan-manager backstop (interval: 30s)');
     this.isRunning = true;
-    
-    // Run first check immediately
-    this.runHeartbeatCheck();
-    
-    // Then schedule subsequent checks
+    void this.runHeartbeatCheck();
     this.heartbeatInterval = setInterval(() => {
-      this.runHeartbeatCheck();
+      void this.runHeartbeatCheck();
     }, this.HEARTBEAT_INTERVAL_MS);
   }
 
-  /**
-   * Stop the heartbeat scheduler
-   */
+  /** Stop the backstop. */
   stop(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-    
     this.isRunning = false;
-    console.log('[ActiveEngineHeartbeat] Stopped heartbeat scheduler');
+    console.log('[ActiveEngineHeartbeat] Stopped orphan-manager backstop');
   }
 
-  /**
-   * Run heartbeat check on all active sessions
-   * Phase 27.F.9: Added reconciliation guard to heal state mismatches
-   */
-  private async runHeartbeatCheck(): Promise<void> {
+  /** One cycle: the queued orphan heal. Silent unless it acts (the helper logs when it does). */
+  async runHeartbeatCheck(): Promise<void> {
     try {
-      console.log('[ActiveEngineHeartbeat] Running heartbeat check...');
-      
-      // Phase 27.F.9: Reconciliation guard - heal any mismatch automatically
-      const { getGlobalActiveEngineManager, clearGlobalActiveEngineManager } = await import('./active-engine-service');
-      const activeSessions = await storage.getRunningEngineSessions();
-      const globalManager = getGlobalActiveEngineManager();
-      
-      // Heal orphaned global manager (manager exists but no DB session)
-      if (globalManager && activeSessions.length === 0) {
-        console.warn('[ActiveEngineHeartbeat] Orphaned global manager detected – cleaning up');
-        clearGlobalActiveEngineManager();
-      }
-      
-      console.log(`[ActiveEngineHeartbeat] Found ${activeSessions.length} active session(s)`);
-      
-      if (activeSessions.length === 0) {
-        return;
-      }
-
-      // Check each session (Phase 27.F.13.C.D: Added null-safety guards)
-      for (const session of activeSessions) {
-        if (!session) {
-          console.warn('[ActiveEngineHeartbeat] Session undefined — skipping check');
-          continue;
-        }
-        await this.checkSession(session);
-      }
-
-      // Emit heartbeat event to cluster bus
-      await clusterBus.publish('task_completed', {
-        taskType: 'simulation_heartbeat',
-        activeSessions: activeSessions.length,
-        timestamp: new Date().toISOString(),
-        success: true,
-      }, 'active_engine_heartbeat');
-
+      await healOrphanManagerQueued();
     } catch (error: any) {
-      console.error('[ActiveEngineHeartbeat] Error during heartbeat check:', error);
-      
-      // Emit error event
-      try {
-        await clusterBus.publish('health_alert', {
-          alert: 'active_engine_heartbeat_failure',
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        }, 'active_engine_heartbeat');
-      } catch (busError) {
-        console.error('[ActiveEngineHeartbeat] Failed to emit health alert:', busError);
-      }
+      console.error('[ActiveEngineHeartbeat] orphan heal failed:', error?.message ?? error);
     }
-  }
-
-  /**
-   * Check individual session health and expiration
-   * Phase 27.4.2: Added cross-verification with system_context
-   * Phase 27.F.13.C.D: Added null-safety guards
-   */
-  private async checkSession(session: any): Promise<void> {
-    try {
-      // Phase 27.F.13.C.D: Null-safety guard
-      if (!session) {
-        console.warn('[ActiveEngineHeartbeat] Session undefined — skipping check');
-        return;
-      }
-      
-      const sessionId = session.id;
-      const userId = session.userId;
-      
-      if (!sessionId || !userId) {
-        console.warn('[ActiveEngineHeartbeat] Session missing required fields — skipping check');
-        return;
-      }
-      
-      console.log(`[ActiveEngineHeartbeat] Checking session ${sessionId} for user ${userId}`);
-
-      // Phase 27.4.2: Cross-verify against system_context (single source of truth)
-      // Phase 27.F.13.O: Use mode for global context
-      const mode = 'paper';
-      const systemContext = await storage.getSystemContext(mode);
-      
-      if (systemContext) {
-        // Check if trading mode is set to paper
-        if (systemContext.tradingMode !== 'paper') {
-          console.warn(`[ActiveEngineHeartbeat] ⚠️ Mode mismatch for session ${sessionId}: system_context=${systemContext.tradingMode}, expected=paper`);
-          
-          // Emit warning
-          await clusterBus.publish('health_alert', {
-            alert: 'active_engine_mode_mismatch',
-            sessionId,
-            userId,
-            systemContextMode: systemContext.tradingMode,
-            expectedMode: 'paper',
-            timestamp: new Date().toISOString(),
-          }, 'active_engine_heartbeat');
-          
-          // Auto-correct: Stop the simulation as it's running in wrong mode
-          console.log(`[ActiveEngineHeartbeat] Auto-stopping session ${sessionId} due to mode mismatch`);
-          await storage.updateActiveEngineSession(sessionId, {
-            status: 'stopped',
-            stoppedAt: new Date(),
-          });
-          
-          return; // Skip further checks
-        }
-        
-        console.log(`[ActiveEngineHeartbeat] Mode verification passed: ${systemContext.tradingMode}`);
-      }
-      
-      // Verify in-memory manager exists and check consistency
-      const { getActiveEngineStatus } = await import('./active-engine-service');
-      const status = await getActiveEngineStatus(userId);
-      
-      // Phase 27.F.13.C.D: Null-safety guard for reconciliation
-      if (!status || !status.reconciliation) {
-        console.warn(`[ActiveEngineHeartbeat] Session ${sessionId} status incomplete — skipping consistency check`);
-        return;
-      }
-      
-      if (!status.reconciliation.isConsistent) {
-        console.warn(`[ActiveEngineHeartbeat] ⚠️ Session ${sessionId} is in inconsistent state:`, status.reconciliation);
-        
-        // Emit warning
-        await clusterBus.publish('health_alert', {
-          alert: 'active_engine_state_inconsistent',
-          sessionId,
-          userId,
-          reconciliation: status.reconciliation,
-          timestamp: new Date().toISOString(),
-        }, 'active_engine_heartbeat');
-      } else {
-        console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} healthy`);
-      }
-
-    } catch (error: any) {
-      console.error(`[ActiveEngineHeartbeat] Error checking session:`, error);
-    }
-  }
-
-  /**
-   * Recovery logic - run on application startup
-   * Restores or cleans up interrupted sessions
-   */
-  async recoverSessions(autoResume: boolean = false): Promise<void> {
-    try {
-      console.log('[ActiveEngineHeartbeat] Starting session recovery...');
-      
-      // Get all sessions marked as running in database
-      const sessions = await storage.getRunningEngineSessions();
-      
-      if (sessions.length === 0) {
-        console.log('[ActiveEngineHeartbeat] No sessions to recover');
-        return;
-      }
-
-      console.log(`[ActiveEngineHeartbeat] Found ${sessions.length} session(s) to recover`);
-
-      for (const session of sessions) {
-        // Phase 27.F.13.C.D: Null-safety guard
-        if (!session) {
-          console.warn('[ActiveEngineHeartbeat] Session undefined — skipping recovery');
-          continue;
-        }
-        await this.recoverSession(session, autoResume);
-      }
-
-      console.log('[ActiveEngineHeartbeat] ✅ Session recovery complete');
-
-    } catch (error: any) {
-      console.error('[ActiveEngineHeartbeat] Error during session recovery:', error);
-    }
-  }
-
-  /**
-   * Recover individual session
-   * Phase 27.F.13.C.D: Added null-safety guards
-   */
-  private async recoverSession(session: any, autoResume: boolean): Promise<void> {
-    try {
-      // Phase 27.F.13.C.D: Null-safety guard
-      if (!session) {
-        console.warn('[ActiveEngineHeartbeat] Session undefined — skipping recovery');
-        return;
-      }
-      
-      const sessionId = session.id;
-      const userId = session.userId;
-      
-      if (!sessionId || !userId) {
-        console.warn('[ActiveEngineHeartbeat] Session missing required fields — skipping recovery');
-        return;
-      }
-      
-      const startedAt = new Date(session.startedAt);
-      
-      console.log(`[ActiveEngineHeartbeat] Recovering session ${sessionId} (user: ${userId}, started: ${startedAt.toISOString()})`);
-
-      // Check if session should still be running
-      // For now, we don't have a duration limit, so check if it was interrupted
-      
-      if (autoResume) {
-        // Auto-resume: Restart the in-memory manager
-        console.log(`[ActiveEngineHeartbeat] Auto-resuming session ${sessionId}...`);
-        
-        const { startActiveEngine } = await import('./active-engine-service');
-        
-        // This will check if already running and create manager if needed
-        const result = await startActiveEngine(userId);
-        
-        if (result.success) {
-          console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} auto-resumed successfully`);
-          
-          // Emit recovery event
-          await clusterBus.publish('task_completed', {
-            taskType: 'simulation_recovery',
-            action: 'auto_resumed',
-            sessionId,
-            userId,
-            timestamp: new Date().toISOString(),
-            success: true,
-          }, 'active_engine_heartbeat');
-        } else {
-          console.error(`[ActiveEngineHeartbeat] Failed to auto-resume session ${sessionId}:`, result.message);
-        }
-        
-      } else {
-        // Clean stop: Mark as stopped since server restarted
-        console.log(`[ActiveEngineHeartbeat] Cleanly stopping interrupted session ${sessionId}...`);
-        
-        await storage.updateActiveEngineSession(sessionId, {
-          status: 'stopped',
-          stoppedAt: new Date(),
-        });
-        
-        console.log(`[ActiveEngineHeartbeat] ✅ Session ${sessionId} marked as stopped`);
-        
-        // Emit recovery event
-        await clusterBus.publish('task_completed', {
-          taskType: 'simulation_recovery',
-          action: 'cleanly_stopped',
-          sessionId,
-          userId,
-          timestamp: new Date().toISOString(),
-          success: true,
-        }, 'active_engine_heartbeat');
-      }
-
-    } catch (error: any) {
-      console.error(`[ActiveEngineHeartbeat] Error recovering session:`, error);
-    }
-  }
-
-  /**
-   * Get current heartbeat status
-   */
-  getStatus(): {
-    isRunning: boolean;
-    intervalMs: number;
-  } {
-    return {
-      isRunning: this.isRunning,
-      intervalMs: this.HEARTBEAT_INTERVAL_MS,
-    };
   }
 }
 

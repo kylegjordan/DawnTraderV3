@@ -73,30 +73,9 @@ export class ClusterBus extends EventEmitter {
     this.off(topic, handler);
   }
 
-  /**
-   * Get recent events from database (for audit/debug)
-   */
-  async getRecentEvents(
-    topic?: BusEventTopic,
-    limit: number = 100
-  ): Promise<ClusterBusEvent[]> {
-    const query = topic
-      ? db.select().from(clusterBusEvent).where(eq(clusterBusEvent.topic, topic))
-      : db.select().from(clusterBusEvent);
-
-    return await query.orderBy(desc(clusterBusEvent.createdAt)).limit(limit);
-  }
-
-  /**
-   * Clean up old events (retention policy)
-   */
-  async cleanup(olderThanHours: number = 24): Promise<number> {
-    const result = await db
-      .delete(clusterBusEvent)
-      .where(sql`${clusterBusEvent.createdAt} < NOW() - INTERVAL '${sql.raw(olderThanHours.toString())} hours'`);
-
-    return result.rowCount || 0;
-  }
+  // B-ENGINE-HEARTBEAT-DEAD-PATHS (rule 18): getRecentEvents() and cleanup(olderThanHours) DELETED — zero callers
+  // each. cluster_bus_event retention is owned by b75-retention-sweep.ts (PLAIN_RETENTION_TABLES,
+  // data_lifecycle / cluster_bus_event.hot_retention_days) — one retention path, not two.
 }
 
 // Singleton instance

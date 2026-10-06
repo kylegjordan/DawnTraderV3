@@ -1479,18 +1479,13 @@ app.use((req, res, next) => {
       console.error('[HealthReportScheduler] ⚠️ Startup failed:', error);
     }
 
-    // Phase 23: Paper Simulation Heartbeat & Recovery
+    // Active-engine heartbeat: the 30-second orphan-manager backstop only. B-ENGINE-HEARTBEAT-DEAD-PATHS
+    // (#1158/#521): its boot-time recoverSessions(AUTO_RESUME_SIMULATIONS) is DELETED — it could never act, and
+    // it was a second boot path beside resumeActiveEngines (the sole boot owner since #520). Do not re-add it.
     try {
       const { activeEngineHeartbeat } = await import('./services/active-engine-heartbeat');
-      
-      // Run recovery logic on startup
-      // Set autoResume to false for now - can be made configurable via env variable
-      const autoResume = process.env.AUTO_RESUME_SIMULATIONS === 'true';
-      await activeEngineHeartbeat.recoverSessions(autoResume);
-      
-      // Start heartbeat monitoring
       activeEngineHeartbeat.start();
-      console.log('[ActiveEngineHeartbeat] ✅ Recovery complete and heartbeat started');
+      console.log('[ActiveEngineHeartbeat] ✅ orphan-manager backstop started');
     } catch (error) {
       console.error('[ActiveEngineHeartbeat] ⚠️ Startup failed:', error);
     }

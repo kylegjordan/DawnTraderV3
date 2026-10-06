@@ -5533,39 +5533,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 24: Automatic Test Harness API
-  apiRouter.post('/auto-test/run', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const userId = req.user!.id;
-      
-      console.log('[AutoTest] Running automatic test harness via API...');
-      
-      const { runAutoTests } = await import('./services/auto_test_harness.js');
-      const { markdown, json } = await runAutoTests(userId);
-      
-      // Save reports to filesystem
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      
-      // Ensure reports directory exists
-      const reportsDir = path.join(process.cwd(), 'reports');
-      await fs.mkdir(reportsDir, { recursive: true });
-      
-      await fs.writeFile(path.join(reportsDir, 'auto_test_results.md'), markdown);
-      await fs.writeFile(path.join(reportsDir, 'auto_test_results.json'), JSON.stringify(json, null, 2));
-      
-      console.log('[AutoTest] Reports generated successfully');
-      
-      res.json({
-        success: true,
-        results: json,
-        markdown,
-      });
-    } catch (error: any) {
-      console.error('[AutoTest] Error running tests:', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
+  // B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158, rule 18): POST /auto-test/run and auto_test_harness.ts DELETED —
+  // zero client callers, already broken (no-balance start, a non-existent `reconciliation` field), and the only
+  // reader of the heartbeat's bus rows. Archived under 1-system-manual/_archive/deleted-code/.
 
   // Phase 26.1: Auto-Tuning Engine API
   apiRouter.get('/tuning/events', authenticateToken, async (req: AuthenticatedRequest, res) => {

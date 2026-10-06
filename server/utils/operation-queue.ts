@@ -17,7 +17,7 @@
 export interface QueueJobMeta {
   userId: string;
   mode: 'paper' | 'live';
-  action: 'start' | 'stop' | 'force-stop';
+  action: 'start' | 'stop' | 'force-stop' | 'orphan-heal'; // orphan-heal: B-ENGINE-HEARTBEAT-DEAD-PATHS
   enqueuedAt: number;
 }
 

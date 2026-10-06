@@ -389,7 +389,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 |---|---|---|
 | Two `declare global` vars | `paper-sim-service.ts:248-249` | `var globalPaperSimOperationLock: Promise<void> \| null` + `var globalPaperSimBusyFlag: boolean`. |
 | Two module timestamps | `paper-sim-service.ts:36-37` (+ 2 threshold consts `:38-39`) | `busyFlagSetAt` / `operationLockSetAt` (and `BUSY_FLAG_STALE_THRESHOLD_MS` / `OPERATION_LOCK_STALE_THRESHOLD_MS`) — only ever set to `null`. |
-| `clearStaleBusyFlag` flag/lock branches | `paper-sim-service.ts:42-61` | The stale-flag and stale-lock auto-clear branches. The function's orphaned-manager cleanup (the part that does real work) was KEPT. |
+| `clearStaleBusyFlag` flag/lock branches | `paper-sim-service.ts:42-61` | The stale-flag and stale-lock auto-clear branches. The function's orphaned-manager cleanup was KEPT here — ⚠️ **CORRECTED 2026-10-06 (B-ENGINE-HEARTBEAT-DEAD-PATHS, Langston): it did no work — `clearStaleBusyFlag` had ZERO call sites, and it cleared without stopping. Deleted; see that entry.** |
 | `resetPaperSimService` lock clear | `paper-sim-service.ts:1126-1129` | `if (global.globalPaperSimOperationLock) { … = null }`. |
 | Route catch/finally clears | `routes.ts` paper-sim start (init-guard `:5745-5746`, catch `:11236`, finally busy-flag `:11238-11242`) + stop catch (`:11266`) | Five `(global as any).globalPaperSim{OperationLock,BusyFlag} = null/false` dead writes. |
 | Reset-service clears | `paper-session-reset.ts:296-297` | `(global as any).globalPaperSimOperationLock = null; …BusyFlag = false`. |
@@ -1168,3 +1168,19 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS / STATE-WRITE CENSUS:** `checkConfidenceDrift` appended to `logs/telemetry/confidence_drift.log` — never called, so no reader depends on new lines. The others write nothing. Module `expectancy_tuning` (3 rows) loses its only reader; its boot prefetch goes in this commit and the rows retire in `#1156` (sprint row 4a2). `getMarketOutcome` stays (still called by `updateOpenTrades`). `tsc` baseline 338 = 338.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/{expectancy.adaptive-roi-chain,vts-telemetry.checkConfidenceDrift,score-calculator.clearPredictiveConfidenceCache,vts-service.simulateTrade}.20261006-B-VTS-TELEMETRY-AGGREGATES.ts.removed`.
 **COMMIT:** the `B-VTS-TELEMETRY-AGGREGATES` Step-3 commit that adds this entry.
+
+## 2026-10-06 — the engine heartbeat's dead session check + boot recovery, its bus event, the auto-test harness, `clearStaleBusyFlag`, and the bus's two unused helpers — B-ENGINE-HEARTBEAT-DEAD-PATHS (row 2a0b, `#1158` merged into `#521`), CC-B
+**REMOVED:**
+| Item | Location (pre-removal) | What it was |
+|---|---|---|
+| `checkSession`, `recoverSessions`, `recoverSession`, `getStatus` | `server/services/active-engine-heartbeat.ts` | The 30-second per-session check (mode-mismatch auto-stop, a consistency check) and the boot recovery/auto-resume. |
+| the boot `recoverSessions(AUTO_RESUME_SIMULATIONS)` call | `server/index.ts` (Phase 23 block) | A second boot-time path beside `resumeActiveEngines`. |
+| the per-cycle `clusterBus.publish('task_completed', {taskType:'simulation_heartbeat'})` (+ the `health_alert` publish on error) | `active-engine-heartbeat.ts` | 2,880 `cluster_bus_event` rows a day. |
+| `auto_test_harness.ts` + `POST /api/auto-test/run` | `server/services/`, `server/routes.ts` | A Phase-24 self-test of the sim. |
+| `clearStaleBusyFlag` | `server/services/active-engine-service.ts` | A mode-agnostic orphan-manager clear without a stop. |
+| `clusterBus.getRecentEvents`, `clusterBus.cleanup` | `server/services/cluster-bus.ts` | An unscheduled read and an unscheduled retention delete. |
+**WHY:** the heartbeat's check and recovery could never act — they gated on `session.userId` (dropped in Phase 2C, `188738f17`), wrote with the `paper_x` id where storage keys by row UUID, and started the engine with no starting balance (2,221 "missing required fields" warns on 2026-10-06 by 18:29Z). Introduced together with the harness in `4556a834e` (2025-10-19, Replit) as the 30-second enforcer of a session time limit that was never built (removed by `B-ENGINE-STOP-DURATION-COLUMN`). The harness had zero client callers, was already broken (no-balance start; reads a `reconciliation` field that does not exist) and was the ONLY reader of the heartbeat's bus rows (its own check asserted `events.length >= 0`). `clearStaleBusyFlag`, `getRecentEvents` and `cleanup` had zero callers. **NOT the Central Clock** — that is `central-clock.ts`, untouched; the census of its subscribers is in the pre-audit §1b.
+**KEPT:** the heartbeat's orphan-manager heal, now `stopAndClearOrphanManager` (STOP, then clear) via the paper operation queue; the start path's orphan branch uses the same helper.
+**BLAST RADIUS / STATE-WRITE CENSUS:** the removed writes were `active_engine_sessions` updates (never reached) and `cluster_bus_event` rows (reader deleted in the same commit). `cluster_bus_event` retention moves to `b75-retention-sweep.ts` (30 d, delete-only, seeded by migration). `tsc` baseline synced 338 → 337 (the harness file's one entry dropped).
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/{active-engine-heartbeat.pre-B-ENGINE-HEARTBEAT-DEAD-PATHS.ts,auto_test_harness.ts}.removed`.
+**COMMIT:** the `B-ENGINE-HEARTBEAT-DEAD-PATHS` Step-3 commit that adds this entry.

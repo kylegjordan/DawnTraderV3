@@ -50,30 +50,62 @@ export interface ActiveEngineResult {
   currentBalance?: number; // Phase 27.F.14.D-POST: Current balance for confirmation prompt
 }
 
-// Phase 41E-S / P19-B4b D5: Auto-clear orphaned managers (manager exists but no DB session).
-// The stale busy-flag / operation-lock branches that used to live here were REMOVED — that
-// mechanism was vestigial (superseded by activeOperationQueue since Phase 41F; verified never
-// acquired anywhere, only defensively cleared). See 1-system-manual/DELETED_COMPONENTS_LOG.md.
-async function clearStaleBusyFlag() {
-  // Phase 41E-S: Clear orphaned managers (manager exists but no DB session)
-  const hasManager = !!getGlobalActiveEngineManager();
-  if (hasManager) {
-    const { db } = await import('../db.js');
-    const { activeEngineSessions } = await import('../../shared/schema.js');
-    const { eq } = await import('drizzle-orm');
-    
-    const activeSessions = await db
-      .select()
-      .from(activeEngineSessions)
-      .where(eq(activeEngineSessions.status, 'running'))
-      .limit(1);
-    
-    const hasDbSession = activeSessions.length > 0;
-    
-    if (!hasDbSession) {
-      console.log(`[SAFEGUARD] Detected orphaned manager - clearing...`);
-      clearGlobalActiveEngineManager();
-    }
+// B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158/#521, Langston Step 2): ONE orphan-manager rule, used everywhere a
+// manager is mapped with no running session row — the start path's orphan branch and the heartbeat heal.
+// It STOPS before it clears: a bare `clearGlobalActiveEngineManager` (a Map.delete) left a still-running
+// manager's timers and its TCL watchdog's Central Clock subscription alive with nothing able to stop them.
+// (The former `clearStaleBusyFlag` here did the same without a stop and had ZERO callers — deleted, rule 18;
+// see DELETED_COMPONENTS_LOG.) NOT enqueued itself: callers already inside `activeOperationQueue` (the start
+// path) call it directly; the heartbeat goes through `healOrphanManagerQueued` so a heal never runs
+// concurrently with a start or stop.
+export async function stopAndClearOrphanManager(mode: ActiveEngineMode, source: string): Promise<boolean> {
+  const manager = getGlobalActiveEngineManager(mode);
+  if (!manager) return false;
+  const running = await storage.getRunningEngineSession(mode);
+  if (running) return false; // re-read inside the job: a heal queued behind a start finds the new row and does nothing
+  console.warn(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][ORPHAN_MANAGER] mode=${mode} source=${source} — manager mapped with no running session row: stopping, then clearing`);
+  try {
+    await manager.stop();
+  } catch (stopErr: any) {
+    console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][ORPHAN_MANAGER] stop failed (mode=${mode}, source=${source}) — clearing anyway: ${stopErr?.message ?? stopErr}`);
+  }
+  clearGlobalActiveEngineManager(mode);
+  return true;
+}
+
+/** The heartbeat's entry: the same rule, serialized through the paper operation queue (dedupe key
+ *  `system:paper:orphan-heal`, so a heal still running when the next tick fires is joined, never doubled). */
+export async function healOrphanManagerQueued(): Promise<boolean> {
+  return activeOperationQueue.enqueue(
+    () => stopAndClearOrphanManager('paper', 'heartbeat'),
+    { userId: 'system', mode: 'paper', action: 'orphan-heal' },
+  );
+}
+
+/** B-ENGINE-HEARTBEAT-DEAD-PATHS (Langston item 7): the engine flag's DB write is fire-and-forget on both
+ *  sides, and both now gate a decision — flag-TRUE decides whether a later start closes a leftover row, flag-FALSE
+ *  decides whether the next boot resumes an operator-stopped engine. A failure raises a dedupe-keyed breakage
+ *  alert; the owner RESOLVES it (never acks — an ack silences the key without discharging it, #982). */
+async function raiseEngineFlagWriteAlert(which: 'start' | 'stop', err: unknown): Promise<void> {
+  const msg = (err as any)?.message ?? String(err);
+  console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][FLAG_WRITE_FAILED] ${which}: ${msg}`);
+  try {
+    const { addAlert } = await import('./system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      title: which === 'start'
+        ? 'Engine start could not record the engine as running'
+        : 'Engine stop could not record the engine as stopped',
+      body: which === 'start'
+        ? `The paper engine started, but writing system_context.isEngineActive = true failed (${msg}). A later start would treat this session row as a leftover and close it; a boot would not resume it. Re-run the start or set the flag by hand, then resolve.`
+        : `The paper engine stopped, but writing system_context.isEngineActive = false failed (${msg}). The next boot would RESUME this operator-stopped engine and it would start trading. Set the flag to false by hand before any restart, then resolve.`,
+      severity: which === 'stop' ? 'critical' : 'warning',
+      category: 'breakage',
+      metadata: { which },
+      dedupe_key: which === 'start' ? 'engine-start-flag-write-failed-paper' : 'engine-stop-flag-write-failed-paper',
+    });
+  } catch (alertErr: any) {
+    console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][FLAG_WRITE_FAILED] alert write failed: ${alertErr?.message}`);
   }
 }
 
@@ -616,9 +648,9 @@ export async function startActiveEngine(
         }
         
         if (!existingSession && existingManager) {
-          // Orphaned manager exists without DB session - clear it
-          console.warn('[ActiveEngineService] Orphaned manager detected without DB session - clearing');
-          clearGlobalActiveEngineManager();
+          // Orphaned manager exists without DB session — STOP then clear (B-ENGINE-HEARTBEAT-DEAD-PATHS; this
+          // branch used to clear without stopping, leaving the old manager running unreferenced).
+          await stopAndClearOrphanManager(mode, 'start');
         }
 
         // No existing session - create new one atomically
@@ -834,6 +866,7 @@ export async function startActiveEngine(
       
       // Update trading state (triggers internal broadcasts) - don't block HTTP response
       tradingStateSync.setEngineActive(userId, true, mode)
+        .catch((err) => { void raiseEngineFlagWriteAlert('start', err); throw err; })
         .then(() => tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started'))
         .then(() => {
           console.log('[41F-B][BROADCAST] Engine state sync completed successfully');
@@ -1166,6 +1199,7 @@ export async function stopActiveEngine(
       
       // Update trading state (triggers internal broadcasts) - don't block HTTP response
       tradingStateSync.setEngineActive(userId, false, mode)
+        .catch((err) => { void raiseEngineFlagWriteAlert('stop', err); throw err; })
         .then(async () => {
           console.log(`[41F-B][BROADCAST] State sync completed in ${Date.now() - t2}ms`);
           
@@ -1223,7 +1257,10 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
     }
 
     return {
-      isRunning: !!dbSession || hasManager,
+      // B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158): running = an engine actually runs (the manager). A session row
+      // with no manager is a leftover or a crash-to-boot gap, not a running engine; `diagnostics.hasDbSession`
+      // still reports the row. Only POST /orchestrator/audit's answer changes (pre-audit A2).
+      isRunning: hasManager,
       sessionInfo: dbSession ? {
         sessionId: dbSession.sessionId,
         startTime: dbSession.startedAt,
