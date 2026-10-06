@@ -99,8 +99,6 @@ beforeEach(() => {
   m.createActiveEngineSession.mockImplementation(async (s: any) => ({ id: 'row-uuid-new', ...s }));
 });
 
-const flush = () => new Promise((r) => setTimeout(r, 0));
-
 describe('objective 1 — the stop writes status + stoppedAt and NO duration key (C3: on the payload)', () => {
   it('a session started 30 days ago stops cleanly; the payload carries no runForMs', async () => {
     m.getRunningEngineSession.mockResolvedValue({ ...OLD_ROW, startedAt: new Date(Date.now() - 30 * DAY) });
@@ -132,8 +130,14 @@ describe('objective 3 — a failed session write no longer skips the teardown (C
   it('teardown runs to the end, the engine flag is cleared, the stop fails loudly with an alert', async () => {
     m.getRunningEngineSession.mockResolvedValue({ ...OLD_ROW, startedAt: new Date(Date.now() - 2 * DAY) });
     m.updateActiveEngineSession.mockRejectedValueOnce(new Error('value out of range for type integer'));
+    // The flag clear must have COMPLETED before the stop returns (in-queue, awaited) — the start-new flow calls
+    // startActiveEngine immediately after a stop and must read it off. The outer block only STARTS a clear
+    // (fire-and-forget), so a slow mock discriminates: completed-at-return is 1 with the fix, 0 without.
+    let flagClearsCompleted = 0;
+    m.setEngineActive.mockImplementation(() => new Promise<void>((r) => setTimeout(() => { flagClearsCompleted++; r(); }, 20)));
     const res = await stopActiveEngine('u1');
-    await flush();
+    expect(flagClearsCompleted).toBe(1);
+    await new Promise((r) => setTimeout(r, 40));
     // fails loudly, naming the session write
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/session write failed/);

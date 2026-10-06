@@ -1102,6 +1102,15 @@ export async function stopActiveEngine(
         await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'stop_reset');
         
         if (sessionWriteError) {
+          // Clear the engine flag INSIDE the queue job, before returning. The normal path clears it outside the
+          // queue, asynchronously; here the row is still `running`, and the start-new flow (routes.ts B8.2 START)
+          // calls startActiveEngine straight after this stop — it must see the flag OFF, or it would adopt the
+          // leftover row instead of closing it. The outer block clears it again (idempotent).
+          try {
+            await tradingStateSync.setEngineActive(userId, false, 'paper');
+          } catch (flagErr: any) {
+            console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] in-queue flag clear failed: ${flagErr?.message}`);
+          }
           return {
             success: false,
             message: `Paper trading stopped, but recording session ${existingSession.sessionId} as stopped failed: ${sessionWriteError}`,
