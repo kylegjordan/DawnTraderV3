@@ -58,6 +58,11 @@ export interface ActiveEngineResult {
 // see DELETED_COMPONENTS_LOG.) NOT enqueued itself: callers already inside `activeOperationQueue` (the start
 // path) call it directly; the heartbeat goes through `healOrphanManagerQueued` so a heal never runs
 // concurrently with a start or stop.
+// LEFT INTENTIONALLY (Langston Step-4 r1 §13, disposition 5 — not a missed sweep): two bare clears remain and are
+// NOT this predicate. `initializeQueues` (operation-queue.ts) clears the paper manager with no stop, but runs at boot
+// before anything is mapped, so the map is empty by construction. The force-stop route (routes.ts) clears right after
+// its own explicit `stopActiveEngine` — stop-then-clear by design. And the heal is PAPER-ONLY on purpose: no live
+// manager is ever mapped today (every `setGlobalActiveEngineManager` site passes paper); it widens when live arms.
 export async function stopAndClearOrphanManager(mode: ActiveEngineMode, source: string): Promise<boolean> {
   const manager = getGlobalActiveEngineManager(mode);
   if (!manager) return false;
@@ -85,24 +90,55 @@ export async function healOrphanManagerQueued(): Promise<boolean> {
 /** B-ENGINE-HEARTBEAT-DEAD-PATHS (Langston item 7): the engine flag's DB write is fire-and-forget on both
  *  sides, and both now gate a decision — flag-TRUE decides whether a later start closes a leftover row, flag-FALSE
  *  decides whether the next boot resumes an operator-stopped engine. A failure raises a dedupe-keyed breakage
- *  alert; the owner RESOLVES it (never acks — an ack silences the key without discharging it, #982). */
-async function raiseEngineFlagWriteAlert(which: 'start' | 'stop', err: unknown): Promise<void> {
+ *  alert; the owner RESOLVES it (never acks — an ack silences the key without discharging it, #982).
+ *  MEASURE BEFORE CLAIMING (Langston Step-4 r1 BLOCKER): `setEngineActive` commits the flag FIRST and fans out after
+ *  (`trading-state-sync.ts`: the awaited `updateSystemContext`, then the unguarded `contextBridge.broadcast` and
+ *  `clusterBus.emit`), so its rejection does not say the flag write failed. The flag is re-read here:
+ *  observed != intended -> the flag really is wrong (the original alert); observed == intended -> the flag is correct
+ *  and only the fan-out failed (its own key, a warning); the re-read threw or found no row -> the conservative form,
+ *  saying the flag could not be confirmed. A false critical would also hold the dedupe key against the true one. */
+async function raiseEngineFlagWriteAlert(which: 'start' | 'stop', err: unknown, mode: ActiveEngineMode = 'paper'): Promise<void> {
   const msg = (err as any)?.message ?? String(err);
-  console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][FLAG_WRITE_FAILED] ${which}: ${msg}`);
+  const intended = which === 'start';
+  let observed: boolean | undefined;
+  let readNote = '';
+  try {
+    const ctx = await storage.getSystemContext(mode);
+    if (ctx && typeof ctx.isEngineActive === 'boolean') observed = ctx.isEngineActive;
+    else readNote = ' The flag could not be confirmed: no system_context row was found on re-read.';
+  } catch (readErr: any) {
+    readNote = ` The flag could not be confirmed: the re-read failed (${readErr?.message ?? readErr}).`;
+  }
+  const flagCorrect = observed === intended;
+  console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][FLAG_WRITE_FAILED] ${which} mode=${mode} observed=${observed ?? 'unknown'} intended=${intended}: ${msg}`);
   try {
     const { addAlert } = await import('./system-alerts.js');
+    if (flagCorrect) {
+      await addAlert({
+        triggers_at: new Date(),
+        title: which === 'start'
+          ? 'Engine start recorded, but the state fan-out failed'
+          : 'Engine stop recorded, but the state fan-out failed',
+        body: `The ${mode} engine flag reads ${intended} as intended (re-read after the failure); the step after the write failed (${msg}). The flag is correct; derived readers (context bridge, cluster bus) may be stale until the next flip. Nothing to set by hand — resolve once the next start or stop fans out cleanly.`,
+        severity: 'warning',
+        category: 'breakage',
+        metadata: { which, mode, observed, intended },
+        dedupe_key: `engine-${which}-state-fanout-failed-${mode}`,
+      });
+      return;
+    }
     await addAlert({
       triggers_at: new Date(),
       title: which === 'start'
         ? 'Engine start could not record the engine as running'
         : 'Engine stop could not record the engine as stopped',
-      body: which === 'start'
-        ? `The paper engine started, but writing system_context.isEngineActive = true failed (${msg}). A later start would treat this session row as a leftover and close it; a boot would not resume it. Re-run the start or set the flag by hand, then resolve.`
-        : `The paper engine stopped, but writing system_context.isEngineActive = false failed (${msg}). The next boot would RESUME this operator-stopped engine and it would start trading. Set the flag to false by hand before any restart, then resolve.`,
+      body: (which === 'start'
+        ? `The ${mode} engine started, but system_context.isEngineActive is not true (${msg}). A later start would treat this session row as a leftover and close it; a boot would not resume it. Re-run the start or set the flag by hand, then resolve.`
+        : `The ${mode} engine stopped, but system_context.isEngineActive is not false (${msg}). The next boot would RESUME this operator-stopped engine and it would start trading. Set the flag to false by hand before any restart, then resolve.`) + readNote,
       severity: which === 'stop' ? 'critical' : 'warning',
       category: 'breakage',
-      metadata: { which },
-      dedupe_key: which === 'start' ? 'engine-start-flag-write-failed-paper' : 'engine-stop-flag-write-failed-paper',
+      metadata: { which, mode, observed: observed ?? null, intended },
+      dedupe_key: `engine-${which}-flag-write-failed-${mode}`,
     });
   } catch (alertErr: any) {
     console.error(`[B-ENGINE-HEARTBEAT-DEAD-PATHS][FLAG_WRITE_FAILED] alert write failed: ${alertErr?.message}`);

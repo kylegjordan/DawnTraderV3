@@ -177,8 +177,9 @@ describe('/status: isRunning means an engine runs (the manager), not that a row 
 });
 
 describe('the engine flag writes are observable (Langston item 7)', () => {
-  it('a failed flag-FALSE write on stop raises the critical stop alert', async () => {
+  it('a failed flag-FALSE write on stop raises the critical stop alert (re-read: the flag still reads ON)', async () => {
     m.getRunningEngineSession.mockResolvedValue(ROW);
+    m.getSystemContext.mockResolvedValue({ isEngineActive: true });
     m.setEngineActive.mockRejectedValue(new Error('db down'));
     await stopActiveEngine('u1');
     await flush(10);
@@ -191,6 +192,39 @@ describe('the engine flag writes are observable (Langston item 7)', () => {
     await startActiveEngine('u1', { startingBalance: 820, skipAutoWatchlist: true });
     await flush(10);
     expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-start-flag-write-failed-paper', category: 'breakage' }));
+  });
+  // Langston Step-4 r1 BLOCKER: setEngineActive commits the flag and THEN fans out; a rejection after the commit must
+  // not claim the flag is wrong. The re-read decides which alert is true.
+  it('stop: the promise rejects but the flag re-reads OFF -> the fan-out warning, never the critical flag alert', async () => {
+    m.getRunningEngineSession.mockResolvedValue(ROW);
+    // commit-then-fan-out: the flag flips to OFF when the write runs, then the broadcast throws
+    let flag = true;
+    m.getSystemContext.mockImplementation(async () => ({ isEngineActive: flag }));
+    m.setEngineActive.mockImplementation(async () => { flag = false; throw new Error('broadcast failed'); });
+    await stopActiveEngine('u1');
+    await flush(10);
+    expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-stop-state-fanout-failed-paper', severity: 'warning' }));
+    expect(m.addAlert).not.toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-stop-flag-write-failed-paper' }));
+  });
+  it('start: the promise rejects but the flag re-reads ON -> the fan-out warning, never the start flag alert', async () => {
+    m.getRunningEngineSession.mockResolvedValue(undefined);
+    let flag = false;
+    m.getSystemContext.mockImplementation(async () => ({ isEngineActive: flag }));
+    m.setEngineActive.mockImplementation(async () => { flag = true; throw new Error('broadcast failed'); });
+    await startActiveEngine('u1', { startingBalance: 820, skipAutoWatchlist: true });
+    await flush(10);
+    expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-start-state-fanout-failed-paper', severity: 'warning' }));
+    expect(m.addAlert).not.toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-start-flag-write-failed-paper' }));
+  });
+  it('the re-read itself fails -> the conservative critical form, and its body says the flag could not be confirmed', async () => {
+    m.getRunningEngineSession.mockResolvedValue(ROW);
+    m.getSystemContext.mockRejectedValue(new Error('db gone'));
+    m.setEngineActive.mockRejectedValue(new Error('db down'));
+    await stopActiveEngine('u1');
+    await flush(10);
+    expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: 'engine-stop-flag-write-failed-paper', severity: 'critical', body: expect.stringContaining('could not be confirmed'),
+    }));
   });
 });
 
