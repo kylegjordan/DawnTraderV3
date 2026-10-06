@@ -1,8 +1,16 @@
-# B-CENSUS-OWNERLESS-TRIAGE — SCOPE (Step 1, r1)
+# B-CENSUS-OWNERLESS-TRIAGE — SCOPE (Step 1, r2)
 
 change-class: non_architecture
 
 **Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row **1n**, after row 1m · **Issue:** `#1139` · **Placed by:** Langston, W40 census handling A3 (2026-09-30), §9.4 disposition 4 — a review.
+
+## STEP-1 r1 → r2 (Langston SENT BACK 2026-10-06 ~23:0xZ; both blockers and three conditions folded)
+- **BLOCKER-1 (OBJ-2's control was false):** five of the 60 — `#439`, `#575`, `#596`, `#613`, `#532` — already resolve to an owner (CC-A) and a placement, so OBJ-2 read 0-of-60 for them before any work. **Fixed:** OBJ-2 now covers the 55 only; those five are graded by OBJ-4 and OBJ-5, which name a decision, not a census state.
+- **BLOCKER-2 (OBJ-2 is satisfiable by editing a status word):** a CLOSED or WITHDRAWN head drops an entry out of the census population, and nothing resolves its citation. **Fixed:** OBJ-1 is re-registered on the object — every citation must RESOLVE (§3) — and **OBJ-6 adds a non-author re-derivation of 10 of the 55, chosen by Langston after the dispositions are written**, weighted to CLOSED and WITHDRAWN. The census run stays as necessary-not-sufficient.
+- **CONDITION 1 (8 predicate-blind entries):** `#174`, `#238`, `#345`, `#523`, `#536`, `#754`, `#997`, `#1047` name a session the census regex cannot see. **Rule now in §2: read the named session first and default to it; a departure states its reason in the triage line.** One departure is expected: `#523` names CC-B (the gates sweep's filer), and its remaining work is the `#522` pre-live gate on row 101, a gates item in CC-A's §6 group — the reason goes in its line.
+- **CONDITION 2:** no Kyle-directed item is WITHDRAWN in this batch (`#174`, `#327`, `#997`); CLOSED or PLACED only.
+- **CONDITION 3:** §6 is recounted in the close commit (it already disagrees at the ref: CC-C 77 vs 74, Infra 55 vs 56).
+- **Found since (pre-audit §5, for the Step-2 ruling):** the census and the live plan-state check both skip 9 valid §4 rows whose ids are deeper than `\d+[a-z]?` (`2a0`…`2a2`, `3a1`, `4a2`); two of the 55 are placed on one of them.
 
 ## 0. WHY
 
@@ -24,9 +32,9 @@ No component changes: this batch edits `RUNNING_ISSUES.md` and the sprint plan o
 
 ## 2. METHOD (per issue)
 1. Read the whole entry and its history; search the ledger and later batches for its number and its component (`§9.5(b-ii)`).
-2. Decide ONE outcome, each with a citation a reader can check without me:
+2. **Read the session the entry itself names first, and default to it** (Langston condition 1); a departure for a §6 group states its reason in the triage line. Then decide ONE outcome, each with a citation a reader can check without me:
    - **CLOSED** — the thing was done; cite the commit or batch that did it.
-   - **WITHDRAWN** — it dissolves (the code it describes is gone, or a later decision supersedes it); cite what dissolves it (§9.4 disposition 5).
+   - **WITHDRAWN** — it dissolves (the code it describes is gone, or a later decision supersedes it); cite what dissolves it (§9.4 disposition 5). **Never for a Kyle-directed item** (`#174`, `#327`, `#997`) — dissolving one of his decisions is his call.
    - **PLACED** — still live: an owner by the §6 grouping (prices and the exit price path → CC-C; signals, strategies, SQE, RTB, learning data → CC-B; identity, servers, restarts, deploys, security, diagnostic screens → Infra Claude; trade records and costs, scores, regimes, gates, risk controls, the live engine → CC-A), and a `HOME:` line in the plan's form — an item on an existing plan row where one fits, a new row only where none does.
 3. Write it into the entry, in place: the head's status word updated, and one line `W41 TRIAGE (CC-A, <date>): <outcome> — <citation>; HOME: …`. **Edit in place, never stack** (`#753`), quoting any home line it replaces.
 
@@ -34,11 +42,13 @@ No component changes: this batch edits `RUNNING_ISSUES.md` and the sprint plan o
 
 | # | objective | check |
 |---|---|---|
-| **OBJ-1** | Every one of the 60 has an outcome and its citation written into its entry | a script lists the 60 and finds the `W41 TRIAGE` line in each — 60 of 60 |
-| **OBJ-2** | None of the 60 is left OPEN-and-unplaced, and none is ownerless | the census's own `ownerOfIssue` and `placement` run over the ledger and plan at the close commit: 0 of the 60 in the unplaced list (control: the same run at `be41f8585` lists all 55 + #439/#575/#596/#613) |
-| **OBJ-3** | Every issue placed on another session's row or given to another session is handed over by number | one post per session, by id; owners may disagree, and a disagreement re-opens that item only |
-| **OBJ-4** | CC-A's four are decided: `#439` re-measured or homed with its measurement; `#575`/`#596` settled with CC-B (the ledger says CC-A, their plan rows say CC-B); `#613`'s owner confirmed | each carries its decision and who agreed it |
-| **OBJ-5** | `#532`'s head no longer reads CLOSED before its final OPEN | the census's self-contradiction list no longer contains it |
+| **OBJ-1** | Every one of the 60 carries an outcome whose citation RESOLVES | a script, over the 60: each CLOSED cites a sha that exists (`git cat-file -e`) and touches the named thing, or a batch whose completion report exists; each WITHDRAWN cites a file or line that exists at the ref; each PLACED has an owner and a HOME naming a §4 row or after-live line that exists and is not closed. **0 unresolved** (control: the script run on a deliberately bad citation reports it) |
+| **OBJ-2** | None of **the 55** is left OPEN-and-unplaced or ownerless — necessary, not sufficient | the census's own `ownerOfIssue` and `placement` over the ledger and plan at the close commit: 0 of the 55 (control: the same run at `be41f8585` lists all 55 as unplaced with `owner ?`) |
+| **OBJ-3** | Every issue placed on another session's row or given to another session is handed over by number | one post per session, by id; a disagreement re-opens that item only (Langston ruled this adequate, 2026-10-06) |
+| **OBJ-4** | CC-A's four are decided: `#439` re-measured or homed with its measurement; `#575`/`#596` settled with CC-B (the ledger says CC-A, their rows are CC-B's); `#613`'s owner confirmed | each carries its decision and who agreed it, in its entry |
+| **OBJ-5** | `#532`'s head no longer reads CLOSED before its final OPEN | the census self-contradiction list no longer contains it |
+| **OBJ-6** | The dispositions survive a reader who did not write them | **Langston picks 10 of the 55 after the dispositions are written** (weighted to CLOSED and WITHDRAWN) and re-derives each from its citation; any he refutes is re-done and reported |
+| **OBJ-7** | §6 agrees with the recount at the close commit | `recountS6` at the close sha: no diffs, stated Total = cell sum |
 
 ## 4. OUT OF SCOPE
 - Fixing any defect found live — it gets a placed home, not a fix (rule 23's fix-on-find applies only where the fix is trivial and sits in a batch already open; none does here).
