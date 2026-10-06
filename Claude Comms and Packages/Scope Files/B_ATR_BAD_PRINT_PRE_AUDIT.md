@@ -20,3 +20,16 @@ change-class: architecture · Step 2 of 11 · owner CC-B · scope `B_ATR_BAD_PRI
 5. **If no candidate passes all three, nothing ships on estimator choice alone** — the result goes back to Langston with the full table.
 
 *(Audit and plan follow below; this section is not edited after the first run.)*
+
+## 1. ROUND 1 RESULTS against §0, as pre-registered (run 2026-10-06 ~16:40Z; script `scratchpad/est.py`, to be copied into the evidence folder at Step 3)
+**Measured 149 of the 163** (14 of the earliest opens fall outside the 720 bars Kraken's 60-minute endpoint returns): **6 spiked, 143 control.** E1 scale factor (from the control): 1.135.
+
+| | criterion 1 — the 6 to ≤ 1.5× clean | criterion 2 — control median ≤ 2 % and p95 ≤ 10 % | criterion 3 — fixtures (a) suppress, (b)/(c) ≥ 80 % of E0's rise |
+|---|---|---|---|
+| **E1** scaled median | PASS (max 1.09×) | **FAIL** — median 9.54 %, p95 27.07 %, max 50.34 %; 68 controls over 10 % | **FAIL** — (b) 17 %, (c) 19 % |
+| **E2** winsorised 3× | PASS (max 1.14×) | **FAIL** — median 0.00 %, p95 13.79 %, max 34.71 %; 15 over 10 % | **FAIL** — (b) 54 %, (c) 20 % |
+| **E3** returned-wick clip | **FAIL on 2 of 6** — GNOT 1.65×, LIGHTER 1.62× (others 0.90-1.15×; GBP/USD 1.15×) | **PASS** — p5 0 %, p25 0 %, median 0.00 %, p75 0.00 %, p95 1.93 %, max 21.60 % (AKE/USD, the one control over 10 %) | **PASS** — (a) 1.19× clean, (b) 100 %, (c) 100 % |
+
+**Criterion 5 applies: no candidate passes all three, so nothing is chosen on this table alone.**
+
+**What the two E3 "misses" are (inspected after the run, criteria NOT changed):** both are genuine one-hour moves whose close moved and held — **LIGHTER `reverse_impulse`, opened 09-30 01:54Z: the 09-29 23:00Z bar `o 4.451 h 4.641 l 3.598 c 3.93` (close −12.0 % vs the prior close, next close 3.899)**; **GNOT `strong_bull_trend`, opened 09-23 22:37Z: the 21:00Z bar `o 0.07036 h 0.09899 l 0.06929 c 0.09499` (close +33.1 %)**. The suppressed ones are returned wicks — GBP/USD `h 1.70000` with the close back at 1.32399; LIGHTER (open) `l 0.110` with the close at 3.728. ⇒ **§0's spike definition (one bar's share of the true-range sum) captures genuine single-bar moves as well as off-market prints, so criteria 1 and 3 conflict on exactly these two rows: criterion 3 says a moved-and-held close must pass through; criterion 1 counts them as spikes to suppress.** That conflict is mine, in the pre-registration, and is put to Langston as found — the remedy is a ruling, not a quiet re-definition.
