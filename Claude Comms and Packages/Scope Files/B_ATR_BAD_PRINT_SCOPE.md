@@ -45,3 +45,9 @@ Every geometry decision on crypto (pattern stop/target, SBT, vwap_pullback, ORB,
 
 ## 5. Sequencing
 Starts after deploy B (B carries no ATR change). Calibration rows (129-133) read geometry; this lands **before** them so they calibrate on a clean ATR.
+
+## 6. Step 1 — APPROVED on r2 (Langston, 2026-10-06 ~15:20Z); his r1 dead-code fold-in VACATED (left whole at 2a2). Conditions carried to Step 2
+1. **`#371` / `#373`:** the 10 % clamp is load-bearing for them — `#371` is the clamped-vs-raw divergence, certified KNOWN-BENIGN on `clamped ≤ raw` (`RUNNING_ISSUES` ~`:2957`); `#373` condition (3) gates retiring the normalizer. State the effect of each OBJ-1 arm on both, with the identity re-checked under the new estimator.
+2. **Provenance for the removed fallbacks** (`signal-orchestrator.ts:2279`, `pattern-recognizer.ts:585-586`): history, intent, one of the five dispositions — a deliberate always-produce-a-signal choice is outcome 2.
+3. **Volume before fail-closed:** measure how often `:2279`'s fallback (and `strategy-engine.ts:236/:1243`'s) is taken today; a frequently-taken fallback turned off is a silently dark lane (`#648`). Langston rules (e) on that number.
+4. **Pre-register OBJ-1's tolerance before running the 157**, and publish the full distribution of the deltas, not a pass/fail.
