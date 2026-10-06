@@ -74,7 +74,7 @@ interface RegimeArchiveRecord {
   metrics: {
     winRate: number;
     avgPnL: number;
-    skipRatio: number;
+    skipRatio: number; // REGIME-LEVEL (all strategies in the regime), not per strategy
     confidence: number;
     dynamicROI: number;
     momentumWeight: number;

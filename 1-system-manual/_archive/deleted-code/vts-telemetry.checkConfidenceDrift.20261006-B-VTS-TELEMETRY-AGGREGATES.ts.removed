@@ -1,0 +1,17 @@
+// Removed from server/core/logging/vts-telemetry.ts (B-VTS-TELEMETRY-AGGREGATES, 2026-10-06): its only caller,
+// checkExpectancyDrift, had zero callers. DRIFT_LOG_PATH (confidence_drift.log) went with it.
+export function checkConfidenceDrift(currentConfidence: number, baselineConfidence: number): boolean {
+  ensureDirectories();
+  
+  const avgDiff = currentConfidence - baselineConfidence;
+  console.log(`[11.7B][Guard] Confidence Δ=${avgDiff.toFixed(3)}, baseline=${baselineConfidence.toFixed(3)}`);
+  
+  if (Math.abs(avgDiff) > 0.05) {
+    console.warn(`[11.7B][Guard] PredictiveConfidence drift detected: ${avgDiff.toFixed(3)}`);
+    fs.appendFileSync(DRIFT_LOG_PATH,
+      `${new Date().toISOString()} Δ=${avgDiff.toFixed(3)} baseline=${baselineConfidence.toFixed(3)}\n`
+    );
+    return true;
+  }
+  return false;
+}

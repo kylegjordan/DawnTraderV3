@@ -1,0 +1,8 @@
+// Removed from server/core/utils/score-calculator.ts (B-VTS-TELEMETRY-AGGREGATES, 2026-10-06): zero callers.
+/**
+ * Clear predictive confidence cache (for testing/telemetry refresh)
+ */
+export function clearPredictiveConfidenceCache(): void {
+  predictiveConfidenceCache.clear();
+  console.log('[11.7C][Cache] PredictiveConfidence cache cleared');
+}

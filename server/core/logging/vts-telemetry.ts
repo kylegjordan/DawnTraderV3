@@ -26,7 +26,6 @@ const EXECUTED_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
 const SKIPPED_DIR = path.join(process.cwd(), 'logs', 'vts_skipped_signals');
 const TELEMETRY_DIR = path.join(process.cwd(), 'logs', 'telemetry');
 const MANIFEST_PATH = path.join(TELEMETRY_DIR, 'regime_performance_manifest.json');
-const DRIFT_LOG_PATH = path.join(TELEMETRY_DIR, 'confidence_drift.log');
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -34,7 +33,10 @@ export interface RegimeStrategyMetrics {
   source: 'VTS';
   winRate: number;
   avgPnL: number;
+  /** REGIME-LEVEL, not per strategy: the share of the regime's skipped signals that were Low_ROI, stamped on every
+   *  strategy in the regime (skipped signals carry no strategy key). Read by the archive and the ML page only. */
   skipRatio: number;
+  /** REGIME-LEVEL, as `skipRatio` (the Illiquid_USD share). */
   illiquidRatio: number;
   tradeCount: number;
   updatedAt: string;
@@ -188,7 +190,14 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
     }
 
     if (totalProcessed === 0) {
-      console.log('[11.7B][Telemetry] No new entries found, skipping snapshot');
+      // B-VTS-TELEMETRY-AGGREGATES P2: the store is the 7-day window — an empty window leaves an empty store, never the
+      // previous run's cells (a value outside its own population, #546). No snapshot: nothing to record.
+      await telemetryLock.runExclusive(() => {
+        vtsTelemetry.regimePerformance = {};
+        vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;
+        vtsTelemetry.lastAggregation = new Date().toISOString();
+      });
+      console.log('[11.7B][Telemetry] No entries in the 7-day window — store cleared, no snapshot');
       return { success: true, totalProcessed: 0, regimesUpdated: 0, message: 'No new entries' };
     }
 
@@ -198,8 +207,14 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
     }
 
     await telemetryLock.runExclusive(() => {
+      // B-VTS-TELEMETRY-AGGREGATES P2 (Langston 2026-10-06): each run REPLACES the store with what this window yields.
+      // It used to MERGE (assign only the cells present), so a regime × strategy with no trade in the 7-day window kept its
+      // last win rate until the next restart — 224 such cell-instances in 170 of 926 retained snapshots (2026-04-12 →
+      // 10-06). A missing cell reads 0.5 at `getPredictiveConfidence`, below every confidence floor (0.55-0.80), so the
+      // change can only refuse, never newly admit (pre-audit A2).
+      const next: VTSTelemetry['regimePerformance'] = {};
       for (const regime in metrics) {
-        vtsTelemetry.regimePerformance[regime] = vtsTelemetry.regimePerformance[regime] ?? {};
+        next[regime] = {};
         const strategyCount = Object.keys(metrics[regime]).length;
         
         for (const strategy in metrics[regime]) {
@@ -216,9 +231,10 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
           };
           
           validateTelemetryIntegrity(regime, perfEntry as unknown as Record<string, unknown>, strategyCount);
-          vtsTelemetry.regimePerformance[regime][strategy] = perfEntry;
+          next[regime][strategy] = perfEntry;
         }
       }
+      vtsTelemetry.regimePerformance = next;
       vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;
       vtsTelemetry.lastAggregation = new Date().toISOString();
     });
@@ -280,23 +296,10 @@ export function getVTSTelemetry(): VTSTelemetry {
 export function getRegimePerformance(regime: string, strategy: string): RegimeStrategyMetrics | null {
   const regimeData = vtsTelemetry.regimePerformance[regime];
   if (!regimeData) return null;
-  return regimeData[strategy] || regimeData['SKIPPED'] || null;
-}
-
-export function checkConfidenceDrift(currentConfidence: number, baselineConfidence: number): boolean {
-  ensureDirectories();
-  
-  const avgDiff = currentConfidence - baselineConfidence;
-  console.log(`[11.7B][Guard] Confidence Δ=${avgDiff.toFixed(3)}, baseline=${baselineConfidence.toFixed(3)}`);
-  
-  if (Math.abs(avgDiff) > 0.05) {
-    console.warn(`[11.7B][Guard] PredictiveConfidence drift detected: ${avgDiff.toFixed(3)}`);
-    fs.appendFileSync(DRIFT_LOG_PATH,
-      `${new Date().toISOString()} Δ=${avgDiff.toFixed(3)} baseline=${baselineConfidence.toFixed(3)}\n`
-    );
-    return true;
-  }
-  return false;
+  // B-VTS-TELEMETRY-AGGREGATES P1: the strategy's own cell or null. The `|| regimeData['SKIPPED']` fallback (Directive
+  // 11.7B Task 4) is DELETED — nothing ever writes a SKIPPED cell (cells are keyed by executed trades' strategy, and
+  // skipped signals are counted per regime), so it could not fire; it was a promise to answer for an absent strategy.
+  return regimeData[strategy] ?? null;
 }
 
 export function getVTSTelemetryStatus(): {

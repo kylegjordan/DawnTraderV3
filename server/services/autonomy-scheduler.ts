@@ -593,6 +593,9 @@ schedulerRegistry.registerTask({
         const status = getVTSTelemetryStatus();
         console.log(`[11.7B][SCHEDULER] - Telemetry version: ${status.version}`);
         console.log(`[11.7B][SCHEDULER] - Total strategies tracked: ${status.totalStrategies}`);
+        const { predictiveConfidenceFallbackCounts } = await import('../core/utils/score-calculator.js');
+        const fb = predictiveConfidenceFallbackCounts();
+        console.log(`[11.7B][SCHEDULER] - Predictive confidence since boot: no-data 0.5 fallbacks=${fb.noDataFallback} served from a cell=${fb.served}`);
       } else {
         console.log(`[11.7B][SCHEDULER] ⚠️ VTS aggregation skipped: ${result.message}`);
       }

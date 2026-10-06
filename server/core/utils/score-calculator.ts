@@ -188,6 +188,13 @@ export function calculateRegimeWeight(metrics: SignalMetrics): RegimeWeightResul
  * @param strategy - Strategy name (e.g., momentum_breakout)
  * @returns PredictiveConfidence bounded [0.0, 1.0]
  */
+let noDataFallbackCount = 0;
+let servedCount = 0;
+/** Since boot: how many predictive-confidence reads found no VTS cell (neutral 0.5) vs found one (cache hits excluded). */
+export function predictiveConfidenceFallbackCounts(): { noDataFallback: number; served: number } {
+  return { noDataFallback: noDataFallbackCount, served: servedCount };
+}
+
 export function getPredictiveConfidence(
   assetClass: AssetClass,
   symbol: string,
@@ -204,8 +211,12 @@ export function getPredictiveConfidence(
 
   const perf = getRegimePerformance(regime, strategy);
   if (!perf || perf.winRate == null) {
+    // B-VTS-TELEMETRY-AGGREGATES (Langston Step-2 residual): no cell → a neutral 0.5 that is NOT a measurement. Counted,
+    // so how often confidence is made up is visible; whether no-data should be null/refuse instead is row 148a's call.
+    noDataFallbackCount++;
     return 0.5;
   }
+  servedCount++;
 
   const confidence = sigmoid((perf.winRate - 0.5) * 6);
   const boundedConfidence = Math.min(Math.max(confidence, 0.0), 1.0);
@@ -220,10 +231,3 @@ export function getPredictiveConfidence(
   return boundedConfidence;
 }
 
-/**
- * Clear predictive confidence cache (for testing/telemetry refresh)
- */
-export function clearPredictiveConfidenceCache(): void {
-  predictiveConfidenceCache.clear();
-  console.log('[11.7C][Cache] PredictiveConfidence cache cleared');
-}

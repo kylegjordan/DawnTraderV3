@@ -1109,8 +1109,9 @@ class ReadyToBuyService {
                 // the single-refresh feed above (same row-read, same honest-absent semantics;
                 // regimeStability deliberately NOT fed — see the single-refresh comment).
                 sourcePool: (signal as any).sourcePool ?? (signal.metadata as any)?.sourcePool,
-                // P19-B8.5a (OBJ-3): the ★third call site (batch refresh — Step-2 enumeration
-                // found it; the consensus said two). No re-decide runs on this path, so feed
+                // P19-B8.5a (OBJ-3): the batch-refresh SQE input — in 2026-07 the third of three SQE input
+                // sites (P19_B8_5a_PRE_AUDIT.md:56); B-RTB-REFRESH-CONSOLIDATE later merged the two refresh
+                // paths, so there are two today (signal-orchestrator.ts + this one). No re-decide runs on this path, so feed
                 // the stored row snapshot; absent → fail-open (Langston-ratified).
                 // ★ OBJ-2 HIGHEST-PRIORITY REWIRE: NetEV is the BINDING admission gate (#501 fee
                 // wall). This path replayed the queue-time snapshot, so a signal whose net

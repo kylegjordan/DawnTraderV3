@@ -33,7 +33,6 @@ const PREFETCH_MODULES = [
   'position_sizing',
   // Commit B Slice 2: cross-strategy modules (math kernels + RTB + sizing).
   'roi_gating',           // expectancy.ts per-regime ROI thresholds (5 regimes)
-  'expectancy_tuning',    // expectancy.ts winrate boost floors (3)
   'expectancy_gates',     // adaptive-thresholds → expectancy.ts (4)
   'queue_admission',      // ready_to_buy_service min queue confidence
   'rtb_ranking',          // ready_to_buy_service finalscore decay + cap

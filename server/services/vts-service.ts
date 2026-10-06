@@ -321,60 +321,6 @@ export class VTSService extends EventEmitter {
     return { high: 0, low: 0, close: 0 };
   }
 
-  /**
-   * Directive 10.0.A: Simulate trade using canonical friction from SYSTEM_GUARDS
-   * Ghost Math eliminated - no hardcoded fees
-   */
-  simulateTrade(signal: VirtualSignal, outcome: MarketOutcome): Partial<VirtualTrade> {
-    const entry = signal.entryPrice;
-    const tp = signal.takeProfit;
-    const sl = signal.stopLoss;
-
-    let exitPrice: number;
-    let resultType: 'take_profit' | 'stop_loss' | 'timeout';
-
-    if (outcome.high >= tp) {
-      exitPrice = tp;
-      resultType = 'take_profit';
-    } else if (outcome.low <= sl) {
-      exitPrice = sl;
-      resultType = 'stop_loss';
-    } else {
-      exitPrice = outcome.close;
-      resultType = 'timeout';
-    }
-
-    const grossProfit = (exitPrice - entry) / entry;
-    // P19-B6.5d (OBJ-6): SAFE (non-throwing) variant — a single unclassifiable symbol must
-    // not crash the VTS simulation cycle. Passive/telemetry path: on the (pathological)
-    // null, log + fall back to crypto_spot friction so the sim still produces a result
-    // (OBJ-5 passive rule: LOGGED default, never silent). No stamp threading here.
-    const _vtsSimClass = safeResolveAssetClass(signal.symbol, 'kraken');
-    if (_vtsSimClass === null) {
-      console.warn(`[P19-B6.5d][VTS] simulateTrade: unclassifiable ${signal.symbol} — using crypto_spot friction (logged fallback, telemetry only)`);
-    }
-    const costMetrics = getCachedCostMetrics(signal.symbol, _vtsSimClass ?? 'crypto_spot');
-    const frictionRate = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
-    const netProfit = grossProfit - frictionRate;
-
-    const isLoss = netProfit <= 0;
-    
-    if (isLoss && grossProfit > 0) {
-      console.log(`[10.0.A][VTS] Friction-adjusted LOSS: ${signal.symbol} gross=${(grossProfit * 100).toFixed(3)}% net=${(netProfit * 100).toFixed(3)}% friction=${(frictionRate * 100).toFixed(3)}%`);
-    }
-
-    return {
-      resultType,
-      exitPrice,
-      exitTime: Date.now(),
-      grossProfit,
-      netProfit,
-      fees: frictionRate,
-      status: 'closed',
-      calibrated: true
-    };
-  }
-
   async updateOpenTrades(): Promise<void> {
     const now = Date.now();
     const tradesToClose: VirtualTrade[] = [];
@@ -948,7 +894,7 @@ export class VTSService extends EventEmitter {
     // Normalize signalType to uppercase canonical format
     const normalizedSignalType = (tradeData.signalType?.toUpperCase() as 'QUANT' | 'PATTERN' | 'HYBRID') || 'HYBRID';
     
-    // Calculate fees using the same formula as VTSService.simulateTrade
+    // Fees = the friction rate × position size (the formula the deleted VTSService.simulateTrade used)
     const fees = tradeData.frictionCost * tradeData.positionSize;
     
     // Convert to VirtualTrade format for legacy persistence compatibility.

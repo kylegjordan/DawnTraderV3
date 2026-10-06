@@ -32,7 +32,6 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { getRegimePerformance, checkConfidenceDrift } from '../logging/vts-telemetry';
 import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/analysis-utils.js';
 // Directive 12.1.2: Import canonical cost model (replaces calculateFriction flat-rate helper)
 import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
@@ -54,8 +53,8 @@ import {
 import { REGIMES, resolveCanonicalStrategy } from '../../config/canonical-regime-strategy-map';
 import { recordUnknownStrategyAtGate } from '../observability/unknown-strategy-counter.js';
 // B72 (2026-05-05): per-regime ROI thresholds + winrate boost floors moved to
-// module_constants. Modules 'roi_gating' (per-regime min_roi) +
-// 'expectancy_tuning' (winrate floors) prefetched in b72-warmup.ts.
+// module_constants. Module 'roi_gating' (per-regime min_roi) is prefetched in b72-warmup.ts. ('expectancy_tuning'
+// lost its only reader with getAdjustedMinROI — B-VTS-TELEMETRY-AGGREGATES; its rows retire in #1156, row 4a2.)
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 
 const _GLOBAL_KEY = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
@@ -398,87 +397,6 @@ export function getROIDetails(
     minROIPercent: (requiredROI * 100).toFixed(2) + '%',
     predictiveConfidence
   };
-}
-
-/**
- * Directive 11.7B Task 4: Get Adaptive Expectancy from VTS Telemetry
- * 
- * Retrieves historical performance metrics for a regime × strategy combination
- * from VTS telemetry to inform adaptive expectancy calculations.
- * 
- * @param regime - Market regime (e.g., BULL_STABLE)
- * @param strategy - Strategy name (e.g., momentum_breakout)
- * @returns Performance metrics or null if not available
- */
-export function getAdaptiveExpectancy(regime: string, strategy: string): {
-  winRate: number;
-  avgPnL: number;
-  skipRatio: number;
-  confidence: number;
-  source: 'VTS';
-} | null {
-  const perf = getRegimePerformance(regime, strategy);
-  if (!perf) {
-    console.debug(`[11.7B][Expectancy] No telemetry for ${regime}/${strategy}`);
-    return null;
-  }
-  
-  const confidence = Math.max(0, Math.min(1, perf.winRate * (1 - perf.skipRatio)));
-  
-  return {
-    winRate: perf.winRate,
-    avgPnL: perf.avgPnL,
-    skipRatio: perf.skipRatio,
-    confidence,
-    source: 'VTS'
-  };
-}
-
-/**
- * Directive 11.7B Task 4: Adjusted ROI Threshold
- * 
- * Adjusts the base ROI threshold based on historical VTS performance.
- * If a regime × strategy combination has poor historical performance,
- * the threshold is increased to require higher expected returns.
- * 
- * @param regime - Market regime
- * @param strategy - Strategy name
- * @returns Adjusted minimum ROI threshold
- */
-export function getAdjustedMinROI(regime: string, strategy: string, assetClass: string): number {
-  const baseROI = getMinROIForRegime(regime, assetClass);
-  const adaptive = getAdaptiveExpectancy(regime, strategy);
-  
-  if (!adaptive) {
-    return baseROI;
-  }
-  
-  // B72: winrate boost thresholds from module_constants (expectancy_tuning).
-  const wrLow  = getCachedNumberRequired('expectancy_tuning', 'winrate_floor_low',        _GLOBAL_KEY);
-  const wrMed  = getCachedNumberRequired('expectancy_tuning', 'winrate_threshold_medium', _GLOBAL_KEY);
-  const wrHigh = getCachedNumberRequired('expectancy_tuning', 'winrate_threshold_high',   _GLOBAL_KEY);
-
-  if (adaptive.winRate < wrLow) {
-    return baseROI * 1.3;
-  }
-  if (adaptive.winRate < wrMed) {
-    return baseROI * 1.15;
-  }
-  if (adaptive.winRate > wrHigh) {
-    return baseROI * 0.9;
-  }
-
-  return baseROI;
-}
-
-/**
- * Directive 11.7B Task 5: Check and log confidence drift
- * 
- * Wrapper for drift detection to be used by scoring systems.
- * Returns true if drift exceeds ±0.05 threshold.
- */
-export function checkExpectancyDrift(currentConfidence: number, baseline: number = 0.5): boolean {
-  return checkConfidenceDrift(currentConfidence, baseline);
 }
 
 /**
