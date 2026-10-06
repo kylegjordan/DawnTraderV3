@@ -2220,6 +2220,10 @@ export class SignalOrchestrator {
       // B-ATR-BAD-PRINT (Langston Step-2 C3): a pattern with no usable ATR is a RECORDED drop, never a
       // silent absence that reads as "no patterns fired". Reported on the pool-complete line below.
       let patternAtrDrops = 0;
+      // B-ATR-BAD-PRINT (Langston Step-4 condition 1): a per-symbol pattern evaluation that THROWS is counted
+      // and reported beside the ATR drops — a single warn line in a rotating log is not evidence anyone sees.
+      // patternToTradeSignal's RangeError (no usable ATR) lands here if the guard below is ever bypassed.
+      let patternEvalErrors = 0;
       for (const symbol of patternSymbols) {
         try {
           // Batch 19G VN HF2: Do NOT skip quant pool pairs — they deserve pattern evaluation too
@@ -2310,7 +2314,9 @@ export class SignalOrchestrator {
               // Verified-canonical strategy key (one of the 19) — a benign string→union
               // narrowing, NOT the old invalid `pattern_*` bridge.
               strategy: consuming.strategy as StrategySignal['strategy'],
-              entryPrice: tradeSignal.entryPrice ?? currentPrice,
+              // B-ATR-BAD-PRINT (Langston Step-4 condition 2): `?? currentPrice` removed — entryPrice is a
+              // non-optional number on patternToTradeSignal's return, so the fallback was dead.
+              entryPrice: tradeSignal.entryPrice,
               // B-ATR-BAD-PRINT: the `?? currentPrice * 0.97 / * 1.03` fallbacks are gone — patternToTradeSignal
               // always returns numeric geometry from a valid ATR (guarded above), so they were dead.
               stopPrice: tradeSignal.stopPrice,
@@ -2369,13 +2375,14 @@ export class SignalOrchestrator {
             }
           }
         } catch (err) {
-          console.warn(`[14.5][ORCHESTRATOR] Pattern pool eval failed for ${symbol}:`, err);
+          patternEvalErrors++;
+          console.error(`[14.5][ORCHESTRATOR][B-ATR-BAD-PRINT][PATTERN_EVAL_ERROR] Pattern pool eval failed for ${symbol}:`, err);
         }
       }
       // P19-B6.5c: surface the exact-match no-match DROP counter (Langston D3/D4 obs gate — "no silent caps").
       // Cumulative per (pattern|regime|class); a high/rising drop count vs signals-generated is the tell that
       // pattern coverage went dark (e.g. a regime-field misread routing everything to a no-consumer regime).
-      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())} | [B-ATR-BAD-PRINT][PATTERN_ATR_DROPS] ${patternAtrDrops}`);
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())} | [B-ATR-BAD-PRINT][PATTERN_ATR_DROPS] ${patternAtrDrops} | [B-ATR-BAD-PRINT][PATTERN_EVAL_ERRORS] ${patternEvalErrors}`);
 
       const now = new Date();
       this.stats = {

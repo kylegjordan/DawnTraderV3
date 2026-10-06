@@ -163,6 +163,10 @@ describe('fence — every ATR call site uses the shared function (two named carv
     expect(orch).not.toMatch(/indicators\?\.atr\s*\?\?\s*\(currentPrice\s*\*\s*0\.02\)/);
     expect(orch).not.toMatch(/stopPrice\s*\?\?\s*currentPrice\s*\*\s*0\.97/);
     expect(orch).toMatch(/patternAtrDrops\+\+/);
+    // Langston Step-4 conditions: the per-symbol catch is counted; the dead entryPrice fallback is gone.
+    expect(orch).toMatch(/patternEvalErrors\+\+/);
+    expect(orch).toMatch(/\[PATTERN_EVAL_ERRORS\] \$\{patternEvalErrors\}/);
+    expect(orch).not.toMatch(/entryPrice:\s*tradeSignal\.entryPrice\s*\?\?/);
     expect(read('server/services/strategy-engine.ts')).not.toMatch(/c\['atr_fallback_daily_range_frac'\]/);
     // the old ternary fallback form `atr > 0 ? atr * 1.5 : currentPrice * …` (code, not the comment naming it)
     expect(read('server/services/pattern-recognizer.ts')).not.toMatch(/\?\s*atr\s*\*\s*1\.5\s*:\s*currentPrice/);
