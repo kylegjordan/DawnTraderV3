@@ -126,7 +126,8 @@ function refuse(why: string): never {
   process.exit(1);
 }
 
-async function api(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<{ status: number; json: any }> {
+// GET and POST only: the script writes no setting (r6), so a PUT here would be a write nobody reviewed (Langston r7 nit).
+async function api(method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ status: number; json: any }> {
   const res = await fetch(`${API}${path}`, {
     method,
     headers: { Authorization: `Bearer ${TOKEN}`, ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}) },
