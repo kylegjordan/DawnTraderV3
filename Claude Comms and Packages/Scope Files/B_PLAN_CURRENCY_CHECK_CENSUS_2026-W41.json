@@ -1,0 +1,1368 @@
+{
+  "week": "2026-W41",
+  "ref": "be41f858592744a99c661fd25dc26d3a6099f4fd",
+  "prevRef": "13fa6bbcedba68829852742d13112bb9fccc4762",
+  "generatedAt": "2026-10-05T09:06:10.779Z",
+  "counts": {
+    "h": 811,
+    "n": 705,
+    "o": 532,
+    "a": [
+      0,
+      0
+    ],
+    "b": [
+      425,
+      107,
+      253,
+      162,
+      2,
+      8,
+      45,
+      31,
+      5,
+      2,
+      10,
+      14
+    ],
+    "c": [
+      0,
+      0,
+      0
+    ],
+    "cx": 1,
+    "d": 2,
+    "dx": 1,
+    "e": [
+      60,
+      2
+    ],
+    "f": [
+      0,
+      5
+    ],
+    "g": 1,
+    "sc": 2,
+    "r": 8,
+    "hv": [
+      148,
+      103,
+      28,
+      17,
+      0
+    ]
+  },
+  "selfCheck": {
+    "heads": 811,
+    "numbers": 705,
+    "open": 532,
+    "openR1": 483,
+    "s1": 43,
+    "s2": 8
+  },
+  "a": [],
+  "b": {
+    "placed": {
+      "number": 253,
+      "homeBatch": 162,
+      "parked": 2,
+      "roadmap": 8
+    },
+    "unplaced": [
+      {
+        "n": 146,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 160,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 170,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 174,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 200,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 211,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 212,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 214,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 225,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 227,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 228,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 230,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 232,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 236,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 238,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 295,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 299,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 300,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 301,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 303,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 320,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 321,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 323,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 325,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 326,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 327,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 328,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 329,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 331,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 342,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 343,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 345,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 346,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 347,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 381,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 384,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 388,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 389,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 390,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 403,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 404,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 406,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 409,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 410,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 411,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 418,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 431,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 435,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 440,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 442,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 523,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 536,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 554,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 565,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 576,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 620,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 624,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 633,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 650,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 667,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 691,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 696,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 703,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 754,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 908,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 911,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 913,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 915,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 916,
+        "code": "U4",
+        "why": "HOME cites PHASE_19_PLAN or a row with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 924,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-INFRA",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 936,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 937,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 938,
+        "code": "U3",
+        "why": "HOME cites the roadmap in prose only",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 939,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 945,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 948,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 949,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 950,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 952,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 953,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 954,
+        "code": "U4",
+        "why": "HOME cites PHASE_19_PLAN or a row with no id",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 955,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 956,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 957,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 958,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 960,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 961,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 962,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 964,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 969,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 971,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 992,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 997,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1001,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1027,
+        "code": "U6",
+        "why": "HOME line with no id",
+        "owner": "owner CC-INFRA",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1047,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner ?",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1065,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1075,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1076,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1083,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1085,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1086,
+        "code": "U5",
+        "why": "HOME batch in no list",
+        "owner": "owner CC-C",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1098,
+        "code": "U2",
+        "why": "a HOME batch has a completion report",
+        "owner": "owner CC-B",
+        "handedOver": "2026-09-30"
+      },
+      {
+        "n": 1143,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": null
+      },
+      {
+        "n": 1145,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-C",
+        "handedOver": null
+      },
+      {
+        "n": 1146,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "owner CC-C",
+        "handedOver": null
+      },
+      {
+        "n": 1151,
+        "code": "U1",
+        "why": "no HOME line",
+        "owner": "filer CC-A",
+        "handedOver": null
+      }
+    ],
+    "handover": {
+      "handed": 148,
+      "stillUnplaced": [
+        146,
+        160,
+        170,
+        174,
+        200,
+        211,
+        212,
+        214,
+        225,
+        227,
+        228,
+        230,
+        232,
+        236,
+        238,
+        295,
+        299,
+        300,
+        301,
+        303,
+        320,
+        321,
+        323,
+        325,
+        326,
+        327,
+        328,
+        329,
+        331,
+        342,
+        343,
+        345,
+        346,
+        347,
+        381,
+        384,
+        388,
+        389,
+        390,
+        403,
+        404,
+        406,
+        409,
+        410,
+        411,
+        418,
+        431,
+        435,
+        440,
+        442,
+        523,
+        536,
+        554,
+        565,
+        576,
+        620,
+        624,
+        633,
+        650,
+        667,
+        691,
+        696,
+        703,
+        754,
+        908,
+        911,
+        913,
+        915,
+        916,
+        924,
+        936,
+        937,
+        938,
+        939,
+        945,
+        948,
+        949,
+        950,
+        952,
+        953,
+        954,
+        955,
+        956,
+        957,
+        958,
+        960,
+        961,
+        962,
+        964,
+        969,
+        971,
+        992,
+        997,
+        1001,
+        1027,
+        1047,
+        1065,
+        1075,
+        1076,
+        1083,
+        1085,
+        1086,
+        1098
+      ],
+      "placedSince": [
+        385,
+        393,
+        395,
+        407,
+        422,
+        437,
+        439,
+        445,
+        525,
+        541,
+        575,
+        578,
+        580,
+        582,
+        584,
+        586,
+        587,
+        591,
+        596,
+        613,
+        623,
+        674,
+        677,
+        702,
+        732,
+        749,
+        751,
+        1073
+      ],
+      "closedSince": [
+        348,
+        433,
+        461,
+        462,
+        500,
+        509,
+        511,
+        516,
+        520,
+        524,
+        555,
+        562,
+        595,
+        607,
+        750,
+        756,
+        1021
+      ],
+      "vanishedSince": []
+    },
+    "byWhy": {
+      "U1": 45,
+      "U2": 31,
+      "U3": 5,
+      "U4": 2,
+      "U5": 10,
+      "U6": 14
+    },
+    "selfContradicting": [
+      {
+        "issue": 1098,
+        "headLine": 173,
+        "filer": "CC-B",
+        "reason": "head carries \"CLOSED\" before its final OPEN"
+      },
+      {
+        "issue": 532,
+        "headLine": 323,
+        "filer": null,
+        "reason": "head carries \"CLOSED\" before its final OPEN"
+      }
+    ],
+    "reused": [
+      559,
+      561,
+      642,
+      646,
+      648,
+      660,
+      741,
+      921
+    ]
+  },
+  "c": {
+    "issues": [],
+    "lineCount": 0,
+    "matchCount": 0,
+    "excluded": [
+      {
+        "issue": 696,
+        "lines": [
+          3793,
+          3795
+        ],
+        "reason": "length-is-the-content date (the date of a data read, not a deadline), Langston Q25, scope §10h"
+      }
+    ]
+  },
+  "d": {
+    "rows": [
+      {
+        "row": "51b",
+        "why": "status \"WITHDRAWN — duplicate of row 73 (#1039)\"",
+        "owner": "CC-B"
+      },
+      {
+        "row": "58",
+        "why": "status \"SUBSUMED — rows 148 / 148a\"",
+        "owner": "CC-B"
+      }
+    ],
+    "excluded": [
+      {
+        "row": "51",
+        "reason": "pointer row (plan row N)"
+      }
+    ]
+  },
+  "e": {
+    "refs": [
+      {
+        "row": "3c",
+        "target": "3b"
+      },
+      {
+        "row": "9c",
+        "target": "B-SIZING-DEC-RESTORE"
+      },
+      {
+        "row": "9j",
+        "target": "9i"
+      },
+      {
+        "row": "19",
+        "target": "B-UNIVERSE-REFRESH-ACTS"
+      },
+      {
+        "row": "20",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "21",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "22",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "23",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "37",
+        "target": "#506"
+      },
+      {
+        "row": "39a",
+        "target": "#977"
+      },
+      {
+        "row": "51a",
+        "target": "51"
+      },
+      {
+        "row": "51c",
+        "target": "51b"
+      },
+      {
+        "row": "80a",
+        "target": "B-SQE-DEADCODE-PURGE"
+      },
+      {
+        "row": "97a",
+        "target": "#561"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-BID-TRIGGER-RELAND"
+      },
+      {
+        "row": "100",
+        "target": "B-VTS-MARK-SIDE"
+      },
+      {
+        "row": "100",
+        "target": "B-VTS-NO-DECISION-VALVE"
+      },
+      {
+        "row": "100",
+        "target": "B-SIZING-DEC-RESTORE"
+      },
+      {
+        "row": "100",
+        "target": "#628"
+      },
+      {
+        "row": "100",
+        "target": "B-REST-SIDES-TO-CACHE"
+      },
+      {
+        "row": "100",
+        "target": "B-BOOK-STATE-RESTART-DURABLE"
+      },
+      {
+        "row": "100",
+        "target": "B-PRICE-SIDE-BY-JOB"
+      },
+      {
+        "row": "100",
+        "target": "B-SYMBOL-CLASS-IDENTITY"
+      },
+      {
+        "row": "100",
+        "target": "B-RTB-SIGNAL-IDENTITY"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-LIVE-FEED"
+      },
+      {
+        "row": "100",
+        "target": "B-PRICE-STALENESS-BOUND"
+      },
+      {
+        "row": "100",
+        "target": "B-CRYPTO-MARK-AGE-GATE"
+      },
+      {
+        "row": "100",
+        "target": "#977"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-SESSION-FRESHNESS"
+      },
+      {
+        "row": "100",
+        "target": "B-XSTOCK-ENTRY-COMPARATOR"
+      },
+      {
+        "row": "100",
+        "target": "B-DECIDED-INTENT-INDEX"
+      },
+      {
+        "row": "100",
+        "target": "B-POST-GRID-MUTATION-CENSUS"
+      },
+      {
+        "row": "100",
+        "target": "#972"
+      },
+      {
+        "row": "100",
+        "target": "#566"
+      },
+      {
+        "row": "100",
+        "target": "B-TARGET-FABRICATION"
+      },
+      {
+        "row": "100",
+        "target": "B-ENTRY-LEVEL-RECHECK"
+      },
+      {
+        "row": "100",
+        "target": "B-INTENT-ENTRY-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-GRID-LIVE-PATH-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-EXIT-TRIGGER-FILL-PARITY"
+      },
+      {
+        "row": "100",
+        "target": "B-EXIT-TICKER-LEG-ADAPTER-SIDES"
+      },
+      {
+        "row": "100",
+        "target": "B-BOOK-STATE-RING-INDEPENDENT-BOUND"
+      },
+      {
+        "row": "100",
+        "target": "#204"
+      },
+      {
+        "row": "100",
+        "target": "#166"
+      },
+      {
+        "row": "100",
+        "target": "B-CLOSE-WRITER-COSTS"
+      },
+      {
+        "row": "100",
+        "target": "B-COST-MATH-CONSOLIDATION"
+      },
+      {
+        "row": "100",
+        "target": "#527"
+      },
+      {
+        "row": "100",
+        "target": "B-EPOCH-PARITY-FENCE"
+      },
+      {
+        "row": "107",
+        "target": "B-PAPER-LANE-PROVENANCE"
+      },
+      {
+        "row": "107a",
+        "target": "T-W20C-SCALAR-LEG"
+      },
+      {
+        "row": "129",
+        "target": "B-EXCURSION-RECORD"
+      },
+      {
+        "row": "135a",
+        "target": "#221"
+      },
+      {
+        "row": "158a",
+        "target": "B-SEC-HARDEN"
+      },
+      {
+        "row": "158b",
+        "target": "B-PATH-SINK-CENSUS"
+      },
+      {
+        "row": "160a",
+        "target": "#615"
+      },
+      {
+        "row": "160a",
+        "target": "B-CREDENTIALS-PRIVATE-REPO"
+      },
+      {
+        "row": "164a",
+        "target": "164"
+      },
+      {
+        "row": "166a",
+        "target": "#692"
+      },
+      {
+        "row": "166b",
+        "target": "166a"
+      },
+      {
+        "row": "179",
+        "target": "#517"
+      },
+      {
+        "row": "186",
+        "target": "P19-B6.10"
+      }
+    ],
+    "unmatched": [],
+    "viaS0": [
+      {
+        "row": "160a",
+        "target": "B-CREDENTIALS-PRIVATE-REPO"
+      }
+    ],
+    "rowRefs": 78,
+    "rowUnmatched": [
+      {
+        "row": "124b",
+        "target": "row 150",
+        "why": "names no earlier row",
+        "owner": "CC-C"
+      },
+      {
+        "row": "124c",
+        "target": "row 148a",
+        "why": "names no earlier row",
+        "owner": "CC-C"
+      }
+    ]
+  },
+  "f": {
+    "all": [
+      "§4:55:B-RTB-REFRESH-CONSOLIDATE",
+      "§0:B-MEASURE-GATE",
+      "§0:B-XSTOCK-FEE-CONTRACT",
+      "§0:B-WAKE-LEAD-NAME",
+      "§5:B-XSTOCK-FEE-CONTRACT"
+    ],
+    "new": []
+  },
+  "g": {
+    "recount": {
+      "CC-A": 70,
+      "CC-INFRA": 57,
+      "CC-C": 72,
+      "CC-B": 63
+    },
+    "table": {
+      "CC-C": 66,
+      "CC-INFRA": 57,
+      "CC-B": 62,
+      "CC-A": 67
+    },
+    "agree": false,
+    "diffs": [
+      {
+        "session": "CC-A",
+        "recount": 70,
+        "table": 67
+      },
+      {
+        "session": "CC-B",
+        "recount": 63,
+        "table": 62
+      },
+      {
+        "session": "CC-C",
+        "recount": 72,
+        "table": 66
+      }
+    ],
+    "cellSum": 252,
+    "statedTotal": 248,
+    "totalAgree": false,
+    "alert": true,
+    "commit": "0db72455edbb5838629ae677bc14d04242910e02",
+    "sameCommit": true
+  },
+  "ownerSources": {
+    "ownerLine": 368,
+    "homeLine": 38,
+    "filer": 23,
+    "unknown": 103
+  }
+}
