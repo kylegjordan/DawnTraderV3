@@ -5608,6 +5608,7 @@ Kraken publishes a per-pair `tick_size` — **1,437 pairs, 11 distinct values, a
 **HOME: folded into `F-G-1` `P4` (§9.4 disposition 1 — the work in hand), owner CC-C.** Kyle's requirement is explicit and he has asked to be told when it is deployed AND visible, so *"counted"* is not *"done"* for this batch. **Deliverable: a pre-SQE reject row on the paper FD tab with grid refusals as a NAMED category of their own, not merged into a catch-all.**
 
 ### #924 OPEN 2026-08-28 (CC-INFRA, surfaced by Langston during `B-TOKEN-WATCH` Step-2 review; he re-derived it independently) — TWO UNGOVERNED KEYS CAN LOG IN AS THE ACCOUNT THAT OWNS THE TRADING APPLICATION, AND THE SYSTEM IMPACT MAP CITES A MITIGATION THAT DOES NOT COVER THEM
+`HOME: B-SEC-HARDEN, owner Infra Claude, placed in SPRINT_TO_LIVE_PLAN.md at row 158, with #1102 (deploy's passwordless root) and #615 (row 160)` — the row's note already names #924; this line makes the placement findable from the issue itself (W41 census, CC-A handover 2026-10-06). Removing or restricting the keys is a server-access change: Kyle's go, at that row.
 
 **BUCKET 2 — WORKING AS BUILT, BUT UNDECIDED.** Nothing is broken; what is missing is a decision nobody has made. ⛔ **Not filed as a defect** — collapsing an undecided posture into a defect is exactly what the bug taxonomy forbids.
 
@@ -8711,7 +8712,8 @@ if [ "$LEN" -lt 1990 ]; then <send>; else echo "STILL OVER at $LEN — not sendi
 
 ---
 
-### #1027 OPEN 2026-09-10 (CC-C; surfaced by Coltrane's own refusal, then confirmed on the box) — ⛔ **COLTRANE CANNOT READ THE REPOSITORY: HIS MIRROR REFRESH IS BLOCKED BY GIT'S OWNERSHIP GUARD** *(heading corrected 2026-09-11 — it said "FAILING GIT AUTHENTICATION", which was wrong; see the amendment)*
+### #1027 CLOSED 2026-10-07 — opened 2026-09-10 (CC-C; surfaced by Coltrane's own refusal, then confirmed on the box) — ⛔ **COLTRANE CANNOT READ THE REPOSITORY: HIS MIRROR REFRESH IS BLOCKED BY GIT'S OWNERSHIP GUARD** *(heading corrected 2026-09-11 — it said "FAILING GIT AUTHENTICATION", which was wrong; see the amendment)*
+✅ **CLOSED 2026-10-07 (CC-INFRA, W41 census) — fixed 2026-09-11 and holding:** `coltrane-repo-refresh.service` last run 2026-10-06T22:09:47Z `OK 06964a668`, `Result=success`, timer every 15 min (`journalctl -u coltrane-repo-refresh.service`, Helsinki). The ownership-guard cause and its `--system` safe.directory fix are recorded in the amendments below and in `comms-infra/systemd/README.md`.
 
 ✅ **HIS REPORT, AND IT WAS ACCURATE:** *"`coltrane-review` refused access: last successful refresh 2,252 minutes ago against a 90-minute limit."* ★ **He reported it rather than working around it.**
 ✅ **CONFIRMED AT THE OBJECT:** `coltrane-repo-refresh.service` is **FAILED**, exiting `status=1/FAILURE` with **`fatal: Could not read from remote repository. Please make sure you have the correct access rights`** — a git credential/access failure against the remote, not a disk or parse problem.
