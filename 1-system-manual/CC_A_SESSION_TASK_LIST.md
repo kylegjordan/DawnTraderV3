@@ -77,12 +77,12 @@
 ### ➕ IN FLIGHT AND SLOTTED — the pre-sprint pair and their homes (2026-09-30 / 10-01; order is the sprint plan's, which is the authority)
 - ✅ **`B-TOKEN-BURN-CUT` CLOSED 2026-10-01** (`#1127`, sprint row 1h; Step 8 CONFIRMED by Langston, Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_TOKEN_BURN_CUT_COMPLETION_REPORT.md`). Sessions are woken only by a message for them.
 - ✅ **`B-WAKE-ARM-EXCLUSIVE` CLOSED 2026-10-02** (`#1140`, sprint row 1o; Step 8 and Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_WAKE_ARM_EXCLUSIVE_COMPLETION_REPORT.md`). One wake watcher per session, enforced by a lease.
-- ⏳ **IN FLIGHT: `B-WAKE-OWNER-LOSS-VISIBLE`** (`#1142`) — sprint row 1p, after 1o, at Step 10 (code `a23e42871`, installed; Step 8 CONFIRMED): a lost alert routing is counted into the owner record where the alert list can show it. **Also carries, from `B-WAKE-ARM-EXCLUSIVE`, as stated objectives checked at close:** the ORPHAN line's local-time stamp (to UTC) and the filter's stale "the Monitor treats stdout" comment (a grep for the string).
+- ✅ **`B-WAKE-OWNER-LOSS-VISIBLE` CLOSED 2026-10-06** (`#1142`, sprint row 1p; Step 8 and Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_WAKE_OWNER_LOSS_VISIBLE_COMPLETION_REPORT.md`). A lost alert routing is recorded and shown to the session that lost it.
 - ▶ **QUEUED: `B-ALERT-OWNER-ON-ROW`** (`#1137`) — sprint row 1l: each alert's owner on the alert record itself, so Langston stops re-guessing it.
 - ▶ **QUEUED: `B-FEATURE-WATCH-ROUTING`** (`#1128`) — sprint row 1i: a feature-watch finding that changes how sessions operate gets a disposition the day it is surfaced.
 - ▶ **QUEUED: `B-GOV-ENROLMENT-WINDOW-OBJECT`** (`#1133`) — sprint row 1j: the checker's enrolment window becomes a chosen object, not the last 300 commits.
 - ▶ **QUEUED: `B-PLAN-ROW-DISAPPEARANCE`** (`#1134`) — sprint row 1k: deleting a batch's plan row must not silently resolve its plan alert.
-- ▶ **QUEUED: `B-CENSUS-OWNERLESS-TRIAGE`** (`#1139`) — sprint row 1n: an owner and a place for the 55 ownerless open issues from the W40 census.
+- ⏳ **IN FLIGHT: `B-CENSUS-OWNERLESS-TRIAGE`** (`#1139`, Step 1 with Langston) — sprint row 1n: an owner and a place for the 55 ownerless open issues from the W40 census.
 
 ### ➕ SCORES — NEW ROWS PLACED BY LANGSTON 2026-10-02 22:24Z / 22:29Z (`02175100e`, `4213136d4`; record `Claude Comms and Packages/Scope Files/CONFIDENCE_SCORING_PROVENANCE_2026-10-02.md` §7). Order is the sprint plan's.
 - ▶ **QUEUED: row 144a, `#399` (c)** — close the xStock DBS-score gap (strong-trend xStock reaches the Net Expectancy kernel with no DBS score, so pWin floors at 0.40). After row 144; **a hard prerequisite for xStock live — done before row 198**; the first step re-measures whether the gap is still open.
