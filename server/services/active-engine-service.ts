@@ -454,11 +454,46 @@ async function reconcileIncompleteTrades(
  * - If no running session, creates new session and starts portfolio manager
  * - Emits cluster bus event on new session start
  */
+/**
+ * B-ENGINE-STOP-DURATION-COLUMN (#1067): close a `running` session row left behind by a stop whose session
+ * write failed (engine flag already false). One retry; on a second failure raise a breakage alert and THROW —
+ * the start refuses rather than create a second running row.
+ */
+async function closeLeftoverSessionRow(rowId: string, sessionId: string): Promise<void> {
+  console.warn(`[B-ENGINE-STOP-DURATION-COLUMN][LEFTOVER_ROW] session ${sessionId} reads 'running' with no manager and the engine flag false — closing it before a fresh start`);
+  let lastErr: any = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await storage.updateActiveEngineSession(rowId, { status: 'stopped', stoppedAt: new Date() });
+      return;
+    } catch (err: any) {
+      lastErr = err;
+      console.error(`[B-ENGINE-STOP-DURATION-COLUMN][LEFTOVER_ROW] close attempt ${attempt} failed for ${sessionId}: ${err?.message}`);
+    }
+  }
+  try {
+    const { addAlert } = await import('./system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      title: 'Engine start refused — a leftover running session could not be closed',
+      body: `Session ${sessionId} reads 'running' with no engine behind it and the engine flag off. Closing it failed twice (${lastErr?.message}); the start was refused rather than create a second running session.`,
+      severity: 'warning',
+      category: 'breakage',
+      metadata: { sessionId },
+      dedupe_key: 'engine-start-leftover-row-unclosable-paper',
+    });
+  } catch (alertErr: any) {
+    console.error(`[B-ENGINE-STOP-DURATION-COLUMN][LEFTOVER_ROW] alert write failed: ${alertErr?.message}`);
+  }
+  throw new Error(`leftover running session ${sessionId} could not be closed: ${lastErr?.message}`);
+}
+
 export async function startActiveEngine(
   userId: string,
   options?: {
     startingBalance?: number;
-    runForMs?: number;
+    // B-ENGINE-STOP-DURATION-COLUMN (#1067): `runForMs` (a requested time limit) is DELETED — specified
+    // 2025-10-19 with an enforcer that was never built; no caller ever passed it (Langston Step 2, Option B).
     startedBy?: string;
     metadata?: any;
     skipAutoWatchlist?: boolean; // Phase 27.F.13.I: Skip slow Kraken API calls during startup
@@ -536,7 +571,23 @@ export async function startActiveEngine(
           };
         }
         
+        // B-ENGINE-STOP-DURATION-COLUMN (#1067, Langston Step 2 item 4): a `running` row with no manager is only
+        // a lost engine if the engine is MEANT to be running — `system_context.isEngineActive`, set true only
+        // after a start succeeds (setEngineActive below, and the routes.ts start) and cleared by every stop. With the flag false the
+        // row is a LEFTOVER of a stop whose session write failed: adopting it is how `paper_-i05tFriAB` lived
+        // 2026-07-16 → 10-06 (every start re-adopted it, its age grew until the stop overflowed) and how a
+        // stale starting_balance survived ($2,250 on that row vs $820 on the post-reset one). Close it and start
+        // fresh with the CALLER's balance. A row that cannot be closed refuses the start — two running rows
+        // would be worse than none.
+        let leftoverClosed = false;
         if (existingSession && !existingManager) {
+          const engineMeantToRun = (await storage.getSystemContext(mode))?.isEngineActive === true;
+          if (!engineMeantToRun) {
+            await closeLeftoverSessionRow(existingSession.id, existingSession.sessionId);
+            leftoverClosed = true;
+          }
+        }
+        if (existingSession && !existingManager && !leftoverClosed) {
           // Reconcile: DB session exists but manager was lost (e.g., server restart)
           console.log('[ActiveEngineService] Reconciling manager from database session');
           const { ActivePortfolioManager } = await import('./active-portfolio-manager.js');
@@ -574,11 +625,6 @@ export async function startActiveEngine(
         const sessionId = `paper_${nanoid(10)}`;
         const startedAt = new Date();
         
-        // Calculate end time if runForMs is specified
-        const endsAt = options?.runForMs 
-          ? new Date(startedAt.getTime() + options.runForMs) 
-          : null;
-
         // Phase 27.F.9: Create session in database FIRST (source of truth)
         // Note: Single-tenant system - userId not stored in activeEngineSessions table
         // Require startingBalance to be provided (no fallback defaults)
@@ -591,8 +637,6 @@ export async function startActiveEngine(
           mode: 'paper',
           status: 'running',
           startingBalance: options.startingBalance.toString(),
-          runForMs: options?.runForMs || null,
-          endsAt: endsAt || null,
           startedBy: options?.startedBy || 'manual',
           metadata: options?.metadata || null,
         };
@@ -992,15 +1036,40 @@ export async function stopActiveEngine(
         const stoppedAt = new Date();
         const runDuration = stoppedAt.getTime() - new Date(existingSession.startedAt).getTime();
 
-        // Update session in database (end DB session)
+        // Update session in database (end DB session).
+        // B-ENGINE-STOP-DURATION-COLUMN (#1067): (1) only `status` + `stoppedAt` — the elapsed duration is derived
+        // from started_at/stopped_at, never written (it overflowed a 32-bit integer column at 24.85 days: the
+        // 2026-09-20 and 2026-10-06 incidents). (2) A failure here no longer skips the teardown below (the window
+        // resets, the bus emit, the reconciliation log and — outside the queue — clearing the engine flag): the
+        // positions are already flattened, so leaving the flag set would make the next boot resume a dead engine.
+        // The stop still FAILS LOUDLY (success:false naming the session write, plus one breakage alert).
         const t1 = Date.now();
         console.log('[41E-S][TIMING] Starting DB session update...');
-        await storage.updateActiveEngineSession(existingSession.id, {
-          status: 'stopped',
-          stoppedAt: stoppedAt,
-          runForMs: runDuration,
-        });
-        console.log(`[41E-S][TIMING] DB session update completed in ${Date.now() - t1}ms`);
+        let sessionWriteError: string | null = null;
+        try {
+          await storage.updateActiveEngineSession(existingSession.id, {
+            status: 'stopped',
+            stoppedAt: stoppedAt,
+          });
+          console.log(`[41E-S][TIMING] DB session update completed in ${Date.now() - t1}ms`);
+        } catch (writeErr: any) {
+          sessionWriteError = writeErr?.message ?? String(writeErr);
+          console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] session ${existingSession.sessionId}: ${sessionWriteError} — teardown continues; the row stays 'running' and the next start closes it`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              title: 'Engine stop could not record the session as stopped',
+              body: `The paper engine stopped (positions flattened, engine flag cleared) but writing session ${existingSession.sessionId} as stopped failed: ${sessionWriteError}. The row still reads 'running'; the next start closes it before creating a new session.`,
+              severity: 'warning',
+              category: 'breakage',
+              metadata: { sessionId: existingSession.sessionId },
+              dedupe_key: 'engine-stop-session-write-failed-paper',
+            });
+          } catch (alertErr: any) {
+            console.error(`[B-ENGINE-STOP-DURATION-COLUMN][SESSION_WRITE_FAILED] alert write failed: ${alertErr?.message}`);
+          }
+        }
 
         // REB 2.8.5C: Reset 24h window and hourly scan history on ACTIVE → STOPPED
         console.log('[REB 2.8.5C] Resetting FX5 24h window and hourly scan history for paper mode');
@@ -1032,6 +1101,22 @@ export async function stopActiveEngine(
         // Phase 8.8.3-C5-1: Balance Reconciliation at session stop/reset
         await c5FinancialDiagnostics.logBalanceReconciliation('paper', 'stop_reset');
         
+        if (sessionWriteError) {
+          return {
+            success: false,
+            message: `Paper trading stopped, but recording session ${existingSession.sessionId} as stopped failed: ${sessionWriteError}`,
+            error: `session write failed: ${sessionWriteError}`,
+            data: {
+              sessionId: existingSession.sessionId,
+              stoppedAt,
+              runDurationMs: runDuration,
+              flatten: flattenReport,
+              sessionWriteFailed: true,
+            },
+            shouldBroadcast: true, // still clear the engine flag below — the engine IS stopped
+          };
+        }
+
         return {
           success: true,
           message: 'Paper trading simulation stopped successfully. Final report generated.',
@@ -1128,8 +1213,6 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
         status: dbSession.status,
         startedBy: dbSession.startedBy,
         startingBalance: dbSession.startingBalance,
-        runForMs: dbSession.runForMs,
-        endsAt: dbSession.endsAt,
       } : null,
       diagnostics: {
         hasDbSession: !!dbSession,
@@ -1224,8 +1307,7 @@ export async function resumeActiveEngines(): Promise<void> {
           try {
             await storage.updateActiveEngineSession(existingSession.id, {
               status: 'stopped',
-              stoppedAt: new Date(),
-              runForMs: Date.now() - new Date(existingSession.startedAt).getTime(),
+              stoppedAt: new Date(), // B-ENGINE-STOP-DURATION-COLUMN (#1067): no elapsed write
             });
             console.error(`[B8.2][RESUME-REFUSED] Session ${existingSession.sessionId} marked stopped (refused rows do not linger).`);
           } catch (stopErr: any) {

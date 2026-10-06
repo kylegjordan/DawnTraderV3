@@ -2074,8 +2074,9 @@ export const activeEngineSessions = pgTable("active_engine_sessions", {
   // NULL-row precheck 2026-07-05: 0 NULLs / 141 rows — constraint lands clean).
   startingBalance: decimal("starting_balance", { precision: 20, scale: 2 }).notNull(),
   endingBalance: decimal("ending_balance", { precision: 20, scale: 2 }),
-  runForMs: integer("run_for_ms"), // If time-limited simulation
-  endsAt: timestamp("ends_at", { withTimezone: true }), // Calculated from runForMs
+  // B-ENGINE-STOP-DURATION-COLUMN (#1067): run_for_ms / ends_at DROPPED — a time limit specified 2025-10-19 and
+  // never enforced; the only values ever stored were elapsed durations (158/158 within 1.7 ms of
+  // stopped_at − started_at). Duration is derived from started_at / stopped_at.
   startedBy: varchar("started_by", { length: 50 }).default("manual"), // 'manual', 'api', 'scheduled'
   metadata: jsonb("metadata"), // Additional session context
 }, (table) => ({

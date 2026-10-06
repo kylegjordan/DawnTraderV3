@@ -4172,7 +4172,7 @@ Supports `exportState()` / `importState()` for persistence across restarts.
 - Gets all open positions from storage
 - For each position it calls **`_flattenOne`**, the ONE flatten path (also used by close-all and, in spirit, by the stranded clear), which resolves the requested price in this order: **(1)** a `getPriceWithFallback` quote of any age — ⚠️ **the `5000` argument decides whether to attempt a REFRESH, never whether to SERVE; a `last_known_good` re-serve carries NO age bound, so its `observedAt` is written onto the row instead** — **(2)** else the best bid of the depth snapshot the fill will walk, **(3)** else **NOTHING: the position is LEFT OPEN**, reported `left_open`, and a breakage alert names it. The stop flow then EXEMPTS it from the orphan delete and passes it to the reconciler, so it is neither deleted nor booked.
 - ⛔ **IT NEVER FALLS BACK TO THE ENTRY PRICE.** That arm made the recorded slippage equal the trade's gross P&L with its sign inverted.
-- ⚠️ **KNOWN, `#1067`:** the stop's LAST write (the session row's run duration into `run_for_ms`, an `integer`) overflows once a session has run > 24.85 days — the flatten completes, the session row still reads `running`, and the HTTP caller sees a 500. Row `3n.u4`.
+- ✅ **`#1067` RESOLVED by `B-ENGINE-STOP-DURATION-COLUMN` (row 2a0):** the stop used to write the session's elapsed run time into `run_for_ms`, a 32-bit `integer` meant for a requested time limit, and it overflowed once a session passed 24.85 days (2026-09-20, 2026-10-06) — the flatten completed but the row stayed `running`, the engine flag stayed set, and the caller saw a 500. Now: **(1)** the time limit is gone — `run_for_ms` and `ends_at` are dropped (specified 2025-10-19, never enforced, never passed by any caller; every stored value was an elapsed duration, 158/158 within 1.7 ms of `stopped_at − started_at`), so the session's duration is derived from `started_at`/`stopped_at`; **(2)** the stop writes only `status` + `stopped_at`, and a failure of that write no longer skips the rest of the teardown — the windows reset, `active_engine_stopped` is emitted, the balance reconciliation logs and the engine flag is cleared — while the stop still fails loudly (`success:false` naming the write, plus a `breakage` alert); **(3)** a later start that finds a `running` row with no engine and the flag OFF closes that leftover row and starts a fresh session with the caller's balance (one retry; if it cannot be closed the start is refused and alerted — never two running rows). With the flag ON it reconciles exactly as before (a lost manager after a crash).
 - Calls `executionEngine.forceClosePosition()` with price source tag
 - Logs diagnostics via `i1TradeLifecycleDiagnostics.logHardStopSummary()`
 
@@ -7813,7 +7813,7 @@ semantics:
   stays true; positions and the RTB queue persist in the database throughout (nothing clears on
   restart — a full reset happens only on an explicit start-new).
 - A `running` session that FAILS the trustworthy-balance gate is **REFUSED loudly** (alert, zero
-  balance writes) and its row is now marked `stopped` (+`runForMs`) so it cannot re-refuse on
+  balance writes) and its row is now marked `stopped` (status + `stopped_at` only since `#1067`) so it cannot re-refuse on
   every subsequent boot.
 - `isEngineActive=true` with NO running session row (post-fix unreachable) resets the flag AND
   raises a dedupe-keyed `breakage` alert — a regression alarm, not housekeeping.
