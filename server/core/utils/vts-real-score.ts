@@ -53,17 +53,24 @@ export function computeRealHybridScore(
     return 0.50; // Neutral fallback
   }
 
-  const safeATR = atr > 0 ? atr : currentPrice * 0.01;
+  // B-ATR-BAD-PRINT (#1153; Langston §9b ruling, 2026-10-06): no fabricated ATR or 24h range. The old
+  // `atr > 0 ? atr : currentPrice * 0.01` and `range24h > 0 ? range24h : currentPrice * 0.02` invented a
+  // measurement. On the xStock lane the score is archived to signal_eval_archive even on rows the gate then
+  // drops as invalid_atr, so the fabrication was persisted. Now: the THREE branches that read the ATR
+  // (vwap_pullback, vwap_bounce, mean_reversion) score the neutral 0.50 when it is unusable — scoped to
+  // them, so the sixteen ATR-independent branches keep their real scores; the four range readers already
+  // carry a `range24h > 0 ? … : 0.5` neutral, which can now actually fire.
+  const atrUsable = Number.isFinite(atr) && atr > 0;
   const range24h = high24h - low24h;
-  const safeRange = range24h > 0 ? range24h : currentPrice * 0.02;
 
   let score: number;
 
   switch (strategy) {
     // ── VWAP-Based Strategies ──
     case 'vwap_pullback': {
+      if (!atrUsable) { score = 0.50; break; } // B-ATR-BAD-PRINT: no ATR, no VWAP-distance score
       // Closer to VWAP = better pullback entry; momentum alignment adds quality
-      const vwapDist = vwap > 0 ? Math.abs(currentPrice - vwap) / safeATR : 1;
+      const vwapDist = vwap > 0 ? Math.abs(currentPrice - vwap) / atr : 1;
       const pullbackQuality = Math.max(0, 1 - vwapDist / 3);
       const momAlignment = momentum > 0 ? 0.6 : 0.4;
       score = pullbackQuality * 0.55 + momAlignment * 0.35 + 0.10;
@@ -71,8 +78,9 @@ export function computeRealHybridScore(
     }
 
     case 'vwap_bounce': {
+      if (!atrUsable) { score = 0.50; break; } // B-ATR-BAD-PRINT: no ATR, no VWAP-proximity score
       // Price near VWAP with strong volume = bounce candidate
-      const vwapProximity = vwap > 0 ? 1 - Math.min(1, Math.abs(currentPrice - vwap) / (safeATR * 2)) : 0.5;
+      const vwapProximity = vwap > 0 ? 1 - Math.min(1, Math.abs(currentPrice - vwap) / (atr * 2)) : 0.5;
       const adxComponent = Math.min(1, adx / 40);
       score = vwapProximity * 0.50 + adxComponent * 0.30 + 0.20;
       break;
@@ -91,7 +99,7 @@ export function computeRealHybridScore(
     // ── Breakout Strategies ──
     case 'breakout': {
       // Price near range extremes + expanding volatility = breakout signal
-      const rangePosition = safeRange > 0 ? (currentPrice - low24h) / safeRange : 0.5;
+      const rangePosition = range24h > 0 ? (currentPrice - low24h) / range24h : 0.5;
       const nearExtreme = rangePosition > 0.85 || rangePosition < 0.15 ? 0.8 : 0.4;
       const volExpansion = Math.min(1, volatility / 0.03);
       score = nearExtreme * 0.45 + volExpansion * 0.35 + 0.20;
@@ -112,15 +120,18 @@ export function computeRealHybridScore(
       // Low volatility + price within range + low ADX = range conditions
       const lowVolScore = Math.max(0, 1 - volatility / 0.03);
       const lowADXScore = Math.max(0, 1 - adx / 40);
-      const inRange = safeRange > 0 ? 1 - Math.abs((currentPrice - low24h) / safeRange - 0.5) * 2 : 0.5;
+      const inRange = range24h > 0 ? 1 - Math.abs((currentPrice - low24h) / range24h - 0.5) * 2 : 0.5;
       score = lowVolScore * 0.35 + lowADXScore * 0.30 + inRange * 0.25 + 0.10;
       break;
     }
 
     case 'mean_reversion': {
+      // B-ATR-BAD-PRINT: an explicit refusal is REQUIRED here — with atr = 0 the deviations divide to
+      // Infinity and the branch would score the MAXIMUM reversion signal (Langston §9b amendment 3).
+      if (!atrUsable) { score = 0.50; break; }
       // Price deviation from VWAP/SMA indicates reversion opportunity
-      const vwapDev = vwap > 0 ? Math.abs(currentPrice - vwap) / safeATR : 0;
-      const smaDev = sma > 0 ? Math.abs(currentPrice - sma) / safeATR : 0;
+      const vwapDev = vwap > 0 ? Math.abs(currentPrice - vwap) / atr : 0;
+      const smaDev = sma > 0 ? Math.abs(currentPrice - sma) / atr : 0;
       const avgDev = (vwapDev + smaDev) / 2;
       const reversionSignal = avgDev > 1.5 ? Math.min(1, avgDev / 3) : avgDev / 3;
       const lowADX = Math.max(0, 1 - adx / 50);
@@ -131,7 +142,7 @@ export function computeRealHybridScore(
     // ── Support/Resistance Strategies ──
     case 'support_bounce': {
       // Price near low24h = potential support bounce
-      const nearSupport = safeRange > 0 ? Math.max(0, 1 - (currentPrice - low24h) / (safeRange * 0.3)) : 0.5;
+      const nearSupport = range24h > 0 ? Math.max(0, 1 - (currentPrice - low24h) / (range24h * 0.3)) : 0.5;
       const volContraction = Math.max(0, 1 - volatility / 0.025);
       score = nearSupport * 0.50 + volContraction * 0.30 + 0.20;
       break;
@@ -139,7 +150,7 @@ export function computeRealHybridScore(
 
     case 'resistance_fade': {
       // Price near high24h = potential fade
-      const nearResistance = safeRange > 0 ? Math.max(0, 1 - (high24h - currentPrice) / (safeRange * 0.3)) : 0.5;
+      const nearResistance = range24h > 0 ? Math.max(0, 1 - (high24h - currentPrice) / (range24h * 0.3)) : 0.5;
       const weakMom = Math.max(0, 1 - Math.abs(momentum) / 0.005);
       score = nearResistance * 0.50 + weakMom * 0.30 + 0.20;
       break;

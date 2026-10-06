@@ -9,6 +9,7 @@ import { join, relative, sep } from 'node:path';
 import { computeAtr, atrOrZero, trueRange } from '../../core/calculations/true-range-atr';
 import { getEffectiveATR, clampEffectiveATR } from '../../strategies/strategy-helpers';
 import { patternToTradeSignal } from '../../services/pattern-recognizer';
+import { computeRealHybridScore } from '../../core/utils/vts-real-score';
 
 type Bar = { open: number; high: number; low: number; close: number };
 const bar = (o: number, h: number, l: number, c: number): Bar => ({ open: o, high: h, low: l, close: c });
@@ -117,6 +118,36 @@ describe('the pattern path requires a valid ATR (no 1 % / 2 % fallback)', () => 
   });
 });
 
+describe('Langston §9b fold — the VTS score fabricates no ATR and no 24h range', () => {
+  const ohlc = BASE.map((b, i) => ({ timestamp: i, ...b, volume: 1 })) as any;
+  const ind = (over: Record<string, number>) => ({
+    vwap: 99, sma: 98, currentPrice: 100, atr: 1, high24h: 101, low24h: 97,
+    volatility: 0.01, momentum: 0.001, adx: 20, ...over,
+  }) as any;
+  const R = 'RANGE_FRIENDLY' as any;
+  it('the three ATR readers score the neutral 0.50 on an unusable ATR (0, NaN)', () => {
+    for (const s of ['vwap_pullback', 'vwap_bounce', 'mean_reversion']) {
+      for (const a of [0, Number.NaN]) expect(computeRealHybridScore(s, ind({ atr: a }), ohlc, R), `${s} atr=${a}`).toBe(0.5);
+    }
+  });
+  it('mean_reversion with atr = 0 is NOT the maximum reversion score (the Infinity path, Langston amendment 3)', () => {
+    const atZero = computeRealHybridScore('mean_reversion', ind({ atr: 0, vwap: 90, sma: 90 }), ohlc, R);
+    const maxish = computeRealHybridScore('mean_reversion', ind({ atr: 0.0001, vwap: 90, sma: 90 }), ohlc, R);
+    expect(atZero).toBe(0.5);
+    expect(maxish).toBeGreaterThan(0.5); // control: a huge deviation does score high
+  });
+  it('an ATR-independent branch keeps its real score whatever the ATR (no top-of-function neutral)', () => {
+    for (const s of ['sma_trend_ride', 'breakout', 'support_bounce']) {
+      expect(computeRealHybridScore(s, ind({ atr: 0 }), ohlc, R), s).toBe(computeRealHybridScore(s, ind({ atr: 1 }), ohlc, R));
+    }
+  });
+  it("a zero 24h range uses each range reader's own neutral instead of a fabricated 2 % range", () => {
+    // breakout: rangePosition neutral 0.5 -> not near an extreme -> nearExtreme 0.4
+    const s = computeRealHybridScore('breakout', ind({ high24h: 100, low24h: 100, volatility: 0 }), ohlc, R);
+    expect(s).toBeCloseTo(0.4 * 0.45 + 0 * 0.35 + 0.20, 10);
+  });
+});
+
 // ── Census fences, read at the source ─────────────────────────────────────────────────────────────
 const ROOT = join(__dirname, '..', '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -167,6 +198,9 @@ describe('fence — every ATR call site uses the shared function (two named carv
     expect(orch).toMatch(/patternEvalErrors\+\+/);
     expect(orch).toMatch(/\[PATTERN_EVAL_ERRORS\] \$\{patternEvalErrors\}/);
     expect(orch).not.toMatch(/entryPrice:\s*tradeSignal\.entryPrice\s*\?\?/);
+    expect(read('server/core/utils/vts-real-score.ts')).not.toMatch(/:\s*currentPrice\s*\*\s*0\.0[12];/); // code form, not the comment naming it
+    // the drift dashboard honours the typed exclusion flag, as the VTS analytics route does
+    expect(read('server/services/drift-dashboard-aggregator.ts')).toMatch(/t\.countsInAggregates === false/);
     expect(read('server/services/strategy-engine.ts')).not.toMatch(/c\['atr_fallback_daily_range_frac'\]/);
     // the old ternary fallback form `atr > 0 ? atr * 1.5 : currentPrice * …` (code, not the comment naming it)
     expect(read('server/services/pattern-recognizer.ts')).not.toMatch(/\?\s*atr\s*\*\s*1\.5\s*:\s*currentPrice/);

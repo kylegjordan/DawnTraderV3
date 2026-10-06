@@ -149,6 +149,10 @@ interface ClosedTrade {
   globalDirectionalBiasScore?: number;
   status?: string;
   sourcePool?: string;
+  countsInAggregates?: boolean;
+  mtTwin?: boolean;
+  shadow?: boolean;
+  resultType?: string;
 }
 
 function readClosedTrades(files: string[], startMs: number, endMs: number): ClosedTrade[] {
@@ -160,6 +164,12 @@ function readClosedTrades(files: string[], startMs: number, endMs: number): Clos
       if (!Array.isArray(data)) continue;
       for (const t of data) {
         if (t?.status !== 'closed') continue;
+        // B-ATR-BAD-PRINT (Langston §9b measurement, 2026-10-06): honour the TYPED exclusion flag, exactly as
+        // the VTS analytics route does (routes/vts.ts '/analytics'). Maker/taker TWINS and never_filled rows carry
+        // countsInAggregates=false and must never enter win rate or trade counts. Measured on staging, last 30
+        // daily files: 1,266 of 7,160 closed rows (17.7 %) were these, all without signal.entryPrice — so the
+        // `entryPrice ?? 0` below was counting them in as 0 % trades.
+        if (t.countsInAggregates === false || t.mtTwin === true || t.shadow === true || t.resultType === 'never_filled') continue;
         const exitTime = t.exitTime;
         if (typeof exitTime !== 'number') continue;
         if (exitTime < startMs || exitTime > endMs) continue;
