@@ -25,3 +25,11 @@ No automatic decision changes today: the only gate that reads this value on the 
 ## Judgement calls — attack these
 1. The empty-window case now CLEARS the store (was: left it). Same contract, but it is a behaviour change you did not see in the plan.
 2. The counter prints only with the 6-hourly aggregation line — enough, or a per-hour line?
+
+## r2 — after Langston's Step-4 send-back (22:12Z)
+- **BLOCKER-1** — the invariant restated with every reader named: pre-audit r3 §B1 (three callers; floors only-refuse; finalScore and the ROI threshold move both ways but feed only shadow logs, a label, a log-only VTS bypass, or the dormant SQE ROI gate — 0 `ROI_Gate` lines today against 3,400 SQE `FINALSCORE_SHADOW` lines). The P2 comment in `vts-telemetry.ts` now says the same.
+- **BLOCKER-2** — `cacheHit` counter added; the three share one total; the scheduler prints total, each count and the made-up share. Test 4 exercises a repeat no-data read and a cached read.
+- **Condition** — the empty-window clear moved below the cross-source guard; new test 6 (with a control).
+- **Nit** — counters moved above the `getPredictiveConfidence` JSDoc.
+- **Record items** — `resetTelemetryCache` deleted (log entry amended); snapshot takes the store + version captured under the lock; version convention stated; the stamped `predictiveConfidence` field recorded as a display echo.
+- Mutation: removing `cacheHitCount++` fails test 4; putting the clear back above the guard fails test 6. vitest 6/6; `tsc` 337 = 337.

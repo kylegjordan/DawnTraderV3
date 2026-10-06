@@ -1,0 +1,15 @@
+// Removed from server/core/logging/vts-telemetry.ts (B-VTS-TELEMETRY-AGGREGATES r2, 2026-10-06): zero callers at the
+// ref and at the parent (Langston Step 4); its comment promised a reload from disk that no code performs.
+/**
+ * Directive 11.7C Task 7: Reset telemetry cache for DSS/RTB refresh
+ * Clears the in-memory telemetry data to force reload from disk
+ */
+export function resetTelemetryCache(): void {
+  vtsTelemetry = {
+    version: 0,
+    source: 'VTS',
+    regimePerformance: {},
+    lastAggregation: new Date().toISOString()
+  };
+  console.log('[11.7C][Telemetry] Cache reset - will reload from disk on next aggregation');
+}

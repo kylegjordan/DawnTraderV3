@@ -595,7 +595,8 @@ schedulerRegistry.registerTask({
         console.log(`[11.7B][SCHEDULER] - Total strategies tracked: ${status.totalStrategies}`);
         const { predictiveConfidenceFallbackCounts } = await import('../core/utils/score-calculator.js');
         const fb = predictiveConfidenceFallbackCounts();
-        console.log(`[11.7B][SCHEDULER] - Predictive confidence since boot: no-data 0.5 fallbacks=${fb.noDataFallback} served from a cell=${fb.served}`);
+        const madeUpPct = fb.total > 0 ? ((fb.noDataFallback / fb.total) * 100).toFixed(1) : 'n/a';
+        console.log(`[11.7B][SCHEDULER] - Predictive confidence reads since boot: total=${fb.total} no-data 0.5=${fb.noDataFallback} (${madeUpPct}%) served from a cell=${fb.served} cache hits=${fb.cacheHit}`);
       } else {
         console.log(`[11.7B][SCHEDULER] ⚠️ VTS aggregation skipped: ${result.message}`);
       }

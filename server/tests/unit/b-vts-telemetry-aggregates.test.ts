@@ -6,7 +6,8 @@
  *        MUTATION: put `|| regimeData['SKIPPED']` back and test 1 fails.
  *   P2 — each run REPLACES the store with what the 7-day window yields (it used to merge, so a quiet strategy kept its
  *        last win rate until the next restart). MUTATION: merge into the old store and test 2 fails.
- *   Residual — the no-data 0.5 fallback is counted, so how often confidence is made up is visible.
+ *   Residual — the no-data 0.5 fallback is counted beside served reads and cache hits (one denominator, Step 4 B2).
+ *   Step 4 condition — the empty-window clear runs below the cross-source guard (test 6).
  *   P4 — the dead code is gone (fence).
  * The store reads `logs/` under `process.cwd()` at import, so cwd is pointed at a temp dir BEFORE the module loads.
  */
@@ -73,15 +74,39 @@ describe('B-VTS-TELEMETRY-AGGREGATES', () => {
     expect(tel.getVTSTelemetry().regimePerformance).toEqual({});
   });
 
-  it('4 — the no-data 0.5 fallback is counted; a served cell is counted separately', async () => {
+  it('4 — every read lands in exactly one of three counters (no-data, served, cache hit), so they share one total', async () => {
     const before = sc.predictiveConfidenceFallbackCounts();
     expect(sc.getPredictiveConfidence('xstock_spot', 'ZZZ/USD', 'R_none', 'nothing_here')).toBe(0.5);
+    expect(sc.getPredictiveConfidence('xstock_spot', 'ZZZ/USD', 'R_none', 'nothing_here')).toBe(0.5); // never cached
     writeTrades([{ regime: 'R2', strategy: 'sC', netProfitPercent: 1.0 }]);
     await tel.updateRegimePerformanceFromVTS();
-    expect(sc.getPredictiveConfidence('xstock_spot', 'ZZZ/USD', 'R2', 'sC')).toBeGreaterThan(0.5);
+    const first = sc.getPredictiveConfidence('xstock_spot', 'ZZZ/USD', 'R2', 'sC');
+    expect(first).toBeGreaterThan(0.5);
+    expect(sc.getPredictiveConfidence('xstock_spot', 'ZZZ/USD', 'R2', 'sC')).toBe(first); // the cached read
     const after = sc.predictiveConfidenceFallbackCounts();
-    expect(after.noDataFallback - before.noDataFallback).toBe(1);
+    expect(after.noDataFallback - before.noDataFallback).toBe(2);
     expect(after.served - before.served).toBe(1);
+    expect(after.cacheHit - before.cacheHit).toBe(1);
+    expect(after.total - before.total).toBe(4);
+    expect(after.total).toBe(after.noDataFallback + after.served + after.cacheHit);
+  });
+
+  it('6 — the empty-window clear is a write, so the cross-source guard stops it too', async () => {
+    writeTrades([{ regime: 'R3', strategy: 'sD', netProfitPercent: 1.0 }]);
+    await tel.updateRegimePerformanceFromVTS();
+    const store = tel.getVTSTelemetry();
+    store.source = 'OTHER' as typeof store.source;
+    try {
+      writeTrades([]);
+      const r = await tel.updateRegimePerformanceFromVTS();
+      expect(r.success).toBe(false);
+      expect(tel.getRegimePerformance('R3', 'sD')?.tradeCount).toBe(1); // not cleared
+    } finally {
+      store.source = 'VTS';
+    }
+    writeTrades([]);
+    await tel.updateRegimePerformanceFromVTS();
+    expect(tel.getVTSTelemetry().regimePerformance).toEqual({}); // control: with source VTS the clear runs
   });
 
   it('5 — P4: the dead code is gone from server/ (and expectancy_tuning is no longer prefetched)', () => {
@@ -96,6 +121,7 @@ describe('B-VTS-TELEMETRY-AGGREGATES', () => {
     expect(text.expectancy).not.toMatch(/function getAdjustedMinROI|function getAdaptiveExpectancy|function checkExpectancyDrift/);
     expect(text.telemetry).not.toMatch(/function checkConfidenceDrift|DRIFT_LOG_PATH|\|\| regimeData\['SKIPPED'\] \|\| null/);
     expect(text.score).not.toMatch(/function clearPredictiveConfidenceCache/);
+    expect(text.telemetry).not.toMatch(/function resetTelemetryCache/);
     expect(text.vts).not.toMatch(/\bsimulateTrade\(signal/);
     expect(text.warmup).not.toMatch(/'expectancy_tuning'/);
     expect(text.warmup).toMatch(/'roi_gating'|'expectancy_gates'/); // control: the warm-up list itself is still read

@@ -189,9 +189,16 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
       }
     }
 
+    if (vtsTelemetry.source && vtsTelemetry.source !== 'VTS') {
+      console.warn('[11.7B][Telemetry] Cross-source write attempt blocked');
+      return { success: false, totalProcessed: 0, regimesUpdated: 0, message: 'Cross-source write blocked' };
+    }
+
     if (totalProcessed === 0) {
       // B-VTS-TELEMETRY-AGGREGATES P2: the store is the 7-day window — an empty window leaves an empty store, never the
-      // previous run's cells (a value outside its own population, #546). No snapshot: nothing to record.
+      // previous run's cells (a value outside its own population, #546). Below the cross-source guard: a clear is a write.
+      // No snapshot, so `version` advances with no manifest entry — the manifest records SNAPSHOTS, `version` counts
+      // STORE CHANGES; a gap in the manifest's versions is an empty-window run, by this convention.
       await telemetryLock.runExclusive(() => {
         vtsTelemetry.regimePerformance = {};
         vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;
@@ -201,17 +208,14 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
       return { success: true, totalProcessed: 0, regimesUpdated: 0, message: 'No new entries' };
     }
 
-    if (vtsTelemetry.source && vtsTelemetry.source !== 'VTS') {
-      console.warn('[11.7B][Telemetry] Cross-source write attempt blocked');
-      return { success: false, totalProcessed: 0, regimesUpdated: 0, message: 'Cross-source write blocked' };
-    }
-
+    let written: { store: VTSTelemetry['regimePerformance']; version: number } | undefined;
     await telemetryLock.runExclusive(() => {
       // B-VTS-TELEMETRY-AGGREGATES P2 (Langston 2026-10-06): each run REPLACES the store with what this window yields.
       // It used to MERGE (assign only the cells present), so a regime × strategy with no trade in the 7-day window kept its
       // last win rate until the next restart — 224 such cell-instances in 170 of 926 retained snapshots (2026-04-12 →
-      // 10-06). A missing cell reads 0.5 at `getPredictiveConfidence`, below every confidence floor (0.55-0.80), so the
-      // change can only refuse, never newly admit (pre-audit A2).
+      // 10-06). A missing cell reads 0.5 at `getPredictiveConfidence`, so the value moves TOWARD neutral in both
+      // directions (167 of the 224 up). At the confidence FLOORS (0.55-0.80, all above 0.5) that can only refuse; every
+      // other reader (finalScore, the ROI threshold) is shadow, log-only or unreachable today — pre-audit r3 §B1.
       const next: VTSTelemetry['regimePerformance'] = {};
       for (const regime in metrics) {
         next[regime] = {};
@@ -237,9 +241,12 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
       vtsTelemetry.regimePerformance = next;
       vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;
       vtsTelemetry.lastAggregation = new Date().toISOString();
+      written = { store: next, version: vtsTelemetry.version };
     });
 
-    saveTelemetrySnapshot(totalProcessed, metrics);
+    // The snapshot writes THIS run's store and version, captured under the lock — replace swaps the object, so reading
+    // `vtsTelemetry` here could file another run's store under this run's count (Langston Step 4, record item).
+    saveTelemetrySnapshot(totalProcessed, metrics, written!.store, written!.version);
 
     const regimesUpdated = Object.keys(metrics).length;
     console.log(`[11.7B][Telemetry] Aggregation complete: ${totalProcessed} entries, ${regimesUpdated} regimes`);
@@ -256,7 +263,12 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
   }
 }
 
-export function saveTelemetrySnapshot(totalProcessed: number, metrics: Record<string, Record<string, ExecutedMetrics>>): void {
+export function saveTelemetrySnapshot(
+  totalProcessed: number,
+  metrics: Record<string, Record<string, ExecutedMetrics>>,
+  store: VTSTelemetry['regimePerformance'],
+  version: number,
+): void {
   ensureDirectories();
   
   const date = new Date().toISOString().slice(0, 10);
@@ -264,7 +276,7 @@ export function saveTelemetrySnapshot(totalProcessed: number, metrics: Record<st
   const filename = `regime_performance_${date}_VTS_${totalProcessed}.json`;
   const filePath = path.join(TELEMETRY_DIR, filename);
   
-  fs.writeFileSync(filePath, JSON.stringify(vtsTelemetry.regimePerformance, null, 2));
+  fs.writeFileSync(filePath, JSON.stringify(store, null, 2));
   
   let manifest: ManifestEntry[] = [];
   if (fs.existsSync(MANIFEST_PATH)) {
@@ -279,7 +291,7 @@ export function saveTelemetrySnapshot(totalProcessed: number, metrics: Record<st
     filename,
     totalProcessed,
     regimes: regimeCount,
-    version: vtsTelemetry.version ?? 1,
+    version,
     timestamp: new Date().toISOString(),
     frictionAware: true // Directive 11.7C Task 6: Enable friction-aware thresholds
   });
@@ -319,18 +331,4 @@ export function getVTSTelemetryStatus(): {
     regimeCount: Object.keys(vtsTelemetry.regimePerformance).length,
     totalStrategies
   };
-}
-
-/**
- * Directive 11.7C Task 7: Reset telemetry cache for DSS/RTB refresh
- * Clears the in-memory telemetry data to force reload from disk
- */
-export function resetTelemetryCache(): void {
-  vtsTelemetry = {
-    version: 0,
-    source: 'VTS',
-    regimePerformance: {},
-    lastAggregation: new Date().toISOString()
-  };
-  console.log('[11.7C][Telemetry] Cache reset - will reload from disk on next aggregation');
 }
