@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isEngineActiveForMode } from '@shared/engine-active';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
@@ -19,6 +20,7 @@ interface FilterDiagnostics {
 interface TradingStatus {
   mode: 'live' | 'paper';
   active: boolean;
+  isEngineActivePaper?: boolean; // B-LIVE-BANNER-ACTIVE-HOTFIX: the per-mode flag the server already sends
 }
 
 export function FilterHealthWidget() {
@@ -30,7 +32,8 @@ export function FilterHealthWidget() {
     staleTime: 5000,
   });
 
-  const isPaperTradingActive = tradingStatus?.mode === 'paper' && tradingStatus?.active;
+  // B-LIVE-BANNER-ACTIVE-HOTFIX (#1160): the paper engine's own flag, not the mode-agnostic `active`.
+  const isPaperTradingActive = isEngineActiveForMode(tradingStatus, 'paper');
 
   // Use faster refresh when paper trading is active
   const { data: diagnostics, isLoading } = useQuery<FilterDiagnostics>({

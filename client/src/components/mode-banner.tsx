@@ -3,13 +3,13 @@ import { useTrading } from "@/hooks/use-trading";
 import { cn } from "@/lib/utils";
 import { Beaker, Activity, PlayCircle, PauseCircle } from "lucide-react";
 
-// Phase 41.2: Use authoritative isTradingActive from useTrading hook to prevent state desync
+// B-LIVE-BANNER-ACTIVE-HOTFIX (#1160): ACTIVE/STOPPED is the engine OF THE MODE SHOWN — the per-mode flag,
+// never the mode-agnostic `active` (which made the Live banner say ACTIVE while only paper ran).
 export default function ModeBanner() {
   const { mode, isLive, isPaper } = useTradingMode();
-  const { isTradingActive } = useTrading();
-  
-  // Phase 41.2: Use single authoritative active state (same as TopBar)
-  const isActive = isTradingActive;
+  const { isTradingActivePaper, isTradingActiveLive } = useTrading();
+
+  const isActive = mode === 'live' ? isTradingActiveLive : isTradingActivePaper;
 
   return (
     <div

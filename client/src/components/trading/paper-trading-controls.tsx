@@ -20,7 +20,7 @@ import { SimulationStartupModal } from "@/components/modals/simulation-startup-m
 
 export function PaperTradingControls() {
   const {
-    isTradingActive,
+    isTradingActivePaper,
     stopTrading,
     isStarting,
     isStopping,
@@ -30,7 +30,8 @@ export function PaperTradingControls() {
   const queryClient = useQueryClient();
   const [showSimulationStartup, setShowSimulationStartup] = useState(false);
 
-  const isActive = isTradingActive;
+  // B-LIVE-BANNER-ACTIVE-HOTFIX (#1160): the PAPER controls show the PAPER engine, not "any engine".
+  const isActive = isTradingActivePaper;
 
   const handleTradingToggle = async (enabled: boolean) => {
     // Phase 33.B: front-end busy guard — prevent rapid toggling.

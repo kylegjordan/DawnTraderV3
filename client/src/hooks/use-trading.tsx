@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { isEngineActiveForMode } from '@shared/engine-active';
 import { useEffect, useRef, useCallback } from 'react';
 import { apiRequest } from '@/lib/queryClient';
 import { apiFetch } from '@/lib/api';
@@ -304,27 +305,12 @@ export function useTrading() {
     }
   });
 
-  // Phase 32.D-Fix.Final: Helper to derive active state from authoritative source
-  function deriveIsActive(state?: TradingStatus, activeEngineStatus?: { isRunning?: boolean }) {
-    // Authoritative boolean first (from server's active field)
-    if (state && typeof state.active === 'boolean') return state.active;
-    
-    // Best-effort on first paint before server data arrives
-    if (!state) return !!activeEngineStatus?.isRunning;
-    
-    // Fallback to mode-specific flags if active field not present
-    if (state.mode === 'paper') return !!(state.isEngineActivePaper || activeEngineStatus?.isRunning);
-    return !!state.isEngineActiveLive;
-  }
-
-  // Phase 32.D-Fix.Final: Single source of truth for trading active state
-  // Prefer authoritative 'active' boolean if present
-  const isTradingActive =
-    typeof tradingStatus?.active === 'boolean'
-      ? tradingStatus.active
-      : deriveIsActive(tradingStatus, activeEngineStatus);
-  const isTradingActivePaper = deriveIsActive(tradingStatus, activeEngineStatus);
-  const isTradingActiveLive = deriveIsActive(tradingStatus, undefined);
+  // B-LIVE-BANNER-ACTIVE-HOTFIX (#1160): per-mode active state from the per-mode server flags, never the
+  // mode-agnostic `active` (which is true when ANY engine runs — it made the Live page say ACTIVE while only
+  // paper ran). The old `deriveIsActive` returned `active` first and reached the per-mode flags only as a
+  // fallback; `isTradingActive` (the mode-agnostic value) is removed so nothing can ask the wrong question.
+  const isTradingActivePaper = isEngineActiveForMode(tradingStatus, 'paper', activeEngineStatus?.isRunning);
+  const isTradingActiveLive = isEngineActiveForMode(tradingStatus, 'live');
 
   return {
     // Status and control
@@ -332,7 +318,6 @@ export function useTrading() {
     statusLoading,
     activeEngineStatus,
     activeEngineStatusLoading,
-    isTradingActive,  // Phase 32.D-Fix.Final: Single authoritative active state
     isTradingActivePaper,
     isTradingActiveLive,
     startTrading: startTradingMutation.mutateAsync,
