@@ -581,9 +581,15 @@ export function patternToTradeSignal(
   signalType: SignalType;
   metadata: Record<string, any>;
 } {
-  // Use ATR for stop/target calculation, fallback to 1% of price
-  const stopDistance = atr > 0 ? atr * 1.5 : currentPrice * 0.01;
-  const targetDistance = atr > 0 ? atr * 2.5 : currentPrice * 0.02;
+  // B-ATR-BAD-PRINT (#1153): a positive finite ATR is a PRECONDITION. The old `currentPrice * 0.01 / 0.02`
+  // fallback fabricated geometry from no measurement; the only production caller (signal-orchestrator's
+  // pattern pass) now drops a pattern with no usable ATR before calling, counted. Reaching here without one
+  // is a wiring defect, so it fails loudly rather than inventing a stop and a target.
+  if (!(Number.isFinite(atr) && atr > 0)) {
+    throw new RangeError(`[B-ATR-BAD-PRINT] patternToTradeSignal requires a positive finite ATR (got ${atr}) for ${pattern.symbol}`);
+  }
+  const stopDistance = atr * 1.5;
+  const targetDistance = atr * 2.5;
 
   const isBuy = pattern.direction === 'BUY';
 

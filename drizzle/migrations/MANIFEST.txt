@@ -214,3 +214,4 @@
 2026-09-30-b-price-side-8a-p4c-inc3.sql
 2026-10-02-b-vts-no-decision-valve-shadow-arm.sql
 2026-10-02-b-pattern-enum-drift-abcd.sql
+2026-10-06-b-atr-bad-print-retire-daily-range-frac.sql

@@ -19,7 +19,6 @@ vi.mock('../../services/module-constants-service.js', () => ({
     max_holding_ms: 86400000, // W2.1 (2026-06-06): was max_holding_period_bars_default: 24
     volume_confirm_min_history: 10,
     volume_avg_lookback: 20,
-    atr_fallback_daily_range_frac: 0.1,
     entry_atr_premium: 0.1,
     stop_atr_mult_vwap: 0.5,
     stop_atr_mult_low24h: 0.1,

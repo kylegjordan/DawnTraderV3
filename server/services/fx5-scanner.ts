@@ -70,17 +70,8 @@ const CYCLES_PER_HOUR = Math.round(3600 / SCAN_INTERVAL_SECONDS); // 120 for 30s
  * Used to supply ATR to computeDirectionalBias() during pre-filter DBS compute.
  */
 function computeATRFromOHLC(ohlcData: OHLCData[], period: number = 14): number {
-  if (ohlcData.length < period + 1) return 0;
-  const recent = ohlcData.slice(-(period + 1));
-  let trSum = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const high = recent[i].high;
-    const low = recent[i].low;
-    const prevClose = recent[i - 1].close;
-    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-    trSum += tr;
-  }
-  return trSum / period;
+  // B-ATR-BAD-PRINT (#1153): the one shared ATR (E3). Unchanged contract: 0 = no usable ATR.
+  return atrOrZero(ohlcData, period);
 }
 
 // B63: Strong DBS threshold for Path D routing (positive, LONG-only).
@@ -107,6 +98,7 @@ import {
 // B54 Fix 4: PATTERN_POOL_THRESHOLDS import removed — all filter thresholds from DB only
 // Batch 19G: PATTERN_GLOBAL_FILTERS and VTS_PATTERN_GLOBAL_FILTERS removed — now read from DB
 import { getMarketContextEngine } from './market-context-engine.js';
+import { atrOrZero } from '../core/calculations/true-range-atr.js';
 
 export const BENCHMARK_BASES = [
   'BTC', 'XBT',           // Bitcoin (standard and Kraken)

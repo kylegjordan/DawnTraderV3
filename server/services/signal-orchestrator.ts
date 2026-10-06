@@ -2217,6 +2217,9 @@ export class SignalOrchestrator {
 
       // Phase 14.5: Process pattern pool — PATTERN + HYBRID strategies only
       let patternSignalsGenerated = 0;
+      // B-ATR-BAD-PRINT (Langston Step-2 C3): a pattern with no usable ATR is a RECORDED drop, never a
+      // silent absence that reads as "no patterns fired". Reported on the pool-complete line below.
+      let patternAtrDrops = 0;
       for (const symbol of patternSymbols) {
         try {
           // Batch 19G VN HF2: Do NOT skip quant pool pairs — they deserve pattern evaluation too
@@ -2276,7 +2279,14 @@ export class SignalOrchestrator {
           const buyPatterns = patternSignals.filter(p => p.direction === 'BUY');
 
           for (const patternSig of buyPatterns) {
-            const atr = context.indicators?.atr ?? (currentPrice * 0.02);
+            // B-ATR-BAD-PRINT (#1153): no fallback. The old `?? (currentPrice * 0.02)` could never fire (the MCE
+            // always returns a number) and, had it fired, would have fabricated a 2 % ATR into stop/target
+            // geometry. A missing or unusable ATR now drops the pattern, counted.
+            const atr = context.indicators?.atr;
+            if (!(typeof atr === 'number' && Number.isFinite(atr) && atr > 0)) {
+              patternAtrDrops++;
+              continue;
+            }
 
             // P19-B6.5c: patterns are TRIGGERS, not strategies. Resolve the detected
             // pattern to the CANONICAL strategy that consumes it in THIS regime
@@ -2301,8 +2311,10 @@ export class SignalOrchestrator {
               // narrowing, NOT the old invalid `pattern_*` bridge.
               strategy: consuming.strategy as StrategySignal['strategy'],
               entryPrice: tradeSignal.entryPrice ?? currentPrice,
-              stopPrice: tradeSignal.stopPrice ?? currentPrice * 0.97,
-              targetPrice: tradeSignal.targetPrice ?? currentPrice * 1.03,
+              // B-ATR-BAD-PRINT: the `?? currentPrice * 0.97 / * 1.03` fallbacks are gone — patternToTradeSignal
+              // always returns numeric geometry from a valid ATR (guarded above), so they were dead.
+              stopPrice: tradeSignal.stopPrice,
+              targetPrice: tradeSignal.targetPrice,
               confidence: tradeSignal.confidence ?? patternSig.strength,
               metadata: {
                 signalType: 'PATTERN',
@@ -2363,7 +2375,7 @@ export class SignalOrchestrator {
       // P19-B6.5c: surface the exact-match no-match DROP counter (Langston D3/D4 obs gate — "no silent caps").
       // Cumulative per (pattern|regime|class); a high/rising drop count vs signals-generated is the tell that
       // pattern coverage went dark (e.g. a regime-field misread routing everything to a no-consumer regime).
-      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())}`);
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())} | [B-ATR-BAD-PRINT][PATTERN_ATR_DROPS] ${patternAtrDrops}`);
 
       const now = new Date();
       this.stats = {

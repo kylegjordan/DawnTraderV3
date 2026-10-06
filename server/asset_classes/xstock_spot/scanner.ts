@@ -55,6 +55,7 @@ import { DEFAULT_DBS_CONFIG, type DBSConfig } from '../../types/directional-bias
 import { xstockDirectionalBiasStore } from '../../core/metrics/directional-bias-store.js';
 import type { OHLCData } from '../../types/market-regime.types.js';
 import { parseQuoteNumber, type XsQuoteRow } from './vts-xs-instrument.js';
+import { atrOrZero } from '../../core/calculations/true-range-atr.js';
 
 /**
  * B-PHASE-A2 (2026-05-17): ATR helper for DBS pre-compute (mirrors fx5-scanner.ts:66-78).
@@ -62,17 +63,9 @@ import { parseQuoteNumber, type XsQuoteRow } from './vts-xs-instrument.js';
  * DBS slope + EMA components for cross-pair comparability.
  */
 function computeATRFromOHLC(ohlcData: OHLCData[], period: number = 14): number {
-  if (ohlcData.length < period + 1) return 0;
-  const recent = ohlcData.slice(-(period + 1));
-  let trSum = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const high = recent[i].high;
-    const low = recent[i].low;
-    const prevClose = recent[i - 1].close;
-    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-    trSum += tr;
-  }
-  return trSum / period;
+  // B-ATR-BAD-PRINT (#1153): the one shared ATR (E3); the caller's period (xsAtrPeriod = 56) is kept.
+  // Unchanged contract: 0 = no usable ATR.
+  return atrOrZero(ohlcData, period);
 }
 
 // 30 seconds — same as FX5 scanner. Aligned with central-clock budget.

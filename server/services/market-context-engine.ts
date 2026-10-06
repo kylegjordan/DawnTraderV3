@@ -65,6 +65,7 @@ import {
   type CanonicalRegimeType,
 } from '../config/canonical-regime-strategy-map.js';
 import { computeDirectionalBias } from '../core/metrics/directional-bias.js';
+import { atrOrZero } from '../core/calculations/true-range-atr.js';
 // B63 Item 16: persistent store + atomic snapshot for global DBS.
 // computeGlobalDirectionalBias is now invoked inside directional-bias-store.ts only.
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
@@ -1774,33 +1775,15 @@ export class MarketContextEngine {
   }
 
   /**
-   * ATR = average of True Range over N periods.
-   * TR = max(high-low, |high-prevClose|, |low-prevClose|)
+   * B-ATR-BAD-PRINT (#1153): the ONE shared ATR (E3 — a single off-market wick cannot carry it),
+   * `server/core/calculations/true-range-atr.ts`. This value is `indicators.atr` → `sizingContext.atr` →
+   * every stop/target/reach check and `atr_at_open`.
+   * Fewer than `period + 1` bars ⇒ 0, the sentinel every consumer already fails closed on (the normalizer's
+   * `invalid_atr`). This used to average a short window instead: a newly listed pair now produces no signal
+   * until it has `period + 1` bars, deliberately (Langston, Step 2 C2).
    */
   private computeATR(ohlcData: OHLCData[], period: number): number {
-    if (ohlcData.length < 2) return 0;
-
-    const trueRanges: number[] = [];
-    for (let i = 1; i < ohlcData.length; i++) {
-      const curr = ohlcData[i];
-      const prevClose = ohlcData[i - 1].close;
-
-      const highLow = curr.high - curr.low;
-      const highClose = Math.abs(curr.high - prevClose);
-      const lowClose = Math.abs(curr.low - prevClose);
-
-      trueRanges.push(Math.max(highLow, highClose, lowClose));
-    }
-
-    if (trueRanges.length < period) {
-      // Not enough data for full period — average what we have
-      const sum = trueRanges.reduce((a, b) => a + b, 0);
-      return trueRanges.length > 0 ? sum / trueRanges.length : 0;
-    }
-
-    const recentTR = trueRanges.slice(-period);
-    const sum = recentTR.reduce((a, b) => a + b, 0);
-    return sum / period;
+    return atrOrZero(ohlcData, period);
   }
 
   /**

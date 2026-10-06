@@ -1,4 +1,5 @@
 import { Trade, TradingSettings, PriceData } from '@shared/schema';
+import { atrOrZero } from '../core/calculations/true-range-atr.js';
 import { storage } from '../storage';
 import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneResult } from './strategy-filters';
 import { telemetryService } from './telemetry-service.js';
@@ -97,17 +98,8 @@ export function stampMaxHoldingMs(
  * @returns ATR value in price units
  */
 function computeATR(priceHistory: PriceData[], period: number = 14): number {
-  if (priceHistory.length < period + 1) return 0;
-  const recent = priceHistory.slice(-(period + 1));
-  let trSum = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const high = parseFloat(recent[i].high);
-    const low = parseFloat(recent[i].low);
-    const prevClose = parseFloat(recent[i - 1].close);
-    const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
-    trSum += tr;
-  }
-  return trSum / period;
+  // B-ATR-BAD-PRINT (#1153): the one shared ATR (E3). Unchanged contract: 0 = no usable ATR.
+  return atrOrZero(priceHistory, period);
 }
 
 /**
@@ -233,7 +225,14 @@ export class StrategyEngine {
 
     if (priceAboveVWAP && nearVWAP && hasReversalPattern && hasVolumeConfirmation) {
       // Batch 45: ATR-relative entry/stop/target
-      const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac']; // Fallback: 10% of daily range
+      // B-ATR-BAD-PRINT (#1153, Langston ruling (e)): no `(high24h − low24h) × atr_fallback_daily_range_frac`
+      // fallback — a slice of the daily range is not a typical hour's range, it was a different measurement
+      // wearing the `atr` name. Both live callers always supply the MCE ATR; a caller without one gets null.
+      const atr = indicators.atr;
+      if (!(typeof atr === 'number' && Number.isFinite(atr) && atr > 0)) {
+        setNullReason('invalid_atr');
+        return null;
+      }
       const entryPrice = currentPrice + atr * c['entry_atr_premium'];
 
       // B63 Item 12: strong-trend geometry override (Variant E from counterfactual audit).
@@ -1239,9 +1238,10 @@ export class StrategyEngine {
     // B72.2: thresholds resolved from module_constants 'strategy.vwap_pullback'.
     // B79.0n.STRATEGY: per-class resolver scope.
     const c = getCachedNumbersForModule('strategy.vwap_pullback', _SE_KEY('vwap_pullback', assetClass));
-    const { currentPrice, vwap, low24h, high24h } = indicators;
-    const atr = indicators.atr ?? (high24h - low24h) * c['atr_fallback_daily_range_frac'];
-    if (atr <= 0 || vwap <= 0) return false;
+    const { currentPrice, vwap, low24h } = indicators;
+    // B-ATR-BAD-PRINT (Langston ruling (e)): no daily-range fallback; a missing ATR fails the check.
+    const atr = indicators.atr;
+    if (!(typeof atr === 'number' && Number.isFinite(atr) && atr > 0) || vwap <= 0) return false;
     // Pullback depth: price is within N ATR below a recent high (VWAP acts as anchor)
     const pullbackFromVwap = currentPrice - vwap;
     const pullbackDepthATR = Math.abs(pullbackFromVwap) / atr;

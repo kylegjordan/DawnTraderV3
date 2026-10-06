@@ -26,7 +26,7 @@
  *   (c) added in the same commit as the signature change it locks
  */
 
-import { describe, it } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   scanPatterns,
   patternToTradeSignal,
@@ -95,8 +95,12 @@ describe('B79.0n.PATTERN-DETECT — REQUIRED-assetClass type-locks', () => {
     });
 
     it('rejects calls that omit atr', () => {
-      // @ts-expect-error B79.0n.PATTERN-DETECT — atr is REQUIRED (no default in post-batch signature)
-      typeCheck(patternToTradeSignal(FIXTURE_PATTERN_SIGNAL, 50000, 'crypto_spot'));
+      // B-ATR-BAD-PRINT (#1153): the call is now also refused at RUNTIME — a positive finite ATR is a
+      // precondition (the old 1 % / 2 % fallback silently absorbed this malformed call).
+      expect(() =>
+        // @ts-expect-error B79.0n.PATTERN-DETECT — atr is REQUIRED (no default in post-batch signature)
+        typeCheck(patternToTradeSignal(FIXTURE_PATTERN_SIGNAL, 50000, 'crypto_spot')),
+      ).toThrow(RangeError);
     });
 
     it('rejects calls with invalid assetClass string', () => {

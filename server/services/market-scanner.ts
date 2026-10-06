@@ -14,19 +14,13 @@ import type { OHLCData } from '../types/market-regime.types.js';
 import { capturePreFilterReject } from './data-archive/signal-eval-archiver.js';
 import { toCanonical } from './utils/symbol-canonicalizer.js';
 import { tradingModeToRunMode } from './run-mode-controller.js';
+import { atrOrZero } from '../core/calculations/true-range-atr.js';
 
-// B63.3: Local ATR helper (mirrors fx5-scanner.ts computeATRFromOHLC — 14-period Wilder)
+// B63.3: 14-period ATR for the DBS pre-compute. B-ATR-BAD-PRINT (#1153): the one shared ATR (E3) — a plain
+// mean of true ranges, NOT Wilder's smoothing (this comment used to say "Wilder"; no copy ever was).
+// Unchanged contract: 0 = no usable ATR.
 function computeATR14(ohlcData: OHLCData[]): number {
-  if (ohlcData.length < 15) return 0;
-  const recent = ohlcData.slice(-15);
-  let trSum = 0;
-  for (let i = 1; i < recent.length; i++) {
-    const hl = recent[i].high - recent[i].low;
-    const hc = Math.abs(recent[i].high - recent[i-1].close);
-    const lc = Math.abs(recent[i].low - recent[i-1].close);
-    trSum += Math.max(hl, hc, lc);
-  }
-  return trSum / 14;
+  return atrOrZero(ohlcData, 14);
 }
 
 const B63_STRONG_DBS_THRESHOLD = 0.35; // LONG-only, positive DBS

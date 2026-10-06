@@ -10,6 +10,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
+import { atrOrZero } from '../core/calculations/true-range-atr.js';
+
 // ═══════════════════════════════════════════════════════════════
 // Global Constants (from STRATEGY_SPECIFICATION_12.3.2_FINAL.md)
 // ═══════════════════════════════════════════════════════════════
@@ -55,21 +57,8 @@ export interface PatternInput {
  * ATR (Average True Range) over N periods
  */
 export function calculateATR(candles: OHLCCandle[], period: number = GLOBAL_CONSTANTS.ATR_PERIOD): number {
-  if (candles.length < period + 1) return 0;
-
-  const trueRanges: number[] = [];
-  for (let i = 1; i < candles.length; i++) {
-    const curr = candles[i];
-    const prev = candles[i - 1];
-    const highLow = curr.high - curr.low;
-    const highClose = Math.abs(curr.high - prev.close);
-    const lowClose = Math.abs(curr.low - prev.close);
-    trueRanges.push(Math.max(highLow, highClose, lowClose));
-  }
-
-  // Use last `period` true ranges for the average
-  const recent = trueRanges.slice(-period);
-  return recent.reduce((sum, tr) => sum + tr, 0) / recent.length;
+  // B-ATR-BAD-PRINT (#1153): the one shared ATR (E3). Unchanged contract: 0 = no usable ATR.
+  return atrOrZero(candles, period);
 }
 
 /**
@@ -328,12 +317,16 @@ export function spearmanRankCorrelation(seriesA: number[], seriesB: number[]): n
 export function getEffectiveATR(candles: OHLCCandle[], currentPrice: number): number | null {
   const atr = calculateATR(candles, GLOBAL_CONSTANTS.ATR_PERIOD);
 
-  // GUARD-2: Reject if ATR too small
-  if (atr < currentPrice * GLOBAL_CONSTANTS.ATR_MIN_RATIO) {
+  // GUARD-2: reject if the ATR is not a positive finite number, or is too small. B-ATR-BAD-PRINT (Langston
+  // Step-2 C1): `NaN < x` is false and `Math.min(NaN, …)` is NaN, so the old `atr < floor` test let a NaN
+  // through as a NaN "effective ATR". Same contract as `clampEffectiveATR` below: unusable ⇒ null ⇒ the
+  // guard's `invalid_atr` drop.
+  if (!(atr > 0) || !Number.isFinite(atr) || atr < currentPrice * GLOBAL_CONSTANTS.ATR_MIN_RATIO) {
     return null;
   }
 
-  // Clamp ATR to max ratio
+  // The 10 % cap is a DATA-INTEGRITY bound, not the measure (B-ATR-BAD-PRINT): its origin is Directive
+  // 12.3.2 GUARD-2, "caps flash-crash ATR". The measure is the shared E3 ATR above.
   return Math.min(atr, currentPrice * GLOBAL_CONSTANTS.ATR_MAX_RATIO);
 }
 
@@ -342,7 +335,7 @@ export function getEffectiveATR(candles: OHLCCandle[], currentPrice: number): nu
  *  don't have a candle array handy at the guard call, so they feed the raw value through this to get the
  *  guard's clamped ATR (identical contract to getEffectiveATR; returns null → guard `invalid_atr` drop). */
 export function clampEffectiveATR(rawATR: number, currentPrice: number): number | null {
-  if (!(rawATR > 0) || rawATR < currentPrice * GLOBAL_CONSTANTS.ATR_MIN_RATIO) return null;
+  if (!(rawATR > 0) || !Number.isFinite(rawATR) || rawATR < currentPrice * GLOBAL_CONSTANTS.ATR_MIN_RATIO) return null;
   return Math.min(rawATR, currentPrice * GLOBAL_CONSTANTS.ATR_MAX_RATIO);
 }
 

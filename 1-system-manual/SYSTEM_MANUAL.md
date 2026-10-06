@@ -73,7 +73,7 @@ The codebase is a TypeScript monorepo with a React frontend, Express API server,
 - **Maintenance convention (keep this document useful):** write new architecture INTO the relevant Chapter — do NOT append dated sections at the tail. Per-batch architecture notes go in **Part VI: Appendices** at the bottom; when an appendix becomes core, fold its substance up into its Chapter and leave a dated pointer. **Update this Table of Contents whenever you add or move a top-level section.**
 
 ### Part I: Core Trading Engine
-- **Chapter 1**: Core Math & Scoring (Phase 1) — FinalScore kernel, Expectancy Gate, cost model, quality metrics
+- **Chapter 1**: Core Math & Scoring (Phase 1) — FinalScore kernel, Expectancy Gate, cost model, quality metrics, the one shared ATR estimator (§9)
 - **Chapter 2**: Strategy Deep Dives (Phase 2) — 19 canonical strategies, regime classification, DSS analysis, active crypto pattern→strategy routing (exact-match-or-drop, P19-B6.5c)
 - **Chapter 3**: Market Scanning & Pair Management (Phase 3) — FX5 Scanner, watchlist, screener filters
 
@@ -112,7 +112,7 @@ Quick reference: which components are authoritative, which are contaminated, and
 | **Net Expectancy Kernel** | `signal-orchestrator.ts`, `active-execution-engine.ts` | Sole EV authority. Mathematically correct. |
 | **cost-model.ts** | `server/core/cost-model.ts` | Cost-of-trade authority. Real spread + slippage + fees. |
 | **calculatePairRegime()** | `server/core/metrics/market-regime.ts` | Canonical pair-level regime classification. 5 regimes. DBS-integrated (B62): accepts `dbsScore` parameter, gates RBS/TFS/IE. |
-| **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. |
+| **Market Context Engine (MCE)** | `server/services/market-context-engine.ts`, `server/types/market-context.ts` | Centralized VWAP/SMA/ATR/regime computation. Signal orchestrator and VTS both call `MCE.computeContext()`. Singleton, 60s cache TTL. Its ATR is the shared E3 estimator (Chapter 1 §9, `B-ATR-BAD-PRINT`). |
 | **Canonical Regime Strategy Map** | `server/config/canonical-regime-strategy-map.ts` | SSOT: 5 regimes, 19 strategies. **Wired via MCE** (Batch 14). |
 | **Guardrails V2** | `guardrails-v2.ts` | Risk gate authority. 10 named guardrails + kill switch. |
 | **Pre-Execution Validator** | `pre-execution-validator.ts` | Final gate before trade execution. Two-gate system (post goal-alignment removal). |
@@ -1072,6 +1072,28 @@ Where `BASE_FEE_SLIPPAGE = 0.005` (flat 0.5%) from `SYSTEM_GUARDS`. ~~The `calcu
 trendSlope = (prices[last] - prices[first]) / prices[first]
 ```
 Used by DSS for regime classification.
+
+### ATR — the one shared estimator (E3) — `B-ATR-BAD-PRINT`, `#1153`, 2026-10-06
+
+**File:** `server/core/calculations/true-range-atr.ts` (`computeAtr`, `atrOrZero`). Every live ATR — the MCE's, the strategies', the clamp helpers', the three scanner DBS copies — calls it. Before this batch there were six copies of a plain 14-bar mean, with no defence against a bad candle.
+
+```
+bars   = the last (period + 1) bars                         // period = 14; xStock DBS uses 56
+TR_i   = max(high_i − low_i, |high_i − close_{i−1}|, |low_i − close_{i−1}|)
+m      = median(TR_1 … TR_period)
+high_i' = min(high_i, max(open_i, close_i) + 3m)            // clip a wick beyond 3× the window's median range
+low_i'  = max(low_i,  min(open_i, close_i) − 3m)
+ATR    = mean(TR'_1 … TR'_period)                          // TR' from the clipped high/low
+fewer than period + 1 bars, or any non-finite value  ⇒  NaN  ⇒  atrOrZero gives 0  ⇒  invalid_atr drop
+```
+
+- **Bar source.** Crypto: Kraken 60-minute REST candles through `ohlcCache`, **the forming (unfinished) hour included**, no candle sanity check upstream. xStock: its scanner's bars.
+- **What it suppresses.** A wick that runs far from the candle body and returns — an off-market print. The case that produced it: GBP/USD's 2026-09-23 20:00Z bar printed a high of 1.70000 with the close back at 1.32399; the plain mean rose more than tenfold and set a stop and a target the pair could not reach. On that real window E3 stays within 1.5× of the clean value.
+- **What it deliberately does not suppress.** A move whose close holds (consecutive wide bars, a gap that stays). The clip is anchored on the body, so a moved close is never touched; the pre-registered fixtures pass ≥ 80 % of such a rise and in the 128-row harm check no ATR moved by more than 1.34 %.
+- **The failure direction it accepts.** A bad print E3 misses leaves the ATR where the old mean left it — no new harm. Wrongly shrinking a real move would silently tighten every stop and target; that arm is the measured one (Langston, pre-audit §1d).
+- **The clamp is an integrity bound, not the measure.** `getEffectiveATR` / `clampEffectiveATR` cap the ATR at 10 % of price and drop it below 0.1 % (Directive 12.3.2 GUARD-2, "caps flash-crash ATR"). Because guard and MCE read the same function, the clamped value can never exceed the raw one (`#371`).
+- **The pattern branch has no clamp.** It sets stop 1.5×ATR and target 2.5×ATR straight from the MCE value; the estimator is its only protection. A pattern without a usable ATR is dropped and counted — there is no fabricated 1 %, 2 % or daily-range ATR anywhere any more.
+- **Not covered:** ADX still sums its own true ranges (row 2a1 `B-ADX-TRUE-RANGE-SHARED`); the 1-minute exit-replay ATR is deliberately separate (`#866`).
 
 ---
 
