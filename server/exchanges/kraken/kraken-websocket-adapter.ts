@@ -295,9 +295,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private subscriptionAcks: Map<string, { acked: boolean; timestamp: number }> = new Map();
   private subscriptionRequests: Map<string, { krakenWsPair: string; internalSymbol: string; timestamp: number }> = new Map();
   private unmappedTicks: Map<string, { count: number; lastSeen: number }> = new Map(); // Track unmapped tick events for gap reporting
-  // B-PRICE-FEED-TRUTH I3 (#1047): a pair argument that is not a non-empty string, counted by kind. The first of each kind
-  // is logged loudly so a new shape names itself; the guard must not turn a loud failure into a silent one (Langston C4).
-  private badPairInputs: Map<string, number> = new Map();
   
   // Phase 8.8.3-I7-WS-F: Subscription health monitoring
   private subscriptionHealthInterval: NodeJS.Timeout | null = null;
@@ -1797,13 +1794,15 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    */
   private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
     // B-PRICE-FEED-TRUTH I3 (#1047): one guard for all seven call sites (each already handles null). A non-string or
-    // empty pair reached the resolver's `toUpperCase()` and threw, dropping the whole message. Counted by kind; the first
-    // of each kind is logged, so this never becomes a silent miss.
+    // empty pair reached the resolver's `toUpperCase()` and threw, dropping the whole message. The first of each kind is
+    // logged; every one is counted in `unmappedTicks` under `badpair:<kind>`, which `getUnmappedTicks()` already serves to
+    // the gap report (Langston Step-4 C1: a counter with no reader is the silent miss this guard must not become).
     if (typeof krakenPair !== 'string' || krakenPair.trim() === '') {
       const kind = krakenPair === null ? 'null' : typeof krakenPair === 'string' ? 'empty' : typeof krakenPair;
-      const n = (this.badPairInputs.get(kind) ?? 0) + 1;
-      this.badPairInputs.set(kind, n);
-      if (n === 1) console.warn(`[1047][WS] pair lookup refused a ${kind} input (first of its kind; later ones counted)`);
+      const key = `badpair:${kind}`;
+      const existing = this.unmappedTicks.get(key) || { count: 0, lastSeen: 0 };
+      this.unmappedTicks.set(key, { count: existing.count + 1, lastSeen: Date.now() });
+      if (existing.count === 0) console.warn(`[1047][WS] pair lookup refused a ${kind} input (first of its kind; later ones counted as ${key})`);
       return null;
     }
     // I7-MAP-FIX: PRIORITY 1 - Use new resolver's mapKrakenPairToInternal
@@ -2316,6 +2315,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
 
   /**
    * Phase 8.8.3-I7-WS-A: Get unmapped tick events for gap reporting
+   * B-PRICE-FEED-TRUTH I3 (#1047): THREE keyspaces share this map, so an entry is NOT always a distinct pair — a bare key
+   * is a ticker miss for that pair, `book:<pair>` a book-update miss, `badpair:<kind>` a refused non-string/empty input.
+   * Count distinct pairs by key prefix, never by entry count (Langston Step-4 R2b).
    */
   getUnmappedTicks(): Array<{ pair: string; count: number; lastSeen: string }> {
     return Array.from(this.unmappedTicks.entries()).map(([pair, data]) => ({

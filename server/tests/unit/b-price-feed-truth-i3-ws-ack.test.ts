@@ -53,7 +53,7 @@ describe('I3 — a symbol-less subscribe ACK', () => {
   });
 });
 
-describe('I3 — the lookup wrapper refuses a bad pair loudly once, then counts', () => {
+describe('I3 — the lookup wrapper refuses a bad pair loudly once, then counts where the gap report reads', () => {
   it('4 — undefined, empty and non-string inputs return null; the first of each kind is logged', () => {
     const a = adapter();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -61,9 +61,11 @@ describe('I3 — the lookup wrapper refuses a bad pair loudly once, then counts'
     expect(a.mapKrakenPairToInternalSymbol(undefined)).toBeNull();
     expect(a.mapKrakenPairToInternalSymbol('')).toBeNull();
     expect(a.mapKrakenPairToInternalSymbol(123)).toBeNull();
-    expect(a.badPairInputs.get('undefined')).toBe(2);
-    expect(a.badPairInputs.get('empty')).toBe(1);
-    expect(a.badPairInputs.get('number')).toBe(1);
+    // Counted where a production reader exists (getUnmappedTicks → the gap report), not in a map nothing reads.
+    const byKey = new Map(a.getUnmappedTicks().map((e: any) => [e.pair, e.count]));
+    expect(byKey.get('badpair:undefined')).toBe(2);
+    expect(byKey.get('badpair:empty')).toBe(1);
+    expect(byKey.get('badpair:number')).toBe(1);
     const refused = warn.mock.calls.filter((c) => String(c[0]).includes('pair lookup refused'));
     expect(refused).toHaveLength(3); // once per kind, not once per call
   });
