@@ -1,0 +1,50 @@
+# B-FEED-HEALTH-GRADE-ARM — PRE-AUDIT AND IMPLEMENTATION PLAN (Step 2, r1)
+
+change-class: non_architecture (Langston Step 1: stands — telemetry and reads, no new active-path emission; the System Impact Map update binds regardless) · **Issue:** `#1123` · **Plan row:** `SPRINT_TO_LIVE_PLAN` 3a (paired with 3a1) · **Owner:** CC-B
+**Scope:** `B_FEED_HEALTH_GRADE_ARM_SCOPE.md` r2 (`a283aa5dc`), Langston Step-1 PROCEED 2026-10-07 with C1, C2, a §13 fold, Q1 = shared state, Q2 = fixed UTC bounds.
+**Read at:** `origin/migration/aws-supabase` (head `9cb29f504`); staging env, DB and logs 2026-10-07 ~02:10Z; Kraken public REST.
+
+## PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED (scope §0.8): the GBP/USD gap is "which subscriptions the recorder covers vs which the engine prices". NOW: the recorder drops EVERY fiat-base pair, and the cause is a name table, not the subscription list.** REASON: §A6 — measured absence plus a mechanism line, labelled a hypothesis until Step 3's test.
+
+## SOURCES READ
+| # | source | read |
+|---|---|---|
+| 1 | code | `feed-integrity-monitor.ts` (`:185-195` thresholds, `:205-215`, `:255-335` liveness + config read, `:596-680` alert state + singleton), `feed-integrity-auto-check.ts:24-232`, `:320-335`, `:384-420`, `alerts-service.ts:255-300`, `b72-warmup.ts:150-200`, `b-price-side-8a-p4c-inc3-guard.test.ts:118-150`, `:240-265`, `passive-archive/universe-loader.ts:96-260` |
+| 2 | runtime + DB | staging `.env` and the running process environment (cooldown override); `system_alerts` (5,708 `feed_health` rows; 1,088 live unacknowledged); `crypto_spot_ticker_snap` (last 6 h); `closed_trades` (GBP/USD, EUR/USD); the recorder's universe log line; Kraken public `AssetPairs` + `Ticker` |
+| 3 | System Impact Map | the monitor + auto-check entries; **no entry for the alert state's recovery predicate** (it lands at Step 10 with the `activeAlertId` removal and the new 3a1 edge) |
+| 4 | System Manual | the feed-liveness section (`P19-B6.7`) — the grade's definition is unchanged by this batch; **not applicable** unless Step 3 changes the grade (it does not) |
+| 5 | ledger | `#1123`, `#301` (`P19-B6.7`), `#638` (folded to 3a1), `#994`; no prior decision to keep `cleanupOldFeedAlerts` |
+| 6 | provenance | `d0a40fabc` / `f9f577fa7` (`P19-B6.7`); Phase 27.F.21.FINAL (`acknowledgeFeedHealthAlerts`, `cleanupOldFeedAlerts`) |
+
+## A. AUDIT
+**A1 — the prefetch exception (scope C-a).** `PREFETCH_EXCEPTIONS` = one entry `feed_health` (`guard test :146-150`), asserted at `:248` and `:262`; `strategy.orb` already prefetched (`b72-warmup.ts:177-181`, asserted `:263`). The 5 rows are seeded by `2026-06-26-p19-b6-7-feed-health-seed.sql`, which asserts `count = 5` (Langston), so the `:193` boot hard-fail cannot bite a fresh database.
+
+**A2 — the recovery predicate has no read site (Langston C1).** `alertState` is private; `getActiveAlertId()` (`:640`) is its only window, and this batch deletes it. Whole-tree: `getLastStatus` / `getAlertState` — 0 matches. ⇒ **a read site must be added.** Why it matters: `alertCooldownSec` defaults to 300 s (`:193`) against a `*/5` cron, and the healthy branch never refreshes `lastAlertTime`, so `shouldSendAlert` (`:602-626`) returns true on almost every healthy cycle. A predicate of `shouldAlert && healthy` would acknowledge every 5 minutes forever.
+
+**A3 — the throttle's margin (Langston C2).** Cooldown 300 s equals the cron period 300 s. `lastAlertTime` is stamped at the END of a check (`updateAlertState`, `:628-635`) and `shouldSendAlert` runs at the START of the next, so a persistent identical state is suppressed only by the width of one check's own duration — a margin of milliseconds to seconds, not a design margin. **`FEED_ALERT_COOLDOWN_SEC` is unset on staging:** 0 matches in `/home/deploy/dawntrader/.env` and 0 in the running process environment (`pm2 env 0`; control: `NODE_ENV` found, 1 match, same read).
+
+**A4 — `cleanupOldFeedAlerts` (`alerts-service.ts:289`), the §13 fold.** It DELETES every `alert_type LIKE '%feed%'` row older than 30 minutes. Callers tree-wide: **zero** (the one hit is its own declaration; Langston's control returned 4 for `getActive*AlertId` with the same grep form). Armed as "the clear" it would destroy the operator's history instead of acknowledging it, and would eat the 1,088-row backlog objective 2's check reads. **Disposition: delete (rule 18)** — `DELETED_COMPONENTS_LOG` + `_archive/deleted-code/`.
+
+**A5 — Q1, shared state (Langston).** The catch path shares the grade path's throttle state. With separate states, the healthy-transition acknowledge would see "already healthy" and never clear catch-path rows — `#638` rebuilt. `CHECK_FAILED` differs from every real grade, so the first successful check after a throw always trips the status/grade-change arm (`:612`).
+
+**A6 — GBP/USD (objective 5).** Measured: in the last 6 h `crypto_spot_ticker_snap` holds **454 distinct symbols** and **no `GBP/USD`, `EUR/USD` (or `ZGBP/USD`/`ZEUR/USD`)** — controls `BTC/USD` 3,223 rows, `USDT/USD` 2,102. The engine has traded both (`closed_trades`: GBP/USD 2026-09-23 → 10-06, 2026-07-24 ×2; EUR/USD 2026-07-23), priced via REST (`[3n.l][WRITE_KEYS] … viaPrimary=[GBP/USD<-ZGBPZUSD …]`). At the venue both pairs are `online`, quoted `ZUSD`, 24 h volume 5.5 M GBP and 33.7 M EUR — every recorder filter passes them. **Mechanism (HYPOTHESIS, rule 29(c) — line read, outcome not yet observed):** `universe-loader.ts:211` builds the canonical name as `normalizeKrakenAsset(info.base, XBASE_TO_PLAIN)`, and `XBASE_TO_PLAIN` (`:153-156`) has no fiat codes (`ZGBP`, `ZEUR`, …), so the name becomes `ZGBP/USD` — not a name the live feed knows. The quote side already maps `ZGBP → GBP` (`:149`) and the perp loader already solved the same class by reading the venue's own `altname` (`:416-460`). Step 3 confirms with a unit test on the loader with the real `AssetPairs` shape before any fix.
+
+**A7 — where the per-cycle line can come from.** `computeLiveness` runs at `:211` (`getHealthMetrics`) and `:431` (`generateReport`), both inside one auto-check cycle; its per-class result (`result.classes`) is discarded after the worst age is taken. The cycle's summary lines (`auto-check.ts:187-188`) carry only the worst age.
+
+## B. PLAN (each item points at its finding)
+1. **Prefetch + guard flip, ONE commit with item 2** — `feed_health` into `PREFETCH_MODULES`; `PREFETCH_EXCEPTIONS` emptied; `:248` asserts `[]`; `feed_health` joins the prefetched assertion. *(A1)*
+2. **The clear, by acknowledging** — monitor gains `getLastStatus(): FeedHealthStatus` (the read site, A2), listed in §3 of the scope; the job's healthy branch: `if (monitor.getLastStatus() !== 'healthy')` → `acknowledgeFeedHealthAlerts(admin.id)` per admin, log `[FeedIntegrity][CLEAR] acknowledged n (live x, paper y)`, then `updateAlertState('healthy', grade, …)`. `activeAlertId`, its setter argument and `getActiveAlertId` REMOVED; the dead `:91-94` branch removed. Catch path: goes through `shouldSendAlert(critical, 'CHECK_FAILED')` + `updateAlertState` (shared state, A5). *(A2, A5)*
+3. **The throttle margin, stated in code** — the comment beside `alertCooldownSec` says the 300 s default equals the cron period, so suppression of an unchanged state rests on the check's own duration; unit test (iii) sets an explicit cooldown (e.g. 600 s) rather than inheriting the coincidence. **No change to the default** (it would change behaviour beyond scope). *(A3)*
+4. **Delete `cleanupOldFeedAlerts`** with the rule-18 record. *(A4)*
+5. **Per-class liveness, stored and logged once per cycle** — `computeLiveness` keeps its last per-class result; `getLastLiveness()` is the read-only accessor for 3a1 (scope objective 4); the job logs `[FeedIntegrity][liveness] class=… freshestAgeMs=… grade=… segment=…` once per cycle per class, with `segment` from fixed UTC bounds (regular 13:30-20:00, after-hours 20:00-24:00, overnight 00:00-08:00, pre-market 08:00-13:30, weekend-closed). *(A7; Q2)*
+6. **GBP/USD** — Step 3: a loader unit test with the real `AssetPairs` shape for `ZGBPZUSD`/`ZEURZUSD`; if it yields `ZGBP/USD`, the canonical name is taken from the venue's `wsname` (`GBP/USD`, the venue's own statement, same posture as the perp loader's `altname`), not by adding codes to a hand list. If the test does NOT reproduce, the hypothesis is withdrawn and the gap re-investigated before any change. *(A6)*
+7. **Tests** — the scope's (i)-(iv), plus: `getLastStatus` drives the clear exactly once per non-healthy → healthy transition across three healthy cycles; the catch path mints once inside an explicit cooldown; `cleanupOldFeedAlerts` absent (fence); the loader test (item 6). Mutation: with the read-site predicate replaced by `shouldAlert && healthy`, the "exactly once" test fails.
+8. **Step 7** — after deploy: boot line `prefetched … module='feed_health' rows=5`; no `config not warmed` line since the restart; the first `[FeedIntegrity][liveness]` lines per class; the unacknowledged `feed_health` count before and after the first post-deploy healthy cycle; GBP/USD rows in `crypto_spot_ticker_snap` within an hour if item 6 ships. **The objective-3 window report stamps its date and says the UTC bounds are DST-valid only until 2026-11-01** (Langston Q2).
+9. **Step 10** — System Impact Map (monitor: `activeAlertId` removed, `getLastStatus` and `getLastLiveness` added, the edge to 3a1; the recorder universe if item 6 ships); `DELETED_COMPONENTS_LOG` (A4, the dead branch); System Manual judged N/A unless the grade's definition changes (it does not).
+
+No item is UNAUDITED.
+
+## C. HONEST LIMITS
+- A6's mechanism is read, not observed: no log line names the recorder's subscribed symbols (0 for `ZGBP/USD`, and the instrument cannot show it would have printed one), so Step 3's unit test is the deciding read.
+- The 1,088 → 0 check assumes no non-healthy grade lands between the deploy and the first healthy cycle; the report states the actual sequence.
