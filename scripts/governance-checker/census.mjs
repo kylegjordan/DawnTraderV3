@@ -199,7 +199,11 @@ function filerOf(e) {
 // R3-Q9: owners widened, measured and LABELLED. Sources, in display precedence: a session on an OWNER line
 // of the issue's text (`owner` case-insensitive; the first session within 30 characters after it); a session
 // named on a HOME line; else the head's `(CC-x` token printed as `filer`; else `owner ?`.
-export function ownerOfIssue(e) {
+// B-CENSUS-OWNERLESS-REMAINDER (#1167, Langston Step-1 C3/C4): with an OPTIONAL `ctx.placingOwner(n)`, an issue that has
+// no owner from its own text reads `placing-line <session>` (source `placingLine`) — the owner of the plan line that
+// places it, LABELLED, never flattened into `owner <session>`: nobody has accepted it. With no `ctx` the result is
+// exactly what it was (every existing caller passes none).
+export function ownerOfIssue(e, ctx) {
   let ownerLine = null, homeLine = null;
   for (const { text } of e.block) {
     if (!ownerLine) {
@@ -213,7 +217,30 @@ export function ownerOfIssue(e) {
   if (ownerLine) return { label: `owner ${ownerLine}`, source: 'ownerLine', ownerLine, homeLine, filer };
   if (homeLine) return { label: `owner ${homeLine}`, source: 'homeLine', ownerLine, homeLine, filer };
   if (filer) return { label: `filer ${filer}`, source: 'filer', ownerLine, homeLine, filer };
+  const placingLine = ctx && ctx.placingOwner ? ctx.placingOwner(e.n) : null;
+  if (placingLine) return { label: `placing-line ${placingLine}`, source: 'placingLine', ownerLine, homeLine, filer, placingLine };
   return { label: 'owner ?', source: 'unknown', ownerLine, homeLine, filer };
+}
+
+// The session named by the plan line that PLACES issue n, by the same rules as `placement` (a §4 row's item or batch
+// cell, its note in a named homing form, an after-live line; else a HOME batch id's §4 row or after-live line), or null.
+export function placingOwnerOf(ledger, plan, pls) {
+  return (n) => {
+    const numIn = (t) => hasNum(t, n);
+    const row = plan.s4.find((r) => numIn(r.item) || numIn(r.batch) || noteHomesNum(r.note, n));
+    if (row) return firstSession(row.owner);
+    const al = pls.afterLive.find(numIn);
+    if (al) return firstSession(al);
+    const e = ledger.byNum.get(n);
+    const ids = e ? [...new Set(e.block.map((b) => b.text).filter((t) => /HOME/.test(t)).flatMap(idsIn))] : [];
+    for (const id of ids) {
+      const r2 = plan.s4.find((r) => hasId(r.batch, id) || hasId(r.item, id));
+      if (r2) return firstSession(r2.owner);
+      const l2 = pls.afterLive.find((l) => hasId(l, id));
+      if (l2) return firstSession(l2);
+    }
+    return null;
+  };
 }
 
 // ══ A2 — handover records (Langston, W40) ═════════════════════════════════════════════════════════════
@@ -541,8 +568,14 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
     for (const n of h.issues) if (!handedOn.has(n) || h.date < handedOn.get(n)) handedOn.set(n, h.date);
   }
 
-  const owner = (n) => ownerOfIssue(ledger.byNum.get(n));
+  const placingOwner = placingOwnerOf(ledger, plan, pls);
+  const owner = (n) => ownerOfIssue(ledger.byNum.get(n), { placingOwner });
   const place = placement(ledger, plan, pls, roadmap, names);
+  // List (b′) (#1167): OPEN issues that are PLACED but that no session has accepted — owned only through the plan line
+  // that places them (`placingLine`) or not at all (`unknown`). Placed issues appear in no other list.
+  const placedOwnerless = [...ledger.open].sort((a, b) => a - b)
+    .filter((n) => place.has(n) && !place.get(n).startsWith('U') && ['placingLine', 'unknown'].includes(owner(n).source))
+    .map((n) => ({ n, owner: owner(n).label }));
   const unplaced = [...place].filter(([, v]) => v.startsWith('U')).map(([n, v]) => ({ n, code: v, why: UNPLACED_WHY[v], owner: owner(n).label, handedOver: handedOn.get(n) ?? null }));
   // The three states (Langston A2): never surfaced / handed over, still unplaced / placed. A handed item that is no
   // longer OPEN is reported apart as closed — neither a placement nor an ignored handover.
@@ -559,14 +592,14 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
   const rec = recountS6(plan);
   const g0 = { ...rec, ...(rec.agree ? { alert: false } : s6AlertDecision(rec, readers.planHistory(ref, CENSUS_SOURCES.plan, historyDepth))) };
   const g = { ...g0, alert: g0.alert || !rec.totalAgree };   // C1: a stated Total that is missing or wrong alerts on its own
-  const ownerSources = { ownerLine: 0, homeLine: 0, filer: 0, unknown: 0 };
+  const ownerSources = { ownerLine: 0, homeLine: 0, filer: 0, placingLine: 0, unknown: 0 };
   for (const n of ledger.open) ownerSources[owner(n).source]++;
   return {
     ref, prevRef,
     selfCheck: { heads: ledger.heads.length, numbers: ledger.byNum.size, open: ledger.open.size, openR1: ledger.openR1.size, s1: ledger.s1.size, s2: ledger.s2.size },
     a,
     b: { placed: { number: tallyOf('number'), homeBatch: tallyOf('homeBatch'), parked: tallyOf('parked'), roadmap: tallyOf('roadmap') },
-      unplaced, handover, byWhy: Object.fromEntries(Object.keys(UNPLACED_WHY).map((k) => [k, tallyOf(k)])),
+      unplaced, handover, placedOwnerless, byWhy: Object.fromEntries(Object.keys(UNPLACED_WHY).map((k) => [k, tallyOf(k)])),
       selfContradicting: ledger.selfContradicting, reused: ledger.reused },
     c: { issues: c.issues.map((n) => ({ n, lines: [...new Set(c.byIssue.get(n).map((h) => h.line))], owner: owner(n).label })), lineCount: c.lineCount, matchCount: c.matchCount, excluded: c.excluded },
     d, e, f, g, ownerSources, _ledger: ledger,
@@ -587,6 +620,7 @@ export function censusCounts(r) {
     d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
     sc: r.b.selfContradicting.length, r: r.b.reused.length,
+    ...(r.b.placedOwnerless ? { po: r.b.placedOwnerless.length } : {}),   // (b′) placed but ownerless (#1167)
     // A2: [handed ITEMS, still unplaced, placed since, closed since, vanished since].
     ...(r.b.handover ? { hv: [r.b.handover.handed, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length, r.b.handover.vanishedSince.length] } : {}),
   };
@@ -599,6 +633,7 @@ export function censusLists(r) {
     b: r.b.unplaced.map((x) => (x.handedOver ? [x.n, x.code, x.handedOver] : [x.n, x.code])),
     hv: r.b.handover ? { placed: r.b.handover.placedSince, closed: r.b.handover.closedSince, vanished: r.b.handover.vanishedSince } : null,
     sc: r.b.selfContradicting.map((x) => x.issue), reused: r.b.reused,
+    po: r.b.placedOwnerless ? r.b.placedOwnerless.map((x) => x.n) : [],
     c: r.c.issues.map((x) => x.n), cx: r.c.excluded.map((x) => x.issue),
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
     e: [...r.e.unmatched, ...r.e.rowUnmatched].map((x) => [x.row, x.target]),
@@ -638,7 +673,8 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       `(b) OPEN ${r.selfCheck.open}: placed ${placed} (by # ${p.number}, HOME batch ${p.homeBatch}, parked ${p.parked}, roadmap ${p.roadmap}), unplaced ${r.b.unplaced.length} [owner ? ${qCount(r.b.unplaced, (x) => x.owner)}]` +
         (withHandover && r.b.handover && r.b.handover.handed ? `; handed over ${r.b.handover.handed}: ${r.b.handover.stillUnplaced.length} unplaced, ${r.b.handover.placedSince.length} placed, ${r.b.handover.closedSince.length} closed` + (r.b.handover.vanishedSince.length ? `, ${r.b.handover.vanishedSince.length} vanished` : '') : '') +
         top(r.b.unplaced, (x) => `#${x.n} ${x.why} (${x.owner})`) +
-        `; self-contradicting ${r.b.selfContradicting.length}, reused ${r.b.reused.length}`,
+        `; self-contradicting ${r.b.selfContradicting.length}, reused ${r.b.reused.length}` +
+        (r.b.placedOwnerless ? `; placed but ownerless ${r.b.placedOwnerless.length}` + top(r.b.placedOwnerless, (x) => `#${x.n} (${x.owner})`) : ''),
       `(c) dated homes: ${r.c.issues.length} issues / ${r.c.lineCount} lines (excluded by name ${r.c.excluded.length}) [owner ? ${qCount(r.c.issues, (x) => x.owner)}]` +
         top(r.c.issues, (x) => `#${x.n} (${x.owner})`),
       `(d) id-less plan rows: ${r.d.rows.length} (excluded ${r.d.excluded.length}) [owner ? ${qCount(r.d.rows, (x) => x.owner)}]` +
@@ -803,6 +839,7 @@ function dryRun(argv) {
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
   out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, commit ${r.g.commit}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
   out(`owner sources over the ${L.open.size} OPEN issues (shown-as): ${JSON.stringify(r.ownerSources)}`);
+  out(`(b′) placed but ownerless (${r.b.placedOwnerless.length}): ${r.b.placedOwnerless.map((x) => `#${x.n} (${x.owner})`).join(' ')}`);
   const src = { ownerLine: [], homeLine: [], filer: [] };
   for (const n of [...L.open].sort((a, b) => a - b)) { const o = ownerOfIssue(L.byNum.get(n)); for (const k of Object.keys(src)) if (o[k] && src[k].length < 10) src[k].push(`#${n}=${o[k]}`); }
   const perSource = Object.fromEntries(Object.keys(src).map((k) => [k, [...L.open].filter((n) => ownerOfIssue(L.byNum.get(n))[k]).length]));

@@ -284,6 +284,13 @@ const plan = parsePlan(PLAN);
   ok('owner: a head token alone prints as `filer`', o(3).label === 'filer CC-B');
   ok('owner: nothing known → `owner ?`', o(4).label === 'owner ?');
   ok('owner: `owner ANALYST` → CC-C', o(5).label === 'owner CC-C');
+  // #1167 (Langston Step-1 C3/C4): a LABELLED placing-line source, only when a ctx is passed
+  ok('owner: no ctx → exactly as before (no placingLine key) — every existing caller is unchanged', !('placingLine' in o(4)) && o(4).source === 'unknown' && o(4).label === 'owner ?');
+  const pc = { placingOwner: () => 'CC-B' };
+  const p4 = ownerOfIssue(L.byNum.get(4), pc);
+  ok('owner: with ctx, an issue with no owner of its own reads `placing-line CC-B`, never `owner CC-B`', p4.source === 'placingLine' && p4.label === 'placing-line CC-B' && p4.placingLine === 'CC-B');
+  ok('owner: with ctx, the issue own owner still wins (ownerLine, homeLine, filer)', ownerOfIssue(L.byNum.get(1), pc).source === 'ownerLine' && ownerOfIssue(L.byNum.get(2), pc).source === 'homeLine' && ownerOfIssue(L.byNum.get(3), pc).source === 'filer');
+  ok('owner: with ctx but no placing owner → `owner ?`', ownerOfIssue(L.byNum.get(4), { placingOwner: () => null }).source === 'unknown');
 }
 
 // ── R3-Q7: the §6 recount ──
@@ -369,6 +376,13 @@ const readers = (over = {}) => ({
   const calls = [];
   runCensus({ ref: 'R', prevRef: 'P', readers: readers({ calls }) });
   ok('runCensus: list (a) is windowed by REF (prevRef..ref), never by clock', calls.length === 1 && calls[0][1] === 'P' && calls[0][2] === 'R');
+  // #1167 list (b′): #302 is placed by row 2's batch cell (owner CC-B) and has no owner of its own → listed as
+  // `placing-line CC-B` (positive control); #300 is placed too but has a filer → not listed (negative control).
+  const r2 = runCensus({ ref: 'a'.repeat(40), prevRef: 'b'.repeat(40), readers: readers({ files: { '1-system-manual/RUNNING_ISSUES.md': [LEDGER, '### #302 OPEN 2026-01-01 nobody took it'].join(String.fromCharCode(10)) } }) });
+  ok('(b′) a placed issue with no owner of its own is listed, labelled by its placing line', r2.b.placedOwnerless.length === 1 && r2.b.placedOwnerless[0].n === 302 && r2.b.placedOwnerless[0].owner === 'placing-line CC-B', JSON.stringify(r2.b.placedOwnerless));
+  ok('(b′) a placed issue with a filer is not listed', !r2.b.placedOwnerless.some((x) => x.n === 300));
+  ok('(b′) counts carry po and the owner sources count placingLine', censusCounts(r2).po === 1 && r2.ownerSources.placingLine === 1 && censusLists(r2).po.join() === '302');
+  ok('(b′) the alert body names it', /placed but ownerless 1/.test(censusAlert(r2, { week: '2026-W42', severity: 'info' }).body));
 }
 
 // ── P45: body, title, metadata; the Discord render at maximum realistic sizes ──
