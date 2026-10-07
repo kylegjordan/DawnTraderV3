@@ -7,11 +7,13 @@
  * id and called `centralClock.start()`, so loading it would have ADDED a fan-out. This fence enumerates every subscribe
  * site in every `.ts`/`.tsx` file under the REPO ROOT (skipping `node_modules`, `.git`, `dist` and `tests` directories)
  * and asserts (C-3) the set is exactly the five live subscribers AND that no subscriber id repeats — so a new copy
- * re-colliding on 'FX5Scanner' fails wherever it lands, not only a new file. The walk starts at the root because BOTH
+ * re-colliding on 'FX5Scanner' fails wherever it lands outside the four skipped directory names, not only a new file. The walk starts at the root because BOTH
  * retired copies lived outside `server/` (Langston Step-4 condition 1: a `server/`+`shared/` walk passed a
  * `BATCH_19H_HF1/server/services/fx5-scanner.ts` drop green).
  * Comments: block comments and FULL-LINE `//` comments are stripped; a trailing `// centralClock.subscribe(...)` is not,
- * so it would count as a site — fail-closed (a false row fails the fence, it never hides one).
+ * so it would count as a site — fail-closed (a false row fails the fence, it never hides one). Symlinks are neither
+ * descended nor read. The walk also covers untracked local files, so a local-only `.ts` with a subscribe call reds this
+ * fence on a developer's machine while CI stays green — fail-closed; a local-only red is that, not a regression.
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
