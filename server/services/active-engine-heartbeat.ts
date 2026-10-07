@@ -18,7 +18,8 @@
  *     boot call was also a SECOND boot-time path beside `resumeActiveEngines` (the one boot owner since
  *     `#520`); deleting it removes that concurrency hazard by construction — do not re-add it.
  *   - the per-cycle `clusterBus.publish('task_completed', { taskType: 'simulation_heartbeat' })`: 2,880
- *     `cluster_bus_event` rows a day, ~99.99 % of that table, read only by the deleted auto-test harness.
+ *     `cluster_bus_event` rows a day, ~99.99 % of the ACCUMULATED table (269,733 of 269,744 rows on staging, 2026-10-07 — a share of rows, not a rate; the heartbeat wrote ~2,880 a day until B-ENGINE-HEARTBEAT-DEAD-PATHS deployed), read only by the deleted
+ *     auto-test harness.
  *   - `getStatus()`: read only by the harness.
  *
  * LIVENESS BOUND (stated, not instrumented — Langston Step 2): a stalled heartbeat costs only a delayed

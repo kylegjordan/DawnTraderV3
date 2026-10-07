@@ -1,7 +1,7 @@
 -- B-CLUSTER-BUS-PERSIST-DISPOSITION (#1159, SPRINT_TO_LIVE_PLAN row 2a0c) — remove the cluster bus's persistence half.
 --
 -- The `cluster_bus_event` table is a write-only audit log with ZERO readers (its only reader, the auto-test harness,
--- was deleted by B-ENGINE-HEARTBEAT-DEAD-PATHS); ~99.99 % of its rows were the engine heartbeat's, which that batch
+-- was deleted by B-ENGINE-HEARTBEAT-DEAD-PATHS); ~99.99 % of its rows of the ACCUMULATED table (269,733 of 269,744 rows on staging, 2026-10-07 — a share of rows, not a rate; the heartbeat wrote ~2,880 a day until B-ENGINE-HEARTBEAT-DEAD-PATHS deployed) were the engine heartbeat's, which that batch
 -- also removed. Langston Step 1: REMOVE (bug-taxonomy outcome 3). The same commit removes the persist branch from
 -- ClusterBus.publish (the in-memory emit is unchanged), the table and its enum from shared/schema.ts, and the
 -- PLAIN_RETENTION_TABLES entry from b75-retention-sweep.ts.
@@ -10,6 +10,10 @@
 -- the two the constant below is an inert orphan — never "entry present, seed absent", which would abort the whole
 -- nightly sweep (loadConfig reqNum()s every entry first). The sweep runs at 02:15 UTC from source: do not deploy
 -- this between 02:00 and 02:30 UTC.
+-- ⛔ RUN ONLY ONCE THE HEARTBEAT WRITER IS GONE AND RESTARTED (Langston Step 4): until B-ENGINE-HEARTBEAT-DEAD-PATHS is
+-- live, the old process inserts a row every ~30 s; DROP TABLE takes ACCESS EXCLUSIVE and would wait on an in-flight insert,
+-- and lock_timeout = 5s would abort the whole transaction (and the deploy) with nothing changed. Deploying this in the
+-- deploy AFTER 2a0b's (Langston Q2 (a)) makes the table quiescent first.
 -- `bus_event_topic` is used by exactly one column (cluster_bus_event.topic, measured on staging 2026-10-07), so it
 -- drops with the table. DROP TYPE has NO CASCADE on purpose: if anything else ever uses the type, this fails loud.
 -- Rollback: the matching -rollback.sql — run IT FIRST, then revert the code (this batch removes entry and seed, so
