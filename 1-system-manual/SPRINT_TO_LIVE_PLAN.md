@@ -37,6 +37,23 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | Infra Claude | B-TOKEN-WATCH — Step 7, paused | stays PAUSED: research, after live |
 | Infra Claude | #670, B-CREW-STATUS-2, #974 | stay parked / after live |
 
+## 0a. Pre-sprint simulation-truth fixes (Kyle, 2026-10-07)
+
+**Kyle:** every system error behind the paper stop-outs after the 2026-10-06 $820 reset (33/33 `stop_hit`, −$31.92 at 11:12Z) is fixed **before the sprint starts**, grouped by the part of the system, then paper is reset to $820 again with the dashboard cleared — so the sprint starts on what we all agree is an accurate simulation. Calibration stays in the sprint. **The plan, its evidence and every rider: `Claude Comms and Packages/Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md` (r4, Langston ruled 11:12Z and 11:31Z; Coltrane reviewed 11:18Z). The rows below keep their numbers and owners; this section is their order.**
+
+| stage | rows (owner) |
+|---|---|
+| 0 — reset safety | 183b `#1154` (CC-C) · 2a0 / 173 `#1067` engine stop, deployed + a stop exercised (CC-B) |
+| 1 — feed truth under the exits | 32/33 staleness bound · 14a primary keys · `#1047` (CC-C) |
+| P1a — entry (with stage 1) | 59 `B-ENTRY-LEVEL-RECHECK` (+`#1168`, a min stop distance vs the live spread, L/USD vs 2a, [C1] durable rejected state) · 39a (CC-B) |
+| P1b — entry (with stage 1) | 41 · 40's entry half · [C2] freshness at consumption, class-agnostic, CC-B reviewing (CC-C) |
+| 2 — exit, in order | 64 + P-8e split + row 86 in its verification + [C5] → 65, 8b, 113, 3c (CC-B) → row 2 increment 3a (`spread_blown` ON + 66's bound; 21-day wait released for 3a) → 66 duration alarm → [C3] with row 62 (CC-C); increment 3b (trigger to the bid) stays gated |
+| 3 — feed decision | 31 `B-XSTOCK-LIVE-FEED` — **a Kyle decision, in parallel, not gating** · the CORZ quote-vs-bars investigation (CC-C) |
+| 4 — paper truth | 8a `#1083` (CC-C) · the main Dashboard 0-trades read, CC-B first against `#903` |
+| 5 — the reset, both halves | `PAPER-RESET-3000` at $820 + a new dashboard epoch · row 100 (plan row 9) the learning-record restart, a declared partial restart (CC-B) |
+
+Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. Kyle's decisions: the entry design (Langston recommends refuse-on-distance now, a resting buy later) and row 31.
+
 ## 1. The rule — what is in the sprint
 
 An item is in the sprint **only** if it serves one of these (Kyle's words, condensed):
