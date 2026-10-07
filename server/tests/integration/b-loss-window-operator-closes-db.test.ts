@@ -87,7 +87,7 @@ describe('B-LOSS-WINDOW-OPERATOR-CLOSES — database predicates', () => {
     const stamp = Date.now();
     const paperId = `${TAG}-paper-${stamp}`;
     const liveId = `${TAG}-live-${stamp}`;
-    const base = { symbol: 'FENCE/USD', baseCurrency: 'FENCE', strategyName: 'strong_bull_trend' as const, side: 'buy', quantity: '1.00000000', entryPrice: '100.00000000' };
+    const base = { symbol: 'FENCE/USD', baseCurrency: 'FENCE', strategyName: 'strong_bull_trend' as const, side: 'buy', quantity: '1.00000000', entryPrice: '100.00000000', openedAt: new Date() }; // opened_at is NOT NULL, no default
     const got = await inRolledBackTx(async (tx) => {
       await tx.insert(closedTradesTable).values([
         { id: paperId, mode: 'paper', ...base } as any,
