@@ -1,6 +1,6 @@
 # B-WAKE-STATE-UNSAVED-LOUD (#1151) — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1r · **change-class:** `non_architecture` · **Scope** r2 `806ddea1b` · **Pre-audit** r1 `793cbf6fe` · **Code** landed `6cb848b22` · **Step 8** CONFIRMED by Langston 2026-10-07
+**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1r · **change-class:** `non_architecture` · **Scope** r2 `806ddea1b` · **Pre-audit** r1 `793cbf6fe` · **Code** landed `6cb848b22` · **Step 8 and Step 11** CONFIRMED by Langston 2026-10-07 — ✅ **CLOSED**
 
 ## OPEN AT CLOSE — stated first
 **No scope objective is open.** One propagation, not an objective: the other three sessions run the filter they armed with until their next re-arm (every wake re-arms). Not measured at close.
@@ -54,7 +54,7 @@ CHANGE-CLASS: non_architecture
 | T1 | Langston's MEMORY.md | ✅ | my closed-batches line now covers 1r; 104,835 → 104,825 B |
 | T2 | SYSTEM_MANUAL.md | N/A | nothing under server/, client/ or shared/ |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | the wake block: failed save/read is said and the run ends |
-| T2 | RUNNING_ISSUES.md | ✅ | `#1151` ruling and home recorded; closes at Step 11 |
+| T2 | RUNNING_ISSUES.md | ✅ | `#1151` ruling and home recorded; CLOSED at Step 11 |
 | T2 | CHANGES_AND_FIXES.md | N/A | no trading-system bug or risk |
 | T2 | POST_AUDIT_ROADMAP.md | N/A | no phase item |
 | T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no parameter |

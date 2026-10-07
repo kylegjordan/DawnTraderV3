@@ -1283,6 +1283,6 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **An old hourly "system health check" that measured nothing is gone.** It dated from the Replit era, had been reading the wrong thing for about a year, and always reported the system as unhealthy — partly because it counted its own previous warnings as a problem. Nothing ever acted on it; it just added a row to an error table every hour. Kyle had it deleted. Since the deploy on 10-06 it has not run once, and the scheduler that used to run it is still running everything else.
 
-### 2026-10-07 — B-WAKE-STATE-UNSAVED-LOUD (CC-A, sprint plan row 1r) — closing (Step 11 next)
+### 2026-10-07 — B-WAKE-STATE-UNSAVED-LOUD (CC-A, sprint plan row 1r) — ✅ CLOSED 2026-10-07
 
 **The watcher that wakes each Claude session now says so when it cannot keep its place, instead of failing silently.** If it could not save where it had read up to, it used to get stuck re-reading the same message every 30 seconds without ever telling the session. And if its saved place was damaged, it quietly jumped to the newest messages and skipped everything in between. Now both cases end with a clear message saying what happened and, after a long absence, from what time to re-read the inbox by hand.
