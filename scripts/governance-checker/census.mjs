@@ -307,7 +307,7 @@ export function parsePlan(text) {
     if (!line.trim().startsWith('|') || SEPARATOR.test(line.trim())) return;
     const c = tableCells(line), lineNo = i + 1;
     if (section === 0 && c.length === 3 && c[0] !== 'session') s0.push({ lineNo, session: c[0], inFlight: c[1], disposition: c[2] });
-    else if (section === 4 && c.length === 7 && /^\d+[a-z]?$/.test(c[0])) {
+    else if (section === 4 && c.length === 7 && /^\d+[a-z0-9]*$/.test(c[0])) {   // ids like 2a0b (#1139 P1)
       const [rowNo, item, batch, owner, status, report, note] = c;
       s4.push({ lineNo, rowNo, item, batch, owner, status, report, note });
     } else if (section === 5 && c.length >= 3 && c[0] !== 'item') s5.push({ lineNo, item: c[0], owner: c[1], closes: c[2], report: c[3] ?? '' });
@@ -405,7 +405,7 @@ export function listD(plan) {
 
 // ══ LIST (e) — `after X` references that name no earlier row (R3; Q22 (i); the §0-reference rule) ════════════
 const AFTER_I = /\bafter `?([#A-Za-z0-9:._-]*[#:A-Z0-9][#A-Za-z0-9:._-]*)`?/g;
-const AFTER_ROW = /\bafter row (\d+[a-z]?(?:\.[a-z0-9]+)?)\b/g;
+const AFTER_ROW = /\bafter row (\d+[a-z0-9]*(?:\.[a-z0-9]+)?)\b/g;   // deeper ids AND the dotted suffix (#1139 P1, Langston C1)
 const AFTER_S0 = /\bafter §0 `?([#A-Za-z0-9:._-]*[#:A-Z0-9][#A-Za-z0-9:._-]*)`?/g;
 const batchTokens = (cell) => new Set((String(cell).replace(/[*`]/g, '').match(/[#A-Za-z0-9._-]+/g) || []).map((t) => t.replace(/\.+$/, '')));
 export function listE(plan) {

@@ -1043,6 +1043,9 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   ok('P33 the §5 row joins by its item cell, with its closes and report cells', j.rows.get('B-WIN')?.s5.length === 1 && j.rows.get('B-WIN').s5[0].closes === '2026-10-10' && j.rows.get('B-WIN').s5[0].report === '—');
   ok('P33 counts: rows4 = every 7-cell numbered §4 row, rows5 = every §5 row', j.rows4 === 4 && j.rows5 === 1, `${j.rows4}/${j.rows5}`);
   ok('P33 no malformed rows in a clean plan', j.malformed.length === 0);
+  const jd = planRowsByBatch(planFixture({ s4b: ['| 2a0b | Deep | B-DEEP-ROW | CC-B | QUEUED | — | x |'] }));
+  ok('#1139 P1 a §4 row whose id runs deeper than one letter (2a0b) joins by its batch id (it was skipped before)',
+    jd.rows.get('B-DEEP-ROW')?.s4.length === 1 && jd.rows.get('B-DEEP-ROW').s4[0].rowNo === '2a0b' && jd.rows4 === 5, `${jd.rows4}`);
   const m = planRowsByBatch(planFixture({ s4b: ['| 138a | Decide | B-PATTERN-SIZE-CAP-REVIEW | CC-C | DONE | — | SUPERSEDED: | stray |'] }));
   ok('P33 an 8-cell numbered row (the 138a shape) → malformed with its line number and cell count, not a row',
     m.malformed.length === 1 && m.malformed[0].section === 4 && m.malformed[0].rowNo === '138a' && m.malformed[0].cellCount === 8

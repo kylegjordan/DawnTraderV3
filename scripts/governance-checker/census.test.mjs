@@ -202,6 +202,27 @@ const plan = parsePlan(PLAN);
   ok('(e) a backticked `#nnn` resolves through an EARLIER batch cell (rows 39a/97a/160a/166a shape)', !bt.unmatched.some((x) => x.target === '#300'));
 }
 
+// ── B-CENSUS-OWNERLESS-TRIAGE P1 (#1139): a row id deeper than one letter (2a0b) is a §4 row ──
+{
+  const DEEP = PLAN.replace('| 16 | F-G-1 reopens |',
+    ['| 2a0b | deep | B-DEEP | CC-B (New Claude) | QUEUED | — | + `#320` |',
+     '| 2a0c | deeper | B-DEEPER | CC-A (Old Claude) | QUEUED | — | after row 2a0b; after row 2a0b.v2; after row 9z9 |',
+     '| 16 | F-G-1 reopens |'].join('\n'));
+  const dp = parsePlan(DEEP);
+  ok('P1 a `2a0b` row is a §4 row (control: the fixture without it has 9)', dp.s4.length === 11 && dp.s4.some((r) => r.rowNo === '2a0b'), String(dp.s4.length));
+  ok('P1 the recount counts a deep row for its owner', recountS6(dp).recount['CC-B'] === recountS6(plan).recount['CC-B'] + 1);
+  const L = parseLedger(['### #320 OPEN (CC-B) homed on a deep row', '### #321 OPEN (CC-B) homed nowhere'].join('\n'));
+  const pls = parseAfterLive('## After live — 0');
+  const rm = parseRoadmap('| 19-1 | a | b |');
+  const pd = placement(L, dp, pls, rm, []);
+  ok('P1 an issue named on a deep row places by number (positive control)', pd.get(320) === 'number');
+  ok('P1 an issue not named there stays unplaced (negative control)', pd.get(321).startsWith('U'));
+  const e = listE(dp);
+  ok('P1 `after row 2a0b` resolves to the earlier deep row', !e.rowUnmatched.some((x) => x.target === 'row 2a0b'));
+  ok('P1 a dotted `after row 2a0b.v2` keeps its suffix (Langston C1: no silent narrowing)', e.rowUnmatched.some((x) => x.target === 'row 2a0b.v2'), JSON.stringify(e.rowUnmatched));
+  ok('P1 `after row 9z9` (no such row) is unmatched', e.rowUnmatched.some((x) => x.target === 'row 9z9'));
+}
+
 // ── lists (a) and (f) ──
 {
   const names = ['B_BETA_COMPLETION_REPORT.md', 'B_ALPHA_COMPLETION_REPORT.md', 'B_OPEN_THING_COMPLETION_REPORT.md', 'B_ALPHA_SCOPE.md'];
