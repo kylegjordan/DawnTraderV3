@@ -1,11 +1,11 @@
-# B-CENSUS-OWNERLESS-REMAINDER — SCOPE (Step 1, r1)
+# B-CENSUS-OWNERLESS-REMAINDER — SCOPE (Step 1, r1 — APPROVED by Langston 2026-10-07 with C1-C5, folded in the pre-audit)
 
 change-class: non_architecture
 
 **Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row **1s**, after row 1n · **Issue:** `#1167` · **Placed by:** Langston, `B-CENSUS-OWNERLESS-TRIAGE` Step 8 condition 2 (§9.4 disposition 3).
 
 ## 0. WHY
-After row 1n, **48 open issues are PLACED but have no owner the census can read** (`census.mjs` `ownerOfIssue` → `source: 'unknown'`; measured at `origin/migration/aws-supabase` after `f440dd232`: ownerLine 407 · homeLine 34 · filer 15 · **unknown 48** of 504 open). Being placed, they appear in no census list, so nothing ever surfaces that nobody owns them.
+After row 1n, **48 open issues are PLACED but have no owner the census can read** (`census.mjs` `ownerOfIssue` → `source: 'unknown'`; measured at `035d0f7e5` (Langston C5: one ref, named): ownerLine 407 · homeLine 34 · filer 15 · **unknown 48** of 504 open). Being placed, they appear in no census list, so nothing ever surfaces that nobody owns them.
 
 **Survey (at the same ref), by the line that places each:** **18** on a §4 row whose owner cell names a session · **24** on an after-live line — **1** names a session, **2** name Kyle (the census does not read Kyle as an owner, and §6 says Kyle owns no rows), **21** read `(—)` or no owner · **6** placed by a HOME batch or roadmap row (`#203`, `#205`, `#237`, `#302`, `#324`, `#539`), read individually. 18 + 24 + 6 = 48.
 
