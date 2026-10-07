@@ -365,9 +365,9 @@ print(f"  {'PASS' if _ok6 else '** FAIL **':10} #1142 r2 C2: a FAILED rotation (
 # P4 — expected: a READABLE record whose directory is read-only, so the temp file for the save cannot be created; the wake
 # prints, nothing is dropped, the loss line is written... to a directory that is read-only. So the append fails too, and the
 # stderr line is the record: it names the id and says the loss record could not be written. (Read-only blocks BOTH files —
-# that is the honest shape of a permissions break, and exactly the case B2 guards.) The exit code is NOT asserted: in a
-# read-only directory the POSITION save at #@CAUGHTUP fails too and exits 1 after the wake has printed (measured on Linux,
-# 2026-10-03) — a pre-existing behaviour outside #1142, put to Langston at this batch's Step 4.
+# that is the honest shape of a permissions break, and exactly the case B2 guards.) The POSITION save at #@CAUGHTUP fails too;
+# since B-WAKE-STATE-UNSAVED-LOUD (#1151) that is said (WATCHER-STATE-UNSAVED) and the run exits 0 on its delivery — it used
+# to exit 1 after the wake had printed, a silent retry under the arm. So the exit code IS asserted now.
 if os.name != "nt" and os.geteuid() != 0:
     _d4 = tempfile.mkdtemp(prefix="wakelossp4-"); _s4 = os.path.join(_d4, "CC-A.json")
     open(_s4, "w", encoding="utf-8").write('{"pos": {}}')
@@ -382,7 +382,7 @@ if os.name != "nt" and os.geteuid() != 0:
     finally:
         os.chmod(_d4, 0o700)
     _ok4 = (b"read-only wake" in _p4.stdout and b"LINE DROPPED" not in _p4.stderr and b"alert-owner record NOT saved" in _p4.stderr
-            and _MID[:8].encode() in _p4.stderr)
+            and _MID[:8].encode() in _p4.stderr and _p4.returncode == 0 and b"WATCHER-STATE-UNSAVED:" in _p4.stderr)
     if not _ok4: fails += 1
     print(f"  {'PASS' if _ok4 else '** FAIL **':10} #1142 P4: the SAVE fails on a readable record (read-only directory) — the wake prints and stderr names the lost id "
           f"(rc={_p4.returncode}, woke={b'read-only wake' in _p4.stdout}, dropped={b'LINE DROPPED' in _p4.stderr})")

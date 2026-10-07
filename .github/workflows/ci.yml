@@ -153,6 +153,12 @@ jobs:
       - name: Wake filter tests (owner record, lost routing)
         if: ${{ !cancelled() }}
         run: python3 scripts/analysis/test-wake-filter-cuts.py
+      # B-WAKE-STATE-UNSAVED-LOUD (#1151): a save or read of the position that fails is said, and the run still ends.
+      # The runner is non-root, so chmod denies a write; each case proves the deny before trusting it, and a root
+      # runner would report SKIP with the reason rather than a vacuous pass.
+      - name: Wake filter tests (position save and read failures)
+        if: ${{ !cancelled() }}
+        run: python3 scripts/analysis/test-wake-state-unsaved.py
 
       - name: Alert hook tests (split, lost routing)
         if: ${{ !cancelled() }}

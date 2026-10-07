@@ -532,11 +532,25 @@ def _utc(ts=None):
 
 
 def load_state():
+    """A missing or unparseable state is a fresh start. A state that EXISTS but cannot be READ (permissions, a directory
+    at its path) refuses instead (B-WAKE-STATE-UNSAVED-LOUD #1151, Langston C1): treating it as empty would resume every
+    source at its tail and silently drop everything posted while away."""
     try:
         with open(STATE, encoding="utf-8") as f:
             return json.load(f)
     except (FileNotFoundError, ValueError):
         return {}
+    except OSError as e:
+        print(f"WATCHER-STATE-UNREADABLE: {STATE} errno {e.errno} ({e.strerror}) — the position is unknown, so the watcher "
+              f"will not resume (an empty start would skip everything posted while away): fix the file or its "
+              f"permissions, then re-arm", file=sys.stderr, flush=True)
+        sys.exit(1)
+
+
+def _unsaved(e, what):
+    """The one wording for a failed position save (#1151): the state dir, the errno, and what the failure means."""
+    return (f"WATCHER-STATE-UNSAVED: {os.path.dirname(STATE)} errno {getattr(e, 'errno', None)} "
+            f"({getattr(e, 'strerror', None) or e}) — {what}")
 
 
 def save_state(st):
@@ -549,9 +563,10 @@ def save_state(st):
         json.dump(st, f)
     # B-TOKEN-BURN-CUT Step 7 (2026-10-01, measured on CC-B): on Windows os.replace is REFUSED (WinError 5) while another
     # process holds the destination open — reproduced with a second process holding it. Retry briefly; the hold is
-    # transient. A save that still fails RAISES: the order is print-then-save (see #@CAUGHTUP), so a raise re-delivers
-    # the wake on the next run rather than losing it — swallowing it would exit 0 having advanced nothing, silently.
-    # (Corrected per Langston: this comment first said the reverse.)
+    # transient. If the save still fails, OSError propagates to the caller. Every caller handles it (#1151): after a
+    # delivery, `_checkpoint_loud` prints WATCHER-STATE-UNSAVED and the run exits on what was DELIVERED, so the session
+    # is told and the next run re-delivers the same message (print-then-save) — a self-announcing duplicate, never a
+    # silent 30 s retry loop; the keepalive skips its save and leaves .alive stale; --positions prints and exits 1.
     _replace_retrying(tmp, STATE)
 
 
@@ -790,7 +805,14 @@ if POSITIONS:
         # session needs to sweep the inbox by hand. The --once run prints it and ends.
         st["stale_from"] = st.get("saved_at") or _utc(saved)
         st["pos"] = {}
-        save_state(st)
+        try:
+            save_state(st)
+        except OSError as e:
+            # Unsaved, the stale notice would be lost on every attempt (#1151): put it in this line, and exit 1 so the
+            # arm's `|| break` ends the task with a line the session acts on. (The FILTER exits 1; the TASK exits 0.)
+            print(_unsaved(e, f"the watcher was away over {STALE_S // 3600} h; anything posted since {st['stale_from']} "
+                              f"was NOT delivered: sweep the Discord inbox from then"), file=sys.stderr, flush=True)
+            sys.exit(1)
         pos = {}
     print(" ".join(f"{p}:{pos[p][0]}:{pos[p][1]}" if p in pos else f"{p}:end" for p in SOURCES))
     sys.exit(0)
@@ -827,13 +849,21 @@ if ONCE:
         STATE_NOW["saved_epoch"] = time.time()
         save_state(STATE_NOW)
 
+    def _checkpoint_loud():
+        """A save after a delivery that fails must not turn the exit into a silent retry (#1151): say so, every failing
+        pass (the repetition is the alarm), and let the run exit on what it DELIVERED. .alive is not touched here."""
+        try:
+            _checkpoint()
+        except OSError as e:
+            print(_unsaved(e, "position not saved; this message will be delivered again"), file=sys.stderr, flush=True)
+
     _stale = STATE_NOW.pop("stale_from", None)
     if _stale:
         TAP.tag = ""
         print(f"WAKE[WATCHER->{ALIAS}]: the watcher resumed after more than {STALE_S // 3600} h away; "
               f"anything posted since {_stale} was NOT delivered. Sweep the Discord inbox from that "
               f"time.", flush=True)
-        _checkpoint()
+        _checkpoint_loud()
 
 
 def _commit(pending):
@@ -881,7 +911,7 @@ for raw in sys.stdin:
                 # or the next keepalive) writes the same position. Never let it kill the watcher (measured on CC-B).
                 # And do NOT refresh .alive (Langston): a watcher that cannot save its position must read STALE, never
                 # fresh-and-green while nothing is delivered — the heartbeat calls it DEAD after 15 minutes.
-                print(f"[cc-wake-filter] keepalive save skipped, .alive NOT refreshed: {_e}", file=sys.stderr, flush=True)
+                print(_unsaved(_e, "keepalive save skipped, .alive NOT refreshed"), file=sys.stderr, flush=True)
             else:
                 try:
                     with open(STATE + ".alive", "w", encoding="utf-8") as f:
@@ -890,7 +920,7 @@ for raw in sys.stdin:
                     # Stale is load-bearing now (Langston nit): a failed .alive write must say so, not pass silently.
                     print(f"[cc-wake-filter] .alive NOT refreshed: {_e}", file=sys.stderr, flush=True)
         elif parts[0] == "#@CAUGHTUP" and TAP.delivered:
-            _checkpoint()          # print-then-save (judgement call (a)): a kill between the two
+            _checkpoint_loud()     # print-then-save (judgement call (a)): a kill between the two
             sys.exit(0)            # re-delivers — a duplicate wake, never a lost one
         continue
     m = re.match(r"^==> (.+) <==$", line.strip())
@@ -1145,5 +1175,5 @@ if ONCE:
     # EOF: the ssh leg dropped (or a harness closed stdin). Save what was processed; exit 0 only
     # if this run delivered, so the arm loop ends — otherwise 3, and the arm loop reconnects.
     _commit(pending)
-    _checkpoint()
+    _checkpoint_loud()         # with nothing delivered, its line is a DIAGNOSTIC, not the alarm (its absence proves nothing)
     sys.exit(0 if TAP.delivered else 3)
