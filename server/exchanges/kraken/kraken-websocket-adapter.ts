@@ -295,6 +295,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private subscriptionAcks: Map<string, { acked: boolean; timestamp: number }> = new Map();
   private subscriptionRequests: Map<string, { krakenWsPair: string; internalSymbol: string; timestamp: number }> = new Map();
   private unmappedTicks: Map<string, { count: number; lastSeen: number }> = new Map(); // Track unmapped tick events for gap reporting
+  // B-PRICE-FEED-TRUTH I3 (#1047): a pair argument that is not a non-empty string, counted by kind. The first of each kind
+  // is logged loudly so a new shape names itself; the guard must not turn a loud failure into a silent one (Langston C4).
+  private badPairInputs: Map<string, number> = new Map();
   
   // Phase 8.8.3-I7-WS-F: Subscription health monitoring
   private subscriptionHealthInterval: NodeJS.Timeout | null = null;
@@ -711,7 +714,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       console.log(`[8.9.0-B][WS] Unrecognized message format:`, rawStr.slice(0, 100));
       
     } catch (error) {
-      console.error(`[${this.MODULE_NAME}] Error parsing message:`, error);
+      // B-PRICE-FEED-TRUTH I3 (#1047): name the message that threw, so a new shape identifies itself.
+      console.error(`[${this.MODULE_NAME}] Error parsing message:`, error, `raw=${rawStr.slice(0, 300)}`);
     }
   }
 
@@ -775,6 +779,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     const { method, result, success, error } = message;
     
     if (method === 'subscribe') {
+      // B-PRICE-FEED-TRUTH I3 (#1047): the `instrument` subscription (`#507`) covers every pair and its ACK carries NO
+      // `symbol`. It used to fall into the per-symbol lookup below and throw — 112 of 112 parse errors over 2026-09-24 →
+      // 10-07 were this ACK, one per subscribe batch. Handled by channel; it touches no per-symbol state.
+      if (success && result && (typeof result.symbol !== 'string' || result.symbol === '')) {
+        if (result.channel === 'instrument') {
+          console.log(`[8.9.0-B][WS] Sub OK: instrument (all pairs)`);
+        } else {
+          console.warn(`[1047][WS] Sub OK with no symbol: channel=${result.channel ?? '?'}`);
+        }
+        return;
+      }
       if (success && result) {
         const symbol = result.symbol;
         const internalSymbol = this.mapKrakenPairToInternalSymbol(symbol);
@@ -1038,6 +1053,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       const internalSymbol = this.mapKrakenPairToInternalSymbol(krakenPair);
       
       if (!internalSymbol) {
+        // B-PRICE-FEED-TRUTH I3 (Langston C4): this branch was a bare `continue` — counted now, keyed by channel so a
+        // book miss never merges with a ticker miss for the same pair.
+        const key = `book:${String(krakenPair)}`;
+        const existing = this.unmappedTicks.get(key) || { count: 0, lastSeen: 0 };
+        this.unmappedTicks.set(key, { count: existing.count + 1, lastSeen: Date.now() });
         continue;
       }
       
@@ -1776,6 +1796,16 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * Uses the enhanced resolver as PRIMARY source of truth.
    */
   private mapKrakenPairToInternalSymbol(krakenPair: string): string | null {
+    // B-PRICE-FEED-TRUTH I3 (#1047): one guard for all seven call sites (each already handles null). A non-string or
+    // empty pair reached the resolver's `toUpperCase()` and threw, dropping the whole message. Counted by kind; the first
+    // of each kind is logged, so this never becomes a silent miss.
+    if (typeof krakenPair !== 'string' || krakenPair.trim() === '') {
+      const kind = krakenPair === null ? 'null' : typeof krakenPair === 'string' ? 'empty' : typeof krakenPair;
+      const n = (this.badPairInputs.get(kind) ?? 0) + 1;
+      this.badPairInputs.set(kind, n);
+      if (n === 1) console.warn(`[1047][WS] pair lookup refused a ${kind} input (first of its kind; later ones counted)`);
+      return null;
+    }
     // I7-MAP-FIX: PRIORITY 1 - Use new resolver's mapKrakenPairToInternal
     const fromResolver = mapKrakenPairToInternal(krakenPair);
     if (fromResolver) {
