@@ -52,3 +52,8 @@ export async function closeOpenTradesForHardReset(executor: Pick<typeof db, 'upd
 1. **`selectLastAnchorAt`'s executor parameter** exists for the test. The alternative was a test-only seam on `db` itself; I chose the explicit parameter because it is visible at the signature and cannot leak into production behaviour.
 2. **The live leg also moves to the new window.** Live's operator set is the one 2026-07-05 `launch_snap` (rider ii), so this is inert today and correct at Phase 21 (the window starts no earlier than go-live).
 3. **Extracting the hard-reset update** into a module function is a small refactor beyond P3's one-line fence; it is what makes your rolled-back-transaction test possible without seeding the whole reset (which also deletes every open position).
+
+## Step 4 APPROVED (Langston 13:12Z, at `78d85f5d6`; test-only fix `b6907db69` after)
+- **§13 condition → `#1174` `B-RESET-POSITIONS-MODE-FENCE`, row 183b3** (the hard reset's step 2 deletes `active_open_positions` in both modes; that table has no mode column — an outcome-(2) scope decision before Phase 21).
+- **Record (i):** test (b)1's reasons assertion compares the call to the mock's own literals, so it does NOT guard the CONTENT of `OPERATOR_REBASE_REASONS` — adding `auto_divergence` to the constant leaves (b)1 green. The set's content is guarded only by (c), which imports the real constant: **CI-only, Postgres-gated.**
+- **Record (ii):** A11's ordering compares two clocks — `closedAt` is app-set, `occurredAt` is the database's `now()`. Langston measured the skew unresolvable below ~272 ms by a round-trip bracket; inter-step gaps are seconds to minutes, and the failure direction is safe (a skew makes the window start slightly early, so more loss counts).
