@@ -1,6 +1,6 @@
 # B-CENSUS-OWNERLESS-TRIAGE (#1139) — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1n · **change-class:** `non_architecture` · **Scope** r2 `169a2cf5d` · **Pre-audit** r2 `d23d71841` · **Code** landed `82775ef9f` · **Step 8** CONFIRMED by Langston 2026-10-07
+**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1n · **change-class:** `non_architecture` · **Scope** r2 `169a2cf5d` · **Pre-audit** r2 `d23d71841` · **Code** landed `82775ef9f` · **Step 8 and Step 11** CONFIRMED by Langston 2026-10-07 — ✅ **CLOSED**
 
 ## OPEN AT CLOSE — stated first
 **No scope objective is open.** One remainder, found by Langston at Step 8 and homed: **`#1167`** — 48 open issues are PLACED but have no owner the census can read, so no census list shows them. `HOME: B-CENSUS-OWNERLESS-REMAINDER, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1s, after row 1n`. Closes when each has an owner by the §6 grouping and the census either lists "placed but ownerless" or the decision not to is recorded; it fails if a fresh census at the close still reads `source=unknown` on any of the 48 without a recorded reason.
@@ -61,7 +61,7 @@ CHANGE-CLASS: non_architecture
 | T1 | Langston's MEMORY.md | ✅ | my 1p line replaced by one line for 1p + 1n through `langston-memory-write`; his load 105,716 → 105,658 B |
 | T2 | SYSTEM_MANUAL.md | N/A | nothing under server/, client/ or shared/ changed |
 | T2 | SYSTEM_IMPACT_MAP.md | N/A | no component added or re-keyed; the checker parses more rows, same structure |
-| T2 | RUNNING_ISSUES.md | ✅ | the 60 triaged in place; `#1162`, `#1167` filed; `#1116` annotated; `#1139` closes at Step 11 |
+| T2 | RUNNING_ISSUES.md | ✅ | the 60 triaged in place; `#1162`, `#1167` filed; `#1116` annotated; `#1139` CLOSED at Step 11 |
 | T2 | CHANGES_AND_FIXES.md | N/A | no trading-system bug or risk |
 | T2 | POST_AUDIT_ROADMAP.md | N/A | no phase item changed |
 | T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no parameter |
@@ -79,3 +79,4 @@ CHANGE-CLASS: non_architecture
 
 ## REVIEW RECORD
 Step 1: sent back r1 (OBJ-2's control false; OBJ-2 satisfiable by a status word), approved r2 with two conditions. Step 2: approved with two conditions (positive control on the deep rows; the resolver's own parser). Step 4: approved with three in-commit conditions (§6 Total 283; same commit; `#754` closes the format only) and three records (a fourth site; dotted residual; a non-discriminating test). Step 8: confirmed with two record conditions (decayed citations; per-list owner zero). Langston re-derived 10 closures: 10/10.
+Step 11: CONFIRMED 2026-10-07 with one in-commit condition — the §6 note's stale clause ("does NOT yet count the 9 rows with deeper ids") struck in the close commit. Langston re-ran the resolver from the Helsinki mirror at a later ref: still 79 / 0 / 3.
