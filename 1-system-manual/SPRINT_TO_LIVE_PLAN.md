@@ -371,7 +371,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 172 | B-TEC-PRIME-BOOT-RACE | B-TEC-PRIME-BOOT-RACE | Infra Claude | QUEUED | — | restarts: the exit loop throws for a tick on open positions |
 | 173 | ~~B-ENGINE-STOP-DURATION-COLUMN~~ | plan row 2a0 (moved 2026-10-06) | — | MOVED | — | moved up to 2a0, owner CC-B (Langston asked the two lists be reconciled; `PHASE_19_PLAN` 3n.u4 already named CC-B) |
 | 174 | #619 | #619 — batch named at Step 1 | Infra Claude | QUEUED | — | a restore from backup lacks seeded config |
-| 175 | B-DASHBOARD-AUTH-RACE | B-DASHBOARD-AUTH-RACE | Infra Claude | QUEUED | — | the portfolio card never recovers from a 401 · 2026-10-04: the portfolio card itself is fixed by hotfix `B-DASHBOARD-STATS-BLANK` (CC-B, rides deploy B; not a race — a bare fetch with no token, `#903`); this row keeps the rest of the class: the other bare fetches to token-gated routes |
+| 175 | B-DASHBOARD-AUTH-RACE | B-DASHBOARD-AUTH-RACE | Infra Claude | QUEUED | — | the portfolio card never recovers from a 401 · 2026-10-04: the portfolio card itself is fixed by hotfix `B-DASHBOARD-STATS-BLANK` (CC-B; not a race — a bare fetch with no token, `#903`) — deployed with deploy B, verified and CLOSED 2026-10-07 (`Batch Completion/B_DASHBOARD_STATS_BLANK_COMPLETION_REPORT.md`); this row keeps the rest of the class: the other bare fetches to token-gated routes |
 | 176 | #296 | #296 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | one rate-limited path for placing and cancelling orders |
 
 ### Wave B3 — TRACK B · The live engine — environment decided 2026-09-28: live as its own program on the same server

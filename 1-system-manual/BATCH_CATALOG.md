@@ -1171,3 +1171,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **RESULT (deployed ref `9ab39a45a`).** 0 of the 60 unplaced or ownerless; ownerless-by-any-source open issues 103 → 48, the 55 that moved being exactly the scoped set; self-contradicting list empty. Langston re-derived 10 closures (8 CLOSED/WITHDRAWN): 10/10.
 
 **HOMES PLACED:** `#1162` `B-WAKE-HEARTBEAT-CONTROL-DATE` (row 1q, the heartbeat's false "control NOT answered" after midnight) · `#1151` `B-WAKE-STATE-UNSAVED-LOUD` (row 1r) · `#1167` `B-CENSUS-OWNERLESS-REMAINDER` (row 1s: the 48 placed but ownerless — Langston Step 8) · `R-*` batch ids folded into `#1116` · after-live `B-EVENT-LOOP-RESIDUAL` (`#225`), `B-CI-TEST-HYGIENE` (`#403`).
+
+## B-DASHBOARD-STATS-BLANK (CC-B, hotfix, Kyle-reported 2026-10-04; `#903`) — change-class `hotfix` — ✅ **CLOSED 2026-10-07** (Langston hotfix gate APPROVED at `8e165d1d6` with two conditions, met; deployed with deploy B; report `Batch Completion/B_DASHBOARD_STATS_BLANK_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** Two blank figures on the staging dashboards: the Earnings card's lifetime rows showed "—" whenever the window held no trades (the analytics route's empty-window return never carried `lifetime`, which `567385eae` put on the main return only), and the main Dashboard's Portfolio Value card never loaded (`dashboard.tsx` and `use-trading.tsx` called a token-gated route with a bare `fetch`, so it 401'd on every load — `#903`'s "race" diagnosis corrected: deterministic).
+
+**THE FIX.** `lifetime` on the empty-window return; `apiFetch` at the three call sites; fence test `b-dashboard-stats-blank.test.ts` (fails on the reverted sources).
+
+**RESULT.** Portfolio Value $820.00, request 200 (10-06 15:55Z); an empty `range=1h` window carries `lifetime` (10-07 07:34Z). **Left to row 175 (`B-DASHBOARD-AUTH-RACE`, Infra Claude):** the other bare fetches to token-gated routes (17 found, a floor).

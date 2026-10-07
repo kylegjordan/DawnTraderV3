@@ -1,4 +1,4 @@
-# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-09-29
+# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-10-07
 
 > **Rebuilt 2026-09-29 from `SPRINT_TO_LIVE_PLAN.md`, which is the authority: if this list and the plan disagree, this list is stale.** The previous version (as of 2026-09-13, with the original 2026-09-01 census) is in git history at `23b4700b2`. Every row points at its record (plan row, `RUNNING_ISSUES` number, alert id); the record is the truth, this file is the index. Kyle 2026-09-05: every slotted task lands here in the same turn.
 
@@ -6,6 +6,12 @@
 
 | batch | step | waiting on |
 |---|---|---|
+| **`B-ATR-BAD-PRINT`** (row 2a, `#1153`) · **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) · hotfix **`B-LIVE-BANNER-ACTIVE-HOTFIX`** (row 2a0h, `#1160`) · **`B-ENGINE-HEARTBEAT-DEAD-PATHS`** (row 2a0b, `#1158`) | **STEP 5 of 11 done — Step 4 APPROVED, CI green** | the deploy at `0c8ef5da2`, not before 2026-10-07T15:53Z (`#1154`); plan `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`. 2a0b's Step 7 is a HARD GATE at the next 02:15Z sweep. |
+| **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c, `#1159`) · **`B-ROOT-DUPLICATE-SCANNER-RETIRE`** (row 2a0d, `#1161`) | **2a0c: Step 4 APPROVED · 2a0d: STEP 5 of 11 done** | the deploy AFTER today's (2a0c needs the heartbeat writer gone and restarted first) |
+| **`B-FEED-HEALTH-GRADE-ARM`** (row 3a, `#1123`) | **STEP 4 of 11** — code `3a549e3a9` | Langston's Step-4 ruling |
+| **`B-VENUE-QUIET-ALERTING`** (row 3a1, `#526`/`#994`/`#638`) | **STEP 4 of 11** — r2 PROCEED; r3 condition at `b70ab5975` | Langston confirming the r3 condition. The xStock exit-freshness alerts stay ACTIVE and UNACKED until it ships (Langston 2026-10-07). |
+| **`B-HEALTH-CHECK-REMOVAL`** (row 51a, `#1147`) | **STEP 7 of 11 PASS** (0 start lines since deploy B vs 14 before) | Langston's Step-8 second pass, then Steps 10-11 |
+| hotfix **`B-PATTERN-ENUM-DRIFT`** (row 51, `#1063`) | **verification half-done** — ABCD insert failures 0 since deploy B | the first `volatility_edge` open after deploy B, to read its `pattern_type` |
 | **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window · ⏸ PAUSED for the sprint start (Kyle 2026-09-30)** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
 | **`T-W20C-SCALAR-LEG`** (sprint row 107) | **scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled** | its turn in the sprint, after row 106 `B-PAPER-LANE-PROVENANCE` |
 
@@ -13,8 +19,7 @@
 
 | alert | when | what |
 |---|---|---|
-| `c25e722d` | 2026-10-02T08:00Z | the pre-registered 52.24 GiB reclaim from the October 1 archive move (Langston's; I follow through). A no-op sweep is a defect at sprint row 6. |
-| `ac32818d` | 2026-10-06T07:00Z | the weekly `dt-deploy` observation; re-mint on each resolve |
+| `be06cec8` | 2026-10-13T07:00Z | the weekly `dt-deploy` observation (10-06 run: all four PASS at `ea456ad40`); re-mint on each resolve |
 
 ## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (66)
 
