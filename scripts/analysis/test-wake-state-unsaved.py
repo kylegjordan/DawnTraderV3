@@ -8,7 +8,7 @@ of WD,AD (create file / add subdirectory) on the directory for the current user.
 direct write into the directory raises OSError (Langston Step-1 C1): a deny that reports success while the write still goes
 through FAILS LOUDLY; a platform or uid that cannot deny at all is a SKIP with the reason printed and counted (Step-2 C3).
 """
-import json, os, subprocess, sys, tempfile, time
+import json, os, shutil, subprocess, sys, tempfile, time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FILTER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "comms-infra", "laptop", "cc-wake-filter.py")
@@ -220,10 +220,11 @@ def c1():
         q = subprocess.run([sys.executable, FILTER, "CC-A", "--positions", "--state", st2, "--lease-root", lr2],
                            capture_output=True, timeout=60)
         if label.startswith("intact"):
-            ok2 = q.returncode == 0 and b":7:100" in q.stdout and not q.stderr.strip().startswith(b"WATCHER-STATE")
+            ok2 = q.returncode == 0 and b":7:100" in q.stdout and b"WATCHER-STATE" not in q.stderr
         else:
             ok2 = (q.returncode == 1 and not q.stdout.strip() and b"WATCHER-STATE-UNREADABLE:" in q.stderr
                    and b"unparseable" in q.stderr and b"Traceback" not in q.stderr)
+        shutil.rmtree(d2, ignore_errors=True); shutil.rmtree(lr2, ignore_errors=True)
         report(f"C1 a {label} state: " + ("resumes at its saved position" if label.startswith("intact") else "refuses, never a silent tail resume"),
                ok2, f"rc={q.returncode}, out={q.stdout.strip()[:60]!r}")
 
