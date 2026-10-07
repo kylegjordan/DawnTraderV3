@@ -36,3 +36,11 @@ The kill switch stops trading when a day's realized losses pass 15% of the balan
 
 ## Langston's rulings (12:07Z)
 (a) `{reset, hard_reset}` confirmed; `engine_stop_cleanup` stays counted. (b) The display family's parity stays as it is; the divergence that needed stating was inside the function's own caller set — now avoided by putting the option at the numerator call site only. Change-class re-checked: `non_architecture` stands (no shared aggregate changes behaviour; one call site and one reset predicate).
+
+## Step 1 APPROVED (Langston 12:17Z, at `ffea9099`) — record conditions, carried to Step 2 and the report
+1. **`hard_reset` has never been written** (0 rows all-time; 18 open `paper` rows with `pnl` NULL are its candidates) and **`closed_trades` holds 0 `live` rows** — objective 1's `hard_reset` arm and objective 3's mode predicate are FENCES on unexercised paths (`#661` leg 3), not fixes of an observed defect. The report says so.
+2. "`hard_reset` adds 0 to the sum" is a DATA fact today (all candidates `pnl` NULL; `reconstructed_net_pnl` NULL so `HONEST_PNL` = `pnl`), not a code invariant — `pnl` is nullable with nothing tying NULL `pnl` to NULL `closed_at`.
+3. **Magnitude:** the 9 `reset` closes of 2026-10-06 net **−$6.63** against a 15% kill line of ≈ $123 on the $820 anchor — 5.4% of the threshold. The batch is justified by the mechanism (a flatten of up to 20 slots), not by the observed instance; the 24 h hold did not avert a trip.
+4. The r2 coherence line, made descriptive: in the null-session branch the denominator carries NO realized P&L at all (anchor alone), so the two sides are already not alike there for `#585` reasons this option does not touch.
+5. After this ships, the kill switch's loss figure will not reconcile with `routes.ts:12442`'s portfolio realized total — intended, stated once.
+6. Objective 4's "both sides shown safe" covers CLOSES only: the inverse case — a re-anchor with no closes — is `#1171`, row 183b1.
