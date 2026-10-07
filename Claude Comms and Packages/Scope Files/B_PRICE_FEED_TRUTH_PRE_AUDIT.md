@@ -67,3 +67,9 @@ Code at `origin/migration/aws-supabase` `3cb978f0e`; staging logs and DB 2026-10
 | — | **Not in I2:** the venue list's lack of a periodic refresh (A3) — a pair Kraken lists after boot stays unknown until a restart. `UNAUDITED` as a defect; it is pre-existing behaviour. Raised for a disposition at Step 2 rather than folded. | A3 |
 
 `REVIEWER: none spawned. NOT RE-READ: A7's harm reading (A8) is one 62-minute window. A10's census is reproducible from `scripts`-free inputs: the public AssetPairs JSON + the resolver + the service, run 2026-10-07.`
+
+---
+
+# INCREMENT I4 (`#960`, `#950`) — GROUNDWORK MEASURED 2026-10-07 (its Step 2 follows I1)
+- The recorder subscribes the list it loaded at start (`equity-spot-archiver.ts:498-505`) and re-sends that copy on every reconnect (`subscribe`, `:332-342`): 473 symbols at the 21:11Z, 09:25Z and 11:17Z reconnects.
+- `xstock_spot_universe` 2026-10-07 ~13:30Z: 498 rows, 473 not delisted = the recorder's 473; **0 added and 0 delisted since the process started** (`pm_uptime` 2026-10-06 15:44:54Z). Additions by `first_seen_at` day since the 05-21 seed: 9 in 4.5 months (06-13 1, 07-01 1, 07-13 1, 07-31 1, 08-29 3, 09-04 1, 09-08 1). ⇒ **`#960`'s gap is real but rare and closed by every restart; measured harm today is zero.** Whether a member with no feed can reach selection is still to be shown at I4's Step 2 (it needs a day with an addition between restarts).
