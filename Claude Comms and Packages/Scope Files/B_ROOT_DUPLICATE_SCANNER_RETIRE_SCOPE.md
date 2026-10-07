@@ -1,4 +1,4 @@
-# B-ROOT-DUPLICATE-SCANNER-RETIRE — SCOPE (Step 1, r1b)
+# B-ROOT-DUPLICATE-SCANNER-RETIRE — SCOPE (Step 1, r2 — Langston PROCEED with C1-C5, 2026-10-07)
 
 change-class: non_architecture
 
@@ -28,3 +28,10 @@ Any change to the live `server/services/fx5-scanner.ts`; the Central Clock (lock
 
 ## 4. Blast radius
 Root-level files only (not compiled, not imported); docs. No runtime behaviour. No deploy needed for the code effect (the twin never loads) — it rides the next deploy for record-keeping only.
+
+## 5. Conditions carried (Langston Step-1 PROCEED, 2026-10-07; each re-derived by him at `3fa1eb54c`)
+- **C1 — THREE non-live copies, not one; the subject set widens.** (a) root `fx5-scanner.ts` (as above); (b) **`BATCH_19G_HF2/server/services/fx5-scanner.ts`** — 1,135 lines, its own `centralClock.subscribe('FX5Scanner', …)` at `:292`, a DIFFERENT twin, and the more hazardous one: it sits beside `BATCH_19G_HF2/server/services/market-scanner.ts`, so a relative `./fx5-scanner` from that directory resolves to it. The folder holds exactly three files (`INSTRUCTIONS.md` + those two; introduced `238d33154` 2026-03-19, *"Batch 19G HF2: Fix pattern filter DB field mapping"* — a Replit-era patch drop). **Disposition (5) for the whole folder**, same rule-18 record. (c) `docs/current_state/screeners_export/backend/fx5-scanner.ts` — 320 lines, no subscribe call, an export SNAPSHOT: a STATED disposition at Step 2 (kept as a labelled historical export, or removed with the export set), never silence. ⇒ **`centralClock.subscribe` has 8 code sites at the ref, not 7** — the 2a0b pre-audit's census (`B_ENGINE_HEARTBEAT_DEAD_PATHS_PRE_AUDIT.md:47`) is corrected at Step 10.
+- **C2 — one owner for the class.** `PHASE_19_PLAN` row **3n.a `B-ORPHAN-ROOT-SCANNER` (CC-C)** names both copies and says delete both; this row (2a0d, CC-B) duplicates it. **Settled (Langston's recommendation): 2a0d absorbs the class; 3n.a is struck with a pointer here** (it waits on `3n`; this needs no deploy). ANALYST Claude told in the channel, since the struck row is his.
+- **C3 — objective 1's verify is replaced.** "The live subscriber list stays at 5" is true by construction (the twins never load). **Verify = an ENUMERATION of every `centralClock.subscribe` code site at the post-change ref against the expected set (the live subscribers only), with a positive control**; the runtime list stays as a labelled no-change control, not the test.
+- **C4 — objective 3's document population, enumerated:** `docs/task-10-1-adjustable-guardrails.md` (4 refs), `docs/task-10-behavioral-integration-report.md` (4), `docs/task-7-validation-final-report.md` (3), `docs/task-7-completion-summary.md` (1), `docs/audits/phase-8.8.1-8.8.2-audit.json` (1), plus two `attached_assets/` dumps. Not `docs/task-10-behavioral-integration-design.md` (0 refs).
+- **C5 — execution only for a keep-and-wire proposal.** A **(5) delete** needs no execution at all; a script is run only if Step 2 proposes **(2) keep-and-wire** for it — the risky action becomes rare, not merely gated.
