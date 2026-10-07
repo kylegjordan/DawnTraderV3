@@ -145,12 +145,6 @@ interface PlainRetentionTableSpec {
 
 const PLAIN_RETENTION_TABLES: PlainRetentionTableSpec[] = [
   { table: 'xstock_qd_probe_history', timestampColumn: 'bucket_start', retentionConstantName: 'xstock_qd_probe_history.hot_retention_days' },
-  // B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158, Langston Q3): cluster_bus_event — a write-only audit log (zero
-  // programmatic readers by design once the auto-test harness was deleted), delete-only lane, 30 days. Its
-  // constant is seeded by 2026-10-06-b-engine-heartbeat-cluster-bus-retention.sql IN THE SAME DEPLOY — loadConfig
-  // reqNum()s every entry before sweeping anything, so a missing seed would abort the WHOLE nightly sweep. The
-  // first run also takes the ~268k heartbeat backlog (batched, VACUUMed, counted) — no separate migration.
-  { table: 'cluster_bus_event', timestampColumn: 'created_at', retentionConstantName: 'cluster_bus_event.hot_retention_days' },
   // B-TRADE-TIER-REGISTER: the trade tables enter the move-not-delete path.
   // vts_open_trades: closed-in-place rows only (OPEN rows never age; the range
   // predicate on closed_at plus `closed = true` scopes every export AND delete).

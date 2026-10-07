@@ -218,3 +218,4 @@
 2026-10-06-b-engine-stop-drop-time-limit-columns.sql
 2026-10-06-b-engine-heartbeat-cluster-bus-retention.sql
 2026-10-07-b-expectancy-tuning-rows-retire.sql
+2026-10-07-b-cluster-bus-persist-remove.sql

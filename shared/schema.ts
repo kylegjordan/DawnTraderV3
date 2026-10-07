@@ -4288,7 +4288,6 @@ export const nodeStatusEnum = pgEnum("node_status", ["healthy", "degraded", "dra
 export const clusterTaskStatusEnum = pgEnum("cluster_task_status", ["queued", "assigned", "running", "completed", "failed", "cancelled"]);
 export const clusterTaskTypeEnum = pgEnum("cluster_task_type", ["trading_signal", "market_analysis", "risk_assessment", "compliance_check", "research", "optimization", "general"]);
 export const outcomeStatusEnum = pgEnum("outcome_status", ["success", "partial", "failed", "timeout"]);
-export const busEventTopicEnum = pgEnum("bus_event_topic", ["task_assigned", "task_completed", "node_status_change", "rebalance_triggered", "circuit_breaker", "health_alert", "learning_delta", "model_sync"]);
 
 // Phase 17.5 & 17.6 enums - Reliability & Security
 export const circuitBreakerStateEnum = pgEnum("circuit_breaker_state", ["closed", "open", "half_open"]);
@@ -4362,19 +4361,6 @@ export const clusterResultLog = pgTable("cluster_result_log", {
   outcomeStatusIdx: index("cluster_result_log_outcome_status_idx").on(table.outcomeStatus),
   createdAtIdx: index("cluster_result_log_created_at_idx").on(table.createdAt),
   userIdIdx: index("cluster_result_log_user_id_idx").on(table.userId),
-}));
-
-export const clusterBusEvent = pgTable("cluster_bus_event", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  topic: busEventTopicEnum("topic").notNull(),
-  sourceNode: varchar("source_node", { length: 100 }),
-  payload: jsonb("payload").notNull(),
-  metadata: jsonb("metadata"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => ({
-  topicIdx: index("cluster_bus_event_topic_idx").on(table.topic),
-  createdAtIdx: index("cluster_bus_event_created_at_idx").on(table.createdAt),
-  sourceNodeIdx: index("cluster_bus_event_source_node_idx").on(table.sourceNode),
 }));
 
 // Phase 17.5: Circuit Breaker for fault tolerance
@@ -4603,11 +4589,6 @@ export const insertClusterResultLogSchema = createInsertSchema(clusterResultLog)
   createdAt: true 
 });
 
-export const insertClusterBusEventSchema = createInsertSchema(clusterBusEvent).omit({ 
-  id: true, 
-  createdAt: true 
-});
-
 export const insertClusterCircuitBreakerSchema = createInsertSchema(clusterCircuitBreaker).omit({ 
   id: true, 
   createdAt: true, 
@@ -4642,9 +4623,11 @@ export type InsertClusterAuditLog = z.infer<typeof insertClusterAuditLogSchema>;
 export type ClusterAuditLog = typeof clusterAuditLog.$inferSelect;
 export type GateType = typeof gateTypeEnum.enumValues[number];
 
-export type InsertClusterBusEvent = z.infer<typeof insertClusterBusEventSchema>;
-export type ClusterBusEvent = typeof clusterBusEvent.$inferSelect;
-export type BusEventTopic = typeof busEventTopicEnum.enumValues[number];
+// B-CLUSTER-BUS-PERSIST-DISPOSITION (#1159): a plain union since the `bus_event_topic` Postgres type dropped with
+// `cluster_bus_event` (its only column). Same eight labels; it types ClusterBus.publish/subscribe only.
+export type BusEventTopic =
+  | 'task_assigned' | 'task_completed' | 'node_status_change' | 'rebalance_triggered'
+  | 'circuit_breaker' | 'health_alert' | 'learning_delta' | 'model_sync';
 
 // Insert schemas for Phase 18
 export const insertAgentLearningDeltaSchema = createInsertSchema(agentLearningDelta).omit({ 

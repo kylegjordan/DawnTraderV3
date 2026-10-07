@@ -266,12 +266,13 @@ describe('fences — the removals stay removed', () => {
     expect(read('server/services/active-engine-service.ts')).toMatch(/action: 'orphan-heal'/);
     expect(read('server/utils/operation-queue.ts')).toMatch(/'orphan-heal'/);
   });
-  it('cluster_bus_event is on the retention sweep AND its constant is seeded in a registered migration', () => {
-    expect(read('server/scripts/b75-retention-sweep.ts')).toMatch(/table: 'cluster_bus_event', timestampColumn: 'created_at', retentionConstantName: 'cluster_bus_event\.hot_retention_days'/);
-    const seed = '2026-10-06-b-engine-heartbeat-cluster-bus-retention.sql';
-    expect(read(`drizzle/migrations/${seed}`)).toMatch(/'cluster_bus_event\.hot_retention_days', '30'::jsonb/);
+  // B-CLUSTER-BUS-PERSIST-DISPOSITION (#1159, row 2a0c) removed the table, its seed and this registration together.
+  // 2a0b's seed migration stays in the manifest as history; the registration must be gone, and the 2a0c removal
+  // migration (which deletes the seed) must be registered alongside it, or the sweep would abort on a missing seed.
+  it('cluster_bus_event is OFF the retention sweep, and the 2a0c removal migration is registered', () => {
+    expect(read('server/scripts/b75-retention-sweep.ts')).not.toMatch(/table: 'cluster_bus_event'/);
     const lines = new Set(read('drizzle/migrations/MANIFEST.txt').split(/\r?\n/).map((l) => l.trim()));
-    expect(lines.has(seed)).toBe(true);
-    expect(lines.has(seed.replace('.sql', '-rollback.sql'))).toBe(false);
+    expect(lines.has('2026-10-06-b-engine-heartbeat-cluster-bus-retention.sql')).toBe(true);
+    expect(lines.has('2026-10-07-b-cluster-bus-persist-remove.sql')).toBe(true);
   });
 });
