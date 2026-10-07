@@ -158,7 +158,7 @@ function planRows(): Map<string, { batch: string; owner: string }> {
   for (const line of text.slice(start, start + 1 + end).split('\n')) {
     if (!line.startsWith('|')) continue;
     const c = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((x) => x.trim());
-    if (c.length === 7 && /^\d+[a-z]?$/.test(c[0])) out.set(c[0], { batch: c[2], owner: c[3] });
+    if (c.length === 7 && /^\d+[a-z0-9]*$/.test(c[0])) out.set(c[0], { batch: c[2], owner: c[3] });   // ids like 2a0b (#1139)
   }
   return out;
 }

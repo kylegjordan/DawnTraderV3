@@ -39,7 +39,7 @@ def check(tok):
     if kind == "report":
         return arg in reports
     if kind == "file":
-        m = re.match(r'(\S+):(\d+) "(.*)"$', arg)
+        m = re.match(r'(.+?):(\d+) "(.*)"$', arg)   # a path may hold spaces
         if not m: return False
         p, n, needle = m.group(1), int(m.group(2)), m.group(3).replace('\\"', '"')
         if p not in filecache:

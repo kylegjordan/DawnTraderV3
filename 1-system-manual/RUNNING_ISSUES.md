@@ -4219,7 +4219,6 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 2. **CC-A’s position block converted.** CC-B and CC-C to follow — **a one-line format change each, not a batch.**
 
 **⛔ NOT BUILT, AND DELIBERATELY SO — the design is preserved here in case it recurs, but nothing is scheduled:**
-➕ **W41 TRIAGE (CC-A, 2026-10-07; row 1n `#1139`):** **CLOSED** — the STEP: N of 11 format shipped (Kyle scoped it down to that); the recurrence tripwire is in the weekly mistake pass. CITE: commit b97cb49d0 · file CLAUDE.md:25 "STEP: N of 11" ¶ (line numbers at `0c8ef5da2`)
 - **(b) `preAuditAddTime` vs `firstCode`** — ⚠️ **and Langston already proved it would have graded THIS case GREEN**, so it never was the fix for `#754`. *(If ever built: `Math.min`, not `Math.max`.)*
 - **(c) the scope-first-add emit** — the "Step 1 begins" alarm at `poller.mjs:586`, outside `applyCutoff`.
 - **the checker-side reconciler** for `STEP: N` (`docPresent(batchId,'pre_audit')`, `checker.mjs:112`).
@@ -4228,6 +4227,7 @@ The COMMITTED copy carries the five **pre-Phase-14 regime keys** (`BULL_STABLE`/
 ⚠️ **WHAT THIS HONESTLY DOES NOT DO, stated because Langston struck the field-alone version and Kyle then accepted the residual: IT BUYS LEGIBILITY, NOT ENFORCEMENT.** A session can write `STEP: 2` and not do step 2; **nothing compares the field to reality.** ★ **It is kept because it costs nothing and makes the one failure we have actually observed visible at a glance.** ⛔ **Mechanism 3 (no front door) remains OPEN and unfixed — not closed, not accepted, just not worth tooling yet.**
 
 ⇔ `#744` · `#752` (§9.4’s trigger — same shape) · `MISTAKE_PATTERNS` `skipped-the-gate`.
+➕ **W41 TRIAGE (CC-A, 2026-10-07; row 1n `#1139`):** **CLOSED** — the STEP: N of 11 format shipped (Kyle scoped it down to that). ⚠️ **What it does NOT cover (Langston, Step 4):** the body above still reads that the three remaining legs are UNSCHEDULED on frequency — they are homed by `#1005` ("HOME: they ride `B-GATE-GUARD` (`#744`), `PHASE_19_PLAN` governance row 10"), and the weekly mistake-pass tripwire this line first leaned on is the instrument `#1005` MEASURED returning zero against 22 commit messages (positive control 49). So this closes the FORMAT only; the recurrence control is `#1005`/`#744`, still open. CITE: commit b97cb49d0 · file CLAUDE.md:25 "STEP: N of 11" ¶ (line numbers at `0c8ef5da2`)
 
 ### #753 OPEN 2026-08-27 (CC-A; Kyle-directed investigation after the third instance) — ★★ **ANOTHER SESSION’S UNCOMMITTED WORK KEEPS APPEARING IN A SESSION’S OWN WORKING TREE, AND THE MECHANISM HAS NEVER BEEN ESTABLISHED. THREE INSTANCES, ALL ON `RUNNING_ISSUES.md`, ACROSS THREE DIFFERENT SESSIONS.**
 

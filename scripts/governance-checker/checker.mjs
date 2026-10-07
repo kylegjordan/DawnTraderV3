@@ -333,7 +333,7 @@ function planCells(line) {
   return s.split('|').map((c) => c.trim());
 }
 const PLAN_SEPARATOR = /^\|[\s:|-]+\|?\s*$/;
-const PLAN_ROW_NO = /^\d+[a-z]?$/;
+const PLAN_ROW_NO = /^\d+[a-z0-9]*$/;   // a row id may run deeper than one letter (2a0b); the narrower /^\d+[a-z]?$/ hid every such row (#1139 P1)
 export function planRowsByBatch(planText, extract = extractLeadingBatchId) {
   if (typeof planText !== 'string' || planText.trim() === '') throw new Error('the plan text is empty or absent');
   const s4Width = planCells(PLAN_LINE.s4Header).length, s5Width = planCells(PLAN_LINE.s5Header).length;
