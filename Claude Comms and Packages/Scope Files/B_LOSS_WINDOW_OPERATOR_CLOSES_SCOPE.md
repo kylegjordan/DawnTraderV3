@@ -1,6 +1,8 @@
 # B-LOSS-WINDOW-OPERATOR-CLOSES — SCOPE r2 (sprint row 183b, `#1154`; pre-sprint Stage 0)
 
-change-class: non_architecture
+change-class: architecture
+
+> **Re-declared at Step 2 r2 (2026-10-07):** was `non_architecture`. The r2 design makes the kill switch's window read balance anchor events, which Langston classed as architecture at Step 1 (`#1171`). Pre-audit r2 has the design.
 
 **Owner:** CC-C. **Placed:** `SPRINT_TO_LIVE_PLAN.md` §0a Stage 0 (Kyle approved the pre-sprint plan 2026-10-07) and row 183b. **Origin:** Langston, `B-SIZING-DEC-RESTORE` inc3 r5 Step-4 condition 2.
 Code read at `origin/migration/aws-supabase` `77904e4d1`; data on staging 2026-10-07 ~12:00Z.
