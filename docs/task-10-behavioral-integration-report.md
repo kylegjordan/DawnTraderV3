@@ -1,3 +1,5 @@
+> ⚠️ **2026-10-07 (B-ROOT-DUPLICATE-SCANNER-RETIRE, `#1161`):** the root `test-*.ts` scripts this document tells you to run were DELETED — three could no longer load and none was part of the test suite. Archived copies and the reasons: `1-system-manual/DELETED_COMPONENTS_LOG.md`, entry dated 2026-10-07. This document is kept as history.
+
 # Task 10: Behavioral Integration Report
 
 **Date**: October 12, 2025  
