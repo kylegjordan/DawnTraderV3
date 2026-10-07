@@ -5289,9 +5289,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   await new Promise(resolve => setTimeout(resolve, 100));
   
   const symbols = pairs.map(p => p.symbol);
-  // I2 P2b: every pair here came from the FX5 scan batch, and FX5 is the crypto_spot scanner (`fx5-scanner.ts:658`,
-  // "FX5 is the crypto scanner; assetClass is explicit") — the class is the ingestion path's (SM rule 3), so all are
-  // REST-eligible. A future non-crypto source for this list must pass its own eligibility.
+  // I2 P2b: every pair here came from the FX5 scan batch, whose UNIVERSE is Kraken's spot REST ticker list itself
+  // (`market-scanner.ts` `collectAdaptiveBatch` STEP 1: `krakenService.getTicker()` joined to `getTradablePairs()`), and
+  // Kraken spot REST carries no tokenized equities under any spelling (`symbol-canonicalizer.ts`, the `BIIBUSD` probe).
+  // A collision ticker here (e.g. CAT/USD) is therefore the CRYPTO pair — the class is the ingestion path's (SM rule 3), so
+  // all are REST-eligible. A future non-crypto source for this list must pass its own eligibility.
   const restEligible = new Set(symbols);
   const priceDataMap = await priceCache.getBatch(bucketType, symbols, { restEligible });
 

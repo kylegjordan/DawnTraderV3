@@ -21,7 +21,14 @@
  *   `unlisted`   — requested symbols the venue's pair list does not name, so NOT SENT (they are also `missing`: the identity
  *                  holds, and `written = requested − unlisted` exactly when nothing else was missed);
  *   `ineligible` — symbols the caller declared not REST-fetchable (another asset class), never part of `requested`;
- *   `unresolved` — response keys the venue's pair list does not name, so NOT FILED (never a phantom).
+ *   `unresolved` — response keys the venue's pair list does not name, so NOT FILED (never a phantom). Since I2 we only ask
+ *                  for listed pairs, so `unresolved > 0` is the live detector of venue-list drift since boot (`#933`);
+ *   `notReady`   — symbols NOT SENT because the venue's pair list was not loaded yet (I2 P5, Langston Step-4 C1): without
+ *                  it a waiting call reads `written=0 missing=N`, byte-identical to "Kraken answered nothing".
+ * ⚠️ `requested` is a different population per site (R3): `refreshBucket` passes every bucket member; `getBatch` passes
+ *    the STALE, REST-eligible subset of what it was asked for. Neither is "the eligible set" in general.
+ * ⚠️ `viaPrimary` (R5): the request form is now the venue ALTNAME, which differs from the response key for most
+ *    Z/X-primary pairs — expect the list near its cap; it no longer discriminates much.
  *
  * ⛔ RECORD-ONLY: no decision reads a ledger.
  * PURE: no cache, no clock, no I/O.
@@ -55,6 +62,8 @@ export interface WriteKeyLedger {
   ineligible: number;
   /** I2: response keys the venue's pair list does not name — not filed. */
   unresolved: number;
+  /** I2 (Step-4 C1): requested symbols not sent because the venue's pair list was not ready (a subset of `missing`). */
+  notReady: number;
 }
 
 /** I2: the counts a site passes beside its writes. */
@@ -62,6 +71,7 @@ export interface WriteKeyExtras {
   unlisted?: readonly string[];
   ineligible?: number;
   unresolved?: number;
+  notReady?: number;
 }
 
 export function buildWriteKeyLedger(
@@ -96,6 +106,7 @@ export function buildWriteKeyLedger(
     unlisted: Array.from(new Set(extras.unlisted ?? [])).sort(),
     ineligible: extras.ineligible ?? 0,
     unresolved: extras.unresolved ?? 0,
+    notReady: extras.notReady ?? 0,
   };
 }
 
@@ -112,7 +123,7 @@ export function formatWriteKeyLedger(l: WriteKeyLedger, extra = ''): string {
   return `[3n.l][WRITE_KEYS] site=${l.site}${extra ? ' ' + extra : ''} requested=${l.requested.length} written=${l.written.length} `
     + `phantom=${l.phantom.length}${formatKeyList(l.phantom)} missing=${l.missing.length}${formatKeyList(l.missing)} `
     + `viaPrimary=${formatKeyList(l.viaPrimary)} unlisted=${l.unlisted.length}${formatKeyList(l.unlisted)} `
-    + `ineligible=${l.ineligible} unresolved=${l.unresolved}`;
+    + `ineligible=${l.ineligible} unresolved=${l.unresolved} notReady=${l.notReady}`;
 }
 
 /**
@@ -133,6 +144,7 @@ export class WriteKeyAccumulator {
   private unlisted = new Set<string>();
   private ineligible = 0;
   private unresolved = 0;
+  private notReady = 0;
 
   constructor(private readonly site: RestWriteSite) {}
 
@@ -146,6 +158,7 @@ export class WriteKeyAccumulator {
     l.unlisted.forEach(k => this.unlisted.add(k));
     this.ineligible += l.ineligible;
     this.unresolved += l.unresolved;
+    this.notReady += l.notReady;
   }
 
   /** The interval's line, or `null` when the site was not called; resets either way. */
@@ -157,7 +170,7 @@ export class WriteKeyAccumulator {
       + `phantomDistinct=${phantom.length}${formatKeyList(phantom)} missingDistinct=${missing.length}${formatKeyList(missing)} `
       + `viaPrimary=${formatKeyList(Array.from(this.viaPrimary).sort())} `
       + `unlistedDistinct=${this.unlisted.size}${formatKeyList(Array.from(this.unlisted).sort())} `
-      + `ineligible=${this.ineligible} unresolved=${this.unresolved}`;
+      + `ineligible=${this.ineligible} unresolved=${this.unresolved} notReady=${this.notReady}`;
     this.calls = 0;
     this.requested = 0;
     this.written = 0;
@@ -167,6 +180,7 @@ export class WriteKeyAccumulator {
     this.unlisted.clear();
     this.ineligible = 0;
     this.unresolved = 0;
+    this.notReady = 0;
     return line;
   }
 }

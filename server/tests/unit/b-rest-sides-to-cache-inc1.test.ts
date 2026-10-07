@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe('OBJ-8 — the static map carries the key Kraken answers by', () => {
-  it('1. Kraken\'s primary resolves to the internal symbol; the resolver\'s request form is the primary (the price cache still asks by its own `toKrakenSymbol`, scope C1)', () => {
+  it('1. Kraken\'s primary resolves to the internal symbol; the resolver\'s request form is the primary (since B-PRICE-FEED-TRUTH I2 the price cache asks and files by the venue pair list, not by this map)', () => {
     expect(normalizeToInternalSymbol('ZGBPZUSD')).toBe('GBP/USD');
     expect(normalizeToInternalSymbol('XETCZUSD')).toBe('ETC/USD');
     expect(toKrakenRest('GBP/USD')).toBe('ZGBPZUSD');

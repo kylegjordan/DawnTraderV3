@@ -102,6 +102,11 @@ Code at `origin/migration/aws-supabase` `3cb978f0e`; staging logs and DB 2026-10
 - **C3 —** `restEligible` is built by filtering `bucketSignals` against `cryptoKeysAtIndex`, never by splitting the `${mode}:${symbol}:${strategy}` key.
 - **A3's owner divergence settled:** `PHASE_19_PLAN` row 3k corrected to Infra Claude (the active plan, sprint row 29, governs); Infra told 13:40Z.
 
+## I2 Step 4 — APPROVED (Langston 2026-10-07 22:20Z, at `40da5121b` / `8bec2afc6` byte-identical); conditions folded
+- **C1** `notReady` carried through `WriteKeyExtras` and printed on the ledger (test 7 asserts it). **C2a** the dual-key branch is reachable by case variance alone — comment corrected. **C2b** `refreshBucket`'s by-construction claim states its fence (the engine's `?? 'crypto_spot'` NULL default; zero NULL `asset_class` measured by him). **C3** test 9 asserts the consequence from a `base: XXDG` AssetPairs payload (tier <= 2, `toKrakenRest('DOGE/USD') = XDGUSD`); mutation (drop the row) fails tests 8 and 9.
+- **Records:** R1 → `#1176` amendment 1 (five tables; row 14b). **R2 — P3a's reach is 1 RESTORED + 7 NEWLY MAPPABLE, not 8 recovered:** `DOGE/USD` is in the static map, so the row prevents the venue-list path from regressing it to `unlisted`; the other 7 DOGE pairs become mappable. Zero operational presence measured by him (scan archive: `DOGE/USD` only; no DOGE closed trade); latent, and DOGE/BTC sits in `#966`. R3/R4/R5 stated in comments (`requested` population per site; `skippedPasses` counts both sites; `viaPrimary` near its cap). R6 the VTS citation now names the scan UNIVERSE (`collectAdaptiveBatch` STEP 1, Kraken spot tickers, no tokenized equities). R7 on `#933`. R8 the two stale texts fixed (inc1 test 1's title; `venue-grid-resolver.ts` "17" → 32).
+- **His reproduction (staging 19:53:58Z → 22:14:21Z):** `readyToBuy` 562 passes, 562 `written=0`, every one `requested=133 missing=133`; control `openTrade` 4,005 of 4,005 `written>0`.
+
 ---
 
 # INCREMENT I4 (`#960`, `#950`) — GROUNDWORK MEASURED 2026-10-07 (its Step 2 follows I1)

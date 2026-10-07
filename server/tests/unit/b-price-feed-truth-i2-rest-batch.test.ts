@@ -12,6 +12,7 @@
  * `XXDG` row from `ASSET_NORMALIZATION` (→ 7).
  */
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import axios from 'axios';
 import { priceCache } from '../../services/price-cache.js';
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
 
@@ -171,6 +172,9 @@ describe('I2 P5 — refuse until the venue list is ready', () => {
     await pc.refreshBucket(bucket, Date.now());
     await pc.getBatch('openTrade', ['BTC/USD'], { restEligible: new Set(['BTC/USD']) });
     expect(pc.krakenService.getTicker).not.toHaveBeenCalled();
+    pc.logHealthLine();
+    // Step-4 C1: the wait is labelled on the ledger, never read as "Kraken answered nothing"
+    expect(logs.some(l => l.includes('site=getBatch') && l.includes('notReady=1'))).toBe(true);
     expect(bucket.lastRefresh).toBe(0); // not advanced: the pass retries
     venue.ready = true;
     await pc.refreshBucket(bucket, Date.now());
@@ -187,5 +191,22 @@ describe('I2 P3a — the venue list names Dogecoin by Kraken\'s base code', () =
     expect(krakenAssetPairsService.normalizeAsset('XXDG')).toBe('DOGE');
     expect(krakenAssetPairsService.normalizeAsset('XDG')).toBe('DOGE');
     expect(krakenAssetPairsService.normalizeAsset('XXBT')).toBe('BTC');
+  });
+
+  // Langston Step-4 C3: assert the CONSEQUENCE, from a payload shaped like Kraken's (base `XXDG`), not only the table row.
+  it('9. from an AssetPairs payload with base XXDG, DOGE/USD is tier <= 2 and its REST pair is XDGUSD', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pair = (altname: string, wsname: string, base: string, quote: string) =>
+      ({ altname, wsname, base, quote, status: 'online', aclass_base: 'currency', aclass_quote: 'currency' });
+    vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: {
+      XDGUSD: pair('XDGUSD', 'XDG/USD', 'XXDG', 'ZUSD'),
+      XXBTZUSD: pair('XBTUSD', 'XBT/USD', 'XXBT', 'ZUSD'), // control
+    } } } as any);
+    await krakenAssetPairsService.refresh();
+    expect(krakenAssetPairsService.toKrakenRest('DOGE/USD')).toBe('XDGUSD');
+    expect(krakenAssetPairsService.getTier('DOGE/USD')).toBeLessThanOrEqual(2);
+    expect(krakenAssetPairsService.resolveByKrakenKey('XDGUSD')?.internalSymbol).toBe('DOGE/USD');
+    expect(krakenAssetPairsService.toKrakenRest('BTC/USD')).toBe('XBTUSD'); // control
   });
 });

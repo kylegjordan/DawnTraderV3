@@ -131,7 +131,7 @@ export function getDerivedGridCount(): number {
  * THE ONE RESOLVER. Everything that needs a venue price grid calls this.
  *
  * ⚠️ Asset class is REQUIRED and is not inferred from the symbol, because xStock and crypto
- * tickers collide (`XSTOCK_SPOT_KRAKEN_COLLISIONS` — 17 of them, e.g. DASH is both DoorDash and
+ * tickers collide (`XSTOCK_SPOT_KRAKEN_COLLISIONS` — 32 entries, 16 USD + 16 EUR, e.g. DASH is both DoorDash and
  * the Dash coin). Resolving by name alone would return the wrong venue's grid for those symbols.
  * That collision is handled correctly elsewhere in the system; this module must not re-open it.
  */

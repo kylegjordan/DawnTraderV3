@@ -294,6 +294,10 @@ class UnifiedPriceCache {
     if (!this.venueReady()) return;
     // Every member is REST-eligible by construction (I2 P2/P2b): members enter only by `subscribe` (crypto callers),
     // by `getBatch`'s re-injection of an ELIGIBLE symbol, or by an owner's reason set (the engine's crypto positions).
+    // ⚠️ A FENCE, not a live defect (Langston Step-4 C2b): the engine's owner set rests on `active-execution-engine.ts`'s
+    // `?? 'crypto_spot'` default for a NULL `asset_class`, which disagrees with its xStock leg (that one resolves by
+    // symbol), so a NULL-class xStock would enter both. Measured 2026-10-07: ZERO NULL `asset_class` in
+    // `active_open_positions` and `vts_open_trades`, both classes present. The venue-list filter below is then the only guard.
     const symbols = Array.from(bucket.symbols);
     const writes: RestWriteKeys[] = []; // `3n.l` P3: every key this pass writes, for the write-key ledger
     const { sent, unlisted } = this.planRestRequest(symbols);
@@ -332,6 +336,8 @@ class UnifiedPriceCache {
     if (!this.venueReadyLogged) {
       this.venueReadyLogged = true;
       const waited = this.initializedAtMs !== null ? Date.now() - this.initializedAtMs : null;
+      // `skippedPasses` = refused `venueReady()` calls across BOTH REST sites (a `refreshBucket` pass and a `getBatch` call
+      // each count one; Langston Step-4 R4). Logged once: a later re-init of the list (`#933`) does not re-log it.
       console.log(`[I2][PriceCache][VENUE_READY] Kraken pair list ready; REST sites open. waitedMs=${waited ?? 'n/a'} skippedPasses=${this.venueNotReadySkips}`);
     }
     return true;
@@ -356,7 +362,10 @@ class UnifiedPriceCache {
   /**
    * I2 P4 (`#1146`): file one REST `Ticker` response by the venue's own key. A key the list does not name is NOT filed and
    * is counted — never a fall-back to the resolver's quote-suffix parse, which is what minted `XXBTZ/CAD`-style phantoms.
-   * The row goes under the venue's internal symbol, and also under the requesting spelling if that differs.
+   * The row goes under the venue's internal symbol, and also under the requesting spelling if that differs. ⚠️ That
+   * difference is reachable by CASE VARIANCE ALONE (Langston Step-4 C2a): `sent` is filled only by `planRestRequest` →
+   * `toKrakenRest` → an `autoMap` keyed by `internalSymbol.toUpperCase()`, so no alias spelling can reach it. Kept for
+   * the case path and its own-push-time rule (`b-rest-sides-to-cache-inc2` test 10).
    * Returns the number of unresolved keys.
    */
   private fileRestResponse(
@@ -597,9 +606,13 @@ class UnifiedPriceCache {
       const writes: RestWriteKeys[] = []; // `3n.l` P3
       let unlisted: string[] = [];
       let unresolved = 0;
+      let notReady = 0;
       try {
-        // I2 P5: before the venue's pair list is ready nothing is sent; the eligible symbols show as missing.
-        if (missingSymbols.length > 0 && this.venueReady()) {
+        // I2 P5: before the venue's pair list is ready nothing is sent; the eligible symbols show as missing AND as
+        // `notReady` (Step-4 C1), so the wait is never read as "Kraken answered nothing".
+        if (missingSymbols.length > 0 && !this.venueReady()) {
+          notReady = missingSymbols.length;
+        } else if (missingSymbols.length > 0) {
           const plan = this.planRestRequest(missingSymbols);
           unlisted = plan.unlisted;
           const pairs = Array.from(plan.sent.keys());
@@ -619,7 +632,7 @@ class UnifiedPriceCache {
         // not write show as MISSING, including those of the chunks after it that were never attempted.
         // I2 (Step-2 C1): `requested` is the ELIGIBLE set, so the identity stays exact; `ineligible` is counted beside it.
         this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.venue.toKrakenRest(sym) ?? sym,
-          { unlisted, ineligible, unresolved }));
+          { unlisted, ineligible, unresolved, notReady }));
       }
     }
 
