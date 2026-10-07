@@ -1278,3 +1278,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-07 — B-CENSUS-OWNERLESS-TRIAGE (CC-A, sprint plan row 1n) — ✅ CLOSED 2026-10-07
 
 **Every open issue now has an owner and a place in the plan, or is closed with proof.** The weekly census had found 55 open issues that belonged to nobody, the same 55 two weeks running. About half turned out to be already finished — their records just had never been marked done — and each is now closed with a pointer to the change that did it, which a script checks. The rest were given to the session whose area they fall in and put on a real row of the plan, and each session was told by number. Along the way the census tool itself was found blind to 14 plan rows with longer row numbers (like "2a0b"); that was fixed and is live. 48 further issues are placed but still name no owner; they have their own follow-up batch (row 1s).
+
+### 2026-10-07 — B-HEALTH-CHECK-REMOVAL (CC-B, sprint plan row 51a) — ⏳ closes on Langston's Step-11 confirm
+
+**An old hourly "system health check" that measured nothing is gone.** It dated from the Replit era, had been reading the wrong thing for about a year, and always reported the system as unhealthy — partly because it counted its own previous warnings as a problem. Nothing ever acted on it; it just added a row to an error table every hour. Kyle had it deleted. Since the deploy on 10-06 it has not run once, and the scheduler that used to run it is still running everything else.
