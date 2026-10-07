@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 215 after live (+6 moved to the sprint, listed below)
+## After live — 217 after live (+6 moved to the sprint, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (3). Recounted 2026-09-30: 221 − 6 − 3 = 212. The theme headings below use the same rule.
 
@@ -72,7 +72,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 71 (+3 struck through)
+### Crew, reviewer, governance and alert tooling — 72 (+3 struck through)
+- B-CI-TEST-HYGIENE (Infra Claude) — #403: the storage/SQE asset-class routing test times out under full-suite database contention; raise the per-test timeout or mock the call
 - #565 (—) — B-COMMS-RESTART-DURABILITY: a Discord message group lost when the bridge restarts (CC-C) — crew tooling, after live (W41 homing 2026-10-06)
 
 - B-RULES-CHANGE-CLASS (CC-A) — the `rules_change` change-class: a five-field case file pushed alone and ruled on BEFORE a rules edit lands; its own definition is its first case (Langston 2026-08-26, restored 2026-09-29, #744). ⛔ BEFORE B-GATE-GUARD (its line, under Other, carries the dependency)
@@ -172,12 +173,13 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 16.3 Database Phase C: Schema Simplification — - Drop Wave 3 tabl (—) — drop legacy tables and enums — proposed deferral
 - 16.4 Wave 7: Post-L-Series Cleanup — - SafetyGuardrails service r (—) — remove the old SafetyGuardrails service — only matters if any live path still consults it
 - 16.5 LSP Error Resolution — - Delete legacy files causing LSP err (—) — editor/type error cleanup
-- 16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026- (—) — ML-era teardown remainder — Kyle decided REMOVE
+- 16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026- (CC-A) — ML-era teardown remainder — Kyle decided REMOVE · + `#174` (W41 triage)
 - 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16
 - row:3n.b (CC-C) — orphan level tables (disposition 5) — legacy removal
 
-### Other (research, UI, refactors) — 76
+### Other (research, UI, refactors) — 77
 
+- B-EVENT-LOOP-RESIDUAL (CC-B) — #225: scattered event-loop stalls after the scan-stall fix (measured 2026-10-06: 8.8/h, p50 193 ms, max 318 ms, at the pinned ceiling); most follow the FX5 scanner's cycle tail
 - #1020 (CC-A) — push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)
 - #148 (—) — health check permission error on a Replit-era path
 - #395 (CC-B) — the null-reason tracker is a module global, safe only while evaluation is serial; refactor to return values (added 2026-09-30, W40 census)
@@ -232,7 +234,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-PRICE-DOC-CONSOLIDATE (Kyle) — merge two price documents into one — Kyle wants it done, but it is documentation
 - B-QUOTE-PEG-DEVIATION-WATCH (CC-C) — watch for quote-peg deviation; its row says it gates nothing
 - B-SLOT-PLACEMENT-CHECK (CC-A) — Kyle's own ask: a newly slotted item reaches the plan and the owning task list at the moment it is slotted — the failure this inventory is repairing by hand ➕ **Also carries (Langston, `B-PLAN-CURRENCY-CHECK` Step-2 part 3, 2026-09-30): the session task lists are DERIVED views of the plan, and their refresh trigger is stated and homed here** — three ownership copies with two drifting (the reconcile found 18 CC-C and 2 CC-A task-list divergences) is how a fourth number appears. · **input:** `scripts/governance-checker/checker.mjs` `planRowsByBatch` (B-PLAN-CURRENCY-CHECK)
-- B-STORAGE-CATALOG (CC-A) — unmanaged app-local file store
+- B-STORAGE-CATALOG (CC-A) — unmanaged app-local file store · + `#431` (W41 triage)
 - B-TOKEN-WATCH Steps 7-11 (Infra Claude) — research feed paused at Step 7; no trading link
 - B-TSC-BASELINE-TS2345-AUDIT (CC-B) — 32 suppressed type errors in the routes file, one tied to the balance
 - B-TSC-GUARD-CWD (CC-B) — push guard working directory
