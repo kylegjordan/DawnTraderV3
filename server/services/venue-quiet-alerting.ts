@@ -26,6 +26,7 @@
  * overnight min 108.
  */
 import { getCachedNumberRequired } from './module-constants-service.js';
+import { QUOTE_LEN_MIN, QUOTE_LEN_MAX } from '../../shared/asset-classes.js';
 import { countEquitySymbolsFramedSince } from './passive-archive/equity-spot-archiver.js';
 
 export type ClassVerdict = 'quiet' | 'not_quiet' | 'thin';
@@ -76,9 +77,13 @@ export function classifyKnobError(err: unknown): 'not_warm' | 'unseeded' {
   return /not warm/i.test(msg) ? 'not_warm' : 'unseeded';
 }
 
-/** The exact key shapes the sweep may select — never a prefix scan (Langston r2 C2). */
+/** The exact key shapes the sweep may select — never a prefix scan (Langston r2 C2). The QUOTE is any quote the system
+ *  recognises, bounded by the shared SSOT (`QUOTE_LEN_MIN`/`QUOTE_LEN_MAX`, `shared/asset-classes.ts`) — the crypto arm mints
+ *  this key for EUR/GBP/CAD/CHF/AUD-quoted positions too (Langston Step-4 BLOCKER-1: a hard-coded USD list left 33 historical
+ *  symbols with no clearing condition, and an unresolved row blocks that symbol's every future page). Exactness against the
+ *  sibling keys holds: `price-skip-config-<mode>-<class>` has no `/`, and the venue-quiet keys do not start `price-skip-`. */
 export function priceSkipKeyPattern(mode: string): RegExp {
-  return new RegExp(`^price-skip-${mode}-([A-Z0-9.]+/(?:USD|USDT|USDC))$`);
+  return new RegExp(`^price-skip-${mode}-([A-Z0-9.]+/[A-Z0-9]{${QUOTE_LEN_MIN},${QUOTE_LEN_MAX}})$`);
 }
 export const standingKey = (mode: string) => `venue-quiet-${mode}-xstock_spot`;
 export const stuckKey = (mode: string) => `venue-quiet-resolve-stuck-${mode}`;
@@ -105,7 +110,12 @@ export interface SweepDeps {
  */
 export class VenueQuietState {
   lastPricedAt = new Map<string, number>();          // positionId -> last venue price, this process
-  thresholdReadOk = new Set<string>();               // asset classes whose skip threshold read cleanly, this process
+  /** Asset classes whose skip threshold read cleanly in this process. It only GROWS: once a class has read, its config row
+   *  is resolvable; a later cold read (boot ordering only — the cache is swap-on-success, never deleted) does not un-read it. */
+  thresholdReadOk = new Set<string>();
+  /** Symbols already escalated on duration in the current not-quiet window — so the sweep line counts NEW escalations, not
+   *  a re-push every minute (Langston Step-4 record item 3). Cleared when the class turns quiet again. */
+  durationEscalated = new Set<string>();
   notQuietSince: number | null = null;               // when the xStock class last turned not-quiet
   failingSince = new Map<string, number>();          // dedupe key -> first failed resolve, this process
   lastVerdict: ClassVerdict | null = null;
@@ -115,13 +125,16 @@ export class VenueQuietState {
   /** `notQuietSince` = the first sweep this process saw the class not quiet, reset by any quiet sweep. After a restart in
    *  liquid hours it starts at the first sweep — duration escalation is then later, never earlier, than true. */
   noteVerdict(v: ClassVerdict, nowMs: number): void {
-    if (v === 'quiet') this.notQuietSince = null;
+    // The CLOCK runs on anything but quiet (thin included): a member listed during QUIET carries `_priceSkipEscalated`, so
+    // when the class turns thin it cannot re-page through the rail and the duration path is its only rescue (Langston
+    // Step-4 BLOCKER-2). What `thin` must NOT do is read as "the venue resumed" — see the resolve and the prose below.
+    if (v === 'quiet') { this.notQuietSince = null; this.durationEscalated.clear(); }
     else if (this.notQuietSince === null) this.notQuietSince = nowMs;
     this.lastVerdict = v;
   }
 }
 
-export interface SweepResult { resolved: string[]; failed: number; escalated: string[] }
+export interface SweepResult { resolved: string[]; failed: number; escalated: string[]; unmatched: string[] }
 
 /**
  * One sweep (objective 9): re-measure every non-terminal row this rail owns and resolve the cleared ones. Never throws —
@@ -138,7 +151,7 @@ export async function sweepVenueQuiet(args: {
   deps: SweepDeps;
 }): Promise<SweepResult> {
   const { mode, nowMs, openPositions, state, cfg, verdict, deps } = args;
-  const out: SweepResult = { resolved: [], failed: 0, escalated: [] };
+  const out: SweepResult = { resolved: [], failed: 0, escalated: [], unmatched: [] };
   state.noteVerdict(verdict, nowMs);
   const bySymbol = new Map<string, SweepPosition[]>();
   for (const p of openPositions) bySymbol.set(p.symbol.toUpperCase(), [...(bySymbol.get(p.symbol.toUpperCase()) ?? []), p]);
@@ -180,17 +193,28 @@ export async function sweepVenueQuiet(args: {
         const open = (bySymbol.get(mem.symbol.toUpperCase()) ?? []).find((p) => p.id === positionId);
         if (open && !pricedAfter(open, mem.listedAtMs)) stillOut.push({ positionId, symbol: mem.symbol });
       }
-      if (verdict !== 'quiet' && stillOut.length === 0) {
+      // RESOLVE only when the venue genuinely resumed (`not_quiet`) — never on `thin`, which is the feed dying, not the
+      // market returning (Langston Step-4 BLOCKER-2: a tri-state must not be tested with `!== 'quiet'`).
+      if (verdict === 'not_quiet' && stillOut.length === 0) {
         await tryResolve(key, Object.keys(members)[0] ?? 'NO-EVIDENCE-GIVEN');
         continue;
       }
-      // Duration escalation (objective 3 / r1a §6.1): the market resumed and this symbol did not.
+      // Duration escalation (objective 3 / r1a §6.1). Fires on not_quiet AND thin (the clock above); the PROSE branches on
+      // the verdict, because the two mean opposite things about the cohort.
       if (verdict !== 'quiet' && state.notQuietSince !== null && nowMs - state.notQuietSince >= cfg.escalateAfterMs) {
+        const mins = Math.round((nowMs - state.notQuietSince) / 60000);
         for (const s of stillOut) {
+          if (state.durationEscalated.has(s.symbol)) continue;
+          state.durationEscalated.add(s.symbol);
+          const body = verdict === 'thin'
+            ? `${s.symbol} has had no usable mark for ${mins} min, and fewer than ${cfg.thinTickingMin} xStock symbols are ticking at all — the whole feed is near-silent, not just this symbol. Check the equities socket and the venue before this position.`
+            : `${s.symbol} has had no usable mark for ${mins} min since the xStock venue stopped being quiet. The cohort is ticking; this symbol is not — a lost subscription or a stuck book, not a quiet market.`;
           await deps.addAlert({
             triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
-            title: `Exit checks still skipped after the venue resumed — ${s.symbol}`,
-            body: `${s.symbol} has had no usable mark for ${Math.round((nowMs - state.notQuietSince) / 60000)} min since the xStock venue stopped being quiet. The cohort is ticking; this symbol is not — a lost subscription or a stuck book, not a quiet market.`,
+            title: verdict === 'thin'
+              ? `Exit checks still skipped and the xStock feed is near-silent — ${s.symbol}`
+              : `Exit checks still skipped after the venue resumed — ${s.symbol}`,
+            body,
             metadata: { positionId: s.positionId, reasonFamily: 'quiet_market', classVerdict: verdict, escalation: 'duration' },
             dedupe_key: `price-skip-${mode}-${s.symbol}`,
           });
@@ -206,6 +230,13 @@ export async function sweepVenueQuiet(args: {
     }
     if (key === stuckKey(mode) && state.failingSince.size === 0) {
       await tryResolve(key, SWEEP_REF);
+      continue;
+    }
+    // Langston Step-4 BLOCKER-1: a key that LOOKS like this rail's but the selector rejects would never resolve — and would
+    // block its symbol's every future page. Count and log it, so the next blind spot announces itself.
+    if (key.startsWith(`price-skip-${mode}-`)) {
+      out.unmatched.push(key);
+      console.error(`[VENUE_QUIET][KEY_UNMATCHED] key=${key} — a price-skip row the sweep cannot select; it will never self-resolve`);
     }
   }
 

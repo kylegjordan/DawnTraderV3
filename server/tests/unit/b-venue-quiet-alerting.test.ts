@@ -232,6 +232,52 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     expect(p.test(configKey('paper', 'xstock_spot'))).toBe(false);
     expect(p.test('price-skip-live-CAG/USD')).toBe(false);
   });
+  it('BLOCKER-1: every recognised quote is selected (EUR/GBP/CAD/CHF/AUD/USDT/USDC, not only USD), from the shared length bound', async () => {
+    const p = priceSkipKeyPattern('paper');
+    for (const k of ['price-skip-paper-ETH/EUR', 'price-skip-paper-GBP/USD', 'price-skip-paper-ADA/CAD', 'price-skip-paper-DOT/CHF',
+      'price-skip-paper-XRP/AUD', 'price-skip-paper-SOL/USDT', 'price-skip-paper-BTC/USDC', 'price-skip-paper-BRK.B/USD']) expect(p.test(k)).toBe(true);
+    const d = deps([row('price-skip-paper-ETH/EUR', now - 60_000, { positionId: 'pos-eur' })]);
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ETH/EUR', 'active-exit-monitor', 'pos-eur', 'engine');
+  });
+  it('BLOCKER-1: a price-skip key the selector rejects is COUNTED and LOGGED, never silently left to freeze its symbol', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const d = deps([row('price-skip-paper-NOSLASH', now - 60_000)]);
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r.unmatched).toEqual(['price-skip-paper-NOSLASH']);
+    expect(err.mock.calls.some((c) => String(c[0]).includes('[VENUE_QUIET][KEY_UNMATCHED] key=price-skip-paper-NOSLASH'))).toBe(true);
+    expect(d.resolveByKey).not.toHaveBeenCalled();
+  });
+  it('BLOCKER-2: THIN never resolves the standing record — a dying feed is not the venue resuming — even with every member priced', async () => {
+    const st = new VenueQuietState();
+    st.notePriced('pos-a', now - 1);
+    const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now - 600_000 } };
+    const d = deps([row(standingKey('paper'), now - 600_000, { members })]);
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'thin', deps: d });
+    expect(d.resolveByKey).not.toHaveBeenCalled();
+  });
+  it('BLOCKER-2: duration escalation under THIN fires, with near-silent-feed wording, never "the cohort is ticking"', async () => {
+    const st = new VenueQuietState();
+    const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now - 3_600_000 } };
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members })]);
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'thin', deps: d });
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'thin', deps: d });
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-CAG/USD')![0] as any;
+    expect(call.metadata.classVerdict).toBe('thin');
+    expect(call.body).toMatch(/fewer than 50 xStock symbols are ticking/);
+    expect(call.body).not.toMatch(/cohort is ticking/);
+  });
+  it('record item 3: a duration escalation is counted once per window, not re-pushed every minute', async () => {
+    const st = new VenueQuietState();
+    const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now - 3_600_000 } };
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members })]);
+    const run = (t: number) => sweepVenueQuiet({ mode: 'paper', nowMs: t, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    await run(now);
+    const r1 = await run(now + CFG.escalateAfterMs);
+    const r2 = await run(now + CFG.escalateAfterMs + 60_000);
+    expect(r1.escalated).toEqual(['CAG/USD']);
+    expect(r2.escalated).toEqual([]);
+  });
   it('the standing record resolves when the class is not quiet and every member has been priced or closed', async () => {
     const st = new VenueQuietState();
     const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now - 600_000 }, 'pos-b': { symbol: 'NET/USD', listedAtMs: now - 600_000 } };

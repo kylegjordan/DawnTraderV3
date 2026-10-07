@@ -938,7 +938,7 @@ export class ActiveExecutionEngine {
         mode: this.mode, nowMs: now, openPositions: open, state: this._venueQuiet, cfg, verdict,
         deps: { listAlerts: readAllAlerts, resolveByKey: resolveAlertsByDedupeKey, addAlert: addAlert as any },
       });
-      console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} escalated=${r.escalated.length}`);
+      console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} newEscalations=${r.escalated.length} unmatchedKeys=${r.unmatched.length}`);
     } catch (err) {
       console.error(`[VENUE_QUIET][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     }
@@ -3358,9 +3358,10 @@ export class ActiveExecutionEngine {
         const _ntKey = position.id as string;
         const _ntStreak = (this._noTriggerStreak.get(_ntKey) ?? 0) + 1;
         this._noTriggerStreak.set(_ntKey, _ntStreak);
-        // ⛔ STRICT EQUALITY — fires ONCE per streak, the `_recordPriceSkip` idiom. `>=` would
-        //    re-raise every tick and the dedupe key would swallow it, leaving a rail that LOOKS
-        //    armed and is inert.
+        // ⛔ STRICT EQUALITY — fires ONCE per streak. Safe HERE because `NO_TRIGGER_STREAK_ALERT_AT` is a CODE constant
+        //    and cannot move mid-streak. (The price-skip rail this once copied moved to `>=` + a once-per-streak flag in
+        //    B-VENUE-QUIET-ALERTING, because ITS threshold is a DB knob that can — FINDING-1.) `>=` without a flag would
+        //    re-raise every tick and the dedupe key would swallow it, leaving a rail that LOOKS armed and is inert.
         if (_ntStreak === NO_TRIGGER_STREAK_ALERT_AT) {
           // ⛔⛔ A §10.5 ALERT ROW, NOT A LOG LINE (Langston BLOCKER-5, and he is right twice).
           // (1) The SIBLING rail 50 lines up raises `addAlert` for a LESS severe predicate — the
