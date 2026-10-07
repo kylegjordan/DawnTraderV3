@@ -188,10 +188,15 @@ export async function sweepVenueQuiet(args: {
     }
     if (key === standingKey(mode)) {
       const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number }>;
-      const stillOut: Array<{ positionId: string; symbol: string }> = [];
+      // `unpricedSinceMs` is THIS symbol's own clock (Langston Step-4 r2 condition): its last venue price in this process
+      // if one was seen, else the moment it was listed — a lower bound, hence "at least". Never the class's
+      // `notQuietSince`: a member listed one minute into a 90-minute window has not been out for 90 minutes.
+      const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number }> = [];
       for (const [positionId, mem] of Object.entries(members)) {
         const open = (bySymbol.get(mem.symbol.toUpperCase()) ?? []).find((p) => p.id === positionId);
-        if (open && !pricedAfter(open, mem.listedAtMs)) stillOut.push({ positionId, symbol: mem.symbol });
+        if (open && !pricedAfter(open, mem.listedAtMs)) {
+          stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs });
+        }
       }
       // RESOLVE only when the venue genuinely resumed (`not_quiet`) — never on `thin`, which is the feed dying, not the
       // market returning (Langston Step-4 BLOCKER-2: a tri-state must not be tested with `!== 'quiet'`).
@@ -202,13 +207,17 @@ export async function sweepVenueQuiet(args: {
       // Duration escalation (objective 3 / r1a §6.1). Fires on not_quiet AND thin (the clock above); the PROSE branches on
       // the verdict, because the two mean opposite things about the cohort.
       if (verdict !== 'quiet' && state.notQuietSince !== null && nowMs - state.notQuietSince >= cfg.escalateAfterMs) {
-        const mins = Math.round((nowMs - state.notQuietSince) / 60000);
+        // The cohort statement is TIME-QUALIFIED (Langston record item, folded in-batch): `durationEscalated` holds the
+        // symbol for the whole window, so this is its only page in that window — a thin reading at 09:30 must not read as
+        // a claim about 09:45, and a not-quiet one must not read as a claim about later either.
+        const at = new Date(nowMs).toISOString().slice(11, 16) + 'Z';
         for (const s of stillOut) {
           if (state.durationEscalated.has(s.symbol)) continue;
           state.durationEscalated.add(s.symbol);
+          const mins = Math.round((nowMs - s.unpricedSinceMs) / 60000);
           const body = verdict === 'thin'
-            ? `${s.symbol} has had no usable mark for ${mins} min, and fewer than ${cfg.thinTickingMin} xStock symbols are ticking at all — the whole feed is near-silent, not just this symbol. Check the equities socket and the venue before this position.`
-            : `${s.symbol} has had no usable mark for ${mins} min since the xStock venue stopped being quiet. The cohort is ticking; this symbol is not — a lost subscription or a stuck book, not a quiet market.`;
+            ? `${s.symbol} has had no usable mark for at least ${mins} min. At ${at}, fewer than ${cfg.thinTickingMin} xStock symbols were ticking at all — the whole feed was near-silent, not just this symbol. Check the equities socket and the venue before this position.`
+            : `${s.symbol} has had no usable mark for at least ${mins} min. At ${at} the xStock venue was not quiet — the cohort was ticking and this symbol was not: a lost subscription or a stuck book, not a quiet market.`;
           await deps.addAlert({
             triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
             title: verdict === 'thin'

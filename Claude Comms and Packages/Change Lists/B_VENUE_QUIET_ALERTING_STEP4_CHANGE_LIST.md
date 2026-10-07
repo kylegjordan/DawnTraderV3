@@ -53,3 +53,10 @@ The pre-audit's item 8 said "re-measure each symbol: its mark within its own cei
 - **Record items:** (2) the no-trigger rail's comment re-pointed — its threshold is a CODE constant and cannot move mid-streak, so strict equality is safe there; (3) duration escalations are counted once per not-quiet window (`durationEscalated`, cleared on quiet; the sweep line now prints `newEscalations=`); (4) `thresholdReadOk`'s grow-only behaviour documented; (1) **Step 7 enumerates `equity_tick_stale_floor_bound_near_stop` members separately** (#563's near-stop exposure), never pooled; and the System Manual entry (Step 10) will say the standing record, being an active info row, surfaces in every §10.5 check though it never reaches Discord.
 - Tests now 24 + 7; `tsc` unchanged against baseline.
 
+
+## r3 — Langston Step-4 r2 PROCEED with one in-commit condition (+ his record item folded in)
+| item | change |
+|---|---|
+| **Condition** — the duration body attributed the CLASS clock (`notQuietSince`) to the SYMBOL | `stillOut` now carries `unpricedSinceMs` per member = its last venue price in this process if one was seen, else its `listedAtMs`; `mins` is computed per symbol and the body says "for at least N min" (a lower bound). Tests: a member listed 1 min into a 90-min window pages "at least 89 min", never "90 min"; a last price 10 min before the listing makes the clock 40 min, not 35. Mutation: restoring the class clock FAILS both |
+| **Record item, §9.4 disposition 1 (folded in-batch)** — inside one window the FIRST verdict's prose wins (`durationEscalated` clears only on quiet; per-symbol dedupe key), so an undated thin body could read stale after recovery | both bodies now date the cohort reading: "At HH:MMZ, fewer than N xStock symbols were ticking…" / "At HH:MMZ the xStock venue was not quiet — the cohort was ticking…". The thin test asserts "were ticking" and never "cohort was ticking". A distinct duration-rail key was NOT taken (it would need its own home); the dated past tense removes the staleness without one |
+Local: 26 + 7 venue-quiet tests, plus the two adapted suites, 38/38; tsc 337 = 337.

@@ -264,8 +264,32 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'thin', deps: d });
     const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-CAG/USD')![0] as any;
     expect(call.metadata.classVerdict).toBe('thin');
-    expect(call.body).toMatch(/fewer than 50 xStock symbols are ticking/);
-    expect(call.body).not.toMatch(/cohort is ticking/);
+    expect(call.body).toMatch(/fewer than 50 xStock symbols were ticking/);
+    expect(call.body).not.toMatch(/cohort was ticking/);
+  });
+  it("r2 condition: the duration page states the SYMBOL's own unpriced time, not the class window, and dates the cohort reading", async () => {
+    const st = new VenueQuietState();
+    // listed ONE minute into a window that has run 90 minutes by the time the page fires
+    const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now + 60_000 } };
+    const d = deps([row(standingKey('paper'), now + 60_000, { members })]);
+    const run = (t: number) => sweepVenueQuiet({ mode: 'paper', nowMs: t, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    await run(now);
+    await run(now + 90 * 60_000);
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-CAG/USD')![0] as any;
+    expect(call.body).toMatch(/for at least 89 min\./);
+    expect(call.body).not.toMatch(/90 min/);
+    expect(call.body).toContain(`At ${new Date(now + 90 * 60_000).toISOString().slice(11, 16)}Z`);
+  });
+  it("r2 condition: a last price seen in this process (before the listing) is the symbol's clock, not the listing time", async () => {
+    const st = new VenueQuietState();
+    st.notePriced('pos-a', now - 10 * 60_000);
+    const members = { 'pos-a': { symbol: 'CAG/USD', listedAtMs: now - 5 * 60_000 } };
+    const d = deps([row(standingKey('paper'), now - 5 * 60_000, { members })]);
+    const run = (t: number) => sweepVenueQuiet({ mode: 'paper', nowMs: t, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    await run(now);
+    await run(now + CFG.escalateAfterMs);
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-CAG/USD')![0] as any;
+    expect(call.body).toMatch(/for at least 40 min\./); // 10 min before `now` + the 30-minute window
   });
   it('record item 3: a duration escalation is counted once per window, not re-pushed every minute', async () => {
     const st = new VenueQuietState();
