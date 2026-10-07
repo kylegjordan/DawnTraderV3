@@ -67,7 +67,8 @@ export interface BookFullState { since: number | null; lastLogAt: number }
  * #698 amendment 5 (B-SIZING-DEC-RESTORE inc3 r9, Langston deploy-B Step 8): the continuous promotion loop skips its
  * promotion step while the book is full and wrote nothing, so a full book read exactly like a dead loop. This decides
  * the one line to write, if any: on entering a full book, every `reminderMs` while it stays full, and on leaving it.
- * Pure — the caller holds the state and prints the line.
+ * Pure — the caller holds the state and prints the line. Contract (one-sided): a line present ⇒ the caller reached this
+ * decision; no line ⇒ nothing concluded. `since` is wall-clock from the fill; the reminder count is not a clock.
  */
 export function nextBookFullLog(
   prev: BookFullState, openSlots: number, openCount: number, maxTrades: number, now: number, reminderMs: number,

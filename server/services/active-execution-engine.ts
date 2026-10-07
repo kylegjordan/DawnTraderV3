@@ -909,6 +909,12 @@ export class ActiveExecutionEngine {
   private lastCycleAt: number | null = null; // Phase 8.8.3-I7-PM-FOCUS: Track monitoring cycle tick
   // #698 amendment 5 (B-SIZING-DEC-RESTORE inc3 r9): the continuous promotion loop's full-book state, so a full book is
   // visible in the log (on entry, on exit, and every BOOK_FULL_REMINDER_MS while it lasts) instead of a silence.
+  // ⛔ THE CONTRACT IS ONE-SIDED (Langston Step 4): a reminder PRESENT ⇒ the loop reached the promotion decision with a
+  // full book; a reminder ABSENT ⇒ nothing concluded — the line prints only after isRunning, tclActive, a returned
+  // positions read and a readable maxTrades, so silence can mean any of those or simply a book that is not full.
+  // The reminder COUNT is not a clock (each print re-anchors lastLogAt); read duration from the `for N min` field, and
+  // know that N is wall-clock since the book filled — it can include minutes the loop was not running. Entry is sampled
+  // every 30 s, so a fill-and-free inside one tick never logs: BOOK_FULL lines undercount entries into a full book.
   private promotionBookFull: BookFullState = { since: null, lastLogAt: 0 };
   private static readonly BOOK_FULL_REMINDER_MS = 10 * 60_000;
   private lastExitChecks: {
