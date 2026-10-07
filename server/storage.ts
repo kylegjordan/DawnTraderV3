@@ -696,6 +696,20 @@ function logUnboundedRead(rowCount: number): void {
   }
 }
 
+/**
+ * B-LOSS-WINDOW-OPERATOR-CLOSES (#1154): the hard reset's close of the open trades — a FENCE on `mode`.
+ * `closed_trades.mode` is NOT NULL since 2026-08-21-b-balance-truth-closed-trades-mode.sql, so a paper reset must not
+ * close a live row. The COLUMN sits on the left of eq(): with the parameter on both sides the predicate is always true.
+ * Takes the executor so its test runs inside a transaction it rolls back.
+ */
+export async function closeOpenTradesForHardReset(executor: Pick<typeof db, 'update'>, mode: 'paper' | 'live') {
+  return executor
+    .update(closedTradesTable)
+    .set({ closedAt: new Date(), closeReason: 'hard_reset' })
+    .where(and(isNull(closedTradesTable.closedAt), eq(closedTradesTable.mode, mode)))
+    .returning();
+}
+
 export class DatabaseStorage implements IStorage {
   // User methods
   async getUser(id: string): Promise<User | undefined> {
@@ -4553,28 +4567,20 @@ export class DatabaseStorage implements IStorage {
   /**
    * Phase 8.8.3-B7.A: Hard reset paper simulation
    * Closes all open trades and clears all open positions for a clean session start.
-   * Note: closedTradesTable and activeOpenPositions are single-tenant (no mode column).
+   * Note: closedTradesTable carries `mode` (NOT NULL since B-BALANCE-TRUTH); activeOpenPositions has no mode column.
    * activeEngineSessions has a mode column for session tracking.
    */
   async hardResetActiveEngineTables(mode: 'paper' | 'live' = 'paper'): Promise<{ closedTrades: number; clearedPositions: number }> {
     console.log(`[B7.A][DB] Starting hard reset for mode=${mode}`);
     
-    const { closedTradesTable, activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
+    const { activeOpenPositions, activeEngineSessions } = await import('@shared/schema');
     
     let closedTrades = 0;
     let clearedPositions = 0;
     
     try {
-      // 1. Close any open paper trades with hard_reset reason
-      // Note: closedTradesTable is single-tenant, no mode column
-      const closeTradesResult = await db
-        .update(closedTradesTable)
-        .set({ 
-          closedAt: new Date(), 
-          closeReason: 'hard_reset' 
-        })
-        .where(isNull(closedTradesTable.closedAt))
-        .returning();
+      // 1. Close this mode's open trades with hard_reset reason (the fenced update: closeOpenTradesForHardReset).
+      const closeTradesResult = await closeOpenTradesForHardReset(db, mode);
       
       closedTrades = closeTradesResult.length;
       console.log(`[B7.A][DB] Closed ${closedTrades} open trades`);

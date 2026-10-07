@@ -52,7 +52,7 @@ export interface DailyLossSnapshot {
   realizedPnl24h: number;   // signed: negative = loss
   portfolioValue: number;   // getPortfolioBalanceV2(mode)
   lossPercent: number;      // POSITIVE magnitude of loss as % of portfolio; 0 if flat/profit
-  windowStart: Date;        // max(now-24h, engineSessionStart)
+  windowStart: Date;        // latest of now-24h, engineSessionStart, last operator re-anchor (resolveLossWindowStart)
   nonPositiveValue: boolean; // portfolioValue <= 0 → force-breach (never compute a ratio)
 }
 
@@ -105,18 +105,38 @@ export function classifyTier(
   return { tier: 'none', warn1Loss, warn2Loss };
 }
 
+/**
+ * B-LOSS-WINDOW-OPERATOR-CLOSES (`#1154`): the loss window's start — the LATEST of `now − 24 h`, the engine session
+ * start and the last operator re-anchor (`OPERATOR_REBASE_REASONS`). A max over the three, so it can only move LATER
+ * than the old `max(now − 24 h, sessionStart)`, never earlier: no input can widen the budget.
+ */
+export function resolveLossWindowStart(nowMs: number, sessionStart: Date | null, lastRebaseAt: Date | null): Date {
+  let startMs = nowMs - 24 * 60 * 60 * 1000;
+  for (const d of [sessionStart, lastRebaseAt]) {
+    if (d && d.getTime() > startMs) startMs = d.getTime();
+  }
+  return new Date(startMs);
+}
+
 // ─── Async snapshot + verdict (re-pointed restore of calculate24hPL/checkKillSwitch) ─────────
 
 async function compute24hSnapshot(mode: TradingMode): Promise<DailyLossSnapshot> {
   const { getPortfolioBalanceV2 } = await import('./guardrail-settings.js');
   const { getEngineSessionStart } = await import('./active-execution-engine.js');
+  const { getLastAnchorAt, OPERATOR_REBASE_REASONS } = await import('./portfolio-anchor-service.js');
 
   const now = Date.now();
-  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
   const sessionStart = getEngineSessionStart(mode);
   // Session-anchored window: never count trades from before the current engine session, so a
   // restart rebaselines the budget (circuit-breaker). Reuses the existing getEngineSessionStart.
-  const windowStart = sessionStart && sessionStart > twentyFourHoursAgo ? sessionStart : twentyFourHoursAgo;
+  // B-LOSS-WINDOW-OPERATOR-CLOSES (#1154): nor from before the last OPERATOR re-anchor — a reset re-baselines the
+  // balance this switch divides by, so every close booked against the old balance (the reset's own flatten, and any
+  // loss before it) leaves the count. This matters most when there is NO session (#585): the numerator then falls back
+  // to 24 h while the denominator (`getPortfolioBalanceV2`) is the anchor alone, and without this term the losses of
+  // the day BEFORE a reset were divided by the balance set AFTER it (measured 2026-10-06: -$40.96 of stop losses).
+  // An automatic re-anchor does NOT move the window (`#1171`) — see OPERATOR_REBASE_REASONS.
+  const lastRebaseAt = await getLastAnchorAt(mode, { reasons: OPERATOR_REBASE_REASONS });
+  const windowStart = resolveLossWindowStart(now, sessionStart, lastRebaseAt);
 
   // Mode-aware realized-P&L over the window (same sources as getPortfolioBalanceV2).
   // ★ #618 (2026-07-31): the paper leg is a SQL-side SUM over the TIME window. It previously

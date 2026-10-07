@@ -53,9 +53,10 @@
  * ⚠️ A closed_trades row is WRITTEN AT OPEN and UPDATED at close on the engine's path, so the flatten adds no row;
  *    "nothing deleted" is the pre-run population counted twice. Two operator routes (close-trade/:id,
  *    force-clear-stranded) do insert at close — this run calls neither, and one called by hand mid-run would show here.
- * ⚠️ RESIDUAL, NAMED (Langston, 2026-10-06): the 'reset' closes are left out of the kill switch's 24-hour loss count ONLY
- *    because the start opens a new session. A process restart inside 24 h that lands without a session (#585) brings
- *    them back into the count. Until B-LOSS-WINDOW-OPERATOR-CLOSES lands: no restart or deploy within 24 h after the reset.
+ * ★ THE KILL SWITCH AFTER A RESET (B-LOSS-WINDOW-OPERATOR-CLOSES, #1154): every close booked before step 3's re-anchor —
+ *    the reset's own and any earlier one — is outside the kill switch's window, which starts no earlier than the last
+ *    operator re-anchor. No 24-hour hold. (Before that batch the 'reset' closes stayed out ONLY because the start opened
+ *    a new session, and a restart without one (#585) brought them back.)
  */
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';

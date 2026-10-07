@@ -17,7 +17,7 @@
 
 import { db } from '../db';
 import { portfolioState, portfolioAnchorEvents } from '@shared/schema';
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray } from 'drizzle-orm';
 
 // P19-B8.5: 'measurement_override' — a KYLE-DIRECTED deliberate paper-balance override
 // for a measurement window (e.g. the $150/trade live-parity sizing at inflated breadth).
@@ -25,6 +25,20 @@ import { and, eq, desc } from 'drizzle-orm';
 // the decision (note REQUIRED — a later reader must never misread it as a mirror), and
 // the next start_new re-mirrors Kraken and restores the equality. Never valid for live.
 export type AnchorReason = 'start_new' | 'auto_divergence' | 'launch_snap' | 'measurement_override';
+
+/**
+ * B-LOSS-WINDOW-OPERATOR-CLOSES (`#1154`): the anchor reasons that RE-BASELINE THE KILL SWITCH — an operator act. The
+ * daily-loss window starts no earlier than the latest of these, so every close booked against the previous balance
+ * (an operator's own flatten, and any loss before it) leaves the count.
+ * - `AnchorReason` is a CLOSED four-member set (fenced by the DB `CHECK`), so "all but `auto_divergence`" cannot grow.
+ * - `auto_divergence` is absent ON PURPOSE: it re-anchors with no operator act, and letting it shorten the window
+ *   would drop real losses from the budget — a loosening. Whether it should is `#1171`'s question, not this one.
+ * - ⚠️ `launch_snap` is the one AUTOMATIC writer of a reason in this set (`portfolio-initializer.ts`, both modes). It
+ *   is safe ONLY because it fires at genesis: the initializer returns early when both `portfolio_state` rows exist, and
+ *   nothing deletes a `portfolio_state` row at runtime. A caller that mints `launch_snap` on a running box would
+ *   silently re-baseline the kill switch — re-read this list before adding one.
+ */
+export const OPERATOR_REBASE_REASONS = ['start_new', 'measurement_override', 'launch_snap'] as const satisfies readonly AnchorReason[];
 
 export interface AnchorState {
   balance: number;
@@ -81,15 +95,31 @@ export async function getRatioStampInputs(
   return { currentBalance: state.balance, anchorBalance, anchorVersion: event.anchorVersion };
 }
 
-/** The most recent anchor event's timestamp for the mode, or null. */
-export async function getLastAnchorAt(mode: 'paper' | 'live'): Promise<Date | null> {
-  const [row] = await db
+/**
+ * The most recent anchor event's timestamp for the mode, or null. With `reasons`, only events of those reasons count;
+ * without, every reason does (the divergence evaluator's cooldown reads it that way and keeps that population).
+ * Takes the executor so a test can run it inside a transaction it rolls back (B-LOSS-WINDOW-OPERATOR-CLOSES P5).
+ */
+export async function selectLastAnchorAt(
+  executor: Pick<typeof db, 'select'>,
+  mode: 'paper' | 'live',
+  reasons?: readonly AnchorReason[],
+): Promise<Date | null> {
+  const byMode = eq(portfolioAnchorEvents.mode, mode);
+  const [row] = await executor
     .select({ occurredAt: portfolioAnchorEvents.occurredAt })
     .from(portfolioAnchorEvents)
-    .where(eq(portfolioAnchorEvents.mode, mode))
+    .where(reasons ? and(byMode, inArray(portfolioAnchorEvents.reason, [...reasons])) : byMode)
     .orderBy(desc(portfolioAnchorEvents.occurredAt))
     .limit(1);
   return row?.occurredAt ?? null;
+}
+
+export async function getLastAnchorAt(
+  mode: 'paper' | 'live',
+  opts?: { reasons?: readonly AnchorReason[] },
+): Promise<Date | null> {
+  return selectLastAnchorAt(db, mode, opts?.reasons);
 }
 
 /**

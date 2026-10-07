@@ -39,6 +39,12 @@ vi.mock('../../services/guardrail-policy', () => ({
 }));
 vi.mock('../../services/guardrail-settings', () => ({ getPortfolioBalanceV2: vi.fn(async () => 10000) }));
 vi.mock('../../services/active-execution-engine', () => ({ getEngineSessionStart: vi.fn(() => new Date(Date.now() - 3_600_000)) }));
+// B-LOSS-WINDOW-OPERATOR-CLOSES (#1154): the window also reads the last operator re-anchor. No anchor here, so the
+// window is exactly what this suite always exercised (session-anchored).
+vi.mock('../../services/portfolio-anchor-service', () => ({
+  getLastAnchorAt: vi.fn(async () => null),
+  OPERATOR_REBASE_REASONS: ['start_new', 'measurement_override', 'launch_snap'],
+}));
 vi.mock('../../services/system-alerts', () => ({ addAlert: (...a: any[]) => addAlertSpy(...a) }));
 vi.mock('../../services/alerts-service', () => ({ AlertsService: { createAlert: (...a: any[]) => createAlertSpy(...a) } }));
 
