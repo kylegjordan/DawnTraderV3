@@ -210,6 +210,22 @@ def c1():
                        capture_output=True, timeout=60)
     ok = p.returncode == 1 and not p.stdout.strip() and b"WATCHER-STATE-UNREADABLE:" in p.stderr and b"Traceback" not in p.stderr
     report("C1 an unreadable state refuses with a line, never an empty start", ok, f"rc={p.returncode}")
+    # Langston Step 4: a state that EXISTS but cannot be PARSED is the same loss (every source at its tail, and the saved
+    # time gone so the 12 h notice cannot fire). Pre-fix: each body below printed `:end` with rc 0 and an empty stderr.
+    # Positive control first: an intact state resumes where it was.
+    for label, body in [("intact (positive control)", b'{"pos": {"%s": [7, 100]}}' % LOG.encode()),
+                        ("zero-length", b""), ("truncated JSON", b'{"pos": {"/var/log/cc'), ("undecodable bytes", b"\xff\xfe\x00{")]:
+        d2 = tempfile.mkdtemp(prefix="wakeparse-"); lr2 = tempfile.mkdtemp(prefix="wakeparse-lease-")
+        st2 = os.path.join(d2, "CC-A.json"); open(st2, "wb").write(body)
+        q = subprocess.run([sys.executable, FILTER, "CC-A", "--positions", "--state", st2, "--lease-root", lr2],
+                           capture_output=True, timeout=60)
+        if label.startswith("intact"):
+            ok2 = q.returncode == 0 and b":7:100" in q.stdout and not q.stderr.strip().startswith(b"WATCHER-STATE")
+        else:
+            ok2 = (q.returncode == 1 and not q.stdout.strip() and b"WATCHER-STATE-UNREADABLE:" in q.stderr
+                   and b"unparseable" in q.stderr and b"Traceback" not in q.stderr)
+        report(f"C1 a {label} state: " + ("resumes at its saved position" if label.startswith("intact") else "refuses, never a silent tail resume"),
+               ok2, f"rc={q.returncode}, out={q.stdout.strip()[:60]!r}")
 
 
 denied_case("OBJ-1", obj1)

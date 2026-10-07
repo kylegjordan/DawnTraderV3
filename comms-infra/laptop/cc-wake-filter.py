@@ -532,18 +532,20 @@ def _utc(ts=None):
 
 
 def load_state():
-    """A missing or unparseable state is a fresh start. A state that EXISTS but cannot be READ (permissions, a directory
-    at its path) refuses instead (B-WAKE-STATE-UNSAVED-LOUD #1151, Langston C1): treating it as empty would resume every
-    source at its tail and silently drop everything posted while away."""
+    """A MISSING state is a fresh start. A state that EXISTS but cannot be read or parsed — permissions, a directory at
+    its path, an empty, truncated or undecodable file — refuses instead (B-WAKE-STATE-UNSAVED-LOUD #1151, Langston C1 and
+    Step 4): treating it as empty would resume every source at its tail AND lose its saved time, so the 12 h "you were
+    away" notice could not fire either — everything posted while away dropped, silently. A refusal announces itself."""
     try:
         with open(STATE, encoding="utf-8") as f:
             return json.load(f)
-    except (FileNotFoundError, ValueError):
+    except FileNotFoundError:
         return {}
-    except OSError as e:
-        print(f"WATCHER-STATE-UNREADABLE: {STATE} errno {e.errno} ({e.strerror}) — the position is unknown, so the watcher "
-              f"will not resume (an empty start would skip everything posted while away): fix the file or its "
-              f"permissions, then re-arm", file=sys.stderr, flush=True)
+    except (OSError, ValueError) as e:     # ValueError covers JSONDecodeError and UnicodeDecodeError
+        why = f"errno {e.errno} ({e.strerror})" if isinstance(e, OSError) else f"unparseable ({type(e).__name__}: {e})"
+        print(f"WATCHER-STATE-UNREADABLE: {STATE} {why} — the position is unknown, so the watcher will not resume (an "
+              f"empty start would skip everything posted while away): sweep the Discord inbox from the last time you "
+              f"were woken, then delete or fix the file and re-arm", file=sys.stderr, flush=True)
         sys.exit(1)
 
 
