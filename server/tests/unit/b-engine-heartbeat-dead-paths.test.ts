@@ -216,6 +216,22 @@ describe('the engine flag writes are observable (Langston item 7)', () => {
     expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-start-state-fanout-failed-paper', severity: 'warning' }));
     expect(m.addAlert).not.toHaveBeenCalledWith(expect.objectContaining({ dedupe_key: 'engine-start-flag-write-failed-paper' }));
   });
+  it('the re-read finds NO system_context row -> the conservative critical form, saying no row was found', async () => {
+    m.getRunningEngineSession.mockResolvedValue(ROW);
+    m.getSystemContext.mockResolvedValue(undefined);
+    m.setEngineActive.mockRejectedValue(new Error('db down'));
+    await stopActiveEngine('u1');
+    await flush(10);
+    expect(m.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: 'engine-stop-flag-write-failed-paper', severity: 'critical', body: expect.stringContaining('no system_context row'),
+    }));
+  });
+  it('both call sites pass the caller mode, so the re-read and the key follow the write (Langston r2 condition 1)', () => {
+    const src = readFileSync(join(__dirname, '..', '..', '..', 'server/services/active-engine-service.ts'), 'utf8');
+    expect(src).toMatch(/raiseEngineFlagWriteAlert\('start', err, mode\)/);
+    expect(src).toMatch(/raiseEngineFlagWriteAlert\('stop', err, mode\)/);
+    expect(src).not.toMatch(/raiseEngineFlagWriteAlert\('(start|stop)', err\)/);
+  });
   it('the re-read itself fails -> the conservative critical form, and its body says the flag could not be confirmed', async () => {
     m.getRunningEngineSession.mockResolvedValue(ROW);
     m.getSystemContext.mockRejectedValue(new Error('db gone'));

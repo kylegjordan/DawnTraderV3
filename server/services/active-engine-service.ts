@@ -96,7 +96,13 @@ export async function healOrphanManagerQueued(): Promise<boolean> {
  *  `clusterBus.emit`), so its rejection does not say the flag write failed. The flag is re-read here:
  *  observed != intended -> the flag really is wrong (the original alert); observed == intended -> the flag is correct
  *  and only the fan-out failed (its own key, a warning); the re-read threw or found no row -> the conservative form,
- *  saying the flag could not be confirmed. A false critical would also hold the dedupe key against the true one. */
+ *  saying the flag could not be confirmed. A false critical would also hold the dedupe key against the true one.
+ *  `observed` is a CURRENT-VALUE read, NOT an attribution of what the failed call did (Langston Step-4 r2 condition 2):
+ *  a genuine failure followed by a legitimate opposite flip re-reads the NEW value, and every body is phrased about the
+ *  flag's current value ("is not true" / "reads … as intended"), so no body gives a wrong instruction. Do not turn it
+ *  into an outcome claim. Callers pass their own `mode` (condition 1) so the re-read and the key follow the write.
+ *  KNOWN LIMIT: `storage.updateSystemContext` is a bare UPDATE — with no row for the mode it writes nothing and does not
+ *  throw, so no alert fires (#1166, row 2a0j). */
 async function raiseEngineFlagWriteAlert(which: 'start' | 'stop', err: unknown, mode: ActiveEngineMode = 'paper'): Promise<void> {
   const msg = (err as any)?.message ?? String(err);
   const intended = which === 'start';
@@ -902,7 +908,7 @@ export async function startActiveEngine(
       
       // Update trading state (triggers internal broadcasts) - don't block HTTP response
       tradingStateSync.setEngineActive(userId, true, mode)
-        .catch((err) => { void raiseEngineFlagWriteAlert('start', err); throw err; })
+        .catch((err) => { void raiseEngineFlagWriteAlert('start', err, mode); throw err; })
         .then(() => tradingStateSync.setTradingMode(userId, 'paper', userId, 'Paper simulation started'))
         .then(() => {
           console.log('[41F-B][BROADCAST] Engine state sync completed successfully');
@@ -1235,7 +1241,7 @@ export async function stopActiveEngine(
       
       // Update trading state (triggers internal broadcasts) - don't block HTTP response
       tradingStateSync.setEngineActive(userId, false, mode)
-        .catch((err) => { void raiseEngineFlagWriteAlert('stop', err); throw err; })
+        .catch((err) => { void raiseEngineFlagWriteAlert('stop', err, mode); throw err; })
         .then(async () => {
           console.log(`[41F-B][BROADCAST] State sync completed in ${Date.now() - t2}ms`);
           
