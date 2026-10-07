@@ -47,12 +47,13 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | 1 — feed truth under the exits | 32/33 staleness bound · 14a primary keys · `#1047` (CC-C) |
 | P1a — entry (with stage 1) | 59 `B-ENTRY-LEVEL-RECHECK` (+`#1168`, a min stop distance vs the live spread, L/USD vs 2a, [C1] durable rejected state) · 39a (CC-B) |
 | P1b — entry (with stage 1) | 41 · 40's entry half · [C2] freshness at consumption, class-agnostic, CC-B reviewing (CC-C) |
+| P1c — fill mode (Kyle 2026-10-07) | `#1170` per-class switch: crypto maker-only entries + target exits, xStock maker-preferred with taker allowed, stops taker — lands with or after [C3] (CC-C) |
 | 2 — exit, in order | 64 + P-8e split + row 86 in its verification + [C5] → 65, 8b, 113, 3c (CC-B) → row 2 increment 3a (`spread_blown` ON + 66's bound; 21-day wait released for 3a) → 66 duration alarm → [C3] with row 62 (CC-C); increment 3b (trigger to the bid) stays gated |
-| 3 — feed decision | 31 `B-XSTOCK-LIVE-FEED` — **a Kyle decision, in parallel, not gating** · the CORZ quote-vs-bars investigation (CC-C) |
+| 3 — feed | 31 `B-XSTOCK-LIVE-FEED`, recast as a fix: the xStock recorder reloads its stock list daily (moves into stage 1) · the CORZ quote-vs-bars investigation (CC-C) |
 | 4 — paper truth | 8a `#1083` (CC-C) · the main Dashboard 0-trades read, CC-B first against `#903` |
 | 5 — the reset, both halves | `PAPER-RESET-3000` at $820 + a new dashboard epoch · row 100 (plan row 9) the learning-record restart, a declared partial restart (CC-B) |
 
-Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. Kyle's decisions: the entry design (Langston recommends refuse-on-distance now, a resting buy later) and row 31.
+Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. **Kyle approved 2026-10-07:** entries refuse on distance and never move the stop or target (the distance, 25% of the stop distance either side, goes to Langston); the RTB refresh checks the live price (P1a); the fill-mode switch (`#1170`, P1c); row 31 is a small fix, not a decision.
 
 ## 1. The rule — what is in the sprint
 
