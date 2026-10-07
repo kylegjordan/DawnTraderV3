@@ -10,8 +10,8 @@
 ## Objectives
 | obj | result at the deployed ref `9ab39a45a` | instrument |
 |---|---|---|
-| OBJ-1 | 61 triage lines, 79 tokens resolve, 7 measured, **0 unresolved** (at `86e39dc47`); five bad tokens flagged | `resolve1n.py --from-ledger [--bad-control]` |
-| OBJ-2 | **0 of the 60 unplaced; 0 open issues with owner ?** (ledger-wide); of the 60, 32 open (28 closed/withdrawn). Ledger-wide unplaced = 7: #620 #667 #908 #913 #936 #945 #1165 — **none in the 60** (Langston's population note). Control at `be41f8585`: 55 unplaced, 55 ownerless | `census.mjs --ref HEAD --dry-run` and `placement()` on the box clone |
+| OBJ-1 | 61 triage lines, 79 tokens resolve, 7 measured, **0 unresolved — measured at `86e39dc47`**. ⚠️ **Langston Step 8 C1: by the deployed ref three line-pinned tokens had DECAYED** (`#406` `active-execution-engine.ts:5486`, `#418` `:3791`/`:4111` — the code moved down the file the same day). Fixed in the instrument, not the citations: `resolve1n.py` now resolves each line-pinned token at the sha its line numbers were STAMPED with, requires the needle to still exist somewhere in the file at the ref, and lists line-moves apart. At `035d0f7e5`: **79 resolve, 7 measured, 0 unresolved; 3 moved** (those three, still present); five bad tokens flagged. Also runs from any clone now (no hard-coded repo path). | `resolve1n.py <ref> --from-ledger [--bad-control]` |
+| OBJ-2 | **0 of the 60 unplaced; 0 of the 60 ownerless; the census lists show `[owner ? 0]` — per LIST, not ledger-wide** (Langston Step 8 C2: 48 open issues are placed but have no owner the census reads, so no list shows them — filed `#1167`, row 1s). Of the 60, 32 open (28 closed/withdrawn). Ledger-wide unplaced = 7: #620 #667 #908 #913 #936 #945 #1165 — none in the 60. **Control at `be41f8585`, population = the 55:** 55 unplaced, 55 ownerless (ledger-wide there: 107 unplaced, 103 ownerless; at `9ab39a45a` ownerless-by-any-source is 48, and the 55 that moved are exactly the scoped 55 — Langston, enumerated). | `census.mjs --ref HEAD --dry-run` and `placement()` on the box clone |
 | OBJ-3 | three hand-over posts by number, ~04:50Z; CC-B, Infra and CC-C replies on record | Discord |
 | OBJ-4 | `#439` `#575` `#596` `#532` → CC-B (agreed by NEW Claude); `#613` → Infra Claude (agreed; discharge test measured at `da54e6617`) | the entries |
 | OBJ-5 | self-contradicting sub-list **(0)** — `#532` gone | census dry run |
@@ -20,3 +20,5 @@
 
 ## No new alert from the widened grading
 `metadata.dedupe_key` starting `gov-planline`, created since 05:30Z: **0**. **Control:** the same filter finds the 3 such rows ever raised (latest `gov-planline:B-WAKE-ARM-EXCLUSIVE:s4`, 2026-10-02). (A first pass keyed on a top-level `dedupe_key` returned 0 for BOTH — the field lives in `metadata`; the control caught it.)
+
+## Langston Step 8 (2026-10-07): CONFIRMED, two record conditions — both above. Records: P1's benefit is prospective (all 14 newly visible rows are QUEUED with no report, so `graded` stayed 9); row `2a0f`'s `R-` id is enrollment-blind (folded into `#1116`); the landing commit's range `2a0b..2a0j` over-reads by one (`2a0g` does not exist — 14 rows, not 15).
