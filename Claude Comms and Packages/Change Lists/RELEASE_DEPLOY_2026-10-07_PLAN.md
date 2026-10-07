@@ -34,7 +34,17 @@
 4. Each owner's Step 7 above. Drift rungs `a24e39ed` / `8a33a05c` clear through the drift job's own exit — read their state after, do not resolve by hand unless the job does not.
 
 ## Record (filled at deploy)
-- deployed at: —
-- ancestry exit codes: —
-- migrations applied: —
-- worktree preserved / restored: —
+- **deployed at:** 2026-10-07T15:56:00Z, `dt-deploy 0c8ef5da2582e03effd21070fb09b9ad5715ed77 --by cc-b` → *"OK — live, engine resumed, identity asserted"*; check-failure window 10 s; pm2 restart 630.
+- **ancestry exit codes:** `66530fc48` `6546aa9af` `e2b5a84a4` `635e7132d` `c8a35d6d9` `9c162aabc` `cfc1d9c67` `2fee017cc` → **0** each (in); `b523c86bf` (2a0c), `3a549e3a9` (3a) → **1** (correctly out).
+- **migrations applied:** all four, `_migrations` 15:55:49.79Z → .97Z, in the planned order.
+- **worktree preserved / restored:** `/home/deploy/preserved-20261007T155529Z` (6 files + `SHA256SUMS`); stashed `ccb-predeploy-20261007T155529Z`; popped after; `sha256sum -c` **6/6 OK**.
+- ⚠️ **CORRECTION to the table above, row 2a:** *"`PATTERN_ATR_DROPS` non-zero"* was my wording, not the batch's — the counter counts pattern candidates DROPPED for having no valid ATR (the old 2 %-of-price stand-in), so 0 is the healthy reading. The change list's Step 7 (`:175`) asks that the pool line SHOW the counter.
+
+## Step 7 results (CC-B, 2026-10-07 ~16:00Z)
+| batch | result |
+|---|---|
+| 2a `B-ATR-BAD-PRINT` | **PASS** — the counter is on 6 of 6 pattern-pool lines since the restart and on 0 of the 46 in the 26 min before (the code is live); `PATTERN_ATR_DROPS` 0 and `PATTERN_EVAL_ERRORS` 0 on every line; no `invalid_atr` lines. **Still to read:** `atr_at_open` on the first new opens against Kraken's bars. Drift rungs `a24e39ed`/`8a33a05c`: read their state after the drift job's next run. |
+| 2a0 `B-ENGINE-STOP-DURATION-COLUMN` | **columns gone** (`run_for_ms`, `ends_at` absent; control `mode`, `started_at` present); the engine resumed through `dt-deploy`. ⏸ **The "an engine stop completes" leg is NOT RUN:** a stop FLATTENS the paper book (`/active-engine/stop` → `stopActiveEngine`, the flatten at `active-execution-engine.ts:1436-1443`) — 18 open positions, mid-analysis by the pre-sprint plan. Proposed to Langston and ANALYST Claude: exercise it as the first act of the pre-sprint reset's stop, before that reset depends on it. |
+| 2a0h `B-LIVE-BANNER-ACTIVE-HOTFIX` | **PASS** — Claude-in-Chrome, Kyle's session, 15:58Z: Live Trading banner **STOPPED** while paper runs; Paper Trading banner **ACTIVE**; the main Dashboard banner now reads Paper Trading Mode (it read Live Trading Mode — ACTIVE at 07:34Z). |
+| 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` | **writer gone:** `cluster_bus_event` rows since the restart **0** (control: `task_completed` 271,009 rows, the last 15:55:35Z — 25 s before the restart). ⛔ **HARD GATE still to read:** the 10-08 02:15Z retention sweep's line for every registered table, zero `missing … data_lifecycle`. |
+| CC-C rows 4a, inc3 r9, 4a2 | CC-C's Step 7. |
