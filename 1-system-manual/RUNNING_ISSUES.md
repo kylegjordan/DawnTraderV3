@@ -3069,6 +3069,8 @@ During the 33-min sustained paper window (session `paper_cHEmpUkX01`), every `he
 
 **HOME:** `B-ALERT-DEDUPE-REASON-DRIFT` (absorbs #572). Owner CC-B. Related: #572, #637, #531, rule 24 bucket 2. **OPEN (homed).**
 
+
+**AMENDMENT 2026-10-07 (CC-B) — FOLDED into `B-VENUE-QUIET-ALERTING`, sprint row 3a1 (Langston Step-1 r1 Q1); row 166a retired with a pointer.** Langston measured at `d455aa154` that the clear needs machinery that does not exist (`resolveAlert` has no production caller, takes an id not a dedupe key, and the `#987` actor gate has no engine actor); r2 of that scope adds it as objectives 7-9, with the resolve driven by a re-measured condition so an engine restart cannot strand a row. `HOME: B-VENUE-QUIET-ALERTING, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 3a1, after row 3a`.
 ### #639 OPEN 2026-07-31 (CC-B + Langston, INDEPENDENTLY from opposite directions) — ★ THE STOP-LOSS IN FORCE AT CLOSE IS NOT PERSISTED ANYWHERE, SO "DID THE EXIT ACTUALLY REACH THE STOP?" IS **UNANSWERABLE** FROM `closed_trades`
 
 **BOTH DIRECTIONS AGREE, and neither is on the other's report.**
