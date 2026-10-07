@@ -10,7 +10,6 @@
 | **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c, `#1159`) · **`B-ROOT-DUPLICATE-SCANNER-RETIRE`** (row 2a0d, `#1161`) | **2a0c: Step 4 APPROVED · 2a0d: STEP 5 of 11 done** | the deploy AFTER today's (2a0c needs the heartbeat writer gone and restarted first) |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a, `#1123`) | **STEP 4 of 11** — code `3a549e3a9` | Langston's Step-4 ruling |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1, `#526`/`#994`/`#638`) | **STEP 4 of 11** — r2 PROCEED; r3 condition at `b70ab5975` | Langston confirming the r3 condition. The xStock exit-freshness alerts stay ACTIVE and UNACKED until it ships (Langston 2026-10-07). |
-| **`B-HEALTH-CHECK-REMOVAL`** (row 51a, `#1147`) | **STEP 10 of 11 done** — Step 8 CONFIRMED by Langston 2026-10-07 | Langston's Step-11 confirm |
 | hotfix **`B-PATTERN-ENUM-DRIFT`** (row 51, `#1063`) | **verification half-done** — ABCD insert failures 0 since deploy B | the first `volatility_edge` open after deploy B, to read its `pattern_type` |
 | **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window · ⏸ PAUSED for the sprint start (Kyle 2026-09-30)** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
 | **`T-W20C-SCALAR-LEG`** (sprint row 107) | **scope r1 drafted 2026-09-13 (`6e97a8f1c`), never ruled** | its turn in the sprint, after row 106 `B-PAPER-LANE-PROVENANCE` |

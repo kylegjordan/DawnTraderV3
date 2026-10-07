@@ -1180,7 +1180,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** Portfolio Value $820.00, request 200 (10-06 15:55Z); an empty `range=1h` window carries `lifetime` (10-07 07:34Z). **Left to row 175 (`B-DASHBOARD-AUTH-RACE`, Infra Claude):** the other bare fetches to token-gated routes (17 found, a floor).
 
-## B-HEALTH-CHECK-REMOVAL (CC-B, sprint plan row 51a — after row 51; `#1147`) — change-class `non_architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED with conditions, met at `cb8786c7f`; deployed with deploy B; Step 8 CONFIRMED by Langston 2026-10-07; report `Batch Completion/B_HEALTH_CHECK_REMOVAL_COMPLETION_REPORT.md`)
+## B-HEALTH-CHECK-REMOVAL (CC-B, sprint plan row 51a — after row 51; `#1147`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-07** (Step 4 APPROVED with conditions, met at `cb8786c7f`; deployed with deploy B; Step 8 and Step 11 CONFIRMED by Langston 2026-10-07; report `Batch Completion/B_HEALTH_CHECK_REMOVAL_COMPLETION_REPORT.md`)
 
 **WHAT IT REMOVED.** The Replit-era System Health Check scheduler task (`server/services/system-health-check-task.ts`, `1590221f7`, 2025-10-09). Its failed-trades reading had been broken since 2025-10-25 (a user-id-to-mode change never reached it), it read a table that holds no rows, and it counted its own unresolved `error_logs` rows as a problem — so it was permanently UNHEALTHY and wrote one more row every hour (6,668 in all, none ever resolved). Nothing acted on its verdict. Kyle directed the delete (rule 18, 2026-10-02).
 

@@ -53,7 +53,7 @@ CHANGE-CLASS: non_architecture
 | T1 | the batch PRE_AUDIT | ✅ | written at Step 2 |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: the row moves to Step 11 |
-| T1 | Langston's MEMORY.md | **OWED** | one close line, written after his Step-11 confirm (his ruling: tick it only once the write lands). His load is over its ceiling, so the line is paid for by trimming |
+| T1 | Langston's MEMORY.md | ✅ | written after his Step-11 confirm through `langston-memory-write` (folded into the CC-B 10-07 close line; a procedural note trimmed to pay for it): 104,825 → 104,723 B, ledger 32 = 32, retractions 14 = 14 |
 | T2 | SYSTEM_MANUAL.md | N/A | no architecture, strategy, regime, filter, pipeline or math change; the task's verdict fed nothing |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | landed in-batch (`3b4df5bf5`, `cb8786c7f`): the deletion line and the registry task counts |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1147` closed in place with the result |
