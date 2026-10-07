@@ -14,6 +14,16 @@ vi.mock('../../services/system-alerts.js', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   addAlert,
 }));
+// B-VENUE-QUIET-ALERTING removed the hard-coded `threshold = 40` fallback (a cold knob no longer silently means 40), so
+// this test supplies the seeded value (exit_integrity.max_consecutive_price_skips = 40, both classes) through the cache.
+vi.mock('../../services/module-constants-service.js', async (importOriginal) => {
+  const orig = await importOriginal<Record<string, any>>();
+  return {
+    ...orig,
+    getCachedNumberRequired: (module: string, name: string, scope: any) =>
+      module === 'exit_integrity' && name === 'max_consecutive_price_skips' ? 40 : orig.getCachedNumberRequired(module, name, scope),
+  };
+});
 
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 
@@ -28,9 +38,11 @@ const record = (ActiveExecutionEngine.prototype as unknown as { _recordPriceSkip
 describe('P-7h r2 — the engine carries the streak\'s reason histogram into the escalation', () => {
   it('1. ★ 39 rest_no_data then 1 rest_token_exhausted raises the ABSENCE copy with its share', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const engine = { _priceSkipStreak: new Map(), _priceSkipReasons: new Map(), mode: 'paper' };
+    const { VenueQuietState } = await import('../../services/venue-quiet-alerting.js');
+    const engine = { _priceSkipStreak: new Map(), _priceSkipReasons: new Map(), _priceSkipEscalated: new Set(),
+      _venueQuiet: new VenueQuietState(), _engineConstructedAt: Date.now(), mode: 'paper' };
     const pos = { id: 'p7h-r2', symbol: 'BTC/USD', assetClass: 'crypto_spot' };
-    // The threshold is DB-knobbed; with the knob cold in a unit test the engine's stated fail-safe default (40) applies.
+    // The threshold is DB-knobbed; the mock above supplies the seeded 40.
     for (let i = 0; i < 39; i++) await record.call(engine, pos, 'rest_no_data');
     expect(addAlert).not.toHaveBeenCalled();
     await record.call(engine, pos, 'rest_token_exhausted');

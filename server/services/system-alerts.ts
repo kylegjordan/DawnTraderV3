@@ -136,11 +136,18 @@ export function shouldDeliverToDiscord(alert: Pick<SystemAlert, 'severity' | 'ca
 // ─── B-GOV-INTEGRITY-1 (F3b, 2026-07-10): resolve provenance primitives ──────
 //
 // `resolved_by_transport` is the channel a resolve arrived through. It is the
-// VERIFIABLE half of the who-resolved-this question — stamped by the code path,
-// NEVER passed by the caller (a caller-supplied transport is just a second
-// claim, which collapses the two-field trust distinction). Each call site hands
-// resolveAlert() its own literal; there is no `--transport` flag.
-export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'governance-checker';
+// VERIFIABLE half of the who-resolved-this question — stamped by CODE, never typed
+// by a person: there is no `--transport` flag, so a human resolve through the CLI
+// can only ever record `cli`. Each entry point hands its own literal; one in-process
+// helper, `resolveAlertsByDedupeKey`, passes its caller's transport through, and every
+// caller of THAT is server code that hands it a literal too (B-VENUE-QUIET-ALERTING,
+// 2026-10-07 — this comment said "never passed by the caller", which the pass-through
+// hop made false as written; Langston r2 §7).
+//   `engine` — a CLASS, not a caller: the server runtime resolving IN-PROCESS (no CLI, no
+//   HTTP request, no timer script). Every server-side resolver uses it and is told apart by
+//   its ACTOR; a transport enum that gained a value per caller would be a caller list and
+//   partition nothing (Langston r2 §7).
+export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'governance-checker' | 'engine';
 
 // Sanctioned sentinels: the ONLY non-reference strings resolution_evidence may
 // hold. `NO-EVIDENCE-GIVEN` forces an HONEST admission (better than a fake
@@ -213,6 +220,7 @@ export const ALERT_ACTORS = [
   { value: 'governance-checker-heartbeat', tag: 'machine', why: 'scripts/governance-checker/heartbeat-check.mjs (15-min timer)' },
   { value: 'b-new-40-soak-verify',         tag: 'machine', why: 'scripts/b-new-40-soak-verify.ts — acks the soak alert it verifies' },
   { value: 'deploy-drift-monitor',         tag: 'machine', why: 'comms-infra/discord/dt-deploy-drift.sh (hourly cron on Helsinki): resolves its own drift rungs whenever a run concludes there is nothing to report — deployed==head, the range touches no runtime file, or the gap is under the floor with the deploy record corroborating (#1021; it was return-to-zero ONLY until 2026-09-09, which is the defect that batch fixed). The resolve evidence names which condition fired. B-DEPLOY-DRIFT-LINE #1002 — an hourly robot must not claim a session identity (#987/#1004).' },
+  { value: 'active-exit-monitor',           tag: 'machine', why: 'server/services/active-execution-engine.ts + venue-quiet-alerting.ts — resolves its own price-skip, venue-quiet and price-skip-config rows when the RE-MEASURED condition clears (B-VENUE-QUIET-ALERTING, #638/#526/#994); transport `engine`' },
   { value: 'langston-privacy-check',       tag: 'machine', why: 'comms-infra/langston-memory/bin/langston-privacy-check (daily 06:00Z timer on Helsinki, root): arms and resolves its own exposure alerts - a machine, so it never claims a session name (B-LANGSTON-CONTEXT)' },
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
@@ -814,4 +822,47 @@ export function listSurfaceable(): SystemAlert[] {
       (a.state === 'active' || (a.state === 'scheduled' && a.triggers_at <= nowISO)) &&
       a.acknowledged_at === null,
   );
+}
+
+/**
+ * B-VENUE-QUIET-ALERTING (#638, objective 7): resolve every NON-TERMINAL row carrying exactly `dedupeKey`, each through
+ * `resolveAlert` so every gate applies (canonical actor, reference evidence, transport). The non-resolved dedupe on
+ * `addAlert` makes more than one match impossible by construction; if it is ever seen, all are resolved and the anomaly is
+ * logged. No match is a no-op. Returns the ids resolved.
+ */
+export async function resolveAlertsByDedupeKey(
+  dedupeKey: string,
+  by: string,
+  evidence: string,
+  transport: ResolveTransport,
+): Promise<string[]> {
+  const targets = readAllAlerts().filter((a) => a.dedupe_key === dedupeKey && a.state !== 'resolved');
+  if (targets.length > 1) {
+    console.error(`[RESOLVE_BY_KEY][MULTI_MATCH] key=${dedupeKey} n=${targets.length} — resolving all`);
+  }
+  const resolved: string[] = [];
+  for (const t of targets) {
+    const r = await resolveAlert(t.id, by, evidence, transport);
+    if (r) resolved.push(r.id);
+  }
+  return resolved;
+}
+
+/**
+ * B-VENUE-QUIET-ALERTING (objective 1): merge `patch` into a NON-TERMINAL row's `metadata` under the file lock. Used only
+ * for the per-class standing record's membership; the row's title and body are never re-rendered (so #572's body-drift
+ * question does not arise). Returns the updated row, or null when the row is missing or resolved.
+ */
+export async function mergeAlertMetadata(id: string, patch: Record<string, unknown>): Promise<SystemAlert | null> {
+  ensureFileExists();
+  let result: SystemAlert | null = null;
+  await withLock(() => {
+    const all = readAllAlerts();
+    const found = all.find((a) => a.id === id);
+    if (!found || found.state === 'resolved') return;
+    found.metadata = { ...(found.metadata ?? {}), ...patch };
+    result = { ...found };
+    writeAllAlertsAtomic(all);
+  });
+  return result;
 }

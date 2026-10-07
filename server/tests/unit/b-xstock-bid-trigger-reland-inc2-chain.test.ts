@@ -116,6 +116,7 @@ vi.mock('../../services/trailing-exit-controller.js', async (orig) => ({
 }));
 
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
+import { VenueQuietState } from '../../services/venue-quiet-alerting.js';
 import { priceCache } from '../../services/price-cache';
 import { livePricingAdapter } from '../../services/live-pricing-adapter';
 import { _resetBookStateComparatorsForTest, _peekRetainedRingForTest, readBookStateComparator } from '../../asset_classes/xstock_spot/book-state-tracker.js';
@@ -186,6 +187,11 @@ function makeEngine(): Stub {
     _entryFillRefusedFirstLook: 0,
     _entryFillRefusedSteady: 0,
     _entryFillLooked: new Set<string>(),
+    // B-VENUE-QUIET-ALERTING (row 3a1) fields the real constructor sets: the streak reset notes the venue price, and the
+    // post-cycle sweep is held off by its throttle (this test drives the exit loop, not the alert sweep).
+    _priceSkipEscalated: new Set<string>(),
+    _venueQuiet: new VenueQuietState(),
+    _lastVenueQuietSweepAt: Date.now(),
     // Stubbed on the instance (see header).
     _recordPriceSkip: vi.fn(async (..._a: unknown[]) => undefined),
     _recordBookStateEvent: vi.fn(async (..._a: unknown[]) => undefined),

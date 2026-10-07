@@ -55,6 +55,10 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
 // moved to module='active_execution'.
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
+import {
+  VenueQuietState, classVerdict, classifyKnobError, configKey, isQuietMarketReason, measureXstockTicking,
+  NOT_WARM_GRACE_MS, readVenueQuietConfig, standingKey, sweepVenueQuiet, type ClassVerdict,
+} from './venue-quiet-alerting.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
 import { xsExitFrameLine } from './xstock-exit-frame-log.js'; // 3n.q7 increment 1: per-tick xStock exit frame line
@@ -757,6 +761,14 @@ export class ActiveExecutionEngine {
   // accounts for. Same key and lifecycle as `_priceSkipStreak`: cleared only with it, on the first venue price, and
   // NEVER on a change of reason, or alternating causes would never escalate.
   private _priceSkipReasons: Map<string, Map<string, number>> = new Map();
+  // B-VENUE-QUIET-ALERTING (#526/#994/#638, row 3a1): positions whose CURRENT streak has already escalated — once per
+  // streak, cleared beside the streak on a venue price. With `streak >= threshold` this makes a threshold that moves
+  // mid-streak to a value already passed still escalate (FINDING-1), where `streak === threshold` lost it.
+  private _priceSkipEscalated: Set<string> = new Set();
+  // The venue-quiet sweep's state — re-established by observation after a restart, never carried across one.
+  private _venueQuiet = new VenueQuietState();
+  private _engineConstructedAt = Date.now();
+  private _lastVenueQuietSweepAt = 0;
   // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
   // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
   private _bookStateSkipStreak: Map<string, number> = new Map();
@@ -813,19 +825,61 @@ export class ActiveExecutionEngine {
     const _reasons = this._priceSkipReasons.get(position.id) ?? new Map<string, number>();
     _reasons.set(reason, (_reasons.get(reason) ?? 0) + 1);
     this._priceSkipReasons.set(position.id, _reasons);
-    let threshold = 40; // fail-safe default if the knob is cold — ~1 min at the monitor cadence
+    // B-VENUE-QUIET-ALERTING (#526/#994/#638, row 3a1). The hard-coded `threshold = 40` fallback is REMOVED (Langston r1
+    // Q3/FINDING-2), and a cold read is split from a missing row (r2 C3) — `module-constants-service` throws two different
+    // messages: NOT WARM ⇒ skip this tick without escalating, and page only if still not warm NOT_WARM_GRACE_MS after the
+    // engine started (the warm-up is deterministic and not a fallback); UNSEEDED (e.g. a perp class with no row) ⇒ a
+    // per-class config alert AND escalate this position at once — never silently counting on.
+    const _cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
+    let threshold: number | null = null;
+    let _knob: 'ok' | 'not_warm' | 'unseeded' = 'ok';
     try {
-      const _cls = asValidAssetClass(position.assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
       threshold = getCachedNumberRequired('exit_integrity', 'max_consecutive_price_skips',
         { exchange: '*', assetClass: _cls, strategy: '*', regime: '*' });
-    } catch { /* knob cold — the default above stands; the alert still fires */ }
-    if (streak === threshold) {
+      this._venueQuiet.thresholdReadOk.add(_cls);
+    } catch (knobErr) {
+      _knob = classifyKnobError(knobErr);
+    }
+    if (_knob === 'not_warm' && Date.now() - this._engineConstructedAt < NOT_WARM_GRACE_MS) return;
+    if (_knob === 'unseeded') {
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(), category: 'breakage', severity: 'warning',
+          title: `Price-skip threshold missing for ${_cls}`,
+          body: `exit_integrity.max_consecutive_price_skips has no row for asset class ${_cls}, so skip streaks there cannot be judged; each position escalates on its first skip until it is seeded.`,
+          metadata: { assetClass: _cls },
+          dedupe_key: configKey(this.mode, _cls),
+        });
+      } catch { /* the escalation below still pages */ }
+    }
+    const _crossed = _knob !== 'ok' || streak >= (threshold as number);
+    if (_crossed && !this._priceSkipEscalated.has(position.id)) {
+      this._priceSkipEscalated.add(position.id);
       // A staleness REJECTION and a genuine ABSENCE are different facts and get different
       // words. The copy branches on the reason that accounts for most of the STREAK (P-7h r2),
       // not on the one tick that crossed the threshold, and prints that reason's share.
       const _reasonCounts = Object.fromEntries(_reasons);
       const _copy = buildPriceSkipAlertCopy({ symbol: position.symbol, mode: this.mode, streak, reason, detail, reasonCounts: _reasonCounts });
-      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) reasons=${JSON.stringify(_reasonCounts)} dominant=${_copy.dominantReason}:${_copy.dominantCount}/${_copy.totalCounted} — raising system alert`);
+      // The cohort test (#994): only the quiet-market family on an xStock class can be a quiet market. Everything a page
+      // or the standing record needs to be READ BACK is stamped into metadata, never left in prose (Langston r2 C2).
+      const _family = isQuietMarketReason(_copy.dominantReason) ? 'quiet_market' : 'other';
+      let _t: number | null = null;
+      let _verdict: ClassVerdict | null = null;
+      if (_cls === 'xstock_spot') {
+        _t = measureXstockTicking(Date.now());
+        try { _verdict = classVerdict(_t, readVenueQuietConfig()); } catch { _verdict = null; /* config unreadable ⇒ page */ }
+      }
+      const _meta = {
+        positionId: position.id, dominantReason: _copy.dominantReason, reasonFamily: _family,
+        T: _t, classVerdict: _verdict, threshold, knob: _knob, streak, reasonCounts: _reasonCounts,
+      };
+      if (_family === 'quiet_market' && _verdict === 'quiet') {
+        console.log(`[VENUE_QUIET][STANDING] ${position.symbol}: ${streak} skips (${_copy.dominantReason}) on a QUIET class (T=${_t}) — joins the standing record, no page`);
+        await this._joinVenueQuietStanding(position, _meta);
+        return;
+      }
+      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) reasons=${JSON.stringify(_reasonCounts)} dominant=${_copy.dominantReason}:${_copy.dominantCount}/${_copy.totalCounted} family=${_family} T=${_t ?? 'n/a'} verdict=${_verdict ?? 'n/a'} — raising system alert`);
       try {
         const { addAlert } = await import('./system-alerts.js');
         await addAlert({
@@ -834,11 +888,59 @@ export class ActiveExecutionEngine {
           severity: 'warning',
           title: _copy.title,
           body: _copy.body,
+          metadata: _meta,
           dedupe_key: `price-skip-${this.mode}-${position.symbol}`,
         });
       } catch (alertErr) {
         console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] alert raise failed (the loud log above stands):`, alertErr instanceof Error ? alertErr.message : alertErr);
       }
+    }
+  }
+
+  /**
+   * B-VENUE-QUIET-ALERTING (objective 1): a quiet-market escalation on a QUIET xStock class joins ONE per-class standing
+   * record instead of paging. Info severity, `health_check` category ⇒ never delivered to Discord (#994: keep the count,
+   * raise no alert). Membership lives in metadata — each position's id, symbol, listing time and the inputs it was judged
+   * on; the clearing sweep re-measures every member.
+   */
+  private async _joinVenueQuietStanding(position: { id: string; symbol: string }, meta: Record<string, unknown>): Promise<void> {
+    try {
+      const { addAlert, mergeAlertMetadata } = await import('./system-alerts.js');
+      const row = await addAlert({
+        triggers_at: new Date(), category: 'health_check', severity: 'info',
+        title: 'xStock venue quiet — exit checks waiting for the market',
+        body: 'The xStock venue is quiet (most symbols are not ticking), so marks for held positions are older than their ceilings and exit checks wait — the freshness standard does not move (Kyle, #994). Members and their inputs are in metadata; the record resolves itself when the venue resumes and every member has been priced or closed.',
+        metadata: { members: {} },
+        dedupe_key: standingKey(this.mode),
+      });
+      const members = { ...((row.metadata?.members as Record<string, unknown>) ?? {}),
+        [position.id]: { symbol: position.symbol, listedAtMs: Date.now(), ...meta } };
+      await mergeAlertMetadata(row.id, { members });
+    } catch (err) {
+      console.error(`[VENUE_QUIET][STANDING] join failed for ${position.symbol} — the per-position log above stands:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  /**
+   * B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep, at most once a minute, AFTER the exit cycle and awaited by
+   * nothing on the exit path. Re-measures (never remembers) and resolves cleared rows; never throws.
+   */
+  private async _runVenueQuietSweep(open: Array<{ id: string; symbol: string }>): Promise<void> {
+    const now = Date.now();
+    if (now - this._lastVenueQuietSweepAt < 60_000) return;
+    this._lastVenueQuietSweepAt = now;
+    try {
+      const cfg = readVenueQuietConfig();
+      const t = measureXstockTicking(now);
+      const verdict = classVerdict(t, cfg);
+      const { readAllAlerts, resolveAlertsByDedupeKey, addAlert } = await import('./system-alerts.js');
+      const r = await sweepVenueQuiet({
+        mode: this.mode, nowMs: now, openPositions: open, state: this._venueQuiet, cfg, verdict,
+        deps: { listAlerts: readAllAlerts, resolveByKey: resolveAlertsByDedupeKey, addAlert: addAlert as any },
+      });
+      console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} escalated=${r.escalated.length}`);
+    } catch (err) {
+      console.error(`[VENUE_QUIET][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     }
   }
 
@@ -2427,6 +2529,9 @@ export class ActiveExecutionEngine {
         // A position that reaches here has a VENUE price — reset its skip streak.
         this._priceSkipStreak.delete(position.id);
         this._priceSkipReasons.delete(position.id);
+        this._priceSkipEscalated.delete(position.id);
+        // B-VENUE-QUIET-ALERTING: the RE-MEASURED condition the clearing sweep reads — this engine priced it, now.
+        this._venueQuiet.notePriced(position.id, Date.now());
         
         // P19-B8.5 (venue-only): the same-day C prong-2 FALLBACK-PRICE SANITY GATE that
         // lived here was DELETED — it refereed heterogeneous price sources, and the
@@ -2863,6 +2968,8 @@ export class ActiveExecutionEngine {
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
     console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch}`);
+    // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
+    void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,

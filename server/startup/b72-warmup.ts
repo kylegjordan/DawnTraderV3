@@ -183,6 +183,9 @@ const PREFETCH_MODULES = [
   // the grade; the same commit gives its dashboard alerts a clear path (acknowledged on recovery) — the guard test's last
   // declared exception, now empty. Seeds: 2026-06-26-p19-b6-7-feed-health-seed.sql (asserts count = 5).
   'feed_health',
+  // B-VENUE-QUIET-ALERTING (#526/#994/#638, row 3a1): the venue-quiet delivery thresholds (quiet/thin ticking counts,
+  // duration escalation, stuck-resolve bound), read sync by venue-quiet-alerting.ts. Seeds: 2026-10-07-b-venue-quiet-alerting.sql.
+  'venue_quiet',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

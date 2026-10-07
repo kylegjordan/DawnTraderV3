@@ -174,6 +174,22 @@ export function getLatestEquityTick(symbol: string): EquityTick | null {
   return latestEquityTick.get(symbol.toUpperCase()) ?? null;
 }
 
+/**
+ * B-VENUE-QUIET-ALERTING (#526/#994, row 3a1): `T` — how many xStock symbols received ANY ticker frame in the trailing
+ * `windowMs` (frame receipt time, `raw.atMs`, not the mark time: a quiet market slows the whole universe's frames
+ * together, while a lost subscription silences one symbol among a ticking cohort). The cohort discriminator reads this.
+ * Measured basis (pre-audit A2, 2026-10-06/07, universe 468): regular-hours p05 461; after-hours median 154; overnight
+ * median 135 (min 108).
+ */
+export function countEquitySymbolsFramedSince(sinceMs: number): number {
+  let n = 0;
+  for (const t of latestEquityTick.values()) {
+    const at = t.raw?.atMs ?? t.tsMs;
+    if (at >= sinceMs) n++;
+  }
+  return n;
+}
+
 function parseTickerSnap(data: any): void {
   // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
   state.cumulativeTickerSnaps++;
