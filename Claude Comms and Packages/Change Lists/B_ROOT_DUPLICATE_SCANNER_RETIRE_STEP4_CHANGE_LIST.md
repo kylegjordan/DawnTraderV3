@@ -32,3 +32,12 @@ A planted `server/zz-mutation-twin.ts` with `centralClock.subscribe('FX5Scanner'
 
 ## 3. Residual
 Runtime no-change control (labelled, not the test): after the next deploy the clock's subscriber list still reads the same five. This batch carries no runtime change; it sits after `b523c86bf` on the branch, so it rides whichever deploy carries 2a0c.
+
+## r2 — Langston Step-4 condition 1 (PROCEED, conditional)
+| item | change |
+|---|---|
+| **Condition 1** — the census walked `server/`+`shared/` only, and both retired copies lived outside them | `census()` now walks every `.ts`/`.tsx` from the REPO ROOT, skipping `node_modules`, `.git`, `dist`, `tests` (by directory-entry type, so a skipped directory is never `stat`ed and symlinks are not followed — a local `dawntrader-v2/frontend/node_modules` refused `stat` with EPERM). The test header and `DELETED_COMPONENTS_LOG` state the scope. 19/19 on the clean tree |
+| mutation, re-planted at the root | `BATCH_19H_HF1/server/services/fx5-scanner.ts` with `centralClock.subscribe('FX5Scanner', …)` FAILS the five-sites assertion and the unique-id assertion (run, removed). **What it reaches:** a copy anywhere under the root outside the four skipped directory names. **What it cannot:** a copy under a directory named `tests`, `dist` or `node_modules`, or a site whose id is not a literal/identifier the regex captures |
+| record 1 | header now says block comments and FULL-LINE `//` comments are stripped; a trailing `// centralClock.subscribe(...)` counts as a site — fail-closed |
+| record 3 | **15 fence entries cover 17 archive files**: `BATCH_19G_HF2` is fenced as one directory standing for its three files |
+| anchor token `862436977` | does not reproduce for me either (worktree `cksum` 3330793276 / 4066 B, blob 2544158531 / 4032 B). I cannot name the instrument that produced it — **withdrawn**; identify the file by content and ref |
