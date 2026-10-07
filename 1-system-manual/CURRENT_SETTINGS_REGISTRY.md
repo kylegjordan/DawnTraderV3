@@ -169,13 +169,15 @@ Resolution: 5-dim `(module_name, exchange, asset_class, strategy, regime)` → `
 | `pwin_ceiling` | `0.6` | `(*, *, *, *)` | b72-step3-commit-b | 2026-05-05T15:24:26.390Z |
 | `pwin_floor` | `0.4` | `(*, *, *, *)` | b72-step3-commit-b | 2026-05-05T15:24:26.390Z |
 
-### `expectancy_tuning` (3 rows)
+### `expectancy_tuning` (RETIRED — 0 rows after `2026-10-07-b-expectancy-tuning-rows-retire.sql`; the 3 below are history)
+
+> ⚠️ **Annotation, not a regenerated value (2026-10-07, B-EXPECTANCY-TUNING-ROWS-RETIRE, row 4a2, `#1156`):** all three rows are DELETED by `drizzle/migrations/2026-10-07-b-expectancy-tuning-rows-retire.sql`. Their only reader, `getAdjustedMinROI`, was deleted with zero callers by B-VTS-TELEMETRY-AGGREGATES (row 4a), which also stopped the boot warm-up prefetching the module. This snapshot predates that; regenerate after the deploy rather than trusting this section's row count.
 
 | Constant | Value | Scope (ex, asset, strat, regime) | Updated by | Updated at |
 |---|---|---|---|---|
-| `winrate_floor_low` | `0.4` | `(*, *, *, *)` | b72-step3-commit-b | 2026-05-05T15:24:26.390Z |
-| `winrate_threshold_high` | `0.6` | `(*, *, *, *)` | b72-step3-commit-b | 2026-05-05T15:24:26.390Z |
-| `winrate_threshold_medium` | `0.5` | `(*, *, *, *)` | b72-step3-commit-b | 2026-05-05T15:24:26.390Z |
+| ~~`winrate_floor_low`~~ | ~~`0.4`~~ | ~~`(*, *, *, *)`~~ | ~~b72-step3-commit-b~~ | ~~2026-05-05T15:24:26.390Z~~ |
+| ~~`winrate_threshold_high`~~ | ~~`0.6`~~ | ~~`(*, *, *, *)`~~ | ~~b72-step3-commit-b~~ | ~~2026-05-05T15:24:26.390Z~~ |
+| ~~`winrate_threshold_medium`~~ | ~~`0.5`~~ | ~~`(*, *, *, *)`~~ | ~~b72-step3-commit-b~~ | ~~2026-05-05T15:24:26.390Z~~ |
 
 ### `goal_alignment` (6 rows)
 
