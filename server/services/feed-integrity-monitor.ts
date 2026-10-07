@@ -94,7 +94,27 @@ interface AlertState {
   lastAlertTime: number;
   lastStatus: FeedHealthStatus;
   lastGrade: string;
-  activeAlertId: string | null;
+}
+
+/**
+ * B-FEED-HEALTH-GRADE-ARM (#1123): one class's liveness as the last cycle graded it — the per-cycle log line's source and
+ * the read-only accessor row 3a1 (B-VENUE-QUIET-ALERTING) reads. `thresholdPresent=false` means NOT GRADED (no DB
+ * threshold for the class), which the grader reports as `healthy`; the two must never print alike (Langston C3, #546).
+ */
+export interface ClassLivenessReading {
+  assetClass: string;
+  freshestAgeMs: number | null;
+  grade: FeedAliveGrade;
+  suppressed: boolean;
+  suppressReason: string | null;
+  thresholdPresent: boolean;
+  symbolCount: number;
+}
+export interface LivenessReading {
+  atMs: number;
+  /** true when NO class had thresholds (config not warm or not seeded) — the cycle graded nothing */
+  configMissing: boolean;
+  classes: ClassLivenessReading[];
 }
 
 /**
@@ -127,8 +147,8 @@ class FeedIntegrityMonitorService {
     lastAlertTime: 0,
     lastStatus: 'healthy',
     lastGrade: 'A',
-    activeAlertId: null,
   };
+  private lastLiveness: LivenessReading | null = null;
   
   // Time-based uptime tracking (minutes)
   private uptimeStartTime: number = Date.now();
@@ -189,7 +209,10 @@ class FeedIntegrityMonitorService {
         tickAgeSec: parseInt(process.env.FEED_GRADE_D_TICK_AGE_SEC || '20'),
       },
       
-      // Alert cooldown
+      // Alert cooldown. ⚠️ B-FEED-HEALTH-GRADE-ARM (Langston Step-1 C2): the 300 s default EQUALS the `*/5` cron period, and
+      // `lastAlertTime` is stamped at the END of a check while `shouldSendAlert` runs at the START of the next — so an
+      // unchanged non-healthy state is suppressed only by the width of one check's own duration, not by a design margin.
+      // Unchanged here (changing it changes behaviour beyond the batch); `FEED_ALERT_COOLDOWN_SEC` is unset on staging.
       alertCooldownSec: parseInt(process.env.FEED_ALERT_COOLDOWN_SEC || '300'), // 5 minutes
     };
   }
@@ -291,7 +314,8 @@ class FeedIntegrityMonitorService {
       if (warningMs !== null && criticalMs !== null) thresholds[cls] = { warningMs, criticalMs };
     }
     if (Object.keys(thresholds).length === 0) {
-      return { grade: 'healthy', worstAgeSec: 0 }; // config not warmed yet → do not alarm
+      this.lastLiveness = { atMs: now, configMissing: true, classes: [] };
+      return { grade: 'healthy', worstAgeSec: 0 }; // config not warmed yet → do not alarm (and the reading says NOT GRADED)
     }
 
     const result = gradePerClassFeedLiveness(health, {
@@ -311,7 +335,25 @@ class FeedIntegrityMonitorService {
       const ageMs = c.freshestAgeMs ?? (c.grade === 'critical' ? (thresholds[c.assetClass]?.criticalMs ?? 0) : 0);
       if (ageMs > worstAgeMs) worstAgeMs = ageMs;
     }
+    this.lastLiveness = {
+      atMs: now,
+      configMissing: false,
+      classes: result.classes.map((c) => ({
+        assetClass: c.assetClass,
+        freshestAgeMs: c.freshestAgeMs,
+        grade: c.grade,
+        suppressed: c.suppressed,
+        suppressReason: c.suppressReason,
+        thresholdPresent: thresholds[c.assetClass] !== undefined,
+        symbolCount: c.symbolCount,
+      })),
+    };
     return { grade: result.overall, worstAgeSec: Math.round(worstAgeMs / 1000) };
+  }
+
+  /** B-FEED-HEALTH-GRADE-ARM: the last cycle's per-class liveness (read-only; null before the first graded cycle). */
+  public getLastLiveness(): LivenessReading | null {
+    return this.lastLiveness;
   }
 
   /** Read a per-asset-class feed_health knob (DB §11), null if unavailable (never throws). */
@@ -625,20 +667,22 @@ class FeedIntegrityMonitorService {
   /**
    * Update alert state after sending alert
    */
-  public updateAlertState(status: FeedHealthStatus, grade: string, alertId: string | null): void {
+  public updateAlertState(status: FeedHealthStatus, grade: string): void {
     this.alertState = {
       lastAlertTime: Date.now(),
       lastStatus: status,
       lastGrade: grade,
-      activeAlertId: alertId,
     };
   }
 
   /**
-   * Get active alert ID (for clearing/resolving)
+   * B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-1 C1): the status the alert state last recorded — the read site of the
+   * recovery predicate. The job acknowledges the dashboard alerts only on a recorded non-healthy → healthy transition, then
+   * records `healthy`, so it fires once per recovery. (`shouldSendAlert` alone cannot say this: with the 300 s cooldown equal
+   * to the 5-minute cron it returns true on nearly every healthy cycle.)
    */
-  public getActiveAlertId(): string | null {
-    return this.alertState.activeAlertId;
+  public getLastStatus(): FeedHealthStatus {
+    return this.alertState.lastStatus;
   }
 
   /**
@@ -656,8 +700,8 @@ class FeedIntegrityMonitorService {
       lastAlertTime: 0,
       lastStatus: 'healthy',
       lastGrade: 'A',
-      activeAlertId: null,
     };
+    this.lastLiveness = null;
   }
 
   /**

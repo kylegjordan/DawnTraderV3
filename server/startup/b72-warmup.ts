@@ -175,9 +175,14 @@ const PREFETCH_MODULES = [
   // `#1123` (the class fix that came with BLOCKER-1): `strategy.orb` = B79.0d's ORB thresholds, read sync but never listed
   // here. Behaviourally inert today — ORB's `strategy_gates` row is disabled, so `orb.ts` returns one branch before this
   // read — listed so the eventual gate flip is not also a cold-cache fault. The swept regression in
-  // `b-price-side-8a-p4c-inc3-guard.test.ts` keeps this list whole; its ONE declared exception is `feed_health` (listing it
-  // arms the feed-liveness grade and its alerts — `B-FEED-HEALTH-GRADE-ARM`, CC-B, sprint plan row 3a; Langston r2 split).
+  // `b-price-side-8a-p4c-inc3-guard.test.ts` keeps this list whole.
   'strategy.orb',
+  // B-FEED-HEALTH-GRADE-ARM (#1123, sprint row 3a): the per-class feed-liveness thresholds (`warning_age_ms`,
+  // `critical_age_ms`, xStock `warmup_grace_ms`) read sync by `feed-integrity-monitor.ts` `tryGetConfig`. Unlisted, every read
+  // threw "not warm" and the grade silently returned healthy (P19-B6.7's alarm, disarmed since 2026-06-26). Listing it ARMS
+  // the grade; the same commit gives its dashboard alerts a clear path (acknowledged on recovery) — the guard test's last
+  // declared exception, now empty. Seeds: 2026-06-26-p19-b6-7-feed-health-seed.sql (asserts count = 5).
+  'feed_health',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 

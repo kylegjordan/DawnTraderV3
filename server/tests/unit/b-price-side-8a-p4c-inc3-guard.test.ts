@@ -143,12 +143,8 @@ function prefetchedModules(): Set<string> {
 /** The DECLARED exceptions — a module read sync but deliberately not prefetched, each with its reason and its PLACED home.
  *  The census asserts this list is exactly its misses (an exception that stops missing is stale and fails), and r3 BLOCKER-4:
  *  the home is checked by READING THE PLAN for the row, never by the shape of a sentence. */
-const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; batch: string; owner: string; planRow: string }> = [
-  { module: 'feed_health',
-    reason: 'prefetching it ARMS the feed-liveness grade (feed-integrity-monitor.ts, the only reader), which mints feed_health '
-      + 'alerts for both classes — a switch-on of another owner\'s component, not a VTS-instrumentation change (Langston r2)',
-    batch: 'B-FEED-HEALTH-GRADE-ARM', owner: 'CC-B', planRow: '3a' },
-];
+// B-FEED-HEALTH-GRADE-ARM (#1123, row 3a) discharged the last one: `feed_health` is prefetched, its alerts clear on recovery.
+const PREFETCH_EXCEPTIONS: Array<{ module: string; reason: string; batch: string; owner: string; planRow: string }> = [];
 
 /** The active plan's §4 rows as the plan's own tally rule defines them: a table line of exactly 7 cells whose first cell
  *  is a row id (digits plus at most one letter), read ONLY inside §4 (Langston r4 residual 1 — a 7-cell id-shaped table in
@@ -245,7 +241,7 @@ describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants mod
   });
 
   it('the ONLY misses are the declared exceptions — each with a reason and a placed home — and none is stale', () => {
-    expect(PREFETCH_EXCEPTIONS.map((e) => e.module)).toEqual(['feed_health']);
+    expect(PREFETCH_EXCEPTIONS.map((e) => e.module)).toEqual([]);
     const rows = planRows();
     expect(rows.size).toBeGreaterThan(200); // the plan parsed (229 rows at build)
     for (const e of PREFETCH_EXCEPTIONS) {
@@ -260,7 +256,7 @@ describe('8a-P4c inc 3 — BLOCKER-1 class: every sync-read module_constants mod
     expect([...rows.values()].some((r) => r.batch.includes('B-NOT-A-PLACED-BATCH'))).toBe(false);
     expect(rows.get('3')?.batch).toContain('B-VTS-MARK-SIDE'); // a known row reads as itself
     expect([...new Set(census.misses.map((m) => m.module))].sort()).toEqual(PREFETCH_EXCEPTIONS.map((e) => e.module).sort());
-    for (const m of ['vts_xstock_touch', 'strategy.orb']) expect(prefetched.has(m)).toBe(true);
+    for (const m of ['vts_xstock_touch', 'strategy.orb', 'feed_health']) expect(prefetched.has(m)).toBe(true);
   });
 
   it('r3 condition — EVERY strategy in the SSOT has its module prefetched (the dynamic `strategy.${…}` readers are sound)', () => {

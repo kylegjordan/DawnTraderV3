@@ -4,7 +4,36 @@ import { AlertsService } from '../services/alerts-service';
 import { storage } from '../storage';
 import { tradingStateSync } from '../services/trading-state-sync';
 import { clusterBus } from '../services/cluster-bus';
-import type { FeedHealthReport } from '../services/feed-integrity-monitor';
+import type { FeedHealthReport, LivenessReading } from '../services/feed-integrity-monitor';
+
+/**
+ * B-FEED-HEALTH-GRADE-ARM (#1123): the trading-session segment of a UTC instant, for the per-cycle liveness line.
+ * FIXED UTC bounds (Langston Step-1 Q2) — valid for US daylight time only, i.e. until 2026-11-01; a report that reads
+ * these lines states its date and that limit. Saturday and Sunday read `weekend`.
+ */
+export function sessionSegmentUtc(d: Date): 'regular' | 'after_hours' | 'overnight' | 'pre_market' | 'weekend' {
+  const day = d.getUTCDay();
+  if (day === 0 || day === 6) return 'weekend';
+  const m = d.getUTCHours() * 60 + d.getUTCMinutes();
+  if (m >= 810 && m < 1200) return 'regular';      // 13:30-20:00
+  if (m >= 1200) return 'after_hours';              // 20:00-24:00
+  if (m < 480) return 'overnight';                  // 00:00-08:00
+  return 'pre_market';                              // 08:00-13:30
+}
+
+/**
+ * B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-2 C3): one line per class per cycle. `threshold=absent` means NOT GRADED —
+ * the grader returns `healthy` for a class with no DB threshold, and that must never print like a graded healthy (#546).
+ */
+export function formatLivenessLines(reading: LivenessReading | null, now: Date): string[] {
+  const segment = sessionSegmentUtc(now);
+  if (!reading) return [`[FeedIntegrity][liveness] not_graded=no_reading segment=${segment}`];
+  if (reading.configMissing) return [`[FeedIntegrity][liveness] not_graded=config_missing segment=${segment}`];
+  return reading.classes.map((c) =>
+    `[FeedIntegrity][liveness] class=${c.assetClass} freshestAgeMs=${c.freshestAgeMs ?? 'none'} grade=${c.grade} ` +
+    `threshold=${c.thresholdPresent ? 'present' : 'absent'} suppressed=${c.suppressed}` +
+    `${c.suppressReason ? ` suppressReason=${c.suppressReason}` : ''} symbols=${c.symbolCount} segment=${segment}`);
+}
 
 /**
  * Feed Integrity Auto-Check Job
@@ -88,10 +117,21 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     // Handle alerting with deduplication
     const { metrics, overallGrade } = report;
     
-    // Check if feed recovered to healthy (auto-resolve independent of alert throttling)
-    if (metrics.status === 'healthy' && monitor.getActiveAlertId()) {
-      console.log(`[FeedIntegrity] Feed recovered - auto-resolving incident`);
-      monitor.updateAlertState(metrics.status, overallGrade, null);
+    for (const line of formatLivenessLines(monitor.getLastLiveness(), new Date())) console.log(line);
+
+    // B-FEED-HEALTH-GRADE-ARM (#1123): the CLEAR. On a recorded non-healthy -> healthy transition (the read site is
+    // getLastStatus, Langston Step-1 C1), ACKNOWLEDGE every unacknowledged feed alert for each admin, both modes — this
+    // clears grade-path and check-failed rows alike (both mint alertType 'feed_health'). Then record healthy, so it runs
+    // once per recovery. The verb is acknowledge: `system_alerts` has no resolve state (the crew's resolve-never-ack rule is
+    // about system-alerts.jsonl, a different store). The dead `getActiveAlertId()` branch that stood here is removed.
+    if (metrics.status === 'healthy' && monitor.getLastStatus() !== 'healthy') {
+      const admins = (await storage.getAllUsers()).filter((u) => u.isAdmin);
+      for (const admin of admins) {
+        const cleared = await AlertsService.acknowledgeFeedHealthAlerts(admin.id);
+        const live = cleared.filter((a) => a.mode === 'live').length;
+        console.log(`[FeedIntegrity][CLEAR] recovered (was ${monitor.getLastStatus()}): acknowledged ${cleared.length} feed alert(s) for user ${admin.id} (live ${live}, paper ${cleared.length - live})`);
+      }
+      monitor.updateAlertState('healthy', overallGrade);
     }
     
     // Handle new alerts (warnings/critical) with deduplication
@@ -174,7 +214,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           }
         }
         
-        monitor.updateAlertState(metrics.status, overallGrade, null);
+        monitor.updateAlertState(metrics.status, overallGrade);
       } else {
         console.log(`[FeedIntegrity] Feed healthy, no action needed`);
       }
@@ -195,31 +235,40 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
   } catch (error: any) {
     console.error(`[FeedIntegrity:${trigger}] ❌ Check failed:`, error);
     
-    // Create critical alert for check failure for all admin users
+    // Create critical alert for check failure for all admin users.
+    // B-FEED-HEALTH-GRADE-ARM (Langston Step-1 Q1): THROTTLED through the grade path's own state — a persistent throw used
+    // to mint two critical rows per admin every 5 minutes. `CHECK_FAILED` differs from every real grade, so the first
+    // successful check after a throw always trips the status/grade-change arm and the healthy transition clears these rows.
     try {
-      const users = await storage.getAllUsers();
-      const adminUsers = users.filter(u => u.isAdmin);
+      const failMonitor = getFeedIntegrityMonitor();
+      if (!failMonitor.shouldSendAlert('critical', 'CHECK_FAILED')) {
+        console.log(`[FeedIntegrity] Check-failed alert suppressed (cooldown or duplicate)`);
+      } else {
+        const users = await storage.getAllUsers();
+        const adminUsers = users.filter(u => u.isAdmin);
       
-      for (const admin of adminUsers) {
-        await AlertsService.createAlert({
-          userId: admin.id,
-          mode: 'live',
-          alertType: 'feed_health',
-          severity: 'critical',
-          category: 'critical',
-          message: `Feed Health Check Failed: ${error.message}`,
-          metadata: { error: error.message, trigger },
-        });
+        for (const admin of adminUsers) {
+          await AlertsService.createAlert({
+            userId: admin.id,
+            mode: 'live',
+            alertType: 'feed_health',
+            severity: 'critical',
+            category: 'critical',
+            message: `Feed Health Check Failed: ${error.message}`,
+            metadata: { error: error.message, trigger },
+          });
         
-        await AlertsService.createAlert({
-          userId: admin.id,
-          mode: 'paper',
-          alertType: 'feed_health',
-          severity: 'critical',
-          category: 'critical',
-          message: `Feed Health Check Failed: ${error.message}`,
-          metadata: { error: error.message, trigger },
-        });
+          await AlertsService.createAlert({
+            userId: admin.id,
+            mode: 'paper',
+            alertType: 'feed_health',
+            severity: 'critical',
+            category: 'critical',
+            message: `Feed Health Check Failed: ${error.message}`,
+            metadata: { error: error.message, trigger },
+          });
+        }
+        failMonitor.updateAlertState('critical', 'CHECK_FAILED');
       }
     } catch (alertError) {
       console.error(`[FeedIntegrity] Failed to create alert:`, alertError);

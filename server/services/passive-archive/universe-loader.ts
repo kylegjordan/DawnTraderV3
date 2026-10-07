@@ -113,6 +113,8 @@ interface CryptoFilterConfig {
 
 interface KrakenAssetPair {
   altname: string;
+  /** the venue's own websocket name, e.g. `GBP/USD`, `XBT/USD` — the BASE is read from here (B-FEED-HEALTH-GRADE-ARM) */
+  wsname?: string;
   base: string;
   quote: string;
   status?: string;
@@ -208,7 +210,13 @@ export async function loadCryptoSpotUniverse(opts?: {
       reasons.wrongQuote++;
       continue;
     }
-    const plainBase = normalizeKrakenAsset(info.base, XBASE_TO_PLAIN);
+    // B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-2 C1): the BASE comes from the venue's own `wsname`, then through
+    // XBASE_TO_PLAIN. `info.base` is the raw asset code (`ZGBP`, `XLTC`, `XMLN`…) and XBASE_TO_PLAIN never carried the fiat
+    // `Z` codes or XETC/XLTC/XMLN, so 8 admitted online pairs were recorded under names the live feed does not know
+    // (GBP/USD as `ZGBP/USD`, LTC/USD as `XLTC/USD`…) and never got a row. Raw `wsname` alone is not the canonical either:
+    // it says `XBT/USD` and `XDG/USD`, which XBASE_TO_PLAIN maps back to BTC and DOGE (B-SCANNER-EGRESS-NORMALISE).
+    const wsBase = typeof info.wsname === 'string' && info.wsname.includes('/') ? info.wsname.split('/')[0] : info.base;
+    const plainBase = normalizeKrakenAsset(wsBase, XBASE_TO_PLAIN);
     preVolumeCandidates.push({ krakenId, canonical: `${plainBase}/${plainQuote}` });
   }
 

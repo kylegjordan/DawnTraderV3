@@ -281,27 +281,9 @@ export class AlertsService {
     return result;
   }
 
-  /**
-   * Phase 27.F.21.FINAL: Cleanup old feed-health alerts
-   * Deletes feed-health alerts older than specified minutes
-   * @param minutesOld - Age threshold in minutes (default: 30)
-   */
-  static async cleanupOldFeedAlerts(minutesOld = 30) {
-    const cutoffDate = new Date();
-    cutoffDate.setMinutes(cutoffDate.getMinutes() - minutesOld);
-
-    const result = await db
-      .delete(systemAlerts)
-      .where(
-        and(
-          sql`${systemAlerts.alertType} LIKE '%feed%'`,
-          sql`${systemAlerts.timestamp} < ${cutoffDate.toISOString()}`
-        )
-      )
-      .returning();
-
-    return result;
-  }
+  // B-FEED-HEALTH-GRADE-ARM (#1123, Langston Step-1 fold): `cleanupOldFeedAlerts` DELETED (rule 18) — zero callers, and it
+  // DELETED every `%feed%` row older than 30 min; armed as "the clear" it would destroy history instead of acknowledging
+  // it. The clear is `acknowledgeFeedHealthAlerts` on recovery. Record: DELETED_COMPONENTS_LOG.
 }
 
 export default AlertsService;
