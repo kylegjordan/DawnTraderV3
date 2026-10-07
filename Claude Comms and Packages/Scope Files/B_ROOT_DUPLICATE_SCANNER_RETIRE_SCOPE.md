@@ -1,4 +1,4 @@
-# B-ROOT-DUPLICATE-SCANNER-RETIRE — SCOPE (Step 1, r1a)
+# B-ROOT-DUPLICATE-SCANNER-RETIRE — SCOPE (Step 1, r1b)
 
 change-class: non_architecture
 
@@ -20,6 +20,7 @@ change-class: non_architecture
 ## 2. Objectives
 1. **Delete the root scanner twin** (rule 18: `DELETED_COMPONENTS_LOG` + `_archive/deleted-code/fx5-scanner.root-twin.ts.removed`). *Verify:* the importer census at the ref (zero), the live clock subscriber list unchanged after deploy (5, with `FX5Scanner` from the live file).
 2. **Disposition each root test script** with evidence (what it exercises; whether that behaviour still exists at the ref; whether it was executed, and if not, why not). *Verify:* a table in the pre-audit, one row per script. *(Root `test-*.ts` are outside vitest's `include: ['server/**/*.test.ts']`, so CI has never run them.)*
+2b. **ADDED 2026-10-07 (§9.4 disposition 2, found in `B-CLUSTER-BUS-PERSIST-DISPOSITION` Step 2 §A1b):** `server/services/schema-audit.ts` and `server/services/provenance-governance.ts` — a zero-importer pair (`schema-audit`'s only importer is `provenance-governance.ts:12`; `provenance-governance` is imported by nothing in `server/`, `client/`, `shared/` or `scripts/`, control 25 files). Same importer census and rule-18 record as the twin; disposition per file at Step 2 (provenance read first — both default their report paths to `/home/runner/workspace`, the Replit layout). *Verify:* the census at the ref, tsc baseline unchanged or lower.
 3. **Correct the Replit-era docs** that point at deleted scripts (`docs/task-10-*.md`) to say so, rather than leave instructions that no longer work.
 
 ## 3. Out of scope
