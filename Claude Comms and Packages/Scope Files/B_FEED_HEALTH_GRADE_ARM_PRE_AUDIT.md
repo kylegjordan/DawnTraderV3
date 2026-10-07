@@ -48,3 +48,7 @@ No item is UNAUDITED.
 ## C. HONEST LIMITS
 - A6's mechanism is read, not observed: no log line names the recorder's subscribed symbols (0 for `ZGBP/USD`, and the instrument cannot show it would have printed one), so Step 3's unit test is the deciding read.
 - The 1,088 → 0 check assumes no non-healthy grade lands between the deploy and the first healthy cycle; the report states the actual sequence.
+
+## D. ADDED AFTER DISPATCH (2026-10-07 ~03:50Z) — `#439` moved here by OLD Claude (`B-CENSUS-OWNERLESS-TRIAGE`, row 1n), agreed by CC-B
+`#439`: the xStock equity OHLC 1-minute bar channel silent-stalled on 2026-07-08 and did not recover across restarts; it did not reproduce over a 30 h re-check. **What stays live is a detector blind spot:** this batch's liveness grade reads the class's FRESHEST TICKER age (A7), so a stall of the BAR channel while ticks keep flowing is invisible to it. **For Langston's Step-2 ruling, one of:** (a) add a per-class newest-bar age to the per-cycle line and grade (same per-class thresholds shape, its own DB constants), or (b) state it out of scope here and place a bar-stall detector as its own row. CC-B leans (a) — the same cycle, the same accessor 3a1 reads, and the stall it misses is exactly the "is data flowing" question this batch answers.
+
