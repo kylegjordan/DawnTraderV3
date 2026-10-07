@@ -1,4 +1,4 @@
-# B-CENSUS-OWNERLESS-REMAINDER — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2, r1)
+# B-CENSUS-OWNERLESS-REMAINDER — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2, r1 — APPROVED by Langston 2026-10-07; his condition folded in §3; his §13 surface homed as `#1169`, row 1u)
 
 change-class: non_architecture · **Owner:** CC-A (OLD Claude) · **Plan row:** `SPRINT_TO_LIVE_PLAN.md` 1s · **Issue:** `#1167` · **Scope:** r1 `15840860b`, **APPROVED by Langston 2026-10-07 with C1-C5** (folded below).
 
@@ -43,7 +43,7 @@ Totals: CC-A 12 · CC-B 15 · CC-C 3 · Infra Claude 15 = 45. **Closed:** 154, 2
 
 ## 3. GRADING (Langston C1, C2)
 - **OBJ-1 is graded with the PRE-change predicate** — `ownerOfIssue(e)` with no placing-line context — so it measures the 45 written owner lines, not the widened rule. Target: `source: 'unknown'` = 0 among the 45; the 3 closed are out of the OPEN set. The post-change run is reported as a separate number.
-- **OBJ-2's discriminating denominator is 20 of 48, published as such:** the 18 §4-row issues + `#537` + `#302` (HOME → row 185) have an owner that existed BEFORE this batch; the comparator is that owner. For the 23 after-live lines that read `(—)`/Kyle and `#237`/`#324`/`#539`, the after-live line is written by this batch, so a match is by construction — stated, not counted as evidence. `#203`/`#205` (roadmap, no owner field anywhere) are **carved out** of OBJ-2.
+- **OBJ-2's discriminating denominator is 19 of the 45, published as such** (Langston Step-2 condition: r1 said 20 and kept `#302`, which is CLOSED and gets no owner line — an empty cell by construction): the 18 §4-row issues + `#537` have an owner that existed BEFORE this batch; the comparator is that owner. For the 23 after-live lines that read `(—)`/Kyle and `#237`/`#324`/`#539`, the after-live line is written by this batch, so a match is by construction — stated, not counted as evidence. `#203`/`#205` (roadmap, no owner field anywhere) are **carved out** of OBJ-2.
 
 ## 4. THE CENSUS RULE (OBJ-3) — (c), Langston C3, priced per C4
 - **`ownerOfIssue(e, ctx)`** — a second, OPTIONAL argument; with no `ctx` the result is byte-identical to today (all four existing call sites unchanged). With `ctx.placingOwner(n)`, an issue that has NO owner from its own text reads `source: 'placingLine'`, labelled `placing-line <session>` — never flattened into `owner <session>`.

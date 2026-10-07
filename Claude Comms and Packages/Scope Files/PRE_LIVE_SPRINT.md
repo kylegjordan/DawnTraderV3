@@ -83,8 +83,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #1035 (Infra Claude) — Langston's alert prompt lists only three owners
 - B-REVIEW-REF-READ (Infra Claude, #1131) — Langston's review tool can read only `migration/aws-supabase`, so a throwaway `migration/<name>` review branch has no supported read path (Langston, 2026-09-30)
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
-- #169 (—) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
-- #219 (—) — dormant flip-rate governance input
+- #169 (Infra Claude) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
+- #219 (CC-A) — dormant flip-rate governance input
 - ~~#449 (CC-B) — governance checker read a frozen rulebook~~ — **CLOSED 2026-09-30 by its filer (CC-B): `B_GOV_INTEGRITY_0_COMPLETION_REPORT.md` line 55 records it fully resolved.**
 - #655 (CC-A) — stateless parallel rulings — crew process
 - #669 (CC-B) — Langston Step-4 finding (B) — contents need the owner's read
@@ -112,7 +112,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-DECISION-RECORDS (CC-A) — decision-history durability and catalogues (CC-A governance lane)
 - B-DISCORD-CONNECT-RESILIENCE (CC-A) — Discord library crash on outage
 - B-FRESHNESS-LOG-READER (CC-B) — nothing reads the rules-freshness hook's log — crew tooling
-- B-GOV-2 (—) — checker always-on gate
+- B-GOV-2 (CC-A) — checker always-on gate
 - B-GOV-4 (CC-C) — checker entry test
 - B-GOV-INTEGRITY-0 (CC-A) — reviewer frozen rulebook · carries `#455`'s CC-A leg (its home points here; Langston R2-Q10 (0), 2026-09-30)
 - B-GOV-LEDGER-GRADE (#1099, CC-A) — the checker grades the commit-message ledger's presence and completeness; `roadmap` probably belongs in `sub_batch`; a report that opens NOT CLOSED should not count as a close; and a conditional doc is never graded today. ✅ Here by Langston's ruling (2026-09-29, B-GOV-REPORTING G6): the GOV-ARC list he named on 2026-08-29 is in a history plan, and GOV-ARC itself (#668) is parked by Kyle, so it confers no position. · `#451` (B-GOV-5's F7 leg): the `steps-combined:` scope declaration as a DECLARED PREDICATE the checker reads, beside the conditional doc that is never graded — cross-reference `B-CHANGE-CLASS-PARSER` (Langston 2026-09-30) · three items added 2026-09-30 by `B-PLAN-CURRENCY-CHECK` (Langston §10i): a hollowed required doc passes live grading (presence only); a self-confirmed exceptions row is invisible; `B-RULES-1c`/`-1d` cannot find their combined report after the id-pattern fix. Detail on `#1099`
@@ -181,22 +181,22 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 
 - B-EVENT-LOOP-RESIDUAL (CC-B) — #225: scattered event-loop stalls after the scan-stall fix (measured 2026-10-06: 8.8/h, p50 193 ms, max 318 ms, at the pinned ceiling); most follow the FX5 scanner's cycle tail
 - #1020 (CC-A) — push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)
-- #148 (—) — health check permission error on a Replit-era path
+- #148 (Infra Claude) — health check permission error on a Replit-era path
 - #395 (CC-B) — the null-reason tracker is a module global, safe only while evaluation is serial; refactor to return values (added 2026-09-30, W40 census)
-- #151 (—) — Phase 16 register entry
-- #152 (—) — document the locked-module override boundary
-- #156 (—) — audit candidate for per-class consumer swaps
-- #157 (—) — line-number drift in a diagnostic payload
-- #158 (—) — inefficient 24h filter at volume
-- #159 (—) — log volume gating for a canary line
-- #171 (—) — corrupt manifest needs a manual runbook
-- #173 (—) — a recurring zero-null guard once Phase 25 reads the dataset
-- #198 (—) — cron-evidence verifier edge case
-- #202 (—) — study scripts leave files on staging that block the next pull
-- #209 (—) — ratchet the type-check baseline down
-- #217 (—) — RTB context bonus in shadow
-- #229 (Kyle) — four symbol-format modules that accept different forms — consolidate
-- #234 (—) — 390 non-active-path type errors, each homed
+- #151 (CC-B) — Phase 16 register entry
+- #152 (CC-A) — document the locked-module override boundary
+- #156 (CC-B) — audit candidate for per-class consumer swaps
+- #157 (Infra Claude) — line-number drift in a diagnostic payload
+- #158 (CC-A) — inefficient 24h filter at volume
+- #159 (CC-A) — log volume gating for a canary line
+- #171 (Infra Claude) — corrupt manifest needs a manual runbook
+- #173 (CC-B) — a recurring zero-null guard once Phase 25 reads the dataset
+- #198 (Infra Claude) — cron-evidence verifier edge case
+- #202 (Infra Claude) — study scripts leave files on staging that block the next pull
+- #209 (Infra Claude) — ratchet the type-check baseline down
+- #217 (CC-B) — RTB context bonus in shadow
+- #229 (Infra Claude; Kyle's decision) — four symbol-format modules that accept different forms — consolidate
+- #234 (Infra Claude) — 390 non-active-path type errors, each homed
 - #298 (Kyle) — ticker shown instead of company name
 - #391 (CC-B) — monitor the xStock in-hours flat-price block rate
 - #463 (—) — bridge code reviewed by documentation, not diff
@@ -220,7 +220,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-DEPLOY-REF-DECLARATION (CC-C) — deploy-tool declaration
 - B-DISPATCH-STAGING-VERIFY (CC-C) — its own row says it blocks nothing
 - B-EOL-NORMALISE (CC-A) — line-ending normalisation
-- B-EOL-POLICY (—) — line-ending policy
+- B-EOL-POLICY (CC-A) — line-ending policy
 - B-EXIT-LINE-IDENTITY (CC-C) — trade id and class on the exit log line, so a close is read by identity
 - B-EXIT-PATH-TYPING (CC-A) — the exit path is untyped
 - B-EXIT-POLICY-EVALUATOR (CC-B) — our expectancy model cannot rank exit alternatives; needs B-OUTCOME-CORPUS-CAPTURE first (not a defect — a missing capability)
@@ -259,9 +259,9 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 
 ### Perpetual futures — 5
 
-- #144 (—) — perpetual-futures activation checklist — perps come after live
+- #144 (CC-C) — perpetual-futures activation checklist — perps come after live
 - #703 (—) — capture six commodity perpetuals as an asset class (CC-C) — perps come after live (W41 homing 2026-10-06)
-- #155 (—) — perp reason truncated in a diagnostic endpoint
+- #155 (Infra Claude) — perp reason truncated in a diagnostic endpoint
 - #687 (CC-C) — equity-perp universe file stale — perps are after live (merges into P19-B-PERPFEED)
 - B-FUNNEL-PERP-CLASSES (CC-C) — open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)
 - B-FUTURES-BAR-FINAL (CC-C) — futures bar finality — perps are post-live, but check whether any live-class signal reads these bars
@@ -271,7 +271,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #407 (CC-A) — `vts_open_trades` has no drizzle schema declaration (the table exists live; W40 census, 2026-09-30)
 - #437 (CC-A) — the `db:migrate` ledger showed an applied migration as pending (2026-07-08); re-measure before scoping (W40 census)
 - #147 (—) — per-class telemetry disk persistence
-- #172 (—) — stale duplicate retention keys
+- #172 (Infra Claude) — stale duplicate retention keys
 - #685 (CC-C) — crypto 1-minute bars cannot be tiered to warm storage
 - #689 (CC-C) — storage-fraction numerator/denominator mismatch
 - #697 (Kyle) — storage overview UI page (Kyle directive)
@@ -279,7 +279,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 12.6 decommission residue (CC-A) — per-table rule-18 census of 9 walter_* tables + backups — its bytes count toward the 72% disk sizing
 - 20.1 Database Phase D: Migration Rebaseline — - Generate fresh ba (—) — migration rebaseline
 - 20.2 Database Phase E: Index & Retention Hygiene — - Audit index (—) — index and retention hygiene — database at 72% of plan (Kyle: August moves to warm storage in October)
-- 20.3.1 — Unit/integration test-tier separation (RUNNING_ISSUES #226 (—) — unit / integration test-tier separation
+- 20.3.1 — Unit/integration test-tier separation (RUNNING_ISSUES #226 (Infra Claude) — unit / integration test-tier separation
 - 20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail) (—) — observability hardening
 - 20.5 Architecture Cleanup — - Decompose monolithic pages (enhance (—) — decompose large pages and route files
 
