@@ -41,6 +41,19 @@
 
 ⇒ **So far only strong_bull_trend crypto has produced evidence, and it is the thing to watch.** The weekly read carries it, alongside the successor test `#1095` (sprint row 135a).
 
+**WEEKLY READ 2, 2026-10-07 (alert `8a7b57c8`; queries as above plus a reason-collapsed reject census and a split at the 2026-10-06 15:52:57Z paper reset — the reset flattened every position and restarted the balance at $820, so the two sides are different books and are not added together for anything but the cell totals).**
+| setting | since the deploy (09-20 21:19Z → 10-07) | since the reset | where its signals stop |
+|---|---|---|---|
+| strong_bull_trend crypto, reach 6.5 | 34 closed (30 filled), **10 winners, average −1.66 % per filled trade, net −$58.57**, 3 still open | 9 opened, 3 closed: 0 winners, average −5.49 %, net −$6.31 | — (it opens) |
+| strong_bull_trend xStock, reach 6.5 + min_rr 1.95 | 0 | 0 | **0 evaluations** — the strategy is switched off for xStock (see Kyle's question below); unexercised by construction |
+| vwap_pullback crypto, min_rr 1.95 | 0 trades | 0 | 755 admitted by the SQE, 454 rejected at Net Expectancy (427 maker / 27 taker) — **and the open question from read 1 is now ANSWERED (below)** |
+| vwap_bounce crypto, min_rr 1.95 | 0 trades | 0 | all 2,220 paper evaluations rejected at the SQE's Net Expectancy gate, just below zero after fees; 0 admitted |
+| vwap_pullback xStock, reach 6.0 | 22 closed rows (9 filled): **0 winners, average −2.61 %, net −$10.72**; 13 still open | not split | 685 admitted; 1 duplicate pair, 1 regime weight |
+**PREVIOUSLY STATED (read 1, 09-30): strong_bull_trend crypto −0.42 % over 16 filled, 6 winners, −$12.61. NOW: −1.66 % over 30 filled, 10 winners, −$58.57. REASON: 14 more filled trades, mostly before the reset; the strategy's per-trade result has worsened for two weeks running.**
+**Its share of crypto opens (the crowding question, `#1095`, row 135a — held by Kyle 2026-10-05):** 28 of 78 between the deploy and the reset (35.9 %); **9 of 9 since the reset (100 %)**. Since the reset no other crypto strategy has opened a trade at all. xStock: 0 of 71.
+**ANSWERED — why crypto vwap_pullback passes the SQE but never opens.** The 7-day read-only capture (`/tmp/cc-b-vwp-catch.log` on staging, 2026-09-29 23:37Z → 10-06 23:37Z, 306,964 lines) caught it: the ranker picked NIL/USD/vwap_pullback **305 times** (10-06 04:10Z → 07:04Z), and **every one of the 305 was refused at the trade-safety check by `MAX_TOTAL_EXPOSURE`** (e.g. *"$958.78 > $818.78 (100 % limit)"*) after the signal had already been removed from the RTB pool. Control: every `vwap_pullback` refusal in the capture, crypto and xStock together, is the same reason — 583 of 583. **So it is the shared exposure cap Coltrane found for xStock opens, not anything in this batch's settings.** Its fix is CC-C's `B-SIZING-DEC-RESTORE`, whose third increment rides the 2026-10-07 deploy; the next weekly read is the first that can show whether vwap_pullback crypto then opens.
+⚠️ **Not established here:** why strong_bull_trend's three post-reset closes average −5.49 % (n = 3). The post-reset stop-outs as a population are being worked under the pre-sprint simulation-truth plan (`Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md`), not in this read.
+
 ### (c) Objectives
 | objective | result | evidence |
 |---|---|---|
