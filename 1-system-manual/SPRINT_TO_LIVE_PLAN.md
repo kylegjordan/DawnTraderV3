@@ -187,7 +187,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 28 | B-PRICE-FLOOR-REVIEW | B-PRICE-FLOOR-REVIEW | Infra Claude | QUEUED | — | replace the $0.25 floor with a real market-depth test |
 | 29 | B-VENUE-PAIRS-REINIT | B-VENUE-PAIRS-REINIT | Infra Claude | QUEUED | — | a changed exchange price step must not refuse orders |
 | 30 | B-SCAN-BREADTH-DECLINE | B-SCAN-BREADTH-DECLINE | Infra Claude | QUEUED | — | why the scanner sees so few pairs — breadth feeds selection |
-| 31 | B-XSTOCK-LIVE-FEED | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | QUEUED | — | the xStock feed became our trading feed without a decision — decide and fix · + item `#960` (W41 homing, CC-C 2026-10-06) |
+| 31 | B-XSTOCK-LIVE-FEED | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | QUEUED | — | the xStock feed became our trading feed without a decision — decide and fix · + item `#960` (W41 homing, CC-C 2026-10-06) · + item `#1175` the price cache has no asset-class key, so the 16 collision tickers share one row (I2 Step 2, 2026-10-07) |
 | 32 | A bound on how old a price may be when used | plan row 6 | CC-C (Analyst Claude) | QUEUED | — | a bound on how old a price may be when used |
 | 33 | B-PRICE-STALENESS-BOUND | B-PRICE-STALENESS-BOUND | CC-C (Analyst Claude) | QUEUED | — | the last-known-good price is re-served with no age bound |
 | 34 | B-EQUITY-RECONNECT-STALL-TIMER | B-EQUITY-RECONNECT-STALL-TIMER | CC-C (Analyst Claude) | QUEUED | — | a stalled xStock reconnect leaves positions unwatched · + `#635` (the stall watchdog reads one universe-wide clock, so it catches only a total stall; its thresholds were derived per symbol) - threshold calibration here, per-symbol alerting with row 165 - homed 2026-09-29 by CC-B |

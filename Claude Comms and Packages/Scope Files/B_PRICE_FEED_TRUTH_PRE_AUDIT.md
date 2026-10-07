@@ -95,6 +95,13 @@ Code at `origin/migration/aws-supabase` `3cb978f0e`; staging logs and DB 2026-10
 
 **A3 → §9.4 disposition 5, citing its home:** the venue list never refreshing after boot is `#933` / `B-VENUE-PAIRS-REINIT`, `PHASE_19_PLAN` row 3k (`RUNNING_ISSUES:6357`: *"a bounded retry on the boot path plus a periodic re-check …"*). Not `UNAUDITED`, not I2's. **Owner divergence to settle with Infra Claude:** row 3k says CC-C, `SPRINT_TO_LIVE_PLAN:188` says Infra Claude.
 
+## I2 Step 2 — r2 PROCEEDS (Langston 13:42Z, at `6619dcba2`): blocker discharged; folds
+- **P2c — DELETE `priceCache.getPrice` under rule 18 (Langston's lean, taken).** The third writer of `bucket.symbols` (`price-cache.ts:447-449` auto-subscribes a stale symbol into `'readyToBuy'` for the process lifetime) has **zero production callers** (tree-wide `.getPrice` census: only `livePricingAdapter.getPrice` at `metrics-core:103` and `verification-test-protocol:322`; the positive control is `b-rest-sides-to-cache-inc1.test.ts:159/:179`, which call it). Step 3: deletion-time state-write census (§9.5(a-ii)) of what it writes — the cache row, `bucket.symbols`, `writeKeyAcc.getPrice` and its `[WRITE_KEYS] site=getPrice` line — each reader named; the two tests re-pointed onto `getBatch`; `DELETED_COMPONENTS_LOG` + `_archive/deleted-code/`.
+- **C1 — the ledger identity stays exact: `requested` = the ELIGIBLE set, and a new `ineligible=` count field** carries the deliberate skips, so `requested = written ∪ missing` still holds and P7's `written = requested − unlisted` is checkable. (`rest-write-keys.ts` header updated to say so.)
+- **C2 — the collision keyspace: P2 improves it, does not close it → `#1175`, homed as an item on `B-XSTOCK-LIVE-FEED` (sprint row 31); measured at I2's Step 7** (collision keys whose row is `rest_batch`/`rest_poller` while an xStock signal or position holds the key). The r2 sentence "xStock members keep their feed-written rows" is narrowed: true except for those 16 keys.
+- **C3 —** `restEligible` is built by filtering `bucketSignals` against `cryptoKeysAtIndex`, never by splitting the `${mode}:${symbol}:${strategy}` key.
+- **A3's owner divergence settled:** `PHASE_19_PLAN` row 3k corrected to Infra Claude (the active plan, sprint row 29, governs); Infra told 13:40Z.
+
 ---
 
 # INCREMENT I4 (`#960`, `#950`) — GROUNDWORK MEASURED 2026-10-07 (its Step 2 follows I1)
