@@ -1,0 +1,59 @@
+// ARCHIVED 2026-10-07 — B-PRICE-FEED-TRUTH I2 P2c (rule 18). `UnifiedPriceCache.getPrice` from server/services/price-cache.ts
+// at 6619dcba2. Zero production callers; it auto-subscribed any stale symbol into the 'readyToBuy' bucket for the
+// process lifetime, a third writer of bucket membership that I2's REST eligibility could not reach. NOT COMPILABLE.
+
+  async getPrice(symbol: string, bucketType: CacheBucketType = 'readyToBuy'): Promise<CachedPrice | null> {
+    const bucket = this.buckets.find(b => b.type === bucketType);
+    const refreshInterval = bucket?.refreshIntervalMs ?? 15000;
+    
+    const cached = this.cache.get(symbol);
+    const now = Date.now();
+    
+    const isFresh = cached && (now - cached.lastUpdatedAt) < refreshInterval;
+    
+    if (isFresh) {
+      return cached;
+    }
+    
+    if (!bucket?.symbols.has(symbol)) {
+      this.subscribe(symbol, bucketType);
+    }
+    
+    const writes: RestWriteKeys[] = []; // `3n.l` P3
+    try {
+      let fetchedData: CachedPrice | null = null;
+      
+      await this.safeFetch(1, async () => {
+        const krakenSymbol = this.toKrakenSymbol(symbol);
+        const data = await this.krakenService.getTicker(krakenSymbol);
+        
+        for (const [pair, ticker] of Object.entries(data)) {
+          const normalizedSymbol = normalizeKrakenPair(pair);
+          // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
+          const tickerData = this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_fetch', now);
+          this.cache.set(normalizedSymbol, tickerData);
+
+          let wroteRequested = false;
+          if (normalizedSymbol === symbol) {
+            fetchedData = tickerData;
+          } else if (this.symbolsMatch(normalizedSymbol, symbol)) {
+            const requestedRow = this.restTickerRow(symbol, normalizedSymbol, ticker, 'rest_fetch', now);
+            this.cache.set(symbol, requestedRow);
+            fetchedData = requestedRow;
+            wroteRequested = true;
+          }
+          writes.push({ responseKey: pair, writtenKeys: wroteRequested ? [normalizedSymbol, symbol] : [normalizedSymbol] });
+        }
+      });
+      
+      return fetchedData || this.cache.get(symbol) || null;
+    } catch (err: any) {
+      console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
+      return cached || null;
+    } finally {
+      // `3n.l` P3, Step-4 condition C1: recorded on the ERROR path too, so a failed fetch shows its symbol as MISSING
+      // instead of leaving the interval looking like the site was never called.
+      this.writeKeyAcc.getPrice.add(buildWriteKeyLedger('getPrice', [symbol], writes, sym => this.toKrakenSymbol(sym)));
+    }
+  }
+

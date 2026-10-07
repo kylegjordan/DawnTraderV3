@@ -1,8 +1,9 @@
 /**
- * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * 🔒 LOCKED MODULE — HANDLE WITH CARE
  * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
  * Owner: Dawn Trader Core
- * Summary: This module is production-locked. Changes require a formal directive.
+ * Summary: This module is production-locked. Changes go through the eleven-step workflow, and the Step-4
+ *          change list names this header (`#1076`, Langston ruling (b) 2026-09-26).
  * 
  * Previous: A4.R10R-1. Rate governance and caching handled by price-cache.ts
  */

@@ -116,6 +116,9 @@ const ASSET_NORMALIZATION: Record<string, string> = {
   'XZEC': 'ZEC',
   'XDOGE': 'DOGE',
   'XDG': 'DOGE',
+  // B-PRICE-FEED-TRUTH I2 P3a: Kraken's AssetPairs `base` for Dogecoin is `XXDG`. Without this row all eight DOGE pairs
+  // were built as `XXDG/<quote>` at tier 3, so `toKrakenRest('DOGE/USD')` returned null (2026-10-07: tier3=8 → 0).
+  'XXDG': 'DOGE',
   'XETC': 'ETC',
   'XREP': 'REP',
   'XMLN': 'MLN',

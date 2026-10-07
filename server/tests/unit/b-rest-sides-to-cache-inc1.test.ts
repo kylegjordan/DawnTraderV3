@@ -13,6 +13,22 @@ import { buildWriteKeyLedger, WriteKeyAccumulator, formatKeyList } from '../../s
 
 const pc: any = priceCache;
 const FAKE = 'ZZ3NL/USD';
+const realVenue = pc.venue;
+
+/**
+ * B-PRICE-FEED-TRUTH I2: the REST sites ask and file by the venue's own pair list (`priceCache.venue`). Tests that drive
+ * those sites stand in a fake list of exactly the pairs they use.
+ */
+function fakeVenue(pairs: Array<{ internal: string; rest: string; key: string }>) {
+  return {
+    isReady: () => true,
+    toKrakenRest: (s: string) => pairs.find(p => p.internal === s.toUpperCase())?.rest ?? null,
+    resolveByKrakenKey: (k: string) => {
+      const p = pairs.find(x => x.key === k.toUpperCase());
+      return p ? ({ internalSymbol: p.internal, krakenRestPair: p.rest } as any) : undefined;
+    },
+  };
+}
 
 /** Kraken REST ticker entry, shaped as `getTicker` returns it. */
 function tick(bid: string, ask: string, last: string) {
@@ -43,8 +59,8 @@ beforeAll(() => {
 afterEach(() => {
   for (const k of ['GBP/USD', 'ZGBPZ/USD', 'BTC/CAD', FAKE]) pc.cache.delete(k);
   for (const b of pc.buckets) b.symbols.clear();
-  pc.writeKeyAcc.getPrice.flushLine();
-  pc.writeKeyAcc.getBatch.flushLine();
+  pc.writeKeyAcc.getBatch.flushLine(); // I2: the getPrice site is deleted
+  pc.venue = realVenue;
   vi.restoreAllMocks();
 });
 
@@ -98,11 +114,11 @@ describe('P3 — the write-key ledger (pure)', () => {
   });
 
   it('6. the accumulator prints its site\'s line once, then resets; lists are bounded', () => {
-    const acc = new WriteKeyAccumulator('getPrice');
+    const acc = new WriteKeyAccumulator('getBatch');
     expect(acc.flushLine()).toBeNull();
-    acc.add(buildWriteKeyLedger('getPrice', ['X/USD'], [{ responseKey: 'XUSD', writtenKeys: ['Q/USD'] }], s => s));
+    acc.add(buildWriteKeyLedger('getBatch', ['X/USD'], [{ responseKey: 'XUSD', writtenKeys: ['Q/USD'] }], s => s));
     const line = acc.flushLine()!;
-    expect(line).toContain('site=getPrice calls=1');
+    expect(line).toContain('site=getBatch calls=1');
     expect(line).toContain('phantomDistinct=1[Q/USD]');
     expect(line).toContain('missingDistinct=1[X/USD]');
     expect(acc.flushLine()).toBeNull();
@@ -111,10 +127,16 @@ describe('P3 — the write-key ledger (pure)', () => {
 });
 
 describe('P3 + OBJ-8 through the cache — the refreshBucket pass (the path that failed on 2026-09-26)', () => {
-  it('7. GBP/USD\'s response lands under GBP/USD with fresh stamped sides; an unmapped primary is named as a phantom', async () => {
+  // I2 (`#1146`): filing moved onto the venue's own pair list, so XXBTZCAD now lands under BTC/CAD and a key the list
+  // does not name is counted `unresolved`, never filed as a phantom.
+  it('7. GBP/USD\'s response lands under GBP/USD with fresh stamped sides; BTC/CAD files by its venue key; an unnamed key is counted, not filed', async () => {
     const logs: string[] = [];
     vi.spyOn(console, 'log').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });
-    pc.krakenService.getTicker = vi.fn().mockResolvedValue({ ZGBPZUSD: tick('1.32447', '1.32459', '1.32459'), XXBTZCAD: tick('1', '2', '1.5') });
+    pc.venue = fakeVenue([
+      { internal: 'GBP/USD', rest: 'GBPUSD', key: 'ZGBPZUSD' },
+      { internal: 'BTC/CAD', rest: 'XBTCAD', key: 'XXBTZCAD' },
+    ]);
+    pc.krakenService.getTicker = vi.fn().mockResolvedValue({ ZGBPZUSD: tick('1.32447', '1.32459', '1.32459'), XXBTZCAD: tick('1', '2', '1.5'), ZZNOTLISTED: tick('1', '2', '1.5') });
     const bucket = pc.buckets.find((b: any) => b.type === 'openTrade');
     bucket.symbols = new Set(['GBP/USD', 'BTC/CAD']);
     const before = Date.now();
@@ -127,15 +149,18 @@ describe('P3 + OBJ-8 through the cache — the refreshBucket pass (the path that
     expect(row.sidesWriter).toBe('rest_poller');
     expect(row.sidesCapturedAtMs).toBeGreaterThanOrEqual(before);
     expect(pc.getCachedPrice('ZGBPZ/USD')).toBeNull();
+    expect(pc.getCachedPrice('BTC/CAD')?.price).toBe(1.5);
+    expect(pc.getCachedPrice('XXBTZ/CAD')).toBeNull();
 
     const line = logs.find(l => l.startsWith('[3n.l][WRITE_KEYS] site=refreshBucket'))!;
     expect(line).toBeDefined();
     expect(line).toContain('bucket=openTrade');
-    expect(line).toContain('requested=2 written=1');
-    expect(line).toContain('missing=1[BTC/CAD]');
-    expect(line).toMatch(/phantom=1\[[^\]]+\]/);
-    expect(line).toContain('viaPrimary=[GBP/USD<-ZGBPZUSD]');
-    expect(line).toContain('rest_poller:1');
+    expect(line).toContain('requested=2 written=2');
+    expect(line).toContain('missing=0[]');
+    expect(line).toContain('phantom=0[]');
+    expect(line).toContain('viaPrimary=[BTC/CAD<-XXBTZCAD,GBP/USD<-ZGBPZUSD]');
+    expect(line).toContain('unresolved=1');
+    expect(line).toContain('rest_poller:2');
   });
 });
 
@@ -151,20 +176,17 @@ describe('OBJ-10 — each row names the writer of its sides', () => {
     expect(pc.getCachedPrice(FAKE).sidesWriter).toBeNull();
   });
 
-  it('9. getPrice names `rest_fetch` and getBatch names `rest_batch`; each prints its own site line at the health tick', async () => {
+  // I2 P2c: `getPrice` (and its `rest_fetch` writer tag) is deleted; `getBatch` is the one on-demand site.
+  it('9. getBatch names `rest_batch` and prints its own site line at the health tick', async () => {
     const logs: string[] = [];
     vi.spyOn(console, 'log').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });
+    pc.venue = fakeVenue([{ internal: FAKE, rest: 'ZZ3NLUSD', key: 'ZZ3NLUSD' }]);
     pc.krakenService.getTicker = vi.fn().mockResolvedValue({ ZZ3NLUSD: tick('9.9', '10.1', '10') });
 
-    await pc.getPrice(FAKE, 'readyToBuy');
-    expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('rest_fetch');
-
-    pc.cache.delete(FAKE);
-    await pc.getBatch('vtsSimulation', [FAKE]);
+    await pc.getBatch('vtsSimulation', [FAKE], { restEligible: new Set([FAKE]) });
     expect(pc.getCachedPrice(FAKE).sidesWriter).toBe('rest_batch');
 
     pc.logHealthLine();
-    expect(logs.some(l => l.includes('site=getPrice calls=1 requested=1 written=1'))).toBe(true);
     expect(logs.some(l => l.includes('site=getBatch calls=1 requested=1 written=1'))).toBe(true);
     const n = logs.length;
     pc.logHealthLine();
@@ -175,11 +197,10 @@ describe('OBJ-10 — each row names the writer of its sides', () => {
     const logs: string[] = [];
     vi.spyOn(console, 'log').mockImplementation((...a: any[]) => { logs.push(a.join(' ')); });
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+    pc.venue = fakeVenue([{ internal: FAKE, rest: 'ZZ3NLUSD', key: 'ZZ3NLUSD' }]);
     pc.krakenService.getTicker = vi.fn().mockRejectedValue(new Error('venue down'));
-    await pc.getPrice(FAKE, 'readyToBuy');
-    await pc.getBatch('vtsSimulation', [FAKE]);
+    await pc.getBatch('vtsSimulation', [FAKE], { restEligible: new Set([FAKE]) });
     pc.logHealthLine();
-    expect(logs.some(l => l.includes('site=getPrice calls=1 requested=1 written=0') && l.includes(`missingDistinct=1[${FAKE}]`))).toBe(true);
     expect(logs.some(l => l.includes('site=getBatch calls=1 requested=1 written=0') && l.includes(`missingDistinct=1[${FAKE}]`))).toBe(true);
   });
 });

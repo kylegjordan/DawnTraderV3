@@ -1201,3 +1201,13 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/*.20261007-B-ROOT-DUPLICATE-SCANNER-RETIRE.removed` (17 files, path separators as `__`).
 **COMMIT:** the `B-ROOT-DUPLICATE-SCANNER-RETIRE` Step-3 commit that adds this entry.
 
+
+## 2026-10-07 — `UnifiedPriceCache.getPrice` and its `rest_fetch` writer tag — B-PRICE-FEED-TRUTH increment I2 P2c (`#1146`, `#1173`)
+| removed | where | what it was |
+|---|---|---|
+| `async getPrice(symbol, bucketType = 'readyToBuy')` | `server/services/price-cache.ts` | The on-demand single-symbol REST read (A4.R10R-1). On a stale or absent row it auto-subscribed the symbol into the bucket (default `'readyToBuy'`) through the LEGACY reason — permanent for the process — then fetched it alone. |
+| `'rest_fetch'` in `SidesWriter`; `writeKeyAcc.getPrice`; `'getPrice'` in `RestWriteSite` | `price-cache.ts`, `market-data/rest-write-keys.ts` | Its writer tag, its ledger accumulator and its `[3n.l][WRITE_KEYS] site=getPrice` line. |
+**WHY:** zero production callers (tree-wide `.getPrice` census at `6619dcba2`: only `livePricingAdapter.getPrice` at `metrics-core:103` and `verification-test-protocol:322`; positive control `b-rest-sides-to-cache-inc1.test.ts:159/:179`, which called it). It was a third writer of bucket membership that I2's caller-declared REST eligibility could not reach, so keeping it would have left a path that re-admits an xStock to the Kraken spot request (Langston Step-2 r2: *"fold the eligibility rule in, or delete the method — my lean is delete"*).
+**STATE-WRITE CENSUS (§9.5(a-ii)):** cache rows — still written by `refreshBucket`/`getBatch`/the WS and adapter writers, and no reader keys on `rest_fetch` (the only reader of the tag, the P-7k source fence, is updated in the same commit); bucket membership — the remaining writers are `subscribe` (crypto callers), `getBatch`'s eligible re-injection and `setReasonMembers`; the ledger accumulator and its log line — read only by `logHealthLine`, removed with it, and by no script (`git grep` over `scripts/` and `server/`). The two tests that called it are re-pointed onto `getBatch`.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/price-cache.getPrice.ts.removed`.
+**COMMIT:** the `B-PRICE-FEED-TRUTH` I2 Step-3 commit that adds this entry.

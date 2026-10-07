@@ -3553,7 +3553,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   const cryptoPriceMap = cryptoSymbolList.length > 0
-    ? await priceCache.getBatch(bucketType, cryptoSymbolList)
+    // I2 P2b: the list is crypto-only (split by the trade's persisted class above), so all of it is REST-eligible.
+    ? await priceCache.getBatch(bucketType, cryptoSymbolList, { restEligible: new Set(cryptoSymbolList) })
     : new Map<string, CachedPrice>();
 
   // Xstock leg — read latest tick per symbol from xstock_spot_ticker_snap.
@@ -4465,7 +4466,8 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
   for (const symbol of cryptoSymbolList) priceCache.subscribe(symbol, bucketType);
   if (cryptoSymbolList.length > 0) await new Promise(resolve => setTimeout(resolve, 100));
   const cryptoPriceMap = cryptoSymbolList.length > 0
-    ? await priceCache.getBatch(bucketType, cryptoSymbolList)
+    // I2 P2b: the list is crypto-only (split by the trade's persisted class above), so all of it is REST-eligible.
+    ? await priceCache.getBatch(bucketType, cryptoSymbolList, { restEligible: new Set(cryptoSymbolList) })
     : new Map<string, CachedPrice>();
 
   const xstockPriceMap = new Map<string, { price: number; rawQuote: XsQuoteRow }>();
@@ -5287,7 +5289,11 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
   await new Promise(resolve => setTimeout(resolve, 100));
   
   const symbols = pairs.map(p => p.symbol);
-  const priceDataMap = await priceCache.getBatch(bucketType, symbols);
+  // I2 P2b: every pair here came from the FX5 scan batch, and FX5 is the crypto_spot scanner (`fx5-scanner.ts:658`,
+  // "FX5 is the crypto scanner; assetClass is explicit") — the class is the ingestion path's (SM rule 3), so all are
+  // REST-eligible. A future non-crypto source for this list must pass its own eligibility.
+  const restEligible = new Set(symbols);
+  const priceDataMap = await priceCache.getBatch(bucketType, symbols, { restEligible });
 
   // Phase 14.1 HF8 (A3): Fetch BTC OHLC once per cycle for defensive_hedge correlation
   // BTC is a separate pair with its own rate limit counter — negligible API impact

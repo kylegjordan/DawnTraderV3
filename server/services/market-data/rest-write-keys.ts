@@ -17,11 +17,18 @@
  * `viaPrimary` names the requested symbols whose response key is not their own request form (`GBP/USD<-ZGBPZUSD`):
  * the resolutions that depend on the static map carrying Kraken's primary key.
  *
+ * `B-PRICE-FEED-TRUTH` I2 (`#1146`, `#1173`; Langston Step-2 C1) — three counts beside the identity, none inside it:
+ *   `unlisted`   — requested symbols the venue's pair list does not name, so NOT SENT (they are also `missing`: the identity
+ *                  holds, and `written = requested − unlisted` exactly when nothing else was missed);
+ *   `ineligible` — symbols the caller declared not REST-fetchable (another asset class), never part of `requested`;
+ *   `unresolved` — response keys the venue's pair list does not name, so NOT FILED (never a phantom).
+ *
  * ⛔ RECORD-ONLY: no decision reads a ledger.
  * PURE: no cache, no clock, no I/O.
  */
 
-export type RestWriteSite = 'refreshBucket' | 'getPrice' | 'getBatch';
+// I2 P2c: the on-demand single-symbol site (`getPrice`) is deleted (zero production callers; rule 18).
+export type RestWriteSite = 'refreshBucket' | 'getBatch';
 
 /** One REST response entry and every cache key it was written under. */
 export interface RestWriteKeys {
@@ -42,6 +49,19 @@ export interface WriteKeyLedger {
   missing: string[];
   /** `SYM<-KEY` for each written requested symbol whose response key differs from its own request form. */
   viaPrimary: string[];
+  /** I2: requested symbols the venue's pair list does not name — not sent (a subset of `missing`). */
+  unlisted: string[];
+  /** I2: symbols the caller declared not REST-fetchable — never in `requested`. */
+  ineligible: number;
+  /** I2: response keys the venue's pair list does not name — not filed. */
+  unresolved: number;
+}
+
+/** I2: the counts a site passes beside its writes. */
+export interface WriteKeyExtras {
+  unlisted?: readonly string[];
+  ineligible?: number;
+  unresolved?: number;
 }
 
 export function buildWriteKeyLedger(
@@ -49,6 +69,7 @@ export function buildWriteKeyLedger(
   requested: readonly string[],
   writes: readonly RestWriteKeys[],
   requestFormOf: (symbol: string) => string,
+  extras: WriteKeyExtras = {},
 ): WriteKeyLedger {
   const req = Array.from(new Set(requested));
   const reqSet = new Set(req);
@@ -72,6 +93,9 @@ export function buildWriteKeyLedger(
     phantom: Array.from(phantomSet).sort(),
     missing: req.filter(s => !writtenSet.has(s)),
     viaPrimary: Array.from(viaPrimary).sort(),
+    unlisted: Array.from(new Set(extras.unlisted ?? [])).sort(),
+    ineligible: extras.ineligible ?? 0,
+    unresolved: extras.unresolved ?? 0,
   };
 }
 
@@ -87,11 +111,12 @@ export function formatKeyList(keys: readonly string[]): string {
 export function formatWriteKeyLedger(l: WriteKeyLedger, extra = ''): string {
   return `[3n.l][WRITE_KEYS] site=${l.site}${extra ? ' ' + extra : ''} requested=${l.requested.length} written=${l.written.length} `
     + `phantom=${l.phantom.length}${formatKeyList(l.phantom)} missing=${l.missing.length}${formatKeyList(l.missing)} `
-    + `viaPrimary=${formatKeyList(l.viaPrimary)}`;
+    + `viaPrimary=${formatKeyList(l.viaPrimary)} unlisted=${l.unlisted.length}${formatKeyList(l.unlisted)} `
+    + `ineligible=${l.ineligible} unresolved=${l.unresolved}`;
 }
 
 /**
- * Sums the ledgers of an on-demand site (`getPrice`, `getBatch`) between two health lines, so each site prints its
+ * Sums the ledgers of the on-demand site (`getBatch`) between two health lines, so each site prints its
  * OWN line: a phantom is never attributed to a bucket pass that did not produce it (Langston, Step-2 condition c).
  * ⚠️ THE LINE MIXES TWO KINDS OF FIELD, AND SAYS SO IN ITS NAMES (Step-4 condition C2): `calls`, `requested` and
  * `written` are SUMS over the interval's calls; `phantomDistinct`, `missingDistinct` and `viaPrimary` are SETS,
@@ -105,6 +130,9 @@ export class WriteKeyAccumulator {
   private phantom = new Set<string>();
   private missing = new Set<string>();
   private viaPrimary = new Set<string>();
+  private unlisted = new Set<string>();
+  private ineligible = 0;
+  private unresolved = 0;
 
   constructor(private readonly site: RestWriteSite) {}
 
@@ -115,6 +143,9 @@ export class WriteKeyAccumulator {
     l.phantom.forEach(k => this.phantom.add(k));
     l.missing.forEach(k => this.missing.add(k));
     l.viaPrimary.forEach(k => this.viaPrimary.add(k));
+    l.unlisted.forEach(k => this.unlisted.add(k));
+    this.ineligible += l.ineligible;
+    this.unresolved += l.unresolved;
   }
 
   /** The interval's line, or `null` when the site was not called; resets either way. */
@@ -124,13 +155,18 @@ export class WriteKeyAccumulator {
     const missing = Array.from(this.missing).sort();
     const line = `[3n.l][WRITE_KEYS] site=${this.site} calls=${this.calls} requested=${this.requested} written=${this.written} `
       + `phantomDistinct=${phantom.length}${formatKeyList(phantom)} missingDistinct=${missing.length}${formatKeyList(missing)} `
-      + `viaPrimary=${formatKeyList(Array.from(this.viaPrimary).sort())}`;
+      + `viaPrimary=${formatKeyList(Array.from(this.viaPrimary).sort())} `
+      + `unlistedDistinct=${this.unlisted.size}${formatKeyList(Array.from(this.unlisted).sort())} `
+      + `ineligible=${this.ineligible} unresolved=${this.unresolved}`;
     this.calls = 0;
     this.requested = 0;
     this.written = 0;
     this.phantom.clear();
     this.missing.clear();
     this.viaPrimary.clear();
+    this.unlisted.clear();
+    this.ineligible = 0;
+    this.unresolved = 0;
     return line;
   }
 }

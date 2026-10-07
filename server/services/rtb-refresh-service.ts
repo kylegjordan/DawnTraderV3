@@ -1,8 +1,9 @@
 /**
- * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * 🔒 LOCKED MODULE — HANDLE WITH CARE
  * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
  * Owner: Dawn Trader Core
- * Summary: This module is production-locked. Changes require a formal directive.
+ * Summary: This module is production-locked. Changes go through the eleven-step workflow, and the Step-4
+ *          change list names this header (`#1076`, Langston ruling (b) 2026-09-26).
  * 
  * Previous: Directive A4.R10R-3 — Central Clock Synchronized RTB Refresh Service
  * 
@@ -400,6 +401,10 @@ class RTBRefreshService {
     // Per-class nested structure: signalBuckets.get(class).get(bucketIndex).
     // Refresh-mode iterates all active classes' buckets at this index.
     const bucketKeysAtIndex = new Set<string>();
+    // B-PRICE-FEED-TRUTH I2 P2 (`#1173`): the crypto_spot keys at this index, from the PER-CLASS bucket — the class each
+    // key was filed under from the signal's persisted `asset_class` (DB-enforced: `rtb_signals_asset_class_not_null_chk`),
+    // never re-derived from the symbol (16 USD tickers are both an xStock and a crypto pair).
+    const cryptoKeysAtIndex = new Set<string>();
     // P19-B8.4b: track which funnel classes (crypto_spot|xstock_spot) had signals in this bucket, so the
     // cyclesRun tick after refreshAndRank is per-class (anchor-a). Perp classes are not funnel-graded.
     const _funnelClassesPresent = new Set<FunnelAssetClass>();
@@ -408,6 +413,7 @@ class RTBRefreshService {
       const bucket = perClassBuckets?.get(bucketIndex);
       if (bucket && bucket.size > 0) {
         for (const k of bucket) bucketKeysAtIndex.add(k);
+        if (cls === 'crypto_spot') for (const k of bucket) cryptoKeysAtIndex.add(k);
         if (cls === 'crypto_spot' || cls === 'xstock_spot') _funnelClassesPresent.add(cls);
       }
     }
@@ -426,11 +432,21 @@ class RTBRefreshService {
 
     const symbols = bucketSignals.map((s: { symbol: string }) => s.symbol);
 
-    for (const symbol of symbols) {
+    // B-PRICE-FEED-TRUTH I2 P2 (`#1173`, Langston Step-2 r2): ONLY crypto members join the bucket or may be fetched from
+    // Kraken spot REST — one xStock in that request voided it for every member (2 good `readyToBuy` passes in ~28 h,
+    // 2026-10-07). The READ list stays all-class, so an xStock member's feed-written row still counts toward
+    // `validPrices` below exactly as before. Built from `bucketSignals` against `cryptoKeysAtIndex` (C3), never by
+    // splitting a key.
+    const cryptoSymbols = new Set<string>(
+      bucketSignals
+        .filter((s: { symbol: string; strategy: string }) => cryptoKeysAtIndex.has(`${mode}:${s.symbol}:${s.strategy}`))
+        .map((s: { symbol: string }) => s.symbol),
+    );
+    for (const symbol of cryptoSymbols) {
       priceCache.subscribe(symbol, 'readyToBuy');
     }
 
-    const prices = await priceCache.getBatch('readyToBuy', symbols);
+    const prices = await priceCache.getBatch('readyToBuy', symbols, { restEligible: cryptoSymbols });
 
     // ⭐⭐ SIDE-AGE PROBE — `rtb_refresh` STAGE. SHADOW, NOTHING GATES ON IT.
     // ⛔ WIRED BECAUSE KYLE ASKED FOR IT EXPLICITLY: *"we also need to make sure that our RTB

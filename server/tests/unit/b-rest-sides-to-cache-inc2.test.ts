@@ -31,6 +31,22 @@ const pc: any = priceCache;
 const lpa: any = livePricingAdapter;
 const kwa: any = krakenWebSocketAdapter;
 const SYM = 'ZZINC2/USD';
+const realVenue = pc.venue;
+
+/**
+ * B-PRICE-FEED-TRUTH I2: the REST sites ask and file by the venue's own pair list (`priceCache.venue`). Tests that drive
+ * those sites stand in a fake list of exactly the pairs they use.
+ */
+function fakeVenue(pairs: Array<{ internal: string; rest: string; key: string }>) {
+  return {
+    isReady: () => true,
+    toKrakenRest: (s: string) => pairs.find(p => p.internal === s.toUpperCase())?.rest ?? null,
+    resolveByKrakenKey: (k: string) => {
+      const p = pairs.find(x => x.key === k.toUpperCase());
+      return p ? ({ internalSymbol: p.internal, krakenRestPair: p.rest } as any) : undefined;
+    },
+  };
+}
 
 beforeAll(() => {
   pc.shutdown(); // stop the refresh and health timers: these tests drive the writers directly
@@ -43,6 +59,7 @@ beforeEach(() => {
 afterEach(() => {
   for (const k of [SYM, 'XBT/USD', 'BTC/USD']) pc.cache.delete(k);
   for (const b of pc.buckets) b.symbols.clear();
+  pc.venue = realVenue;
   vi.restoreAllMocks();
 });
 
@@ -129,6 +146,7 @@ describe('P7 + P8 — every side producer writes both sides or neither (OBJ-2, O
   it('16. the cache\'s own REST ticker sites write a zero side as NO sides: the warm row keeps its sides and stamps', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const before = seedWsRow(SYM, 1_000);
+    pc.venue = fakeVenue([{ internal: SYM, rest: 'ZZINC2USD', key: 'ZZINC2USD' }]); // I2: the REST sites use the venue list
     pc.krakenService.getTicker = vi.fn().mockResolvedValue({
       ZZINC2USD: { a: ['101', '1', '1'], b: ['0', '1', '1'], c: ['100.5', '0.1'], v: ['1', '1'], h: ['1', '1'], l: ['1', '1'] },
     });
@@ -188,6 +206,13 @@ describe('P9 — the "venue pushed" field moves only on a push, and its counters
     expect(normalizeToInternalSymbol('XXBTZUSD')).toBe('BTC/USD');
     pc.cache.set('XBT/USD', { ...seedWsRow('XBT/USD', 1_000), lastWsMessageAtMs: 111 });
     pc.cache.set('BTC/USD', { ...seedWsRow('BTC/USD', 1_000), lastWsMessageAtMs: 222 });
+    // I2: a venue list in which the requested spelling XBT/USD asks for the same REST pair whose key files as BTC/USD,
+    // so the dual-key write still happens through `fileRestResponse`.
+    pc.venue = {
+      isReady: () => true,
+      toKrakenRest: (s: string) => (s === 'XBT/USD' || s === 'BTC/USD' ? 'XBTUSD' : null),
+      resolveByKrakenKey: (k: string) => (k === 'XXBTZUSD' ? ({ internalSymbol: 'BTC/USD', krakenRestPair: 'XBTUSD' } as any) : undefined),
+    };
     pc.krakenService.getTicker = vi.fn().mockResolvedValue({
       XXBTZUSD: { a: ['101', '1', '1'], b: ['99', '1', '1'], c: ['100', '0.1'], v: ['1', '1'], h: ['1', '1'], l: ['1', '1'] },
     });

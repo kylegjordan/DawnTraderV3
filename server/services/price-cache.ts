@@ -1,8 +1,9 @@
 /**
- * 🔒 LOCKED MODULE — DO NOT MODIFY
+ * 🔒 LOCKED MODULE — HANDLE WITH CARE
  * Directive: 8.8.4-A4.R10R-4 (Core System Hardening)
  * Owner: Dawn Trader Core
- * Summary: This module is production-locked. Changes require a formal directive.
+ * Summary: This module is production-locked. Changes go through the eleven-step workflow, and the Step-4
+ *          change list names this header (`#1076`, Langston ruling (b) 2026-09-26).
  * 
  * Previous: A4.R10R-1 — Unified, Rate-Governed Price Cache
  * 
@@ -18,11 +19,14 @@
  *  - Deliver cached prices to all consuming modules.
  * 
  * A4.R10R-1: Uses canonical normalizeToInternalSymbol from kraken-symbol-resolver.
+ * B-PRICE-FEED-TRUTH I2 (`#1146`, `#1173`): the REST sites ask and file by the VENUE'S OWN pair list
+ * (`krakenAssetPairsService`), not by the resolver — see `planRestRequest` / `fileRestResponse`.
  */
 
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { normalizeToInternalSymbol as normalizeKrakenPair } from '../markets/kraken-symbol-resolver';
 import { buildWriteKeyLedger, formatWriteKeyLedger, WriteKeyAccumulator, type RestWriteKeys, type WriteKeyLedger } from './market-data/rest-write-keys.js';
+import { krakenAssetPairsService } from '../markets/kraken-asset-pairs-service.js';
 import { pairwiseStatedSides } from './market-data/stated-sides.js';
 
 export type PriceSourceTag = 'kraken_ws' | 'kraken_rest';
@@ -126,7 +130,7 @@ export type CacheMarkKind = 'mid' | 'last';
  */
 export type SidesWriter =
   | 'ws_ticker' | 'ws_book'
-  | 'rest_poller' | 'rest_fetch' | 'rest_batch'
+  | 'rest_poller' | 'rest_batch' // I2 P2c: `rest_fetch` (the deleted `getPrice` site) is gone
   | 'rest_adapter' | 'rest_engine';
 
 /** `3n.l` increment 2, P6: sides a caller of `updateFromRest` observed, WITH the writer that observed them (Langston Step-2 C2). */
@@ -137,8 +141,15 @@ export interface StatedSides {
   writer: SidesWriter;
 }
 
-/** The REST ticker fields the cache's own three REST sites read (structural; `KrakenTicker` is not exported). */
+/** The REST ticker fields the cache's own REST sites read (structural; `KrakenTicker` is not exported). */
 type RestTickerFields = { a?: string[]; b?: string[]; c?: string[]; v?: string[]; h?: string[]; l?: string[] };
+
+/**
+ * B-PRICE-FEED-TRUTH I2: the venue's own pair list, as the REST sites use it — its readiness, the pair to SEND for an
+ * internal symbol, and the internal symbol a RESPONSE key belongs to. A field (not a direct import call) so a test can
+ * stand in a fake list.
+ */
+type VenuePairLookup = Pick<typeof krakenAssetPairsService, 'isReady' | 'toKrakenRest' | 'resolveByKrakenKey'>;
 
 /**
  * P-7k: P-7i's carry rule for this row, in ONE place, with one predicate deciding both halves (Langston chunk-3 C1).
@@ -189,6 +200,13 @@ class UnifiedPriceCache {
   private readonly MAX_WEIGHT_PER_SECOND = 10;
   private readonly BATCH_SIZE = 100;
 
+  /** I2: the venue's pair list (see `VenuePairLookup`). */
+  private venue: VenuePairLookup = krakenAssetPairsService;
+  /** I2 P5: when `initialize()` ran, whether the ready transition has been logged, and how many REST passes waited. */
+  private initializedAtMs: number | null = null;
+  private venueReadyLogged = false;
+  private venueNotReadySkips = 0;
+
   constructor() {
     this.krakenService = new KrakenService();
   }
@@ -211,6 +229,7 @@ class UnifiedPriceCache {
 
     this.healthLogInterval = setInterval(() => this.logHealthLine(), 60000);
 
+    this.initializedAtMs = Date.now();
     this.isInitialized = true;
     console.log('[A4.R10R-1][PriceCache] Initialized with 4 buckets (openTrade=2s, readyToBuy=15s, fx5Snapshot=30s, vtsSimulation=60s)');
   }
@@ -271,30 +290,23 @@ class UnifiedPriceCache {
   }
 
   private async refreshBucket(bucket: CacheBucket, now: number): Promise<void> {
+    // I2 P5: nothing is sent before the venue's pair list is ready; `lastRefresh` is not advanced, so the pass retries.
+    if (!this.venueReady()) return;
+    // Every member is REST-eligible by construction (I2 P2/P2b): members enter only by `subscribe` (crypto callers),
+    // by `getBatch`'s re-injection of an ELIGIBLE symbol, or by an owner's reason set (the engine's crypto positions).
     const symbols = Array.from(bucket.symbols);
     const writes: RestWriteKeys[] = []; // `3n.l` P3: every key this pass writes, for the write-key ledger
-    
-    for (let i = 0; i < symbols.length; i += this.BATCH_SIZE) {
-      const batch = symbols.slice(i, i + this.BATCH_SIZE);
-      const pairString = batch.map(s => this.toKrakenSymbol(s)).join(',');
-      
+    const { sent, unlisted } = this.planRestRequest(symbols);
+    const pairs = Array.from(sent.keys());
+    let unresolved = 0;
+
+    for (let i = 0; i < pairs.length; i += this.BATCH_SIZE) {
+      const chunk = pairs.slice(i, i + this.BATCH_SIZE);
       try {
         await this.safeFetch(1, async () => {
-          const data = await this.krakenService.getTicker(pairString);
-          
-          for (const [pair, ticker] of Object.entries(data)) {
-            const normalizedSymbol = normalizeKrakenPair(pair);
-            // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
-            this.cache.set(normalizedSymbol, this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_poller', now));
-
-            const requestedSymbol = batch.find(s => this.symbolsMatch(s, normalizedSymbol));
-            if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
-              this.cache.set(requestedSymbol, this.restTickerRow(requestedSymbol, normalizedSymbol, ticker, 'rest_poller', now));
-            }
-            writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
-          }
-          
-          console.log(`[A4.R10R-1][PriceCache][${bucket.type}] refreshed ${batch.length} symbols`);
+          const data = await this.krakenService.getTicker(chunk.join(','));
+          unresolved += this.fileRestResponse(data, sent, 'rest_poller', now, writes);
+          console.log(`[A4.R10R-1][PriceCache][${bucket.type}] refreshed ${chunk.length} symbols`);
         });
       } catch (err: any) {
         console.warn(`[A4.R10R-1][PriceCache][${bucket.type}] Batch fetch error:`, err.message);
@@ -302,25 +314,83 @@ class UnifiedPriceCache {
     }
 
     // `3n.l` P3: requested / written / phantom / missing for this pass, and who wrote each member's sides.
-    this.logWriteKeys(buildWriteKeyLedger('refreshBucket', symbols, writes, sym => this.toKrakenSymbol(sym)),
-      `bucket=${bucket.type} sidesWriter=${this.sidesWriterCensus(symbols)}`);
+    this.logWriteKeys(buildWriteKeyLedger('refreshBucket', symbols, writes, sym => this.venue.toKrakenRest(sym) ?? sym,
+      { unlisted, unresolved }), `bucket=${bucket.type} sidesWriter=${this.sidesWriterCensus(symbols)}`);
     bucket.lastRefresh = now;
   }
 
-  private toKrakenSymbol(symbol: string): string {
-    const parts = symbol.split('/');
-    if (parts.length !== 2) return symbol;
-    
-    let [base, quote] = parts;
-    
-    if (base === 'BTC') base = 'XBT';
-    
-    return `${base}${quote}`;
+  /**
+   * I2 P5 (Langston's call, Step 2): REFUSE UNTIL READY. The cache loop starts before the venue's pair list is loaded
+   * (`index.ts`), and a request built without it would fall back to the phantom path. Logs ONE line at the transition,
+   * with how long the REST sites waited and how many passes they skipped. A consumer of `#933` / `B-VENUE-PAIRS-REINIT`.
+   */
+  private venueReady(): boolean {
+    if (!this.venue.isReady()) {
+      this.venueNotReadySkips++;
+      return false;
+    }
+    if (!this.venueReadyLogged) {
+      this.venueReadyLogged = true;
+      const waited = this.initializedAtMs !== null ? Date.now() - this.initializedAtMs : null;
+      console.log(`[I2][PriceCache][VENUE_READY] Kraken pair list ready; REST sites open. waitedMs=${waited ?? 'n/a'} skippedPasses=${this.venueNotReadySkips}`);
+    }
+    return true;
   }
 
   /**
-   * `3n.l` increment 2 — THE ROW THE THREE REST TICKER SITES WRITE (`refreshBucket`, `getPrice`, `getBatch`), built once
-   * instead of three copies, and built PER KEY WRITTEN.
+   * I2 P3 (`#1173`): the request for these symbols — the venue's own REST pair for each. A symbol the list does not name
+   * (an xStock, a halted pair, a pair listed after boot) is NOT SENT: Kraken voids a whole `Ticker` request on one
+   * unknown pair (`EQuery:Unknown asset pair`), so one such member used to cost every other member its price.
+   */
+  private planRestRequest(symbols: readonly string[]): { sent: Map<string, string>; unlisted: string[] } {
+    const sent = new Map<string, string>(); // the venue REST pair (upper-case) → the symbol that asked for it
+    const unlisted: string[] = [];
+    for (const s of symbols) {
+      const rest = this.venue.toKrakenRest(s);
+      if (rest) sent.set(rest.toUpperCase(), s);
+      else unlisted.push(s);
+    }
+    return { sent, unlisted };
+  }
+
+  /**
+   * I2 P4 (`#1146`): file one REST `Ticker` response by the venue's own key. A key the list does not name is NOT filed and
+   * is counted — never a fall-back to the resolver's quote-suffix parse, which is what minted `XXBTZ/CAD`-style phantoms.
+   * The row goes under the venue's internal symbol, and also under the requesting spelling if that differs.
+   * Returns the number of unresolved keys.
+   */
+  private fileRestResponse(
+    data: Record<string, RestTickerFields>,
+    sent: ReadonlyMap<string, string>,
+    writer: SidesWriter,
+    now: number,
+    writes: RestWriteKeys[],
+    onRow?: (key: string, row: CachedPrice) => void,
+  ): number {
+    let unresolved = 0;
+    for (const [pair, ticker] of Object.entries(data)) {
+      const entry = this.venue.resolveByKrakenKey(pair);
+      if (!entry) {
+        unresolved++;
+        continue;
+      }
+      const internal = entry.internalSymbol;
+      const requested = sent.get(entry.krakenRestPair.toUpperCase());
+      const keys = requested && requested !== internal ? [internal, requested] : [internal];
+      for (const key of keys) {
+        // `3n.l` increment 2 (P8, P9 ii): one row builder for the REST ticker sites, built PER KEY WRITTEN.
+        const row = this.restTickerRow(key, internal, ticker, writer, now);
+        this.cache.set(key, row);
+        onRow?.(key, row);
+      }
+      writes.push({ responseKey: pair, writtenKeys: keys });
+    }
+    return unresolved;
+  }
+
+  /**
+   * `3n.l` increment 2 — THE ROW THE REST TICKER SITES WRITE (`refreshBucket`, `getBatch`; `getPrice` deleted in I2), built
+   * once, and built PER KEY WRITTEN.
    * ⛔ P8 (OBJ-12): the REST sides are stated only as a pair that passes `pairwiseStatedSides`. Otherwise this write states
    *    NO sides and the key's previous sides, their stamps and their writer are carried, the rule `updateFromWebSocket`
    *    applies to a tick without sides. Before this a missing REST side was parsed as `0` and stored under a fresh stamp.
@@ -354,12 +424,6 @@ class UnifiedPriceCache {
       ...carryLastTrade(existing, price, now),
       lastUpdatedAt: now,
     };
-  }
-
-  private symbolsMatch(a: string, b: string): boolean {
-    const normalizeA = normalizeKrakenPair(a);
-    const normalizeB = normalizeKrakenPair(b);
-    return normalizeA === normalizeB;
   }
 
   subscribe(symbol: string, bucketType: CacheBucketType): void {
@@ -431,61 +495,6 @@ class UnifiedPriceCache {
     return this.cache.get(symbol) || null;
   }
 
-  async getPrice(symbol: string, bucketType: CacheBucketType = 'readyToBuy'): Promise<CachedPrice | null> {
-    const bucket = this.buckets.find(b => b.type === bucketType);
-    const refreshInterval = bucket?.refreshIntervalMs ?? 15000;
-    
-    const cached = this.cache.get(symbol);
-    const now = Date.now();
-    
-    const isFresh = cached && (now - cached.lastUpdatedAt) < refreshInterval;
-    
-    if (isFresh) {
-      return cached;
-    }
-    
-    if (!bucket?.symbols.has(symbol)) {
-      this.subscribe(symbol, bucketType);
-    }
-    
-    const writes: RestWriteKeys[] = []; // `3n.l` P3
-    try {
-      let fetchedData: CachedPrice | null = null;
-      
-      await this.safeFetch(1, async () => {
-        const krakenSymbol = this.toKrakenSymbol(symbol);
-        const data = await this.krakenService.getTicker(krakenSymbol);
-        
-        for (const [pair, ticker] of Object.entries(data)) {
-          const normalizedSymbol = normalizeKrakenPair(pair);
-          // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
-          const tickerData = this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_fetch', now);
-          this.cache.set(normalizedSymbol, tickerData);
-
-          let wroteRequested = false;
-          if (normalizedSymbol === symbol) {
-            fetchedData = tickerData;
-          } else if (this.symbolsMatch(normalizedSymbol, symbol)) {
-            const requestedRow = this.restTickerRow(symbol, normalizedSymbol, ticker, 'rest_fetch', now);
-            this.cache.set(symbol, requestedRow);
-            fetchedData = requestedRow;
-            wroteRequested = true;
-          }
-          writes.push({ responseKey: pair, writtenKeys: wroteRequested ? [normalizedSymbol, symbol] : [normalizedSymbol] });
-        }
-      });
-      
-      return fetchedData || this.cache.get(symbol) || null;
-    } catch (err: any) {
-      console.warn(`[A4.R10R-1][PriceCache] getPrice error for ${symbol}:`, err.message);
-      return cached || null;
-    } finally {
-      // `3n.l` P3, Step-4 condition C1: recorded on the ERROR path too, so a failed fetch shows its symbol as MISSING
-      // instead of leaving the interval looking like the site was never called.
-      this.writeKeyAcc.getPrice.add(buildWriteKeyLedger('getPrice', [symbol], writes, sym => this.toKrakenSymbol(sym)));
-    }
-  }
-
   /**
    * ⭐ FEED LIVENESS AS A COUNT OF DISTINCT SYMBOLS, NOT AS A RECENCY GAUGE (Langston, 2026-09-06).
    *
@@ -507,8 +516,8 @@ class UnifiedPriceCache {
   /**
    * `3n.l` increment 2, P9 (iii): the two liveness counters count INSTRUMENTS, not cache keys. A REST response that
    * matches a requested symbol spelled differently from its normalised key is written under BOTH keys, and counting keys
-   * counted that instrument twice. Two keys are one instrument exactly when `symbolsMatch` says so, so the canonical form
-   * is the same normalisation. ⛔ NOT the row's `.symbol`: that merges a dual-key pair only while both keys hold rows
+   * counted that instrument twice. Two keys are one instrument exactly when their resolver normalisation agrees (the rule
+   * `symbolsMatch` applied until I2 moved filing onto the venue list). ⛔ NOT the row's `.symbol`: that merges a dual-key pair only while both keys hold rows
    * from the same REST write, and any single-key writer re-sets it to its own key. Memoised: keys are few and stable, and
    * the counters run on every recorded attempt.
    * ⚠️ A PHANTOM key (a primary the static map lacks, row `3n.l-a`) still counts as its own instrument: it matches nothing.
@@ -548,13 +557,25 @@ class UnifiedPriceCache {
   /**
    * A4.R10R-1: Batch retrieval for FX5 integration
    * Returns cached prices for a list of symbols, fetching missing ones if needed
+   *
+   * ⛔ B-PRICE-FEED-TRUTH I2 P2b (`#1173`, Langston Step-2 r2): `restEligible` is REQUIRED and names which of `symbols`
+   * may be fetched from Kraken's spot REST — the caller's own persisted asset class decides, never the symbol (16 USD
+   * tickers are both an xStock and a crypto pair, `XSTOCK_SPOT_KRAKEN_COLLISIONS`). Every symbol is still READ from the
+   * cache, so a fresh row another feed wrote is returned exactly as before; a stale INELIGIBLE symbol is neither
+   * fetched nor added to the bucket, and is counted `ineligible=` on the ledger. Required, so a mixed caller cannot
+   * forget it.
    */
-  async getBatch(bucketType: CacheBucketType, symbols: string[]): Promise<Map<string, CachedPrice>> {
+  async getBatch(
+    bucketType: CacheBucketType,
+    symbols: string[],
+    opts: { restEligible: ReadonlySet<string> },
+  ): Promise<Map<string, CachedPrice>> {
     const result = new Map<string, CachedPrice>();
     const bucket = this.buckets.find(b => b.type === bucketType);
     const refreshInterval = bucket?.refreshIntervalMs ?? 30000;
     const now = Date.now();
     const missingSymbols: string[] = [];
+    let ineligible = 0;
 
     for (const symbol of symbols) {
       const cached = this.cache.get(symbol);
@@ -562,48 +583,43 @@ class UnifiedPriceCache {
       
       if (isFresh) {
         result.set(symbol, cached);
-      } else {
+      } else if (opts.restEligible.has(symbol)) {
         missingSymbols.push(symbol);
         if (bucket && !bucket.symbols.has(symbol)) {
           bucket.symbols.add(symbol);
         }
+      } else {
+        ineligible++;
       }
     }
 
-    if (missingSymbols.length > 0) {
+    if (missingSymbols.length > 0 || ineligible > 0) {
       const writes: RestWriteKeys[] = []; // `3n.l` P3
+      let unlisted: string[] = [];
+      let unresolved = 0;
       try {
-        for (let i = 0; i < missingSymbols.length; i += this.BATCH_SIZE) {
-          const batch = missingSymbols.slice(i, i + this.BATCH_SIZE);
-          const pairString = batch.map(s => this.toKrakenSymbol(s)).join(',');
-          
-          await this.safeFetch(1, async () => {
-            const data = await this.krakenService.getTicker(pairString);
-            
-            for (const [pair, ticker] of Object.entries(data)) {
-              const normalizedSymbol = normalizeKrakenPair(pair);
-              // `3n.l` increment 2 (P8, P9 ii): one row builder for the three REST ticker sites, built PER KEY WRITTEN.
-              const tickerData = this.restTickerRow(normalizedSymbol, normalizedSymbol, ticker, 'rest_batch', now);
-              this.cache.set(normalizedSymbol, tickerData);
-              result.set(normalizedSymbol, tickerData);
-
-              const requestedSymbol = batch.find(s => this.symbolsMatch(s, normalizedSymbol));
-              if (requestedSymbol && requestedSymbol !== normalizedSymbol) {
-                const requestedRow = this.restTickerRow(requestedSymbol, normalizedSymbol, ticker, 'rest_batch', now);
-                this.cache.set(requestedSymbol, requestedRow);
-                result.set(requestedSymbol, requestedRow);
-              }
-              writes.push({ responseKey: pair, writtenKeys: requestedSymbol && requestedSymbol !== normalizedSymbol ? [normalizedSymbol, requestedSymbol] : [normalizedSymbol] });
-            }
-          });
+        // I2 P5: before the venue's pair list is ready nothing is sent; the eligible symbols show as missing.
+        if (missingSymbols.length > 0 && this.venueReady()) {
+          const plan = this.planRestRequest(missingSymbols);
+          unlisted = plan.unlisted;
+          const pairs = Array.from(plan.sent.keys());
+          for (let i = 0; i < pairs.length; i += this.BATCH_SIZE) {
+            const chunk = pairs.slice(i, i + this.BATCH_SIZE);
+            await this.safeFetch(1, async () => {
+              const data = await this.krakenService.getTicker(chunk.join(','));
+              unresolved += this.fileRestResponse(data, plan.sent, 'rest_batch', now, writes, (key, row) => result.set(key, row));
+            });
+          }
+          console.log(`[A4.R10R-1][PriceCache][getBatch] Fetched ${missingSymbols.length} missing symbols for ${bucketType}`);
         }
-        console.log(`[A4.R10R-1][PriceCache][getBatch] Fetched ${missingSymbols.length} missing symbols for ${bucketType}`);
       } catch (err: any) {
         console.warn(`[A4.R10R-1][PriceCache][getBatch] Error fetching batch:`, err.message);
       } finally {
         // `3n.l` P3, Step-4 condition C1: a throwing chunk no longer discards the call's ledger, and the symbols it did
         // not write show as MISSING, including those of the chunks after it that were never attempted.
-        this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.toKrakenSymbol(sym)));
+        // I2 (Step-2 C1): `requested` is the ELIGIBLE set, so the identity stays exact; `ineligible` is counted beside it.
+        this.writeKeyAcc.getBatch.add(buildWriteKeyLedger('getBatch', missingSymbols, writes, sym => this.venue.toKrakenRest(sym) ?? sym,
+          { unlisted, ineligible, unresolved }));
       }
     }
 
@@ -631,15 +647,13 @@ class UnifiedPriceCache {
     const r = kinds.rows;
     const l = kinds.levelReads;
     console.log(`[A4.R10R-1][PriceCache][HEALTH] open=${open} rtb=${rtb} fx5=${fx5} vts=${vts} weight=${this.currentWeight}/${this.MAX_WEIGHT_PER_SECOND} cacheSize=${this.cache.size} rowKind=mid:${r.mid},last:${r.last},unknown:${r.unknown} levelReadKind=mid:${l.mid},last:${l.last},unknown:${l.unknown}`);
-    // `3n.l` P3: the on-demand sites print their own interval, each on its own line (Step-2 condition c).
-    for (const acc of [this.writeKeyAcc.getPrice, this.writeKeyAcc.getBatch]) {
-      const line = acc.flushLine();
-      if (line) console.log(line);
-    }
+    // `3n.l` P3: the on-demand site prints its own interval on its own line (Step-2 condition c).
+    const line = this.writeKeyAcc.getBatch.flushLine();
+    if (line) console.log(line);
   }
 
-  /** `3n.l` P3: the on-demand REST sites' ledgers, summed between health lines. */
-  private writeKeyAcc = { getPrice: new WriteKeyAccumulator('getPrice'), getBatch: new WriteKeyAccumulator('getBatch') };
+  /** `3n.l` P3: the on-demand REST site's ledger, summed between health lines (`getPrice` deleted in I2). */
+  private writeKeyAcc = { getBatch: new WriteKeyAccumulator('getBatch') };
 
   private logWriteKeys(ledger: WriteKeyLedger, extra: string): void {
     console.log(formatWriteKeyLedger(ledger, extra));
@@ -650,7 +664,7 @@ class UnifiedPriceCache {
     // ⛔ Step-2 C1 (Langston): keyed to the union so a new writer that is not listed here fails the build. As
     // `Record<string, number>` a widened union compiled and `counts[newWriter]++` printed `NaN`.
     const counts: Record<SidesWriter | 'none', number> = {
-      ws_ticker: 0, ws_book: 0, rest_poller: 0, rest_fetch: 0, rest_batch: 0, rest_adapter: 0, rest_engine: 0, none: 0,
+      ws_ticker: 0, ws_book: 0, rest_poller: 0, rest_batch: 0, rest_adapter: 0, rest_engine: 0, none: 0,
     };
     for (const sym of symbols) counts[this.cache.get(sym)?.sidesWriter ?? 'none']++;
     return Object.entries(counts).map(([k, v]) => `${k}:${v}`).join(',');
