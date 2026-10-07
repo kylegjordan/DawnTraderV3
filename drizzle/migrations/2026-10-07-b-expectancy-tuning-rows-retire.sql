@@ -10,9 +10,11 @@
 -- callers by B-VTS-TELEMETRY-AGGREGATES (row 4a, d4c688b88), which also took the module out of the boot warm-up's
 -- PREFETCH_MODULES. Nothing reads them now.
 --
--- FORWARD IS SAFE FOR TWO INDEPENDENT REASONS: (i) ancestry — any sha carrying this file carries d4c688b88, so this
+-- FORWARD IS SAFE FOR THREE INDEPENDENT REASONS: (i) ancestry — any sha carrying this file carries d4c688b88, so this
 -- DELETE can never meet pre-4a code; (ii) sequence — dt-deploy runs build → db:migrate → pm2 restart
--- (SYSTEM_MANUAL.md:13234), so the new build is already on disk before this runs.
+-- (SYSTEM_MANUAL.md:13234), so the new build is already on disk before this runs. (iii) execution order is MANIFEST.txt,
+-- not a directory sort — the rollback's name sorts BEFORE this file's, so a lexical runner would INSERT then DELETE;
+-- the MANIFEST makes that moot (Langston, Step 4).
 --
 -- ⛔ ROLLBACK ORDER — the one live hazard is BACKWARDS. b72-warmup.ts throws at boot on a prefetched module with zero
 -- rows, and code before d4c688b88 prefetches 'expectancy_tuning'. To roll code back past d4c688b88: run

@@ -61,7 +61,8 @@ describe('row 4a2 — the expectancy_tuning rows are retired', () => {
   it('TEXT (forward): deletes exactly the three names under the one module', () => {
     const f = readFileSync(join(MIG, FORWARD), 'utf8');
     const del = f.slice(f.indexOf('DELETE FROM module_constants'));
-    expect(del).toMatch(/WHERE module_name = 'expectancy_tuning'/);
+    // Langston Step 4: a token count fences arity, never shape — assert the predicate as a unit so AND→OR / IN→NOT IN fail.
+    expect(del).toMatch(/WHERE module_name = 'expectancy_tuning'\s+AND constant_name IN \(/);
     for (const n of NAMES) expect(del).toContain(`'${n}'`);
     expect(del.match(/'[a-z_]+'/g)?.length).toBe(1 + NAMES.length); // the module + the three names, nothing else
   });
