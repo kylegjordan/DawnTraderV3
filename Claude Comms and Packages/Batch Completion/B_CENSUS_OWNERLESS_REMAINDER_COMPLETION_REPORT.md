@@ -1,6 +1,6 @@
 # B-CENSUS-OWNERLESS-REMAINDER (#1167) — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1s (after row 1n) · **change-class:** `non_architecture` · **Scope** r1 `15840860b` (APPROVED with C1-C5) · **Pre-audit** r1 (APPROVED with one condition) · **Ledger** `e8c247aec` · **Code** reviewed `2fc2fcdd9`, landed `9dbc86c47` + `d728f903d` · **Step 8** CONFIRMED by Langston 2026-10-08 · ⏳ **closes on Langston's Step-11 confirm**
+**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1s (after row 1n) · **change-class:** `non_architecture` · **Scope** r1 `15840860b` (APPROVED with C1-C5) · **Pre-audit** r1 (APPROVED with one condition) · **Ledger** `e8c247aec` · **Code** reviewed `2fc2fcdd9`, landed `9dbc86c47` + `d728f903d` · **Step 8 and Step 11** CONFIRMED by Langston 2026-10-08 — ✅ **CLOSED**
 
 ## OPEN AT CLOSE — stated first
 **No scope objective is open.** Langston's reach, stated by him: he cannot read CI job logs (`gh run view --log` → HTTP 403), so the figure **167** for the census suite in CI is reported fact; the per-job green and the mechanism that yields 167 are his own.

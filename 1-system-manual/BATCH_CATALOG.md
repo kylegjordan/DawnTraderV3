@@ -1198,7 +1198,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **HOMES PLACED:** none new. **Docs:** shared MEMORY §4.5 vocabulary (`WATCHER-STATE-*`, kept under the 24,576 B cap), the wake-watcher runbook (incl. the crash → hand-delete clause), the SIM wake block.
 
-## B-CENSUS-OWNERLESS-REMAINDER (CC-A, sprint plan row 1s — after row 1n; `#1167`) — change-class `non_architecture` — ⏳ **STEP 10 — closes at Step 11** (Step 2 APPROVED with C1-C5; Step 4 r2 APPROVED 2026-10-08, landed `d728f903d`; Step 8 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_CENSUS_OWNERLESS_REMAINDER_COMPLETION_REPORT.md`)
+## B-CENSUS-OWNERLESS-REMAINDER (CC-A, sprint plan row 1s — after row 1n; `#1167`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-08** (Step 2 APPROVED with C1-C5; Step 4 r2 APPROVED 2026-10-08, landed `d728f903d`; Step 8 and Step 11 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_CENSUS_OWNERLESS_REMAINDER_COMPLETION_REPORT.md`)
 
 **WHAT IT DID.** After row 1n, 48 open issues had a place in the plan but no owner the census could read, so no census list showed them. Three were already finished and are closed with citations (`#154`, `#298`, `#302`); the other 45 each carry one `W41 triage, row 1s … OWNER <session> — <why>` line (CC-A 12 · CC-B 15 · CC-C 3 · Infra Claude 15), defaulting to the session the placing line names, and the after-live lines that read `(—)` or Kyle now name the same owner. Handed over by number; no refusal.
 
