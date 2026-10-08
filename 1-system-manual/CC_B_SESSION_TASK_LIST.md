@@ -6,7 +6,8 @@
 
 | batch | step | waiting on |
 |---|---|---|
-| **`B-ATR-BAD-PRINT`** (row 2a, `#1153`) · **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) · hotfix **`B-LIVE-BANNER-ACTIVE-HOTFIX`** (row 2a0h, `#1160`) · **`B-ENGINE-HEARTBEAT-DEAD-PATHS`** (row 2a0b, `#1158`) | **STEP 5 of 11 done — Step 4 APPROVED, CI green** | the deploy at `0c8ef5da2`, not before 2026-10-07T15:53Z (`#1154`); plan `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`. 2a0b's Step 7 is a HARD GATE at the next 02:15Z sweep. |
+| **`B-ATR-BAD-PRINT`** (row 2a, `#1153`) · **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) · hotfix **`B-LIVE-BANNER-ACTIVE-HOTFIX`** (row 2a0h, `#1160`) | **deployed 2026-10-07 15:56Z — STEP 7** | 2a0h: Langston's close confirm (record sent) · 2a: the first crypto open since the deploy, to read its `atr_at_open` · 2a0: the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
+| **`B-ENGINE-HEARTBEAT-DEAD-PATHS`** (row 2a0b, `#1158`→`#521`) | **STEP 10 of 11 done** — sweep gate passed, Step 8 confirmed | Langston's Step-11 confirm |
 | **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c, `#1159`) · **`B-ROOT-DUPLICATE-SCANNER-RETIRE`** (row 2a0d, `#1161`) | **2a0c: Step 4 APPROVED · 2a0d: STEP 5 of 11 done** | the deploy AFTER today's (2a0c needs the heartbeat writer gone and restarted first) |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a, `#1123`) | **STEP 4 of 11** — code `3a549e3a9` | Langston's Step-4 ruling |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1, `#526`/`#994`/`#638`) | **STEP 4 of 11** — r2 PROCEED; r3 condition at `b70ab5975` | Langston confirming the r3 condition. The xStock exit-freshness alerts stay ACTIVE and UNACKED until it ships (Langston 2026-10-07). |

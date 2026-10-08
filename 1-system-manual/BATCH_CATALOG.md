@@ -1205,3 +1205,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **THE FIX.** One shared helper, `isEngineActiveForMode`; all three displays read the per-mode flag; the mode-agnostic read removed from the hook.
 
 **RESULT.** Live banner STOPPED while paper runs, Paper banner ACTIVE (Claude-in-Chrome, 2026-10-07 15:58Z). **Left:** the view-default half of `#1160` (Kyle's decision); the WebSocket payload (`#1164`, row 2a0i).
+
+## B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b — after row 2a0; `#1158` merged into `#521`) — change-class `non_architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED at r3 `635e7132d`; deployed 2026-10-07; the 02:15Z sweep gate passed; Step 8 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_ENGINE_HEARTBEAT_DEAD_PATHS_COMPLETION_REPORT.md`)
+
+**WHAT IT REMOVED.** The engine heartbeat's session check and boot recovery, which could never act (they required a user id the single-tenant session row no longer has — `#521`, found 2026-07-16), the cluster-bus events it published that nothing read, the old auto-test harness, `clearStaleBusyFlag` (zero callers) and two unused bus helpers.
+
+**WHAT IT KEPT AND FIXED.** A 30-second orphan-manager backstop, now one rule shared with the start path: stop the orphaned manager first, then clear it, queued so it never runs beside a start or stop. `/status` reports running only when a manager exists. A failed engine-flag write now raises an alert. The write-only `cluster_bus_event` table got 30-day retention on the nightly sweep.
+
+**RESULT (deployed `0c8ef5da2`).** 0 bus events written since the restart; the 10-08 02:15Z sweep processed 18 of 18 tables including the new one (185,865 old rows removed), failed=0. **Closed:** `#521`, `#1158`, `#404`. **Moved:** `#214` to row 2a0i. **Next:** row 2a0c drops the table itself.
