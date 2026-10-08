@@ -1197,3 +1197,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **INSTALL.** By hand on the laptop (`#1004` class): sha256 of `~/.claude/cc-wake-filter.py` = the blob at `6cb848b22`; CC-A's watcher re-armed on it; the others pick it up at their next re-arm.
 
 **HOMES PLACED:** none new. **Docs:** shared MEMORY §4.5 vocabulary (`WATCHER-STATE-*`, kept under the 24,576 B cap), the wake-watcher runbook (incl. the crash → hand-delete clause), the SIM wake block.
+
+## B-LIVE-BANNER-ACTIVE-HOTFIX (CC-B, hotfix, Kyle-assigned 2026-10-07; `#1160` ACTIVE half; sprint row 2a0h) — change-class `hotfix` — ⏳ **closes on Langston's confirm** (hotfix gate APPROVED at `e2b5a84a4`; deployed 2026-10-07; report `Batch Completion/B_LIVE_BANNER_ACTIVE_HOTFIX_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** The Live Trading page's banner said *Live Trading Mode — real capital at risk — ACTIVE* while only paper ran: the client read the server's mode-agnostic `active` flag as if it meant this mode. The paper toggle and the filter-health widget had the same read.
+
+**THE FIX.** One shared helper, `isEngineActiveForMode`; all three displays read the per-mode flag; the mode-agnostic read removed from the hook.
+
+**RESULT.** Live banner STOPPED while paper runs, Paper banner ACTIVE (Claude-in-Chrome, 2026-10-07 15:58Z). **Left:** the view-default half of `#1160` (Kyle's decision); the WebSocket payload (`#1164`, row 2a0i).

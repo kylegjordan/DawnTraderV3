@@ -1,5 +1,15 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-07-A — `B-LIVE-BANNER-ACTIVE-HOTFIX` (hotfix, `#1160` ACTIVE half, CC-B, Kyle-assigned) — the Live Trading banner said ACTIVE while only paper ran
+
+**CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_LIVE_BANNER_ACTIVE_HOTFIX_SCOPE.md`. Plan row 2a0h.
+**SYMPTOM (CC-INFRA, staging 2026-10-06/07):** the Live Trading page's banner read *"Live Trading Mode • Real capital at risk | ACTIVE"* while the live engine was stopped; `/api/trading/status` returned `isEngineActiveLive: false`, `isEngineActivePaper: true`, `active: true`.
+**MECHANISM:** the server's `active` is mode-agnostic (`isActiveEngineRunning || isLiveEngineRunning`); the client's banner, the paper start/stop toggle and the filter-health widget read it as though it were per mode (`use-trading.tsx` `isTradingActive`; `deriveIsActive` returned `active` first).
+**BLAST RADIUS:** display only — one hook, three components; no server, engine, trading or data change. Census of every client read of the active state: the three above were the defect, `top-bar.tsx:144` was already per mode.
+**FIX:** new `shared/engine-active.ts` `isEngineActiveForMode(status, mode, paperRunning?)`; the hook's per-mode flags come from it and the mode-agnostic `isTradingActive` is removed; the banner, the paper toggle and the filter-health widget read the per-mode flag. Test `b-live-banner-active-hotfix.test.ts` (8; the three fences fail on the pre-fix client). ⚠️ **Behaviour change beyond the banner:** the filter-health widget now shows paper as running only when the PAPER engine runs (before: whenever any engine ran).
+**LANGSTON:** hotfix gate APPROVED 2026-10-07 at `e2b5a84a4`; CI 4/4 run `37543361562`. FINDING-1 (the WebSocket payload) homed `#1164`, row 2a0i.
+**VERIFIED — deployed `0c8ef5da2582e03effd21070fb09b9ad5715ed77` (2026-10-07T15:56:00Z), Claude-in-Chrome in Kyle's session, 15:58Z, the same instrument that showed it (the banner):** Live Trading banner **STOPPED** while paper runs; Paper Trading banner **ACTIVE**, its toggle on; the main Dashboard banner now reads Paper Trading Mode (it read Live Trading Mode — ACTIVE at 07:34Z the same day). **The view-default half of `#1160` (a fresh browser opens on the live view) is NOT in this fix — Kyle's decision.**
+
 ## FIX-2026-10-04-A — `B-DASHBOARD-STATS-BLANK` (hotfix, `#903`, CC-B, Kyle-reported) — two blank figures on the staging dashboards
 
 **CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_DASHBOARD_STATS_BLANK_SCOPE.md`. **Ships with deploy B (not before 2026-10-05); no migration.**
