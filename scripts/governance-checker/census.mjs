@@ -687,6 +687,9 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
 // number, by HOME batch, parked, roadmap, U1..U6] · c [issues, lines, matches] · cx excluded dated · d rows · dx excluded d rows ·
 // e [refs, unmatched] · f [new, total] · g §6 alert (0/1) · sc self-contradicting · r reused numbers · al the after-live
 // recount's things-to-look-at (#1180) · po placed but ownerless · hv handover.
+// `al` CONVENTION (Langston, Step 4): it folds five conditions into one number, and some of them (a partial strike) stay
+// counted LIVE — so a non-zero `al` holds until a person edits the list. A non-zero that survives a week is a task to do,
+// never background noise to learn to ignore; the detail is in lists.al.
 // ⚠️ THE SLICE IS FULL (Langston, B-AFTERLIVE-TOTAL-RULE Step 2): with every count at 9,999 the counts object fills the
 // first 300 characters of the metadata almost exactly (P45 prints the length). The 300 is Discord's DISPLAY truncation
 // (`scripts/system-alerts.ts:87`), not a store limit — over it, the counts are no longer recoverable from the post, nothing

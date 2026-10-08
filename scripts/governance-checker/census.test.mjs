@@ -15,6 +15,9 @@ import { CENSUS_BODY_MAX } from './config.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
+// #1180 (Langston Step-4 finding): the keys a REAL runCensus result ships, recorded where one is built (the (b′) block),
+// so P45 can be fenced against them — a maximum-size fixture missing a key measured a smaller object than ships, twice.
+let LIVE_COUNT_KEYS = null, LIVE_LIST_KEYS = null;
 const throws = (fn, re) => { try { fn(); return false; } catch (e) { return re.test(String(e.message)); } };
 
 // ── R1: the status word and the OPEN rule (pre-audit §1.1 R1) ──
@@ -383,6 +386,7 @@ const readers = (over = {}) => ({
   ok('(b′) a placed issue with a filer is not listed', !r2.b.placedOwnerless.some((x) => x.n === 300));
   ok('(b′) counts carry po and the owner sources count placingLine', censusCounts(r2).po === 1 && r2.ownerSources.placingLine === 1 && censusLists(r2).po.join() === '302');
   ok('(b′) the alert body names it', /placed but ownerless 1/.test(censusAlert(r2, { week: '2026-W42', severity: 'info' }).body));
+  LIVE_COUNT_KEYS = Object.keys(censusCounts(r2)); LIVE_LIST_KEYS = Object.keys(censusLists(r2));
   // Langston Step-4 BLOCKER-2: the HOME-id leg of placingOwnerOf, reached for real (no stub). #303 has no owner of its own
   // and is placed ONLY through `HOME: B-ALPHA`, row 1's batch cell (owner CC-A) → `placing-line CC-A`. #304 is placed only
   // through a NOTE homing form (`with B-NOTEONLY` on row 107, owner CC-B) → `placing-line CC-B` (FINDING-1: the same rules
@@ -452,6 +456,13 @@ function frameResurface(alert, d, nowMs) {
   // #1180: print both lengths every run — the body against CENSUS_BODY_MAX, the counts object against the 300 slice.
   console.log(`  P45 lengths: body ${t.body.length}/${CENSUS_BODY_MAX} · counts object ${JSON.stringify(nines).length} chars, ends at metadata char ${meta.indexOf('},"dedupe_key"') + 1}/300`);
   ok('P45 the counts carry al and po (#1180, the keys runCensus ships)', 'al' in counts && 'po' in counts, JSON.stringify(Object.keys(counts)));
+  // THE FENCE (#1180, Langston Step 4): every counts key and every lists key a real runCensus result ships must be in the
+  // maximum-size fixture — so the next key cannot be added without P45 measuring it (the B-CENSUS-OWNERLESS-REMAINDER
+  // overrun was exactly a key P45 did not carry).
+  const pCounts = Object.keys(counts), pLists = Object.keys(censusLists(r));
+  ok('P45 FENCE: LIVE_COUNT_KEYS was recorded from a real runCensus result (the fence is armed)', Array.isArray(LIVE_COUNT_KEYS) && LIVE_COUNT_KEYS.length > 10);
+  ok('P45 FENCE: every counts key a real census ships is in the maximum-size fixture', (LIVE_COUNT_KEYS || []).every((k) => pCounts.includes(k)), JSON.stringify((LIVE_COUNT_KEYS || []).filter((k) => !pCounts.includes(k))));
+  ok('P45 FENCE: every lists key a real census ships is in the maximum-size fixture', (LIVE_LIST_KEYS || []).every((k) => pLists.includes(k)), JSON.stringify((LIVE_LIST_KEYS || []).filter((k) => !pLists.includes(k))));
   ok('P45 metadata key order: counts, dedupe_key, source, week, ref, lists', Object.keys(JSON.parse(meta)).join() === 'counts,dedupe_key,source,week,ref,lists');
   ok('P45 metadata ≤ 64 KB (lists cut with a stated marker when over)', Buffer.byteLength(meta) <= 65536 && (JSON.parse(meta).lists.truncated ? /box file/.test(JSON.parse(meta).lists.truncated) : true));
   const alert = { id: '12345678-aaaa-bbbb-cccc-1234567890ab', category: 'verification', severity: 'warning', title: t.title, body: t.body,
