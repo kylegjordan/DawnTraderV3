@@ -1213,3 +1213,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT KEPT AND FIXED.** A 30-second orphan-manager backstop, now one rule shared with the start path: stop the orphaned manager first, then clear it, queued so it never runs beside a start or stop. `/status` reports running only when a manager exists. A failed engine-flag write now raises an alert. The write-only `cluster_bus_event` table got 30-day retention on the nightly sweep.
 
 **RESULT (deployed `0c8ef5da2`).** 0 bus events written since the restart; the 10-08 02:15Z sweep processed 18 of 18 tables including the new one (185,865 old rows removed), failed=0. **Closed:** `#521`, `#1158`, `#404`. **Moved:** `#214` to row 2a0i. **Next:** row 2a0c drops the table itself.
+
+## B-EXPECTANCY-TUNING-ROWS-RETIRE (CC-C, sprint plan row 4a2 — after row 4a; `#1156`) — change-class `non_architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED at `2fee017cc`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-07 22:52Z; report `Batch Completion/B_EXPECTANCY_TUNING_ROWS_RETIRE_COMPLETION_REPORT.md`)
+
+**WHAT IT RETIRED.** The three `expectancy_tuning` rows in `module_constants` (win-rate floor 0.4 / medium 0.5 / high 0.6), whose only reader `getAdjustedMinROI` row 4a deleted.
+
+**HOW.** A forward migration deleting exactly the three rows, and a tracked rollback that restores them with their values and `updated_by`. **Order:** ships with row 4a or later; a code rollback to before `d4c688b88` runs the rollback FIRST, or the older code refuses boot.
+
+**RESULT.** 0 rows on staging after the deploy (control `roi_gating` 10); clean boot, no warm-up line for the module. **Closed:** `#1156`.

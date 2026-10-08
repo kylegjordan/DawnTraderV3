@@ -1211,3 +1211,12 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **STATE-WRITE CENSUS (§9.5(a-ii)):** cache rows — still written by `refreshBucket`/`getBatch`/the WS and adapter writers, and no reader keys on `rest_fetch` (the only reader of the tag, the P-7k source fence, is updated in the same commit); bucket membership — the remaining writers are `subscribe` (crypto callers), `getBatch`'s eligible re-injection and `setReasonMembers`; the ledger accumulator and its log line — read only by `logHealthLine`, removed with it, and by no script (`git grep` over `scripts/` and `server/`). The two tests that called it are re-pointed onto `getBatch`.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/price-cache.getPrice.ts.removed`.
 **COMMIT:** the `B-PRICE-FEED-TRUTH` I2 Step-3 commit that adds this entry.
+
+## 2026-10-08 — the three `expectancy_tuning` rows in `module_constants` — B-EXPECTANCY-TUNING-ROWS-RETIRE (row 4a2, `#1156`)
+| removed | where | what it was |
+|---|---|---|
+| `expectancy_tuning` × 3 rows (win-rate floor 0.4, medium 0.5, high 0.6; scope `(*, *, *, *)`) | `module_constants` (staging + every environment the migration runs in) | thresholds read only by `getAdjustedMinROI`, deleted by row 4a (`B-VTS-TELEMETRY-AGGREGATES`); the boot warm-up's prefetch of the module was removed in the same row |
+**WHY:** no reader remained, so the rows looked tunable and did nothing (`LEVER_INVENTORY.md` B72-CORE-008/009/010).
+**CENSUS:** readers of the module at `d4c688b88` — none (the deleted function was the only one; Langston re-derived at Step 2); writers — the seed migration only.
+**ROLLBACK / ARCHIVE:** `drizzle/migrations/2026-10-07-b-expectancy-tuning-rows-retire-rollback.sql` (tracked) restores all three with their values and `updated_by`. **Order: run it BEFORE deploying any code older than `d4c688b88`, or that code refuses boot.**
+**COMMIT:** migration `2fee017cc` (+ header `ff5a21d39`); deployed `0c8ef5da2`.

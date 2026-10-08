@@ -1290,3 +1290,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm
 
 **The engine heartbeat now does only the one job it could ever do.** Since July we had known that its session check and its start-up recovery could never act — they looked for a user id the system stopped using long ago — and that it was writing a stream of status events nobody read. Those are gone. What remains checks every 30 seconds for an engine left running without its record and stops it cleanly. The old events table now gets cleaned nightly, and the first clean-up ran without a hitch; a later batch deletes the table itself.
+
+### 2026-10-08 — B-EXPECTANCY-TUNING-ROWS-RETIRE (CC-C, sprint plan row 4a2) — ⏳ closes on Langston's Step-11 confirm
+
+**Three settings that no longer did anything are gone.** They were win-rate thresholds for a function deleted the day before, so they sat in the settings table looking adjustable while nothing read them. The database now holds no such rows, the system starts cleanly without them, and the way to restore them is saved in case an older version of the code ever has to be brought back.
