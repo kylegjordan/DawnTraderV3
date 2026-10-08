@@ -29,7 +29,7 @@ Positions the arm touches: 37 of 78 (floor bound 41). Longest single blind episo
 Before deploy B (4 segments, 17.2 h): too small to read; MGM 13.8 h blind on stale marks.
 
 ## Reading
-Today an open paper xStock position goes unwatched ~16% of its holding time, mostly on stale marks overnight. ON adds between +0.3 h (+0.05 points) and +60 h (+10.7 points). Langston's finding 3 (ON freezes the ring at pre-blowout spreads, so thr drifts toward its floor overnight) puts the likely ON cost toward the upper bound. **INTERIM: may not be cited as the 21-day window's read** (`GOVERNANCE_EXCEPTIONS.md:41`).
+Today an open paper xStock position goes unwatched ~16% of its holding time, mostly on stale marks overnight. ON adds between +0.3 h (+0.05 points) and +60 h (+10.7 points). ⚠️ SUPERSEDED by the ruling below: the +60 h figure bounds only direct refusals, and the yield/re-seed cascade adds hours per yield on top. **INTERIM: may not be cited as the 21-day window's read** (`GOVERNANCE_EXCEPTIONS.md:41`).
 
 ## Langston's ruling (2026-10-08 07:27Z, at `68b298dbb`, re-derived by him)
 - **Method APPROVED** (all three streams are the active path's own stderr lines; the 5 s cover is validated by HUT's one refuse line per 1.80 s; `unknown` 0.04%).
