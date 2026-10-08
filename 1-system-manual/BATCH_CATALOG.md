@@ -1218,6 +1218,14 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **OPEN, ON AN ALERT:** OBJ-4 — the first self-advance reply after the restart opens with its requester. Alert `3668b78b-30df-4621-82be-78332bc9040e`, a daily check-in, resolved with the quoted lead name, never acked.
 
+## B-LEDGER-TAIL-DISPOSITION (CC-A, sprint plan row 1u — after row 1s; `#1169`) — change-class `non_architecture` — ⏳ **STEP 10 — closes at Step 11** (Step 1 r1 SENT BACK, r2 APPROVED; Step 2 APPROVED with C-4..C-6; Step 4 APPROVED with one condition, landed `7e6e78b89` + `6a95458d8`; Step 8 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_LEDGER_TAIL_DISPOSITION_COMPLETION_REPORT.md`)
+
+**WHAT IT DID.** Two open issues (`#395`, `#398`) said RESOLVED only in a trailing cell of their head line, so the census counted them open forever and its self-contradiction check — which runs only on entries with no status head — could not see the shape. Both read and closed in place with citations. The census gained a **tail leg** of the self-contradicting list: an `openR1` entry whose head line's last ` \| ` cell begins with a word of the file's own `CONTRADICTS` set (a Set built from its source — never `.test()`, stateful under `g`); a cell inside a code span or opening with another issue's number is not read; the entry's own number is read past. Lists only; every row now carries `leg: head|tail`. PARKED/ADDRESSED/REWRITTEN tails were ruled a separate tidiness class and not touched.
+
+**RESULT.** Deployed by the checker's 06:09:50Z self-deploy (`92555b26c`): the dry run lists `#395`, `#398` at `cc2cc29e0` and none at the deployed head. Tests 183/0; five mutations each fail only their own test.
+
+**HOMES PLACED:** `#1178` — the null-reason global is not serial at the crypto VTS read (a hypothesis: 2 exposed paths, 0 fires) — row 52a `B-NULL-REASON-LOCAL` + after-live `B-NULL-REASON-RETURN-VALUE`, both CC-B · `#1179` the wake lease and a reused pid (row 1w, CC-A) · `#1180` the after-live headline total (row 1x, CC-A).
+
 ## B-LIVE-BANNER-ACTIVE-HOTFIX (CC-B, hotfix, Kyle-assigned 2026-10-07; `#1160` ACTIVE half; sprint row 2a0h) — change-class `hotfix` — ⏳ **closes on Langston's confirm** (hotfix gate APPROVED at `e2b5a84a4`; deployed 2026-10-07; report `Batch Completion/B_LIVE_BANNER_ACTIVE_HOTFIX_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The Live Trading page's banner said *Live Trading Mode — real capital at risk — ACTIVE* while only paper ran: the client read the server's mode-agnostic `active` flag as if it meant this mode. The paper toggle and the filter-health widget had the same read.
