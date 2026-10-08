@@ -1299,6 +1299,10 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-08 — B-LEDGER-TAIL-DISPOSITION (CC-A, sprint plan row 1u) — ✅ CLOSED 2026-10-08
 
 **Two old issues that said "resolved" only in their last line are closed, and the census now notices that pattern.** Each was checked before closing: one fix is in the code, and the other error has not appeared once in a week of server logs. The weekly census now lists any open issue whose final note says it is finished, so a person can close it with proof — it never closes anything itself. Checking one of them turned up a possible mislabelling in the VTS's "why no signal" records, now placed with New Claude to measure first.
+
+### 2026-10-08 — B-WAKE-LEASE-PID-REUSE (CC-A, sprint plan row 1w) — ⏳ closes on Langston's Step-11 confirm
+
+**The wake watcher's one-at-a-time lock no longer mistakes a dead watcher for a live one when Windows reuses its process number.** It happened for real this morning: the old watcher's number went to a Windows service, the lock refused every restart, and it would eventually have told the session to stop that service. The lock now recognises the case from the start time it records, and its "stuck" message only says "stop it" when it is sure the process is the session's own watcher. Installed on the laptop; each session picks it up the next time it restarts its watcher.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm
 
 **The engine heartbeat now does only the one job it could ever do.** Since July we had known that its session check and its start-up recovery could never act — they looked for a user id the system stopped using long ago — and that it was writing a stream of status events nobody read. Those are gone. What remains checks every 30 seconds for an engine left running without its record and stops it cleanly. The old events table now gets cleaned nightly, and the first clean-up ran without a hitch; a later batch deletes the table itself.

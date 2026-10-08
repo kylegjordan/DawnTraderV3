@@ -1226,6 +1226,16 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **HOMES PLACED:** `#1178` — the null-reason global is not serial at the crypto VTS read (a hypothesis: 2 exposed paths, 0 fires) — row 52a `B-NULL-REASON-LOCAL` + after-live `B-NULL-REASON-RETURN-VALUE`, both CC-B · `#1179` the wake lease and a reused pid (row 1w, CC-A) · `#1180` the after-live headline total (row 1x, CC-A).
 
+## B-WAKE-LEASE-PID-REUSE (CC-A, sprint plan row 1w — after row 1u; `#1179`) — change-class `non_architecture` — ⏳ **STEP 10 — closes at Step 11** (Step 1 APPROVED with C1-C6; Step 2 APPROVED with six in-commit conditions; Step 4 APPROVED at `2bfe98d4d` with two conditions, landed `01ba50771` + `8734c0acc`; Step 8 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_WAKE_LEASE_PID_REUSE_COMPLETION_REPORT.md`)
+
+**WHAT IT DOES.** The one-watcher-per-session lease (`B-WAKE-ARM-EXCLUSIVE`, `#1140`) read a DEAD holder as alive when Windows reused its pid for a process this user cannot open (live 2026-10-08: `svchost.exe` on pid 5448, error 5): every arm refused, and after 15 minutes `WATCHER-STUCK` told the session to stop that system process. Now `_proc` reports `denied` (error 5 exactly) and a pure `holder_verdict` decides: a refused pid under a lease that RECORDED its holder's creation time is not the holder (the lease proves the holder was ours and openable); with nothing recorded the ruled fail-safe stands (alive). `WATCHER-STUCK` says "stop it" only for a confirmed holder; otherwise it names the `tasklist` check. A lease taken without a creation time warns at take.
+
+**TESTS.** `test-wake-lease-verdict.py` (new, CI): `holder_verdict` read out of the repo copy with `ast`, 24-row truth table + named cases, 29/0, pre-fix control on exactly 2 pre-stated rows; Langston added two mutations of his own. `test-wake-lease.py` (Windows): pid 4 refused with error 5 asserted; the #1179 takeover and unconfirmed-STUCK wording pass and fail on the pre-fix filter; the confirmed-STUCK control passes on both.
+
+**INSTALL.** By hand (`#1004` class): `~/.claude/cc-wake-filter.py` sha256 = the blob at `1276bccc1`; CC-A re-armed 07:16Z; the other three sessions pick it up at their next re-arm.
+
+**HOMES PLACED:** `#1181` `dt-review` false absence on a 14-minute-old sha (Langston's §13) — row 1w1, Infra Claude.
+
 ## B-LIVE-BANNER-ACTIVE-HOTFIX (CC-B, hotfix, Kyle-assigned 2026-10-07; `#1160` ACTIVE half; sprint row 2a0h) — change-class `hotfix` — ⏳ **closes on Langston's confirm** (hotfix gate APPROVED at `e2b5a84a4`; deployed 2026-10-07; report `Batch Completion/B_LIVE_BANNER_ACTIVE_HOTFIX_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The Live Trading page's banner said *Live Trading Mode — real capital at risk — ACTIVE* while only paper ran: the client read the server's mode-agnostic `active` flag as if it meant this mode. The paper toggle and the filter-health widget had the same read.
