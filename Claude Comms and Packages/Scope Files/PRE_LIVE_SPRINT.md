@@ -2,7 +2,7 @@
 
 **Kyle's rule:** everything needed to get paper to the point where the mechanics are sound and working as intended, the thresholds / gates / regimes / strategies / scores are tuned, the prices are right, paper tells the truth, we capture the data we mean to learn from, and paper trades profitably and consistently — plus the live-mode fixes, mixed into the same push. **Everything else goes after live.** No phase names: one list, prioritised next.
 
-**In the sprint (snapshot 2026-09-28): 198** — the live order is the rows of `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, the one working order · **After live: 212** (+6 moved to the sprint; the counting rule is under that heading) · **Running now (observation windows):** the plan's §5 · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
+**In the sprint (snapshot 2026-09-28): 198** — the live order is the rows of `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, the one working order · **After live: 224** (+6 moved to the sprint, +4 struck through; the counting rule is under that heading) · **Running now (observation windows):** the plan's §5 · **Parked by Kyle: 7** · awaiting owner confirmation: see the draft's UNCONFIRMED section.
 
 > ⚠️ **Category is not schedule (Langston S1):** the counts below say WHY an item was in the sprint; WHEN it runs is the sprint plan's §4 (`1-system-manual/SPRINT_TO_LIVE_PLAN.md`), the one working order. Plan from §4, not from these counts.
 
@@ -24,11 +24,11 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 218 after live (+6 moved to the sprint, listed below)
+## After live — 224 after live (+6 moved to the sprint, +4 struck through, listed below)
 
-> Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (3). Recounted 2026-09-30: 221 − 6 − 3 = 212. The theme headings below use the same rule.
+> Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (4). Recounted 2026-10-08: 234 − 6 − 4 = 224 (the weekly census re-counts it since B-AFTERLIVE-TOTAL-RULE, #1180). The theme headings below use the same rule.
 
-### AMR and machine learning — 25 (+6 moved to the sprint)
+### AMR and machine learning — 25 (+6 moved to the sprint, +1 struck through)
 
 - #608 (CC-B) — ➡️ MOVED to the sprint, `SPRINT_TO_LIVE_PLAN` row 124a (Kyle 2026-09-30: fix the AMR's observation lens before live; switch-on stays after live)
 - #609 (CC-B) — ➡️ MOVED to the sprint, row 124a (Kyle 2026-09-30)
@@ -72,7 +72,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 72 (+3 struck through)
+### Crew, reviewer, governance and alert tooling — 73 (+3 struck through)
 - B-CI-TEST-HYGIENE (Infra Claude) — #403: the storage/SQE asset-class routing test times out under full-suite database contention; raise the per-test timeout or mock the call
 - #565 (—) — B-COMMS-RESTART-DURABILITY: a Discord message group lost when the bridge restarts (CC-C) — crew tooling, after live (W41 homing 2026-10-06)
 
@@ -151,7 +151,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - row:1 (CC-A) — crew-process rule mechanisms (B-RULES-1e) — governance tooling, no effect on trading
 - B-INSTRUMENTS-OVER-RULES OBJ-3 (CC-A) — change WHAT LOADS, not what exists: path-scoped rule files so a session loads the repo-wide rules plus only its own area; measured before/after from `~/.claude/instructions-loaded.jsonl` with a paired negative control (a named binding rule must still load); folded with B-RULES-1e, same subject. Moved here at the batch's close (Langston-ruled shape, 2026-10-01); the rest of the batch closed
 
-### Legacy and dead-code cleanup (the reachability census may pull some forward) — 21
+### Legacy and dead-code cleanup (the reachability census may pull some forward) — 22
 - #1086 (—) — B-GUARDRAIL-POLICY-ORPHAN: a dead block-code list and an orphan import (CC-C) — no live path reaches it (W41 homing 2026-10-06)
 
 - B-AI-CHAT-REMOVAL (CC-C) — Kyle 2026-09-30: the AI chat is dead code, remove it with finality. Its ACTION path (intent executor + the seven `/intent/*` routes + the approval components) goes NOW in `B-SIZING-DEC-RESTORE` 2e because it touches paper trading; THIS entry is the rest — conversation, saved chats, chat logs/costs routes, and the unmounted assistant/panel/container/sidebar/insights components (`ai-opportunities-tab` is mounted and stays). 0 calls in ~11 days of access logs. Pull forward if Kyle wants it before live.
@@ -258,7 +258,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 22.1 Build & Deploy Pipeline — - Production build validation - En (—) — already placed post-live in the roadmap
 - 22.2 Monitoring & Observability — - Production logging strategy ( (—) — already placed post-live in the roadmap
 
-### Perpetual futures — 5
+### Perpetual futures — 6
 
 - #144 (CC-C) — perpetual-futures activation checklist — perps come after live
 - #703 (—) — capture six commodity perpetuals as an asset class (CC-C) — perps come after live (W41 homing 2026-10-06)
