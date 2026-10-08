@@ -519,6 +519,7 @@ function frameResurface(alert, d, nowMs) {
     '### #906 ✅ CLOSED 2026-10-08 — closed in place',
     '- **#907 OPEN 2026-06-26 (x) — a cross-reference.** body | #386 RETRACTED its premise',      // C-6: a reference, not a state
     '- **#908 OPEN 2026-06-26 (x) — bold tail.** body | **DONE** (shipped)',                      // markup before the word
+    '- **#909 OPEN 2026-06-26 (x) — own number.** body | #909 CLOSED 2026-10-08 (by a commit)',   // own number: its own state
   ].join('\n'));
   const tail = L.selfContradicting.filter((x) => x.leg === 'tail').map((x) => x.issue);
   ok('T1 an OPEN-headed entry ending `| RESOLVED (…)` is listed by the tail leg', tail.includes(901), tail.join());
@@ -533,6 +534,8 @@ function frameResurface(alert, d, nowMs) {
   ok('T8 the tail leg does not change open status: #901 stays in openR1', L.openR1.has(901));
   ok('T9 every row carries its leg', L.selfContradicting.every((x) => x.leg === 'tail' || x.leg === 'head'));
   ok('T10 no tail cell → ""', tailStatusWord('- **#1 OPEN x** no cell here') === '');
+  ok('T12 a tail opening with the entry\'s OWN number is its own state — #909 listed (Langston Step-4 condition)', tail.includes(909), tail.join());
+  ok('T12 control: the same cell with another number is not read', tailStatusWord('x | #386 CLOSED y', 909) === '' && tailStatusWord('x | #909 CLOSED y', 909) === 'CLOSED');
 }
 {
   // T11 the head leg is unchanged and labelled — its existing fixture shape still lists, now with leg 'head'.

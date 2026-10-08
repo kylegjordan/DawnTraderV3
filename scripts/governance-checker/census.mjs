@@ -139,14 +139,19 @@ export function statusWord(text) {
 
 // B-LEDGER-TAIL-DISPOSITION (#1169): the status word of a head line's TRAILING CELL — the text after its last ` | `.
 // '' when there is no such cell, when that ` | ` sits inside a code span (an odd number of backticks before it:
-// quoted code such as `pre_audit | …`, not a cell), or when the cell opens with an issue reference (`#386 RETRACTED`
-// is another issue's state — the cross-reference the head leg's hand-check drops for #385; Langston C-6).
-export function tailStatusWord(line) {
+// quoted code such as `pre_audit | …`, not a cell), or when the cell opens with ANOTHER issue's number (`#386
+// RETRACTED` is that issue's state — the cross-reference the head leg's hand-check drops for #385; Langston C-6).
+// A cell opening with the entry's OWN number (`| #395 CLOSED …`, pass `own`) IS its own state: the number is read past.
+export function tailStatusWord(line, own) {
   const k = line.lastIndexOf(' | ');
   if (k < 0) return '';
   if ((line.slice(0, k).match(/`/g) || []).length % 2 === 1) return '';
-  const cell = line.slice(k + 3);
-  if (/^[\s*_`]*#\d/.test(cell)) return '';
+  let cell = line.slice(k + 3);
+  const ref = /^[\s*_`]*#(\d+)\b/.exec(cell);
+  if (ref) {
+    if (own === undefined || Number(ref[1]) !== Number(own)) return '';
+    cell = cell.slice(ref[0].length);
+  }
   return statusWord(cell);
 }
 
@@ -190,7 +195,7 @@ export function parseLedger(text) {
     if (e.words.has('OPEN') && !closed) {
       for (const h of e.heads) {
         if (h.word !== 'OPEN') continue;
-        const w = tailStatusWord(L[h.i]);
+        const w = tailStatusWord(L[h.i], e.n);
         if (w && CONTRADICTS_WORDS.has(w) && !selfContradicting.some((x) => x.issue === e.n)) {
           selfContradicting.push({ issue: e.n, headLine: h.i + 1, filer: filerOf(e), leg: 'tail', reason: `trailing cell carries "${w}" after an OPEN head` });
         }
@@ -856,7 +861,7 @@ function dryRun(argv) {
   const ruled = placement(L, plan, pls, rm, names);
   const moved = [...asBuilt].filter(([n, v]) => v !== ruled.get(n));
   out(`    R1-Q13 (a)↔(c) delta: ${moved.length} issue(s) place differently when every note-cell mention counts: ${moved.map(([n, v]) => `#${n}→${v}`).join(' ')}`);
-  out(`    self-contradicting sub-list (${r.b.selfContradicting.length}): ${r.b.selfContradicting.map((x) => `#${x.issue}@L${x.headLine} (${x.reason}; filer ${x.filer ?? '?'})`).join(' · ')}`);
+  out(`    self-contradicting sub-list (${r.b.selfContradicting.length}): ${r.b.selfContradicting.map((x) => `#${x.issue}@L${x.headLine} (${x.leg ?? '?'} leg: ${x.reason}; filer ${x.filer ?? '?'})`).join(' · ')}`);
   out(`    reused numbers (${r.b.reused.length}): ${r.b.reused.map((n) => '#' + n).join(' ')}`);
   for (const [name, set, owner, ex] of [['R1 × R2', L.openR1, false, {}], ['R1w × R2', L.open, false, {}], ['R1 × R2+OWNER', L.openR1, true, {}],
     ['R1w × R2+OWNER, #696 counted', L.open, true, {}], ['R1w × R2+OWNER, #696 excluded (Q25)', L.open, true, DATED_EXCLUSIONS]]) {
