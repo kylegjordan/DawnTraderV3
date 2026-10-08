@@ -1208,6 +1208,16 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **HOMES PLACED:** `#1169` (row 1u, a trailing disposition cell never closes an entry — Langston's Step-2 surface). The five text files carrying the same 0x08 corruption were restored in the Step-10 commit (Langston §13, disposition 1).
 
+## B-WAKE-SELF-ADVANCE-LEAD (CC-A, sprint plan row 1v — after row 1s; `#1177`) — change-class `non_architecture` — ⏳ **STEP 10 — closes at Step 11** (Step 1 r1 APPROVED with two conditions, r2 `68af4ccbf`; Step 2 APPROVED with two; Step 4 APPROVED at `34e51a966`, landed `f1030945d` + `34fa9e330`; Step 8 CONFIRMED by Langston 2026-10-08; OBJ-4 carried by alert `3668b78b`; report `Batch Completion/B_WAKE_SELF_ADVANCE_LEAD_COMPLETION_REPORT.md`)
+
+**WHAT IT DOES.** A reply Langston posts from his own review queue now opens with the name of the session that asked, so it wakes them. The queue's re-invoke carried the author label `self-advance`, and the bridge led the reply with that; once `OPEN_RE` was anchored (2026-09-30) such replies woke nobody (2 of 2 since; one sat ~15 h). The rule moved to `langston_queue.py` as two pure functions — `recipient_name(task, kyle_id)` (addressee → Kyle by id, only when `kyle_id` is set → display name) and `lead_with_addressee` (adds `(self-advance)` only when the bridge leads with a real addressee) — and the queue now stores the resolved name as `requester` (a Kyle item stores `Kyle`).
+
+**TESTS.** `langston_queue_test.py` R1-R7, L1-L4 — and the suite is in CI for the first time (Linux-only, `fcntl`); mutations drop-the-addressee 86/4, drop-the-marker 89/1. `test-wake-filter-cuts.py`: L1's exact string wakes CC-A; the pre-batch form wakes nobody (control).
+
+**INSTALL.** One combined restart of Langston's bridge with Infra Claude's `B-CREDENTIALS-PRIVATE-REPO` OBJ-4a P4 (SSH review remote, pinned `[REVIEW SOURCE]` preamble): idle-gated, the `langston` ssh `ls-remote` as a pre-restart gate, sha256 = the blobs at `34fa9e330`, restart 2026-10-08 04:55Z, a reply came back; Infra Claude verified his leg. Laptop filter (comment-only) = blob. `#1004` class.
+
+**OPEN, ON AN ALERT:** OBJ-4 — the first self-advance reply after the restart opens with its requester. Alert `3668b78b-30df-4621-82be-78332bc9040e`, a daily check-in, resolved with the quoted lead name, never acked.
+
 ## B-LIVE-BANNER-ACTIVE-HOTFIX (CC-B, hotfix, Kyle-assigned 2026-10-07; `#1160` ACTIVE half; sprint row 2a0h) — change-class `hotfix` — ⏳ **closes on Langston's confirm** (hotfix gate APPROVED at `e2b5a84a4`; deployed 2026-10-07; report `Batch Completion/B_LIVE_BANNER_ACTIVE_HOTFIX_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The Live Trading page's banner said *Live Trading Mode — real capital at risk — ACTIVE* while only paper ran: the client read the server's mode-agnostic `active` flag as if it meant this mode. The paper toggle and the filter-health widget had the same read.
