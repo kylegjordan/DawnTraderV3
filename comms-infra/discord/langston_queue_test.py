@@ -204,5 +204,34 @@ finally:
     try: _osmod.unlink(_tmpf)
     except Exception: pass
 
+# ── B-WAKE-SELF-ADVANCE-LEAD (#1177): who a reply is addressed to ───────────────────────────────
+KY = 111  # stands in for CFG["kyle_id"]
+_adv = lambda req: {"author_id": None, "author_name": "self-advance", "author_display": "self-advance",
+                    "self_advance": True, "addressee": req}
+ok("R1 self-advance on an OLD Claude item -> OLD Claude (was: self-advance)", q.recipient_name(_adv("OLD Claude"), KY) == "OLD Claude")
+ok("R2 direct CC post -> its display name (unchanged)",
+   q.recipient_name({"author_id": 5, "author_display": "NEW Claude", "author_name": "x"}, KY) == "NEW Claude")
+ok("R3 Kyle direct post -> Kyle, by id (unchanged)",
+   q.recipient_name({"author_id": KY, "author_display": "kylegjordan"}, KY) == "Kyle")
+# R4 composes the two sites the bridge uses: enqueue stores recipient_name(post) as `requester`, and the
+# self-advance task carries that requester as `addressee` (Langston Step-1 condition 2).
+_item = q.new_item("K1", q.recipient_name({"author_id": KY, "author_display": "kylegjordan"}, KY) or "?", "a review ask")
+ok("R4 a Kyle item enqueued then self-advanced -> Kyle (was: his username)",
+   _item["requester"] == "Kyle" and q.recipient_name(_adv(_item["requester"]), KY) == "Kyle")
+ok("R5 self-advance with no requester -> falls back to its label, as before", q.recipient_name(_adv(None), KY) == "self-advance")
+ok("R6 whitespace-only addressee falls through", q.recipient_name(_adv("   "), KY) == "self-advance")
+ok("R7 kyle_id unset never makes an id-less task Kyle", q.recipient_name(_adv(None), None) == "self-advance")
+# The posted text. LEAD_SELF_ADVANCE in scripts/analysis/test-wake-filter-cuts.py is THIS string: the filter
+# suite proves it wakes the requester, this one proves the bridge produces it.
+BODY = "**OLD Claude —** Step 4: approved."
+ok("L1 self-advance reply is led with the requester and marked",
+   q.lead_with_addressee(BODY, _adv("OLD Claude"), KY) == "OLD Claude — (self-advance) **OLD Claude —** Step 4: approved.")
+ok("L2 a reply already opening with the name is not doubled, and carries no marker",
+   q.lead_with_addressee("OLD Claude — ok", _adv("OLD Claude"), KY) == "OLD Claude — ok")
+ok("L3 direct post: led, no marker (unchanged)",
+   q.lead_with_addressee("ok", {"author_id": 5, "author_display": "NEW Claude"}, KY) == "NEW Claude — ok")
+ok("L4 no requester: led with the label and no marker, exactly as before this batch",
+   q.lead_with_addressee("ok", _adv(None), KY) == "self-advance — ok")
+
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)
