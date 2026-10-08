@@ -107,6 +107,10 @@ const S1_WORD = /\b(OPEN|CLOSED|RESOLVED|WITHDRAWN|DONE|FIXED)\b/g;
 // #385 (`#386 RETRACTED` is another issue's) and #408 (a retracted sub-claim) — each word sits in body prose after
 // the head's bold span. #451 (PREMISE REFUTED … THE ISSUE SURVIVES) is not listed under either rule.
 const CONTRADICTS = /\b(RESOLVED|CLOSED|WITHDRAWN|RETRACTED|DISPOSITIONED|DONE|FIXED)\b/g;
+// B-LEDGER-TAIL-DISPOSITION (#1169): the same vocabulary as a Set, for whole-word membership. NEVER call
+// CONTRADICTS.test() — the `g` flag makes it stateful (lastIndex), so successive calls alternate true/false
+// and a second hit in one parse is silently dropped (Langston, Step 1 C-2).
+const CONTRADICTS_WORDS = new Set(CONTRADICTS.source.match(/[A-Z]+/g));
 export function headStatement(line) {
   const m = /^(?:- )?\*\*(.*?)\*\*/.exec(line);
   return m ? m[1] : line;
@@ -131,6 +135,19 @@ export function statusWord(text) {
   }
   const m = /^[A-Za-z]+/.exec(s);
   return m ? m[0].toUpperCase() : '';
+}
+
+// B-LEDGER-TAIL-DISPOSITION (#1169): the status word of a head line's TRAILING CELL — the text after its last ` | `.
+// '' when there is no such cell, when that ` | ` sits inside a code span (an odd number of backticks before it:
+// quoted code such as `pre_audit | …`, not a cell), or when the cell opens with an issue reference (`#386 RETRACTED`
+// is another issue's state — the cross-reference the head leg's hand-check drops for #385; Langston C-6).
+export function tailStatusWord(line) {
+  const k = line.lastIndexOf(' | ');
+  if (k < 0) return '';
+  if ((line.slice(0, k).match(/`/g) || []).length % 2 === 1) return '';
+  const cell = line.slice(k + 3);
+  if (/^[\s*_`]*#\d/.test(cell)) return '';
+  return statusWord(cell);
 }
 
 // S1 on one head line: after deleting every `*`, the LAST status word is OPEN and it starts within the line's
@@ -166,6 +183,19 @@ export function parseLedger(text) {
     const closed = [...e.words].some((w) => CLOSING.has(w));
     if (e.words.has('OPEN') && !closed) openR1.add(e.n);
     if (e.heads.filter((h) => h.word === 'OPEN').length >= 2) reused.push(e.n);
+    // B-LEDGER-TAIL-DISPOSITION (#1169): the TAIL leg — an OPEN entry (openR1: an OPEN head and no closing head,
+    // Langston C-1; an entry closed in place by a later head is not listed) whose OPEN head line ENDS in a cell that
+    // says it is finished. It sits ABOVE the `continue` below because that guard skips every OPEN-headed entry —
+    // the head leg can never reach this shape. It LISTS; it never changes an entry's status.
+    if (e.words.has('OPEN') && !closed) {
+      for (const h of e.heads) {
+        if (h.word !== 'OPEN') continue;
+        const w = tailStatusWord(L[h.i]);
+        if (w && CONTRADICTS_WORDS.has(w) && !selfContradicting.some((x) => x.issue === e.n)) {
+          selfContradicting.push({ issue: e.n, headLine: h.i + 1, filer: filerOf(e), leg: 'tail', reason: `trailing cell carries "${w}" after an OPEN head` });
+        }
+      }
+    }
     if (e.words.has('OPEN') || closed) continue;           // the widening applies only to numbers with no status head
     // Step 4 G7-2 (Langston): the self-contradicting detector below also runs ONLY on these no-status-head entries, so its
     // count (5 at c6751f5b3) is a count of THAT subset — never a ledger-wide figure.
@@ -178,7 +208,7 @@ export function parseLedger(text) {
         const earlier = stmtAt === -1 ? null
           : [...stmt.matchAll(CONTRADICTS)].find((m) => stmtAt + m.index < hit.openAt);
         if (earlier && !selfContradicting.some((x) => x.issue === e.n)) {
-          selfContradicting.push({ issue: e.n, headLine: h.i + 1, filer: filerOf(e), reason: `head carries "${earlier[1]}" before its final OPEN` });
+          selfContradicting.push({ issue: e.n, headLine: h.i + 1, filer: filerOf(e), leg: 'head', reason: `head carries "${earlier[1]}" before its final OPEN` });
         }
       }
       let k = h.i + 1;

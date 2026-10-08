@@ -9,7 +9,7 @@ import {
   statusWord, parseLedger, datedHomes, parsePlan, parseAfterLive, parseRoadmap, placement, cellClosed, listD, listE,
   listF, listA, planLines, recountS6, s6AlertDecision, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
   tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX, gitReaders,
-  historyStruck, parseHandover, HANDOVER_FILE_RE,
+  historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
 
@@ -505,6 +505,41 @@ function frameResurface(alert, d, nowMs) {
   const txt = censusAlert(r, { week: '2026-W40', severity: 'info' });
   ok('A2 the body carries the handover clause at normal sizes', /handed over 2: \d+ unplaced, \d+ placed, 0 closed, 1 vanished/.test(txt.body), txt.body.slice(0, 400));
   ok('A2 nit: the bold date form `**handed over** 2026-09-30` parses', parseHandover(HO.replace('handed over 2026-09-30', '**handed over** 2026-09-30'), 'fx').date === '2026-09-30');
+}
+
+// ── B-LEDGER-TAIL-DISPOSITION (#1169): the TAIL leg of the self-contradicting list ──────────────────────────────
+{
+  const L = parseLedger([
+    '- **#901 OPEN 2026-06-26 (x) — a fixed thing.** body text | RESOLVED (P19-B6.9)',          // (i) listed
+    '- **#902 OPEN 2026-06-26 (x) — another.** body | CLOSED (by a commit)',                       // (ii) second hit, one parse
+    '- **#903 OPEN 2026-06-26 (x) — quoted code.** see `pre_audit | RESOLVED` in the row',        // (iii) code span: not listed
+    '- **#904 OPEN 2026-06-26 (x) — parked.** body | PARKED (re-trigger on telemetry)',          // (iv) PARKED: not a contradiction
+    '- **#905 OPEN 2026-06-26 (x) — consistent.** body | OPEN (diagnosed, fix scoped)',            // (iv) OPEN: consistent
+    '- **#906 OPEN 2026-06-26 (x) — reopened shape.** body | RESOLVED (old)',                     // (v) OPEN head + a later CLOSED head
+    '### #906 ✅ CLOSED 2026-10-08 — closed in place',
+    '- **#907 OPEN 2026-06-26 (x) — a cross-reference.** body | #386 RETRACTED its premise',      // C-6: a reference, not a state
+    '- **#908 OPEN 2026-06-26 (x) — bold tail.** body | **DONE** (shipped)',                      // markup before the word
+  ].join('\n'));
+  const tail = L.selfContradicting.filter((x) => x.leg === 'tail').map((x) => x.issue);
+  ok('T1 an OPEN-headed entry ending `| RESOLVED (…)` is listed by the tail leg', tail.includes(901), tail.join());
+  ok('T2 TWO tail hits in ONE parse are both listed (the stateful CONTRADICTS.test() trap would drop the second)', tail.includes(901) && tail.includes(902), tail.join());
+  ok('T3 a ` | ` inside a code span is not a cell — #903 not listed', !tail.includes(903));
+  ok('T3 control: the same tail without the code span IS read as RESOLVED', tailStatusWord('- **#903 OPEN x** see pre_audit | RESOLVED in the row') === 'RESOLVED');
+  ok('T4 PARKED and OPEN tails are not contradictions — #904, #905 not listed', !tail.includes(904) && !tail.includes(905));
+  ok('T5 an entry closed in place by a later head is not open, so not listed (C-1)', !L.openR1.has(906) && !tail.includes(906));
+  ok('T6 a tail opening with an issue reference is not this entry\'s state — #907 not listed (C-6)', !tail.includes(907));
+  ok('T6 control: without the `#386` the same cell reads RETRACTED', tailStatusWord('x | RETRACTED its premise') === 'RETRACTED');
+  ok('T7 bold markup before the word still reads it — #908 listed', tail.includes(908), tail.join());
+  ok('T8 the tail leg does not change open status: #901 stays in openR1', L.openR1.has(901));
+  ok('T9 every row carries its leg', L.selfContradicting.every((x) => x.leg === 'tail' || x.leg === 'head'));
+  ok('T10 no tail cell → ""', tailStatusWord('- **#1 OPEN x** no cell here') === '');
+}
+{
+  // T11 the head leg is unchanged and labelled — its existing fixture shape still lists, now with leg 'head'.
+  const pad = ' '.repeat(10);
+  const L = parseLedger(['- **#348 — title RESOLVED, then** OPEN (dated).' + pad].join('\n'));
+  const r = L.selfContradicting.find((x) => x.issue === 348);
+  ok('T11 the head leg still lists #348, labelled leg=head', !!r && r.leg === 'head', JSON.stringify(r));
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);
