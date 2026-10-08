@@ -19,7 +19,7 @@
 | C6 | a lease with no creation time announces itself | `_lease_create`: `WARNING: could not read loop N's creation time — this lease cannot detect pid reuse; … see the runbook` (runbook at Step 10) |
 
 ## The decision, pure — `holder_verdict(alive, created, loop_created, denied)`
-1 not alive → dead · **2 denied AND `loop_created` recorded → dead (#1179)** · 3 `created` unknown → alive (fail-safe; covers C1's producer B, an open that succeeded with `GetProcessTimes` failing) · 4 `loop_created` unknown → alive (OBJ-6, ruled) · 5 equal → alive, else dead (reuse). `_holder_state(lease)` = `_proc` + this, returning `(alive, identity confirmed)`; `_holder_alive` = its first half (callers `:474`→ now the gate, `:528` `_lease_ours` unchanged in behaviour).
+1 not alive → dead · **2 denied AND `loop_created` recorded → dead (#1179)** · 3 `created` unknown → alive (fail-safe; covers C1's producer B, an open that succeeded with `GetProcessTimes` failing) · 4 `loop_created` unknown → alive (OBJ-6, ruled) · 5 equal → alive, else dead (reuse). `_holder_state(lease)` = `_proc` + this, returning `(alive, identity confirmed)`; `_holder_alive` = its first half. **Behaviour change at `_lease_ours` (Langston Step-4 condition 2, corrected here — r1 said "unchanged in behaviour", which was false):** the call site is unchanged, but in exactly the #1179 case (a refused pid under a lease with a recorded creation time) an OLD `--once` arm (`_LOOP is None`) used to read the holder alive and refuse; it now reads it dead and proceeds as the reader. Right direction (the holder is gone), and it takes no lease, so nothing is blocked.
 
 ## STUCK — branched (C2 of Step 1)
 Confirmed identity (creation time matches the lease) → today's text, *"stop that task or process N"* (the `#1140` case). Unconfirmed → *"a lease names loop N … its identity is NOT confirmed — check that process N is this session's bash arm loop (tasklist) before stopping anything; if it is not, move <lease> aside and re-arm"*. **STAND-DOWN keeps one wording** for both — it directs no action on the pid (a decision, stated in a code comment).
@@ -36,3 +36,7 @@ By hand: `~/.claude/cc-wake-filter.py` = the blob at the landed sha (sha256), CC
 ## JUDGEMENT CALLS TO ATTACK
 1. `_holder_state` returns identity-confirmed only when `created == loop_created` — a holder alive by rule 3 or 4 is "alive, unconfirmed", so STUCK there names the check rather than "stop".
 2. The OBJ-3 control uses a live python dummy as the confirmed holder (its creation time recorded at take) — not a bash loop; identity is what is tested, not the process name.
+
+## Step-4 record items, done in the landing commit
+- `expected()`'s docstring no longer claims independence: it is the same five rules restated; the guard is exhaustiveness, the pre-fix control and mutation sensitivity.
+- the OBJ-3 control now asserts its setup (L7 holds the lease with a recorded creation time) before the STUCK assertion; Windows suite ALL PASS.

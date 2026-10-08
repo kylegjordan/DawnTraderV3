@@ -32,7 +32,8 @@ def ok(name, cond, extra=""):
     else: F += 1; print(f"  FAIL: {name} {extra}")
 
 def expected(alive, cname, lc, denied):
-    """The specification, written independently of the code."""
+    """The specification, restated: the same five rules, in the same order — NOT an independent oracle (Langston,
+    Step 4). What makes this table a guard is that it is exhaustive, the pre-fix control, and mutation sensitivity."""
     if not alive: return "dead"
     if denied and lc is not None: return "dead"          # #1179
     if cname == "none": return "alive"

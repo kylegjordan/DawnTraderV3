@@ -135,7 +135,9 @@ say(f3.returncode == 5 and f3.stderr.startswith("WATCHER-STUCK") and "NOT confir
     f"#1179 OBJ-3 an unconfirmed stuck holder names the identity check, not 'stop' ({f3.stderr.strip()[:100]})")
 # #1179 OBJ-3 control — the CONFIRMED case keeps its instruction: a live dummy whose recorded creation time is its own.
 lr, st = root(); L7 = dummy(); time.sleep(0.5)
-pos(lr, st, L7.pid)                                       # L7 takes the lease with its own creation time
+t7 = pos(lr, st, L7.pid)                                  # L7 takes the lease with its own creation time
+say(t7.returncode == 0 and (lease(lr) or {}).get("loop") == L7.pid and (lease(lr) or {}).get("loop_created") is not None,
+    f"#1179 OBJ-3 control setup: L7 holds the lease with a recorded creation time (rc={t7.returncode})")
 open(st + ".alive", "w").write("x"); os.utime(st + ".alive", (time.time() - 2000, time.time() - 2000))
 f4 = pos(lr, st, L4.pid)
 say(f4.returncode == 5 and f4.stderr.startswith("WATCHER-STUCK") and "stop that task or process" in f4.stderr,
