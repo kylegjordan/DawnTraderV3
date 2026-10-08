@@ -9,7 +9,7 @@ import {
   statusWord, parseLedger, datedHomes, parsePlan, parseAfterLive, parseRoadmap, placement, cellClosed, listD, listE,
   listF, listA, planLines, recountS6, s6AlertDecision, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
   tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX, gitReaders,
-  historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord,
+  historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord, recountAfterLive,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
 
@@ -422,7 +422,13 @@ function frameResurface(alert, d, nowMs) {
     a: big(999, (i) => ({ file: `${longId}_${i}_COMPLETION_REPORT.md`, verdict: i % 2 ? 'in-no-plan-line' : 'not-closed-in-plan', owner: null })),
     b: { placed: { number: 9999, homeBatch: 9999, parked: 9999, roadmap: 9999 }, unplaced: big(999, (i) => ({ n: 10000 + i, code: 'U5', why: 'HOME batch in no list', owner: 'owner ?' })),
       byWhy: { U1: 9999, U2: 9999, U3: 9999, U4: 9999, U5: 9999, U6: 9999 }, selfContradicting: big(999, (i) => ({ issue: i })), reused: big(999, (i) => i),
-      handover: { handed: 9999, stillUnplaced: big(999, (i) => i), placedSince: big(999, (i) => i), closedSince: big(999, (i) => i), vanishedSince: big(999, (i) => i) } },
+      handover: { handed: 9999, stillUnplaced: big(999, (i) => i), placedSince: big(999, (i) => i), closedSince: big(999, (i) => i), vanishedSince: big(999, (i) => i) },
+      // #1180 (Langston Step-1 condition 2): the fixture carries every key runCensus ships, or the slice it measures is
+      // smaller than the live one. placedOwnerless was missing since #1167.
+      placedOwnerless: big(999, (i) => ({ n: 30000 + i, owner: 'owner ?' })) },
+    afterLive: { al: 9999, disagree: big(999, (i) => ({ line: i, heading: longId, stated: 9999, recount: 1 })),
+      partialStrikes: big(999, (i) => i), bothMarked: big(999, (i) => i), orphans: big(999, (i) => i), unparseable: big(999, (i) => i),
+      headline: { stated: 9999, recount: 1 }, summary: { line: 5, stated: 9999 }, themes: [] },
     c: { issues: big(999, (i) => ({ n: 20000 + i, lines: [1, 2], owner: 'filer CC-INFRA' })), lineCount: 9999, matchCount: 9999, excluded: [{ issue: 696 }] },
     d: { rows: big(999, (i) => ({ row: `${i}a`, why: 'item cell is one batch id', owner: 'CC-INFRA' })), excluded: big(999, (i) => ({ row: i })) },
     e: { refs: big(999, () => ({})), rowRefs: 999, unmatched: big(999, (i) => ({ row: `${i}`, target: longId, owner: 'CC-A' })), rowUnmatched: [], viaS0: [] },
@@ -443,6 +449,9 @@ function frameResurface(alert, d, nowMs) {
   let recovered = null;
   try { recovered = JSON.parse(head.slice(head.indexOf('{"h"'), head.indexOf('},"dedupe_key"') + 1)); } catch { /* not in the slice → FAIL below */ }
   ok('P45 the counts object, every count at 9,999, is recovered whole from the first 300 characters', JSON.stringify(recovered) === JSON.stringify(nines), head);
+  // #1180: print both lengths every run — the body against CENSUS_BODY_MAX, the counts object against the 300 slice.
+  console.log(`  P45 lengths: body ${t.body.length}/${CENSUS_BODY_MAX} · counts object ${JSON.stringify(nines).length} chars, ends at metadata char ${meta.indexOf('},"dedupe_key"') + 1}/300`);
+  ok('P45 the counts carry al and po (#1180, the keys runCensus ships)', 'al' in counts && 'po' in counts, JSON.stringify(Object.keys(counts)));
   ok('P45 metadata key order: counts, dedupe_key, source, week, ref, lists', Object.keys(JSON.parse(meta)).join() === 'counts,dedupe_key,source,week,ref,lists');
   ok('P45 metadata ≤ 64 KB (lists cut with a stated marker when over)', Buffer.byteLength(meta) <= 65536 && (JSON.parse(meta).lists.truncated ? /box file/.test(JSON.parse(meta).lists.truncated) : true));
   const alert = { id: '12345678-aaaa-bbbb-cccc-1234567890ab', category: 'verification', severity: 'warning', title: t.title, body: t.body,
@@ -543,6 +552,48 @@ function frameResurface(alert, d, nowMs) {
   const L = parseLedger(['- **#348 — title RESOLVED, then** OPEN (dated).' + pad].join('\n'));
   const r = L.selfContradicting.find((x) => x.issue === 348);
   ok('T11 the head leg still lists #348, labelled leg=head', !!r && r.leg === 'head', JSON.stringify(r));
+}
+
+// ── B-AFTERLIVE-TOTAL-RULE (#1180): the after-live list re-counted by its own rule ───────────────────────────────
+{
+  const AL = (themeA, themeB, head, summary, extra = []) => [
+    `**In the sprint (snapshot): 9** · **After live: ${summary}** (+1 moved)`,
+    '',
+    `## After live — ${head} after live (+1 moved to the sprint, +1 struck through, listed below)`,
+    '',
+    '> Counting rule: every `- ` line, less the lines marked ➡️ MOVED to the sprint and the struck lines.',   // D2: not a subtrahend
+    '',
+    `### Theme A — ${themeA} (+1 moved to the sprint)`,
+    '- a1 (CC-A) — x',
+    '- a2 (CC-A) — y',
+    '- #9 (CC-B) — ➡️ MOVED to the sprint, row 9',
+    `### Theme B — ${themeB} (+1 struck through)`,
+    '- b1 (CC-A) — x',
+    '- ~~b2 (CC-A)~~ — WITHDRAWN',
+    ...extra,
+    '',
+    '## Next section',
+    '- not counted',
+  ].join('\n');
+  const ok0 = recountAfterLive(AL(2, 1, 3, 3));
+  ok('A1 a consistent file: al 0, headline 3 = rule 3 (the rule line containing ➡️ MOVED is not subtracted — D2)', ok0.al === 0 && ok0.headline.recount === 3, JSON.stringify(ok0.disagree));
+  const t = recountAfterLive(AL(3, 1, 3, 3));
+  ok('A2 a theme off by one is reported (positive control)', t.disagree.some((d) => d.stated === 3 && d.recount === 2), JSON.stringify(t.disagree));
+  const h = recountAfterLive(AL(2, 1, 4, 3));
+  ok('A3 the headline off by one is reported', h.disagree.some((d) => d.heading === 'After live (headline)' && d.stated === 4 && d.recount === 3));
+  const s5 = recountAfterLive(AL(2, 1, 3, 7));
+  ok('A4 the summary at the top off is reported', s5.disagree.some((d) => d.heading.startsWith('After live (summary') && d.stated === 7));
+  ok('A5 the sum of the theme headings must equal the headline', recountAfterLive(AL(2, 2, 3, 3)).disagree.some((d) => d.heading === 'sum of the theme headings'));
+  const both = recountAfterLive(AL(2, 1, 3, 3, ['- ~~b3 (CC-A) — ➡️ MOVED to the sprint~~']));
+  ok('A6 a line both moved and struck is subtracted ONCE, listed, and raises al (D3)', both.bothMarked.length === 1 && both.headline.recount === 3 && both.al >= 1, JSON.stringify(both));
+  const part = recountAfterLive(AL(2, 2, 4, 4, ['- b4 (CC-A) — a ~~partly struck~~ note']));
+  ok('A7 a partial strike counts as live AND is shown (al raised)', part.partialStrikes.length === 1 && part.themes[1].recount === 2 && part.al === 1, JSON.stringify(part));
+  const orphan = recountAfterLive(AL(2, 1, 3, 3).replace('> Counting rule', '- an orphan bullet (CC-A)\n> Counting rule'));
+  ok('A8 a bullet before the first theme is an orphan: in no theme, raises al', orphan.orphans.length === 1 && orphan.al >= 1, JSON.stringify(orphan.orphans));
+  const unp = recountAfterLive(AL(2, 1, 3, 3).replace('### Theme B — 1', '### Theme B — some'));
+  ok('A9 an unparseable stated count is shown, never read as 0', unp.unparseable.length === 1 && unp.al >= 1);
+  let threw = false; try { recountAfterLive('# no heading here'); } catch { threw = true; }
+  ok('A10 no "## After live" heading refuses', threw);
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);

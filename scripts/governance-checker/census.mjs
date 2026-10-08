@@ -575,6 +575,45 @@ export function s6AlertDecision(rec, history) {
 // ══ THE CENSUS ═══════════════════════════════════════════════════════════════════════════════════════════
 // readers: { show(ref, path) → text|null, names(ref, dir) → basenames[], added(prevRef, ref, dir) → basenames[],
 //            planHistory(ref, path, n) → [{sha, text}] } — the live ones are gitReaders below.
+// B-AFTERLIVE-TOTAL-RULE (#1180): the after-live list's counts, re-counted by the file's OWN rule (its `:29`): every
+// `- ` line under `## After live` (at column 0), less the lines marked ➡️ … MOVED and the lines STARTING `- ~~`.
+// Pure. Returns each theme heading's and the headline's {stated, recount}, the `**After live: N**` summary near the top,
+// and every thing a human should look at — `al` is their COUNT (Langston Step-2 D1: a partial strike, a line both moved
+// and struck, a bullet outside every theme, or an unparseable stated count must not read as a clean zero).
+// D2: only `- ` lines are subtracted — the rule line itself contains "➡️ MOVED" and must not count.
+export function recountAfterLive(text) {
+  const L = lines(String(text ?? ''));
+  const start = L.findIndex((l) => /^## After live\b/.test(l));
+  if (start < 0) throw new Error(`census: ${CENSUS_SOURCES.afterLive} has no "## After live" heading — refusing`);
+  let end = L.findIndex((l, i) => i > start && /^## /.test(l)); if (end < 0) end = L.length;
+  const statedOf = (s) => { const m = /—\s*(\d+)\b/.exec(s); return m ? Number(m[1]) : null; };
+  const headline = { heading: L[start], line: start + 1, stated: statedOf(L[start]), recount: 0 };
+  const sm = L.slice(0, start).map((l, i) => ({ i, m: /\*\*After live:\s*(\d+)\*\*/.exec(l) })).find((x) => x.m);
+  const summary = sm ? { line: sm.i + 1, stated: Number(sm.m[1]) } : null;
+  const themes = []; const partialStrikes = [], bothMarked = [], orphans = [], unparseable = [];
+  let cur = null;
+  for (let i = start + 1; i < end; i++) {
+    const l = L[i];
+    if (/^### /.test(l)) { cur = { heading: l, line: i + 1, stated: statedOf(l), recount: 0 }; themes.push(cur); if (cur.stated === null) unparseable.push(i + 1); continue; }
+    if (!l.startsWith('- ')) continue;                                   // D2: subtrahends are `- ` lines only
+    const moved = l.includes('➡️') && /\bMOVED\b/.test(l), struck = l.startsWith('- ~~');
+    if (moved && struck) bothMarked.push(i + 1);                          // D3: counted once, listed, raises al
+    if (!struck && l.includes('~~')) partialStrikes.push(i + 1);          // counted live, and shown
+    if (cur === null) { orphans.push(i + 1); continue; }                  // a bullet in no theme
+    if (moved || struck) continue;
+    cur.recount++; headline.recount++;
+  }
+  if (headline.stated === null) unparseable.push(headline.line);
+  const disagree = [];
+  for (const t of themes) if (t.stated !== null && t.stated !== t.recount) disagree.push({ line: t.line, heading: t.heading.slice(4, 60), stated: t.stated, recount: t.recount });
+  if (headline.stated !== null && headline.stated !== headline.recount) disagree.push({ line: headline.line, heading: 'After live (headline)', stated: headline.stated, recount: headline.recount });
+  if (summary && summary.stated !== headline.recount) disagree.push({ line: summary.line, heading: 'After live (summary at the top)', stated: summary.stated, recount: headline.recount });
+  const statedSum = themes.reduce((s, t) => s + (t.stated ?? 0), 0);
+  if (headline.stated !== null && statedSum !== headline.stated) disagree.push({ line: headline.line, heading: 'sum of the theme headings', stated: statedSum, recount: headline.stated });
+  return { headline, summary, themes, disagree, partialStrikes, bothMarked, orphans, unparseable,
+    al: disagree.length + partialStrikes.length + bothMarked.length + orphans.length + unparseable.length };
+}
+
 export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 20, openScope = null }) {
   if (!ref) throw new Error('census: no graded ref — refusing');
   const read = (p) => {
@@ -587,7 +626,9 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
   // placement at the audit's ref can be compared like-for-like with its 352/117 and 354/115. The live tick never sets it.
   if (openScope === 'r1') ledger.open = new Set(ledger.openR1);
   const plan = parsePlan(read(CENSUS_SOURCES.plan));
-  const pls = parseAfterLive(read(CENSUS_SOURCES.afterLive));
+  const afterLiveText = read(CENSUS_SOURCES.afterLive);
+  const pls = parseAfterLive(afterLiveText);
+  const afterLive = recountAfterLive(afterLiveText);                // #1180: the list's own counts, re-counted
   const roadmap = parseRoadmap(read(CENSUS_SOURCES.roadmap));
   const names = readers.names(ref, CENSUS_SOURCES.reportsDir);
   if (!Array.isArray(names) || names.length === 0) throw new Error(`census: the ${CENSUS_SOURCES.reportsDir} listing at ${ref} is EMPTY — refusing (the read failed; the directory is never empty)`);
@@ -637,14 +678,19 @@ export function runCensus({ ref, prevRef, readers, prevF = null, historyDepth = 
       unplaced, handover, placedOwnerless, byWhy: Object.fromEntries(Object.keys(UNPLACED_WHY).map((k) => [k, tallyOf(k)])),
       selfContradicting: ledger.selfContradicting, reused: ledger.reused },
     c: { issues: c.issues.map((n) => ({ n, lines: [...new Set(c.byIssue.get(n).map((h) => h.line))], owner: owner(n).label })), lineCount: c.lineCount, matchCount: c.matchCount, excluded: c.excluded },
-    d, e, f, g, ownerSources, _ledger: ledger,
+    d, e, f, g, afterLive, ownerSources, _ledger: ledger,
   };
 }
 
 // The terse counts object — FIRST in the metadata so the 300-character slice Discord shows is the counts (P45
 // round 3). h heads · n numbers · o OPEN · a [not-closed-in-plan, in-no-plan-line] · b [placed, unplaced, by
 // number, by HOME batch, parked, roadmap, U1..U6] · c [issues, lines, matches] · cx excluded dated · d rows · dx excluded d rows ·
-// e [refs, unmatched] · f [new, total] · g §6 alert (0/1) · sc self-contradicting · r reused numbers.
+// e [refs, unmatched] · f [new, total] · g §6 alert (0/1) · sc self-contradicting · r reused numbers · al the after-live
+// recount's things-to-look-at (#1180) · po placed but ownerless · hv handover.
+// ⚠️ THE SLICE IS FULL (Langston, B-AFTERLIVE-TOTAL-RULE Step 2): with every count at 9,999 the counts object fills the
+// first 300 characters of the metadata almost exactly (P45 prints the length). The 300 is Discord's DISPLAY truncation
+// (`scripts/system-alerts.ts:87`), not a store limit — over it, the counts are no longer recoverable from the post, nothing
+// crashes. The next counts key must widen that P45 assertion DELIBERATELY, not discover it in CI.
 export function censusCounts(r) {
   const p = r.b.placed, placed = p.number + p.homeBatch + p.parked + p.roadmap;
   return {
@@ -654,10 +700,10 @@ export function censusCounts(r) {
     c: [r.c.issues.length, r.c.lineCount, r.c.matchCount], cx: r.c.excluded.length,
     d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
-    sc: r.b.selfContradicting.length, r: r.b.reused.length,
-    // (b′) placed but ownerless (#1167). runCensus ALWAYS sets r.b.placedOwnerless (so the dry run reads it unguarded);
-    // these guards exist only for hand-built result objects that predate the key — the P45 size fixture in census.test.mjs.
-    ...(r.b.placedOwnerless ? { po: r.b.placedOwnerless.length } : {}),
+    sc: r.b.selfContradicting.length, r: r.b.reused.length, al: r.afterLive.al,
+    // (b′) placed but ownerless (#1167). Unconditional since #1180: runCensus always sets it, and the P45 size fixture —
+    // the only hand-built caller, whose missing key was the guard's sole reason (Langston D5) — now sets it too.
+    po: r.b.placedOwnerless.length,
     // A2: [handed ITEMS, still unplaced, placed since, closed since, vanished since].
     ...(r.b.handover ? { hv: [r.b.handover.handed, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length, r.b.handover.vanishedSince.length] } : {}),
   };
@@ -670,7 +716,9 @@ export function censusLists(r) {
     b: r.b.unplaced.map((x) => (x.handedOver ? [x.n, x.code, x.handedOver] : [x.n, x.code])),
     hv: r.b.handover ? { placed: r.b.handover.placedSince, closed: r.b.handover.closedSince, vanished: r.b.handover.vanishedSince } : null,
     sc: r.b.selfContradicting.map((x) => x.issue), reused: r.b.reused,
-    po: r.b.placedOwnerless ? r.b.placedOwnerless.map((x) => x.n) : [],
+    po: r.b.placedOwnerless.map((x) => x.n),
+    al: r.afterLive.al ? { disagree: r.afterLive.disagree.map((x) => [x.line, x.stated, x.recount]), partial: r.afterLive.partialStrikes,
+      both: r.afterLive.bothMarked, orphans: r.afterLive.orphans, unparseable: r.afterLive.unparseable } : null,
     c: r.c.issues.map((x) => x.n), cx: r.c.excluded.map((x) => x.issue),
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
     e: [...r.e.unmatched, ...r.e.rowUnmatched].map((x) => [x.row, x.target]),
@@ -698,7 +746,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
   if (title.length > TITLE_MAX) throw new Error(`census: title over ${TITLE_MAX} characters`);
   const qCount = (xs, f) => xs.filter((x) => f(x) === 'owner ?' || f(x) == null).length;
   const planOwner = (o) => (o ? o : 'owner ?');
-  const lineFor = (k, withHandover = true) => {
+  const lineFor = (k, withHandover = true, withPo = true) => {
     const top = (xs, fmt) => (k === 0 || xs.length === 0 ? '' : ' — ' + xs.slice(0, k).map(fmt).join('; '));
     const p = r.b.placed, placed = p.number + p.homeBatch + p.parked + p.roadmap;
     const eAll = [...r.e.unmatched, ...r.e.rowUnmatched];
@@ -711,7 +759,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
         (withHandover && r.b.handover && r.b.handover.handed ? `; handed over ${r.b.handover.handed}: ${r.b.handover.stillUnplaced.length} unplaced, ${r.b.handover.placedSince.length} placed, ${r.b.handover.closedSince.length} closed` + (r.b.handover.vanishedSince.length ? `, ${r.b.handover.vanishedSince.length} vanished` : '') : '') +
         top(r.b.unplaced, (x) => `#${x.n} ${x.why} (${x.owner})`) +
         `; self-contradicting ${r.b.selfContradicting.length}, reused ${r.b.reused.length}` +
-        (r.b.placedOwnerless ? `; placed but ownerless ${r.b.placedOwnerless.length}` + top(r.b.placedOwnerless, (x) => `#${x.n} (${x.owner})`) : ''),
+        (withPo && r.b.placedOwnerless ? `; placed but ownerless ${r.b.placedOwnerless.length}` + top(r.b.placedOwnerless, (x) => `#${x.n} (${x.owner})`) : ''),
       `(c) dated homes: ${r.c.issues.length} issues / ${r.c.lineCount} lines (excluded by name ${r.c.excluded.length}) [owner ? ${qCount(r.c.issues, (x) => x.owner)}]` +
         top(r.c.issues, (x) => `#${x.n} (${x.owner})`),
       `(d) id-less plan rows: ${r.d.rows.length} (excluded ${r.d.excluded.length}) [owner ? ${qCount(r.d.rows, (x) => x.owner)}]` +
@@ -733,6 +781,9 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
   // in the box file (A2: at maximum sizes the clause did not fit — the worst case was 992 before it).
   for (const k of [3, 2, 1, 0]) { const body = lineFor(k); if (body.length <= CENSUS_BODY_MAX) return { title, body, severity }; }
   { const body = lineFor(0, false); if (body.length <= CENSUS_BODY_MAX) return { title, body, severity }; }
+  // #1180 (found by Langston's Step-1 condition 2): the (b′) clause #1167 added overran the cap at maximum sizes (1,018) —
+  // invisible while the P45 fixture lacked placedOwnerless. It is the last thing dropped; its count stays in `po`.
+  { const body = lineFor(0, false, false); if (body.length <= CENSUS_BODY_MAX) return { title, body, severity }; }
   throw new Error(`census: the body is over ${CENSUS_BODY_MAX} characters with every example dropped — refusing`);
 }
 
@@ -875,6 +926,10 @@ function dryRun(argv) {
   out(`(f) ${r.f.all.length} lines / ${r.f.ids.length} ids: ${r.f.all.join(' ')}`);
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
   out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, commit ${r.g.commit}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
+  { const x = r.afterLive;
+    out(`(g′) after-live recount: headline stated ${x.headline.stated} vs rule ${x.headline.recount} · al ${x.al}` +
+      (x.al ? ` · disagree: ${x.disagree.map((d) => `L${d.line} ${d.heading} stated ${d.stated} rule ${d.recount}`).join('; ') || 'none'}` +
+        ` · partial strikes ${JSON.stringify(x.partialStrikes)} · both-marked ${JSON.stringify(x.bothMarked)} · orphan bullets ${JSON.stringify(x.orphans)} · unparseable ${JSON.stringify(x.unparseable)}` : ' · agrees')); }
   out(`owner sources over the ${L.open.size} OPEN issues (shown-as): ${JSON.stringify(r.ownerSources)}`);
   out(`(b′) placed but ownerless (${r.b.placedOwnerless.length}): ${r.b.placedOwnerless.map((x) => `#${x.n} (${x.owner})`).join(' ')}`);
   const src = { ownerLine: [], homeLine: [], filer: [] };
