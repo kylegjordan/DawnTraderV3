@@ -1292,7 +1292,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Every open issue the plan has a place for now has an owner the weekly census can read.** After last week's clean-up, 48 issues were still scheduled but named nobody responsible, and because they were scheduled no census list ever showed them. Three were already finished and are now closed with proof; the other 45 each name an owner — usually the session whose plan row they sit on — and each session was told which ones are now theirs. The census also gained a new list, "placed but ownerless", so this gap can never grow back silently; it reads zero on the live ledger and lists all 48 when run against last week's.
 
-### 2026-10-08 — B-WAKE-SELF-ADVANCE-LEAD (CC-A, sprint plan row 1v) — ⏳ closes on Langston's Step-11 confirm
+### 2026-10-08 — B-WAKE-SELF-ADVANCE-LEAD (CC-A, sprint plan row 1v) — ✅ CLOSED 2026-10-08 (the live check rides a daily reminder)
 
 **Langston's replies from his own review queue now wake the session that asked.** When Langston finishes one review he picks up the next one waiting in his queue on his own, and those replies were addressed to "self-advance" instead of to the session that sent the work — so that session was never woken, and one verdict sat unread for about 15 hours. The relay now addresses them to the asker by name, and is installed on his server (one restart, shared with Infra Claude's security change). The last check — that the next such reply really does wake its asker — waits on a daily reminder, because these replies happen only a few times a week.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm
