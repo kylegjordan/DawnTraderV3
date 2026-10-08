@@ -110,6 +110,36 @@ lr, st = root()
 json.dump({"loop": 4, "loop_created": None, "taken_at": "x"}, open(os.path.join(lr, "CC-A.lease"), "w"))
 f_ = pos(lr, st, L4.pid)
 say(f_.returncode == 5 and f_.stderr.startswith("WATCHER-STAND-DOWN"), f"OBJ-6 an unreadable holder (access denied) reads ALIVE (rc={f_.returncode})")
+# B-WAKE-LEASE-PID-REUSE (#1179) — C2 (Langston): the pid-4 cases below rest on OpenProcess refusing pid 4 with ERROR 5
+# exactly (the `denied` predicate keys on 5); assert the observed code, not only the verdict.
+import ctypes
+_k = ctypes.WinDLL("kernel32", use_last_error=True); _k.OpenProcess.restype = ctypes.c_void_p
+_h = _k.OpenProcess(0x1000 | 0x00100000, False, 4); _err = ctypes.get_last_error()
+if _h: _k.CloseHandle(ctypes.c_void_p(_h))
+say(not _h and _err == 5, f"#1179 C2 the probe on pid 4 is refused with error 5 (handle={bool(_h)}, error={_err})")
+# #1179 OBJ-1 — expected: a lease that RECORDED a creation time, whose pid is now refused (pid 4 stands in for the
+# svchost that reused 5448), is not the holder -> a newcomer takes it over (exit 0, the lease names the newcomer).
+lr, st = root()
+json.dump({"loop": 4, "loop_created": 134359110427768539, "taken_at": "x"}, open(os.path.join(lr, "CC-A.lease"), "w"))
+f2 = pos(lr, st, L4.pid)
+say(f2.returncode == 0 and (lease(lr) or {}).get("loop") == L4.pid,
+    f"#1179 OBJ-1 a refused pid under a lease with a recorded creation time is taken over (rc={f2.returncode}, {f2.stderr.strip()[:80]})")
+# #1179 OBJ-3 — expected: a holder that reads alive but whose identity is NOT confirmed (nothing recorded, pid 4) and has
+# stopped saving refuses WATCHER-STUCK WITHOUT telling the session to stop the process — it names the identity check.
+lr, st = root()
+json.dump({"loop": 4, "loop_created": None, "taken_at": "x"}, open(os.path.join(lr, "CC-A.lease"), "w"))
+open(st + ".alive", "w").write("x"); os.utime(st + ".alive", (time.time() - 2000, time.time() - 2000))
+f3 = pos(lr, st, L4.pid)
+say(f3.returncode == 5 and f3.stderr.startswith("WATCHER-STUCK") and "NOT confirmed" in f3.stderr
+    and "before stopping anything" in f3.stderr and "stop that task or process" not in f3.stderr,
+    f"#1179 OBJ-3 an unconfirmed stuck holder names the identity check, not 'stop' ({f3.stderr.strip()[:100]})")
+# #1179 OBJ-3 control — the CONFIRMED case keeps its instruction: a live dummy whose recorded creation time is its own.
+lr, st = root(); L7 = dummy(); time.sleep(0.5)
+pos(lr, st, L7.pid)                                       # L7 takes the lease with its own creation time
+open(st + ".alive", "w").write("x"); os.utime(st + ".alive", (time.time() - 2000, time.time() - 2000))
+f4 = pos(lr, st, L4.pid)
+say(f4.returncode == 5 and f4.stderr.startswith("WATCHER-STUCK") and "stop that task or process" in f4.stderr,
+    f"#1179 OBJ-3 control: a confirmed stuck holder still says stop it ({f4.stderr.strip()[:100]})")
 # OBJ-5 — expected: a refused --positions writes nothing, even when the state is old enough to be reset.
 lr, st = root(); L5, L6 = dummy(), dummy()
 pos(lr, st, L5.pid)

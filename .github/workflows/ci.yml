@@ -165,6 +165,11 @@ jobs:
       - name: Langston queue tests (addressee, ordering, caps)
         if: ${{ !cancelled() }}
         run: python3 comms-infra/discord/langston_queue_test.py
+      # B-WAKE-LEASE-PID-REUSE (#1179): the wake lease's holder decision as a 24-row truth table, read out of the REPO
+      # copy of the filter with ast. Green here does not prove the laptop's hand-installed copy (the #1004 class).
+      - name: Wake lease verdict tests (pid reuse)
+        if: ${{ !cancelled() }}
+        run: python3 scripts/analysis/test-wake-lease-verdict.py
 
       - name: Alert hook tests (split, lost routing)
         if: ${{ !cancelled() }}
