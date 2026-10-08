@@ -10917,3 +10917,7 @@ Read: the loop BREAKS (so the background task ends and the session is notified) 
 **Recovered by hand:** the lease moved aside as `CC-A.lease.dead-5448-svchost` after confirming no reader ran; evidence copied to `~/.claude/cc-wake-state/evidence-1179/`; re-armed 05:53Z (loop 16796). Gap without a watcher ~11 min.
 `HOME: B-WAKE-LEASE-PID-REUSE, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1w, after row 1u` — §9.4 disposition 3 (wake layer, mine). OPEN.
 
+### #1180 OPEN 2026-10-08 (CC-A; Langston, `B-LEDGER-TAIL-DISPOSITION` Step 4, §13 surface) — THE AFTER-LIVE LIST'S HEADLINE TOTAL DISAGREES WITH ITS OWN THEME COUNTS, AND NOTHING CHECKS IT
+**Measured at `6a95458d8`, stated numbers only:** `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md` heading `## After live — 218`; the seven theme headings beneath it state 25 · 6 · 72 · 21 · 78 · 5 · 14 = **221**, under one counting rule (`:29`: every `- ` line, less the ➡️ MOVED lines and the struck-through ones; "the theme headings below use the same rule"). Each later edit (mine included: 217 → 218 for `#1178`) added +1 to a base that was already off. The census's §6 total rule (`recountS6`, `census.mjs`) covers the sprint plan only; this file has no recount.
+`HOME: B-AFTERLIVE-TOTAL-RULE, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1x, after row 1w` — §9.4 disposition 3 (Langston named the home). OPEN.
+
