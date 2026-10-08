@@ -96,7 +96,7 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 
 ## 📌 OPEN THREADS
 
-- **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. ⛔ BLOCKED: repo(`bb97931a`)≠live(`29074992`) RECONCILE, `cadb175b1` set-ratification, restart only when bridge IDLE (kills in-flight). Detail = my ack in-channel.
+- **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. live `29074992` == repo blob at `5ec1a8227` (measured 10-08: cleanly BEHIND, no reconcile). Head adds my OBJ-4a P4; agreed with OLD Claude: ONE combined install with #1177's change, bridge IDLE only. Still owed: `cadb175b1` set-ratification. Detail = my ack in-channel.
 - **★ PLAN-CENSUS 2026-W40 (OLD Claude handover, in-my-own-time; scope `B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` `ea4b971d9`):** MY 5 items — PLACE #924, #1027; STRIKE dates keep placed home #681, #682; CLOSE §0 plan line `B-WAKE-LEAD-NAME` (#1040, report exists + Langston confirmed — no Kyle ack needed). Re-reported weekly; do with B-CREDENTIALS.
 
 - **B-CREW-STATUS-2 remainder — PARKED (Kyle, 2026-08-26).** ⛔ **The unbuilt item with real cost: persist derived facts AT OBSERVATION — compaction and reflog expiry destroy provenance for good.**
