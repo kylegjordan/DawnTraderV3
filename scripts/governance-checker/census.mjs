@@ -232,9 +232,9 @@ export function placingOwnerOf(ledger, plan, pls) {
     const al = pls.afterLive.find(numIn);
     if (al) return firstSession(al);
     const e = ledger.byNum.get(n);
-    const ids = e ? [...new Set(e.block.map((b) => b.text).filter((t) => /HOME/.test(t)).flatMap(idsIn))] : [];
+    const ids = e ? [...new Set(e.block.map((b) => b.text).filter((t) => /\bHOME\b/.test(t)).flatMap(idsIn))] : [];
     for (const id of ids) {
-      const r2 = plan.s4.find((r) => hasId(r.batch, id) || hasId(r.item, id));
+      const r2 = plan.s4.find((r) => hasId(r.batch, id) || hasId(r.item, id) || noteHomesId(r.note, id));   // noteHomesId: placement()'s rule (Langston F-1)
       if (r2) return firstSession(r2.owner);
       const l2 = pls.afterLive.find((l) => hasId(l, id));
       if (l2) return firstSession(l2);
@@ -620,7 +620,9 @@ export function censusCounts(r) {
     d: r.d.rows.length, dx: r.d.excluded.length, e: [r.e.refs.length, r.e.unmatched.length + r.e.rowUnmatched.length],
     f: [r.f.new.length, r.f.all.length], g: r.g.alert ? 1 : 0,
     sc: r.b.selfContradicting.length, r: r.b.reused.length,
-    ...(r.b.placedOwnerless ? { po: r.b.placedOwnerless.length } : {}),   // (b′) placed but ownerless (#1167)
+    // (b′) placed but ownerless (#1167). runCensus ALWAYS sets r.b.placedOwnerless (so the dry run reads it unguarded);
+    // these guards exist only for hand-built result objects that predate the key — the P45 size fixture in census.test.mjs.
+    ...(r.b.placedOwnerless ? { po: r.b.placedOwnerless.length } : {}),
     // A2: [handed ITEMS, still unplaced, placed since, closed since, vanished since].
     ...(r.b.handover ? { hv: [r.b.handover.handed, r.b.handover.stillUnplaced.length, r.b.handover.placedSince.length, r.b.handover.closedSince.length, r.b.handover.vanishedSince.length] } : {}),
   };

@@ -383,6 +383,20 @@ const readers = (over = {}) => ({
   ok('(b′) a placed issue with a filer is not listed', !r2.b.placedOwnerless.some((x) => x.n === 300));
   ok('(b′) counts carry po and the owner sources count placingLine', censusCounts(r2).po === 1 && r2.ownerSources.placingLine === 1 && censusLists(r2).po.join() === '302');
   ok('(b′) the alert body names it', /placed but ownerless 1/.test(censusAlert(r2, { week: '2026-W42', severity: 'info' }).body));
+  // Langston Step-4 BLOCKER-2: the HOME-id leg of placingOwnerOf, reached for real (no stub). #303 has no owner of its own
+  // and is placed ONLY through `HOME: B-ALPHA`, row 1's batch cell (owner CC-A) → `placing-line CC-A`. #304 is placed only
+  // through a NOTE homing form (`with B-NOTEONLY` on row 107, owner CC-B) → `placing-line CC-B` (FINDING-1: the same rules
+  // as placement(), noteHomesId included). Both FAIL on the shipped 8655a1bfd bytes, where `\b` in /\bHOME\b/ was 0x08.
+  const NL = String.fromCharCode(10);
+  const plan3 = PLAN.replace('| 107 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | after row 200 |',
+    '| 107 | T-W20C-SCALAR-LEG | — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | with B-NOTEONLY; after row 200 |');
+  const r3 = runCensus({ ref: 'a'.repeat(40), prevRef: 'b'.repeat(40), readers: readers({ files: {
+    '1-system-manual/RUNNING_ISSUES.md': [LEDGER, '### #303 OPEN 2026-01-01 homed by batch only', 'HOME: B-ALPHA',
+      '### #304 OPEN 2026-01-01 homed by a note only', 'HOME: B-NOTEONLY'].join(NL),
+    '1-system-manual/SPRINT_TO_LIVE_PLAN.md': plan3 } }) });
+  const po3 = Object.fromEntries(r3.b.placedOwnerless.map((x) => [x.n, x.owner]));
+  ok('(b′) HOME-id leg: an issue placed only by `HOME: <batch>` reads the batch row owner', po3[303] === 'placing-line CC-A', JSON.stringify(r3.b.placedOwnerless));
+  ok('(b′) HOME-id leg via a note homing form (`with B-X`) reads that row owner', po3[304] === 'placing-line CC-B', JSON.stringify(r3.b.placedOwnerless));
 }
 
 // ── P45: body, title, metadata; the Discord render at maximum realistic sizes ──
