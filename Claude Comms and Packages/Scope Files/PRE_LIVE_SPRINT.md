@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 217 after live (+6 moved to the sprint, listed below)
+## After live — 218 after live (+6 moved to the sprint, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (3). Recounted 2026-09-30: 221 − 6 − 3 = 212. The theme headings below use the same rule.
 
@@ -177,8 +177,9 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16
 - row:3n.b (CC-C) — orphan level tables (disposition 5) — legacy removal
 
-### Other (research, UI, refactors) — 77
+### Other (research, UI, refactors) — 78
 
+- B-NULL-REASON-RETURN-VALUE (CC-B) — #1178: make each strategy evaluation's "why no signal" reason its own (a return value, not one shared global) across the 166 production call sites; after B-NULL-REASON-LOCAL (sprint row 52a), which measures first
 - B-EVENT-LOOP-RESIDUAL (CC-B) — #225: scattered event-loop stalls after the scan-stall fix (measured 2026-10-06: 8.8/h, p50 193 ms, max 318 ms, at the pinned ceiling); most follow the FX5 scanner's cycle tail
 - #1020 (CC-A) — push guard inherits the previous call's working directory and refuses on a false zero (hit again building this draft)
 - #148 (Infra Claude) — health check permission error on a Replit-era path
