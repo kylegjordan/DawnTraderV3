@@ -88,7 +88,7 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 
 ⚠️ ★ **MUTATION-TESTING LESSON, EARNED TWICE: JUDGE BY EXIT CODE, NEVER BY GREPPING FOR `FAIL`** — a mutation that CRASHES the suite prints no FAIL lines and reads as "survived". **And verify the patch APPLIED before reading its result: mutate BY LINE NUMBER, never by a string containing escapes.**
 ⚠️ ★ **NEVER PUT `\n` IN A PYTHON STRING INSIDE A HEREDOC** — it becomes a REAL newline and splits the statement. Use `chr(10)`, or edit by line number.
-⚠️ ★ **TWO DEFECTS ONLY THE RENDERED OUTPUT REVEALED, NOT 266 CHECKS:** survival computed over the census would have reported ~97% alive against a published ~2/3 dying day one (**only FOLLOWED tokens are re-checked, so an unchecked token can never be tombstoned** — survival runs over the TRACKED set and the payload states that denominator); and `sort_keys=True` rendered the death checkpoints ALPHABETICALLY (1h, 24h, 30d, 3d, 6h) — every number right, the sequence nonsense. **Look at the artifact.**
+⚠️ ★ **LOOK AT THE RENDERED ARTIFACT** — two token-watch defects (wrong survival denominator; alphabetical checkpoint order) passed 266 checks and showed only in the output.
 
 ## ⚑ LANGSTON'S CONCEPT-REVIEW CATCHES — THE FIVE THAT GENERALISE
 
@@ -99,6 +99,8 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 - **★ EMITTER fix (MINE, B-TOKEN-BURN-CUT amd-1, #1026/#1035; acked CC-A 09-30):** `discord-langston-bridge.py` owner=/blocked-on= templates → 6-way. live `29074992` == repo blob at `5ec1a8227` (measured 10-08: cleanly BEHIND, no reconcile). Head adds my OBJ-4a P4; agreed with OLD Claude: ONE combined install with #1177's change, bridge IDLE only. Still owed: `cadb175b1` set-ratification. Detail = my ack in-channel.
 - **★ PLAN-CENSUS 2026-W40 (OLD Claude handover, in-my-own-time; scope `B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` `ea4b971d9`):** MY 5 items — PLACE #924, #1027; STRIKE dates keep placed home #681, #682; CLOSE §0 plan line `B-WAKE-LEAD-NAME` (#1040, report exists + Langston confirmed — no Kyle ack needed). Re-reported weekly; do with B-CREDENTIALS.
 
+- **QUEUED for after Kyle's usage reset (alert 4d90b645, 23:00Z 10-08):** remove is_admin (Kyle APPROVED), settle Plans A/B with Langston. Kyle: conserve tokens until then.
+- **#1181 B-DTREVIEW-ABSENCE-PROVENANCE (mine, row 1w1):** dt-review refused 2bfe98d4d "not in the mirror" 10-08 07:14Z while the mirror held it since 07:00; obj 1 = reproduce or record why not.
 - **B-CREW-STATUS-2 remainder — PARKED (Kyle, 2026-08-26).** ⛔ **The unbuilt item with real cost: persist derived facts AT OBSERVATION — compaction and reflog expiry destroy provenance for good.**
 - **#651 B-RULES-1E-LANGSTON-SLIM** — Langston's instruction-file restructure (lean core + on-demand modules + ledger split). Transferred to me by CC-A. **NOT STARTED**; Kyle has not given the go.
 - **#670** — crew-status snapshots have no cold hand-off; warm tier grows unbounded (~18 MB/yr gz, policy-conformance not capacity).
