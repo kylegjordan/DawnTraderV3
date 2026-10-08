@@ -1296,7 +1296,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Langston's replies from his own review queue now wake the session that asked.** When Langston finishes one review he picks up the next one waiting in his queue on his own, and those replies were addressed to "self-advance" instead of to the session that sent the work — so that session was never woken, and one verdict sat unread for about 15 hours. The relay now addresses them to the asker by name, and is installed on his server (one restart, shared with Infra Claude's security change). The last check — that the next such reply really does wake its asker — waits on a daily reminder, because these replies happen only a few times a week.
 
-### 2026-10-08 — B-LEDGER-TAIL-DISPOSITION (CC-A, sprint plan row 1u) — ⏳ closes on Langston's Step-11 confirm
+### 2026-10-08 — B-LEDGER-TAIL-DISPOSITION (CC-A, sprint plan row 1u) — ✅ CLOSED 2026-10-08
 
 **Two old issues that said "resolved" only in their last line are closed, and the census now notices that pattern.** Each was checked before closing: one fix is in the code, and the other error has not appeared once in a week of server logs. The weekly census now lists any open issue whose final note says it is finished, so a person can close it with proof — it never closes anything itself. Checking one of them turned up a possible mislabelling in the VTS's "why no signal" records, now placed with New Claude to measure first.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm

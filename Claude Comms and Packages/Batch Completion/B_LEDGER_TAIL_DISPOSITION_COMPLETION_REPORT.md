@@ -1,6 +1,6 @@
 # B-LEDGER-TAIL-DISPOSITION (#1169) — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1u (after row 1s) · **change-class:** `non_architecture` · **Scope** r2 `1f353111f` (r1 sent back: one blocker, three conditions) · **Pre-audit** `cc2cc29e0` (APPROVED with C-4..C-6) · **Ledger** `45a442b0d` · **Code** reviewed `26e599a2d` + `454506b00`, landed `7e6e78b89` + `6a95458d8` · **Step 8** CONFIRMED by Langston 2026-10-08 · ⏳ **closes on Langston's Step-11 confirm**
+**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1u (after row 1s) · **change-class:** `non_architecture` · **Scope** r2 `1f353111f` (r1 sent back: one blocker, three conditions) · **Pre-audit** `cc2cc29e0` (APPROVED with C-4..C-6) · **Ledger** `45a442b0d` · **Code** reviewed `26e599a2d` + `454506b00`, landed `7e6e78b89` + `6a95458d8` · **Step 8 and Step 11** CONFIRMED by Langston 2026-10-08 — ✅ **CLOSED**
 
 ## OPEN AT CLOSE — stated first
 **No scope objective is open.** Out of scope and homed, not done here: `#1178` (CC-B, row 52a + after-live), `#1179` (row 1w), `#1180` (row 1x).
