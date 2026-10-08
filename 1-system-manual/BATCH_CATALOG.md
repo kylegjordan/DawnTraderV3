@@ -1214,7 +1214,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT (deployed `0c8ef5da2`).** 0 bus events written since the restart; the 10-08 02:15Z sweep processed 18 of 18 tables including the new one (185,865 old rows removed), failed=0. **Closed:** `#521`, `#1158`, `#404`. **Moved:** `#214` to row 2a0i. **Next:** row 2a0c drops the table itself.
 
-## B-EXPECTANCY-TUNING-ROWS-RETIRE (CC-C, sprint plan row 4a2 — after row 4a; `#1156`) — change-class `non_architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED at `2fee017cc`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-07 22:52Z; report `Batch Completion/B_EXPECTANCY_TUNING_ROWS_RETIRE_COMPLETION_REPORT.md`)
+## B-EXPECTANCY-TUNING-ROWS-RETIRE (CC-C, sprint plan row 4a2 — after row 4a; `#1156`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-08** (Step 11 CONFIRMED by Langston 03:53Z; Step 4 APPROVED at `2fee017cc`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-07 22:52Z; report `Batch Completion/B_EXPECTANCY_TUNING_ROWS_RETIRE_COMPLETION_REPORT.md`)
 
 **WHAT IT RETIRED.** The three `expectancy_tuning` rows in `module_constants` (win-rate floor 0.4 / medium 0.5 / high 0.6), whose only reader `getAdjustedMinROI` row 4a deleted.
 

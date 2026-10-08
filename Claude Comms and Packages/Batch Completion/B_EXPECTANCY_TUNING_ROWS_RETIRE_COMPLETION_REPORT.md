@@ -1,6 +1,6 @@
 # B-EXPECTANCY-TUNING-ROWS-RETIRE — Completion Report
 
-change-class: `non_architecture` · sprint plan row 4a2 · `#1156` · owner CC-C (Analyst Claude) · **STEP 11 — closes on Langston's confirm**
+change-class: `non_architecture` · sprint plan row 4a2 · `#1156` · owner CC-C (Analyst Claude) · ✅ **CLOSED 2026-10-08** (Step 11 CONFIRMED by Langston 03:53Z)
 
 ## 1. What it was for
 Row 4a (`B-VTS-TELEMETRY-AGGREGATES`) deleted `getAdjustedMinROI`, the only reader of the three `expectancy_tuning` rows in `module_constants` (win-rate floor 0.4, medium 0.5, high 0.6). With no reader, the rows were settings that looked live and did nothing, and the boot warm-up still prefetched the module. This batch removes the rows, with a rollback in git and the deploy/rollback order stated, so nothing appears tunable that is not.
@@ -44,7 +44,7 @@ CHANGE-CLASS: `non_architecture`
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | Observation column | N/A | the scope names no observation window; the result was read at deploy |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-C: row 4a2 at Step 11 |
-| T1 | Langston's MEMORY.md | **OWED** | one close line, written net-zero after his Step-11 confirm |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston at his confirm, net −56 B (part `15b8c96cba2c`→`2e6b66f7abed`) |
 | T2 | SYSTEM_MANUAL.md | N/A | no mention of `expectancy_tuning` (grep, 2026-10-08); no architecture or math changed — three unread rows removed |
 | T2 | SYSTEM_IMPACT_MAP.md | N/A | no mention of the module; the reader and the prefetch were removed by row 4a, whose Step 10 carries the SIM change |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1156` closed |

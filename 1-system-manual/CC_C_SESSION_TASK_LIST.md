@@ -39,7 +39,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 2 | B-XSTOCK-BID-TRIGGER-RELAND | QUEUED | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
 | 4 | B-VTS-NO-DECISION-VALVE | STEP 7 of 11 — deployed in release deploy B 2026-10-06; weekend reopen count open | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
 | 4a | B-VTS-TELEMETRY-AGGREGATES (`#1141`) | STEP 4 r2 of 11 — with Langston | after row 4: NARROWED 2026-10-02 (Langston) to the telemetry lookup's `SKIPPED` fallback (`:283`), stale-cell overwrite (`:218-219`) and the regime-level skipped denominator (`:212-213`) — measure first — plus two rule-18 deletions and one comment record-fix; the never-count / class-pooling half moved to row 148a (CC-A) |
-| 4a2 | B-EXPECTANCY-TUNING-ROWS-RETIRE (`#1156`) | STEP 11 — deployed `0c8ef5da2`, Step 8 confirmed; report written, Langston's confirm owed | after row 4a: a migration retiring the 3 `expectancy_tuning` rows nothing reads once 4a lands |
+| 4a2 | B-EXPECTANCY-TUNING-ROWS-RETIRE (`#1156`) | ✅ CLOSED 2026-10-08 (Step 11 confirmed 03:53Z) | after row 4a: a migration retiring the 3 `expectancy_tuning` rows nothing reads once 4a lands |
 | 8a | B-OPEN-REFUSAL-DURABLE-ROW (`#1083`) | QUEUED | after row 8, before the paper run |
 | 8b | B-STALE-BOOK-DEPTH-REFUSAL (`#1085`) | QUEUED | after row 8a |
 | 14a | B-KRAKEN-PRIMARY-KEY-RESOLUTION (`#1076`, `#1146`) | QUEUED | after row 14 |
