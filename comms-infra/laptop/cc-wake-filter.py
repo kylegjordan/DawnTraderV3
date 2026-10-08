@@ -345,8 +345,9 @@ REFUSED = 5
 
 
 def _proc(pid):
-    """(alive, creation filetime) for a Windows pid; None off Windows. Fail-safe: ANY failure to read the process
-    except 'invalid parameter' (87, no such process) reads ALIVE — an unreadable process is not a dead one."""
+    """(alive, creation filetime, denied) for a Windows pid; None off Windows. `denied` is True only when OpenProcess
+    is refused with ERROR_ACCESS_DENIED (5). Fail-safe: a failure to read the process reads ALIVE, except 87 ('invalid
+    parameter' — no such process, dead); what a refused open MEANS for a lease holder is decided by holder_verdict."""
     if os.name != "nt" or pid is None:
         return None
     import ctypes, ctypes.wintypes as w
@@ -354,7 +355,10 @@ def _proc(pid):
     k.OpenProcess.restype = w.HANDLE
     h = k.OpenProcess(0x1000 | 0x00100000, False, int(pid))        # QUERY_LIMITED_INFORMATION | SYNCHRONIZE (for the wait)
     if not h:
-        return (False, None) if ctypes.get_last_error() == 87 else (True, None)
+        err = ctypes.get_last_error()
+        # #1179 (Langston Step-2 C1): ONE measured cause, ONE predicate — error 5 exactly. Every other non-87 error
+        # stays on the fail-safe (alive, not denied): widening this set would move toward evicting a live holder.
+        return (False, None, False) if err == 87 else (True, None, err == 5)
     try:
         c, e, kk, u = (w.FILETIME() for _ in range(4))
         t = k.GetProcessTimes(h, ctypes.byref(c), ctypes.byref(e), ctypes.byref(kk), ctypes.byref(u))
@@ -362,20 +366,52 @@ def _proc(pid):
         # The exact test (Langston): WaitForSingleObject(h, 0). An exit code of 259 alone cannot tell a live process
         # from one that exited WITH 259. Only a CONFIRMED exit reads dead — WAIT_OBJECT_0 (0) = signalled = exited;
         # WAIT_TIMEOUT means running, and a failed wait (WAIT_FAILED) reads ALIVE, fail-safe like every unreadable case.
-        return (k.WaitForSingleObject(h, 0) != 0, created)
+        return (k.WaitForSingleObject(h, 0) != 0, created, False)
     finally:
         k.CloseHandle(h)
 
 
-def _holder_alive(lease):
-    """The lease's loop is alive AND is the same process (creation time is the primary key against pid reuse)."""
+def holder_verdict(alive, created, loop_created, denied):
+    """THE lease-holder decision, pure (B-WAKE-LEASE-PID-REUSE, #1179). Returns (verdict, why), verdict 'alive'|'dead'.
+    `scripts/analysis/test-wake-lease-verdict.py` reads this function out of this file and grades its truth table in
+    CI — so keep it free of anything outside its four arguments. Order matters; each rule says why it is where it is.
+      1. not alive -> dead (an exit was confirmed, or error 87).
+      2. denied AND loop_created recorded -> dead: the lease proves the holder was openable by this user at the same
+         integrity level when it took the lease (_lease_create reads it then); our own loop does not become
+         unopenable, so a refused open means the pid now belongs to someone else (#1179: svchost on a reused pid).
+         Declared limit: a holder armed ELEVATED is refused to a non-elevated newcomer while alive -> a duplicate,
+         the announced direction.
+      3. created unknown (an open that succeeded but GetProcessTimes failed, or a denied open with nothing recorded)
+         -> alive: the fail-safe — an unreadable process is not a dead one.
+      4. loop_created unknown -> alive (the ruled case, test-wake-lease.py OBJ-6: nothing known about the holder).
+      5. created == loop_created -> alive (identity confirmed); otherwise dead (a reused pid)."""
+    if not alive:
+        return "dead", "not running"
+    if denied and loop_created is not None:
+        return "dead", "open refused (5) under a lease that recorded its holder's creation time: pid reused"
+    if created is None:
+        return "alive", "creation time unreadable: fail-safe"
+    if loop_created is None:
+        return "alive", "lease recorded no creation time: nothing to compare (OBJ-6)"
+    if created == loop_created:
+        return "alive", "identity confirmed"
+    return "dead", "creation time differs: pid reused"
+
+
+def _holder_state(lease):
+    """(alive?, identity confirmed?) for the lease's holder loop."""
     st = _proc(lease.get("loop"))
     if st is None:
-        return False
-    alive, created = st
-    if not alive:
-        return False
-    return created is None or lease.get("loop_created") is None or created == lease.get("loop_created")
+        return False, False
+    alive, created, denied = st
+    loop_created = lease.get("loop_created")
+    verdict, _ = holder_verdict(alive, created, loop_created, denied)
+    return verdict == "alive", (verdict == "alive" and created is not None and created == loop_created)
+
+
+def _holder_alive(lease):
+    """The lease's loop is alive AND is the same process (holder_verdict decides)."""
+    return _holder_state(lease)[0]
 
 
 class CensusFailed(Exception):
@@ -459,6 +495,12 @@ def _lease_create():
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump({"loop": _LOOP, "loop_created": st[1] if st else None, "taken_at": _utc()}, f)
     print(f"[cc-wake-filter] lease taken: loop {_LOOP}", file=sys.stderr, flush=True)
+    if os.name == "nt" and (st is None or st[1] is None):
+        # #1179 (Langston Step-2 C6): a lease with no creation time can never prove its holder is gone if that pid is
+        # later reused by a process this user cannot open — it reads alive until moved aside by hand. Say so now.
+        print(f"[cc-wake-filter] WARNING: could not read loop {_LOOP}'s creation time — this lease cannot detect pid "
+              f"reuse; if a later arm refuses on loop {_LOOP} while no watcher runs, see the runbook (move the lease aside)",
+              file=sys.stderr, flush=True)
 
 
 def _lease_gate():
@@ -471,15 +513,24 @@ def _lease_gate():
     lease = _lease_read()
     if _LOOP is not None and lease and lease.get("loop") == _LOOP:
         return                              # our own loop's reconnect pass
-    if lease and not lease.get("corrupt") and _holder_alive(lease):
+    held, confirmed = _holder_state(lease) if (lease and not lease.get("corrupt")) else (False, False)
+    if held:
         who = f"loop {lease.get('loop')}, holding since {lease.get('taken_at')}"
         if _LOOP is None:
             _refuse("WATCHER-OLD-ARM", f"a lease is held ({who}); this arm cannot take one — re-arm with the current "
                     "command (shared MEMORY 4.5)")
         age = _alive_age()
         if age != "age unknown" and int(age.split()[0]) > 900:
-            _refuse("WATCHER-STUCK", f"a watcher of yours runs but is not saving ({who}; .alive {age}) — stop that "
-                    f"task or process {lease.get('loop')}, then re-arm")
+            # #1179 (Langston Step-2 C2): "stop it" only when the holder's identity is CONFIRMED (its creation time
+            # matches the lease) — the #1140 case. Unconfirmed, the pid may now be someone else's process.
+            if confirmed:
+                _refuse("WATCHER-STUCK", f"a watcher of yours runs but is not saving ({who}; .alive {age}) — stop that "
+                        f"task or process {lease.get('loop')}, then re-arm")
+            _refuse("WATCHER-STUCK", f"a lease names {who} but it is not saving (.alive {age}) and its identity is NOT "
+                    f"confirmed — check that process {lease.get('loop')} is this session's bash arm loop (tasklist) "
+                    f"before stopping anything; if it is not, move {LEASE} aside and re-arm")
+        # WATCHER-STAND-DOWN directs no action on the pid, so it keeps one wording for a confirmed and an
+        # unconfirmed holder (a decision, Langston Step-2 record item) — only the line above can tell a session to stop one.
         _refuse("WATCHER-STAND-DOWN", f"a watcher of yours is running ({who}; .alive {age}) — do NOT re-arm"
                 + (f". If no wake arrives, check that loop and the lease at {LEASE}" if age == "age unknown" else ""))
     try:
