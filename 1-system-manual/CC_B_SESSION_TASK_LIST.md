@@ -22,6 +22,7 @@
 
 ## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (66)
 
+- ⭐ **PRE-SPRINT (Kyle 2026-10-07, `Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md`) — mine:** Stage 0 = the engine-stop exercise as the reset's own first act (five pre-registered conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) · **P1a = row 59, increment 1 `B-ENTRY-DISTANCE-GUARD`** (live: refuse a taker open at/through stop or target + the RR floor; shadow: the distance band), then 39a, the minimum stop vs the live spread, L/USD's 0.059 % stop vs row 2a, the RTB refresh latch (Coltrane C1) · Stage 4 = main Dashboard 0 trades / $0 vs the Paper page · Stage 5 = row 100 with the reset.
 - 2a0 `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`, moved from Infra's row 173): an engine stop crashes on a session older than ~24.8 days — it halted the 10-06 reset. Stop storing elapsed (both write sites), no migration. FIRST, after the 24 h no-deploy window.
 - 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
