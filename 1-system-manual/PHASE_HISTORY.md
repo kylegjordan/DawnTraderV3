@@ -1287,6 +1287,10 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **The watcher that wakes each Claude session now says so when it cannot keep its place, instead of failing silently.** If it could not save where it had read up to, it used to get stuck re-reading the same message every 30 seconds without ever telling the session. And if its saved place was damaged, it quietly jumped to the newest messages and skipped everything in between. Now both cases end with a clear message saying what happened and, after a long absence, from what time to re-read the inbox by hand.
 
+
+### 2026-10-08 — B-CENSUS-OWNERLESS-REMAINDER (CC-A, sprint plan row 1s) — ⏳ closes on Langston's Step-11 confirm
+
+**Every open issue the plan has a place for now has an owner the weekly census can read.** After last week's clean-up, 48 issues were still scheduled but named nobody responsible, and because they were scheduled no census list ever showed them. Three were already finished and are now closed with proof; the other 45 each name an owner — usually the session whose plan row they sit on — and each session was told which ones are now theirs. The census also gained a new list, "placed but ownerless", so this gap can never grow back silently; it reads zero on the live ledger and lists all 48 when run against last week's.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm
 
 **The engine heartbeat now does only the one job it could ever do.** Since July we had known that its session check and its start-up recovery could never act — they looked for a user id the system stopped using long ago — and that it was writing a stream of status events nobody read. Those are gone. What remains checks every 30 seconds for an engine left running without its record and stops it cleanly. The old events table now gets cleaned nightly, and the first clean-up ran without a hitch; a later batch deletes the table itself.

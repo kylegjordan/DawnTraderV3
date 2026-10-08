@@ -1198,6 +1198,16 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **HOMES PLACED:** none new. **Docs:** shared MEMORY §4.5 vocabulary (`WATCHER-STATE-*`, kept under the 24,576 B cap), the wake-watcher runbook (incl. the crash → hand-delete clause), the SIM wake block.
 
+## B-CENSUS-OWNERLESS-REMAINDER (CC-A, sprint plan row 1s — after row 1n; `#1167`) — change-class `non_architecture` — ⏳ **STEP 10 — closes at Step 11** (Step 2 APPROVED with C1-C5; Step 4 r2 APPROVED 2026-10-08, landed `d728f903d`; Step 8 CONFIRMED by Langston 2026-10-08; report `Batch Completion/B_CENSUS_OWNERLESS_REMAINDER_COMPLETION_REPORT.md`)
+
+**WHAT IT DID.** After row 1n, 48 open issues had a place in the plan but no owner the census could read, so no census list showed them. Three were already finished and are closed with citations (`#154`, `#298`, `#302`); the other 45 each carry one `W41 triage, row 1s … OWNER <session> — <why>` line (CC-A 12 · CC-B 15 · CC-C 3 · Infra Claude 15), defaulting to the session the placing line names, and the after-live lines that read `(—)` or Kyle now name the same owner. Handed over by number; no refusal.
+
+**THE CODE.** `census.mjs` `ownerOfIssue(e, ctx)` — an optional second argument; without it the result is unchanged (a test pins it). With `ctx.placingOwner`, an issue with no owner in its own text reads a LABELLED fifth source, `placing-line <session>` (from the §4 row or after-live line that places it, by the same homing forms `placement()` uses; no parked/roadmap leg). New list **(b′) placed but ownerless** in the census body and metadata. Step 4 r1 was sent back: two 0x08 bytes stood where `\b` belonged (`/\bHOME\b/`), so the HOME-id leg matched nothing, and no test reached it; r2 fixed both, and Langston's mutations proved the two new cases discriminate.
+
+**RESULT (deployed `68af4ccbf`, the checker's 03:39Z self-deploy).** Owner sources over 504 open: ownerLine 455 · homeLine 34 · filer 15 · placingLine 0 · unknown 0; (b′) 0. Control at `035d0f7e5`, same code: (b′) 48 (19 placing-line + 29 unknown). §6 agrees (291).
+
+**HOMES PLACED:** `#1169` (row 1u, a trailing disposition cell never closes an entry — Langston's Step-2 surface). The five text files carrying the same 0x08 corruption were restored in the Step-10 commit (Langston §13, disposition 1).
+
 ## B-LIVE-BANNER-ACTIVE-HOTFIX (CC-B, hotfix, Kyle-assigned 2026-10-07; `#1160` ACTIVE half; sprint row 2a0h) — change-class `hotfix` — ⏳ **closes on Langston's confirm** (hotfix gate APPROVED at `e2b5a84a4`; deployed 2026-10-07; report `Batch Completion/B_LIVE_BANNER_ACTIVE_HOTFIX_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The Live Trading page's banner said *Live Trading Mode — real capital at risk — ACTIVE* while only paper ran: the client read the server's mode-agnostic `active` flag as if it meant this mode. The paper toggle and the filter-health widget had the same read.

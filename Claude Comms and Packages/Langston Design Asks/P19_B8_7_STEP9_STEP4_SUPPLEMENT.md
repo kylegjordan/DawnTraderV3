@@ -1074,7 +1074,7 @@ Every remaining hit is inside the two shared tables themselves, all guarded (vis
 
 # §5 ADDENDUM (2026-07-17 ~09:30Z) — your #527 verify-condition answer + a §9.2-grade CORRECTION of my own claim + a rule-23 fix it surfaced
 
-**Your condition (spread shadowing):** PASSES mechanically — `grep -n "spread" eval-cycle.ts` shows exactly ONE declaration in the function (was :639), no intervening redeclaration before the blend or the insertion.
+**Your condition (spread shadowing):** PASSES mechanically — `grep -n "\bspread\b" eval-cycle.ts` shows exactly ONE declaration in the function (was :639), no intervening redeclaration before the blend or the insertion.
 
 **BUT my claim to you was FALSE, and I own it:** I described the blend's spread as "the LIVE measured lane spread." Reading the declaration to answer your condition showed `const spread = 0.001;` — a HARDCODED constant, and specifically CRYPTO's spread number (crypto spreadRateDefault = 0.0010, friction.ts:28), sitting in the xStock lane whose own static default is 0.0012 (12bps observed mid-range, xstock_spot/friction.ts:37) and whose `getCachedCostMetrics` ALREADY serves a per-symbol MEASURED spread with provenance (B-5 AMR Obj-12, cost-model.ts:60-61/:202). I inferred "live measured" without reading the declaration — the exact ruled-on-reported-fact trap.
 

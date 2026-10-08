@@ -291,7 +291,7 @@ export function resolveEvidenceOrSentinel(sha) {
   // [0-9a-f]. ⛔ CORRECTED (Langston Step-4): an earlier comment here claimed it
   // would "fail the CLI's validation one layer deeper". IT WOULD NOT.
   // `isValidResolutionEvidence` (server/services/system-alerts.ts:172) tests
-  // /[0-9a-f]{7,40}/i — UNANCHORED — so 13 hex chars PASSES. The timestamp
+  // /\b[0-9a-f]{7,40}\b/i — UNANCHORED — so 13 hex chars PASSES. The timestamp
   // would have been written into `resolution_evidence` AS IF IT WERE A GIT SHA.
   // ⇒ not a failure moved later: a SILENT FABRICATED PROVENANCE RECORD, which is
   // the #447 class the sentinel exists to prevent. A real git sha at 7+ chars
