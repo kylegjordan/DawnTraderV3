@@ -95,15 +95,9 @@ CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_
 
 
 def resolve_recipient_name(task):
-    """Who Langston is replying to, as a name the wake filter recognizes (Kyle 2026-06-20).
-    The CC sessions wake only when their name appears in a post; Langston's reply must therefore
-    LEAD with the addresser's name so their watcher catches it. The bridge knows the addresser
-    deterministically (the triggering message's author) — don't rely on Langston's wording.
-      - Kyle           -> "Kyle"
-      - a CC webhook post -> its display name IS the session name ("OLD Claude" / "NEW Claude")."""
-    if task.get("author_id") == CFG.get("kyle_id"):
-        return "Kyle"
-    return (task.get("author_display") or task.get("author_name") or "").strip()
+    """Who Langston is replying to (Kyle 2026-06-20). The rule lives in langston_queue.recipient_name
+    (B-WAKE-SELF-ADVANCE-LEAD, #1177) so the queue suite can test it; this binds the config."""
+    return lq.recipient_name(task, CFG.get("kyle_id"))
 
 BOT_TOKEN = dc.load_env_value(BOT_TOKEN_FILE, "DISCORD_BOT_TOKEN")
 OAUTH_TOKEN = dc.load_env_value(OAUTH_TOKEN_FILE, "CLAUDE_CODE_OAUTH_TOKEN")
@@ -322,7 +316,10 @@ def _self_advance(task_q, channel_id, items, prev_task):
     task_q.put({"channel_id": channel_id, "message_id": f"adv-{nxt['id']}", "author_id": None,
                 "author_name": "self-advance", "author_display": "self-advance",
                 "is_dm": prev_task.get("is_dm", False), "kind": "text", "content": prompt,
-                "self_advance": True, "is_alert": False})
+                "self_advance": True, "is_alert": False,
+                # #1177: whom the reply is addressed to. "self-advance" above is a LABEL (the breaker and
+                # the prompt key on it); without this the reply led with the label and woke nobody.
+                "addressee": nxt.get("requester")})
     log(f"self-advance: re-invoking Langston for queue item {nxt['id']} (gate={nxt['gate_type']})")
 
 
@@ -444,7 +441,9 @@ def process_task(task, state, breaker, task_q=None):
                 items = lq.load_queue(QUEUE_FILE)
                 if not any(it.get("id") == str(msg_id) for it in items):
                     # OBJ-B (#345): capture a re-fetchable pointer at enqueue (inbox path / repo file / sha).
-                    items.append(lq.new_item(msg_id, task.get("author_display") or task.get("author_name", "?"),
+                    # #1177: the requester is the RESOLVED addressee (a Kyle item stores "Kyle", not his
+                    # username) - a self-advance on this item leads its reply with it.
+                    items.append(lq.new_item(msg_id, resolve_recipient_name(task) or "?",
                                              prompt, pointer=lq.extract_pointer(prompt),
                                              gate_type=lq.infer_gate_type(prompt)))
                     lq.save_queue(QUEUE_FILE, items)
@@ -551,10 +550,9 @@ def process_task(task, state, breaker, task_q=None):
     # Guarded so a reply Langston already opened with the name isn't double-prefixed. Skipped for
     # alerts — the addresser is the alerts webhook (no session to wake); CC follow-through on an
     # alert rides the existing alert-completion wake path, not a name in Langston's triage reply.
+    # The rule (and the self-advance marker, #1177) is langston_queue.lead_with_addressee.
     if not task.get("is_alert"):
-        recipient = resolve_recipient_name(task)
-        if recipient and not cleaned[:len(recipient) + 2].lower().startswith(recipient.lower()):
-            cleaned = f"{recipient} — {cleaned}"
+        cleaned = lq.lead_with_addressee(cleaned, task, CFG.get("kyle_id"))
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
     mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
     # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload

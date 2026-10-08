@@ -159,6 +159,12 @@ jobs:
       - name: Wake filter tests (position save and read failures)
         if: ${{ !cancelled() }}
         run: python3 scripts/analysis/test-wake-state-unsaved.py
+      # B-WAKE-SELF-ADVANCE-LEAD (#1177): Langston's review queue - its ordering, markers and caps, and who a reply
+      # is addressed to (a queue reply must open with the requester's name, or it wakes nobody). The module imports
+      # fcntl, so this suite cannot run on Windows; CI is its only grader. Pure Python, no installs.
+      - name: Langston queue tests (addressee, ordering, caps)
+        if: ${{ !cancelled() }}
+        run: python3 comms-infra/discord/langston_queue_test.py
 
       - name: Alert hook tests (split, lost routing)
         if: ${{ !cancelled() }}

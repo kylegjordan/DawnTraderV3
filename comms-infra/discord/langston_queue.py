@@ -90,6 +90,38 @@ def marker_attempted(text):
     return bool(text) and bool(_MARKER_ATTEMPT_RE.search(text))
 
 
+def recipient_name(task, kyle_id):
+    """Who Langston's reply is addressed to, as a name the wake filter recognizes (Kyle 2026-06-20).
+    The CC sessions wake only on a reply that OPENS with their name (cc-wake-filter.py OPEN_RE), so the
+    bridge leads every non-alert reply with this. The ONE resolution site - the bridge calls it at post
+    time AND at enqueue, so a queue item's `requester` is already the resolved name.
+      - a self-advance task -> its `addressee`, the queue item's requester (B-WAKE-SELF-ADVANCE-LEAD,
+        #1177: it used to resolve to the task's label "self-advance", so the requester never woke)
+      - Kyle                -> "Kyle"   (by id; his display name matches no session)
+      - a CC webhook post   -> its display name, which IS the session name ("OLD Claude" / "NEW Claude")
+    Pure: no config read here, so the queue suite can test it without the Discord client."""
+    addressee = (task.get("addressee") or "").strip()
+    if addressee:
+        return addressee
+    if kyle_id is not None and task.get("author_id") == kyle_id:
+        return "Kyle"
+    return (task.get("author_display") or task.get("author_name") or "").strip()
+
+
+def lead_with_addressee(text, task, kyle_id):
+    """The reply as posted: led with recipient_name(task) unless it already opens with that name
+    (case-insensitive, so it is never doubled). A self-advance reply that the bridge leads also says
+    it came from the queue - `OLD Claude — (self-advance) …`; when Langston already opened with the
+    name nothing is added, so the marker is absent there (stated in the batch scope, §2)."""
+    recipient = recipient_name(task, kyle_id)
+    if not recipient or text[:len(recipient) + 2].lower().startswith(recipient.lower()):
+        return text
+    # Only when the addressee is real: a self-advance task with no requester falls back to its label,
+    # and leads `self-advance — …` exactly as before this batch.
+    marker = "(self-advance) " if task.get("self_advance") and (task.get("addressee") or "").strip() else ""
+    return f"{recipient} — {marker}{text}"
+
+
 def new_item(item_id, requester, summary, pointer=None, gate_type=None, now=None):
     now = now if now is not None else time.time()
     gt = gate_type if gate_type in GATE_PRIORITY else DEFAULT_GATE

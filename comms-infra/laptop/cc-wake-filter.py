@@ -181,8 +181,9 @@ ALERT_OWNER_RE = re.compile(
 ALERT_MARKER_STRIP = re.compile(r"\[\[ALERT\b[^\n]*?\]\]", re.I)
 
 # B-WAKE-LEAD-NAME (#1040): does the reply OPEN with this session's name? His bridge prepends the
-# triggering author's display name to every NON-alert reply by construction
-# (discord-langston-bridge.py:530-535), so the opening name is the addressee. Built from NAMES - one
+# addressee's name to every NON-alert reply by construction (comms-infra/discord/langston_queue.py
+# lead_with_addressee; a reply from his own review queue is led with the item's REQUESTER since
+# B-WAKE-SELF-ADVANCE-LEAD, #1177 - before it, `self-advance —`), so the opening name is the addressee. Built from NAMES - one
 # registry, never restated. Tested on the marker-STRIPPED full body.
 # ⚠️ NO SEPARATOR IS REQUIRED AFTER THE NAME, DELIBERATELY (Langston Step-2 condition 5). So a reply
 # that merely MENTIONS this session first - "OLD Claude's r2 is fine, but NEW Claude - ..." - also
@@ -1082,7 +1083,7 @@ for raw in sys.stdin:
                         print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {body}{media_suffix(d)}", flush=True)
                 # ⛔ B-TOKEN-BURN-CUT amendment 1, OBJ-5 (Kyle 2026-09-30; Langston approved): a reply wakes this
                 # session only when it is ADDRESSED here — it OPENS with this session's name (his bridge prefixes the
-                # addressee, discord-langston-bridge.py:530-535) — or carries the explicit wake tag above. It used to
+                # addressee, langston_queue.py lead_with_addressee) — or carries the explicit wake tag above. It used to
                 # be `MY_RE.search(full)`: the name ANYWHERE, so a passing mention in a reply to someone else woke
                 # this session (345 of 547 Langston-reply wakes, 09-23..09-30, were that). OPEN_RE is ^-anchored and
                 # NOT multiline: a line further down that leads with another name does NOT wake that session — the

@@ -61,6 +61,13 @@ LANG_NAME_LATE = ("Kyle — a long reply that does not name any session for a wh
                   + ("Filler that pushes the name past the 400-character truncation. " * 8)
                   + "OLD Claude, this part is for you.")
 LANG_OTHER = "NEW Claude — a plain reply addressed to someone else."
+# B-WAKE-SELF-ADVANCE-LEAD (#1177): a reply from Langston's own review queue. LEAD_SELF_ADVANCE is EXACTLY what
+# langston_queue.lead_with_addressee produces for an OLD Claude item (comms-infra/discord/langston_queue_test.py L1
+# asserts the same string), so the two suites together cover bridge -> filter. The OLD form is what the bridge
+# posted before the batch; it is the control - it must wake nobody, or the new case proves nothing.
+LEAD_SELF_ADVANCE = "OLD Claude — (self-advance) **OLD Claude —** Step 4: approved."
+LEAD_SELF_ADVANCE_OLD = "self-advance — **OLD Claude —** Step 4: approved."
+LEAD_SELF_ADVANCE_OTHER = "NEW Claude — (self-advance) **NEW Claude —** Step 4: approved."
 # B-TOKEN-BURN-CUT amendment 1, OBJ-5 (Kyle 2026-09-30): the route to a second addressee is the explicit wake tag;
 # a later line that merely LEADS with a name does not wake (OPEN_RE is ^-anchored, not multiline — Langston C1).
 LANG_NAME_LATE_TAGGED = LANG_NAME_LATE.replace("OLD Claude, this part is for you.", "@CC-WAKE OLD Claude, this part is for you.")
@@ -104,6 +111,9 @@ CASES = [
     ("langston_outbound", None,    LANG_SECOND_LINE,       False, "OBJ-5 C1: a later LINE leading with my name does not wake (OPEN_RE is not multiline)"),
     ("langston_outbound", None,    LANG_BRACKET_MARKER,    True,  "Step 4 BLOCKER-1: a marker with `]` inside action=, reply opening with my name -> WAKE", "CC-B"),
     ("langston_outbound", None,    LANG_OTHER,             False, "REGRESSION GUARD: plain reply to someone else -> silent"),
+    ("langston_outbound", None,    LEAD_SELF_ADVANCE,       True,  "#1177: a queue reply led with my name by the bridge -> WAKE"),
+    ("langston_outbound", None,    LEAD_SELF_ADVANCE_OLD,   False, "#1177 CONTROL: the pre-batch form, `self-advance —` first -> wakes nobody (the defect)"),
+    ("langston_outbound", None,    LEAD_SELF_ADVANCE_OTHER, False, "#1177: a queue reply led with ANOTHER session's name -> silent"),
     ("langston_outbound", None,    LEAD_A,           True,  "#1040 (a): reply OPENS with my name, another owner's marker -> WAKE, tagged CC-B (the defect)", "CC-B"),
     ("langston_outbound", None,    LEAD_B,           False, "#1040 (b): my name only MID-body, another owner's marker -> silent (the #995 cut, untouched)"),
     ("langston_outbound", None,    LEAD_C,           False, "#1040 (c): marker is mine, reply opens with someone else -> silent (unchanged)"),
