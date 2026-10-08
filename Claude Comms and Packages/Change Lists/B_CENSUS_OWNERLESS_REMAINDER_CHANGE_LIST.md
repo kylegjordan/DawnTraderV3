@@ -36,7 +36,7 @@ Dry run with the new code at `origin/migration/aws-supabase` (after `e8c247aec`)
 2. The list counts `unknown` as well as `placingLine`, so an issue placed on an after-live line with no owner is listed too.
 
 ## r2 — Langston's Step-4 send-back (code SENT BACK, ledger APPROVED), folded at `2fc2fcdd9`
-- **BLOCKER-1, two 0x08 bytes at `census.mjs:235`:** written through a shell heredoc that turned `` into BACKSPACE. Replaced with `HOME` (bounded — parity with `:214`/`:397`; the unbounded form misreads `#693`). 0x08 bytes in the file now: **0**.
+- **BLOCKER-1, two 0x08 bytes at `census.mjs:235`:** written through a shell heredoc that turned `\b` into BACKSPACE. Replaced with `\bHOME\b` (bounded — parity with `:214`/`:397`; the unbounded form misreads `#693`). 0x08 bytes in the file now: **0**.
 - **BLOCKER-2, no test reached the leg:** two `runCensus` cases with no stub — `#303` placed only by `HOME: B-ALPHA` (row 1, CC-A) → `placing-line CC-A`; `#304` placed only by a note homing form `with B-NOTEONLY` (row 107, CC-B) → `placing-line CC-B`. **Mutation-proved:** on the shipped `8655a1bfd` bytes both FAIL (`owner ?`); with the bytes fixed but `noteHomesId` removed, `#304` alone FAILS. Census 166 → **168**, poller 443.
 - **FINDING-1:** the HOME-id leg now applies `noteHomesId` — the same rules as `placement()`, so the docblock is true.
 - **FINDING-2:** a comment at the guard: `runCensus` always sets `r.b.placedOwnerless` (the dry run reads it unguarded); the guards serve the hand-built P45 size fixture that predates the key.
