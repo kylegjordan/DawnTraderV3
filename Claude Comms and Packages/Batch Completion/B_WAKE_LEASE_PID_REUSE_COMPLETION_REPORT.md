@@ -1,6 +1,6 @@
 # B-WAKE-LEASE-PID-REUSE (#1179) — COMPLETION REPORT
 
-**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1w (after row 1u) · **change-class:** `non_architecture` · **Scope** `c31d13ed9` (APPROVED with C1-C6) · **Pre-audit** `ab4bbaa45` (APPROVED with six in-commit conditions) · **Code** reviewed `2bfe98d4d`, landed `01ba50771` + `8734c0acc` · **Install** laptop filter 2026-10-08 07:15Z · **Step 8** CONFIRMED by Langston 2026-10-08 · ⏳ **closes on Langston's Step-11 confirm**
+**Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row 1w (after row 1u) · **change-class:** `non_architecture` · **Scope** `c31d13ed9` (APPROVED with C1-C6) · **Pre-audit** `ab4bbaa45` (APPROVED with six in-commit conditions) · **Code** reviewed `2bfe98d4d`, landed `01ba50771` + `8734c0acc` · **Install** laptop filter 2026-10-08 07:15Z · **Step 8 and Step 11** CONFIRMED by Langston 2026-10-08 — ✅ **CLOSED**
 
 ## OPEN AT CLOSE — stated first
 **No scope objective is open.** Two stated bounds: (1) **reach** — the filter file is shared on the laptop, but each of the other three sessions decides on the pre-fix rule until its next re-arm; only CC-A's re-arm is evidenced. (2) **not a live reproduction** — the fix was not exercised on a real reused pid; pid 4 stands in, as in the ruled OBJ-6 case. Langston's reach: the Windows suite and the installed file are reported fact to him; the decision is CI-graded and the wiring is code he read.

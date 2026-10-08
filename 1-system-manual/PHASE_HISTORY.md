@@ -1300,7 +1300,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Two old issues that said "resolved" only in their last line are closed, and the census now notices that pattern.** Each was checked before closing: one fix is in the code, and the other error has not appeared once in a week of server logs. The weekly census now lists any open issue whose final note says it is finished, so a person can close it with proof — it never closes anything itself. Checking one of them turned up a possible mislabelling in the VTS's "why no signal" records, now placed with New Claude to measure first.
 
-### 2026-10-08 — B-WAKE-LEASE-PID-REUSE (CC-A, sprint plan row 1w) — ⏳ closes on Langston's Step-11 confirm
+### 2026-10-08 — B-WAKE-LEASE-PID-REUSE (CC-A, sprint plan row 1w) — ✅ CLOSED 2026-10-08
 
 **The wake watcher's one-at-a-time lock no longer mistakes a dead watcher for a live one when Windows reuses its process number.** It happened for real this morning: the old watcher's number went to a Windows service, the lock refused every restart, and it would eventually have told the session to stop that service. The lock now recognises the case from the start time it records, and its "stuck" message only says "stop it" when it is sure the process is the session's own watcher. Installed on the laptop; each session picks it up the next time it restarts its watcher.
 ### 2026-10-08 — B-ENGINE-HEARTBEAT-DEAD-PATHS (CC-B, sprint plan row 2a0b) — ⏳ closes on Langston's Step-11 confirm
