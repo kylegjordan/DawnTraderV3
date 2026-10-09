@@ -75,3 +75,21 @@ In cash hours the mark fired anyway in 31 of 33 cases, a median 78 s later. Bid 
 - **Book-state guard over these episodes:** an XS_FRAME line is emitted only on a tick that has already cleared the book-state guard (the method of `…3A_BLIND_TIME_INTERIM.md`, approved by Langston). So the guard passed **every** frame in these 327 episodes. Today's guard does not protect against them, which supports making row 66 a predecessor. ⚠️ The window spans three builds (deploy A 10-02, deploy B 10-06, `0c8ef5da2` 10-07). Staging has been on `0c8ef5da2` since 2026-10-07 15:56Z, and none of these builds carries row 66.
 
 **Owed before Step 1 closes (Langston), §9.4 disposition 1, folded in:** (a) the five-way disposition of `trading-engine.ts` `placeStopAndTargetOrders` (a venue-side Kraken `stop-loss` with the stop pushed 5% further away, behind the Phase-21 gate). Two signs it is legacy are its 9-strategy union and its retired risk-based sizing. "Likely legacy" is not a disposition. (b) A `validate=true` `stop-loss` on an xStock pair, and FOK acceptance on the xStock route (Coltrane). (c) A Kraken book snapshot on the 11 no-ticker-data pairs, as a positive control before anything calls them untradeable.
+
+---
+
+## r3 — LANGSTON'S RULING ON THE COLLAR (2026-10-09 06:59Z, re-derived by him; supersedes r2's collar sizing)
+
+**Q2 NO — r2 sized k on the wrong population.** The episode set is `bidWouldFire=stop AND markExit=n`, but the collar acts on **every** xStock stop exit. On the 82 `stop_hit` closes in the same 7 days: 29 filled at or above the stop · 28 within 0.18% below · 3 at 0.18-0.30% · 6 at 0.30-1.0% · **16 more than 1% below** (worst DLR 10.402%, 20:15:07Z). A k of 0.30% refuses 22 of 82, **including three cash-hours gap-throughs on healthy two-sided books** (STZ 0.400% with spread 0.280%; MSTR 1.327% with spread 0.074%; TER 2.084% with spread 0.316%). On those, the mark itself was already through the stop. ⇒ r2's line *"a collar of a few tenths admits every real stop observed"* is **withdrawn**. Also: `exit_price = exit_ticker_bid` on 82 of 82, so the size walk has never left top of book at our size, and the FOK depth test is **unexercised** (`#661` leg 3).
+
+**THE DESIGN, REDIRECTED (Langston; consistent with Coltrane's "separate stop trigger S from acceptable execution F"):**
+1. **The stop triggers on the bid, unconditionally** (row 64's xStock leg; Kyle's fidelity test).
+2. **The gate is book PLAUSIBILITY, not distance below the stop. That is row 66's mechanism.** Of the 16 closes that slipped more than 1%, **12 had a spread above 1% (median 7.46%, max 20.2%) and 4 did not (min 0.074%)**. A spread-relative gate refuses the 12 stubs and admits the 4 genuine gap-throughs. A distance collar refuses all 16. It is the same comparator the live book-state guard already computes.
+3. **Any collar shrinks to a loose catastrophe backstop**, set well above any observed cash gap and **denominated in stop distance, not price percent**. Stop distance ran from p10 0.059% to p90 3.341% (n=91), so a flat percent means wildly different risk on wide and tight stops.
+4. **A latched-but-refused exit needs a TERMINAL PATH with a loss bound.** Without one, the design repeats L2's defect. Evidence of the cost: 12 of 295 open xStock VTS positions have printed through their stop and are still open, one of them (STX) for 695 minutes. **The bound is a risk-envelope setting, so it is Kyle's to set, at Step 1.**
+5. **Error directions are asymmetric, and the harmful one is silent:** too loose books a fill below the stop and records it; too tight holds through a real move and announces nothing. ⇒ refusals must be counted and alerted on duration (row 66's duration item already covers this).
+
+**Folded into increment 3's Step 1 (§9.4 disposition 1):** size on all stop exits · name the refused-latch terminal path · state the depth test as unexercised · denominate any backstop in stop distance. Plus r2's owed items (a)-(c).
+**Sequencing:** row 66 lands FIRST; increment 3 is row 64's xStock leg.
+
+MISTAKE: wrong-object [B-XSTOCK-BID-TRIGGER-RELAND] — collar k sized on bid-only stop episodes; the collar acts on all stop exits, where k=0.30% refuses 22 of 82 including healthy-book gap-throughs.
