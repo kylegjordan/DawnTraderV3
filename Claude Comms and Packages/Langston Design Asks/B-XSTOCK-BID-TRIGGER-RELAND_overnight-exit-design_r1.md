@@ -113,3 +113,8 @@ MISTAKE: wrong-object [B-XSTOCK-BID-TRIGGER-RELAND] — collar k sized on bid-on
 3. **The handoff pause: whatever length protects us** (*"if it's 20 minutes, if it's 30 minutes"*). CC-C and Langston size it from the data, in Eastern time.
 4. **The VTS gets the same overnight behaviour for xStocks:** a VTS xStock trade opens and closes only where the book could really fill it. It does NOT gain the SQE or the other paper gates; only the fill and exit realism carries over.
 ⇒ **Increment 3's Step 1 scope carries all four.** The VTS half joins the xStock VTS clamp that `8a-P4c` holds today.
+
+**r5 data — sizing the pause** (`scripts/analysis/xstock-handoff-spread-minutes.py`, frozen corpus; share of XS_FRAME frames with spread > 1%, per minute, pooled over the window's weekdays):
+- **4:15 pm ET (20:15Z):** 0.0% every minute 19:51-20:13 → **53.0% at 20:15**, 45% at 20:19, 35-39% to 20:31, then it settles to a new after-hours level of **~24-28%** from about 20:35 onward. **It never returns to the daytime 0%.** After-hours is a different book, not a spike that passes.
+- **8:15 pm ET (00:15Z):** about 21-28% before → **54.4% at 00:16**, ~45% to 00:22, back to the earlier level by **~00:34**, then down to 7-18% after 00:36.
+⇒ **The transition spike lasts about 20 minutes at both handoffs. CC-C proposes a pause of 4:14-4:35 pm and 8:14-8:35 pm ET** (about a minute of margin at each end). After the pause the per-trade book check governs, because the after-hours level itself is permanent, so no fixed window could cover it.
