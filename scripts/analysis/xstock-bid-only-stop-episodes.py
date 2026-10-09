@@ -85,7 +85,7 @@ def read_frames(lines):
         if kv.get('markExit') == 'y':
             mark_exit[pos].append(t)
         if kv.get('bidWouldFire') == 'stop' and kv.get('markExit') == 'n':
-            stop.append({'t': t, 'sym': sym, 'pos': pos, 'sl': num(kv.get('sl')), 'frame': kv.get('frame')})
+            stop.append({'t': t, 'sym': sym, 'pos': pos, 'sl': num(kv.get('sl')), 'bid': num(kv.get('bid')), 'frame': kv.get('frame')})
     stop.sort(key=lambda r: (r['pos'], r['t']))
     for v in mark_exit.values():
         v.sort()
@@ -114,8 +114,10 @@ def episodes(frames, boundaries):
             if r['pos'] != cur['pos'] or r['t'] - cur['t1'] > GAP_S or crossed:
                 out.append(cur); cur = None
         if cur is None:
-            cur = {'pos': r['pos'], 'sym': r['sym'], 't0': r['t'], 't1': r['t'], 'n': 0, 'sl': r['sl']}
+            cur = {'pos': r['pos'], 'sym': r['sym'], 't0': r['t'], 't1': r['t'], 'n': 0, 'sl': r['sl'], 'gaps': []}
         cur['t1'] = r['t']; cur['n'] += 1
+        if r['sl'] and r.get('bid') is not None:
+            cur['gaps'].append((r['sl'] - r['bid']) / r['sl'])  # how far the top bid sits below the stop, as a fraction
         if r['sl'] is not None:
             cur['sl'] = r['sl']
     if cur is not None:
@@ -184,6 +186,24 @@ def report(frames, mark_exit, prints, boundaries):
     return eps
 
 
+def gap_report(eps, prints):
+    """Collar sizing (Langston 2026-10-09): per episode, the top bid's distance below the stop — `min` over its frames
+    (the closest the bid came to the stop: a collar k refuses the WHOLE episode only if k < this) and `first` (the first
+    frame). Top-of-book only: a size-walk fills at or below it, so these are upper bounds on the fill price."""
+    def pct(xs, q):
+        return xs[min(len(xs) - 1, int(q * (len(xs) - 1)))] if xs else float('nan')
+    print('# collar sizing: per-episode (stop - top bid)/stop, %; min = closest approach (refuse-all needs k below it)')
+    print('session class episodes min_of_min p10_min p50_min p50_first p90_first max_first')
+    for key in ('cash', 'h2015', 'h0015', 'off'):
+        for cls in ('REAL', 'FAKE', 'NOT_COMPUTABLE'):
+            es = [e for e in eps if session(e['t0']) == key and e['gaps'] and classify(e, prints, PRIMARY_S) == cls]
+            if not es:
+                continue
+            mins = sorted(100 * min(e['gaps']) for e in es); firsts = sorted(100 * e['gaps'][0] for e in es)
+            print(f'{key} {cls} {len(es)} {mins[0]:.3f} {pct(mins, .1):.3f} {pct(mins, .5):.3f} '
+                  f'{pct(firsts, .5):.3f} {pct(firsts, .9):.3f} {firsts[-1]:.3f}')
+
+
 def self_test():
     def line(t, sym, pos, sl, fire, mark='n'):
         return (f"{t} +00:00: [3n.q7][XS_FRAME] {sym} pos={pos} frame=ok spread=0.01 thr=0.02 sl={sl} tp=200 "
@@ -218,6 +238,7 @@ def self_test():
     assert mark_later(eps[2], mark_exit) is None
     # a restart between two frames splits the episode
     assert len(episodes(frames[:2], [t0 + 2])) == 2
+    assert eps[0]['gaps'] == [], eps[0]  # the self-test lines carry no bid=
     print('self-test OK')
     return 0
 
@@ -237,7 +258,10 @@ def main(argv):
         return out
     frames, mark_exit = read_frames(read_lines(many('--frames')))
     bounds = read_boundaries((many('--boundaries') or [None])[0])
-    report(frames, mark_exit, read_prints(many('--snaps')[0]), bounds)
+    prints = read_prints(many('--snaps')[0])
+    eps = report(frames, mark_exit, prints, bounds)
+    if '--gaps' in argv:
+        gap_report(eps, prints)
     return 0
 
 
