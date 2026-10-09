@@ -36,7 +36,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 
 | plan row | item | state | what it is |
 |---|---|---|---|
-| 2 | B-XSTOCK-BID-TRIGGER-RELAND | QUEUED | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
+| 2 | B-XSTOCK-BID-TRIGGER-RELAND — ONE BATCH (merged 2026-10-09: + rows 66, 41, the xStock legs of 64 and 189) | PRE-SPRINT stage 2; window read done, design converged (r6), merge ruled; next Step 1 of increments 1-4 after row 64's crypto leg and row 65 | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
 | 4 | B-VTS-NO-DECISION-VALVE | STEP 7 of 11 — deployed in release deploy B 2026-10-06; weekend reopen count open | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
 | 4a | B-VTS-TELEMETRY-AGGREGATES (`#1141`) | STEP 4 r2 of 11 — with Langston | after row 4: NARROWED 2026-10-02 (Langston) to the telemetry lookup's `SKIPPED` fallback (`:283`), stale-cell overwrite (`:218-219`) and the regime-level skipped denominator (`:212-213`) — measure first — plus two rule-18 deletions and one comment record-fix; the never-count / class-pooling half moved to row 148a (CC-A) |
 | 4a2 | B-EXPECTANCY-TUNING-ROWS-RETIRE (`#1156`) | ✅ CLOSED 2026-10-08 (Step 11 confirmed 03:53Z) | after row 4a: a migration retiring the 3 `expectancy_tuning` rows nothing reads once 4a lands |
@@ -64,7 +64,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 38 | B-CRYPTO-MARK-AGE-GATE | QUEUED | crypto mark age |
 | 39 | #977 — batch named at Step 1 | QUEUED | the shared price-cache refresh lane for open positions runs but nothing subscribes - staleness hits selection (CC-C) |
 | 40 | B-XSTOCK-SESSION-FRESHNESS | QUEUED | xStock entry-age limit vs the exit standard Kyle ruled |
-| 41 | B-XSTOCK-ENTRY-COMPARATOR | QUEUED | xStock entry-price cross-check |
+| 41 | B-XSTOCK-ENTRY-COMPARATOR | FOLDED into row 2 (2026-10-09) | xStock entry-price cross-check |
 | 42 | B-DECIDED-INTENT-INDEX | QUEUED | xStock's three definitions of 'the price' from one frame |
 | 43 | B-POST-GRID-MUTATION-CENSUS | QUEUED | what changes a stop after it is rounded |
 | 44 | plan row 7 | QUEUED | the VTS reads prices through the shared accessor |
@@ -74,9 +74,9 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 61 | B-GRID-LIVE-PATH-PARITY | QUEUED | open: grid rounding on the live order path |
 | 62 | — batch named at Step 1 | QUEUED | open: a resting order's deadline runs even when no price is usable |
 | 63 | #630 — batch named at Step 1 | QUEUED | open: exercise the maker-order deadline once |
-| 64 | B-EXIT-TRIGGER-FILL-PARITY | QUEUED | close: exits fire on the price they would fill at |
+| 64 | B-EXIT-TRIGGER-FILL-PARITY | QUEUED | close: exits fire on the price they would fill at — the CRYPTO leg; the xStock leg is row 2 |
 | 65 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | QUEUED | close: the exit path sees both price sides |
-| 66 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | QUEUED | close: xStock exit plausibility bound |
+| 66 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | FOLDED into row 2 increment 1 (2026-10-09) | close: xStock exit plausibility bound |
 | 67 | #204 — batch named at Step 1 | QUEUED | close: xStock stop prices at the wrong scale |
 | 68 | plan row 3h.b | QUEUED | close: remove the second exit implementation |
 | 69 | B-EXIT-LATCH-INVESTIGATION | QUEUED | close: is the hold-past-target a label or a real exit defect |
