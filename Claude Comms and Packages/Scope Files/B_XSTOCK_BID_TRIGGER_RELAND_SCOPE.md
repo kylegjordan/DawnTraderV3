@@ -72,3 +72,7 @@ Corpora: `git log -S` (not path-limited) on `SEED_ESCAPED`, `clearBookStateCompa
 
 ### Existence + ledger check
 `RUNNING_ISSUES` `#1065` (the false stop), `#1066` (the restart-durable ring, row `3n.q8`, which OBJ-3's chain relies on for its outside datum), `#1064` (the decision-price label), `#943` / `#567`. No entry or batch builds a `spread_blown` arm or a false-hollow instrument for the spread test.
+
+## WINDOW ENDED AT DAY 7 (Kyle 2026-10-09)
+
+Kyle: *"if you have enough data, then yes, end it now and start the analysis."* The 21-day window for increment 1 ended at day 7. The read is in `B_XSTOCK_BID_TRIGGER_RELAND_WINDOW_READ.md`. A bid stop trigger is mostly right during cash hours (24 REAL / 9 FAKE at 90 s) and fires on stub bids off-hours (0 REAL in 59 handoff episodes; 12 REAL / 111 FAKE / 112 no-print in the rest). Increment 3 therefore needs an off-hours rule, which is Kyle's call.
