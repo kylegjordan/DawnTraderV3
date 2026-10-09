@@ -104,3 +104,12 @@ MISTAKE: wrong-object [B-XSTOCK-BID-TRIGGER-RELAND] — collar k sized on bid-on
 2. **The handoff blackout, as a cheap belt beside row 66's plausibility gate, not instead of it.** Two cautions from the data: (a) **the length.** This window's bid-only stop episodes at the 4:15 pm handoff ran a median 89 s and p90 799 s (~13 min), so 10 minutes misses the tail. More importantly, a broken book can outlast any window: HUT stayed implausible for 17.8 h after 4:15 pm on 10-06. So the blackout catches the spike, and row 66 catches the aftermath. (b) **It must be ET-aware.** 4:15 pm ET is 20:15Z now and becomes 21:15Z when US clocks change on 2026-11-01. A UTC-hardcoded window would sit an hour off for five months of the year (Coltrane raised the same point).
 - **Targets are naturally honest on the bid:** a target fires only when a real buyer is at or above it. The 108 frames where the MARK said "target" while the bid sat below the stop are exactly what a bid trigger would NOT fire.
 - **Refused exits:** Kyle's "exit when realistically possible" reads as **no forced sale into a broken book**. The protection is the duration alarm (row 66) and the measured cost (HUT: 4 cents a share over 17.8 h). Kyle's call to confirm.
+
+---
+
+## r5 — KYLE'S ANSWERS (2026-10-09 ~07:55Z); Langston and CC-C to iterate to consensus and go
+1. **No forced exit and no time limit.** Paper trades only where a real trade could happen; if live could not sell, paper does not sell, however long that lasts. *"I want this to work as close to how it will work when we go live."*
+2. **No overnight alert flood.** Thin overnight books are EXPECTED. A position held because the book cannot fill it must not page the crew or Langston's queue. ⇒ **Row 66's duration item changes shape: record how long each refusal lasts (on the trade or in a report), and ALERT only on something unexpected** (for example, a broken book in cash hours, or our own feed impaired — the `#994` split). Kyle: *"it should basically only trade when there's certainty that it could be done in reality."*
+3. **The handoff pause: whatever length protects us** (*"if it's 20 minutes, if it's 30 minutes"*). CC-C and Langston size it from the data, in Eastern time.
+4. **The VTS gets the same overnight behaviour for xStocks:** a VTS xStock trade opens and closes only where the book could really fill it. It does NOT gain the SQE or the other paper gates; only the fill and exit realism carries over.
+⇒ **Increment 3's Step 1 scope carries all four.** The VTS half joins the xStock VTS clamp that `8a-P4c` holds today.
