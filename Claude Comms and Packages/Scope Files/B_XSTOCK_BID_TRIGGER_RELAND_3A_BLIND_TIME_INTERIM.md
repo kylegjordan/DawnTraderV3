@@ -49,3 +49,6 @@ Today an open paper xStock position goes unwatched ~16% of its holding time, mos
 
 ## Owed by the FINAL read (window day 21), not the interim
 (a) union the still-open positions from `active_open_positions` (13 open at 07:27Z, the oldest 10-06 16:13:29Z — survivors, blind-heavy by selection); (b) split `arm_floor` by cash session vs off-hours (Kyle's 2026-09-03 ruling settles the off-hours posture); (c) the cascade term above, per yield.
+
+## KYLE'S DECISION (2026-10-09 ~00:10Z)
+**`spread_blown` stays OFF.** Row 66 (`B-BOOK-STATE-RING-INDEPENDENT-BOUND`) moves up the pre-sprint exit stage to run right after row 64; 3a is reconsidered only after 66 lands and the window's final read.
