@@ -1220,3 +1220,14 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **CENSUS:** readers of the module at `d4c688b88` — none (the deleted function was the only one; Langston re-derived at Step 2); writers — the seed migration only.
 **ROLLBACK / ARCHIVE:** `drizzle/migrations/2026-10-07-b-expectancy-tuning-rows-retire-rollback.sql` (tracked) restores all three with their values and `updated_by`. **Order: run it BEFORE deploying any code older than `d4c688b88`, or that code refuses boot.**
 **COMMIT:** migration `2fee017cc` (+ header `ff5a21d39`); deployed `0c8ef5da2`.
+
+## 2026-08-07 — the class-less 11.7S posture mechanism — B-SIZING-DEC-RESTORE obj-10 (Kyle 2026-08-06/07: "delete, don't retire") — ⚠️ ENTRY BACKFILLED 2026-10-09 at the batch's Step 10
+| removed | where | what it was |
+|---|---|---|
+| `resolveStrategyMode`, `REGIME_TO_MODE_MAP`, `STRATEGY_MODE_OVERLAYS`, `getModeOverlay`, `getOverlayForStability`, `applyModeOverlay`, the class-less `meetsConfidenceFloor`, `recordModeExecution`, the aggregate mode counters and their reader (`getModeStats`) | `server/core/governance/strategy-modes.ts` (+ the panel's reader in `routes.ts`) | Directive 11.7S (born `9d00fa9c3`, 2026-01-30): a class-less NORMAL/DEFENSIVE/SURVIVAL overlay on size, stop, target, confidence floor and cooldown, resolved from global regime stability |
+**WHY:** it was damping the VTS trades the system learns from (DEFENSIVE ×0.6 on ~900 a day, SURVIVAL ×0.25 on ~741 a day) on a premise that had rotted ("effectively always NORMAL"). Kyle: *"we are learning from trades affected by a mechanism we plan to replace."*
+**WHAT SURVIVES, deliberately:** the AMR per-class path (`getModeOverlayForClass`, `getSlotCapForMode`, `meetsConfidenceFloorForClass`, `resolveStrategyModeFromWeather`) and the per-class stat recorders. The AMR is the only posture writer and is in shadow, so no posture is applied. The `strategyMode` trade stamp is kept.
+**CENSUS:** the aggregate counter and its reader went together, so no reader survives a deleted writer (§9.5(a-ii)); the 11.7S subject test was archived and the AMR probe re-pointed (37 of 37).
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/directive-11.7S-strategy-modes.test.ts.removed`; git history holds the module body. **FENCE:** `server/tests/integration/b-sizing-legacy-deletion-fence.test.ts` (obj-10 block; landed unproven at `22e133a5c` and is no longer labelled so at head).
+**COMMIT:** `22e133a5c` (2026-08-07); live since `213e162dc`.
+**WHY BACKFILLED:** rule 18 required this entry in the same batch; the module header cited this log and the entry did not exist. Found at Step 10 (§9.4 disposition 1).

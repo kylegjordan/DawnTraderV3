@@ -1184,7 +1184,7 @@ SQE is the final signal gatekeeper before signals enter the RTB queue. It evalua
 | FinalScore | ≥ 0.35 | Computed or backfilled. SQE is sole authority — duplicate checks in active-execution-engine and RTB removed (HF8). |
 | RegimeWeight | ≥ 0.30 | Computed or backfilled |
 | ROI Gate | ≥ dynamic threshold | Regime + PredictiveConfidence |
-| Confidence Floor | Mode-dependent | NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80 (Directive 11.7S). Requires `regimeStability` in input. VTS signals bypass via `skipConfidenceFloor` option (cold-start). Added HF8. |
+| Confidence Floor | Mode-dependent | ⛔ **The class-less 11.7S floor was DELETED 2026-08-07 (`B-SIZING-DEC-RESTORE` obj-10). Only the AMR per-class floor (`meetsConfidenceFloorForClass`) survives, and the AMR is in shadow, so no posture floor applies today.** Historical: NORMAL=0.60, DEFENSIVE=0.70, SURVIVAL=0.80 (Directive 11.7S). Requires `regimeStability` in input. VTS signals bypass via `skipConfidenceFloor` option (cold-start). Added HF8. |
 | Governance Gate (11.7R-E) | Strategy-dependent | Checks `isStrategyEligible()` based on `regimeStability` + `getStrategyDependency()`. HIGH-dependency strategies blocked in UNSTABLE regime. Requires `strategy` + `regimeStability` in input. VTS bypass via `skipGovernanceGate` option (VTS has own inline governance). Migrated from active-execution-engine in HF9. |
 
 **All legacy metrics purged**: NGC, CWQI, ProfitRate, and Risk are no longer gating factors. The interface still carries `ngc` as a field name (it's the confidence carrier), but it is NOT independently gated.
@@ -3536,9 +3536,9 @@ TIER 5 — ADAPTIVE LEARNING (tuning protection parameters)
 
 | Parameter | Range | Purpose |
 |-----------|-------|---------|
-| `portfolioRiskPerTradePct` | 0.10%-5.00% | Percentage of portfolio risked per trade |
+| ~~`portfolioRiskPerTradePct`~~ | — | **RETIRED 2026-09-29 (`B-SIZING-DEC-RESTORE` increment 2c, Kyle):** column and CHECK dropped; no trade is sized by risk ÷ stop distance any more. See *Position sizing* below. |
 | `symbolCooldownMinutes` | >= 0 (warn > 90) | Minutes before re-trading same symbol |
-| `maxOpenPositions` | 1-20 | Maximum concurrent open positions |
+| ~~`maxOpenPositions`~~ | — | **RETIRED 2026-09-29 (`B-SIZING-DEC-RESTORE` increment 2a, obj-4):** the number of open positions is DERIVED, never set. See *Position sizing* below. |
 | `dailyLossKillSwitchPct` | 1.00%-25.00% | Portfolio loss % triggering auto-shutdown |
 | `dailyLossWarning1Pct` | 0 < w1 < w2 < 100 | **(P19-B6.8 — now user-visible)** Tier-1 early-warning alert, as % OF the kill-switch threshold |
 | `dailyLossWarning2Pct` | 0 < w1 < w2 < 100 | **(P19-B6.8 — now user-visible)** Tier-2 early-warning alert, as % OF the kill-switch threshold |
@@ -3554,6 +3554,17 @@ TIER 5 — ADAPTIVE LEARNING (tuning protection parameters)
 | `lowPriceThreshold` | $0.50 | LPCP: price below which special rules apply |
 | `lowPriceMinStopAtrMult` | 3.0 | LPCP: minimum stop distance as ATR multiple |
 | `lowPriceMinPositionNotional` | $25.00 | LPCP: minimum trade notional in USD |
+
+### Position sizing — THE ONE RULE (`B-SIZING-DEC-RESTORE`, Kyle 2026-08-05 / 2026-09-29 / 2026-09-30; deployed 2026-10-06 and 2026-10-07)
+
+> ⚠️ The `maxPositionPercentPct` / `maxTotalExposurePct` defaults in the table above are historical seeds. Read the live per-mode values from `guardrails_v2`, never from this page.
+
+- **Trade size:** `balance × (maxTotalExposurePct / 100) × (maxPositionPercentPct / 100) × buffer`, with `buffer = module_constants active_sizing.max_position_buffer_factor` (read fail-hard). One formula in `active-position-sizing.ts`: `tradeNotional` (pure) / `bufferedTradeNotional` (reads the buffer). The sizer, the max-position check's missing-notional branch and the pre-execution estimate all call it. `quantity = notional / entry price`.
+- **Slots:** `deriveSlotCount(resolveEffectivePositionPct(p)) = floor(100 / p)`. `p` slices the exposure BUDGET, so the count does not depend on `e`. It is deliberately ~3% conservative: N full slots commit N × p × 0.97 of the budget. A non-finite or non-positive result HALTS admissions; nothing invents a cap.
+- **The seam:** `resolveEffectivePositionPct` is the ONE resolver of the per-trade share. Both the sizer and the slot count read it. ⛔ **Any posture size term (AMR `position_size_multiplier`) must land INSIDE it, never after the sizer** (Langston condition C-5, scope r8). Applied outside it, N slots would be sized at ×1.25 = 125% of the budget. Today it is the identity, because the AMR is in shadow and no posture is applied.
+- **What the buffer actually does:** it keeps a full book inside `checkMaxTotalExposure` through a small balance drawdown, because open positions are summed at their frozen entry notionals against a budget that moves with the balance. The max-position check compares on a strict `>` and cannot block a size fixed at signal birth (2e, Langston J1a).
+- **Gone, and fenced against return** (`server/tests/integration/b-sizing-legacy-deletion-fence.test.ts`): risk-per-trade sizing; the `max_open_positions` setting and `checkMaxOpenTrades`; the pattern-list size cap (every trade, pattern or quant, takes `p` exactly; Kyle 2026-09-30); the fallback sizer (an unsized signal is refused); the class-less 11.7S posture overlay; the LATTI adaptive tuner.
+- **Paper values at the 2026-10-06 reset:** balance $820, `p` = 5, `e` = 100, kill switch 15% ⇒ $39.77 a trade, 20 slots (Step 8, Langston re-derived). Live uses the same code on its own `guardrails_v2` row.
 
 **Kill Switch State** (persisted for restart resilience):
 
@@ -3654,9 +3665,7 @@ Provides helper functions for building settings from guardrails_v2:
 
 ### Key Functions
 
-**`calculateRiskAmount(portfolioValue, riskPerTradePct)`**: Converts percentage risk to USD amount.
-
-**`getRiskPercentageV2(mode, guardrails)`**: Reads `portfolioRiskPerTradePct` from guardrails. Falls back to 4% default if missing/invalid.
+~~`calculateRiskAmount`~~ / ~~`getRiskPercentageV2`~~ — **DELETED 2026-09-29 (`B-SIZING-DEC-RESTORE` increment 2c)** with risk-per-trade sizing. The only remaining mention is inside the commented-out body of the DORMANT LPCP check (`trade-safety.ts`).
 
 **`getPortfolioBalanceV2(mode)`** (Phase 8.8.3-C7-FIX):
 - Formula: `Current Balance = Starting Balance + Realized P/L`
@@ -3688,7 +3697,7 @@ Provides helper functions for building settings from guardrails_v2:
 | 4 | Symbol Cooldown | No trade in same symbol within cooldown period | COOLDOWN |
 | 5 | Position Size Cap | `preComputedNotional / portfolioValue <= maxPositionPercentPct` | MAX_POSITION |
 | 6 | LPCP | **DORMANT** — always returns `ok: true` | (LPCP_LOW_PRICE / LPCP_MIN_NOTIONAL) |
-| 7 | Max Open Trades | Open positions < maxOpenPositions | MAX_TRADES |
+| ~~7~~ | ~~Max Open Trades~~ | **RETIRED 2026-09-29 (`B-SIZING-DEC-RESTORE` obj-4).** The slot count is derived (`deriveSlotCount`), and the money cap is check 8, which binds at the same point by construction. | — |
 | 8 | Max Total Exposure | Total exposure < maxTotalExposurePct | MAX_TOTAL_EXPOSURE |
 
 **Plus**: Correlation Exposure check via `riskConcentrationAnalyzer.isCorrelatedExposure()`
@@ -3851,6 +3860,8 @@ Kill switch state is persisted to `guardrails_v2` table — survives restarts. B
 ---
 
 ## 10. Adaptive Guardrails Engine
+
+> ⛔ **DELETED 2026-08-07 (`B-SIZING-DEC-RESTORE` obj-11, `#659`, Kyle): the module and its six `/api/learning/*` endpoints. The rest of this section is HISTORY.** It had been dormant (zero callers of its write path). Record: `DELETED_COMPONENTS_LOG.md` (2026-08-07 entry).
 
 **File**: `server/services/adaptive-guardrails.ts` (Phase 29)
 **Pattern**: Singleton via `AdaptiveGuardrailsService.getInstance()`
@@ -4446,7 +4457,7 @@ The L-Series autonomy cluster (MCP, ARE, GASP, MOF, MACO, ECS, DCE, etc.) was di
 | `server/services/trade-safety.ts` | ~916 | ACTIVE | Runtime pre-trade guardrail enforcement |
 | `server/services/guardrail-policy.ts` | ~670 | ACTIVE | Policy management, coherency validation, kill switch |
 | `server/services/guardrail-settings.ts` | ~233 | ACTIVE | Settings builder from guardrails_v2 |
-| `server/services/adaptive-guardrails.ts` | ~617 | ACTIVE | LATTI adaptive parameter tuning |
+| ~~`server/services/adaptive-guardrails.ts`~~ | — | **DELETED 2026-08-07** (`B-SIZING-DEC-RESTORE` obj-11) | LATTI adaptive parameter tuning |
 | `server/services/pre-execution-validator.ts` | ~292 | ACTIVE (Goal Alignment DEPRECATED) | Two active gates + one deprecated gate |
 | `server/services/circuit-breaker.ts` | ~336 | ACTIVE | Infrastructure fault tolerance |
 | `server/services/risk-concentration.ts` | ~369 | ACTIVE | Correlation-weighted exposure control |
@@ -5395,7 +5406,7 @@ The flow diagram that lived in the deleted file's header has been superseded by 
      ↓
 [TCL] (FinalScore ranking)
      ↓
-[Mode Overlay (Directive 11.7S)] (NORMAL/DEFENSIVE/SURVIVAL multipliers on size/stop/target/confidence/cooldown)
+[~~Mode Overlay (Directive 11.7S)~~ — DELETED 2026-08-07, `B-SIZING-DEC-RESTORE` obj-10; posture now only via the AMR per-class path, in shadow]
      ↓
 [Trade open: ATR/DI/VolNoise snapshot stored on trade record]
      ↓
@@ -6231,7 +6242,7 @@ startAutonomousSimulation()
 
 **Pre-Score Governance (Directive 11.7R-E)**: Before any scoring, strategies are checked against regime stability. If a strategy's dependency (trend, volatility, stability) is blocked in the current regime stability state, the signal is never scored, never ranked, and never generates a trade.
 
-**Strategy Mode Modulation (Directive 11.7S)**: After governance, the strategy mode is resolved (NORMAL / DEFENSIVE / SURVIVAL) based on global regime stability. The mode overlay adjusts position size, stop-loss distance, take-profit distance, confidence floor, and entry cooldown via multipliers. This is the **defensive-only skeleton** of the broader Adaptive Market Response framework.
+**Strategy Mode Modulation (Directive 11.7S)** — ⛔ **DELETED 2026-08-07 (`B-SIZING-DEC-RESTORE` obj-10, Kyle: delete, do not retire). It was damping the VTS trades the system learns from (DEFENSIVE ×0.6 on ~900 a day, SURVIVAL ×0.25 on ~741 a day). What follows is HISTORY:** After governance, the strategy mode is resolved (NORMAL / DEFENSIVE / SURVIVAL) based on global regime stability. The mode overlay adjusts position size, stop-loss distance, take-profit distance, confidence floor, and entry cooldown via multipliers. This is the **defensive-only skeleton** of the broader Adaptive Market Response framework.
 
 > **Adaptive Market Response (concept, 2026-04-25):** The mode overlay above is the existing defensive half of a planned multi-input, defensive-and-offensive market-response framework. The expansion adds richer detection inputs (regime + DBS trend + realized-EV drift + pair-distribution + friction trend), an offensive Aggressive mode for favorable conditions, and tunable response dials in `module_constants`. Conditional Phase 19.5 in roadmap; concept document at `1-system-manual/ADAPTIVE_MARKET_RESPONSE_CONCEPT.md`. The post-launch ML-driven version is Phase 17.5 (Smart Thermostat).
 

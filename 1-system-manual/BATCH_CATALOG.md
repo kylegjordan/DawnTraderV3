@@ -1259,3 +1259,13 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **HOW.** A forward migration deleting exactly the three rows, and a tracked rollback that restores them with their values and `updated_by`. **Order:** ships with row 4a or later; a code rollback to before `d4c688b88` runs the rollback FIRST, or the older code refuses boot.
 
 **RESULT.** 0 rows on staging after the deploy (control `roi_gating` 10); clean boot, no warm-up line for the module. **Closed:** `#1156`.
+
+## B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9; `#698`, `#659`, `#569`) — change-class `architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (report `Claude Comms and Packages/Batch Completion/B_SIZING_DEC_RESTORE_COMPLETION_REPORT.md`)
+
+**WHAT IT DID.** One sizing rule for both modes: a trade is `balance × exposure % × max position % × 0.97`, and the number of open positions is derived as `floor(100 / max position %)`. It deleted what competed with that rule: risk ÷ stop sizing (`portfolioRiskPerTradePct`), the `max_open_positions` setting and its check, the pattern-list size cap, the fallback sizer, the class-less 11.7S posture overlay, the LATTI adaptive tuner and the AI chat's trade-action path. It also reset paper non-destructively to $820 at 5% (20 slots) with a 15% kill switch.
+
+**INCREMENTS.** Step-3 obj-1/10/11 `213e162dc` (2026-08-07) · 2a slots derived, `max_open_positions` deleted · 2b the symbol cooldown by exact symbol and class (`#1093`) · 2c risk-per-trade deleted · 2d the legacy sweep · 2e Kyle's 2026-09-30 directives (pattern cap and fallback sizer off, the chat action path deleted) · 3 the $820 reset script (r1-r8) and r9 the promotion loop's full-book log (`#698` am.5).
+
+**DEPLOYED.** Deploy B `3576d3981` 2026-10-06T15:45Z (reset 15:53Z) and `0c8ef5da2` 2026-10-07T15:56Z (r9). **Step 8 CONFIRMED by Langston:** row 1 sizing ($38.02-$39.81 against $39.77), row 2 (`#1081`), row 3 (`3n.q8` restart and the HUT live refusal, 2026-10-09).
+
+**OPEN BEYOND IT.** obj-5's posture term lands inside `resolveEffectivePositionPct` only when the AMR activates (`#616`, condition C-5).

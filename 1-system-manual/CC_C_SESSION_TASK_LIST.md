@@ -19,7 +19,7 @@
 | 16 | `F-G-1` reopened (`#1031`) | Step 5 done; deploy with the held window; conversion to a completion report owed |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | built and reviewed; ship in the one held deploy |
-| 9 | `B-SIZING-DEC-RESTORE` | 2e Step 4: gates A1 and B approved, A2 round 3 with Langston; deploy ≥ 2026-10-02T20:10Z (2e's rollback first), then Kyle's $3,000 paper reset |
+| 9 | `B-SIZING-DEC-RESTORE` | STEP 11 — deployed (10-06, 10-07), Step 8 confirmed, governance landed 2026-10-09; report written, Langston's confirm owed |
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | open; continues as its sprint row |
 | — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
 
