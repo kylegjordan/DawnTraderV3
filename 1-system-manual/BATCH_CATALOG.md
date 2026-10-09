@@ -1260,7 +1260,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** 0 rows on staging after the deploy (control `roi_gating` 10); clean boot, no warm-up line for the module. **Closed:** `#1156`.
 
-## B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9; `#698`, `#659`, `#569`) — change-class `architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (report `Claude Comms and Packages/Batch Completion/B_SIZING_DEC_RESTORE_COMPLETION_REPORT.md`)
+## B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9; `#698`, `#659`, `#569`) — change-class `architecture` — ✅ **CLOSED 2026-10-09** (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z; report `Claude Comms and Packages/Batch Completion/B_SIZING_DEC_RESTORE_COMPLETION_REPORT.md`)
 
 **WHAT IT DID.** One sizing rule for both modes: a trade is `balance × exposure % × max position % × 0.97`, and the number of open positions is derived as `floor(100 / max position %)`. It deleted what competed with that rule: risk ÷ stop sizing (`portfolioRiskPerTradePct`), the `max_open_positions` setting and its check, the pattern-list size cap, the fallback sizer, the class-less 11.7S posture overlay, the LATTI adaptive tuner and the AI chat's trade-action path. It also reset paper non-destructively to $820 at 5% (20 slots) with a 15% kill switch.
 

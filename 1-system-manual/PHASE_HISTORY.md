@@ -1311,6 +1311,6 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Three settings that no longer did anything are gone.** They were win-rate thresholds for a function deleted the day before, so they sat in the settings table looking adjustable while nothing read them. The database now holds no such rows, the system starts cleanly without them, and the way to restore them is saved in case an older version of the code ever has to be brought back.
 
-### 2026-10-09 — B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9) — ⏳ closes on Langston's Step-11 confirm
+### 2026-10-09 — B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9) — ✅ CLOSED 2026-10-09
 
 **Every paper and live trade is now sized by one plain rule, and the old competing rules are gone.** A trade is a fixed share of the balance (5% in paper today, about $40), and the number of positions that can be open follows from that share (20), so nothing else can quietly shrink or cap a trade. The old rules that did, including the one that shrank the practice trades the system learns from, are deleted and guarded against coming back. Paper was reset to $820 without deleting any history.

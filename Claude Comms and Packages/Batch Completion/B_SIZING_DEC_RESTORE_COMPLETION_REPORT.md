@@ -1,6 +1,6 @@
 # B-SIZING-DEC-RESTORE — Completion Report
 
-change-class: `architecture` · sprint plan row 9 · `#698` (with `#659`, `#569`) · owner CC-C (Analyst Claude) · ⏳ **STEP 11 — closes on Langston's confirm**
+change-class: `architecture` · sprint plan row 9 · `#698` (with `#659`, `#569`) · owner CC-C (Analyst Claude) · ✅ **CLOSED 2026-10-09** (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z)
 
 ## 0. Open beyond this batch (stated first, by rule)
 - **obj-5 — the AMR posture size term is NOT applied, by design.** The seam is in place (`resolveEffectivePositionPct`), but the AMR is in shadow, so no posture is applied. **Condition C-5 binds whoever activates AMR sizing:** the term lands INSIDE that resolver, and the existing `TRUST_SIZED` application in `processSignal` (`active-execution-engine.ts`, `quantity × (modeOverlay?.positionSizeMultiplier ?? 1)`, re-read at the ref 2026-10-09) moves into it. **Home:** `#616` (AMR activation, CC-B), recorded in `CHANGES_AND_FIXES.md` FIX-2026-10-09-A. **Failure if skipped:** N slots sized at ×1.25 = 125% of the exposure budget.
@@ -81,7 +81,9 @@ CHANGE-CLASS: `architecture`
 | T2 | BUILD_METHOD_PLAYBOOK.md · LANGSTON_ARCHITECTURE.md · CLAUDE.md / CONDUCT.md · rule history · ALERT_HANDLING_PROTOCOL.md · DELIVERY_BOARD_PROTOCOL.md · CLAUDE_CODE_FEATURE_WATCH.md | N/A | no method, reviewer, rule, alert-process, board or feature-watch change |
 | T2 | MISTAKE_PATTERNS.md | N/A | no `MISTAKE:` trailer in this batch's Step 10 or 11 |
 
+- **Langston's Step-11 finding:** the fence's obj-10/11/4 blocks walk only `server/` + `client/src`, while obj-3 and 2d were widened. The surviving `maxOpenPositions` on the legacy v1 `guardrails` table (`shared/schema.ts:290`) is NOT a defect: that table has zero queries (his positive-controlled census). DISPOSITION: the walk gap is its own batch — `HOME: B-SIZING-FENCE-WALK-WIDEN (#1182), owner CC-C, placed in SPRINT_TO_LIVE_PLAN at row 9b1, after row 9b`.
+
 ## 8. Honest residual
-- The fence's obj-10 half landed unproven at `22e133a5c`. It is not labelled unproven at head, but this report did not re-run its mutation proof.
+- The fence's obj-10 block carries two boundary-matched positive controls (the scan can see `strategy-modes.ts`; every masked survivor is really exported) on top of the walk's own control, so the vacuous-pass class is instrumented. **What is missing is a mutation proof of the block, not evidence that it can fire** (Langston, Step 11).
 - Live mode uses the same code and has never sized a real order (Phase 21).
 - The AMR posture term (§0) is the one way a size can still leave `B × e × p × buffer`, and only when the AMR activates.

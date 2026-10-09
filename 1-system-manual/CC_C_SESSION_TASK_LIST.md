@@ -19,7 +19,7 @@
 | 16 | `F-G-1` reopened (`#1031`) | Step 5 done; deploy with the held window; conversion to a completion report owed |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | built and reviewed; ship in the one held deploy |
-| 9 | `B-SIZING-DEC-RESTORE` | STEP 11 — deployed (10-06, 10-07), Step 8 confirmed, governance landed 2026-10-09; report written, Langston's confirm owed |
+| 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | open; continues as its sprint row |
 | — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
 
@@ -47,6 +47,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 4c | B-SHADOW-HOLD-CLOCK (`#1144`) | QUEUED | after row 4b: decide whether the shadow lane's 48 h hold pauses while xStock is shut |
 | 9a | B-TRADE-LOSS-BOUND-DECISION (`#1105`) | DONE — decided (Kyle 2026-09-30: NO bound) | Kyle: no buffer and no limit on the max position % tied to the kill switch; if a large position fails and the kill switch trips past its limit, so… |
 | 9b | B-SETTINGS-REAL-TYPE (`#1106`) | QUEUED | after row 9a: the builder returns the legacy table's type, so 24 fields read at ~50 sites are always undefined (engine blacklist/whitelist, AI-prom… |
+| 9b1 | B-SIZING-FENCE-WALK-WIDEN (`#1182`) | QUEUED | after row 9b: one shared file walk for every block of the sizing deletion fence |
 | 9c | B-LIVE-READERS-CLOSED-TRADES (`#1108`, was `#668`) | QUEUED | after row 9b, before the go-live switch (Kyle 2026-08-07: its own batch right after B-SIZING-DEC-RESTORE; named then, placed 2026-09-29): live's ba… |
 | 9d | B-STRATEGY-SETTINGS-KNOBS (`#1109`) | QUEUED | after row 9c: shown and editable on the strategies screen, enforced nowhere; only feeds the strategy-settings approval rule, so removing it is a ch… |
 | 9e | B-CLAMP-ESTIMAND-RESPEC (`#1110`) | QUEUED | after row 9d, before Phase 25 reads it: the clamp-bind stream is retired in B-SIZING-DEC-RESTORE 2d because its ratio is always 0.97 × one factor;… |

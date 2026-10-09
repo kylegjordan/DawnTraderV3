@@ -10931,3 +10931,9 @@ Read: the loop BREAKS (so the background task ends and the session is notified) 
 **Why it matters:** the script's own rule is that only a clean "no such commit" may be reported as an absence; a reviewer who takes this refusal at face value reports "the sha CC-A named is not at origin" — a manufactured sha error with the sanctioned instrument vouching for it.
 `HOME: B-DTREVIEW-ABSENCE-PROVENANCE, owner Infra Claude, placed in SPRINT_TO_LIVE_PLAN.md at row 1w1, after row 1w` — §9.4 disposition 3 (Langston named the home; placement is Infra Claude's to settle). First objective: reproduce; if it does not reproduce, disposition 5 with the measurement recorded. OPEN.
 
+
+### #1182 OPEN 2026-10-09 (CC-C; Langston, `B-SIZING-DEC-RESTORE` Step 11) — **THE SIZING DELETION FENCE'S FILE WALK IS ASYMMETRIC**
+**The gap:** in `server/tests/integration/b-sizing-legacy-deletion-fence.test.ts` the obj-10, obj-11 and obj-4 blocks scan `server/` + `client/src` `.ts/.tsx` only. obj-3 and 2d were widened to `shared/` + `types/` + `scripts/` + `.mjs/.js` after a Step-4 round found `types/config.ts` still requiring a retired field outside the narrow walk; the widening never travelled back to the earlier blocks.
+**Measured, and withdrawn as a defect (Langston, §9.4 disposition 5):** `shared/schema.ts:290` still declares `maxOpenPositions` on the legacy v1 `guardrails` table, which obj-4's fence cannot see. That table has zero `from/insert/update/delete` uses across `server/ client/src shared scripts` (positive control: the same instrument finds `from(guardrailsV2)`); `storage.upsertGuardrails` is a throwing stub logged at `DELETED_COMPONENTS_LOG:241`. Nothing reads it.
+**What remains:** the walk gap itself, so a future reader outside `server/`/`client/src` would pass every block but two.
+`HOME: B-SIZING-FENCE-WALK-WIDEN, owner CC-C, placed in SPRINT_TO_LIVE_PLAN.md at row 9b1, after row 9b` — §9.4 disposition 3 (Langston's home, accepted).
