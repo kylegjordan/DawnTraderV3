@@ -93,3 +93,14 @@ In cash hours the mark fired anyway in 31 of 33 cases, a median 78 s later. Bid 
 **Sequencing:** row 66 lands FIRST; increment 3 is row 64's xStock leg.
 
 MISTAKE: wrong-object [B-XSTOCK-BID-TRIGGER-RELAND] — collar k sized on bid-only stop episodes; the collar acts on all stop exits, where k=0.30% refuses 22 of 82 including healthy-book gap-throughs.
+
+---
+
+## r4 — KYLE'S DIRECTION (2026-10-09 ~07:45Z), recorded for increment 3's Step 1
+**His words, condensed:** paper keeps trading xStocks around the clock, **both entries and exits, stops and targets**, whenever what we have built says it is realistically possible: the order book has the volume for our size and the bid (or, for a buy, the ask) is real. **Live mode will then show how realistic that simulation was.** He does not want overnight trading switched off for today's thin volume, because 24/7 trading is likely to grow. **For the 4:15 pm and 8:15 pm ET handoffs: a short no-xStock-trading window, about 10 minutes at each,** as the simplest protection. He asked to have holes poked in this.
+
+**How it maps onto the converged design (r3):** it is the same design with no session switch, plus two additions.
+1. **Entries get the same test as exits, on the other side of the book.** A buy is honest only if the ask is real and holds depth for our size. ⚠️ **One hole, and it is about EV, not fidelity:** an overnight entry into a 5-10% spread loses that spread at once (buy at the ask, value at the mark, sell at the bid). The EV gate must price the ACTUAL spread at the moment of entry, or overnight entries are a modelled loss. Step 2 checks what the friction model uses for xStock spread today.
+2. **The handoff blackout, as a cheap belt beside row 66's plausibility gate, not instead of it.** Two cautions from the data: (a) **the length.** This window's bid-only stop episodes at the 4:15 pm handoff ran a median 89 s and p90 799 s (~13 min), so 10 minutes misses the tail. More importantly, a broken book can outlast any window: HUT stayed implausible for 17.8 h after 4:15 pm on 10-06. So the blackout catches the spike, and row 66 catches the aftermath. (b) **It must be ET-aware.** 4:15 pm ET is 20:15Z now and becomes 21:15Z when US clocks change on 2026-11-01. A UTC-hardcoded window would sit an hour off for five months of the year (Coltrane raised the same point).
+- **Targets are naturally honest on the bid:** a target fires only when a real buyer is at or above it. The 108 frames where the MARK said "target" while the bid sat below the stop are exactly what a bid trigger would NOT fire.
+- **Refused exits:** Kyle's "exit when realistically possible" reads as **no forced sale into a broken book**. The protection is the duration alarm (row 66) and the measured cost (HUT: 4 cents a share over 17.8 h). Kyle's call to confirm.
