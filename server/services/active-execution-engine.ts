@@ -750,8 +750,9 @@ export class ActiveExecutionEngine {
       }
       // ⛔⛔ B-XSTOCK-BID-TRIGGER-RELAND increment A, P3 — THE UNHELD-NAME ARM (`entry-spread-plausibility.ts`). Above, a
       // symbol with no comparator reaches only the absent-side arms; here its CURRENT spread (the live tick, the same
-      // object the guard reads) is judged against its OWN normal spread — the live retained ring, else its last N
-      // regular-session snapshots — with the guard's own threshold form. HOUR-INVARIANT by construction (gate 2).
+      // object the guard reads) is judged against its OWN normal spread — its last N REGULAR-SESSION snapshots — with the
+      // guard's own threshold form. HOUR-INVARIANT by construction (gate 2; the retained-ring basis was DELETED at Step 4
+      // gate 2 because a ring holds whatever hour the symbol last held a plausible chain).
       // A symbol WITH a comparator keeps the predicate above. Reason code `implausible_spread_entry`, separate from P4's.
       if (bs.ok && _noUsableRef) {
         const _raw = bs.raw;
@@ -762,7 +763,7 @@ export class ActiveExecutionEngine {
             const _j = judgeEntrySpread(_spread, _ys.median, bs.cfg.kRel, bs.cfg.floorPct);
             if (_j.refuse) {
               const _why = `implausible_spread_entry spread=${_spread.toFixed(5)} threshold=${_j.threshold.toFixed(5)} yardstick=${_ys.median.toFixed(5)} basis=${_ys.basis}`;
-              console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — ${_why} n=${_ys.n ?? 'ring'}`);
+              console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — ${_why} n=${_ys.n}`);
               return { pass: false, reason: _why, snapshot };
             }
           } else {
@@ -2446,11 +2447,16 @@ export class ActiveExecutionEngine {
                   const _t = this._exitRefusalTally.get(position.id);
                   const _stopNum = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
                   if (_t && noteRelease(_t, _gSides ? _gSides.bid : null, Number.isFinite(_stopNum) ? _stopNum : null)) {
+                    // Langston Step 4 gate 2 C-2: the suppressed range since the last RI_NEAR_MISS line is FLUSHED here, not
+                    // dropped — a stable refusal prints one near-miss line, so its whole range would otherwise be lost.
+                    const _accR = this._riMissAcc.get(position.id);
                     this._riMissSig.delete(position.id);
                     this._riMissAcc.delete(position.id);
                     console.warn(
                       `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} EXIT_RELEASED pos=${position.id} ` +
                       `bidToStopPct=${_t.lastReleaseBidToStopPct === null ? 'none' : _t.lastReleaseBidToStopPct.toFixed(3)} ` +
+                      `suppressedTicks=${_accR?.n ?? 0} suppressedMinSpread=${_accR && _accR.n ? _accR.min.toFixed(5) : 'none'} ` +
+                      `suppressedMaxSpread=${_accR && _accR.n ? _accR.max.toFixed(5) : 'none'} ` +
                       `refusedS=${Math.round(_t.refusedMs / 1000)} episodes=${_t.episodes} sinceRestart=${_t.sinceRestart}`,
                     );
                   }
@@ -4362,10 +4368,6 @@ export class ActiveExecutionEngine {
       _persistedNetPnl = _persistedTrade?.netPnl != null
         ? parseFloat(_persistedTrade.netPnl.toString())
         : undefined;
-      // row 2 increment A, P5: the tally is now on the row; evict it with the position.
-      this._exitRefusalTally.delete(position.id);
-      this._riMissSig.delete(position.id);
-      this._riMissAcc.delete(position.id);
 
       // Log the exit event with C2 breakdown
       await storage.createActiveTradeLog(this.mode, {
@@ -4424,6 +4426,21 @@ export class ActiveExecutionEngine {
         );
       }
       _ladderShadow.delete(position.id);
+    }
+    // ── row 2 increment A, P5 (Langston Step 4 gate 2 C-1): evict the refusal tally, the near-miss signature and its
+    // accumulator HERE, in the same `finally` as the ladder accumulator and for the same reason — whether or not a trade
+    // row was found and whether or not the write threw. C-2: a non-empty accumulator is FLUSHED to the log first.
+    {
+      const _accC = this._riMissAcc.get(position.id);
+      if (_accC && _accC.n > 0) {
+        console.warn(
+          `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} RI_NEAR_MISS_FLUSH pos=${position.id} at=close ` +
+          `suppressedTicks=${_accC.n} suppressedMinSpread=${_accC.min.toFixed(5)} suppressedMaxSpread=${_accC.max.toFixed(5)}`,
+        );
+      }
+      this._exitRefusalTally.delete(position.id);
+      this._riMissSig.delete(position.id);
+      this._riMissAcc.delete(position.id);
     }
     }
 

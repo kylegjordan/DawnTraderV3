@@ -17,7 +17,6 @@ import {
   advanceBookStateComparator,
   clearBookStateComparator,
   readBookStateComparator,
-  readRetainedRingMedian,
   readRiLastMiss,
   _peekRetainedRingForTest,
   _resetBookStateComparatorsForTest,
@@ -173,16 +172,19 @@ describe('P3 — entry spread plausibility (hour-invariant yardstick)', () => {
     const mid2 = (60 + 100.1) / 2; // collapsed bid
     expect(judgeEntrySpread((100.1 - 60) / mid2, 0.001, K_REL, 1.0).refuse).toBe(true);
   });
-  it('prefers the LIVE retained ring and never touches the DB when one exists', async () => {
+  it('BLOCKER-1 fence: a WIDE retained ring is never the yardstick — the regular-session read always is', async () => {
+    // A ring retained from an off-hours plausible chain (spread ~11%, the PLTR shape Langston measured at 784× its norm).
     for (let i = 0; i < 25; i++) {
       const bid = 50 + i * 0.01;
-      advanceBookStateComparator('RING/USD', { bid, ask: bid + 0.02, last: bid, atMs: tick() }, WINDOW, true, K_REL, CEIL);
+      advanceBookStateComparator('RING/USD', { bid, ask: bid * 1.12, last: bid, atMs: tick() }, WINDOW, true, K_REL, CEIL);
     }
     clearBookStateComparator('RING/USD', 'yield_after_60_hollow');
-    expect(readRetainedRingMedian('RING/USD')).toBeGreaterThan(0);
+    expect(_peekRetainedRingForTest('RING/USD')).not.toBeNull(); // CONTROL: the wide ring exists
+    dbExecute.mockResolvedValueOnce({ rows: [{ n: '20', med: '0.00014' }] });
     const y = await resolveEntryYardstick('RING/USD', WINDOW);
-    expect(y.basis).toBe('ring');
-    expect(dbExecute).not.toHaveBeenCalled();
+    expect(y).toEqual({ median: 0.00014, basis: 'regular_session', n: 20 });
+    expect(dbExecute).toHaveBeenCalledTimes(1);
+    expect(judgeEntrySpread(0.03, y.median as number, K_REL, 1.0).refuse).toBe(true); // a 3% book is refused, not admitted at 33%
   });
   it('else reads the regular-session snapshots, and under a full window it passes LABELLED', async () => {
     dbExecute.mockResolvedValueOnce({ rows: [{ n: '20', med: '0.0003' }] });

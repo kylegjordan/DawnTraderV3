@@ -206,19 +206,6 @@ export function readBookStateComparator(symbol: string): BookStateComparator | n
   return _comparators.get(symbol.toUpperCase()) ?? null;
 }
 
-/**
- * B-XSTOCK-BID-TRIGGER-RELAND increment A, P3 — THE LIVE RETAINED RING'S MEDIAN for one symbol, or null when none.
- * A PURE READ of S25b (`_retainedSpreads`): no writer, no DB, no clock. It is the entry gate's preferred yardstick for
- * a symbol with no comparator (an unheld name), because the ring holds that symbol's own last PLAUSIBLE book.
- * ⛔ NOT `xstock_book_state_rings` (the durable snapshot: boot-only reader, stale between writes), NOT
- * `_peekRetainedRingForTest`, and NOT `takeChainRefusalBasis`'s `retainedMedianNow` (gated on a chain an unheld
- * symbol does not have) — Langston, gate 2 r2. Declared as a new S25b reader in the SIM.
- */
-export function readRetainedRingMedian(symbol: string): number | null {
-  const r = _retainedSpreads.get(symbol.toUpperCase());
-  return r ? medianOf(r.spreads) : null;
-}
-
 /** P1 — the last ring-independent near-miss on this symbol's chain (pure read; null = no chain or no miss). */
 export function readRiLastMiss(symbol: string): RiMiss | null {
   return _comparators.get(symbol.toUpperCase())?.riLastMiss ?? null;

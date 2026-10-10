@@ -7,11 +7,15 @@
  * unheld name passed. Seeding the comparator at entry was refused (a second writer to SIM S25).
  *
  * THE TEST. Refuse the entry when the CURRENT spread > max(kRel × YARDSTICK, floor_pct / 100) — the same threshold form as
- * the exit guard's one-side arms, from the same knobs. The YARDSTICK is the symbol's OWN normal spread:
- *   (1) its LIVE retained ring, where one exists (`readRetainedRingMedian`: in memory, no writer, no DB) — the last
- *       plausible book the exit guard kept for it; else
- *   (2) the median spread of its last N REGULAR-SESSION two-sided snapshots (`is_extended_hours = false`), N = the
- *       guard's `trailing_spread_window_snaps`.
+ * the exit guard's one-side arms, from the same knobs. The YARDSTICK is the symbol's OWN normal spread: the median spread
+ * of its last N REGULAR-SESSION two-sided snapshots (`is_extended_hours = false`), N = the guard's
+ * `trailing_spread_window_snaps`.
+ * ⛔⛔ ONE YARDSTICK, AND THE RETAINED RING IS NOT IT (Langston, Step 4 gate 2 BLOCKER-1). An earlier build preferred the
+ *   exit guard's live retained ring. A ring holds whatever HOUR the symbol last held a plausible chain, so it is not
+ *   hour-invariant: measured over all 95 durable rings, 86 were wider than the symbol's regular-session median and 32
+ *   lifted the threshold above the 1% floor (worst 53.51%, KEYS/USD; PLTR's ring 784× its regular-session median). And
+ *   the regular-session window was available for all 95, so the ring was never needed. The yardstick may never be
+ *   LOOSER than the hour-invariant one; it is now the hour-invariant one alone.
  * ⛔⛔ HOUR-INVARIANT, NOT A TRAILING WINDOW (Langston gate 2 sent the trailing form back): a window taken AT ENTRY TIME
  *   holds only that hour's books, so its threshold moved with the clock — at 2026-10-08 02:00Z it admitted 419 of 467
  *   names at a median current spread of 2.93% because their own trailing median was 4.13%. A regular-session yardstick
@@ -26,18 +30,15 @@
  */
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
-import { readRetainedRingMedian } from './book-state-tracker.js';
 
 export type EntryYardstick =
-  | { median: number; basis: 'ring' | 'regular_session'; n: number | null }
+  | { median: number; basis: 'regular_session'; n: number }
   | { median: null; basis: 'under_window' | 'read_failed'; n: number | null; error?: string };
 
 /** How far back the regular-session read may look: covers a weekend plus a US holiday. */
 const LOOKBACK = '5 days';
 
 export async function resolveEntryYardstick(symbol: string, windowSnaps: number): Promise<EntryYardstick> {
-  const ring = readRetainedRingMedian(symbol);
-  if (ring !== null && ring > 0) return { median: ring, basis: 'ring', n: null };
   try {
     const res = await db.execute<{ n: string; med: string | null }>(sql`
       SELECT count(*)::text AS n,

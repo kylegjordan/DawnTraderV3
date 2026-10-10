@@ -66,7 +66,7 @@ Per-tick `REFUSE unvalidated` lines and one `REFUSAL_BASIS` line per chain (`:22
 ### A7. Census (§9.5(a)) — SIM S25 `_comparators` / S25b `_retainedSpreads`, tests excluded
 - **writes:** `advanceBookStateComparator` — ONE call site, the exit loop (`aee:2255`) · `3n.q8` ring restore at boot (`book-state-ring-store.ts`).
 - **deletes:** `clearBookStateComparator` — the yield (`aee:2151`) and the escape (`book-state-tracker.ts:334`).
-- **reads:** `assessBookStateNow` — entry gate (`aee:731`), exit loop (`aee:2100`), close fill (`aee:3762`), two `routes.ts` display reads (`:12677`, `:12810`) · `takeChainRefusalBasis` (`aee:2302`) · `readThresholdBasis` (`aee:2344`). · **after P2: `readBookStateComparator` from the engine's yield (`aee:2151`), the first external reader of S25.** · **after P3: the new `readRetainedRingMedian(symbol)` from the entry gate, a new reader of S25b (`_retainedSpreads`).**
+- **reads:** `assessBookStateNow` — entry gate (`aee:731`), exit loop (`aee:2100`), close fill (`aee:3762`), two `routes.ts` display reads (`:12677`, `:12810`) · `takeChainRefusalBasis` (`aee:2302`) · `readThresholdBasis` (`aee:2344`). · **after P2: `readBookStateComparator` from the engine's yield (`aee:2151`), the first external reader of S25.** · ~~after P3: `readRetainedRingMedian`~~ (deleted at Step 4 gate 2; P3 reads no S25b)
 - **schedules:** the exit monitor loop only. **Exactly one writer of comparators, confirmed;** this increment keeps it one (obj 3 reads a DIFFERENT source; P3 below).
 
 ### A8. Ledger and provenance (§9.5(b), (b-ii))
@@ -83,7 +83,9 @@ Per-tick `REFUSE unvalidated` lines and one `REFUSAL_BASIS` line per chain (`:22
 | **P6** | **`spread_blown` knob: NOT in increment A** | A3 | Langston already ruled the knob lands WITH the switch, not ahead of it (`book-state-config.ts:41-43`). So its row ships as objective 6 (the 14th, after P1's 13th), seeded at Kyle's value. Increment A adds nothing here. **Gate 2: PROCEED.** P1 moves the boot-assertion literal (`book-state-config.ts:62`) 12 → 13, so objective 6 moves it 13 → 14 and its Step 2 re-enumerates the count sites AFTER P1 lands. | (objective 6's own Step 2) |
 - **No item is UNAUDITED.**
 - **Out of increment A:** the trigger and fill on the bid (B); the pause (C); crypto (row 38).
-- **Governance owed at Step 10:** SM §3.5.1/§3.5.1a (the ring-independent release P1, the entry arm P3, the yield change P2); `ADJUSTMENT_FRAMEWORK` / `LEVER_INVENTORY` for the new knob; SIM S25/S25b (unchanged writers; P2 adds the engine as an S25 reader; P3 adds the entry gate as an S25b reader through the new accessor, and reads the snapshot table; P4 changes `getDepthSnapshot`'s return for three consumers); `DELETED_COMPONENTS_LOG` N/A (nothing removed).
+- **Governance owed at Step 10:** SM §3.5.1/§3.5.1a (the ring-independent release P1, the entry arm P3, the yield change P2); `ADJUSTMENT_FRAMEWORK` / `LEVER_INVENTORY` for the new knob; SIM S25/S25b (unchanged writers; P2 adds the engine as an S25 reader; P3 reads the snapshot table (no S25b reader after Step 4 gate 2); the entry seam treats a `seedImplausible` comparator as no usable reference; P4 changes `getDepthSnapshot`'s return for three consumers); `DELETED_COMPONENTS_LOG` N/A (nothing removed).
+
+**STEP 4 GATE 2 AMENDMENT (2026-10-10):** P3's ring basis (1) is DELETED — not hour-invariant (32 of 95 rings lifted the threshold above the floor, worst 53.51%); the yardstick is the regular-session median alone and P3 adds no S25b reader. Change list §STEP 4 GATE 2.
 
 **STEP 2 RULINGS (Langston, 2026-10-10):** gate 1 r2 PROCEED (P1, 1% seed); gate 2 PROCEED P2/P6, P3-P5 re-ruled; **gate 2 r2 ACCEPTED P1, P2, P4, P5, P6 and GATE 3 ACCEPTED (form (i))**; P3's one point (the ring arm's read site) folded in r5.
 
