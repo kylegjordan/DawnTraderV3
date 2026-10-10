@@ -61,7 +61,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 34 | B-EQUITY-RECONNECT-STALL-TIMER | QUEUED | a stalled xStock reconnect leaves positions unwatched |
 | 36 | #506 — batch named at Step 1 | QUEUED | book subscriptions never unsubscribe |
 | 37 | B-BOOK-SUBSCRIPTION-REACH | QUEUED | after #506: subscribe the order book for the whole pool, not ~3 coins |
-| 38 | B-CRYPTO-MARK-AGE-GATE | QUEUED | crypto mark age |
+| 38 | B-CRYPTO-MARK-AGE-GATE | PRE-SPRINT stage 2, after row 2 (Kyle 2026-10-10) | crypto mark age |
 | 39 | #977 — batch named at Step 1 | QUEUED | the shared price-cache refresh lane for open positions runs but nothing subscribes - staleness hits selection (CC-C) |
 | 40 | B-XSTOCK-SESSION-FRESHNESS | QUEUED | xStock entry-age limit vs the exit standard Kyle ruled |
 | 42 | B-DECIDED-INTENT-INDEX | QUEUED | xStock's three definitions of 'the price' from one frame |
