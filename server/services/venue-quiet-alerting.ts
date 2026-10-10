@@ -47,6 +47,15 @@ export const NOT_WARM_GRACE_MS = 120_000;
 export const THRESHOLD_SEED_REF = 'drizzle/migrations/2026-07-15-p19-b8-5-venue-only-pricing.sql:13';
 export const SWEEP_REF = 'server/services/venue-quiet-alerting.ts:1';
 
+/** r6b condition (Langston): the sweep clears a `price-skip` row for THREE different facts, and each gets its own evidence
+ *  token so the row says which — a bare position uuid read the same for all three, and for a superseded row it read FALSE
+ *  ("priced") in the direction that matters. Each keeps the uuid, which is what `isValidResolutionEvidence` matches. */
+export const clearEvidence = {
+  positionClosed: (positionId: string) => `POSITION-CLOSED position=${positionId}`,
+  pricedAfterMint: (positionId: string) => `PRICED-AFTER-MINT position=${positionId}`,
+  supersededByDurationPage: (positionId: string) => `SUPERSEDED-BY-DURATION-PAGE position=${positionId}`,
+} as const;
+
 export function isQuietMarketReason(reason: string): boolean {
   return reason === 'equity_tick_missing' || reason.startsWith('equity_tick_stale_');
 }
@@ -250,12 +259,12 @@ export async function sweepVenueQuiet(args: {
     if (m) {
       const positions = bySymbol.get(m[1]) ?? [];
       if (positions.length === 0) {
-        const ev = typeof row.metadata?.positionId === 'string' ? (row.metadata.positionId as string) : 'NO-EVIDENCE-GIVEN';
+        const ev = typeof row.metadata?.positionId === 'string' ? clearEvidence.positionClosed(row.metadata.positionId as string) : 'NO-EVIDENCE-GIVEN';
         await tryResolve(key, ev); // the position this row was minted for has closed
         continue;
       }
       const priced = positions.find((p) => pricedAfter(p, createdMs));
-      if (priced) await tryResolve(key, priced.id); // the RE-MEASURED position's uuid (Langston record fix)
+      if (priced) await tryResolve(key, clearEvidence.pricedAfterMint(priced.id)); // the RE-MEASURED position's uuid (Langston record fix)
       continue;
     }
     if (key === standingKey(mode)) {
@@ -306,7 +315,7 @@ export async function sweepVenueQuiet(args: {
           const held = rows.filter((a) => a.dedupe_key === pageKey);
           if (held.length > 0) {
             const before = out.failed;
-            await tryResolve(pageKey, s.positionId);
+            await tryResolve(pageKey, clearEvidence.supersededByDurationPage(s.positionId));
             if (out.failed > before) continue;
           }
           const minted = await deps.addAlert({

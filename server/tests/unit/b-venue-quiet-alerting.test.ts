@@ -40,10 +40,11 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (importO
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 import {
   VenueQuietState, classVerdict, isQuietMarketReason, isBookStateHoldReason, reasonFamilyOf, joinsStandingRecord,
-  familyJoinsStandingRecord, familiesOf, memberFamilies,
+  familyJoinsStandingRecord, familiesOf, memberFamilies, clearEvidence,
   priceSkipKeyPattern, standingKey, stuckKey, configKey,
   sweepVenueQuiet, THRESHOLD_SEED_REF,
 } from '../../services/venue-quiet-alerting.js';
+import { isValidResolutionEvidence } from '../../services/system-alerts.js';
 
 const CFG = { quietTickingMin: 346, thinTickingMin: 50, escalateAfterMs: 1_800_000, resolveStuckAfterMs: 3_600_000 };
 // r4: the verdict reads the venue calendar, so every rule test names its instant (Wednesday 11:00 ET = regular session).
@@ -293,7 +294,7 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     expect(d.resolveByKey).not.toHaveBeenCalled(); // not yet priced
     st.notePriced('pos-xs', now - 1_000);
     await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [{ id: 'pos-xs', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'quiet', deps: d });
-    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-CAG/USD', 'active-exit-monitor', 'pos-xs', 'engine');
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-CAG/USD', 'active-exit-monitor', 'PRICED-AFTER-MINT position=pos-xs', 'engine');
   });
   it('RESTART between mint and resume: a fresh engine state that prices the position resolves the row', async () => {
     const fresh = new VenueQuietState(); // the pre-restart streak is gone; nothing remembered
@@ -305,7 +306,7 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
   it('a closed position resolves its row citing the position it was minted for', async () => {
     const d = deps([row('price-skip-paper-PDD/USD', now - 60_000, { positionId: 'pos-pdd' })]);
     await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: d });
-    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-PDD/USD', 'active-exit-monitor', 'pos-pdd', 'engine');
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-PDD/USD', 'active-exit-monitor', 'POSITION-CLOSED position=pos-pdd', 'engine');
   });
   it('a throwing resolve is counted and retried, never thrown; stuck past the bound ⇒ one stuck row; it clears when nothing fails', async () => {
     const st = new VenueQuietState();
@@ -342,7 +343,7 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
       'price-skip-paper-XRP/AUD', 'price-skip-paper-SOL/USDT', 'price-skip-paper-BTC/USDC', 'price-skip-paper-BRK.B/USD']) expect(p.test(k)).toBe(true);
     const d = deps([row('price-skip-paper-ETH/EUR', now - 60_000, { positionId: 'pos-eur' })]);
     await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'not_quiet', deps: d });
-    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ETH/EUR', 'active-exit-monitor', 'pos-eur', 'engine');
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ETH/EUR', 'active-exit-monitor', 'POSITION-CLOSED position=pos-eur', 'engine');
   });
   it('BLOCKER-1: a price-skip key the selector rejects is COUNTED and LOGGED, never silently left to freeze its symbol', async () => {
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -408,7 +409,7 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     const open = [{ id: 'pos-m', symbol: 'ORCL/USD' }];
     await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
     const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
-    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ORCL/USD', 'active-exit-monitor', 'pos-m', 'engine');
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ORCL/USD', 'active-exit-monitor', 'SUPERSEDED-BY-DURATION-PAGE position=pos-m', 'engine');
     const resolveOrder = d.resolveByKey.mock.invocationCallOrder.at(-1)!;
     const mintOrder = d.addAlert.mock.invocationCallOrder.at(-1)!;
     expect(resolveOrder).toBeLessThan(mintOrder);
@@ -445,6 +446,13 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     expect(memberFamilies({ reasonFamily: 'book_state' })).toEqual(['book_state']);
     expect(memberFamilies({ reasonFamily: 'quiet_market', reasonFamilies: ['quiet_market', 'book_state'] })).toEqual(['quiet_market', 'book_state']);
     expect(memberFamilies({})).toEqual([]);
+  });
+  it('r6b condition: the three clears carry three DIFFERENT evidence tokens, each passing the store evidence gate with a real uuid', () => {
+    const id = '6f66ff86-c85b-47da-b210-f30de392b312';
+    const toks = [clearEvidence.positionClosed(id), clearEvidence.pricedAfterMint(id), clearEvidence.supersededByDurationPage(id)];
+    expect(new Set(toks).size).toBe(3);
+    for (const t of toks) { expect(t).toContain(id); expect(isValidResolutionEvidence(t)).toBe(true); }
+    expect(toks[2]).toMatch(/^SUPERSEDED-BY-DURATION-PAGE /); // a superseded row must never read as "priced"
   });
   it('r6: a sweep with no standing record reports nothing held', async () => {
     const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: deps([]) });
