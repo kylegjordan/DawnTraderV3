@@ -268,14 +268,16 @@ export async function sweepVenueQuiet(args: {
       continue;
     }
     if (key === standingKey(mode)) {
-      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; reasonFamily?: ReasonFamily; reasonFamilies?: ReasonFamily[] }>;
+      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; lastJoinedAtMs?: number; reasonFamily?: ReasonFamily; reasonFamilies?: ReasonFamily[] }>;
       // `unpricedSinceMs` is THIS symbol's own clock (Langston Step-4 r2 condition): its last venue price in this process
       // if one was seen, else the moment it was listed — a lower bound, hence "at least". Never the class's
       // `notQuietSince`: a member listed one minute into a 90-minute window has not been out for 90 minutes.
       const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number; reasonFamily: ReasonFamily | null; reasonFamilies: ReasonFamily[] }> = [];
       for (const [positionId, mem] of Object.entries(members)) {
         const open = (bySymbol.get(mem.symbol.toUpperCase()) ?? []).find((p) => p.id === positionId);
-        if (open && !pricedAfter(open, mem.listedAtMs)) {
+        // r6c: "priced since it last JOINED" decides membership (a member priced, re-staled and re-joined is out again);
+        // the unpriced CLOCK below keeps the earliest listing (FINDING-B) when this process has never priced it.
+        if (open && !pricedAfter(open, mem.lastJoinedAtMs ?? mem.listedAtMs)) {
           stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs,
             reasonFamily: mem.reasonFamily ?? null, reasonFamilies: memberFamilies(mem) });
         }

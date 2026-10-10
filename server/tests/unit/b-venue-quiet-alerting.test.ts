@@ -178,6 +178,23 @@ describe('engine — escalation', () => {
     const merged = m.mergeAlertMetadata.mock.calls[0][1] as any;
     expect(merged.members['pos-xs']).toMatchObject({ symbol: 'CAG/USD', reasonFamily: 'quiet_market', T: 200, classVerdict: 'quiet' });
   });
+  it('r6c (Langston FINDING-A/B): a re-join keeps the EARLIEST listing time and the row counts every suppressed page', async () => {
+    const stored: Record<string, any> = { members: {} };
+    m.addAlert.mockImplementation(async (o: any) => ({ id: 'row-' + o.dedupe_key, metadata: stored }));
+    m.mergeAlertMetadata.mockImplementation(async (_id: string, patch: any) => { Object.assign(stored, patch); return {}; });
+    const e = engine() as any;
+    await e._joinVenueQuietStanding({ id: 'pos-xs', symbol: 'CAG/USD' }, { reasonFamily: 'quiet_market' });
+    const first = stored.members['pos-xs'].listedAtMs;
+    vi.setSystemTime(WEEKDAY + 600_000);
+    await e._joinVenueQuietStanding({ id: 'pos-xs', symbol: 'CAG/USD' }, { reasonFamily: 'quiet_market' });
+    expect(stored.members['pos-xs'].listedAtMs).toBe(first);            // the unpriced clock is not reset
+    expect(stored.members['pos-xs'].lastJoinedAtMs).toBe(WEEKDAY + 600_000);
+    expect(stored.members['pos-xs'].joins).toBe(2);
+    expect(stored.suppressedPages).toBe(2);
+    await e._joinVenueQuietStanding({ id: 'pos-b', symbol: 'GLW/USD' }, { reasonFamily: 'book_state' });
+    expect(stored.suppressedPages).toBe(3);
+    expect(stored.members['pos-b'].joins).toBe(1);
+  });
   it('quiet-family on a NOT-quiet class ⇒ the per-symbol page, with the family in metadata', async () => {
     m.T = 400;
     const e = engine();
@@ -453,6 +470,14 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     expect(new Set(toks).size).toBe(3);
     for (const t of toks) { expect(t).toContain(id); expect(isValidResolutionEvidence(t)).toBe(true); }
     expect(toks[2]).toMatch(/^SUPERSEDED-BY-DURATION-PAGE /); // a superseded row must never read as "priced"
+  });
+  it('r6c: a member priced, re-staled and RE-JOINED is held again; its clock runs from its last price, not the re-join', async () => {
+    const st = new VenueQuietState();
+    const members = { 'pos-q': { symbol: 'PLTR/USD', listedAtMs: now - 3_600_000, lastJoinedAtMs: now - 60_000, reasonFamilies: ['quiet_market'] } };
+    st.notePriced('pos-q', now - 120_000); // priced after the first listing, before the re-join
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [{ id: 'pos-q', symbol: 'PLTR/USD' }], state: st, cfg: CFG, verdict: 'not_quiet',
+      deps: deps([row(standingKey('paper'), now - 3_600_000, { members })]) });
+    expect(r.held).toEqual([{ symbol: 'PLTR/USD', reasonFamilies: ['quiet_market'] }]);
   });
   it('r6: a sweep with no standing record reports nothing held', async () => {
     const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: deps([]) });

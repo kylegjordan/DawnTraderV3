@@ -997,9 +997,19 @@ export class ActiveExecutionEngine {
         metadata: { members: {} },
         dedupe_key: standingKey(this.mode),
       });
-      const members = { ...((row.metadata?.members as Record<string, unknown>) ?? {}),
-        [position.id]: { symbol: position.symbol, listedAtMs: Date.now(), ...meta } };
-      await mergeAlertMetadata(row.id, { members });
+      const prior = (row.metadata?.members as Record<string, Record<string, unknown>> | undefined) ?? {};
+      const prev = prior[position.id];
+      const now = Date.now();
+      // r6c (Langston Step-8 FINDING-B): a re-join KEEPS the earliest listing time — overwriting it reset the member's
+      // unpriced clock on every re-stale, so the longest staleness read shortest (objective 3's own failure, in reverse).
+      const listedAtMs = typeof prev?.listedAtMs === 'number' ? prev.listedAtMs : now;
+      const members = { ...prior,
+        [position.id]: { symbol: position.symbol, ...meta, listedAtMs, lastJoinedAtMs: now,
+          joins: (typeof prev?.joins === 'number' ? prev.joins : 0) + 1 } };
+      // r6c (FINDING-A): each join IS a page this record suppressed. The count lives on the row — out.log keeps about a day,
+      // and the suppression volume across a closed window is the number this batch exists to move.
+      const suppressedPages = (typeof row.metadata?.suppressedPages === 'number' ? row.metadata.suppressedPages : 0) + 1;
+      await mergeAlertMetadata(row.id, { members, suppressedPages });
     } catch (err) {
       console.error(`[VENUE_QUIET][STANDING] join failed for ${position.symbol} — the per-position log above stands:`, err instanceof Error ? err.message : err);
     }
