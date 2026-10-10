@@ -110,24 +110,42 @@ import { isInXstockWeekendClose, isXstockVenueTransitionPause } from '../asset_c
  * drop) and no new xStock trade opens. ⛔ Never counted as a VTS no-decision (`3n.q3`) and never an alert: a deliberate
  * fidelity deviation, recorded by these counters and one summary line per pause window.
  */
-const _vtsVenuePause = { realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0, lastWindowKey: '' };
+// ⛔ PER-WINDOW, PRINTED AT THE WINDOW'S END (Langston Step 4 C3 (iii)): a line at the window's START can only report the
+// windows before it, so the current window's VTS cost would be printed nowhere. `win` resets at each window; `cum` is since
+// process start (a restart zeroes both — the last window before a restart is reported only if a pass runs after it).
+const _vtsVenuePause = {
+  win: { realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0 },
+  cum: { realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0 },
+  windowKey: '',
+};
+type VtsPauseCounter = keyof typeof _vtsVenuePause.win;
+function _vtsVenuePauseCount(k: VtsPauseCounter): void { _vtsVenuePause.win[k]++; _vtsVenuePause.cum[k]++; }
 function _vtsVenuePauseNow(nowMs: number): string | null {
   const vp = isXstockVenueTransitionPause(new Date(nowMs));
-  if (!vp.paused) return null;
-  const key = `${vp.window}@${new Date(nowMs).toISOString().slice(0, 13)}`;
-  if (key !== _vtsVenuePause.lastWindowKey) {
-    _vtsVenuePause.lastWindowKey = key;
-    console.warn(
-      `[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] window=${vp.window} — xStock VTS looks and opens suspended; ` +
-      `cumulative realSkips=${_vtsVenuePause.realSkips} shadowSkips=${_vtsVenuePause.shadowSkips} ` +
-      `opensRefused=${_vtsVenuePause.opensRefused} shadowOpensRefused=${_vtsVenuePause.shadowOpensRefused}`,
-    );
+  const key = vp.paused ? `${vp.window}@${new Date(nowMs).toISOString().slice(0, 13)}` : '';
+  if (key !== _vtsVenuePause.windowKey) {
+    if (_vtsVenuePause.windowKey !== '') {
+      const w = _vtsVenuePause.win;
+      console.warn(
+        `[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] END window=${_vtsVenuePause.windowKey} realSkips=${w.realSkips} ` +
+        `shadowSkips=${w.shadowSkips} opensRefused=${w.opensRefused} shadowOpensRefused=${w.shadowOpensRefused} ` +
+        `sinceStart realSkips=${_vtsVenuePause.cum.realSkips} shadowSkips=${_vtsVenuePause.cum.shadowSkips} ` +
+        `opensRefused=${_vtsVenuePause.cum.opensRefused} shadowOpensRefused=${_vtsVenuePause.cum.shadowOpensRefused}`,
+      );
+      _vtsVenuePause.win = { realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0 };
+    }
+    _vtsVenuePause.windowKey = key;
+    if (key !== '') console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] START window=${key} — xStock VTS looks and opens suspended`);
   }
-  return vp.window;
+  return vp.paused ? vp.window : null;
 }
-export function getVtsVenuePauseCounters(): { realSkips: number; shadowSkips: number; opensRefused: number; shadowOpensRefused: number } {
-  const { lastWindowKey: _k, ...c } = _vtsVenuePause;
-  return { ...c };
+/** Test seam: drive the window bookkeeping at a chosen instant (production calls it from the passes and the opens). */
+export function _vtsVenuePauseNowForTest(nowMs: number): string | null { return _vtsVenuePauseNow(nowMs); }
+/** Test seam: count as a pass or an open would. */
+export function _vtsVenuePauseCountForTest(k: VtsPauseCounter): void { _vtsVenuePauseCount(k); }
+/** Test seam: the counters as they stand (the END line is the production reader). */
+export function _vtsVenuePauseCountersForTest(): { win: Record<VtsPauseCounter, number>; cum: Record<VtsPauseCounter, number>; windowKey: string } {
+  return { win: { ..._vtsVenuePause.win }, cum: { ..._vtsVenuePause.cum }, windowKey: _vtsVenuePause.windowKey };
 }
 import {
   selectCryptoTouch,
@@ -1051,7 +1069,7 @@ export async function registerOpenShadowTrade(
   // ⚠️ A third null case beside cap-reject and persist-fail; the sole caller tolerates null (the pool-member row then has
   // no shadow FK for that cycle).
   if (input.assetClass === 'xstock_spot' && _vtsVenuePauseNow(Date.now()) !== null) {
-    _vtsVenuePause.shadowOpensRefused++;
+    _vtsVenuePauseCount('shadowOpensRefused');
     return null;
   }
 
@@ -3678,7 +3696,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // symbol-collection loop above for full rationale (pre-audit §4.2).
     if (trade.state === 'weekend_suspended') continue;
     // row 2 increment C: inside a venue-transition pause an xStock trade is not looked at this pass (exit, pending fill, drop).
-    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePause.realSkips++; continue; }
+    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePauseCount('realSkips'); continue; }
     const holdDurationMs = now - trade.openedAt;
     // B79.0m.b2: pass assetClass so xstock trades route to xstock_spot_ticker_snap
     // instead of priceCache (which only has crypto prices via Kraken REST).
@@ -4558,7 +4576,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     // whether the clock should pause instead is `#1144` (row 4c).
     if (trade.assetClass === 'xstock_spot' && isInXstockWeekendClose(new Date(now))) continue;
     // row 2 increment C: the venue-transition pause, keyed on the WINDOW like the weekend skip above.
-    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePause.shadowSkips++; continue; }
+    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePauseCount('shadowSkips'); continue; }
     const holdDurationMs = now - trade.openedAt;
     const currentPrice = getShadowPrice(trade.symbol, trade.assetClass);
     // `8a-P3`: the shadow lane reads the same touch as the real lane — without counters or funnel records, so the
@@ -4898,7 +4916,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
   if (input.assetClass === 'xstock_spot') {
     const _w = _vtsVenuePauseNow(openedAt);
     if (_w !== null) {
-      _vtsVenuePause.opensRefused++;
+      _vtsVenuePauseCount('opensRefused');
       console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] ${input.symbol}: VTS open refused — venue_transition_pause ${_w}`);
       return null;
     }

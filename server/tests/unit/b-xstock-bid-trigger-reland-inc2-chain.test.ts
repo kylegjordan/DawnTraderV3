@@ -201,6 +201,7 @@ function makeEngine(): Stub {
     // B-XSTOCK-BID-TRIGGER-RELAND increment C fields the real constructor sets.
     _venuePauseExitTicks: 0,
     _venuePauseWouldFire: 0,
+    _venuePauseBidWouldFire: 0,
     _venuePauseEntriesRefused: 0,
     _venuePausePending: new Map(),
     // Stubbed on the instance (see header).
@@ -351,6 +352,11 @@ async function wideReseed(eng: Stub, extraWideFrames: number) {
 }
 
 beforeEach(() => {
+  // ⛔ row 2 increment C: the exit loop now pauses xStock decisions at the venue's transition minutes, so this file is
+  // CALENDAR-DEPENDENT. Pin the clock to an ordinary weekday morning (Wed 2026-10-14 11:00 ET) so a CI run that happens
+  // to fall inside a window cannot change what these tests see. Only `Date` is faked; timers and promises run real.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
   _resetBookStateComparatorsForTest();
   h.frame = null;
   h.spreadBlownEnabled = true;
@@ -362,6 +368,7 @@ beforeEach(() => {
   vi.spyOn(livePricingAdapter, 'updateCache').mockImplementation(() => undefined as any);
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   h.addAlert.mockClear();
   h.getActiveOpenPositions.mockReset();
@@ -460,5 +467,61 @@ describe('3n.q7 inc-2 OBJ-3 — the chain, driven through the real exit loop', (
     expect(exitCondition.type).toBe('stop_hit');
     expect(requestedPrice).toBe(mid(BLOWN));
     expect(opts.exitProvenance).toMatchObject({ decisionPrice: mid(BLOWN), bookStateAtDecision: 'two_sided' });
+  });
+});
+
+describe('row 2 increment C (C-P2, Langston Step 4 C1) — the venue-transition pause, driven through the real exit loop', () => {
+  const PAUSE = /\[VENUE_PAUSE\] MDB\/USD /;
+  const RESUMED = /\[VENUE_PAUSE_RESUMED\] MDB\/USD /;
+  it('a paused tick decides nothing, records no skip, closes nothing, still advances the guard; the bid arm is counted; the first tick after decides', async () => {
+    // A stop just under the warm book, so the BID crosses it while the MARK does not (the C2 case).
+    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '400.0' }]);
+    const eng = makeEngine();
+    await warm(eng);
+    const framesBefore = readBookStateComparator(SYMBOL)!.framesSinceSeed;
+
+    vi.setSystemTime(new Date('2026-10-14T20:20:00Z')); // Wed 16:20 ET — inside the 16:15 window
+    const t1 = await tick(eng, { bid: 399.9, ask: 400.7, last: 400 }); // mark 400.3 > stop; bid 399.9 <= stop
+    expect(t1.closes).toEqual([]);
+    expect(t1.priceSkips).toEqual([]);
+    expect(t1.alerts).toBe(0);
+    expect(count(t1.warns, XS_FRAME)).toBe(0); // the exit decision did not run
+    const p1 = t1.warns.filter((l) => PAUSE.test(l));
+    expect(p1).toHaveLength(1);
+    expect(p1[0]).toContain('window=16:15');
+    expect(p1[0]).toContain('wouldFire=none');
+    expect(p1[0]).toContain('bidWouldFire=stop');
+    expect(readBookStateComparator(SYMBOL)!.framesSinceSeed).toBe(framesBefore + 1); // the guard still advanced
+    expect(eng._venuePauseExitTicks).toBe(1);
+    expect(eng._venuePauseBidWouldFire).toBe(1);
+    expect(eng._venuePauseWouldFire).toBe(0);
+    expect(eng._venuePausePending.size).toBe(1);
+
+    const t2 = await tick(eng, { bid: 399.95, ask: 400.75, last: 400 });
+    expect(t2.warns.filter((l) => PAUSE.test(l))).toHaveLength(0); // one line per position per window
+    expect(t2.closes).toEqual([]);
+    expect(eng._venuePauseExitTicks).toBe(2);
+
+    vi.setSystemTime(new Date('2026-10-14T20:40:00Z')); // 16:40 ET — the window has ended
+    const f3: Frame = { bid: 400.0, ask: 400.8, last: 400 };
+    const t3 = await tick(eng, f3);
+    const r = t3.warns.filter((l) => RESUMED.test(l));
+    expect(r).toHaveLength(1);
+    expect(r[0]).toContain('window=16:15');
+    expect(r[0]).toContain('pausedS=1200');
+    expect(r[0]).toContain('bidWouldFireDuring=stop');
+    expectEvaluated(t3, f3, 'n');
+    expect(eng._venuePausePending.size).toBe(0);
+  });
+
+  it('CONTROL: the same tick outside a window is decided, with no pause line', async () => {
+    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '400.0' }]);
+    const eng = makeEngine();
+    await warm(eng);
+    const f: Frame = { bid: 399.9, ask: 400.7, last: 400 };
+    const t = await tick(eng, f);
+    expect(t.warns.filter((l) => PAUSE.test(l))).toHaveLength(0);
+    expectEvaluated(t, f, 'n');
+    expect(eng._venuePauseExitTicks).toBe(0);
   });
 });

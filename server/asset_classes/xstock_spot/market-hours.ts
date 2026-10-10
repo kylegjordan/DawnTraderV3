@@ -154,6 +154,10 @@ export function isXstockLiquidFillWindowET(
  * ⛔ POLICY, NOT A KNOB (pre-audit A11): the edges encode a deliberate fidelity deviation (choosing not to trade), so they
  *   change only by a reviewed commit, never by a `module_constants` write.
  * NOT included: US holidays and half-days (the file header; `#392`). First half-day candidate 2026-11-27, a Step-8 read.
+ * ⚠️ THE TRAILING EDGE IS BOUNDED BY TWO KNOBS, NOT BY THIS FILE (Langston Step 4): the pause gates on the clock, not on
+ *   the mark's age, so the first decided tick after a window can act on a book quoted inside it. Today that exposure is
+ *   ~15 s: none of the windows is in 09:30-16:00 ET, so σ is unavailable ⇒ the mark-staleness ceiling sits at its
+ *   `floor_ms` (15000). Lowering `sigma_min_observations` or raising `floor_ms` widens it toward the 300 s cap.
  */
 export type XstockPauseWindow = '16:15' | '20:15' | 'sun_reopen';
 const PAUSE_1615: readonly [number, number] = [974, 995];
@@ -165,9 +169,9 @@ export function isXstockVenueTransitionPause(now: Date = new Date()): { paused: 
   const { weekday, hour, minute } = getETParts(now);
   const m = hour * 60 + minute;
   const inside = (w: readonly [number, number]) => m >= w[0] && m < w[1];
+  // Saturday and Friday 20:00+ never reach here: the weekend close above returns first (it is the only guard for both).
   if (weekday === 'Sun') return inside(PAUSE_SUN_REOPEN) ? { paused: true, window: 'sun_reopen' } : { paused: false, window: null };
-  if (weekday === 'Sat') return { paused: false, window: null };
   if (inside(PAUSE_1615)) return { paused: true, window: '16:15' };
-  if (weekday !== 'Fri' && inside(PAUSE_2015)) return { paused: true, window: '20:15' };
+  if (inside(PAUSE_2015)) return { paused: true, window: '20:15' };
   return { paused: false, window: null };
 }

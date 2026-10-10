@@ -832,9 +832,15 @@ export class ActiveExecutionEngine {
   // streak (that pages) and never `_recordPriceSkip`: a paused tick is a deliberate fidelity deviation, not a fault.
   private _venuePauseExitTicks = 0;
   private _venuePauseWouldFire = 0;
+  private _venuePauseBidWouldFire = 0;
   private _venuePauseEntriesRefused = 0;
-  /** Per position: the open pause episode (one `VENUE_PAUSE` line at its start, one `VENUE_PAUSE_RESUMED` at the first decided tick after). */
-  private _venuePausePending: Map<string, { window: string; atMs: number; mark: number; bid: number | null; wouldFire: 'stop' | 'target' | null }> = new Map();
+  /**
+   * Per position: the open pause episode (one `VENUE_PAUSE` line at its start, one more the first time a level would have
+   * fired, one `VENUE_PAUSE_RESUMED` at the first decided tick after). ⛔ BOTH ARMS (Langston Step 4 C2): `wouldFire` on
+   * the MARK (today's trigger) AND `bidWouldFire` on the BID — the bid collapses first, so a mark-only set undercounts and
+   * selects on severity; the retirement criterion (pre-audit C-P5) reads the bid set once increment B is live.
+   */
+  private _venuePausePending: Map<string, { window: string; atMs: number; mark: number; bid: number | null; wouldFire: 'stop' | 'target' | null; bidWouldFire: 'stop' | 'target' | null }> = new Map();
   private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
     let t = this._exitRefusalTally.get(position.id);
     if (!t) {
@@ -2942,22 +2948,28 @@ export class ActiveExecutionEngine {
           const _pend = this._venuePausePending.get(position.id);
           if (_vp.paused) {
             this._venuePauseExitTicks++;
-            const _wf: 'stop' | 'target' | null =
-              stopLoss !== null && currentPrice <= stopLoss ? 'stop'
-                : takeProfit !== null && currentPrice >= takeProfit ? 'target' : null;
+            const _lvl = (px: number | null): 'stop' | 'target' | null =>
+              px === null ? null
+                : stopLoss !== null && px <= stopLoss ? 'stop'
+                  : takeProfit !== null && px >= takeProfit ? 'target' : null;
+            const _wf = _lvl(currentPrice);
+            const _bwf = _lvl(xsBid);
             if (!_pend) {
-              this._venuePausePending.set(position.id, { window: _vp.window as string, atMs: Date.now(), mark: currentPrice, bid: xsBid, wouldFire: _wf });
+              this._venuePausePending.set(position.id, { window: _vp.window as string, atMs: Date.now(), mark: currentPrice, bid: xsBid, wouldFire: _wf, bidWouldFire: _bwf });
               if (_wf) this._venuePauseWouldFire++;
+              if (_bwf) this._venuePauseBidWouldFire++;
               console.warn(
                 `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_vp.window} ` +
-                `mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} wouldFire=${_wf ?? 'none'}`,
+                `mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} ` +
+                `wouldFire=${_wf ?? 'none'} bidWouldFire=${_bwf ?? 'none'}`,
               );
-            } else if (_wf && !_pend.wouldFire) {
-              _pend.wouldFire = _wf;
-              this._venuePauseWouldFire++;
+            } else if ((_wf && !_pend.wouldFire) || (_bwf && !_pend.bidWouldFire)) {
+              if (_wf && !_pend.wouldFire) { _pend.wouldFire = _wf; this._venuePauseWouldFire++; }
+              if (_bwf && !_pend.bidWouldFire) { _pend.bidWouldFire = _bwf; this._venuePauseBidWouldFire++; }
               console.warn(
                 `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
-                `WOULD_FIRE=${_wf} mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'}`,
+                `WOULD_FIRE mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} ` +
+                `wouldFire=${_pend.wouldFire ?? 'none'} bidWouldFire=${_pend.bidWouldFire ?? 'none'}`,
               );
             }
             continue;
@@ -2966,7 +2978,7 @@ export class ActiveExecutionEngine {
             this._venuePausePending.delete(position.id);
             console.warn(
               `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE_RESUMED] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
-              `pausedS=${Math.round((Date.now() - _pend.atMs) / 1000)} wouldFireDuring=${_pend.wouldFire ?? 'none'} ` +
+              `pausedS=${Math.round((Date.now() - _pend.atMs) / 1000)} wouldFireDuring=${_pend.wouldFire ?? 'none'} bidWouldFireDuring=${_pend.bidWouldFire ?? 'none'} ` +
               `markAtStart=${_pend.mark} bidAtStart=${_pend.bid ?? 'none'} markNow=${currentPrice} bidNow=${xsBid ?? 'none'} ` +
               `sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'}`,
             );
@@ -3161,7 +3173,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicks=${this._venuePauseExitTicks} venuePauseWouldFire=${this._venuePauseWouldFire} venuePauseEntriesRefused=${this._venuePauseEntriesRefused}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.

@@ -77,10 +77,8 @@ describe('C-P2 — the paper exit pause: after the book-state block, before the 
     expect(branch).not.toMatch(/_recordPriceSkip\s*\(/);
     expect(branch).not.toMatch(/addAlert\s*\(/);
   });
-  it('CONTROL: a fixture that records a price skip in the branch is caught', () => {
-    const f = "const _vp = isXstockVenueTransitionPause(new Date()); await this._recordPriceSkip(position, 'x'); continue;";
-    expect(f.slice(0, f.indexOf('continue;'))).toMatch(/_recordPriceSkip\s*\(/);
-  });
+  // (The r1 "CONTROL" here matched a string literal declared inside itself, so it could not fail — Langston Step 4 C1.
+  // The behaviour is now driven through the real exit loop in `b-xstock-bid-trigger-reland-inc2-chain.test.ts`.)
 });
 
 describe('C-P3 — the paper entry refusal precedes the depth read', () => {
@@ -96,23 +94,46 @@ describe('C-P3 — the paper entry refusal precedes the depth read', () => {
 describe('C-P4 — the VTS: both lanes skip before any look; both opens refuse', () => {
   const VTS = SRC('services/vts-runner.ts');
   it('real lane: the skip sits before the xStock exit selector', () => {
-    const skip = VTS.indexOf("_vtsVenuePauseNow(now) !== null) { _vtsVenuePause.realSkips++; continue; }");
+    const skip = VTS.indexOf("_vtsVenuePauseNow(now) !== null) { _vtsVenuePauseCount('realSkips'); continue; }");
     const sel = VTS.indexOf('selectVtsXstockExitBid(trade.symbol', skip);
     expect(skip).toBeGreaterThan(0); expect(sel).toBeGreaterThan(skip);
   });
   it('shadow lane: the skip sits beside the weekend skip', () => {
     const wk = VTS.indexOf("if (trade.assetClass === 'xstock_spot' && isInXstockWeekendClose(new Date(now))) continue;");
-    const skip = VTS.indexOf('_vtsVenuePause.shadowSkips++; continue;');
+    const skip = VTS.indexOf("_vtsVenuePauseCount('shadowSkips'); continue;");
     expect(wk).toBeGreaterThan(0); expect(skip).toBeGreaterThan(wk); expect(skip - wk).toBeLessThan(400);
   });
   it('both registration functions refuse an xStock open during the pause', () => {
     const reg = VTS.indexOf('export async function registerOpenVtsTrade(');
-    expect(VTS.indexOf('_vtsVenuePause.opensRefused++;', reg)).toBeGreaterThan(reg);
+    expect(VTS.indexOf("_vtsVenuePauseCount('opensRefused');", reg)).toBeGreaterThan(reg);
     const sreg = VTS.indexOf('export async function registerOpenShadowTrade(');
-    expect(VTS.indexOf('_vtsVenuePause.shadowOpensRefused++;', sreg)).toBeGreaterThan(sreg);
+    expect(VTS.indexOf("_vtsVenuePauseCount('shadowOpensRefused');", sreg)).toBeGreaterThan(sreg);
   });
   it('the VTS pause never feeds the no-decision streak and never alerts', () => {
-    const fn = VTS.slice(VTS.indexOf('function _vtsVenuePauseNow('), VTS.indexOf('export function getVtsVenuePauseCounters('));
+    const fn = VTS.slice(VTS.indexOf('function _vtsVenuePauseNow('), VTS.indexOf('export function _vtsVenuePauseNowForTest('));
     expect(fn).not.toMatch(/addAlert\s*\(|noDecision|_vtsNoDecision/);
   });
+});
+
+describe('C-P4 / C3 (iii) — the VTS counters are reported PER WINDOW, at the window\'s END', () => {
+  it('a window\'s own counts print when it ends, then reset; the since-start totals carry on', async () => {
+    const V = await import('../../services/vts-runner');
+    const warns: string[] = [];
+    const orig = console.warn; console.warn = (m: unknown) => { warns.push(String(m)); };
+    try {
+      const t0 = Date.parse('2026-10-14T20:20:00Z'); // Wed 16:20 ET — inside 16:15
+      expect(V._vtsVenuePauseNowForTest(t0)).toBe('16:15');
+      V._vtsVenuePauseCountForTest('realSkips'); V._vtsVenuePauseCountForTest('realSkips'); V._vtsVenuePauseCountForTest('opensRefused');
+      const before = V._vtsVenuePauseCountersForTest();
+      expect(before.win).toEqual({ realSkips: 2, shadowSkips: 0, opensRefused: 1, shadowOpensRefused: 0 });
+      expect(V._vtsVenuePauseNowForTest(Date.parse('2026-10-14T20:40:00Z'))).toBeNull(); // the window has ended
+      const end = warns.find((l) => l.includes('VTS_VENUE_PAUSE] END window=16:15@'));
+      expect(end).toBeDefined();
+      expect(end).toContain('realSkips=2 shadowSkips=0 opensRefused=1 shadowOpensRefused=0 sinceStart');
+      const after = V._vtsVenuePauseCountersForTest();
+      expect(after.win).toEqual({ realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0 });
+      expect(after.cum.realSkips).toBe(before.cum.realSkips);
+      expect(after.windowKey).toBe('');
+    } finally { console.warn = orig; }
+  }, 60_000); // importing vts-runner alone takes several seconds
 });
