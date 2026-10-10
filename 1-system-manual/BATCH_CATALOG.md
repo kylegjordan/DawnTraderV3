@@ -1269,3 +1269,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **DEPLOYED.** Deploy B `3576d3981` 2026-10-06T15:45Z (reset 15:53Z) and `0c8ef5da2` 2026-10-07T15:56Z (r9). **Step 8 CONFIRMED by Langston:** row 1 sizing ($38.02-$39.81 against $39.77), row 2 (`#1081`), row 3 (`3n.q8` restart and the HUT live refusal, 2026-10-09).
 
 **OPEN BEYOND IT.** obj-5's posture term lands inside `resolveEffectivePositionPct` only when the AMR activates (`#616`, condition C-5).
+
+## B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a — paired with 3a1; `#1123`) — change-class `non_architecture` — ⏳ **OPEN — Step 7 partial** (Step 4 APPROVED at `3a549e3a9`; deployed in CC-C's 10-10 release `ad01f5339`; progress report `Batch Completion/B_FEED_HEALTH_GRADE_ARM_PROGRESS_REPORT.md`)
+
+**WHAT IT DOES.** Loads the feed-health settings at boot, so the per-class liveness grade actually runs. Clears what the grade raises, by acknowledging the dashboard alerts on a recovery; the old clear path tested an alert id that was never set. Prints a per-cycle per-class liveness line. Exposes the liveness to 3a1. Fixes the crypto recorder's subscription naming, which had dropped 8 pairs.
+
+**SO FAR.** Armed at both 10-10 restarts; the 8 pairs record from 10 s after the restart (0 rows each in the 24 h before). **Waiting on:** the first real non-healthy → healthy transition (the acknowledge path; backlog 1,088) and one full weekday of liveness lines (the pre-registered distribution).

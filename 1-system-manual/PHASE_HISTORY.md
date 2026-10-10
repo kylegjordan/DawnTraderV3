@@ -1314,3 +1314,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-09 — B-SIZING-DEC-RESTORE (CC-C, sprint plan row 9) — ✅ CLOSED 2026-10-09
 
 **Every paper and live trade is now sized by one plain rule, and the old competing rules are gone.** A trade is a fixed share of the balance (5% in paper today, about $40), and the number of positions that can be open follows from that share (20), so nothing else can quietly shrink or cap a trade. The old rules that did, including the one that shrank the practice trades the system learns from, are deleted and guarded against coming back. Paper was reset to $820 without deleting any history.
+
+### 2026-10-10 — B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a) — ⏳ open, waiting on a weekday and a real recovery
+
+**The feed-health check now actually runs, and its alerts can clear themselves.** Its settings had never been loaded at startup, so part of the check had been quietly off, and the alerts it raised had no working way to clear — over a thousand had piled up on the dashboard. Both are fixed and went out on 10-10. The same batch found that the crypto price recorder had been dropping eight pairs because of a naming mismatch; those now record. What is left is to watch it work: one full weekday of readings, and the first time the feed dips and recovers, which should clear the old backlog.
