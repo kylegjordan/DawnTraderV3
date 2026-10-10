@@ -192,7 +192,13 @@ export class VenueQuietState {
   }
 }
 
-export interface SweepResult { resolved: string[]; failed: number; escalated: string[]; unmatched: string[] }
+/** `held` (r6, Langston 2026-10-11): the standing record's members still unpriced at this sweep, with each one's own family —
+ *  what is HOLDING the record open. Before r6 this list was computed and discarded unless a duration page fired, so a record
+ *  that did not resolve could not name the member blocking it (the deciding quantity logged only when it released). */
+export interface SweepResult {
+  resolved: string[]; failed: number; escalated: string[]; unmatched: string[];
+  held: Array<{ symbol: string; reasonFamily: ReasonFamily | null }>;
+}
 
 /**
  * One sweep (objective 9): re-measure every non-terminal row this rail owns and resolve the cleared ones. Never throws —
@@ -209,7 +215,7 @@ export async function sweepVenueQuiet(args: {
   deps: SweepDeps;
 }): Promise<SweepResult> {
   const { mode, nowMs, openPositions, state, cfg, verdict, deps } = args;
-  const out: SweepResult = { resolved: [], failed: 0, escalated: [], unmatched: [] };
+  const out: SweepResult = { resolved: [], failed: 0, escalated: [], unmatched: [], held: [] };
   state.noteVerdict(verdict, nowMs);
   const bySymbol = new Map<string, SweepPosition[]>();
   for (const p of openPositions) bySymbol.set(p.symbol.toUpperCase(), [...(bySymbol.get(p.symbol.toUpperCase()) ?? []), p]);
@@ -257,6 +263,7 @@ export async function sweepVenueQuiet(args: {
             reasonFamily: mem.reasonFamily ?? null });
         }
       }
+      out.held = stillOut.map((s) => ({ symbol: s.symbol, reasonFamily: s.reasonFamily }));
       // RESOLVE only when the venue genuinely resumed (`not_quiet`) — never on `thin`, which is the feed dying, not the
       // market returning (Langston Step-4 BLOCKER-2: a tri-state must not be tested with `!== 'quiet'`).
       if (verdict === 'not_quiet' && stillOut.length === 0) {

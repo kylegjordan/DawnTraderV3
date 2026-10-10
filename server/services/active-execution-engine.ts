@@ -1022,7 +1022,9 @@ export class ActiveExecutionEngine {
         mode: this.mode, nowMs: now, openPositions: open, state: this._venueQuiet, cfg, verdict,
         deps: { listAlerts: readAllAlerts, resolveByKey: resolveAlertsByDedupeKey, addAlert: addAlert as any },
       });
-      console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} newEscalations=${r.escalated.length} unmatchedKeys=${r.unmatched.length}`);
+      console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} newEscalations=${r.escalated.length} unmatchedKeys=${r.unmatched.length}` +
+        // r6: what holds the standing record open, member by member with its own family (empty when nothing is listed).
+        ` held=${r.held.length}${r.held.length ? `[${r.held.map((h) => `${h.symbol}:${h.reasonFamily ?? 'unknown'}`).join(',')}]` : ''}`);
     } catch (err) {
       console.error(`[VENUE_QUIET][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     }

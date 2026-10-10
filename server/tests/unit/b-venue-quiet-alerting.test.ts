@@ -367,6 +367,29 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     }
     expect(d2.addAlert).not.toHaveBeenCalled();
   });
+  it('r6 (Langston 2026-10-11): the sweep names what HOLDS the standing record open, each member with its own family', async () => {
+    const st = new VenueQuietState();
+    const members = {
+      'pos-a': { symbol: 'ORCL/USD', listedAtMs: now - 3_600_000, reasonFamily: 'book_state' },
+      'pos-b': { symbol: 'CRCL/USD', listedAtMs: now - 3_600_000, reasonFamily: 'quiet_market' },
+    };
+    const open = [{ id: 'pos-a', symbol: 'ORCL/USD' }, { id: 'pos-b', symbol: 'CRCL/USD' }];
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members })]);
+    const r1 = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r1.held).toEqual([{ symbol: 'ORCL/USD', reasonFamily: 'book_state' }, { symbol: 'CRCL/USD', reasonFamily: 'quiet_market' }]);
+    expect(d.resolveByKey).not.toHaveBeenCalledWith(standingKey('paper'), expect.anything(), expect.anything(), expect.anything());
+    st.notePriced('pos-b', now);
+    const r2 = await sweepVenueQuiet({ mode: 'paper', nowMs: now + 1, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r2.held).toEqual([{ symbol: 'ORCL/USD', reasonFamily: 'book_state' }]); // the book-state member is what blocks it
+    st.notePriced('pos-a', now + 2);
+    const r3 = await sweepVenueQuiet({ mode: 'paper', nowMs: now + 3, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r3.held).toEqual([]);
+    expect(d.resolveByKey).toHaveBeenCalledWith(standingKey('paper'), 'active-exit-monitor', 'pos-a', 'engine');
+  });
+  it('r6: a sweep with no standing record reports nothing held', async () => {
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: deps([]) });
+    expect(r.held).toEqual([]);
+  });
   it('r5 BLOCKER-1: the duration page stamps the MEMBER\'s own family and words a book-state member as a refusal, not a missing mark', async () => {
     const st = new VenueQuietState();
     const members = { 'pos-b': { symbol: 'GLW/USD', listedAtMs: now - 3_600_000, reasonFamily: 'book_state' } };
