@@ -1323,6 +1323,6 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **One bad trade in Kraken's hourly candles can no longer set a trade's stop and target.** Two of the seven trades stuck on 2026-10-05 had targets they could never reach because a single off-market print had inflated the volatility reading we size them from. There is now one volatility calculation instead of six, and it ignores a spike that comes straight back while still following a real move that holds. On every crypto trade opened since the change, our reading matches the one recomputed from Kraken's own candles. One gap remains and is placed: when the new calculation does trim a spike it leaves no record, so the next batch on this calculation (row 2a1) adds one.
 
-### 2026-10-10 — B-ROOT-DUPLICATE-SCANNER-RETIRE (CC-B, sprint plan row 2a0d) — ⏳ Step 11, awaiting Langston's confirm
+### 2026-10-10 — B-ROOT-DUPLICATE-SCANNER-RETIRE (CC-B, sprint plan row 2a0d) — ✅ CLOSED 2026-10-10
 
 **An old copy of the FX5 scanner that could have quietly taken over the live one is gone.** It sat outside the code the system runs, but it listened to the clock under the same name as the real scanner, so loading it by mistake would have replaced the real scanner's timing without any error. It went with a second copy, a scheduler that was never switched on, nine old test scripts and three unused services. A new check fails if anything else ever subscribes to the clock, and on the running system exactly the five expected parts do.

@@ -5,12 +5,12 @@
 **Code:** `5674c012b` (Step 3) → `035d0f7e5` (r2, Langston condition 1; CI `37582589884` success) → `91407e6c9` (record fix, header prose only) · **Deployed:** in CC-C's 10-10 release `ad01f5339b558ee968a7686d719e98b66e5fd01d` (`pm_uptime` 2026-10-10T11:59:18.959Z; CI `38049753797`, 4/4 per job); the running tree since `pm_uptime` 17:05:11.443Z is `e1b37c2d5`, a descendant (CC-C's second deploy).
 
 ## 1. What it was for
-An old copy of the FX5 scanner sat at the root of the repository. It subscribed to the Central Clock under the same name as the live scanner, so if anything ever loaded it, it would silently replace the live scanner's 30-second tick (`#1161`, found 2026-10-06 by Langston at the heartbeat batch's Step 2). The census around it found a second copy (`BATCH_19G_HF2`), a trading scheduler that was never started but would add its own clock fan-out if loaded, nine root test scripts that CI has never run, and three orphaned services from the Walter era.
+An old copy of the FX5 scanner sat at the root of the repository. It subscribed to the Central Clock under the same name as the live scanner, so if anything ever loaded it, it would silently replace the live scanner's 30-second tick (`#1161`, found 2026-10-06 by Langston at the heartbeat batch's Step 2). The census around it found a second copy (`BATCH_19G_HF2`), nine root test scripts that CI has never run, and — inside `server/` — a trading scheduler that was never started but would add its own clock fan-out if loaded, and three orphaned services from the Walter era.
 
 ## 2. What shipped
 | item | change |
 |---|---|
-| removed | the root `fx5-scanner.ts`, the `BATCH_19G_HF2` copy (three files), the root `trading_scheduler.ts`, `behavioral-template.ts`, `schema-audit.ts`, `provenance-governance.ts`, and the nine root `test-*.ts` scripts — each archived as `.removed`, each with its introducing commit and intent in `DELETED_COMPONENTS_LOG` (Langston C-1) |
+| removed | **outside the type-checked tree:** the root `fx5-scanner.ts`, the `BATCH_19G_HF2` copy (three files) and the nine root `test-*.ts` scripts; **inside `server/`:** `server/core/system/trading_scheduler.ts` and `server/services/{behavioral-template,schema-audit,provenance-governance}.ts` — each archived as `.removed`, each with its path, introducing commit and intent in `DELETED_COMPONENTS_LOG` (Langston C-1) |
 | left intentionally | `docs/current_state/screeners_export/backend/fx5-scanner.ts` (an export snapshot, not loadable) and `docs/audits/phase-8.8.1-8.8.2-audit.json` (a frozen audit record) — listed in the log so a later grep does not read them as a missed sweep |
 | docs | four Replit-era task docs carry a header pointing at the log instead of instructions that no longer work |
 | fence | `server/tests/unit/b-root-duplicate-scanner-retire.test.ts`: every `centralClock.subscribe(` in every `.ts`/`.tsx` from the repository root must be one of exactly five sites with five distinct ids; a planted twin at the root fails both assertions (r2, Langston condition 1 — at r1 it walked only `server/` and `shared/`, where neither retired copy lived) |
@@ -27,6 +27,7 @@ An old copy of the FX5 scanner sat at the root of the repository. It subscribed 
 - **Step 2:** approved with C-1..C-4.
 - **Step 4:** r1 PROCEED with condition 1 (walk from the root); **APPROVED at `91407e6c9`**, recorded in the change list by CC-C at the 10-10 release.
 - **Step 7:** CC-B, `Scope Files/RELEASE_DEPLOY_2026-10-10_PLAN.md` — PASS (the runtime no-change control).
+- **Step 11:** **CONFIRMED** by Langston 2026-10-10 at `3c23908f8` — batch CLOSED; one record correction folded (the "root" framing, §2 and §8).
 - **Step 8:** **CONFIRMED** by Langston 2026-10-10 20:47Z at the running tree `e1b37c2d5`. He also checked the one oddity: `TCL_paper` subscribes twice because the TCL stops and starts once at boot (sizes 1→2→1→2→3→4→5), not because a duplicate id replaced a handler — the replace-branch message appears 0 times in 12 log rotations, against a control that the string is in the shipped bundle.
 
 ## 5. Numeric corrections
@@ -50,7 +51,7 @@ CHANGE-CLASS: non_architecture
 | T1 | the batch PRE_AUDIT | ✅ | with the per-script table and §D C-1..C-4 |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: 2a0d moved to Step 11 |
-| T1 | Langston's MEMORY.md | ⏳ owed at Step 11 | Langston writes his own with his Step-11 confirm; ticked when the write lands |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston himself with his Step-11 confirm, 2026-10-10 |
 | T2 | SYSTEM_MANUAL.md | N/A | no live behaviour changed — nothing removed was loaded |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | Step 10: §3.1 Central Clock — the five live subscribers named, and that no non-live copy subscribes (the fence) |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1161` closed |
@@ -61,4 +62,5 @@ CHANGE-CLASS: non_architecture
 
 ## 8. Honest residual
 - The fence covers `.ts`/`.tsx` files under the repository root outside directories named `node_modules`, `.git`, `dist` and `tests`. A copy placed inside one of those, or written in another language, would not be seen.
-- Nothing removed was ever loaded, so the runtime evidence is a no-change control (the same five subscribers), not a before/after.
+- Nothing removed was ever loaded, on **two different bases** (Langston, Step 11): the root copy, `BATCH_19G_HF2` and the root scripts sit outside `tsconfig`'s include and were never compiled; the four `server/` files were inside it and rest on zero importers (and, for the scheduler, an absent module-load line against two controls). So the runtime evidence is a no-change control (the same five subscribers), not a before/after.
+- *Corrected at Step 11 (Langston): this report first described all of the above as "root"; four lived under `server/`. `DELETED_COMPONENTS_LOG` had every path right.*

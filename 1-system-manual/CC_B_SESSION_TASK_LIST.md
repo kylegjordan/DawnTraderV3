@@ -7,7 +7,6 @@
 | batch | step | waiting on |
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
-| **`B-ROOT-DUPLICATE-SCANNER-RETIRE`** (row 2a0d) | **STEP 11 of 11** — report `Batch Completion/B_ROOT_DUPLICATE_SCANNER_RETIRE_COMPLETION_REPORT.md` | Langston's Step-11 confirm |
 | **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c) | **deployed 2026-10-10 — STEP 7** | the 2026-10-11 02:15Z retention sweep (no `cluster_bus_event` line, failed=0), then Step 8 |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1) | **STEP 9 CLEARED** (Langston, r5 at `2b005902b`) | record items 1-2 (the shared ticking window; the replay's per-row instant), then the next deploy and Step 7 — quote one live `ticker_snaps_60s=` line at Step 8 |
@@ -29,7 +28,7 @@
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
 - 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`): keep or remove the cluster-bus persistence layer (Langston 10-06).
-- 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`): delete the root-level FX5 scanner twin; census the root test scripts (Langston 10-06).
+- ✅ 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`) — CLOSED 2026-10-10 (Langston Step 11).
 - 2a1 `B-ADX-TRUE-RANGE-SHARED`: the regime's ADX takes 2a's shared true range (Langston 10-06).
 - 2a1a `B-RISK-INDEX-ORPHAN-REMOVAL` (`#1157`): delete the orphaned `risk_index.ts` and the docs calling it active (Langston 10-06).
 - 2a2 `B-VOLATILITY-CACHE-RETIRE`: retire the dead volatility cache (was only on PHASE_19_PLAN's board).
