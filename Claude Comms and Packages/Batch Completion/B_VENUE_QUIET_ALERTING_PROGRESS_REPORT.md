@@ -59,6 +59,8 @@ The scope's staging criterion, quoted: *"at the next US close with xStocks held,
 - **The instrument and the rescue, fixed in r6b before the data:** `held` and the duration page read each member's **family set** (11 of the 16 live members carry `book_state` only as a minority family); the duration page **resolves a held off-session row on its key as superseded first, then mints, and counts/flags only a row actually created** — before r6b it was dedupe-suppressed on 8 of those 11 and still counted as escalated.
 - **Residual, named (Langston):** `getXstockSession` is day-blind (it reads `regular` on a Saturday 13:30-20:00Z, saved only because `closed` is tested first), and a US holiday (`#392`, no calendar) reads `thin`, not `closed` — so the duration page would page the book-state members at a shut venue. Not built here; it is `#392`'s.
 
+**Re-anchor (restart clause):** r6 + r6b + the evidence-token condition deployed at `71c8a2210`, **`pm_uptime` 2026-10-10T23:17:43.835Z**, before the 00:00Z reopen — the Monday window reads on this code; the first sweep printed `held=16[…:quiet_market+book_state, …]`.
+
 ## 4. What is unproven, stated as unproven
 - The weekday arms (`quiet`, `not_quiet`, `thin` in session and after hours) have not run on the deployed code.
 - `T` counts updates only; the thresholds were measured on all frames. Off-session steady state should differ little (no resubscribes), but that is Monday's measurement.
