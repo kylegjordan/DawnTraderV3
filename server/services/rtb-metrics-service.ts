@@ -52,6 +52,7 @@ export type OpenFailStage =
   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
   | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
+  | 'ENTRY_GEOMETRY'      // B-ENTRY-DISTANCE-GUARD (row 59): the taker fill sits at or through the signal's own stop or target (refuseTakerBooking)
   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
@@ -156,7 +157,7 @@ class RtbMetricsService {
     // P19-B6.5e: initialize the open-stage failure breakdown
     const stages: OpenFailStage[] = [
       'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'STAMP_MISSING', 'DEPTH_GATE',
-      'FILL_REJECTED', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
+      'FILL_REJECTED', 'ENTRY_GEOMETRY', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
     ];
     for (const stage of stages) {
       this.stats.openFailedByStage[stage] = 0;

@@ -38,3 +38,21 @@ export function bookedQuantity(dollarValue: number, price: number | null | undef
   if (!Number.isFinite(dollarValue) || dollarValue <= 0) return null;
   return dollarValue / price;
 }
+
+/**
+ * `B-ENTRY-DISTANCE-GUARD` (sprint row 59 increment 1, OBJ-2 — SHADOW). Reward-to-risk measured at the FILL, against the
+ * strategy's live `min_rr`, and the adverse move from the planned entry in units of the planned risk. It refuses nothing:
+ * the pre-registered rule (`B_ENTRY_DISTANCE_GUARD_PRE_AUDIT.md` §0, §1.2) sent it to shadow — live it would have refused
+ * about three opens in ten, because the floors sit within ~0.017 R of several strategies' own constant RR (`#1183`).
+ * `floor === null` ⇒ the floor could not be read; `wouldRefuse` is then null, never a guess.
+ */
+export interface EntryFillShadow { rrFill: number | null; adverseR: number | null; wouldRefuse: boolean | null }
+export function entryFillShadow(a: { fill: number; intended: number; stop: number; target: number; floor: number | null }): EntryFillShadow {
+  const fin = (x: number) => Number.isFinite(x);
+  const risk = a.fill - a.stop;
+  const rrFill = fin(a.fill) && fin(a.stop) && fin(a.target) && risk > 0 ? (a.target - a.fill) / risk : null;
+  const plannedRisk = a.intended - a.stop;
+  const adverseR = fin(a.intended) && fin(a.fill) && plannedRisk > 0 ? (a.fill - a.intended) / plannedRisk : null;
+  const wouldRefuse = a.floor === null || !fin(a.floor) || rrFill === null ? null : rrFill < a.floor;
+  return { rrFill, adverseR, wouldRefuse };
+}

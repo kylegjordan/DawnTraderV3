@@ -50,6 +50,8 @@
 import { storage } from '../storage';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
 import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
+import { refuseTakerBooking, entryFillShadow } from '../core/trading/entry-booking.js'; // B-ENTRY-DISTANCE-GUARD (row 59)
+import { getPerClassTargetGate } from '../core/calculations/expectancy.js'; // B-ENTRY-DISTANCE-GUARD OBJ-2 shadow floor
 import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
 // B72 (2026-05-05): MONITOR_INTERVAL_MS + CONTINUOUS_PROMOTION_INTERVAL_MS
@@ -5629,6 +5631,13 @@ export class ActiveExecutionEngine {
       entryFee = _b72cLimit * quantity * getFrictionForAssetClass(_openClass).feeRateMaker;
       totalSlippage = 0; // a maker fill at the resting limit pays no taker slippage
     } else {
+    // B-ENTRY-DISTANCE-GUARD OBJ-2 (shadow): the strategy's live `min_rr`, read ONCE per open and BEFORE the fill (Langston
+    // Step-1 FINDING-1: `getPerClassTargetGate` throws on a missing class row, and a throw past the fill would leave an
+    // open attempt that is neither opened nor counted). A read failure is logged on the shadow line, never thrown.
+    let _entryFloor: number | null = null;
+    let _entryFloorNote = '';
+    try { _entryFloor = getPerClassTargetGate(_openClass, signal.strategy).minRR; }
+    catch (floorErr) { _entryFloorNote = ` floor_unresolved=${JSON.stringify(floorErr instanceof Error ? floorErr.message : String(floorErr))}`; }
     const _openFill = await this.orderPlacer.openOrder({
       symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
       mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
@@ -5661,6 +5670,32 @@ export class ActiveExecutionEngine {
     actualEntryPrice = _openFill.fillPrice;
     entryFee = _openFill.feeQuote;
     totalSlippage = _openFill.slippageQuote;
+    // B-ENTRY-DISTANCE-GUARD (sprint row 59 increment 1). The fill is a pure book walk (`openOrder` writes nothing), so
+    // judging it here, before any write, leaves nothing behind. A fourth sibling of the three FILL_REJECTED returns above.
+    // OBJ-2 SHADOW first, on EVERY taker open, so the refused ones are in the same population as the admitted ones.
+    const _shadow = entryFillShadow({ fill: actualEntryPrice, intended: signal.entryPrice, stop: signal.stopPrice, target: signal.targetPrice, floor: _entryFloor });
+    console.log(`[ENTRY_GEOMETRY][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} ` +
+      `rr_fill=${_shadow.rrFill === null ? 'n/a' : _shadow.rrFill.toFixed(4)} floor=${_entryFloor ?? 'n/a'} adverse_r=${_shadow.adverseR === null ? 'n/a' : _shadow.adverseR.toFixed(4)} would_refuse=${_shadow.wouldRefuse ?? 'n/a'}${_entryFloorNote}`);
+    // OBJ-1 LIVE: a taker fill at or through the signal's own stop or target is a trade dead or spent the moment it opens
+    // (13 of 117 W1 xStock taker opens, pre-audit §1.1). The shared primitive the VTS and the xStock booking already use.
+    const _geom = refuseTakerBooking(actualEntryPrice, signal.stopPrice, signal.targetPrice);
+    if (_geom !== null) {
+      console.error(`[ENTRY_GEOMETRY][REFUSED] ${signal.symbol} strategy=${signal.strategy} fill=${actualEntryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} reason=${_geom} — not opened`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'ENTRY_GEOMETRY', _geom);
+      try {
+        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass: _openClass,
+          source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'tcl', confidenceModulated: signal.confidence,
+          gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, intendedEntryPrice: signal.entryPrice,
+            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice },
+        });
+      } catch (archErr) {
+        // The refusal above is already counted and logged; an archive failure must never read as "no refusal happened".
+        console.error(`[ENTRY_GEOMETRY][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
+      }
+      return { opened: false, stage: 'ENTRY_GEOMETRY', reason: _geom };
+    }
     }
     const positionValue = actualEntryPrice * quantity;
 
