@@ -21,3 +21,65 @@
 **OBJ-4 (the fabricated 2 % target):** the count of current `rtb_signals` rows with a null `target_price`, and the count of P-taker rows (both windows) whose `take_profit / intended_entry_price` equals 1.02 within 1e-9. Zero on both ⇒ the fallback never fired in these windows and its removal is a fail-closed change with no observed population.
 
 **§3 maker question (measured, ruled by Langston):** the count of `chosen_entry_mode = 'maker'` opens (both windows) whose recorded entry-decision ask (`entry_decision_price` on closed rows; the metadata stamp on open rows) was at or below `stop_loss` when the maker filled.
+
+## PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED** (scope §0, from `#915`): 6 of 160 crypto `stop_hit` closes since 2026-07-15 had `stop_loss >= entry_price`. **NOW:** 7 of 295 (Langston, staging, 2026-10-10). **REASON:** a later read over a longer window; this audit's own windows are W1/W2 below and do not re-measure that figure.
+- **PREVIOUSLY STATED** (scope §0, from `#1168`): four xStocks opened with the fill at or below the stop. **NOW:** 9 at or below the stop and 4 at or above the target in W1 (§1.1). **REASON:** `#1168` counted the first 30 closes; W1 runs to the read time.
+
+## 1. AUDIT — measurements against §0, as pre-registered (read 2026-10-10 22:30:22Z, staging DB; deployed sha `5da17e02c`, CC-C 21:58:27Z; scripts `edg_q.sql` + `edg_an.py` in the CC-B scratchpad)
+**Populations:** W1 = 162 rows (142 closed, 20 open), `chosen_entry_mode` taker 161 / maker 1; W2 = 395 (taker 330, maker 65). **20 taker rows in each window have a null intended price and fill — they are the `closed_trades` rows the engine writes at the open for the 20 positions still open** (the same 20 symbols as `active_open_positions`, opened within 0.1 s); they are excluded and each open position is counted once, from `active_open_positions`. P-taker with complete fields: W1 141 (crypto 24, xStock 117); W2 310 (crypto 137, xStock 173).
+
+### 1.1 OBJ-1 — fill at or through a level
+| window | class | fill ≤ stop | fill ≥ target |
+|---|---|---|---|
+| W1 | crypto | **0** of 24 | 0 |
+| W1 | xStock | **9** of 117 — STZ 10-06 19:36, CEG 20:15, INTC 10-07 00:15, CRCL 02:16, SKHY 10-08 06:35, INTC 07:17, ARM 07:44, MSTR 13:53, TER 17:50 | **4** — CTVA 10-08 00:18, ANET 00:22, APP 08:21, BBY 17:49 |
+| W2 | crypto | 1 of 137 (ACU 09-08) | 0 |
+| W2 | xStock | the same 9 | the same 4 |
+
+**How they ended:** all 9 below-stop opens closed `stop_hit`; of the 4 above-target opens, ANET and BBY closed `target_hit` (bought above the target, "won" at it) and CTVA and APP closed `stop_hit`. **13 of 117 W1 xStock taker opens (11.1 %) were dead or spent the moment they opened.** No other check on the open path sees them (A3).
+
+### 1.2 OBJ-2 — RR at the fill vs the live floor — ⛔ THE PRE-REGISTERED RULE SAYS **SHADOW**
+**Live floors** (staging `module_constants`, `expectancy_gates.min_rr`, read 22:30:22Z): class defaults crypto 2.0 / xStock 2.0; crypto mean_reversion 2.88, morning_star 1.39, range_trade 1.71, reverse_impulse 2.40, strong_bull_trend 1.95, support_bounce 1.0, volatility_edge 1.0, vwap_bounce 1.95, vwap_pullback 1.95; xStock morning_star 1.0, pivot_shift 2.16, sma_trend_ride 1.95, strong_bull_trend 1.95, vwap_bounce 1.95, vwap_pullback 1.96; unknown floors crypto 2.88, xStock 2.16.
+
+**Headroom table (PRIMARY; geometry from a code read at `06b348065`, per-strategy citations in the Step-2 research record):** constant-RR cells — `strong_bull_trend` RR 2.0 (6/3 ATR) vs 1.95 ⇒ **t = 0.0169 R**; `vwap_bounce` 2.0 vs 1.95 ⇒ **0.0169 R**; `sma_trend_ride` 'break' exit crypto 2.5 vs 2.0 ⇒ **0.167 R**, xStock 2.0 vs 1.95 ⇒ **0.0169 R**; the crypto pattern-pool arm RR 1.667 (1.5/2.5 ATR) under whichever strategy label it carries. `vwap_pullback` is variable but **floored at 2.0 by construction** (`target = max(high24h − 0.25·ATR, entry + 2·risk)`), so its floor-bound signals sit at 2.0 against 1.96 ⇒ **t ≈ 0.0135 R**. Every other cell is variable.
+**Observed adverse slip in R, (fill − intended)/(intended − stop):** W1 crypto n=24 median −0.042, **p90 0.572**, max 1.78; W1 xStock n=117 median −0.015, **p90 0.562**, max 3.26. (W2: crypto p90 0.235, xStock p90 0.414.)
+**Rule (a):** every constant-RR cell that opened in W1 has t far below its class's p90 slip (≈ 0.017 R vs ≈ 0.57 R) ⇒ **(a) FAILS.**
+**Rule (b), CORROBORATING, counterfactual on today's floors, excluding OBJ-1's rows:** W1 crypto **7 of 24 (29 %)**, all `strong_bull_trend`; W1 xStock **31 of 104 (30 %)** — 29 `vwap_pullback`, 1 `pivot_shift`, 1 `sma_trend_ride` ⇒ **(b) FAILS** (bar 5 %).
+⇒ **OBJ-2 SHIPS IN SHADOW.** The table shows the knife edge sits in the FLOORS (constant-RR cells floored 0.05 below their own RR — the `ADJUSTMENT_FRAMEWORK` clause-2 shape) and in the fill quality (p90 ≈ 0.57 R adverse) — a calibration matter, not this check's. Live, it would refuse about three opens in ten.
+
+### 1.3 FINDING-2 — strategy tokens
+Distinct `strategy_name` in both windows: defensive_hedge, inside_bar_reversal, mean_reversion, morning_star, pivot_shift, **range_trading**, reverse_impulse, sma_trend_ride, strong_bull_trend, vwap_pullback; current `rtb_signals` (86 rows) add volatility_edge. **Each of the ten window tokens canonicalizes** through `resolveCanonicalStrategy` (run at `06b348065`; `range_trading` → `range_trade`; control `not_a_strategy` → null). `volatility_edge` was not run — it is itself one of the map's 19 canonical keys (`canonical-regime-strategy-map.ts:528-550`, per the research pass): NOT RE-READ. **0 tokens resolve to null** in these populations. With OBJ-2 in shadow it cannot refuse in any case.
+
+### 1.4 OBJ-4 — the fabricated 2 % target
+Current `rtb_signals`: **0 of 86** with a null `target_price`. P-taker rows with `take_profit = intended × 1.02` exactly: **0** in W1 and W2. ⇒ the fallback did not fire in these windows; removing it is a fail-closed change with no observed population (rules 15 and 18).
+
+### 1.5 §3 maker question
+65 maker opens in W2 (1 in W1), each with an `entry_decision_price`: **0 of 65 at or below the stop.** ⚠️ **Instrument limit:** on 43 of the 65 the decision price equals the limit (the intended price), so for those rows the stored value is not the ask at the moment of the fill; the read cannot exclude a maker that filled after the market passed through its stop. **Recommendation:** leave the resting maker as it is (it books what a live resting order would book); cancel-on-stop stays a question for after the band's data.
+*(In-step correction: my first run read `original_stop_price` as the decision price and reported 55 of 55 at or below the stop — a column-index error, caught because 100 % was implausible; re-run on the right column.)*
+
+### 1.6 Code (A1-A7; read at `origin/migration/aws-supabase`; line numbers at `667babd4c` per Langston's re-derivation)
+- **A1 — one booking function**, `executeSimulatedTrade` (`active-execution-engine.ts:~5093`), reached only through RTB promotion → `executePromotedSignal` (`:~5004`) → `processSignal` (`:~6322`); the pending-maker fill (`_processPendingMaker`, `:~1791`) only flips state. **Entry points enumerated** (Step-1 research pass): four triggers of `checkRtbPromotion` — TCL activation, trade close, the 30 s loop, the coalesced re-run; `createActiveOpenPosition` (`storage.ts:3789`) has exactly one caller.
+- **A2 — the taker fill is a pure ask-side walk** (`order-placer.ts` `openOrder`: no writes, no state — read), so refusing straight after it leaves nothing behind. `actualEntryPrice = _openFill.fillPrice` sits inside the taker `else`, which closes at `:~5652` (FINDING-5).
+- **A3 — no fill-vs-level check exists:** `checkStopLossRequired` (`trade-safety.ts:147-165`) compares the stop with `signal.entryPrice` (the birth price, `tradeCandidate`); `riskAmount: quantity * Math.abs(actualEntryPrice - signal.stopPrice)` (`:~6220`) discards the sign (FINDING-3).
+- **A4 — the RR floor read** `getPerClassTargetGate` throws on a missing class row (`expectancy.ts:231`), and the open path's outer catch records no `openFailed` (FINDING-1). The floor is NOT carried on the signal: the orchestrator resolves it at `signal-orchestrator.ts:~1915`, **after** the RTB queue write (`:~1495`), so stamping it at birth would not reach a queued signal.
+- **A5 — the refusal record:** `OpenFailStage` + `rtbMetricsService.recordOpenFailed` (`rtb-metrics-service.ts:44-58`, zero-init `:157-160`); the admitted-open archive at `:~6082-6095` carries entry/stop/target/`gateConstantsVersion` inside a swallowing `catch` (FINDING-5).
+- **A6 — System Impact Map / System Manual:** the map has no entry for fill-time checks on the active booking (there are none) nor for `entry-booking.ts` as shared by three lanes; the manual's §3 describes entry pricing but no fill-vs-level rule. Both silences are this batch's Step-10 content.
+- **A7 — provenance:** `bridge/canonical/` consulted for the paper execution engine — **no coverage of a fill-time geometry check** (it was never designed in); `executeSimulatedTrade` `cb8ee0942` and `refuseTakerBooking` `f02e5190f`, both quoted in the scope.
+
+## 2. PLAN — each item ← its finding
+1. **OBJ-1, LIVE** ← 1.1, A2, A3. Inside the taker `else`, immediately after `actualEntryPrice = _openFill.fillPrice` and before anything is written: `const _geom = refuseTakerBooking(actualEntryPrice, signal.stopPrice, signal.targetPrice)`; a refusal ⇒ `rtbMetricsService.recordOpenFailed(symbol, strategy, 'ENTRY_GEOMETRY', _geom)` + `return { opened:false, stage:'ENTRY_GEOMETRY', reason:_geom }`. The shared primitive, no copy. The maker arm untouched (1.5).
+2. **OBJ-2, SHADOW** ← 1.2, A4, FINDING-1/2. The floor is resolved ONCE per open in `processSignal`, BEFORE the booking, inside a try: success ⇒ carried into `executeSimulatedTrade`; a throw ⇒ `floor = null`, the shadow line says `floor_unresolved`, the open proceeds (shadow admits all) — never an uncounted exit. After the taker fill: `rr_fill = (target − fill)/(fill − stop)` on one line `[ENTRY_GEOMETRY][SHADOW] … rr_fill floor would_refuse=…`. **Counter (FINDING-2):** one extra gate call per OPEN (≈ 40 a day in W1), not per signal — stated in the System Impact Map; tokens measured clean (1.3).
+3. **OBJ-3, SHADOW band** ← the convergence, 1.2's slip. On the same line: the adverse move in R and in the band unit `max(spread, k·ATR)`, `k` a `module_constants` row (`entry_guard.band_atr_k`, shadow-only) seeded **0.5** as a stated placeholder under `ADJUSTMENT_FRAMEWORK`'s baseline-placeholder regime (blast radius none — shadow; falsifier = the band data; rollback tracked); ATR = `signal.metadata.atr`, stamped at birth (`#581`); spread = the open's own depth snapshot; favourable side in the same unit.
+4. **OBJ-4** ← 1.4. `executePromotedSignal`: a row with no target is refused (`ENTRY_GEOMETRY`, reason `no_target`), never given `entry × 1.02`; `DELETED_COMPONENTS_LOG` entry (rule 18).
+5. **OBJ-5** ← A5, FINDING-5. `ENTRY_GEOMETRY` in `OpenFailStage` and its zero-init list; the refusal also writes an `archiveSignalEval` row, gate `entry_fill`, carrying entry/fill/stop/target — a sibling of the admitted-open archive, from the same fields; an archive failure logs `[ENTRY_GEOMETRY][ARCHIVE_FAILED]` and never reads as "no refusal". Visible in `/api/diagnostics/rtb-metrics`.
+6. **A3's abs** ← FINDING-3. `riskAmount` keeps its form: item 1 makes a fill at or below the stop unreachable there; a signed assertion would be a second copy of item 1 — **not added**; the map notes the invariant item 1 now guarantees.
+7. **Tests** ← all: STZ/CEG/INTC/CRCL and ANET/BBY replayed through the taker branch ⇒ refused with the primitive's reason, nothing written; a fill strictly inside passes; a knife-edge shadow case (RR 2.0 vs 1.95, fill +0.02 R) ⇒ `would_refuse=true` and the open proceeds; a throwing floor read ⇒ `floor_unresolved`, the open proceeds and is counted; a no-target RTB row ⇒ refused; a source fence that the engine calls the shared primitive; mutation — remove the call ⇒ the replay tests fail.
+8. **Docs** ← A6: System Impact Map (the booking's fill-time checks, the primitive's fourth caller, the stage, the shadow line, the counter) and System Manual §3 (what the open refuses, what it only logs, and why OBJ-2 is shadow — the headroom table).
+
+**UNAUDITED:** none.
+
+## 3. Open for Langston
+- OBJ-2 → SHADOW by the pre-registered rule (1.2). The floors' knife edge (≈ 0.017 R headroom against a ≈ 0.57 R p90 slip) is a calibration matter; I propose it is homed with the band's promotion, not fixed here.
+- `k = 0.5` as a stated placeholder for the shadow band, or another start.
+- The maker arm left as is (1.5).
