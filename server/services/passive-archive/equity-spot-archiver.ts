@@ -193,6 +193,11 @@ export function getLatestEquityTick(symbol: string): EquityTick | null {
  * Measured basis (pre-audit A2, 2026-10-06/07, universe 468): regular-hours p05 461; after-hours median 154; overnight
  * median 135 (min 108).
  */
+/** The trailing window `T` is counted over — ONE value for the venue-quiet rule (`venue-quiet-alerting.ts`, which imports it)
+ *  and for this archiver's heartbeat line, so the published `symbols_updated_60s` control can never drift from the deciding
+ *  quantity (Langston, 3a1 r5 record item 1). It lives here because the rule module imports from this one, not the reverse. */
+export const EQUITY_TICKING_WINDOW_MS = 60_000;
+
 export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
   let n = 0;
   for (const at of lastTickerUpdateAt.values()) {
@@ -431,7 +436,7 @@ setInterval(() => {
     // 60 s) beside the ticker snaps received by frame type. T=0 with update>0 is a measurement; T=0 with update=0 and
     // snapshot/other>0 says the labelling, not the market, changed.
     `ticker_snaps_60s=update:${state.tickerSnapsByType60s.update},snapshot:${state.tickerSnapsByType60s.snapshot},other:${state.tickerSnapsByType60s.other} ` +
-    `symbols_updated_60s=${countEquitySymbolsUpdatedSince(now - 60_000)}`
+    `symbols_updated_60s=${countEquitySymbolsUpdatedSince(now - EQUITY_TICKING_WINDOW_MS)}`
   );
   state.tickerSnapsByType60s = { update: 0, snapshot: 0, other: 0 };
   state.rowsPersistedLastMinute = 0;

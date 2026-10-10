@@ -27,7 +27,7 @@
  */
 import { getCachedNumberRequired } from './module-constants-service.js';
 import { QUOTE_LEN_MIN, QUOTE_LEN_MAX } from '../../shared/asset-classes.js';
-import { countEquitySymbolsUpdatedSince } from './passive-archive/equity-spot-archiver.js';
+import { countEquitySymbolsUpdatedSince, EQUITY_TICKING_WINDOW_MS } from './passive-archive/equity-spot-archiver.js';
 import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 
@@ -36,7 +36,8 @@ import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
  *  pages at 12:00, 13:03, 17:06, 17:44 and 18:38Z. A closed venue neither pages nor reads as resumed. */
 export type ClassVerdict = 'quiet' | 'not_quiet' | 'thin' | 'closed';
 export const VENUE_QUIET_ACTOR = 'active-exit-monitor';
-export const TICKING_WINDOW_MS = 60_000;
+/** The window T is counted over; defined beside the count so the archiver's heartbeat control reads the same value. */
+export const TICKING_WINDOW_MS = EQUITY_TICKING_WINDOW_MS;
 /** How long a cold (not-yet-warm) knob may be read as "skip, do not escalate" after engine start before it pages.
  *  A BOOT-ORDERING bound, not a trading decision: the warm-up measured 2 s at the 2026-10-06 restart (pre-audit A7). */
 export const NOT_WARM_GRACE_MS = 120_000;

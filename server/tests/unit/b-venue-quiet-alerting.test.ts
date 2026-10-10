@@ -106,8 +106,11 @@ describe('the rule', () => {
 
 // The 46 price-skip rows minted 2026-10-06 after 19:30Z, with the trailing-60 s T at each row's created_at (measured on
 // staging 2026-10-07; re-derived by Langston). One row is NOT quiet-family: HUT/USD 20:17:34Z is a book-state refusal.
-const REPLAY: Array<[string, number, 'quiet' | 'book_state']> = [
-  ['NWL', 401, 'quiet'], ['HUT', 389, 'book_state'], ['NVT', 245, 'quiet'], ['CAG', 236, 'quiet'], ['ARKK', 195, 'quiet'],
+// A book-state row MUST carry its own instant: that family's rule reads the US session at that instant, and ~9 of these
+// rows fall in the 19:30-20:00Z regular window (Langston, 3a1 r5 record item 2). The type makes the instant mandatory.
+type ReplayRow = [string, number, 'quiet'] | [string, number, 'book_state', string];
+const REPLAY: ReplayRow[] = [
+  ['NWL', 401, 'quiet'], ['HUT', 389, 'book_state', '2026-10-06T20:17:34Z'], ['NVT', 245, 'quiet'], ['CAG', 236, 'quiet'], ['ARKK', 195, 'quiet'],
   ['INVH', 248, 'quiet'], ['ALB', 184, 'quiet'], ['PDD', 279, 'quiet'], ['HUM', 197, 'quiet'], ['NET', 183, 'quiet'],
   ['ARKK', 180, 'quiet'], ['PDD', 172, 'quiet'], ['CAG', 172, 'quiet'], ['ALB', 183, 'quiet'], ['HUM', 218, 'quiet'],
   ['NWL', 169, 'quiet'], ['INVH', 157, 'quiet'], ['PDD', 146, 'quiet'], ['CAG', 159, 'quiet'], ['HUM', 148, 'quiet'],
@@ -118,11 +121,13 @@ const REPLAY: Array<[string, number, 'quiet' | 'book_state']> = [
   ['CAG', 136, 'quiet'], ['PDD', 137, 'quiet'], ['ALB', 133, 'quiet'], ['NET', 127, 'quiet'], ['HUM', 147, 'quiet'],
   ['OKTA', 125, 'quiet'],
 ];
-// Every replay row is from 2026-10-06 after 19:30Z; HUT (the one book-state row) is at 20:17:34Z = 16:17 ET, after hours.
-// r5 (Langston r4 record item b): the replay calls the PRODUCTION predicate for both families, so it cannot drift from it.
-const REPLAY_AT = Date.parse('2026-10-06T20:17:34Z');
-const pages = (rows: typeof REPLAY, rule: (t: number) => string) =>
-  rows.filter(([, t, fam]) => !joinsStandingRecord([fam === 'quiet' ? 'quiet_market' : 'book_state'], rule(t) as any, REPLAY_AT));
+// Every replay row is from 2026-10-06 after 19:30Z. The replay calls the PRODUCTION predicate for both families (r5, Langston
+// r4 record item b). The quiet family never reads the session, so its rows need no instant; a book-state row is judged at
+// its OWN instant (r5 record item 2) — HUT at 20:17:34Z = 16:17 ET, after hours.
+const QUIET_ROWS_AT = Date.parse('2026-10-06T20:00:00Z'); // unused by the quiet family's rule; any instant in the window
+const atOf = (r: ReplayRow) => (r[2] === 'book_state' ? Date.parse(r[3]) : QUIET_ROWS_AT);
+const pages = (rows: ReplayRow[], rule: (t: number) => string) =>
+  rows.filter((r) => !joinsStandingRecord([r[2] === 'quiet' ? 'quiet_market' : 'book_state'], rule(r[1]) as any, atOf(r)));
 describe('PRE-REGISTERED replay (pre-audit A3, corrected by Langston C1 before any code)', () => {
   it('46 rows; quiet-family pages: 1 of the first-hour 14, 1 of 45; HUT (a book-state hold after hours) no longer pages (r4, Kyle 2026-10-09)', () => {
     expect(REPLAY).toHaveLength(46);
