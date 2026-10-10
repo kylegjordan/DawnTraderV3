@@ -27,9 +27,14 @@
  */
 import { getCachedNumberRequired } from './module-constants-service.js';
 import { QUOTE_LEN_MIN, QUOTE_LEN_MAX } from '../../shared/asset-classes.js';
-import { countEquitySymbolsFramedSince } from './passive-archive/equity-spot-archiver.js';
+import { countEquitySymbolsUpdatedSince } from './passive-archive/equity-spot-archiver.js';
+import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
+import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 
-export type ClassVerdict = 'quiet' | 'not_quiet' | 'thin';
+/** `closed` (r4, row 3a1 Step 9): the venue's scheduled weekend close (Fri 20:00 → Sun 20:00 ET, `isInXstockWeekendClose`,
+ *  DST-aware). Nothing can tick, so `thin` there is the calendar, not a dying feed — measured 2026-10-10 (Saturday): `thin`
+ *  pages at 12:00, 13:03, 17:06, 17:44 and 18:38Z. A closed venue neither pages nor reads as resumed. */
+export type ClassVerdict = 'quiet' | 'not_quiet' | 'thin' | 'closed';
 export const VENUE_QUIET_ACTOR = 'active-exit-monitor';
 export const TICKING_WINDOW_MS = 60_000;
 /** How long a cold (not-yet-warm) knob may be read as "skip, do not escalate" after engine start before it pages.
@@ -42,6 +47,31 @@ export const SWEEP_REF = 'server/services/venue-quiet-alerting.ts:1';
 
 export function isQuietMarketReason(reason: string): boolean {
   return reason === 'equity_tick_missing' || reason.startsWith('equity_tick_stale_');
+}
+
+/** r4 (row 3a1 Step 9; CC-C's item at `f3c721bf4`, Langston's consensus ruling 2026-10-09 on Kyle's overnight direction): our
+ *  own book-state guard HOLDING a symbol whose prices are arriving — a thin book. Outside the US regular session that hold is
+ *  expected and must not page; inside it, an implausible book is worth a page. NOT `book_state_knob_missing`: that is our
+ *  own configuration missing, which always pages. */
+export function isBookStateHoldReason(reason: string): boolean {
+  return reason === 'book_state_unvalidated' || reason === 'book_state_yield_refused';
+}
+
+export type ReasonFamily = 'quiet_market' | 'book_state' | 'other';
+export function reasonFamilyOf(reason: string): ReasonFamily {
+  if (isQuietMarketReason(reason)) return 'quiet_market';
+  if (isBookStateHoldReason(reason)) return 'book_state';
+  return 'other';
+}
+
+/** Does an xStock skip escalation join the standing record (no page) rather than page? Kyle 2026-10-03 (#994): a quiet
+ *  market keeps the count and raises no alert; Kyle 2026-10-09: an expected overnight hold must not page — page only on a
+ *  book implausible inside the US regular session, or our own feed impaired. Everything else pages. */
+export function joinsStandingRecord(family: ReasonFamily, verdict: ClassVerdict | null, nowMs: number): boolean {
+  if (verdict === null) return false;                                   // config unreadable ⇒ page
+  if (family === 'quiet_market') return verdict === 'quiet' || verdict === 'closed';
+  if (family === 'book_state') return verdict === 'closed' || getXstockSession(nowMs) !== 'regular';
+  return false;
 }
 
 export interface VenueQuietConfig {
@@ -61,14 +91,15 @@ export function readVenueQuietConfig(): VenueQuietConfig {
   };
 }
 
-export function classVerdict(t: number, cfg: Pick<VenueQuietConfig, 'quietTickingMin' | 'thinTickingMin'>): ClassVerdict {
+export function classVerdict(t: number, cfg: Pick<VenueQuietConfig, 'quietTickingMin' | 'thinTickingMin'>, nowMs: number): ClassVerdict {
+  if (isInXstockWeekendClose(new Date(nowMs))) return 'closed';
   if (t < cfg.thinTickingMin) return 'thin';
   if (t < cfg.quietTickingMin) return 'quiet';
   return 'not_quiet';
 }
 
 export function measureXstockTicking(nowMs: number): number {
-  return countEquitySymbolsFramedSince(nowMs - TICKING_WINDOW_MS);
+  return countEquitySymbolsUpdatedSince(nowMs - TICKING_WINDOW_MS);
 }
 
 /** The cold/unseeded split (Langston r2 C3) — `module-constants-service` throws two distinguishable messages. */
@@ -128,7 +159,8 @@ export class VenueQuietState {
     // The CLOCK runs on anything but quiet (thin included): a member listed during QUIET carries `_priceSkipEscalated`, so
     // when the class turns thin it cannot re-page through the rail and the duration path is its only rescue (Langston
     // Step-4 BLOCKER-2). What `thin` must NOT do is read as "the venue resumed" — see the resolve and the prose below.
-    if (v === 'quiet') { this.notQuietSince = null; this.durationEscalated.clear(); }
+    // r4: a scheduled close is no more a "not-quiet" window than a quiet market is — the clock does not run across a weekend.
+    if (v === 'quiet' || v === 'closed') { this.notQuietSince = null; this.durationEscalated.clear(); }
     else if (this.notQuietSince === null) this.notQuietSince = nowMs;
     this.lastVerdict = v;
   }
@@ -206,7 +238,8 @@ export async function sweepVenueQuiet(args: {
       }
       // Duration escalation (objective 3 / r1a §6.1). Fires on not_quiet AND thin (the clock above); the PROSE branches on
       // the verdict, because the two mean opposite things about the cohort.
-      if (verdict !== 'quiet' && state.notQuietSince !== null && nowMs - state.notQuietSince >= cfg.escalateAfterMs) {
+      // r4: by name, never `!== 'quiet'` — `closed` must not reach the duration page (the BLOCKER-2 lesson, one verdict later).
+      if ((verdict === 'not_quiet' || verdict === 'thin') && state.notQuietSince !== null && nowMs - state.notQuietSince >= cfg.escalateAfterMs) {
         // The cohort statement is TIME-QUALIFIED (Langston record item, folded in-batch): `durationEscalated` holds the
         // symbol for the whole window, so this is its only page in that window — a thin reading at 09:30 must not read as
         // a claim about 09:45, and a not-quiet one must not read as a claim about later either.

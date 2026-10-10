@@ -56,7 +56,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 // moved to module='active_execution'.
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 import {
-  VenueQuietState, classVerdict, classifyKnobError, configKey, isQuietMarketReason, measureXstockTicking,
+  VenueQuietState, classVerdict, classifyKnobError, configKey, reasonFamilyOf, joinsStandingRecord, measureXstockTicking,
   NOT_WARM_GRACE_MS, readVenueQuietConfig, standingKey, sweepVenueQuiet, type ClassVerdict,
 } from './venue-quiet-alerting.js';
 // B65.2: centralized exit-decision primitive shared with VTS
@@ -918,19 +918,22 @@ export class ActiveExecutionEngine {
       const _copy = buildPriceSkipAlertCopy({ symbol: position.symbol, mode: this.mode, streak, reason, detail, reasonCounts: _reasonCounts });
       // The cohort test (#994): only the quiet-market family on an xStock class can be a quiet market. Everything a page
       // or the standing record needs to be READ BACK is stamped into metadata, never left in prose (Langston r2 C2).
-      const _family = isQuietMarketReason(_copy.dominantReason) ? 'quiet_market' : 'other';
+      // r4 (row 3a1 Step 9): two families can join the record — the quiet market (feed staleness) and our own book-state
+      // guard holding a thin book — and the verdict knows the venue's weekend close. The rule is `joinsStandingRecord`.
+      const _family = reasonFamilyOf(_copy.dominantReason);
+      const _nowMs = Date.now();
       let _t: number | null = null;
       let _verdict: ClassVerdict | null = null;
       if (_cls === 'xstock_spot') {
-        _t = measureXstockTicking(Date.now());
-        try { _verdict = classVerdict(_t, readVenueQuietConfig()); } catch { _verdict = null; /* config unreadable ⇒ page */ }
+        _t = measureXstockTicking(_nowMs);
+        try { _verdict = classVerdict(_t, readVenueQuietConfig(), _nowMs); } catch { _verdict = null; /* config unreadable ⇒ page */ }
       }
       const _meta = {
         positionId: position.id, dominantReason: _copy.dominantReason, reasonFamily: _family,
         T: _t, classVerdict: _verdict, threshold, knob: _knob, streak, reasonCounts: _reasonCounts,
       };
-      if (_family === 'quiet_market' && _verdict === 'quiet') {
-        console.log(`[VENUE_QUIET][STANDING] ${position.symbol}: ${streak} skips (${_copy.dominantReason}) on a QUIET class (T=${_t}) — joins the standing record, no page`);
+      if (_cls === 'xstock_spot' && joinsStandingRecord(_family, _verdict, _nowMs)) {
+        console.log(`[VENUE_QUIET][STANDING] ${position.symbol}: ${streak} skips (${_copy.dominantReason}, family=${_family}) verdict=${_verdict} (T=${_t}) — joins the standing record, no page`);
         await this._joinVenueQuietStanding(position, _meta);
         return;
       }
@@ -963,8 +966,8 @@ export class ActiveExecutionEngine {
       const { addAlert, mergeAlertMetadata } = await import('./system-alerts.js');
       const row = await addAlert({
         triggers_at: new Date(), category: 'health_check', severity: 'info',
-        title: 'xStock venue quiet — exit checks waiting for the market',
-        body: 'The xStock venue is quiet (most symbols are not ticking), so marks for held positions are older than their ceilings and exit checks wait — the freshness standard does not move (Kyle, #994). Members and their inputs are in metadata; the record resolves itself when the venue resumes and every member has been priced or closed.',
+        title: 'xStock venue quiet or closed — exit checks waiting for the market',
+        body: 'The xStock venue is quiet (most symbols are not ticking) or closed for the weekend, or an overnight book is too thin for our own book-state check — so exit checks wait on held positions; the freshness standard does not move (Kyle, #994 and 2026-10-09). Each member, its reason family and the verdict it was judged on are in metadata; the record resolves itself when the venue resumes and every member has been priced or closed.',
         metadata: { members: {} },
         dedupe_key: standingKey(this.mode),
       });
@@ -987,7 +990,7 @@ export class ActiveExecutionEngine {
     try {
       const cfg = readVenueQuietConfig();
       const t = measureXstockTicking(now);
-      const verdict = classVerdict(t, cfg);
+      const verdict = classVerdict(t, cfg, now);
       const { readAllAlerts, resolveAlertsByDedupeKey, addAlert } = await import('./system-alerts.js');
       const r = await sweepVenueQuiet({
         mode: this.mode, nowMs: now, openPositions: open, state: this._venueQuiet, cfg, verdict,

@@ -168,6 +168,13 @@ export interface EquityTick {
   raw?: EquityTickRaw;
 }
 const latestEquityTick = new Map<string, EquityTick>();
+/** B-VENUE-QUIET-ALERTING r4 (row 3a1, Step 9): receipt time of the last ticker frame per symbol whose envelope `type` was
+ *  `update` — a CHANGE the venue sent. A `snapshot` frame (sent on every subscribe, so on every restart and reconnect) is
+ *  the venue replaying a book's CURRENT state, however old; it must not read as the symbol ticking. Measured on the wire
+ *  2026-10-10 19:18Z (`ws-equities.kraken.com`, Saturday, venue shut): subscribe ⇒ one `ticker/snapshot` per symbol, then
+ *  heartbeats only. Both restarts that day (11:59:23Z, 17:05:16Z) were followed within a minute by the cohort count reading
+ *  468 of 468 — every symbol "ticking" on a closed market. */
+const lastTickerUpdateAt = new Map<string, number>();
 
 /** Latest equities-feed tick for an internal symbol ('BIIB/USD'), or null. */
 export function getLatestEquityTick(symbol: string): EquityTick | null {
@@ -175,22 +182,26 @@ export function getLatestEquityTick(symbol: string): EquityTick | null {
 }
 
 /**
- * B-VENUE-QUIET-ALERTING (#526/#994, row 3a1): `T` — how many xStock symbols received ANY ticker frame in the trailing
- * `windowMs` (frame receipt time, `raw.atMs`, not the mark time: a quiet market slows the whole universe's frames
+ * B-VENUE-QUIET-ALERTING (#526/#994, row 3a1): `T` — how many xStock symbols received a ticker UPDATE (a venue change, never a
+ * replayed `snapshot` — r4) in the trailing `windowMs` (receipt time of that update, not the mark time: a quiet market slows the whole universe's frames
  * together, while a lost subscription silences one symbol among a ticking cohort). The cohort discriminator reads this.
  * Measured basis (pre-audit A2, 2026-10-06/07, universe 468): regular-hours p05 461; after-hours median 154; overnight
  * median 135 (min 108).
  */
-export function countEquitySymbolsFramedSince(sinceMs: number): number {
+export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
   let n = 0;
-  for (const t of latestEquityTick.values()) {
-    const at = t.raw?.atMs ?? t.tsMs;
+  for (const at of lastTickerUpdateAt.values()) {
     if (at >= sinceMs) n++;
   }
   return n;
 }
 
-function parseTickerSnap(data: any): void {
+/** Test-only: the per-symbol update clock. */
+export function _resetTickerUpdateClockForTests(): void {
+  lastTickerUpdateAt.clear();
+}
+
+function parseTickerSnap(data: any, frameType?: string): void {
   // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
   state.cumulativeTickerSnaps++;
   if (!data?.symbol) return;
@@ -220,6 +231,8 @@ function parseTickerSnap(data: any): void {
       askQty: data.ask_qty != null && Number.isFinite(Number(data.ask_qty)) ? Number(data.ask_qty) : null,
       atMs: _now,
     };
+    // r4 (row 3a1): only a venue CHANGE counts toward the cohort's "ticking" measure — never a replayed snapshot.
+    if (frameType === 'update') lastTickerUpdateAt.set(_sym, _now);
     // B-EXIT-BOOK-AGE-STAMP P1: one predicate, one home. `_bid`/`_ask` are NaN when a side is
     // absent here (not 0 as on the crypto side) and `markKindOf` handles both — NaN > 0 is false.
     const _kind = markKindOf(_bid, _ask);
@@ -320,7 +333,7 @@ function handleMessage(raw: WebSocket.RawData): void {
   if (msg.channel === 'ohlc' && Array.isArray(msg.data)) {
     for (const bar of msg.data) parseOhlcBar(bar);
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
-    for (const snap of msg.data) parseTickerSnap(snap);
+    for (const snap of msg.data) parseTickerSnap(snap, msg.type);
   } else {
     // B-NEW-44: route everything that isn't an ohlc/ticker data message into
     // the diagnostic logger. Includes subscribe-ack, errors, status updates,
