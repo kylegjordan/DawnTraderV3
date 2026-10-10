@@ -116,6 +116,22 @@ describe('the per-cycle liveness line (Langston C3 — not graded never prints a
     expect(lines[0]).toMatch(/class=crypto_spot freshestAgeMs=812 grade=healthy threshold=present .*segment=overnight/);
     expect(lines[1]).toMatch(/class=xstock_spot freshestAgeMs=none grade=healthy threshold=absent suppressed=true suppressReason=market_closed/);
   });
+  // Langston 2026-10-10, positive-control ruling condition 1 (leg 1, CAPABILITY): the line objective 3 reads must be shown
+  // able to print a non-healthy grade. The grader's own tests prove the grader, not this line.
+  it('leg 1: the line prints WARNING and CRITICAL with their real ages, for both classes', () => {
+    const now = new Date('2026-10-07T15:00:00Z');
+    const lines = formatLivenessLines({ atMs: 0, configMissing: false, classes: [
+      { assetClass: 'crypto_spot', freshestAgeMs: 45_000, grade: 'warning', suppressed: false, suppressReason: null, thresholdPresent: true, symbolCount: 460 },
+      { assetClass: 'xstock_spot', freshestAgeMs: 900_000, grade: 'critical', suppressed: false, suppressReason: null, thresholdPresent: true, symbolCount: 468 },
+      { assetClass: 'crypto_spot', freshestAgeMs: 120_000, grade: 'critical', suppressed: false, suppressReason: null, thresholdPresent: true, symbolCount: 460 },
+      { assetClass: 'xstock_spot', freshestAgeMs: 300_000, grade: 'warning', suppressed: false, suppressReason: null, thresholdPresent: true, symbolCount: 468 },
+    ] }, now);
+    expect(lines[0]).toBe('[FeedIntegrity][liveness] class=crypto_spot freshestAgeMs=45000 grade=warning threshold=present suppressed=false symbols=460 segment=regular');
+    expect(lines[1]).toBe('[FeedIntegrity][liveness] class=xstock_spot freshestAgeMs=900000 grade=critical threshold=present suppressed=false symbols=468 segment=regular');
+    expect(lines[2]).toMatch(/class=crypto_spot freshestAgeMs=120000 grade=critical threshold=present/);
+    expect(lines[3]).toMatch(/class=xstock_spot freshestAgeMs=300000 grade=warning threshold=present/);
+    expect(lines.some((l) => /grade=healthy/.test(l))).toBe(false);
+  });
 });
 
 // Kraken AssetPairs, read 2026-10-07 (1,458 pairs, error []): every admitted online pair whose canonical name differs
