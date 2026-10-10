@@ -48,7 +48,7 @@ def pts(s):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('--krel', type=float, required=True); ap.add_argument('--control')
+    ap = argparse.ArgumentParser(); ap.add_argument('--krel', type=float, required=True); ap.add_argument('--control'); ap.add_argument('--simulate', type=float); ap.add_argument('--ring', type=int, default=20)
     ap.add_argument('logs', nargs='+'); a = ap.parse_args()
     seen = set(); rows = []
     for p in a.logs:
@@ -62,28 +62,29 @@ def main():
     J = []
     for t, sym, state, ratio, cap, bid, ask, pid in csv.reader(open(fout)):
         t = pts(t); rv = None if ratio == 'none' else float(ratio)
-        spread = None
+        spread = None; q = None
         if cap and bid and ask:
             b, k = float(bid), float(ask)
-            if b > 0 and k > 0 and (t - pts(cap)).total_seconds() <= MAX_SNAP_AGE_S: spread = (k - b) / ((k + b) / 2)
-        J.append((sym, t, state, rv, spread, pid or f'nopos:{sym}'))
+            if b > 0 and k > 0 and (t - pts(cap)).total_seconds() <= MAX_SNAP_AGE_S: spread = (k - b) / ((k + b) / 2); q = (b, k)
+        J.append((sym, t, state, rv, spread, pid or f'nopos:{sym}', q))
     J.sort(key=lambda x: (x[0], x[1]))
     # per-line owned seconds
     lines = []
-    for i, (sym, t, state, rv, sp, unit) in enumerate(J):
+    for i, (sym, t, state, rv, sp, unit, q) in enumerate(J):
         nxt = J[i + 1] if i + 1 < len(J) and J[i + 1][0] == sym else None
         own = min((nxt[1] - t).total_seconds(), GAP_S) if nxt else 0.0
         contiguous = bool(nxt) and (nxt[1] - t).total_seconds() <= GAP_S and nxt[5] == unit
-        lines.append((sym, t, rv, sp, unit, own, contiguous))
+        lines.append((sym, t, rv, sp, unit, own, contiguous, q))
     rc = lambda rv: 'ratio=none' if rv is None else ('ratio<=kRel' if rv <= a.krel else 'ratio>kRel')
-    band = lambda sp: 'unknown' if sp is None else next((f'<= {c*100:g}%' for c in CEILINGS if sp <= c), '> 10%')
+    BANDS = [f'{lo*100:g}-{c*100:g}%' for lo, c in zip([0.0] + CEILINGS[:-1], CEILINGS)]
+    band = lambda sp: 'unknown' if sp is None else next((BANDS[i] for i, c in enumerate(CEILINGS) if sp <= c), '> 10%')
     print(f'# lines {len(lines)} on {len({l[0] for l in lines})} symbols; units {len({l[4] for l in lines})} '
           f'(of which no-position {len({l[4] for l in lines if l[4].startswith("nopos:")})}); snapshot as-of max age {MAX_SNAP_AGE_S:.0f} s')
     tot = collections.Counter(); grid = collections.Counter()
-    for sym, t, rv, sp, unit, own, _ in lines:
+    for sym, t, rv, sp, unit, own, _, _q in lines:
         tot[rc(rv)] += own; grid[(rc(rv), band(sp))] += own
-    bands = [f'<= {c*100:g}%' for c in CEILINGS] + ['> 10%', 'unknown']
-    print('# refused HOURS by ratio class x absolute-spread band (each class on its own line; no total row):')
+    bands = BANDS + ['> 10%', 'unknown']
+    print('# refused HOURS by ratio class x absolute-spread band (bands are EXCLUSIVE, not cumulative; each class on its own line; no total row):')
     print('class        ' + ' | '.join(f'{b:>8}' for b in bands) + ' | class total')
     for k in ('ratio=none', 'ratio<=kRel', 'ratio>kRel'):
         print(f'{k:<12} ' + ' | '.join(f'{grid[(k, b)]/3600:8.2f}' for b in bands) + f' | {tot[k]/3600:.2f}')
@@ -96,7 +97,7 @@ def main():
         longest = {}
         for u, ls in units.items():
             run = mx = 0.0; at = None; cur_at = None
-            for sym, t, rv, sp, unit, own, cont in ls:
+            for sym, t, rv, sp, unit, own, cont, _q in ls:
                 if sp is not None and sp <= c:
                     if run == 0: cur_at = t
                     run += own
@@ -123,6 +124,45 @@ def main():
             for l in units[u]: sec[(rc(l[2]), band(l[3]))] += l[5]
             print(f'  {u} {t0.isoformat()} -> {t1.isoformat()} refused {refused/3600:.2f} h fragments {frags}; '
                   + '; '.join(f'{k[0]} {k[1]} {v/3600:.2f} h' for k, v in sorted(sec.items(), key=lambda x: -x[1]) if v > 0))
+
+    if a.simulate:
+        # The P1 release predicate (candidate C), replayed over each hold's refused ticks, each tick reading its as-of quote
+        # as the guard's frame: (a) the trailing window of `--ring` frames is full and its median <= ceiling; (b) this frame
+        # <= ceiling; (c) >= 2 moves within the current run of frames <= ceiling; (d) BOTH sides moved within that run.
+        # An unknown spread breaks the run and enters the window as over-ceiling; a fragment break (gap > GAP_S) resets.
+        c = a.simulate
+        print(f'# SIMULATED RELEASE at ceiling {c*100:g}% (ring {a.ring}): per hold with >= 0.25 h refused — '
+              'over-ceiling share of known-spread ticks, released y/n, WALL minutes from the hold's first refused tick to the simulated release (spans gaps between fragments), refused hours after it')
+        rel_n = 0; saved = 0.0; considered = 0
+        for refused, u, sym, t0, t1, frags in sorted(summ, reverse=True):
+            ls = units[u]; known = [l for l in ls if l[3] is not None]
+            over = sum(1 for l in known if l[3] > c)
+            trail = []; run_moves = 0; bm = am = False; prevq = None; rel_at = None
+            for l in ls:
+                sym_, t, rv, sp, unit, own, cont, q = l
+                ok = sp is not None and sp <= c
+                trail.append(sp if sp is not None else float('inf'))
+                if len(trail) > a.ring: trail.pop(0)
+                if ok:
+                    if prevq is not None and q is not None:
+                        if q[0] != prevq[0]: bm = True
+                        if q[1] != prevq[1]: am = True
+                        if q != prevq: run_moves += 1
+                else:
+                    run_moves = 0; bm = am = False
+                med = sorted(trail)[len(trail) // 2] if len(trail) == a.ring else None
+                if ok and med is not None and med <= c and run_moves >= 2 and bm and am:
+                    rel_at = t; break
+                prevq = q
+                if not cont: trail = []; run_moves = 0; bm = am = False; prevq = None
+            after = sum(l[5] for l in ls if rel_at is not None and l[1] >= rel_at)
+            if refused >= 900:
+                considered += 1; rel_n += rel_at is not None; saved += after
+                print(f'  {sym} {u[:8]} refused {refused/3600:.2f} h; over {c*100:g}%: {over}/{len(known)} '
+                      f'({(over/len(known)*100 if known else 0):.1f}%); released {"y" if rel_at else "n"}'
+                      + (f' after {(rel_at - t0).total_seconds()/60:.1f} min; refused after {after/3600:.2f} h' if rel_at else ''))
+        print(f'# holds >= 0.25 h refused: {considered}; predicted released {rel_n}; refused hours after first release {saved/3600:.2f} '
+              '(an UPPER bound on hours saved: a released chain can be refused again)')
 
 
 if __name__ == '__main__':
