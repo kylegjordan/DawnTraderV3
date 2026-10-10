@@ -197,7 +197,15 @@ export class VenueQuietState {
  *  that did not resolve could not name the member blocking it (the deciding quantity logged only when it released). */
 export interface SweepResult {
   resolved: string[]; failed: number; escalated: string[]; unmatched: string[];
-  held: Array<{ symbol: string; reasonFamily: ReasonFamily | null }>;
+  held: Array<{ symbol: string; reasonFamilies: ReasonFamily[] }>;
+}
+
+/** r6b (Langston r6 BLOCKER-1): a member's FULL family set, never only its dominant family — the minority fact class must
+ *  veto, not lose a ranking. Live 2026-10-10: 11 of 16 members carried `book_state` in `reasonFamilies` and 0 of 16 in
+ *  `reasonFamily`. Members listed before r5 carry only `reasonFamily`; they fall back to it. */
+export function memberFamilies(mem: { reasonFamily?: ReasonFamily | null; reasonFamilies?: ReasonFamily[] }): ReasonFamily[] {
+  if (Array.isArray(mem.reasonFamilies) && mem.reasonFamilies.length > 0) return [...mem.reasonFamilies];
+  return mem.reasonFamily ? [mem.reasonFamily] : [];
 }
 
 /**
@@ -251,19 +259,19 @@ export async function sweepVenueQuiet(args: {
       continue;
     }
     if (key === standingKey(mode)) {
-      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; reasonFamily?: ReasonFamily }>;
+      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; reasonFamily?: ReasonFamily; reasonFamilies?: ReasonFamily[] }>;
       // `unpricedSinceMs` is THIS symbol's own clock (Langston Step-4 r2 condition): its last venue price in this process
       // if one was seen, else the moment it was listed — a lower bound, hence "at least". Never the class's
       // `notQuietSince`: a member listed one minute into a 90-minute window has not been out for 90 minutes.
-      const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number; reasonFamily: ReasonFamily | null }> = [];
+      const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number; reasonFamily: ReasonFamily | null; reasonFamilies: ReasonFamily[] }> = [];
       for (const [positionId, mem] of Object.entries(members)) {
         const open = (bySymbol.get(mem.symbol.toUpperCase()) ?? []).find((p) => p.id === positionId);
         if (open && !pricedAfter(open, mem.listedAtMs)) {
           stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs,
-            reasonFamily: mem.reasonFamily ?? null });
+            reasonFamily: mem.reasonFamily ?? null, reasonFamilies: memberFamilies(mem) });
         }
       }
-      out.held = stillOut.map((s) => ({ symbol: s.symbol, reasonFamily: s.reasonFamily }));
+      out.held = stillOut.map((s) => ({ symbol: s.symbol, reasonFamilies: s.reasonFamilies }));
       // RESOLVE only when the venue genuinely resumed (`not_quiet`) — never on `thin`, which is the feed dying, not the
       // market returning (Langston Step-4 BLOCKER-2: a tri-state must not be tested with `!== 'quiet'`).
       if (verdict === 'not_quiet' && stillOut.length === 0) {
@@ -280,25 +288,43 @@ export async function sweepVenueQuiet(args: {
         const at = new Date(nowMs).toISOString().slice(11, 16) + 'Z';
         for (const s of stillOut) {
           if (state.durationEscalated.has(s.symbol)) continue;
-          state.durationEscalated.add(s.symbol);
           const mins = Math.round((nowMs - s.unpricedSinceMs) / 60000);
-          // r5 (Langston r4 BLOCKER-1): the member's OWN family, never a hard-coded one — a book-state member is a symbol
-          // whose prices arrive and our own check refuses, not one with no mark.
-          const what = s.reasonFamily === 'book_state'
-            ? `Our own book-state check has refused ${s.symbol}'s order book for at least ${mins} min`
+          // r5 (Langston r4 BLOCKER-1) + r6b (r6 BLOCKER-1): worded from the member's FAMILY SET — a member whose streak
+          // carried any book-state refusal is a symbol whose prices arrive and our own check refuses, not one with no mark.
+          const bookState = s.reasonFamilies.includes('book_state');
+          const what = bookState
+            ? `Our own book-state check has refused ${s.symbol}'s order book for at least ${mins} min` +
+              (s.reasonFamilies.includes('quiet_market') ? ' (its mark has also been too old to use)' : '')
             : `${s.symbol} has had no usable mark for at least ${mins} min`;
           const body = verdict === 'thin'
             ? `${what}. At ${at}, fewer than ${cfg.thinTickingMin} xStock symbols were updating at all — the whole feed was near-silent, not just this symbol. Check the equities socket and the venue before this position.`
             : `${what}. At ${at} the xStock venue was not quiet — the cohort was updating and this symbol was not: a lost subscription or a stuck book, not a quiet market.`;
-          await deps.addAlert({
+          const pageKey = `price-skip-${mode}-${s.symbol}`;
+          // r6b (Langston r6 BLOCKER-2): a non-terminal row on this key — e.g. an off-session page the member's book-state
+          // basis left held — would make `addAlert` return it and write nothing. Resolve it first as SUPERSEDED by this
+          // duration page (evidence = the position's uuid); if that resolve fails, do not mint and do not flag — retry next sweep.
+          const held = rows.filter((a) => a.dedupe_key === pageKey);
+          if (held.length > 0) {
+            const before = out.failed;
+            await tryResolve(pageKey, s.positionId);
+            if (out.failed > before) continue;
+          }
+          const minted = await deps.addAlert({
             triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
             title: verdict === 'thin'
               ? `Exit checks still skipped and the xStock feed is near-silent — ${s.symbol}`
               : `Exit checks still skipped after the venue resumed — ${s.symbol}`,
             body,
-            metadata: { positionId: s.positionId, reasonFamily: s.reasonFamily, classVerdict: verdict, escalation: 'duration' },
-            dedupe_key: `price-skip-${mode}-${s.symbol}`,
+            metadata: { positionId: s.positionId, reasonFamily: s.reasonFamily, reasonFamilies: s.reasonFamilies, classVerdict: verdict, escalation: 'duration' },
+            dedupe_key: pageKey,
           });
+          // Flag ONLY a row actually created: `addAlert` hands back an existing non-terminal row unchanged on a dedupe hit.
+          const heldIds = new Set(held.map((a) => a.id));
+          if (!minted || !minted.id || heldIds.has(minted.id)) {
+            console.error(`[VENUE_QUIET][DURATION_SUPPRESSED] key=${pageKey} — a held row was returned, nothing written; retrying next sweep`);
+            continue;
+          }
+          state.durationEscalated.add(s.symbol);
           out.escalated.push(s.symbol);
         }
       }

@@ -40,7 +40,7 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (importO
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 import {
   VenueQuietState, classVerdict, isQuietMarketReason, isBookStateHoldReason, reasonFamilyOf, joinsStandingRecord,
-  familyJoinsStandingRecord, familiesOf,
+  familyJoinsStandingRecord, familiesOf, memberFamilies,
   priceSkipKeyPattern, standingKey, stuckKey, configKey,
   sweepVenueQuiet, THRESHOLD_SEED_REF,
 } from '../../services/venue-quiet-alerting.js';
@@ -376,15 +376,75 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     const open = [{ id: 'pos-a', symbol: 'ORCL/USD' }, { id: 'pos-b', symbol: 'CRCL/USD' }];
     const d = deps([row(standingKey('paper'), now - 3_600_000, { members })]);
     const r1 = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
-    expect(r1.held).toEqual([{ symbol: 'ORCL/USD', reasonFamily: 'book_state' }, { symbol: 'CRCL/USD', reasonFamily: 'quiet_market' }]);
+    expect(r1.held).toEqual([{ symbol: 'ORCL/USD', reasonFamilies: ['book_state'] }, { symbol: 'CRCL/USD', reasonFamilies: ['quiet_market'] }]);
     expect(d.resolveByKey).not.toHaveBeenCalledWith(standingKey('paper'), expect.anything(), expect.anything(), expect.anything());
     st.notePriced('pos-b', now);
     const r2 = await sweepVenueQuiet({ mode: 'paper', nowMs: now + 1, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
-    expect(r2.held).toEqual([{ symbol: 'ORCL/USD', reasonFamily: 'book_state' }]); // the book-state member is what blocks it
+    expect(r2.held).toEqual([{ symbol: 'ORCL/USD', reasonFamilies: ['book_state'] }]); // the book-state member is what blocks it
     st.notePriced('pos-a', now + 2);
     const r3 = await sweepVenueQuiet({ mode: 'paper', nowMs: now + 3, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
     expect(r3.held).toEqual([]);
     expect(d.resolveByKey).toHaveBeenCalledWith(standingKey('paper'), 'active-exit-monitor', 'pos-a', 'engine');
+  });
+  // r6b — the live shape (Langston r6 BLOCKER-1): 11 of 16 members on 2026-10-10 had a quiet-market DOMINANT reason and
+  // book_state among their families. Before r6b `held` and the page read only the dominant family.
+  const MIXED = { symbol: 'ORCL/USD', listedAtMs: now - 3_600_000, reasonFamily: 'quiet_market', reasonFamilies: ['quiet_market', 'book_state'] };
+  it('r6b BLOCKER-1: a MIXED member is held with its whole family set, and its duration page is worded as a book-state refusal', async () => {
+    const st = new VenueQuietState();
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members: { 'pos-m': MIXED } })]);
+    const open = [{ id: 'pos-m', symbol: 'ORCL/USD' }];
+    const r1 = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r1.held).toEqual([{ symbol: 'ORCL/USD', reasonFamilies: ['quiet_market', 'book_state'] }]);
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-ORCL/USD')![0] as any;
+    expect(call.body).toMatch(/Our own book-state check has refused ORCL\/USD's order book/);
+    expect(call.body).toMatch(/its mark has also been too old to use/);
+    expect(call.metadata.reasonFamilies).toEqual(['quiet_market', 'book_state']);
+  });
+  it('r6b BLOCKER-2: a held off-session page on the key is resolved as SUPERSEDED first, then the duration page mints and is flagged', async () => {
+    const st = new VenueQuietState();
+    const stale = row('price-skip-paper-ORCL/USD', now - 7_200_000, { positionId: 'pos-m', classVerdict: 'thin' });
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members: { 'pos-m': MIXED } }), stale]);
+    const open = [{ id: 'pos-m', symbol: 'ORCL/USD' }];
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(d.resolveByKey).toHaveBeenCalledWith('price-skip-paper-ORCL/USD', 'active-exit-monitor', 'pos-m', 'engine');
+    const resolveOrder = d.resolveByKey.mock.invocationCallOrder.at(-1)!;
+    const mintOrder = d.addAlert.mock.invocationCallOrder.at(-1)!;
+    expect(resolveOrder).toBeLessThan(mintOrder);
+    expect(r.escalated).toEqual(['ORCL/USD']);
+    expect(st.durationEscalated.has('ORCL/USD')).toBe(true);
+  });
+  it('r6b BLOCKER-2: a dedupe hit (the held row handed back, nothing written) is NOT counted or flagged, and the next sweep retries', async () => {
+    const st = new VenueQuietState();
+    const stale = row('price-skip-paper-ORCL/USD', now - 7_200_000, { positionId: 'pos-m' });
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members: { 'pos-m': MIXED } }), stale], async () => []);
+    d.addAlert.mockImplementation(async () => ({ id: stale.id })); // what system-alerts returns on a non-terminal same-key row
+    const open = [{ id: 'pos-m', symbol: 'ORCL/USD' }];
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r.escalated).toEqual([]);
+    expect(st.durationEscalated.has('ORCL/USD')).toBe(false);
+    d.addAlert.mockImplementation(async (o: any) => ({ id: 'new-' + o.dedupe_key }));
+    const r2 = await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs + 60_000, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(r2.escalated).toEqual(['ORCL/USD']);
+  });
+  it('r6b: a failed supersede-resolve does not mint and does not flag', async () => {
+    const st = new VenueQuietState();
+    const stale = row('price-skip-paper-ORCL/USD', now - 7_200_000, { positionId: 'pos-m' });
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members: { 'pos-m': MIXED } }), stale],
+      async (k) => { if (k === 'price-skip-paper-ORCL/USD') throw new Error('locked'); return ['res-' + k]; });
+    const open = [{ id: 'pos-m', symbol: 'ORCL/USD' }];
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    expect(d.addAlert.mock.calls.some((c) => (c[0] as any).dedupe_key === 'price-skip-paper-ORCL/USD')).toBe(false);
+    expect(r.escalated).toEqual([]);
+    expect(st.durationEscalated.has('ORCL/USD')).toBe(false);
+  });
+  it('r6b: memberFamilies falls back to the dominant family for a member listed before r5', () => {
+    expect(memberFamilies({ reasonFamily: 'book_state' })).toEqual(['book_state']);
+    expect(memberFamilies({ reasonFamily: 'quiet_market', reasonFamilies: ['quiet_market', 'book_state'] })).toEqual(['quiet_market', 'book_state']);
+    expect(memberFamilies({})).toEqual([]);
   });
   it('r6: a sweep with no standing record reports nothing held', async () => {
     const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: deps([]) });
