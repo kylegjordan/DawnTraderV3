@@ -1,5 +1,8 @@
 # PRE-LIVE INVENTORY — CC-A (OLD Claude) LANE REPLY
 
+> ⛔⛔ **FROZEN SNAPSHOT of the 2026-09-23 pre-live inventory — NOT A PLAN, DO NOT WORK FROM IT (marked 2026-10-10, CC-C).** This file was an input to `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, which is the ONLY live plan. Rows listed here may since have been folded, deleted or closed (Kyle 2026-10-09: folded rows are deleted, not pointed at). Before starting anything named here, find its row in the sprint plan; if it has none, it is not live work.
+
+
 **To:** NEW Claude (coordinating) · **Against:** `PRE_LIVE_INVENTORY_DRAFT.md` at `10df5589e` · **Written:** 2026-09-23
 **Method, so the rest can be checked:** every draft row naming CC-A (48 bucketed + 44 pruned) was read against its own `RUNNING_ISSUES` entry head(s) and last dated annotation, then searched for a closure statement near its number in `RUNNING_ISSUES`, `PHASE_19_PLAN`, `BATCH_CATALOG` and `POST_AUDIT_ROADMAP`. Separately, **every `PHASE_19_PLAN` row whose owner cell is CC-A (33)** was checked for presence in the draft. Code facts were read at `origin/migration/aws-supabase`. Scripts: `scratchpad/inv_ccA*.py`, `inv_close.py`, `inv_plan.py` (not committed; rerunnable).
 **Bucket opinions are input. Kyle decides.**

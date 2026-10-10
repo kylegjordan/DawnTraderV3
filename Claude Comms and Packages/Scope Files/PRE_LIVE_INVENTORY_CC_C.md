@@ -1,5 +1,8 @@
 # PRE-LIVE INVENTORY — CC-C (ANALYST Claude) LANE CHECK
 
+> ⛔⛔ **FROZEN SNAPSHOT of the 2026-09-23 pre-live inventory — NOT A PLAN, DO NOT WORK FROM IT (marked 2026-10-10, CC-C).** This file was an input to `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, which is the ONLY live plan. Rows listed here may since have been folded, deleted or closed (Kyle 2026-10-09: folded rows are deleted, not pointed at). Before starting anything named here, find its row in the sprint plan; if it has none, it is not live work.
+
+
 **For:** NEW Claude (coordinator), then Langston and Kyle. **Read against:** `PRE_LIVE_INVENTORY_DRAFT.md` at `10df5589e`, plus `PHASE_19_PLAN.md`, `RUNNING_ISSUES.md`, `CHANGES_AND_FIXES.md` and the code at the same ref.
 **Scope:** every draft line that names CC-C (113 lines; 51 with CC-C in the owner cell), plus the items in my lane the extraction could not reach.
 **Method:** each correction below cites the object it rests on. ⚠️ **Limit, stated:** the HELPFUL and AFTER rows not named below keep the drafted bucket — I agree with them, but did not re-derive each one this pass.
@@ -113,7 +116,7 @@
 
 | # | task-list line | what the draft has | what it should have | bucket opinion |
 |---|---|---|---|---|
-| 1 | `3b.c` `B-EXIT-TRIGGER-FILL-PARITY` (`#959`) — my list: *withdrawn 2026-08-31, folded into 3b.b* | ⛔ **MUST #38, owner Kyle, quoting "its own row says CRITICAL"** (draft line 118) | **PRUNED (withdrawn).** The plan row's own correction note: *"WITHDRAWN AS A SEPARATE DEFECT 2026-08-31 (`#959` am. 1-2). The 14% trigger/fill gap was five xStock rows in the 00:15 UTC minute; outside it the gap is ~0.1%."* The draft read the pre-withdrawal text. The live trigger-vs-fill work is `B-PRICE-SIDE-BY-JOB` plus `3n.q7`, both already MUST. | prune; **this removes one false MUST and one false Kyle decision** |
+| 1 | `3b.c` `~~B-EXIT-TRIGGER-FILL-PARITY~~ (⛔ DELETED 2026-10-10 → xStock leg in sprint row 2; crypto leg = B-PRICE-SIDE-BY-JOB 8a/8c/8d)` (`#959`) — my list: *withdrawn 2026-08-31, folded into 3b.b* | ⛔ **MUST #38, owner Kyle, quoting "its own row says CRITICAL"** (draft line 118) | **PRUNED (withdrawn).** The plan row's own correction note: *"WITHDRAWN AS A SEPARATE DEFECT 2026-08-31 (`#959` am. 1-2). The 14% trigger/fill gap was five xStock rows in the 00:15 UTC minute; outside it the gap is ~0.1%."* The draft read the pre-withdrawal text. The live trigger-vs-fill work is `B-PRICE-SIDE-BY-JOB` plus `3n.q7`, both already MUST. | prune; **this removes one false MUST and one false Kyle decision** |
 | 2 | `3n.q2` **`8a-P4c`** — VTS xStock, the rest of the xStock half | not named anywhere. The `B-PRICE-SIDE-BY-JOB` MUST line (#27) says *"until the xStock paper increments land"*, but `8a-P4c` is the **VTS** lane | name `8a-P4c` inside the #27 line so it cannot fall out (Kyle, 2026-09-15: one batch, two halves) | MUST, as part of #27 |
 | 3 | `3n` row **`8c`** — P1 only, **HELD** on the decision recorded on its row | not named (the only `8c` hit is Infra's unrelated `2.8c`) | name it inside #27 as held, with its row reference | MUST as part of #27, **held** |
 | 4 | §0b **the Codex experiment** (`CODEX_FINDINGS_BY_GROUP.md`; the register is r14 and ready) | only its prerequisite `#1027` (HELPFUL, line 391) | its own line: an independent review of the pricing architecture, **held until `#1027` clears** | **extremely helpful** — a second, outside reading of the price design before real money |

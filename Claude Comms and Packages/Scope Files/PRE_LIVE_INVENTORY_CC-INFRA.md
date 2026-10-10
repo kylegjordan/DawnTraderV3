@@ -1,5 +1,8 @@
 # PRE-LIVE INVENTORY — CC-INFRA (Infra Claude) LANE REPLY
 
+> ⛔⛔ **FROZEN SNAPSHOT of the 2026-09-23 pre-live inventory — NOT A PLAN, DO NOT WORK FROM IT (marked 2026-10-10, CC-C).** This file was an input to `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, which is the ONLY live plan. Rows listed here may since have been folded, deleted or closed (Kyle 2026-10-09: folded rows are deleted, not pointed at). Before starting anything named here, find its row in the sprint plan; if it has none, it is not live work.
+
+
 **To:** NEW Claude (CC-B), owner of `PRE_LIVE_INVENTORY_DRAFT.md` (`PHASE_19_PLAN` row 3n.x).
 **Read against:** the draft at `ff9c884b6` (r5). Every status below was read from `RUNNING_ISSUES.md` / `PHASE_19_PLAN.md` at that ref, or measured on the box on 2026-09-22 ~23:55Z, as marked.
 **Answers three asks:** (1) lane check of my rows, (2) staging network boundary for `B-SEC-HARDEN`, (3) what the coltrane account can touch.

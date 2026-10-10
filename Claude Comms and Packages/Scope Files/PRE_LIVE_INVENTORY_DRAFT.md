@@ -1,5 +1,8 @@
 # PRE-LIVE INVENTORY — CATEGORISED DRAFT (for Langston's review, then Kyle)
 
+> ⛔⛔ **FROZEN SNAPSHOT of the 2026-09-23 pre-live inventory — NOT A PLAN, DO NOT WORK FROM IT (marked 2026-10-10, CC-C).** This file was an input to `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, which is the ONLY live plan. Rows listed here may since have been folded, deleted or closed (Kyle 2026-10-09: folded rows are deleted, not pointed at). Before starting anything named here, find its row in the sprint plan; if it has none, it is not live work.
+
+
 **Kyle, 2026-09-23:** everything left in Phase 19 and planned for 25, 16, 20 and 21, deduped, then bucketed MUST before live / EXTREMELY HELPFUL before live / AFTER live. Kyle picks the pre-live set; then the roadmap and all four task lists are reorganised and every item assigned a session, including a trial of Coltrane as an implementor.
 
 **Home:** `PHASE_19_PLAN` row 3n.x (owner CC-B). **Working file (raw extraction):** `PRE_LIVE_INVENTORY_WORKING.md`.
@@ -115,10 +118,10 @@
 
 | # | gate | owner | why it must be true before live | status |
 |---:|---|---|---|---|
-| 38 | **B-EXIT-TRIGGER-FILL-PARITY** `3b.c` #954 #959 | Kyle | exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits | ⏳ |
+| 38 | **~~B-EXIT-TRIGGER-FILL-PARITY~~ (⛔ DELETED 2026-10-10 → xStock leg in sprint row 2; crypto leg = B-PRICE-SIDE-BY-JOB 8a/8c/8d)** `3b.c` #954 #959 | Kyle | exits must fire on the price they would actually fill at — its own row says CRITICAL; wrong in live = wrong real exits | ⏳ |
 | 39 | **B-EXIT-TICKER-LEG-ADAPTER-SIDES** `3n.p` | CC-C | the exit path carries both sides of the price and cannot see them — needed to exit on the transactable side | ⏳ |
 | 40 | **B-XSTOCK-BID-TRIGGER-RELAND** `3n.q7` | CC-C | put the xStock stop/target trigger back on the transactable bid — price-side fidelity for xStock exits | ⏳ |
-| 41 | **B-BOOK-STATE-RING-INDEPENDENT-BOUND** `3n.q5` | CC-C | xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one) | ⏳ |
+| 41 | **~~B-BOOK-STATE-RING-INDEPENDENT-BOUND~~ (⛔ DELETED 2026-10-10 → sprint row 2 increment 1)** `3n.q5` | CC-C | xStock exit plausibility bound — a false stop in live is a real loss (#1065 was one) | ⏳ |
 | 42 | **B-BOOK-STATE-RESTART-DURABLE** `3n.q8` #1066 | CC-C | a restart empties the xStock guard and a false stop fired 12 seconds after a deploy — every live restart would risk one | ⏳ |
 | 43 | **B-ENTRY-LEVEL-RECHECK** `3n.u2` | CC-B | nothing re-checks a signal's levels against the current price before the fill, on either class — in live a stale signal fills at a moved price | ⏳ |
 | 44 | **B-GRID-LIVE-PATH-PARITY** `3g` #939 | CC-C | venue-grid rounding on the LIVE order path — the grid today covers the orchestrator path; an off-grid live order is rejected by the venue | ⏳ |
@@ -245,7 +248,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **B-ROLLBACK-EPOCH-FORWARD** `3b.b-c` #1045 (CC-B) — calibration-epoch bookkeeping across a rollback — keeps learning data unmixed
 - **B-XSTOCK-SESSION-FRESHNESS** `3b.f-c` (Kyle) — CORRECTED (Langston): Kyle ruled 2026-09-03 — off-hours entries allowed at the same bar; exit freshness the same standard round the clock, 'we just hold'. Exit side: change nothing. Remaining: keep the alert's record but stop paging, and the flat 15s entry age against the risk-derived exit ceiling
 - **B-OBS-WINDOW-EVIDENCE-CAPTURE** `3b.f-d` #1044 (CC-C) — capture observation-window evidence at the event — measurement quality
-- **B-XSTOCK-ENTRY-COMPARATOR** `3b.b-b` #996 (CC-C) — xStock entry-price comparator — price-truth lane ⚠️ *verify*
+- **~~B-XSTOCK-ENTRY-COMPARATOR~~ (⛔ DELETED 2026-10-10 → sprint row 2 increment 1)** `3b.b-b` #996 (CC-C) — xStock entry-price comparator — price-truth lane ⚠️ *verify*
 - **B-VENUE-QUIET-ALERTING** `3b.f-d` #526 (Kyle) — alert when a venue goes quiet — observability that matters once capital is exposed
 - **B-DECIDED-INTENT-INDEX** `3b.g` #956 (CC-C) — index of decided intents — groundwork for the exit-path redesign
 - **B-VTS-MARK-SIDE** `3n.0` (CC-C) — the learning lane's mark side — VTS is not live, but it is the calibration record
@@ -272,7 +275,7 @@ Some are honest shared citations; some are one number minted twice (#921, #559 a
 - **B-GATE-WILDCARD-REFUSE** `3n.v3` #1069 (CC-B) — code-side guard behind a migration invariant that already refuses the bad row
 - **B-SILENT-STRATEGY-CENSUS** `3n.v4` #1070 (CC-B) — three wired strategies have never been evaluated — more strategies alive means better selection
 - **B-EXIT-MAKER-VS-TAKER-REVIEW** `3n.w` (CC-B) — Kyle's observation: maker exits profitable, taker target exits negative — possibly a large P&L lever
-- **B-CRYPTO-MARK-AGE-GATE** `3n.o` (CC-C) — crypto mark-age gate — its original premise was withdrawn; the rewritten row survives
+- **~~B-CRYPTO-MARK-AGE-GATE~~ (⛔ MOVED 2026-10-10 → sprint row 38 (pre-sprint stage 2); Phase-19 3n.o deleted)** `3n.o` (CC-C) — crypto mark-age gate — its original premise was withdrawn; the rewritten row survives
 - **row:7** (unowned) — F-D learning-lane accessor and isolation
 - **row:9** (unowned) — F-F(b) the reset gate — when the learning record restarts clean after the price fixes ⚠️ *verify*
 - **B-KRAKEN-FEE-WATCH** `2.4-FEE-b` #1011 (CC-B) — the venue changed fees on 07-09 and we noticed on 09-06 — in live, a stale fee is a wrong EV gate
@@ -613,7 +616,7 @@ Phases 17, 18, 22 and the post-live 21.4/21.5 sections are already placed after 
 
 | item | merged into | why |
 |---|---|---|
-| **B-XSTOCK-BOOK-LADDER** `3b.d` #949 | `B-PRICE-SIDE-BY-JOB` | ABSORBED INTO 3n r5 2026-09-11 (plan row 3b.d) |
+| **~~B-XSTOCK-BOOK-LADDER~~ (⛔ MOVED 2026-10-10 → sprint row 189a (notional-growth trigger))** `3b.d` #949 | `B-PRICE-SIDE-BY-JOB` | ABSORBED INTO 3n r5 2026-09-11 (plan row 3b.d) |
 | **B-OPENTRADE-REFRESH-LANE** `3b.f-a` #977 | `B-PRICE-SIDE-BY-JOB` | ABSORBED INTO 3n r5 on 2026-09-11 (decision D7: open positions enrolled in the fast refresh) |
 | **B-PRICE-AGE-REFUSAL** `3b.f-b` | `B-PRICE-SIDE-BY-JOB` | ABSORBED INTO 3n r5 on 2026-09-11 (D7 replaces the blanket refusal) |
 | **B-TICKER-BBO-TRIGGER** `3b.h-1` #1017 | `B-PRICE-SIDE-BY-JOB` | ABSORBED INTO 3n r5 on 2026-09-11 (D3) |
