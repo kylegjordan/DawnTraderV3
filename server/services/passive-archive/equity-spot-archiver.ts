@@ -60,6 +60,10 @@ interface ArchiverState {
   cumulativeTickerSnaps: number;
   /** *skipped*: OHLC bars the frame guard REJECTED (#1028). Never rate-limited (Step-2 condition C2). */
   ohlcFramesSkipped: number;
+  /** B-VENUE-QUIET-ALERTING r5 (Langston r4 condition): ticker snaps received in the current 60 s heartbeat window, by the
+   *  envelope `type` of the frame that carried them. The cohort count reads `update` only, so a feed that stopped labelling
+   *  updates would read T=0 — indistinguishable from a dying feed — unless this tally is published beside it. */
+  tickerSnapsByType60s: { update: number; snapshot: number; other: number };
 }
 
 const state: ArchiverState = {
@@ -75,6 +79,7 @@ const state: ArchiverState = {
   cumulativeOhlcRows: 0,
   cumulativeTickerSnaps: 0,
   ohlcFramesSkipped: 0,
+  tickerSnapsByType60s: { update: 0, snapshot: 0, other: 0 },
 };
 
 export function getEquitySpotStats(): {
@@ -199,11 +204,20 @@ export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
 /** Test-only: the per-symbol update clock. */
 export function _resetTickerUpdateClockForTests(): void {
   lastTickerUpdateAt.clear();
+  state.tickerSnapsByType60s = { update: 0, snapshot: 0, other: 0 };
+}
+
+/** Test-only: the heartbeat window's per-type tally (r5). */
+export function _getTickerSnapsByTypeForTests(): { update: number; snapshot: number; other: number } {
+  return { ...state.tickerSnapsByType60s };
 }
 
 function parseTickerSnap(data: any, frameType?: string): void {
   // *scanned* counts every snap RECEIVED, so it is bumped before the guard (#1029). Nothing else here changes.
   state.cumulativeTickerSnaps++;
+  if (frameType === 'update') state.tickerSnapsByType60s.update++;
+  else if (frameType === 'snapshot') state.tickerSnapsByType60s.snapshot++;
+  else state.tickerSnapsByType60s.other++;
   if (!data?.symbol) return;
   // #594: DATA-liveness stamp — AFTER the malformed-payload guard (a junk snap must not count as
   // proof of life) and BEFORE the mark branch (which is conditional on a finite positive mark;
@@ -412,8 +426,14 @@ setInterval(() => {
   console.log(
     `[B74][equity-spot] connected=${state.ws?.readyState === WebSocket.OPEN} ` +
     `last_msg_age_ms=${lastMsgAge} last_data_msg_age_ms=${lastDataMsgAge} ` +
-    `rows_persisted_60s=${state.rowsPersistedLastMinute}`
+    `rows_persisted_60s=${state.rowsPersistedLastMinute} ` +
+    // r5: the cohort count's deciding quantity and its own control on one line — T (symbols with an UPDATE in the trailing
+    // 60 s) beside the ticker snaps received by frame type. T=0 with update>0 is a measurement; T=0 with update=0 and
+    // snapshot/other>0 says the labelling, not the market, changed.
+    `ticker_snaps_60s=update:${state.tickerSnapsByType60s.update},snapshot:${state.tickerSnapsByType60s.snapshot},other:${state.tickerSnapsByType60s.other} ` +
+    `symbols_updated_60s=${countEquitySymbolsUpdatedSince(now - 60_000)}`
   );
+  state.tickerSnapsByType60s = { update: 0, snapshot: 0, other: 0 };
   state.rowsPersistedLastMinute = 0;
   state.rowsPersistedLastMinuteWindowStart = now;
 }, 60_000);

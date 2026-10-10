@@ -20,7 +20,8 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', async (importOr
 });
 
 import {
-  _handleMessageForTests, _resetTickerUpdateClockForTests, countEquitySymbolsUpdatedSince, getLatestEquityTick,
+  _handleMessageForTests, _resetTickerUpdateClockForTests, _getTickerSnapsByTypeForTests, countEquitySymbolsUpdatedSince,
+  getLatestEquityTick,
 } from '../../services/passive-archive/equity-spot-archiver.js';
 
 const frame = (o: unknown) => Buffer.from(JSON.stringify(o));
@@ -46,6 +47,12 @@ describe('r4: only a venue update counts as ticking', () => {
     const t0 = Date.now();
     _handleMessageForTests(snap(undefined, ['AAPL/USD']));
     expect(countEquitySymbolsUpdatedSince(t0 - 1)).toBe(0);
+  });
+  it('r5 the heartbeat tally counts ticker snaps by frame type, so T=0 can be told from a labelling change', () => {
+    _handleMessageForTests(snap('snapshot', ['AAPL/USD', 'MSFT/USD']));
+    _handleMessageForTests(snap('update', ['AAPL/USD']));
+    _handleMessageForTests(snap(undefined, ['ORCL/USD']));
+    expect(_getTickerSnapsByTypeForTests()).toEqual({ update: 1, snapshot: 2, other: 1 });
   });
   it('the window bounds the count: an update older than `sinceMs` is not ticking now', () => {
     _handleMessageForTests(snap('update', ['AAPL/USD']));

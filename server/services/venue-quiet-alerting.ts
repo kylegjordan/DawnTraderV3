@@ -64,14 +64,38 @@ export function reasonFamilyOf(reason: string): ReasonFamily {
   return 'other';
 }
 
-/** Does an xStock skip escalation join the standing record (no page) rather than page? Kyle 2026-10-03 (#994): a quiet
- *  market keeps the count and raises no alert; Kyle 2026-10-09: an expected overnight hold must not page — page only on a
- *  book implausible inside the US regular session, or our own feed impaired. Everything else pages. */
-export function joinsStandingRecord(family: ReasonFamily, verdict: ClassVerdict | null, nowMs: number): boolean {
+/** Would ONE reason family, on its own, join the standing record rather than page? Kyle 2026-10-03 (#994): a quiet market
+ *  keeps the count and raises no alert; Kyle 2026-10-09 (sprint row 3a1): an expected overnight hold must not page — page
+ *  only on (i) a book implausible inside the US regular session, or (ii) our own feed impaired. Arm (ii) binds EVERY family
+ *  (Langston r4 BLOCKER-2): `thin` — fewer than `thin_ticking_min` symbols updating — is "our feed impaired", so it pages
+ *  whatever the reason; if `thin` turns out to fire on healthy overnight hours, the knob moves, never a per-family carve-out. */
+export function familyJoinsStandingRecord(family: ReasonFamily, verdict: ClassVerdict | null, nowMs: number): boolean {
   if (verdict === null) return false;                                   // config unreadable ⇒ page
-  if (family === 'quiet_market') return verdict === 'quiet' || verdict === 'closed';
-  if (family === 'book_state') return verdict === 'closed' || getXstockSession(nowMs) !== 'regular';
+  if (verdict === 'closed') return family !== 'other';                  // the venue is shut: nothing it does is a fault
+  if (verdict === 'thin') return false;                                 // arm (ii): our feed impaired ⇒ page
+  if (family === 'quiet_market') return verdict === 'quiet';
+  if (family === 'book_state') return getXstockSession(nowMs) !== 'regular';  // arm (i): page inside the regular session
   return false;
+}
+
+/** The streak joins only if EVERY family present in it would join on its own — a minority reason that would page VETOES the
+ *  join (Langston's UNH triage 2026-10-10, routed to row 3a1 and widened by r4): a streak whose dominant reason is a quiet
+ *  market but which also carries regular-session book-state refusals must not hide those inside an info-level record.
+ *  Measured on 2026-10-10: 23 of 94 escalation lines carried more than one reason key. An empty set never joins. */
+export function joinsStandingRecord(families: Iterable<ReasonFamily>, verdict: ClassVerdict | null, nowMs: number): boolean {
+  let any = false;
+  for (const f of families) {
+    any = true;
+    if (!familyJoinsStandingRecord(f, verdict, nowMs)) return false;
+  }
+  return any;
+}
+
+/** The families present in a streak's reason tally. */
+export function familiesOf(reasonCounts: Record<string, number>): Set<ReasonFamily> {
+  const out = new Set<ReasonFamily>();
+  for (const [reason, n] of Object.entries(reasonCounts)) if (n > 0) out.add(reasonFamilyOf(reason));
+  return out;
 }
 
 export interface VenueQuietConfig {
@@ -219,15 +243,16 @@ export async function sweepVenueQuiet(args: {
       continue;
     }
     if (key === standingKey(mode)) {
-      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number }>;
+      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; reasonFamily?: ReasonFamily }>;
       // `unpricedSinceMs` is THIS symbol's own clock (Langston Step-4 r2 condition): its last venue price in this process
       // if one was seen, else the moment it was listed — a lower bound, hence "at least". Never the class's
       // `notQuietSince`: a member listed one minute into a 90-minute window has not been out for 90 minutes.
-      const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number }> = [];
+      const stillOut: Array<{ positionId: string; symbol: string; unpricedSinceMs: number; reasonFamily: ReasonFamily | null }> = [];
       for (const [positionId, mem] of Object.entries(members)) {
         const open = (bySymbol.get(mem.symbol.toUpperCase()) ?? []).find((p) => p.id === positionId);
         if (open && !pricedAfter(open, mem.listedAtMs)) {
-          stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs });
+          stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs,
+            reasonFamily: mem.reasonFamily ?? null });
         }
       }
       // RESOLVE only when the venue genuinely resumed (`not_quiet`) — never on `thin`, which is the feed dying, not the
@@ -248,16 +273,21 @@ export async function sweepVenueQuiet(args: {
           if (state.durationEscalated.has(s.symbol)) continue;
           state.durationEscalated.add(s.symbol);
           const mins = Math.round((nowMs - s.unpricedSinceMs) / 60000);
+          // r5 (Langston r4 BLOCKER-1): the member's OWN family, never a hard-coded one — a book-state member is a symbol
+          // whose prices arrive and our own check refuses, not one with no mark.
+          const what = s.reasonFamily === 'book_state'
+            ? `Our own book-state check has refused ${s.symbol}'s order book for at least ${mins} min`
+            : `${s.symbol} has had no usable mark for at least ${mins} min`;
           const body = verdict === 'thin'
-            ? `${s.symbol} has had no usable mark for at least ${mins} min. At ${at}, fewer than ${cfg.thinTickingMin} xStock symbols were ticking at all — the whole feed was near-silent, not just this symbol. Check the equities socket and the venue before this position.`
-            : `${s.symbol} has had no usable mark for at least ${mins} min. At ${at} the xStock venue was not quiet — the cohort was ticking and this symbol was not: a lost subscription or a stuck book, not a quiet market.`;
+            ? `${what}. At ${at}, fewer than ${cfg.thinTickingMin} xStock symbols were updating at all — the whole feed was near-silent, not just this symbol. Check the equities socket and the venue before this position.`
+            : `${what}. At ${at} the xStock venue was not quiet — the cohort was updating and this symbol was not: a lost subscription or a stuck book, not a quiet market.`;
           await deps.addAlert({
             triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
             title: verdict === 'thin'
               ? `Exit checks still skipped and the xStock feed is near-silent — ${s.symbol}`
               : `Exit checks still skipped after the venue resumed — ${s.symbol}`,
             body,
-            metadata: { positionId: s.positionId, reasonFamily: 'quiet_market', classVerdict: verdict, escalation: 'duration' },
+            metadata: { positionId: s.positionId, reasonFamily: s.reasonFamily, classVerdict: verdict, escalation: 'duration' },
             dedupe_key: `price-skip-${mode}-${s.symbol}`,
           });
           out.escalated.push(s.symbol);

@@ -56,7 +56,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 // moved to module='active_execution'.
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 import {
-  VenueQuietState, classVerdict, classifyKnobError, configKey, reasonFamilyOf, joinsStandingRecord, measureXstockTicking,
+  VenueQuietState, classVerdict, classifyKnobError, configKey, reasonFamilyOf, familiesOf, joinsStandingRecord, measureXstockTicking,
   NOT_WARM_GRACE_MS, readVenueQuietConfig, standingKey, sweepVenueQuiet, type ClassVerdict,
 } from './venue-quiet-alerting.js';
 // B65.2: centralized exit-decision primitive shared with VTS
@@ -921,6 +921,8 @@ export class ActiveExecutionEngine {
       // r4 (row 3a1 Step 9): two families can join the record — the quiet market (feed staleness) and our own book-state
       // guard holding a thin book — and the verdict knows the venue's weekend close. The rule is `joinsStandingRecord`.
       const _family = reasonFamilyOf(_copy.dominantReason);
+      // r5 (the minority veto): the JOIN reads every family present in the streak, not only the dominant one.
+      const _families = familiesOf(_reasonCounts);
       const _nowMs = Date.now();
       let _t: number | null = null;
       let _verdict: ClassVerdict | null = null;
@@ -929,15 +931,15 @@ export class ActiveExecutionEngine {
         try { _verdict = classVerdict(_t, readVenueQuietConfig(), _nowMs); } catch { _verdict = null; /* config unreadable ⇒ page */ }
       }
       const _meta = {
-        positionId: position.id, dominantReason: _copy.dominantReason, reasonFamily: _family,
+        positionId: position.id, dominantReason: _copy.dominantReason, reasonFamily: _family, reasonFamilies: [..._families],
         T: _t, classVerdict: _verdict, threshold, knob: _knob, streak, reasonCounts: _reasonCounts,
       };
-      if (_cls === 'xstock_spot' && joinsStandingRecord(_family, _verdict, _nowMs)) {
-        console.log(`[VENUE_QUIET][STANDING] ${position.symbol}: ${streak} skips (${_copy.dominantReason}, family=${_family}) verdict=${_verdict} (T=${_t}) — joins the standing record, no page`);
+      if (_cls === 'xstock_spot' && joinsStandingRecord(_families, _verdict, _nowMs)) {
+        console.log(`[VENUE_QUIET][STANDING] ${position.symbol}: ${streak} skips (${_copy.dominantReason}, families=${[..._families].join('+')}) verdict=${_verdict} (T=${_t}) — joins the standing record, no page`);
         await this._joinVenueQuietStanding(position, _meta);
         return;
       }
-      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) reasons=${JSON.stringify(_reasonCounts)} dominant=${_copy.dominantReason}:${_copy.dominantCount}/${_copy.totalCounted} family=${_family} T=${_t ?? 'n/a'} verdict=${_verdict ?? 'n/a'} — raising system alert`);
+      console.error(`[P19-B8.5][PRICE_SKIP_ESCALATION] ${position.symbol}: ${streak} consecutive exit-monitor ticks not evaluated (${reason}${detail ? `; ${detail}` : ''}) reasons=${JSON.stringify(_reasonCounts)} dominant=${_copy.dominantReason}:${_copy.dominantCount}/${_copy.totalCounted} family=${_family} families=${[..._families].join('+')} T=${_t ?? 'n/a'} verdict=${_verdict ?? 'n/a'} — raising system alert`);
       try {
         const { addAlert } = await import('./system-alerts.js');
         await addAlert({

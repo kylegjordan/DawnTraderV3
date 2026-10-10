@@ -40,6 +40,7 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (importO
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 import {
   VenueQuietState, classVerdict, isQuietMarketReason, isBookStateHoldReason, reasonFamilyOf, joinsStandingRecord,
+  familyJoinsStandingRecord, familiesOf,
   priceSkipKeyPattern, standingKey, stuckKey, configKey,
   sweepVenueQuiet, THRESHOLD_SEED_REF,
 } from '../../services/venue-quiet-alerting.js';
@@ -76,16 +77,30 @@ describe('the rule', () => {
     expect(reasonFamilyOf('book_state_unvalidated')).toBe('book_state');
     expect(reasonFamilyOf('book_state_knob_missing')).toBe('other');
   });
-  it('r4: who joins the record - never on an unreadable config, never the other family', () => {
-    expect(joinsStandingRecord('quiet_market', 'quiet', WEEKDAY)).toBe(true);
-    expect(joinsStandingRecord('quiet_market', 'closed', SATURDAY)).toBe(true);
-    expect(joinsStandingRecord('quiet_market', 'not_quiet', WEEKDAY)).toBe(false);
-    expect(joinsStandingRecord('quiet_market', 'thin', WEEKDAY)).toBe(false);
-    expect(joinsStandingRecord('book_state', 'not_quiet', WEEKDAY)).toBe(false);
-    expect(joinsStandingRecord('book_state', 'not_quiet', AFTER_HOURS)).toBe(true);
-    expect(joinsStandingRecord('book_state', 'closed', SATURDAY)).toBe(true);
-    expect(joinsStandingRecord('other', 'quiet', AFTER_HOURS)).toBe(false);
-    expect(joinsStandingRecord('quiet_market', null, WEEKDAY)).toBe(false);
+  it('r4/r5: which single family joins the record - never on an unreadable config, never the other family', () => {
+    expect(familyJoinsStandingRecord('quiet_market', 'quiet', WEEKDAY)).toBe(true);
+    expect(familyJoinsStandingRecord('quiet_market', 'closed', SATURDAY)).toBe(true);
+    expect(familyJoinsStandingRecord('quiet_market', 'not_quiet', WEEKDAY)).toBe(false);
+    expect(familyJoinsStandingRecord('quiet_market', 'thin', WEEKDAY)).toBe(false);
+    expect(familyJoinsStandingRecord('book_state', 'not_quiet', WEEKDAY)).toBe(false);
+    expect(familyJoinsStandingRecord('book_state', 'not_quiet', AFTER_HOURS)).toBe(true);
+    expect(familyJoinsStandingRecord('book_state', 'quiet', AFTER_HOURS)).toBe(true);
+    expect(familyJoinsStandingRecord('book_state', 'closed', SATURDAY)).toBe(true);
+    expect(familyJoinsStandingRecord('other', 'quiet', AFTER_HOURS)).toBe(false);
+    expect(familyJoinsStandingRecord('other', 'closed', SATURDAY)).toBe(false);
+    expect(familyJoinsStandingRecord('quiet_market', null, WEEKDAY)).toBe(false);
+  });
+  it('r5 BLOCKER-2: THIN pages for EVERY family - a book-state hold after hours on a near-silent feed is our feed impaired', () => {
+    expect(familyJoinsStandingRecord('book_state', 'thin', AFTER_HOURS)).toBe(false);
+    expect(familyJoinsStandingRecord('quiet_market', 'thin', AFTER_HOURS)).toBe(false);
+  });
+  it('r5 the minority veto: the streak joins only if EVERY family in it would; an empty set never joins', () => {
+    expect(joinsStandingRecord(['quiet_market', 'book_state'], 'quiet', WEEKDAY)).toBe(false);    // book-state in liquid hours vetoes
+    expect(joinsStandingRecord(['quiet_market', 'book_state'], 'quiet', AFTER_HOURS)).toBe(true);
+    expect(joinsStandingRecord(['book_state', 'quiet_market'], 'not_quiet', AFTER_HOURS)).toBe(false); // the quiet arm vetoes
+    expect(joinsStandingRecord(['quiet_market', 'other'], 'closed', SATURDAY)).toBe(false);
+    expect(joinsStandingRecord([], 'quiet', AFTER_HOURS)).toBe(false);
+    expect([...familiesOf({ equity_tick_stale_classwide: 30, book_state_unvalidated: 10, rest_failed: 0 })].sort()).toEqual(['book_state', 'quiet_market']);
   });
 });
 
@@ -103,9 +118,11 @@ const REPLAY: Array<[string, number, 'quiet' | 'book_state']> = [
   ['CAG', 136, 'quiet'], ['PDD', 137, 'quiet'], ['ALB', 133, 'quiet'], ['NET', 127, 'quiet'], ['HUM', 147, 'quiet'],
   ['OKTA', 125, 'quiet'],
 ];
-const HUT_AT = Date.parse('2026-10-06T20:17:34Z'); // 16:17 ET - after hours
+// Every replay row is from 2026-10-06 after 19:30Z; HUT (the one book-state row) is at 20:17:34Z = 16:17 ET, after hours.
+// r5 (Langston r4 record item b): the replay calls the PRODUCTION predicate for both families, so it cannot drift from it.
+const REPLAY_AT = Date.parse('2026-10-06T20:17:34Z');
 const pages = (rows: typeof REPLAY, rule: (t: number) => string) =>
-  rows.filter(([, t, fam]) => fam === 'quiet' ? rule(t) !== 'quiet' : !joinsStandingRecord('book_state', rule(t) as any, HUT_AT));
+  rows.filter(([, t, fam]) => !joinsStandingRecord([fam === 'quiet' ? 'quiet_market' : 'book_state'], rule(t) as any, REPLAY_AT));
 describe('PRE-REGISTERED replay (pre-audit A3, corrected by Langston C1 before any code)', () => {
   it('46 rows; quiet-family pages: 1 of the first-hour 14, 1 of 45; HUT (a book-state hold after hours) no longer pages (r4, Kyle 2026-10-09)', () => {
     expect(REPLAY).toHaveLength(46);
@@ -181,6 +198,28 @@ describe('engine — escalation', () => {
     for (let i = 0; i < 40; i++) await record.call(e, XS, 'book_state_yield_refused');
     expect(keys()).toEqual([standingKey('paper')]);
     expect((m.mergeAlertMetadata.mock.calls[0][1] as any).members['pos-xs']).toMatchObject({ reasonFamily: 'book_state' });
+  });
+  it('r5 the minority veto in the engine: a quiet-dominant streak carrying book-state refusals PAGES in the regular session', async () => {
+    const e = engine();
+    for (let i = 0; i < 30; i++) await record.call(e, XS, 'equity_tick_stale_classwide');
+    for (let i = 0; i < 10; i++) await record.call(e, XS, 'book_state_unvalidated');
+    expect(keys()).toEqual(['price-skip-paper-CAG/USD']);
+    expect(m.addAlert.mock.calls[0][0].metadata).toMatchObject({ reasonFamily: 'quiet_market', reasonFamilies: ['quiet_market', 'book_state'] });
+  });
+  it('r5 the same mixed streak AFTER HOURS joins the record (each family would join on its own)', async () => {
+    vi.setSystemTime(AFTER_HOURS);
+    const e = engine();
+    for (let i = 0; i < 30; i++) await record.call(e, XS, 'equity_tick_stale_classwide');
+    for (let i = 0; i < 10; i++) await record.call(e, XS, 'book_state_unvalidated');
+    expect(keys()).toEqual([standingKey('paper')]);
+  });
+  it('r5 BLOCKER-2 in the engine: a book-state hold after hours on a THIN feed pages', async () => {
+    vi.setSystemTime(AFTER_HOURS);
+    m.T = 10;
+    const e = engine();
+    for (let i = 0; i < 40; i++) await record.call(e, XS, 'book_state_unvalidated');
+    expect(keys()).toEqual(['price-skip-paper-CAG/USD']);
+    expect(m.addAlert.mock.calls[0][0].metadata).toMatchObject({ reasonFamily: 'book_state', classVerdict: 'thin' });
   });
   it('r4: our own MISSING book-state config still pages after hours (not a thin book - our configuration)', async () => {
     vi.setSystemTime(AFTER_HOURS);
@@ -323,6 +362,17 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     }
     expect(d2.addAlert).not.toHaveBeenCalled();
   });
+  it('r5 BLOCKER-1: the duration page stamps the MEMBER\'s own family and words a book-state member as a refusal, not a missing mark', async () => {
+    const st = new VenueQuietState();
+    const members = { 'pos-b': { symbol: 'GLW/USD', listedAtMs: now - 3_600_000, reasonFamily: 'book_state' } };
+    const d = deps([row(standingKey('paper'), now - 3_600_000, { members })]);
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [{ id: 'pos-b', symbol: 'GLW/USD' }], state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: [{ id: 'pos-b', symbol: 'GLW/USD' }], state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-GLW/USD')![0] as any;
+    expect(call.metadata.reasonFamily).toBe('book_state');
+    expect(call.body).toMatch(/Our own book-state check has refused GLW\/USD's order book/);
+    expect(call.body).not.toMatch(/no usable mark/);
+  });
   it('BLOCKER-2: THIN never resolves the standing record — a dying feed is not the venue resuming — even with every member priced', async () => {
     const st = new VenueQuietState();
     st.notePriced('pos-a', now - 1);
@@ -339,8 +389,8 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
     await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: [{ id: 'pos-a', symbol: 'CAG/USD' }], state: st, cfg: CFG, verdict: 'thin', deps: d });
     const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-CAG/USD')![0] as any;
     expect(call.metadata.classVerdict).toBe('thin');
-    expect(call.body).toMatch(/fewer than 50 xStock symbols were ticking/);
-    expect(call.body).not.toMatch(/cohort was ticking/);
+    expect(call.body).toMatch(/fewer than 50 xStock symbols were updating/);
+    expect(call.body).not.toMatch(/cohort was updating/);
   });
   it("r2 condition: the duration page states the SYMBOL's own unpriced time, not the class window, and dates the cohort reading", async () => {
     const st = new VenueQuietState();
