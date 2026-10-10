@@ -196,6 +196,7 @@ function makeEngine(): Stub {
     // B-XSTOCK-BID-TRIGGER-RELAND increment A (P5) fields the real constructor sets.
     _exitRefusalTally: new Map(),
     _riMissSig: new Map<string, string>(),
+    _riMissAcc: new Map(),
     _engineConstructedAt: 0,
     // Stubbed on the instance (see header).
     _recordPriceSkip: vi.fn(async (..._a: unknown[]) => undefined),

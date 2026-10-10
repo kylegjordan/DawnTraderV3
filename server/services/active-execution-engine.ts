@@ -736,7 +736,14 @@ export class ActiveExecutionEngine {
       // frame. The fail direction is covered downstream (`stale_book` + the B6.6 liveness gate); nothing may
       // read a book-state pass as a freshness claim.
       const bs = assessBookStateNow(symbol);
-      if (bs.ok && bs.result.state === 'hollow') {
+      // ⛔ row 2 increment A (Langston Step 4 gate 1, carried to gate 2): a comparator whose chain was seeded IMPLAUSIBLE
+      // is NOT a usable reference — it outlives a closed position for the process lifetime (P2), and judging a fresh tick
+      // against a blown seed reads `mark_deviation`/`bid_collapsed` falsely. Only the absent-side arms (which need no
+      // reference) are taken from it; the spread is judged by P3's arm below, as for a symbol with no comparator.
+      const _cmpAtEntry = readBookStateComparator(symbol);
+      const _noUsableRef = _cmpAtEntry === null || _cmpAtEntry.seedImplausible;
+      if (bs.ok && bs.result.state === 'hollow' &&
+          (!_noUsableRef || bs.result.reasons.some((r) => r === 'absent_bid' || r === 'absent_ask'))) {
         const _why = `hollow_book ${bs.result.reasons.join('|')}`;
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
         return { pass: false, reason: _why, snapshot };
@@ -746,7 +753,7 @@ export class ActiveExecutionEngine {
       // object the guard reads) is judged against its OWN normal spread — the live retained ring, else its last N
       // regular-session snapshots — with the guard's own threshold form. HOUR-INVARIANT by construction (gate 2).
       // A symbol WITH a comparator keeps the predicate above. Reason code `implausible_spread_entry`, separate from P4's.
-      if (bs.ok && readBookStateComparator(symbol) === null) {
+      if (bs.ok && _noUsableRef) {
         const _raw = bs.raw;
         if (_raw.bid !== null && _raw.ask !== null && _raw.bid > 0 && _raw.ask >= _raw.bid) {
           const _spread = (_raw.ask - _raw.bid) / ((_raw.ask + _raw.bid) / 2);
@@ -807,6 +814,8 @@ export class ActiveExecutionEngine {
   // In memory by design; a position opened before this instance started is labelled `sinceRestart`.
   private _exitRefusalTally: Map<string, ExitRefusalTally> = new Map();
   private _riMissSig: Map<string, string> = new Map();
+  // Step 4 gate 1 condition 1: the ticks suppressed since the last `RI_NEAR_MISS` line, with their spread range.
+  private _riMissAcc: Map<string, { n: number; min: number; max: number }> = new Map();
   private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
     let t = this._exitRefusalTally.get(position.id);
     if (!t) {
@@ -2199,8 +2208,12 @@ export class ActiveExecutionEngine {
                   // re-seeds on the blown frame and THROWS AWAY its release progress (KKR/USD 2026-10-09: yield-clear 20:16:31Z
                   // → `SEED_IMPLAUSIBLE` ratio 270 two seconds later, run counts back to zero).
                   // ⛔ SAFE ONLY BECAUSE P1 SHIPS IN THE SAME INCREMENT: this removes the only non-escape reset of an implausible
-                  //   chain, so its exits are now the kRel escape and the ring-independent release (P1). IF P1 IS EVER REVERTED,
-                  //   REVERT THIS WITH IT.
+                  //   chain, so WHILE THE POSITION IS HELD its exits are the kRel escape and the ring-independent release (P1).
+                  //   IF P1 IS EVER REVERTED, REVERT THIS WITH IT.
+                  // ⛔ CARVE-OUT (Langston, Step 4 gate 1 condition 2): both exits live inside `advanceBookStateComparator`, whose
+                  //   ONLY call site is this loop, keyed on the HELD position. Once the position CLOSES, nothing advances the
+                  //   chain, so an implausible chain left behind is permanent for the process lifetime. The entry gate therefore
+                  //   treats a `seedImplausible` comparator as NO usable reference (P3's arm runs; see `_evaluateOpenDepthGate`).
                   // ⛔ The r6 warning in `clearBookStateComparator` (gating RETENTION makes the mechanism inert) does NOT apply:
                   //   this gates the CLEAR, and `retainsRing` is false for every chain skipped here (its first term is
                   //   `!seedImplausible`), so the skipped clear would have retained nothing. Streak reset, alert and refusal below
@@ -2388,16 +2401,27 @@ export class ActiveExecutionEngine {
                   const _tally = this._noteExitRefusal(position, 'unvalidated');
                   const _miss = readRiLastMiss(position.symbol);
                   if (_miss) {
+                    // ⛔ Langston Step 4 gate 1 condition 1: one line per CHANGE of the failed set would emit ONE spread sample
+                    // for a long, stable refusal — exactly the population that tunes the ceiling. So each printed line also
+                    // carries what was SUPPRESSED since the previous one: tick count, min and max spread.
                     const _sig = _miss.failed.join('|');
+                    const _acc = this._riMissAcc.get(position.id) ?? { n: 0, min: Infinity, max: -Infinity };
                     if (this._riMissSig.get(position.id) !== _sig) {
                       this._riMissSig.set(position.id, _sig);
                       console.warn(
                         `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} RI_NEAR_MISS pos=${position.id} failed=${_sig} ` +
                         `spread=${_fx(_miss.spreadNow)} ceiling=${_fx(_miss.ceiling)} windowMedian=${_fx(_miss.trailingMedian)} ` +
                         `runMoves=${_miss.runMoves} bidMoved=${_miss.bidMoved} askMoved=${_miss.askMoved} ` +
+                        `suppressedTicks=${_acc.n} suppressedMinSpread=${_acc.n ? _fx(_acc.min) : 'none'} suppressedMaxSpread=${_acc.n ? _fx(_acc.max) : 'none'} ` +
                         `refusedS=${Math.round(_tally.refusedMs / 1000)} episodes=${_tally.episodes} longestS=${Math.round(_tally.longestEpisodeMs / 1000)} ` +
                         `sinceRestart=${_tally.sinceRestart}`,
                       );
+                      this._riMissAcc.set(position.id, { n: 0, min: Infinity, max: -Infinity });
+                    } else {
+                      _acc.n++;
+                      _acc.min = Math.min(_acc.min, _miss.spreadNow);
+                      _acc.max = Math.max(_acc.max, _miss.spreadNow);
+                      this._riMissAcc.set(position.id, _acc);
                     }
                   }
                   // Typed, uncast (Langston nit a): a rename must fail the build, not print `stop none`.
@@ -2423,6 +2447,7 @@ export class ActiveExecutionEngine {
                   const _stopNum = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
                   if (_t && noteRelease(_t, _gSides ? _gSides.bid : null, Number.isFinite(_stopNum) ? _stopNum : null)) {
                     this._riMissSig.delete(position.id);
+                    this._riMissAcc.delete(position.id);
                     console.warn(
                       `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} EXIT_RELEASED pos=${position.id} ` +
                       `bidToStopPct=${_t.lastReleaseBidToStopPct === null ? 'none' : _t.lastReleaseBidToStopPct.toFixed(3)} ` +
@@ -4340,6 +4365,7 @@ export class ActiveExecutionEngine {
       // row 2 increment A, P5: the tally is now on the row; evict it with the position.
       this._exitRefusalTally.delete(position.id);
       this._riMissSig.delete(position.id);
+      this._riMissAcc.delete(position.id);
 
       // Log the exit event with C2 breakdown
       await storage.createActiveTradeLog(this.mode, {

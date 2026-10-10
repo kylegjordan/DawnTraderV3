@@ -397,8 +397,18 @@ export function advanceBookStateComparator(
   // ⛔ (d) IS WHAT MAKES ANY CEILING SAFE AND MAY NOT BE RELAXED WITHOUT REOPENING LANGSTON'S GATE-1 r2 RULING: a stub-ask
   //   book with a live bid moves on one side only; a frozen artefact moves on neither (UNH weekend: one quote pair).
   // ⛔ Ends the chain through `clearBookStateComparator` like the escape (r4 ring rule, r5 movement rule). The NEW chain's
-  //   seed is NOT judged against the retained ring — that ring is exactly the yardstick this release overrides — so it
-  //   consumes the ring as any plausible seed does (the kRel escape reaches the same end state) and seeds `vacuous`.
+  //   seed is NOT judged against the retained ring — a FORCED move (Langston, Step 4 gate 1): judged, it would read
+  //   implausible by construction and the release would deliver nothing. It consumes the ring and seeds `vacuous`.
+  //   ⚠️ SAME END STATE AS THE kRel ESCAPE, DIFFERENT WARRANT: that escape's seed is judged and consumes a ring that
+  //   APPROVED it; this one consumes a ring that would have REJECTED it. And the ceiling bounds the release DECISION,
+  //   never the datum left behind: `spreads` takes every advanced frame, so the ring this chain later writes is NOT
+  //   ceiling-bounded. This is one more labelled vacuous-genesis entry point — inside Langston's r6 ruling (vacuous
+  //   genesis is labelled, not gated), not against r5.
+  //   ⚠️ RECORD: an RI-released ring and a cold-start ring BOTH read `seedBasis='vacuous'`; only `SEED_ESCAPED_RI` /
+  //   `reason=ring_independent_escape` tell them apart — any measurement over vacuous rings must split the two.
+  //   ⚠️ RESIDUAL, NAMED NOT GATED: (d)'s side flags are sticky over an unbounded run, so a side that moved once and then
+  //   froze under a tight book satisfies it. Langston measures this at Step 8 (distinct bid/ask values per release
+  //   window); a material share with a single distinct side value means (d) needs a recency term. DO NOT RELAX (d).
   // ⛔ No clock term: the ceiling is a property of the book, the same at every hour (Kyle 2026-09-03).
   let riEscapedThisFrame = false;
   let riRunMovesNow = 0;
@@ -434,7 +444,6 @@ export function advanceBookStateComparator(
       prev = undefined;
       escapedThisFrame = true;
       riEscapedThisFrame = true;
-      riRunMovesNow = 0; riBidMovedNow = false; riAskMovedNow = false;
     } else {
       riMiss = {
         failed, spreadNow, ceiling: riCeilingFrac, trailingMedian, runMoves: riRunMovesNow,

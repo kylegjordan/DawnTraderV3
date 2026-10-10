@@ -143,6 +143,22 @@ describe('P2 — the hollow yield keeps a seedImplausible chain (fence on the en
   });
 });
 
+describe('Step 4 gate 1 — the entry seam treats an implausible chain as NO usable reference; RI_NEAR_MISS carries the suppressed range', () => {
+  const AEE = readFileSync(join(__dirname, '..', '..', 'services', 'active-execution-engine.ts'), 'utf8');
+  it('an implausible comparator is not a reference at entry: only absent-side hollow refuses, and P3 runs', () => {
+    expect(AEE).toContain('const _noUsableRef = _cmpAtEntry === null || _cmpAtEntry.seedImplausible;');
+    expect(AEE).toMatch(/\(!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => r === 'absent_bid' \|\| r === 'absent_ask'\)\)/);
+    expect(AEE).toContain('if (bs.ok && _noUsableRef) {');
+    expect(AEE).not.toContain('if (bs.ok && readBookStateComparator(symbol) === null) {'); // the r1 form, held-only
+  });
+  it('every RI_NEAR_MISS line carries the suppressed tick count and spread range since the last line', () => {
+    const at = AEE.indexOf('RI_NEAR_MISS pos=');
+    expect(at).toBeGreaterThan(0);
+    const line = AEE.slice(at, at + 900);
+    for (const f of ['suppressedTicks=', 'suppressedMinSpread=', 'suppressedMaxSpread=']) expect(line).toContain(f);
+  });
+});
+
 describe('P3 — entry spread plausibility (hour-invariant yardstick)', () => {
   it('refuses an off-hours 2.9% book whose regular-session norm is 0.03% (Langston 10-08 02:00Z shape)', () => {
     expect(judgeEntrySpread(0.029, 0.0003, K_REL, 1.0)).toEqual({ refuse: true, threshold: 0.01 });
