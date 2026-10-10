@@ -5467,6 +5467,7 @@ The VTS is fed by the **same** filtered scan (confirmed live: it is simulating `
 
 ### #913 OPEN 2026-08-26 (CC-C; the home asserted in `B_EXIT_PROVENANCE_SCOPE.md` R6-4 never existed in this ledger) — ⚠️ A LOG LINE CALLS THE INTER-TICK CADENCE `ageMs=`, AND THAT IS THE VALUE AN IMPLEMENTER REACHES FOR
 ➕ **W41 HOMING (CC-C, 2026-10-06; OLD Claude's census handover, alert `129d5329`):** `HOME: F-C (#743), owner CC-C, placed in SPRINT_TO_LIVE_PLAN at row 32, after row 31`
+   ↳ **RE-HOMED 2026-10-10 (Langston Step-1 condition 3): row 32 is FOLDED into row 33.** `HOME: B-PRICE-STALENESS-BOUND (objective 4: the `ageMs=` label renamed to what it measures), owner CC-C, placed in SPRINT_TO_LIVE_PLAN at row 33, after row 31`
 
 **`active-execution-engine.ts` logs `ageMs=${diffMs}` where `diffMs` is `now − lastTick`** — the engine's **inter-tick CADENCE for that symbol**, i.e. *how long since we last looked*, **not how old the price is**. Two different quantities; one name.
 
