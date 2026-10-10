@@ -1,0 +1,39 @@
+# B-PRICE-STALENESS-BOUND — Scope r1 (Step 1, CC-C, 2026-10-10)
+
+change-class: architecture
+
+**Placement:** `SPRINT_TO_LIVE_PLAN` rows **32 and 33**, both CC-C, pre-sprint **stage 1** (*"feed truth under the exits"*). Row 32 is `F-C` (`#743`, homed there by the W41 census, carrying `#913`); row 33 is `B-PRICE-STALENESS-BOUND` (`#743`). **Same issue, two rows. Proposal (§9.4 disposition 1): ONE batch, `B-PRICE-STALENESS-BOUND`, at row 33; row 32 deleted from the plan and the task list with its text kept verbatim here** (Kyle's 10-10 rule for folded rows), once Langston rules this scope. ⚠️ Row 32's batch column reads "plan row 6", which is Infra's database-headroom row — a stale cross-reference, corrected by the fold.
+
+## 1. The goal, in one line
+**No trading decision — paper or VTS, entry or exit, crypto or xStock — acts on a price whose DATA is older than the bound for that use, however recently our process received or re-stamped it.** Today two routes let an old price read as fresh.
+
+## 2. The two routes, at the ref (`origin/migration/aws-supabase`, read 2026-10-10)
+**Route A — the last-known-good re-serve (`#743`, 2026-08-23).** `live-pricing-adapter.ts` `fetchLivePrice` has three legs that re-serve a cached price: the xStock REST gate (`:671-685`, producer `xstock_rest_gate_reserve`, fires on EVERY poll by design), all-APIs-failed (`:726-741`), fetch-exception (`:762-778`). Each returns `timestamp: new Date().toISOString()`, and the cache writer (`:605-640`) then sets `cachedAt: Date.now()`. **Since `B-EXIT-PROVENANCE` the ORIGINAL observation time is carried (`observedAt`, "carried through, NOT refreshed") — so the staleness is RECOVERABLE, but still NOT BOUNDED**: `timestamp` and `cachedAt` advance every 15 s on a price that never moved, and the age the legs compute (`cacheAge`) is logged and compared to nothing. ⚠️ **Whether any DECIDING path reads `timestamp`/`cachedAt` as freshness is UNTRACED** — the crypto exit path refuses `last_known_good` by its venue predicate (`8a-P2`; `RUNNING_ISSUES` `#951`), so the exposure may sit only in display and sizing reads. That census is objective 1, not an assumption.
+**Route B — the venue's reconnect snapshot (found 2026-10-10 at row 2's deploy; on `#743`).** `equity-spot-archiver.ts` `parseTickerSnap` writes the xStock MARK with `tsMs = Date.now()` for EVERY ticker frame, including the `type:"snapshot"` frame the venue sends on each subscribe (CC-B's wire probe 19:18Z: one snapshot per symbol on subscribe, then heartbeats; changes arrive as `update`). So after every restart or reconnect, a shut or quiet book reads as freshly priced. **Measured:** after the 17:05:21Z restart (Saturday, venue shut, newest real update 13:02:20Z) the exit loop EVALUATED MRVL/USD for ~15 s on a 4-hour-old 10.6% book (7 `XS_FRAME frame=ok`, mark 264.5 vs stop 261.89) until the frame aged past the mark-staleness ceiling; the 11:59Z restart shows the same. Nothing closed. **This route reaches a DECISION**, which makes it the sharper half. CC-B's 3a1 r4 already keys its liveness CLOCK on `update` frames only (`lastTickerUpdateAt`, `:180-206`) and left the mark write untouched for this row.
+
+## 3. Objectives
+| # | objective | verification |
+|---|---|---|
+| **1** | **Census — every consumer of a price's freshness**: the `live-pricing-adapter` cache (`timestamp`, `cachedAt`, `observedAt`) and the equities tick store (`latestEquityTick` `tsMs`, `raw.atMs`) — who READS each as an age, and whether that reader DECIDES (entry, exit, sizing, guard) or only displays. Entry points enumerated repo-wide first (§9.5(a)). | Step 2 table, every reader with `path:line` at the ref; "exactly one" stated where true; a positive control for each grep. |
+| **2** | **Route B — a replayed book never refreshes the mark's age.** A `snapshot` frame may update the book the guard reads, but it does not make the MARK fresh: with a prior mark, its age carries; with none (just after a restart), the mark is unaged-unknown and the staleness gate refuses until the first `update` arrives. | Unit on both cases. Staging: after a deploy while the venue is shut, zero `XS_FRAME frame=ok` for held xStocks until an `update` frame; after a deploy in market hours, decisions resume within the first update (measured). |
+| **3** | **Route A — a re-serve never restamps freshness.** The three legs stop presenting a re-served price as just observed (`timestamp` follows `observedAt`; `cachedAt` stays a RECEIPT time, never read as an age by a decider), and every DECIDING reader from objective 1 applies an age bound to `observedAt`, counted when it refuses. The bound is per USE and, where it exists, the one already derived (crypto: `8a-P2`'s 2,000 ms trigger; xStock: the mark-staleness ceiling); no new number is invented here. | Unit per leg; a fence that no decider reads `cachedAt`/`timestamp` as freshness; staging: re-serve refusals counted by producer. |
+| **4** | **`#913` — the log line that calls the inter-tick cadence `ageMs=`** is renamed to what it measures, so an implementer cannot reach for it as an age. | Grep fence on the label. |
+| **5** | **No alert flood.** A refusal by this bound on a quiet or shut venue is expected and pages nobody (Kyle 2026-10-09); it is counted. | Zero new alert keys (grep the dedupe keys). |
+
+## 4. Provenance (Step 1.b; tier 1 = behaviour this batch changes)
+- **`fetchLivePrice` re-serve legs** (tier 1): Phase 8.8.3-I6 introduced last-known-good as the outage fallback (*"Only use last_known_good if ALL external APIs fail"*, in the code); P19-B8.9 added the xStock REST gate that serves it on every poll by design (display only: *"this leg only ever served display"*); `B-EXIT-PROVENANCE` carried `observedAt` through without bounding it, and its scope drew the line explicitly — *recoverable is not bounded; a behaviour change does not belong in a batch whose safety case is "no decision path changes"* (`#743` SCOPE BOUNDARY). `B-PRICE-AGE-TRUTH` (`#951`) excluded `#743` by name (its completion report OBJ-5). ⇒ disposition **(2) relevant, needs updating**.
+- **`parseTickerSnap` mark write** (tier 1): P19-B8.5 (xStock marks from the equities feed), `#943` (raw sides for the guard), 3a1 r4 (the update-only liveness clock, CC-B, deployed 2026-10-10 `fe830d69c`). The mark's `tsMs` was always receipt time because the venue frame carries no timestamp (`#943` §15.3). ⇒ **(2)**.
+- **Mark-staleness gate** (`mark-staleness.ts`, P19-B8.5e; tier 2, read not changed) — the consumer that turns an age into a refusal; it is correct, it is fed a wrong age.
+- **`#913`** (tier 2) — a label only.
+- Corpora searched: `RUNNING_ISSUES` (`#743`, `#913`, `#951`, `#636`), the `B-PRICE-AGE-TRUTH` and `B-EXIT-PROVENANCE` records, the archiver and adapter headers, today's 3a1 dispatch. `bridge/canonical/` not consulted yet (Step 2's provenance read).
+
+## 5. Out of scope, named
+The crypto per-coin spread ceiling (row 38); the book-state guard (row 2); the venue-quiet alert rules (3a1, CC-B); a clock-based pause (row 2 increment C). **Coordination:** `equity-spot-archiver.ts` is CC-B's 3a1 file as of today — the wrench is called in the channel before Step 3 edits it.
+
+## 6. Dependencies and order
+Stage 1, before stage 2's row 38. Independent of row 2's remaining increments. Route B's staging verification needs a deploy while the venue is shut (any weekend) AND one in market hours.
+
+## 7. ROW 32, VERBATIM (to be deleted from the plan and the task list on Langston's ruling)
+> plan: `| 32 | A bound on how old a price may be when used | plan row 6 | CC-C (Analyst Claude) | QUEUED | — | a bound on how old a price may be when used |`
+> task list: `| 32 | plan row 6 | QUEUED | a bound on how old a price may be when used |`
+> homing line (`RUNNING_ISSUES` `#913`): `HOME: F-C (#743), owner CC-C, placed in SPRINT_TO_LIVE_PLAN at row 32, after row 31`
