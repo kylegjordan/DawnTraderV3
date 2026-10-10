@@ -4832,6 +4832,18 @@ For each open position:
    **⚠️ The ceiling is an AGE THRESHOLD, not a retry interval.** Evaluation re-runs every cycle; the ceiling only decides whether the mark is trusted on THIS pass, and a fresh tick resets the age to zero.
 
    **⚠️ LIMITATION, stated in the model rather than left to be rediscovered:** where the budget-derived ceiling falls below `floor_ms` the floor governs, and the symbol can then cover MORE than the remaining room inside the blind window — i.e. **near a stop, on a fast symbol, the stop can be crossed unseen**. This is not fixable by lowering the floor (a sub-second ceiling refuses on every ordinary tick gap) and is not created by the ceiling: near the stop with a stale mark the position is exposed whichever branch is taken. The structural fix is a **venue-resting exit** (`#563`) — our stop is evaluated IN-PROCESS, so it dies with our own liveness, whereas an exchange-held stop executes regardless. Also unaddressed here: **nothing validates a mark's VALUE, only its AGE** (`#567`), and σ lags a genuine volatility spike because the trailing window dilutes it (`#566`).
+   **★ WHEN THE MARK IS TOO OLD — WHO IS TOLD (`B-VENUE-QUIET-ALERTING`, row 3a1, deployed 2026-10-10; Kyle `#994`).** A tick whose mark is older than its ceiling is SKIPPED, never priced on a stale value, and the skip is counted per position — that freshness standard is unchanged. What changed is DELIVERY. A streak of skips reaching `max_consecutive_price_skips` is judged against the whole xStock class at that instant:
+
+   ```
+   T = xStock symbols that received a venue UPDATE in the last 60 s   (a reconnect's snapshot frames do not count)
+   verdict = closed     if inside the weekend close (Fri 20:00 → Sun 20:00 ET)
+           = thin       if T < thin_ticking_min      (too few updating to tell the market from our feed ⇒ page)
+           = quiet      if T < quiet_ticking_min     (the market itself is quiet)
+           = not_quiet  otherwise                    (the class is updating; this symbol is not ⇒ page)
+   ```
+
+   A quiet-market streak on a `quiet` or `closed` class, and a book-state hold outside the US regular session, **join one standing info record** for the class instead of paging; every other case pages. A streak mixing families joins only if every family would on its own. A listed position still unpriced well after the class resumes pages on its own. **Every alert this raises clears itself** on a re-measured condition — the position priced after the alert, or closed — resolved by the engine as `active-exit-monitor`. **Measured basis** (pre-audit A2, universe 468): regular-session p05 461 symbols updating, after-hours median 154, overnight minimum 108; live 2026-10-10 (Saturday, venue shut): `T = 0`, every streak `closed`, no page. **Known limits:** a US market holiday is not in the calendar (`#392`); a book-state-basis alert cannot clear while the refusal holds (the price is never accepted).
+
 2. **Mock price rejection** (Phase B9) — skips if price source is 'mock'
 
    **★ 2a. PRICE PROVENANCE IS CAPTURED HERE AND PERSISTED AT THE CLOSE (B-EXIT-PROVENANCE, `#741`/`#743`, 2026-08-26).**

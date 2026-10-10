@@ -7,7 +7,8 @@
  *
  *   - QUIET-MARKET FAMILY: only `equity_tick_stale_*` and `equity_tick_missing` can be a quiet market. Every other skip
  *     reason (knob missing, book-state, the crypto REST arm) pages exactly as before.
- *   - THE COHORT TEST, at the decision instant: `T` = xStock symbols with a ticker frame in the trailing 60 s.
+ *   - THE COHORT TEST, at the decision instant: `T` = xStock symbols with a venue UPDATE frame in the trailing 60 s (r4: a
+ *     subscribe-time `snapshot` frame never counts; `closed` is read first from the weekend window).
  *     QUIET iff T < `quiet_ticking_min`; THIN iff T < `thin_ticking_min` ⇒ cannot tell a quiet venue from an impaired
  *     feed ⇒ PAGE (default-to-page, Langston r1 Q2). A quiet-family escalation on a QUIET class joins ONE per-class
  *     standing record (`venue-quiet-<mode>-xstock_spot`, info, not delivered to Discord) instead of a per-symbol page.
