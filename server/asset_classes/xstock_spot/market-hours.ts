@@ -129,3 +129,45 @@ export function isXstockLiquidFillWindowET(
   const minutesEt = hour * 60 + minute;
   return minutesEt >= openMinEt && minutesEt < closeMinEt;
 }
+
+/**
+ * B-XSTOCK-BID-TRIGGER-RELAND increment C (row 2, objective 7) — THE VENUE-TRANSITION PAUSE.
+ *
+ * WHAT. Is `now` inside one of the minutes where the xStock book re-quotes at a Kraken session handoff, so that no
+ * xStock decision (entry, exit trigger, resting-exit fill, VTS look) may act on it? The CALLERS suppress; this answers.
+ *
+ * THE WINDOWS (half-open, ET minutes since midnight; Step 2 `B_XSTOCK_BID_TRIGGER_RELAND_INCC_PRE_AUDIT.md` r3):
+ *   - `16:15`      [974, 995)  = 16:14-16:34 ET, Mon-Fri       — the 4 PM ET after-hours handoff (+15 min, measured)
+ *   - `20:15`      [1214, 1235) = 20:14-20:34 ET, Mon-Thu       — the 8 PM ET overnight handoff (+15 min, measured)
+ *   - `sun_reopen` [1200, 1235) = 20:00-20:34 ET, Sunday        — the weekly reopen: whole-universe re-sends at 20:00 and
+ *                                                                20:13 (97% wider than 1%, 4 of 4 Sundays), live at 20:15
+ *   No Friday evening window: the weekend close begins Friday 20:00 ET (`isInXstockWeekendClose`), which wins.
+ * WHY (sized and evidenced in the pre-audit A1/A2): inside these minutes the BID collapses while the ask holds — per close,
+ *   a fill >= 3% below the stop 38.9% inside vs 2.0% outside (Langston's control, 116 closes from 2026-09-19).
+ *   After objective 6 (`spread_blown`) the measured residual is one close, so this is an ACKNOWLEDGED BELT with a
+ *   retirement criterion (pre-audit C-P5), not a permanent rule.
+ * THE ANCHOR IS EASTERN TIME, NOT UTC (pre-audit A10, Langston C5): Kraken publishes these sessions in Eastern time as the
+ *   US-equity extended sessions (Nasdaq/NYSE, Blue Ocean ATS overnight), which follow ET across daylight saving.
+ *   `getETParts` uses `Intl.DateTimeFormat` with `timeZone: 'America/New_York'`, so these minutes ARE Eastern time in
+ *   winter and summer. The +15-minute offset is a MEASUREMENT, not documented; pre-registered EST reads 2026-11-01
+ *   (Sunday reopen), 11-02 (16:15) and 11-03 (20:15) — a spike at the UTC-anchored time instead is a same-day reviewed fix.
+ * ⛔ POLICY, NOT A KNOB (pre-audit A11): the edges encode a deliberate fidelity deviation (choosing not to trade), so they
+ *   change only by a reviewed commit, never by a `module_constants` write.
+ * NOT included: US holidays and half-days (the file header; `#392`). First half-day candidate 2026-11-27, a Step-8 read.
+ */
+export type XstockPauseWindow = '16:15' | '20:15' | 'sun_reopen';
+const PAUSE_1615: readonly [number, number] = [974, 995];
+const PAUSE_2015: readonly [number, number] = [1214, 1235];
+const PAUSE_SUN_REOPEN: readonly [number, number] = [1200, 1235];
+
+export function isXstockVenueTransitionPause(now: Date = new Date()): { paused: boolean; window: XstockPauseWindow | null } {
+  if (isInXstockWeekendClose(now)) return { paused: false, window: null };
+  const { weekday, hour, minute } = getETParts(now);
+  const m = hour * 60 + minute;
+  const inside = (w: readonly [number, number]) => m >= w[0] && m < w[1];
+  if (weekday === 'Sun') return inside(PAUSE_SUN_REOPEN) ? { paused: true, window: 'sun_reopen' } : { paused: false, window: null };
+  if (weekday === 'Sat') return { paused: false, window: null };
+  if (inside(PAUSE_1615)) return { paused: true, window: '16:15' };
+  if (weekday !== 'Fri' && inside(PAUSE_2015)) return { paused: true, window: '20:15' };
+  return { paused: false, window: null };
+}

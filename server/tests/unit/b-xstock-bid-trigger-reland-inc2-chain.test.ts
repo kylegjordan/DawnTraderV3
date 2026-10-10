@@ -198,6 +198,11 @@ function makeEngine(): Stub {
     _riMissSig: new Map<string, string>(),
     _riMissAcc: new Map(),
     _engineConstructedAt: 0,
+    // B-XSTOCK-BID-TRIGGER-RELAND increment C fields the real constructor sets.
+    _venuePauseExitTicks: 0,
+    _venuePauseWouldFire: 0,
+    _venuePauseEntriesRefused: 0,
+    _venuePausePending: new Map(),
     // Stubbed on the instance (see header).
     _recordPriceSkip: vi.fn(async (..._a: unknown[]) => undefined),
     _recordBookStateEvent: vi.fn(async (..._a: unknown[]) => undefined),

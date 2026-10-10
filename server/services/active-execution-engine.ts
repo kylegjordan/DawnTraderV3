@@ -493,6 +493,7 @@ import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../as
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
 import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis, readThresholdBasis, readBookStateComparator, readRiLastMiss } from '../asset_classes/xstock_spot/book-state-tracker.js';
 import { resolveEntryYardstick, judgeEntrySpread } from '../asset_classes/xstock_spot/entry-spread-plausibility.js';
+import { isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
 import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
@@ -674,6 +675,16 @@ export class ActiveExecutionEngine {
   ): Promise<{ pass: boolean; reason: string; snapshot: DepthSnapshot | null }> {
     const config = await resolveFillDepthGateConfig(assetClass);
     if (!config) return { pass: false, reason: 'depth_gate_config_missing', snapshot: null };
+    // ⛔ row 2 increment C (C-P3): inside a venue-transition pause an xStock entry is refused before any book is read —
+    // the book at those minutes is the transient the pause exists for (pre-audit A1). Its own reason code.
+    if (assetClass === 'xstock_spot') {
+      const _vp = isXstockVenueTransitionPause(new Date());
+      if (_vp.paused) {
+        this._venuePauseEntriesRefused++;
+        console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — venue_transition_pause ${_vp.window}`);
+        return { pass: false, reason: `venue_transition_pause ${_vp.window}`, snapshot: null };
+      }
+    }
     const snapshot = await getDepthSnapshot(symbol, assetClass);
     // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]): the NEWEST xStock row must hold BOTH sides with size. Its own
     // reason code (`depth_verdict`), separate from P3's `implausible_spread_entry` so Step 8 can count each.
@@ -817,6 +828,13 @@ export class ActiveExecutionEngine {
   private _riMissSig: Map<string, string> = new Map();
   // Step 4 gate 1 condition 1: the ticks suppressed since the last `RI_NEAR_MISS` line, with their spread range.
   private _riMissAcc: Map<string, { n: number; min: number; max: number }> = new Map();
+  // ── row 2 increment C (objective 7) — THE VENUE-TRANSITION PAUSE's own record (pre-audit C-P2/C-P5). Never the price-skip
+  // streak (that pages) and never `_recordPriceSkip`: a paused tick is a deliberate fidelity deviation, not a fault.
+  private _venuePauseExitTicks = 0;
+  private _venuePauseWouldFire = 0;
+  private _venuePauseEntriesRefused = 0;
+  /** Per position: the open pause episode (one `VENUE_PAUSE` line at its start, one `VENUE_PAUSE_RESUMED` at the first decided tick after). */
+  private _venuePausePending: Map<string, { window: string; atMs: number; mark: number; bid: number | null; wouldFire: 'stop' | 'target' | null }> = new Map();
   private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
     let t = this._exitRefusalTally.get(position.id);
     if (!t) {
@@ -2912,6 +2930,49 @@ export class ActiveExecutionEngine {
           unrealizedPnlPercent: pnlPercent.toString()
         });
 
+        // ⛔⛔ row 2 increment C (C-P2) — THE VENUE-TRANSITION PAUSE. xStock only. Placed AFTER the book-state block (the
+        // guard has already judged and advanced this tick, so no chain is held back) and AFTER the P/L update, and BEFORE
+        // the exit decision: inside the pause there is NO trigger and NO resting-exit fill this tick (the maker rest
+        // lifecycle below is reached only through this iteration). A resting order stays resting; a level crossed during
+        // the pause is decided at the first tick after it, on the book as it is then. One line per position per window,
+        // plus `VENUE_PAUSE_RESUMED` at resume — the cost read for the retirement criterion (pre-audit C-P5).
+        // ⛔ NOT `_recordPriceSkip` and no alert: the pause is a deliberate fidelity deviation, never a page (objective 9).
+        if (_posClass === 'xstock_spot') {
+          const _vp = isXstockVenueTransitionPause(new Date());
+          const _pend = this._venuePausePending.get(position.id);
+          if (_vp.paused) {
+            this._venuePauseExitTicks++;
+            const _wf: 'stop' | 'target' | null =
+              stopLoss !== null && currentPrice <= stopLoss ? 'stop'
+                : takeProfit !== null && currentPrice >= takeProfit ? 'target' : null;
+            if (!_pend) {
+              this._venuePausePending.set(position.id, { window: _vp.window as string, atMs: Date.now(), mark: currentPrice, bid: xsBid, wouldFire: _wf });
+              if (_wf) this._venuePauseWouldFire++;
+              console.warn(
+                `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_vp.window} ` +
+                `mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'} wouldFire=${_wf ?? 'none'}`,
+              );
+            } else if (_wf && !_pend.wouldFire) {
+              _pend.wouldFire = _wf;
+              this._venuePauseWouldFire++;
+              console.warn(
+                `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
+                `WOULD_FIRE=${_wf} mark=${currentPrice} bid=${xsBid ?? 'none'} sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'}`,
+              );
+            }
+            continue;
+          }
+          if (_pend) {
+            this._venuePausePending.delete(position.id);
+            console.warn(
+              `[B-XSTOCK-BID-TRIGGER-RELAND][VENUE_PAUSE_RESUMED] ${position.symbol} pos=${position.id} window=${_pend.window} ` +
+              `pausedS=${Math.round((Date.now() - _pend.atMs) / 1000)} wouldFireDuring=${_pend.wouldFire ?? 'none'} ` +
+              `markAtStart=${_pend.mark} bidAtStart=${_pend.bid ?? 'none'} markNow=${currentPrice} bidNow=${xsBid ?? 'none'} ` +
+              `sl=${stopLoss ?? 'none'} tp=${takeProfit ?? 'none'}`,
+            );
+          }
+        }
+
         // Check for exit conditions
         // Phase 8.8.3-I7-WS-C: Pass trace ID for Stage 8 logging
         const evalStartedAt = Date.now();
@@ -3100,7 +3161,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicks=${this._venuePauseExitTicks} venuePauseWouldFire=${this._venuePauseWouldFire} venuePauseEntriesRefused=${this._venuePauseEntriesRefused}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
@@ -4446,6 +4507,7 @@ export class ActiveExecutionEngine {
       this._exitRefusalTally.delete(position.id);
       this._riMissSig.delete(position.id);
       this._riMissAcc.delete(position.id);
+      this._venuePausePending.delete(position.id); // row 2 increment C
     }
     }
 

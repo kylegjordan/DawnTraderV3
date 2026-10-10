@@ -101,7 +101,34 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
-import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
+import { isInXstockWeekendClose, isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
+
+/**
+ * B-XSTOCK-BID-TRIGGER-RELAND increment C (row 2, objective 7, pre-audit C-P4) — THE VENUE-TRANSITION PAUSE IN THE VTS.
+ * Kyle 2026-10-09: the VTS gets the same xStock fill and exit realism as paper (not the SQE). Inside a pause an xStock
+ * trade in either lane is skipped for the pass (exactly like the weekend skip: no exit look, no pending maker fill, no
+ * drop) and no new xStock trade opens. ⛔ Never counted as a VTS no-decision (`3n.q3`) and never an alert: a deliberate
+ * fidelity deviation, recorded by these counters and one summary line per pause window.
+ */
+const _vtsVenuePause = { realSkips: 0, shadowSkips: 0, opensRefused: 0, shadowOpensRefused: 0, lastWindowKey: '' };
+function _vtsVenuePauseNow(nowMs: number): string | null {
+  const vp = isXstockVenueTransitionPause(new Date(nowMs));
+  if (!vp.paused) return null;
+  const key = `${vp.window}@${new Date(nowMs).toISOString().slice(0, 13)}`;
+  if (key !== _vtsVenuePause.lastWindowKey) {
+    _vtsVenuePause.lastWindowKey = key;
+    console.warn(
+      `[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] window=${vp.window} — xStock VTS looks and opens suspended; ` +
+      `cumulative realSkips=${_vtsVenuePause.realSkips} shadowSkips=${_vtsVenuePause.shadowSkips} ` +
+      `opensRefused=${_vtsVenuePause.opensRefused} shadowOpensRefused=${_vtsVenuePause.shadowOpensRefused}`,
+    );
+  }
+  return vp.window;
+}
+export function getVtsVenuePauseCounters(): { realSkips: number; shadowSkips: number; opensRefused: number; shadowOpensRefused: number } {
+  const { lastWindowKey: _k, ...c } = _vtsVenuePause;
+  return { ...c };
+}
 import {
   selectCryptoTouch,
   transactableSide,
@@ -1018,6 +1045,14 @@ export async function registerOpenShadowTrade(
   const existingId = shadowOpenBySignal.get(dedupeKey);
   if (existingId !== undefined) {
     return existingId;
+  }
+
+  // row 2 increment C: no NEW xStock shadow inside a venue-transition pause (an existing one is returned above, untouched).
+  // ⚠️ A third null case beside cap-reject and persist-fail; the sole caller tolerates null (the pool-member row then has
+  // no shadow FK for that cycle).
+  if (input.assetClass === 'xstock_spot' && _vtsVenuePauseNow(Date.now()) !== null) {
+    _vtsVenuePause.shadowOpensRefused++;
+    return null;
   }
 
   // Cap backstop: reject-NEW at SHADOW_CAP (never evict-oldest — that would bias
@@ -3642,6 +3677,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     // B-NEW-36 (2026-05-20): skip weekend-suspended trades. See the
     // symbol-collection loop above for full rationale (pre-audit §4.2).
     if (trade.state === 'weekend_suspended') continue;
+    // row 2 increment C: inside a venue-transition pause an xStock trade is not looked at this pass (exit, pending fill, drop).
+    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePause.realSkips++; continue; }
     const holdDurationMs = now - trade.openedAt;
     // B79.0m.b2: pass assetClass so xstock trades route to xstock_spot_ticker_snap
     // instead of priceCache (which only has crypto prices via Kraken REST).
@@ -4520,6 +4557,8 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     // inside the closure closes in the first passes after the reopen, mostly with no price (pre-registered, Step 7 (f));
     // whether the clock should pause instead is `#1144` (row 4c).
     if (trade.assetClass === 'xstock_spot' && isInXstockWeekendClose(new Date(now))) continue;
+    // row 2 increment C: the venue-transition pause, keyed on the WINDOW like the weekend skip above.
+    if (trade.assetClass === 'xstock_spot' && _vtsVenuePauseNow(now) !== null) { _vtsVenuePause.shadowSkips++; continue; }
     const holdDurationMs = now - trade.openedAt;
     const currentPrice = getShadowPrice(trade.symbol, trade.assetClass);
     // `8a-P3`: the shadow lane reads the same touch as the real lane — without counters or funnel records, so the
@@ -4853,6 +4892,17 @@ export interface RegisterOpenVtsTradeInput {
 export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Promise<string | null> {
   const tradeId = input.id ?? `vts_${input.assetClass}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
   const openedAt = Date.now();
+
+  // row 2 increment C: no new xStock VTS trade inside a venue-transition pause (its entry would be priced off the transient
+  // book). The caller tolerates null (it already handles the duplicate refusal below).
+  if (input.assetClass === 'xstock_spot') {
+    const _w = _vtsVenuePauseNow(openedAt);
+    if (_w !== null) {
+      _vtsVenuePause.opensRefused++;
+      console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][VTS_VENUE_PAUSE] ${input.symbol}: VTS open refused — venue_transition_pause ${_w}`);
+      return null;
+    }
+  }
 
   // B79.0g pre-flight: refuse duplicate id (Map.set idempotency check).
   if (openVirtualTrades.has(tradeId)) {
