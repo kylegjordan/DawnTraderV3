@@ -40,7 +40,7 @@ CHANGE-CLASS: hotfix
 | T1 | the batch PRE_AUDIT | N/A | hotfix — the audit is the scope's §2 |
 | T1 | COMPLETION_REPORT | ✅ | this note |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: the 2a0h row leaves the open table at close |
-| T1 | Langston's MEMORY.md | **OWED** | one close line, written after his confirm |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston himself with his close confirm, 2026-10-08 (`memory-parts/00-legacy.md` `0a6861d5→03adb84d`) |
 | T2 | SYSTEM_MANUAL.md | N/A | no architecture, strategy, regime, filter, pipeline or math change |
 | T2 | SYSTEM_IMPACT_MAP.md | N/A | client display only; no component added, removed or re-keyed (one shared pure helper; the server payload is unchanged) |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1160` annotated: ACTIVE half fixed, entry open for the view-default half |

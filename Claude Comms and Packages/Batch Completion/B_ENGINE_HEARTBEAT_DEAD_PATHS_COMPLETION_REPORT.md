@@ -54,10 +54,10 @@ CHANGE-CLASS: non_architecture
 | T1 | the batch PRE_AUDIT | ✅ | Step 2; its census line corrected in place at Step 10 |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: 2a0b its own row at Step 10, the deploy row rebuilt |
-| T1 | Langston's MEMORY.md | **OWED** | one close line, written after his Step-11 confirm |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston himself with his Step-11 confirm, 2026-10-08 (his `## ✅ B-ENGINE-HEARTBEAT-DEAD-PATHS` block) |
 | T2 | SYSTEM_MANUAL.md | N/A | no architecture, strategy, regime, filter, pipeline or math change; the heartbeat is engine liveness infrastructure |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | in-batch (`4a17ca8f4`): the heartbeat's remaining job, the queued orphan rule, the liveness bound, the flag-write alerts, the retention; corrected at Step 10 (Central Clock census 7 → 8) |
-| T2 | RUNNING_ISSUES.md | ✅ | `#521`, `#1158`, `#404` closed; `#214` re-homed |
+| T2 | RUNNING_ISSUES.md | ✅ | `#521`, `#1158` closed at Step 10; `#404` closed in its own text at Step 11 (Langston's condition: the close line had landed under its triage note while the entry still read OPEN); `#214` re-homed |
 | T2 | CHANGES_AND_FIXES.md | N/A | legacy removal and a backstop repair, not a trading-system bug or risk |
 | T2 | STORAGE_POLICY.md | ✅ | in-batch: the `cluster_bus_event` row (30 d, age-delete + VACUUM, why no cold-offload) |
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ | in-batch: the 2026-10-06 entry with archive copies |
