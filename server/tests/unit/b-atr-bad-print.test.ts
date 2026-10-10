@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import { computeAtr, atrOrZero, trueRange } from '../../core/calculations/true-range-atr';
+import { computeAtr, atrOrZero, trueRange, usableAtrOrCount } from '../../core/calculations/true-range-atr';
 import { getEffectiveATR, clampEffectiveATR } from '../../strategies/strategy-helpers';
 import { patternToTradeSignal } from '../../services/pattern-recognizer';
 import { computeRealHybridScore } from '../../core/utils/vts-real-score';
@@ -193,7 +193,9 @@ describe('fence — every ATR call site uses the shared function (two named carv
     const orch = read('server/services/signal-orchestrator.ts');
     expect(orch).not.toMatch(/indicators\?\.atr\s*\?\?\s*\(currentPrice\s*\*\s*0\.02\)/);
     expect(orch).not.toMatch(/stopPrice\s*\?\?\s*currentPrice\s*\*\s*0\.97/);
-    expect(orch).toMatch(/patternAtrDrops\+\+/);
+    // Langston Step-8 condition: the loop routes its ATR through the counted gate (the gate itself is DRIVEN below).
+    expect(orch).toMatch(/usableAtrOrCount\(context\.indicators\?\.atr, patternAtrDrops\)/);
+    expect(orch).toMatch(/\[PATTERN_ATR_DROPS\] \$\{patternAtrDrops\.n\}/);
     // Langston Step-4 conditions: the per-symbol catch is counted; the dead entryPrice fallback is gone.
     expect(orch).toMatch(/patternEvalErrors\+\+/);
     expect(orch).toMatch(/\[PATTERN_EVAL_ERRORS\] \$\{patternEvalErrors\}/);
@@ -214,5 +216,20 @@ describe('fence — every ATR call site uses the shared function (two named carv
     const lines = new Set(read('drizzle/migrations/MANIFEST.txt').split(/\r?\n/).map((l) => l.trim()));
     expect(lines.has('2026-10-06-b-atr-bad-print-retire-daily-range-frac.sql')).toBe(true);
     expect(lines.has('2026-10-06-b-atr-bad-print-retire-daily-range-frac-rollback.sql')).toBe(false);
+  });
+});
+
+describe('the pattern path ATR gate, driven (Langston Step-8 condition 2026-10-10)', () => {
+  it('a usable ATR passes through and counts nothing', () => {
+    const drops = { n: 0 };
+    expect(usableAtrOrCount(0.0123, drops)).toBe(0.0123);
+    expect(drops.n).toBe(0);
+  });
+  it('every unusable ATR is dropped and COUNTED, once each - never replaced by a fabricated value', () => {
+    const drops = { n: 0 };
+    for (const bad of [undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, '0.5']) {
+      expect(usableAtrOrCount(bad, drops)).toBeNull();
+    }
+    expect(drops.n).toBe(7);
   });
 });

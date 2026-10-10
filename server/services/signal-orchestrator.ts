@@ -59,6 +59,7 @@ import { generateSignalId } from '../utils/signal-id.js';
 import { getTelemetryAggregator } from './telemetry-aggregator.js';
 import { getGlobalFriction, getLastGlobalDBSCategory, getLastGlobalDBSScore } from './market-indicators.js';
 import { computePairFrictionIndex } from '../core/math/cost-model.js';
+import { usableAtrOrCount } from '../core/calculations/true-range-atr.js';
 import { calculateExtendedSignalMetrics, estimateVolatility } from '../core/metrics/quality_index.js';
 import { signalQualityEvaluator, type SQEInput } from '../core/filters/signal_quality_evaluator.js';
 // P19-B8.4b: active-path funnel instrumentation (S21). buildSizedSignalForStrategy + the crypto
@@ -2219,7 +2220,7 @@ export class SignalOrchestrator {
       let patternSignalsGenerated = 0;
       // B-ATR-BAD-PRINT (Langston Step-2 C3): a pattern with no usable ATR is a RECORDED drop, never a
       // silent absence that reads as "no patterns fired". Reported on the pool-complete line below.
-      let patternAtrDrops = 0;
+      const patternAtrDrops = { n: 0 };
       // B-ATR-BAD-PRINT (Langston Step-4 condition 1): a per-symbol pattern evaluation that THROWS is counted
       // and reported beside the ATR drops — a single warn line in a rotating log is not evidence anyone sees.
       // patternToTradeSignal's RangeError (no usable ATR) lands here if the guard below is ever bypassed.
@@ -2286,11 +2287,9 @@ export class SignalOrchestrator {
             // B-ATR-BAD-PRINT (#1153): no fallback. The old `?? (currentPrice * 0.02)` could never fire (the MCE
             // always returns a number) and, had it fired, would have fabricated a 2 % ATR into stop/target
             // geometry. A missing or unusable ATR now drops the pattern, counted.
-            const atr = context.indicators?.atr;
-            if (!(typeof atr === 'number' && Number.isFinite(atr) && atr > 0)) {
-              patternAtrDrops++;
-              continue;
-            }
+            // The gate and its counter live in `usableAtrOrCount` (true-range-atr.ts), where a test drives them.
+            const atr = usableAtrOrCount(context.indicators?.atr, patternAtrDrops);
+            if (atr === null) continue;
 
             // P19-B6.5c: patterns are TRIGGERS, not strategies. Resolve the detected
             // pattern to the CANONICAL strategy that consumes it in THIS regime
@@ -2382,7 +2381,7 @@ export class SignalOrchestrator {
       // P19-B6.5c: surface the exact-match no-match DROP counter (Langston D3/D4 obs gate — "no silent caps").
       // Cumulative per (pattern|regime|class); a high/rising drop count vs signals-generated is the tell that
       // pattern coverage went dark (e.g. a regime-field misread routing everything to a no-consumer regime).
-      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())} | [B-ATR-BAD-PRINT][PATTERN_ATR_DROPS] ${patternAtrDrops} | [B-ATR-BAD-PRINT][PATTERN_EVAL_ERRORS] ${patternEvalErrors}`);
+      console.log(`[14.5][ORCHESTRATOR] Pattern pool complete: ${patternSignalsGenerated} signal(s) generated from ${patternSymbols.length} pair(s) | [P19-B6.5c][PATTERN_NOMATCH_DROPS] ${JSON.stringify(getPatternNoMatchDropStats())} | [B-ATR-BAD-PRINT][PATTERN_ATR_DROPS] ${patternAtrDrops.n} | [B-ATR-BAD-PRINT][PATTERN_EVAL_ERRORS] ${patternEvalErrors}`);
 
       const now = new Date();
       this.stats = {

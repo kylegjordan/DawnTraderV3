@@ -88,3 +88,15 @@ export function atrOrZero(bars: readonly AtrBar[], period: number = 14): number 
   const a = computeAtr(bars, period);
   return Number.isFinite(a) && a > 0 ? a : 0;
 }
+
+/**
+ * B-ATR-BAD-PRINT (#1153) — the pattern path's ATR gate, with its drop counter. A usable ATR is a positive finite number;
+ * anything else (absent, 0, negative, NaN, infinite) is DROPPED and counted in `drops.n`, never replaced by a fabricated
+ * value. Extracted from `signal-orchestrator.ts`'s pattern loop so the counted branch is DRIVEN by a test rather than
+ * located by a source-text fence (Langston Step-8 condition, 2026-10-10). Behaviour is unchanged.
+ */
+export function usableAtrOrCount(atr: unknown, drops: { n: number }): number | null {
+  if (typeof atr === 'number' && Number.isFinite(atr) && atr > 0) return atr;
+  drops.n++;
+  return null;
+}
