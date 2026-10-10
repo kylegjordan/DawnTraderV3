@@ -126,3 +126,8 @@ Kyle: a pointer row gets missed, and someone starts a batch that is already bein
 
   | 66 | B-BOOK-STATE-RING-INDEPENDENT-BOUND | FOLDED into row 2 increment 1 (2026-10-09) | close: xStock exit plausibility bound |
 
+
+## ➕ FOLDED 2026-10-10 — Langston's KKR finding (alert `8a1eded8-4010-4719-b165-cde3b5cef481`, triaged and resolved by him 2026-10-09 22:05Z, owner CC-C)
+**The finding:** a hollow-yield re-seed lands on the hollow frame itself, so the seed escape's progress RESETS on every repeat yield. Measured twice on KKR/USD in 48 min, with the ratio going from 16.96 to 260.78. No value was lost (about 4,000 quotes since entry; the bid never came within ~2.6% of the stop or ~5.7% of the target).
+**Disposition — §9.4 #1, folded into increment 1 (book plausibility), NOT a second home:** Langston named `B-PRICE-SIDE-BY-JOB` row 8l / the `8a-P4a` seed escape. But this is the same release-path machinery as the ring-independent bound (a re-seed inside a blowout needs a way out), and Kyle's one-batch directive places it here. The refusal-duration report (also named in the alert) is already increment 1.
+**Live check:** KKR/USD is still open (opened 2026-10-09 14:40:38Z). A check is armed for 2026-10-10 13:50Z to confirm it escapes the unvalidated chain at the 13:30Z open, rather than trading through cash hours unmanaged.
