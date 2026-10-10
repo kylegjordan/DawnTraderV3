@@ -567,6 +567,16 @@ Per Langston pre-audit rev1 #4: cataloguing the new per-asset-class behavioral k
 
 ---
 
+## Appendix B — the ATR estimator's clip multiple (`B-ATR-BAD-PRINT`, 2026-10-10)
+
+**`WICK_CLIP_MULTIPLE = 3`** (`server/core/calculations/true-range-atr.ts`) is a **code constant, deliberately not a `module_constants` row**: it is a parameter of the one shared ATR estimator (E3), chosen against criteria committed before any estimator was run (`B_ATR_BAD_PRINT_PRE_AUDIT.md` §0-§1d, Langston-ruled). Every stop, target, reach test and DBS normalization reads the ATR, so a change is an architecture change, not an operator tune.
+
+**To move it:** re-run the pre-registered test (the 163-open population and the three fixtures, `Scope Files/B_ATR_BAD_PRINT_evidence/`) and measure the population the clip actually acted on. ⚠️ **That population cannot be measured today: the clip records nothing when it fires, and the hourly bars are not kept.** So the clip-observability field (row 2a1 `B-ADX-TRUE-RANGE-SHARED`) must land, and run, before any proposal to move the multiple.
+
+**The 10 % clamp beside it** (`GLOBAL_CONSTANTS.ATR_MAX_RATIO`) is a data-integrity bound (Directive 12.3.2 GUARD-2), not a second measure; the pattern path does not pass through it.
+
+---
+
 ## CALIBRATION EPOCHS — per-source learning-lineage governance (ITEM-4 Phase B step 2, 2026-06-10; Langston-amended v0)
 
 Every learning SOURCE (`vts` / `paper_sim` / `live`) carries an integer **calibration epoch** (`module_constants`, module `calibration_epoch`, one constant per source; seeded at 1 by `2026-06-10-item4-step2-calibration-epoch.sql`). Learning aggregates stamp the writer's current epoch; on mismatch the Welford stream RESETS so pre- and post-calibration outcomes never silently blend (the trap that data-blocked the W2.x studies).

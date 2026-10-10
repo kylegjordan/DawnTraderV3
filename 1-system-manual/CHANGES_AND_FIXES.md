@@ -1,5 +1,14 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-07-B — `B-ATR-BAD-PRINT` (architecture, `#1153`, CC-B, found in Kyle's stuck-trades investigation) — one bad print in Kraken's hourly candles set a trade's stop and target
+
+**CLASS: `architecture`.** Scope: `Claude Comms and Packages/Scope Files/B_ATR_BAD_PRINT_SCOPE.md`. Plan row 2a.
+**SYMPTOM:** GBP/USD (opened 2026-09-23 21:12Z) got a 3.25 % stop and 5.42 % target after a 60-minute candle printed a high of 1.70000 against ~1.324; LIGHTER (09-30) got 17.7 % / 30.1 % after a 0.110 low. Both were among the seven stuck paper positions of 2026-10-05.
+**MECHANISM:** every ATR was a plain mean of the last 14 hourly true ranges, in six copies; one off-market wick carried the whole value, and the pattern path sets stop 1.5× and target 2.5× that ATR with no clamp.
+**FIX:** one shared estimator, E3 (`server/core/calculations/true-range-atr.ts`): each bar's high and low clipped to its body ± 3 × the window's median true range, then the plain mean; the six copies repointed in one commit and fenced; every geometry fallback fails closed; the `atr_fallback_daily_range_frac` row retired.
+**LANGSTON:** Step 4 APPROVED at `66530fc48`; Step 8 CONFIRMED 2026-10-10.
+**VERIFIED — deployed `0c8ef5da2` (2026-10-07T15:56:00Z):** 17 of 17 crypto opens since the deploy agree with E3 recomputed from Kraken's bars (0.688-1.198×); the real GBP/USD window runs in CI (plain mean > 10× clean, E3 ≤ 1.5×). Report `Claude Comms and Packages/Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md`.
+
 ## FIX-2026-10-07-A — `B-LIVE-BANNER-ACTIVE-HOTFIX` (hotfix, `#1160` ACTIVE half, CC-B, Kyle-assigned) — the Live Trading banner said ACTIVE while only paper ran
 
 **CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_LIVE_BANNER_ACTIVE_HOTFIX_SCOPE.md`. Plan row 2a0h.

@@ -1275,3 +1275,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT DOES.** Loads the feed-health settings at boot, so the per-class liveness grade actually runs. Clears what the grade raises, by acknowledging the dashboard alerts on a recovery; the old clear path tested an alert id that was never set. Prints a per-cycle per-class liveness line. Exposes the liveness to 3a1. Fixes the crypto recorder's subscription naming, which had dropped 8 pairs.
 
 **SO FAR.** Armed at both 10-10 restarts; the 8 pairs record from 10 s after the restart (0 rows each in the 24 h before). **Waiting on:** the first real non-healthy → healthy transition (the acknowledge path; backlog 1,088) and one full weekday of liveness lines (the pre-registered distribution).
+
+## B-ATR-BAD-PRINT (CC-B, sprint plan row 2a — after row 2; `#1153`) — change-class `architecture` — ⏳ **STEP 11** (Step 4 APPROVED at `66530fc48`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-10 with one condition, met at `cf881d302`; report `Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** One off-market trade in Kraken's hourly candles could set a trade's stop and target: the ATR was a plain mean of 14 hourly ranges, in six copies, and one bad wick carried it (GBP/USD's 1.70000 print made a 5.4 % target on a currency; LIGHTER's 0.110 print made a 30 % one).
+
+**WHAT IT CHANGED.** One shared estimator (E3: each bar's wick clipped to its body ± 3 × the window's median range, then the mean), chosen against criteria committed before any run; all six copies call it and a fence keeps it that way; every fabricated fallback ATR (2 % of price, 1 %/2 % levels, a daily-range stand-in) now fails closed and is counted; the 10 % clamp stays as an integrity bound; the false "Wilder" labels corrected.
+
+**RESULT.** 17 of 17 crypto opens since the deploy agree with E3 recomputed from Kraken's own bars (0.688-1.198×); the real GBP/USD window runs in CI. **Closed:** `#1153`. **Placed:** the clip records nothing when it fires → row 2a1; xStock `atr_at_open` = 0 stays `#972`.

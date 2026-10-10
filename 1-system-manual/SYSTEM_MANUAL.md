@@ -1094,6 +1094,8 @@ fewer than period + 1 bars, or any non-finite value  ⇒  NaN  ⇒  atrOrZero gi
 - **The clamp is an integrity bound, not the measure.** `getEffectiveATR` / `clampEffectiveATR` cap the ATR at 10 % of price and drop it below 0.1 % (Directive 12.3.2 GUARD-2, "caps flash-crash ATR"). Because guard and MCE read the same function, the clamped value can never exceed the raw one (`#371`).
 - **The pattern branch has no clamp.** It sets stop 1.5×ATR and target 2.5×ATR straight from the MCE value; the estimator is its only protection. A pattern without a usable ATR is dropped and counted — there is no fabricated 1 %, 2 % or daily-range ATR anywhere any more.
 - **Not covered:** ADX still sums its own true ranges (row 2a1 `B-ADX-TRUE-RANGE-SHARED`); the 1-minute exit-replay ATR is deliberately separate (`#866`).
+- **Verified on the running system (2026-10-10, Langston re-derived):** on all 17 crypto opens since the deploy, the ATR we stored agrees with E3 recomputed from Kraken's public 60-minute bars (0.688-1.198×, median 1.000×, none above 1.25×); the widest targets (RLC/USD +52 %, ORCA +36 %, MET +35 %) are genuinely volatile pairs, not bad prints.
+- **What cannot yet be seen:** the clip leaves no record when it acts, and the hourly bars are not kept, so whether the clip moved a given trade's ATR is unknowable after the fact — and so is the evidence needed to move the 3× multiple (`ADJUSTMENT_FRAMEWORK.md` Appendix B). Row 2a1 adds the field.
 
 ---
 

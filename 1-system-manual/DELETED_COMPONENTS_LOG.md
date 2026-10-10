@@ -1231,3 +1231,17 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/directive-11.7S-strategy-modes.test.ts.removed`; git history holds the module body. **FENCE:** `server/tests/integration/b-sizing-legacy-deletion-fence.test.ts` (obj-10 block; landed unproven at `22e133a5c` and is no longer labelled so at head).
 **COMMIT:** `22e133a5c` (2026-08-07); live since `213e162dc`.
 **WHY BACKFILLED:** rule 18 required this entry in the same batch; the module header cited this log and the entry did not exist. Found at Step 10 (§9.4 disposition 1).
+
+## 2026-10-06 — five plain-mean ATR bodies, five geometry fallbacks, and the `atr_fallback_daily_range_frac` constant — B-ATR-BAD-PRINT (row 2a, `#1153`), CC-B — ⚠️ entry written at Step 10 (2026-10-10), after the migration ran on staging, as the change list stated
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| the plain-mean ATR bodies (each function kept as a one-line adapter onto the shared E3) | MCE `computeATR` (`market-context-engine.ts`), `strategy-engine.ts` `computeATR`, `strategy-helpers.ts` `calculateATR`, `fx5-scanner.ts` `computeATRFromOHLC`, `market-scanner.ts` `computeATR14`, `xstock_spot/scanner.ts` `computeATRFromOHLC` | six copies of a 14-bar (xStock DBS 56-bar) true-range mean with differing degenerate arms; one bad print carried the whole value |
+| `?? currentPrice * 0.02` ATR, and `stopPrice ?? currentPrice * 0.97` / `targetPrice ?? currentPrice * 1.03` | `signal-orchestrator.ts` pattern loop (`:2279`, `:2304-2305` at `3576d3981`) | a fabricated 2 %-of-price ATR and ±3 % levels; introduced `1b917598a` 2026-03-17 (Replit, copied from an instructions file) |
+| `currentPrice * 0.01` / `* 0.02` stop and target | `pattern-recognizer.ts` `patternToTradeSignal` (`:585-586`) | a fabricated 1 % / 2 % geometry when no ATR was passed |
+| `(high24h − low24h) × atr_fallback_daily_range_frac` | `strategy-engine.ts` (`:236`, `:1243`) | a daily-range stand-in wearing the `atr` name (ruling (e): fail closed) |
+| `module_constants` row `strategy.vwap_pullback` / `atr_fallback_daily_range_frac` (0.10) | staging DB | the constant's only reader went with the line above |
+**WHY:** rule 15 and ruling (e) — a fabricated ATR sets real stops and targets; a missing ATR now means no signal (counted as `PATTERN_ATR_DROPS`), never an invented one.
+**BLAST RADIUS / STATE-WRITE CENSUS:** the removed fallbacks wrote nothing themselves; their values flowed into signal geometry. Fallback volume measured before removal (Step-1 condition 3): live blast radius zero for the daily-range stand-in; the five diagnostic surfaces now return null. Reader census for the constant: one reader, removed in the same commit (change list §7).
+**VERIFIED AFTER DEPLOY (`0c8ef5da2`, read 2026-10-10):** the row is gone (0 rows; control: 17 other `strategy.vwap_pullback` rows present); `PATTERN_ATR_DROPS 0` on every pool line of the running process.
+**ARCHIVE:** no file was deleted (each function body was replaced in place and each fallback was an inline expression) — git history holds them at `ef4c7c8be^`; the row is restored by `drizzle/migrations/2026-10-06-b-atr-bad-print-retire-daily-range-frac-rollback.sql` (tracked).
+**COMMIT:** `ef4c7c8be` (Step 3); migration `2026-10-06-b-atr-bad-print-retire-daily-range-frac.sql`; deployed `0c8ef5da2`.
