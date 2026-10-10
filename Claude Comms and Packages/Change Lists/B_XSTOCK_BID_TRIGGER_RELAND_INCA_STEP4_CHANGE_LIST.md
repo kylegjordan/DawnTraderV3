@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND increment A — STEP 4 CHANGE LIST (CC-C, 2026-10-10)
 
-**Graded ref: `546cda86e`** (code), on `origin/migration/aws-supabase`. CI run `38067812938`.
+**Graded ref: `e1b37c2d5`** (code, after the gate-1 and gate-2 folds; first review at `546cda86e`, CI `38067812938`), on `origin/migration/aws-supabase`. CI run `38069987228` 4/4. **DEPLOYED 2026-10-10T17:05:21Z** (restart 632). **Step 4 APPROVED** (Langston gate 2 r2).
 
 ## DISPATCH HEADER (workflow-04, three fields)
 | field | value |
@@ -56,7 +56,7 @@ The engine passes `_c.riAbsSpreadCeilingPct / 100`. Knob `ri_abs_spread_ceiling_
 Both your in-code statements are in the comment above it (safe only with P1; the r6 retention warning does not reach the clear).
 
 ## P3 — unheld-name entry plausibility (`entry-spread-plausibility.ts` + the entry gate)
-Runs only when `readBookStateComparator(symbol) === null`. Yardstick: `readRetainedRingMedian(symbol)` (new tracker accessor over the in-memory `_retainedSpreads`) else:
+Runs when there is no USABLE reference (no comparator, or a `seedImplausible` one — gate 1 carried item). Yardstick: the regular-session median ONLY (the retained-ring basis and `readRetainedRingMedian` were DELETED at gate 2, BLOCKER-1):
 ```sql
 SELECT count(*), percentile_cont(0.5) WITHIN GROUP (ORDER BY spread)
 FROM (SELECT (ask-bid)/((ask+bid)/2) AS spread FROM xstock_spot_ticker_snap
@@ -91,3 +91,8 @@ Per position: refused ticks, refused ms (between ticks of one episode only), epi
 - **C-2** — the `RI_NEAR_MISS` accumulator is flushed onto `EXIT_RELEASED` (suppressedTicks/Min/Max) and, at close, onto a `RI_NEAR_MISS_FLUSH` line before eviction.
 - **Call 3** corrected above. Calls 1, 2, 4, 5, 6 accepted. Call 5 convention, stated: the tally and `_recordPriceSkip` are two instruments on overlapping populations; a one-tick episode contributes 0 ms by design.
 - **Record items (§9.4):** (a) crossed-with-size rows read `ok/ok` (118 in 7 days, 101 regular-session, 56 symbols; unchanged exposure) — **disposition 2: added to increment B**, owner CC-C (scope §MERGED, increment B note). (b) on the `allowLastTwoSided` return the verdict describes the newest row while the levels are an older row — guarded at the one consumer; **disposition 5**, citing `depth-source.ts` docstring + the `_isFlatten` skip. (c) a regular-session median of exactly 0 is accepted — inert while the 1% floor binds; **disposition 5**.
+
+## STEP 4 GATE 2 r2 (Langston, 2026-10-10) — APPROVED; record items folded
+- (c) **the release branch's RI reset line was deleted at gate 1 (Langston's nit) and is provably inert:** `prev = undefined` forces the chain record's `prev ? … : 0/false` branch, so the new chain's run fields are 0/false either way.
+- (d) **the knob row and the code are a PAIR:** the boot assertion is exact-13 both ways, so a code rollback without `2026-10-10-b-xstock-bid-trigger-reland-inca-rollback.sql` fails CLOSED at boot, and the rollback SQL without the code rollback does too. Roll back both, code first (the rollback file says so).
+- **FORWARD-BINDING CONDITION (before objective 6 arms `spread_blown`):** the entry seam's `_noUsableRef` carve-out drops every hollow reason except `absent_bid|absent_ask`. Correct today only because the non-reference-relative reasons cannot fire (`spread_blown` hardcoded off; `feed_burst` behind `feed_read_enabled=0`). Objective 6 must turn the carve-out into a WHITELIST of the reference-relative reasons it drops (`bid_collapsed`, `ask_spiked`, `mark_deviation`), or fence it so arming either knob goes red. Recorded in the scope (§MERGED objective 6 note).
