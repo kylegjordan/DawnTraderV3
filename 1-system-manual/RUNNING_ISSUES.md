@@ -1347,6 +1347,7 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 ---
 
 ### #959 OPEN 2026-08-30 (CC-C; surfaced by the fresh reader attacking the plan draft, re-derived by me at the ref) — ⛔⛔⛔ **THE EXIT *TRIGGER* AND THE EXIT *FILL* READ DIFFERENT PRICES FROM DIFFERENT SAMPLES. ON xSTOCK THEY DISAGREE BY 14% ON AVERAGE, AND STOP-OUTS FILL *BETTER* THAN THEIR OWN STOP.**
+➕ **RE-HOMED / WITHDRAWN 2026-10-10 (Langston ruled 11:47Z; Kyle: folded rows are deleted, not pointed at):** sprint row 64 `B-EXIT-TRIGGER-FILL-PARITY` is DELETED. Its xStock leg and [C5] are in row 2 `B-XSTOCK-BID-TRIGGER-RELAND` (increment 1/2). Its crypto leg is withdrawn under §9.4 disposition 5, citing `B-PRICE-SIDE-BY-JOB` rows 8a/8c/8d (`B_PRICE_SIDE_BY_JOB_SCOPE.md:265-268`). Row 86 stays. The deleted row is kept verbatim in `B_XSTOCK_BID_TRIGGER_RELAND_SCOPE.md`.
 
 **SEVERITY: high (DOWNGRADED from CRITICAL 2026-08-30, same day — see the magnitude correction below). OWNER: CC-C. DISPOSITION: §9.4 (3) — own batch, `B-EXIT-TRIGGER-FILL-PARITY`, placed in `PHASE_19_PLAN` at row **3b.c**, before `F-G-2`.** ⚠️ *The `DISPOSITION:` field was MISSING from the original filing — §9.4 makes it mandatory and the plan was building a step on it.*
 

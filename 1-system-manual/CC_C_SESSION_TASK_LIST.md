@@ -73,7 +73,6 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 61 | B-GRID-LIVE-PATH-PARITY | QUEUED | open: grid rounding on the live order path |
 | 62 | — batch named at Step 1 | QUEUED | open: a resting order's deadline runs even when no price is usable |
 | 63 | #630 — batch named at Step 1 | QUEUED | open: exercise the maker-order deadline once |
-| 64 | B-EXIT-TRIGGER-FILL-PARITY | QUEUED | close: exits fire on the price they would fill at — the CRYPTO leg; the xStock leg is row 2 |
 | 65 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | QUEUED | close: the exit path sees both price sides |
 | 67 | #204 — batch named at Step 1 | QUEUED | close: xStock stop prices at the wrong scale |
 | 68 | plan row 3h.b | QUEUED | close: remove the second exit implementation |
