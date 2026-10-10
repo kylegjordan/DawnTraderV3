@@ -33,6 +33,7 @@ A trade's stop and target are set from the ATR, the pair's typical hourly move. 
 - **Step 2:** APPROVED with ruling (e) fail closed; the estimator chosen against criteria committed first (`d4c96ef76`), re-scored under a predicate registered before the re-score (`0c4c9adf1`).
 - **Step 4:** APPROVED at `66530fc48` after conditions 1-2 (count evaluation errors; drop a dead entry-price fallback), the §9b fold (the VTS and drift dashboard) and R1/R2.
 - **Step 7:** CC-B, recorded in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md` row 2a: code live, `atr_at_open` agrees with Kraken (read 2026-10-10 19:35Z).
+- **Step 11:** **CONFIRMED** by Langston 2026-10-10 — batch CLOSED. His record item: my dispatch listed the driven values wrongly (corrected in a follow-up post); the test drives `undefined, null, 0, -1, NaN, +Infinity, '0.5'` — `-Infinity` is not among them; the count of 7 and the mutation result stand.
 - **Step 8:** **CONFIRMED** by Langston 2026-10-10 20:41Z, re-derived at the running tree (`e1b37c2d5`, which contains the batch; `true-range-atr.ts` blob identical three ways). One condition — drive the counter once — met at `cf881d302`, CI `38085049493` 4/4.
 
 ## 5. Numeric corrections
@@ -59,7 +60,7 @@ CHANGE-CLASS: architecture
 | T1 | the batch PRE_AUDIT | ✅ | Step 2: pre-registration, rounds, ruling, audit A1-A12, plan |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: the open-and-stalled table moved to Step 11 for 2a, the 10-10 deploy row brought current |
-| T1 | Langston's MEMORY.md | ⏳ owed at Step 11 | Langston writes his own with his Step-11 confirm; ticked when the write lands (his nit, 2026-10-07) |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston himself with his Step-11 confirm, 2026-10-10 (`langston-memory-write --ledger-append --entries 2`) |
 | T2 | SYSTEM_MANUAL.md | ✅ | in-batch (`ef4c7c8be`): the E3 section; Step 10: the live 17-of-17 check and the clip records nothing |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | in-batch: 5.2.5a, the MCE/DBS/pattern-gate notes, the forming-hour note; Step 10: tests 18 → 24, `usableAtrOrCount`, the clip-observability gap |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1153` closed; `#972` annotated (14 of 14, the `?? 0` shape) |

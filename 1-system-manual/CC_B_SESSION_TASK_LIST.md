@@ -6,7 +6,6 @@
 
 | batch | step | waiting on |
 |---|---|---|
-| **`B-ATR-BAD-PRINT`** (row 2a, `#1153`) | **STEP 11 of 11** — report `Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md` | Langston's Step-11 confirm (Step 8 CONFIRMED 10-10, condition met at `cf881d302`); then resolve `3af25ef9` |
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
 | **`B-ROOT-DUPLICATE-SCANNER-RETIRE`** (row 2a0d) | **STEP 11 of 11** — report `Batch Completion/B_ROOT_DUPLICATE_SCANNER_RETIRE_COMPLETION_REPORT.md` | Langston's Step-11 confirm |
 | **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c) | **deployed 2026-10-10 — STEP 7** | the 2026-10-11 02:15Z retention sweep (no `cluster_bus_event` line, failed=0), then Step 8 |
@@ -26,7 +25,7 @@
 
 - ⭐ **PRE-SPRINT (Kyle 2026-10-07, `Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md`) — mine:** Stage 0 = the engine-stop exercise as the reset's own first act (five pre-registered conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) · **P1a = row 59, increment 1 `B-ENTRY-DISTANCE-GUARD`** (live: refuse a taker open at/through stop or target + the RR floor; shadow: the distance band), then 39a, the minimum stop vs the live spread, L/USD's 0.059 % stop vs row 2a, the RTB refresh latch (Coltrane C1) · Stage 4 = main Dashboard 0 trades / $0 vs the Paper page · Stage 5 = row 100 with the reset.
 - 2a0 `B-ENGINE-STOP-DURATION-COLUMN` (`#1067`, moved from Infra's row 173): an engine stop crashes on a session older than ~24.8 days — it halted the 10-06 reset. Stop storing elapsed (both write sites), no migration. FIRST, after the 24 h no-deploy window.
-- 2a `B-ATR-BAD-PRINT` (`#1153`, found 2026-10-05): one off-market print inflates the ATR that sets stops and targets (GBP/USD, LIGHTER stuck) — FIRST in my queue, after row 2.
+- ✅ 2a `B-ATR-BAD-PRINT` (`#1153`) — CLOSED 2026-10-10 (Langston Step 11). Its clip-observability field rides 2a1.
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
 - 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`): keep or remove the cluster-bus persistence layer (Langston 10-06).

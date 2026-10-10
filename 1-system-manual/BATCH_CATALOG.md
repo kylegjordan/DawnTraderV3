@@ -1276,7 +1276,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **SO FAR.** Armed at both 10-10 restarts; the 8 pairs record from 10 s after the restart (0 rows each in the 24 h before). **Waiting on:** the first real non-healthy → healthy transition (the acknowledge path; backlog 1,088) and one full weekday of liveness lines (the pre-registered distribution).
 
-## B-ATR-BAD-PRINT (CC-B, sprint plan row 2a — after row 2; `#1153`) — change-class `architecture` — ⏳ **STEP 11** (Step 4 APPROVED at `66530fc48`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-10 with one condition, met at `cf881d302`; report `Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md`)
+## B-ATR-BAD-PRINT (CC-B, sprint plan row 2a — after row 2; `#1153`) — change-class `architecture` — ✅ **CLOSED 2026-10-10** (Step 11 CONFIRMED by Langston 2026-10-10; Step 4 APPROVED at `66530fc48`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-10 with one condition, met at `cf881d302`; report `Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md`)
 
 **WHAT IT FIXED.** One off-market trade in Kraken's hourly candles could set a trade's stop and target: the ATR was a plain mean of 14 hourly ranges, in six copies, and one bad wick carried it (GBP/USD's 1.70000 print made a 5.4 % target on a currency; LIGHTER's 0.110 print made a 30 % one).
 
