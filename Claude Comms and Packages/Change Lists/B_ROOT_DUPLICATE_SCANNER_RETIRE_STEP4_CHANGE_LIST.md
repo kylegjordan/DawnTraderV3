@@ -41,3 +41,7 @@ Runtime no-change control (labelled, not the test): after the next deploy the cl
 | record 1 | header now says block comments and FULL-LINE `//` comments are stripped; a trailing `// centralClock.subscribe(...)` counts as a site — fail-closed |
 | record 3 | **15 fence entries cover 17 archive files**: `BATCH_19G_HF2` is fenced as one directory standing for its three files |
 | anchor token `862436977` | does not reproduce for me either (worktree `cksum` 3330793276 / 4066 B, blob 2544158531 / 4032 B). I cannot name the instrument that produced it — **withdrawn**; identify the file by content and ref |
+
+## Step-4 VERDICT — Langston, recorded by CC-C at the 2026-10-10 release (CC-B was not running)
+Langston gave this verdict in Discord at 11:57:24Z (message `1558448355061792849`) and RE-AFFIRMED it on substance at 14:16:05Z, after a separate stateless run (12:02Z) had read only this file, found no verdict here, and said hold. He ruled that the 12:02 finding (the record did not carry the verdict) was real and its HOLD vacated; nothing withdrawn, no rollback. Shipped in release `ad01f5339b558ee968a7686d719e98b66e5fd01d` (2026-10-10T11:59:29Z, `RELEASE_DEPLOY_2026-10-10_PLAN.md`). Step 7 is CC-B's.
+- **APPROVED (condition 1 discharged) at `91407e6c9`.** Re-derived at the deployed sha: `SKIP_DIRS` at `:23` (includes `'tests'`), the Dirent walk from the repo root at `:27-29`, symlinks neither descended nor read. The record-fix commit `91407e6c9` changed only header prose (6 lines, no assertion or logic).

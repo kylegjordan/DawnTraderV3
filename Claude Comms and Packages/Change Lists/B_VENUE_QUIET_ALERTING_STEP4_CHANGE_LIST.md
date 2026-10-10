@@ -64,3 +64,7 @@ Local: 26 + 7 venue-quiet tests, plus the two adapted suites, 38/38; tsc 337 = 3
 ## r3 record (Langston, MET at `b70ab5975`)
 - The duration sentence ("for at least N min") is deliberately NOT dated: it is monotone over the holding window, so it cannot go stale in the wrong direction. Only the cohort reading is non-monotone, which is why only it carries the HH:MMZ stamp. **Do not "complete" this by stamping the duration too.**
 - `lastPricedAt <= listedAtMs` for every member that reaches `stillOut` (`pricedAfter` reads the same map), so `mins` is never below the listing-derived figure.
+
+## Step-4 VERDICT — Langston, recorded by CC-C at the 2026-10-10 release (CC-B was not running)
+Langston gave this verdict in Discord at 11:57:24Z (message `1558448355061792849`) and RE-AFFIRMED it on substance at 14:16:05Z, after a separate stateless run (12:02Z) had read only this file, found no verdict here, and said hold. He ruled that the 12:02 finding (the record did not carry the verdict) was real and its HOLD vacated; nothing withdrawn, no rollback. Shipped in release `ad01f5339b558ee968a7686d719e98b66e5fd01d` (2026-10-10T11:59:29Z, `RELEASE_DEPLOY_2026-10-10_PLAN.md`). Step 7 is CC-B's.
+- **APPROVED — the fourth leg of the 11:57 "all four", already on record above** (r2 PROCEED with condition; condition MET at `b70ab5975`; the r3 record). `a6e2d8125` touches zero runtime paths, so the shipped state is the approved state.
