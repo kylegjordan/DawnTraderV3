@@ -1283,3 +1283,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT CHANGED.** One shared estimator (E3: each bar's wick clipped to its body ± 3 × the window's median range, then the mean), chosen against criteria committed before any run; all six copies call it and a fence keeps it that way; every fabricated fallback ATR (2 % of price, 1 %/2 % levels, a daily-range stand-in) now fails closed and is counted; the 10 % clamp stays as an integrity bound; the false "Wilder" labels corrected.
 
 **RESULT.** 17 of 17 crypto opens since the deploy agree with E3 recomputed from Kraken's own bars (0.688-1.198×); the real GBP/USD window runs in CI. **Closed:** `#1153`. **Placed:** the clip records nothing when it fires → row 2a1; xStock `atr_at_open` = 0 stays `#972`.
+
+## B-ROOT-DUPLICATE-SCANNER-RETIRE (CC-B, sprint plan row 2a0d — after row 2a0c; `#1161`) — change-class `non_architecture` — ⏳ **STEP 11** (Step 4 APPROVED at `91407e6c9`; deployed in `ad01f5339` 2026-10-10; Step 8 CONFIRMED by Langston 2026-10-10; report `Batch Completion/B_ROOT_DUPLICATE_SCANNER_RETIRE_COMPLETION_REPORT.md`)
+
+**WHAT IT REMOVED.** An old copy of the FX5 scanner at the repository root that subscribed to the Central Clock under the live scanner's own name (it would have replaced the live 30-second tick if ever loaded), a second copy in `BATCH_19G_HF2`, a never-started trading scheduler, nine root test scripts CI never ran, and three orphaned Walter-era services — each archived with its original intent.
+
+**WHAT GUARDS IT.** A fence test: every Central Clock subscription in the repository must be one of five known sites with five distinct names.
+
+**RESULT.** On the running system the clock has exactly five subscribers, the live ones. **Closed:** `#1161`; absorbed `PHASE_19_PLAN` 3n.a.

@@ -465,6 +465,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **What**: 1-second tick source. Emits `ClockTick` events with monotonic counter, timestamp, and drift measurement.
 - **Upstream**: System timer
 - **Downstream**: FX5 Scanner (every 30 ticks), RTB Refresh (every tick), TCL Watchdog
+- ★ **Subscribers, exactly five (`B-ROOT-DUPLICATE-SCANNER-RETIRE`, `#1161`, 2026-10-10):** `FX5Scanner` (`fx5-scanner.ts`), `RTBRefreshService` (`rtb-refresh-service.ts`), `TCL_paper` (`tcl_watchdog.ts`), `XstockSpotScanner` (`xstock_spot/scanner.ts`), `MarketEventScheduler` (`market-events.ts`). The registry is keyed by module id, so a second subscriber under an existing id REPLACES that handler (`central-clock.ts` replace branch) — which is why the retired root copy of the FX5 scanner was a hazard. **No non-live copy subscribes any more:** `server/tests/unit/b-root-duplicate-scanner-retire.test.ts` enumerates every `centralClock.subscribe(` from the repository root and fails on a sixth site or a repeated id. Live check 2026-10-10: `totalSubscribers=5` after the 17:05:11Z restart; `TCL_paper` subscribes twice at boot because the TCL stops and starts once (sizes 1→2→1→2→3→4→5), not a replace.
 - **Execution**: **Continuous 1-second interval**
 - **Blast Radius**: **HIGH** — all time-dependent subsystems synchronize to this
 
