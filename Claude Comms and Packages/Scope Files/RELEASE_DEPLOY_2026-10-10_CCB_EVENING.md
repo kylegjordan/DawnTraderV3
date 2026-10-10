@@ -33,3 +33,7 @@ In-memory state re-warms: the 3a1 update clock (by design — a restart's snapsh
 | 4. pattern pool (row 2a) | PASS — 59 of 59 pool lines since the restart carry `[PATTERN_ATR_DROPS] 0` and `[PATTERN_EVAL_ERRORS] 0` |
 
 **Not yet readable:** a weekday — the r4/r5 rule's `quiet` / `not_quiet` / `thin` arms in session and after hours (the venue reopens Sunday 20:00 ET = Monday 00:00Z).
+
+## Second deploy, before the 00:00Z reopen — `28121f958` (r6 + r6b + the evidence-token condition)
+**From (rollback target):** `5da17e02c25d78dec0bbc4690e9c45e58b400b7c` (CC-C, `deployed_at` 2026-10-10T21:58:27Z, which contains `fe830d69c`). **Range `5da17e02c..28121f958`, runtime files:** `active-execution-engine.ts` (the sweep line's `held=`), `venue-quiet-alerting.ts`, the 3a1 test file — row 3a1 only; no migration, no lockfile change. **Review:** Langston cleared r6+r6b at `19639663e` with one in-commit condition, met at `28121f958`. **Why now:** the progress report's pre-registered criteria (amendments 1-2) read the Monday reopen on r6b; a deploy after 00:00Z would void that window.
+**Step 7 reads:** the sweep line carries `held=N[SYM:fam+fam,…]`; the 16-member standing record shows its blockers by family set; no `price-skip` mint from the restart; `pm_uptime` recorded as the progress report's re-anchor.
