@@ -491,7 +491,9 @@ import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_clas
 import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
-import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis, readThresholdBasis } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis, readThresholdBasis, readBookStateComparator, readRiLastMiss } from '../asset_classes/xstock_spot/book-state-tracker.js';
+import { resolveEntryYardstick, judgeEntrySpread } from '../asset_classes/xstock_spot/entry-spread-plausibility.js';
+import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
 import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
@@ -673,6 +675,11 @@ export class ActiveExecutionEngine {
     const config = await resolveFillDepthGateConfig(assetClass);
     if (!config) return { pass: false, reason: 'depth_gate_config_missing', snapshot: null };
     const snapshot = await getDepthSnapshot(symbol, assetClass);
+    // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]): the NEWEST xStock row must hold BOTH sides with size. Its own
+    // reason code (`depth_verdict`), separate from P3's `implausible_spread_entry` so Step 8 can count each.
+    if (snapshot?.verdict && (snapshot.verdict.bid !== 'ok' || snapshot.verdict.ask !== 'ok')) {
+      return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask}`, snapshot: null };
+    }
     const warmth = assessWarmth(snapshot, 'asks', config);
     if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null };
     const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);
@@ -734,6 +741,29 @@ export class ActiveExecutionEngine {
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
         return { pass: false, reason: _why, snapshot };
       }
+      // ⛔⛔ B-XSTOCK-BID-TRIGGER-RELAND increment A, P3 — THE UNHELD-NAME ARM (`entry-spread-plausibility.ts`). Above, a
+      // symbol with no comparator reaches only the absent-side arms; here its CURRENT spread (the live tick, the same
+      // object the guard reads) is judged against its OWN normal spread — the live retained ring, else its last N
+      // regular-session snapshots — with the guard's own threshold form. HOUR-INVARIANT by construction (gate 2).
+      // A symbol WITH a comparator keeps the predicate above. Reason code `implausible_spread_entry`, separate from P4's.
+      if (bs.ok && readBookStateComparator(symbol) === null) {
+        const _raw = bs.raw;
+        if (_raw.bid !== null && _raw.ask !== null && _raw.bid > 0 && _raw.ask >= _raw.bid) {
+          const _spread = (_raw.ask - _raw.bid) / ((_raw.ask + _raw.bid) / 2);
+          const _ys = await resolveEntryYardstick(symbol, bs.cfg.trailingSpreadWindowSnaps);
+          if (_ys.median !== null) {
+            const _j = judgeEntrySpread(_spread, _ys.median, bs.cfg.kRel, bs.cfg.floorPct);
+            if (_j.refuse) {
+              const _why = `implausible_spread_entry spread=${_spread.toFixed(5)} threshold=${_j.threshold.toFixed(5)} yardstick=${_ys.median.toFixed(5)} basis=${_ys.basis}`;
+              console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — ${_why} n=${_ys.n ?? 'ring'}`);
+              return { pass: false, reason: _why, snapshot };
+            }
+          } else {
+            // Fail-OPEN on absence (#546), labelled — never a silent pass.
+            console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: spread plausibility NOT JUDGED (basis=${_ys.basis} n=${_ys.n ?? 'none'}${'error' in _ys && _ys.error ? ` error=${_ys.error}` : ''}) — entry passes this arm`);
+          }
+        }
+      }
     }
     return { pass: true, reason: 'ok', snapshot };
   }
@@ -772,6 +802,21 @@ export class ActiveExecutionEngine {
   // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
   // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
   private _bookStateSkipStreak: Map<string, number> = new Map();
+  // B-XSTOCK-BID-TRIGGER-RELAND increment A, P5 — the refusal-duration tally per open position (`exit-refusal-tally.ts`),
+  // and the last `RI_NEAR_MISS` signature printed per position (a line per CHANGE of failing clauses, not per tick).
+  // In memory by design; a position opened before this instance started is labelled `sinceRestart`.
+  private _exitRefusalTally: Map<string, ExitRefusalTally> = new Map();
+  private _riMissSig: Map<string, string> = new Map();
+  private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
+    let t = this._exitRefusalTally.get(position.id);
+    if (!t) {
+      const _openedMs = position.openedAt ? new Date(position.openedAt).getTime() : NaN;
+      t = newExitRefusalTally(!(Number.isFinite(_openedMs) && _openedMs >= this._engineConstructedAt));
+      this._exitRefusalTally.set(position.id, t);
+    }
+    noteRefusal(t, kind, Date.now());
+    return t;
+  }
   // ── `8a-P2` BLOCKER-2 — CONSECUTIVE NO-TRANSACTABLE-SIDE REFUSALS, PER POSITION ────────────
   // ⛔⛔ WITHOUT THIS THE ROW SHIPS A GATE ON A LIVE STOP CHECK THAT NOBODY CAN SEE. The
   // evaluator returns `noDecisionReason: 'no_transactable_side'` and, as first written, NOTHING
@@ -2148,7 +2193,23 @@ export class ActiveExecutionEngine {
                   // `mark_deviation` forever and the exit loop degrades from ~1.5 s to one look per
                   // yield, silently, until a restart. The yield IS the evidence the reference is
                   // unusable: it took `hollowSkipCap` CONSECUTIVE unactionable verdicts to get here.
-                  clearBookStateComparator(position.symbol, `yield_after_${_next}_hollow`);
+                  // ⛔⛔ B-XSTOCK-BID-TRIGGER-RELAND increment A, P2 (Langston's KKR finding, alert `8a1eded8`) — A
+                  // `seedImplausible` CHAIN IS NOT CLEARED HERE. The clear exists to drop a bad reference on a VALIDATED chain
+                  // (the 09-03 latch fix, above) — a chain that is already implausible can never validate, so clearing it only
+                  // re-seeds on the blown frame and THROWS AWAY its release progress (KKR/USD 2026-10-09: yield-clear 20:16:31Z
+                  // → `SEED_IMPLAUSIBLE` ratio 270 two seconds later, run counts back to zero).
+                  // ⛔ SAFE ONLY BECAUSE P1 SHIPS IN THE SAME INCREMENT: this removes the only non-escape reset of an implausible
+                  //   chain, so its exits are now the kRel escape and the ring-independent release (P1). IF P1 IS EVER REVERTED,
+                  //   REVERT THIS WITH IT.
+                  // ⛔ The r6 warning in `clearBookStateComparator` (gating RETENTION makes the mechanism inert) does NOT apply:
+                  //   this gates the CLEAR, and `retainsRing` is false for every chain skipped here (its first term is
+                  //   `!seedImplausible`), so the skipped clear would have retained nothing. Streak reset, alert and refusal below
+                  //   are unchanged.
+                  if (readBookStateComparator(position.symbol)?.seedImplausible !== true) {
+                    clearBookStateComparator(position.symbol, `yield_after_${_next}_hollow`);
+                  } else {
+                    console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} YIELD_KEEPS_IMPLAUSIBLE_CHAIN — not cleared; it ends by the escape or the ring-independent release`);
+                  }
                   bookStateAtDecision = 'hollow';
                   bookStateYielded = true;
                   hollowYields++;
@@ -2213,12 +2274,14 @@ export class ActiveExecutionEngine {
                   //    (Langston C1): the engine did NOT act on this mark, so the cache must not show
                   //    that it did.
                   withoutPrice++;
+                  this._noteExitRefusal(position, 'yield_refused');
                   await this._recordPriceSkip(position, 'book_state_yield_refused');
                   continue;
                 } else {
                   this._bookStateSkipStreak.set(position.id, _next);
                   hollowSkips++;
                   withoutPrice++;
+                  this._noteExitRefusal(position, 'hollow_skip');
                   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
                   await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
                   // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
@@ -2258,6 +2321,7 @@ export class ActiveExecutionEngine {
                     _c.trailingSpreadWindowSnaps,
                     _r.state === 'two_sided', // the one fact the writer cannot derive: the verdict
                     _c.kRel, // 8a r3: judges a NEW chain's seed against the retained spread ring
+                    _c.riAbsSpreadCeilingPct / 100, // row 2 increment A P1: the ring-independent release's absolute ceiling
                   );
                 }
                 // ⛔⛔ D3 r2 — THE REFUSAL MUST SURVIVE THE RESEED, NOT JUST THE YIELD
@@ -2317,6 +2381,25 @@ export class ActiveExecutionEngine {
                     `[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} REFUSE unvalidated ` +
                     `state=${_r.state} ${_cmpV} ratio=${_ratioTxt} reasons=${_r.reasons.join(',')}`,
                   );
+                  // ⭐ B-XSTOCK-BID-TRIGGER-RELAND increment A — P5's tally, and P1's `RI_NEAR_MISS` (Langston gate 1 r2
+                  // condition 1): a refused tick records its spread nowhere else, so the ring-independent release's
+                  // comparison is logged HERE, on the refusal side — one line per CHANGE of which clauses failed — with the
+                  // position's running tally (the in-flight read gate 2 required). The ceiling is tuned from this line.
+                  const _tally = this._noteExitRefusal(position, 'unvalidated');
+                  const _miss = readRiLastMiss(position.symbol);
+                  if (_miss) {
+                    const _sig = _miss.failed.join('|');
+                    if (this._riMissSig.get(position.id) !== _sig) {
+                      this._riMissSig.set(position.id, _sig);
+                      console.warn(
+                        `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} RI_NEAR_MISS pos=${position.id} failed=${_sig} ` +
+                        `spread=${_fx(_miss.spreadNow)} ceiling=${_fx(_miss.ceiling)} windowMedian=${_fx(_miss.trailingMedian)} ` +
+                        `runMoves=${_miss.runMoves} bidMoved=${_miss.bidMoved} askMoved=${_miss.askMoved} ` +
+                        `refusedS=${Math.round(_tally.refusedMs / 1000)} episodes=${_tally.episodes} longestS=${Math.round(_tally.longestEpisodeMs / 1000)} ` +
+                        `sinceRestart=${_tally.sinceRestart}`,
+                      );
+                    }
+                  }
                   // Typed, uncast (Langston nit a): a rename must fail the build, not print `stop none`.
                   const _stop = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
                   const _target = position.takeProfit ? parseFloat(position.takeProfit) : NaN;
@@ -2333,6 +2416,20 @@ export class ActiveExecutionEngine {
                 // hollow, `book-state.ts:181-188`), two-sided and validated. Its sides are the decision inputs.
                 // ⛔ Step 4 BLOCKER-1: `two_sided` does not carry the uncrossed test, so the capture applies it.
                 const _gSides = xstockTransactableSides(_raw); // the SAME predicate as J2
+                // ⭐ row 2 increment A, P5 — THE RELEASE: the first decided tick after a refusal episode records where the
+                // BID stood against the stop (the cost of the hold). Logged once per episode.
+                {
+                  const _t = this._exitRefusalTally.get(position.id);
+                  const _stopNum = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
+                  if (_t && noteRelease(_t, _gSides ? _gSides.bid : null, Number.isFinite(_stopNum) ? _stopNum : null)) {
+                    this._riMissSig.delete(position.id);
+                    console.warn(
+                      `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} EXIT_RELEASED pos=${position.id} ` +
+                      `bidToStopPct=${_t.lastReleaseBidToStopPct === null ? 'none' : _t.lastReleaseBidToStopPct.toFixed(3)} ` +
+                      `refusedS=${Math.round(_t.refusedMs / 1000)} episodes=${_t.episodes} sinceRestart=${_t.sinceRestart}`,
+                    );
+                  }
+                }
                 if (_gSides) {
                   xsBid = _gSides.bid;
                   xsAsk = _gSides.ask;
@@ -3762,7 +3859,14 @@ export class ActiveExecutionEngine {
         const _bsNow = assessBookStateNow(position.symbol);
         _bsAtFill = _bsNow.ok ? _bsNow.result.state : null; // not-ok = no frame assessed ⇒ NULL, re-cuttable
       }
-      const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass) : null;
+      // P4 ([C5]): a FLATTEN keeps the pre-P4 read (the last complete row); every other close reads the newest row and
+      // refuses below when a side lacks size or price, so the position holds instead of filling on an older book.
+      const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass, { allowLastTwoSided: _isFlatten }) : null;
+      if (!_isFlatten && _closeSnap?.verdict && (_closeSnap.verdict.bid !== 'ok' || _closeSnap.verdict.ask !== 'ok')) {
+        console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][CLOSE_FILL] ${position.symbol} pos=${positionId} depth_verdict bid=${_closeSnap.verdict.bid} ask=${_closeSnap.verdict.ask} — position left OPEN, retry next cycle`);
+        await this._countCloseRefusal(position, _closeContract, `depth_verdict_${_closeSnap.verdict.bid}_${_closeSnap.verdict.ask}`, false, _isFlatten);
+        return;
+      }
       // OBJ-1: the FILL-time depth age — taken two lines before the walk that consumes it, with no
       // await in between. ⛔ NOT the same instant as `exit_book_age_ms`, which is built once per
       // position ABOVE the exit-condition evaluation; and NOT the same instant as
@@ -4113,6 +4217,9 @@ export class ActiveExecutionEngine {
           if (_bsRec || options?.exitProvenance?.bookStateYielded) {
             _carry.bookState = { ...((_bsRec as Record<string, unknown> | undefined) ?? {}), yielded: options?.exitProvenance?.bookStateYielded === true };
           }
+          // row 2 increment A, P5 — the durable refusal-duration record. ALLOWLIST, like every key in this block.
+          const _erTally = this._exitRefusalTally.get(position.id);
+          if (_erTally) _carry.exitRefusal = snapshotExitRefusal(_erTally);
           return Object.keys(_carry).length
             ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), ..._carry } }
             : {};
@@ -4230,6 +4337,9 @@ export class ActiveExecutionEngine {
       _persistedNetPnl = _persistedTrade?.netPnl != null
         ? parseFloat(_persistedTrade.netPnl.toString())
         : undefined;
+      // row 2 increment A, P5: the tally is now on the row; evict it with the position.
+      this._exitRefusalTally.delete(position.id);
+      this._riMissSig.delete(position.id);
 
       // Log the exit event with C2 breakdown
       await storage.createActiveTradeLog(this.mode, {

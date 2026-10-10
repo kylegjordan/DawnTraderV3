@@ -97,6 +97,7 @@ vi.mock('../../asset_classes/xstock_spot/book-state-config.js', async (orig) => 
     feedCohortFloor: 50,
     hollowSkipCap: 3,
     ownMarkDeviationDPct: 5,
+    riAbsSpreadCeilingPct: 1.0,
     spreadBlownEnabled: h.spreadBlownEnabled,
   }),
 }));
@@ -192,6 +193,10 @@ function makeEngine(): Stub {
     _priceSkipEscalated: new Set<string>(),
     _venueQuiet: new VenueQuietState(),
     _lastVenueQuietSweepAt: Date.now(),
+    // B-XSTOCK-BID-TRIGGER-RELAND increment A (P5) fields the real constructor sets.
+    _exitRefusalTally: new Map(),
+    _riMissSig: new Map<string, string>(),
+    _engineConstructedAt: 0,
     // Stubbed on the instance (see header).
     _recordPriceSkip: vi.fn(async (..._a: unknown[]) => undefined),
     _recordBookStateEvent: vi.fn(async (..._a: unknown[]) => undefined),

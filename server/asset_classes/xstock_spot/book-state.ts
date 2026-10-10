@@ -39,14 +39,15 @@
  * read INERT (reason `feed_read_inert`), never actionable-by-emptiness; F4 it is INERT by knob
  * (`feed_read_enabled = 0`) until its fraction is re-measured on the guard's own telemetry.
  *
- * ★ THE TWELVE KNOB NAMES BELOW ARE THE ONE LIST. The seed migration, the config resolver
+ * ★ THE THIRTEEN KNOB NAMES BELOW ARE THE ONE LIST (the thirteenth, `ri_abs_spread_ceiling_pct`, is row 2 increment A's
+ * ring-independent release, 2026-10-10). The seed migration, the config resolver
  * (`book-state-config.ts`) and the boot assertion (`b72-warmup.ts`) all read THIS array, so the
  * three cannot drift (`#641`; Langston Step-2 condition C2). Adding a knob = adding it here.
  */
 
 export const BOOK_STATE_MODULE = 'book_state' as const;
 
-/** Exactly twelve. The boot assertion asserts the count, so an eleventh or a thirteenth refuses. */
+/** Exactly thirteen. The boot assertion asserts the count, so a twelfth or a fourteenth refuses. */
 export const BOOK_STATE_KNOBS = [
   'enabled',
   'single_side_departure_k_rel',
@@ -60,6 +61,9 @@ export const BOOK_STATE_KNOBS = [
   'feed_cohort_floor',
   'hollow_skip_cap',
   'own_mark_deviation_d_pct',
+  // B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 (objective 1b): the ring-independent release's ABSOLUTE spread
+  // ceiling, in percent. No code default (rule 15): a missing row refuses boot like the other twelve.
+  'ri_abs_spread_ceiling_pct',
 ] as const;
 export type BookStateKnob = (typeof BOOK_STATE_KNOBS)[number];
 
@@ -78,6 +82,9 @@ export const BOOK_STATE_SEED: Readonly<Record<BookStateKnob, number>> = {
   feed_cohort_floor: 50,
   hollow_skip_cap: 60,
   own_mark_deviation_d_pct: 5,
+  // Langston gate 1 r2 (2026-10-10): 1% stands. Above the regular-session p99 of all eight stranding symbols (max HUT
+  // 0.8336%), below every blown seed (seedImplausible median 5.53%). A change is a DB write, recorded PREVIOUSLY/NOW.
+  ri_abs_spread_ceiling_pct: 1.0,
 };
 
 export interface BookStateConfig {
@@ -97,8 +104,14 @@ export interface BookStateConfig {
   hollowSkipCap: number;
   ownMarkDeviationDPct: number;
   /**
+   * B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 — the ring-independent release's ABSOLUTE spread ceiling, PERCENT of
+   * mid (`ri_abs_spread_ceiling_pct`). Read by the tracker's release on a `seedImplausible` chain, never by
+   * `assessBookState` itself: the predicate's verdicts are unchanged by it.
+   */
+  riAbsSpreadCeilingPct: number;
+  /**
    * `3n.q7` increment 2 (OBJ-1) — the `spread_blown` arm. ⛔ NOT A KNOB YET: the resolver sets it `false` as a code
-   * constant (`book-state-config.ts`), and only a test injects `true`. Increment 3 makes it the thirteenth knob when it
+   * constant (`book-state-config.ts`), and only a test injects `true`. Row 2's objective 6 makes it the FOURTEENTH knob when it
    * becomes tunable, gated on the bid-trigger window's read and Kyle's overnight-hold decision. Required (not optional),
    * but ⛔ tsc does NOT list every config literal: `tsconfig.json` covers `server/`, `shared/` and `client/src` only and
    * excludes test files, so `scripts/` and the tests are invisible to it (Langston inc-2 Step-4 BLOCKER-2). The literal

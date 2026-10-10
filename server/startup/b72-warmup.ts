@@ -164,9 +164,9 @@ const PREFETCH_MODULES = [
   // wrapped error. A knob in `module_constants` is NOT usable from a sync caller until its
   // module is listed HERE. Seeds: 2026-07-21-p19-b8-5e-mark-staleness-knobs.sql.
   'mark_staleness',
-  // B-XSTOCK-FEED-SANITY (#943): the book-state guard's twelve xstock_spot knobs. Same rule as the
+  // B-XSTOCK-FEED-SANITY (#943): the book-state guard's thirteen xstock_spot knobs. Same rule as the
   // line above — the exit loop reads them SYNC on every tick; unlisted = every read throws.
-  // Seeds: 2026-09-0x-b-xstock-feed-sanity.sql. Asserted at boot below (count + ranges).
+  // Seeds: 2026-09-03-b-xstock-feed-sanity.sql + 2026-10-10-b-xstock-bid-trigger-reland-inca.sql (the 13th). Asserted at boot below (count + ranges).
   'book_state',
   // `8a-P4c` increment 3 (Langston Step-4 BLOCKER-1, 2026-09-30): the VTS xStock exit guard's spread ceiling — read SYNC
   // on every xStock VTS exit look, both lanes. Unlisted = every look refuses. Seeds: 2026-09-30-b-price-side-8a-p4c-inc3.sql.
@@ -358,14 +358,14 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
   // ── B-XSTOCK-FEED-SANITY (#943) — the book-state guard's knobs, asserted at BOOT. ──────────────
   // Same reasoning as the mark_staleness block above: the guard's fail-safe on a cold or missing
   // knob is to REFUSE the tick (its own skip reason), so an unseeded deploy would silently stop the
-  // guard while the server looked healthy. The twelve names, the count and the ranges are asserted
+  // guard while the server looked healthy. The thirteen names, the count and the ranges are asserted
   // by `assertBookStateKnobsAtBoot`, which reads the SAME `BOOK_STATE_KNOBS` array the seed and the
   // resolver read — one list, so the three cannot drift (Langston Step-2 condition C2, #641).
   // xstock_spot ONLY, for the same reason as above: no crypto read-path exists for this guard.
   {
     const { assertBookStateKnobsAtBoot } = await import('../asset_classes/xstock_spot/book-state-config.js');
     const r = assertBookStateKnobsAtBoot();
-    console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (12 rows; enabled=${r.enabled} k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled})`);
+    console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (13 rows; enabled=${r.enabled} k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled} ri_ceiling=${r.ri_abs_spread_ceiling_pct}%)`);
   }
 
   // ── `8a-P4c` increment 3 (Langston Step-4 BLOCKER-1) — the VTS xStock exit spread ceiling, asserted at BOOT. ────────

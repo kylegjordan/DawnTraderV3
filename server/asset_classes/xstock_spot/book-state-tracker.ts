@@ -122,10 +122,33 @@ export interface BookStateComparator {
    * is cadence-free: it waits for two real moves however many ticks that takes, and a frozen book never gets them.
    */
   plausibleRunMoves: number;
+  /**
+   * B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 — the RING-INDEPENDENT release's run on a `seedImplausible` chain:
+   * moves counted during the current run of frames whose spread is within the ABSOLUTE ceiling
+   * (`ri_abs_spread_ceiling_pct`), and whether EACH side has moved during that run. A frame over the ceiling resets
+   * all three. Same cadence-free run structure as `plausibleRunMoves` (the kRel escape's condition (c)).
+   */
+  riRunMoves: number;
+  riBidMoved: boolean;
+  riAskMoved: boolean;
+  /** The last ring-independent test that FAILED on this chain, for the engine's `RI_NEAR_MISS` line; null = none. */
+  riLastMiss: RiMiss | null;
   /** When this reference CHAIN began (the seed frame's own time). Survives validation. */
   seededAtMs: number;
   /** Advances against this chain since the seed, so a fresh seed is distinguishable from a settled one. */
   framesSinceSeed: number;
+}
+
+/** P1 — which clauses of the ring-independent release failed on a frame, and the values they failed on. */
+export interface RiMiss {
+  /** `window_not_full` · `window_median` · `frame` · `moves` · `both_sides` — every clause that failed, in that order. */
+  failed: string[];
+  spreadNow: number;
+  ceiling: number;
+  trailingMedian: number | null;
+  runMoves: number;
+  bidMoved: boolean;
+  askMoved: boolean;
 }
 
 const _comparators = new Map<string, BookStateComparator>();
@@ -181,6 +204,24 @@ function seedWasJudged(chain: Pick<BookStateComparator, 'seedRetainedMedian'>): 
 
 export function readBookStateComparator(symbol: string): BookStateComparator | null {
   return _comparators.get(symbol.toUpperCase()) ?? null;
+}
+
+/**
+ * B-XSTOCK-BID-TRIGGER-RELAND increment A, P3 — THE LIVE RETAINED RING'S MEDIAN for one symbol, or null when none.
+ * A PURE READ of S25b (`_retainedSpreads`): no writer, no DB, no clock. It is the entry gate's preferred yardstick for
+ * a symbol with no comparator (an unheld name), because the ring holds that symbol's own last PLAUSIBLE book.
+ * ⛔ NOT `xstock_book_state_rings` (the durable snapshot: boot-only reader, stale between writes), NOT
+ * `_peekRetainedRingForTest`, and NOT `takeChainRefusalBasis`'s `retainedMedianNow` (gated on a chain an unheld
+ * symbol does not have) — Langston, gate 2 r2. Declared as a new S25b reader in the SIM.
+ */
+export function readRetainedRingMedian(symbol: string): number | null {
+  const r = _retainedSpreads.get(symbol.toUpperCase());
+  return r ? medianOf(r.spreads) : null;
+}
+
+/** P1 — the last ring-independent near-miss on this symbol's chain (pure read; null = no chain or no miss). */
+export function readRiLastMiss(symbol: string): RiMiss | null {
+  return _comparators.get(symbol.toUpperCase())?.riLastMiss ?? null;
 }
 
 /**
@@ -272,6 +313,12 @@ export function advanceBookStateComparator(
    * `null` ⇒ unreadable ⇒ fail-safe: the seed is treated as implausible.
    */
   kRel: number | null = null,
+  /**
+   * B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 — the ring-independent release's ABSOLUTE spread ceiling as a FRACTION
+   * of mid (the knob is percent; the caller divides). `null` ⇒ the release does not run (the fail-safe direction:
+   * an implausible chain then ends only by the kRel escape or a yield, exactly as before this batch).
+   */
+  riCeilingFrac: number | null = null,
 ): void {
   const key = symbol.toUpperCase();
   const mid = (frame.bid + frame.ask) / 2;
@@ -336,6 +383,65 @@ export function advanceBookStateComparator(
       escapedThisFrame = true;
     }
   }
+  // ⛔⛔ B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 (objective 1b, was row 66 / `3n.q5`) — THE RING-INDEPENDENT RELEASE.
+  // WHY: the kRel escape above judges a recovered book against the RETAINED RING, and a symbol's ring holds its tightest
+  //   daytime spread. An ordinary after-hours book of a few tenths of a percent then reads `kRel`-times blown, so a healthy,
+  //   moving book is refused for hours. MEASURED (pre-audit A1, 14 days, 92,540 refused ticks): 43.58 h refused at
+  //   ratio > kRel, 6.46 h of it at an ABSOLUTE spread <= 0.5%; GLW/USD refused 110 min continuously on a book under 0.5%
+  //   with 19 distinct quote pairs. That met `8a-P4a` §A7's reopen condition, so the bound homed there is built here.
+  // THE TEST — the escape's own run structure with TWO changes (Langston `8a-P4a` §4a candidate C; gate 1 r2):
+  //   (a) the chain's own trailing ring, FULL, has its median <= the ABSOLUTE ceiling (not `kRel ×` the retained median);
+  //   (b) THIS frame is <= the ceiling;
+  //   (c) >= 2 moves during the current run of frames <= the ceiling (cadence-free, repeats tolerated, as `plausibleRunMoves`);
+  //   (d) BOTH sides have moved during that run — stricter than the escape's either-side.
+  // ⛔ (d) IS WHAT MAKES ANY CEILING SAFE AND MAY NOT BE RELAXED WITHOUT REOPENING LANGSTON'S GATE-1 r2 RULING: a stub-ask
+  //   book with a live bid moves on one side only; a frozen artefact moves on neither (UNH weekend: one quote pair).
+  // ⛔ Ends the chain through `clearBookStateComparator` like the escape (r4 ring rule, r5 movement rule). The NEW chain's
+  //   seed is NOT judged against the retained ring — that ring is exactly the yardstick this release overrides — so it
+  //   consumes the ring as any plausible seed does (the kRel escape reaches the same end state) and seeds `vacuous`.
+  // ⛔ No clock term: the ceiling is a property of the book, the same at every hour (Kyle 2026-09-03).
+  let riEscapedThisFrame = false;
+  let riRunMovesNow = 0;
+  let riBidMovedNow = false;
+  let riAskMovedNow = false;
+  let riMiss: RiMiss | null = null;
+  if (prev && prev.seedImplausible && riCeilingFrac !== null && riCeilingFrac > 0) {
+    const inRun = spreadNow <= riCeilingFrac;
+    if (inRun) {
+      const bidMoved = frame.bid !== prev.priorBid;
+      const askMoved = frame.ask !== prev.priorAsk;
+      riRunMovesNow = prev.riRunMoves + (bidMoved || askMoved ? 1 : 0);
+      riBidMovedNow = prev.riBidMoved || bidMoved;
+      riAskMovedNow = prev.riAskMoved || askMoved;
+    }
+    const trailing = prev.spreads.concat(spreadNow);
+    while (trailing.length > ringCap) trailing.shift();
+    const trailingMedian = trailing.length >= ringCap ? medianOf(trailing) : null;
+    const failed: string[] = [];
+    if (trailingMedian === null) failed.push('window_not_full');
+    else if (trailingMedian > riCeilingFrac) failed.push('window_median');
+    if (!inRun) failed.push('frame');
+    if (riRunMovesNow < 2) failed.push('moves');
+    if (!(riBidMovedNow && riAskMovedNow)) failed.push('both_sides');
+    if (failed.length === 0) {
+      console.warn(
+        `[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${key} SEED_ESCAPED_RI framesHeld=${prev.framesSinceSeed} runMoves=${riRunMovesNow} ` +
+        `seedSpread=${prev.seedSpread.toFixed(5)} escapeMedian=${(trailingMedian as number).toFixed(5)} spreadNow=${spreadNow.toFixed(5)} ` +
+        `ceiling=${riCeilingFrac.toFixed(5)} retainedMedian=${prev.seedRetainedMedian === null ? 'none' : prev.seedRetainedMedian.toFixed(5)} ` +
+        `seededAt=${new Date(prev.seededAtMs).toISOString()}`,
+      );
+      clearBookStateComparator(key, 'ring_independent_escape');
+      prev = undefined;
+      escapedThisFrame = true;
+      riEscapedThisFrame = true;
+      riRunMovesNow = 0; riBidMovedNow = false; riAskMovedNow = false;
+    } else {
+      riMiss = {
+        failed, spreadNow, ceiling: riCeilingFrac, trailingMedian, runMoves: riRunMovesNow,
+        bidMoved: riBidMovedNow, askMoved: riAskMovedNow,
+      };
+    }
+  }
   const spreads = (prev?.spreads ?? []).concat(spreadNow);
   while (spreads.length > ringCap) spreads.shift();
   // THE EMITTER'S POSITIVE CONTROL (Langston, 2026-09-03 01:26Z): the guard's skip/yield lines fire only
@@ -356,7 +462,12 @@ export function advanceBookStateComparator(
   const observedMovement = (prev?.observedMovement ?? false) || movedThisFrame;
   let seedImplausible = prev?.seedImplausible ?? false;
   let seedRetainedMedian: number | null = prev ? prev.seedRetainedMedian : null;
-  if (!prev) {
+  if (!prev && riEscapedThisFrame) {
+    // P1: the release overrides the retained ring for THIS seed (see the release above). Consume the ring, as a plausible
+    // seed does, and seed `vacuous` (no judged-against median) — the honest basis for a seed the ring did not judge.
+    _retainedSpreads.delete(key);
+    seedRetainedMedian = null;
+  } else if (!prev) {
     const retained = _retainedSpreads.get(key);
     const retainedMedian = retained ? medianOf(retained.spreads) : null;
     seedRetainedMedian = retainedMedian;
@@ -408,6 +519,10 @@ export function advanceBookStateComparator(
     seedRetainedMedian,
     refusalBasisLogged: prev ? prev.refusalBasisLogged : false,
     plausibleRunMoves: prev ? runMovesNow : 0,
+    riRunMoves: prev ? riRunMovesNow : 0,
+    riBidMoved: prev ? riBidMovedNow : false,
+    riAskMoved: prev ? riAskMovedNow : false,
+    riLastMiss: prev ? riMiss : null,
     observedMovement,
     seededAtMs: prev?.seededAtMs ?? frame.atMs,
     framesSinceSeed: prev ? prev.framesSinceSeed + 1 : 0,
@@ -436,9 +551,11 @@ export function advanceBookStateComparator(
  * run it exists to refuse. That arm cannot be judged relatively (there is no prior), so it is
  * LABELLED via `validated` and measured, not guessed at with a fresh threshold.
  */
-// ⛔ `8a-P4a`: called from TWO places now — the engine's hollow-skip yield (`reason = yield_after_N_hollow`)
-// and the reseed escape inside `advanceBookStateComparator` (`reason = seed_escape_recovered`). Both end the
-// chain through this ONE path, so r4's ring rule and r5's movement rule apply to both.
+// ⛔ `8a-P4a`: called from THREE places now — the engine's hollow-skip yield (`reason = yield_after_N_hollow`; since
+// row 2 increment A P2 the engine SKIPS this call when the chain is `seedImplausible`), the reseed escape inside
+// `advanceBookStateComparator` (`reason = seed_escape_recovered`), and the ring-independent release there
+// (`reason = ring_independent_escape`, increment A P1). All end the chain through this ONE path, so r4's ring rule and
+// r5's movement rule apply to all.
 export function clearBookStateComparator(symbol: string, reason: string): void {
   const key = symbol.toUpperCase();
   const prev = _comparators.get(key);

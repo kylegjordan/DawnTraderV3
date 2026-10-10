@@ -300,7 +300,9 @@ export class ActivePortfolioManager {
       };
     }
     if (cls) {
-      const snap = await getDepthSnapshot(position.symbol, cls);
+      // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4: the flatten keeps the pre-P4 read (the last complete xStock row), so
+      // this price resolution is byte-for-byte what it was — it reads only `bids[0].price`, never a size (Langston gate 2 r2).
+      const snap = await getDepthSnapshot(position.symbol, cls, { allowLastTwoSided: true });
       const bestBid = snap?.bids?.[0]?.price;
       if (snap && typeof bestBid === 'number' && bestBid > 0) {
         return {

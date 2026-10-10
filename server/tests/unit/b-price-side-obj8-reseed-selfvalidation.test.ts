@@ -39,7 +39,7 @@ const CFG: BookStateConfig = {
   enabled: true, kRel: K_REL, floorPct: 1.0, otherSideHoldPct: 0.5, lastHoldPct: 0.5,
   trailingSpreadWindowSnaps: WINDOW, feedReadEnabled: false, feedStubFractionF: 0.10,
   feedStubWindowMs: 90_000, feedCohortFloor: 50, hollowSkipCap: 60, ownMarkDeviationDPct: 5,
-  spreadBlownEnabled: false,
+  riAbsSpreadCeilingPct: 1.0, spreadBlownEnabled: false,
 };
 
 const HEALTHY = { bid: 247.01, ask: 248.00, last: 247.25 };

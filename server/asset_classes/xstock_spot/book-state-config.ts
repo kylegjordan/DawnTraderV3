@@ -15,7 +15,7 @@ import { BOOK_STATE_KNOBS, BOOK_STATE_MODULE, type BookStateConfig, type BookSta
 
 const KEY = { exchange: '*', assetClass: 'xstock_spot' as const, strategy: '*', regime: '*' };
 
-/** Read all twelve rows for `xstock_spot` from the warmed cache. Throws on any missing row. */
+/** Read all thirteen rows for `xstock_spot` from the warmed cache. Throws on any missing row. */
 export function readBookStateKnobs(): Record<BookStateKnob, number> {
   const out = {} as Record<BookStateKnob, number>;
   for (const k of BOOK_STATE_KNOBS) out[k] = getCachedNumberRequired(BOOK_STATE_MODULE, k, KEY);
@@ -38,29 +38,32 @@ export function resolveBookStateConfigSync(): BookStateConfig {
     feedCohortFloor: r.feed_cohort_floor,
     hollowSkipCap: r.hollow_skip_cap,
     ownMarkDeviationDPct: r.own_mark_deviation_d_pct,
-    // `3n.q7` increment 2: OFF, and deliberately NOT a knob yet (Langston, inc-2 Step 1 (a)). A thirteenth
-    // `module_constants` row would make the boot assertion's set-equality refuse to start the app for a switch that
-    // does nothing for three weeks. Increment 3 adds the knob when the arm is turned on.
+    riAbsSpreadCeilingPct: r.ri_abs_spread_ceiling_pct,
+    // `3n.q7` increment 2: OFF, and deliberately NOT a knob yet (Langston, inc-2 Step 1 (a)): a knob row lands WITH
+    // the switch, never ahead of it, because a row for a switch that does nothing is a live-looking setting with no
+    // effect. ⚠️ The THIRTEENTH row is now `ri_abs_spread_ceiling_pct` (row 2 increment A's ring-independent release,
+    // which IS live), so this switch becomes the FOURTEENTH when row 2's objective 6 turns it on — and that change
+    // moves every count site below (13 → 14) in the same commit.
     spreadBlownEnabled: false,
   };
 }
 
 /**
  * The BOOT assertion (called from `b72-warmup.ts` after the module is prefetched). Every one of
- * the twelve rows present by name, the count exactly twelve, and every range sane. A refusal here
+ * the thirteen rows present by name, the count exactly thirteen, and every range sane. A refusal here
  * is a DEPLOY-time failure — never a silent mid-session guard outage (the `calibration_epoch`
  * precedent). Returns the values so the warmup can log them.
  */
 export function assertBookStateKnobsAtBoot(): Record<BookStateKnob, number> {
   // ⛔ THE ROW SET IS READ FROM THE CACHE, NOT REBUILT FROM THE LIST (Langston Step-4 condition):
-  // iterating BOOK_STATE_KNOBS can only ever see the twelve names it iterates — a THIRTEENTH
+  // iterating BOOK_STATE_KNOBS can only ever see the thirteen names it iterates — a FOURTEENTH
   // xstock_spot row (a future batch's stray seed) would be invisible. `getCachedNumbersForModule`
   // returns whatever rows the module actually holds for the key; the set must EQUAL the list.
   const live = getCachedNumbersForModule(BOOK_STATE_MODULE, KEY);
   const liveNames = Object.keys(live).sort();
   const wanted = [...BOOK_STATE_KNOBS].sort();
-  if (liveNames.length !== 12 || wanted.length !== 12 || liveNames.some((n, i) => n !== wanted[i])) {
-    throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state must hold EXACTLY the twelve xstock_spot rows named in BOOK_STATE_KNOBS — live rows: ${liveNames.length} (${liveNames.join(',')}); expected: ${wanted.join(',')}`);
+  if (liveNames.length !== 13 || wanted.length !== 13 || liveNames.some((n, i) => n !== wanted[i])) {
+    throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state must hold EXACTLY the thirteen xstock_spot rows named in BOOK_STATE_KNOBS — live rows: ${liveNames.length} (${liveNames.join(',')}); expected: ${wanted.join(',')}`);
   }
   const r = readBookStateKnobs();
   const fail = (msg: string): never => { throw new Error(`[B-XSTOCK-FEED-SANITY][warmup] book_state ${msg} — refusing to start (fail-closed, no silent default)`); };
@@ -76,5 +79,6 @@ export function assertBookStateKnobsAtBoot(): Record<BookStateKnob, number> {
   if (!(r.feed_cohort_floor >= 1)) fail(`feed_cohort_floor=${r.feed_cohort_floor} must be >= 1`);
   if (!(r.hollow_skip_cap >= 1)) fail(`hollow_skip_cap=${r.hollow_skip_cap} must be >= 1`);
   if (!(r.own_mark_deviation_d_pct > 0)) fail(`own_mark_deviation_d_pct=${r.own_mark_deviation_d_pct} must be > 0`);
+  if (!(r.ri_abs_spread_ceiling_pct > 0 && r.ri_abs_spread_ceiling_pct <= 10)) fail(`ri_abs_spread_ceiling_pct=${r.ri_abs_spread_ceiling_pct} must be in (0,10]`);
   return r;
 }

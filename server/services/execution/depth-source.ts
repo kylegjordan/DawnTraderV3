@@ -23,21 +23,43 @@ import type { BookLevel } from './depth-walk.js';
 import { cumulativeNotional, validLevelCount } from './depth-walk.js';
 import type { FillDepthGateConfig } from './depth-gate-config.js';
 
+/** B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]) — what the NEWEST xStock snapshot row holds on one side. */
+export type DepthSideVerdict = 'ok' | 'qty_absent' | 'price_absent';
+
 /** A two-sided book snapshot for a fill, best-first per side, with its age. */
 export interface DepthSnapshot {
   asks: BookLevel[]; // ascending (best-first)
   bids: BookLevel[]; // descending (best-first)
   ageMs: number;
   source: 'crypto_ws_book' | 'xstock_ticker_snap';
+  /**
+   * xStock only (P4): the verdict on the NEWEST snapshot row, per side. Absent on crypto. A caller that may act on the
+   * current book (entry, a normal exit fill) must refuse unless both sides are `ok`; see `getDepthSnapshot`.
+   */
+  verdict?: { bid: DepthSideVerdict; ask: DepthSideVerdict };
+  /** xStock only: true when the levels are the last fully two-sided row, returned because the caller asked for it. */
+  fromLastTwoSided?: boolean;
 }
 
 /**
  * Fetch the current fill-time depth for a symbol+class. `null` when absent
  * (cold/no two-sided book) → caller blocks the open / penalizes the close.
+ *
+ * ⛔⛔ xSTOCK — B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5], Langston gate 2). The query used to filter
+ * `bid > 0 AND bid_qty > 0 AND ask > 0 AND ask_qty > 0` BEFORE taking the newest row, so a current book with a side
+ * missing read as the last complete one. It now reads the NEWEST row unconditionally and returns a per-side `verdict`.
+ * MEASURED (7 days, 14,237,109 rows): 21,019 fail the old filter — bid_qty absent 8,579 · both qty absent 6,464 ·
+ * ask_qty absent 5,975 · price one-sided 1. So the real population is a MISSING SIZE on a two-sided price book, all
+ * extended-hours, clustering at 00:15:00Z — hence `qty_absent` per side, not "one-sided".
+ * THREE CONSUMERS, THREE POLICIES: the entry depth gate refuses; a normal exit fill refuses (the position holds);
+ * the operator FLATTEN passes `allowLastTwoSided` and gets exactly the old behaviour (the last complete row), so P4 can
+ * never newly block an engine stop (B-FEED-MISMATCH-FIX P2 lets a stopped-engine flatten book a cold book).
+ * A `qty_absent` side carries its price with qty 0 (so every depth reader sees no size); a `price_absent` side is empty.
  */
 export async function getDepthSnapshot(
   symbol: string,
   assetClass: AssetClass,
+  opts?: { allowLastTwoSided?: boolean },
 ): Promise<DepthSnapshot | null> {
   if (assetClass === 'crypto_spot') {
     const book = krakenWebSocketAdapter.getBookForFill(symbol);
@@ -46,27 +68,59 @@ export async function getDepthSnapshot(
   }
   if (assetClass === 'xstock_spot') {
     try {
-      const res = await db.execute<{
-        ask: string; ask_qty: string; bid: string; bid_qty: string; age_ms: string;
-      }>(sql`
+      type Row = { ask: string | null; ask_qty: string | null; bid: string | null; bid_qty: string | null; age_ms: string };
+      const first = (res: unknown): Row | undefined => {
+        const rows = (res as any).rows ?? (res as unknown as any[]);
+        return Array.isArray(rows) ? rows[0] : undefined;
+      };
+      // P4: the NEWEST row, whatever it holds.
+      const r = first(await db.execute<Row>(sql`
         SELECT ask::text, ask_qty::text, bid::text, bid_qty::text,
                EXTRACT(EPOCH FROM (NOW() - captured_at)) * 1000 AS age_ms
         FROM xstock_spot_ticker_snap
-        WHERE symbol = ${symbol} AND ask > 0 AND ask_qty > 0 AND bid > 0 AND bid_qty > 0
+        WHERE symbol = ${symbol}
         ORDER BY captured_at DESC
         LIMIT 1
-      `);
-      const rows = (res as any).rows ?? (res as unknown as any[]);
-      const r = Array.isArray(rows) ? rows[0] : undefined;
+      `));
       if (!r) return null;
-      const ask = parseFloat(r.ask), askQty = parseFloat(r.ask_qty);
-      const bid = parseFloat(r.bid), bidQty = parseFloat(r.bid_qty);
-      if (!(ask > 0 && askQty > 0 && bid > 0 && bidQty > 0)) return null;
+      const num = (v: string | null) => (v === null ? NaN : parseFloat(v));
+      const ask = num(r.ask), askQty = num(r.ask_qty), bid = num(r.bid), bidQty = num(r.bid_qty);
+      const sideVerdict = (price: number, qty: number): DepthSideVerdict =>
+        !(price > 0) ? 'price_absent' : !(qty > 0) ? 'qty_absent' : 'ok';
+      const verdict = { bid: sideVerdict(bid, bidQty), ask: sideVerdict(ask, askQty) };
+      if (verdict.bid === 'ok' && verdict.ask === 'ok') {
+        return {
+          asks: [{ price: ask, qty: askQty }],
+          bids: [{ price: bid, qty: bidQty }],
+          ageMs: Math.max(0, parseFloat(r.age_ms) || 0),
+          source: 'xstock_ticker_snap',
+          verdict,
+        };
+      }
+      if (opts?.allowLastTwoSided) {
+        // The flatten's policy: exactly the pre-P4 read (the last complete row), with the newest row's verdict attached.
+        const lr = first(await db.execute<Row>(sql`
+          SELECT ask::text, ask_qty::text, bid::text, bid_qty::text,
+                 EXTRACT(EPOCH FROM (NOW() - captured_at)) * 1000 AS age_ms
+          FROM xstock_spot_ticker_snap
+          WHERE symbol = ${symbol} AND ask > 0 AND ask_qty > 0 AND bid > 0 AND bid_qty > 0
+          ORDER BY captured_at DESC
+          LIMIT 1
+        `));
+        if (!lr) return null;
+        const la = num(lr.ask), laq = num(lr.ask_qty), lb = num(lr.bid), lbq = num(lr.bid_qty);
+        if (!(la > 0 && laq > 0 && lb > 0 && lbq > 0)) return null;
+        return {
+          asks: [{ price: la, qty: laq }], bids: [{ price: lb, qty: lbq }],
+          ageMs: Math.max(0, parseFloat(lr.age_ms) || 0), source: 'xstock_ticker_snap', verdict, fromLastTwoSided: true,
+        };
+      }
       return {
-        asks: [{ price: ask, qty: askQty }],
-        bids: [{ price: bid, qty: bidQty }],
+        asks: verdict.ask === 'price_absent' ? [] : [{ price: ask, qty: verdict.ask === 'ok' ? askQty : 0 }],
+        bids: verdict.bid === 'price_absent' ? [] : [{ price: bid, qty: verdict.bid === 'ok' ? bidQty : 0 }],
         ageMs: Math.max(0, parseFloat(r.age_ms) || 0),
         source: 'xstock_ticker_snap',
+        verdict,
       };
     } catch (err) {
       console.error(`[P19-B4b.1][DEPTH_SOURCE] xStock snapshot query threw for ${symbol} — fail-closed (null):`, err);

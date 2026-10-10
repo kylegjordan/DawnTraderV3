@@ -17,7 +17,7 @@ import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, type Book
 const CFG: BookStateConfig = {
   enabled: true, kRel: 3, floorPct: 1.0, otherSideHoldPct: 0.5, lastHoldPct: 0.5, trailingSpreadWindowSnaps: 20,
   feedReadEnabled: false, feedStubFractionF: 0.10, feedStubWindowMs: 90_000, feedCohortFloor: 50, hollowSkipCap: 60,
-  ownMarkDeviationDPct: 5, spreadBlownEnabled: false,
+  ownMarkDeviationDPct: 5, riAbsSpreadCeilingPct: 1.0, spreadBlownEnabled: false,
 };
 
 function frame(now: { bid: number | null; ask: number | null; last: number | null }, prior: { bid: number; ask: number; last: number | null } | null): BookStateInput {
@@ -223,11 +223,11 @@ describe('B-XSTOCK-FEED-SANITY — every threshold is mutation-proved (one bound
 });
 
 describe('B-XSTOCK-FEED-SANITY — the one list', () => {
-  it('BOOK_STATE_KNOBS has exactly twelve names and the seed covers each once', () => {
-    expect(BOOK_STATE_KNOBS.length).toBe(12);
-    expect(new Set(BOOK_STATE_KNOBS).size).toBe(12);
+  it('BOOK_STATE_KNOBS has exactly thirteen names and the seed covers each once', () => {
+    expect(BOOK_STATE_KNOBS.length).toBe(13);
+    expect(new Set(BOOK_STATE_KNOBS).size).toBe(13);
     for (const k of BOOK_STATE_KNOBS) expect(typeof BOOK_STATE_SEED[k]).toBe('number');
-    expect(Object.keys(BOOK_STATE_SEED).length).toBe(12);
+    expect(Object.keys(BOOK_STATE_SEED).length).toBe(13);
   });
   it('medianOf: odd, even, empty', () => {
     expect(medianOf([3, 1, 2])).toBe(2); expect(medianOf([4, 1, 3, 2])).toBe(2.5); expect(medianOf([])).toBeNull();
@@ -550,10 +550,10 @@ describe('3n.q7 inc-2 OBJ-1 — spread_blown', () => {
     expect(r.state).toBe('two_sided');
     expect(r.reasons).not.toContain('spread_blown');
   });
-  it('the shipped resolver sets it false, and the knob list is untouched (still twelve)', () => {
+  it('the shipped resolver sets it false, and spread_blown is still not a knob (thirteen, its row lands with objective 6)', () => {
     const src = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state-config.ts'), 'utf8');
     expect(src).toMatch(/spreadBlownEnabled: false,/);
-    expect(BOOK_STATE_KNOBS.length).toBe(12);
+    expect(BOOK_STATE_KNOBS.length).toBe(13);
     expect(BOOK_STATE_KNOBS as readonly string[]).not.toContain('spread_blown_enabled');
   });
 });
