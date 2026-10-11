@@ -94,8 +94,10 @@ describe('P3 — display ages are observation ages', () => {
     expect(errSpy.mock.calls.some((c) => String(c[0]).includes('Live fetch exception'))).toBe(false);
     expect(logSpy.mock.calls.some((c) => String(c[0]).includes('[XSTOCK_REST_GATE] symbol=AAPL/USD rest_ask=skipped serving=no_reliable_price'))).toBe(true);
     // Langston gate 3 r2, condition 1: without its guard a leg throws in observedIso, and the catch below ALSO returns
-    // no_reliable_price — so each leg is asserted to decide WITHOUT an exception (the throw is a second route to the
-    // same verdict, invisible to a verdict assertion).
+    // no_reliable_price — so the gate, all-APIs-failed and REST-quote legs are asserted to decide WITHOUT an exception
+    // (the throw is a second route to the same verdict, invisible to a verdict assertion). The fetch-exception leg
+    // (NANY) logs an exception BY DESIGN and cannot carry that assertion: its guard is covered instead because, without
+    // it, the throw happens INSIDE the catch with no outer handler, so the call rejects and the await fails the test.
     const exceptions = () => errSpy.mock.calls.filter((c) => String(c[0]).includes('Live fetch exception')).length;
     let e0 = exceptions();
     vi.spyOn(adapter, 'fetchFromKrakenRest').mockResolvedValueOnce(null);  // all-APIs-failed
@@ -125,7 +127,7 @@ describe('P3 — display ages are observation ages', () => {
 });
 
 describe('P5 — #913 and the dead constant', () => {
-  it('#913 / row 33: the last-known-good fallback lines name BOTH ages; no bare age= label survives in the adapter', async () => {
+  it('#913 / row 33: the two last-known-good fallback lines name BOTH ages, with no bare age= label (three receipt-age lines elsewhere are left intentionally, change list gate 3 r2)', async () => {
     const { readFileSync } = await import('node:fs');
     const lines = readFileSync('server/services/live-pricing-adapter.ts', 'utf8').replace(/\r/g, '').split('\n')
       .filter((l) => l.includes('[LAST_KNOWN_GOOD_FALLBACK]'));
