@@ -15,6 +15,8 @@
  *  - 'sqe'                — failed SQE FinalScore floor
  *  - 'rtb'                — RTB queue stale / TTL expired before promotion
  *  - 'tcl'                — TCL cooldown / dedup
+ *  - 'entry_fill'         — the active taker fill sat at or through the signal's own stop or target (B-ENTRY-DISTANCE-GUARD,
+ *                           sprint row 59) — kept apart from 'tcl' so the per-strategy attrition tally does not pool it into dedup
  *  - 'strategy_internal'  — strategy detect() returned null
  */
 
@@ -110,6 +112,7 @@ export type RejectStage =
   | 'sqe'
   | 'rtb'
   | 'tcl'
+  | 'entry_fill'
   | 'strategy_internal';
 
 /**

@@ -5630,6 +5630,10 @@ export class ActiveExecutionEngine {
     let actualEntryPrice: number;
     let entryFee: number;
     let totalSlippage: number;
+    // B-ENTRY-DISTANCE-GUARD (Langston Step-4 CHANGE 1): the OBJ-2 shadow measurement, carried to the DURABLE archive row of
+    // BOTH arms (admitted and refused) with one schema — out.log alone rotates away long before the promotion read needs it.
+    // The plan's age rides with it (queuedAt / rtbQueueId), so a stale plan can be told from a fast move. Null on a maker.
+    let _entryShadowRec: Record<string, unknown> | null = null;
     if (_b72cPendingMaker) {
       actualEntryPrice = _b72cLimit;
       entryFee = _b72cLimit * quantity * getFrictionForAssetClass(_openClass).feeRateMaker;
@@ -5678,6 +5682,12 @@ export class ActiveExecutionEngine {
     // judging it here, before any write, leaves nothing behind. A fourth sibling of the three FILL_REJECTED returns above.
     // OBJ-2 SHADOW first, on EVERY taker open, so the refused ones are in the same population as the admitted ones.
     const _shadow = entryFillShadow({ fill: actualEntryPrice, intended: signal.entryPrice, stop: signal.stopPrice, target: signal.targetPrice, floor: _entryFloor });
+    _entryShadowRec = {
+      intendedEntryPrice: signal.entryPrice, rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,
+      rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',
+      planQueuedAt: (signal.metadata as Record<string, unknown> | undefined)?.queuedAt ?? null,
+      rtbQueueId: (signal.metadata as Record<string, unknown> | undefined)?.rtbQueueId ?? null,
+    };
     console.log(`[ENTRY_GEOMETRY][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} ` +
       `rr_fill=${_shadow.rrFill === null ? 'n/a' : _shadow.rrFill.toFixed(4)} floor=${_entryFloor ?? 'n/a'} adverse_r=${_shadow.adverseR === null ? 'n/a' : _shadow.adverseR.toFixed(4)} would_refuse=${_shadow.wouldRefuse ?? 'n/a'}${_entryFloorNote}`);
     // OBJ-1 LIVE: a taker fill at or through the signal's own stop or target is a trade dead or spent the moment it opens
@@ -5690,9 +5700,9 @@ export class ActiveExecutionEngine {
         const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
         archiveSignalEval({
           mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass: _openClass,
-          source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'tcl', confidenceModulated: signal.confidence,
-          gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, intendedEntryPrice: signal.entryPrice,
-            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice },
+          source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
+          gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, entryPrice: actualEntryPrice,
+            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...(_entryShadowRec ?? {}) },
         });
       } catch (archErr) {
         // The refusal above is already counted and logged; an archive failure must never read as "no refusal happened".
@@ -6140,6 +6150,7 @@ export class ActiveExecutionEngine {
           rejectStage: 'admitted',
           confidenceModulated: signal.confidence,
           gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
+            ...(_entryShadowRec ?? {}), // B-ENTRY-DISTANCE-GUARD CHANGE 1: the shadow measurement, same schema as the refused arm
             // ★ mark-2 precondition (Langston 2026-08-17): same expectancy_gates version stamp as the SQE reject row.
             gateConstantsVersion: (await import('./data-archive/decision-provenance.js')).gateConstantsVersionFor(_tradeClass, signal.strategy) },
           features: { entrySlippage: totalSlippage, entryFee },

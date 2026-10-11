@@ -95,6 +95,18 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
     expect(src).toContain('[ENTRY_GEOMETRY][ARCHIVE_FAILED]');
     expect(src).toContain("gate: 'entry_fill', accepted: false");
   });
+  it('Langston CHANGE 2: the refusal row has its OWN reject stage, not the dedup stage', () => {
+    expect(src).toContain("rejectStage: 'entry_fill', confidenceModulated: signal.confidence,");
+    expect(src).not.toMatch(/rejectStage: 'tcl',[^\n]*\n\s*gateDecision: \{ gate: 'entry_fill'/);
+  });
+  it('Langston CHANGE 1: BOTH archive rows carry the shadow measurement with one schema, and the plan age', () => {
+    expect(src).toContain('rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,');
+    expect(src).toContain('planQueuedAt:');
+    expect(src).toContain('rtbQueueId:');
+    const spreads = src.split('...(_entryShadowRec ?? {})').length - 1;
+    expect(spreads).toBe(2); // the refused row and the admitted row
+    expect(at("gate: 'admitted', accepted: true")).toBeLessThan(src.lastIndexOf('...(_entryShadowRec ?? {})'));
+  });
 });
 
 describe('the stage is counted, so attempts still reconcile (P19-B6.5e)', () => {

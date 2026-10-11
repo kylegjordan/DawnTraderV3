@@ -20,6 +20,11 @@
  * arm is reachable only through divergence between two non-simultaneous reads (the cached mid, which the B53 guard
  * already requires to sit above the stop, and the touch read at booking time). It is NOT dead code — keep it.
  *
+ * FOURTH CALLER (`B-ENTRY-DISTANCE-GUARD`, sprint row 59): the ACTIVE engine's taker open (`active-execution-engine.ts`,
+ * after the depth-walked fill, before any write). The long-only premise holds there too — the open is `side: 'buy'` and the
+ * signal is `type: 'LONG'` — and its maker arm is likewise left alone (a maker books at its limit, which
+ * `checkStopLossRequired` keeps above the stop).
+ *
  * QUANTITY is the fixed dollars at the BOOKED price; a non-positive or non-finite price yields NO quantity (the caller
  * refuses) — never a zero-size trade, never a divide by zero (RIDER-A: one policy for all three sites).
  */
