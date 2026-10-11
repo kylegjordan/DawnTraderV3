@@ -93,12 +93,20 @@ describe('P3 — display ages are observation ages', () => {
     // decided AT the gate leg, never by a throw caught one leg down
     expect(errSpy.mock.calls.some((c) => String(c[0]).includes('Live fetch exception'))).toBe(false);
     expect(logSpy.mock.calls.some((c) => String(c[0]).includes('[XSTOCK_REST_GATE] symbol=AAPL/USD rest_ask=skipped serving=no_reliable_price'))).toBe(true);
+    // Langston gate 3 r2, condition 1: without its guard a leg throws in observedIso, and the catch below ALSO returns
+    // no_reliable_price — so each leg is asserted to decide WITHOUT an exception (the throw is a second route to the
+    // same verdict, invisible to a verdict assertion).
+    const exceptions = () => errSpy.mock.calls.filter((c) => String(c[0]).includes('Live fetch exception')).length;
+    let e0 = exceptions();
     vi.spyOn(adapter, 'fetchFromKrakenRest').mockResolvedValueOnce(null);  // all-APIs-failed
     expect((await adapter.fetchLivePrice('NANX/USD')).source).toBe('no_reliable_price');
+    expect(exceptions()).toBe(e0);
     vi.spyOn(adapter, 'fetchFromKrakenRest').mockRejectedValueOnce(new Error('boom')); // fetch exception (inside the catch)
     expect((await adapter.fetchLivePrice('NANY/USD')).source).toBe('no_reliable_price');
     vi.spyOn(adapter, 'fetchFromKrakenRest').mockResolvedValueOnce({ price: 5, observedAt: Number.NaN, producer: 'kraken_rest_poller', lastTradePrice: null, lastTradeReceivedAtMs: null });
+    e0 = exceptions();
     expect((await adapter.fetchLivePrice('NANZ/USD')).source).toBe('no_reliable_price'); // the REST quote leg, no cache row
+    expect(exceptions()).toBe(e0);
   });
 
   it('FENCE: no re-serve leg stamps "now" as its timestamp', async () => {
@@ -117,6 +125,14 @@ describe('P3 — display ages are observation ages', () => {
 });
 
 describe('P5 — #913 and the dead constant', () => {
+  it('#913 / row 33: the last-known-good fallback lines name BOTH ages; no bare age= label survives in the adapter', async () => {
+    const { readFileSync } = await import('node:fs');
+    const lines = readFileSync('server/services/live-pricing-adapter.ts', 'utf8').replace(/\r/g, '').split('\n')
+      .filter((l) => l.includes('[LAST_KNOWN_GOOD_FALLBACK]'));
+    expect(lines).toHaveLength(2);
+    for (const l of lines) { expect(l).toContain('receiptAgeMs=${cacheAge}'); expect(l).toContain('observedAgeMs=${Date.now() - cached.observedAt}'); expect(l).not.toMatch(/ age=\$\{/); }
+  });
+
   it('#913 by CLASS: every log line printing the inter-tick cadence names it for what it is — never an age', async () => {
     const { readFileSync } = await import('node:fs');
     const lines = readFileSync('server/services/active-execution-engine.ts', 'utf8').replace(/\r/g, '').split('\n')

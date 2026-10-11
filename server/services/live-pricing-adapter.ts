@@ -746,7 +746,7 @@ export class LivePricingAdapter {
       // row 33 P3: a re-serve whose age cannot be stated is not presented (falls to `no_reliable_price` below).
       if (cached && cached.price > 0 && Number.isFinite(cached.observedAt)) {
         const cacheAge = Date.now() - cached.cachedAt;
-        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=all_apis_failed`);
+        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} receiptAgeMs=${cacheAge} observedAgeMs=${Date.now() - cached.observedAt} reason=all_apis_failed`); // row 33: two ages, each named (was `age=`, the receipt age)
         return {
           symbol,
           price: cached.price,
@@ -784,7 +784,7 @@ export class LivePricingAdapter {
       // row 33 P3: a re-serve whose age cannot be stated is not presented (falls to `no_reliable_price` below).
       if (cached && cached.price > 0 && Number.isFinite(cached.observedAt)) {
         const cacheAge = Date.now() - cached.cachedAt;
-        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=fetch_exception`);
+        console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} receiptAgeMs=${cacheAge} observedAgeMs=${Date.now() - cached.observedAt} reason=fetch_exception`); // row 33: two ages, each named (was `age=`, the receipt age)
         return {
           symbol,
           price: cached.price,
@@ -861,7 +861,7 @@ export class LivePricingAdapter {
         // ⛔⛔ WHAT A NaN WOULD REACH — as of `B-PRICE-STALENESS-BOUND` P3 (row 33, 2026-10-11), BOTH:
         //    (1) the provenance columns — `entryObservedAtMs` and `exitObservedAtMs` (engine,
         //        `active-portfolio-manager.ts`) — a CORRUPT PROVENANCE COLUMN; and
-        //    (2) `isPriceVenueQuiet` (:378), at both call sites, which since P3 derive their age FROM
+        //    (2) `isPriceVenueQuiet` (:381), at both call sites, which since P3 derive their age FROM
         //        `observedAt`: `routes.ts:4932` via `peekCachedPrice` (`Date.now() - cached.observedAt`)
         //        and `routes.ts:12106` via `:11931` (`Date.now() - new Date(liveQuote.timestamp)`, where a
         //        re-served `timestamp` is now `observedIso(observedAt)`). A NaN age reads NOT quiet — a
