@@ -403,6 +403,7 @@ import { aj19bDiagnostic } from './aj19b-lifecycle-diagnostic';
 import { aj19Diagnostic } from './aj19-max-position-diagnostic';
 import { livePricingAdapter, isKrakenVenueSource, type PriceProducer } from './live-pricing-adapter';
 import { isNonActionableVenueMark } from '../core/trading/venue-mark-actionable.js';
+import { judgeExitPriceAge, CRYPTO_EXIT_PRICE_MAX_AGE_MS } from '../core/trading/exit-price-age.js';
 import { priceCache } from './price-cache';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
@@ -820,6 +821,9 @@ export class ActiveExecutionEngine {
   private _venueQuiet = new VenueQuietState();
   private _engineConstructedAt = Date.now();
   private _lastVenueQuietSweepAt = 0;
+  /** row 33 P4 (8g-bis): the stored-row tripwire's watermark — 0 until its first run, which looks back 24 h. */
+  private _reserveTripwireSinceMs = 0;
+  private _lastReserveTripwireAt = 0;
   // B-XSTOCK-FEED-SANITY: consecutive HOLLOW-book skips per position (the bounded withholding of
   // scope constraint 7). Reset on any non-hollow verdict; cleared at yield. Per engine instance.
   private _bookStateSkipStreak: Map<string, number> = new Map();
@@ -1049,6 +1053,30 @@ export class ActiveExecutionEngine {
         ` held=${r.held.length}${r.held.length ? `[${r.held.map((h) => `${h.symbol}:${h.reasonFamilies.join('+') || 'unknown'}`).join(',')}]` : ''}`);
     } catch (err) {
       console.error(`[VENUE_QUIET][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  /**
+   * `B-PRICE-STALENESS-BOUND` P4 (`B-PRICE-SIDE-BY-JOB` row 8g-bis): the STORED-ROW tripwire, at most every 10 minutes,
+   * after the exit cycle and awaited by nothing on the exit path. Reads `closed_trades` (stored columns, never a log line)
+   * for this mode's rows priced by the rate-limited re-serve and alerts once per violating row (`reserve-row-tripwire.ts`).
+   * The run line prints how many reserve rows it CHECKED, so a clean run over an empty arm reads as unexercised, not as
+   * a pass. Watermark overlaps by 5 minutes; a restart looks back 24 h (a resolved row in that window can re-alert once).
+   */
+  private async _runReserveRowTripwire(): Promise<void> {
+    const now = Date.now();
+    if (now - this._lastReserveTripwireAt < 600_000) return;
+    this._lastReserveTripwireAt = now;
+    const since = this._reserveTripwireSinceMs > 0 ? this._reserveTripwireSinceMs : now - 86_400_000;
+    try {
+      const { runReserveRowTripwire, listReserveRowsFromDb } = await import('./reserve-row-tripwire.js');
+      const { addAlert } = await import('./system-alerts.js');
+      const r = await runReserveRowTripwire(this.mode, since, { listReserveRows: listReserveRowsFromDb, addAlert: addAlert as any });
+      this._reserveTripwireSinceMs = now - 300_000;
+      console.log(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE] mode=${this.mode} since=${new Date(since).toISOString()} reserveRowsChecked=${r.checked} violating=${r.violating.length}` +
+        (r.violating.length ? ` [${r.violating.map((v) => `${v.symbol}:${v.violations.join('+')}`).join(',')}]` : ''));
+    } catch (err) {
+      console.error(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     }
   }
 
@@ -2061,6 +2089,9 @@ export class ActiveExecutionEngine {
     let restTokenExhausted = 0;
     let restVenueRateLimited = 0;
     let restAgeExempt = 0;
+    // row 33 P4 (8g): crypto exit prices refused on their RETAINED observation age, and exemptions that changed a decision.
+    let exitAgeRefused = 0;
+    let exitAgeExemptUsed = 0;
     let slHits = 0;
     let tpHits = 0;
     // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle — printed in EVAL_EXIT. Not a row census: count
@@ -2602,7 +2633,7 @@ export class ActiveExecutionEngine {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
         // Only fall back to REST if WS cache is stale > 2 seconds
-        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, 2000);
+        const priceResult = await livePricingAdapter.getPriceWithFallback(position.symbol, CRYPTO_EXIT_PRICE_MAX_AGE_MS);
         
         // ── P19-B8.5 (VENUE-ONLY ACTIONABLE PRICING — Kyle structural cut B, Langston-
         // endorsed 2026-07-15) ─────────────────────────────────────────────────────────
@@ -2629,15 +2660,33 @@ export class ActiveExecutionEngine {
         // ⇒ the evaluator's stale-mark branch would then fire on a mark this engine had already
         //   accepted. Closing it at the SOURCE is worth more than counting it at the sink.
         // (Langston, 2026-09-14 — folded in under §9.4 disposition 1.)
-        if (priceResult !== null && priceResult.price !== null && Number.isFinite(priceResult.price) && priceResult.price > 0 && isKrakenVenueSource(priceResult.source)) {
-          currentPrice = priceResult.price;
-          priceSource = priceResult.source;
+        // ── B-PRICE-STALENESS-BOUND P4 (`B-PRICE-SIDE-BY-JOB` row 8g, moved by Langston's Step-2 ruling) ──────────────
+        // The adapter's fresh arm judged `cachedAt`, a receipt stamp every cache write renews — so a rate-limited
+        // re-serve passed as a venue price. A venue price may decide an exit only if its RETAINED observation is inside
+        // D6's window (or its producer is declared exempt, counted). Refused ⇒ treated exactly like an adapter that
+        // offered nothing actionable: the direct Kraken REST leg below fetches a fresh read or skips the tick. The stale
+        // price never decides. Operator closes (flatten, stop reconcile, manual close) are deliberately NOT gated here.
+        const _venueMarkOk = priceResult !== null && priceResult.price !== null && Number.isFinite(priceResult.price) && priceResult.price > 0 && isKrakenVenueSource(priceResult.source);
+        let _exitAgeOk = true;
+        if (_venueMarkOk) {
+          const _ageJ = judgeExitPriceAge(priceResult!, Date.now(), CRYPTO_EXIT_PRICE_MAX_AGE_MS,
+            (p) => ageExemptionOfProducer(p as PriceProducer) !== null);
+          if (_ageJ.verdict === 'exempt') exitAgeExemptUsed++;
+          if (!_ageJ.actionable) {
+            _exitAgeOk = false;
+            exitAgeRefused++;
+            console.warn(`[B-PRICE-STALENESS-BOUND][EXIT_AGE_REFUSED] ${position.symbol}: '${priceResult!.producer}' ${_ageJ.verdict} (observed ${_ageJ.ageMs === null ? 'unstamped' : `${_ageJ.ageMs}ms ago`}, clock=receipt, limit ${CRYPTO_EXIT_PRICE_MAX_AGE_MS}ms) — not actionable, going to Kraken REST directly`);
+          }
+        }
+        if (_venueMarkOk && _exitAgeOk) {
+          currentPrice = priceResult!.price!;
+          priceSource = priceResult!.source;
           // B-EXIT-PROVENANCE P2 (R6-3, crypto adapter branch): ★ THE ONLY GENUINE CARRY OF THE
           // THREE — a real quote object with a real provenance field. `observedAt` is the ORIGINAL
           // venue observation time, carried through last-known-good re-serves unrefreshed (#743),
           // which is exactly why it is the honest freshness measure and `timestamp` is not.
-          priceProducer = priceResult.producer;
-          priceObservedAtMs = priceResult.observedAt;
+          priceProducer = priceResult!.producer;
+          priceObservedAtMs = priceResult!.observedAt;
           withWsPrice++;
           console.log(`[I7-WS-D][ENGINE_WS_PRICE] symbol=${position.symbol} price=${currentPrice}`);
         } else {
@@ -3235,9 +3284,10 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${this._coldMarkPending.size}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} exitAgeExemptUsed=${exitAgeExemptUsed} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${this._coldMarkPending.size}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
+    void this._runReserveRowTripwire(); // row 33 P4 (8g-bis)
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,

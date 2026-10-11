@@ -34,6 +34,9 @@ vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
 import {
   _handleMessageForTests, getLatestEquityTick, runStallWatchdogTick, _setArchiverStateForTest,
 } from '../../services/passive-archive/equity-spot-archiver.js';
+import { judgeExitPriceAge, CRYPTO_EXIT_PRICE_MAX_AGE_MS } from '../../core/trading/exit-price-age.js';
+import { ageExemptionOfProducer, AGE_EXEMPTION_BY_PRODUCER } from '../../services/market-data/price-basis.js';
+import { classifyReserveRow, runReserveRowTripwire, type ReserveRow } from '../../services/reserve-row-tripwire.js';
 
 const frame = (type: string, symbol: string, bid: number, ask: number) =>
   Buffer.from(JSON.stringify({ channel: 'ticker', type, data: [{ symbol, bid, ask, last: (bid + ask) / 2 }] }));
@@ -131,5 +134,68 @@ describe('P2 — the stall watchdog does not count a venue closure as feed silen
     });
     await at('2026-10-14T16:00:00Z'); // Wed 12:00 ET, regular session: 200 s silent > 75 s
     expect(close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('P4 (8g) — judgeExitPriceAge: the retained observation decides, the exemption is declared', () => {
+  const exempt = (p: string) => ageExemptionOfProducer(p as any) !== null;
+  const NOW = 1_800_000_000_000;
+  it('the window is the D6 2 s exit limit', () => expect(CRYPTO_EXIT_PRICE_MAX_AGE_MS).toBe(2000));
+  it('a rate-limited re-serve 14.3 s old is STALE and not actionable — whatever its cachedAt', () => {
+    expect(judgeExitPriceAge({ observedAt: NOW - 14_300, producer: 'kraken_rest_rate_limited_reserve' }, NOW, 2000, exempt))
+      .toEqual({ verdict: 'stale', actionable: false, ageMs: 14_300 });
+  });
+  it('NEGATIVE CONTROL: a genuine read inside the window is fresh', () => {
+    expect(judgeExitPriceAge({ observedAt: NOW - 500, producer: 'kraken_ws_ticker_mid' }, NOW, 2000, exempt))
+      .toEqual({ verdict: 'fresh', actionable: true, ageMs: 500 });
+    expect(judgeExitPriceAge({ observedAt: NOW - 2000, producer: 'kraken_rest_poller' }, NOW, 2000, exempt).actionable).toBe(true);
+  });
+  it('a missing stamp on a non-exempt producer is NOT fresh (never inferred from a null)', () => {
+    expect(judgeExitPriceAge({ observedAt: null, producer: 'kraken_rest_poller' }, NOW, 2000, exempt))
+      .toEqual({ verdict: 'unstamped', actionable: false, ageMs: null });
+  });
+  it('a declared-exempt producer passes BY DECLARATION, with its own verdict so the caller counts it', () => {
+    const exemptProducers = Object.entries(AGE_EXEMPTION_BY_PRODUCER).filter(([, v]) => v !== null).map(([k]) => k);
+    expect(exemptProducers.sort()).toEqual(['kraken_rest_engine_fallback_last', 'kraken_rest_engine_fallback_mid']);
+    for (const p of exemptProducers) {
+      expect(judgeExitPriceAge({ observedAt: null, producer: p }, NOW, 2000, exempt)).toEqual({ verdict: 'exempt', actionable: true, ageMs: null });
+    }
+    // and no re-serve is exempt — the table says so, and the judgement follows it
+    for (const p of ['kraken_rest_rate_limited_reserve', 'last_known_good_reserve', 'xstock_rest_gate_reserve']) {
+      expect(judgeExitPriceAge({ observedAt: NOW - 60_000, producer: p }, NOW, 2000, exempt).actionable).toBe(false);
+    }
+  });
+});
+
+describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows', () => {
+  const close = '2026-10-14T15:00:00.000Z';
+  const closeMs = Date.parse(close);
+  const row = (o: Partial<ReserveRow>): ReserveRow => ({ id: 't1', symbol: 'ZEC/USD', exit_observed_at_ms: closeMs - 14_300, closed_at: close, exit_price_source: 'kraken_rest', ...o });
+
+  it('(a) a null stamp fires', () => expect(classifyReserveRow(row({ exit_observed_at_ms: null }))).toEqual(['null_stamp']));
+  it('(b) a stamp equal to the close instant fires (a re-stamp at close)', () => {
+    expect(classifyReserveRow(row({ exit_observed_at_ms: closeMs }))).toEqual(['stamp_equals_close']);
+    expect(classifyReserveRow(row({ exit_observed_at_ms: String(closeMs) }))).toEqual(['stamp_equals_close']); // numeric arrives as text
+  });
+  it('(c) a source other than kraken_rest fires', () => expect(classifyReserveRow(row({ exit_price_source: 'last_known_good' }))).toEqual(['wrong_source']));
+  it('NEGATIVE CONTROL: a reserve row with an older stamp and source kraken_rest does not fire', () => {
+    expect(classifyReserveRow(row({}))).toEqual([]);
+  });
+  it('the run alerts once per violating row, keyed on the row, and reports how many rows it CHECKED', async () => {
+    const alerts: any[] = [];
+    const r = await runReserveRowTripwire('paper', 0, {
+      listReserveRows: async (mode, since) => { expect(mode).toBe('paper'); expect(since).toBe(0); return [row({ id: 'ok' }), row({ id: 'bad', exit_observed_at_ms: null, exit_price_source: 'mock' })]; },
+      addAlert: async (a) => { alerts.push(a); return {}; },
+    });
+    expect(r.checked).toBe(2);
+    expect(r.violating).toEqual([{ id: 'bad', symbol: 'ZEC/USD', violations: ['null_stamp', 'wrong_source'] }]);
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0].dedupe_key).toBe('reserve-row-tripwire-bad');
+  });
+  it('the production query reads the stored columns of the reserve producer only', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('server/services/reserve-row-tripwire.ts', 'utf8');
+    expect(src).toContain("export const RESERVE_PRODUCER = 'kraken_rest_rate_limited_reserve';");
+    expect(src).toMatch(/SELECT id, symbol, exit_observed_at_ms, closed_at, exit_price_source\s+FROM closed_trades\s+WHERE mode = \$\{mode\} AND exit_price_producer = \$\{RESERVE_PRODUCER\}/);
   });
 });

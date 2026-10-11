@@ -125,6 +125,7 @@ import { ActiveExecutionEngine } from '../../services/active-execution-engine.js
 import { VenueQuietState } from '../../services/venue-quiet-alerting.js';
 import { priceCache } from '../../services/price-cache';
 import { livePricingAdapter } from '../../services/live-pricing-adapter';
+import { restRateLimiter } from '../../services/market-data/rest-rate-limiter.js';
 import { _resetBookStateComparatorsForTest, _peekRetainedRingForTest, readBookStateComparator } from '../../asset_classes/xstock_spot/book-state-tracker.js';
 
 const SYMBOL = 'MDB/USD';
@@ -603,5 +604,56 @@ describe('row 33 B-PRICE-STALENESS-BOUND P1b — a COLD mark (a subscribe replay
     const t2 = await tick(eng, f);
     expectEvaluated(t2, f, 'n');
     expect(eng._priceSkipStreak.has(id)).toBe(false);
+  });
+});
+
+describe('row 33 B-PRICE-STALENESS-BOUND P4 (8g) — the crypto exit age check, through the real exit loop', () => {
+  const REFUSED = /\[EXIT_AGE_REFUSED\] BTC\/USD: 'kraken_rest_rate_limited_reserve' stale/;
+  // The evaluator was reached on this price. (Whether the stop then FIRES is the bid-side trigger's job, which needs book
+  // sides this harness does not seed — it refuses for want of a side, counted as exitEvalRefused. Reaching the evaluator
+  // is the property the age check governs.)
+  const EVALUATED = /\[8\.8\.3-I6\]\[EXIT_EVAL\] symbol=BTC\/USD livePrice=94 /;
+  function cryptoPosition() {
+    return { ...makePosition(), id: 'pos-BTC-8g', symbol: 'BTC/USD', assetClass: 'crypto_spot', avgPrice: '100', entryPrice: '100', stopLoss: '95', takeProfit: '120' };
+  }
+  function cryptoEngine(): Stub {
+    const eng = makeEngine();
+    eng.krakenService = { getTicker: vi.fn(async () => { throw new Error('must not be reached: the token bucket is empty'); }) };
+    return eng;
+  }
+  // The rate-limited re-serve: a venue source, the ORIGINAL observation 14.3 s old (the #951 sawtooth's first rung),
+  // and a price BELOW the stop — so if it were allowed to decide, the stop would fire.
+  const reserve = (observedAgoMs: number) => ({
+    symbol: 'BTC/USD', price: 94, timestamp: new Date().toISOString(), source: 'kraken_rest',
+    producer: 'kraken_rest_rate_limited_reserve', observedAt: Date.now() - observedAgoMs,
+    lastTradePrice: null, lastTradeReceivedAtMs: null,
+  });
+
+  it('a re-serve past the window HOLDS the exit: refused, sent to REST, the empty bucket skips the tick, nothing closes', async () => {
+    h.getActiveOpenPositions.mockImplementation(async () => [cryptoPosition()]);
+    vi.spyOn(livePricingAdapter, 'getPriceWithFallback').mockImplementation(async () => reserve(14_300) as any);
+    vi.spyOn(restRateLimiter, 'takeToken').mockImplementation(() => false);
+    const eng = cryptoEngine();
+    const t = await tick(eng, WARM[0]);
+    expect(count(t.warns, REFUSED)).toBe(1);
+    expect(t.warns.find((l) => REFUSED.test(l))).toContain('observed 14300ms ago, clock=receipt, limit 2000ms');
+    expect(t.priceSkips).toEqual(['rest_token_exhausted']);
+    expect(t.closes).toEqual([]);
+    expect(has(t.logs, EVALUATED)).toBe(false); // the stale price never reached the evaluator
+    expect(eng.krakenService.getTicker).not.toHaveBeenCalled();
+    expect(has(t.logs, /exitAgeRefused=1 exitAgeExemptUsed=0/)).toBe(true);
+  });
+
+  it('CONTROL: the same price observed inside the window reaches the exit evaluator', async () => {
+    h.getActiveOpenPositions.mockImplementation(async () => [cryptoPosition()]);
+    vi.spyOn(livePricingAdapter, 'getPriceWithFallback').mockImplementation(async () => reserve(500) as any);
+    vi.spyOn(restRateLimiter, 'takeToken').mockImplementation(() => false);
+    const eng = cryptoEngine();
+    const t = await tick(eng, WARM[0]);
+    expect(count(t.warns, REFUSED)).toBe(0);
+    expect(t.priceSkips).toEqual([]);
+    expect(has(t.logs, EVALUATED)).toBe(true);
+    expect(has(t.logs, /exitEvalInvoked=1 /)).toBe(true);
+    expect(has(t.logs, /exitAgeRefused=0 exitAgeExemptUsed=0/)).toBe(true);
   });
 });
