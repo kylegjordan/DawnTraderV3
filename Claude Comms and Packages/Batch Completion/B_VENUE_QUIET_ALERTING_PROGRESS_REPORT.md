@@ -61,6 +61,10 @@ The scope's staging criterion, quoted: *"at the next US close with xStocks held,
 
 **Re-anchor (restart clause):** r6 + r6b + the evidence-token condition deployed at `71c8a2210`, **`pm_uptime` 2026-10-10T23:17:43.835Z**, before the 00:00Z reopen — the Monday window reads on this code; the first sweep printed `held=16[…:quiet_market+book_state, …]`.
 
+**➕ 2026-10-11 00:16Z UTC — two facts for the record, before the window opens:**
+- **The window has not opened yet.** The reopen is **Sunday 20:00 ET = 2026-10-12T00:00Z** (as §3 states); my dispatches and messages on 10-10 evening said "the 00:00Z reopen" meaning 2026-10-11 — wrong by 24 hours. The sweeps at 2026-10-11 00:00-00:15Z correctly read `closed`, `T=0`. Nothing in the criteria moves; the deploy of r6+r6b (`pm_uptime` 2026-10-10T23:17:43.835Z) simply landed a day early, and r6c can deploy on Sunday without touching the window.
+- **FINDING-1's Monday corroboration on the eight held rows is no longer available:** Langston resolved all eight by hand between 2026-10-10T23:59:50Z and 2026-10-11T00:13:01Z (`resolved_by_claimed: langston`), each with a measured "guard correct, no value lost" evidence block. FINDING-1 already rests on the mechanism (§3a item 4), and r6b's supersede-before-mint handles the held-key layer, so the batch's position is unchanged; the observation that would have corroborated it is what is gone, and that is stated rather than counted as a pass.
+
 ## 4. What is unproven, stated as unproven
 - The weekday arms (`quiet`, `not_quiet`, `thin` in session and after hours) have not run on the deployed code.
 - `T` counts updates only; the thresholds were measured on all frames. Off-session steady state should differ little (no resubscribes), but that is Monday's measurement.
