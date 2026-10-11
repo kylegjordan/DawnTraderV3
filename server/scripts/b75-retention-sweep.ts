@@ -97,8 +97,11 @@ const B74_TABLES: B74TableSpec[] = [
 // IDENTICAL shape as the B74 tables above — so they route through the SAME
 // export→warm→verify→DROP-only-after-verify path (then the table-agnostic
 // cold-rotator moves warm→cold at 365d, preserving them indefinitely).
-// Each entry's `retentionConstantName` is per-table isolated (Langston Step-2):
-// a B70 config gap fails ONLY that table's `reqNum`, never a B74 table.
+// Each entry's `retentionConstantName` is per-table (Langston Step-2) — but a config gap is NOT isolated: `reqNum`
+// throws, `loadConfig` runs before the sweep starts and nothing catches it, so a missing key on ANY entry (B74, B70 or
+// plain) aborts the WHOLE night's sweep. That is the safe fail-hard behaviour — and it is why a rollback that restores a
+// table entry must restore its seed row FIRST (B-CLUSTER-BUS-PERSIST-DISPOSITION: run the rollback SQL, then revert the
+// code). Corrected 2026-10-11; it read "a B70 config gap fails ONLY that table's reqNum, never a B74 table".
 const B70_TABLES: B74TableSpec[] = [
   { parent: 'signal_eval_archive',     timestampColumn: 'captured_at', retentionConstantName: 'signal_eval_archive.hot_retention_days' },
   { parent: 'pair_scan_archive',       timestampColumn: 'captured_at', retentionConstantName: 'pair_scan_archive.hot_retention_days' },

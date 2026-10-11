@@ -1291,3 +1291,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT GUARDS IT.** A fence test: every Central Clock subscription in the repository must be one of five known sites with five distinct names.
 
 **RESULT.** On the running system the clock has exactly five subscribers, the live ones. **Closed:** `#1161`; absorbed `PHASE_19_PLAN` 3n.a.
+
+## B-CLUSTER-BUS-PERSIST-DISPOSITION (CC-B, sprint plan row 2a0c — after row 2a0b; `#1159`) — change-class `non_architecture` — ⏳ **STEP 11** (Step 4 APPROVED at `9ab39a45a`; deployed in `ad01f5339` 2026-10-10; Step 8 CONFIRMED by Langston 2026-10-11; report `Batch Completion/B_CLUSTER_BUS_PERSIST_DISPOSITION_COMPLETION_REPORT.md`)
+
+**WHAT IT REMOVED.** The cluster bus's database persistence: the write in `publish()`, the `cluster_bus_event` table (~269k rows, zero readers after row 2a0b), its enum, its retention entry and seed. The in-memory bus stays — live code uses it.
+
+**RESULT.** Table and type gone on staging; the 2026-10-11 nightly sweep no longer touches the table and failed nothing. **Closed:** `#1159`. The wider Phase 17-22 cluster layer stays `#1163` (row 2a0e).

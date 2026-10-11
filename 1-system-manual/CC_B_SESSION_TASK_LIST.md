@@ -7,7 +7,7 @@
 | batch | step | waiting on |
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
-| **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c) | **deployed 2026-10-10 — STEP 7** | the 2026-10-11 02:15Z retention sweep (no `cluster_bus_event` line, failed=0), then Step 8 |
+| **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c) | **STEP 11** — report `Batch Completion/B_CLUSTER_BUS_PERSIST_DISPOSITION_COMPLETION_REPORT.md` | Langston's Step-11 confirm |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
 | **`B-ENTRY-DISTANCE-GUARD`** (row 59 increment 1, pre-sprint P1a) | **STEP 3** — Step 2 PROCEED (Langston 2026-10-10), pre-audit r2 | build items 1, 2, 5-8; items 3 and 4 wait on Langston's r3 clear |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1) | **STEP 10 — progress report, card Observation** (Step 8 CONFIRMED 10-10) | the first weekday against the pre-registered criteria: the record resolves at the 10-12 00:00Z reopen; `update:N` vs the 50 floor; the 20:00Z close pages no quiet-family streak; FINDING-1: any of the 8 book-state rows still active after 13:30Z = fix before close |

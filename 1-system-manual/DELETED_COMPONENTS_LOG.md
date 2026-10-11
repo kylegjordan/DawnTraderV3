@@ -1245,3 +1245,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **VERIFIED AFTER DEPLOY (`0c8ef5da2`, read 2026-10-10):** the row is gone (0 rows; control: 17 other `strategy.vwap_pullback` rows present); `PATTERN_ATR_DROPS 0` on every pool line of the running process.
 **ARCHIVE:** no file was deleted (each function body was replaced in place and each fallback was an inline expression) — git history holds them at `ef4c7c8be^`; the row is restored by `drizzle/migrations/2026-10-06-b-atr-bad-print-retire-daily-range-frac-rollback.sql` (tracked).
 **COMMIT:** `ef4c7c8be` (Step 3); migration `2026-10-06-b-atr-bad-print-retire-daily-range-frac.sql`; deployed `0c8ef5da2`.
+
+## 2026-10-07 — the cluster bus's persistence: the `cluster_bus_event` table, the `bus_event_topic` enum, the persist branch and its retention entry — B-CLUSTER-BUS-PERSIST-DISPOSITION (row 2a0c, `#1159`), CC-B — ⚠️ entry written at Step 10 (2026-10-11), after the 10-11 sweep, as the change list stated
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| the persist branch, `persistTopics`, the `db` / `clusterBusEvent` / two type imports | `server/services/cluster-bus.ts` | `publish()` wrote every persisted topic to `cluster_bus_event` |
+| `busEventTopicEnum`, `clusterBusEvent`, `insertClusterBusEventSchema`, `InsertClusterBusEvent`, `ClusterBusEvent` | `shared/schema.ts` | the table's schema; `BusEventTopic` kept as a plain union of the same eight labels |
+| the `cluster_bus_event` entry | `server/scripts/b75-retention-sweep.ts` (`PLAIN_RETENTION_TABLES`) | 30-day age-delete, added by 2a0b on 2026-10-06 |
+| table `cluster_bus_event` (~269k rows), type `bus_event_topic`, seed `data_lifecycle.cluster_bus_event.hot_retention_days` | staging DB | dropped by `2026-10-07-b-cluster-bus-persist-remove.sql`, no `CASCADE` |
+**WHY:** after `B-ENGINE-HEARTBEAT-DEAD-PATHS` (row 2a0b) removed its main writer, the table had zero programmatic readers; it was write-only audit telemetry (rule 18, Langston's §13 home for `#1159`).
+**BLAST RADIUS / STATE-WRITE CENSUS:** the one removed writer's only state was the table it dropped with; `publish()` still delivers to in-process subscribers (test: a formerly persisted topic reaches a subscriber with a `db` mock that throws on any access). Migration safety measured by Langston on staging: `cluster_bus_event.topic` was the only column on the enum, zero FKs, zero dependent views.
+**VERIFIED AFTER DEPLOY (`ad01f5339`, 2026-10-10 11:59Z):** `to_regclass` NULL, 0 `bus_event_topic` types (control: 96 live enums), the seed gone (control: 17 other `hot_retention_days` keys); the 2026-10-11 02:15Z sweep printed no `cluster_bus_event` line and `plain_deleted` = `xstock_qd_probe_history`'s 137,376 exactly, failed=0.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/cluster-bus.pre-B-CLUSTER-BUS-PERSIST-DISPOSITION.ts.removed` (the bus before the change); the schema entries are in git at `b523c86bf^:shared/schema.ts`; the table and enum are restored by `drizzle/migrations/2026-10-07-b-cluster-bus-persist-remove-rollback.sql` (tracked) — **run it FIRST, then revert the code.**
+**COMMIT:** `b523c86bf` (Step 3), conditions `9ab39a45a`; deployed `ad01f5339`.

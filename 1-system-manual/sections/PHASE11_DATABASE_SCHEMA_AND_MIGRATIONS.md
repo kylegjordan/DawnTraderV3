@@ -179,7 +179,6 @@ All 10 Walter tables have FK relationships to `users`. These tables will become 
 | `cluster_node` | 17.0 | Node registry |
 | `cluster_task_queue` | 17.0 | Task queue |
 | `cluster_result_log` | 17.0 | Result tracking |
-| `cluster_bus_event` | 17.0 | Event bus |
 | `cluster_circuit_breaker` | 17.5 | Circuit breaker |
 | `cluster_audit_log` | 17.6 | Gate audit |
 | `agent_learning_delta` | 18 | Learning deltas |

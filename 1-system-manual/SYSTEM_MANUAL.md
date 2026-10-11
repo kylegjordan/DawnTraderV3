@@ -7923,6 +7923,8 @@ PostgreSQL-backed async task queue for AI reasoning tasks (DevOpsBob, FullStackB
 **File:** `server/services/task-router.ts` (~428 lines)
 **Directive:** Phase 17.0
 
+> **2026-10-10 (`B-CLUSTER-BUS-PERSIST-DISPOSITION`, row 2a0c):** the cluster bus this layer publishes on is **in-memory only** — `publish()` emits to subscribers and persists nothing; the `cluster_bus_event` table and `bus_event_topic` enum are dropped. The Phase 17-22 cluster layer still runs (`cluster_rebalance` ~144 a day) and writes nothing; whether it stays is `#1163`, sprint row 2a0e.
+
 ### Purpose
 Routes cluster tasks to appropriate nodes based on task type affinity, node capacity, and load balancing.
 
@@ -11075,7 +11077,6 @@ All 10 Walter tables have FK relationships to `users`. These tables will become 
 | `cluster_node` | 17.0 | Node registry |
 | `cluster_task_queue` | 17.0 | Task queue |
 | `cluster_result_log` | 17.0 | Result tracking |
-| `cluster_bus_event` | 17.0 | Event bus |
 | `cluster_circuit_breaker` | 17.5 | Circuit breaker |
 | `cluster_audit_log` | 17.6 | Gate audit |
 | `agent_learning_delta` | 18 | Learning deltas |

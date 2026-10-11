@@ -1326,3 +1326,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-10 — B-ROOT-DUPLICATE-SCANNER-RETIRE (CC-B, sprint plan row 2a0d) — ✅ CLOSED 2026-10-10
 
 **An old copy of the FX5 scanner that could have quietly taken over the live one is gone.** It sat outside the code the system runs, but it listened to the clock under the same name as the real scanner, so loading it by mistake would have replaced the real scanner's timing without any error. It went with a second copy, a scheduler that was never switched on, nine old test scripts and three unused services. A new check fails if anything else ever subscribes to the clock, and on the running system exactly the five expected parts do.
+
+### 2026-10-11 — B-CLUSTER-BUS-PERSIST-DISPOSITION (CC-B, sprint plan row 2a0c) — ⏳ Step 11, awaiting Langston's confirm
+
+**An internal message log nobody read is gone.** The system kept a database copy of certain internal status messages; once the engine heartbeat stopped sending them, nothing read the copy at all. The copy, its table and its nightly clean-up are removed; the messages themselves still pass between parts of the system as before. Last night's clean-up ran cleanly without it.
