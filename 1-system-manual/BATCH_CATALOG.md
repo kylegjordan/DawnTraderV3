@@ -1208,7 +1208,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **HOMES PLACED:** `#1169` (row 1u, a trailing disposition cell never closes an entry — Langston's Step-2 surface). The five text files carrying the same 0x08 corruption were restored in the Step-10 commit (Langston §13, disposition 1).
 
-## B-AFTERLIVE-TOTAL-RULE (CC-A, sprint plan row 1x — after row 1w; `#1180`) — change-class `non_architecture` — ⏳ **CLOSING — Step 11 with Langston** (Step 1 r2 APPROVED with three conditions; Step 2 APPROVED with D1-D5; list edits `baf9ed3a7`; code Step 4 r2 APPROVED, r3 CLEARED, landed `0e12c42a7` + `7de4a5380` + `9dc90f5e9` + `896289a2d`; Step 8 CONFIRMED by Langston 2026-10-11; report `Batch Completion/B_AFTERLIVE_TOTAL_RULE_COMPLETION_REPORT.md`)
+## B-AFTERLIVE-TOTAL-RULE (CC-A, sprint plan row 1x — after row 1w; `#1180`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-11** (Step 1 r2 APPROVED with three conditions; Step 2 APPROVED with D1-D5; list edits `baf9ed3a7`; code Step 4 r2 APPROVED, r3 CLEARED, landed `0e12c42a7` + `7de4a5380` + `9dc90f5e9` + `896289a2d`; Step 8 and Step 11 CONFIRMED by Langston 2026-10-11; report `Batch Completion/B_AFTERLIVE_TOTAL_RULE_COMPLETION_REPORT.md`)
 
 **WHAT IT DID.** The after-live list (`PRE_LIVE_SPRINT.md`) stated a headline of 218 while its theme headings summed to 221, and nothing re-counted it. Every count now states what the file's own rule gives (headline and `:5` summary 224; AMR, Crew, Legacy and Perpetual corrected; the `:29` rule sentence `234 − 6 − 4 = 224`), and nothing else in the file changed (`baf9ed3a7`, 7+/7−).
 

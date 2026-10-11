@@ -1288,7 +1288,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 **The watcher that wakes each Claude session now says so when it cannot keep its place, instead of failing silently.** If it could not save where it had read up to, it used to get stuck re-reading the same message every 30 seconds without ever telling the session. And if its saved place was damaged, it quietly jumped to the newest messages and skipped everything in between. Now both cases end with a clear message saying what happened and, after a long absence, from what time to re-read the inbox by hand.
 
 
-### 2026-10-11 — B-AFTERLIVE-TOTAL-RULE (CC-A, sprint plan row 1x) — ⏳ CLOSING (Step 11 with Langston)
+### 2026-10-11 — B-AFTERLIVE-TOTAL-RULE (CC-A, sprint plan row 1x) — ✅ CLOSED 2026-10-11
 
 **The after-live list's totals now add up, and the weekly census checks that they keep adding up.** The list of work deferred until after going live said 218 items at the top while its own sections added to 221, and the true count by the list's own rule is 224 — nobody had a way to notice. Every total is corrected, and the Monday census now recounts the list and flags any section whose stated number has drifted. While adding the check, a hidden fault in last week's census change came to light: at its largest the census message could run 18 characters over its limit and refuse to post. That is fixed, and a new test makes sure the size test always measures everything the census really sends.
 
