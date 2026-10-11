@@ -5632,7 +5632,9 @@ export class ActiveExecutionEngine {
     let totalSlippage: number;
     // B-ENTRY-DISTANCE-GUARD (Langston Step-4 CHANGE 1): the OBJ-2 shadow measurement, carried to the DURABLE archive row of
     // BOTH arms (admitted and refused) with one schema — out.log alone rotates away long before the promotion read needs it.
-    // The plan's age rides with it (queuedAt / rtbQueueId), so a stale plan can be told from a fast move. Null on a maker.
+    // The plan's age rides with it (queuedAt / rtbQueueId), so a stale plan can be told from a fast move. On a maker the
+    // record stays null, so the admitted row carries NO shadow keys — which is why that row also stamps `entryArm` (the
+    // REALISED arm) outside the spread: a missing `rrFill` must never be read as "measured and uncomputable" (Langston r2).
     let _entryShadowRec: Record<string, unknown> | null = null;
     if (_b72cPendingMaker) {
       actualEntryPrice = _b72cLimit;
@@ -5701,7 +5703,7 @@ export class ActiveExecutionEngine {
         archiveSignalEval({
           mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass: _openClass,
           source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
-          gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, entryPrice: actualEntryPrice,
+          gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, entryPrice: actualEntryPrice, entryArm: 'taker',
             stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...(_entryShadowRec ?? {}) },
         });
       } catch (archErr) {
@@ -6151,6 +6153,9 @@ export class ActiveExecutionEngine {
           confidenceModulated: signal.confidence,
           gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
             ...(_entryShadowRec ?? {}), // B-ENTRY-DISTANCE-GUARD CHANGE 1: the shadow measurement, same schema as the refused arm
+            // Always present (r2 condition): the arm this open REALISED — not `chosenEntryMode`, since a maker that cannot rest
+            // opens as a taker. Key absent ⇒ a row written before this deploy; 'maker' ⇒ no shadow keys by design.
+            entryArm: _b72cPendingMaker ? 'maker' : 'taker',
             // ★ mark-2 precondition (Langston 2026-08-17): same expectancy_gates version stamp as the SQE reject row.
             gateConstantsVersion: (await import('./data-archive/decision-provenance.js')).gateConstantsVersionFor(_tradeClass, signal.strategy) },
           features: { entrySlippage: totalSlippage, entryFee },

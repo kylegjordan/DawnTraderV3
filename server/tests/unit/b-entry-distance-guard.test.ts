@@ -99,6 +99,12 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
     expect(src).toContain("rejectStage: 'entry_fill', confidenceModulated: signal.confidence,");
     expect(src).not.toMatch(/rejectStage: 'tcl',[^\n]*\n\s*gateDecision: \{ gate: 'entry_fill'/);
   });
+  it('Langston r2 condition: the admitted row stamps the REALISED arm outside the spread; the refused row is a taker', () => {
+    expect(src).toContain("entryArm: _b72cPendingMaker ? 'maker' : 'taker',");
+    expect(src).toContain("entryPrice: actualEntryPrice, entryArm: 'taker',");
+    expect(src).not.toMatch(/entryArm: [^,]*chosenEntryMode/);
+    expect(at("entryArm: _b72cPendingMaker ? 'maker' : 'taker',")).toBeGreaterThan(src.lastIndexOf('...(_entryShadowRec ?? {})'));
+  });
   it('Langston CHANGE 1: BOTH archive rows carry the shadow measurement with one schema, and the plan age', () => {
     expect(src).toContain('rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,');
     expect(src).toContain('planQueuedAt:');
