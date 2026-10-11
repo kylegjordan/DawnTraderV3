@@ -3015,7 +3015,9 @@ export class ActiveExecutionEngine {
         console.log(`[PRICE_TICK] symbol=${position.symbol} refreshed_at=${tickEntry.refreshedAt} diff_ms=${diffMs} source=${priceSource}`);
         
         // Phase 8.8.3-I7-PM-FOCUS: ENGINE_PRICE_READ diagnostic
-        console.log(`[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=${position.symbol} source=${priceSource} ageMs=${diffMs} price=${currentPrice}`);
+        // row 33 P5 (`#913`): `diffMs` is now − this symbol's LAST ENGINE TICK — how long since we last looked — NOT how old
+        // the price is. It was labelled `ageMs=`, the name an implementer reaches for; the price's age is its observation stamp.
+        console.log(`[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=${position.symbol} source=${priceSource} sinceLastTickMs=${diffMs} price=${currentPrice}`);
         
         // Phase 8.8.3-I6 B1: Diagnostic logging for trade engine live price usage
         console.log(`[8.8.3-I6][ENGINE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} age=${diffMs}ms`);

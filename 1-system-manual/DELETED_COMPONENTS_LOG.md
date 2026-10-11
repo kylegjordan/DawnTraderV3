@@ -1258,3 +1258,10 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **VERIFIED AFTER DEPLOY (`ad01f5339`, 2026-10-10 11:59Z):** `to_regclass` NULL, 0 `bus_event_topic` types (control: 96 live enums), the seed gone (control: 17 other `hot_retention_days` keys); the 2026-10-11 02:15Z sweep printed no `cluster_bus_event` line and `plain_deleted` = `xstock_qd_probe_history`'s 137,376 exactly, failed=0.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/cluster-bus.pre-B-CLUSTER-BUS-PERSIST-DISPOSITION.ts.removed` (the bus before the change); the schema entries are in git at `b523c86bf^:shared/schema.ts`; the table and enum are restored by `drizzle/migrations/2026-10-07-b-cluster-bus-persist-remove-rollback.sql` (tracked) — **run it FIRST, then revert the code.**
 **COMMIT:** `b523c86bf` (Step 3), conditions `9ab39a45a`; deployed `ad01f5339`.
+
+## 2026-10-11 — `LivePricingAdapter.WS_CACHE_FALLBACK_MS` — B-PRICE-STALENESS-BOUND P5 (sprint row 33, `#743`), CC-C
+**WHAT:** the private constant `WS_CACHE_FALLBACK_MS = 25000` (`server/services/live-pricing-adapter.ts`, was `:411` at `c5e63ef8b`, commented "≥25s = REST fallback (was 5s)").
+**WHY:** declared and never read — a number that looks like a governing threshold and governs nothing (rule 18). The adapter's REST fallback is decided by `WS_CACHE_FRESH_MS` and the caller's `staleThresholdMs`.
+**BLAST RADIUS:** whole-tree census at `c5e63ef8b` — one occurrence, the declaration, no reader (re-derived by Langston at Step 2 with a positive control: `WS_CACHE_FRESH_MS` returns live read sites). A private class field writes no state.
+**ARCHIVE:** git only — `c5e63ef8b:server/services/live-pricing-adapter.ts` (one line; no `.removed` copy for a single constant).
+**COMMIT:** this batch's Step-3 part 3.

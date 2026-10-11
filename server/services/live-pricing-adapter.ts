@@ -355,6 +355,13 @@ interface CachedPrice {
 // equities WS, or REST — is venue data. The engine's actionable gate AND its non-venue warn
 // both reference THIS predicate so they cannot drift apart. Freshness is the CALLER's
 // dimension (getPriceWithFallback's window); this predicate rules only on provenance.
+/** `B-PRICE-STALENESS-BOUND` P3 (row 33): a quote's `timestamp` is its OBSERVATION time, so a re-served price never
+ *  presents as just observed (`#743` route A, display half). Takes a REQUIRED number: every caller holds a non-nullable
+ *  stamp (`CachedPrice.observedAt`, `RestFetchResult.observedAt`). ⛔ No fallback to "now" — that is the launder itself. */
+export function observedIso(observedAt: number): string {
+  return new Date(observedAt).toISOString();
+}
+
 export function isKrakenVenueSource(source: string): boolean {
   return source === 'kraken_ws' || source === 'kraken_equities_ws' || source === 'kraken_rest';
 }
@@ -408,7 +415,6 @@ export class LivePricingAdapter {
   // Thresholds for WebSocket cache freshness
   private readonly WS_CACHE_FRESH_MS = 2000;       // ≤2s = fresh, use WS cache
   private readonly WS_CACHE_WARNING_MS = 10000;    // ≥10s = mild warning (was 3s)
-  private readonly WS_CACHE_FALLBACK_MS = 25000;   // ≥25s = REST fallback (was 5s)
   
   // I7-WS-E: REST fallback metrics tracking
   private restFallbackMetrics: Map<string, RestFallbackMetric> = new Map();
@@ -541,7 +547,9 @@ export class LivePricingAdapter {
     if (!cached || !(cached.price > 0)) {
       return null;
     }
-    return { price: cached.price, source: cached.source, ageMs: Date.now() - cached.cachedAt };
+    // row 33 P3: the age a reader sees is the OBSERVATION age. `cachedAt` is a receipt time every cache write renews —
+    // a re-served price read "fresh" here (the RTB "Current" column) while it was minutes old.
+    return { price: cached.price, source: cached.source, ageMs: Date.now() - cached.observedAt };
   }
 
   /**
@@ -673,7 +681,7 @@ export class LivePricingAdapter {
           return {
             symbol,
             price: cachedEq.price,
-            timestamp: new Date().toISOString(),
+            timestamp: observedIso(cachedEq.observedAt),   // row 33 P3: the observation time, not "now"
             source: 'last_known_good',
             producer: 'xstock_rest_gate_reserve',
             observedAt: cachedEq.observedAt,   // #743: carried through, NOT refreshed
@@ -702,7 +710,8 @@ export class LivePricingAdapter {
         return {
           symbol,
           price: krakenResult.price,
-          timestamp: new Date().toISOString(),
+          // row 33 P3: the observation time — a genuine read is observed now; the rate-limited re-serve keeps its own.
+          timestamp: observedIso(krakenResult.observedAt),
           // ⛔ `source` UNCHANGED, deliberately. Relabelling it is what makes the re-serve
           //    non-actionable, and that is carved out to B-PRICE-AGE-REFUSAL because it would
           //    route the blocked population onto the engine's un-rate-limited direct REST leg.
@@ -732,7 +741,7 @@ export class LivePricingAdapter {
         return {
           symbol,
           price: cached.price,
-          timestamp: new Date().toISOString(),
+          timestamp: observedIso(cached.observedAt),   // row 33 P3: the observation time, not "now"
           source: 'last_known_good',
           producer: 'last_known_good_all_apis_failed',
           observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
@@ -769,7 +778,7 @@ export class LivePricingAdapter {
         return {
           symbol,
           price: cached.price,
-          timestamp: new Date().toISOString(),
+          timestamp: observedIso(cached.observedAt),   // row 33 P3: the observation time, not "now"
           source: 'last_known_good',
           producer: 'last_known_good_fetch_exception',
           observedAt: cached.observedAt,      // #743: carried through, NOT refreshed
