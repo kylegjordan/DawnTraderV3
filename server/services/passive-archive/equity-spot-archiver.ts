@@ -181,9 +181,9 @@ export interface EquityTick {
    *  `snapshot` with no prior entry, i.e. just after a restart or a first subscription): its `tsMs` is then the receipt
    *  time of that replay, NOT a quote age, and the exit gate treats it as COLD. A snapshot never refreshes `tsMs` or
    *  `observed` on an existing entry. ⚠️ Even an observed `tsMs` is RECEIPT age of the last changed quote, never an
-   *  observation age: the venue's ticker frame carries no timestamp (#943 §15.3). Absent (`undefined`) on a
-   *  hand-built tick reads as observed. */
-  observed?: boolean;
+   *  observation age: the venue's ticker frame carries no timestamp (#943 §15.3). REQUIRED (Langston Step-4 gate 1,
+   *  BLOCKER-1): an optional flag defaulting to "observed" is the permissive direction. */
+  observed: boolean;
 }
 const latestEquityTick = new Map<string, EquityTick>();
 /** B-VENUE-QUIET-ALERTING r4 (row 3a1, Step 9): receipt time of the last ticker frame per symbol whose envelope `type` was
@@ -270,18 +270,21 @@ function parseTickerSnap(data: any, frameType?: string): void {
     const _kind = markKindOf(_bid, _ask);
     const _mark = _kind === 'mid' ? (_bid + _ask) / 2 : _last;
     if (Number.isFinite(_mark) && _mark > 0) {
-      if (frameType === 'snapshot') {
-        // B-PRICE-STALENESS-BOUND P1 (row 33, `#743` route B): a snapshot is the venue REPLAYING a book's current state on
-        // a subscribe — however old. It updates the price and the sides (they are the venue's current state) but never
-        // the mark's AGE: with a prior entry its `tsMs` and `observed` carry; with none the mark is born COLD (P1b). Live
-        // case (Langston, 2026-10-10): PLTR's 20.8-hour-old frozen book re-sent byte-identical on a subscribe and read
-        // as fresh, bid 3.12 below the stop.
+      if (frameType === 'update') {
+        // B-PRICE-STALENESS-BOUND P1 (row 33): ONLY a venue CHANGE observes the mark — the same polarity as the cohort
+        // clock above (Langston Step-4 gate 1, BLOCKER-1).
+        latestEquityTick.set(_sym, { price: _mark, tsMs: _now, kind: _kind, raw: _raw, observed: true });
+      } else {
+        // Anything else — a `snapshot` (the venue REPLAYING a book's current state on a subscribe, however old), or a frame
+        // whose type we do not recognise — updates the price and the sides (the venue's current state) but never the
+        // mark's AGE: with a prior entry its `tsMs` and `observed` carry; with none the mark is born COLD (P1b). A protocol
+        // change therefore yields self-announcing refusals (COLD_EXPIRED), never a silently fresh mark. Live case
+        // (Langston, 2026-10-10): PLTR's 20.8-hour-old frozen book re-sent byte-identical on a subscribe read as fresh,
+        // bid 3.12 below the stop.
         const _prev = latestEquityTick.get(_sym);
         latestEquityTick.set(_sym, _prev
           ? { price: _mark, tsMs: _prev.tsMs, kind: _kind, raw: _raw, observed: _prev.observed }
           : { price: _mark, tsMs: _now, kind: _kind, raw: _raw, observed: false });
-      } else {
-        latestEquityTick.set(_sym, { price: _mark, tsMs: _now, kind: _kind, raw: _raw, observed: true });
       }
     } else {
       // No mark this frame (the #636 case): the MARK fields keep their prior value and age — the

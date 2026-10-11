@@ -58,7 +58,8 @@ const h = vi.hoisted(() => ({
   getActiveOpenPositions: vi.fn(async (_mode: string) => [] as unknown[]),
   updateActiveOpenPosition: vi.fn(async () => undefined),
   // row 33 P1b: the mark's age and `observed` flag, so a COLD mark (a subscribe replay) can be driven. null/undefined =
-  // the default fresh, observed mark every earlier test in this file was written against.
+  // the default fresh, observed mark every earlier test in this file was written against (`observed` is required on
+  // the real tick; the harness states it).
   markTsMs: null as number | null,
   markObserved: undefined as boolean | undefined,
 }));
@@ -83,7 +84,7 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (orig) =
     const f = h.frame;
     if (!f) return null;
     const now = Date.now();
-    return { price: (f.bid + f.ask) / 2, tsMs: h.markTsMs ?? now, kind: 'mid', raw: { bid: f.bid, ask: f.ask, last: f.last, bidQty: 10, askQty: 10, atMs: now }, observed: h.markObserved };
+    return { price: (f.bid + f.ask) / 2, tsMs: h.markTsMs ?? now, kind: 'mid', raw: { bid: f.bid, ask: f.ask, last: f.last, bidQty: 10, askQty: 10, atMs: now }, observed: h.markObserved ?? true };
   },
 }));
 vi.mock('../../asset_classes/xstock_spot/book-state-config.js', async (orig) => ({
@@ -575,7 +576,7 @@ describe('row 33 B-PRICE-STALENESS-BOUND P1b — a COLD mark (a subscribe replay
     h.markTsMs = Date.now() - 60_000;
     const t1 = await tick(eng, WARM[0]);
     expect(t1.priceSkips).toHaveLength(1);
-    expect(t1.priceSkips[0]).toMatch(/^equity_tick_stale_/);
+    expect(t1.priceSkips[0]).toBe('equity_tick_stale_cold_unobserved'); // its own reason, never a ceiling basis
     const detail = (eng._recordPriceSkip.mock.calls.at(-1) as unknown[])[2] as string;
     expect(detail).toContain('no update since subscribe, ≥60s');
     expect(detail).not.toMatch(/\d{6,}s/); // never the epoch-sized age an unset stamp would print

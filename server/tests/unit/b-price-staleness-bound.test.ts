@@ -79,6 +79,31 @@ describe('P1/P1b — a replayed book never refreshes the mark age', () => {
     expect(getLatestEquityTick('COLDB/USD')).toMatchObject({ observed: false, tsMs: Date.parse('2026-10-14T15:00:00Z') });
   });
 
+  it('BLOCKER-1 polarity: a frame of any type other than update never refreshes the age (an untyped frame included)', () => {
+    vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
+    _handleMessageForTests(frame('update', 'POLAR/USD', 10, 11));
+    vi.setSystemTime(new Date('2026-10-14T16:00:00Z'));
+    _handleMessageForTests(Buffer.from(JSON.stringify({ channel: 'ticker', data: [{ symbol: 'POLAR/USD', bid: 12, ask: 13, last: 12.5 }] })));
+    _handleMessageForTests(frame('mystery', 'POLAR/USD', 12, 13));
+    expect(getLatestEquityTick('POLAR/USD')).toMatchObject({ observed: true, tsMs: Date.parse('2026-10-14T15:00:00Z'), price: 12.5 });
+    // and with no prior entry, an untyped frame births a COLD mark, never an observed one
+    _handleMessageForTests(Buffer.from(JSON.stringify({ channel: 'ticker', data: [{ symbol: 'POLAR2/USD', bid: 1, ask: 2, last: 1.5 }] })));
+    expect(getLatestEquityTick('POLAR2/USD')!.observed).toBe(false);
+  });
+
+  it('CONDITION-3: a frame with NO mark (the #636 branch) carries tsMs and observed — cold stays cold, observed stays observed', () => {
+    vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
+    _handleMessageForTests(frame('snapshot', 'NOMARK1/USD', 20, 21));   // cold
+    _handleMessageForTests(frame('update', 'NOMARK2/USD', 30, 31));     // observed
+    vi.setSystemTime(new Date('2026-10-14T15:10:00Z'));
+    const markless = (symbol: string) => Buffer.from(JSON.stringify({ channel: 'ticker', type: 'update', data: [{ symbol, bid: null, ask: null, last: null }] }));
+    _handleMessageForTests(markless('NOMARK1/USD'));
+    _handleMessageForTests(markless('NOMARK2/USD'));
+    expect(getLatestEquityTick('NOMARK1/USD')).toMatchObject({ observed: false, tsMs: Date.parse('2026-10-14T15:00:00Z'), price: 20.5 });
+    expect(getLatestEquityTick('NOMARK2/USD')).toMatchObject({ observed: true, tsMs: Date.parse('2026-10-14T15:00:00Z'), price: 30.5 });
+    expect(getLatestEquityTick('NOMARK1/USD')!.raw?.bid).toBeNull(); // the sides DID move
+  });
+
   it('CONTROL: an update refreshes the age', () => {
     vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
     _handleMessageForTests(frame('snapshot', 'CTRL/USD', 10, 11));

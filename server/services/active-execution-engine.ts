@@ -2218,9 +2218,10 @@ export class ActiveExecutionEngine {
           // both sit downstream of a usable mark. Past the allowance it is judged as an ordinary stale mark, with an
           // honest detail. Measured cost: 16 of 16 held symbols changed quote within 13.1 s at the last two reopens.
           if (_eqTick.observed === false) {
-            const _coldAge = Date.now() - _eqTick.tsMs;
+            // `_eqAge` IS the cold age here (now − the replay's receipt time). The bound is the knob: `ceilingMs` is never
+            // below `floor_ms`, so at the seed (= floor_ms) the min() is constant; it binds only if the knob is raised.
             const _allowMs = Math.min(_coldMaxMs, _ceiling.ceilingMs);
-            if (_coldAge <= _allowMs) {
+            if (_eqAge <= _allowMs) {
               this._coldMarkTicks++;
               const _cp = this._coldMarkPending.get(position.id);
               if (_cp) _cp.ticks++;
@@ -2230,13 +2231,14 @@ export class ActiveExecutionEngine {
             }
             const _cpx = this._coldMarkPending.get(position.id);
             if (!_cpx?.expired) { // once per cold episode — the stale skips that follow carry their own lines
-              console.warn(`[B-PRICE-STALENESS-BOUND][EQUITY_MARK_COLD_EXPIRED] ${position.symbol} pos=${position.id} waitedMs=${_coldAge} coldTicks=${_cpx?.ticks ?? 0} allowMs=${_allowMs} — no update since the subscribe's replay; judged as a stale mark`);
+              console.warn(`[B-PRICE-STALENESS-BOUND][EQUITY_MARK_COLD_EXPIRED] ${position.symbol} pos=${position.id} waitedMs=${_eqAge} coldTicks=${_cpx?.ticks ?? 0} allowMs=${_allowMs} — no update since the subscribe's replay; judged as a stale mark`);
               this._coldMarkPending.set(position.id, { symbol: position.symbol, sinceMs: _eqTick.tsMs, ticks: _cpx?.ticks ?? 0, expired: true });
             }
             withoutPrice++;
-            await this._recordPriceSkip(position,
-              _ceiling.floorBoundNearStop ? 'equity_tick_stale_floor_bound_near_stop' : `equity_tick_stale_${_ceiling.basis}`,
-              `no update since subscribe, ≥${Math.round(_coldAge / 1000)}s (ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s)`);
+            // Its OWN reason (Langston Step-4 gate 1, BLOCKER-2): sharing a ceiling basis would record a cold refusal as
+            // that basis in every per-basis count. The `equity_tick_stale_` prefix keeps it in the quiet-market family.
+            await this._recordPriceSkip(position, 'equity_tick_stale_cold_unobserved',
+              `no update since subscribe, ≥${Math.round(_eqAge / 1000)}s (allowance ${Math.round(_allowMs / 1000)}s, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s)`);
             continue;
           }
           {
@@ -3286,7 +3288,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} exitAgeExemptUsed=${exitAgeExemptUsed} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${this._coldMarkPending.size}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} exitAgeExemptUsed=${exitAgeExemptUsed} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${[...this._coldMarkPending.values()].filter((c) => !c.expired).length} coldExpiredPositionsNow=${[...this._coldMarkPending.values()].filter((c) => c.expired).length}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     void this._runReserveRowTripwire(); // row 33 P4 (8g-bis)
