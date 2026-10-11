@@ -19,7 +19,12 @@ const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; consol
 // result in this file, recorded at each site by recordLive — so the end-of-file fence checks the P45 maximum-size fixture
 // against all of them. A fixture missing a key measured a smaller object than ships, twice. ⚠️ HONEST LIMIT (Langston,
 // measured): a conditional key that NO fixture here triggers escapes this fence and the 300 slice alike; what closes that
-// is the D5 convention — counts keys are unconditional (hv is the one exception, and r2 + the A2 result carry it).
+// is the D5 convention. At source today the escape set is exactly ONE key: hv is the only conditionally-spread counts
+// key, censusLists has none (hv/al/g are present-with-null), the P45 fixture carries hv, and removing it fails the fence.
+// ⚠️ THIS IS A KEY FENCE, NOT A WIDTH FENCE (Langston, Step 4 r3): counts.b is [...6 fixed, ...Object.values(byWhy)], so a
+// new reason code (a U7) WIDENS an existing key — the fence cannot see that, and P45's nines normalise values, not array
+// length. Headroom at r3: the counts object ends at metadata char 282/300 (≈3-4 array elements), the body 992/1000.
+// A green fence does NOT mean the slice is covered: re-read the P45 lengths line when any count array grows.
 const LIVE_COUNT_KEYS = new Set(), LIVE_LIST_KEYS = new Set();
 let LIVE_SITES = 0, P45_KEYS = null;
 const recordLive = (res) => { LIVE_SITES++; Object.keys(censusCounts(res)).forEach((k) => LIVE_COUNT_KEYS.add(k)); Object.keys(censusLists(res)).forEach((k) => LIVE_LIST_KEYS.add(k)); return res; };
