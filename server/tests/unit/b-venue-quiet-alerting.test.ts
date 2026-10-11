@@ -479,6 +479,28 @@ describe('sweep — resolve on a RE-MEASURED condition', () => {
       deps: deps([row(standingKey('paper'), now - 3_600_000, { members })]) });
     expect(r.held).toEqual([{ symbol: 'PLTR/USD', reasonFamilies: ['quiet_market'] }]);
   });
+  it('r6c condition: after a restart the duration page counts from the last price carried on the row, not the earliest listing', async () => {
+    const st = new VenueQuietState(); // a fresh process: no in-memory lastPricedAt
+    const members = { 'pos-q': { symbol: 'PLTR/USD', listedAtMs: now - 7_200_000, lastJoinedAtMs: now - 3_600_000, lastPricedAtMs: now - 3_600_000, reasonFamilies: ['quiet_market'] } };
+    const d = deps([row(standingKey('paper'), now - 7_200_000, { members })]);
+    const open = [{ id: 'pos-q', symbol: 'PLTR/USD' }];
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    await sweepVenueQuiet({ mode: 'paper', nowMs: now + CFG.escalateAfterMs, openPositions: open, state: st, cfg: CFG, verdict: 'not_quiet', deps: d });
+    const call = d.addAlert.mock.calls.find((c) => (c[0] as any).dedupe_key === 'price-skip-paper-PLTR/USD')![0] as any;
+    expect(call.body).toMatch(/for at least 90 min/);   // from the carried last price (60 min before now) + 30 min — not 150 from the listing
+  });
+  it('r6c condition: the join carries the last price this process saw, and keeps a previous one when it saw none', async () => {
+    const stored: Record<string, any> = { members: {} };
+    m.addAlert.mockImplementation(async (o: any) => ({ id: 'row-' + o.dedupe_key, metadata: stored }));
+    m.mergeAlertMetadata.mockImplementation(async (_id: string, patch: any) => { Object.assign(stored, patch); return {}; });
+    const e = engine() as any;
+    e._venueQuiet.notePriced('pos-xs', WEEKDAY - 5_000);
+    await e._joinVenueQuietStanding({ id: 'pos-xs', symbol: 'CAG/USD' }, { reasonFamily: 'quiet_market' });
+    expect(stored.members['pos-xs'].lastPricedAtMs).toBe(WEEKDAY - 5_000);
+    const fresh = engine() as any; // a restart: nothing priced in this process
+    await fresh._joinVenueQuietStanding({ id: 'pos-xs', symbol: 'CAG/USD' }, { reasonFamily: 'quiet_market' });
+    expect(stored.members['pos-xs'].lastPricedAtMs).toBe(WEEKDAY - 5_000);
+  });
   it('r6: a sweep with no standing record reports nothing held', async () => {
     const r = await sweepVenueQuiet({ mode: 'paper', nowMs: now, openPositions: [], state: new VenueQuietState(), cfg: CFG, verdict: 'quiet', deps: deps([]) });
     expect(r.held).toEqual([]);

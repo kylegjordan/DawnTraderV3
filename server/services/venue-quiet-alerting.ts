@@ -268,7 +268,7 @@ export async function sweepVenueQuiet(args: {
       continue;
     }
     if (key === standingKey(mode)) {
-      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; lastJoinedAtMs?: number; reasonFamily?: ReasonFamily; reasonFamilies?: ReasonFamily[] }>;
+      const members = (row.metadata?.members ?? {}) as Record<string, { symbol: string; listedAtMs: number; lastJoinedAtMs?: number; lastPricedAtMs?: number; reasonFamily?: ReasonFamily; reasonFamilies?: ReasonFamily[] }>;
       // `unpricedSinceMs` is THIS symbol's own clock (Langston Step-4 r2 condition): its last venue price in this process
       // if one was seen, else the moment it was listed — a lower bound, hence "at least". Never the class's
       // `notQuietSince`: a member listed one minute into a 90-minute window has not been out for 90 minutes.
@@ -278,7 +278,9 @@ export async function sweepVenueQuiet(args: {
         // r6c: "priced since it last JOINED" decides membership (a member priced, re-staled and re-joined is out again);
         // the unpriced CLOCK below keeps the earliest listing (FINDING-B) when this process has never priced it.
         if (open && !pricedAfter(open, mem.lastJoinedAtMs ?? mem.listedAtMs)) {
-          stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.listedAtMs,
+          // r6c condition: "unpriced since" = this process's last price, else the last price carried on the row, else the
+          // listing — so `mins` stays a lower bound across a restart (it never reads from a listing that a later price superseded).
+          stillOut.push({ positionId, symbol: mem.symbol, unpricedSinceMs: state.lastPricedAt.get(positionId) ?? mem.lastPricedAtMs ?? mem.listedAtMs,
             reasonFamily: mem.reasonFamily ?? null, reasonFamilies: memberFamilies(mem) });
         }
       }

@@ -1006,7 +1006,11 @@ export class ActiveExecutionEngine {
       // unpriced clock on every re-stale, so the longest staleness read shortest (objective 3's own failure, in reverse).
       const listedAtMs = typeof prev?.listedAtMs === 'number' ? prev.listedAtMs : now;
       const members = { ...prior,
+        // r6c condition (Langston): the member's last venue price, carried on the row — the in-process `lastPricedAt` is lost at
+        // every restart, and without this the duration page's "for at least N min" would read from the EARLIEST listing and
+        // overstate. Kept from a previous join when this process has not priced the position.
         [position.id]: { symbol: position.symbol, ...meta, listedAtMs, lastJoinedAtMs: now,
+          lastPricedAtMs: this._venueQuiet.lastPricedAt.get(position.id) ?? (typeof prev?.lastPricedAtMs === 'number' ? prev.lastPricedAtMs : undefined),
           joins: (typeof prev?.joins === 'number' ? prev.joins : 0) + 1 } };
       // r6c (FINDING-A): each join IS a page this record suppressed. The count lives on the row — out.log keeps about a day,
       // and the suppression volume across a closed window is the number this batch exists to move.
