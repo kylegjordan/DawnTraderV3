@@ -325,6 +325,7 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
       'budget_k', 'null_stop_budget_pct', 'floor_ms', 'cap_ms',
       'sigma_min_observations', 'sigma_classwide_percentile',
       'sigma_window_ms', 'sigma_refresh_after_ms', 'sigma_max_age_ms', 'sigma_query_timeout_ms',
+      'cold_mark_max_ms', // B-PRICE-STALENESS-BOUND P1b: migration 2026-10-11-b-price-staleness-bound.sql
     ] as const) {
       try {
         getCachedNumberRequired('mark_staleness', c, k);
@@ -342,6 +343,12 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     const capMs = getCachedNumberRequired('mark_staleness', 'cap_ms', k);
     if (!(capMs > floorMs)) {
       throw new Error(`[P19-B8.5e][warmup] mark_staleness cap_ms=${capMs} must exceed floor_ms=${floorMs} — refusing to start.`);
+    }
+    // B-PRICE-STALENESS-BOUND P1b: the cold-mark allowance is a wait, capped by the ceiling at the read site — a value at or
+    // below zero would refuse every replayed mark forever, one above the cap could never bind.
+    const coldMs = getCachedNumberRequired('mark_staleness', 'cold_mark_max_ms', k);
+    if (!(coldMs > 0 && coldMs <= capMs)) {
+      throw new Error(`[B-PRICE-STALENESS-BOUND][warmup] mark_staleness cold_mark_max_ms=${coldMs} outside (0, cap_ms=${capMs}] — refusing to start.`);
     }
     const budgetK = getCachedNumberRequired('mark_staleness', 'budget_k', k);
     if (!(budgetK > 0 && budgetK < 1)) {

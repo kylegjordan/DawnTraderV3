@@ -29,7 +29,7 @@ import { markKindOf } from '../market-data/mark-kind.js';
 import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
 // P19-B4a (C3) — silent-stall watchdog deps.
 import { addAlert } from '../system-alerts.js';
-import { isInXstockWeekendClose, isXstockLiquidFillWindowET } from '../../asset_classes/xstock_spot/market-hours.js';
+import { isInXstockWeekendClose, isXstockLiquidFillWindowET, isXstockVenueTransitionPause } from '../../asset_classes/xstock_spot/market-hours.js';
 import { resolveXstockFillSafetyConfig } from '../../asset_classes/xstock_spot/fill-safety-config.js';
 
 const WS_URL = 'wss://ws-equities.kraken.com';
@@ -48,6 +48,10 @@ interface ArchiverState {
    *  "are PRICES arriving?" and is stamped ONLY in the parsers. Seeded at ws-open so "never yet
    *  had a price" can never read as infinitely stale. */
   lastDataMsgAt: number;
+  /** `B-PRICE-STALENESS-BOUND` P2 (row 33): the last watchdog tick that fell inside a venue CLOSURE — the weekend close or
+   *  the Sunday reopen pause (`sun_reopen`, row 2 increment C). The watchdog measures silence from the later of this and
+   *  `lastDataMsgAt`, so time the venue was shut never counts as our feed being silent. 0 until the first closure tick. */
+  closureSeenAt: number;
   /** *persisted*: OHLC bars BUFFERED in the last minute — the health line's `rows_persisted_60s`.
    *  ⚠️ Buffered, not rows persisted: rows land later, in the batch writer's flush (pre-audit R5). */
   rowsPersistedLastMinute: number;
@@ -74,6 +78,7 @@ const state: ArchiverState = {
   reconnectPending: false,
   lastMsgAt: 0,
   lastDataMsgAt: 0,
+  closureSeenAt: 0,
   rowsPersistedLastMinute: 0,
   rowsPersistedLastMinuteWindowStart: Date.now(),
   cumulativeOhlcRows: 0,
@@ -171,6 +176,14 @@ export interface EquityTick {
   /** Present once ANY frame has been parsed for the symbol; absent only on a tick seeded before
    *  this field existed (never, post-deploy — `parseTickerSnap` always writes it first). */
   raw?: EquityTickRaw;
+  /** `B-PRICE-STALENESS-BOUND` P1/P1b (row 33, `#743` route B). `true` once an `update` frame — a venue CHANGE — has set
+   *  this mark. `false` only for a mark that exists solely because the venue REPLAYED the book on a subscribe (a
+   *  `snapshot` with no prior entry, i.e. just after a restart or a first subscription): its `tsMs` is then the receipt
+   *  time of that replay, NOT a quote age, and the exit gate treats it as COLD. A snapshot never refreshes `tsMs` or
+   *  `observed` on an existing entry. ⚠️ Even an observed `tsMs` is RECEIPT age of the last changed quote, never an
+   *  observation age: the venue's ticker frame carries no timestamp (#943 §15.3). Absent (`undefined`) on a
+   *  hand-built tick reads as observed. */
+  observed?: boolean;
 }
 const latestEquityTick = new Map<string, EquityTick>();
 /** B-VENUE-QUIET-ALERTING r4 (row 3a1, Step 9): receipt time of the last ticker frame per symbol whose envelope `type` was
@@ -257,7 +270,19 @@ function parseTickerSnap(data: any, frameType?: string): void {
     const _kind = markKindOf(_bid, _ask);
     const _mark = _kind === 'mid' ? (_bid + _ask) / 2 : _last;
     if (Number.isFinite(_mark) && _mark > 0) {
-      latestEquityTick.set(_sym, { price: _mark, tsMs: _now, kind: _kind, raw: _raw });
+      if (frameType === 'snapshot') {
+        // B-PRICE-STALENESS-BOUND P1 (row 33, `#743` route B): a snapshot is the venue REPLAYING a book's current state on
+        // a subscribe — however old. It updates the price and the sides (they are the venue's current state) but never
+        // the mark's AGE: with a prior entry its `tsMs` and `observed` carry; with none the mark is born COLD (P1b). Live
+        // case (Langston, 2026-10-10): PLTR's 20.8-hour-old frozen book re-sent byte-identical on a subscribe and read
+        // as fresh, bid 3.12 below the stop.
+        const _prev = latestEquityTick.get(_sym);
+        latestEquityTick.set(_sym, _prev
+          ? { price: _mark, tsMs: _prev.tsMs, kind: _kind, raw: _raw, observed: _prev.observed }
+          : { price: _mark, tsMs: _now, kind: _kind, raw: _raw, observed: false });
+      } else {
+        latestEquityTick.set(_sym, { price: _mark, tsMs: _now, kind: _kind, raw: _raw, observed: true });
+      }
     } else {
       // No mark this frame (the #636 case): the MARK fields keep their prior value and age — the
       // freshness ceiling still governs them — but `raw` moves, so the guard sees the absent side.
@@ -496,7 +521,15 @@ async function raiseStallConfigMissingAlert(): Promise<void> {
 
 export async function runStallWatchdogTick(now: Date = new Date()): Promise<void> {
   if (!state.enabled) return;
-  if (isInXstockWeekendClose(now)) return; // feed legitimately closed — do not watch.
+  // B-PRICE-STALENESS-BOUND P2 (row 33, Langston Step-1 condition 2): the venue is shut — the weekend close, or the Sunday
+  // reopen pause before it trades at 20:15 ET — so do not watch, and REMEMBER it. Measured: resuming at Sunday 20:00 ET
+  // with `lastDataMsgAt` hours old, the watchdog fired at 20:00 and again at ~20:13 every week (stderr 09-28 and 10-05;
+  // 10 Monday-00:00Z `xstock-equity-feed-stall` rows 08-03 → 10-05), forcing the reconnects whose replayed books read as
+  // fresh. Stamped from `now` (the clock the closure was judged on); in production that is the wall clock.
+  if (isInXstockWeekendClose(now) || isXstockVenueTransitionPause(now).window === 'sun_reopen') {
+    state.closureSeenAt = now.getTime();
+    return;
+  }
   const safety = await resolveXstockFillSafetyConfig();
   if (!safety) {
     await raiseStallConfigMissingAlert(); // loud + inert this tick (rule-15: no silent default).
@@ -514,7 +547,9 @@ export async function runStallWatchdogTick(now: Date = new Date()): Promise<void
   // per-symbol clock the numbers came from ⇒ this change CANNOT make the watchdog fire more often
   // than before. The thresholds are NOT re-derived, and this detects a TOTAL feed stall ONLY.
   // ⇒ partial-stall blindness + aggregate-clock calibration are homed at #635.
-  const ageMs = state.lastDataMsgAt > 0 ? Date.now() - state.lastDataMsgAt : Infinity;
+  // P2: silence is measured from the later of the last data frame and the last closure tick — a real outage after the
+  // reopen still fires on the unchanged threshold, from 20:35 ET.
+  const ageMs = state.lastDataMsgAt > 0 ? Date.now() - Math.max(state.lastDataMsgAt, state.closureSeenAt) : Infinity;
   const inLiquid = isXstockLiquidFillWindowET(
     safety.liquidFillWindowOpenMinEt,
     safety.liquidFillWindowCloseMinEt,
@@ -554,7 +589,7 @@ export function stopEquitySpotArchiver(): void {
 // P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit
 // tests can exercise runStallWatchdogTick without a live socket.
 export function _setArchiverStateForTest(
-  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'ws'
+  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'closureSeenAt' | 'ws'
     | 'cumulativeOhlcRows' | 'cumulativeTickerSnaps' | 'ohlcFramesSkipped' | 'rowsPersistedLastMinute'>>,
 ): void {
   Object.assign(state, patch);

@@ -30,6 +30,16 @@ export function readXstockMarkStalenessConfig(): MarkStalenessConfig {
   };
 }
 
+/**
+ * `B-PRICE-STALENESS-BOUND` P1b (Langston Step-2 condition 2): how long a COLD mark — replayed by the venue on a subscribe,
+ * never yet changed — may wait for its first update before it is judged as an ordinary stale mark. Its OWN knob, not
+ * `floor_ms` (a feed-liveness quantity, not a decision-safety one); the caller caps it at the per-symbol ceiling, so it is
+ * never the value when the ceiling is tighter. Throws on a missing row.
+ */
+export function readXstockColdMarkMaxMs(): number {
+  return getCachedNumberRequired('mark_staleness', 'cold_mark_max_ms', XSTOCK_KEY);
+}
+
 /** The σ cache's configuration — the SAME object shape for every caller. Throws on a missing row. */
 export function readXstockSigmaCacheConfig(): SigmaCacheConfig {
   return {

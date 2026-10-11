@@ -221,3 +221,4 @@
 2026-10-07-b-cluster-bus-persist-remove.sql
 2026-10-07-b-venue-quiet-alerting.sql
 2026-10-10-b-xstock-bid-trigger-reland-inca.sql
+2026-10-11-b-price-staleness-bound.sql

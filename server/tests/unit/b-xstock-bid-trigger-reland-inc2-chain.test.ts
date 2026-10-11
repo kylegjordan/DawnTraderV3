@@ -57,6 +57,10 @@ const h = vi.hoisted(() => ({
   addAlert: vi.fn(async (_a: unknown) => undefined),
   getActiveOpenPositions: vi.fn(async (_mode: string) => [] as unknown[]),
   updateActiveOpenPosition: vi.fn(async () => undefined),
+  // row 33 P1b: the mark's age and `observed` flag, so a COLD mark (a subscribe replay) can be driven. null/undefined =
+  // the default fresh, observed mark every earlier test in this file was written against.
+  markTsMs: null as number | null,
+  markObserved: undefined as boolean | undefined,
 }));
 
 vi.mock('../../services/system-alerts.js', async (orig) => ({ ...(await orig<Record<string, unknown>>()), addAlert: h.addAlert }));
@@ -79,7 +83,7 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (orig) =
     const f = h.frame;
     if (!f) return null;
     const now = Date.now();
-    return { price: (f.bid + f.ask) / 2, tsMs: now, kind: 'mid', raw: { bid: f.bid, ask: f.ask, last: f.last, bidQty: 10, askQty: 10, atMs: now } };
+    return { price: (f.bid + f.ask) / 2, tsMs: h.markTsMs ?? now, kind: 'mid', raw: { bid: f.bid, ask: f.ask, last: f.last, bidQty: 10, askQty: 10, atMs: now }, observed: h.markObserved };
   },
 }));
 vi.mock('../../asset_classes/xstock_spot/book-state-config.js', async (orig) => ({
@@ -104,6 +108,7 @@ vi.mock('../../asset_classes/xstock_spot/book-state-config.js', async (orig) => 
 vi.mock('../../asset_classes/xstock_spot/mark-staleness-config.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   readXstockMarkStalenessConfig: () => ({ budgetK: 0.5, nullStopBudgetPct: 0.005, floorMs: 10_000, capMs: 90_000, sigmaFullCreditMs: 60_000 }),
+  readXstockColdMarkMaxMs: () => 15_000, // row 33 P1b
   readXstockSigmaCacheConfig: () => ({ windowMs: 3_600_000, refreshAfterMs: 60_000, maxAgeMs: 600_000, minObservations: 30, classwidePercentile: 0.9, queryTimeoutMs: 5_000 }),
 }));
 vi.mock('../../asset_classes/xstock_spot/sigma-rate-cache.js', async (orig) => ({
@@ -204,6 +209,9 @@ function makeEngine(): Stub {
     _venuePauseBidWouldFire: 0,
     _venuePauseEntriesRefused: 0,
     _venuePausePending: new Map(),
+    // B-PRICE-STALENESS-BOUND (row 33) P1b fields the real constructor sets.
+    _coldMarkTicks: 0,
+    _coldMarkPending: new Map(),
     // Stubbed on the instance (see header).
     _recordPriceSkip: vi.fn(async (..._a: unknown[]) => undefined),
     _recordBookStateEvent: vi.fn(async (..._a: unknown[]) => undefined),
@@ -359,6 +367,8 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-10-14T15:00:00Z'));
   _resetBookStateComparatorsForTest();
   h.frame = null;
+  h.markTsMs = null;
+  h.markObserved = undefined;
   h.spreadBlownEnabled = true;
   h.getActiveOpenPositions.mockImplementation(async () => [makePosition()]);
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -523,5 +533,75 @@ describe('row 2 increment C (C-P2, Langston Step 4 C1) — the venue-transition 
     expect(t.warns.filter((l) => PAUSE.test(l))).toHaveLength(0);
     expectEvaluated(t, f, 'n');
     expect(eng._venuePauseExitTicks).toBe(0);
+  });
+});
+
+describe('row 33 B-PRICE-STALENESS-BOUND P1b — a COLD mark (a subscribe replay) through the real exit loop', () => {
+  const COLD_CLEARED = /\[EQUITY_MARK_COLD_CLEARED\] MDB\/USD /;
+  const COLD_EXPIRED = /\[EQUITY_MARK_COLD_EXPIRED\] MDB\/USD /;
+
+  it('inside the allowance: no decision, no skip, no position or cache write, counted; the first update clears it and the tick proceeds', async () => {
+    const eng = makeEngine();
+    h.markObserved = false;
+    h.markTsMs = Date.now() - 2_000; // replayed 2 s ago; allowance = min(15 s, ceiling >= the 10 s floor)
+    const cacheCalls0 = (livePricingAdapter.updateCache as any).mock.calls.length;
+    const posCalls0 = h.updateActiveOpenPosition.mock.calls.length;
+    const t1 = await tick(eng, WARM[0]);
+    expect(t1.priceSkips).toEqual([]);
+    expect(t1.closes).toEqual([]);
+    expect(t1.alerts).toBe(0);
+    expect(count(t1.warns, XS_FRAME)).toBe(0);
+    expect(has(t1.logs, /COMPARATOR_SEEDED/)).toBe(false); // the book-state guard sits downstream — never reached
+    expect(t1.bookEvents).toEqual([]);
+    expect((livePricingAdapter.updateCache as any).mock.calls.length).toBe(cacheCalls0); // condition 3: no display cache
+    expect(h.updateActiveOpenPosition.mock.calls.length).toBe(posCalls0);              // condition 3: no current_price
+    expect(eng._coldMarkTicks).toBe(1);
+    expect(eng._coldMarkPending.size).toBe(1);
+
+    h.markObserved = true; // the first venue UPDATE lands
+    h.markTsMs = null;
+    const t2 = await tick(eng, WARM[0]);
+    const cl = t2.warns.filter((l) => COLD_CLEARED.test(l));
+    expect(cl).toHaveLength(1);
+    expect(cl[0]).toContain('coldTicks=1 expired=false');
+    expect(eng._coldMarkPending.size).toBe(0);
+    expectRefused(t2, 'unknown'); // the tick went on to the guard, which seeds as it always does
+  });
+
+  it('past the allowance: one stale skip with an honest detail, the expiry line once per episode', async () => {
+    const eng = makeEngine();
+    h.markObserved = false;
+    h.markTsMs = Date.now() - 60_000;
+    const t1 = await tick(eng, WARM[0]);
+    expect(t1.priceSkips).toHaveLength(1);
+    expect(t1.priceSkips[0]).toMatch(/^equity_tick_stale_/);
+    const detail = (eng._recordPriceSkip.mock.calls.at(-1) as unknown[])[2] as string;
+    expect(detail).toContain('no update since subscribe, ≥60s');
+    expect(detail).not.toMatch(/\d{6,}s/); // never the epoch-sized age an unset stamp would print
+    expect(count(t1.warns, COLD_EXPIRED)).toBe(1);
+    expect(t1.closes).toEqual([]);
+    const t2 = await tick(eng, WARM[0]);
+    expect(t2.priceSkips).toHaveLength(1);
+    expect(count(t2.warns, COLD_EXPIRED)).toBe(0);
+    expect(eng._coldMarkTicks).toBe(0);
+  });
+
+  it('condition 1: a cold tick touches neither the streak increment nor its reset; CONTROL: an observed tick resets it', async () => {
+    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '380.0' }]);
+    const eng = makeEngine();
+    await warm(eng);
+    const id = makePosition().id;
+    eng._priceSkipStreak.set(id, 7);
+    h.markObserved = false;
+    h.markTsMs = Date.now() - 1_000;
+    const t1 = await tick(eng, { bid: 400.0, ask: 400.8, last: 400 });
+    expect(t1.priceSkips).toEqual([]);
+    expect(eng._priceSkipStreak.get(id)).toBe(7);
+    h.markObserved = true;
+    h.markTsMs = null;
+    const f: Frame = { bid: 400.05, ask: 400.85, last: 400 };
+    const t2 = await tick(eng, f);
+    expectEvaluated(t2, f, 'n');
+    expect(eng._priceSkipStreak.has(id)).toBe(false);
   });
 });

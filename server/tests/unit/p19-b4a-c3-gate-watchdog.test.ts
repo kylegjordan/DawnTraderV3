@@ -53,6 +53,9 @@ vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
 vi.mock('../../asset_classes/xstock_spot/market-hours.js', () => ({
   isXstockLiquidFillWindowET: () => inLiquidWindow,
   isInXstockWeekendClose: () => weekendClose,
+  // row 33 P2: the watchdog also skips the Sunday reopen pause; never inside one in these tests (the P2 sequence is
+  // driven on the real calendar in b-price-staleness-bound.test.ts).
+  isXstockVenueTransitionPause: () => ({ paused: false, window: null }),
 }));
 
 import {

@@ -490,7 +490,7 @@ import { ageExemptionOfProducer } from './market-data/price-basis.js'; // P-7h �
 // never awaits a DB read to decide whether a mark is trustworthy.
 import { computeStalenessCeiling, type MarkStalenessConfig } from '../asset_classes/xstock_spot/mark-staleness.js';
 // `8a-P4c` increment 3: the ONE reader of the mark-staleness and σ-cache knobs, shared with the VTS xStock exit guard.
-import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
+import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig, readXstockColdMarkMaxMs } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 // B-XSTOCK-FEED-SANITY (#943, closes #567) — the book-state guard: the tracker is the one reader every
 // label site calls; the comparator advances ONLY here, after a two_sided verdict at the decision site.
 import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparator, takeChainRefusalBasis, readThresholdBasis, readBookStateComparator, readRiLastMiss } from '../asset_classes/xstock_spot/book-state-tracker.js';
@@ -843,6 +843,12 @@ export class ActiveExecutionEngine {
    * selects on severity; the retirement criterion (pre-audit C-P5) reads the bid set once increment B is live.
    */
   private _venuePausePending: Map<string, { window: string; atMs: number; mark: number; bid: number | null; wouldFire: 'stop' | 'target' | null; bidWouldFire: 'stop' | 'target' | null }> = new Map();
+  /** `B-PRICE-STALENESS-BOUND` P1b (row 33): exit ticks spent on a COLD xStock mark — one the venue has only replayed on a
+   *  subscribe — since engine start, and the positions waiting on one now (`sinceMs` = the replay's receipt time). A cold
+   *  tick is neither a decision nor a skip: it never reaches `_recordPriceSkip` (the streak's only increment) nor the reset
+   *  that follows a venue price, so an accumulating streak is left exactly where it was (Langston Step-2 condition 1). */
+  private _coldMarkTicks = 0;
+  private _coldMarkPending: Map<string, { symbol: string; sinceMs: number; ticks: number; expired: boolean }> = new Map();
   private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
     let t = this._exitRefusalTally.get(position.id);
     if (!t) {
@@ -2141,11 +2147,13 @@ export class ActiveExecutionEngine {
           // rises, and a position near its stop gets the tightest window.
           let _msCfg: MarkStalenessConfig;
           let _sigmaCfg: SigmaCacheConfig;
+          let _coldMaxMs: number;
           try {
             // `8a-P4c` increment 3: the ONE shared reader (behaviour-identical; the knobs and their fail-closed
             // throw are unchanged).
             _msCfg = readXstockMarkStalenessConfig();
             _sigmaCfg = readXstockSigmaCacheConfig();
+            _coldMaxMs = readXstockColdMarkMaxMs(); // row 33 P1b — fail-closed with its siblings
           } catch (knobErr) {
             console.error(`[P19-B8.5e][EQUITY_MARK] mark_staleness knobs unavailable — xstock mark NOT actionable for ${position.symbol} (fail-safe skip):`, knobErr instanceof Error ? knobErr.message : knobErr);
             withoutPrice++;
@@ -2171,6 +2179,42 @@ export class ActiveExecutionEngine {
             },
             _msCfg,
           );
+          // ── B-PRICE-STALENESS-BOUND P1b (row 33, `#743` route B; Langston Step-2 conditions 1-3) ──────────────────
+          // A COLD mark exists only because the venue REPLAYED the book on a subscribe; its `tsMs` is that replay's
+          // receipt time, not a quote age. Inside `min(cold_mark_max_ms, ceiling)` — the ceiling a CAP, never the value —
+          // it waits: no decision, counted, and it touches NEITHER the streak's increment (`_recordPriceSkip`) NOR its
+          // reset below, so a streak in progress is left where it was. A cold tick cannot mask a book-state refusal:
+          // both sit downstream of a usable mark. Past the allowance it is judged as an ordinary stale mark, with an
+          // honest detail. Measured cost: 16 of 16 held symbols changed quote within 13.1 s at the last two reopens.
+          if (_eqTick.observed === false) {
+            const _coldAge = Date.now() - _eqTick.tsMs;
+            const _allowMs = Math.min(_coldMaxMs, _ceiling.ceilingMs);
+            if (_coldAge <= _allowMs) {
+              this._coldMarkTicks++;
+              const _cp = this._coldMarkPending.get(position.id);
+              if (_cp) _cp.ticks++;
+              else this._coldMarkPending.set(position.id, { symbol: position.symbol, sinceMs: _eqTick.tsMs, ticks: 1, expired: false });
+              withoutPrice++;
+              continue;
+            }
+            const _cpx = this._coldMarkPending.get(position.id);
+            if (!_cpx?.expired) { // once per cold episode — the stale skips that follow carry their own lines
+              console.warn(`[B-PRICE-STALENESS-BOUND][EQUITY_MARK_COLD_EXPIRED] ${position.symbol} pos=${position.id} waitedMs=${_coldAge} coldTicks=${_cpx?.ticks ?? 0} allowMs=${_allowMs} — no update since the subscribe's replay; judged as a stale mark`);
+              this._coldMarkPending.set(position.id, { symbol: position.symbol, sinceMs: _eqTick.tsMs, ticks: _cpx?.ticks ?? 0, expired: true });
+            }
+            withoutPrice++;
+            await this._recordPriceSkip(position,
+              _ceiling.floorBoundNearStop ? 'equity_tick_stale_floor_bound_near_stop' : `equity_tick_stale_${_ceiling.basis}`,
+              `no update since subscribe, ≥${Math.round(_coldAge / 1000)}s (ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s)`);
+            continue;
+          }
+          {
+            const _cpd = this._coldMarkPending.get(position.id);
+            if (_cpd) {
+              console.warn(`[B-PRICE-STALENESS-BOUND][EQUITY_MARK_COLD_CLEARED] ${position.symbol} pos=${position.id} waitedMs=${Date.now() - _cpd.sinceMs} coldTicks=${_cpd.ticks} expired=${_cpd.expired}`);
+              this._coldMarkPending.delete(position.id);
+            }
+          }
           if (_eqAge > _ceiling.ceilingMs) {
             console.warn(`[P19-B8.5e][EQUITY_MARK] ${position.symbol}: mark is ${Math.round(_eqAge / 1000)}s old, ceiling ${Math.round(_ceiling.ceilingMs / 1000)}s (basis=${_ceiling.basis} σ=${_sigma ? _sigma.sigmaRatePerSec.toExponential(3) + '/s src=' + _sigma.source : 'UNAVAILABLE⇒floor'}${_ceiling.clamped ? ' clamped' : ''}${_ceiling.sigmaAgeInflation > 1 ? ` σ-age-inflated x${_ceiling.sigmaAgeInflation.toFixed(2)} (σ is ${Math.round((_sigma?.ageMs ?? 0) / 1000)}s old)` : ''}) — not actionable this tick`);
             withoutPrice++;
@@ -3191,7 +3235,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${this._coldMarkPending.size}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
@@ -4538,6 +4582,7 @@ export class ActiveExecutionEngine {
       this._riMissSig.delete(position.id);
       this._riMissAcc.delete(position.id);
       this._venuePausePending.delete(position.id); // row 2 increment C
+      this._coldMarkPending.delete(position.id); // row 33 P1b
     }
     }
 
