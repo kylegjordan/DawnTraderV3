@@ -45,7 +45,7 @@ CHANGE-CLASS: non_architecture
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the Observation column | N/A | no window: both checks are graded by the dry run at close |
 | T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | CC-A: row 1x closed |
-| T1 | Langston's MEMORY.md | ✅ | via `langston-memory-write`: my closed-batches line covers 1x |
+| T1 | Langston's MEMORY.md | N/A — stated | his loaded set is in BREACH of its ceiling (`langston-size-watch --status` 2026-10-11: last_status BREACH) and may only go down; a line for this batch would grow it. He reads the batch at the ref; nothing in his memory describes the after-live list |
 | T2 | SYSTEM_MANUAL.md | N/A | nothing under server/, client/ or shared/ changed |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | the census table gains an "after-live recount" row (reads, `al`, the fence) |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1180` closed with this report |
