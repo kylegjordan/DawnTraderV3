@@ -170,7 +170,7 @@ All 10 Walter tables have FK relationships to `users`. These tables will become 
 | 15.0 | `bias_observation_log`, `confidence_drift_log`, `introspection_report`, `bias_correction_log` | Bias detection, introspection |
 | 16.0 | `knowledge_retrieval_log`, `knowledge_cache`, `knowledge_trust_record` | Knowledge management |
 
-### Tier 6: Distributed Cluster — 9 tables (LEGACY)
+### Tier 6: Distributed Cluster — 8 tables (LEGACY; `cluster_bus_event` dropped 2026-10-10, row 2a0c)
 
 **Phases 17–18**: A distributed multi-node architecture:
 

@@ -1,4 +1,4 @@
-# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-10-10
+# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-10-11
 
 > **Rebuilt 2026-09-29 from `SPRINT_TO_LIVE_PLAN.md`, which is the authority: if this list and the plan disagree, this list is stale.** The previous version (as of 2026-09-13, with the original 2026-09-01 census) is in git history at `23b4700b2`. Every row points at its record (plan row, `RUNNING_ISSUES` number, alert id); the record is the truth, this file is the index. Kyle 2026-09-05: every slotted task lands here in the same turn.
 
@@ -7,9 +7,8 @@
 | batch | step | waiting on |
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
-| **`B-CLUSTER-BUS-PERSIST-DISPOSITION`** (row 2a0c) | **STEP 11** — report `Batch Completion/B_CLUSTER_BUS_PERSIST_DISPOSITION_COMPLETION_REPORT.md` | Langston's Step-11 confirm |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
-| **`B-ENTRY-DISTANCE-GUARD`** (row 59 increment 1, pre-sprint P1a) | **STEP 3** — Step 2 PROCEED (Langston 2026-10-10), pre-audit r2 | build items 1, 2, 5-8; items 3 and 4 wait on Langston's r3 clear |
+| **`B-ENTRY-DISTANCE-GUARD`** (row 59 increment 1, pre-sprint P1a) | **STEP 7** — Step 4 APPROVED (r2 + entryArm condition); deployed in `a52f16a52` 2026-10-11 01:30Z | the first taker open, to read the shadow line and the stamped entry arm; items 3 and 4 held for r3 |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1) | **STEP 10 — progress report, card Observation** (Step 8 CONFIRMED 10-10) | the first weekday against the pre-registered criteria: the record resolves at the 10-12 00:00Z reopen; `update:N` vs the 50 floor; the 20:00Z close pages no quiet-family streak; FINDING-1: any of the 8 book-state rows still active after 13:30Z = fix before close |
 | hotfix **`B-PATTERN-ENUM-DRIFT`** (row 51, `#1063`) | **verification half-done** — ABCD insert failures 0 since deploy B | the first `volatility_edge` open after deploy B, to read its `pattern_type` |
 | **`B-FEED-MISMATCH-FIX`** (row `3n.u`) | **STEP 10 of 11 — observation window · ⏸ PAUSED for the sprint start (Kyle 2026-09-30)** | the data: 300 taker closes or 2026-10-10T00:02:43Z, whichever first. How it is read (per side of each boundary, the short-n rule, the reset excluded) is fixed in amendment 4a (`0c8918c5d`), Langston-confirmed. Then the progress report converts to the completion report. |
@@ -28,7 +27,7 @@
 - ✅ 2a `B-ATR-BAD-PRINT` (`#1153`) — CLOSED 2026-10-10 (Langston Step 11). Its clip-observability field rides 2a1.
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
-- 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`): keep or remove the cluster-bus persistence layer (Langston 10-06).
+- ✅ 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`) — CLOSED 2026-10-11 (Langston Step 11): the cluster bus is in-memory only; its table, enum and retention entry are dropped.
 - ✅ 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`) — CLOSED 2026-10-10 (Langston Step 11).
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).

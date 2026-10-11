@@ -1,8 +1,8 @@
-# B-CLUSTER-BUS-PERSIST-DISPOSITION — Completion Report
+# B-CLUSTER-BUS-PERSIST-DISPOSITION — Completion Report — ✅ CLOSED 2026-10-11 (Langston Step-11 CONFIRMED)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` · **Sprint plan row:** 2a0c, after row 2a0b · **Issue:** `#1159` (closed at Step 10); `#1163` (row 2a0e) unchanged
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_CLUSTER_BUS_PERSIST_DISPOSITION_SCOPE.md` r2, `…_PRE_AUDIT.md` · **Change list:** `Change Lists/B_CLUSTER_BUS_PERSIST_DISPOSITION_STEP4_CHANGE_LIST.md`
-**Code:** `b523c86bf` (Step 3) → `9ab39a45a` (Step-4 conditions, APPROVED) · **Deployed:** in CC-C's 10-10 release `ad01f5339b558ee968a7686d719e98b66e5fd01d` (2026-10-10T11:59:29Z); migration applied 2026-10-10 11:59:18.507Z. The running tree is now `a52f16a52`, a descendant; Langston confirmed the batch's five files unchanged from the approved bytes.
+**Code:** `b523c86bf` (Step 3) → `9ab39a45a` (Step-4 conditions, APPROVED) · **CI:** run `38101871492` at the running tree `a52f16a52` and run `38105881667` at the Step-10 ref `620b1b6b5`, each 4/4 green per job (TypeScript Check, Test Suite, Build, Docker Build) · **Deployed:** in CC-C's 10-10 release `ad01f5339b558ee968a7686d719e98b66e5fd01d` (2026-10-10T11:59:29Z); migration applied 2026-10-10 11:59:18.507Z. The running tree is now `a52f16a52`, a descendant; Langston confirmed the batch's five files unchanged from the approved bytes.
 
 ## 1. What it was for
 The cluster bus wrote a database row for every event on seven topics into `cluster_bus_event`. After row 2a0b removed its main writer (the engine heartbeat's status event), the table had no reader at all — only about 22 non-heartbeat rows ever, the newest from 2025-11-06 (`#1159`). This batch kept the in-memory bus, which live code uses, and removed the persistence.
@@ -28,11 +28,12 @@ The cluster bus wrote a database row for every event on seven topics into `clust
 - **Step 2:** PROCEED — rollback order corrected (the SQL first, then the code).
 - **Step 4:** APPROVED at `9ab39a45a`, recorded by CC-C at the 10-10 release (Langston 11:57Z, re-affirmed 14:16Z).
 - **Step 7:** CC-B, `Scope Files/RELEASE_DEPLOY_2026-10-10_PLAN.md` row 2a0c — table and type gone (10-10), the 10-11 sweep (above).
+- **Step 11:** **CONFIRMED** by Langston 2026-10-11, re-derived (ancestry, staging HEAD, per-job CI, OBJ-2's four drop measurements, the sweep block). His two record findings folded at the close: the Tier-6 header count (9 → 8) in the System Manual and its section mirror, and the System Impact Map's session-row entry that still called the table live — both corrected.
 - **Step 8:** **CONFIRMED** by Langston 2026-10-11, re-derived on staging. He settled the question the evidence alone did not — by design, not swallowed: the plain-table list has exactly three entries, and a stale entry would have aborted the whole sweep before its `started at` line, so a complete block is itself proof there is no stale entry.
 
 ## 5. Numeric corrections
 - **PREVIOUSLY STATED** (change list): the System Manual inventory row at `:11053`. **NOW:** `:11078`, and its section mirror `sections/PHASE11_DATABASE_SCHEMA_AND_MIGRATIONS.md:182`. **REASON:** line drift since Step 4; the mirror was not cited. Both removed at Step 10.
-- **PREVIOUSLY STATED** (change list): the `STORAGE_POLICY.md:51` row. **NOW:** `:51` and `:56` (the delete-exceptions bullet). Both handled at Step 10.
+- **PREVIOUSLY STATED** (change list): the `STORAGE_POLICY.md:51` row. **NOW:** `:51` and the delete-exceptions bullet (`:55` at the ref after the row's removal). Both handled at Step 10.
 
 ## 6. New findings / dispositions
 - **A comment, attributed to Langston, asserted the opposite of the deploy-ordering premise** (`b75-retention-sweep.ts:101`: *"a B70 config gap fails ONLY that table's `reqNum`, never a B74 table"*). At the ref `reqNum` throws and nothing catches it, so a missing key on any entry aborts the whole night's sweep — which is why the rollback must restore the seed first. **Disposition 1, folded:** the comment corrected at Step 10 beside the rollback it protects. A wrong comment, not a code defect.
@@ -44,14 +45,14 @@ CHANGE-CLASS: non_architecture
 |---|---|---|---|
 | T1 | BATCH_CATALOG.md | ✅ | entry |
 | T1 | PHASE_HISTORY.md | ✅ | plain-language entry |
-| T1 | SPRINT_TO_LIVE_PLAN.md (row 2a0c) | ✅ | at Step 11 with this report in the report column |
+| T1 | SPRINT_TO_LIVE_PLAN.md (row 2a0c) | ✅ | CLOSED with this report in the report column |
 | T1 | PHASE_19_PLAN.md | N/A — no row there | the row is sprint row 2a0c |
 | T1 | shared MEMORY.md + MEMORY_CC_B.md | ✅ mine / N/A shared | mine: position |
 | T1 | the batch SCOPE | ✅ | r2 |
 | T1 | the batch PRE_AUDIT | ✅ | with the reader census and the corrected rollback order |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: 2a0c moved to Step 11 |
-| T1 | Langston's MEMORY.md | ⏳ owed at Step 11 | Langston writes his own with his Step-11 confirm; ticked when the write lands |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston with his Step-11 confirm, 2026-10-11 |
 | T2 | SYSTEM_MANUAL.md | ✅ | Step 10: the table-inventory row removed (`:11078` and its section mirror); §20 (the Phase 17 cluster layer) annotated — the bus is in-memory only, the layer is `#1163`'s |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | Step 10: the cluster bus as cross-cutting state — in-memory only, what was removed, the rollback order, the remaining publishers |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1159` closed |
