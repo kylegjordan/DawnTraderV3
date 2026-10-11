@@ -36,7 +36,7 @@ import {
 } from '../../services/passive-archive/equity-spot-archiver.js';
 import { judgeExitPriceAge, CRYPTO_EXIT_PRICE_MAX_AGE_MS } from '../../core/trading/exit-price-age.js';
 import { ageExemptionOfProducer, AGE_EXEMPTION_BY_PRODUCER } from '../../services/market-data/price-basis.js';
-import { classifyReserveRow, runReserveRowTripwire, type ReserveRow } from '../../services/reserve-row-tripwire.js';
+import { classifyReserveRow, runReserveRowTripwire, RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN, type ReserveRow } from '../../services/reserve-row-tripwire.js';
 
 const frame = (type: string, symbol: string, bid: number, ask: number) =>
   Buffer.from(JSON.stringify({ channel: 'ticker', type, data: [{ symbol, bid, ask, last: (bid + ask) / 2 }] }));
@@ -195,16 +195,28 @@ describe('P4 (8g) — judgeExitPriceAge: the retained observation decides, the e
 describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows', () => {
   const close = '2026-10-14T15:00:00.000Z';
   const closeMs = Date.parse(close);
-  const row = (o: Partial<ReserveRow>): ReserveRow => ({ id: 't1', symbol: 'ZEC/USD', exit_observed_at_ms: closeMs - 14_300, closed_at: close, exit_price_source: 'kraken_rest', ...o });
+  const row = (o: Partial<ReserveRow>): ReserveRow => ({ id: 't1', symbol: 'ZEC/USD', exit_observed_at_ms: closeMs - 936, closed_at: close, exit_price_source: 'kraken_rest', close_reason: 'target_hit', ...o });
+  const v = (o: Partial<ReserveRow>) => classifyReserveRow(row(o)).violations;
 
-  it('(a) a null stamp fires', () => expect(classifyReserveRow(row({ exit_observed_at_ms: null }))).toEqual(['null_stamp']));
-  it('(b) a stamp equal to the close instant fires (a re-stamp at close)', () => {
-    expect(classifyReserveRow(row({ exit_observed_at_ms: closeMs }))).toEqual(['stamp_equals_close']);
-    expect(classifyReserveRow(row({ exit_observed_at_ms: String(closeMs) }))).toEqual(['stamp_equals_close']); // numeric arrives as text
+  it('(a) a null stamp fires', () => expect(v({ exit_observed_at_ms: null })).toEqual(['null_stamp']));
+  it('(b) an implausibly young stamp fires — equal to close, after it, or under 100 ms (numeric may arrive as text)', () => {
+    expect(v({ exit_observed_at_ms: closeMs })).toEqual(['stamp_too_young']);
+    expect(v({ exit_observed_at_ms: String(closeMs) })).toEqual(['stamp_too_young']);
+    expect(v({ exit_observed_at_ms: closeMs + 5 })).toEqual(['stamp_too_young']);
+    expect(v({ exit_observed_at_ms: closeMs - 50 })).toEqual(['stamp_too_young']);
   });
-  it('(c) a source other than kraken_rest fires', () => expect(classifyReserveRow(row({ exit_price_source: 'last_known_good' }))).toEqual(['wrong_source']));
-  it('NEGATIVE CONTROL: a reserve row with an older stamp and source kraken_rest does not fire', () => {
-    expect(classifyReserveRow(row({}))).toEqual([]);
+  it('(c) a source other than kraken_rest fires, NULL included', () => {
+    expect(v({ exit_price_source: 'last_known_good' })).toEqual(['wrong_source']);
+    expect(v({ exit_price_source: null })).toEqual(['wrong_source']);
+  });
+  it('(d) a stamp older than the 2 s exit window at close fires — on an operator close too; age reported', () => {
+    expect(classifyReserveRow(row({ exit_observed_at_ms: closeMs - 14_300 }))).toEqual({ violations: ['stale_at_close'], ageAtCloseMs: 14_300 });
+    expect(v({ exit_observed_at_ms: closeMs - 3_160, close_reason: 'reset' })).toEqual(['stale_at_close']);
+  });
+  it('NEGATIVE CONTROL: honest re-serves inside 100 ms .. 2 s with source kraken_rest do not fire (936 ms = the youngest on record)', () => {
+    expect(v({})).toEqual([]);
+    expect(v({ exit_observed_at_ms: closeMs - 100 })).toEqual([]);
+    expect(v({ exit_observed_at_ms: closeMs - 2000 })).toEqual([]);
   });
   it('the run alerts once per violating row, keyed on the row, and reports how many rows it CHECKED', async () => {
     const alerts: any[] = [];
@@ -213,14 +225,29 @@ describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows'
       addAlert: async (a) => { alerts.push(a); return {}; },
     });
     expect(r.checked).toBe(2);
-    expect(r.violating).toEqual([{ id: 'bad', symbol: 'ZEC/USD', violations: ['null_stamp', 'wrong_source'] }]);
+    expect(r.violating).toEqual([{ id: 'bad', symbol: 'ZEC/USD', closeReason: 'target_hit', violations: ['null_stamp', 'wrong_source'], ageAtCloseMs: null }]);
+    expect(r.alerted).toBe(1);
+    expect(r.overCap).toBe(0);
     expect(alerts).toHaveLength(1);
     expect(alerts[0].dedupe_key).toBe('reserve-row-tripwire-bad');
+    expect(alerts[0].metadata.closeReason).toBe('target_hit');
+  });
+  it('a systematic break is capped per run and the overflow counted', async () => {
+    const many = Array.from({ length: 25 }, (_, k) => row({ id: `s${k}`, exit_observed_at_ms: closeMs - 60_000 }));
+    let n = 0;
+    const r = await runReserveRowTripwire('paper', 0, { listReserveRows: async () => many, addAlert: async () => { n++; return {}; } });
+    expect(n).toBe(RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN);
+    expect(r.violating).toHaveLength(25);
+    expect(r.overCap).toBe(25 - RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN);
   });
   it('the production query reads the stored columns of the reserve producer only', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('server/services/reserve-row-tripwire.ts', 'utf8');
     expect(src).toContain("export const RESERVE_PRODUCER = 'kraken_rest_rate_limited_reserve';");
-    expect(src).toMatch(/SELECT id, symbol, exit_observed_at_ms, closed_at, exit_price_source\s+FROM closed_trades\s+WHERE mode = \$\{mode\} AND exit_price_producer = \$\{RESERVE_PRODUCER\}/);
+    expect(src).toMatch(/SELECT id, symbol, exit_observed_at_ms, closed_at, exit_price_source, close_reason\s+FROM closed_trades\s+WHERE mode = \$\{mode\} AND exit_price_producer = \$\{RESERVE_PRODUCER\}/);
+  });
+  it('gate 2 condition 2: the engine carries no exemption counter that could never leave zero', async () => {
+    const { readFileSync } = await import('node:fs');
+    expect(readFileSync('server/services/active-execution-engine.ts', 'utf8')).not.toContain('exitAgeExemptUsed');
   });
 });

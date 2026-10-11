@@ -642,7 +642,7 @@ describe('row 33 B-PRICE-STALENESS-BOUND P4 (8g) — the crypto exit age check, 
     expect(t.closes).toEqual([]);
     expect(has(t.logs, EVALUATED)).toBe(false); // the stale price never reached the evaluator
     expect(eng.krakenService.getTicker).not.toHaveBeenCalled();
-    expect(has(t.logs, /exitAgeRefused=1 exitAgeExemptUsed=0/)).toBe(true);
+    expect(has(t.logs, /exitAgeRefused=1 /)).toBe(true);
   });
 
   it('CONTROL: the same price observed inside the window reaches the exit evaluator', async () => {
@@ -655,6 +655,6 @@ describe('row 33 B-PRICE-STALENESS-BOUND P4 (8g) — the crypto exit age check, 
     expect(t.priceSkips).toEqual([]);
     expect(has(t.logs, EVALUATED)).toBe(true);
     expect(has(t.logs, /exitEvalInvoked=1 /)).toBe(true);
-    expect(has(t.logs, /exitAgeRefused=0 exitAgeExemptUsed=0/)).toBe(true);
+    expect(has(t.logs, /exitAgeRefused=0 /)).toBe(true);
   });
 });

@@ -1067,14 +1067,17 @@ export class ActiveExecutionEngine {
     const now = Date.now();
     if (now - this._lastReserveTripwireAt < 600_000) return;
     this._lastReserveTripwireAt = now;
+    const lookback = this._reserveTripwireSinceMs > 0 ? 'watermark' : 'restart_24h';
     const since = this._reserveTripwireSinceMs > 0 ? this._reserveTripwireSinceMs : now - 86_400_000;
     try {
       const { runReserveRowTripwire, listReserveRowsFromDb } = await import('./reserve-row-tripwire.js');
       const { addAlert } = await import('./system-alerts.js');
       const r = await runReserveRowTripwire(this.mode, since, { listReserveRows: listReserveRowsFromDb, addAlert: addAlert as any });
       this._reserveTripwireSinceMs = now - 300_000;
-      console.log(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE] mode=${this.mode} since=${new Date(since).toISOString()} reserveRowsChecked=${r.checked} violating=${r.violating.length}` +
-        (r.violating.length ? ` [${r.violating.map((v) => `${v.symbol}:${v.violations.join('+')}`).join(',')}]` : ''));
+      // Read with its reach stated: checked only while this engine runs; `lookback=restart_24h` marks the run that can
+      // re-mint a row resolved inside the last 24 h (bounded — Langston gate 2, call 3).
+      console.log(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE] mode=${this.mode} lookback=${lookback} since=${new Date(since).toISOString()} reserveRowsChecked=${r.checked} violating=${r.violating.length} alerted=${r.alerted} overCap=${r.overCap}` +
+        (r.violating.length ? ` [${r.violating.map((v) => `${v.symbol}:${v.closeReason ?? 'null'}:${v.violations.join('+')}${v.ageAtCloseMs !== null ? `@${v.ageAtCloseMs}ms` : ''}`).join(',')}]` : ''));
     } catch (err) {
       console.error(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     }
@@ -2089,9 +2092,8 @@ export class ActiveExecutionEngine {
     let restTokenExhausted = 0;
     let restVenueRateLimited = 0;
     let restAgeExempt = 0;
-    // row 33 P4 (8g): crypto exit prices refused on their RETAINED observation age, and exemptions that changed a decision.
+    // row 33 P4 (8g): crypto exit prices refused on their RETAINED observation age.
     let exitAgeRefused = 0;
-    let exitAgeExemptUsed = 0;
     let slHits = 0;
     let tpHits = 0;
     // B-XSTOCK-FEED-SANITY: OCCURRENCES this cycle — printed in EVAL_EXIT. Not a row census: count
@@ -2673,7 +2675,11 @@ export class ActiveExecutionEngine {
         if (_venueMarkOk) {
           const _ageJ = judgeExitPriceAge(priceResult!, Date.now(), CRYPTO_EXIT_PRICE_MAX_AGE_MS,
             (p) => ageExemptionOfProducer(p as PriceProducer) !== null);
-          if (_ageJ.verdict === 'exempt') exitAgeExemptUsed++;
+          // No `exempt` counter here, deliberately (Langston Step-4 gate 2, condition 2): the only writer of an exempt
+          // producer is the direct REST leg below, which caches via `updateCache` with `observedAt = cachedAt = now`, and
+          // both cache arms of `getPriceWithFallback` serve only entries ≤ 2 s old — so an exempt producer reaching this
+          // check is ALWAYS already `fresh`. The exemption is honoured (the judgement keeps the branch) but structurally
+          // never decides here; a counter would print a zero that could never be anything else.
           if (!_ageJ.actionable) {
             _exitAgeOk = false;
             exitAgeRefused++;
@@ -2760,8 +2766,9 @@ export class ActiveExecutionEngine {
             // P-7h (Langston condition 2): the NAMED age exemption. `observedAt` is null by design on this branch, so
             // an age check keyed on it exempts the branch by declaration, and the use is counted, never inferred.
             // ⚠️ On THIS branch the counter is identically `withRestPrice` (Langston chunk-2 FINDING-1): the block is
-            // straight-line and both producers it can set are exempt. It does NOT count exits the exemption saved; the
-            // use it names is OBJ-8's crypto age check, where the exemption first changes a decision.
+            // straight-line and both producers it can set are exempt. It does NOT count exits the exemption saved — and
+            // the crypto age check (row 33 P4 / 8g) never needs it either: this leg's price is fetched inside the tick
+            // that acts on it, and its cached copy reaches 8g only while fresh (see the 8g block above).
             if (ageExemptionOfProducer(priceProducer) !== null) restAgeExempt++;
 
             console.log(`[8.9.2][REST_TICK] ${position.symbol} bid=${bid} ask=${ask} mid=${currentPrice.toFixed(8)}`);
@@ -3288,7 +3295,7 @@ export class ActiveExecutionEngine {
     }
     
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
-    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} exitAgeExemptUsed=${exitAgeExemptUsed} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${[...this._coldMarkPending.values()].filter((c) => !c.expired).length} coldExpiredPositionsNow=${[...this._coldMarkPending.values()].filter((c) => c.expired).length}`);
+    console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${[...this._coldMarkPending.values()].filter((c) => !c.expired).length} coldExpiredPositionsNow=${[...this._coldMarkPending.values()].filter((c) => c.expired).length}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
     void this._runReserveRowTripwire(); // row 33 P4 (8g-bis)
