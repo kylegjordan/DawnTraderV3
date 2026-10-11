@@ -356,8 +356,11 @@ interface CachedPrice {
 // both reference THIS predicate so they cannot drift apart. Freshness is the CALLER's
 // dimension (getPriceWithFallback's window); this predicate rules only on provenance.
 /** `B-PRICE-STALENESS-BOUND` P3 (row 33): a quote's `timestamp` is its OBSERVATION time, so a re-served price never
- *  presents as just observed (`#743` route A, display half). Takes a REQUIRED number: every caller holds a non-nullable
- *  stamp (`CachedPrice.observedAt`, `RestFetchResult.observedAt`). ⛔ No fallback to "now" — that is the launder itself. */
+ *  presents as just observed (`#743` route A, display half). ⛔ No fallback to "now" — that is the launder itself.
+ *  ⚠️ `new Date(NaN).toISOString()` THROWS. Every caller first requires `Number.isFinite(observedAt)` (the rate-limited
+ *  reserve's own shape) and otherwise does not present the price at all (Langston Step-4 gate 3, FINDING-1: the type
+ *  says number, but the cache writer's `quote.observedAt ?? Date.now()` admits NaN, so a non-finite is treated as
+ *  reachable). */
 export function observedIso(observedAt: number): string {
   return new Date(observedAt).toISOString();
 }
@@ -544,7 +547,9 @@ export class LivePricingAdapter {
    */
   peekCachedPrice(symbol: string): { price: number; source: CachedPrice['source']; ageMs: number } | null {
     const cached = this.priceCache.get(this.normalizeSymbol(symbol));
-    if (!cached || !(cached.price > 0)) {
+    // row 33 P3: an entry whose observation time is not finite has no statable age ⇒ no peek ⇒ the caller's
+    // `!_peek` reads it as venue-quiet (the safe direction; a NaN age would read NOT quiet, a false-fresh badge).
+    if (!cached || !(cached.price > 0) || !Number.isFinite(cached.observedAt)) {
       return null;
     }
     // row 33 P3: the age a reader sees is the OBSERVATION age. `cachedAt` is a receipt time every cache write renews —
@@ -676,8 +681,10 @@ export class LivePricingAdapter {
       // this leg only ever served display.
       if (safeResolveAssetClass(symbol, 'kraken') === 'xstock_spot') {
         const cachedEq = this.priceCache.get(this.normalizeSymbol(symbol));
-        console.log(`[P19-B8.9][XSTOCK_REST_GATE] symbol=${symbol} rest_ask=skipped serving=${cachedEq && cachedEq.price > 0 ? 'last_known_good' : 'no_reliable_price'}`);
-        if (cachedEq && cachedEq.price > 0) {
+        const _gateServes = !!cachedEq && cachedEq.price > 0 && Number.isFinite(cachedEq.observedAt); // row 33 P3
+        console.log(`[P19-B8.9][XSTOCK_REST_GATE] symbol=${symbol} rest_ask=skipped serving=${_gateServes ? 'last_known_good' : 'no_reliable_price'}`);
+        // row 33 P3: a re-serve whose age cannot be stated is not presented (falls to `no_reliable_price` below).
+        if (cachedEq && _gateServes) {
           return {
             symbol,
             price: cachedEq.price,
@@ -706,7 +713,8 @@ export class LivePricingAdapter {
       // venue the engine prices and exits against (no UI showing a Binance number for a
       // position Kraken will fill).
       const krakenResult = await this.fetchFromKrakenRest(symbol);
-      if (krakenResult !== null) {
+      // row 33 P3: a REST result whose observation time is not finite is not presented (the paths below handle it).
+      if (krakenResult !== null && Number.isFinite(krakenResult.observedAt)) {
         return {
           symbol,
           price: krakenResult.price,
@@ -735,7 +743,8 @@ export class LivePricingAdapter {
       // Phase 8.8.3-I6: Only use last_known_good if ALL external APIs fail
       // This should now be rare since Kraken REST is the authoritative source
       const cached = this.priceCache.get(this.normalizeSymbol(symbol));
-      if (cached && cached.price > 0) {
+      // row 33 P3: a re-serve whose age cannot be stated is not presented (falls to `no_reliable_price` below).
+      if (cached && cached.price > 0 && Number.isFinite(cached.observedAt)) {
         const cacheAge = Date.now() - cached.cachedAt;
         console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=all_apis_failed`);
         return {
@@ -772,7 +781,8 @@ export class LivePricingAdapter {
       
       // Try cached price as last resort
       const cached = this.priceCache.get(this.normalizeSymbol(symbol));
-      if (cached && cached.price > 0) {
+      // row 33 P3: a re-serve whose age cannot be stated is not presented (falls to `no_reliable_price` below).
+      if (cached && cached.price > 0 && Number.isFinite(cached.observedAt)) {
         const cacheAge = Date.now() - cached.cachedAt;
         console.log(`[8.8.3-I6][LAST_KNOWN_GOOD_FALLBACK] symbol=${symbol} price=${cached.price.toFixed(4)} age=${cacheAge}ms reason=fetch_exception`);
         return {
@@ -838,28 +848,27 @@ export class LivePricingAdapter {
         //    `Date.now()` here, so an absent origin time could not reach the exit stamp.
         // ⛔ CORRECTED IN ROUND 3, AND THE PREVIOUS COMMENT HERE WAS OVERSTATED. It read
         //    "IF WE CANNOT STATE THE AGE HONESTLY, WE DO NOT SERVE THE PRICE." That is NOT
-        //    what returning null does. Null falls through to the last-known-good leg at :620,
-        //    which re-serves the SAME row and emits `observedAt: cached.observedAt` UNGUARDED
-        //    at :631 — the same value, one leg down. What actually changes is the TAG: it is
-        //    emitted `source: 'last_known_good'`, which fails isKrakenVenueSource and is
-        //    therefore NON-ACTIONABLE. ⇒ the honest statement is "we do not serve it AS
-        //    ACTIONABLE VENUE DATA", not "we do not serve it."
+        //    what returning null does. Null falls through to the all-APIs-failed last-known-good
+        //    leg in `fetchLivePrice`, which re-serves the SAME row tagged `source: 'last_known_good'`
+        //    (non-actionable: it fails isKrakenVenueSource). ⇒ the honest statement is "we do not
+        //    serve it AS ACTIONABLE VENUE DATA", not "we do not serve it." ⚠️ Since row 33 P3
+        //    (2026-10-11) that leg ALSO requires `Number.isFinite(cached.observedAt)`, so a row whose
+        //    age cannot be stated now falls through to `no_reliable_price` — it is not re-served at all.
         // ⛔ AND THE PREDICATE WAS SELECTING ON THE WRONG PROPERTY. `!= null` blocks null and
         //    undefined — which the type forbids and no writer produces — while ADMITTING NaN.
         //    `Number.isFinite` covers null, undefined, NaN and Infinity in one, and is the
         //    property actually wanted: an age we can do arithmetic on.
-        // ⛔⛔ THE JUSTIFICATION THAT STOOD HERE NAMED THE WRONG CONSUMER, AND LANGSTON CAUGHT IT
-        //    AT STEP 4 (rule 29(c), condition 1). It claimed a NaN would reach
-        //    `isPriceVenueQuiet` (:292) and read as NOT QUIET, i.e. a false-fresh venue read.
-        //    THE ARITHMETIC WAS RIGHT AND THE REACHABILITY WAS WRONG: that predicate is NEVER
-        //    fed `observedAt`. Both call sites derive `ageMs` elsewhere — `routes.ts:5169` from
-        //    `peekCachedPrice` (:463, `Date.now() - cached.cachedAt`) and `routes.ts:12392`
-        //    from `:12217` (`Date.now() - new Date(liveQuote.timestamp)`). Re-derived here.
-        // ⇒ THE REACHABLE CONSEQUENCE IS NARROWER AND DIFFERENT: a NaN would be PERSISTED into
-        //    the provenance columns — `entryObservedAtMs` (`active-execution-engine.ts:1052`)
-        //    and `exitObservedAtMs` (`:2326`, `active-portfolio-manager.ts:666`) — i.e. a
-        //    CORRUPT PROVENANCE COLUMN, not a false-fresh price. The guard is kept; only its
-        //    stated mechanism was wrong.
+        // ⛔⛔ WHAT A NaN WOULD REACH — as of `B-PRICE-STALENESS-BOUND` P3 (row 33, 2026-10-11), BOTH:
+        //    (1) the provenance columns — `entryObservedAtMs` and `exitObservedAtMs` (engine,
+        //        `active-portfolio-manager.ts`) — a CORRUPT PROVENANCE COLUMN; and
+        //    (2) `isPriceVenueQuiet` (:378), at both call sites, which since P3 derive their age FROM
+        //        `observedAt`: `routes.ts:4932` via `peekCachedPrice` (`Date.now() - cached.observedAt`)
+        //        and `routes.ts:12106` via `:11931` (`Date.now() - new Date(liveQuote.timestamp)`, where a
+        //        re-served `timestamp` is now `observedIso(observedAt)`). A NaN age reads NOT quiet — a
+        //        false-fresh badge. ⇒ every P3 site requires `Number.isFinite(observedAt)` before it presents
+        //        a price, exactly as this branch does, and `peekCachedPrice` returns no peek (read as quiet).
+        //    (Before P3, (2) was unreachable — Langston's Step-4 ruling for `B-PRICE-AGE-TRUTH`, withdrawn by him
+        //    for the code after P3, 2026-10-11 gate 3.) The guard here is kept.
         // ⚠️ RECORDED RATHER THAN QUIETLY EDITED, because in a batch whose whole thesis is
         //    "do not launder a claim", a comment naming the wrong consumer is the one defect a
         //    later reader inherits verbatim.

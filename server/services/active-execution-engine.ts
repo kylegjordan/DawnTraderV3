@@ -3029,7 +3029,7 @@ export class ActiveExecutionEngine {
         console.log(`[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=${position.symbol} source=${priceSource} sinceLastTickMs=${diffMs} price=${currentPrice}`);
         
         // Phase 8.8.3-I6 B1: Diagnostic logging for trade engine live price usage
-        console.log(`[8.8.3-I6][ENGINE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} age=${diffMs}ms`);
+        console.log(`[8.8.3-I6][ENGINE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} sinceLastTickMs=${diffMs}`); // row 33 P5 (#913): was `age=`
         
         positionsEvaluated++;
         const avgPrice = parseFloat(position.avgPrice);

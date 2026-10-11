@@ -78,6 +78,29 @@ describe('P3 — display ages are observation ages', () => {
     expect(q2.timestamp).toBe(new Date(NOW).toISOString());
   });
 
+  it('FINDING-1: a re-serve whose observation time is not finite is NOT presented — no throw, no false-fresh peek', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+    for (const sym of ['NANX/USD', 'AAPL/USD', 'NANY/USD']) {
+      seed(sym, sym === 'AAPL/USD' ? 'kraken_equities_ws' : 'kraken_rest');
+      adapter.priceCache.get(adapter.normalizeSymbol(sym)).observedAt = Number.NaN;
+    }
+    expect(livePricingAdapter.peekCachedPrice('NANX/USD')).toBeNull(); // the route reads no peek as venue-quiet
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const gate = await adapter.fetchLivePrice('AAPL/USD');                // the xStock REST gate
+    expect(gate.source).toBe('no_reliable_price');
+    // decided AT the gate leg, never by a throw caught one leg down
+    expect(errSpy.mock.calls.some((c) => String(c[0]).includes('Live fetch exception'))).toBe(false);
+    expect(logSpy.mock.calls.some((c) => String(c[0]).includes('[XSTOCK_REST_GATE] symbol=AAPL/USD rest_ask=skipped serving=no_reliable_price'))).toBe(true);
+    vi.spyOn(adapter, 'fetchFromKrakenRest').mockResolvedValueOnce(null);  // all-APIs-failed
+    expect((await adapter.fetchLivePrice('NANX/USD')).source).toBe('no_reliable_price');
+    vi.spyOn(adapter, 'fetchFromKrakenRest').mockRejectedValueOnce(new Error('boom')); // fetch exception (inside the catch)
+    expect((await adapter.fetchLivePrice('NANY/USD')).source).toBe('no_reliable_price');
+    vi.spyOn(adapter, 'fetchFromKrakenRest').mockResolvedValueOnce({ price: 5, observedAt: Number.NaN, producer: 'kraken_rest_poller', lastTradePrice: null, lastTradeReceivedAtMs: null });
+    expect((await adapter.fetchLivePrice('NANZ/USD')).source).toBe('no_reliable_price'); // the REST quote leg, no cache row
+  });
+
   it('FENCE: no re-serve leg stamps "now" as its timestamp', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('server/services/live-pricing-adapter.ts', 'utf8').replace(/\r/g, '');
@@ -94,11 +117,17 @@ describe('P3 — display ages are observation ages', () => {
 });
 
 describe('P5 — #913 and the dead constant', () => {
-  it('the engine price-read line names the inter-tick cadence for what it is', async () => {
+  it('#913 by CLASS: every log line printing the inter-tick cadence names it for what it is — never an age', async () => {
     const { readFileSync } = await import('node:fs');
-    const src = readFileSync('server/services/active-execution-engine.ts', 'utf8');
-    expect(src).toContain('[I7-PM-FOCUS][ENGINE_PRICE_READ] symbol=${position.symbol} source=${priceSource} sinceLastTickMs=${diffMs}');
-    expect(src).not.toContain('ageMs=${diffMs}');
+    const lines = readFileSync('server/services/active-execution-engine.ts', 'utf8').replace(/\r/g, '').split('\n')
+      .filter((l) => l.includes('console.') && l.includes('${diffMs}'));
+    // Enumerated, not counted (Langston gate 3, FINDING-3): the three lines in the cadence block.
+    expect(lines.map((l) => (l.match(/\[[^\]]+\](\[[^\]]+\])?/) ?? [''])[0])).toEqual(['[PRICE_TICK]', '[I7-PM-FOCUS][ENGINE_PRICE_READ]', '[8.8.3-I6][ENGINE_LIVE_PRICE]']);
+    for (const l of lines) {
+      const labels = [...l.matchAll(/(\w+)=\$\{diffMs\}/g)].map((m) => m[1]);
+      expect(labels.length).toBe(1);
+      expect(['diff_ms', 'sinceLastTickMs']).toContain(labels[0]);
+    }
   });
   it('WS_CACHE_FALLBACK_MS is gone from the server tree', async () => {
     const { readFileSync, readdirSync, statSync } = await import('node:fs');
