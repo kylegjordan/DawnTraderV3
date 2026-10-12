@@ -70,7 +70,7 @@ CHANGE-CLASS: architecture
 | T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no tunable gate threshold: the pass count is the pre-registered structural rule (M3), the shadow intervals are logging cadence, the exit constants moved unchanged |
 | T2 | STORAGE_POLICY.md | N/A | new rows in an existing table (~700 shadow rows an hour at most, beside ~106,000 an hour already); retention unchanged |
 | T2 | POST_AUDIT_ROADMAP.md · AUTHORITY_BASELINE.md · MULTI_ASSET_VTS_EXPANSION_PLAN.md · ASSET_CLASS_ONBOARDING_WORKFLOW.md · BUILD_METHOD_PLAYBOOK.md · LANGSTON_ARCHITECTURE.md · CLAUDE.md / CONDUCT.md · PRE_LIVE_SPRINT.md | N/A | not touched by the refresh's price check |
-| T2 | MISTAKE_PATTERNS.md | N/A | no new instance of mine; the manual line that vouched for a check that never existed predates this batch and is corrected here (Langston, Step 11: "your call, stated not disputed") |
+| T2 | MISTAKE_PATTERNS.md | ✅ | new entry `docblock-rebound` (n=1): my Step-3 insertion re-pointed `logRtbTrace`'s docblock — this batch's own instance, found after the close (Langston); the stale manual line predates the batch |
 
 ## 8. Honest residual
 - **The claim's refusal outcomes have not fired live** (`claimRefused=0`); they are proved by driven tests.
