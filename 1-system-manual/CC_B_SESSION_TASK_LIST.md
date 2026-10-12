@@ -7,6 +7,7 @@
 | batch | step | waiting on |
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
+| **`B-RTB-REFRESH-LIVE-PRICE`** (row 59e, pre-sprint P1a) | **STEP 1** — scope r1 | Langston's Step-1 review |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1) | **STEP 10 — progress report, card Observation** (Step 8 CONFIRMED 10-10) | the first weekday against the pre-registered criteria: the record resolves at the 10-12 00:00Z reopen; `update:N` vs the 50 floor; the 20:00Z close pages no quiet-family streak; FINDING-1: any of the 8 book-state rows still active after 13:30Z = fix before close |
 | hotfix **`B-PATTERN-ENUM-DRIFT`** (row 51, `#1063`) | **verification half-done** — ABCD insert failures 0 since deploy B | the first `volatility_edge` open after deploy B, to read its `pattern_type` |
@@ -29,6 +30,7 @@
 - ✅ 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`) — CLOSED 2026-10-11 (Langston Step 11): the cluster bus is in-memory only; its table, enum and retention entry are dropped.
 - ✅ 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`) — CLOSED 2026-10-10 (Langston Step 11).
 - ✅ 59 inc 1 `B-ENTRY-DISTANCE-GUARD` (`#915`, `#1168`) — CLOSED 2026-10-12 (Langston Step 11): a taker fill at or through its stop or target is refused; reward-to-risk at the fill logged in shadow.
+- 59e `B-RTB-REFRESH-LIVE-PRICE` (`#1168`, `#1189`) — the RTB refresh reads the live ask: retires a signal past its stop or target, measures reward-to-risk and stop room in shadow, and closes [C1]'s two windows (Kyle's directive 3).
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).
 - 59c `B-ENTRY-BAND-SHADOW` (`#1186`) — log the fill's distance from the plan against spread and ATR at every taker open; ATR absent on xStock ⇒ log the inputs and refuse the leg (row 59 increment 4).
