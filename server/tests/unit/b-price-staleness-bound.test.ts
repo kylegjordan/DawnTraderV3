@@ -209,9 +209,25 @@ describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows'
     expect(v({ exit_price_source: 'last_known_good' })).toEqual(['wrong_source']);
     expect(v({ exit_price_source: null })).toEqual(['wrong_source']);
   });
-  it('(d) a stamp older than the 2 s exit window at close fires — on an operator close too; age reported', () => {
+  it('(d) a DECIDED exit older at close than the 2 s window + 1.5 s booking allowance fires; age reported', () => {
     expect(classifyReserveRow(row({ exit_observed_at_ms: closeMs - 14_300 }))).toEqual({ violations: ['stale_at_close'], ageAtCloseMs: 14_300 });
-    expect(v({ exit_observed_at_ms: closeMs - 3_160, close_reason: 'reset' })).toEqual(['stale_at_close']);
+    expect(v({ exit_observed_at_ms: closeMs - 3_600, close_reason: 'stop_hit' })).toEqual(['stale_at_close']);
+    expect(v({ exit_observed_at_ms: closeMs - 3_600, close_reason: 'some_future_reason' })).toEqual(['stale_at_close']); // unknown ⇒ judged
+    expect(v({ exit_observed_at_ms: closeMs - 3_400, close_reason: 'target_hit' })).toEqual([]); // inside the allowance
+  });
+  it('(d) does not judge an OPERATOR close (8g leaves it ungated; its age is on the row) — the other arms still do', () => {
+    for (const reason of ['reset', 'manual_stop', 'engine_stop_cleanup', 'stranded_clear']) {
+      expect(v({ exit_observed_at_ms: closeMs - 60_000, close_reason: reason })).toEqual([]);
+    }
+    expect(v({ exit_observed_at_ms: null, close_reason: 'reset' })).toEqual(['null_stamp']);
+  });
+  it('the 8 reserve rows on record (Langston Step 8): the narrowed arm fires on exactly ONE — the autonomous 4,553 ms close', () => {
+    const onRecord: Array<[string, string, number]> = [
+      ['JTO/USD', 'target_hit', 936], ['SUI/USD', 'stop_hit', 4553], ['RENDER/USD', 'reset', 1902], ['PHA/USD', 'reset', 2051],
+      ['GRASS/USD', 'reset', 3160], ['GBP/USD', 'reset', 3705], ['LIGHTER/USD', 'reset', 3810], ['XDC/USD', 'reset', 4034],
+    ];
+    const firing = onRecord.filter(([symbol, reason, age]) => v({ symbol, close_reason: reason, exit_observed_at_ms: closeMs - age }).length > 0).map(([s]) => s);
+    expect(firing).toEqual(['SUI/USD']);
   });
   it('NEGATIVE CONTROL: honest re-serves inside 100 ms .. 2 s with source kraken_rest do not fire (936 ms = the youngest on record)', () => {
     expect(v({})).toEqual([]);

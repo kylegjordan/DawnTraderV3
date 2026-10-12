@@ -12,13 +12,19 @@
  *       degenerate case; the youngest honest re-serve on record is 936 ms, so a 100 ms floor false-positives nothing
  *       that exists;
  *   (c) `exit_price_source` is anything other than `kraken_rest` (a NULL source included) — the literal was rewritten;
- *   (d) the stamp is older than D6's exit window at close (`closed_at − exit_observed_at_ms` >
- *       `CRYPTO_EXIT_PRICE_MAX_AGE_MS`) — an exit booked on a stale re-serve, on ANY path (Langston gate 2, condition 1).
- *       It is the only arm that reaches the operator closes 8g deliberately does not gate. ⚠️ Age-at-close is an UPPER
- *       BOUND on the age at decision time: it includes the evaluate-and-book latency.
+ *   (d) on an exit the engine DECIDED (any close reason outside `OPERATOR_CLOSE_REASONS`), the stamp is older at close
+ *       than D6's exit window plus the measured booking latency (`closed_at − exit_observed_at_ms` >
+ *       `CRYPTO_EXIT_PRICE_MAX_AGE_MS + RESERVE_CLOSE_LATENCY_ALLOWANCE_MS`) — an autonomous exit booked on a stale re-serve
+ *       (Langston gate 2, condition 1; narrowed at Step 8, 2026-10-12). Age-at-close is an UPPER bound on decision-time
+ *       age: it includes the evaluate-and-book latency, so the window carries an allowance. An OPERATOR close (flatten,
+ *       reset, manual, stop reconcile, stranded clear) is deliberately ungated by 8g and records its age on the row, so
+ *       (d) does not judge it — on the 8 reserve rows on record, 6 are `reset` at 1.9-4.0 s and the unnarrowed arm fired
+ *       on 6 of 8 honest rows (Langston's Step-8 FINDING). The set is NAMED; an unknown reason is judged (fails toward firing).
  * ✅ The residual `B-PRICE-AGE-TRUTH` left unproven — that the honest stamp reaches `closed_trades` — is DISCHARGED
- * POSITIVELY (Langston, 2026-10-11): all 8 reserve-priced rows on staging (`paper`, 2026-09-22 → 2026-10-06) carry a
- * non-null stamp, source `kraken_rest`, and 936-4,553 ms of honest age. The invariant is still held.
+ * POSITIVELY (Langston, 2026-10-11; re-derived by him 2026-10-12): all 8 `kraken_rest_rate_limited_reserve` rows on
+ * staging (`paper`, 2026-09-22 → 2026-10-06) carry a non-null stamp, source `kraken_rest`, and 936-4,553 ms of age. On the
+ * narrowed arm (d) exactly ONE fires: the autonomous SUI close at 4,553 ms — a pre-8g exit decided on a stale re-serve, the
+ * class 8g now prevents. (A 9th reserve-priced row, AMC/USD `xstock_rest_gate_reserve`, is another producer, outside.)
  * The run line prints how many reserve rows it CHECKED, so a zero is read against its population, never as a pass — and
  * it is checked only while the engine runs.
  */
@@ -27,6 +33,14 @@ import { CRYPTO_EXIT_PRICE_MAX_AGE_MS } from '../core/trading/exit-price-age.js'
 export const RESERVE_PRODUCER = 'kraken_rest_rate_limited_reserve';
 /** Below this age at close a re-served stamp is implausible — a re-stamp, not an observation. */
 export const RESERVE_MIN_HONEST_AGE_MS = 100;
+/** Measured booking latency on decided exits: across 215 paper crypto closes with a FRESH WebSocket price (`kraken_ws_book_mid`
+ *  171, `kraken_ws_ticker_mid` 44; close reasons stop/target/trailing/max-holding), age at close was median ~0.2 s, p99
+ *  0.93 s, max 1,263 ms (read 2026-10-12). 1,500 ms covers the observed maximum. */
+export const RESERVE_CLOSE_LATENCY_ALLOWANCE_MS = 1500;
+/** Close reasons an OPERATOR (or a reconciler acting for one) writes — 8g does not gate them, so arm (d) does not judge them. */
+export const OPERATOR_CLOSE_REASONS: ReadonlySet<string> = new Set([
+  'reset', 'hard_reset', 'manual', 'manual_stop', 'engine_stop_cleanup', 'stranded_clear', 'stranded_trades_cleared', 'guardrail', 'never_filled',
+]);
 /** At most this many alerts per run; the rest are counted on the run line (a systematic break mints one row per trade). */
 export const RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN = 20;
 
@@ -51,7 +65,9 @@ export function classifyReserveRow(r: ReserveRow): { violations: ReserveRowViola
   else if (Number.isFinite(closeMs)) {
     ageAtCloseMs = closeMs - stamp;
     if (ageAtCloseMs < RESERVE_MIN_HONEST_AGE_MS) out.push('stamp_too_young');
-    else if (ageAtCloseMs > CRYPTO_EXIT_PRICE_MAX_AGE_MS) out.push('stale_at_close');
+    else if (ageAtCloseMs > CRYPTO_EXIT_PRICE_MAX_AGE_MS + RESERVE_CLOSE_LATENCY_ALLOWANCE_MS && !OPERATOR_CLOSE_REASONS.has(r.close_reason ?? '')) {
+      out.push('stale_at_close');
+    }
   }
   if (r.exit_price_source !== 'kraken_rest') out.push('wrong_source');
   return { violations: out, ageAtCloseMs };
@@ -85,7 +101,7 @@ export async function runReserveRowTripwire(mode: string, sinceMs: number, deps:
     await deps.addAlert({
       triggers_at: new Date(), category: 'breakage', severity: 'warning',
       title: `Closed trade ${r.symbol} (${r.close_reason ?? 'no close reason'}) was priced by a re-served quote that breaks the age invariant`,
-      body: `A ${mode} closed trade (${r.id}, close_reason ${r.close_reason ?? 'null'}) exited on the rate-limited re-serve, and its stored row breaks the invariant: ${violations.join(', ')}${ageAtCloseMs !== null ? ` (stamp ${ageAtCloseMs} ms before close — an upper bound on its age at decision)` : ''}. The honest observation time must reach closed_trades unrefreshed and inside D6's ${CRYPTO_EXIT_PRICE_MAX_AGE_MS} ms exit window (B-PRICE-STALENESS-BOUND P4, row 8g-bis; #951 §9b).`,
+      body: `A ${mode} closed trade (${r.id}, close_reason ${r.close_reason ?? 'null'}) exited on the rate-limited re-serve, and its stored row breaks the invariant: ${violations.join(', ')}${ageAtCloseMs !== null ? ` (stamp ${ageAtCloseMs} ms before close — an upper bound on its age at decision)` : ''}. The honest observation time must reach closed_trades unrefreshed, and a decided exit must close inside D6's ${CRYPTO_EXIT_PRICE_MAX_AGE_MS} ms window plus ${RESERVE_CLOSE_LATENCY_ALLOWANCE_MS} ms booking latency (B-PRICE-STALENESS-BOUND P4, row 8g-bis; #951 §9b).`,
       metadata: { tradeId: r.id, symbol: r.symbol, mode, closeReason: r.close_reason, violations, ageAtCloseMs, exitObservedAtMs: r.exit_observed_at_ms, closedAt: r.closed_at, exitPriceSource: r.exit_price_source },
       dedupe_key: `reserve-row-tripwire-${r.id}`,
     });

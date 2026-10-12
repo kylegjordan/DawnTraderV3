@@ -57,7 +57,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 9h | B-OPEN-POSITION-INDEX-TRUTH (`#1113`) | QUEUED | after row 9g: the duplicate-open handler names one index, the schema declares a second, and the database holds a third shape (symbol + side); decid… |
 | 10 | #628 — batch named at Step 1 | QUEUED | with B-SIZING-DEC-RESTORE: its two sizing sites |
 | 31 | B-XSTOCK-LIVE-FEED | QUEUED | the xStock feed became our trading feed without a decision — decide and fix |
-| 33 | B-PRICE-STALENESS-BOUND (row 32 folded in, `#743` + `#913`; 8g/8g-bis moved in) | STEP 4 — review gate 1 of 3 approved, 2-3 at Langston; deploy held | the last-known-good price is re-served with no age bound |
+| 33 | B-PRICE-STALENESS-BOUND (row 32 folded in, `#743` + `#913`; 8g/8g-bis moved in) | STEP 8 CONFIRMED — deployed 2026-10-12; age-arm narrowing at Langston; watchdog read 10-18/19; Step 10 next | the last-known-good price is re-served with no age bound |
 | 34 | B-EQUITY-RECONNECT-STALL-TIMER | QUEUED | a stalled xStock reconnect leaves positions unwatched |
 | 36 | #506 — batch named at Step 1 | QUEUED | book subscriptions never unsubscribe |
 | 37 | B-BOOK-SUBSCRIPTION-REACH | QUEUED | after #506: subscribe the order book for the whole pool, not ~3 coins |
