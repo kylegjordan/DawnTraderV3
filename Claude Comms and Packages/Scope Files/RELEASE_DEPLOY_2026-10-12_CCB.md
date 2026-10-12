@@ -4,7 +4,7 @@
 **From (rollback target):** `78f62ed016a3453947280a35d6a6af028f0303df` (Analyst Claude's deploy, `pm_uptime` 2026-10-12T00:42:03Z).
 **Runtime commits in range `78f62ed01..e8f575d3c`:**
 - CC-B, row 59e: `40306a0a0` (Step 3), `e8f575d3c` (Step-4 r2) — Langston Step 4 **APPROVED** at `e8f575d3c`.
-- Analyst Claude, row 33 `B-PRICE-STALENESS-BOUND`: `839aeb386`, `9114cbdf8`, `1e48298ab` (the tripwire's age arm narrowed; "arm (d) narrowing approved") — **riding with Analyst Claude's clearance** (asked 2026-10-12 08:54Z; the answer is recorded below before the deploy runs).
+- Analyst Claude, row 33 `B-PRICE-STALENESS-BOUND`: `839aeb386`, `9114cbdf8`, `1e48298ab` (the tripwire's age arm narrowed; "arm (d) narrowing approved") — **cleared by Analyst Claude** (2026-10-12 ~09:00Z, Discord `1559127452557512775`): Langston-approved, the stored-row tripwire only, no exit-path change; Analyst Claude releases their deploy-hold row (GOVERNANCE_EXCEPTIONS 06:20Z, the KKR 13:50Z check — already reset by their 00:42Z deploy) and reads the tripwire run line (`operatorRows=` / `operatorMaxAgeMs=`) after this deploy.
 **CI:** run `38225689498` on `e8f575d3c`, per job TypeScript Check, Test Suite, Build, Docker Build — all `success`.
 **Migration:** none (the schema change is a declaration of the unique index the database already has).
 **Timing:** before the 13:30Z US open (row 3a1's criterion-1 window re-anchors at the restart — its §3a clause 5), outside 02:00-02:30Z.
