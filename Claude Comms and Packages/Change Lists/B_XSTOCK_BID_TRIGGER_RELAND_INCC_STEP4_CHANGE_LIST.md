@@ -69,3 +69,8 @@ xStock only; after the book-state block (`advanceBookStateComparator`) and the P
 - **VTS:** `[VTS_VENUE_PAUSE] START window=sun_reopen@2026-10-12T00` at 00:00:41Z; `END … realSkips=7920 shadowSkips=6510 opensRefused=0` at 00:35:41Z.
 - **Closes:** 0 `closed_trades` rows from 2026-10-11 23:50Z to the read.
 - Not yet read: the weekday 16:15 / 20:15 ET windows (first: 2026-10-12 20:14Z), the EST reads (11-01/02/03).
+
+## STEP 7 — THE FIRST WEEKDAY WINDOW READ (16:15 ET, 2026-10-12 20:14-20:35Z; `error.log` 20:10-20:40Z, build `e8f575d3c`)
+- **The discriminating read — PASS.** 19 positions priced inside the window and paused at 20:14:00-20:14:01Z; **0 `XS_FRAME frame=ok` between 20:14:00 and 20:35:00Z** (positive controls in the same file: 2,829 before 20:14Z, 1,997 after 20:35Z). `VENUE_PAUSE_RESUMED` at 20:35:00-20:35:14Z (`pausedS` ~1,260). VTS `START` 20:14:03Z, `END` 20:35:05Z (`realSkips=4368 shadowSkips=1470 opensRefused=1` — RBLX's VTS open refused).
+- **★ THE WINDOW DID ITS JOB, MEASURED: at the 16:15 ET transition (20:15:01Z) the books blew out** — `WOULD_FIRE` with `bidWouldFire=stop` on PCAR (bid 102.10 vs mark 107.95, stop 107.66), TMUS (149.00), ABNB (160.01), DXCM (82.86), ACN (203.93), BKR (54.00), ALGN (140.00); the MARK crossed on ALGN (`wouldFire=target`, mark 157.94 vs target 150.40) and ABNB (`wouldFire=stop` at 20:15:23Z). **Without the pause: seven bid-side false stops and a false target on transient transition quotes. With it: nothing decided, 0 `closed_trades` rows from 20:00Z to the 20:40Z read.**
+- Next: the 20:15 ET window (2026-10-13 00:14-00:35Z), then the EST reads (11-01/02/03).
