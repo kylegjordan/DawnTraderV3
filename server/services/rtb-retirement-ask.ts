@@ -47,7 +47,7 @@ export async function readRetirementAsk(
       });
       if (!selection.ok) return { ok: false, reason: `crypto_${selection.bookRefusal}_${selection.tickerRefusal}` };
       const { bid, ask, ageMs, basis } = selection.quote;
-      return { ok: true, ask, bid, ageMs, basis: String(basis) };
+      return { ok: true, ask, bid, ageMs, basis: String(basis), readAtMs: nowMs, ceilingMs: EXIT_TRIGGER_MAX_AGE_MS };
     }
 
     if (cls === 'xstock_spot') {
@@ -77,7 +77,7 @@ export async function readRetirementAsk(
       if (judgeEntrySpread(spread, yardstick.median, cfg.kRel, cfg.floorPct).refuse) {
         return { ok: false, reason: 'xstock_implausible_spread' };
       }
-      return { ok: true, ask: sides.ask, bid: sides.bid, ageMs, basis: 'xstock_equities_tick' };
+      return { ok: true, ask: sides.ask, bid: sides.bid, ageMs, basis: 'xstock_equities_tick', readAtMs: nowMs, ceilingMs: ceiling.ceilingMs };
     }
 
     return { ok: false, reason: 'class_unsupported' };

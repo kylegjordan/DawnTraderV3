@@ -22,8 +22,8 @@ vi.mock('../../db.js', () => ({
   },
 }));
 
-const store: { rows: any[]; deletes: string[][]; updates: any[]; deleteGate: Promise<void> | null; deleteThrows: boolean; updatedRow: any[] } = {
-  rows: [], deletes: [], updates: [], deleteGate: null, deleteThrows: false, updatedRow: [],
+const store: { rows: any[]; deletes: string[][]; updates: any[]; deleteGate: Promise<void> | null; deleteThrows: boolean; deleteZero: boolean; updatedRow: any[] } = {
+  rows: [], deletes: [], updates: [], deleteGate: null, deleteThrows: false, deleteZero: false, updatedRow: [],
 };
 vi.mock('../../storage.js', () => ({
   storage: {
@@ -41,6 +41,7 @@ vi.mock('../../storage.js', () => ({
     },
     deleteRtbSignals: async ({ id }: { id: string }) => {
       if (store.deleteThrows) throw new Error('delete failed (test)');
+      if (store.deleteZero) return 0; // a no-match: the real query returns 0 rows and does not throw
       store.deletes.push([id]);
       store.rows = store.rows.filter((r) => r.id !== id);
       return 1;
@@ -64,7 +65,7 @@ const RRS = 'server/services/rtb-refresh-service.ts';
 const AEE = 'server/services/active-execution-engine.ts';
 const ASK = 'server/services/rtb-retirement-ask.ts';
 
-const ok = (ask: number, bid = ask * 0.999): RetirementAsk => ({ ok: true, ask, bid, ageMs: 500, basis: 'test' });
+const ok = (ask: number, bid = ask * 0.999): RetirementAsk => ({ ok: true, ask, bid, ageMs: 500, basis: 'test', readAtMs: Date.now(), ceilingMs: 2_000 });
 
 // ── 1. the decision (pure) — read 1's six rows ─────────────────────────────────────────────────────────────────────────
 describe('1. decideRetirement — the six would-retire rows of read 1, and the rest', () => {
@@ -101,6 +102,14 @@ describe('1. decideRetirement — the six would-retire rows of read 1, and the r
     const r = decideRetirement({ assetClass: 'xstock_spot', ask: ok(173), stopPrice: 169.14, targetPrice: 172.8, prior: { reason: 'ask_at_or_through_stop', passes: 1 } });
     expect(r.decision).toMatchObject({ action: 'hold_breach', reason: 'ask_at_or_through_target', passes: 1 });
   });
+  it('⛔ Step-4 CONDITION 1: an ask fresh when READ but past its ceiling when DECIDED ⇒ unpriced (ask_expired), never a retirement', () => {
+    const t0 = 1_800_000_000_000;
+    const ask: RetirementAsk = { ok: true, ask: 1.2768, bid: 1.2767, ageMs: 1_400, basis: 'test', readAtMs: t0, ceilingMs: 2_000 };
+    const late = decideRetirement({ assetClass: 'crypto_spot', ask, stopPrice: 0.9878, targetPrice: 1.0758, prior: null, nowMs: t0 + 700 });
+    expect(late.decision).toEqual({ action: 'unpriced', reason: 'ask_expired' });
+    const inTime = decideRetirement({ assetClass: 'crypto_spot', ask, stopPrice: 0.9878, targetPrice: 1.0758, prior: null, nowMs: t0 + 500 });
+    expect(inTime.decision).toMatchObject({ action: 'retire' });
+  });
   it('a class with no rule, a non-finite stop, a null target ⇒ never a false retirement', () => {
     expect(decideRetirement({ assetClass: 'crypto_perp', ask: ok(1), stopPrice: 2, targetPrice: 3, prior: null }).decision).toEqual({ action: 'unpriced', reason: 'class_unsupported' });
     expect(decideRetirement({ assetClass: null, ask: ok(1), stopPrice: 2, targetPrice: 3, prior: null }).decision).toEqual({ action: 'unpriced', reason: 'class_unsupported' });
@@ -121,7 +130,7 @@ const keyOf = (r: any) => `paper:${r.symbol}:${r.strategy}`;
 
 describe('2. refreshAndRank — the price check inside the refresh', () => {
   beforeEach(() => {
-    store.rows = []; store.deletes = []; store.updates = []; store.deleteGate = null; store.deleteThrows = false; store.updatedRow = [];
+    store.rows = []; store.deletes = []; store.updates = []; store.deleteGate = null; store.deleteThrows = false; store.deleteZero = false; store.updatedRow = [];
     archived.length = 0;
     vi.spyOn(readyToBuyService as any, 'acquireRefreshedInputs').mockResolvedValue({
       decayPenalty: 0, refreshedFinalScore: 0.6, refreshedRegimeWeight: 0.6, currentVol: 0.02, refreshedMT: null,
@@ -193,7 +202,7 @@ describe('2. refreshAndRank — the price check inside the refresh', () => {
 
 // ── 3. the promotion claim ([C1](b) + C7) ──────────────────────────────────────────────────────────────────────────────
 describe('3. promoteSignal — a claim with an outcome', () => {
-  beforeEach(() => { store.rows = []; store.deletes = []; store.deleteThrows = false; store.updatedRow = []; });
+  beforeEach(() => { store.rows = []; store.deletes = []; store.deleteThrows = false; store.deleteZero = false; store.updatedRow = []; });
   it("'deleted' when the row is there and nothing is refreshing it", async () => {
     store.rows = [row('p1', 'BTC/USD', 'crypto_spot', 100, 95, 110)];
     expect(await readyToBuyService.promoteSignal('p1')).toBe('deleted');
@@ -201,6 +210,11 @@ describe('3. promoteSignal — a claim with an outcome', () => {
   });
   it("'missing' when a refresh deleted it after selection — the engine must not open it", async () => {
     expect(await readyToBuyService.promoteSignal('gone')).toBe('missing');
+  });
+  it("⛔ Step-4 CONDITION 2: a delete that removed ZERO rows ⇒ 'missing', never 'deleted'", async () => {
+    store.rows = [row('p4', 'ADA/USD', 'crypto_spot', 100, 95, 110)];
+    store.deleteZero = true;
+    expect(await readyToBuyService.promoteSignal('p4')).toBe('missing');
   });
   it("'refreshing' when a refresh pass holds its latch — not deleted, still queued", async () => {
     store.rows = [row('p2', 'ETH/USD', 'crypto_spot', 100, 95, 110)];
@@ -215,6 +229,34 @@ describe('3. promoteSignal — a claim with an outcome', () => {
     expect(await readyToBuyService.promoteSignal('p3')).toBe('delete_failed');
     expect(store.updatedRow).toEqual([]);
     expect(store.rows.map((r) => r.id)).toEqual(['p3']);
+  });
+});
+
+// ── 3b. the shadow's own rate limit (Step-4 CONDITION 3) ──────────────────────────────────────────────────────────────
+describe('3b. the shadow row — hourly, plus a verdict change no sooner than 10 minutes after the last row', () => {
+  it('a signal flipping across its floor every pass writes ONE row per 10 minutes, carrying the flip count', () => {
+    archived.length = 0;
+    const st: any = { priceBreach: null, lastShadowAtMs: null, lastShadowWouldRefuse: null, shadowFlipsSinceRow: 0, rrFloor: { value: 2.0, unresolved: false } };
+    const sig: any = row('s1', 'ONDO/USD', 'crypto_spot', 1.0, 0.9, 1.2); // RR at plan = 2.0, exactly on the floor
+    let now = 1_800_000_000_000;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const shadow = (askPx: number) => (readyToBuyService as any)._maybeArchivePriceShadow('paper', sig, 'crypto_spot',
+      { ok: true, ask: askPx, bid: askPx * 0.999, ageMs: 100, basis: 't', readAtMs: now, ceilingMs: 2_000 }, 0.9, 1.2, st, { action: 'inside' });
+    shadow(0.999);                       // first ever ⇒ a row (rr just above the floor)
+    for (let i = 0; i < 20; i++) { now += 15_000; shadow(i % 2 ? 0.999 : 1.001); } // 20 flips across the floor in 5 minutes
+    expect(archived.length).toBe(0);     // the archive is fire-and-forget; let it settle below
+    return new Promise<void>((res) => setTimeout(() => {
+      expect(archived.filter((a) => a.rejectStage === 'rtb_price_shadow').length).toBe(1);
+      now += 600_000; shadow(1.001);     // past the change interval, on a flip ⇒ one row carrying the count
+      setTimeout(() => {
+        const rows = archived.filter((a) => a.rejectStage === 'rtb_price_shadow');
+        expect(rows.length).toBe(2);
+        expect(rows[1].gateDecision.sample).toBe('verdict_change');
+        expect(rows[1].gateDecision.flipsSinceLastRow).toBeGreaterThanOrEqual(20);
+        spy.mockRestore();
+        res();
+      }, 5);
+    }, 5));
   });
 });
 
@@ -235,6 +277,10 @@ describe('4. fences on the wiring', () => {
     const sqe = s.indexOf('await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true })');
     expect(dec).toBeGreaterThan(0);
     expect(sqe).toBeGreaterThan(dec);
+  });
+  it('the decision dispatches on the ROW class, never the symbol-resolved SQE class (Step-4 record 1)', () => {
+    const s = src(RTB);
+    expect(s).toMatch(/const _rpClass = asValidAssetClass\(signal\.assetClass\);\n\s*const _rp = decideRetirement\(\{ assetClass: _rpClass,/);
   });
   it('⛔ [C1](a): the finally releases the latch ONLY for a signal not being deleted', () => {
     expect(src(RTB)).toMatch(/if \(!bulkDeletes\.includes\(signal\.id\)\) _refreshState\.isRefreshing = false;/);

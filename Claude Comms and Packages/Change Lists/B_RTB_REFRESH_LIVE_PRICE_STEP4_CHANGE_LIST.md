@@ -82,3 +82,16 @@ if (_claim !== 'deleted') { console.warn(`…[CLAIM_REFUSED] … outcome=${_clai
 - `b-rtb-retirement-ask.test.ts` (15): every xStock arm (no tick, cold, crossed, one-sided, the ORCL/AMAT NULL-quantity placeholders, stale at the 15 s floor, RCL's 276/300, **no yardstick ⇒ keep**, a thrown knob read ⇒ keep); crypto (fresh ok; stale; a 5 % spread refused under the exit policy); **C5 — `STX/USD` stamped crypto reads the crypto book with an equities tick present, and stamped xStock reads the equities tick with a crypto book present**; unresolved and unsupported classes keep.
 - **Mutants:** latch released for every signal ⇒ 2 fail; retirement disabled ⇒ 4 fail. **tsc baseline 337 = 337.** Full suite: **4,121 passed**; 10 files fail to load — the same 10 on the clean tree (stash, run, pop).
 - **Positive control for M1's instrument (your C5 note):** the M1 query's branches are each gated on `s.asset_class` — stated in §5.
+
+## r2 — Langston Step 4 (2026-10-12 ~09:3xZ UTC): CHANGES, three in-commit conditions — all folded
+| condition | done |
+|---|---|
+| **1 — read-to-decide gap unbounded** (the ask judged fresh at read, acted on later; measured `rankDuration` n=63 p50 669 ms, max 1,299 ms) | `RetirementAsk` ok carries `readAtMs` + `ceilingMs` (crypto `EXIT_TRIGGER_MAX_AGE_MS`; xStock the per-symbol ceiling the read computed); `decideRetirement` re-checks `ageMs + (now − readAtMs) ≤ ceilingMs` at decide time ⇒ else `unpriced`/`ask_expired`. **(a)** the shared `_askNow` is gone — every read takes its own clock. Test: an ask read at 1,400 ms decided 700 ms later ⇒ `ask_expired`; decided 500 ms later ⇒ retired. |
+| **2 — `'deleted'` asserted on a zero-row delete** | `promoteSignal` reads the count: `removed >= 1 ? 'deleted' : 'missing'`; `recordQueueRemove(removed)`. Test: a zero-row delete ⇒ `'missing'`. |
+| **3 — the verdict-change escape had no rate limit** (70 of 101 live rows within 0.05 R of the floor) | a change row needs `RTB_PRICE_SHADOW_CHANGE_MIN_MS` = 10 min since the last row; flips between rows are counted and carried (`flipsSinceLastRow`); bound: at most 7 rows per signal per hour (~700/h at ~100 queued). Test: 20 flips in 5 minutes ⇒ one row; the next flip past 10 minutes ⇒ one row carrying ≥ 20. |
+| record 1 — the decision dispatched on `sqeAssetClass` (symbol-resolvable) | now `asValidAssetClass(signal.assetClass)` — the row's class — with a fence. |
+| record 2 — the promotion trace written before the delete | moved after a successful delete. |
+| record 3 — `1-system-manual/ACTIVE_PATH_FLOW.md:242,244` document both removed calls | added to the Step-10 list. |
+| record 4 — CI | run `38223297445` on `40306a0a0` was cancelled by the change-list push (Build and TypeScript Check `success`, Test Suite and Docker Build `cancelled`); no 4/4 on that head — Step 5 will cite the run on the r2 head. |
+**Tests:** 43 (24 + 4 new in the refresh file, 15 unchanged in the contract file) · tsc 337 = 337 · full suite 4,125 passed, the same 10 files fail on the clean tree.
+

@@ -495,11 +495,12 @@ class RTBRefreshService {
     // directive's own shape (`refreshAndRank(signals, prices)`, A4-R10R-2), dropped when this service was built (`7a029f390`).
     // One read per bucket signal, dispatched on the row's persisted `asset_class` (C5), through the exit's own contract (C1);
     // a refusal is a reason, never a fallback. Keyed exactly as the bucket keys are.
+    // Each read takes its OWN clock (Langston Step-4 CONDITION 1(a)): a shared timestamp captured before the serial loop
+    // understated a later signal's age by the loop's own elapsed time (the xStock leg makes a DB read per signal).
     const asks = new Map<string, RetirementAsk>();
-    const _askNow = Date.now();
     for (const s of bucketSignals as Array<{ symbol: string; strategy: string; assetClass?: string | null; stopPrice: string | number }>) {
       asks.set(`${mode}:${s.symbol}:${s.strategy}`, await readRetirementAsk(
-        { symbol: s.symbol, assetClass: s.assetClass ?? null, stopPrice: Number(s.stopPrice) }, _askNow,
+        { symbol: s.symbol, assetClass: s.assetClass ?? null, stopPrice: Number(s.stopPrice) },
       ));
     }
 

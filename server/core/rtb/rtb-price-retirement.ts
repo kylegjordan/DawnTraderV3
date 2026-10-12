@@ -15,8 +15,14 @@
  */
 import { refuseTakerBooking, type TakerBookingRefusal } from '../trading/entry-booking.js';
 
+/**
+ * `readAtMs` + `ceilingMs` (Langston Step-4 CONDITION 1): the ask is judged fresh at READ time but acted on later — the refresh
+ * awaits per-chunk work in between (measured on the deployed code, `rankDuration` n=63: p50 669 ms, p99 1,290 ms, max 1,299 ms).
+ * The decision re-checks the age AT DECIDE TIME against the same ceiling the read applied, so an ask that was fresh when read
+ * but stale when acted on is `unpriced` (`ask_expired`), never a retirement.
+ */
 export type RetirementAsk =
-  | { ok: true; ask: number; bid: number; ageMs: number; basis: string }
+  | { ok: true; ask: number; bid: number; ageMs: number; basis: string; readAtMs: number; ceilingMs: number }
   | { ok: false; reason: string };
 
 /** A refusal carried from the previous pass of the same signal (xStock needs two in a row on the same level). */
@@ -40,12 +46,17 @@ export function decideRetirement(input: {
   stopPrice: number;
   targetPrice: number | null;
   prior: PriorBreach | null;
+  /** Decision time; defaults to now. */
+  nowMs?: number;
 }): { decision: RetirementDecision; nextBreach: PriorBreach | null } {
   const required = input.assetClass ? RETIREMENT_PASSES_REQUIRED[input.assetClass] : undefined;
   if (required === undefined) return { decision: { action: 'unpriced', reason: 'class_unsupported' }, nextBreach: null };
   // No admissible ask: no decision on price, and the streak RESETS — "consecutive" means two refusing passes with nothing
   // between them (the pre-audit's item 3: reset by any pass that does not refuse). The conservative direction (C6).
   if (!input.ask.ok) return { decision: { action: 'unpriced', reason: input.ask.reason }, nextBreach: null };
+  // CONDITION 1: the age the ask has NOW, not when it was read.
+  const ageNow = input.ask.ageMs + ((input.nowMs ?? Date.now()) - input.ask.readAtMs);
+  if (!(ageNow <= input.ask.ceilingMs)) return { decision: { action: 'unpriced', reason: 'ask_expired' }, nextBreach: null };
   if (!Number.isFinite(input.stopPrice) || input.stopPrice <= 0) {
     return { decision: { action: 'unpriced', reason: 'stop_not_finite' }, nextBreach: null };
   }

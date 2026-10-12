@@ -470,13 +470,17 @@ interface SignalRefreshState {
   priceBreach: PriorBreach | null;
   lastShadowAtMs: number | null;
   lastShadowWouldRefuse: boolean | null;
+  /** Verdict flips seen since the last shadow row (carried on the next row; Langston Step-4 CONDITION 3). */
+  shadowFlipsSinceRow: number;
   rrFloor: { value: number | null; unresolved: boolean } | null;
 }
 
 /** `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`): what `promoteSignal` did; the engine opens only on `'deleted'`. */
 export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed';
-/** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour (plus one on any verdict change). */
+/** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour, plus one on a verdict change no sooner than
+ *  `RTB_PRICE_SHADOW_CHANGE_MIN_MS` after the last (Langston Step-4 CONDITION 3) — at most 7 rows per signal per hour. */
 const RTB_PRICE_SHADOW_SAMPLE_MS = 3_600_000;
+const RTB_PRICE_SHADOW_CHANGE_MIN_MS = 600_000;
 
 class ReadyToBuyService {
   private initialized = false;
@@ -628,6 +632,7 @@ class ReadyToBuyService {
         priceBreach: null,
         lastShadowAtMs: null,
         lastShadowWouldRefuse: null,
+        shadowFlipsSinceRow: 0,
         rrFloor: null,
       });
     }
@@ -1077,7 +1082,10 @@ class ReadyToBuyService {
                 const _rpAsk: RetirementAsk = asks?.get(`${mode}:${signal.symbol}:${signal.strategy}`) ?? { ok: false, reason: 'ask_not_supplied' };
                 const _rpStop = parseFloat(String(signal.stopPrice));
                 const _rpTarget = signal.targetPrice != null ? parseFloat(String(signal.targetPrice)) : null;
-                const _rp = decideRetirement({ assetClass: sqeAssetClass, ask: _rpAsk, stopPrice: _rpStop, targetPrice: _rpTarget, prior: _refreshState.priceBreach });
+                // The ROW's persisted class (Langston Step-4 record 1): `sqeAssetClass` may be symbol-resolved, and the pass-count
+                // policy must never dispatch on a symbol. The NOT NULL check makes the two equal today; this keeps it so.
+                const _rpClass = asValidAssetClass(signal.assetClass);
+                const _rp = decideRetirement({ assetClass: _rpClass, ask: _rpAsk, stopPrice: _rpStop, targetPrice: _rpTarget, prior: _refreshState.priceBreach });
                 _refreshState.priceBreach = _rp.nextBreach;
                 this._tallyPriceOutcome(_priceTally, sqeAssetClass, _rp.decision);
                 if (_rp.decision.action === 'retire') {
@@ -1369,13 +1377,21 @@ class ReadyToBuyService {
     const entry = Number(signal.entryPrice);
     const sh = entryFillShadow({ fill: ask.ask, intended: entry, stop, target: target ?? Number.NaN, floor: st.rrFloor.value });
     const nowMs = Date.now();
-    const due = st.lastShadowAtMs === null || nowMs - st.lastShadowAtMs >= RTB_PRICE_SHADOW_SAMPLE_MS;
-    const changed = st.lastShadowAtMs !== null && st.lastShadowWouldRefuse !== sh.wouldRefuse;
-    if (!due && !changed) return;
-    st.lastShadowAtMs = nowMs;
+    // ⛔ Langston Step-4 CONDITION 3: a verdict change has its OWN rate limit. `rrFill` is continuous in the ask and 70 of 101
+    // live rows sat within 0.05 R of their floor, so an unlimited "on change" escape wrote a row nearly every pass — the
+    // unsampled rate the sampling exists to avoid, into the largest table. Flips between rows are COUNTED and carried instead.
+    const flipped = st.lastShadowWouldRefuse !== null && st.lastShadowWouldRefuse !== sh.wouldRefuse;
+    if (flipped) st.shadowFlipsSinceRow++;
     st.lastShadowWouldRefuse = sh.wouldRefuse;
+    const sinceRow = st.lastShadowAtMs === null ? Number.POSITIVE_INFINITY : nowMs - st.lastShadowAtMs;
+    const due = sinceRow >= RTB_PRICE_SHADOW_SAMPLE_MS;
+    const changed = flipped && sinceRow >= RTB_PRICE_SHADOW_CHANGE_MIN_MS;
+    if (!due && !changed) return;
+    const flips = st.shadowFlipsSinceRow;
+    st.lastShadowAtMs = nowMs;
+    st.shadowFlipsSinceRow = 0;
     this._archiveRtbPrice(mode, signal, cls, 'rtb_price_shadow', {
-      gate: 'rtb_price_shadow', accepted: true, sample: changed ? 'verdict_change' : 'hourly', decision: decision.action,
+      gate: 'rtb_price_shadow', accepted: true, sample: due ? 'hourly' : 'verdict_change', flipsSinceLastRow: flips, decision: decision.action,
       ask: ask.ask, bid: ask.bid, askAgeMs: ask.ageMs, basis: ask.basis,
       entryPrice: entry, stopPrice: stop, targetPrice: target,
       rrAsk: sh.rrFill, adverseR: sh.adverseR, rrFloor: st.rrFloor.value, rrWouldRefuse: sh.wouldRefuse, rrFloorUnresolved: st.rrFloor.unresolved,
@@ -1648,11 +1664,19 @@ class ReadyToBuyService {
       return 'refreshing';
     }
     const promotionStartMs = Date.now();
-    this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
     try {
-      await storage.deleteRtbSignals({ mode, id: signal.id });
-      performanceMonitor.recordQueueRemove(1);
+      // ⛔ Langston Step-4 CONDITION 2: the outcome is MEASURED — `deleteRtbSignals` returns the rows it removed and does not
+      // throw on a no-match. Zero rows means another path deleted it after the read above: `'missing'`, not `'deleted'`.
+      const removed = await storage.deleteRtbSignals({ mode, id: signal.id });
+      if (!(removed >= 1)) {
+        console.warn(`[B-RTB-REFRESH-LIVE-PRICE][PROMOTION_ROW_GONE] symbol=${normalizedSymbol} id=${signalId} — deleted by another path after the read; not opened`);
+        return 'missing';
+      }
+      performanceMonitor.recordQueueRemove(removed);
       this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
+      // The trace records the promotion only once it happened (record 2: it was written before the delete, so a failed
+      // delete left a promotion in the trace on a row that stayed queued).
+      this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
       console.log(`[A3.R9.2][PROMOTION_COMPLETE] symbol=${normalizedSymbol} rtbRemoved=true duration=${Date.now() - promotionStartMs}ms`);
       return 'deleted';
     } catch (error) {
