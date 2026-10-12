@@ -30,7 +30,7 @@ No trading decision — paper or VTS, entry or exit, crypto or xStock — acts o
 - **PASS (P2):** ZERO `[B74][equity-spot][STALL]` lines in `error.log` between 2026-10-19 00:00:00Z and 00:35:00Z, AND ZERO `xstock-equity-feed-stall` rows minted in that span. (Control on the old code, 2026-10-12: exactly 2 lines, 00:00:13Z and 00:13:13Z.)
 - **FAIL (P2):** any `[STALL]` line between 00:00:00Z and 00:35:00Z on such a build ⇒ the batch reopens at Step 3 for P2.
 - **NOT a fail by itself:** a `[STALL]` line after 00:47:00Z — that is the watchdog doing its job on a real outage; read it against the feed's own liveness before judging.
-- **Also owed before conversion:** the arm-(d) narrowing (`1e48298ab`) deployed (any later deploy carries it); its run line shows `operatorRows=` and `operatorMaxAgeMs=`.
+- ✅ **DISCHARGED 2026-10-12:** the arm-(d) narrowing (`1e48298ab`) went live in CC-B's `e8f575d3c` deploy (2026-10-12T08:58:11Z, carried with CC-C's clearance); the run line now prints `operatorRows=0 operatorMaxAgeMs=none` (08:58:06Z `lookback=restart_24h`, 09:08:07Z `lookback=watermark`).
 **Close = that data AND a decision on it** (close the batch on PASS; reopen Step 3 on FAIL).
 
 ## 4. Unproven, stated as unproven (none blocks the close; each is a standing mechanism that announces itself)
