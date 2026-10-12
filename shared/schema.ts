@@ -2170,7 +2170,12 @@ export const rtbSignals = pgTable("rtb_signals", {
   // B7.2b migration drops them cleanly. See DELETED_COMPONENTS_LOG.
 }, (table) => ({
   modeStatusIdx: index("rtb_signals_mode_status_idx").on(table.mode, table.status),
-  symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy, table.status),
+  // B-RTB-REFRESH-LIVE-PRICE (row 59e, item 11): THREE columns — what the database has (`pg_indexes`, 2026-10-12) and what the
+  // queue upsert's `ON CONFLICT (mode, symbol, strategy)` targets (`storage.ts` `upsertRtbSignal`). This line declared a fourth,
+  // `status`: a schema-driven migration would have recreated that form, every re-admission would then throw (no matching
+  // constraint) and be swallowed by the orchestrator's fire-and-forget catch, and a re-issue at a different status could
+  // INSERT a second row for the same setup.
+  symbolStrategyIdx: uniqueIndex("rtb_signals_symbol_strategy_idx").on(table.mode, table.symbol, table.strategy),
   finalScoreIdx: index("rtb_signals_final_score_idx").on(table.finalScore), // Directive 11.0F: FinalScore is ONLY ranking metric
   queuedAtIdx: index("rtb_signals_queued_at_idx").on(table.queuedAt),
   expiresAtIdx: index("rtb_signals_expires_at_idx").on(table.expiresAt),

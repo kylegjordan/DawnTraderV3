@@ -24,6 +24,8 @@ import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
 /** Trailing window for the feed-liveness symbol count. Recorded beside every count. */
 const FEED_LIVENESS_WINDOW_MS = 60_000;
 import { readyToBuyService } from '../core/rtb/ready_to_buy_service';
+import { readRetirementAsk } from './rtb-retirement-ask.js'; // B-RTB-REFRESH-LIVE-PRICE (row 59e)
+import type { RetirementAsk } from '../core/rtb/rtb-price-retirement.js';
 import { centralClock, type ClockTick } from './central-clock.js';
 import type { TradingMode } from './guardrail-policy';
 // P19-B8.4b: active-path funnel — cyclesRun ticks on the REFRESH path (Langston anchor-a), so the
@@ -489,24 +491,41 @@ class RTBRefreshService {
       }
     }
 
-    if (validPrices.size > 0) {
-      const rankStart = Date.now();
-
-      // R3: Pass bucket signal keys to refreshAndRank for optimized processing.
-      // B79.0n.RTB (2026-05-27): pass aggregated per-class bucket keys at
-      // this index (computed above as `bucketKeysAtIndex` Set<string>).
-      await readyToBuyService.refreshAndRank(mode, bucketKeysAtIndex);
-
-      // P19-B8.4b (Langston anchor-a): tick cyclesRun on the REFRESH path — hasActiveFunnelActivity keys on
-      // it, so the Paper/Live tab flips dormant→active only once a refresh micro-cycle actually runs. One tick
-      // per funnel class present in this bucket. Dormant until paper-active (B8.5). The per-signal refresh
-      // outcomes (reconfirmed / rejectedInRefresh + SQE-refresh) are recorded inside refreshAndRank.
-      for (const cls of _funnelClassesPresent) recordActiveRtbRefresh(mode, cls, { cyclesRun: 1 });
-
-      const rankDuration = Date.now() - rankStart;
-      
-      console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);
+    // ⭐ `B-RTB-REFRESH-LIVE-PRICE` (row 59e, Kyle's directive 3; Langston Step-2 C2): THE ASK IS READ HERE AND HANDED IN — the
+    // directive's own shape (`refreshAndRank(signals, prices)`, A4-R10R-2), dropped when this service was built (`7a029f390`).
+    // One read per bucket signal, dispatched on the row's persisted `asset_class` (C5), through the exit's own contract (C1);
+    // a refusal is a reason, never a fallback. Keyed exactly as the bucket keys are.
+    const asks = new Map<string, RetirementAsk>();
+    const _askNow = Date.now();
+    for (const s of bucketSignals as Array<{ symbol: string; strategy: string; assetClass?: string | null; stopPrice: string | number }>) {
+      asks.set(`${mode}:${s.symbol}:${s.strategy}`, await readRetirementAsk(
+        { symbol: s.symbol, assetClass: s.assetClass ?? null, stopPrice: Number(s.stopPrice) }, _askNow,
+      ));
     }
+
+    // ⛔ THE SWITCH (C2): the refresh — and so the price check — runs whenever the bucket HAS SIGNALS. It used to run only when
+    // the MARK cache priced at least one of them (`validPrices.size > 0`), a liveness proxy for inputs that never used the price.
+    // ⚠️ SERIES BREAK, named (Langston C9): `refreshedAttempted` (a funnel denominator, inside `refreshAndRank`) now counts
+    // the ~7 % of bucket passes the mark cache did not price — filter at this deploy.
+    const rankStart = Date.now();
+    // R3: Pass bucket signal keys to refreshAndRank for optimized processing.
+    // B79.0n.RTB (2026-05-27): pass aggregated per-class bucket keys at
+    // this index (computed above as `bucketKeysAtIndex` Set<string>).
+    await readyToBuyService.refreshAndRank(mode, bucketKeysAtIndex, asks);
+
+    // P19-B8.4b (Langston anchor-a): tick cyclesRun on the REFRESH path — hasActiveFunnelActivity keys on
+    // it, so the Paper/Live tab flips dormant→active only once a refresh micro-cycle actually runs. One tick
+    // per funnel class present in this bucket. Dormant until paper-active (B8.5). The per-signal refresh
+    // outcomes (reconfirmed / rejectedInRefresh + SQE-refresh) are recorded inside refreshAndRank.
+    // ⛔ `B-RTB-REFRESH-LIVE-PRICE` C9: KEPT under its ORIGINAL condition (the bucket had a cache price), so the Paper/Live
+    // tab's dormant→active flip is exactly as before the switch change above.
+    if (validPrices.size > 0) {
+      for (const cls of _funnelClassesPresent) recordActiveRtbRefresh(mode, cls, { cyclesRun: 1 });
+    }
+
+    const rankDuration = Date.now() - rankStart;
+    const _askOk = [...asks.values()].filter((a) => a.ok).length;
+    console.log(`[A4.R10R-3][RTBRefresh] mode=${mode} bucket=${bucketIndex} signals=${bucketSignals.length} priced=${validPrices.size} askAdmissible=${_askOk} rankDuration=${rankDuration}ms totalDuration=${Date.now() - refreshStart}ms`);
   }
 
   stop(): void {

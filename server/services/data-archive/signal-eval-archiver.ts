@@ -18,6 +18,9 @@
  *  - 'entry_fill'         — the active taker fill sat at or through the signal's own stop or target (B-ENTRY-DISTANCE-GUARD,
  *                           sprint row 59) — kept apart from 'tcl' so the per-strategy attrition tally does not pool it into dedup
  *  - 'strategy_internal'  — strategy detect() returned null
+ *  - 'rtb_price'          — source 'rtb-refresh': a QUEUED signal retired because its live ask was at or through its own stop
+ *                           or target (B-RTB-REFRESH-LIVE-PRICE, sprint row 59e)
+ *  - 'rtb_price_shadow'   — source 'rtb-refresh': the refresh's sampled price measurement; never a refusal
  */
 
 import { createHash } from 'node:crypto'; // P19-B8.5b: STATIC import — the server bundles as ESM (esbuild --format=esm), where require() throws at runtime (caught + silently nulled every hash until fixed 2026-07-13)
@@ -105,7 +108,11 @@ export type SignalEvalSource =
   | 'market-scanner'
   | 'fx5-scanner'
   // P19-B5a: active-path reject source — RTB confidence-drop (reject_stage='rtb').
-  | 'ready-to-buy';
+  | 'ready-to-buy'
+  // `B-RTB-REFRESH-LIVE-PRICE` (row 59e): the RTB REFRESH's price check — a retirement (`rtb_price`) and the sampled shadow
+  // (`rtb_price_shadow`). Its own source so `stage-attrition-cache.ts` (the table's only runtime reader, which GROUPS BY
+  // source) keeps it apart from the confidence-drop rows above.
+  | 'rtb-refresh';
 export type RejectStage =
   | 'admitted'
   | 'pre_filter'
@@ -113,7 +120,13 @@ export type RejectStage =
   | 'rtb'
   | 'tcl'
   | 'entry_fill'
-  | 'strategy_internal';
+  | 'strategy_internal'
+  // `B-RTB-REFRESH-LIVE-PRICE` (row 59e), source `rtb-refresh` only: a queued signal RETIRED by the refresh because its live
+  // ask was at or through its own stop or target (`rtb_price`), and the SAMPLED shadow measurement — reward-to-risk at the
+  // live ask, the adverse move, stop room against the spread — one row per signal per hour or on a verdict change
+  // (`rtb_price_shadow`). TS-only: `reject_stage` is free text.
+  | 'rtb_price'
+  | 'rtb_price_shadow';
 
 /**
  * B-NEW-53: the EXACT decision-time replay inputs not derivable from the base

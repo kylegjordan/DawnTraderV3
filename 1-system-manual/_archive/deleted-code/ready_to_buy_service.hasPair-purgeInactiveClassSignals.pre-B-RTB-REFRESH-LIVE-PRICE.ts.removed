@@ -1,0 +1,50 @@
+// Removed 2026-10-12 by B-RTB-REFRESH-LIVE-PRICE (sprint row 59e), rule 18 — archived from server/core/rtb/ready_to_buy_service.ts
+// at origin/migration/aws-supabase 8ee3ecf10. Both had ZERO callers in the tree (tests excluded):
+// hasPair since before this batch; purgeInactiveClassSignals since its only caller went with Mechanism A (d2306518e, 2026-07-22).
+// Not compilable on its own (methods of the ReadyToBuyService class).
+
+  /**
+   * Directive 8.8.4-A3: Check if a pair exists in the RTB queue
+   * Used for pair-level duplicate validation
+   * 
+   * @param symbol - The trading pair in BASE/QUOTE format (e.g., 'BTC/USD')
+   * @param mode - Trading mode ('paper' or 'live')
+   * @returns true if the pair exists in the RTB queue
+   */
+  async hasPair(symbol: string, mode: TradingMode): Promise<boolean> {
+    // Directive 8.8.4-A3.R1: Normalize pair key for consistent comparison
+    const normalizedSymbol = normalizePairKey(symbol);
+    const signals = await storage.getRtbSignals({ mode, status: 'queued', symbol: normalizedSymbol });
+    return signals.length > 0;
+  }
+
+
+  /**
+   * P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth re-eval purge): drop any QUEUED signal
+   * whose per-asset-class active gate is OFF for this mode. The admission chokepoint (queueSQESignal)
+   * blocks NEW entries; this clears STALE ones (e.g. a class deactivated while it held live queued
+   * signals) so a gated-OFF class can never be re-ranked or promoted out of the queue. Runs once per
+   * refresh cycle on the SystemContext the caller already fetched (no extra round-trip per signal).
+   * Reads the SAME isAssetClassActiveInContext the entry gate uses; witnesses each breach via the
+   * #321 hard-breach hook (LIVENESS_SPLIT) so an isolation failure is observable, never silent.
+   */
+  private async purgeInactiveClassSignals(
+    mode: TradingMode,
+    systemContext: Parameters<typeof isAssetClassActiveInContext>[0],
+  ): Promise<number> {
+    const queued = await this.getQueuedSignals(mode);
+    let purged = 0;
+    for (const sig of queued) {
+      const cls = asValidAssetClass(sig.assetClass);
+      if (cls && !isAssetClassActiveInContext(systemContext, cls)) {
+        tradingStateSync.witnessAssetClassEmissionWhileInactive(mode, cls);
+        await storage.deleteRtbSignals({ mode, id: sig.id });
+        performanceMonitor.recordQueueRemove(1);
+        this.signalRefreshStates.delete(this._refreshKey(mode, sig.signalId));
+        purged++;
+        console.warn(`[P19-B6.5b][#320][RTB_GATE_PURGE] queued ${cls} signal ${sig.symbol} purged — per-class gate OFF in ${mode} (defense-in-depth re-eval).`);
+      }
+    }
+    if (purged > 0) console.log(`[P19-B6.5b][#320] purged ${purged} inactive-class signal(s) from ${mode} queue.`);
+    return purged;
+  }

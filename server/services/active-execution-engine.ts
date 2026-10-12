@@ -255,49 +255,9 @@ function _ladderSnapshot(acc: LadderShadowAcc): Record<string, unknown> {
 const LADDER_FLUSH_WALKS = 20;
 const LADDER_FLUSH_MS = 30_000;
 
-/**
- * ⭐⭐ `8a-P2` — THE EXIT TRIGGER'S FRESHNESS CEILING. RISK-DERIVED, NOT INHERITED.
- *
- * A stale quote costs nothing while price is far from the stop; it costs exactly the error in
- * the exit decision when price is NEAR it. So the ceiling answers: **how long until this quote
- * could be wrong by enough to matter against the level it is compared to?**
- *
- *   t = 60 · ( f · stop / move60 )²          [range-over-t: a missed stop is an EXCURSION,
- *                                             not a displacement, so RANGE is the right estimand]
- *
- *   f      = 0.10 — the share of the stop distance we accept as decision error.
- *            ⛔ LOAD-BEARING, AND THE DEPENDENCE IS QUADRATIC: halving f QUARTERS the bound
- *            (2.50 s → 625 ms), which would put THIS 2,000 ms value 3.2× ABOVE it. f is not a
- *            formality and may not be lowered without re-deriving. A tightening of f is Kyle's.
- *   stop   = 0.926 % — p10 of |entry − stop| / entry, crypto, 30 d, n=147. The TIGHT stop, not
- *            the median: the tight trade is where a stale trigger does its damage.
- *   move60 = the WORST CELL of a `trade_count` sweep over held-name 1-minute bars.
- *
- * ⛔⛔ THE BOUND IS NOT A PROPERTY OF `f` ALONE — IT IS A PROPERTY OF `f` **AND WHICH CELL IS
- * WORST**, AND THE WORST CELL BELONGS TO THE DATA, NOT TO THIS FILE (Langston, 2026-09-14).
- * So the cell is NAMED here, with its n and its date, and a reader can see what falsifies it:
- *
- *   WORST CELL, as measured 2026-09-14: held-name crypto (68 symbols with a close in 30 d),
- *   `crypto_spot_ohlc_1m`, 24 h, `trade_count > 10`, n = 7,435 bars, p90 move60 = 0.4534 %
- *   ⇒ bound = 60 · (0.10 · 0.926 / 0.4534)² = **2.50 s at f = 0.10**.
- *   (Least-worst cell for contrast: `trade_count > 1`, n = 27,439, p90 0.2567 % ⇒ 7.81 s.)
- *
- * ⚠️ **THE HALVER IS NOT THE ONLY WAY THIS GOES FALSE — SO IS THE NEXT PERSON WHO SIMPLY ADDS
- * DATA.** A new symbol with a higher stop/move60 ratio moves the worst cell and lowers the bound
- * with `f` untouched. **Re-derive when the traded universe changes materially.**
- * ⛔ THE POOL IS THE WRONG POPULATION: all-455-symbol p90 runs ~41 % HIGHER because ~400 thin
- *   names we never trade drag it up. Held-name only. (Pool sensitivity 4.8× vs held-name 1.77×.)
- *
- * ⇒ SHIP VALUE 2,000 ms is a **TIGHTENING BELOW** that 2.50 s bound, chosen to equal the exit
- *   loop's own mark fetch (`getPriceWithFallback(symbol, 2000)`) so trigger and mark are held to
- *   ONE standard. ⛔ THEY ARE NOT COUPLED IN CODE: changing that call does NOT move this, and
- *   moving this does not move that. Re-derive before dragging one with the other.
- * ⚠️ RESIDUAL, RECORDED RATHER THAN DISSOLVED: at 2,000 ms the effective f is 0.051 at the
- *   held p90 but **0.165 at the held p99** — holding 0.10 there needs 730 ms, which no feed
- *   delivers. A tighter ceiling does not buy that back; it only converts a mispriced trigger
- *   into a refused one. The per-symbol form is the real answer and is homed at plan row `3n.o`.
- */
-const EXIT_TRIGGER_MAX_AGE_MS = 2_000;
+// `B-RTB-REFRESH-LIVE-PRICE` (row 59e, Langston Step-2 C8): `EXIT_TRIGGER_MAX_AGE_MS` and `EXIT_TRIGGER_MAX_SPREAD_FRACTION`
+// moved WITH THEIR DERIVATIONS to `server/core/trading/crypto-touch.ts` (pure), so the RTB refresh's retirement contract
+// reads the exit's own crypto policy without importing this engine (which imports the RTB service — a cycle).
 
 /**
  * `8a-P2` BLOCKER-2 — consecutive no-transactable-side refusals on ONE position before the rail
@@ -311,77 +271,6 @@ const EXIT_TRIGGER_MAX_AGE_MS = 2_000;
  */
 const NO_TRIGGER_STREAK_ALERT_AT = 20;
 
-/**
- * ⭐⭐ `8a-P2` B-4 — THE EXIT TRIGGER'S SPREAD CEILING. RISK-DERIVED, EXIT-LANE ONLY.
- *
- * ⛔⛔ WHY THIS EXISTS RATHER THAN REUSING `LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION`:
- * P2-4 gave the exit lane its own AGE ceiling because the level lane's 60,000 ms was harmless
- * for a recorder and wrong for a decider. Re-using the shared SPREAD constant after splitting
- * the age one would be the same inconsistency, one field over. **And the lanes fail differently:
- * on the level/VTS lanes a too-wide spread produces a worse ESTIMATE; on THIS lane it produces a
- * trigger far below the mark and BOOKS A CLAMPED STOP NOBODY COULD HAVE FILLED.** The shared
- * constant is untouched at its other three sites (`signal-orchestrator.ts`, `vts-runner.ts`) —
- * that number stays `3b.f-c`'s open question and is deliberately NOT answered here.
- *
- * ⛔⛔ `D` IS DOING DOUBLE DUTY, AND THAT IS THIS CONSTANT'S LOAD-BEARING ASSUMPTION (Langston).
- * `stop − bid = spread/2 − D` is right, but the `D` in it is the **LIVE mid-to-stop distance AT
- * THE TRIGGER INSTANT**, not the entry-time stop distance. This is calibrated at `D_live` = the
- * full entry distance — the **LOOSEST** member of that family. As the mid legitimately walks down
- * toward the stop, `D_live → 0` and the residual overbooking → `spread/2`, i.e. **up to 1.0 % at
- * this ceiling**. ⚠️ THAT RESIDUAL IS REAL AND IS NOT BOUNDED HERE.
- *
- * ⚠️ I FIRST WROTE THAT MY EARLIER `spread ≤ 2·f·stop` = 0.185 % CUT WAS "NONSENSE — IT TREATED A
- * KNOWN PRICE AS AN ERROR TERM." **THAT RETRACTION WAS ITSELF HALF WRONG AND IS WITHDRAWN.**
- * 0.185 % and 2.037 % are THE SAME FORMULA AT THE TWO ENDS OF `D_live` — the first is the
- * `D_live → 0` corner, not a different and mistaken idea. ⛔ AND LEAVING THE GENERAL CLAIM
- * STANDING WOULD TELL A FUTURE READER THE BID-SIDE HARM IS IMAGINARY. IT IS NOT — `F-G-2` EXISTS
- * BECAUSE IT IS NOT.
- *
- * ⇒ SO WHY NOT TAKE THE WORST CASE? **BECAUSE THE HARM IS TWO-SIDED, AND THAT — NOT A WRONG
- * FORMULA — IS THE REASON.** A refused trigger is a SKIPPED STOP CHECK (`NO_TRIGGER_STREAK_ALERT_AT`
- * exists for precisely that). 0.185 % sits at roughly the held-name p90, so the tight bound would
- * refuse ~10 % of exit checks and ride positions through their stops. **This constant is a
- * TRADEOFF BETWEEN OVERBOOKING A STOP AND NOT CHECKING ONE**, resolved toward checking.
- *
- * ⇒ THE REAL HARM IS IN THE BOOKING, NOT THE TRIGGER. On a stop hit the exit is booked at the
- * CLAMPED STOP, not at the bid. So the quantity to bound is `stop − bid` at the instant the
- * trigger fires:
- *     bid = mid − spread/2 ·  stop = mid − D  (D = stop distance)
- *     stop − bid = spread/2 − D  ≤  f · D     ⇒  spread ≤ 2·D·(1 + f)
- * At the limit the mid sits `1.1·D` above the stop when the bid crosses it — i.e. the stop fires
- * while the trade is still in profit ON THE MID. That is exactly the pathology, and it is what
- * the ceiling is for.
- *
- *   f = 0.10 (the `EXIT_TRIGGER_MAX_AGE_MS` parameter — ⛔ SAME `f`, so a change to it moves BOTH
- *             ceilings; it is load-bearing in both and quadratically so in the age one)
- *   D = 0.926 % — p10 of |entry − stop| / entry, crypto, 30 d, n = 147. The TIGHT stop again:
- *       a ceiling safe for the median stop is wrong for the tight trade, and the tight trade is
- *       where a spread-driven stop does its damage.
- *   ⇒ spread ≤ 2 × 0.926 % × 1.10 = 2.037 %  ⇒ SHIPPED AT 2.0 %.
- *
- * ⛔ THE CELL, NAMED WITH ITS n AND DATE SO A READER CAN SEE WHAT FALSIFIES IT (the r8 rule):
- *   held-name crypto (crypto closes in 30 d), `crypto_spot_ticker_snap`, 24 h to 2026-09-14,
- *   n = 90,833 quotes: p50 0.0473 % · p90 0.1839 % · p99 0.5961 % · p99.9 1.6012 % · max 4.407 %.
- *   ⛔⛔ AND THE TAIL MOVED WITHIN ONE DAY — THE CAVEAT FIRED BEFORE THE INK DRIED:
- *     2026-09-14 (mine, n=90,833):     p99.9 1.6012 % · max 4.407 %
- *     2026-09-15 (Langston, n=91,226): p99.9 **2.0095 %** · max **5.5319 %**
- *   ⇒ "2.0 % refuses between p99.9 and the max" WAS TRUE FOR ONE DAY AND IS NOW FALSE: the ceiling
- *     sits just BELOW p99.9 — **ON THE TAIL KNEE, NOT ABOVE IT.** Both dated pairs are kept rather
- *     than collapsed into one number that will drift again.
- * ⚠️ THIS IS NOT A WARNING TO REMEMBER, IT IS A SCHEDULED RE-DERIVATION: the tail moves with the
- *   traded universe, so the number has an owner and a home — plan row `3n.o`, with the per-symbol
- *   ceiling, where a per-name bound DISSOLVES the drift instead of chasing it.
- *
- * ★ FOR SCALE: the shared constant this replaces on THIS lane is 0.50 — **25× looser**, and ~9×
- *   looser than the widest spread observed in a 24 h window. It admitted a bid at 0.75 × mid.
- *
- * ⛔⛔ AND THE HONEST LIMIT OF THIS WHOLE CONSTANT: **IT TREATS A *BOOKING* DEFECT AT THE *TRIGGER*.**
- * The trigger knows the bid EXACTLY; the booking then throws it away and clamps to the stop.
- * **Clamp to `min(stop, touch)` instead and the quantity bounded above goes to ZERO with no ceiling
- * at all.** ⇒ THIS CEILING IS A MITIGATION, NOT THE ANSWER, and it must not be left standing as
- * one. HOME: `F-G-2`'s transactable-booking leg. (Langston, §9.4 disposition 3.)
- */
-const EXIT_TRIGGER_MAX_SPREAD_FRACTION = 0.02;
 // P19-B8.4b: active-path funnel — the `promoted` counter (signal promoted out of the RTB queue to an open
 // attempt). Single home for `promoted` (the refresh reconfirmed/rejected live in ready_to_buy_service).
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
@@ -472,15 +361,12 @@ import {
   transactableSide,
   ENTRY_FILL_TOUCH_MAX_AGE_MS,
   ENTRY_LEG_NO_SPREAD_CEILING,
-  type CryptoTouchReaders,
+  EXIT_TRIGGER_MAX_AGE_MS,
+  EXIT_TRIGGER_MAX_SPREAD_FRACTION,
 } from '../core/trading/crypto-touch.js';
-// `8a-P3` — the paper engine's crypto touch readers. The book read is IN-MEMORY (`getBookForFill` reads the WS
-// mini-book map), not a venue call; `selectCryptoTouch` normalises the symbol before it (Langston r4 CONDITION-1).
-const CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
-  normalize: normalizeToInternalSymbol,
-  getBook: (s) => krakenWebSocketAdapter.getBookForFill(s),
-  getCached: (s) => priceCache.getCachedPrice(s),
-};
+// `8a-P3` — the crypto touch readers, now ONE shared module (`B-RTB-REFRESH-LIVE-PRICE`, Langston C8: this engine's and the
+// VTS's copies were identical in content); the book read is IN-MEMORY, not a venue call.
+import { CRYPTO_TOUCH_READERS } from './execution/crypto-touch-readers.js';
 import { getLatestEquityTick } from './passive-archive/equity-spot-archiver.js'; // P19-B8.5 xstock marks — the equities-feed venue leg
 import { markKindOf } from './market-data/mark-kind.js'; // B-EXIT-BOOK-AGE-STAMP P1 — the one mid-or-last predicate
 import { restRateLimiter } from './market-data/rest-rate-limiter.js'; // B-PRICE-SIDE-BY-JOB r5 P-7h — the shared REST token bucket
@@ -4969,6 +4855,7 @@ export class ActiveExecutionEngine {
 
       let promotedCount = 0;
       let failedCount = 0;
+      let claimRefusedCount = 0; // B-RTB-REFRESH-LIVE-PRICE ([C1](b), #1189): selected, but the queue did not hand it over
 
       // B-PROMOTION-RACE-FIX (#508): the SAME-PASS half of the double-promotion. `openPositions`
       // above is a snapshot taken BEFORE this loop and never refreshed, so the guards that read it
@@ -5058,7 +4945,16 @@ export class ActiveExecutionEngine {
 
         // Directive 8.8.4-A3.R1: RTB removal must precede trade creation to prevent double-activation
         // Step 1: Remove signal from RTB queue BEFORE attempting trade execution
-        await readyToBuyService.promoteSignal(signal.id, 'pending');
+        // ⛔ B-RTB-REFRESH-LIVE-PRICE ([C1](b), `#1189`; Langston C3 + C7): the claim RETURNS what happened and the open runs ONLY
+        // on `'deleted'`. This in-memory signal was selected before this point; a refresh may since have rejected and deleted
+        // it (`'missing'`), be evaluating it now (`'refreshing'`), or the delete may have thrown (`'delete_failed'`) — none is
+        // opened, and none is an open attempt. The last two stay queued for the next pass.
+        const _claim = await readyToBuyService.promoteSignal(signal.id);
+        if (_claim !== 'deleted') {
+          console.warn(`[B-RTB-REFRESH-LIVE-PRICE][CLAIM_REFUSED] ${signal.symbol}/${signal.strategy} id=${signal.id} outcome=${_claim} — not opened`);
+          claimRefusedCount++;
+          continue;
+        }
         console.log(`[8.8.4-A3.R1][PROMOTION_ORDER] RTB signal ${signal.symbol} removed before trade creation`);
         
         // Step 2: Execute the promoted signal (create trade)
@@ -5070,9 +4966,9 @@ export class ActiveExecutionEngine {
           // pre-loop openPositions snapshot cannot know about it).
           promotedSymbolsThisPass.add(signal.symbol);
 
-          // Step 3: Update signal with actual trade ID
-          await readyToBuyService.promoteSignal(signal.id, tradeResult.tradeId);
-          
+          // (B-RTB-REFRESH-LIVE-PRICE: the second `promoteSignal(id, tradeId)` call that stood here is removed — the row was
+          // already deleted by the claim above, so it always found nothing and only logged a warning.)
+
           // Step 4: Emit PROMOTION event for diagnostics (after both removal and trade creation succeed)
           eventBus.emitPromotion({
             mode: this.mode,
@@ -5101,7 +4997,7 @@ export class ActiveExecutionEngine {
         }
       }
 
-      console.log(`[8.8.4-C.14.B][PROMOTION_SUMMARY] mode=${this.mode}, promoted=${promotedCount}, failed=${failedCount}, remainingSlots=${openSlots}`);
+      console.log(`[8.8.4-C.14.B][PROMOTION_SUMMARY] mode=${this.mode}, promoted=${promotedCount}, failed=${failedCount}, claimRefused=${claimRefusedCount}, remainingSlots=${openSlots}`);
     } catch (error) {
       console.error(`[RTB-Promotion:${this.mode}] Error during promotion check:`, error);
     } finally {
@@ -5110,7 +5006,7 @@ export class ActiveExecutionEngine {
       // permanently. Then honour ONE coalesced re-run if a trigger arrived mid-pass.
       this.promotionInProgress = false;
       // ★ `isRunning` is REQUIRED here (Langston Step-4 blocker): the coalesced re-run is the only
-      // promotion trigger without one — the interval self-guards (`:422`) and the two event handlers
+      // promotion trigger without one — the interval self-guards (its callback checks `isRunning`) and the two event handlers
       // are unbound in stop(). Without it, a trigger arriving mid-pass while stop() lands fires a
       // fresh pass on a STOPPED engine, which pulls ranked signals, REMOVES them from RTB, then
       // fails at processSignal ('engine not running') — and a failed promotion leaves the signal

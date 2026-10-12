@@ -8,7 +8,8 @@
  * per-class flag). F1 closes it structurally (fx5-scanner scanMode now gates pool
  * population on `isEngineActive && isAssetClassActiveInContext(ctx,'crypto_spot')`)
  * AND with defense-in-depth at the single RTB admission chokepoint queueSQESignal
- * (+ the purgeInactiveClassSignals re-eval purge), each wiring the #321 witness.
+ * (the purgeInactiveClassSignals re-eval purge stood here; it had no caller from 2026-07-22 (`d2306518e`) and was deleted
+ * under rule 18 by B-RTB-REFRESH-LIVE-PRICE, 2026-10-12 — the admission chokepoint is the surviving guard), wiring the #321 witness.
  *
  * These tests cover the two pieces that are cheaply + deterministically unit-testable:
  *  - F2/#321: witnessAssetClassEmissionWhileInactive is now WIRED and OBSERVABLE

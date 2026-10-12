@@ -153,7 +153,6 @@ import {
   VTS_EXIT_TOUCH_MAX_AGE_MS,
   VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
   ENTRY_LEG_NO_SPREAD_CEILING,
-  type CryptoTouchReaders,
 } from '../core/trading/crypto-touch.js';
 import { compareLatestSessions, savePaperSessionTrades, getPaperSessionTrades } from './vts-live-comparison-audit.js';
 import { SCORE_WEIGHTS } from '../config/score-weights.config.js';
@@ -194,11 +193,8 @@ import { normalizeToInternalSymbol, getSymbolMappingDetails } from '../markets/k
 // ⛔ `8a-P3` — VTS crypto touch readers (read FRESH from the cache, never from `priceDataMap`, which drops every stamp
 // and would refuse `age_unknown` on every look — Langston r3 FINDING-2) and per-pass counters, emitted once per
 // resolve pass as `[8a-P3][VTS_TOUCH]` with denominators beside numerators, then reset.
-const VTS_CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
-  normalize: normalizeToInternalSymbol,
-  getBook: (s) => krakenWebSocketAdapter.getBookForFill(s),
-  getCached: (s) => priceCache.getCachedPrice(s),
-};
+// `B-RTB-REFRESH-LIVE-PRICE` (Langston C8): the readers are the ONE shared object — this lane's copy was identical in content.
+import { CRYPTO_TOUCH_READERS as VTS_CRYPTO_TOUCH_READERS } from './execution/crypto-touch-readers.js';
 const _vtsTouch = {
   entryFillLooks: 0,
   entryFillRefusedFirstLook: 0,

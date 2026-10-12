@@ -32,7 +32,6 @@ import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool.
 import { nanoid } from 'nanoid';
 import type { ScreenerFilters } from '@shared/schema';
 import { recordScanFor24h, recordScanCompletion, getCyclesPerHour, get24hSummary } from './fx5-24h-window.js';
-import { readyToBuyService } from '../core/rtb/ready_to_buy_service.js';
 import { centralClock, ClockTick } from './central-clock.js';
 import { dataAggregator } from './data-aggregator.js';
 // P19-B5a: active-path pre_filter reject capture (gated on isEngineActive).

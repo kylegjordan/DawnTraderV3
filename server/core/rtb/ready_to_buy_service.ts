@@ -44,6 +44,10 @@ import { safeResolveAssetClass, asValidAssetClass, type AssetClass } from '../..
 import { isCapacityBlock, type TradingMode, type CapacityGuardrailCode } from '../../services/guardrail-policy';
 // P19-B5a: active-path RTB reject capture (structurally dormant — queue is empty in VTS/passive).
 import { tradingModeToRunMode } from '../../services/run-mode-controller.js';
+// B-RTB-REFRESH-LIVE-PRICE (row 59e): the refresh's price decision (pure) and the shadow measurement it records.
+import { decideRetirement, type RetirementAsk, type RetirementDecision, type PriorBreach } from './rtb-price-retirement.js';
+import { entryFillShadow } from '../trading/entry-booking.js';
+import { getPerClassTargetGate } from '../calculations/expectancy.js';
 
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
@@ -459,7 +463,20 @@ interface SignalProcessingResult {
 interface SignalRefreshState {
   nextRefreshAt: number;  // Unix timestamp (ms) when signal should next refresh
   isRefreshing: boolean;  // Flag to prevent TCL promoting during refresh
+  // B-RTB-REFRESH-LIVE-PRICE (row 59e): the price check's per-signal memory — an xStock needs TWO consecutive refusing passes
+  // on the same level before it is retired; the shadow row is sampled (hourly, or on a verdict change); the strategy's
+  // `min_rr` floor is read ONCE per signal (it depends only on class × strategy), so the unknown-strategy tripwire counter
+  // does not climb with the refresh cadence (Langston's row-59 Step-1 FINDING-2).
+  priceBreach: PriorBreach | null;
+  lastShadowAtMs: number | null;
+  lastShadowWouldRefuse: boolean | null;
+  rrFloor: { value: number | null; unresolved: boolean } | null;
 }
+
+/** `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`): what `promoteSignal` did; the engine opens only on `'deleted'`. */
+export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed';
+/** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour (plus one on any verdict change). */
+const RTB_PRICE_SHADOW_SAMPLE_MS = 3_600_000;
 
 class ReadyToBuyService {
   private initialized = false;
@@ -546,20 +563,6 @@ class ReadyToBuyService {
     console.log('[8.8.4-A1][RTB_CLEANUP] PROMOTION event handler registered');
   }
 
-  /**
-   * Directive 8.8.4-A3: Check if a pair exists in the RTB queue
-   * Used for pair-level duplicate validation
-   * 
-   * @param symbol - The trading pair in BASE/QUOTE format (e.g., 'BTC/USD')
-   * @param mode - Trading mode ('paper' or 'live')
-   * @returns true if the pair exists in the RTB queue
-   */
-  async hasPair(symbol: string, mode: TradingMode): Promise<boolean> {
-    // Directive 8.8.4-A3.R1: Normalize pair key for consistent comparison
-    const normalizedSymbol = normalizePairKey(symbol);
-    const signals = await storage.getRtbSignals({ mode, status: 'queued', symbol: normalizedSymbol });
-    return signals.length > 0;
-  }
 
   /**
    * Directive 8.8.4-A1: Remove a signal by symbol and mode
@@ -621,7 +624,11 @@ class ReadyToBuyService {
     if (!this.signalRefreshStates.has(key)) {
       this.signalRefreshStates.set(key, {
         nextRefreshAt: Date.now() + RTB_REFRESH_INTERVAL_MS,
-        isRefreshing: false
+        isRefreshing: false,
+        priceBreach: null,
+        lastShadowAtMs: null,
+        lastShadowWouldRefuse: null,
+        rrFloor: null,
       });
     }
     return this.signalRefreshStates.get(key)!;
@@ -631,35 +638,6 @@ class ReadyToBuyService {
     return this.signalRefreshStates.get(this._refreshKey(mode, signalId))?.isRefreshing ?? false;
   }
 
-  /**
-   * P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth re-eval purge): drop any QUEUED signal
-   * whose per-asset-class active gate is OFF for this mode. The admission chokepoint (queueSQESignal)
-   * blocks NEW entries; this clears STALE ones (e.g. a class deactivated while it held live queued
-   * signals) so a gated-OFF class can never be re-ranked or promoted out of the queue. Runs once per
-   * refresh cycle on the SystemContext the caller already fetched (no extra round-trip per signal).
-   * Reads the SAME isAssetClassActiveInContext the entry gate uses; witnesses each breach via the
-   * #321 hard-breach hook (LIVENESS_SPLIT) so an isolation failure is observable, never silent.
-   */
-  private async purgeInactiveClassSignals(
-    mode: TradingMode,
-    systemContext: Parameters<typeof isAssetClassActiveInContext>[0],
-  ): Promise<number> {
-    const queued = await this.getQueuedSignals(mode);
-    let purged = 0;
-    for (const sig of queued) {
-      const cls = asValidAssetClass(sig.assetClass);
-      if (cls && !isAssetClassActiveInContext(systemContext, cls)) {
-        tradingStateSync.witnessAssetClassEmissionWhileInactive(mode, cls);
-        await storage.deleteRtbSignals({ mode, id: sig.id });
-        performanceMonitor.recordQueueRemove(1);
-        this.signalRefreshStates.delete(this._refreshKey(mode, sig.signalId));
-        purged++;
-        console.warn(`[P19-B6.5b][#320][RTB_GATE_PURGE] queued ${cls} signal ${sig.symbol} purged — per-class gate OFF in ${mode} (defense-in-depth re-eval).`);
-      }
-    }
-    if (purged > 0) console.log(`[P19-B6.5b][#320] purged ${purged} inactive-class signal(s) from ${mode} queue.`);
-    return purged;
-  }
 
   /**
    * B-RTB-REFRESH-CONSOLIDATE (OBJ-1/OBJ-2, 2026-07-19) — THE SHARED REFRESH ACQUISITION.
@@ -895,7 +873,7 @@ class ReadyToBuyService {
    * @param bucketSignalKeys - Optional set of signal keys (mode:symbol:strategy) to filter
    *                           If provided, only processes signals matching these keys
    */
-  async refreshAndRank(mode: TradingMode, bucketSignalKeys?: Set<string>): Promise<void> {
+  async refreshAndRank(mode: TradingMode, bucketSignalKeys?: Set<string>, asks?: Map<string, RetirementAsk>): Promise<void> {
     const startTime = Date.now();
     
     // A3.R9.0: Set refresh incomplete flag for TCL sync barrier
@@ -966,6 +944,8 @@ class ReadyToBuyService {
       const bulkDeletes: string[] = [];
       let reconfirmedCount = 0;
       let expiredCount = 0;
+      // B-RTB-REFRESH-LIVE-PRICE (row 59e): this pass's price outcomes, per class (`<class>:<action>[:<reason>]`).
+      const _priceTally = new Map<string, number>();
       
       // Process signals in concurrent chunks
       const chunks = chunkArray(deduplicatedSignals, POOL_SIZE);
@@ -1086,6 +1066,37 @@ class ReadyToBuyService {
               // in rtb-refresh-service). Increments are single-threaded-atomic under the Promise.all chunk.
               _fCls = (sqeAssetClass === 'crypto_spot' || sqeAssetClass === 'xstock_spot') ? sqeAssetClass : undefined;
               if (_fCls) recordActiveRtbRefresh(mode, _fCls, { refreshedAttempted: 1 });
+
+              // ⭐ B-RTB-REFRESH-LIVE-PRICE (sprint row 59e, `#1168`; Kyle's directive 3): the queued signal against the LIVE ASK.
+              // The ask was read by the caller through the exit's own contract, dispatched on the row's persisted class
+              // (`server/services/rtb-retirement-ask.ts`); an absent or refused ask is NO decision on price. A signal whose ask
+              // is at or through its own stop or target is RETIRED — crypto on the first pass, xStock on the second consecutive
+              // (`rtb-price-retirement.ts`) — through the refresh's own delete path, counted and archived. This is queue
+              // hygiene; the open still refuses a bad fill on its own (row 59 increment 1).
+              {
+                const _rpAsk: RetirementAsk = asks?.get(`${mode}:${signal.symbol}:${signal.strategy}`) ?? { ok: false, reason: 'ask_not_supplied' };
+                const _rpStop = parseFloat(String(signal.stopPrice));
+                const _rpTarget = signal.targetPrice != null ? parseFloat(String(signal.targetPrice)) : null;
+                const _rp = decideRetirement({ assetClass: sqeAssetClass, ask: _rpAsk, stopPrice: _rpStop, targetPrice: _rpTarget, prior: _refreshState.priceBreach });
+                _refreshState.priceBreach = _rp.nextBreach;
+                this._tallyPriceOutcome(_priceTally, sqeAssetClass, _rp.decision);
+                if (_rp.decision.action === 'retire') {
+                  const _askQ = _rpAsk as Extract<RetirementAsk, { ok: true }>;
+                  console.log(`[B-RTB-REFRESH-LIVE-PRICE][RETIRE] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass} reason=${_rp.decision.reason} ask=${_askQ.ask} bid=${_askQ.bid} askAgeMs=${_askQ.ageMs} basis=${_askQ.basis} entry=${signal.entryPrice} stop=${_rpStop} target=${_rpTarget ?? 'none'} passes=${_rp.decision.passes} queuedAt=${signal.queuedAt ? new Date(signal.queuedAt).toISOString() : 'unknown'}`);
+                  this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', `price_${_rp.decision.reason}`);
+                  this._archiveRtbPrice(mode, signal, sqeAssetClass, 'rtb_price', {
+                    gate: 'rtb_price', accepted: false, reason: _rp.decision.reason, passes: _rp.decision.passes,
+                    ask: _askQ.ask, bid: _askQ.bid, askAgeMs: _askQ.ageMs, basis: _askQ.basis,
+                    entryPrice: Number(signal.entryPrice), stopPrice: _rpStop, targetPrice: _rpTarget,
+                    queuedAt: signal.queuedAt ? new Date(signal.queuedAt).toISOString() : null,
+                  });
+                  bulkDeletes.push(signal.id);
+                  expiredCount++;
+                  if (_fCls) recordActiveRtbRefresh(mode, _fCls, { rejectedInRefresh: 1 });
+                  return;
+                }
+                if (_rpAsk.ok) this._maybeArchivePriceShadow(mode, signal, sqeAssetClass, _rpAsk, _rpStop, _rpTarget, _refreshState, _rp.decision);
+              }
 
               const sqeInput: SQEInput = {
                 signalId: signal.signalId,
@@ -1210,7 +1221,10 @@ class ReadyToBuyService {
               // set and the clear would strand the latch TRUE and make the signal permanently
               // invisible to promotion — a silent, self-inflicted queue leak. The error path
               // above deletes the row anyway, but the latch must not depend on that.
-              _refreshState.isRefreshing = false;
+              // ⛔ B-RTB-REFRESH-LIVE-PRICE ([C1](a), `#1189`): EXCEPT for a signal this pass is DELETING. Its delete runs only
+              // after EVERY chunk (below), and clearing its latch here made it selectable by promotion in that gap — a signal
+              // the refresh had just rejected could be opened. Its latch is released by the delete itself (the map entry goes).
+              if (!bulkDeletes.includes(signal.id)) _refreshState.isRefreshing = false;
             }
           })
         );
@@ -1218,9 +1232,22 @@ class ReadyToBuyService {
       
       // T3: Batch database operations
       if (bulkDeletes.length > 0) {
-        const deleted = await storage.deleteRtbSignalsByIds(bulkDeletes);
-        performanceMonitor.recordQueueRemove(deleted);
-        console.log(`[T3][BATCH_DELETE] deleted=${deleted} signals`);
+        const _deleting = new Set(bulkDeletes);
+        try {
+          const deleted = await storage.deleteRtbSignalsByIds(bulkDeletes);
+          performanceMonitor.recordQueueRemove(deleted);
+          console.log(`[T3][BATCH_DELETE] deleted=${deleted} signals`);
+        } finally {
+          // B-RTB-REFRESH-LIVE-PRICE ([C1](a) + the map cleanup): a deleted signal's refresh state goes WITH it — releasing
+          // the latch held above and ending the map's growth (entries for deleted signals were never removed). On a failed
+          // delete the rows remain, now unlatched, and the next pass sees them again.
+          for (const sig of deduplicatedSignals) {
+            if (_deleting.has(sig.id)) this.signalRefreshStates.delete(this._refreshKey(mode, sig.signalId));
+          }
+        }
+      }
+      if (_priceTally.size > 0) {
+        console.log(`[B-RTB-REFRESH-LIVE-PRICE][PASS] mode=${mode} ${[..._priceTally.entries()].map(([k, v]) => `${k}=${v}`).join(' ')}`);
       }
       
       if (bulkUpdates.length > 0) {
@@ -1291,6 +1318,72 @@ class ReadyToBuyService {
    * Directive 8.8.4-A3.R8: Log RTB trace event to persistent file
    * Tracks all status transitions for observability
    */
+  // ── B-RTB-REFRESH-LIVE-PRICE (sprint row 59e) — the price check's counters and durable rows ─────────────────────────────
+  private priceCheckCounts = new Map<string, number>();
+  /** Cumulative price-check outcomes since boot, `<class>:<action>[:<reason>]` → count (Step-7 read; the per-pass log line too). */
+  getPriceCheckCounts(): Record<string, number> {
+    return Object.fromEntries(this.priceCheckCounts);
+  }
+  private _tallyPriceOutcome(pass: Map<string, number>, cls: string, d: RetirementDecision): void {
+    const key = d.action === 'inside' ? `${cls}:inside` : `${cls}:${d.action}:${d.reason}`;
+    pass.set(key, (pass.get(key) ?? 0) + 1);
+    this.priceCheckCounts.set(key, (this.priceCheckCounts.get(key) ?? 0) + 1);
+  }
+  /** Fire-and-forget, never throws into the refresh (the archiver's own convention). */
+  private _archiveRtbPrice(mode: TradingMode, signal: RtbSignal, cls: string, stage: 'rtb_price' | 'rtb_price_shadow', gateDecision: Record<string, unknown>): void {
+    void (async () => {
+      try {
+        const { archiveSignalEval } = await import('../../services/data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(mode),
+          symbol: signal.symbol,
+          exchange: 'kraken',
+          assetClass: cls,
+          source: 'rtb-refresh',
+          strategy: signal.strategy,
+          rejectStage: stage,
+          gateDecision: { ...gateDecision, rtbQueueId: signal.id, signalId: signal.signalId },
+        });
+      } catch (archErr) {
+        console.warn(`[B-RTB-REFRESH-LIVE-PRICE][ARCHIVE_FAILED] ${signal.symbol}/${signal.strategy} stage=${stage}:`, archErr instanceof Error ? archErr.message : archErr);
+      }
+    })();
+  }
+  /**
+   * SHADOW — measures, never acts (scope OBJ-3): reward-to-risk at the live ask against the strategy's live `min_rr`, the adverse
+   * move from the planned entry in R, and the stop room beside the spread (the plan's "minimum stop distance vs the live spread",
+   * measured before any number is chosen). SAMPLED (the pre-registered volume rule: 2,907 refreshes an hour > 2,000): one durable
+   * row per signal per hour, and on any change of the would-refuse verdict.
+   */
+  private _maybeArchivePriceShadow(
+    mode: TradingMode, signal: RtbSignal, cls: string, ask: Extract<RetirementAsk, { ok: true }>,
+    stop: number, target: number | null, st: SignalRefreshState, decision: RetirementDecision,
+  ): void {
+    if (st.rrFloor === null) {
+      try {
+        st.rrFloor = { value: getPerClassTargetGate(cls as AssetClass, signal.strategy).minRR, unresolved: false };
+      } catch {
+        st.rrFloor = { value: null, unresolved: true };
+      }
+    }
+    const entry = Number(signal.entryPrice);
+    const sh = entryFillShadow({ fill: ask.ask, intended: entry, stop, target: target ?? Number.NaN, floor: st.rrFloor.value });
+    const nowMs = Date.now();
+    const due = st.lastShadowAtMs === null || nowMs - st.lastShadowAtMs >= RTB_PRICE_SHADOW_SAMPLE_MS;
+    const changed = st.lastShadowAtMs !== null && st.lastShadowWouldRefuse !== sh.wouldRefuse;
+    if (!due && !changed) return;
+    st.lastShadowAtMs = nowMs;
+    st.lastShadowWouldRefuse = sh.wouldRefuse;
+    this._archiveRtbPrice(mode, signal, cls, 'rtb_price_shadow', {
+      gate: 'rtb_price_shadow', accepted: true, sample: changed ? 'verdict_change' : 'hourly', decision: decision.action,
+      ask: ask.ask, bid: ask.bid, askAgeMs: ask.ageMs, basis: ask.basis,
+      entryPrice: entry, stopPrice: stop, targetPrice: target,
+      rrAsk: sh.rrFill, adverseR: sh.adverseR, rrFloor: st.rrFloor.value, rrWouldRefuse: sh.wouldRefuse, rrFloorUnresolved: st.rrFloor.unresolved,
+      stopRoom: ask.ask - stop, spread: ask.ask - ask.bid,
+      queuedAt: signal.queuedAt ? new Date(signal.queuedAt).toISOString() : null,
+    });
+  }
+
   private logRtbTrace(mode: TradingMode, symbol: string, strategy: string, oldStatus: string, newStatus: string, trigger: string): void {
     try {
       const fs = require('fs');
@@ -1526,65 +1619,45 @@ class ReadyToBuyService {
   }
 
   /**
-   * Promote a signal from queue to execution
-   * Directive 8.8.4-A3.R8: Log trace and delete signal after promotion
-   * Directive 8.8.4-A3.R9.2-D: Atomic promotion - defer RTB removal until trade creation confirmed
-   * Directive A3.R9.0.C: Normalize symbols for consistent comparisons
-   * 
-   * IMPORTANT: This method should ONLY be called AFTER trade creation succeeds.
-   * The tradeId parameter confirms the trade was already created.
+   * Claim a queued signal for an open: remove it from the RTB queue BEFORE the trade is created (Directive 8.8.4-A3.R1 — the
+   * removal precedes creation to prevent a double activation).
+   *
+   * ⛔ `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`; Langston C3 + C7): it RETURNS what happened, and the caller opens ONLY on
+   * `'deleted'`. It used to return nothing — a row the refresh had already deleted logged a warning and the engine opened
+   * the in-memory signal anyway, so a signal the refresh had rejected could be bought.
+   *  - `'deleted'`       the row was removed by this call — open it.
+   *  - `'missing'`       the row is gone (a refresh rejected it after it was selected) — do not open.
+   *  - `'refreshing'`    a refresh pass is evaluating it right now — do not open; it is still queued for the next pass.
+   *  - `'delete_failed'` the delete threw — do not open; nothing is written and the row stays queued for the next pass.
+   *    (It used to be marked `status: 'promoted'` and opened anyway: a `promoted` row is invisible to `getQueuedSignals`,
+   *    so it was permanent, and the open proceeded with the queue entry never removed.)
+   * The old second call with the trade id after a successful open always found nothing (the row was already gone) and is
+   * removed with this change. A FAILED open still leaves the signal removed and not restored — a known hazard, unchanged.
    */
-  async promoteSignal(signalId: string, tradeId: string): Promise<void> {
+  async promoteSignal(signalId: string): Promise<PromoteOutcome> {
     const signal = await storage.getRtbSignalById(signalId);
-    
     if (!signal) {
       console.warn(`[A3.R9.2][RTB] Cannot promote - signal ${signalId} not found`);
-      return;
+      return 'missing';
     }
-
-    // A3.R9.0.C: Normalize symbol for consistent comparisons
     const normalizedSymbol = normalizePairKey(signal.symbol);
     const oldStatus = signal.status || 'active';
     const mode = signal.mode as TradingMode;
-    const promotionStartMs = Date.now();
-
-    // Directive 8.8.4-A3.R9.2-D: Verify trade exists before deleting signal
-    // This ensures we don't orphan signals if trade creation failed
-    if (!tradeId) {
-      console.error(`[A3.R9.2][PROMOTION_ABORT] symbol=${normalizedSymbol} no tradeId - trade creation may have failed`);
-      return;
+    if (this.isSignalRefreshing(mode, signal.signalId)) {
+      console.warn(`[B-RTB-REFRESH-LIVE-PRICE][PROMOTION_DEFERRED] symbol=${normalizedSymbol} id=${signalId} — a refresh pass is evaluating it; left queued`);
+      return 'refreshing';
     }
-
-    console.log(`[A3.R9.2][PROMOTION_START] symbol=${normalizedSymbol} tradeId=${tradeId} starting atomic promotion`);
-
-    // Step 2: Log promotion trace
+    const promotionStartMs = Date.now();
     this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'promoted', 'TCL_promotion');
-
-    // Step 3: Delete signal from RTBQ (deferred until after trade creation confirmed)
-    // A3.R9.2-D: Deletion happens ONLY after trade creation is confirmed via tradeId
     try {
       await storage.deleteRtbSignals({ mode, id: signal.id });
       performanceMonitor.recordQueueRemove(1);
-      
-      const promotionDurationMs = Date.now() - promotionStartMs;
-      console.log(`[A3.R9.2][PROMOTION_COMPLETE] symbol=${normalizedSymbol} tradeId=${tradeId} rtbRemoved=true duration=${promotionDurationMs}ms`);
-      
+      this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
+      console.log(`[A3.R9.2][PROMOTION_COMPLETE] symbol=${normalizedSymbol} rtbRemoved=true duration=${Date.now() - promotionStartMs}ms`);
+      return 'deleted';
     } catch (error) {
-      // A3.R9.2-D: Deletion failed but trade was already created
-      // Signal may remain in queue as orphan - log for manual cleanup
-      console.error(`[A3.R9.2][PROMOTION_CLEANUP_FAILED] symbol=${normalizedSymbol} tradeId=${tradeId} - signal may be orphaned:`, error);
-      
-      // Attempt to mark as promoted to prevent re-promotion
-      try {
-        await storage.updateRtbSignal(signalId, {
-          status: 'promoted',
-          promotedAt: new Date(),
-          promotedTradeId: tradeId,
-        });
-        console.log(`[A3.R9.2][PROMOTION_MARKED] symbol=${normalizedSymbol} marked as promoted (delete failed)`);
-      } catch (markError) {
-        console.error(`[A3.R9.2][PROMOTION_MARK_FAILED] symbol=${normalizedSymbol}:`, markError);
-      }
+      console.error(`[B-RTB-REFRESH-LIVE-PRICE][PROMOTION_DELETE_FAILED] symbol=${normalizedSymbol} id=${signalId} — not opened; the row stays queued:`, error);
+      return 'delete_failed';
     }
   }
 
