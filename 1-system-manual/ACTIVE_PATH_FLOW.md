@@ -237,13 +237,13 @@ Zero asset-class references in 321 lines, in the component that watches TCL prom
 
 **What is handed over, and in what order — the ordering is the load-bearing part.** Per Directive 8.8.4-A3.R1 the removal from the queue **deliberately precedes** trade creation, to prevent double-activation:
 
-| Step | Site | Action |
+| Step | Site (`active-execution-engine.ts`, `checkRtbPromotion`) | Action |
 |---|---|---|
-| 1 | `:2197` | `promoteSignal(signal.id, 'pending')` — **removes from the RTB queue FIRST**, with a sentinel where the trade id will go |
-| 2 | `:2200` | `executePromotedSignal(signal)` — creates the trade |
-| 3 | `:2205` | `promoteSignal(signal.id, tradeResult.tradeId)` — writes the REAL id, **only** `if (tradeResult.success && tradeResult.tradeId)` |
+| 1 | `const _claim = await readyToBuyService.promoteSignal(signal.id)` | **claims the signal: removes it from the RTB queue FIRST** and returns what happened — `'deleted'` (removed by this call; the delete count is read), `'missing'` (gone — a refresh rejected it after it was selected), `'refreshing'` (a refresh pass holds it now; left queued), `'delete_failed'` (the delete threw; nothing written, left queued) |
+| 2 | `if (_claim !== 'deleted') { … continue; }` | **the open runs ONLY on `'deleted'`** — the others are not open attempts; `claimRefused=` on `PROMOTION_SUMMARY` |
+| 3 | `executePromotedSignal(signal)` | creates the trade |
 
-> **`'pending'` is a deliberate ordering sentinel, NOT a placeholder defect.** Checked before characterising it (rule 24). The two-call shape exists so the queue-removal cannot lose a race with trade creation.
+> ⛔ **REWRITTEN 2026-10-12 (`B-RTB-REFRESH-LIVE-PRICE`, `#1189`; Langston Step-4 C3/C7).** This table showed a two-call shape — `promoteSignal(signal.id, 'pending')` then `promoteSignal(signal.id, tradeResult.tradeId)` — and defended `'pending'` as "a deliberate ordering sentinel". **Both calls are gone:** the first never checked its own outcome, so a signal the refresh had already rejected and deleted was opened from the in-memory copy; the second always found nothing (the row was already deleted) and only logged a warning. ⚠️ **The 7 other `'pending'` occurrences in the engine are `active_open_positions.state` on a resting maker — a different object; do not edit them by grep.** The removal still precedes creation (Directive 8.8.4-A3.R1), so the failed-open hazard below is unchanged.
 
 **★ WHAT CAN SILENTLY DROP THE PAYLOAD HERE — and the honest answer is: nothing silently, but a signal CAN be lost.**
 If step 2 fails, the signal has **already left the queue** and is **deliberately not restored**. The code says so in its own words at `:2228`: *"Signal … was removed from RTB but trade failed - signal not restored."* Two `console.warn`s fire and `failedCount` increments, with a `PROMOTION_SUMMARY` line carrying `promoted=` / `failed=`. **This is fail-loud and working-as-designed** — an explicit trade-off preferring a lost signal over a double-activation. **Recorded as edge semantics, NOT filed as a defect.**

@@ -1265,3 +1265,15 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS:** whole-tree census at `c5e63ef8b` — one occurrence, the declaration, no reader (re-derived by Langston at Step 2 with a positive control: `WS_CACHE_FRESH_MS` returns live read sites). A private class field writes no state.
 **ARCHIVE:** git only — `c5e63ef8b:server/services/live-pricing-adapter.ts` (one line; no `.removed` copy for a single constant).
 **COMMIT:** this batch's Step-3 part 3.
+
+## 2026-10-12 — `hasPair`, `purgeInactiveClassSignals`, `promoteSignal`'s `'promoted'` fallback and its second call, fx5-scanner's unused import — B-RTB-REFRESH-LIVE-PRICE (sprint row 59e, `#1189`), CC-B
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| `hasPair(symbol, mode)` | `server/core/rtb/ready_to_buy_service.ts` | a queued-pair existence check filtering `status: 'queued'` (a status no code writes); **zero callers** |
+| `purgeInactiveClassSignals(mode, ctx)` | same file | the #320 defense-in-depth re-eval purge; its only caller went with Mechanism A (`d2306518e`, 2026-07-22) — **zero callers since**. The surviving #320 guard is the admission chokepoint in `queueSQESignal` |
+| the `status: 'promoted'` write on a failed delete, inside `promoteSignal` | same file | marked a row `promoted` when its delete threw, then the engine opened anyway; a `promoted` row is invisible to `getQueuedSignals` ⇒ permanent. Now: `'delete_failed'`, nothing written, not opened |
+| the second `promoteSignal(signal.id, tradeResult.tradeId)` call | `server/services/active-execution-engine.ts` | always found nothing (the first call had deleted the row) and only logged a warning |
+| `import { readyToBuyService }` | `server/services/fx5-scanner.ts` | never used (TypeScript elided it, so no runtime change) |
+**BLAST RADIUS / STATE-WRITE CENSUS:** `purgeInactiveClassSignals` wrote queue deletes and latch-map deletes and `hasPair` read only; with zero callers neither wrote anything in production. The `promoted` fallback's state (a `promoted` row) had no reader on the live path (0 such rows at 2026-10-12). Census at Step 2 (`Scope Files/B_RTB_REFRESH_LIVE_PRICE_PRE_AUDIT.md` §1.9); `tsc` 337 = 337; full suite unchanged.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/ready_to_buy_service.hasPair-purgeInactiveClassSignals.pre-B-RTB-REFRESH-LIVE-PRICE.ts.removed` (both methods verbatim); the rest is in git at `40306a0a0^`.
+**COMMIT:** `40306a0a0` (Step 3), `e8f575d3c` (Step-4 r2); deployed `e8f575d3c` 2026-10-12T08:58:11Z. Record: `Batch Completion/B_RTB_REFRESH_LIVE_PRICE_COMPLETION_REPORT.md`.
