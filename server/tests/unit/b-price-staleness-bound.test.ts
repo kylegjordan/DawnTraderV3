@@ -223,7 +223,7 @@ describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows'
   });
   it('the 8 reserve rows on record (Langston Step 8): the narrowed arm fires on exactly ONE — the autonomous 4,553 ms close', () => {
     const onRecord: Array<[string, string, number]> = [
-      ['JTO/USD', 'target_hit', 936], ['SUI/USD', 'stop_hit', 4553], ['RENDER/USD', 'reset', 1902], ['PHA/USD', 'reset', 2051],
+      ['JTO/USD', 'target_hit', 936], ['SUI/USD', 'target_hit', 4553], ['RENDER/USD', 'reset', 1902], ['PHA/USD', 'reset', 2051],
       ['GRASS/USD', 'reset', 3160], ['GBP/USD', 'reset', 3705], ['LIGHTER/USD', 'reset', 3810], ['XDC/USD', 'reset', 4034],
     ];
     const firing = onRecord.filter(([symbol, reason, age]) => v({ symbol, close_reason: reason, exit_observed_at_ms: closeMs - age }).length > 0).map(([s]) => s);
