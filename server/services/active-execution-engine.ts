@@ -1076,7 +1076,7 @@ export class ActiveExecutionEngine {
       this._reserveTripwireSinceMs = now - 300_000;
       // Read with its reach stated: checked only while this engine runs; `lookback=restart_24h` marks the run that can
       // re-mint a row resolved inside the last 24 h (bounded — Langston gate 2, call 3).
-      console.log(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE] mode=${this.mode} lookback=${lookback} since=${new Date(since).toISOString()} reserveRowsChecked=${r.checked} violating=${r.violating.length} alerted=${r.alerted} overCap=${r.overCap}` +
+      console.log(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE] mode=${this.mode} lookback=${lookback} since=${new Date(since).toISOString()} reserveRowsChecked=${r.checked} violating=${r.violating.length} alerted=${r.alerted} overCap=${r.overCap} operatorRows=${r.operatorRows} operatorMaxAgeMs=${r.operatorMaxAgeMs ?? 'none'}` +
         (r.violating.length ? ` [${r.violating.map((v) => `${v.symbol}:${v.closeReason ?? 'null'}:${v.violations.join('+')}${v.ageAtCloseMs !== null ? `@${v.ageAtCloseMs}ms` : ''}`).join(',')}]` : ''));
     } catch (err) {
       console.error(`[B-PRICE-STALENESS-BOUND][RESERVE_ROW_TRIPWIRE_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);

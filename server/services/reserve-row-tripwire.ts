@@ -34,12 +34,19 @@ export const RESERVE_PRODUCER = 'kraken_rest_rate_limited_reserve';
 /** Below this age at close a re-served stamp is implausible — a re-stamp, not an observation. */
 export const RESERVE_MIN_HONEST_AGE_MS = 100;
 /** Measured booking latency on decided exits: across 215 paper crypto closes with a FRESH WebSocket price (`kraken_ws_book_mid`
- *  171, `kraken_ws_ticker_mid` 44; close reasons stop/target/trailing/max-holding), age at close was median ~0.2 s, p99
- *  0.93 s, max 1,263 ms (read 2026-10-12). 1,500 ms covers the observed maximum. */
+ *  171, `kraken_ws_ticker_mid` 44), age at close was median 223 ms, p99 984 ms, max 1,263 ms (read 2026-10-12; Langston
+ *  re-derived). 1,500 ms covers the observed maximum. ⚠️ POPULATION LIMIT: every one of the 215 is a `stop_hit` or
+ *  `target_hit` — `trailing_stop_hit` and `max_holding_period` contribute ZERO rows (an era artifact: all 14 trailing
+ *  closes predate the first stamped row, 2026-08-27), so their booking latency is unmeasured by construction. A miss
+ *  there fires on an honest exit: noise, self-announcing, and the alert carries `closeReason`. */
 export const RESERVE_CLOSE_LATENCY_ALLOWANCE_MS = 1500;
 /** Close reasons an OPERATOR (or a reconciler acting for one) writes — 8g does not gate them, so arm (d) does not judge them. */
+/** The engine's own force-close taxonomy (`isForceClose`: `manual_stop`, `guardrail`, `reset`) is a subset, fenced by a
+ *  test, as is the rule that no DECIDED exit type (`target_hit`, `stop_hit`, `trailing_stop_hit`, `max_holding_period`)
+ *  is ever in it. `manual_close` is the manual-close route's default; that route also takes free text, so the set can
+ *  never be total — an unknown reason is judged. */
 export const OPERATOR_CLOSE_REASONS: ReadonlySet<string> = new Set([
-  'reset', 'hard_reset', 'manual', 'manual_stop', 'engine_stop_cleanup', 'stranded_clear', 'stranded_trades_cleared', 'guardrail', 'never_filled',
+  'reset', 'hard_reset', 'manual', 'manual_stop', 'manual_close', 'engine_stop_cleanup', 'stranded_clear', 'stranded_trades_cleared', 'guardrail', 'never_filled',
 ]);
 /** At most this many alerts per run; the rest are counted on the run line (a systematic break mints one row per trade). */
 export const RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN = 20;
@@ -61,7 +68,8 @@ export function classifyReserveRow(r: ReserveRow): { violations: ReserveRowViola
   const stamp = r.exit_observed_at_ms === null ? null : Number(r.exit_observed_at_ms);
   const closeMs = r.closed_at === null ? NaN : new Date(r.closed_at).getTime();
   let ageAtCloseMs: number | null = null;
-  if (stamp === null || !Number.isFinite(stamp)) out.push('null_stamp');
+  // A stamp at or below 0 is a default, not an observation (`?? 0`) — treated as absent, unconditionally (Langston, Step 8).
+  if (stamp === null || !Number.isFinite(stamp) || stamp <= 0) out.push('null_stamp');
   else if (Number.isFinite(closeMs)) {
     ageAtCloseMs = closeMs - stamp;
     if (ageAtCloseMs < RESERVE_MIN_HONEST_AGE_MS) out.push('stamp_too_young');
@@ -85,6 +93,10 @@ export interface ReserveTripwireResult {
   alerted: number;
   /** Violating rows NOT alerted this run because the per-run cap was reached. */
   overCap: number;
+  /** Operator-closed reserve rows in the population (arm (d) does not judge them) and their oldest age at close — the
+   *  ungated population on the run line as a number, never an argument (Langston's Step-8 condition). */
+  operatorRows: number;
+  operatorMaxAgeMs: number | null;
 }
 
 /** Run once: classify every reserve row closed since `sinceMs`; one alert per violating row (dedupe key per row). */
@@ -92,8 +104,14 @@ export async function runReserveRowTripwire(mode: string, sinceMs: number, deps:
   const rows = await deps.listReserveRows(mode, sinceMs);
   const violating: ReserveTripwireResult['violating'] = [];
   let alerted = 0;
+  let operatorRows = 0;
+  let operatorMaxAgeMs: number | null = null;
   for (const r of rows) {
     const { violations, ageAtCloseMs } = classifyReserveRow(r);
+    if (OPERATOR_CLOSE_REASONS.has(r.close_reason ?? '')) {
+      operatorRows++;
+      if (ageAtCloseMs !== null && (operatorMaxAgeMs === null || ageAtCloseMs > operatorMaxAgeMs)) operatorMaxAgeMs = ageAtCloseMs;
+    }
     if (violations.length === 0) continue;
     violating.push({ id: r.id, symbol: r.symbol, closeReason: r.close_reason, violations, ageAtCloseMs });
     if (alerted >= RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN) continue;
@@ -106,7 +124,7 @@ export async function runReserveRowTripwire(mode: string, sinceMs: number, deps:
       dedupe_key: `reserve-row-tripwire-${r.id}`,
     });
   }
-  return { checked: rows.length, violating, alerted, overCap: violating.length - alerted };
+  return { checked: rows.length, violating, alerted, overCap: violating.length - alerted, operatorRows, operatorMaxAgeMs };
 }
 
 /** The production query: the stored columns only. */

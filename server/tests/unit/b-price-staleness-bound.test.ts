@@ -36,7 +36,7 @@ import {
 } from '../../services/passive-archive/equity-spot-archiver.js';
 import { judgeExitPriceAge, CRYPTO_EXIT_PRICE_MAX_AGE_MS } from '../../core/trading/exit-price-age.js';
 import { ageExemptionOfProducer, AGE_EXEMPTION_BY_PRODUCER } from '../../services/market-data/price-basis.js';
-import { classifyReserveRow, runReserveRowTripwire, RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN, type ReserveRow } from '../../services/reserve-row-tripwire.js';
+import { classifyReserveRow, runReserveRowTripwire, RESERVE_TRIPWIRE_MAX_ALERTS_PER_RUN, OPERATOR_CLOSE_REASONS, type ReserveRow } from '../../services/reserve-row-tripwire.js';
 
 const frame = (type: string, symbol: string, bid: number, ask: number) =>
   Buffer.from(JSON.stringify({ channel: 'ticker', type, data: [{ symbol, bid, ask, last: (bid + ask) / 2 }] }));
@@ -228,6 +228,39 @@ describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows'
     ];
     const firing = onRecord.filter(([symbol, reason, age]) => v({ symbol, close_reason: reason, exit_observed_at_ms: closeMs - age }).length > 0).map(([s]) => s);
     expect(firing).toEqual(['SUI/USD']);
+  });
+  it('(d) boundary: exactly 3,500 ms does not fire, 3,501 does', () => {
+    expect(v({ exit_observed_at_ms: closeMs - 3_500, close_reason: 'stop_hit' })).toEqual([]);
+    expect(v({ exit_observed_at_ms: closeMs - 3_501, close_reason: 'stop_hit' })).toEqual(['stale_at_close']);
+  });
+  it('a stamp at or below 0 is a default, not an observation — null_stamp on ANY row, operator included', () => {
+    expect(v({ exit_observed_at_ms: 0, close_reason: 'reset' })).toEqual(['null_stamp']);
+    expect(v({ exit_observed_at_ms: -5, close_reason: 'target_hit' })).toEqual(['null_stamp']);
+  });
+  it('FENCE: the engine force-close types are operator reasons; no DECIDED exit type ever is', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('server/services/active-execution-engine.ts', 'utf8');
+    const force = src.match(/const isForceClose = ([^;]+);/)![1].match(/'([a-z_]+)'/g)!.map((q) => q.slice(1, -1));
+    expect(force.sort()).toEqual(['guardrail', 'manual_stop', 'reset']);
+    for (const f of force) expect(OPERATOR_CLOSE_REASONS.has(f)).toBe(true);
+    const union = src.match(/interface ExitCondition \{\s*type: ([^;]+);/)![1].match(/'([a-z_]+)'/g)!.map((q) => q.slice(1, -1));
+    const decided = union.filter((t) => !force.includes(t));
+    expect(decided.sort()).toEqual(['max_holding_period', 'stop_hit', 'target_hit', 'trailing_stop_hit']);
+    for (const d of decided) expect(OPERATOR_CLOSE_REASONS.has(d)).toBe(false);
+    expect(OPERATOR_CLOSE_REASONS.has('manual_close')).toBe(true); // the manual-close route's default
+  });
+  it('the run reports the ungated operator population as a number', async () => {
+    const r = await runReserveRowTripwire('paper', 0, {
+      listReserveRows: async () => [
+        row({ id: 'a', close_reason: 'reset', exit_observed_at_ms: closeMs - 4_034 }),
+        row({ id: 'b', close_reason: 'reset', exit_observed_at_ms: closeMs - 1_902 }),
+        row({ id: 'c', close_reason: 'target_hit', exit_observed_at_ms: closeMs - 936 }),
+      ],
+      addAlert: async () => ({}),
+    });
+    expect(r.operatorRows).toBe(2);
+    expect(r.operatorMaxAgeMs).toBe(4_034);
+    expect(r.violating).toEqual([]);
   });
   it('NEGATIVE CONTROL: honest re-serves inside 100 ms .. 2 s with source kraken_rest do not fire (936 ms = the youngest on record)', () => {
     expect(v({})).toEqual([]);
