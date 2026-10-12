@@ -5718,6 +5718,14 @@ Manages paper simulation sessions with:
 
 DawnTrader's exit management operates through multiple layers:
 
+### 18.0.2 ⭐ HOW OLD A PRICE MAY BE WHEN IT DECIDES — OBSERVATION AGE, NOT RECEIPT AGE (`B-PRICE-STALENESS-BOUND`, row 33, `#743`; deployed 2026-10-12)
+
+**The rule:** no decision acts on a price whose DATA is older than its bound, however recently we received or re-stamped it. Two clocks exist and are never pooled: **observation age** (when the venue's price was seen) and **receipt age** (when our cache last wrote the row — renewed on every write, including a re-serve).
+- **Crypto exits:** the age that decides is the RETAINED `observedAt`, bounded at 2,000 ms (D6's exit window). A rate-limited re-serve carries its original `observedAt` and is refused past the bound; the exit then takes a fresh REST read or waits a tick. Operator closes (flatten, reset, manual, stop reconcile) are deliberately ungated and record the age on the row.
+- **xStock exits:** the venue's ticker frame carries no timestamp, so the mark's age is the RECEIPT age of the last CHANGED quote. A replayed book (`snapshot`, sent on every subscribe) never refreshes it. A mark that exists only by replay is COLD: it waits up to `cold_mark_max_ms` (15 s, capped by the per-symbol ceiling, which is never below the 15 s floor) for its first change, then is judged stale. Live case behind it: PLTR's 20.8-hour frozen book read as fresh on a resubscribe (2026-10-10).
+- **Display:** a re-served price shows its observation age; one whose age cannot be stated is not shown (venue-quiet).
+- **Standing record check:** a stored exit priced by the rate-limited re-serve must carry a real, plausible observation time and, on a decided exit, close within 2 s + 1.5 s booking latency (measured: max 1,263 ms over 215 fresh-price crypto closes).
+
 ### 18.1 Exit Hierarchy
 
 ```

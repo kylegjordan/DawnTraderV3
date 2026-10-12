@@ -1334,3 +1334,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-11 — B-CLUSTER-BUS-PERSIST-DISPOSITION (CC-B, sprint plan row 2a0c) — ✅ CLOSED (Langston confirmed Step 11)
 
 **An internal message log nobody read is gone.** The system kept a database copy of certain internal status messages; once the engine heartbeat stopped sending them, nothing read the copy at all. The copy, its table and its nightly clean-up are removed; the messages themselves still pass between parts of the system as before. Last night's clean-up ran cleanly without it.
+
+### 2026-10-12 — B-PRICE-STALENESS-BOUND (CC-C, sprint plan row 33) — ⏳ OPEN, deployed, observing
+
+**An old price can no longer pose as a fresh one.** After every reconnect the xStock feed resends each symbol's last price, and the system treated that as brand new — on 2026-10-10 a 20-hour-old PLTR price read as fresh with the bid below the stop. A resent price now keeps its real age, and right after a restart a position waits for a genuine update (up to 15 s) before any decision. On crypto, a re-served price older than 2 s no longer triggers an exit. The connection watchdog stops raising its two false critical alerts every Sunday night, and the screens show a re-served price's true age. Deployed 2026-10-12; the watchdog's result is read at the next Sunday reopen.
