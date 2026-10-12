@@ -16,11 +16,14 @@ change-class: non_architecture
 | the R-multiple key | `8939105f8` 2026-07-25, `#558` A1: *"TIEBREAKER (Kyle-ruled 2026-07-24): queueSQESignal duplicate resolution now decides on the LIVE rank key (expected R-multiple), not finalScore"* | Kyle ruled WHAT to compare; nobody checked the branch could run |
 ⇒ **the tiebreak has been dead for ten months, under both keys.** Kyle's 2026-07-24 ruling has never taken effect. **Nothing downstream has been running on it:** the R-multiple ranking that picks which signal to promote is live (`getRankedSignals`) — what never happened is the choice between two copies of the SAME setup.
 
-## 2. Why "just fix the filter" is not obviously right any more
-Since this morning (`B-RTB-REFRESH-LIVE-PRICE`, row 59e) the refresh checks every queued signal against the live price and drops one already past its stop or target. In that world:
-- a **re-issue** carries levels built on the current price — the strategy's current view of the setup;
-- the **incumbent** carries its queue-time levels, refreshed in cost and score but not in level. Its R-multiple is computed on those old levels (`rMultipleCore`: entry, stop, target, `chosenNetEv`).
-Restoring the tiebreak as ruled would keep an older copy whenever its stale-level R is higher — and a price that has moved TOWARD the stop raises that number. **It would reintroduce, inside the dedupe, the stale-levels problem Kyle asked to be removed (directive 3).**
+## 2. Why "just fix the filter" is not obviously right any more — r2 (Langston's correction folded)
+⛔ **r1's mechanism here was FALSE and is withdrawn:** it said the incumbent's R-multiple "rises as the price moves toward the stop". It does not — `signalRMultiple` (`ready_to_buy_service.ts:1845-1863`) reads the row's STORED entry, stop, target and `chosenNetEv`, and `rMultipleCore` (`:1877-1908`) takes no live price: `r = chosenNetEv / |entry − stop|`. The incumbent's R is fixed with respect to later price moves; the live-price-inflates-R shape belongs to option (c) only.
+**The true argument (Langston, re-derived):**
+- **The incumbent's R is mixed-vintage:** the refresh writes a fresh `chosenNetEv` back (`:1182-1187`) and never writes a level — the only entry/stop/target write is the admission insert (`:2465-2467`). So it is *current net EV ÷ queue-time risk distance*, competing under (a) with a wholly current number.
+- **Decisive, and it needs no mechanism: the incumbent's entry is a price the market has left.** A tiebreak that can select it selects an unenterable copy of the setup — directive 3's frozen-levels problem re-entering through the dedupe.
+- **Nothing of the 07-24 ruling is overturned.** Compare-on-R is live and working where it decides between DIFFERENT setups (`getRankedSignals` / `computeRankKey`). The question here is narrower: **is a same-setup duplicate a ranking question at all?** Two copies of one `symbol × strategy` are one intent restated, not two competitors; the later restatement is the strategy's current view.
+**Telemetry note (checked, not a blocker):** under newest-wins the upsert resets `queuedAt`, so a persistently re-issued setup reads as fresh; every behavioural consumer of queue age was checked (TTL removed; `reEvaluateQueue`'s age unused for removal; the decay penalty feeds only the unused `refreshedFinalScore`). Only the `oldestSignalAge` telemetry understates a re-issued setup's true age — stated in objective 1's System Manual line.
+**Census (Langston, whole tree):** `getQueuedSignal` — exactly 2 occurrences (the definition and the branch's call); the deletion is caller-clean.
 
 ## 3. The options (Kyle decides; Langston's view sought first)
 | | what | consequence |
@@ -28,7 +31,7 @@ Restoring the tiebreak as ruled would keep an older copy whenever its stale-leve
 | **(a) restore as ruled** | fix the lookup (`status in ('active','reconfirmed')`); higher R wins | ~19,346 admissions per 72 h move from newest-wins to best-R-wins, with an `expireSignal` delete on each replace; a stale copy can block a fresh one |
 | **(b) newest wins — make it explicit (RECOMMENDED)** | keep today's behaviour by design: a re-issue replaces the queued copy with current levels; **delete the dead tiebreak branch and `getQueuedSignal`** (rule 18), record that the 07-24 ruling never took effect and why it is superseded | the queue always holds the strategy's latest levels; ranking between DIFFERENT setups is unchanged (R-multiple at promotion); nothing in the live behaviour changes |
 | (c) compare both copies at the live price | R recomputed at the current ask for both | favours a copy whose price has fallen toward its stop (its risk at the live price shrinks, so its R swells) — the wrong winner by construction; not recommended |
-**Recommendation: (b).** It turns ten months of accidental behaviour into a stated rule, removes a branch that has never run, and is the only option consistent with directive 3. It asks Kyle to set aside his 07-24 ruling **for this one choice** (same setup, two copies) — not for ranking, where it stands.
+**Recommendation: (b) — Langston concurs.** It turns ten months of accidental behaviour into a stated rule, removes a branch that has never run, and is the only option consistent with directive 3. It does not set aside the 07-24 ruling: that ruling decides between different setups and keeps doing so; a same-setup duplicate is one intent restated.
 
 ## 4. Objectives — written for (b); re-scoped if Kyle chooses (a)
 1. **The rule is explicit:** `queueSQESignal` writes the re-issue over the queued copy (the upsert, as today), with a comment and a System Manual line saying newest-wins is the design and why. *Verify:* a test that a re-issue replaces the incumbent's levels.
