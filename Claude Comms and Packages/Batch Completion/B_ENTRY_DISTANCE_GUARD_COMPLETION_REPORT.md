@@ -76,3 +76,6 @@ CHANGE-CLASS: architecture
 - **The refusal has never fired live.** Its proof is the replay tests and the source fences; the first live refusal is the evidence still to come.
 - The shadow measurement has n = 1 on staging (CLSK: a 5-hour-old plan filled 0.1 R better than planned). Nothing is sized off it.
 - Paper's record now differs from what live would hold on refused trades (§6) until `#1186`'s pre-order check exists.
+
+## Addendum (2026-10-12, after the close) — the refusal fired live
+**The honest residual above ("the refusal has never fired live") is discharged:** `[OPEN_FAILED] stage=ENTRY_GEOMETRY symbol=KLAC/USD strategy=vwap_pullback reason=ask_at_or_through_stop` at **2026-10-12 09:09:36Z** — the xStock taker fill 193.9 against its own stop 195.246 (`adverse_r` −1.8109), refused before any write. Found by Langston in the row 59e Step-8 window (`Scope Files/RELEASE_DEPLOY_2026-10-12_CCB.md`), running code `e8f575d3c` (the row-59 block unchanged since `a52f16a52`).
