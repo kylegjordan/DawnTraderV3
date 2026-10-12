@@ -1,4 +1,4 @@
-# B-RTB-ADMISSION-TIEBREAK-LIVE — SCOPE (Step 1, r1) — ⛔ A KYLE DECISION FIRST
+# B-RTB-ADMISSION-TIEBREAK-LIVE — SCOPE (Step 1, r2) — ⛔ A KYLE DECISION FIRST
 
 change-class: non_architecture
 
