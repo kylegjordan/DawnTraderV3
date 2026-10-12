@@ -1312,7 +1312,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **OPEN ON:** the watchdog read at the 2026-10-18/19 Sunday reopen (pre-registered), and three unexercised items (the tripwire on a real row, the cold-unobserved escalation, the re-serve display) — criteria in the progress report.
 
-## B-ENTRY-DISTANCE-GUARD (CC-B, sprint plan row 59 increment 1 — pre-sprint P1a; `#915`, `#1168`) — change-class `architecture` — ⏳ **STEP 11** (Step 4 APPROVED (r2 + the `entryArm` condition); deployed in `a52f16a52` 2026-10-11T01:30:39Z; Step 8 CONFIRMED by Langston 2026-10-12; report `Batch Completion/B_ENTRY_DISTANCE_GUARD_COMPLETION_REPORT.md`)
+## B-ENTRY-DISTANCE-GUARD (CC-B, sprint plan row 59 increment 1 — pre-sprint P1a; `#915`, `#1168`) — change-class `architecture` — ✅ **CLOSED 2026-10-12** (Step 4 APPROVED (r2 + the `entryArm` condition); deployed in `a52f16a52` 2026-10-11T01:30:39Z; Steps 8 and 11 CONFIRMED by Langston 2026-10-12; report `Batch Completion/B_ENTRY_DISTANCE_GUARD_COMPLETION_REPORT.md`)
 
 **WHAT IT DOES.** The active open now checks the price it actually got. A taker fill at or through the trade's own stop or target is refused before anything is written (the shared `refuseTakerBooking`, now with its fourth caller), recorded under a new stage `ENTRY_GEOMETRY` and a durable archive row. Reward-to-risk at the fill against the strategy's live floor is measured on every taker open and logged — not enforced, by the rule pre-registered at Step 2.
 

@@ -1,4 +1,4 @@
-# B-ENTRY-DISTANCE-GUARD — Completion Report (row 59 increment 1)
+# B-ENTRY-DISTANCE-GUARD — Completion Report (row 59 increment 1) — ✅ CLOSED 2026-10-12 (Langston Step-11 CONFIRMED)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `architecture` · **Sprint plan row:** 59 `B-ENTRY-LEVEL-RECHECK`, increment 1, pre-sprint P1a · **Issues:** `#915` (closed here), `#1168` (its dead-on-arrival half closed here; the frozen-levels half stays in row 59)
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_ENTRY_DISTANCE_GUARD_SCOPE.md` r1, `…_PRE_AUDIT.md` r2 · **Change list:** `Change Lists/B_ENTRY_DISTANCE_GUARD_STEP4_CHANGE_LIST.md` (r1 + r2)
@@ -34,6 +34,7 @@ The active open bought at whatever the market offered and never compared that pr
 - **Step 2:** PROCEED on the audit, two plan blockers (items 3 and 4 held), three corrections, one finding (the two checks catch disjoint trades); homes `#1183` (59a) and `#1184` (59b).
 - **Step 4:** CHANGES-NEEDED, bounded (a durable sink for the shadow; the refusal row's own stage) → r2 → APPROVED with one condition (`entryArm`, the realised arm, on every admitted row) → `fdcaff411`.
 - **Step 7:** CC-B, `Scope Files/RELEASE_DEPLOY_2026-10-10_CCB_EVENING.md` "Row 59 Step 7" — the first taker open waited a day because all 20 slots were held from 2026-10-10 16:00Z until the xStock reopen let a position close.
+- **Step 11:** **CONFIRMED** by Langston 2026-10-12, re-derived (per-job CI, the commit chain, the block's byte identity — 18 hunks above it, not 19 — the four call sites, the 20 tests, the N/A rows against the class matrix). Two record findings folded at the close: the parity magnitude in the System Manual now carries its population, and two bare file names in this report carry their paths. A third — the plan-line checker does not enrol row 59 — is OLD Claude's to place with Langston.
 - **Step 8:** **CONFIRMED** by Langston 2026-10-12, re-derived: the shadow line byte-exact, the only `[ENTRY_GEOMETRY]` line since 05:57:06Z; the arithmetic recomputed from the four prices; the archive row the only engine admit row since the deploy; the fill equal to the best ask of a real two-sided book (0.1874 % spread, 11 quotes in six minutes); the plan 5 h 06 m old at the fill; the slot freed by DRV/USD's stop 62 s before.
 
 ## 5. Numeric corrections
@@ -41,8 +42,8 @@ The active open bought at whatever the market offered and never compared that pr
 - **PREVIOUSLY STATED** (my Step-8 dispatch): "row 59's files unchanged since `a52f16a52`". **NOW:** the engine file changed (CC-C's `78f62ed01`, 19 hunks above line 4646); the row-59 block is byte-identical. **REASON:** identity stated at the file instead of the block.
 
 ## 6. New findings / dispositions
-- **The parity direction.** Paper now refuses after the fill what live mode cannot (a live taker order has filled when its price is known), removing 11 `stop_hit` and 2 `target_hit` trades from the post-reset population's record. An interim until a pre-order check — `#1186`. Recorded in the System Manual; the paper standard rules `ENTRY_GEOMETRY` (b2) (`PAPER_STANDARD_PROPOSAL.md` r13, `#1083` amendment 6).
-- **`gate_decision.schema_version` (Langston's Step-4 record note, corrected).** The note said the decision record carries no version stamp. It does: `{ schema_version: 1, … }` since B70 (`0dc7c470b`, `signal-eval-archiver.ts:375`), measured on 105,967 of 105,967 rows in an hour. His point stands: a constant stamp cannot mark the deploy boundary, so the promotion read filters on `entryArm`'s presence or on `captured_at`.
+- **The parity direction.** Paper now refuses after the fill what live mode cannot (a live taker order has filled when its price is known), removing from the record, on W1's taker opens, 13 of 117 xStock (11 `stop_hit`, 2 `target_hit`) and 0 of 24 crypto; over all closes since 2026-07-15 the stop side is crypto 7 of 296 and xStock 12 of 287 (Langston, Step 11). An interim until a pre-order check — `#1186`. Recorded in the System Manual; the paper standard rules `ENTRY_GEOMETRY` (b2) (`Claude Comms and Packages/Scope Files/PAPER_STANDARD_PROPOSAL.md` r13, `#1083` amendment 6).
+- **`gate_decision.schema_version` (Langston's Step-4 record note, corrected).** The note said the decision record carries no version stamp. It does: `{ schema_version: 1, … }` since B70 (`0dc7c470b`, `server/services/data-archive/signal-eval-archiver.ts:375`), measured on 105,967 of 105,967 rows in an hour. His point stands: a constant stamp cannot mark the deploy boundary, so the promotion read filters on `entryArm`'s presence or on `captured_at`.
 - **§9.4 disposition 5 — no work, withdrawn (Langston, Step 8):** `closed_trades.intended_entry_price` NULL on the open CLSK row is written at close (`active-execution-engine.ts:4470`); the open writes it to `active_open_positions` (present, 10.70136).
 
 ## 7. Governance ledger
@@ -52,19 +53,19 @@ CHANGE-CLASS: architecture
 |---|---|---|---|
 | T1 | BATCH_CATALOG.md | ✅ | entry, at Step 11 |
 | T1 | PHASE_HISTORY.md | ✅ | plain-language entry |
-| T1 | SPRINT_TO_LIVE_PLAN.md (row 59) | ✅ | increment 1 at Step 11 with this report in the report column; rows 59c and 59d placed |
+| T1 | SPRINT_TO_LIVE_PLAN.md (row 59) | ✅ | increment 1 CLOSED with this report in the report column; rows 59c and 59d placed. ⚠️ **The plan-line checker does not grade this row** (it enrols on the batch cell, which holds the umbrella `B-ENTRY-LEVEL-RECHECK`); its currency rests on Langston's read of the row at Step 11 (his Step-11 FINDING 1, §9.4 disposition 2 into OLD Claude's plan-currency work, placed by OLD Claude with Langston) |
 | T1 | PHASE_19_PLAN.md | N/A — no row there | the row is sprint row 59 (its Phase-19 origin 3n.u2 is closed into it) |
 | T1 | shared MEMORY.md + MEMORY_CC_B.md | ✅ mine / N/A shared | mine: position |
 | T1 | the batch SCOPE | ✅ | r1, with Langston's Step-1 findings |
 | T1 | the batch PRE_AUDIT | ✅ | r2, the pre-registration and the audit |
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: row 59 at Step 11; 59c and 59d added |
-| T1 | Langston's MEMORY.md | ⏳ owed at Step 11 | Langston writes his own with his Step-11 confirm; ticked when the write lands |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston with his Step-11 confirm, 2026-10-12 |
 | T2 | SYSTEM_MANUAL.md | ✅ | §5 Cost Model: "WHAT THE ACTIVE OPEN CHECKS AT THE FILL" — what it refuses, what it only logs and why, the parity direction, how to read the data |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | §6.1: the fill-time checks, the primitive's fourth caller, the new stage and reject stage, the per-open gate call, the invariant `riskAmount` now relies on |
 | T2 | RUNNING_ISSUES.md | ✅ | `#915` closed; `#1168` note; `#1083` amendment 6; `#1186` and `#1187` opened and homed |
 | T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-11-A |
-| T2 | PAPER_STANDARD_PROPOSAL.md | ✅ | r13: `ENTRY_GEOMETRY` ruled (b2), denominator named |
+| T2 | `Claude Comms and Packages/Scope Files/PAPER_STANDARD_PROPOSAL.md` | ✅ | r13: `ENTRY_GEOMETRY` ruled (b2), denominator named |
 | T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no new constant — the floor is the existing `min_rr`; the band's `k` was not built |
 | T2 | STORAGE_POLICY.md | N/A | new keys inside an existing JSON column; no new table or retention |
 | T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed (the 2 % target is `#1187`) |
