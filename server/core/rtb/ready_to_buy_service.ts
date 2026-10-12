@@ -1322,20 +1322,15 @@ class ReadyToBuyService {
     // Per-signal refresh state is tracked via signalRefreshStates
   }
 
-  /**
-   * Directive 8.8.4-A3.R8: Log RTB trace event to persistent file
-   * Tracks all status transitions for observability
-   */
   // ── B-RTB-REFRESH-LIVE-PRICE (sprint row 59e) — the price check's counters and durable rows ─────────────────────────────
-  private priceCheckCounts = new Map<string, number>();
-  /** Cumulative price-check outcomes since boot, `<class>:<action>[:<reason>]` → count (Step-7 read; the per-pass log line too). */
-  getPriceCheckCounts(): Record<string, number> {
-    return Object.fromEntries(this.priceCheckCounts);
-  }
+  /**
+   * This pass's price outcomes, `<class>:<action>[:<reason>]` → count — emitted as the `[B-RTB-REFRESH-LIVE-PRICE][PASS]` line,
+   * which IS the instrument. (A cumulative since-boot counter and its accessor stood here with no reader while the accessor's
+   * comment called it the Step-7 read; removed after Langston's Step-11 finding, 2026-10-12.)
+   */
   private _tallyPriceOutcome(pass: Map<string, number>, cls: string, d: RetirementDecision): void {
     const key = d.action === 'inside' ? `${cls}:inside` : `${cls}:${d.action}:${d.reason}`;
     pass.set(key, (pass.get(key) ?? 0) + 1);
-    this.priceCheckCounts.set(key, (this.priceCheckCounts.get(key) ?? 0) + 1);
   }
   /** Fire-and-forget, never throws into the refresh (the archiver's own convention). */
   private _archiveRtbPrice(mode: TradingMode, signal: RtbSignal, cls: string, stage: 'rtb_price' | 'rtb_price_shadow', gateDecision: Record<string, unknown>): void {
@@ -1400,6 +1395,10 @@ class ReadyToBuyService {
     });
   }
 
+  /**
+   * Directive 8.8.4-A3.R8: Log RTB trace event to persistent file
+   * Tracks all status transitions for observability
+   */
   private logRtbTrace(mode: TradingMode, symbol: string, strategy: string, oldStatus: string, newStatus: string, trigger: string): void {
     try {
       const fs = require('fs');
