@@ -1311,3 +1311,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT DOES.** No decision acts on a price whose data is older than its bound. xStock: a replayed book never refreshes the mark's age, and a mark that exists only by replay is cold (waits up to 15 s, then stale). Crypto: an exit's re-served price is judged on its retained observation time (2 s). The stall watchdog no longer counts the weekend or the Sunday reopen pause as silence. Re-served prices show their true age; a stored-row tripwire watches the re-serve's records. `#913`'s label and a dead constant fixed.
 
 **OPEN ON:** the watchdog read at the 2026-10-18/19 Sunday reopen (pre-registered), and three unexercised items (the tripwire on a real row, the cold-unobserved escalation, the re-serve display) — criteria in the progress report.
+
+## B-ENTRY-DISTANCE-GUARD (CC-B, sprint plan row 59 increment 1 — pre-sprint P1a; `#915`, `#1168`) — change-class `architecture` — ⏳ **STEP 11** (Step 4 APPROVED (r2 + the `entryArm` condition); deployed in `a52f16a52` 2026-10-11T01:30:39Z; Step 8 CONFIRMED by Langston 2026-10-12; report `Batch Completion/B_ENTRY_DISTANCE_GUARD_COMPLETION_REPORT.md`)
+
+**WHAT IT DOES.** The active open now checks the price it actually got. A taker fill at or through the trade's own stop or target is refused before anything is written (the shared `refuseTakerBooking`, now with its fourth caller), recorded under a new stage `ENTRY_GEOMETRY` and a durable archive row. Reward-to-risk at the fill against the strategy's live floor is measured on every taker open and logged — not enforced, by the rule pre-registered at Step 2.
+
+**WHAT IT LEAVES.** Plan items 3 (the distance band, `#1186`, row 59c) and 4 (the fabricated 2 % target at three sites, `#1187`, row 59d) were held at Step 2 and are homed; the floors' calibration is row 59a (`#1183`), the resting maker row 59b (`#1184`). The refusal path has not yet fired live.
