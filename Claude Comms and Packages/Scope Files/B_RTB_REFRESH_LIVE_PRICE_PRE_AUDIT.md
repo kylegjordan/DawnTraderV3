@@ -33,6 +33,21 @@
 **Every would-retire row (6):** DOT/USD `reverse_impulse` (entry 1.0208, target 1.0758) and `pivot_shift` (1.0852, 1.1443) at ask 1.2768; ONDO/USD `pivot_shift` (0.45158, target 0.49186) at 0.51639; SENT/USD `strong_bull_trend` (stop 0.022529) at 0.021223; SKHY/USD `pivot_shift` (stop 169.14) at 167.95; SNDK/USD `pivot_shift` (stop 1575.72) at 1564.59. **Every one has quantity on both sides and a spread of 0.008-0.134 % of the mid** — none is a shape the exit would refuse. ⇒ **By the pre-registered rule, read 1 finds no "contract must exclude" row.** DOT queued 2026-10-08 17:45Z and has moved 25 % above its planned entry; ONDO 2026-10-08 16:42Z; SENT 2026-10-11 12:21Z; SKHY and SNDK this morning (04:53Z, 05:02Z).
 ⚠️ **Instrument limit, stated:** the crypto archive is a ~60 s sampler (median age 58.4 s), so 77 of 97 crypto rows have no archive row within 15 s — **this is the archive's cadence, not the in-memory touch the refresh will read**; crypto M1/M2 are a proxy, labelled so. **Reads 2 and 3 (the regular session, after it) follow in §1.1b.**
 
+### 1.1b M1 reads 2 and 3 — RECORDED AFTER THE CLOSE (2026-10-12; added post-close, no decision rides on them)
+⚠️ **Both reads ran on deployed `e8f575d3c` — i.e. AFTER this batch's live check was running — so they measure the pool the check leaves behind, not OBJ-2's blast radius.** Same query as read 1 (the newest archive ticker row no older than 15 s). Snapshots, single-moment, not decision-grade (rule 13).
+| read | class | inside | ask ≤ stop | ask ≥ target | archive row older than 15 s |
+|---|---|---|---|---|---|
+| **2** — 14:00:45Z, regular session | crypto | 9 | 0 | 0 | 22 |
+| | xStock | 6 | **1** | **1** | 0 |
+| **3** — 20:30:49Z, after the US close | crypto | 6 | **2** | **1** | 24 |
+| | xStock | 12 | 0 | **2** | 48 |
+**Every would-retire row, and what the live check did with it:**
+- **Read 2 — ANET/USD `vwap_pullback`** (stop 213.95, ask 213.51, spread 0.225 %, both sides quantity): **retired by the live check 13 s later**, `[RETIRE] … reason=ask_at_or_through_stop ask=213.8 … passes=2` at 14:00:58Z.
+- **Read 2 — HUT/USD `vwap_bounce`** (target 86.14, archive ask 86.70, age 3.8 s): **not retired.** The check's own record shows `inside` at 13:55:42Z (ask 85.23) and 14:55:49Z (ask 84.26) and **no verdict-change row between them** — a `hold_breach` would have written one — so at its passes the ask it read was either inside or not admissible; which one is **not determinable from the archive** (the shadow keeps verdict changes, not every pass). The archive row is a different instrument (§1.1's limit). Recorded, not a finding.
+- **Read 3 — crypto ICP/USD `reverse_impulse`** (queued 10-09, target 3.047, ask 3.262, age 8.7 s), **XLM/USD and ZEC/USD `strong_bull_trend`** (ask under stop, ages 12.8 s and 10.2 s): every one is older than the exit's 2 s crypto ceiling, so the check correctly declines to decide — **the never-priced tail named at Step 8 (`#1085`, row 8b)**, and ICP shows its cost: a signal three days past its target is still in the pool.
+- **Read 3 — xStock JBL/USD and KDP/USD** (ask at/through target): after-hours books, **spread 2.308 % and 2.182 %** — the shape the contract refuses (C1, spread vs the symbol's yardstick), so kept by design.
+⇒ **Nothing here contradicts the shipped contract.** The one cost it makes visible is the crypto never-priced tail, already owned by `#1085`.
+
 ### 1.2 M2 — `price_unavailable`
 xStock read 1: 0 of 3 unpriced (overnight session, the venue reopened 00:00Z). Crypto: not measurable from the archive (above). The refresh's own log already counts cache-priced signals: **2,699 of 2,907 signal-refreshes priced (92.8 %)** between 06:40 and 07:40Z — the cache mark, not the ask, so it bounds nothing about the new contract; the new contract's own counter is plan item 4.
 
