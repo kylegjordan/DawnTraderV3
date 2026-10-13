@@ -3825,3 +3825,17 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 - **What it does not stop:** it guarantees only writes that go THROUGH it. A root session that edits the file by hand bypasses every check.
 - **What makes that visible:** the next writer call refuses on the changed sha (exit 4). The daily size watch reports the size change.
 
+### `B-CODEX-FAILOVER` — temporary crew identity and shift control (2026-10-13)
+
+**ACTOR REGISTRY:** `ALERT_ACTORS` remains the source of truth. It now includes four `codex`-tagged actors (`codex-a`, `codex-b`, `codex-c`, `codex-infra`) and human actor `coltrane`, with exact aliases for both displayed word orders. Alert writes normalize through that table; the deployment actor test derives every non-machine canonical name and alias from the same source, so this batch does not create a second identity registry.
+
+**INSTRUCTION SURFACE:** root `AGENTS.md` is the Codex-only counterpart to `CLAUDE.md`. It selects identity from the existing folder, forbids worktrees, assigns the counterpart's alerts, supplies manual replacements for hooks, and makes `crew-switch status` the duty gate. Claude sessions ignore it.
+
+**NEW HELSINKI COMPONENT:** `comms-infra/crew-switch/crew-switch.py`, installed as `/usr/local/bin/crew-switch`, owns `/var/lib/crew-switch/state.json` and follows the Discord inbox through `crew-switch-watch.service`; `crew-switch-nag.timer` re-sends missing handovers. It accepts only Kyle-authored fixed commands, posts through `cc-send`, and starts/stops plus enables/disables `discord-langston-bridge.service` with two-state read-back. It does not change Coltrane's service.
+
+**SHARED STATE AND ORDERING:** an order moves from open state to immutable history when its required outgoing receipts arrive. Incoming receipts are tracked but never chased and may be added once to a completed history row; they cannot reopen, supersede or revive an order. The inbox offset advances before dispatch, so a failed post cannot replay a state-changing command.
+
+**DOWNSTREAM:** on-duty sessions work in the same four existing folders and resume from the counterpart memory position; Coltrane reads the pushed ref from the read-only mirror. No app process, trading path, database object or market-data component consumes crew-switch state.
+
+**BLAST RADIUS:** trading behaviour none; crew coordination high. Residual automatic wake/alert/hook coverage is `#731` / sprint row 1z.
+

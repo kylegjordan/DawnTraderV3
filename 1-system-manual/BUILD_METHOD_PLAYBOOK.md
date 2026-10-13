@@ -329,3 +329,13 @@ correct fix RED.)
 ★★ **THE RULE, AND IT IS NARROWER THAN "RUN EVERYTHING": ANY GUARD WRITTEN AGAINST AN EXTERNAL CONTRACT IS EXERCISED AGAINST A REAL RESPONSE FROM THAT CONTRACT, AND THE BRANCH EXERCISED IS THE FAILURE BRANCH.**
 ➕ **AND A SECOND CLAUSE, WHICH THE FIRST DOES NOT COVER: A CONTROL STATES ITS EXPECTED OUTPUT BEFORE IT RUNS.** ⚠️ **Measured in the same batch: the failure branch WAS run first, and still returned a pass-shaped result from a control that had processed nothing at all.** Only the pre-stated expectation caught it — two ids were expected and neither appeared.
 ⇒ **Both clauses are independent; either is satisfiable alone; neither alone catches both cases.**
+
+---
+
+## A TEMPORARY CREW MUST PRESERVE ROLES, NOT BORROW NAMES (added 2026-10-13 from `B-CODEX-FAILOVER`)
+
+When the primary agent budget is unavailable, replace each implementation role one-for-one in the same owned folder and give every stand-in its own canonical identity. Do not create parallel worktrees and do not let a stand-in deploy or resolve alerts under the absent agent's name; shared storage plus borrowed identity makes authorship and handover unprovable.
+
+The reviewer role moves as a role too. During this project's Codex shift, Coltrane reads the pushed ref from the existing read-only mirror and Langston is stopped and disabled; when Claude returns, Langston reviews the shift's changes. The implementation/review separation and pushed-ref rule do not change with the model vendor.
+
+A shift is a persisted order, not a message. The outgoing role must park at a step boundary and confirm; missing confirmations are re-sent and escalated. The incoming role's receipt is useful provenance but cannot hold the switch open, because an unopened incoming session cannot safely be made a completion dependency.

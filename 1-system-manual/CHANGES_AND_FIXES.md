@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-13-A — `B-CODEX-FAILOVER` (`#1192`, CC-A / OLD Codex) — a completed handover refused the incoming session's required confirmation
+
+**CLASS: `non_architecture`.** The shift system completed an order when the final outgoing session confirmed, but the order message also required the incoming Codex session to confirm. If that incoming session opened after completion, `crew-switch` refused it with “no open order,” so the required receipt could never be recorded.
+
+**FIX:** an incoming session may add its first receipt to a completed history row. It cannot revive an expired or superseded row, cannot reopen the order, and a duplicate alias cannot change the original timestamp or post twice. Outgoing completion remains immediate, so an unopened incoming session never blocks the shift.
+
+**VERIFIED:** Coltrane reproduced the original refusal from the deployed bytes, then returned PROCEED at `25d7bcf2e`; the exact Helsinki suite passed 41/41 and the inverted predicate reproduced the old failure. Live switch S1 stayed closed while accepting `OLD Codex`, and a repeated `codex old` receipt preserved the timestamp and emitted no second message.
+
 ## FIX-2026-10-07-B — `B-ATR-BAD-PRINT` (architecture, `#1153`, CC-B, found in Kyle's stuck-trades investigation) — one bad print in Kraken's hourly candles set a trade's stop and target
 
 **CLASS: `architecture`.** Scope: `Claude Comms and Packages/Scope Files/B_ATR_BAD_PRINT_SCOPE.md`. Plan row 2a.

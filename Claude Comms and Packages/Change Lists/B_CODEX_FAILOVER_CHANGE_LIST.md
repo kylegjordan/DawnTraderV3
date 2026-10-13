@@ -3,7 +3,7 @@
 | field | value |
 |---|---|
 | **(i) DECLARED CHANGE-CLASS** | `non_architecture` — crew tooling; one code change to the actor table (no trading path) |
-| **(ii) DOC SET** | SCOPE — **absent** · PRE_AUDIT — **absent** · COMPLETION_REPORT, BATCH_CATALOG, PHASE_HISTORY — absent, Step 10-11 · SYSTEM_IMPACT_MAP — **owed at Step 10** (actor table gains the `codex` tag + 5 actors; a new Helsinki component, crew-switch, which also starts/stops Langston's bridge) · SYSTEM_MANUAL — N/A (no trading logic) · RUNNING_ISSUES — present (`#1192`) · SPRINT_TO_LIVE_PLAN row 1y — present · DELETED_COMPONENTS_LOG — N/A · board card — **owed** (none exists; Langston measured) |
+| **(ii) DOC SET** | SCOPE + PRE_AUDIT — present and explicitly labelled retrospective/non-gating · COMPLETION_REPORT — Step 11 · BATCH_CATALOG, PHASE_HISTORY, SYSTEM_IMPACT_MAP, BUILD_METHOD_PLAYBOOK, LANGSTON_ARCHITECTURE, RUNNING_ISSUES, SPRINT_TO_LIVE_PLAN and CC-A task list — Step 10 · SYSTEM_MANUAL — N/A (no trading logic) · DELETED_COMPONENTS_LOG — N/A · board card — present and moved by the owning session |
 | **(iii) STEP-2 REFERENCE** | **NO STEP 2 — Kyle-directed fast path (2026-10-13, at 87% of his weekly Claude allowance). Accepted by Langston for this batch on one condition: the retroactive scope and pre-audit written at Step 10 are LABELLED as not having gated the work and are never cited as though they did (`#1005`).** |
 
 ## Kyle's decisions (2026-10-13, Desktop)
@@ -51,3 +51,9 @@ unchanged, so an unopened incoming session can never block the switch.
 **Regression:** the offline sequence now closes S1 on the fourth outgoing confirmation, accepts `OLD Codex` afterward,
 persists that receipt in S1 history, and proves a repeated reverse-order alias is idempotent. Exact suite: **41 passed,
 0 failed** under `python3 -O` in a private Helsinki temp directory using only the fake sender and fake service.
+
+## Step 8 rerun and live installation — final evidence
+
+**Coltrane verdict: PROCEED at exact shared ref `25d7bcf2e9a546730ba994c93a2bea4271bc9ff4`.** He re-ran the 41-test suite, exercised the outgoing-close → late-incoming → duplicate-alias sequence, and mutation-proved the completed-history predicate by inverting it and reproducing the original refusal.
+
+CI run `38453885686`: TypeScript Check, Test Suite, Build and Docker Build each concluded `success`. The installed Helsinki script and reviewed blob both hashed `aca7b58107da44dc55c065aff7fc944812b29e669ce1292f3e3b813d89f45c42`; the watcher was active and enabled. Live switch S1 stayed closed as `complete`, accepted `OLD Codex` at `2026-10-13T19:36:58Z`, and a repeated `codex old` acknowledgement preserved that timestamp and emitted no second post.

@@ -42,11 +42,7 @@
 
 **★ A GEOMETRY THRESHOLD IS ONLY A DIAL IF THE GATED QUANTITY IS DISTRIBUTED (`#1052`, 2026-09-13):** `atrsToTarget` **IS** `target_exit_atr_multiplier`, a SPIKE ⇒ the reach ceiling is an ON/OFF switch, not a dial (`strong_bull_trend`: 0 of 298,731). ⚠️ **Per strategy — `sma_trend_ride` is continuous.** ⇒ **measure the blast radius before seeding one — rule + numbers in `ADJUSTMENT_FRAMEWORK` and `SYSTEM_MANUAL`.**
 
-**Langston runtime:** **`claude-opus-5[1m]`** (switched 2026-07-27 from Opus 4.8 — now legacy per Anthropic; same price, same 1M context, newer cutoff). **★ His model is set at TWO live sites — switch BOTH or he runs split: `discord-langston-bridge.py:69` (chat) + `langston-call:38` (alert/queue path).** Dispatch model + bridge detail in CLAUDE.md §6/§8; full build record in `LANGSTON_ARCHITECTURE.md`.
-
 **★ LANGSTON = STATELESS per-invoke (fresh `claude -p` each message): multi-turn context goes IN the prompt or a staged file, always (CLAUDE.md §6.5).**
-
-**★ DISCORD CUTOVER + TELEGRAM DECOMMISSION — DONE (#333/#348; record: CLAUDE.md §6/§8 + DELETED_COMPONENTS_LOG).**
 
 **★ CLAUDE.md size — the SUPERSESSION CHAIN:** **2026-06-23 #339 RESOLVED as NO-TRIM** (keep the rich full file; re-grounding in the FULL file is worth more than the tokens) → **2026-07-22 Kyle directed a slim himself**, which produced the **PLACEMENT rule** (#564, batch `B-CLAUDEMD-PLACEMENT`): the operative statement stays in CLAUDE.md; diagnostic depth/evidence/version-history moves to a named runbook with a short pointer. NO-TRIM still holds (nothing deleted/unfindable); this is about WHERE supporting evidence lives, not removing rules.
 
@@ -54,6 +50,8 @@
 
 **★ DEPLOY IDENTITY IS CANONICAL SINCE 2026-09-04 (`B-DEPLOY-ACTOR-ALLOWLIST`, `#656`, CC-B, `a4bcbe3c1`):** `dt-deploy --by` matches a table DERIVED from `ALERT_ACTORS` (non-machine), stores the CANONICAL value, and refuses free text. ⛔ **Read the table from `ALERT_ACTORS`.**
 ⛔⛔ **AND THE ONE EVERY SESSION MUST KNOW (`#1004`): `dt-deploy` DOES NOT INSTALL ITSELF.** A deploy leaves `/usr/local/bin/dt-deploy` untouched — measured. **If you change that script, INSTALL IT BY HAND and verify `sha256sum` equals the blob at the deployed sha.** The comparator exists (`daily_deploy_check.sh:33-38`) and nothing schedules it; arming that is `P19-B12`.
+
+**★ CODEX FAILOVER CREW IS LIVE (`#1192`, 2026-10-13):** each Codex works in its matching Claude folder; Coltrane reviews; `crew-switch` keeps Langston off and records handovers. **Read `crew-switch status` first; off duty means do nothing.** Residual automation: `#731`, row 1z.
 
 **★ THE HOOK LAYER IS LIVE (B-MEASURE-GATE leg 2, closed 2026-09-02, CC-A):** every session now runs warn-only guards at MEASURE time — `guard-measurement-shape` / `guard-stale-fetch` / `guard-ci-cited` (PreToolUse), `guard-result-shape` (PostToolUse), and **`inject-due-alerts` does the §10.5 read as a whole-file hook on every prompt with FULL alert ids** (a `tail -50` saw 4 of 11 due — #980; `CLAUDE.md` fixed 2026-09-29). ⛔ **A guard's silence is NON-EVIDENTIAL — its header says so.** ⛔ **ACK SILENCES AN EVENT-WAIT ALERT and there is no unack verb (#982) — route, don't ack; ANY unresolved row blocks its key's next mint.** Registry: SYSTEM_IMPACT_MAP "Claude Code Hook Layer". Other clones run the version their last session start refreshed (`B-HOOK-ESTATE-VERSION`, CC-C).
 

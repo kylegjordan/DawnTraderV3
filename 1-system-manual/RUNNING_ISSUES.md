@@ -5027,6 +5027,14 @@ return currentPrice <= state.currentStopPrice;
 
 **DISPOSITION: rule 24 outcome (1), real defect, fixed at root.** Not a patch: the encoding fix closes the whole class, and the `else` closes the class of tests that cannot fail. **FIXED — pushed `5c2896938` + rider commit. Related: #702 (blocks), #623 leg 2, #701, `CLAUDE.md` §6.9.**
 
+### #731 OPEN 2026-10-13 (CC-A / OLD Codex; `B-CODEX-FAILOVER` Step 10) — THE CODEX FAILOVER WORKS, BUT ITS AUTOMATIC SAFETY AND ROUTING LAYERS ARE STILL MANUAL
+
+**Measured boundary:** the first Codex shift can load rules, act under canonical identities, review through Coltrane, switch duty and shut Langston down. It does **not** inherit Claude's hooks or wake watcher; alerts routed to the Claude counterpart are found by the Codex session's manual queue read; Coltrane has no automatic alert route; `LANGSTON ON|OFF` contains his name and can wake his bridge before the command disables or enables it; the delivery board has no Codex/Coltrane identity options. These are explicit manual substitutes and UI gaps, not failures of switch S1.
+
+**Batch boundary:** do not add these to the already-reviewed switch. First census the guarantees supplied by Claude hooks/wakes against the manual `AGENTS.md` substitutes; then build only the missing safety behaviour, give Codex/Coltrane first-class board identities without rewriting existing cards, and prevent control commands from becoming reviewer prompts.
+
+`HOME: B-CODEX-FAILOVER-AUTOMATION, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1z, after row 1y` — §9.4 disposition 3. OPEN.
+
 ### #702 OPEN 2026-08-20 (CC-A; raised by Langston at the B-CONDUCT-FILE Step-2 gate, after my own #699/#697 collided with CC-C's) — ISSUE-NUMBER MINTING HAS NO RESERVATION SCHEME, AND SIX ENTRIES CURRENTLY SHARE A NUMBER WITH ANOTHER ENTRY
 HOME (CC-A, W40 census 2026-09-30): `B-GATE-GUARD` (with #745), owner CC-A, placed in PRE_LIVE_SPRINT — the range split was SETTLED 2026-08-20 (`B_CONDUCT_FILE_COMPLETION_REPORT.md`:81); what remains is the minting guard and the four legacy doubles (#642, #646, #660, #668).
 
@@ -11024,7 +11032,8 @@ Read: the loop BREAKS (so the background task ends and the session is notified) 
 
 ### #1192 OPEN 2026-10-13 (CC-A; Kyle's directive 2026-10-12/13) — A CODEX FAILOVER CREW FOR THE WEEKS THE CLAUDE ALLOWANCE RUNS OUT
 **What:** Kyle runs out of weekly Claude allowance before the week resets (87% used on 2026-10-13). One Codex session per Claude folder (OLD/NEW/ANALYST/INFRA Codex, plus one for the Command Center) takes over from its Claude counterpart's POSITION block; Coltrane reviews in place of Langston; Kyle switches back when Claude resets. First shift set up fast-path on 2026-10-13: `AGENTS.md` (`ae9b039a2` + Langston's four corrections: deploys are Kyle's because `dt-deploy --by` refuses any name outside `ALERT_ACTORS`; exit evaluation, price-side guards and DB-governed settings/migrations added to the no-land list; the tsc-baseline re-sync and the measurement and alert-queue duties written in by hand).
-**Not yet built (scaffolding):** no hooks run for Codex; Codex sessions cannot be woken; Coltrane is not wired into Langston's Discord bridge; no switch command; no measurement of how much work a ChatGPT plan buys.
+**Delivered:** four Codex actor identities plus Coltrane are canonical for alerts and deploy attribution; `AGENTS.md` gives each stand-in the same-folder takeover rules; `crew-switch` handles whole-crew, single-session and Langston commands with durable receipts, escalation and read-back; Coltrane reviewed the Step-8 correction at exact shared ref `25d7bcf2e` and returned PROCEED. The installed bytes matched that ref; 41/41 Helsinki tests and all four CI jobs passed; live switch S1 shut Langston down, completed all four outgoing handovers, accepted a late incoming receipt without reopening, and kept its duplicate idempotent.
+**Residuals separated:** the automatic wake/alert/hook and identity-UI gaps are `#731` / row 1z. The push-guard subfolder defect is `#926`; canonical generated-file churn is `#733`; the single-slot deploy provenance limit stays with `#1004` / `P19-B12`.
 `HOME: B-CODEX-FAILOVER, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1y, after row 1x` — §9.4 disposition 3. OPEN.
 
 ### #1193 OPEN 2026-10-13 (CC-A; Langston, `B-CODEX-FAILOVER` §13 FINDING 2) — THE §6 TALLY ALERT IS SILENCED BY ANY COMMIT THAT TOUCHES §6, SO ONE SESSION'S PARTIAL RECOUNT MASKS EVERY OTHER SESSION'S DRIFT
