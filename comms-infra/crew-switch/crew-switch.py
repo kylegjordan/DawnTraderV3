@@ -24,6 +24,12 @@ INBOX = '/var/log/cc-discord-inbox.jsonl'
 CC_SEND = '/usr/local/bin/cc-send'
 SENDER = 'Crew switch'
 KYLE_ENV = '/etc/dawntrader/discord-comms.env'
+# Kyle 2026-10-13: Langston must ACTUALLY stop on a switch to Codex — asking him does not work (each alert and each
+# mention starts a fresh invoke, so a told-to-stop Langston still answered). The only thing on this box that invokes
+# him is this bridge (measured 2026-10-13: no timer or cron calls langston-call), so the switch stops AND disables
+# it, and reads the state back. Switching to Claude enables and starts it again.
+SYSTEMCTL = '/usr/bin/systemctl'
+LANGSTON_UNIT = 'discord-langston-bridge.service'
 NAG_FIRST_S = 15 * 60          # first re-send after 15 min, then hourly
 NAG_EVERY_S = 60 * 60
 EXPIRE_S = 24 * 60 * 60        # B2 (Langston): an unconfirmed switch stops nagging after 24 h and closes as EXPIRED
@@ -77,6 +83,18 @@ def post(msg, notify=False):
     if r.returncode != 0:
         raise SystemExit(f'crew-switch: post FAILED rc={r.returncode}: {r.stderr.strip()[:300]}')
 
+def set_langston(on):
+    """Stop+disable (on=False) or enable+start (on=True) Langston's bridge; return the state READ BACK, never assumed."""
+    verbs = (['enable', 'start'] if on else ['stop', 'disable'])
+    errs = []
+    for v in verbs:
+        r = subprocess.run([SYSTEMCTL, v, LANGSTON_UNIT], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
+    r = subprocess.run([SYSTEMCTL, 'is-active', LANGSTON_UNIT], capture_output=True, text=True, timeout=30)
+    state = r.stdout.strip() or 'unknown'
+    good = (state == 'active') if on else (state in ('inactive', 'failed'))
+    return good, state, errs
+
 def ack_cmd(sid):
     return f"ssh root@204.168.141.77 'crew-switch ack {sid} \"<your name>\"'"
 
@@ -107,6 +125,13 @@ def start(to, by='kyle'):
         st['mode'] = to
         save(st)
     out, inc = CREWS[frm], CREWS[to]
+    good, state, errs = set_langston(on=(to == 'claude'))
+    want = 'ON' if to == 'claude' else 'OFF'
+    if good:
+        post(f"Crew switch {sid}: Langston is {want} (his Discord bridge reads `{state}`).")
+    else:
+        post(f"Kyle — crew switch {sid}: Langston should be {want} but his bridge reads `{state}`"
+             f"{' (' + '; '.join(errs) + ')' if errs else ''}. Check `{LANGSTON_UNIT}` on the Helsinki box.", notify=True)
     if superseded:
         post(f"Crew switch {superseded[0]} closed as SUPERSEDED by {sid}; never confirmed: "
              f"{', '.join(superseded[1]) or 'nobody'}.")

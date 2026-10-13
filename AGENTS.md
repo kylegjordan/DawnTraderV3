@@ -12,7 +12,7 @@
 | `C:\DawnTraderV3-analyst` | **ANALYST Codex** (also "Codex Analyst"; actor `codex-c`) | ANALYST Claude (CC-C) — pricing, VTS, analysis |
 | `C:\DawnTraderV3-infra` | **INFRA Codex** (also "Codex Infra"; actor `codex-infra`) | Infra Claude (CC-INFRA) — servers, comms, Langston's box |
 
-**Coltrane** (the Codex reviewer, sandbox `C:\DawnTrader-Codex`) replaces **Langston** as the reviewer for the shift.
+**Coltrane** (the Codex reviewer: he runs on the Helsinki box with his own Discord bot and his own read-only mirror of the repo) replaces **Langston** as the reviewer for the shift. **He wakes when a Discord post STARTS with "Coltrane"**, exactly as Langston does. During a Codex shift Langston is switched OFF.
 ⛔ Work **directly in your folder above, never in a separate worktree** — worktrees are banned here (they let one session's changes silently undo another's at merge).
 
 ## 2. At the start of every conversation, and after every compaction
@@ -34,7 +34,7 @@
 - **Alerts reach nobody automatically.** Each time Kyle opens you, read the queue: `ssh deploy@188.245.193.8 'python3 -' < scripts/due-alerts.py`. **The alerts routed to your Claude counterpart are yours** (owner CC-A -> OLD Codex, CC-B -> NEW Codex, CC-C -> ANALYST Codex, CC-INFRA -> INFRA Codex); handle them as `CLAUDE.md` section 10.5 and `1-system-manual/ALERT_HANDLING_PROTOCOL.md` say, acting **under your own actor name** (`--by codex-a` etc.), never the Claude one. Do **not** `ack` an alert that is waiting on an event: route it (an ack silences every future occurrence); `resolve` only when fixed, with evidence. Coltrane sorts unrouted alerts during the shift.
 - **Nobody can wake you.** Kyle opens you when he needs you, and may not open all of you. So post **complete** messages — claim, evidence, what you need — never "thoughts?".
 - **Discord** (`#general`): `ssh root@204.168.141.77 'cc-send --sender "<YOUR NAME>" --message "..."'` with your name from §1 (e.g. `OLD Codex`). A message for the reviewer **starts with "Coltrane"**. Kyle may write any name in either order ("Codex Old" = "OLD Codex").
-- **Reviews:** Coltrane reads at a pushed ref, exactly as Langston does — **commit and push to a throwaway `migration/<name>` branch first**, put the change list in `Claude Comms and Packages/Change Lists/`, then ask on Discord (Coltrane, too, works when Kyle opens him).
+- **Reviews:** Coltrane reads at a pushed ref, exactly as Langston does — **commit and push to a throwaway `migration/<name>` branch first**, put the change list in `Claude Comms and Packages/Change Lists/`, then post on Discord starting with "Coltrane" — he wakes on his name and replies in the channel.
 - **Memory:** update your POSITION block in `.claude/memory/MEMORY_CC_<X>.md` at every step boundary and commit it (explicit path). Write `STEP: N of 11 · NEXT STEP: N+1 of 11`.
 
 ## 4. No shift limits: the whole workflow, end to end (Kyle, 2026-10-13)

@@ -16,6 +16,15 @@ os.chmod(fake, 0o700)
 cs.STATE = os.path.join(d, 'state', 'state.json')
 cs.CC_SEND = fake; cs.INBOX = os.path.join(d, 'inbox.jsonl'); cs.KYLE_ENV = os.path.join(d, 'k.env')
 open(cs.KYLE_ENV, 'w').write('KYLE_DISCORD_ID=42\n')
+# A FAKE systemctl: start -> active, stop -> inactive, is-active prints the state. ⛔ The real one must NEVER run
+# under test: a first draft of this file missed the fake and the suite stopped and disabled Langston's LIVE bridge on
+# 2026-10-13 (restored within ~20 s). So the guard below refuses to run at all unless the fake is in place.
+sysd = os.path.join(d, 'unit-state'); open(sysd, 'w').write('active')
+fsc = os.path.join(d, 'systemctl')
+GOOD_SC = '#!/bin/sh\nS=%s\ncase "$1" in start) echo active > $S;; stop) echo inactive > $S;; is-active) cat $S;; esac\nexit 0\n' % sysd
+open(fsc, 'w').write(GOOD_SC); os.chmod(fsc, 0o700)
+cs.SYSTEMCTL = fsc
+assert cs.SYSTEMCTL.startswith(d), 'REFUSING TO RUN: the real systemctl would be called'
 
 P = F = 0
 def ok(name, cond):
@@ -42,7 +51,9 @@ ok('T2 claude infra', cs.ALIASES['claude infra'] == 'Infra Claude'); ok('T2 anal
 # T3 start to codex: mode written, two posts naming every outgoing and incoming session
 cs.start('codex'); st = cs.load(); p = read_posts()
 ok('T3 mode codex (one record, state.json)', st['mode'] == 'codex' and not hasattr(cs, 'MODE_FILE'))
-ok('T3 two posts', len(p) == 2)
+ok('T3 three posts (Langston state, order, on-duty)', len(p) == 3)
+ok('T3 Langston OFF, read back', open(sysd).read().strip() == 'inactive' and 'Langston is OFF' in p[0][3])
+p = p[1:]
 ok('T3 outgoing order names all four Claude sessions', all(n in p[0][3] for n in cs.CREWS['claude']) and 'OUTGOING' in p[0][3])
 ok('T3 on-duty notice names all four Codex sessions + Coltrane', all(n in p[1][3] for n in cs.CREWS['codex'] + ['Coltrane']))
 
@@ -68,6 +79,7 @@ ok('T6 complete', st['switch']['complete'] is True)
 ok('T6 completion notifies Kyle', '--notify' in p[-1] and 'COMPLETE' in p[-1][3])
 cs.start('claude'); st = cs.load()
 ok('T6 back to claude: outgoing is the Codex crew', st['switch']['outgoing'] == cs.CREWS['codex'] and st['mode'] == 'claude')
+ok('T6 Langston ON again, read back', open(sysd).read().strip() == 'active')
 
 # T7 already on the target: no switch, one 'already' post
 st['switch']['complete'] = True; cs.save(st); n2 = len(read_posts()); cs.start('claude')
@@ -79,7 +91,7 @@ cs.start('codex'); s3 = cs.load()['switch']['id']; cs.ack(s3, 'OLD Claude')
 n3 = len(read_posts()); cs.start('claude'); st = cs.load(); p = read_posts()[n3:]
 old = [h for h in st['history'] if h['id'] == s3][-1]
 ok('T8 superseded, not refused', old['closed_as'] == 'superseded' and st['switch']['id'] != s3 and st['mode'] == 'claude')
-ok('T8 names who never confirmed', set(old['never_confirmed']) == {'NEW Claude', 'ANALYST Claude', 'Infra Claude'} and 'SUPERSEDED' in p[0][3])
+ok('T8 names who never confirmed', set(old['never_confirmed']) == {'NEW Claude', 'ANALYST Claude', 'Infra Claude'} and any('SUPERSEDED' in x[3] for x in p))
 
 # T9 B2: after 24 h unconfirmed, nag closes it EXPIRED and tells Kyle once; then nags no more
 st = cs.load(); st['switch']['started_t'] -= 25 * 3600; cs.save(st); n4 = len(read_posts()); cs.nag(); p = read_posts()[n4:]
@@ -95,6 +107,13 @@ ok('T10 safe() survives a failing post', survived)
 cs.CC_SEND = good; n6 = len(read_posts()); cs.safe('near', 'Langston, switch to codex please')
 ok('T10 near-miss posts a not-acted-on note to Kyle', len(read_posts()) == n6 + 1 and 'did NOT act' in read_posts()[-1][3])
 ok('T10 NEAR matches an addressed sentence, TRIGGER does not', bool(cs.NEAR.search('Langston, switch to codex')) and not cs.TRIGGER.match('Langston, switch to codex'))
+
+# T12 a systemctl that cannot stop Langston is reported to Kyle, never assumed
+open(fsc, 'w').write('#!/bin/sh\ncase "$1" in is-active) echo active;; esac\nexit 0\n')
+st = cs.load(); st['switch']['complete'] = True; st['mode'] = 'claude'; cs.save(st); n7 = len(read_posts()); cs.start('codex')
+p = read_posts()[n7:]
+ok('T12 failed stop -> Kyle told, with the read-back state', any('--notify' in x and 'should be OFF' in x[3] and '`active`' in x[3] for x in p))
+open(fsc, 'w').write(GOOD_SC)
 
 # T11 B1: watch advances the offset BEFORE dispatching (a failed dispatch cannot replay)
 open(cs.INBOX, 'w').write(json.dumps({'author_id': 42, 'source': 'discord-cc-bridge', 'kind': '', 'text': 'switch to codex'}) + '\n')
