@@ -138,3 +138,7 @@ Coltrane independently extracted the committed 34-line event slice and reproduce
 ### Coltrane gate 3 — complete source populations committed; review pending
 
 `B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8_EVIDENCE.md` now names two deterministic gzip objects containing every STZ line in the original pre- and post-release ranges. Locally expanding those committed candidates reproduces 10,224 pre-release source lines with 7,900 refusals and 11,424 post-release source lines with 11,418 `XS_FRAME` rows, all `frame=ok`, and zero refusals; the three filtered-stream hashes exactly match the earlier packet. The gate remains open until Coltrane independently re-derives those results from the pushed objects.
+
+### Coltrane gate 4 — BLOCKED on reviewer authority (2026-10-13 19:53-19:54Z; exact ref `5abab2b06`)
+
+The complete source objects are pushed on the graded shared ref and CI run `38458091854` passed all four jobs at their exact commit. Coltrane nevertheless refused the re-review twice: his higher-priority installed `AGENTS.md` excludes him from every routine review and says a repository rule cannot replace that instruction. The repository `AGENTS.md` assigns him this Codex-shift gate and Langston is disabled, so neither reviewer can act without Kyle resolving the instruction conflict. No Step-8 approval is claimed.
