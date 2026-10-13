@@ -3890,6 +3890,14 @@ collision from silent to loud for one session; it does nothing for the other thr
 
 
 
+### #707 OPEN 2026-10-13 (ANALYST Codex / CC-C; CORZ Stage-3 investigation) — **xSTOCK OHLC BARS BECOME AVAILABLE ABOUT 15–16 MINUTES AFTER THEIR KRAKEN `interval_begin`, BUT LIVE AND REPLAY CONSUMERS GENERALLY USE ONLY THE LABEL CLOCK**
+
+The 2026-10-06 CORZ quote-versus-bars gap did not prove that either price side was wrong. It paired receipt-time ticker rows with OHLC values under Kraken's interval label. Current actual-receipt population: **20,151 xStock bars / 465 symbols**, label→`arrived_at` p50 **953.70 s** (min 900.08, p99 962.78); same-writer crypto control **11,677 / 432**, p50 **42.60 s**. A direct equities WebSocket subscription returned a 20:55Z OHLC label at 21:11Z while ticker-last matched the bar close; DawnTrader copies the label unchanged. Across the historical xStock population, receipt-time ticker-last pairing was materially closer than same-label pairing. Yet the scanner calls the latest 15-minute rollup “forming,” and aggregation, replay and calibration select/order on `interval_begin` without an availability predicate. `arrived_at` exists for current rows but was added for writer ordering, not decision-time semantics.
+
+**Rule-24 outcome (3): legacy no longer fits today's intent.** B74 was explicitly a sink-only raw archive with pass-through labels and no quality checks; B-NEW-34 later promoted it to live source-of-truth without defining bar availability. The producer is not declared defective, and the evidence does not decide whether Kraken publishes event-time bars late, uses shifted labels, or delays the whole equities feed while ticker lacks a source timestamp. No unilateral +15-minute normalization.
+
+**§9.4 disposition (3):** `HOME: B-XSTOCK-BAR-AVAILABILITY, owner CC-C, placed in SPRINT_TO_LIVE_PLAN.md pre-sprint Stage 3, after the CORZ investigation and before B-CRON-MISSED-CATCHUP.` Contract decision first; then ingress/aggregation/cache/scanner/replay/calibration/provenance move together. Full evidence and competing states: `Claude Comms and Packages/Scope Files/CORZ_QUOTE_VS_BARS_INVESTIGATION_2026-10-13.md`. **OPEN.**
+
 ### #706 CLOSED-BY-KYLE-RULING 2026-08-20 (CC-C measured; Kyle ruled the same day) — **THE 24-HOUR KILL SWITCH STAYS AS IS: IT IS A CATASTROPHIC-LOSS BACKSTOP, NOT A DAILY-LOSS GOVERNOR, AND THAT IS ITS INTENT**
 
 **Kyle asked (2026-08-20):** the 24h loss-evaluation kill switch was *"something I had built in and just came up with on my own in the early days... I didn't do any research on if this is the best or the smartest way to prevent catastrophic losses"* — and asked for research plus CC-C's own view, explicitly open to tearing it out.
