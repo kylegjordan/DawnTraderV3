@@ -1,16 +1,46 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — STZ STEP 8 IMMUTABLE EVIDENCE
 
-Captured from staging by ANALYST Codex at `2026-10-13T19:03:08Z` after Coltrane's first review returned `CHANGES NEEDED` because his host has no staging SSH identity. This file preserves the fixed-window command stdout and the SHA-256 of each exact filtered byte stream so the review is against a committed object rather than the implementer's verdict.
+Captured from staging by ANALYST Codex at `2026-10-13T19:03:08Z` after Coltrane's first review returned `CHANGES NEEDED` because his host has no staging SSH identity. Coltrane later accepted the committed 34-line event slice but superseded his initial sustained-window approval at 19:20Z: counts and digests without the source bytes were not independently re-derivable. This packet now includes the complete fixed-window STZ source slices behind every sustained-result count.
 
 ## Provenance
 
 - Host: staging, `188.245.193.8`, read as `deploy`.
 - Source: `/var/log/dawntrader/error.log`.
 - Source stat at capture: inode `305737`, size `408391393` bytes, mtime `2026-10-13 19:03:08.448329716 +0000`.
+- Complete-source check: the same inode was size `420633995` bytes at `2026-10-13 19:49:21.480320007 +0000`; both slice cutoffs precede the original capture, so later append-only growth is outside these populations.
 - Deployed repo head: `94bf16d1022b8cb24c027df9aa721fb1d0333f18`.
 - `/home/deploy/dawntrader-deploy.record` SHA-256: `a313d4cb77058170614b11574987c40ace2ae92ea6269c08a16adbc29965c10a`.
 - Hash convention: each SHA-256 is over the exact LF-terminated stdout byte stream produced by the pipeline shown for that population.
 - Fixed populations: event slice `13:45:00-13:45:39Z`; post-release decisions/refusals `13:46:00-18:44:11Z`; positive-control refusals `09:29:01-13:45:29Z`.
+
+## Complete fixed-window source objects
+
+Both artifacts contain every `STZ/USD` line selected by the original fixed-window `sed` range, not only lines that satisfy the claimed outcome. They were compressed with `gzip -n -9`, so the gzip bytes do not contain a capture timestamp. In particular, the complete post-release object is the independently inspectable population from which a reviewer can establish both 11,418 usable frames and the absence of any renewed refusal.
+
+| Object | Expanded population | Expanded bytes / SHA-256 | Gzip bytes / SHA-256 |
+|---|---|---|---|
+| `evidence/B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8/pre-release-STZ.log.gz` | 10,224 STZ lines; first `09:29:01`, last `13:45:29` | 1,783,780 / `fb52cf5d21aac5187db19c8484bfd5165a22349d0d65f50b32f4b5f67b55358c` | 63,450 / `50a9fbfb06a53a86d4c3c842e1a3ef657cedeb3687773431c7afeb42021a886a` |
+| `evidence/B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8/post-release-STZ.log.gz` | 11,424 STZ lines; first `13:46:00`, last `18:44:11` | 3,206,257 / `001fed2ede39f78ef02c4850a281834b3338f3ecf26dab969fe0350729bea785` | 66,065 / `7ac3ae1f35de1b8b7e50bc44e5a1ac74716667b02503fbc73d50f0cbb4e9755f` |
+
+### Re-derive from committed source objects
+
+```bash
+PRE='Claude Comms and Packages/Change Lists/evidence/B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8/pre-release-STZ.log.gz'
+POST='Claude Comms and Packages/Change Lists/evidence/B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8/post-release-STZ.log.gz'
+
+gzip -cd "$PRE" | wc -l
+gzip -cd "$PRE" | grep -F 'REFUSE unvalidated' | wc -l
+gzip -cd "$PRE" | grep -F 'REFUSE unvalidated' | sha256sum
+
+gzip -cd "$POST" | wc -l
+gzip -cd "$POST" | grep -F '[3n.q7][XS_FRAME] STZ/USD' | wc -l
+gzip -cd "$POST" | grep -F '[3n.q7][XS_FRAME] STZ/USD' | sed -n 's/.* frame=\([^ ]*\).*/\1/p' | sort | uniq -c
+gzip -cd "$POST" | grep -F '[3n.q7][XS_FRAME] STZ/USD' | sha256sum
+gzip -cd "$POST" | grep -F 'REFUSE unvalidated' | awk 'END{print NR}'
+gzip -cd "$POST" | grep -F 'REFUSE unvalidated' | sha256sum
+```
+
+Expected output is 10,224 pre-release source lines with 7,900 refusals; 11,424 post-release source lines with 11,418 `XS_FRAME` rows in the sole `ok` bucket and zero refusals. The filtered hashes reproduce `47e9aa0e...ff99c`, `e0287505...27c34`, and the empty-stream `e3b0c442...b855` recorded below.
 
 ## Captured counts and stream hashes
 
@@ -86,4 +116,4 @@ grep -F 'STZ/USD' /var/log/dawntrader/error.log | sed -n '/^2026-10-13 09:29:01/
 grep -F 'STZ/USD' /var/log/dawntrader/error.log | sed -n '/^2026-10-13 09:29:01/,/^2026-10-13 13:45:29/p' | grep -F 'REFUSE unvalidated' | sha256sum
 ```
 
-The committed event slice is independently hashable from this file after extracting the fenced block. The two larger fixed-window streams are represented by their complete command stdout counts and SHA-256 digests; no moving end time is used.
+The committed event slice is independently hashable from this file after extracting the fenced block. The two larger fixed-window populations are present above as complete compressed STZ source objects; no moving end time is used.
