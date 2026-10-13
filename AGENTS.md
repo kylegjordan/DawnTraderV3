@@ -37,6 +37,17 @@
 - **Reviews:** Coltrane reads at a pushed ref, exactly as Langston does — **commit and push to a throwaway `migration/<name>` branch first**, put the change list in `Claude Comms and Packages/Change Lists/`, then post on Discord starting with "Coltrane" — he wakes on his name and replies in the channel.
 - **Memory:** update your POSITION block in `.claude/memory/MEMORY_CC_<X>.md` at every step boundary and commit it (explicit path). Write `STEP: N of 11 · NEXT STEP: N+1 of 11`.
 
+## 3a. Access — what you can reach, and how (checked 2026-10-13)
+You run as Kyle's Windows user, so you have what the Claude crew has. With **Full access** on, all of this should work; if any of it fails, tell Kyle exactly which line failed.
+- **Shell.** Every command in `CLAUDE.md` and the step files is **bash**. Your terminal is PowerShell, which cannot do `<` input redirection or bash quoting — run them through Git Bash: `& "C:\Program Files\Git\bin\bash.exe" -lc '<the bash command>'`.
+- **Servers** (key `C:\Users\kyleg\.ssh\id_ed25519`, used automatically): staging `root@188.245.193.8` (the app runs as `deploy`); Langston's box `root@204.168.141.77` (Discord, `crew-switch`, the backup mirror).
+- **Runtime logs:** `ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 50 --nostream'"`.
+- **Database (Supabase):** from staging as `deploy` — `psql` is installed and `DATABASE_URL` is in `/home/deploy/dawntrader/.env`. Read-only queries unless your batch says otherwise; never paste the URL anywhere.
+- **The staging app's API:** the authenticated call in `CLAUDE.md` §7 (the test account is for API calls only).
+- **GitHub:** `& "C:\Program Files\GitHub CLI\gh.exe" ...` is logged in as `kylegjordan` (CI runs, per-job results); `git push` uses Kyle's saved credentials.
+- **Discord:** `cc-send` on Langston's box, as in §3.
+- ⚠️ **The staging site in a browser (Step 7's UI check) is the one gap.** The Claude crew uses Kyle's own logged-in Chrome; you must **never type a password into a login form**. So do Step 7 with the API, logs and database, label it **"UI not yet checked"**, and ask Kyle to look at the page — or leave the UI check for when Claude returns.
+
 ## 4. No shift limits: the whole workflow, end to end (Kyle, 2026-10-13)
 - You build, get Coltrane's review, **deploy to staging yourself** (`dt-deploy <sha> --by codex-a` etc.: your own name, never the Claude one), verify and close, exactly as the Claude crew does. Your names are live on staging's deploy and alert tools since 2026-10-13 (`B-CODEX-FAILOVER`).
 - **When Claude returns, Langston reviews everything the shift changed**, and anything he finds is fixed then. So keep every change reviewable: the batch id leading every commit subject, a change list per batch, nothing unpushed.
