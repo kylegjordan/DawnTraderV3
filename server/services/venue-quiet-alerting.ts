@@ -12,8 +12,12 @@
  *     QUIET iff T < `quiet_ticking_min`; THIN iff T < `thin_ticking_min` ⇒ cannot tell a quiet venue from an impaired
  *     feed ⇒ PAGE (default-to-page, Langston r1 Q2). A quiet-family escalation on a QUIET class joins ONE per-class
  *     standing record (`venue-quiet-<mode>-xstock_spot`, info, not delivered to Discord) instead of a per-symbol page.
+ *     r7: OUTSIDE the US regular session a quiet-market streak joins on any verdict but `thin`/unreadable — the 60 s count
+ *     cannot describe an off-session minute against a 15 s ceiling (FAIL-3). In session the cohort test runs as above.
+ *   - BOOT: until the count is warm (a full window after this process's first update frame, bounded by `NOT_WARM_GRACE_MS`
+ *     from engine start) an xStock streak skips without escalating — an EMPTY count is not a `thin` reading (r7, A.7).
  *   - DURATION: a standing-record member still unpriced `escalate_after_ms` after the class stopped being quiet pages on
- *     its own key (the market resumed; this symbol did not).
+ *     its own key (the market resumed; this symbol did not). r7: the clock also resets when the regular session ends.
  *   - THE CLEAR (#638), off the exit path and driven by a RE-MEASURED condition, never by the in-memory streak (a restart
  *     loses the streak): a `price-skip-<mode>-<SYMBOL>` row resolves once this engine has priced the symbol's position
  *     AFTER the row was minted, or once no position is open on the symbol; the standing record resolves when the class is
@@ -28,9 +32,9 @@
  */
 import { getCachedNumberRequired } from './module-constants-service.js';
 import { QUOTE_LEN_MIN, QUOTE_LEN_MAX } from '../../shared/asset-classes.js';
-import { countEquitySymbolsUpdatedSince, EQUITY_TICKING_WINDOW_MS } from './passive-archive/equity-spot-archiver.js';
+import { countEquitySymbolsUpdatedSince, EQUITY_TICKING_WINDOW_MS, isEquityTickingCountWarm } from './passive-archive/equity-spot-archiver.js';
 import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
-import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
+import { getXstockSession, type XstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 
 /** `closed` (r4, row 3a1 Step 9): the venue's scheduled weekend close (Fri 20:00 → Sun 20:00 ET, `isInXstockWeekendClose`,
  *  DST-aware). Nothing can tick, so `thin` there is the calendar, not a dying feed — measured 2026-10-10 (Saturday): `thin`
@@ -54,6 +58,8 @@ export const clearEvidence = {
   positionClosed: (positionId: string) => `POSITION-CLOSED position=${positionId}`,
   pricedAfterMint: (positionId: string) => `PRICED-AFTER-MINT position=${positionId}`,
   supersededByDurationPage: (positionId: string) => `SUPERSEDED-BY-DURATION-PAGE position=${positionId}`,
+  // r7 (FINDING-1): an off-session row still held when the regular session opens, its position handed back to the engine.
+  supersededBySessionChange: (positionId: string) => `SUPERSEDED-BY-SESSION-CHANGE position=${positionId}`,
 } as const;
 
 export function isQuietMarketReason(reason: string): boolean {
@@ -84,7 +90,11 @@ export function familyJoinsStandingRecord(family: ReasonFamily, verdict: ClassVe
   if (verdict === null) return false;                                   // config unreadable ⇒ page
   if (verdict === 'closed') return family !== 'other';                  // the venue is shut: nothing it does is a fault
   if (verdict === 'thin') return false;                                 // arm (ii): our feed impaired ⇒ page
-  if (family === 'quiet_market') return verdict === 'quiet';
+  // r7 (row 3a1 Step 9, FAIL-3): outside the US regular session a quiet-market streak joins whatever the cohort count.
+  // `T` is a 60 s union and the ceiling it excuses is 15 s, so off-session it saturates on the wind-down, the ramp-up and a
+  // burst writer — n = 3 false pages on 2026-10-12, all off-session, when 69 % of the cohort was stale by the same standard
+  // (Langston; `Langston Design Asks/B_VENUE_QUIET_ALERTING_STEP9_R7_DESIGN.md` A.2-A.5). In session the two clocks agree.
+  if (family === 'quiet_market') return verdict === 'quiet' || getXstockSession(nowMs) !== 'regular';
   if (family === 'book_state') return getXstockSession(nowMs) !== 'regular';  // arm (i): page inside the regular session
   return false;
 }
@@ -137,6 +147,14 @@ export function measureXstockTicking(nowMs: number): number {
   return countEquitySymbolsUpdatedSince(nowMs - TICKING_WINDOW_MS);
 }
 
+/** r7 (Langston BLOCKER-1, row 3a1 Step 9): may an xStock streak escalate on `T` yet? Not while the count is an EMPTY
+ *  instrument after a restart — until a full window has passed since this process's first update frame. Bounded and
+ *  fail-closed, the `NOT_WARM_GRACE_MS` boot-ordering pattern: once `engineAgeMs` reaches it the count is used as it stands,
+ *  so a feed that never delivers an update frame reads `T = 0` ⇒ `thin` ⇒ pages within 120 s. Not a widening of `thin`. */
+export function xstockCountColdHoldsEscalation(nowMs: number, engineAgeMs: number): boolean {
+  return !isEquityTickingCountWarm(nowMs) && engineAgeMs < NOT_WARM_GRACE_MS;
+}
+
 /** The cold/unseeded split (Langston r2 C3) — `module-constants-service` throws two distinguishable messages. */
 export function classifyKnobError(err: unknown): 'not_warm' | 'unseeded' {
   const msg = err instanceof Error ? err.message : String(err);
@@ -162,12 +180,15 @@ export interface SweepAlertRow {
   created_at: string;
   metadata?: Record<string, unknown>;
 }
-export interface SweepPosition { id: string; symbol: string }
+export interface SweepPosition { id: string; symbol: string; assetClass?: string | null }
 
 export interface SweepDeps {
   listAlerts: () => SweepAlertRow[];
   resolveByKey: (key: string, by: string, evidence: string, transport: 'engine') => Promise<string[]>;
   addAlert: (opts: Record<string, unknown>) => Promise<{ id: string }>;
+  /** r7 (FINDING-1): clear the engine's escalation latch and skip streak for a position, so its next skips are judged afresh
+   *  by the engine's own rule. In memory; it cannot fail. */
+  clearLatch: (positionId: string) => void;
 }
 
 /**
@@ -185,6 +206,8 @@ export class VenueQuietState {
   notQuietSince: number | null = null;               // when the xStock class last turned not-quiet
   failingSince = new Map<string, number>();          // dedupe key -> first failed resolve, this process
   lastVerdict: ClassVerdict | null = null;
+  /** r7: the US session at the previous sweep — so the duration clock can be reset when the regular session ENDS. */
+  lastSession: XstockSession | null = null;
 
   notePriced(positionId: string, nowMs: number): void { this.lastPricedAt.set(positionId, nowMs); }
 
@@ -195,8 +218,14 @@ export class VenueQuietState {
     // when the class turns thin it cannot re-page through the rail and the duration path is its only rescue (Langston
     // Step-4 BLOCKER-2). What `thin` must NOT do is read as "the venue resumed" — see the resolve and the prose below.
     // r4: a scheduled close is no more a "not-quiet" window than a quiet market is — the clock does not run across a weekend.
-    if (v === 'quiet' || v === 'closed') { this.notQuietSince = null; this.durationEscalated.clear(); }
-    else if (this.notQuietSince === null) this.notQuietSince = nowMs;
+    // r7 (Langston BLOCKER-2, 2026-10-13): nor across the DAILY close. On 10-12 the clock ran from 13:45:37Z through 391
+    // not-quiet sweeps, so at 20:16:51Z it read 6 h 31 m against 30 min: a member joining after the close would have been
+    // duration-paged at the next not-quiet flicker (4 of 19 sweeps in the wind-down) with a "the cohort was updating" body.
+    const session = getXstockSession(nowMs);
+    const leftRegular = this.lastSession === 'regular' && session !== 'regular';
+    this.lastSession = session;
+    if (v === 'quiet' || v === 'closed' || leftRegular) { this.notQuietSince = null; this.durationEscalated.clear(); }
+    if (v !== 'quiet' && v !== 'closed' && this.notQuietSince === null) this.notQuietSince = nowMs;
     this.lastVerdict = v;
   }
 }
@@ -264,7 +293,16 @@ export async function sweepVenueQuiet(args: {
         continue;
       }
       const priced = positions.find((p) => pricedAfter(p, createdMs));
-      if (priced) await tryResolve(key, clearEvidence.pricedAfterMint(priced.id)); // the RE-MEASURED position's uuid (Langston record fix)
+      if (priced) { await tryResolve(key, clearEvidence.pricedAfterMint(priced.id)); continue; } // the RE-MEASURED position's uuid (Langston record fix)
+      // r7 (FINDING-1): a row minted OUTSIDE the regular session and still held when it is regular would swallow the in-session
+      // page the rule promises — the engine latches before it decides and never sees its mint swallowed. Hand the position back
+      // to the engine's own rule: clear its latch FIRST (in memory, cannot fail), then resolve; a failed resolve retries next
+      // sweep (Langston's ordering, 2026-10-13). The sweep mints nothing: the streak re-crosses in session and is judged there.
+      const xs = positions.find((p) => p.assetClass === 'xstock_spot');
+      if (xs && getXstockSession(createdMs) !== 'regular' && getXstockSession(nowMs) === 'regular') {
+        deps.clearLatch(xs.id);
+        await tryResolve(key, clearEvidence.supersededBySessionChange(xs.id));
+      }
       continue;
     }
     if (key === standingKey(mode)) {

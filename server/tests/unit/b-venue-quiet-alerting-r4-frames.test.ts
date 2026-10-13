@@ -21,8 +21,9 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', async (importOr
 
 import {
   _handleMessageForTests, _resetTickerUpdateClockForTests, _getTickerSnapsByTypeForTests, countEquitySymbolsUpdatedSince,
-  getLatestEquityTick,
+  getLatestEquityTick, isEquityTickingCountWarm,
 } from '../../services/passive-archive/equity-spot-archiver.js';
+import { xstockCountColdHoldsEscalation } from '../../services/venue-quiet-alerting.js';
 
 const frame = (o: unknown) => Buffer.from(JSON.stringify(o));
 const snap = (type: string | undefined, symbols: string[]) =>
@@ -53,6 +54,23 @@ describe('r4: only a venue update counts as ticking', () => {
     _handleMessageForTests(snap('update', ['AAPL/USD']));
     _handleMessageForTests(snap(undefined, ['ORCL/USD']));
     expect(_getTickerSnapsByTypeForTests()).toEqual({ update: 1, snapshot: 2, other: 1 });
+  });
+  it('r7 (Langston BLOCKER-1): the count is COLD until a full window after the first UPDATE frame; a snapshot never warms it', () => {
+    const t0 = Date.now();
+    expect(isEquityTickingCountWarm(t0)).toBe(false);
+    _handleMessageForTests(snap('snapshot', ['AAPL/USD', 'MSFT/USD']));   // the subscribe replay after a restart
+    expect(isEquityTickingCountWarm(t0 + 10 * 60_000)).toBe(false);
+    _handleMessageForTests(snap('update', ['AAPL/USD']));
+    const first = Date.now();
+    expect(isEquityTickingCountWarm(first + 30_000)).toBe(false);
+    expect(isEquityTickingCountWarm(first + 60_000)).toBe(true);
+  });
+  it('r7: the hold is bounded and fail-closed — cold inside NOT_WARM_GRACE_MS holds, past it never does', () => {
+    const now = Date.now();
+    expect(xstockCountColdHoldsEscalation(now, 56_000)).toBe(true);
+    expect(xstockCountColdHoldsEscalation(now, 120_000)).toBe(false);
+    _handleMessageForTests(snap('update', ['AAPL/USD']));
+    expect(xstockCountColdHoldsEscalation(Date.now() + 60_000, 56_000)).toBe(false); // warm ⇒ never holds
   });
   it('the window bounds the count: an update older than `sinceMs` is not ticking now', () => {
     _handleMessageForTests(snap('update', ['AAPL/USD']));

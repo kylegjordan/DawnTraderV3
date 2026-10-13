@@ -98,7 +98,9 @@ describe('the rule', () => {
   it('r5 the minority veto: the streak joins only if EVERY family in it would; an empty set never joins', () => {
     expect(joinsStandingRecord(['quiet_market', 'book_state'], 'quiet', WEEKDAY)).toBe(false);    // book-state in liquid hours vetoes
     expect(joinsStandingRecord(['quiet_market', 'book_state'], 'quiet', AFTER_HOURS)).toBe(true);
-    expect(joinsStandingRecord(['book_state', 'quiet_market'], 'not_quiet', AFTER_HOURS)).toBe(false); // the quiet arm vetoes
+    // r7 (FAIL-3): off-session the quiet arm no longer reads the cohort, so it no longer vetoes there; in session it still does.
+    expect(joinsStandingRecord(['book_state', 'quiet_market'], 'not_quiet', AFTER_HOURS)).toBe(true);
+    expect(joinsStandingRecord(['book_state', 'quiet_market'], 'not_quiet', WEEKDAY)).toBe(false);   // in session: both page
     expect(joinsStandingRecord(['quiet_market', 'other'], 'closed', SATURDAY)).toBe(false);
     expect(joinsStandingRecord([], 'quiet', AFTER_HOURS)).toBe(false);
     expect([...familiesOf({ equity_tick_stale_classwide: 30, book_state_unvalidated: 10, rest_failed: 0 })].sort()).toEqual(['book_state', 'quiet_market']);
@@ -107,8 +109,9 @@ describe('the rule', () => {
 
 // The 46 price-skip rows minted 2026-10-06 after 19:30Z, with the trailing-60 s T at each row's created_at (measured on
 // staging 2026-10-07; re-derived by Langston). One row is NOT quiet-family: HUT/USD 20:17:34Z is a book-state refusal.
-// A book-state row MUST carry its own instant: that family's rule reads the US session at that instant, and ~9 of these
-// rows fall in the 19:30-20:00Z regular window (Langston, 3a1 r5 record item 2). The type makes the instant mandatory.
+// A book-state row MUST carry its own instant: that family's rule reads the US session at that instant. ⚠️ CORRECTED r7: the
+// earlier note here said ~9 rows fall in the 19:30-20:00Z regular window — the store says otherwise: the first of the 46 is
+// NWL at 20:17:17.895Z, so every row is AFTER HOURS (re-read 2026-10-13). The type makes the instant mandatory.
 type ReplayRow = [string, number, 'quiet'] | [string, number, 'book_state', string];
 const REPLAY: ReplayRow[] = [
   ['NWL', 401, 'quiet'], ['HUT', 389, 'book_state', '2026-10-06T20:17:34Z'], ['NVT', 245, 'quiet'], ['CAG', 236, 'quiet'], ['ARKK', 195, 'quiet'],
@@ -122,27 +125,34 @@ const REPLAY: ReplayRow[] = [
   ['CAG', 136, 'quiet'], ['PDD', 137, 'quiet'], ['ALB', 133, 'quiet'], ['NET', 127, 'quiet'], ['HUM', 147, 'quiet'],
   ['OKTA', 125, 'quiet'],
 ];
-// Every replay row is from 2026-10-06 after 19:30Z. The replay calls the PRODUCTION predicate for both families (r5, Langston
-// r4 record item b). The quiet family never reads the session, so its rows need no instant; a book-state row is judged at
-// its OWN instant (r5 record item 2) — HUT at 20:17:34Z = 16:17 ET, after hours.
-const QUIET_ROWS_AT = Date.parse('2026-10-06T20:00:00Z'); // unused by the quiet family's rule; any instant in the window
-const atOf = (r: ReplayRow) => (r[2] === 'book_state' ? Date.parse(r[3]) : QUIET_ROWS_AT);
-const pages = (rows: ReplayRow[], rule: (t: number) => string) =>
-  rows.filter((r) => !joinsStandingRecord([r[2] === 'quiet' ? 'quiet_market' : 'book_state'], rule(r[1]) as any, atOf(r)));
+// Every replay row is from 2026-10-06 at or after 20:17:17Z — after hours. The replay calls the PRODUCTION predicate for both
+// families (r5, Langston r4 record item b). r7: the quiet family now reads the session too, so its rows are judged at the
+// first row's own instant (NWL 20:17:17.895Z, 16:17 ET); `inSession` re-judges them at a regular-session instant, which is
+// what the cohort test still decides. A book-state row is judged at its OWN instant (r5 record item 2).
+const QUIET_ROWS_AT = Date.parse('2026-10-06T20:17:17.895Z');
+const atOf = (r: ReplayRow, inSession = false) => (r[2] === 'book_state' ? Date.parse(r[3]) : inSession ? WEEKDAY : QUIET_ROWS_AT);
+const pages = (rows: ReplayRow[], rule: (t: number) => string, inSession = false) =>
+  rows.filter((r) => !joinsStandingRecord([r[2] === 'quiet' ? 'quiet_market' : 'book_state'], rule(r[1]) as any, atOf(r, inSession)));
 describe('PRE-REGISTERED replay (pre-audit A3, corrected by Langston C1 before any code)', () => {
   it('46 rows; quiet-family pages: 1 of the first-hour 14, 1 of 45; HUT (a book-state hold after hours) no longer pages (r4, Kyle 2026-10-09)', () => {
     expect(REPLAY).toHaveLength(46);
     const verdict = (t: number) => classVerdict(t, CFG, WEEKDAY);
     const quietFam = REPLAY.filter((r) => r[2] === 'quiet');
     expect(quietFam).toHaveLength(45);
-    expect(pages(quietFam, verdict).map((r) => r[0])).toEqual(['NWL']);
-    expect(pages(quietFam.slice(0, 14), verdict).map((r) => r[0])).toEqual(['NWL']);
-    expect(pages(REPLAY, verdict).map((r) => r[0])).toEqual(['NWL']);
+    // r7 (FAIL-3): NWL's T=401 page at 20:17:17Z was the same wind-down edge as INVH 2026-10-12 20:16:54Z (T=410) — the
+    // pre-audit predicted it as the one row that would still page. Off-session it now joins; nothing in the replay pages.
+    expect(pages(quietFam, verdict)).toEqual([]);
+    expect(pages(REPLAY, verdict)).toEqual([]);
+    // In session the cohort test is unchanged: judged at a regular-session instant, NWL (T=401) is still the one that pages.
+    expect(pages(quietFam, verdict, true).map((r) => r[0])).toEqual(['NWL']);
+    expect(pages(quietFam.slice(0, 14), verdict, true).map((r) => r[0])).toEqual(['NWL']);
   });
   it('MUTATION: with the QUIET test inverted, the replay pages 44 of 46 (every quiet-family row but NWL; HUT joins after hours either way)', () => {
     const inverted = (t: number) => (classVerdict(t, CFG, WEEKDAY) === 'quiet' ? 'not_quiet' : 'quiet');
-    expect(pages(REPLAY, inverted)).toHaveLength(44);
-    expect(pages(REPLAY, inverted).some((r) => r[0] === 'NWL' && r[1] === 401)).toBe(false); // the T=401 NWL row is the one it drops
+    // r7: judged IN SESSION, where the cohort test still decides (off-session the quiet family joins on any verdict but thin).
+    expect(pages(REPLAY, inverted, true)).toHaveLength(44);
+    expect(pages(REPLAY, inverted, true).some((r) => r[0] === 'NWL' && r[1] === 401)).toBe(false); // the T=401 NWL row is the one it drops
+    expect(pages(REPLAY, inverted)).toEqual([]); // off-session the inverted cohort test cannot page a quiet-only streak
   });
 });
 
@@ -290,6 +300,23 @@ describe('engine — escalation', () => {
     await record.call(old, XS, 'equity_tick_stale_classwide');
     expect(keys()).toEqual(['price-skip-paper-CAG/USD']);
   });
+  // r7 (Langston BLOCKER-1): no frame has reached the archiver in this file, so the count is COLD — the restart state.
+  it('r7 BLOCKER-1: a COLD count after a restart holds xStock escalation inside the boot grace; past it, T=0 reads thin and pages', async () => {
+    m.T = 0;
+    const fresh = engine(56_000);   // the 10-10 restarts re-crossed at ~56 s
+    for (let i = 0; i < 50; i++) await record.call(fresh, XS, 'equity_tick_stale_classwide');
+    expect(m.addAlert).not.toHaveBeenCalled();
+    expect(fresh._priceSkipEscalated.size).toBe(0);
+    const old = engine(120_000);    // NOT_WARM_GRACE_MS reached: a feed that never delivered an update frame announces itself
+    for (let i = 0; i < 40; i++) await record.call(old, XS, 'equity_tick_stale_classwide');
+    expect(keys()).toEqual(['price-skip-paper-CAG/USD']);
+    expect(m.addAlert.mock.calls[0][0].metadata.classVerdict).toBe('thin');
+  });
+  it('r7: the cold equities count never holds a crypto streak', async () => {
+    const fresh = engine(56_000);
+    for (let i = 0; i < 40; i++) await record.call(fresh, { id: 'pos-c', symbol: 'BTC/USD', assetClass: 'crypto_spot' }, 'rest_failed');
+    expect(keys()).toEqual(['price-skip-paper-BTC/USD']);
+  });
 });
 
 // ── the clearing sweep ───────────────────────────────────────────────────────────────────────────────────────────
@@ -301,6 +328,7 @@ function deps(rows: any[], resolveImpl?: (k: string) => Promise<string[]>) {
     listAlerts: () => rows,
     resolveByKey: vi.fn(async (k: string) => (resolveImpl ? resolveImpl(k) : ['res-' + k])),
     addAlert: vi.fn(async (o: any) => ({ id: 'new-' + o.dedupe_key })),
+    clearLatch: vi.fn(),
   };
 }
 describe('sweep — resolve on a RE-MEASURED condition', () => {

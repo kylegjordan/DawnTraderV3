@@ -59,7 +59,7 @@ import { KrakenService } from '../exchanges/kraken/kraken.js';
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
 import {
   VenueQuietState, classVerdict, classifyKnobError, configKey, reasonFamilyOf, familiesOf, joinsStandingRecord, measureXstockTicking,
-  NOT_WARM_GRACE_MS, readVenueQuietConfig, standingKey, sweepVenueQuiet, type ClassVerdict,
+  NOT_WARM_GRACE_MS, readVenueQuietConfig, standingKey, sweepVenueQuiet, xstockCountColdHoldsEscalation, type ClassVerdict,
 } from './venue-quiet-alerting.js';
 // B65.2: centralized exit-decision primitive shared with VTS
 import { evaluateTECExit } from './tec-evaluator';
@@ -830,6 +830,10 @@ export class ActiveExecutionEngine {
         });
       } catch { /* the escalation below still pages */ }
     }
+    // r7 (row 3a1 Step 9, Langston BLOCKER-1): after a restart the cohort count is empty, so `T = 0` reads `thin` and every
+    // xStock streak would page (16 per bounce on 2026-10-10). While the count is cold, skip this tick without escalating —
+    // the same boot-ordering bound as the cold knob above, bounded and fail-closed by NOT_WARM_GRACE_MS.
+    if (_cls === 'xstock_spot' && _knob === 'ok' && xstockCountColdHoldsEscalation(Date.now(), Date.now() - this._engineConstructedAt)) return;
     const _crossed = _knob !== 'ok' || streak >= (threshold as number);
     if (_crossed && !this._priceSkipEscalated.has(position.id)) {
       this._priceSkipEscalated.add(position.id);
@@ -921,7 +925,7 @@ export class ActiveExecutionEngine {
    * B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep, at most once a minute, AFTER the exit cycle and awaited by
    * nothing on the exit path. Re-measures (never remembers) and resolves cleared rows; never throws.
    */
-  private async _runVenueQuietSweep(open: Array<{ id: string; symbol: string }>): Promise<void> {
+  private async _runVenueQuietSweep(open: Array<{ id: string; symbol: string; assetClass?: string | null }>): Promise<void> {
     const now = Date.now();
     if (now - this._lastVenueQuietSweepAt < 60_000) return;
     this._lastVenueQuietSweepAt = now;
@@ -932,7 +936,9 @@ export class ActiveExecutionEngine {
       const { readAllAlerts, resolveAlertsByDedupeKey, addAlert } = await import('./system-alerts.js');
       const r = await sweepVenueQuiet({
         mode: this.mode, nowMs: now, openPositions: open, state: this._venueQuiet, cfg, verdict,
-        deps: { listAlerts: readAllAlerts, resolveByKey: resolveAlertsByDedupeKey, addAlert: addAlert as any },
+        deps: { listAlerts: readAllAlerts, resolveByKey: resolveAlertsByDedupeKey, addAlert: addAlert as any,
+          // r7 (FINDING-1): hand a position back to the rail — the same three clears a venue price makes (the pricing site below).
+          clearLatch: (id: string) => { this._priceSkipStreak.delete(id); this._priceSkipReasons.delete(id); this._priceSkipEscalated.delete(id); } },
       });
       console.log(`[VENUE_QUIET][SWEEP] mode=${this.mode} T=${t} verdict=${verdict} resolved=${r.resolved.length} failed=${r.failed} newEscalations=${r.escalated.length} unmatchedKeys=${r.unmatched.length}` +
         // r6: what holds the standing record open, member by member with its own family (empty when nothing is listed).
@@ -3183,7 +3189,7 @@ export class ActiveExecutionEngine {
     // Phase 8.8.3-I7-PRICE-FIX (A3): Enhanced EVAL_EXIT aggregate log with price stats
     console.log(`[I7-PRICE-FIX][EVAL_EXIT] cycleId=${this.lastCycleAt} positionsEvaluated=${positionsEvaluated} withWsPrice=${withWsPrice} withRestPrice=${withRestPrice} withoutPrice=${withoutPrice} slHits=${slHits} tpHits=${tpHits} exitEvalInvoked=${this._exitEvalInvoked} exitEvalRefused=${this._noTriggerRefusals} exitEvalNoHit=${this._exitEvalNoHit} exitEvalNoMark=${this._exitEvalNoMark} venueMarkNonFinite=${this._venueMarkNonFinite} exitEvalHit=${this._exitEvalHit} exitEvalResidual=${this._exitEvalInvoked - this._noTriggerRefusals - this._exitEvalNoHit - this._exitEvalHit - this._exitEvalNoMark} noTriggerRefusals=${this._noTriggerRefusals} noTriggerByClass=crypto:${this._exitEvalByClass.crypto.refused}/${this._exitEvalByClass.crypto.invoked},xstock:${this._exitEvalByClass.xstock.refused}/${this._exitEvalByClass.xstock.invoked},other:${this._exitEvalByClass.other.refused}/${this._exitEvalByClass.other.invoked} hollowSkips=${hollowSkips} hollowYields=${hollowYields} unvalidatedRefusals=${unvalidatedRefusals} restTokenExhausted=${restTokenExhausted} restVenueRateLimited=${restVenueRateLimited} restAgeExempt=${restAgeExempt} exitAgeRefused=${exitAgeRefused} ladderAccepted=${ladderAccepted} ladderRefused=${ladderRefused} ladderViaBook=${ladderViaBook} ladderErrors=${ladderErrors} entryFillLooks=${this._entryFillLooks} entryFillRefusedFirstLook=${this._entryFillRefusedFirstLook} entryFillRefusedSteady=${this._entryFillRefusedSteady} xsFrames=${this._xsFramesEmitted}/${this._exitEvalByClass.xstock.invoked} xsFrameClassMismatch=${this._xsFrameClassMismatch} venuePauseExitTicksSinceStart=${this._venuePauseExitTicks} venuePauseWouldFireSinceStart=${this._venuePauseWouldFire} venuePauseBidWouldFireSinceStart=${this._venuePauseBidWouldFire} venuePauseEntriesRefusedSinceStart=${this._venuePauseEntriesRefused} venuePausedPositionsNow=${this._venuePausePending.size} coldMarkTicksSinceStart=${this._coldMarkTicks} coldMarkPositionsNow=${[...this._coldMarkPending.values()].filter((c) => !c.expired).length} coldExpiredPositionsNow=${[...this._coldMarkPending.values()].filter((c) => c.expired).length}`);
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
-    void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol })));
+    void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol, assetClass: p.assetClass })));
     void this._runReserveRowTripwire(); // row 33 P4 (8g-bis)
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.

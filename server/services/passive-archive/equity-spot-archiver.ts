@@ -193,6 +193,15 @@ const latestEquityTick = new Map<string, EquityTick>();
  *  heartbeats only. Both restarts that day (11:59:23Z, 17:05:16Z) were followed within a minute by the cohort count reading
  *  468 of 468 — every symbol "ticking" on a closed market. */
 const lastTickerUpdateAt = new Map<string, number>();
+/** r7 (row 3a1 Step 9, Langston BLOCKER-1): when THIS process received its first `update` frame. The count above lives in
+ *  memory, so after a restart it is empty and `T = 0` reads `thin` — every family pages (16 positions per bounce on
+ *  2026-10-10). An empty instrument is not a reading: the count is WARM only once a full window has passed since this. */
+let firstTickerUpdateAtMs: number | null = null;
+
+/** Is `T` a reading yet? True once a full `EQUITY_TICKING_WINDOW_MS` has passed since this process's first `update` frame. */
+export function isEquityTickingCountWarm(nowMs: number): boolean {
+  return firstTickerUpdateAtMs !== null && nowMs - firstTickerUpdateAtMs >= EQUITY_TICKING_WINDOW_MS;
+}
 
 /** Latest equities-feed tick for an internal symbol ('BIIB/USD'), or null. */
 export function getLatestEquityTick(symbol: string): EquityTick | null {
@@ -222,6 +231,7 @@ export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
 /** Test-only: the per-symbol update clock. */
 export function _resetTickerUpdateClockForTests(): void {
   lastTickerUpdateAt.clear();
+  firstTickerUpdateAtMs = null;
   state.tickerSnapsByType60s = { update: 0, snapshot: 0, other: 0 };
 }
 
@@ -264,7 +274,10 @@ function parseTickerSnap(data: any, frameType?: string): void {
       atMs: _now,
     };
     // r4 (row 3a1): only a venue CHANGE counts toward the cohort's "ticking" measure — never a replayed snapshot.
-    if (frameType === 'update') lastTickerUpdateAt.set(_sym, _now);
+    if (frameType === 'update') {
+      lastTickerUpdateAt.set(_sym, _now);
+      if (firstTickerUpdateAtMs === null) firstTickerUpdateAtMs = _now;
+    }
     // B-EXIT-BOOK-AGE-STAMP P1: one predicate, one home. `_bid`/`_ask` are NaN when a side is
     // absent here (not 0 as on the crypto side) and `markKindOf` handles both — NaN > 0 is false.
     const _kind = markKindOf(_bid, _ask);
