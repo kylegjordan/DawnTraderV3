@@ -1,0 +1,9 @@
+[Unit]
+Description=crew-switch nag every 5 minutes (the script itself spaces re-sends: first at 15 min, then hourly)
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target

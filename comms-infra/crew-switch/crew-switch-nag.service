@@ -1,0 +1,6 @@
+[Unit]
+Description=crew-switch: re-send the handover order to outgoing sessions that have not confirmed, and tell Kyle (B-CODEX-FAILOVER #1192)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/crew-switch nag

@@ -1,0 +1,12 @@
+[Unit]
+Description=crew-switch: start a Claude<->Codex crew switch when Kyle posts "switch to codex|claude" (B-CODEX-FAILOVER #1192)
+After=network-online.target discord-cc-bridge.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/crew-switch watch
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
