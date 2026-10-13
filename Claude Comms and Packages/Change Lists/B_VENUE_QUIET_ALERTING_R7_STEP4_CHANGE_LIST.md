@@ -93,7 +93,7 @@ export function xstockCountColdHoldsEscalation(nowMs: number, engineAgeMs: numbe
 - **tsc 337 = 337. Full suite 4,144 passed;** the same 10 files fail on the clean tree.
 
 ## Staging, pre-registered for the next weekday (written now, before the data)
-1. **Zero quiet-only `price-skip` mints outside the US regular session** over positions priced in session, across one close and one reopen; any in-session quiet-only mint listed with `T`, verdict and the symbol's own last update.
+1. **Read on the deployed sha (Langston rider):** off-session, the sweep's `held=` list **names** the quiet-only positions that would have paged before r7, with their `reasonFamilies` — the positive carrier (rider a: an absence of mints is suppressed by design and is not evidence). Secondary: any in-session quiet-only mint listed with `T`, verdict and the symbol's own last update.
 2. **The deploy restart itself:** zero xStock `price-skip` mints in the first 120 s after `pm_uptime`, and the first post-restart sweep lines read as they do today.
 3. **B.3:** if an off-session row is still held at the open, a `SUPERSEDED-BY-SESSION-CHANGE` resolve at the first regular sweep, and no mint by the sweep. If none is held, recorded as not exercised (unit tests are the evidence).
 4. **The duration page** is still never-fired in production — a first firing is recorded whenever it happens; its absence is not evidence.

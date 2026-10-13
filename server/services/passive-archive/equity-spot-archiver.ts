@@ -195,7 +195,9 @@ const latestEquityTick = new Map<string, EquityTick>();
 const lastTickerUpdateAt = new Map<string, number>();
 /** r7 (row 3a1 Step 9, Langston BLOCKER-1): when THIS process received its first `update` frame. The count above lives in
  *  memory, so after a restart it is empty and `T = 0` reads `thin` — every family pages (16 positions per bounce on
- *  2026-10-10). An empty instrument is not a reading: the count is WARM only once a full window has passed since this. */
+ *  2026-10-10). An empty instrument is not a reading: the count is WARM only once a full window has passed since this.
+ *  ⛔ Its own field, never `state.tickerSnapsByType60s.update` (Langston): that tally is reset on every heartbeat, so it returns
+ *  to 0 mid-run and would read as cold forever. */
 let firstTickerUpdateAtMs: number | null = null;
 
 /** Is `T` a reading yet? True once a full `EQUITY_TICKING_WINDOW_MS` has passed since this process's first `update` frame. */

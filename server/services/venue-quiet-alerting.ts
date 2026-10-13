@@ -149,8 +149,8 @@ export function measureXstockTicking(nowMs: number): number {
 
 /** r7 (Langston BLOCKER-1, row 3a1 Step 9): may an xStock streak escalate on `T` yet? Not while the count is an EMPTY
  *  instrument after a restart — until a full window has passed since this process's first update frame. Bounded and
- *  fail-closed, the `NOT_WARM_GRACE_MS` boot-ordering pattern: once `engineAgeMs` reaches it the count is used as it stands,
- *  so a feed that never delivers an update frame reads `T = 0` ⇒ `thin` ⇒ pages within 120 s. Not a widening of `thin`. */
+ *  fail-closed, the `NOT_WARM_GRACE_MS` boot-ordering pattern: STILL COLD once `engineAgeMs` reaches it ⇒ the count is used as it
+ *  stands, whatever made it cold (no update frame yet, or a first frame that came late). Not a widening of `thin`. */
 export function xstockCountColdHoldsEscalation(nowMs: number, engineAgeMs: number): boolean {
   return !isEquityTickingCountWarm(nowMs) && engineAgeMs < NOT_WARM_GRACE_MS;
 }
@@ -298,6 +298,8 @@ export async function sweepVenueQuiet(args: {
       // page the rule promises — the engine latches before it decides and never sees its mint swallowed. Hand the position back
       // to the engine's own rule: clear its latch FIRST (in memory, cannot fail), then resolve; a failed resolve retries next
       // sweep (Langston's ordering, 2026-10-13). The sweep mints nothing: the streak re-crosses in session and is judged there.
+      // ⛔ FAMILY-AGNOSTIC ON PURPOSE (Langston 2026-10-13 condition 4): the session gate stops quiet-only off-session mints, but
+      // `thin`, `null` and an `other` minority still mint off-session and still hold their key — do not re-narrow this to book_state.
       const xs = positions.find((p) => p.assetClass === 'xstock_spot');
       if (xs && getXstockSession(createdMs) !== 'regular' && getXstockSession(nowMs) === 'regular') {
         deps.clearLatch(xs.id);
