@@ -26,7 +26,8 @@ GOOD_SC = ('#!/bin/sh\nA=%s\nE=%s\ncase "$1" in start) echo active > $A;; stop) 
            'enable) echo enabled > $E;; disable) echo disabled > $E;; is-active) cat $A;; is-enabled) cat $E;; esac\nexit 0\n') % (act, ena)
 def set_sc(body): open(fsc, 'w').write(body); os.chmod(fsc, 0o700)
 set_sc(GOOD_SC); cs.SYSTEMCTL = fsc
-assert cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test'), 'REFUSING TO RUN: a real service could be touched'
+if not (cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test')):   # not `assert`: -O strips it
+    raise SystemExit('REFUSING TO RUN: a real service could be touched')
 
 P = F = 0
 def ok(name, cond):
@@ -99,7 +100,8 @@ oid = [o for o in st['orders'].values() if o['note'] == 'OLD Codex ON'][0]['id']
 ok('T7 OLD Claude gets the handover order', text(p[0]).startswith('OLD Claude') and 'OUTGOING' in text(p[0]))
 cs.ack(oid, 'OLD Claude'); ok('T7 completes on the counterpart ack', oid not in cs.load()['orders'])
 n = len(read_posts()); cs.session('codex old', True); p = since(n)
-ok('T7 already on duty, counterpart off: no handover order', 'no handover' in text(p[0]))
+ok('T7 already on duty, counterpart off: no handover order and NO ack asked for (condition 2)',
+   'no handover' in text(p[0]) and 'crew-switch ack' not in text(p[0]) and 'Nothing to confirm' in text(p[0]))
 
 # T8 session OFF: the session gets a stand-down order; nag chases it
 n = len(read_posts()); cs.session('NEW CLAUDE', False); st = cs.load(); p = since(n)
@@ -129,6 +131,28 @@ th = threading.Thread(target=cs.watch, daemon=True); th.start(); time.sleep(3)
 ok('T11 offset advanced past the line despite the failing post', cs.load()['inbox_offset'] == os.path.getsize(cs.INBOX))
 ok('T11 watcher thread alive', th.is_alive())
 cs.CC_SEND = fake
+
+# T13 condition 3: Kyle's LANGSTON ON during a Codex shift survives a re-sent SWITCH TO CODEX, and is reported
+st = cs.load(); [cs._close(st, o, 'test') for o in list(st['orders'])]; st['mode'] = 'claude'; cs.save(st)
+cs.start('codex'); cs.langston(True)
+n = len(read_posts()); cs.start('codex'); p = since(n)
+ok('T13 Langston stays ON after the re-sent switch', lang() == 'active/enabled')
+ok('T13 the override is reported, not corrected', any('turned ON by you' in text(x) and 'LANGSTON OFF' in text(x) for x in p))
+cs.langston(False)
+
+# T14 condition 1: a stop that times out cannot suppress the handover order (sent first) and is reported
+st = cs.load(); [cs._close(st, o, 'test') for o in list(st['orders'])]; st['mode'] = 'claude'; cs.save(st)
+cs.langston(True)
+import subprocess as _sp
+real_run = cs.subprocess.run
+def slow_run(cmd, *a, **k):
+    if len(cmd) > 1 and cmd[1] == 'stop': raise _sp.TimeoutExpired(cmd, 150)
+    return real_run(cmd, *a, **k)
+cs.subprocess.run = slow_run
+n = len(read_posts()); cs.start('codex'); p = since(n)
+cs.subprocess.run = real_run
+ok('T14 handover order still the first post', 'OUTGOING' in text(p[0]))
+ok('T14 the timed-out stop is reported to Kyle', any('timed out' in text(x) and '--notify' in x for x in p))
 
 # T12 refusals
 ok('T12 unknown session', raises(lambda: cs.session('Bob', True), 'unknown session'))

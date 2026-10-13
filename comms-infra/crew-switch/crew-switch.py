@@ -69,7 +69,7 @@ def load():
         with open(STATE) as f: st = json.load(f)
     except FileNotFoundError:
         st = {'mode': 'claude', 'seq': 0, 'inbox_offset': None, 'history': []}
-    st.setdefault('orders', {})
+    st.setdefault('orders', {}); st.setdefault('history', [])
     st.setdefault('duty', {n: (KIND[n] == st['mode']) for n in KIND})
     return st
 
@@ -106,8 +106,13 @@ def set_langston(on):
     stopped-but-enabled returns at the next boot). Never discards an error."""
     errs = []
     for v in (['enable', 'start'] if on else ['stop', 'disable']):
-        r = subprocess.run([SYSTEMCTL, v, LANGSTON_UNIT], capture_output=True, text=True, timeout=60)
-        if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
+        # Condition 1 (Langston, r3): the timeout sits ABOVE the unit's own TimeoutStopUSec (1 min 30 s, measured), and a
+        # timeout is recorded as an error rather than raised, so it can never suppress the read-back or the report.
+        try:
+            r = subprocess.run([SYSTEMCTL, v, LANGSTON_UNIT], capture_output=True, text=True, timeout=150)
+            if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
+        except subprocess.TimeoutExpired:
+            errs.append(f'{v} timed out after 150 s')
     return langston_state(on, errs)
 
 def langston_state(on, errs=()):
@@ -158,9 +163,9 @@ def start(to, by='kyle'):
         st = load()
         if st['mode'] == to:
             # BLOCKER-1 (Langston): a repeated command must NEVER close the open order or disarm the nag.
-            # Report status, and reconcile Langston (finding 1), instead.
-            pending = _open_for(st, CREWS[frm])
-            missing = sorted({x for o in pending for x in o['outgoing'] if x not in o['acks']})
+            # Report status, and reconcile Langston (finding 1) — unless Kyle set him by hand (condition 3).
+            missing = sorted({x for o in _open_for(st, CREWS[frm]) for x in o['outgoing'] if x not in o['acks']})
+            manual = st.get('langston') or {}
             already = True
         else:
             already = False
@@ -168,16 +173,24 @@ def start(to, by='kyle'):
             oid = _new_order(st, 'crew', CREWS[frm], CREWS[to], f'crew {frm} -> {to}')
             st['mode'] = to
             for n in KIND: st['duty'][n] = (KIND[n] == to)
+            st['langston'] = {'on': to == 'claude', 'at': iso(), 'by': 'crew switch'}
             save(st)
     if already:
+        head = (f"Crew switch: the crew is already on {to.upper()}. "
+                + (f"Still waiting on: {', '.join(missing)} — the reminders keep running." if missing
+                   else 'Every outgoing session has handed over.'))
+        if manual.get('by') == 'kyle' and manual.get('on') != (to == 'claude'):
+            # Condition 3 (Langston): Kyle's own LANGSTON ON/OFF is never overridden by a re-sent SWITCH — reported.
+            a, e = langston_state(True)[1].split('/')
+            post_all([(head, False),
+                      (f"Langston was turned {'ON' if manual.get('on') else 'OFF'} by you at {manual.get('at')} and is left "
+                       f"that way (bridge `{a}/{e}`). Type LANGSTON {'OFF' if manual.get('on') else 'ON'} to change it.", False)])
+            return
         good, state, errs = set_langston(on=(to == 'claude'))
-        msgs = [(f"Crew switch: the crew is already on {to.upper()}. "
-                 + (f"Still waiting on: {', '.join(missing)} — the reminders keep running." if missing
-                    else 'Every outgoing session has handed over.'), False),
-                langston_msg('Crew switch', to == 'claude', good, state, errs)]
-        post_all(msgs)
+        post_all([(head, False), langston_msg('Crew switch', to == 'claude', good, state, errs)])
         return
-    good, state, errs = set_langston(on=(to == 'claude'))
+    # Condition 1 (Langston): the handover order and the on-duty notice go out BEFORE Langston is touched — neither
+    # depends on him, and nothing that happens to his bridge may suppress them.
     msgs = [
         (f"{' / '.join(CREWS[frm])} — CREW SWITCH {oid}: Kyle is moving the crew from {frm.upper()} to {to.upper()}. "
          f"You are OUTGOING. Now: bring your work to a step boundary, push everything (git fetch, pull, push; the sync "
@@ -187,10 +200,13 @@ def start(to, by='kyle'):
         (f"{' / '.join(CREWS[to])} / {REVIEWER[to]} — CREW SWITCH {oid}: you are ON DUTY from now ({to.upper()}). When "
          f"Kyle opens you: pull, read your POSITION block and any message addressed to you, then CONFIRM: "
          f"{ack_cmd(oid)}. {REVIEWER[to]} reviews and handles alerts for this shift.", False),
-        langston_msg(f'Crew switch {oid}', to == 'claude', good, state, errs),
     ] + [(f"Order {o['id']} closed as SUPERSEDED by {oid}; never confirmed: {', '.join(o['never_confirmed']) or 'nobody'}.", False)
          for o in superseded]
-    post_all(msgs)
+    try:
+        post_all(msgs)
+    finally:
+        good, state, errs = set_langston(on=(to == 'claude'))
+        post_all([langston_msg(f'Crew switch {oid}', to == 'claude', good, state, errs)])
 
 def session(name, on):
     n = ALIASES.get(re.sub(r'[\s-]+', ' ', name.strip().lower()))
@@ -207,14 +223,16 @@ def session(name, on):
             superseded = _supersede(st, [n])
             oid = _new_order(st, 'session', [n], [], f'{n} OFF')
             st['duty'][n] = False
-        if not st['orders'][oid]['outgoing']:
-            o = _close(st, oid, 'complete')          # nobody to hand over: nothing to chase
+        no_handover = not st['orders'][oid]['outgoing']
+        if no_handover:
+            _close(st, oid, 'complete')              # nobody to hand over: nothing to chase, nothing to confirm
         save(st)
     msgs = []
     if on:
-        if st['history'] and st['history'][-1]['id'] == oid:   # closed at once: the counterpart was not on duty
+        if no_handover:
+            # Condition 2 (Langston): the order is already closed, so no ack is asked for — it would be refused.
             msgs.append((f"{n} — ORDER {oid}: Kyle has put you ON DUTY ({cp} was not on duty, so there is no handover). "
-                         f"Pull, read your POSITION block, carry on, and CONFIRM: {ack_cmd(oid)}.", False))
+                         f"Pull, read your POSITION block and carry on. Nothing to confirm.", False))
         else:
             msgs.append((f"{cp} — ORDER {oid}: Kyle has put {n} on duty in your folder. You are OUTGOING: step boundary, "
                          f"push everything, POSITION block, then CONFIRM: {ack_cmd(oid)}. Until you confirm, Kyle is told.", False))
@@ -230,7 +248,8 @@ def session(name, on):
 def langston(on):
     good, state, errs = set_langston(on)
     with Lock():
-        st = load(); st['langston'] = {'on': on, 'at': iso(), 'state': state}; save(st)
+        # Read by start()'s already-branch (condition 3): a manual setting is never overridden by a re-sent SWITCH.
+        st = load(); st['langston'] = {'on': on, 'at': iso(), 'by': 'kyle', 'state': state}; save(st)
     post_all([langston_msg('Kyle asked', on, good, state, errs)])
 
 def ack(oid, name):
@@ -248,7 +267,7 @@ def ack(oid, name):
         done = [x for x in o['outgoing'] if x in o['acks']]
         total = len(o['outgoing'])
         completed = len(done) == total
-        if completed: c = _close(st, oid, 'complete')
+        if completed: _close(st, oid, 'complete')
         save(st)
     msgs = []
     if first: msgs.append((f"Order {oid}: {n} {side} ({len(done)}/{total} outgoing handed over).", False))
@@ -322,8 +341,8 @@ def safe(what, arg):
         elif what == 'langston': langston(arg)
         elif what == 'session': session(*arg)
         elif what == 'coltrane':
-            post('Kyle — Coltrane is never switched off: on a Claude shift he is a second reviewer who works only when '
-                 'called by name; on a Codex shift he is the reviewer. Nothing changed.')
+            post('Kyle — Coltrane is always on and is not switched by these commands: on a Codex shift he is the reviewer; '
+                 'on a Claude shift he is a second reviewer who works only when called by name. Nothing changed.')
         else:
             post(f'Kyle — I saw a message that looks like a crew command but did NOT act on it: "{arg}". Post the command '
                  f'on its own line, e.g. SWITCH TO CODEX, LANGSTON ON, OLD CLAUDE OFF.')
@@ -340,6 +359,7 @@ def safe(what, arg):
 def watch():
     """Follow the inbox log; act on Kyle's own messages only (author_id, discord-cc-bridge, text or voice)."""
     kid = kyle_id()
+    while not os.path.exists(INBOX): time.sleep(5)                  # a missing log at start must not crash-loop the unit
     with Lock():
         st = load()
         if st.get('inbox_offset') is None:
@@ -360,6 +380,9 @@ def watch():
                 for raw in chunk[:last_nl].split(b'\n'):
                     try: e = json.loads(raw)
                     except Exception: continue
+                    # `source == 'discord-cc-bridge'` is the DEDUPE, not provenance (Langston, measured 2026-10-13: of Kyle's
+                    # 149 rows only 82 message_ids are distinct — 60 logged by BOTH bridges, 22 by this one only, 0 by
+                    # Langston's only). Widen it and every command fires twice. Provenance is the author_id.
                     if e.get('author_id') != kid or e.get('source') != 'discord-cc-bridge': continue
                     if e.get('kind') not in ('', 'voice_inbound'): continue
                     c = classify((e.get('text') or '').strip())
