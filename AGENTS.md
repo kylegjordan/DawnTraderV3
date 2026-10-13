@@ -16,7 +16,7 @@
 ⛔ Work **directly in your folder above, never in a separate worktree** — worktrees are banned here (they let one session's changes silently undo another's at merge).
 
 ## 2. At the start of every conversation, and after every compaction
-0. **Orders come first** (once `crew-switch` is installed on the Helsinki box - until then, skip this step and ask Kyle whether you are on duty). Run `ssh root@204.168.141.77 'crew-switch status'`. It lists who is ON DUTY and every open ORDER. If an open order names you as OUTGOING, hand over (step boundary, push, POSITION block) and confirm; if it names you as INCOMING, finish steps 1-3 below, then confirm: `ssh root@204.168.141.77 'crew-switch ack <id> "<your name>"'`. **If you are not on the on-duty list, you are off duty: say so to Kyle and do nothing else.**
+0. **Orders come first** (`crew-switch` is installed on the Helsinki box since 2026-10-13). Run `ssh root@204.168.141.77 'crew-switch status'`. It lists who is ON DUTY and every open ORDER. If an open order names you as OUTGOING, hand over (step boundary, push, POSITION block) and confirm; if it names you as INCOMING, finish steps 1-3 below, then confirm: `ssh root@204.168.141.77 'crew-switch ack <id> "<your name>"'`. **If you are not on the on-duty list, you are off duty: say so to Kyle and do nothing else.**
 1. `git fetch origin` then `git pull --rebase origin migration/aws-supabase` (a rejected push means pull first — that is normal).
 2. Read **`CONDUCT.md`** (how you behave and report to Kyle) and **`CLAUDE.md`** (the binding rules). Wherever they say "Claude", "CC" or "the session", read **you**. Wherever they say **Langston**, read **Coltrane** for this shift.
 3. Read **`.claude/memory/MEMORY.md`** and **your own** file: `MEMORY_CC_A.md` (OLD) · `MEMORY_CC_B.md` (NEW) · `MEMORY_CC_C.md` (ANALYST) · `MEMORY_CC_INFRA.md` (INFRA) in `.claude/memory/`. Its **POSITION** block says which batch and which step you are on. **Resume from there.**
@@ -38,7 +38,7 @@
 - **Memory:** update your POSITION block in `.claude/memory/MEMORY_CC_<X>.md` at every step boundary and commit it (explicit path). Write `STEP: N of 11 · NEXT STEP: N+1 of 11`.
 
 ## 4. No shift limits: the whole workflow, end to end (Kyle, 2026-10-13)
-- You build, get Coltrane's review, **deploy to staging yourself** (`dt-deploy <sha> --by codex-a` etc.: your own name, never the Claude one), verify and close, exactly as the Claude crew does. Until the change that adds your names to the deploy and alert tools is live on staging (`B-CODEX-FAILOVER`), `--by codex-*` is refused: ask Kyle to deploy until then.
+- You build, get Coltrane's review, **deploy to staging yourself** (`dt-deploy <sha> --by codex-a` etc.: your own name, never the Claude one), verify and close, exactly as the Claude crew does. Your names are live on staging's deploy and alert tools since 2026-10-13 (`B-CODEX-FAILOVER`).
 - **When Claude returns, Langston reviews everything the shift changed**, and anything he finds is fixed then. So keep every change reviewable: the batch id leading every commit subject, a change list per batch, nothing unpushed.
 - Unchanged hard rules: never type a password into a form; never switch Langston's model; never run anything under `scripts/inventory/`; never read, list or search `G:\My Drive\Misc\I.T. and Security` (no recursive sweeps of `G:\`); in `/tmp` on a server, build in a private folder and delete it in the same command.
 
