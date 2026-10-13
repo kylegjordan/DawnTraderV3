@@ -1,129 +1,139 @@
 #!/usr/bin/env python3
-"""Offline tests for crew-switch.py (B-CODEX-FAILOVER #1192). Linux only (fcntl). Runs in a temp dir with a fake
-cc-send that records every post — nothing reaches Discord. Run: python3 test_crew_switch.py"""
-import importlib.util, json, os, sys, tempfile, time
+"""Offline tests for crew-switch.py (B-CODEX-FAILOVER #1192). Linux only (fcntl). Runs in a private temp dir with a
+FAKE cc-send (records every post) and a FAKE systemctl — nothing reaches Discord or a real service.
+⛔ A first draft of this file missed the fake systemctl and stopped+disabled Langston's LIVE bridge (2026-10-13,
+restored in ~20 s). Two guards now: the fake must be in place (assert), AND the unit name is a fake (Langston,
+finding 2), so even a real systemctl could only fail harmlessly.  Run: python3 test_crew_switch.py"""
+import importlib.util, json, os, shutil, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location('cs', os.path.join(HERE, 'crew-switch.py'))
 cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
 
 d = tempfile.mkdtemp(); os.chmod(d, 0o700)
+cs.LANGSTON_UNIT = 'crew-switch-test-fake.service'
 posts = os.path.join(d, 'posts.jsonl')
 fake = os.path.join(d, 'cc-send')
-with open(fake, 'w') as f:
-    f.write('#!/usr/bin/env python3\nimport json,sys\nopen(%r,"a").write(json.dumps(sys.argv[1:])+"\\n")\n' % posts)
+open(fake, 'w').write('#!/usr/bin/env python3\nimport json,sys\nopen(%r,"a").write(json.dumps(sys.argv[1:])+"\\n")\n' % posts)
 os.chmod(fake, 0o700)
-cs.STATE = os.path.join(d, 'state', 'state.json')
-cs.CC_SEND = fake; cs.INBOX = os.path.join(d, 'inbox.jsonl'); cs.KYLE_ENV = os.path.join(d, 'k.env')
+cs.STATE = os.path.join(d, 'state', 'state.json'); cs.CC_SEND = fake
+cs.INBOX = os.path.join(d, 'inbox.jsonl'); cs.KYLE_ENV = os.path.join(d, 'k.env')
 open(cs.KYLE_ENV, 'w').write('KYLE_DISCORD_ID=42\n')
-# A FAKE systemctl: start -> active, stop -> inactive, is-active prints the state. ⛔ The real one must NEVER run
-# under test: a first draft of this file missed the fake and the suite stopped and disabled Langston's LIVE bridge on
-# 2026-10-13 (restored within ~20 s). So the guard below refuses to run at all unless the fake is in place.
-sysd = os.path.join(d, 'unit-state'); open(sysd, 'w').write('active')
+act = os.path.join(d, 'active'); ena = os.path.join(d, 'enabled')
+open(act, 'w').write('active'); open(ena, 'w').write('enabled')
 fsc = os.path.join(d, 'systemctl')
-GOOD_SC = '#!/bin/sh\nS=%s\ncase "$1" in start) echo active > $S;; stop) echo inactive > $S;; is-active) cat $S;; esac\nexit 0\n' % sysd
-open(fsc, 'w').write(GOOD_SC); os.chmod(fsc, 0o700)
-cs.SYSTEMCTL = fsc
-assert cs.SYSTEMCTL.startswith(d), 'REFUSING TO RUN: the real systemctl would be called'
+GOOD_SC = ('#!/bin/sh\nA=%s\nE=%s\ncase "$1" in start) echo active > $A;; stop) echo inactive > $A;; '
+           'enable) echo enabled > $E;; disable) echo disabled > $E;; is-active) cat $A;; is-enabled) cat $E;; esac\nexit 0\n') % (act, ena)
+def set_sc(body): open(fsc, 'w').write(body); os.chmod(fsc, 0o700)
+set_sc(GOOD_SC); cs.SYSTEMCTL = fsc
+assert cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test'), 'REFUSING TO RUN: a real service could be touched'
 
 P = F = 0
 def ok(name, cond):
     global P, F
     if cond: P += 1
     else: F += 1; print('  FAIL:', name)
-def read_posts():
-    return [json.loads(l) for l in open(posts)] if os.path.exists(posts) else []
+def read_posts(): return [json.loads(l) for l in open(posts)] if os.path.exists(posts) else []
+def since(n): return read_posts()[n:]
 def raises(fn, needle):
     try: fn(); return False
     except SystemExit as e: return needle in str(e)
+def lang(): return open(act).read().strip() + '/' + open(ena).read().strip()
+def text(p): return p[3]
 
-# T1 trigger: exact phrase, either crew, punctuation and case tolerant; anything else ignored
-for t, want in [('SWITCH TO CODEX', 'codex'), ('switch to claude.', 'claude'), ('Switch the crew over to Codex!', 'codex'),
-                ('  switch to codex  ', 'codex')]:
-    m = cs.TRIGGER.match(t.strip()); ok(f'T1 trigger {t!r}', bool(m) and m.group(1).lower() == want)
-for t in ['should we switch to codex?', 'switch to codex tomorrow', 'Langston, switch to codex', 'switch to gemini']:
-    ok(f'T1 non-trigger {t!r}', not cs.TRIGGER.match(t))
+# T1 classify: commands, near-misses (short only), conversation ignored
+C = cs.classify
+ok('T1 switch', C('SWITCH TO CODEX') == ('start', 'codex') and C('switch the crew over to Claude.') == ('start', 'claude'))
+ok('T1 langston on/off', C('Langston ON') == ('langston', True) and C('langston off!') == ('langston', False))
+ok('T1 session either order', C('OLD CLAUDE ON') == ('session', ('old claude', True)) and C('codex new off') == ('session', ('codex new', False)))
+ok('T1 coltrane', C('Coltrane off')[0] == 'coltrane')
+ok('T1 near (short)', C('Langston, switch to codex please')[0] == 'near' and C('turn langston on now')[0] == 'near')
+ok('T1 long conversation ignored', C('Langston on this issue I think we should look again at how the switch to codex handles alerts') is None)
+ok('T1 unrelated ignored', C('hello there') is None)
 
-# T2 aliases: both word orders, case-insensitive, never cross-crew
-ok('T2 codex old', cs.ALIASES['codex old'] == 'OLD Codex'); ok('T2 old codex', cs.ALIASES['old codex'] == 'OLD Codex')
-ok('T2 claude infra', cs.ALIASES['claude infra'] == 'Infra Claude'); ok('T2 analyst-codex', cs.ALIASES['analyst-codex'] == 'ANALYST Codex')
+# T2 crew switch to codex: Langston OFF and DISABLED, read back; handover order is the FIRST post (finding 3)
+n = len(read_posts()); cs.start('codex'); st = cs.load(); p = since(n)
+ok('T2 mode + duty', st['mode'] == 'codex' and st['duty']['OLD Codex'] and not st['duty']['OLD Claude'])
+ok('T2 Langston inactive/disabled', lang() == 'inactive/disabled')
+ok('T2 first post is the handover order naming all four Claude sessions', 'OUTGOING' in text(p[0]) and all(x in text(p[0]) for x in cs.CREWS['claude']))
+ok('T2 on-duty notice names the Codex crew + Coltrane', all(x in text(p[1]) for x in cs.CREWS['codex'] + ['Coltrane']))
+ok('T2 Langston OFF reported', any('Langston is OFF' in text(x) and 'inactive/disabled' in text(x) for x in p))
+s1 = [o for o in st['orders'].values()][0]['id']
 
-# T3 start to codex: mode written, two posts naming every outgoing and incoming session
-cs.start('codex'); st = cs.load(); p = read_posts()
-ok('T3 mode codex (one record, state.json)', st['mode'] == 'codex' and not hasattr(cs, 'MODE_FILE'))
-ok('T3 three posts (Langston state, order, on-duty)', len(p) == 3)
-ok('T3 Langston OFF, read back', open(sysd).read().strip() == 'inactive' and 'Langston is OFF' in p[0][3])
-p = p[1:]
-ok('T3 outgoing order names all four Claude sessions', all(n in p[0][3] for n in cs.CREWS['claude']) and 'OUTGOING' in p[0][3])
-ok('T3 on-duty notice names all four Codex sessions + Coltrane', all(n in p[1][3] for n in cs.CREWS['codex'] + ['Coltrane']))
+# T3 BLOCKER-1: a repeated SWITCH TO CODEX keeps the order open and the nag armed, and reports who is missing
+cs.ack(s1, 'Claude Old'); n = len(read_posts()); cs.start('codex'); st = cs.load(); p = since(n)
+ok('T3 order still open', s1 in st['orders'])
+ok('T3 reports already-on + who is missing', 'already on CODEX' in text(p[0]) and 'NEW Claude' in text(p[0]) and 'OLD Claude' not in text(p[0]))
+st['orders'][s1]['started_t'] -= 16 * 60; cs.save(st); n = len(read_posts()); cs.nag(); p = since(n)
+ok('T3 nag still fires after the repeat', len(p) == 2 and 'NEW Claude' in text(p[0]) and '--notify' in p[1])
 
-# T4 acks: unknown name and wrong id refused; reversed name accepted; incoming does not complete
-ok('T4 unknown name', raises(lambda: cs.ack('S1', 'Bob'), 'unknown name'))
-ok('T4 wrong id', raises(lambda: cs.ack('S9', 'OLD Claude'), 'no open switch'))
-cs.ack('S1', 'Codex Old')
-ok('T4 incoming ack does not complete', not cs.load()['switch']['complete'])
-for n in ['Claude Old', 'new claude', 'ANALYST CLAUDE']: cs.ack('S1', n)
-ok('T4 three of four outgoing: still open', not cs.load()['switch']['complete'])
+# T4 BLOCKER-2: stop ok but disable FAILS -> not good, Kyle pinged, the error named
+set_sc(GOOD_SC.replace('disable) echo disabled > $E;;', 'disable) exit 1;;'))
+open(act, 'w').write('active'); open(ena, 'w').write('enabled')
+good, state, errs = cs.set_langston(on=False)
+ok('T4 stopped-but-enabled is NOT good', not good and state == 'inactive/enabled' and any('disable' in e for e in errs))
+m, notify = cs.langston_msg('x', False, good, state, errs)
+ok('T4 Kyle pinged with the failed disable', notify and 'disable' in m and 'inactive/enabled' in m)
+set_sc(GOOD_SC.replace('enable) echo enabled > $E;;', 'enable) exit 1;;'))
+open(act, 'w').write('inactive'); open(ena, 'w').write('disabled')
+good, state, errs = cs.set_langston(on=True)
+ok('T4 started-but-disabled is NOT good', not good and state == 'active/disabled')
+set_sc(GOOD_SC)
 
-# T5 nag: not before 15 min; then names ONLY the missing session and pings Kyle; not again within the hour
-n0 = len(read_posts()); cs.nag(); ok('T5 no nag before 15 min', len(read_posts()) == n0)
-st = cs.load(); st['switch']['started_t'] -= 16 * 60; cs.save(st); cs.nag(); p = read_posts()[n0:]
-ok('T5 nag posts twice (crew + Kyle)', len(p) == 2)
-ok('T5 nag names only Infra Claude', 'Infra Claude' in p[0][3] and 'OLD Claude' not in p[0][3])
-ok('T5 Kyle ping carries --notify', '--notify' in p[1])
-n1 = len(read_posts()); cs.nag(); ok('T5 no second nag within the hour', len(read_posts()) == n1)
+# T5 acks complete the crew order; Kyle notified; then crew back to claude turns Langston ON
+for x in ['new claude', 'ANALYST CLAUDE', 'claude infra']: cs.ack(s1, x)
+st = cs.load(); p = read_posts()
+ok('T5 complete + Kyle notified', s1 not in st['orders'] and 'COMPLETE' in text(p[-1]) and '--notify' in p[-1])
+cs.start('claude'); ok('T5 Langston active/enabled', lang() == 'active/enabled' and cs.load()['mode'] == 'claude')
 
-# T6 last outgoing ack completes the switch and notifies Kyle; then switching back works
-cs.ack('S1', 'infra claude'); st = cs.load(); p = read_posts()
-ok('T6 complete', st['switch']['complete'] is True)
-ok('T6 completion notifies Kyle', '--notify' in p[-1] and 'COMPLETE' in p[-1][3])
-cs.start('claude'); st = cs.load()
-ok('T6 back to claude: outgoing is the Codex crew', st['switch']['outgoing'] == cs.CREWS['codex'] and st['mode'] == 'claude')
-ok('T6 Langston ON again, read back', open(sysd).read().strip() == 'active')
+# T6 LANGSTON OFF / ON alone (the crew stays as it is)
+n = len(read_posts()); cs.langston(False); p = since(n)
+ok('T6 LANGSTON OFF', lang() == 'inactive/disabled' and 'Langston is OFF' in text(p[0]) and cs.load()['mode'] == 'claude')
+cs.langston(True); ok('T6 LANGSTON ON', lang() == 'active/enabled')
 
-# T7 already on the target: no switch, one 'already' post
-st['switch']['complete'] = True; cs.save(st); n2 = len(read_posts()); cs.start('claude')
-ok('T7 already-on posts once, no new switch', len(read_posts()) == n2 + 1 and cs.load()['seq'] == 2)
+# T7 single session ON hands its counterpart OFF (one worker per folder); counterpart OFF-duty -> no handover
+st = cs.load(); [cs._close(st, o, 'test') for o in list(st['orders'])]; cs.save(st)
+n = len(read_posts()); cs.session('OLD CODEX', True); st = cs.load(); p = since(n)
+ok('T7 OLD Codex on, OLD Claude off', st['duty']['OLD Codex'] and not st['duty']['OLD Claude'])
+oid = [o for o in st['orders'].values() if o['note'] == 'OLD Codex ON'][0]['id']
+ok('T7 OLD Claude gets the handover order', text(p[0]).startswith('OLD Claude') and 'OUTGOING' in text(p[0]))
+cs.ack(oid, 'OLD Claude'); ok('T7 completes on the counterpart ack', oid not in cs.load()['orders'])
+n = len(read_posts()); cs.session('codex old', True); p = since(n)
+ok('T7 already on duty, counterpart off: no handover order', 'no handover' in text(p[0]))
 
-# T8 B2: a new switch SUPERSEDES an open one (no deadlock), naming who never confirmed
-st = cs.load(); st['switch']['complete'] = True; st['mode'] = 'claude'; cs.save(st)
-cs.start('codex'); s3 = cs.load()['switch']['id']; cs.ack(s3, 'OLD Claude')
-n3 = len(read_posts()); cs.start('claude'); st = cs.load(); p = read_posts()[n3:]
-old = [h for h in st['history'] if h['id'] == s3][-1]
-ok('T8 superseded, not refused', old['closed_as'] == 'superseded' and st['switch']['id'] != s3 and st['mode'] == 'claude')
-ok('T8 names who never confirmed', set(old['never_confirmed']) == {'NEW Claude', 'ANALYST Claude', 'Infra Claude'} and any('SUPERSEDED' in x[3] for x in p))
+# T8 session OFF: the session gets a stand-down order; nag chases it
+n = len(read_posts()); cs.session('NEW CLAUDE', False); st = cs.load(); p = since(n)
+ok('T8 NEW Claude off duty + ordered to stand down', not st['duty']['NEW Claude'] and 'OFF DUTY' in text(p[0]))
 
-# T9 B2: after 24 h unconfirmed, nag closes it EXPIRED and tells Kyle once; then nags no more
-st = cs.load(); st['switch']['started_t'] -= 25 * 3600; cs.save(st); n4 = len(read_posts()); cs.nag(); p = read_posts()[n4:]
-ok('T9 expired', cs.load()['switch']['closed_as'] == 'expired' and len(p) == 1 and '--notify' in p[0] and 'EXPIRED' in p[0][3])
-n5 = len(read_posts()); cs.nag(); ok('T9 no nag after expiry', len(read_posts()) == n5)
+# T9 B2: a crew switch supersedes open orders (no deadlock) and names who never confirmed
+n = len(read_posts()); cs.start('codex'); p = since(n)
+ok('T9 superseded reported', any('SUPERSEDED' in text(x) and 'NEW Claude' in text(x) for x in p))
 
-# T10 B1: a failing cc-send never kills the watcher's dispatch, and a near-miss gets a reply
+# T10 B2 expiry after 24 h, one Kyle ping, then silence
+st = cs.load()
+for o in st['orders'].values(): o['started_t'] -= 25 * 3600
+cs.save(st); n = len(read_posts()); cs.nag(); p = since(n)
+ok('T10 expired + Kyle pinged', not cs.load()['orders'] and any('EXPIRED' in text(x) and '--notify' in x for x in p))
+n = len(read_posts()); cs.nag(); ok('T10 silent after expiry', len(read_posts()) == n)
+
+# T11 B1: a failing cc-send never kills dispatch; watch advances the offset first and its thread survives
 bad = os.path.join(d, 'cc-send-bad'); open(bad, 'w').write('#!/bin/sh\nexit 1\n'); os.chmod(bad, 0o700)
-good = cs.CC_SEND; cs.CC_SEND = bad
-try: cs.safe('start', 'codex'); survived = True
+cs.CC_SEND = bad
+try: cs.safe('start', 'claude'); survived = True
 except BaseException: survived = False
-ok('T10 safe() survives a failing post', survived)
-cs.CC_SEND = good; n6 = len(read_posts()); cs.safe('near', 'Langston, switch to codex please')
-ok('T10 near-miss posts a not-acted-on note to Kyle', len(read_posts()) == n6 + 1 and 'did NOT act' in read_posts()[-1][3])
-ok('T10 NEAR matches an addressed sentence, TRIGGER does not', bool(cs.NEAR.search('Langston, switch to codex')) and not cs.TRIGGER.match('Langston, switch to codex'))
-
-# T12 a systemctl that cannot stop Langston is reported to Kyle, never assumed
-open(fsc, 'w').write('#!/bin/sh\ncase "$1" in is-active) echo active;; esac\nexit 0\n')
-st = cs.load(); st['switch']['complete'] = True; st['mode'] = 'claude'; cs.save(st); n7 = len(read_posts()); cs.start('codex')
-p = read_posts()[n7:]
-ok('T12 failed stop -> Kyle told, with the read-back state', any('--notify' in x and 'should be OFF' in x[3] and '`active`' in x[3] for x in p))
-open(fsc, 'w').write(GOOD_SC)
-
-# T11 B1: watch advances the offset BEFORE dispatching (a failed dispatch cannot replay)
+ok('T11 safe() survives a failing post', survived)
+cs.CC_SEND = fake
 open(cs.INBOX, 'w').write(json.dumps({'author_id': 42, 'source': 'discord-cc-bridge', 'kind': '', 'text': 'switch to codex'}) + '\n')
-st = cs.load(); st['inbox_offset'] = 0; st['switch']['complete'] = True; cs.save(st); cs.CC_SEND = bad
-import threading
+st = cs.load(); st['inbox_offset'] = 0; cs.save(st); cs.CC_SEND = bad
 th = threading.Thread(target=cs.watch, daemon=True); th.start(); time.sleep(3)
 ok('T11 offset advanced past the line despite the failing post', cs.load()['inbox_offset'] == os.path.getsize(cs.INBOX))
-ok('T11 the watcher thread is still alive', th.is_alive())
-cs.CC_SEND = good
+ok('T11 watcher thread alive', th.is_alive())
+cs.CC_SEND = fake
+
+# T12 refusals
+ok('T12 unknown session', raises(lambda: cs.session('Bob', True), 'unknown session'))
+ok('T12 ack of a closed order', raises(lambda: cs.ack('S1', 'OLD Claude'), 'no open order'))
 
 print(f'crew-switch tests: {P} passed, {F} failed')
-import shutil; shutil.rmtree(d, ignore_errors=True)   # Langston: 'removed after' is now in the file
+shutil.rmtree(d, ignore_errors=True)
 sys.exit(1 if F else 0)

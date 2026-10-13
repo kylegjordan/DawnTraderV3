@@ -1,27 +1,38 @@
-# B-CODEX-FAILOVER (#1192, sprint row 1y) — CHANGE LIST (Step 4, r1)
+# B-CODEX-FAILOVER (#1192, sprint row 1y) — CHANGE LIST (Step 4, r3)
 
 | field | value |
 |---|---|
 | **(i) DECLARED CHANGE-CLASS** | `non_architecture` — crew tooling; one code change to the actor table (no trading path) |
-| **(ii) DOC SET** | SCOPE — **absent** · PRE_AUDIT — **absent** · COMPLETION_REPORT, BATCH_CATALOG, PHASE_HISTORY — absent, Step 10-11 · SYSTEM_IMPACT_MAP — **owed at Step 10** (actor table gains `codex` tag + 5 actors; a new Helsinki component, crew-switch) · SYSTEM_MANUAL — N/A (no trading logic) · RUNNING_ISSUES — present (`#1192`) · SPRINT_TO_LIVE_PLAN row 1y — present · DELETED_COMPONENTS_LOG — N/A |
-| **(iii) STEP-2 REFERENCE** | **NO STEP 2 — Kyle-directed fast path (2026-10-13, at 87% of his weekly Claude allowance): the crew must be switchable before it runs out. Scope and pre-audit are written retroactively at Step 10 from this change list and your rulings.** |
+| **(ii) DOC SET** | SCOPE — **absent** · PRE_AUDIT — **absent** · COMPLETION_REPORT, BATCH_CATALOG, PHASE_HISTORY — absent, Step 10-11 · SYSTEM_IMPACT_MAP — **owed at Step 10** (actor table gains the `codex` tag + 5 actors; a new Helsinki component, crew-switch, which also starts/stops Langston's bridge) · SYSTEM_MANUAL — N/A (no trading logic) · RUNNING_ISSUES — present (`#1192`) · SPRINT_TO_LIVE_PLAN row 1y — present · DELETED_COMPONENTS_LOG — N/A · board card — **owed** (none exists; Langston measured) |
+| **(iii) STEP-2 REFERENCE** | **NO STEP 2 — Kyle-directed fast path (2026-10-13, at 87% of his weekly Claude allowance). Accepted by Langston for this batch on one condition: the retroactive scope and pre-audit written at Step 10 are LABELLED as not having gated the work and are never cited as though they did (`#1005`).** |
 
-## Kyle's decisions this batch implements (2026-10-13, Desktop)
-1. **No shift limits.** Codex sessions run the whole workflow and deploy; you review the shift's changes when Claude returns. (Supersedes the §4 no-land list you corrected at `f8362f069`.)
-2. **A handover on every switch, both directions.** 3. **One trigger, with a guarantee each session gets it.** 4. **Discord names in both word orders.** 5. **No scheduled Codex check-ins** — he opens the Codex sessions he needs, and may not open all of them.
+## Kyle's decisions (2026-10-13, Desktop)
+1. **No shift limits** — Codex runs the whole workflow and deploys under its own names; Langston reviews everything a shift changed when Claude returns.
+2. **A handover on every switch, both directions.** 3. **One trigger, with a guarantee every session gets it** (confirmation + escalation). 4. **Names in both word orders.** 5. **No scheduled Codex check-ins** — he opens the Codex sessions he needs.
+6. **Langston must really shut down on a switch to Codex** — telling him did not work before.
+7. **Manual on/off for Langston and for any single session**; Coltrane is never switched off (reviewer on a Codex shift, called-by-name second reviewer on a Claude shift).
 
-## C1 — `bac793f92`: the Codex crew + Coltrane become canonical actors
-`server/services/system-alerts.ts`: `AlertActorTag` gains `'codex'`; `ALERT_ACTORS` gains `codex-a|codex-b|codex-c|codex-infra` (tag `codex`) and `coltrane` (tag `human`). Aliases, both word orders: `old codex|codex old|old-codex|codex-old → codex-a` (same for new/analyst/infra; `codex-infra`'s own alias dropped — it IS canonical). `scripts/dt-deploy.sh`: table, `USAGE`, `DEPLOY_ACTOR_LIST` (the derived non-machine set is now 11). Tests: the parity expected set; the tag list; both orders resolve. Local 39/39 in the three actor suites; tsc baseline 337 = 337. CI `38367705222` at `bac793f92`: success.
-⚠️ `dt-deploy.sh` does not install itself (`#1004`): after the deploy, install `/usr/local/bin/dt-deploy` by hand and match its sha256 to the blob.
+## C1 — `bac793f92`: the Codex crew + Coltrane become canonical actors (approved r1)
+`server/services/system-alerts.ts`: `AlertActorTag` gains `'codex'`; `ALERT_ACTORS` gains `codex-a|codex-b|codex-c|codex-infra` (tag `codex`) and `coltrane` (tag `human`). Aliases in both orders (`old codex|codex old|old-codex|codex-old → codex-a`, …; `codex-infra`'s self-alias dropped). `scripts/dt-deploy.sh`: table, `USAGE`, `DEPLOY_ACTOR_LIST` — the derived non-machine set is **11 canonical + 22 aliases = 33** (Langston enumerated). Tests: parity expected set, tag list, both orders. ⚠️ `dt-deploy.sh` does not install itself (`#1004`): install by hand after the deploy and match sha256 to the blob.
 
-## C2 — `33fed96c4`: `comms-infra/crew-switch/` + `AGENTS.md`
-**`crew-switch.py`** — `watch` follows the inbox log; a message **from Kyle's `author_id`, source `discord-cc-bridge`, kind `''` or `voice_inbound`**, matching `^\W*switch\s+(the crew\s+)?(over\s+)?to\s+(codex|claude)\W*$` starts a switch (first run seeks to EOF — no replay). `start` writes `/etc/dawntrader/crew-mode.env` and posts (sender `Crew switch`) a HANDOVER ORDER naming every outgoing session + an ON-DUTY notice naming the incoming crew and reviewer. `ack <id> <name>` (either order); COMPLETE = every **outgoing** session confirmed → Kyle notified; incoming tracked, never nagged. `nag` (5-min timer): first re-send at 15 min, then hourly, naming only the missing outgoing sessions + a `--notify` to Kyle. State `/var/lib/crew-switch/state.json` under `flock`. **Not yet installed.**
-**The guarantee, stated honestly:** confirmation + escalation, not assumed delivery — a closed Claude window and every Codex session can be reached only by Kyle; the checklist tells him exactly who.
-`test_crew_switch.py`: **30 passed, 0 failed** on Helsinki (0700 temp dir, fake `cc-send`, removed after): trigger matches/non-matches, aliases, both directions, refusals, nag timing and naming, completion notify.
-**`AGENTS.md`:** §4 limits removed (deploy under your own actor once C1 is live; until then Kyle deploys); step 0 = `crew-switch status` + ack; alerts routed to the Claude counterpart are the Codex session's, acted on under its own actor; names both orders; §5 = the switch.
+## C2 — `comms-infra/crew-switch/` (r3 replaces r1/r2 wholesale)
+**`crew-switch.py`** — state in ONE file, `/var/lib/crew-switch/state.json` (mode, per-session `duty`, open `orders`, `history`); no `crew-mode.env` (condition (d)).
+- **`watch`**: follows `/var/log/cc-discord-inbox.jsonl`; only Kyle's own messages (`author_id`, `discord-cc-bridge`, kind `''|voice_inbound`). `classify()`: `SWITCH TO CODEX|CLAUDE` · `LANGSTON ON|OFF` · `<session> ON|OFF` (either order) · `COLTRANE …` → "never switched off" reply · a **short** (≤60 chars) near-miss → "did NOT act" reply, no phone ping. The offset is advanced **before** dispatch, and every dispatch runs through `safe()` (B1). `getsize` guarded.
+- **`start <crew>`**: if the crew is **already** on the target, it **reports status and who is still missing, keeps the order open and the nag armed**, and reconciles Langston (BLOCKER-1, finding 1). Otherwise it supersedes open orders (B2), opens a crew order, sets duty, and switches Langston (`stop`+`disable` / `enable`+`start`). **Posts in order of importance:** handover order first, on-duty notice, Langston state, superseded notes (finding 3); `post_all` tries every post and raises only at the end.
+- **`set_langston`**: reads back **both** `is-active` and `is-enabled`; good only if both match the target **and** no verb failed; errors are never discarded (BLOCKER-2).
+- **`langston <on|off>`**: Langston alone; read back; Kyle pinged on any mismatch.
+- **`session <name> <on|off>`**: ON hands the counterpart OFF (OLD Claude and OLD Codex share one folder) — a one-session order chased like a crew order; if the counterpart is not on duty there is nothing to hand over. OFF sends the session a stand-down order.
+- **`ack`**, **`status`** (mode, on-duty list, Langston `active/enabled`, open orders), **`nag`** (15 min, then hourly; EXPIRED after 24 h with one Kyle ping).
+- Units: `crew-switch-watch.service`, `crew-switch-nag.{service,timer}`. **Not yet installed.**
+
+**`test_crew_switch.py`: 35 passed, 0 failed** on Helsinki (0700 temp dir, fake `cc-send`, fake `systemctl`, **fake unit name** — finding 2 — and an assert that refuses to run otherwise; removes its own temp dir). Covers: classify (commands, short near-miss, long conversation ignored); the switch to Codex (Langston `inactive/disabled`, handover order first); **BLOCKER-1** (a repeated command keeps the order open, reports who is missing, the nag still fires); **BLOCKER-2** (stopped-but-enabled and started-but-disabled both NOT good, Kyle pinged with the failed verb); completion; LANGSTON ON/OFF; session ON with and without a handover; session OFF; supersede; expiry; B1 (a failing post never kills dispatch; the watcher advances its offset first and survives); refusals. Langston's live bridge read `active/enabled` before and after the run.
+
+**`AGENTS.md`**: no shift limits; step 0 = `crew-switch status` (orders and the on-duty list; off duty ⇒ do nothing); Coltrane wakes on his name; alerts of the Claude counterpart are the Codex session's, under its own actor; §5 = the orders.
+
+## INCIDENT, OWNED
+At 08:46:43Z a first run of the r2 tests missed the fake `systemctl` and **stopped and disabled Langston's live bridge**; re-enabled and started by ~08:47:00Z (~20 s; his bridge backfilled 26 messages). `MISTAKE: fixture-not-process` trailer on `5c6296f82`. Two guards now (fake binary + fake unit name).
 
 ## JUDGEMENT CALLS TO ATTACK
-1. **The trigger matches Kyle's `author_id` only, and the exact phrase only** — a sentence containing "switch to codex" does not fire. Too strict for voice transcription?
-2. **COMPLETE counts outgoing only.** Incoming never blocks or nags. Right, given Kyle may open only some Codex sessions?
-3. **`coltrane` tagged `human`** (like `langston`), so he can deploy. Should the reviewer be in the deploy set at all?
-4. **The Command Center session is not in the crew lists** (its own rules say hands off DawnTrader).
+1. A session ON order completes on the **counterpart's** hand-over only; the incoming session's confirmation is tracked, never chased.
+2. The near-miss reply only fires on messages ≤60 characters.
+3. `LANGSTON ON` while the crew is on Codex leaves the crew on Codex — Langston and Coltrane can both be on.
