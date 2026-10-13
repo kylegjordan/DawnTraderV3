@@ -16,8 +16,8 @@ Add a temporary Codex crew that works in the existing four Claude folders, carri
 | workspace ownership | Can a Codex stand-in work without creating a competing checkout? | `AGENTS.md` binds each stand-in to its counterpart's existing folder and bans worktrees. |
 | review separation | Can the reviewer read a pushed ref without gaining a write path? | Coltrane uses the existing read-only Helsinki mirror and is engaged only when a post starts with his name. |
 | shift authority | Can one Kyle-authored line change duty without an agent interpreting prose? | `crew-switch` accepts a fixed command grammar and only Kyle's Discord identity. |
-| handover durability | Can a switch finish without every outgoing session parking and confirming? | Orders persist in one state file; missing outgoing receipts are re-sent and escalated; late incoming receipts are recorded but never hold completion. |
-| reviewer shutdown | Does “Langston off” mean both stopped and unable to restart? | The switch reads back both inactive and disabled; either mismatch is a failure. |
+| handover durability | Can a switch finish without every outgoing session parking and confirming? | The `complete` path requires every named outgoing receipt; missing names are re-sent and escalated, while a superseding order or 24-hour expiry is a loud terminal path with `never_confirmed`. A receipt presently proves a supplied canonical name, not the invoking session; actor-bound proof is row 1z. Late incoming receipts are recorded against retained complete history but never hold completion. |
+| reviewer shutdown | Does “Langston off” mean both stopped and unable to restart? | A whole-crew switch reads the Discord bridge back inactive and disabled; either mismatch is a failure. Kyle's explicit `LANGSTON ON` is an intentional override, and root-callable direct invocation is outside this service-state claim. |
 | failure isolation | Can a failed post or service action silently abort the rest of a switch? | Posts are attempted independently, command failures are retained, and Kyle is told when the final state is not the requested state. |
 
 ## 3. Blast radius
@@ -40,7 +40,7 @@ Add a temporary Codex crew that works in the existing four Claude folders, carri
 
 ## 6. Residuals and homes
 
-- **Codex automation gaps** — automatic wake/alert delivery, hook-equivalent guards, reviewer-command wake noise and board identity options: `B-CODEX-FAILOVER-AUTOMATION`, issue `#731`, sprint row `1z`, after row `1y`.
+- **Codex automation gaps** — automatic wake/alert delivery, hook-equivalent guards, actor-bound handover receipts, reviewer-command wake noise and board identity options: `B-CODEX-FAILOVER-AUTOMATION`, issue `#731`, sprint row `1z`, after row `1y`.
 - **Push guard false refusal from a subfolder:** existing `B-TSC-GUARD-CWD`, issue `#926`, Phase-19 tail.
 - **Tracked generated file rewritten after start:** existing `B-CANONICAL-CORPUS-ACCURACY`, issue `#733`, Phase-19 row `3n.e`; the separate untracked CSAV reports remain evidence for that batch's first census rather than an inferred cause here.
 - **Single overwritten deployment record:** existing provenance class `#1004`, placed at `P19-B12`; this batch does not enlarge the deployment-history contract.

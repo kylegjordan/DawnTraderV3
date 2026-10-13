@@ -28,7 +28,7 @@ Kyle's weekly Claude allowance runs out before the week resets. Working on Anthr
 
 ## 3. OUT OF SCOPE — HOMED AT STEP 10
 
-- Coltrane/Codex automatic alert and wake delivery, hook-equivalent safeguards, reviewer-command wake noise and board identity options → `B-CODEX-FAILOVER-AUTOMATION`, issue `#731`, sprint row `1z`.
+- Coltrane/Codex automatic alert and wake delivery, hook-equivalent safeguards, actor-bound handover receipts, reviewer-command wake noise and board identity options → `B-CODEX-FAILOVER-AUTOMATION`, issue `#731`, sprint row `1z`.
 - The deploy record being one overwritten slot → existing provenance class `#1004`, `P19-B12`.
 - The push guard's false refusal from a subfolder → existing `B-TSC-GUARD-CWD`, issue `#926`, Phase-19 tail.
 - The tracked canonical file rewritten after process start → existing `B-CANONICAL-CORPUS-ACCURACY`, issue `#733`, Phase-19 row `3n.e`; the untracked CSAV reports are preserved as evidence for that batch's census.
