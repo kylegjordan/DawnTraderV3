@@ -1,4 +1,4 @@
-# B-CODEX-FAILOVER — Completion Report (sprint row 1y) — ⏳ STEP 11 REVIEW
+# B-CODEX-FAILOVER — Completion Report (sprint row 1y) — ✅ CLOSED 2026-10-13 (Coltrane Step-11 CONFIRMED)
 
 **Owner:** CC-A / OLD Codex · **change-class:** `non_architecture` · **Sprint plan row:** 1y · **Issue:** `#1192`
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_CODEX_FAILOVER_SCOPE.md` and `B_CODEX_FAILOVER_PRE_AUDIT.md` — both retrospective and explicitly non-gating · **Change list:** `Claude Comms and Packages/Change Lists/B_CODEX_FAILOVER_CHANGE_LIST.md`
@@ -36,7 +36,9 @@ When Kyle's weekly Claude allowance runs out, DawnTrader needs a temporary crew 
 - The correction accepts late incoming receipts only against completed history, never expired or superseded history, and keeps duplicates idempotent. Coltrane returned **PROCEED** at exact shared ref `25d7bcf2e9a546730ba994c93a2bea4271bc9ff4` after re-running the 41-test suite and mutation-proving the completed-history predicate.
 - CI `38453885686` at the reviewed implementation: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
 - CI `38458566092` at governance ref `7268da41f90d57768a8ae96fda2dfb3f825895c9`: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
+- CI `38460376485` at the report ref `b4f6fbc66952cbee3d7f65028d874a62ff11377b`: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
 - The installed Helsinki `crew-switch` and the reviewed blob both hashed `aca7b58107da44dc55c065aff7fc944812b29e669ce1292f3e3b813d89f45c42`; its watcher was active and enabled at the Step-11 read.
+- Coltrane **CONFIRMED Step 11** at exact ref `b4f6fbc66952cbee3d7f65028d874a62ff11377b`: he independently reran 41/41 tests, inverted the completed-history predicate and reproduced the former refusal, checked the four CI jobs, counted the nine-message S1 transcript, and found no remaining blocker. His mechanism review also named bounded-history eviction, failed-post states, unauthenticated names and later service drift; the material limits are stated above or placed in row 1z.
 
 ## 5. Numeric deltas
 
@@ -103,4 +105,4 @@ Copied from the filled Step-10 tier ledger in commit `7268da41f`; N/A rows are r
 
 ## 9. Step-11 close state
 
-Awaiting Coltrane's Step-11 confirmation at the pushed report ref. After confirmation, row 1y, issue #1192, the batch catalog, phase history, task list, board card and CURRENT POSITION move to CLOSED / Complete; no Kyle acknowledgement is required.
+Coltrane CONFIRMED at the exact pushed report ref `b4f6fbc66952cbee3d7f65028d874a62ff11377b`. Row 1y, issue #1192, the batch catalog, phase history, task list, board card and CURRENT POSITION are CLOSED / Complete. No Kyle acknowledgement is required.

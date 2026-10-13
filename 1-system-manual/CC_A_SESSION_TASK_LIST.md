@@ -75,7 +75,7 @@
 - ✅ **`#947` `B-GOV-CLASS-PARSE` CLOSED 2026-09-29 as `#968`'s duplicate** (Langston) — the parser fix is CC-C's `B-CHANGE-CLASS-PARSER`.
 
 ### ➕ IN FLIGHT AND SLOTTED — the pre-sprint pair and their homes (2026-09-30 / 10-01; order is the sprint plan's, which is the authority)
-- ⏳ **`B-CODEX-FAILOVER` GOVERNANCE** (`#1192`, sprint row 1y; Step 8 PROCEED from Coltrane at `25d7bcf2e`; 41/41 tests; live switch S1 complete). Step 10 is recording the delivered crew and handing the remaining automation gaps to row 1z.
+- ✅ **`B-CODEX-FAILOVER` CLOSED 2026-10-13** (`#1192`, sprint row 1y; Step 8 PROCEED and Step 11 CONFIRMED by Coltrane; code `25d7bcf2e`; report ref `b4f6fbc66`; 41/41 tests; live switch S1 complete). Completion report: `Claude Comms and Packages/Batch Completion/B_CODEX_FAILOVER_COMPLETION_REPORT.md`; remaining automation is row 1z.
 - ▶ **QUEUED: `B-CODEX-FAILOVER-AUTOMATION`** (`#731`, sprint row 1z) — replace the manual wake/alert/hook substitutes, bind handover receipts to their supplying session, prevent reviewer-control commands from waking the reviewer, and add first-class Codex/Coltrane board identities; after row 1y.
 - ✅ **`B-TOKEN-BURN-CUT` CLOSED 2026-10-01** (`#1127`, sprint row 1h; Step 8 CONFIRMED by Langston, Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_TOKEN_BURN_CUT_COMPLETION_REPORT.md`). Sessions are woken only by a message for them.
 - ✅ **`B-WAKE-ARM-EXCLUSIVE` CLOSED 2026-10-02** (`#1140`, sprint row 1o; Step 8 and Step 11 CONFIRMED by Langston; report `Claude Comms and Packages/Batch Completion/B_WAKE_ARM_EXCLUSIVE_COMPLETION_REPORT.md`). One wake watcher per session, enforced by a lease.
