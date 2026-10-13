@@ -38,6 +38,10 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 | 9 · delayed proof | complete population 2026-10-12T00:00Z through 2026-10-13T18:55Z: 2 of 2 scheduled runs minted fresh 7-day sessions; the clean-environment run exited 0; both stored sessions returned `SESSION OK`. Alert `32efdab2-71ab-4571-93cb-35782ec07fc9` resolved with `47e83709a3ba0ca3ef89073c8f6f9532945ffe1a`. |
 | 10 · governance | the rules no longer publish a password or perform a raw login; the seven-day lifetime, access boundary, impact map, reviewer capability, issue closure, active plans, task list, board and both memories are current. The full ledger is below. |
 
+**Step-11 pre-dispatch re-check (2026-10-13T19:19Z):** the shared `dt-api` read path returned HTTP 200, both stored agent sessions returned `SESSION OK`, the refresh service still recorded `Result=success`, and its journal contained the two timer runs and expiry times stated above. This is a current health check of the shared path and stored sessions, not a claim of per-party credentials, isolation or uninterrupted availability since Step 7.
+
+`REVIEWER: object + claim · WHAT OTHER STATES OF THE WORLD ARE CONSISTENT WITH THESE OBJECTS? · HIT — the change-list header still said nothing was installed, and the completion wording could be read as current six-party availability; the header is corrected and the claim is now bounded to its dated evidence · re-derived y`
+
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
 |---|---|---|

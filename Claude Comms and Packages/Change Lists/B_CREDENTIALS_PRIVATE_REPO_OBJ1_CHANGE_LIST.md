@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — STEP 4 CHANGE LIST, INCREMENT 2: OBJ-1 (the crew login)
 
-**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **READY AT:** the commit that carries this revision of the change list (named in the dispatch). **The OBJ-1 code is the round-3 fix — `def3ca76f` + `0296b0b4d`** (round 3 read `82dc4edd2`); `git diff --stat 0296b0b4d 1f8092e96 -- comms-infra/staging comms-infra/agent-staging-session comms-infra/systemd` is empty, so nothing in OBJ-1 moved after it. · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Nothing is installed** — Step 6 follows this review. **Deadline:** the agents' stored staging session stopped refreshing at 2026-09-30 04:40Z and lapses 2026-10-06 04:40Z.
+**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **The OBJ-1 code is the round-3 fix — `def3ca76f` + `0296b0b4d`** (round 3 read `82dc4edd2`); `git diff --stat 0296b0b4d 1f8092e96 -- comms-infra/staging comms-infra/agent-staging-session comms-infra/systemd` is empty, so nothing in OBJ-1 moved after it. · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Installed and verified:** Step 6 installed the reviewed source on 2026-10-04, Steps 7-8 verified it on 2026-10-06, the required scheduled proof passed on 2026-10-12 and 2026-10-13, and Step 10 governance is at `7a7f3e544`. The parent batch remains open for the objectives named in the progress report.
 
 ## THE THREE HEADER FIELDS
 | # | field | value |
