@@ -115,13 +115,14 @@ echo "$SHA" | grep -qE '^[0-9a-f]{40}$' || fail "'$SHA' is not a full 40-char sh
 # key, '@', '*' and a newline-bearing key all yield the empty string under
 # ${A[$k]:-} — verified on this box, bash 5.2.21, not assumed from the manual.
 declare -A DEPLOY_ACTORS=(
-  # the SIX deploy-set canonical values, mapping to themselves
+  # the deploy-set canonical values, mapping to themselves (ELEVEN since B-CODEX-FAILOVER: 4 roster + 4 codex + 3 human;
+  # do not trust this count - server/tests/unit/dt-deploy-actor-parity.test.ts derives the set and is the check)
   [cc-a]=cc-a  [cc-b]=cc-b  [cc-c]=cc-c  [cc-infra]=cc-infra
   [kyle]=kyle  [langston]=langston
   # B-CODEX-FAILOVER (#1192): the Codex failover crew + Coltrane, under their OWN names
   [codex-a]=codex-a  [codex-b]=codex-b  [codex-c]=codex-c  [codex-infra]=codex-infra  [coltrane]=coltrane
-  # the SEVEN aliases — every target is inside the six; none collides with a
-  # canonical value; none points at a machine actor. Union 6+7=13.
+  # the aliases - every target is inside the canonical set; none collides with a canonical value; none points at a
+  # machine actor (the parity test asserts all three). The original seven:
   [cc-a-old-claude]=cc-a
   [cc-analyst]=cc-c
   [cc-c-analyst]=cc-c

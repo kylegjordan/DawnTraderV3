@@ -3,7 +3,7 @@
 
 B-CODEX-FAILOVER (#1192, Kyle 2026-10-13). Kyle types ONE message on Discord:  SWITCH TO CODEX  or  SWITCH TO CLAUDE.
 A deterministic script — not a reviewer's judgement — then:
-  1. records the crew mode (/etc/dawntrader/crew-mode.env, CREW=claude|codex) and a numbered switch;
+  1. records the crew mode and a numbered switch in ONE place, /var/lib/crew-switch/state.json (read: `status`);
   2. posts a HANDOVER ORDER to each outgoing session BY NAME (Claude watchers wake on their names) and an ON-DUTY
      notice to each incoming session;
   3. keeps a checklist: each session confirms with `crew-switch ack <id> "<its name>"`;
@@ -19,14 +19,14 @@ Subcommands:  start <claude|codex> [--by kyle]   ack <id> <name>   status   nag 
 import fcntl, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
 
-STATE = '/var/lib/crew-switch/state.json'
-MODE_FILE = '/etc/dawntrader/crew-mode.env'
+STATE = '/var/lib/crew-switch/state.json'   # the ONE record of the crew mode (Langston (d): no second, unread copy)
 INBOX = '/var/log/cc-discord-inbox.jsonl'
 CC_SEND = '/usr/local/bin/cc-send'
 SENDER = 'Crew switch'
 KYLE_ENV = '/etc/dawntrader/discord-comms.env'
 NAG_FIRST_S = 15 * 60          # first re-send after 15 min, then hourly
 NAG_EVERY_S = 60 * 60
+EXPIRE_S = 24 * 60 * 60        # B2 (Langston): an unconfirmed switch stops nagging after 24 h and closes as EXPIRED
 
 CREWS = {
     'claude': ['OLD Claude', 'NEW Claude', 'ANALYST Claude', 'Infra Claude'],
@@ -39,12 +39,15 @@ def _aliases():
     out = {}
     for crew, names in CREWS.items():
         for n in names:
-            role, kind = n.split(' ')
+            role, kind = n.split(' ')   # every crew name is exactly TWO words; a third raises here, at import
             for k in (f'{role} {kind}', f'{kind} {role}', f'{role}-{kind}', f'{kind}-{role}'):
                 out[k.lower()] = n
     return out
 ALIASES = _aliases()
 
+# A Kyle message that MENTIONS switching but is not the bare command gets a "not acted on" reply (Langston, Step 4:
+# never trade a self-announcing failure for a silent one).
+NEAR = re.compile(r'\bswitch\b.*\b(codex|claude)\b', re.I | re.S)
 TRIGGER = re.compile(r'^\W*switch\s+(?:the\s+crew\s+)?(?:over\s+)?to\s+(codex|claude)\W*$', re.I)
 
 def now(): return time.time()
@@ -74,11 +77,6 @@ def post(msg, notify=False):
     if r.returncode != 0:
         raise SystemExit(f'crew-switch: post FAILED rc={r.returncode}: {r.stderr.strip()[:300]}')
 
-def write_mode(mode, sid):
-    tmp = MODE_FILE + '.tmp'
-    with open(tmp, 'w') as f: f.write(f'CREW={mode}\nSWITCH_ID={sid}\nSINCE={iso()}\n')
-    os.chmod(tmp, 0o644); os.replace(tmp, MODE_FILE)
-
 def ack_cmd(sid):
     return f"ssh root@204.168.141.77 'crew-switch ack {sid} \"<your name>\"'"
 
@@ -88,8 +86,15 @@ def start(to, by='kyle'):
     with Lock():
         st = load()
         sw = st.get('switch')
+        superseded = None
         if sw and not sw.get('complete'):
-            raise SystemExit(f"crew-switch: switch {sw['id']} to {sw['to']} is still open — finish it first (status).")
+            # B2 (Langston, Step 4): a session that can never confirm (a closed window) must not deadlock the next
+            # switch. Kyle's new command IS the decision: close the open one as SUPERSEDED, naming who never confirmed.
+            missing = [x for x in sw['outgoing'] if x not in sw['acks']]
+            sw.update(complete=True, completed=iso(), closed_as='superseded', never_confirmed=missing)
+            st['history'] = (st.get('history') or [])[-20:] + [dict(sw)]
+            superseded = (sw['id'], missing)
+            save(st)
         if st['mode'] == to:
             post(f'Crew switch: the crew is ALREADY on {to.upper()} — nothing to do. (Kyle\'s message was read; no order sent.)')
             return
@@ -100,9 +105,11 @@ def start(to, by='kyle'):
                         'outgoing': CREWS[frm], 'incoming': CREWS[to], 'acks': {}, 'last_nag_t': None,
                         'complete': False}
         st['mode'] = to
-        write_mode(to, sid)
         save(st)
     out, inc = CREWS[frm], CREWS[to]
+    if superseded:
+        post(f"Crew switch {superseded[0]} closed as SUPERSEDED by {sid}; never confirmed: "
+             f"{', '.join(superseded[1]) or 'nobody'}.")
     post(f"{' / '.join(out)} — CREW SWITCH {sid}: Kyle is moving the crew from {frm.upper()} to {to.upper()}. "
          f"You are OUTGOING. Now: bring your work to a step boundary, push everything (git fetch, pull, push; the sync "
          f"gate reads 0 behind / 0 ahead), write your POSITION block in your MEMORY_CC_<X>.md (both copies) so your "
@@ -145,7 +152,7 @@ def status():
     if not sw: print('no switch yet'); return
     missing_out = [x for x in sw['outgoing'] if x not in sw['acks']]
     print(f"switch {sw['id']} {sw['from']}->{sw['to']} started {sw['started']} "
-          f"{'COMPLETE ' + sw.get('completed', '') if sw['complete'] else 'OPEN'}")
+          f"{(sw.get('closed_as') or 'complete').upper() + ' ' + sw.get('completed', '') if sw['complete'] else 'OPEN'}")
     print('  outgoing not yet handed over: ' + (', '.join(missing_out) or 'none'))
     print('  incoming confirmed: ' + (', '.join(x for x in sw['incoming'] if x in sw['acks']) or 'none'))
 
@@ -155,9 +162,21 @@ def nag():
         if not sw or sw['complete']: return
         missing = [x for x in sw['outgoing'] if x not in sw['acks']]
         t = now(); last = sw.get('last_nag_t')
-        due = (last is None and t - sw['started_t'] >= NAG_FIRST_S) or (last is not None and t - last >= NAG_EVERY_S)
-        if not missing or not due: return
-        sw['last_nag_t'] = t; save(st)
+        if missing and t - sw['started_t'] >= EXPIRE_S:
+            sw.update(complete=True, completed=iso(), closed_as='expired', never_confirmed=missing)
+            st['history'] = (st.get('history') or [])[-20:] + [dict(sw)]
+            save(st)
+            expired = True
+        else:
+            expired = False
+            due = (last is None and t - sw['started_t'] >= NAG_FIRST_S) or (last is not None and t - last >= NAG_EVERY_S)
+            if not missing or not due: return
+            sw['last_nag_t'] = t; save(st)
+    if expired:
+        post(f"Kyle — crew switch {sw['id']} to {sw['to'].upper()} CLOSED AS EXPIRED after 24 h; never confirmed: "
+             f"{', '.join(missing)}. The crew stays on {sw['to'].upper()}; open those sessions to hand over by hand.",
+             notify=True)
+        return
     mins = int((t - sw['started_t']) / 60)
     post(f"{' / '.join(missing)} — CREW SWITCH {sw['id']} STILL NOT CONFIRMED after {mins} min. Hand over now "
          f"(step boundary, push, POSITION block), then: {ack_cmd(sw['id'])}.")
@@ -170,6 +189,25 @@ def kyle_id():
         for line in f:
             if line.startswith('KYLE_DISCORD_ID='): return int(line.split('=', 1)[1].strip())
     raise SystemExit('crew-switch: KYLE_DISCORD_ID not found')
+
+def safe(what, arg):
+    """B1 (Langston, Step 4): nothing a dispatch does may kill the watcher — a refusal, a failed post or a timeout
+    is logged to the journal and reported, never raised."""
+    try:
+        if what == 'start':
+            start(arg)
+        else:
+            post(f'Kyle — I saw a message about switching the crew but did NOT act on it: "{arg}". To switch, post '
+                 f'exactly SWITCH TO CODEX or SWITCH TO CLAUDE on its own.', notify=True)
+    except BaseException as x:          # SystemExit (refusal / failed post), subprocess.TimeoutExpired, anything
+        if isinstance(x, KeyboardInterrupt): raise
+        print(f'crew-switch: {what} failed: {x!r}', file=sys.stderr, flush=True)
+        try:
+            post(f'Kyle — crew switch: "{what} {arg}" did not complete ({type(x).__name__}). '
+                 f'Check `crew-switch status` on the Helsinki box.', notify=True)
+        except BaseException as y:
+            if isinstance(y, KeyboardInterrupt): raise
+            print(f'crew-switch: the report failed too: {y!r}', file=sys.stderr, flush=True)
 
 def watch():
     """Follow the inbox log; a message FROM KYLE that is exactly 'switch to codex|claude' starts a switch."""
@@ -187,18 +225,22 @@ def watch():
                 f.seek(off); chunk = f.read(size - off)
             last_nl = chunk.rfind(b'\n')
             if last_nl >= 0:
+                found = []
                 for raw in chunk[:last_nl].split(b'\n'):
                     try: e = json.loads(raw)
                     except Exception: continue
                     if e.get('author_id') != kid or e.get('source') != 'discord-cc-bridge': continue
                     if e.get('kind') not in ('', 'voice_inbound'): continue
-                    m = TRIGGER.match((e.get('text') or '').strip())
-                    if m:
-                        try: start(m.group(1))
-                        except SystemExit as x: post(f'Kyle — crew switch NOT started: {x}', notify=True)
+                    text = (e.get('text') or '').strip()
+                    m = TRIGGER.match(text)
+                    if m: found.append(('start', m.group(1)))
+                    elif NEAR.search(text): found.append(('near', text[:80]))
+                # B1 (Langston, Step 4): advance the offset BEFORE acting, so a failure can never replay or loop.
                 off += last_nl + 1
                 with Lock():
                     st = load(); st['inbox_offset'] = off; save(st)
+                for what, arg in found:
+                    safe(what, arg)
         time.sleep(5)
 
 if __name__ == '__main__':

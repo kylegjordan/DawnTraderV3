@@ -32,7 +32,7 @@ interface SystemAlert {
 
 interface AlertActorOption {
   value: string;
-  tag: 'roster' | 'machine' | 'human';
+  tag: 'roster' | 'codex' | 'machine' | 'human';   // mirrors AlertActorTag in server/services/system-alerts.ts
 }
 
 interface SystemAlertsResponse {
