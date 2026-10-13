@@ -43,7 +43,7 @@ describe('ALERT_ACTORS — the table is the SSOT', () => {
     const values = ALERT_ACTORS.map((a) => a.value);
     expect(new Set(values).size).toBe(values.length);
     for (const a of ALERT_ACTORS) {
-      expect(['roster', 'machine', 'human']).toContain(a.tag);
+      expect(['roster', 'codex', 'machine', 'human']).toContain(a.tag);
       expect(a.why.length).toBeGreaterThan(0);
       expect(a.value).toBe(a.value.trim().toLowerCase());     // stored form IS the canonical form
       expect(normaliseAlertActor(a.value)).toBe(a.value);      // round-trips
@@ -80,6 +80,13 @@ describe('normalisation — exact aliases store the canonical; everything else i
     expect(normaliseAlertActor('infra-claude')).toBe('cc-infra');
     expect(normaliseAlertActor('Langston')).toBe('langston');
     expect(normaliseAlertActor('Langston (reviewer)')).toBe('langston');
+    // B-CODEX-FAILOVER: the Codex crew, in either word order, and never onto a Claude value
+    expect(normaliseAlertActor('OLD Codex')).toBe('codex-a');
+    expect(normaliseAlertActor('Codex Old')).toBe('codex-a');
+    expect(normaliseAlertActor('codex new')).toBe('codex-b');
+    expect(normaliseAlertActor('ANALYST Codex')).toBe('codex-c');
+    expect(normaliseAlertActor('Codex Infra')).toBe('codex-infra');
+    expect(normaliseAlertActor('Coltrane')).toBe('coltrane');
     expect(normaliseAlertActor('langston-reviewer')).toBe('langston');
     expect(normaliseAlertActor('Langston-reviewer')).toBe('langston');
     expect(normaliseAlertActor('kyle-direct')).toBe('kyle');

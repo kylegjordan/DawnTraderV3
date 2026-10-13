@@ -92,7 +92,7 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     // If this ever fails, do not "fix" it by editing the expected list: it means
     // ALERT_ACTORS changed, and the question is whether the new actor DEPLOYS.
     expect(deployCanonical.sort()).toEqual(
-      ['cc-a', 'cc-b', 'cc-c', 'cc-infra', 'kyle', 'langston'].sort(),
+      ['cc-a', 'cc-b', 'cc-c', 'cc-infra', 'codex-a', 'codex-b', 'codex-c', 'codex-infra', 'kyle', 'langston', 'coltrane'].sort(),
     );
     const machine = ALERT_ACTORS.filter((a) => a.tag === 'machine').map((a) => a.value);
     for (const m of machine) expect(deployCanonicalSet.has(m)).toBe(false);

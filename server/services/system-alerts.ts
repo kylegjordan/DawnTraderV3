@@ -203,7 +203,7 @@ export function isValidResolutionEvidence(s: unknown): s is string {
 // the normalisation table below is EXACT strings after trim + lowercase — never a
 // prefix, never a regex — so `langston (transport: …)` is refused, not mapped
 // (Langston Step-2 condition L3). Historical rows are NOT rewritten (OBJ-5).
-export type AlertActorTag = 'roster' | 'machine' | 'human';
+export type AlertActorTag = 'roster' | 'codex' | 'machine' | 'human';
 export interface AlertActor {
   readonly value: string;
   readonly tag: AlertActorTag;
@@ -215,6 +215,12 @@ export const ALERT_ACTORS = [
   { value: 'cc-b',     tag: 'roster', why: 'Claude New (NEW Claude) — roster-bound session' },
   { value: 'cc-c',     tag: 'roster', why: 'Claude Analyst (ANALYST Claude) — roster-bound session' },
   { value: 'cc-infra', tag: 'roster', why: 'Infra Claude — roster-bound session' },
+  // codex — the failover crew (B-CODEX-FAILOVER #1192, Kyle 2026-10-13): one Codex session per Claude folder, acting under
+  // ITS OWN name, never its Claude counterpart's (#656/#987 provenance). They deploy and act on alerts like the roster.
+  { value: 'codex-a', tag: 'codex', why: 'OLD Codex — the Codex stand-in for OLD Claude (CC-A) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
+  { value: 'codex-b', tag: 'codex', why: 'NEW Codex — the Codex stand-in for NEW Claude (CC-B) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
+  { value: 'codex-c', tag: 'codex', why: 'ANALYST Codex — the Codex stand-in for ANALYST Claude (CC-C) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
+  { value: 'codex-infra', tag: 'codex', why: 'INFRA Codex — the Codex stand-in for Infra Claude (CC-INFRA) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
   // machine — timers and scripts that act on the file with a fixed name
   { value: 'governance-checker',           tag: 'machine', why: 'scripts/governance-checker/poller.mjs (30-min timer): add + auto-resolve' },
   { value: 'governance-checker-heartbeat', tag: 'machine', why: 'scripts/governance-checker/heartbeat-check.mjs (15-min timer)' },
@@ -225,6 +231,7 @@ export const ALERT_ACTORS = [
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
   { value: 'langston', tag: 'human', why: 'the reviewer, acting through the CLI over SSH from Helsinki' },
+  { value: 'coltrane', tag: 'human', why: 'the Codex reviewer — stands in for Langston during a Codex shift (B-CODEX-FAILOVER #1192)' },
 ] as const satisfies readonly AlertActor[];
 export type CanonicalAlertActor = typeof ALERT_ACTORS[number]['value'];
 const ALERT_ACTOR_VALUES: ReadonlySet<string> = new Set(ALERT_ACTORS.map((a) => a.value));
@@ -242,6 +249,22 @@ export const ALERT_ACTOR_NORMALISATION: Readonly<Record<string, CanonicalAlertAc
   'langston (reviewer)': 'langston',
   'langston-reviewer':   'langston',
   'kyle-direct':         'kyle',   // the dt-deploy convention (scripts/dt-deploy.sh)
+  // B-CODEX-FAILOVER: each Codex name in either word order (Kyle 2026-10-13: 'if I say it backwards, it knows who I mean').
+  'old codex': 'codex-a',
+  'codex old': 'codex-a',
+  'old-codex': 'codex-a',
+  'codex-old': 'codex-a',
+  'new codex': 'codex-b',
+  'codex new': 'codex-b',
+  'new-codex': 'codex-b',
+  'codex-new': 'codex-b',
+  'analyst codex': 'codex-c',
+  'codex analyst': 'codex-c',
+  'analyst-codex': 'codex-c',
+  'codex-analyst': 'codex-c',
+  'infra codex': 'codex-infra',
+  'codex infra': 'codex-infra',
+  'infra-codex': 'codex-infra',
 };
 
 /**

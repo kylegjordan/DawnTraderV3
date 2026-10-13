@@ -43,7 +43,7 @@ LIVENESS_URL="http://localhost:5000/api/health/liveness"
 SHA="${1:-}"
 PRE_RESTART=""
 BY=""
-USAGE="Usage: dt-deploy <full-40-char-sha> --by <cc-a|cc-b|cc-c|cc-infra|kyle|langston> [--pre-restart '<npm script>']"
+USAGE="Usage: dt-deploy <full-40-char-sha> --by <cc-a|cc-b|cc-c|cc-infra|codex-a|codex-b|codex-c|codex-infra|kyle|langston|coltrane> [--pre-restart '<npm script>']"
 shift $(( $# > 0 ? 1 : 0 ))
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -118,6 +118,8 @@ declare -A DEPLOY_ACTORS=(
   # the SIX deploy-set canonical values, mapping to themselves
   [cc-a]=cc-a  [cc-b]=cc-b  [cc-c]=cc-c  [cc-infra]=cc-infra
   [kyle]=kyle  [langston]=langston
+  # B-CODEX-FAILOVER (#1192): the Codex failover crew + Coltrane, under their OWN names
+  [codex-a]=codex-a  [codex-b]=codex-b  [codex-c]=codex-c  [codex-infra]=codex-infra  [coltrane]=coltrane
   # the SEVEN aliases — every target is inside the six; none collides with a
   # canonical value; none points at a machine actor. Union 6+7=13.
   [cc-a-old-claude]=cc-a
@@ -127,8 +129,24 @@ declare -A DEPLOY_ACTORS=(
   ["langston (reviewer)"]=langston
   [langston-reviewer]=langston
   [kyle-direct]=kyle
+  # B-CODEX-FAILOVER: each Codex name in either word order
+  ["old codex"]=codex-a
+  ["codex old"]=codex-a
+  [old-codex]=codex-a
+  [codex-old]=codex-a
+  ["new codex"]=codex-b
+  ["codex new"]=codex-b
+  [new-codex]=codex-b
+  [codex-new]=codex-b
+  ["analyst codex"]=codex-c
+  ["codex analyst"]=codex-c
+  [analyst-codex]=codex-c
+  [codex-analyst]=codex-c
+  ["infra codex"]=codex-infra
+  ["codex infra"]=codex-infra
+  [infra-codex]=codex-infra
 )
-DEPLOY_ACTOR_LIST="cc-a | cc-b | cc-c | cc-infra | kyle | langston"
+DEPLOY_ACTOR_LIST="cc-a | cc-b | cc-c | cc-infra | codex-a | codex-b | codex-c | codex-infra | kyle | langston | coltrane"
 
 [ -n "$BY" ] || fail "no --by given. Every deploy names its session — the observed unix identity is the same for all of them, so without the claim the record cannot attribute this deploy. $USAGE"
 # trim + lowercase, then EXACT lookup. Never a prefix, never a regex (#987 L3).
