@@ -42,6 +42,8 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 
 `REVIEWER: object + claim · WHAT OTHER STATES OF THE WORLD ARE CONSISTENT WITH THESE OBJECTS? · HIT — the change-list header still said nothing was installed, and the completion wording could be read as current six-party availability; the header is corrected and the claim is now bounded to its dated evidence · re-derived y`
 
+**STEP 11 BLOCKED — no completion verdict:** Coltrane re-read the graded failover rule assigning him this review, but his higher-priority deployed instruction says routine batch reviews remain exclusively Langston's and cannot be replaced by a repository rule. Langston is disabled in CODEX mode, so Kyle must amend that deployed instruction or explicitly choose another reviewer; OBJ-1 has no Step-11 approval and the parent card remains in Governance.
+
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
 |---|---|---|
