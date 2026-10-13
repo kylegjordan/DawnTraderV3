@@ -77,14 +77,20 @@ A same-method crypto control at 21:11:38.789Z returned a BTC current OHLC bucket
 - `server/services/passive-archive/ohlc-batch-writer.ts:345-363` upserts by `(symbol, interval_begin)`, touches `captured_at=NOW()`, persists `arrived_at`, and uses arrival order for overwrite safety.
 - `server/services/passive-archive/equity-spot-archiver.ts:315` stamps ticker `capturedAt` locally; the equities ticker payload supplies no venue clock.
 
-### Live and replay consumers
+### Current runtime consumers
 
 - `server/asset_classes/xstock_spot/scanner.ts:592` reads 15-minute bars; `:914-915` prices strategy geometry from the latest rolled bar close.
 - `server/asset_classes/xstock_spot/ohlc-aggregator.ts:225-297` buckets and orders by `interval_begin`; it does not carry `arrived_at` into the aggregate.
 - `server/services/xstock-ohlc-cache.ts:217-329` caches the rollup and merges snapshots/live overlays without an availability predicate.
 - `server/core/metrics/regime-inputs.ts` consumes the same xStock OHLC cache for regime refresh.
 - `server/services/exit-strategy-replay-service.ts:163-173` reads and orders by `interval_begin` only.
+- `server/routes.ts:9052-9060` exposes the live passive-archive status route. Its `computePassiveArchiveStatus` reader in `server/services/drift-dashboard-aggregator.ts:888-997` applies the same wall-clock window start to OHLC `interval_begin` and ticker `captured_at`. That is the mixed-clock boundary in monitoring form: it can skew the dashboard's stored-row and active-symbol comparison even though it does not affect admission or execution.
+
+### Offline and non-current readers
+
 - `scripts/b-xstock-calib-b31a-gate-audit.ts:125-138` reconstructs decision-minute bars from `interval_begin` only while asserting no look-ahead.
+- `server/services/amr-context-bonus-shadow.ts:111-146` reads label-time SPY 15-minute snapshots, but `computeContextBonusShadow` has zero production callers at this ref: the repo-wide code search finds only its export definition. Positive control: the same caller-search method finds the passive-archive route plus its aggregator definition and tests. **Disposition:** fold a dormant-path guard into `B-XSTOCK-BAR-AVAILABILITY`; if this module gains a caller at the implementation ref, it must adopt the decided availability contract before activation.
+- `server/scripts/b-xstock-freshness-monitor.ts:181-216` also queries OHLC by `interval_begin`, but it is not a running reader: its own header says it is a superseded draft, the required `xstock_freshness_report` migration is absent, and `RUNNING_ISSUES #441` records it as inert and unscheduled. **Disposition:** it remains owned by existing batch `B-XSTOCK-FRESHNESS-MONITOR` / `#441`; that rebuild must consume the contract settled by `B-XSTOCK-BAR-AVAILABILITY`, not independently reinterpret the label clock.
 
 Fixed live-provenance population, 2026-10-13 18:30–20:00Z: 61,940 xStock `signal_eval_provenance` rows across 414 symbols with `bar_interval_sec=900` had `decision captured_at - forming_bar_ts` p01 947.0 seconds, p50 1,484.1 seconds, and p99 2,055.8 seconds. Thus even the youngest bar called “forming” in this population was more than 15 minutes behind the decision clock.
 
@@ -121,7 +127,7 @@ The batch starts with a contract decision, not a code patch:
 1. Obtain or bound the `ws-equities` OHLC label/publication contract with Kraken, preserving the three still-consistent states above if the venue cannot answer.
 2. Define separate event/interval, source-publication (if available), local-arrival, cache-insertion, and decision clocks for xStock bars.
 3. Decide live semantics for an unavailable/current bar and replay semantics (`arrived_at <= decision_time` where historical receipt exists; honest unknown/era boundary where it does not).
-4. Only after that decision, adapt ingress/aggregation/cache/scanner/replay/calibration/provenance together; never silently add 15 minutes to `interval_begin` or relabel historical rows.
+4. Only after that decision, adapt ingress/aggregation/cache/scanner/replay/calibration/provenance and the passive-archive dashboard together; never silently add 15 minutes to `interval_begin` or relabel historical rows. Re-run the caller census at the implementation ref so a newly activated dormant reader cannot bypass the contract.
 5. Re-measure live decision age and same-label/receipt-time pairing after the change, with the crypto control retained.
 
 This batch is a precondition for interpreting historical xStock simulations and therefore stays ahead of the paper reset and learning-record restart.

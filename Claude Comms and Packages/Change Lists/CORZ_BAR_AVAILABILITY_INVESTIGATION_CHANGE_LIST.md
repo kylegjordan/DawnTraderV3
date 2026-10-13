@@ -6,7 +6,7 @@
 
 **Base ref:** `483e6f4903a65d6da0c3267790f6083b2cf32be0`
 
-**Review branch:** `migration/corz-bar-availability-investigation`
+**Graded branch:** `migration/aws-supabase`
 
 ## Claim to review
 
@@ -18,7 +18,7 @@ Rule-24 classification is outcome (3): the B74 raw sink works as designed, but i
 
 | file | change |
 |---|---|
-| `Claude Comms and Packages/Scope Files/CORZ_QUOTE_VS_BARS_INVESTIGATION_2026-10-13.md` | New evidence record: CORZ reproduction, actual-arrival and crypto controls, raw-wire control, consumer/provenance census, history, competing states, taxonomy, and next-batch boundary. |
+| `Claude Comms and Packages/Scope Files/CORZ_QUOTE_VS_BARS_INVESTIGATION_2026-10-13.md` | New evidence record: CORZ reproduction, actual-arrival and crypto controls, raw-wire control, complete current-consumer census, explicit non-current-reader dispositions, history, competing states, taxonomy, and next-batch boundary. |
 | `1-system-manual/RUNNING_ISSUES.md` | Adds CC-C issue `#707` with the finding and explicit §9.4 home. |
 | `1-system-manual/SPRINT_TO_LIVE_PLAN.md` | Places `B-XSTOCK-BAR-AVAILABILITY` in pre-sprint Stage 3 before `B-CRON-MISSED-CATCHUP`. |
 | `Claude Comms and Packages/Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md` | Replaces the open CORZ symptom with the bounded conclusion and record pointer. |
@@ -32,13 +32,18 @@ Rule-24 classification is outcome (3): the B74 raw sink works as designed, but i
 4. Is the placed home precise enough: CC-C, Stage 3, after the completed investigation and before `B-CRON-MISSED-CATCHUP`?
 5. Does any statement collapse the still-consistent states (late event-time publication, shifted label, or whole-feed delay) into a verdict?
 
+## Coltrane round-1 correction
+
+At `c6f661e2929cfbfb0e7e65d1241623611f2d0ff7`, Coltrane accepted the mechanism boundary, outcome (3), and placement, but found the consumer census incomplete. This revision adds the route-reachable passive-archive dashboard reader, which compares OHLC `interval_begin` and ticker `captured_at` under one rolling-window cutoff; it is included in `B-XSTOCK-BAR-AVAILABILITY`. It also records the adjacent non-current readers: the AMR context shadow has zero production callers and gains an activation guard in this batch, while the inert freshness monitor remains with existing `#441` and must inherit the settled contract when rebuilt.
+
 ## Verification already performed
 
 - Direct equities and crypto WebSocket subscriptions, using the same subscription method.
 - Current staging population with actual `arrived_at`: 20,151 xStock bars / 465 symbols versus 11,677 crypto bars / 432 symbols.
 - Historical and current price pairing at the label clock versus the receipt/write clock.
 - Live decision-provenance age population: 61,940 rows / 414 symbols at 15-minute bars.
-- Producer, writer, scanner, aggregator, cache, regime, replay, calibration, and provenance paths traced at the base ref.
+- Producer, writer, scanner, aggregator, cache, regime, replay, passive-archive dashboard, calibration, and provenance paths traced at the base ref.
+- Adjacent reader census: `computeContextBonusShadow` has only its export definition in production code (positive control finds the passive-archive caller); the freshness-monitor draft is explicitly inert under `#441`.
 - One required claim-only fresh-reader pass; its hit and the re-derivation are recorded at the end of the investigation file.
 
 No runtime code, migration, configuration, deployment, or trading state changes in this review.
