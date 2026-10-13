@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — STEP 4 CHANGE LIST, INCREMENT 2: OBJ-1 (the crew login)
 
-**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **The OBJ-1 code is the round-3 fix — `def3ca76f` + `0296b0b4d`** (round 3 read `82dc4edd2`); `git diff --stat 0296b0b4d 1f8092e96 -- comms-infra/staging comms-infra/agent-staging-session comms-infra/systemd` is empty, so nothing in OBJ-1 moved after it. · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Installed and verified:** Step 6 installed the reviewed source on 2026-10-04, Steps 7-8 verified it on 2026-10-06, the required scheduled proof passed on 2026-10-12 and 2026-10-13, and Step 10 governance is at `7a7f3e544`. The parent batch remains open for the objectives named in the progress report.
+**Owner:** Infra Claude (CC-INFRA) · **Issue:** `#1023` · **The OBJ-1 code is the round-3 fix — `def3ca76f` + `0296b0b4d`** (round 3 read `82dc4edd2`); `git diff --stat 0296b0b4d 1f8092e96 -- comms-infra/staging comms-infra/agent-staging-session comms-infra/systemd` is empty, so nothing in OBJ-1 moved after it. · **First build:** `bd698603a` (code) + `8cc41792b` (exec bits) · **Complete:** Step 6 installed the reviewed source on 2026-10-04, Steps 7-8 verified it on 2026-10-06, the required scheduled proof passed on 2026-10-12 and 2026-10-13, Step 10 governance is at `7a7f3e544`, and Coltrane confirmed Step 11 at exact ref `680e87b8d` on 2026-10-13. The parent batch remains open for the objectives named in the progress report.
 
 ## THE THREE HEADER FIELDS
 | # | field | value |
@@ -191,3 +191,10 @@
 
 ## THE FILE-ROUTE FINDING — SUPERSEDED, CLOSED UNDER `#1022`
 Handled entirely in `B-SEC-HARDEN` (`#1022`): an nginx edge control (five guards) that you confirmed CLOSED at the public edge at `20a30ab8`, mirrored at `deploy/nginx.conf` (`335e80e4a`); the containment code fix rides the 10-02 release. No probe was run. Nothing in OBJ-1 depends on it. Record: `RUNNING_ISSUES.md` `#1022`.
+
+## STEP 11 — COLTRANE CONFIRMED 2026-10-13 — OBJ-1 ONLY
+- **Exact graded ref:** `680e87b8d30f8909dbd8937a8687e66f78d1cf5a`; CI run `38456301222` showed TypeScript Check, Test Suite, Build and Docker Build all successful.
+- **Independent live checks:** the timer was enabled and waiting; its 2026-10-13 04:40Z run was `0/SUCCESS`; Coltrane's stored token had the exact seven-day lifetime 2026-10-13T04:40:02Z → 2026-10-20T04:40:02Z; `/api/settings` returned HTTP 200 with it and 401 without a token. The signed-in browser rendered the dashboard, while a fresh context redirected to `/login`.
+- **Independent object checks:** the three graded records were byte-identical at the exact ref and the fresh review head; the 18:55 state rewrite retained the 04:40 token; the source uses absolute paths, mints once, writes both agent states and exits nonzero if either write fails.
+- **Honest read boundary:** Coltrane could not read the protected 2026-10-12 journal from his shell and did not claim that he did. The exact-ref record contains the complete measured scheduled population, 2 of 2 runs, with both expiry times.
+- **Verdict:** **CONFIRMED.** OBJ-1 may close. The parent `B-CREDENTIALS-PRIVATE-REPO` batch must remain open for GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repository flip.

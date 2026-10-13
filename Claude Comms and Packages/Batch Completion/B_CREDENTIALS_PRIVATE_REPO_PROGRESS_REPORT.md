@@ -42,7 +42,7 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 
 `REVIEWER: object + claim · WHAT OTHER STATES OF THE WORLD ARE CONSISTENT WITH THESE OBJECTS? · HIT — the change-list header still said nothing was installed, and the completion wording could be read as current six-party availability; the header is corrected and the claim is now bounded to its dated evidence · re-derived y`
 
-**STEP 11 BLOCKED — no completion verdict:** Coltrane re-read the graded failover rule assigning him this review, but his higher-priority deployed instruction says routine batch reviews remain exclusively Langston's and cannot be replaced by a repository rule. Langston is disabled in CODEX mode, so Kyle must amend that deployed instruction or explicitly choose another reviewer; OBJ-1 has no Step-11 approval and the parent card remains in Governance.
+**STEP 11 CONFIRMED — OBJ-1 complete:** after Kyle explicitly authorized Codex-shift reviews, Coltrane independently confirmed exact ref `680e87b8d30f8909dbd8937a8687e66f78d1cf5a` on 2026-10-13. He reproduced the live seven-day token, authenticated 200 / unauthenticated 401 control, signed-in dashboard / fresh-context login redirect, timer state, source behavior and all four green CI jobs. The protected 2026-10-12 journal remained outside his shell boundary, so he relied on the exact-ref 2-of-2 scheduled-run record for that leg and said so. This closes OBJ-1 only; the shared parent card remains in Governance with `Blocked on = Nothing` because the remaining objectives below are still open.
 
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
