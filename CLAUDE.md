@@ -341,9 +341,8 @@ When a CC session's transcript grows too large (context overhead climbs; ~195MB 
 - **GitHub:** `kylegjordan/DawnTraderV3`, branch `migration/aws-supabase`. GitHub CLI `gh` at `"/c/Program Files/GitHub CLI/gh.exe"`, authenticated as `kylegjordan`.
 - **Staging server:** Hetzner CPX22 at `188.245.193.8` (Falkenstein), Ubuntu 24.04. App runs as `dawntrader` under `deploy` user via PM2. **TLS edge (B-SEC-HARDEN #353, 2026-07-13): Caddy on :80/:443 terminates HTTPS (auto Let's Encrypt cert for `188.245.193.8.sslip.io`, auto-renew) and reverse-proxies to nginx on `127.0.0.1:8080`** (nginx keeps WS upgrade + rate limiting + the X-Forwarded-Proto allowlist map → app :5000). SSH is key-only (password auth off); ufw active (deny-in / allow-out / 22,80,443). Rollback: stop caddy + nginx `listen 8080`→`80`.
 - **Database:** Supabase PostgreSQL 17.6 (Frankfurt), project `vqqyisaudwenrdhnmjwt`.
-- **Staging URL:** **canonical = `https://188.245.193.8.sslip.io`** (HTTPS, clean padlock; B-SEC-HARDEN #353). The bare **`http://188.245.193.8` now 302-REDIRECTS to the HTTPS host** (Kyle 2026-07-13 — plain HTTP could still serve the login form = a cleartext-password path; the redirect closes it, no unencrypted login possible). Browsers/Claude-in-Chrome follow the redirect transparently, so §9.3 UI verification + login flows keep working — just land on HTTPS. ⛔⛔ **CREDENTIALS — FOR THE AUTHENTICATED API CALL BELOW, AND NOTHING ELSE.** `testuser123 / SecurePass123!` or `kylegjordan`.
-⛔⛔ **THEY ARE NOT A PRECONDITION FOR §9.3 UI VERIFICATION, AND NO SESSION CAN EVER LOG IN WITH THEM.** ★ **A session MAY NOT TYPE A PASSWORD INTO A FORM — a hard boundary, not a permission.** ⇒ **VERIFY IN CLAUDE-IN-CHROME, which carries Kyle's own session: the full dashboard loads with NO LOGIN** *(measured 2026-08-28).* ⛔ **DO NOT use the in-app Browser pane for staging — it serves a sign-in form it can never get past.**
-★ **THE CONTRADICTION THIS RESOLVES (Kyle, 2026-08-28): sessions repeatedly told him they could not verify because they needed a password. This line listed credentials with no stated purpose, so the inference was reasonable — and the fix is to REMOVE the dead end, not to explain it.** Full table: `workflow-07-verify-cc`.
+- **Staging URL:** **canonical = `https://188.245.193.8.sslip.io`** (HTTPS, clean padlock; B-SEC-HARDEN #353). The bare **`http://188.245.193.8` now 302-REDIRECTS to the HTTPS host** (Kyle 2026-07-13 — plain HTTP could still serve the login form = a cleartext-password path; the redirect closes it, no unencrypted login possible). Browsers/Claude-in-Chrome follow the redirect transparently, so §9.3 UI verification + login flows keep working — just land on HTTPS. **Authenticated shell reads use the server-held crew login through `dt-api`; no password belongs in this file or in a session.**
+⛔⛔ **A session MAY NOT TYPE A PASSWORD INTO A FORM — a hard boundary, not a permission.** ⇒ **VERIFY IN CLAUDE-IN-CHROME, which carries Kyle's own session: the full dashboard loads with NO LOGIN** *(measured 2026-08-28).* ⛔ **DO NOT use the in-app Browser pane for staging — it serves a sign-in form it can never get past.** Full table: `workflow-07-verify-cc`.
 - **CI/CD:** GitHub Actions on migration branch — 4 checks (TypeScript Check, Test Suite, Build, Docker Build). ALL 4 GREEN since B56.
 - **Replit:** FROZEN since 2026-03-30.
 
@@ -358,8 +357,8 @@ ssh root@188.245.193.8 "su - deploy -c 'pm2 logs dawntrader --lines 50 --nostrea
 # Status:
 ssh root@188.245.193.8 "su - deploy -c 'pm2 list'"
 
-# Authenticated API call:
-ssh root@188.245.193.8 'TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login -H "Content-Type: application/json" -d "{\"username\":\"testuser123\",\"password\":\"SecurePass123!\"}" | python3 -c "import json,sys; print(json.load(sys.stdin)[\"accessToken\"])") && curl -s -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/vts/filter-diagnostics'
+# Authenticated API read (server-held crew login; writes are denied by default):
+ssh root@188.245.193.8 "su - deploy -c 'sudo -n -u dtapi /usr/local/bin/dt-api GET /api/vts/filter-diagnostics'"
 ```
 
 ### 7.1 Storage & sync workflow — THE canonical flow (🔒 SET IN STONE — Kyle 2026-07-23, superseding the 2026-06-01 rule)

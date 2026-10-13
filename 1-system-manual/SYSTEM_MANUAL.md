@@ -8453,7 +8453,7 @@ Express App
 
 | Parameter | Value |
 |-----------|-------|
-| Access token lifetime | 12 hours |
+| Access token lifetime | 7 days |
 | Refresh token lifetime | 7 days |
 | Signing algorithm | HS256 (default jsonwebtoken) |
 | Secret source | `JWT_SECRET` environment variable |
@@ -8498,6 +8498,14 @@ Minimal utility module (47 lines):
 | POST | `/api/auth/login` | None | Email/password login → access + refresh tokens |
 | GET | `/api/auth/verify` | Token | Validates token, returns user info |
 | POST | `/api/auth/refresh` | Refresh | Exchanges refresh token for new access token |
+
+### Server-held Crew Access — `B-CREDENTIALS-PRIVATE-REPO` OBJ-1 (2026-10-13)
+
+The six crew users do not carry or type a staging password. On staging, the locked `dtapi` account owns the crew credential and token cache; `deploy` can invoke `dt-api GET <path>` through the narrow sudo rule but cannot read the credential file. `dt-api` canonicalises the requested `/api/` path, denies account, authentication, user-management, mode-switch and kill-switch routes, and starts with an empty write allowlist, so the default capability is authenticated reads only.
+
+The separate `dtmint` account can run only `dt-api mint` through a Helsinki forced-command key. `agent-staging-session` uses that path at 04:40 UTC each day to refresh Langston's and Coltrane's browser sessions without receiving a password; a token younger than 20 hours is reused only while at least 6 days remain. The underlying access and refresh tokens both live for 7 days (`server/routes.ts`), and the crew password is bcrypt cost 10, matching the app's password service.
+
+`dt-install-drift` checks the installed binaries, accounts, permissions, sudo rules, key pairing and session-refresh installation. Failures page through the unit-failure handler; the failed operation leaves the previous stored sessions untouched. The 2026-10-12 and 2026-10-13 scheduled runs both minted fresh 7-day sessions, and a clean-environment run plus both stored-session checks passed on 2026-10-13.
 
 ---
 

@@ -24,6 +24,13 @@ Three fresh-reader rounds changed four of the texts OBJ-4a's row wrote before th
 - **Added at Step 4 (Langston gate 4a-2, folded at `445b6a505`):** the backup gate's two undecidable in-sync arms and a renamed known file are `FAIL-INFRA … NOT a verdict on the backup either way`, never `FAIL-REPRODUCE`; a failed page is logged as `PAGE FAILED (cc-send exit N: …) — the alarm above did NOT reach Discord`.
 - **HOME, Langston gate 4a-2 rider:** `--only readers` never runs the unpinned `pip install -U "discord.py>=2.3"`; the bridges install does. ⇒ **the GB-8 bridges increment of THIS batch pins discord.py** (owner CC-INFRA, §9.4 disposition 1).
 
+## STEP-3 AMENDMENT — OBJ-1 as BUILT and verified (2026-10-13)
+- **Access boundary:** `dtapi` owns the credential and token cache; `deploy` can invoke `dt-api GET <path>` and the empty write allowlist, but cannot read the credential. Account/auth/user, mode-switch and kill-switch routes are refused before sending.
+- **Agent mint boundary:** the `dtmint` forced-command key can run only `dt-api mint`; neither Langston's interactive login nor the four sessions receive the password or mint output as a standing credential. The retired Helsinki password files are recorded in `DELETED_COMPONENTS_LOG`.
+- **Installed-state boundary:** `dt-install-drift` checks the reviewed install, identities, permissions, sudo rules, key pairing and scheduled units; the unit-failure path was fired end-to-end before close.
+- **Delayed proof:** both 04:40Z scheduled runs in the required 2026-10-12 through 2026-10-13 population minted fresh 7-day sessions; the clean-environment reproduction exited 0 and both stored agent sessions passed. Alert `32efdab2-71ab-4571-93cb-35782ec07fc9` was resolved with commit evidence, satisfying Langston's Step-8 condition.
+- **Separate privilege follow-up:** Kyle approved clearing `testuser123.is_admin`; that work remains in `B-USER-RESOLUTION-PIN` (`#1092`) and does not reopen OBJ-1's server-held read path.
+
 ## ROUND RECORD — the fresh-reader loop reached its CAP (3 rounds)
 - `REVIEWER r1: object (r2 at b4948145b) · Langston-ruling coverage + code-claim check · ~15 gaps · fixed in r3`
 - `REVIEWER r2: object (r3 at 8cf041381) · fix-check + cold adversarial · 4 partly, 17 new · fixed in r4`
