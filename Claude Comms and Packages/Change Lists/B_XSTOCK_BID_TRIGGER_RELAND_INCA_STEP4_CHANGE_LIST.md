@@ -116,7 +116,7 @@ Per position: refused ticks, refused ms (between ticks of one episode only), epi
 
 ## STEP 8 EVIDENCE PACKET — THE STZ/USD POST-OPEN READ (2026-10-13 13:30-18:44Z; `error.log`, build `94bf16d1022b8cb24c027df9aa721fb1d0333f18`)
 - **The pre-registered falsifier passed on its intended position.** The current process started at 09:24:30Z; STZ seeded an implausible chain at 09:29:00Z (`seedSpread=0.02005`, retained median `0.00032`). At 13:45:26Z — 15 min 26 s after the US cash open — `SEED_ESCAPED_RI` fired after both sides moved over five run moves, with `spreadNow=0.00423`, the 20-frame `escapeMedian=0.00886`, and both below the 1% ceiling. `EXIT_RELEASED` followed at 13:45:30Z (`bidToStopPct=18.442`, `refusedS=12024`, 11 episodes), and the same tick emitted `XS_FRAME frame=ok` on bid 127.46 / ask 128.00 rather than another refusal.
-- **Sustained-result population:** from 13:46:00Z through the fixed cutoff at 18:44:11Z, STZ emitted **11,418 `XS_FRAME` rows, all `frame=ok`, and zero `REFUSE unvalidated` rows**. Positive control on the same current-process STZ stream: from the new chain's 09:29:01Z seed through the last refusal at 13:45:29Z, the instrument emitted 7,900 `REFUSE unvalidated` rows. The deployed build contains increment A (`e1b37c2d5` is an ancestor). **CC-C verdict: PASS, pending Coltrane's independent re-derivation** — the release fired soon after the open on a clean moving book and stayed released.
+- **Sustained-result population:** from 13:46:00Z through the fixed cutoff at 18:44:11Z, STZ emitted **11,418 `XS_FRAME` rows, all `frame=ok`, and zero `REFUSE unvalidated` rows**. Positive control on the same current-process STZ stream: from the new chain's 09:29:01Z seed through the last refusal at 13:45:29Z, the instrument emitted 7,900 `REFUSE unvalidated` rows. The deployed build contains increment A (`e1b37c2d5` is an ancestor). **CC-C verdict: PASS; Coltrane independently APPROVED at graded ref `7a7f3e544`** — the release fired soon after the open on a clean moving book and stayed released.
 
 ### Re-derive on staging (fixed cutoff; commands run for this packet)
 ```bash
@@ -130,3 +130,7 @@ Ref check from a fetched repo: `git merge-base --is-ancestor e1b37c2d5 94bf16d10
 ### Coltrane gate 1 — CHANGES NEEDED, evidence reach fixed
 
 Coltrane independently confirmed the ancestry check, but his host could not authenticate to staging and the first review ref carried only the implementer's counts. The fixed-window command stdout, exact 34-line release slice, provenance, and SHA-256 digests for all four filtered populations are now committed in `B_XSTOCK_BID_TRIGGER_RELAND_STZ_STEP8_EVIDENCE.md`; the verdict remains pending until he reviews that immutable object.
+
+### Coltrane gate 2 — APPROVED (2026-10-13 19:19Z; graded ref `7a7f3e544`)
+
+Coltrane independently extracted the committed 34-line event slice and reproduced SHA-256 `d498ffc3dd37d037646295dc6756ad488e2c387494b605d559781f597b4a64d5`. He confirmed the 13:45:26Z escape after five moves with the current spread and 20-frame median both below the 1% ceiling, the 13:45:30Z release and usable frame, and accepted the fixed-window stdout of 11,418 usable frames, zero renewed refusals with the empty-stream hash, and 7,900 same-process pre-release refusals as the positive control. **Verdict: APPROVED; no remaining blocker.**
