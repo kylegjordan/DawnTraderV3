@@ -36,3 +36,18 @@ At 08:46:43Z a first run of the r2 tests missed the fake `systemctl` and **stopp
 1. A session ON order completes on the **counterpart's** hand-over only; the incoming session's confirmation is tracked, never chased.
 2. The near-miss reply only fires on messages ≤60 characters.
 3. `LANGSTON ON` while the crew is on Codex leaves the crew on Codex — Langston and Coltrane can both be on.
+
+## Step 8 iteration — late incoming receipts (r4)
+
+**Coltrane verdict at `47e83709a`: BLOCKED.** The final outgoing handover closed the order before an incoming Codex
+session could run the confirmation command that its order message required. He reproduced the refusal from the exact
+`94bf16d10` bytes and matched it to live switch S1, whose completion message reported no incoming confirmations.
+
+**Fix:** keep the intended contract — incoming confirmations are tracked but never chased — and accept a late incoming
+receipt against a completed history row. Late receipts cannot revive an expired or superseded order, and duplicates do
+not replace the first receipt or emit a second post. The existing immediate close on the final outgoing handover is
+unchanged, so an unopened incoming session can never block the switch.
+
+**Regression:** the offline sequence now closes S1 on the fourth outgoing confirmation, accepts `OLD Codex` afterward,
+persists that receipt in S1 history, and proves a repeated reverse-order alias is idempotent. Exact suite: **41 passed,
+0 failed** under `python3 -O` in a private Helsinki temp directory using only the fake sender and fake service.
