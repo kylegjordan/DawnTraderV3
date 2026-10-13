@@ -109,4 +109,13 @@ Per position: refused ticks, refused ms (between ticks of one episode only), epi
 
 ## STEP 8 EVIDENCE PACKET — THE STZ/USD POST-OPEN READ (2026-10-13 13:30-18:44Z; `error.log`, build `94bf16d1022b8cb24c027df9aa721fb1d0333f18`)
 - **The pre-registered falsifier passed on its intended position.** The current process started at 09:24:30Z; STZ seeded an implausible chain at 09:29:00Z (`seedSpread=0.02005`, retained median `0.00032`). At 13:45:26Z — 15 min 26 s after the US cash open — `SEED_ESCAPED_RI` fired after both sides moved over five run moves, with `spreadNow=0.00423`, the 20-frame `escapeMedian=0.00886`, and both below the 1% ceiling. `EXIT_RELEASED` followed at 13:45:30Z (`bidToStopPct=18.442`, `refusedS=12024`, 11 episodes), and the same tick emitted `XS_FRAME frame=ok` on bid 127.46 / ask 128.00 rather than another refusal.
-- **Sustained-result population:** from 13:46:00Z through the last available line at 18:44:11Z, STZ emitted **11,470 `XS_FRAME` rows, all `frame=ok`, and zero `REFUSE unvalidated` rows**. Positive controls on the same current-process STZ stream: the 09:24-13:49Z control slice contains 7,920 `REFUSE unvalidated` rows (all before the release), and the log contains 16 fleet `EXIT_RELEASED` rows from 13:00Z through the read. The deployed build contains increment A (`e1b37c2d5` is an ancestor). **CC-C verdict: PASS, pending Coltrane's independent re-derivation** — the release fired soon after the open on a clean moving book and stayed released.
+- **Sustained-result population:** from 13:46:00Z through the fixed cutoff at 18:44:11Z, STZ emitted **11,418 `XS_FRAME` rows, all `frame=ok`, and zero `REFUSE unvalidated` rows**. Positive control on the same current-process STZ stream: from the new chain's 09:29:01Z seed through the last refusal at 13:45:29Z, the instrument emitted 7,900 `REFUSE unvalidated` rows. The deployed build contains increment A (`e1b37c2d5` is an ancestor). **CC-C verdict: PASS, pending Coltrane's independent re-derivation** — the release fired soon after the open on a clean moving book and stayed released.
+
+### Re-derive on staging (fixed cutoff; commands run for this packet)
+```bash
+grep -F 'STZ/USD' /var/log/dawntrader/error.log | grep -E '^2026-10-13 13:45:(0[0-9]|1[0-9]|2[0-9]|3[0-9])'
+grep -F '[3n.q7][XS_FRAME] STZ/USD' /var/log/dawntrader/error.log | sed -n '/^2026-10-13 13:46:/,/^2026-10-13 18:44:11/p' | sed -n 's/.* frame=\([^ ]*\).*/\1/p' | sort | uniq -c
+grep -F 'STZ/USD' /var/log/dawntrader/error.log | sed -n '/^2026-10-13 13:46:/,/^2026-10-13 18:44:11/p' | grep -F 'REFUSE unvalidated' | awk 'END{print NR}'
+grep -F 'STZ/USD' /var/log/dawntrader/error.log | sed -n '/^2026-10-13 09:29:01/,/^2026-10-13 13:45:29/p' | grep -F 'REFUSE unvalidated' | awk 'END{print NR}'
+```
+Ref check from a fetched repo: `git merge-base --is-ancestor e1b37c2d5 94bf16d1022b8cb24c027df9aa721fb1d0333f18` exits 0.
