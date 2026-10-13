@@ -257,18 +257,25 @@ def ack(oid, name):
     if not n: raise SystemExit(f'crew-switch: unknown name {name!r}. Known: ' + ', '.join(sorted(set(ALIASES.values()))))
     with Lock():
         st = load(); o = st['orders'].get(oid)
+        closed = False
         if not o:
-            raise SystemExit(f"crew-switch: no open order {oid} (open: {', '.join(st['orders']) or 'none'}).")
+            # Incoming sessions are deliberately tracked but never chased. The last outgoing handover closes an
+            # order immediately, so an incoming session opened afterwards must be able to leave a late receipt on
+            # the completed history row. Superseded/expired orders stay closed: a stale receipt must not revive them.
+            o = next((x for x in reversed(st.get('history') or []) if x.get('id') == oid), None)
+            if not o or o.get('closed_as') != 'complete' or n not in o.get('incoming', []):
+                raise SystemExit(f"crew-switch: no open order {oid} (open: {', '.join(st['orders']) or 'none'}).")
+            closed = True
         if n not in o['outgoing'] + o['incoming']:
             raise SystemExit(f'crew-switch: {n} is not part of order {oid}.')
         first = n not in o['acks']
-        o['acks'][n] = iso()
+        if first: o['acks'][n] = iso()
         side = 'handed over' if n in o['outgoing'] else 'on duty'
         done = [x for x in o['outgoing'] if x in o['acks']]
         total = len(o['outgoing'])
-        completed = len(done) == total
+        completed = not closed and len(done) == total
         if completed: _close(st, oid, 'complete')
-        save(st)
+        if first: save(st)
     msgs = []
     if first: msgs.append((f"Order {oid}: {n} {side} ({len(done)}/{total} outgoing handed over).", False))
     if completed:

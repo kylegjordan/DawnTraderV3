@@ -85,6 +85,16 @@ set_sc(GOOD_SC)
 for x in ['new claude', 'ANALYST CLAUDE', 'claude infra']: cs.ack(s1, x)
 st = cs.load(); p = read_posts()
 ok('T5 complete + Kyle notified', s1 not in st['orders'] and 'COMPLETE' in text(p[-1]) and '--notify' in p[-1])
+# Step-8 blocker (Coltrane): the last outgoing ack closes the order before an incoming session opened later can
+# confirm. A late incoming receipt must land on the completed history row, and a duplicate remains idempotent.
+n = len(read_posts()); cs.ack(s1, 'OLD Codex'); st = cs.load(); p = since(n)
+h1 = next(o for o in st['history'] if o['id'] == s1)
+ok('T5 outgoing-then-incoming receipt is accepted after completion',
+   h1['acks'].get('OLD Codex') and len(p) == 1 and 'OLD Codex on duty' in text(p[0]))
+first_receipt = h1['acks']['OLD Codex']
+n = len(read_posts()); cs.ack(s1, 'codex old')
+duplicate_receipt = next(o for o in cs.load()['history'] if o['id'] == s1)['acks']['OLD Codex']
+ok('T5 duplicate late incoming receipt is idempotent', len(read_posts()) == n and duplicate_receipt == first_receipt)
 cs.start('claude'); ok('T5 Langston active/enabled', lang() == 'active/enabled' and cs.load()['mode'] == 'claude')
 
 # T6 LANGSTON OFF / ON alone (the crew stays as it is)
