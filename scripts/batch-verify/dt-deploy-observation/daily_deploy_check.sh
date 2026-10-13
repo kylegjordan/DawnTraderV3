@@ -24,7 +24,10 @@ echo "record.restart   = $REC_RT   live.restart = $LIVE_RT   status = $LIVE_STAT
 echo "deployed_by_claimed = '$REC_BY'"
 [ "$REC_SHA" = "$BUILD_SHA" ] && echo "  sha record-vs-built: MATCH" || echo "  sha record-vs-built: DRIFT (#647 class - overwrite)"
 [ "$REC_SHA" = "$HEAD_SHA" ] && echo "  sha record-vs-HEAD:  MATCH" || echo "  sha record-vs-HEAD:  DRIFT"
-if [ "$LIVE_RT" -gt "$REC_RT" ]; then echo "  restart_time HIGHER than record => crash-restart since deploy (delta $((LIVE_RT-REC_RT)))"
+# 2026-10-13 (CC-B): a failed live read left LIVE_RT empty, both tests errored, and the else branch printed "EQUAL => no
+# restart" - a PASS from an instrument that read nothing (run as root, pm2 lists root's empty daemon). Refuse instead.
+if ! [[ "$LIVE_RT" =~ ^[0-9]+$ && "$REC_RT" =~ ^[0-9]+$ ]]; then echo "  restart_time UNREADABLE (live='$LIVE_RT' record='$REC_RT') => NO VERDICT - run as the deploy user"
+elif [ "$LIVE_RT" -gt "$REC_RT" ]; then echo "  restart_time HIGHER than record => crash-restart since deploy (delta $((LIVE_RT-REC_RT)))"
 elif [ "$LIVE_RT" -lt "$REC_RT" ]; then echo "  restart_time LOWER than record => boot-resurrect"
 else echo "  restart_time EQUAL to record => no restart since deploy"; fi
 [ -n "$REC_BY" ] && echo "  deployed_by_claimed populated: YES (#656)" || echo "  deployed_by_claimed EMPTY (#656)"
