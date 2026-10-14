@@ -1,8 +1,34 @@
 # B-CREW-ACCESS-HARDEN — Step 3 Ref A change list
 
-**Review target:** the passive dashboard prerequisite and dormant implementation assets only. No database value, server authorization, private key, Windows service/task/profile, installed wrapper, SSH server setting, package, jail, firewall state or governed caller source is changed by this ref.
+## Mandatory Step-4 dispatch fields
 
-**Change class:** sub-batch implementation / access hardening
+**i. DECLARED CHANGE-CLASS:** `sub_batch`
+
+**ii. SUB-BATCH DOCUMENT SET, ROW BY ROW:**
+
+| document-set row | status at Ref A |
+|---|---|
+| batch `SCOPE` | **present** — `Claude Comms and Packages/Scope Files/B_CREW_ACCESS_HARDEN_SCOPE.md` |
+| batch `PRE_AUDIT` | **present** — `Claude Comms and Packages/Scope Files/B_CREW_ACCESS_HARDEN_PRE_AUDIT.md` |
+| `COMPLETION_REPORT` | **absent** — Step 11 deliverable; Ref A is an internal Step-3/4 source boundary, not batch completion |
+| `BATCH_CATALOG.md` | **absent from this ref's change** — required Step-10 close update |
+| `PHASE_HISTORY.md` | **absent from this ref's change** — required Step-10 close update |
+| `SYSTEM_MANUAL.md` | **judged N/A for Ref A** — no trading architecture, strategy, regime, filter, signal-pipeline or quantitative-math behavior changes |
+| `SYSTEM_IMPACT_MAP.md` | **absent from this ref's change** — applicable Step-10 update because the laptop access component and server controls are new |
+| `CHANGES_AND_FIXES.md` | **absent from this ref's change** — applicability will be recorded in the complete Step-10 ledger after live outcomes are known |
+| `RUNNING_ISSUES.md` | **present at the ref** — existing `#1092` and `#924` govern this sub-batch; Ref A does not change their disposition |
+| `POST_AUDIT_ROADMAP.md` | **judged N/A for Ref A** — no phase-level roadmap decision changes |
+| `DELETED_COMPONENTS_LOG.md` | **judged N/A for Ref A** — no component is removed |
+| `ADJUSTMENT_FRAMEWORK.md` | **judged N/A for Ref A** — no governed trading parameter changes |
+| `PHASE_19_PLAN.md` | **judged N/A** — this batch is not `P19-*` and has no in-flight row there |
+| active plan `SPRINT_TO_LIVE_PLAN.md` | **present at the ref** — the batch has its active pre-sprint row; close status waits for Step 10 |
+| shared and Infra memory files | **present at the ref** — batch position is recorded; final step position waits for the step boundary |
+| four session task lists | **absent from this ref's change** — Infra's required close update and the other three `N/A — not mine` verdicts wait for Step 10 |
+| Langston memory | **absent from this ref's change** — required Step-10 close update after the finished outcome is known |
+
+**iii. STEP-2 REFERENCE:** `Claude Comms and Packages/Scope Files/B_CREW_ACCESS_HARDEN_PRE_AUDIT.md` at approved ref `47aa50f25fe8a0c1c0a7da18d33510f2dfe348e5`.
+
+**Review target:** the passive dashboard prerequisite and dormant implementation assets only. No database value, server authorization, private key, Windows service/task/profile, installed wrapper, SSH server setting, package, jail, firewall state or governed caller source is changed by this ref.
 
 **Issues:** `#1092`, `#924`
 
@@ -45,6 +71,100 @@ Ten deterministic tests cover current-session success; zero, wrong and multiple 
 - `comms-infra/security/fail2ban/README.md`
 
 The SSH manager requires two held laptop recovery sessions, saves only the exact replaced drop-in, validates syntax, reloads rather than restarts, and evaluates every required Helsinki account/source context. The fail2ban manager pins the audited package version, renders an ignore set containing loopback and the current laptop but not the peer test source, requires a real journal filter-match positive control, and preserves exact rollback state. Separate peer-attempt and target-observation tools drive the production jail/firewall proof without a valid password and explicitly unban the disposable source.
+
+## Load-bearing diff snippets
+
+### MODIFIED — dashboard scan source
+
+Before:
+
+```tsx
+// Phase 27.F.19b: Fetch diagnostics for nextScanAt
+const { data: diagnosticsData } = useQuery<{ nextScanAt?: string }>({
+  queryKey: ['/api/active-engine/diagnostics/scan?mode=paper&limit=10&trace=false&strategies=false'],
+  staleTime: 10 * 1000,
+  refetchInterval: 10 * 1000,
+});
+
+if (!diagnosticsData?.nextScanAt) {
+  setCountdown('—:—');
+  return;
+}
+```
+
+After:
+
+```tsx
+const latestScan = useQuery<LatestScanResponse>({
+  queryKey: ['/api/active-engine/diagnostics/scan-latest', 'paper'],
+  queryFn: () => apiFetch('/api/active-engine/diagnostics/scan-latest?mode=paper'),
+  staleTime: 10 * 1000,
+  refetchInterval: 10 * 1000,
+});
+
+const nextScanInMs = latestScan.data?.data?.nextScanInMs;
+const nextScanAtMs = typeof nextScanInMs === 'number'
+  ? (latestScan.dataUpdatedAt || Date.now()) + nextScanInMs
+  : null;
+```
+
+### NEW — fail-closed key-holder assertion
+
+Before: file absent.
+
+After:
+
+```python
+def assert_unlocked(self) -> dict[str, Any]:
+    marker = self.backend.read_marker()
+    epoch = self.backend.service_epoch()
+    expected = {
+        "version": 1,
+        "fingerprint": self.config.expected_fingerprint,
+        "luid": self.backend.current_luid(),
+        "agentPid": epoch.pid,
+        "agentStartTicks": epoch.start_ticks,
+    }
+    if marker != expected:
+        raise KeyholderError("unlock marker does not match this logon and ssh-agent epoch")
+    if self.backend.registry_snapshot():
+        raise KeyholderError("Windows ssh-agent has persistent registry material")
+    self._expected_only()
+    return expected
+```
+
+### NEW — key-only server policy
+
+Before: file absent.
+
+After:
+
+```text
+# B-CREW-ACCESS-HARDEN — canonical production key-only authentication.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin prohibit-password
+```
+
+### NEW — production SSH ban policy template
+
+Before: file absent.
+
+After:
+
+```ini
+[sshd]
+enabled = true
+backend = systemd
+port = ssh
+filter = sshd
+bantime = 10m
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 __LAPTOP_ADDRESS__
+```
 
 ## Continuous verification
 
