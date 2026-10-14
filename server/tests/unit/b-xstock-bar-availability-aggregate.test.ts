@@ -43,14 +43,14 @@ const aggregateRow = (eligibility_state = 'eligible_certified') => ({
   bar_volume: '123.00000000',
   source_bar_count: '2',
   source_revision_ids: sourceIds,
-  source_max_visible_by: eligibility_state === 'eligible_certified' ? '2026-10-14T15:02:00.000Z' : null,
+  source_max_visible_by: eligibility_state === 'eligible_certified' ? '2026-10-14T15:02:00.123456Z' : null,
   source_max_visible_seq: eligibility_state === 'eligible_certified' ? '8' : null,
   source_revision_set_hash_seed: sourceIds.join(','),
   eligibility_state,
 });
 
 const observation = [{
-  read_observed_at: '2026-10-14T15:03:00.000Z',
+  read_observed_at: '2026-10-14T15:03:00.234567Z',
   read_observed_seq: '12',
   certificate_primary_identity: 'test@primary',
 }];
@@ -77,7 +77,8 @@ describe('B-XSTOCK-BAR-AVAILABILITY aggregate contract', () => {
     expect(bar.sourceRevisionIds).toEqual(sourceIds);
     expect(bar.aggregateRevisionId).toBe('33333333-3333-4333-8333-333333333333');
     expect(bar.readObservedSeq).toBe(12);
-    expect(bar.readObservedAt?.toISOString()).toBe('2026-10-14T15:03:00.000Z');
+    expect(bar.sourceMaxVisibleBy).toBe('2026-10-14T15:02:00.123456Z');
+    expect(bar.readObservedAt).toBe('2026-10-14T15:03:00.234567Z');
     expect(() => assertEligibleXstockAggregate(bar)).not.toThrow();
   });
 

@@ -149,9 +149,9 @@ interface AvailabilitySnapshotRow extends SnapshotRow {
   aggregate_revision_id: string | null;
   aggregate_hash: string | null;
   source_revision_set_hash: string | null;
-  source_max_visible_by: Date | string | null;
+  source_max_visible_by: string | null;
   source_max_visible_seq: number | string | null;
-  read_observed_at: Date | string | null;
+  read_observed_at: string | null;
   read_observed_seq: number | string | null;
   certificate_primary_identity: string | null;
   availability_contract_version: string | null;
@@ -167,7 +167,7 @@ interface AvailabilitySnapshotRow extends SnapshotRow {
   persisted_source_bar_count: number | string | null;
   persisted_aggregate_hash: string | null;
   persisted_source_revision_set_hash: string | null;
-  persisted_source_max_visible_by: Date | string | null;
+  persisted_source_max_visible_by: string | null;
   persisted_source_max_visible_seq: number | string | null;
   persisted_certificate_primary_identity: string | null;
   persisted_contract_version: string | null;
@@ -489,8 +489,13 @@ class XstockOHLCCache {
       )
       SELECT r.symbol, r.bucket_ts, r.open, r.high, r.low, r.close, r.volume,
         r.source_bar_count, r.aggregate_revision_id, r.aggregate_hash,
-        r.source_revision_set_hash, r.source_max_visible_by, r.source_max_visible_seq,
-        r.read_observed_at, r.read_observed_seq, r.certificate_primary_identity,
+        r.source_revision_set_hash,
+        to_char(r.source_max_visible_by AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+          AS source_max_visible_by,
+        r.source_max_visible_seq,
+        to_char(r.read_observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+          AS read_observed_at,
+        r.read_observed_seq, r.certificate_primary_identity,
         r.availability_contract_version, r.eligibility_state,
         a.source_revision_ids,
         a.symbol AS persisted_symbol,
@@ -503,7 +508,8 @@ class XstockOHLCCache {
         a.source_bar_count AS persisted_source_bar_count,
         a.aggregate_hash AS persisted_aggregate_hash,
         a.source_revision_set_hash AS persisted_source_revision_set_hash,
-        a.source_max_visible_by AS persisted_source_max_visible_by,
+        to_char(a.source_max_visible_by AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+          AS persisted_source_max_visible_by,
         a.source_max_visible_seq AS persisted_source_max_visible_seq,
         a.certificate_primary_identity AS persisted_certificate_primary_identity,
         a.contract_version AS persisted_contract_version,
@@ -541,8 +547,7 @@ class XstockOHLCCache {
         && Number(row.persisted_source_bar_count) === Number(row.source_bar_count)
         && row.persisted_aggregate_hash === row.aggregate_hash
         && row.persisted_source_revision_set_hash === row.source_revision_set_hash
-        && new Date(row.persisted_source_max_visible_by as Date | string).getTime()
-          === new Date(row.source_max_visible_by as Date | string).getTime()
+        && row.persisted_source_max_visible_by === row.source_max_visible_by
         && Number(row.persisted_source_max_visible_seq) === Number(row.source_max_visible_seq)
         && row.persisted_certificate_primary_identity === row.certificate_primary_identity
         && row.certificate_primary_identity === row.current_primary_identity
@@ -561,9 +566,9 @@ class XstockOHLCCache {
         aggregateHash: exactShape ? row.aggregate_hash : null,
         sourceRevisionSetHash: exactShape ? row.source_revision_set_hash ?? '' : '',
         sourceRevisionIds: exactShape ? row.source_revision_ids ?? [] : [],
-        sourceMaxVisibleBy: exactShape ? new Date(row.source_max_visible_by as Date | string) : null,
+        sourceMaxVisibleBy: exactShape ? row.source_max_visible_by : null,
         sourceMaxVisibleSeq: exactShape ? Number(row.source_max_visible_seq) : null,
-        readObservedAt: exactShape ? new Date(row.read_observed_at as Date | string) : null,
+        readObservedAt: exactShape ? row.read_observed_at : null,
         readObservedSeq: exactShape ? Number(row.read_observed_seq) : null,
         certificatePrimaryIdentity: exactShape ? row.certificate_primary_identity : null,
         contractVersion: exactShape ? XSTOCK_BAR_AVAILABILITY_CONTRACT : null,
@@ -609,8 +614,8 @@ class XstockOHLCCache {
           `('${sym}', '${new Date(bar.timestamp).toISOString()}', ${bar.open}, ${bar.high}, ${bar.low}, `
           + `${bar.close}, ${bar.volume}, ${bar.sourceBarCount}, '${bar.aggregateRevisionId}'::uuid, `
           + `'${bar.aggregateHash}', '${bar.sourceRevisionSetHash}', `
-          + `'${bar.sourceMaxVisibleBy!.toISOString()}', ${bar.sourceMaxVisibleSeq}, `
-          + `'${bar.readObservedAt.toISOString()}', ${bar.readObservedSeq}, '${primary}', `
+          + `'${bar.sourceMaxVisibleBy.replace(/'/g, "''")}', ${bar.sourceMaxVisibleSeq}, `
+          + `'${bar.readObservedAt.replace(/'/g, "''")}', ${bar.readObservedSeq}, '${primary}', `
           + `'${XSTOCK_BAR_AVAILABILITY_CONTRACT}', 'eligible_certified')`,
         );
       }

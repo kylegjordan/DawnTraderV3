@@ -153,8 +153,8 @@ describe(TAG, () => {
     expect(aggregate.sourceRevisionIds).toEqual([identicalLater.revision_id]);
     expect(aggregate.sourceMaxVisibleSeq).toBeGreaterThan(0);
     expect(aggregate.readObservedSeq).toBeGreaterThan(0);
-    expect(aggregate.readObservedAt!.getTime()).toBeGreaterThanOrEqual(
-      aggregate.sourceMaxVisibleBy!.getTime(),
+    expect(Date.parse(aggregate.readObservedAt!)).toBeGreaterThanOrEqual(
+      Date.parse(aggregate.sourceMaxVisibleBy!),
     );
     expect(aggregate.certificatePrimaryIdentity).toBe([...certificatePrimaryIdentities][0]);
 
@@ -193,8 +193,8 @@ describe(TAG, () => {
         ${aggregate.open}, ${aggregate.high}, ${aggregate.low}, ${aggregate.close},
         ${aggregate.volume}, ${aggregate.sourceBarCount},
         ${aggregate.aggregateRevisionId}::uuid, ${aggregate.aggregateHash},
-        ${aggregate.sourceRevisionSetHash}, ${aggregate.sourceMaxVisibleBy!.toISOString()}::timestamptz,
-        ${aggregate.sourceMaxVisibleSeq}, ${aggregate.readObservedAt!.toISOString()}::timestamptz,
+        ${aggregate.sourceRevisionSetHash}, ${aggregate.sourceMaxVisibleBy}::timestamptz,
+        ${aggregate.sourceMaxVisibleSeq}, ${aggregate.readObservedAt}::timestamptz,
         ${aggregate.readObservedSeq}, ${aggregate.certificatePrimaryIdentity},
         ${aggregate.contractVersion}, ${aggregate.eligibilityState}
       )

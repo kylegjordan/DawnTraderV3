@@ -47,3 +47,9 @@
 - Focused run: 7 test files passed; 32 tests passed and 6 local-database legs skipped. The population covered raw capture, exact aggregation, manifest identity and mixed-primary refusal, snapshot/cache collision, value/primary mismatch handling, restart/prewarm, legacy 15-minute/60-minute aggregation, and the F-G-1 arrival guard.
 - `node scripts/check-tsc-baseline.mjs` — 337 current errors / 337 baseline errors; no regression.
 - The snapshot trigger, aggregate/manifest database functions, and PostgreSQL integration mutation require the migration-applied CI database; they are not represented as locally passed.
+
+### Increment-2 CI correction
+
+- CI run `38596665242` applied both migrations and passed TypeScript Check, Build, and Docker Build, but its Test Suite found one exactness defect in the new PostgreSQL integration case: the PostgreSQL driver rounded a certified `timestamptz` with microsecond precision through JavaScript `Date` milliseconds before aggregate persistence, so the database correctly rejected the altered availability bound.
+- Availability and read-observation bounds now cross the application boundary as fixed-width UTC database text with six fractional digits. Aggregate canonical payloads, snapshots, manifests, and comparisons retain that exact value; JavaScript parses a copy only when it needs temporal ordering.
+- Focused correction run: 4 test files passed; 15 tests passed and 1 local-database integration leg skipped. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.

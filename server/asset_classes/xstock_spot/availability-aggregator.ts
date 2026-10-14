@@ -35,9 +35,11 @@ export interface XstockAvailabilityAggregate {
   aggregateHash: string | null;
   sourceRevisionSetHash: string;
   sourceRevisionIds: string[];
-  sourceMaxVisibleBy: Date | null;
+  /** Exact UTC database timestamp text (six fractional digits); never round through JS Date. */
+  sourceMaxVisibleBy: string | null;
   sourceMaxVisibleSeq: number | null;
-  readObservedAt: Date | null;
+  /** Exact UTC database timestamp text (six fractional digits); never round through JS Date. */
+  readObservedAt: string | null;
   readObservedSeq: number | null;
   certificatePrimaryIdentity: string | null;
   contractVersion: typeof XSTOCK_BAR_AVAILABILITY_CONTRACT | null;
@@ -53,7 +55,7 @@ export interface XstockWindowManifest {
   aggregateRevisionIds: string[];
   firstBucketTs: Date;
   lastBucketTs: Date;
-  sourceMaxVisibleBy: Date;
+  sourceMaxVisibleBy: string;
   sourceMaxVisibleSeq: number;
   certificatePrimaryIdentity: string;
   contractVersion: typeof XSTOCK_BAR_AVAILABILITY_CONTRACT;
@@ -69,14 +71,14 @@ interface AggregateQueryRow {
   bar_volume: string;
   source_bar_count: number | string;
   source_revision_ids: string[];
-  source_max_visible_by: Date | string | null;
+  source_max_visible_by: string | null;
   source_max_visible_seq: number | string | null;
   source_revision_set_hash_seed: string;
   eligibility_state: XstockBarEligibilityState;
 }
 
 interface ReadObservationRow {
-  read_observed_at: Date | string;
+  read_observed_at: string;
   read_observed_seq: number | string;
   certificate_primary_identity: string;
 }
@@ -218,7 +220,10 @@ async function aggregateAvailableXstockOHLCInternal(
           array_agg(revision_id ORDER BY interval_begin ASC) FILTER (WHERE revision_id IS NOT NULL),
           ARRAY[]::uuid[]
         ) AS source_revision_ids,
-        MAX(visible_by) AS source_max_visible_by,
+        to_char(
+          MAX(visible_by) AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'
+        ) AS source_max_visible_by,
         MAX(visible_seq) AS source_max_visible_seq,
         COALESCE(string_agg(revision_id::text, ',' ORDER BY interval_begin ASC), '')
           AS source_revision_set_hash_seed,
@@ -257,7 +262,7 @@ async function aggregateAvailableXstockOHLCInternal(
           aggregateHash: null,
           sourceRevisionSetHash: sha256(row.source_revision_set_hash_seed),
           sourceRevisionIds: row.source_revision_ids,
-          sourceMaxVisibleBy: row.source_max_visible_by == null ? null : new Date(row.source_max_visible_by),
+          sourceMaxVisibleBy: row.source_max_visible_by,
           sourceMaxVisibleSeq: row.source_max_visible_seq == null ? null : Number(row.source_max_visible_seq),
           readObservedAt: null,
           readObservedSeq: null,
@@ -274,7 +279,12 @@ async function aggregateAvailableXstockOHLCInternal(
     // Its database wall time is therefore a conservative upper bound on when
     // that exact set was readable; the sequence supplies causal order.
     const observationResult = await tx.execute(sql`
-      SELECT * FROM observe_xstock_bar_read(${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text)
+      SELECT
+        to_char(read_observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+          AS read_observed_at,
+        read_observed_seq,
+        certificate_primary_identity
+      FROM observe_xstock_bar_read(${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text)
     `);
     const observations = resultRows<ReadObservationRow>(observationResult);
     if (observations.length !== 1) {
@@ -300,7 +310,7 @@ async function aggregateAvailableXstockOHLCInternal(
         sourceBarCount: Number(row.source_bar_count),
         sourceRevisionIds: row.source_revision_ids,
         sourceRevisionSetHash,
-        sourceMaxVisibleBy: iso(row.source_max_visible_by as Date | string),
+        sourceMaxVisibleBy: row.source_max_visible_by as string,
         sourceMaxVisibleSeq: Number(row.source_max_visible_seq),
         certificatePrimaryIdentity: observation.certificate_primary_identity,
         contractVersion: XSTOCK_BAR_AVAILABILITY_CONTRACT,
@@ -322,7 +332,7 @@ async function aggregateAvailableXstockOHLCInternal(
         aggregateHash: draft.aggregateHash,
         sourceRevisionSetHash: draft.sourceRevisionSetHash,
         sourceRevisionIds: draft.row.source_revision_ids,
-        sourceMaxVisibleBy: iso(draft.row.source_max_visible_by as Date | string),
+        sourceMaxVisibleBy: draft.row.source_max_visible_by as string,
         sourceMaxVisibleSeq: Number(draft.row.source_max_visible_seq),
         certificatePrimaryIdentity: observation.certificate_primary_identity,
         sourceBarCount: Number(draft.row.source_bar_count),
@@ -380,9 +390,9 @@ async function aggregateAvailableXstockOHLCInternal(
         aggregateHash: draft?.aggregateHash ?? null,
         sourceRevisionSetHash: draft?.sourceRevisionSetHash ?? sha256(row.source_revision_set_hash_seed),
         sourceRevisionIds: row.source_revision_ids,
-        sourceMaxVisibleBy: row.source_max_visible_by == null ? null : new Date(row.source_max_visible_by),
+        sourceMaxVisibleBy: row.source_max_visible_by,
         sourceMaxVisibleSeq: row.source_max_visible_seq == null ? null : Number(row.source_max_visible_seq),
-        readObservedAt: new Date(observation.read_observed_at),
+        readObservedAt: observation.read_observed_at,
         readObservedSeq: Number(observation.read_observed_seq),
         certificatePrimaryIdentity: observation.certificate_primary_identity,
         contractVersion: XSTOCK_BAR_AVAILABILITY_CONTRACT,
@@ -434,9 +444,9 @@ export async function previewAvailableXstockOHLC(
 export type EligibleXstockAvailabilityAggregate = XstockAvailabilityAggregate & {
   aggregateRevisionId: string;
   aggregateHash: string;
-  sourceMaxVisibleBy: Date;
+  sourceMaxVisibleBy: string;
   sourceMaxVisibleSeq: number;
-  readObservedAt: Date;
+  readObservedAt: string;
   readObservedSeq: number;
   certificatePrimaryIdentity: string;
   contractVersion: typeof XSTOCK_BAR_AVAILABILITY_CONTRACT;
@@ -458,6 +468,9 @@ export function assertEligibleXstockAggregate(
       || bar.sourceRevisionIds.length !== bar.sourceBarCount
       || !/^[0-9a-f]{64}$/.test(bar.sourceRevisionSetHash)
       || bar.sourceBarCount <= 0
+      || !Number.isFinite(Date.parse(bar.sourceMaxVisibleBy ?? ''))
+      || !Number.isFinite(Date.parse(bar.readObservedAt ?? ''))
+      || Date.parse(bar.readObservedAt ?? '') < Date.parse(bar.sourceMaxVisibleBy ?? '')
       || ![
         bar.timestamp,
         bar.open,
@@ -507,9 +520,10 @@ export async function persistSettledXstockWindowManifest(
   }
 
   const aggregateRevisionIds = eligibleBars.map((bar) => bar.aggregateRevisionId);
-  const sourceMaxVisibleBy = new Date(Math.max(
-    ...eligibleBars.map((bar) => bar.sourceMaxVisibleBy.getTime()),
-  ));
+  const sourceMaxVisibleBy = eligibleBars.reduce(
+    (latest, bar) => bar.sourceMaxVisibleBy > latest ? bar.sourceMaxVisibleBy : latest,
+    eligibleBars[0].sourceMaxVisibleBy,
+  );
   const sourceMaxVisibleSeq = Math.max(
     ...eligibleBars.map((bar) => bar.sourceMaxVisibleSeq),
   );
@@ -519,7 +533,7 @@ export async function persistSettledXstockWindowManifest(
     aggregateRevisionIds,
     firstBucketTs: new Date(ordered[0].timestamp).toISOString(),
     lastBucketTs: new Date(ordered[ordered.length - 1].timestamp).toISOString(),
-    sourceMaxVisibleBy: sourceMaxVisibleBy.toISOString(),
+    sourceMaxVisibleBy,
     sourceMaxVisibleSeq,
     certificatePrimaryIdentity,
     contractVersion: XSTOCK_BAR_AVAILABILITY_CONTRACT,
