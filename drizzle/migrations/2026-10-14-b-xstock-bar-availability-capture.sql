@@ -20,7 +20,8 @@ VALUES (
   true,
   clock_timestamp(),
   current_database() || '@' || COALESCE(inet_server_addr()::text, 'local') || ':'
-    || COALESCE(inet_server_port()::text, 'local') || '/' || pg_postmaster_start_time()::text,
+    || COALESCE(inet_server_port()::text, 'local') || '/system:'
+    || (SELECT system_identifier::text FROM pg_control_system()),
   'xstock-bar-availability/v1'
 )
 ON CONFLICT (singleton) DO NOTHING;
@@ -371,7 +372,8 @@ BEGIN
   END IF;
 
   primary_id := current_database() || '@' || COALESCE(inet_server_addr()::text, 'local') || ':'
-    || COALESCE(inet_server_port()::text, 'local') || '/' || pg_postmaster_start_time()::text;
+    || COALESCE(inet_server_port()::text, 'local') || '/system:'
+    || (SELECT system_identifier::text FROM pg_control_system());
   observed_at := clock_timestamp();
 
   SELECT last_observed_at INTO prior_clock

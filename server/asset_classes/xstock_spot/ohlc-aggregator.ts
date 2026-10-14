@@ -1,11 +1,13 @@
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * B-NEW-34 — xstock OHLC aggregator (60-min + 240-min from 1-min source)
+ * B-NEW-34 — xstock OHLC aggregator (15-min + 60-min from 1-min source)
  * ══════════════════════════════════════════════════════════════════════════════
  *
  * Rolls up `xstock_spot_ohlc_1m` rows into higher-timeframe OHLC bars on demand.
- * Provides 60-min (hourly) and 240-min (4-hour) aggregations. Used by
- * `xstockOhlcCache` to feed the xstock scanner pipeline, mirroring crypto's
+ * Provides the legacy 15-min and 60-min aggregations. The dormant 240-min
+ * branch is retained only as an explicit unsupported type value and is
+ * refused before any database read until it gains revision-aware provenance.
+ * `xstockOhlcCache` uses it to feed the xStock scanner pipeline, mirroring crypto's
  * `ohlcCache` consumer pattern but sourcing from local DB instead of Kraken
  * REST (because Kraken has no public equities REST endpoint — see
  * BATCH_79_0k investigation + B-NEW-34 design ask Round 2 §0).
@@ -22,17 +24,10 @@
  *        included in the returned series. SYSTEM_MANUAL "Bar interval — design
  *        rationale" section documents this choice.
  *
- *   R2#3 240-MIN UTC ALIGNMENT — boundaries at 00/04/08/12/16/20 UTC matching
- *        Kraken's native interval=240 candles. Uses
- *        `to_timestamp(floor(extract(epoch from interval_begin)/14400)*14400)`
- *        because postgres has no native 4-hour date_trunc.
+ *   R2#3/R2#4 UTC ALIGNMENT + QUERY FANOUT — one SQL per active interval,
+ *        using epoch-floor boundaries and grouping the symbol set in-process.
  *
- *   R2#4 QUERY FANOUT — single SQL per interval with
- *        `WHERE symbol = ANY($1)`. Two round-trips per cycle (60-min + 240-min),
- *        not 75 × 2 = 150. Postgres groups in-process.
- *
- *   R2#5 CACHE DEPTH — 200 bars for 60-min, 60 bars for 240-min. Memory ~5.5MB
- *        total across the 265-symbol universe.
+ *   R2#5 CACHE DEPTH — 240 bars for 15-min and 60 bars for 60-min.
  *
  *   R3 No 1m-bar-cadence assumption in the aggregator output: returned
  *      OHLCData arrays are consumed by 60-min-calibrated downstream code.
@@ -58,31 +53,21 @@ import type { OHLCData } from '../../types/market-regime.types.js';
  * Supported aggregation intervals. Strict union — anything else throws.
  * 15 = quarter-hour (B.4 foundation 2026-06-03 — the new xStock evaluation bar).
  * 60 = hourly (matches crypto interval=60).
- * 240 = 4-hour (matches B68.1 multi-TF agreement higher-TF + crypto interval=240).
+ * 240 remains in the caller-facing union solely so old call sites receive the
+ * explicit unsupported-contract error instead of an untyped failure.
  */
 export type XstockAggregationInterval = 15 | 60 | 240;
 
 /**
- * Per-Langston R2#5 — cache depth caps. Aggregator returns up to this many
- * bars per symbol per interval. Caller can re-roll on cache expiry cheaply.
- *
- * B-NEW-34 hotfix (2026-05-15 post-staging-verify): initial 200/60 depths
- * produced ~15s 60-min cycle times and statement-timeout errors on the 240-min
- * warm-fetch. Source-row math: 200 bars × 60-min × 60 1-min/bar = 720K rows
- * for the 60-min query alone; 60 bars × 240-min × 60 = 864K rows for the
- * 240-min. Concurrent execution saturated the connection pool.
- *
- * Reduced to 60/30 — still well above the 24-bar floor (`min_ohlc_history_bars`)
- * and B68.1's 30-bar `min_higher_tf_samples` threshold. Source-row counts drop
- * to 270K (60-min) + 540K (240-min) ≈ 4× faster on the rollup queries.
+ * Per-Langston R2#5 — active cache depth caps. Aggregator returns up to this
+ * many bars per symbol per interval. Caller can re-roll on cache expiry.
  */
-// MAX_BARS_60M / MAX_BARS_240M govern the RETURNED ARRAY CAP (most-recent N bars).
+// MAX_BARS_15M / MAX_BARS_60M govern the RETURNED ARRAY CAP (most-recent N bars).
 // They are independent of LOOKBACK_HOURS_* (the DB query wall-clock window). Per
 // B-NEW-34a (2026-05-18), the lookback hours are decoupled from the cap because
 // xStock weekend close (Fri 20:00 ET → Sun 20:00 ET = 48h gap) means
 // `wall-clock hours ≠ bar-producing hours` for equities.
 const MAX_BARS_60M = 60;  // ≤60 returned per pair regardless of lookback breadth
-const MAX_BARS_240M = 30; // ≤30 returned per pair (matches B68.1 min_higher_tf_samples)
 // B.4 foundation (2026-06-03): 15-min cap sized to the DEEPEST 15m consumer —
 // DBS lookbackPeriod=192 (Langston Step-2 must-fix #1) — plus margin, AND it
 // preserves the 60-hour whole-array volatility window (240 × 15-min = 60h,
@@ -121,18 +106,12 @@ const MAX_BARS_15M = 240;
 // hot scanner cycle no longer scans the wide window — see
 // server/services/xstock-ohlc-cache.ts NARROW_OVERLAY_HOURS_60M.
 const LOOKBACK_HOURS_60M = 120;
-const LOOKBACK_HOURS_240M = 30 * 24; // 720h = 30 days; 240-min warm-fetch is disabled today (scanner.ts:408) so this is dead-code-safe but symmetric.
 // B.4 foundation (2026-06-03): 15-min forensic-caller default lookback. To find
 // MAX_BARS_15M=240 bars (60h of bar-producing time) across xStock weekend
 // closes + non-RTH gaps, the wall-clock window must be wider than 60h — same
 // session-shape logic as the 60M=120h default. 240h (10 days) spans a weekend
 // + 4 prior RTH sessions. Scanner/cache contexts pass lookbackHoursOverride
 // (the cache's NARROW_OVERLAY_HOURS_15M); this default is forensic/backfill only.
-// ⚠️ READABILITY (Langston Chunk-B1 review): there are now THREE unrelated 240s
-// in this file — XstockAggregationInterval `240` (minutes / 4h bar),
-// MAX_BARS_15M `240` (bars), and LOOKBACK_HOURS_15M `240` (hours). The
-// coincidence is UNINTENTIONAL; they are not linked. Do NOT "fix" one by
-// changing another. (MAX_BARS_15M=240 is bars=60h; this is hours=10 days.)
 const LOOKBACK_HOURS_15M = 240;
 
 /**
@@ -147,7 +126,7 @@ const LOOKBACK_HOURS_15M = 240;
  *                  level (xstock_spot_ohlc_1m only holds xstock data), so the
  *                  5 known collision tickers (CVX, DASH, MET, OPEN, SUI per
  *                  XSTOCK_SPOT_KRAKEN_COLLISIONS) are unambiguous here.
- * @param intervalMinutes - 60 or 240
+ * @param intervalMinutes - 15 or 60; 240 is accepted only to fail explicitly
  * @param lookbackHoursOverride - B-NEW-34b (2026-05-18) optional override of the
  *                  default wall-clock lookback. When the snapshot-first cache
  *                  path is in use, the cache supplies a NARROW overlay window
@@ -172,6 +151,11 @@ export async function aggregateXstockOHLC(
   intervalMinutes: XstockAggregationInterval,
   lookbackHoursOverride?: number,
 ): Promise<Map<string, OHLCData[]>> {
+  if (intervalMinutes === 240) {
+    throw new Error(
+      '[B-XSTOCK-BAR-AVAILABILITY] xStock 240m is unsupported until its revision contract is migrated',
+    );
+  }
   const out = new Map<string, OHLCData[]>();
   for (const s of symbols) out.set(s, []);
   if (symbols.length === 0) return out;
@@ -185,16 +169,9 @@ export async function aggregateXstockOHLC(
   // narrow-overlay path), use that instead. Otherwise fall back to the default
   // session-shape-aware constants. Range guard: override must be a positive
   // finite number; anything else falls back to the default.
-  // B.4 foundation (2026-06-03): explicit per-interval dispatch (was a 60-vs-240
-  // ternary). 15-min joins the set with its own cap + forensic lookback.
-  const maxBars =
-    intervalMinutes === 15 ? MAX_BARS_15M
-    : intervalMinutes === 60 ? MAX_BARS_60M
-    : MAX_BARS_240M;
-  const defaultLookback =
-    intervalMinutes === 15 ? LOOKBACK_HOURS_15M
-    : intervalMinutes === 60 ? LOOKBACK_HOURS_60M
-    : LOOKBACK_HOURS_240M;
+  // B.4 foundation (2026-06-03): 15-min has its own cap and lookback.
+  const maxBars = intervalMinutes === 15 ? MAX_BARS_15M : MAX_BARS_60M;
+  const defaultLookback = intervalMinutes === 15 ? LOOKBACK_HOURS_15M : LOOKBACK_HOURS_60M;
   const lookbackHours =
     Number.isFinite(lookbackHoursOverride) && (lookbackHoursOverride as number) > 0
       ? (lookbackHoursOverride as number)
@@ -204,7 +181,6 @@ export async function aggregateXstockOHLC(
   // to UTC boundaries WITHOUT depending on postgres session TZ.
   //
   //   60-min:  epoch / 3600  → UTC hour boundaries (Kraken interval=60 native)
-  //   240-min: epoch / 14400 → UTC 00/04/08/12/16/20 (Kraken interval=240)
   //
   // R4#1: `date_trunc('hour', timestamptz)` truncates in session TZ, not UTC.
   // Silent parity break with crypto under non-UTC postgres session config.
@@ -219,15 +195,9 @@ export async function aggregateXstockOHLC(
   // B.4 foundation (2026-06-03): 15-min adds a 900-second epoch-floor bucket
   //   15-min: epoch / 900   → UTC :00/:15/:30/:45 boundaries (Kraken interval=15)
   //   60-min: epoch / 3600  → UTC hour boundaries (Kraken interval=60 native)
-  //   240-min: epoch / 14400 → UTC 00/04/08/12/16/20 (Kraken interval=240)
-  let bucketExpr: string;
-  if (intervalMinutes === 15) {
-    bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 900) * 900)";
-  } else if (intervalMinutes === 60) {
-    bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 3600) * 3600)";
-  } else {
-    bucketExpr = "to_timestamp(floor(extract(epoch from interval_begin) / 14400) * 14400)";
-  }
+  const bucketExpr = intervalMinutes === 15
+    ? "to_timestamp(floor(extract(epoch from interval_begin) / 900) * 900)"
+    : "to_timestamp(floor(extract(epoch from interval_begin) / 3600) * 3600)";
 
   // R2#4: single SQL with IN-literal-list (per the workaround documented in
   // scanner.ts:337-339 — drizzle sql template doesn't auto-bind JS arrays to
@@ -266,9 +236,8 @@ export async function aggregateXstockOHLC(
   // side so DISTINCT ON is no longer needed.
   //
   // Note: even with DISTINCT ON the scan cost remains O(rows-in-window).
-  // Combined with the 240-min warm-fetch disable in scanner.ts (also B-NEW-34
-  // hotfix 3), this brings cold-cache cycle time from 25s+ (SCAN_TIMEOUT) into
-  // the single-digit-seconds range.
+  // The snapshot-first cache path keeps this legacy read out of the historical
+  // wide-window hot path; 240-min no longer reaches this query at all.
   const symbolListSql = symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
   const result: any = await db.execute(sql`
     WITH deduped AS (

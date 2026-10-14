@@ -17,8 +17,8 @@
  *
  * Architecture per Langston R2 + R3:
  *   - Separate cache instance (R2 Q1 flip from "shared concur" — see R2 §2)
- *   - Cache depth: 200 bars (60-min) + 60 bars (240-min) per symbol per
- *     interval (R2#5) — aggregator naturally caps the return
+ *   - Legacy cache depth follows the existing 15-min and 60-min caps.
+ *     Revision-aware reads preserve the same bounded shape.
  *   - Re-roll cost on cache miss is cheap (single SQL with ANY($1))
  *
  * B-NEW-34b cold-read shape (RUNNING_ISSUES #118 pivot):
@@ -28,8 +28,7 @@
  *     the recent tail. Merge: live wins on bucket_ts collisions.
  *   - This eliminates the DISTINCT-ON-over-120h-of-duplicate-rows cost that
  *     made B-NEW-34a hotfix iterations all time out (#118).
- *   - 240-min path is unchanged (it was already disabled by B-NEW-34 hotfix 3
- *     pending B-NEW-35 source-side dedup).
+ *   - 240-min is hard-refused until it has the same revision contract.
  *
  * Crypto regression: NONE by-construction (separate instance, separate code path).
  *
@@ -44,10 +43,29 @@ import {
   aggregateXstockOHLC,
   type XstockAggregationInterval,
 } from '../asset_classes/xstock_spot/ohlc-aggregator.js';
+import {
+  aggregateAvailableXstockOHLC,
+  assertEligibleXstockAggregate,
+  type XstockAvailabilityAggregate,
+  type XstockAvailabilityInterval,
+} from '../asset_classes/xstock_spot/availability-aggregator.js';
+import { XSTOCK_BAR_AVAILABILITY_CONTRACT } from './passive-archive/xstock-bar-availability.js';
 
 interface CacheEntry {
   bars: OHLCData[];
   fetchedAt: number;
+}
+
+interface AvailabilityCacheEntry {
+  bars: XstockAvailabilityAggregate[];
+  fetchedAt: number;
+}
+
+export interface XstockAvailabilityPrewarmResult {
+  bucketsRead: number;
+  eligibleBuckets: number;
+  ineligibleBuckets: number;
+  snapshotRowsWritten: number;
 }
 
 const DEFAULT_TTL_MS = 300_000; // 5 minutes — matches crypto ohlcCache
@@ -127,8 +145,38 @@ interface SnapshotRow {
   source_bar_count: string | number;
 }
 
+interface AvailabilitySnapshotRow extends SnapshotRow {
+  aggregate_revision_id: string | null;
+  aggregate_hash: string | null;
+  source_revision_set_hash: string | null;
+  source_max_visible_by: Date | string | null;
+  source_max_visible_seq: number | string | null;
+  read_observed_at: Date | string | null;
+  read_observed_seq: number | string | null;
+  certificate_primary_identity: string | null;
+  availability_contract_version: string | null;
+  eligibility_state: string | null;
+  source_revision_ids: string[] | null;
+  persisted_symbol: string | null;
+  persisted_interval_minutes: number | string | null;
+  persisted_open: string | null;
+  persisted_high: string | null;
+  persisted_low: string | null;
+  persisted_close: string | null;
+  persisted_volume: string | null;
+  persisted_source_bar_count: number | string | null;
+  persisted_aggregate_hash: string | null;
+  persisted_source_revision_set_hash: string | null;
+  persisted_source_max_visible_by: Date | string | null;
+  persisted_source_max_visible_seq: number | string | null;
+  persisted_certificate_primary_identity: string | null;
+  persisted_contract_version: string | null;
+  current_primary_identity: string;
+}
+
 class XstockOHLCCache {
   private cache: Map<string, CacheEntry> = new Map();
+  private availabilityCache: Map<string, AvailabilityCacheEntry> = new Map();
   private readonly ttlMs: number;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private hitCount = 0;
@@ -195,20 +243,18 @@ class XstockOHLCCache {
    *   3. Merge per symbol: live overlay wins where the same bucket_ts is
    *      present in both. Sort ASC, cap to MAX_BARS_60M (60).
    *   4. Store the merged result in the cache.
-   *   5. Write-back: UPSERT the most-recent N=12 buckets per symbol to the
-   *      snapshot table so the snapshot stays ≤5 min stale during active
-   *      scanning.
+   *   5. Write-back: UPSERT the most-recent N=24 buckets per symbol. This
+   *      refreshes values on cache misses but does not claim provider
+   *      currentness and does not provide snapshot-table retention.
    *
-   * 240-min path unchanged — falls through to the legacy single-call shape
-   * because that path is currently disabled in scanner.ts (B-NEW-34 hotfix
-   * 3, pending B-NEW-35).
+   * 240-min is now hard-refused before any cache lookup. It has no revision-
+   * aware contract and therefore cannot silently return the legacy shape.
    *
    * B.4 foundation (2026-06-03): a 15-min branch mirrors the 60-min snapshot-
    * first shape EXACTLY (snapshot read → narrow live overlay → merge → cache
-   * store → write-back), against the xstock_spot_ohlc_15m_snapshot table with
+   * store -> write-back), against the xstock_spot_ohlc_15m_snapshot table with
    * the 15m constants (NARROW_OVERLAY_HOURS_15M, MAX_BARS_15M,
-   * WRITE_BACK_RECENT_BUCKETS_15M). Additive, xStock-only — the 60-min and
-   * 240-min paths are unchanged.
+   * WRITE_BACK_RECENT_BUCKETS_15M). Additive and xStock-only.
    *
    * Per Langston R2#4 + B-NEW-34b: this is the call site that bounds per-
    * cycle DB cost at "1 snapshot SQL + 1 narrow live SQL + 1 write-back SQL"
@@ -218,6 +264,11 @@ class XstockOHLCCache {
     symbols: string[],
     intervalMinutes: XstockAggregationInterval,
   ): Promise<Map<string, OHLCData[]>> {
+    if (intervalMinutes === 240) {
+      throw new Error(
+        '[B-XSTOCK-BAR-AVAILABILITY] xStock 240m is unsupported until its revision contract is migrated',
+      );
+    }
     const result = new Map<string, OHLCData[]>();
     const misses: string[] = [];
     const now = Date.now();
@@ -279,8 +330,7 @@ class XstockOHLCCache {
     // table (xstock_spot_ohlc_15m_snapshot), the cache cap (MAX_BARS_15M=240),
     // the live-overlay window (NARROW_OVERLAY_HOURS_15M=6 → 24 live bars), and
     // the write-back depth (WRITE_BACK_RECENT_BUCKETS_15M=24) differ. xStock-
-    // only, additive: crypto/fx5 never reach this instance, and the 60-min /
-    // 240-min paths are untouched.
+    // only, additive: crypto/fx5 never reach this instance; 240-min is refused.
     // ════════════════════════════════════════════════════════════════════
     if (intervalMinutes === 15) {
       // 1. Read snapshot rows for all missed symbols. Single SQL across the
@@ -315,23 +365,299 @@ class XstockOHLCCache {
       return result;
     }
 
-    // ════════════════════════════════════════════════════════════════════
-    // DEAD per B-NEW-34 hotfix 3 — remove with B-NEW-35 two-table cutover.
-    // ════════════════════════════════════════════════════════════════════
-    // Legacy path (240-min only — currently disabled at the caller in
-    // scanner.ts:408). Preserved verbatim from the pre-B-NEW-34b shape so
-    // the 240-min code path remains unchanged in behavior. Restored if
-    // 240-min consumption is wired (Phase D of XSTOCK_CALIBRATION_PLAN).
-    // Langston Step 4 Q5 ACK (2026-05-18 night): mark DEAD with cutover
-    // pointer; do NOT remove tonight (not in scope for the scanner-recovery
-    // ship). B-NEW-35 owns the cleanup.
-    // ════════════════════════════════════════════════════════════════════
-    const fresh = await aggregateXstockOHLC(misses, intervalMinutes);
-    for (const [symbol, bars] of fresh) {
-      this.cache.set(this.getCacheKey(symbol, intervalMinutes), { bars, fetchedAt: now });
-      result.set(symbol, bars);
+    throw new Error(
+      `[B-XSTOCK-BAR-AVAILABILITY] unreachable xStock interval ${intervalMinutes}`,
+    );
+  }
+
+  /**
+   * Canonical availability-aware cache path for the later dual-read/enforcement
+   * phases. It is additive in capture-only rollout: existing scanner and RTB
+   * callers remain on getOHLCDataBatch until P8 switches both together.
+   */
+  async getAvailabilityDataBatch(
+    symbols: string[],
+    intervalMinutes: XstockAvailabilityInterval,
+  ): Promise<Map<string, XstockAvailabilityAggregate[]>> {
+    const result = new Map<string, XstockAvailabilityAggregate[]>();
+    const misses: string[] = [];
+    const now = Date.now();
+
+    for (const symbol of symbols) {
+      const key = this.getCacheKey(symbol, intervalMinutes);
+      const cached = this.availabilityCache.get(key);
+      if (cached && now - cached.fetchedAt < this.ttlMs) {
+        result.set(symbol, cached.bars);
+        this.hitCount++;
+      } else {
+        misses.push(symbol);
+        this.missCount++;
+      }
     }
+    if (misses.length === 0) return result;
+
+    const is15m = intervalMinutes === 15;
+    const tableName = is15m ? SNAPSHOT_TABLE_15M : SNAPSHOT_TABLE_60M;
+    const maxBars = is15m ? MAX_BARS_15M : MAX_BARS_60M;
+    const lookbackHours = is15m ? NARROW_OVERLAY_HOURS_15M : NARROW_OVERLAY_HOURS_60M;
+    const writeBackBuckets = is15m ? WRITE_BACK_RECENT_BUCKETS_15M : WRITE_BACK_RECENT_BUCKETS;
+
+    const snapshotBySymbol = await this.readAvailabilitySnapshotBars(misses, tableName, maxBars, intervalMinutes);
+    const liveBySymbol = await aggregateAvailableXstockOHLC(misses, intervalMinutes, lookbackHours);
+    const mergedBySymbol = new Map<string, XstockAvailabilityAggregate[]>();
+    for (const symbol of misses) {
+      const merged = this.mergeAvailabilityBars(
+        snapshotBySymbol.get(symbol) ?? [],
+        liveBySymbol.get(symbol) ?? [],
+        maxBars,
+      );
+      mergedBySymbol.set(symbol, merged);
+      this.availabilityCache.set(this.getCacheKey(symbol, intervalMinutes), { bars: merged, fetchedAt: now });
+      result.set(symbol, merged);
+    }
+
+    void this.writeBackAvailabilitySnapshot(mergedBySymbol, tableName, writeBackBuckets).catch((error) => {
+      console.warn(
+        `[B-XSTOCK-BAR-AVAILABILITY][SNAPSHOT_WRITEBACK_ERROR] `
+        + `${error instanceof Error ? error.message : error}`,
+      );
+    });
     return result;
+  }
+
+  async getAvailabilityData(
+    symbol: string,
+    intervalMinutes: XstockAvailabilityInterval,
+  ): Promise<{ bars: XstockAvailabilityAggregate[]; cacheHit: boolean }> {
+    const key = this.getCacheKey(symbol, intervalMinutes);
+    const cached = this.availabilityCache.get(key);
+    const cacheHit = !!cached && Date.now() - cached.fetchedAt < this.ttlMs;
+    const result = await this.getAvailabilityDataBatch([symbol], intervalMinutes);
+    return { bars: result.get(symbol) ?? [], cacheHit };
+  }
+
+  /**
+   * Restart/prewarm entry point. Unlike the hot cache path, this uses the full
+   * caller-supplied lookback, caps the resulting snapshot window, and awaits
+   * the exact-identity write before reporting success.
+   */
+  async prewarmAvailabilitySnapshot(
+    symbol: string,
+    intervalMinutes: XstockAvailabilityInterval,
+    lookbackHours: number,
+  ): Promise<XstockAvailabilityPrewarmResult> {
+    const is15m = intervalMinutes === 15;
+    const tableName = is15m ? SNAPSHOT_TABLE_15M : SNAPSHOT_TABLE_60M;
+    const maxBars = is15m ? MAX_BARS_15M : MAX_BARS_60M;
+    const fresh = await aggregateAvailableXstockOHLC([symbol], intervalMinutes, lookbackHours);
+    const bars = (fresh.get(symbol) ?? []).slice(-maxBars);
+    const eligibleBuckets = bars.filter((bar) => bar.eligibilityState === 'eligible_certified').length;
+    const snapshotRowsWritten = await this.writeBackAvailabilitySnapshot(
+      new Map([[symbol, bars]]),
+      tableName,
+      maxBars,
+    );
+    return {
+      bucketsRead: bars.length,
+      eligibleBuckets,
+      ineligibleBuckets: bars.length - eligibleBuckets,
+      snapshotRowsWritten,
+    };
+  }
+
+  private async readAvailabilitySnapshotBars(
+    symbols: string[],
+    tableName: string,
+    maxBars: number,
+    intervalMinutes: XstockAvailabilityInterval,
+  ): Promise<Map<string, XstockAvailabilityAggregate[]>> {
+    const out = new Map<string, XstockAvailabilityAggregate[]>();
+    for (const symbol of symbols) out.set(symbol, []);
+    if (symbols.length === 0) return out;
+    const symbolListSql = symbols.map((symbol) => `'${symbol.replace(/'/g, "''")}'`).join(',');
+    const queryResult = await db.execute(sql`
+      WITH primary_context AS (
+        SELECT current_database() || '@' || COALESCE(inet_server_addr()::text, 'local') || ':'
+          || COALESCE(inet_server_port()::text, 'local') || '/system:'
+          || (SELECT system_identifier::text FROM pg_control_system()) AS primary_identity
+      ),
+      ranked AS (
+        SELECT s.*,
+          ROW_NUMBER() OVER (PARTITION BY s.symbol ORDER BY s.bucket_ts DESC) AS rn
+        FROM ${sql.raw(tableName)} s
+        WHERE s.symbol IN (${sql.raw(symbolListSql)})
+      )
+      SELECT r.symbol, r.bucket_ts, r.open, r.high, r.low, r.close, r.volume,
+        r.source_bar_count, r.aggregate_revision_id, r.aggregate_hash,
+        r.source_revision_set_hash, r.source_max_visible_by, r.source_max_visible_seq,
+        r.read_observed_at, r.read_observed_seq, r.certificate_primary_identity,
+        r.availability_contract_version, r.eligibility_state,
+        a.source_revision_ids,
+        a.symbol AS persisted_symbol,
+        a.interval_minutes AS persisted_interval_minutes,
+        a.open::text AS persisted_open,
+        a.high::text AS persisted_high,
+        a.low::text AS persisted_low,
+        a.close::text AS persisted_close,
+        a.volume::text AS persisted_volume,
+        a.source_bar_count AS persisted_source_bar_count,
+        a.aggregate_hash AS persisted_aggregate_hash,
+        a.source_revision_set_hash AS persisted_source_revision_set_hash,
+        a.source_max_visible_by AS persisted_source_max_visible_by,
+        a.source_max_visible_seq AS persisted_source_max_visible_seq,
+        a.certificate_primary_identity AS persisted_certificate_primary_identity,
+        a.contract_version AS persisted_contract_version,
+        c.primary_identity AS current_primary_identity
+      FROM ranked r
+      CROSS JOIN primary_context c
+      LEFT JOIN xstock_bar_aggregate_revision a
+        ON a.aggregate_revision_id = r.aggregate_revision_id
+       AND a.bucket_ts = r.bucket_ts
+      WHERE r.rn <= ${sql.raw(String(maxBars))}
+      ORDER BY r.symbol, r.bucket_ts ASC
+    `);
+    const rows: AvailabilitySnapshotRow[] = (queryResult as any).rows ?? queryResult;
+    for (const row of rows) {
+      const exactShape = row.aggregate_revision_id != null
+        && row.aggregate_hash != null
+        && row.source_revision_set_hash != null
+        && row.source_max_visible_by != null
+        && row.source_max_visible_seq != null
+        && row.read_observed_at != null
+        && row.read_observed_seq != null
+        && row.certificate_primary_identity != null
+        && row.availability_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT
+        && row.eligibility_state === 'eligible_certified'
+        && Array.isArray(row.source_revision_ids)
+        && row.source_revision_ids.length > 0
+        && row.source_revision_ids.length === Number(row.source_bar_count)
+        && row.persisted_symbol === row.symbol
+        && Number(row.persisted_interval_minutes) === intervalMinutes
+        && Number(row.persisted_open) === Number(row.open)
+        && Number(row.persisted_high) === Number(row.high)
+        && Number(row.persisted_low) === Number(row.low)
+        && Number(row.persisted_close) === Number(row.close)
+        && Number(row.persisted_volume) === Number(row.volume)
+        && Number(row.persisted_source_bar_count) === Number(row.source_bar_count)
+        && row.persisted_aggregate_hash === row.aggregate_hash
+        && row.persisted_source_revision_set_hash === row.source_revision_set_hash
+        && new Date(row.persisted_source_max_visible_by as Date | string).getTime()
+          === new Date(row.source_max_visible_by as Date | string).getTime()
+        && Number(row.persisted_source_max_visible_seq) === Number(row.source_max_visible_seq)
+        && row.persisted_certificate_primary_identity === row.certificate_primary_identity
+        && row.certificate_primary_identity === row.current_primary_identity
+        && row.persisted_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT;
+      const bar: XstockAvailabilityAggregate = {
+        symbol: row.symbol,
+        intervalMinutes,
+        timestamp: new Date(row.bucket_ts).getTime(),
+        open: Number(row.open),
+        high: Number(row.high),
+        low: Number(row.low),
+        close: Number(row.close),
+        volume: Number(row.volume),
+        sourceBarCount: Number(row.source_bar_count),
+        aggregateRevisionId: exactShape ? row.aggregate_revision_id : null,
+        aggregateHash: exactShape ? row.aggregate_hash : null,
+        sourceRevisionSetHash: exactShape ? row.source_revision_set_hash ?? '' : '',
+        sourceRevisionIds: exactShape ? row.source_revision_ids ?? [] : [],
+        sourceMaxVisibleBy: exactShape ? new Date(row.source_max_visible_by as Date | string) : null,
+        sourceMaxVisibleSeq: exactShape ? Number(row.source_max_visible_seq) : null,
+        readObservedAt: exactShape ? new Date(row.read_observed_at as Date | string) : null,
+        readObservedSeq: exactShape ? Number(row.read_observed_seq) : null,
+        certificatePrimaryIdentity: exactShape ? row.certificate_primary_identity : null,
+        contractVersion: exactShape ? XSTOCK_BAR_AVAILABILITY_CONTRACT : null,
+        eligibilityState: exactShape ? 'eligible_certified' : 'metadata_unknown_legacy',
+        providerCurrentnessState: 'provider_currentness_unknown',
+      };
+      out.get(row.symbol)?.push(bar);
+    }
+    return out;
+  }
+
+  private mergeAvailabilityBars(
+    snapshot: XstockAvailabilityAggregate[],
+    live: XstockAvailabilityAggregate[],
+    maxBars: number,
+  ): XstockAvailabilityAggregate[] {
+    const byTimestamp = new Map<number, XstockAvailabilityAggregate>();
+    for (const bar of snapshot) byTimestamp.set(bar.timestamp, bar);
+    // The newest raw winner always wins the label collision as one whole
+    // object. If it is ineligible, the cache must not resurrect an older
+    // certified snapshot revision for the same bucket.
+    for (const bar of live) byTimestamp.set(bar.timestamp, bar);
+    const merged = [...byTimestamp.values()].sort((a, b) => a.timestamp - b.timestamp);
+    return merged.length > maxBars ? merged.slice(-maxBars) : merged;
+  }
+
+  private async writeBackAvailabilitySnapshot(
+    mergedBySymbol: Map<string, XstockAvailabilityAggregate[]>,
+    tableName: string,
+    writeBackBuckets: number,
+  ): Promise<number> {
+    const values: string[] = [];
+    for (const [symbol, bars] of mergedBySymbol) {
+      for (const bar of bars.slice(-writeBackBuckets)) {
+        if (bar.eligibilityState !== 'eligible_certified') continue;
+        assertEligibleXstockAggregate(bar);
+        if (bar.symbol !== symbol) {
+          throw new Error('[B-XSTOCK-BAR-AVAILABILITY] snapshot map key/symbol mismatch');
+        }
+        const sym = symbol.replace(/'/g, "''");
+        const primary = bar.certificatePrimaryIdentity.replace(/'/g, "''");
+        values.push(
+          `('${sym}', '${new Date(bar.timestamp).toISOString()}', ${bar.open}, ${bar.high}, ${bar.low}, `
+          + `${bar.close}, ${bar.volume}, ${bar.sourceBarCount}, '${bar.aggregateRevisionId}'::uuid, `
+          + `'${bar.aggregateHash}', '${bar.sourceRevisionSetHash}', `
+          + `'${bar.sourceMaxVisibleBy!.toISOString()}', ${bar.sourceMaxVisibleSeq}, `
+          + `'${bar.readObservedAt.toISOString()}', ${bar.readObservedSeq}, '${primary}', `
+          + `'${XSTOCK_BAR_AVAILABILITY_CONTRACT}', 'eligible_certified')`,
+        );
+      }
+    }
+    if (values.length === 0) return 0;
+
+    await db.execute(sql`
+      INSERT INTO ${sql.raw(tableName)} (
+        symbol, bucket_ts, open, high, low, close, volume, source_bar_count,
+        aggregate_revision_id, aggregate_hash, source_revision_set_hash,
+        source_max_visible_by, source_max_visible_seq, read_observed_at,
+        read_observed_seq, certificate_primary_identity,
+        availability_contract_version, eligibility_state
+      ) VALUES ${sql.raw(values.join(','))}
+      ON CONFLICT (symbol, bucket_ts) DO UPDATE SET
+        open = EXCLUDED.open,
+        high = EXCLUDED.high,
+        low = EXCLUDED.low,
+        close = EXCLUDED.close,
+        volume = EXCLUDED.volume,
+        source_bar_count = EXCLUDED.source_bar_count,
+        aggregate_revision_id = EXCLUDED.aggregate_revision_id,
+        aggregate_hash = EXCLUDED.aggregate_hash,
+        source_revision_set_hash = EXCLUDED.source_revision_set_hash,
+        source_max_visible_by = EXCLUDED.source_max_visible_by,
+        source_max_visible_seq = EXCLUDED.source_max_visible_seq,
+        read_observed_at = CASE
+          WHEN ${sql.raw(tableName)}.aggregate_revision_id = EXCLUDED.aggregate_revision_id
+            THEN ${sql.raw(tableName)}.read_observed_at
+          ELSE EXCLUDED.read_observed_at
+        END,
+        read_observed_seq = CASE
+          WHEN ${sql.raw(tableName)}.aggregate_revision_id = EXCLUDED.aggregate_revision_id
+            THEN ${sql.raw(tableName)}.read_observed_seq
+          ELSE EXCLUDED.read_observed_seq
+        END,
+        certificate_primary_identity = CASE
+          WHEN ${sql.raw(tableName)}.aggregate_revision_id = EXCLUDED.aggregate_revision_id
+            THEN ${sql.raw(tableName)}.certificate_primary_identity
+          ELSE EXCLUDED.certificate_primary_identity
+        END,
+        availability_contract_version = EXCLUDED.availability_contract_version,
+        eligibility_state = EXCLUDED.eligibility_state,
+        captured_at = NOW()
+    `);
+    this.snapshotWriteBackCount += values.length;
+    return values.length;
   }
 
   /**
@@ -534,6 +860,12 @@ class XstockOHLCCache {
         removed++;
       }
     }
+    for (const [key, entry] of this.availabilityCache) {
+      if (now - entry.fetchedAt > expiryMs) {
+        this.availabilityCache.delete(key);
+        removed++;
+      }
+    }
     if (removed > 0) {
       console.log(`[B-NEW-34][xstockOhlcCache] Cleanup removed ${removed} stale entries; ${this.cache.size} remain`);
     }
@@ -577,6 +909,7 @@ class XstockOHLCCache {
    */
   _resetForTests(): void {
     this.cache.clear();
+    this.availabilityCache.clear();
     this.hitCount = 0;
     this.missCount = 0;
     this.snapshotReadCount = 0;

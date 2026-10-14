@@ -30,3 +30,20 @@
 - The pre-existing writer retry fence now mocks the new bounded repair transaction and exercises generic retry/latch mechanics on the unchanged xStock-perpetual path rather than accidentally entering the new xStock-spot revision contract with a crypto fixture.
 - Focused rerun: `npx vitest run server/tests/unit/f-g-1-writer-retry-fence.test.ts server/tests/unit/b-xstock-bar-availability-capture.test.ts server/tests/integration/b-xstock-bar-availability-revision.test.ts` — 3 files passed; 21 tests passed, 1 local-database integration case skipped.
 - `node scripts/check-tsc-baseline.mjs` — 337 current errors / 337 baseline errors; no regression.
+- Corrected CI run `38590391854` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
+
+## Increment 2 — exact aggregate, snapshot/cache, manifest, and prewarm identity
+
+- Added immutable daily-partitioned 15-minute and 60-minute aggregate revisions whose canonical payload names the exact ordered winning 1-minute revision set, its maximum certified availability bound/sequence, and the aggregate values.
+- Added a primary read-observation sequence and clock check after each exact source read. Primary identity uses the stable database system identity plus database/listener identity, so an ordinary database restart does not invalidate every historical certificate while a different cluster/listener still fails closed. Historical reads anchor both the source window and eligibility test to the requested cutoff; an uncertified or later actual winner cannot resurrect a lower certified revision.
+- Added content-addressed settled-window manifests and database checks that the complete ordered aggregate set exists, belongs to one symbol/interval and stable primary identity, is time-ordered, and matches the declared bounds and canonical payload before reuse.
+- Added snapshot columns and database guards that allow legacy all-NULL rows or fully linked exact rows, reject value/evidence drift under one aggregate ID, and reject inserts whose values or source evidence do not match the immutable aggregate.
+- Added a separate availability-aware cache API for 15-minute and 60-minute bars. Snapshot reads cross-check persisted aggregate values/evidence; a newer ineligible live collision replaces the whole older object; TTL hits retain the original read evidence; 240-minute reads now fail before the database.
+- Migrated restart/manual prewarm to the same exact aggregate and awaited snapshot-write path. Dry-run uses the same winner/certificate query inside a read-only transaction and creates no identities or snapshot rows.
+- Registered aggregate partitions in the shared daily partition lifecycle and added a rollback that removes only this aggregate/snapshot layer while preserving the raw revision ledger.
+
+### Increment-2 verification before push
+
+- Focused run: 7 test files passed; 32 tests passed and 6 local-database legs skipped. The population covered raw capture, exact aggregation, manifest identity and mixed-primary refusal, snapshot/cache collision, value/primary mismatch handling, restart/prewarm, legacy 15-minute/60-minute aggregation, and the F-G-1 arrival guard.
+- `node scripts/check-tsc-baseline.mjs` — 337 current errors / 337 baseline errors; no regression.
+- The snapshot trigger, aggregate/manifest database functions, and PostgreSQL integration mutation require the migration-applied CI database; they are not represented as locally passed.

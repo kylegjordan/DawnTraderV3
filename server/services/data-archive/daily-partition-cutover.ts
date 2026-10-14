@@ -51,6 +51,7 @@ export const DAILY_PARTITION_CUTOVERS: DailyPartitionCutover[] = [
   // B-XSTOCK-BAR-AVAILABILITY P4: born daily-partitioned. The migration
   // pre-creates deploy-day coverage plus the same 14-day forward window.
   { table: 'xstock_bar_revision_event', cutoverDate: '2026-10-01' },
+  { table: 'xstock_bar_aggregate_revision', cutoverDate: '2026-10-01' },
 ];
 
 /** The cutover Date (UTC midnight) for a table, or null if it is not daily-partitioned. */

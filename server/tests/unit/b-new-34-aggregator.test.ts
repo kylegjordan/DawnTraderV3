@@ -4,7 +4,7 @@
  * ════════════════════════════════════════════════════════════════════════════
  *
  * Per Langston R3 — "golden-fixture rollup regression test ... hand-pick a
- * 4-hour window for one symbol, compute 60-min and 240-min by hand from the
+ * fixed window for one symbol, compute 15-min and 60-min by hand from the
  * 1-min rows, lock those values into a test that runs in CI. Cheap insurance
  * against silent aggregation regressions over time."
  *
@@ -16,7 +16,7 @@
  * Coverage:
  *   - 60-min hourly rollup: open=first, close=last, high=max, low=min,
  *     volume=sum, ordered by interval_begin
- *   - 240-min 4-hour UTC alignment: bucket boundaries at 00/04/08/12/16/20
+ *   - 240-min calls fail before the database until revision-aware support lands
  *   - Empty-source handling: returns empty array, not error
  *   - Symbol-scoped grouping: multiple symbols in one query, correct per-
  *     symbol output map
@@ -119,41 +119,20 @@ describe('B-NEW-34 ohlc-aggregator — golden-fixture rollup', () => {
     expect(result.get('NOSUCH/USD')).toEqual([]);
   });
 
-  it('240-min rollup uses 4-hour UTC alignment (epoch-floor)', async () => {
-    // SQL is mocked — we just verify the call shape. The SQL itself contains
-    // `to_timestamp(floor(extract(epoch from interval_begin)/14400)*14400)`
-    // per Langston R2#3 (UTC 00/04/08/12/16/20 boundaries). We assert the
-    // raw SQL string contains the 14400 epoch-floor pattern.
-    mockedExecute.mockResolvedValueOnce({ rows: [] });
-    await aggregateXstockOHLC(['AAPL/USD'], 240);
-    expect(mockedExecute).toHaveBeenCalled();
-    const callArg = mockedExecute.mock.calls[0][0];
-    // drizzle sql template produces an object — coerce to string via toJSON-ish path
-    const sqlStr = JSON.stringify(callArg);
-    expect(sqlStr).toContain('14400');
+  it('refuses 240-min until that reader has the revision-aware contract', async () => {
+    await expect(aggregateXstockOHLC(['AAPL/USD'], 240)).rejects.toThrow(/240m is unsupported/);
+    expect(mockedExecute).not.toHaveBeenCalled();
   });
 
   it('60-min rollup uses epoch-floor 3600 for UTC alignment (R4#1 — no session-TZ surface)', async () => {
     // B-NEW-34 R4#1: 60-min path uses epoch/3600 floor — NOT date_trunc('hour',...)
     // which would truncate in postgres session TZ. Both intervals use the same
-    // epoch-floor shape; only the divisor differs (3600 vs 14400).
+    // epoch-floor shape keeps the 60-minute boundary session-TZ independent.
     mockedExecute.mockResolvedValueOnce({ rows: [] });
     await aggregateXstockOHLC(['AAPL/USD'], 60);
     const sqlStr = JSON.stringify(mockedExecute.mock.calls[0][0]);
     expect(sqlStr).toContain('3600');
     expect(sqlStr).not.toContain('date_trunc'); // explicit regression-lock against session-TZ-dependent truncation
-  });
-
-  it('240-min rollup does NOT append AT TIME ZONE \'UTC\' (R4#2 — preserves timestamptz return type)', async () => {
-    // B-NEW-34 R4#2: `to_timestamp(...) AT TIME ZONE 'UTC'` converts timestamptz
-    // → timestamp (TZ-naive), which the pg driver renders without `+00`. Drop
-    // the AT TIME ZONE 'UTC' clause so the column stays timestamptz and
-    // `new Date(bucket_ts).getTime()` works regardless of host TZ.
-    mockedExecute.mockResolvedValueOnce({ rows: [] });
-    await aggregateXstockOHLC(['AAPL/USD'], 240);
-    const sqlStr = JSON.stringify(mockedExecute.mock.calls[0][0]);
-    expect(sqlStr).toContain('14400');
-    expect(sqlStr).not.toContain("TIME ZONE 'UTC'"); // explicit regression-lock against the host-TZ class of bug
   });
 
   it('aggregateXstockOHLCSingle unwraps the map', async () => {
