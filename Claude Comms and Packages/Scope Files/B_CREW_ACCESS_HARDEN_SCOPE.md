@@ -94,7 +94,7 @@ The direct read covered the current entries in both governed architecture docume
 3. The same crew token gets 403 from `GET /api/admin/users`; Kyle's owner session remains the positive admin control without any session typing or seeing his password.
 4. Both stored browser sessions pass their existing `--check`; a fresh browser context is still sent to login.
 5. `dt-api` keeps refusing account/user/mode/kill-switch paths and keeps serving its sanctioned read control.
-6. The route-use question is answered for all ten identities. Any reported use of the diagnostic scan is resolved through a separately reviewed least-privilege path or a documented no-longer-needed verdict before the flag changes.
+6. All ten identities receive a named route-use disposition before the flag changes. A direct reply is recorded where one exists; a non-reply is not converted into a reply, and instead requires explicit evidence for that identity's actual access plane and governing policy showing whether the privilege removal can take away a sanctioned capability. Any reported or structurally possible sanctioned use of the diagnostic scan is resolved through a separately reviewed least-privilege path or a documented no-longer-needed verdict before the flag changes.
 7. Settings → Users loss for the two headless browser sessions is recorded as intended, not a regression; the four Claude sessions' separate Kyle-Chrome path is not confused with the crew login, and Codex does not receive a password or browser exception.
 
 ### OBJ-2 — Replace the shared laptop key with an encrypted, labelled key held once

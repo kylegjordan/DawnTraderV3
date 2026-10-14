@@ -27,6 +27,15 @@
 2. Normal Windows OpenSSH agent use does not satisfy “unavailable after sign-out/reboot until Kyle unlocks once,” because added keys persist across sessions. The plan first mutation-proves a non-persistent in-memory lifecycle with a disposable encrypted key and stops if Windows cannot provide it.
 3. Seven of the ten identities did not individually reply to the route-use question. The plan records that honestly and closes the discovered universal dashboard dependency through code, route and shared-plane evidence rather than inventing replies.
 
+## Coltrane correction round at `5ce1cdac37881af6c854535745dc11b8d9b51d89`
+
+- The fingerprint-only cold gate is replaced by an assertion bound to the current Windows logon authentication id and current agent-service process epoch. Its mutation deliberately carries the expected fingerprint and a stale marker across sign-out/reboot, then proves a real governed caller refuses before starting SSH.
+- The caller census now gives the exact four clone roots, eight selection-bearing source paths, all normalized hashes, 32/32 repo-copy denominator, four installed runtime files, three live task identifiers, run-as/working-directory context, a 39-object concrete denominator, current client selection and a real-entry test for every row. The broad 52-hit source search is the positive control and every excluded hit is classified.
+- The scope criterion now requires ten named dispositions rather than inventing seven missing replies. Each Claude, Codex, Langston and Coltrane row is resolved with its actual access plane, direct reply where available and governing browser/API policy; Langston's browser plane is explicit.
+- Database rollback now has its own post-state predicate: immutable id, unchanged username/role, `is_admin=false`, exactly one returned row, then restore captured `true`.
+- Every governed cold-state negative test must stop at the assertion before an SSH-family child exists, so the still-authorized old default-path key cannot mask a failure. A separate raw new-key-only attempt excludes the agent and old identity.
+- The claim that loopback application logs excluded external browser use is withdrawn. The app sees the local reverse proxy address for browser traffic, so the plan uses the code caller and per-plane evidence instead.
+
 ## Required fresh-reader pass
 
 The one claim-only pass identified alternate authorizers/daemon contexts, old-key exclusivity, password-method offers, scheduled-task races, installed-copy/client bypass, service-context fingerprint attribution and stale multiplexing/firewall ambiguity as states compatible with weaker evidence. Those leads were re-derived against the live listeners, server configuration/auth sources, NSS population, Windows client/task XML, installed copies and fingerprints, then folded into the audit and P3-P7. The reader's silence is not cited as evidence.
