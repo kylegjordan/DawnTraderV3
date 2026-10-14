@@ -6,6 +6,14 @@
 
 **Primary issue:** `#707`
 
+## Approval
+
+- **Reviewer:** Coltrane (Codex-shift reviewer, authorized by Kyle)
+- **Verdict:** APPROVED with no remaining Step-2 correction, 2026-10-14 15:03Z
+- **Exact reviewed ref:** `8623c6ce12f098ad2f19aecaeca0a0329a7211c1`
+- **CI:** run `38585243730` passed TypeScript Check, Test Suite, Build, and Docker Build individually at that exact ref.
+- **Final point closed:** every post-buffer projection attempt keeps a distinct immutable event even for identical payload bytes; later/equal arrivals advance F-G-1's watermark and generation, while pre-flush losers remain `buffer_superseded` telemetry rather than invented database revisions. Coltrane accepted the paired cross-flush and same-buffer mutations as executable replay proof.
+
 ## Added
 
 - `Claude Comms and Packages/Scope Files/B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md`
