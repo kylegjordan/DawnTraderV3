@@ -72,6 +72,13 @@ class CallerCensusParserTests(unittest.TestCase):
         path = self.write("caller", "C:/Users/kyleg/.claude/ssh-keyholder/dt-ssh-keyholder.py exec --client scp -- a host:b\n")
         self.assertTrue(has_guarded_invocation(path))
 
+    def test_shell_guard_plus_direct_ssh_on_next_line_is_rejected(self):
+        path = self.write(
+            "caller",
+            "C:/Users/kyleg/.claude/ssh-keyholder/dt-ssh-keyholder.py exec --client ssh -- host\nssh host\n",
+        )
+        self.assertFalse(has_guarded_invocation(path))
+
     def test_shell_unrelated_guard_string_is_rejected(self):
         path = self.write(
             "caller",

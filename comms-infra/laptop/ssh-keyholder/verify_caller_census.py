@@ -184,11 +184,40 @@ def uncommented_non_python(text: str, suffix: str) -> str:
 def shell_process_commands(text: str) -> list[list[str]]:
     assignments: dict[str, str] = {}
     commands: list[list[str]] = []
-    lexer = shlex.shlex(text.replace("\\\n", " "), posix=True, punctuation_chars=";&|")
+    continued = text.replace("\\\r\n", " ").replace("\\\n", " ")
+    marked: list[str] = []
+    quote: str | None = None
+    comment = False
+    index = 0
+    while index < len(continued):
+        character = continued[index]
+        marked.append(character)
+        if comment:
+            if character == "\n":
+                comment = False
+                marked.append(";")
+        elif quote:
+            if character == "\\" and quote == '"' and index + 1 < len(continued):
+                index += 1
+                marked.append(continued[index])
+            elif character == quote:
+                quote = None
+        elif character == "#":
+            comment = True
+        elif character in {"'", '"'}:
+            quote = character
+        elif character == "\\" and index + 1 < len(continued):
+            index += 1
+            marked.append(continued[index])
+        elif character == "\n":
+            marked.append(";")
+        index += 1
+    lexer = shlex.shlex("".join(marked), posix=True, punctuation_chars=";&|")
     lexer.whitespace_split = True
     lexer.commenters = "#"
+    tokens = list(lexer) + [";"]
     segment: list[str] = []
-    for token in list(lexer) + [";"]:
+    for token in tokens:
         if token in {";", "&&", "||", "|", "&"}:
             while segment and segment[0] in {"if", "then", "elif", "while", "until", "do", "!", "{"}:
                 segment.pop(0)

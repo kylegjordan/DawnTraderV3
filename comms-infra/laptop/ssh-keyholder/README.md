@@ -46,7 +46,8 @@ layer. It does not create, copy, or authorize a private key.
    only recognized process-launch calls whose executable is the holder and whose ordered
    arguments begin `exec --client <ssh|scp|sftp> --`; comments, print/echo decoys, a
    fake launcher, a remaining direct SSH-family launch, or any unresolved process-launch
-   command all fail. It validates task actions and installed hashes.
+   command all fail. Shell continuations are joined deliberately, while every other
+   newline remains a command boundary. It validates task actions and installed hashes.
 
 `capture_caller_processes.ps1` is the bounded producer for real-entry evidence. It
 requires an exact ten-row plan, subscribes to the Windows `Win32_ProcessStartTrace`
