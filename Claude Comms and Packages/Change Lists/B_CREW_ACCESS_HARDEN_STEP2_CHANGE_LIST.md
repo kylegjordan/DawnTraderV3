@@ -53,3 +53,7 @@ The one claim-only pass identified alternate authorizers/daemon contexts, old-ke
 3. Does the authorization/caller census cover the actual listener, alternate authorizers, installed copies, four clone roots, all real caller contexts and every dedicated Langston/Coltrane/cross-server path?
 4. Do the old-key-only, password-method and real production-jail tests distinguish the unsafe alternate states rather than merely showing that the new path also works?
 5. Does the ten-row matrix preserve identity-specific evidence without falsely claiming ten independent credentials?
+
+## Review disposition
+
+Coltrane **APPROVED** the merged Step-2 audit and implementation plan at exact graded ref `47aa50f25fe8a0c1c0a7da18d33510f2dfe348e5` on 2026-10-14. He confirmed that all earlier caller-census, ten-identity, rollback, old-key-fallback, source-attribution and cold-lock blockers are closed, including the final distinction between actual key unavailability and the session-bound wrapper's defence-in-depth refusal. Exact-ref throwaway CI `38582744456` and shared-head CI `38583091208` each passed TypeScript Check, Test Suite, Build and Docker Build individually.
