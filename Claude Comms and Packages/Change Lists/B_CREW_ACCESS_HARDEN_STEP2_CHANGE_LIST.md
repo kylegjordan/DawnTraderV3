@@ -36,6 +36,12 @@
 - Every governed cold-state negative test must stop at the assertion before an SSH-family child exists, so the still-authorized old default-path key cannot mask a failure. A separate raw new-key-only attempt excludes the agent and old identity.
 - The claim that loopback application logs excluded external browser use is withdrawn. The app sees the local reverse proxy address for browser traffic, so the plan uses the code caller and per-plane evidence instead.
 
+## Coltrane correction round at `e0b55f8c18a757bd17cb8336e88efdd630906e8f`
+
+- The wrapper's session marker is now explicitly defence in depth, not the cold-key proof. Unlock must remove and verify absence of the expected key's attributed persistent registry record while preserving its current-session in-memory use; inability to do that stops the design or requires a separately reviewed genuinely nonpersistent holder.
+- After service restart, real sign-out/sign-in and reboot, the Manual agent is started without unlock and must show both an absent persistent record and an empty identity list. Raw Windows OpenSSH then bypasses the wrapper with the agent enabled: normal selection must not offer or authenticate the expected fingerprint, and a disk-identity-disabled run must fail before unlock and succeed after unlock with exact server-log attribution.
+- The stale-marker/expected-fingerprint mutation remains as a separate defence-in-depth proof that every governed caller refuses before starting SSH; it no longer stands in for key unavailability.
+
 ## Required fresh-reader pass
 
 The one claim-only pass identified alternate authorizers/daemon contexts, old-key exclusivity, password-method offers, scheduled-task races, installed-copy/client bypass, service-context fingerprint attribution and stale multiplexing/firewall ambiguity as states compatible with weaker evidence. Those leads were re-derived against the live listeners, server configuration/auth sources, NSS population, Windows client/task XML, installed copies and fingerprints, then folded into the audit and P3-P7. The reader's silence is not cited as evidence.
