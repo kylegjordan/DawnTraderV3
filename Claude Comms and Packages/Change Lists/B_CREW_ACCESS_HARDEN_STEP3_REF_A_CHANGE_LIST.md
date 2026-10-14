@@ -51,6 +51,8 @@
 - `comms-infra/laptop/ssh-keyholder/config.example.json`
 - `comms-infra/laptop/ssh-keyholder/install.ps1`
 - `comms-infra/laptop/ssh-keyholder/rollback.ps1`
+- `comms-infra/laptop/ssh-keyholder/capture_caller_processes.ps1`
+- `comms-infra/laptop/ssh-keyholder/seal_caller_evidence.py`
 - `comms-infra/laptop/ssh-keyholder/verify_caller_census.py`
 - `comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py`
 - `comms-infra/laptop/ssh-keyholder/test_verify_caller_census.py`
@@ -58,7 +60,7 @@
 
 The lifecycle accepts exactly one configured fingerprint, removes its attributed persistent registry material while requiring current-service memory use to survive, and binds its owner-only marker to the current logon LUID and agent process epoch. Every assertion also requires an empty persistence store and exactly one expected in-memory identity before it can start an absolute Windows OpenSSH client. Lock attempts marker deletion, identity purge and verification, registry purge and verification, and service stop and verification independently; it aggregates failures only after every cleanup attempt and cannot emit `LOCKED` for a partial result.
 
-Eleven deterministic key-holder tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; complete lock cleanup; and injected failure at each lock cleanup stage. Eight census-parser tests prove comment-only and unrelated strings cannot count as guards, named Python calls are recognized, task actions and working directories are validated, and duplicate evidence rows are rejected. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
+Eleven deterministic key-holder tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; complete lock cleanup; and injected failure at each lock cleanup stage. Eighteen census-parser/evidence tests prove comment-only, print/echo, fake-launcher and unrelated strings cannot count as guards, a remaining direct or statically unresolved SSH-family launcher invalidates a guarded Python, JavaScript or shell file, named Python calls are recognized, task actions and working directories are validated, and duplicate, raw-artifact-tampered or non-descendant process evidence is rejected. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
 
 ## Dormant server-hardening source
 
@@ -81,6 +83,13 @@ The SSH manager requires two held laptop recovery sessions, saves only the exact
 4. **Concrete caller verifier:** repository guards are parsed as executable calls, installed files must match their sources, task XML must select the exact guarded source, and ten real-entry evidence rows cover all eight logical callers plus direct PowerShell and Git Bash while naming spawned Windows OpenSSH clients.
 5. **SSH semantic and listener proof:** both OpenSSH key-only canonical values pass; unsafe root values, an empty listener and a non-`sshd` listener fail; live verify also requires the active production service.
 6. **fail2ban recovery and exact rollback:** install requires two held authenticated sessions, supports a pinned downgrade, preserves prior bans without global unban, restores active/enabled state and package inventory, and refuses unequal rollback. The required real install-to-rollback mutation remains deliberately deferred to the separately reviewed live P6 exact-ref gate; running it during Ref A would violate Coltrane's source/proof and live-mutation boundary.
+
+## Coltrane correction round at `edfbd548162a51e9ab67af6de583672e4040d104`
+
+1. **Executable caller proof:** Python is now accepted only when a recognized process-launch API receives a statically resolved argv beginning with the exact key-holder path and ordered `exec --client <client> --` arguments. Shell and JavaScript use the same command-vector rule. Any recognized direct `ssh`, `scp` or `sftp` launch invalidates the file. The exact print decoy and echo-plus-direct-SSH bypasses from review are mutation tests.
+2. **Raw capture provenance:** a bounded PowerShell producer observes the full Windows process-start tree for every positive and locked-negative real entry; a separate sealer correlates non-overlapping windows to raw `ssh.service` journal JSON. The verifier SHA-256-binds both raw artifacts, derives client images and accepted fingerprint from them, proves each SSH-family process descends from the invoked entry process, requires unique journal cursors, and rejects a hand-written ten-row summary.
+3. **Dependency rollback boundary:** the fail2ban preflight now rejects a simulated version transition for any already-installed dependency before package mutation. The only permitted existing-package transition is `fail2ban` itself, whose exact prior version is captured and restored; self-test covers both the safe new-dependency case and an unsafe dependency upgrade.
+4. **Firewall absence proof:** `verify-live-ban.sh` captures the complete nftables ruleset before matching. Its self-test uses a long captured ruleset and requires a present peer to fail the absence condition, eliminating the `nft | grep -q`/SIGPIPE false pass.
 
 ## Load-bearing diff snippets
 
@@ -275,7 +284,7 @@ Local evidence before dispatch:
 
 - Watchlist mounted test: 1/1 passed.
 - Key-holder tests: 11/11 passed.
-- Caller-census parser tests: 8/8 passed.
+- Caller-census parser/evidence tests: 18/18 passed.
 - Caller census inventory: 39/39 concrete runtime objects present and hash-consistent (32 repository selectors, four installed files, three task definitions); guarded count remains intentionally 0 at inert Ref A.
 - TypeScript baseline: 337 existing errors over the whole project, 0 new errors.
 - Production build: passed.

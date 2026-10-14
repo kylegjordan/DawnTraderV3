@@ -9,7 +9,11 @@ Installation requires two established authenticated laptop recovery sessions bef
 the package transaction begins. The state directory captures the complete installed
 package inventory, exact prior fail2ban version, enabled and active states, local jail
 bytes and existing ban set. Downgrades use the package manager's explicit downgrade
-mode. Rollback removes only bans added since capture, restores missing prior bans,
+mode. Before mutation, the simulated transaction must show no removal and no version
+transition for any already-installed dependency; only the separately captured/restorable
+`fail2ban` version may transition. This refusal prevents a dependency upgrade that an
+otherwise exact rollback could discover only after it had already failed to restore it.
+Rollback removes only bans added since capture, restores missing prior bans,
 restores the exact package/file/service state, and fails if the final package inventory
 or service state differs. It never issues a global unban.
 
@@ -26,6 +30,11 @@ target-side verifier must show the peer in both the real `sshd` jail and firewal
 while the laptop source remains unbanned. The operator then proves a new peer
 connection is blocked, runs `unban`, proves fresh peer access is restored, and
 re-runs every dedicated path before moving to the second host.
+
+The firewall verifier writes the complete `nft list ruleset` result to a private temporary
+file before either presence or absence matching. It never streams `nft` into `grep -q`, so
+an early-match SIGPIPE cannot turn a present peer into a false absence. Its self-test uses
+a long ruleset and mutation-proves that the present peer is rejected by the absence gate.
 
 A filter simulation, an active service, an alternate jail, or an existing
 multiplexed connection does not satisfy the live proof.

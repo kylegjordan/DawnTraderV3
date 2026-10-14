@@ -53,6 +53,16 @@ package_snapshot() {
   dpkg-query -W -f='${binary:Package}\t${Version}\n' | LC_ALL=C sort
 }
 
+existing_dependency_transitions() {
+  awk '
+    $1 == "Inst" && $3 ~ /^\[/ {
+      package=$2
+      sub(/:.*/, "", package)
+      if (package != "fail2ban") print $0
+    }
+  '
+}
+
 ban_snapshot() {
   fail2ban-client get sshd banip | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort -u
 }
@@ -119,6 +129,10 @@ if [[ $ACTION == self-test ]]; then
   sample_sessions=$'0 0 10.0.0.5:22 83.25.118.232:53001\n0 0 [2001:db8::5]:22 [2001:db8::9]:53002\n0 0 10.0.0.5:22 192.0.2.1:53003'
   [[ $(count_laptop_sessions 83.25.118.232 <<<"$sample_sessions") == 1 ]]
   [[ $(count_laptop_sessions 2001:db8::9 <<<"$sample_sessions") == 1 ]]
+  safe_simulation=$'Inst fail2ban [1.0.2-2] (1.0.2-3ubuntu0.1 Ubuntu:24.04/noble-updates [all])\nInst python3-pyinotify (0.9.6-3 Ubuntu:24.04/noble [all])'
+  [[ -z $(existing_dependency_transitions <<<"$safe_simulation") ]]
+  unsafe_simulation=$'Inst fail2ban [1.0.2-2] (1.0.2-3ubuntu0.1 Ubuntu:24.04/noble-updates [all])\nInst python3-systemd [234-3build3] (235-1 Ubuntu:24.04/noble-updates [amd64])'
+  [[ $(existing_dependency_transitions <<<"$unsafe_simulation") == Inst\ python3-systemd* ]]
   echo FAIL2BAN_STATE_SELF_TEST_OK
   exit 0
 fi
@@ -145,6 +159,12 @@ case "$ACTION" in
     simulation=$(apt-get -s install --allow-downgrades "fail2ban=$PINNED_VERSION")
     if grep -Eq '^Remv ' <<<"$simulation"; then
       echo 'fail2ban package transaction would remove a package; refusing' >&2
+      exit 1
+    fi
+    dependency_transitions=$(existing_dependency_transitions <<<"$simulation")
+    if [[ -n $dependency_transitions ]]; then
+      echo 'fail2ban package transaction would change an existing dependency; refusing before mutation:' >&2
+      printf '%s\n' "$dependency_transitions" >&2
       exit 1
     fi
     stamp=$(date -u +%Y%m%dT%H%M%SZ)

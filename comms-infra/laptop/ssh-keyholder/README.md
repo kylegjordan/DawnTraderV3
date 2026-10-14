@@ -43,10 +43,29 @@ layer. It does not create, copy, or authorize a private key.
 5. Route and verify all 39 concrete objects plus both direct command classes. The
    census tool must report 32 guarded repository selectors, four installed runtime
    files, three scheduled tasks, and a total governed population of 39. It parses
-   executable guard calls (comments do not count), validates task actions and installed
-   hashes, and requires real-entry evidence naming the spawned Windows OpenSSH clients,
-   accepted server fingerprint and zero locked-state client spawns for every logical
-   caller plus direct PowerShell and Git Bash.
+   only recognized process-launch calls whose executable is the holder and whose ordered
+   arguments begin `exec --client <ssh|scp|sftp> --`; comments, print/echo decoys, a
+   fake launcher, a remaining direct SSH-family launch, or any unresolved process-launch
+   command all fail. It validates task actions and installed hashes.
+
+`capture_caller_processes.ps1` is the bounded producer for real-entry evidence. It
+requires an exact ten-row plan, subscribes to the Windows `Win32_ProcessStartTrace`
+provider before each positive and locked-negative entry, and records the process tree,
+invoked-entry pid, observed SSH-family executable image and UTC time. The verifier follows
+parent ids back to that invoked entry; an unrelated concurrent client cannot count. A
+missing SSH-family executable image is a hard failure when
+`seal_caller_evidence.py` seals the result. Quiesce the three scheduled tasks and
+concurrent hooks before capture so an unrelated SSH process cannot be attributed to an
+entry window.
+
+Copy the raw `journalctl -u ssh.service --since ... --until ... -o json` output covering
+the capture into `server-journal.jsonl` beside the process capture. The sealer selects
+accepted-publickey records only by the capture windows and expected fingerprint; it does
+not accept a hand-entered fingerprint or spawned-client list. The final
+`dt-caller-capture-v1` bundle SHA-256-binds both raw files. The census verifier re-derives
+the client set from process events, rejects overlapping windows or reused journal cursors,
+requires one matching raw server record per entry, and proves the negative windows contain
+zero SSH-family starts. A ten-row summary JSON without these raw artifacts cannot pass.
 
 The passphrase must be entered only at the interactive `ssh-add` prompt. It must not
 appear in any argument, file, environment variable, task definition, repository
