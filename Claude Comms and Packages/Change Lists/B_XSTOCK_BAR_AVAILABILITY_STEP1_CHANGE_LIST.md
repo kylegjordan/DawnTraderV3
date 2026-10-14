@@ -1,4 +1,4 @@
-# B-XSTOCK-BAR-AVAILABILITY — Step 1 change list
+# B-XSTOCK-BAR-AVAILABILITY — Step 1 change list r2
 
 **Review target:** scope only; no runtime code or schema changed.
 
@@ -15,6 +15,15 @@
   - scopes one availability contract across ingest, aggregation, snapshots/cache, scanner, regime refresh, replay, calibration, provenance, dashboard, and dormant-reader fences;
   - pre-registers live and historical verification populations and a mutation/positive-control requirement;
   - explicitly forbids a blind 15-minute relabel.
+
+## Coltrane correction pass at `2d50303bf57a105d31f50145ad1914b91ed7688e`
+
+Coltrane accepted the three-way provenance conclusion and returned four load-bearing corrections. Scope r2 now:
+
+1. splits process receipt/enqueue (`arrived_at`) from persistence/reader-visible availability and requires delayed-flush plus pool-wait proof;
+2. records that the upsert destroys earlier revisions, adds the retained-ineligible/prior-unknown state, and limits exact replay to revision-aware post-cutover evidence;
+3. covers both production snapshot paths (15m scanner and 60m regime refresh) and fences the dormant 240m path;
+4. adds a table/API reader census with explicit migrate, fence, retire-or-migrate, historical-only, or remain-inert dispositions for every direct semantic reader found.
 
 ## Already in place before this scope commit
 
