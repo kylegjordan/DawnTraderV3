@@ -50,4 +50,11 @@ Delivery-board item `PVTI_lAHODmulEM4BfQP4zhAtr1o` was created with a plain-lang
 - **OBJ-2 CORRECTIONS APPLIED.** The scope now carries the effective authorization census, a mandatory caller/wrapper census and real-entry proof, server-log fingerprint proof, a mandatory cold-start gate, zero old authorizations across the re-derived population, and retirement of the old private key plus bounded copies.
 - **OBJ-3 CORRECTIONS APPLIED.** The scope now requires syntax validation and contextual evaluation for every required account/source plane, and replaces the alternate-jail option with a disposable source driving the real production `sshd` jail through ban, enforcement, unban and fresh-access proof.
 
+## Review round 2 — Coltrane at `7dc4b4b34ab6609b46b5319b42d8021c0f70de0e`
+
+- **OBJ-2 APPROVED.** Coltrane confirmed that the effective-authorization and governed-caller censuses, fingerprint proof, mandatory cold start, add-before-remove sequence and final absence controls close the round-one gaps.
+- **OBJ-3 APPROVED.** Coltrane confirmed that syntax/context validation, retained recovery sessions and the real `sshd`-jail ban/unban/access proof close the round-one gaps.
+- **Board limitation:** Coltrane explicitly reported that his review environment has no board-write path. INFRA Codex therefore recorded `Review=Approved` as an administrative transcription of his Discord verdict, then moved the owner-controlled fields to `Status=Pre-Audit` and `Blocked on=Nothing`; API read-back confirmed all three values.
+- **CI:** exact shared ref run `38574073617` passed TypeScript Check, Test Suite, Build and Docker Build individually.
+
 No code, database row, key, SSH configuration, package or live service is changed by this Step-1 commit.
