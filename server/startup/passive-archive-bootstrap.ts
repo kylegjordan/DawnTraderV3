@@ -48,6 +48,7 @@ const ARCHIVE_TABLES = [
   'xstock_perp_ticker_snap',
   'crypto_spot_ticker_snap',
   'crypto_perp_ticker_snap',
+  'xstock_bar_revision_event',
 ];
 
 /**

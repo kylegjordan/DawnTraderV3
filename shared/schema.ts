@@ -19,7 +19,8 @@ import {
   bigint,
   doublePrecision,
   real,
-  numeric
+  numeric,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -5018,7 +5019,15 @@ const ohlcColumns = {
 // convention preserving equity_* for FUTURE real (non-tokenized) US equities.
 // Const exports kept identical names for transitional grep-hygiene; underlying
 // pgTable name + index name renamed to xstock_*.
-export const xstockSpotOhlc1m = pgTable("xstock_spot_ohlc_1m", ohlcColumns, (table) => ({
+export const xstockSpotOhlc1m = pgTable("xstock_spot_ohlc_1m", {
+  ...ohlcColumns,
+  // B-XSTOCK-BAR-AVAILABILITY: NULL marks legacy/pre-cutover compact rows.
+  // The immutable event ledger is xStock-only; sibling archive classes keep
+  // their byte-for-byte existing schema and writer path.
+  winningRevisionId: uuid("winning_revision_id"),
+  winningPayloadHash: text("winning_payload_hash"),
+  projectionGeneration: bigint("projection_generation", { mode: "number" }).notNull().default(0),
+}, (table) => ({
   symTimeIdx: index("xstock_spot_ohlc_1m_sym_time").on(table.symbol, table.intervalBegin),
 }));
 

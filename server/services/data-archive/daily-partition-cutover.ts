@@ -48,6 +48,9 @@ export const DAILY_PARTITION_CUTOVERS: DailyPartitionCutover[] = [
   // the daily creator's loop starts at today and never back-creates dead days.
   { table: 'crypto_perp_ohlc_1m', cutoverDate: '2026-08-01' },
   { table: 'crypto_perp_ticker_snap', cutoverDate: '2026-08-01' },
+  // B-XSTOCK-BAR-AVAILABILITY P4: born daily-partitioned. The migration
+  // pre-creates deploy-day coverage plus the same 14-day forward window.
+  { table: 'xstock_bar_revision_event', cutoverDate: '2026-10-01' },
 ];
 
 /** The cutover Date (UTC midnight) for a table, or null if it is not daily-partitioned. */

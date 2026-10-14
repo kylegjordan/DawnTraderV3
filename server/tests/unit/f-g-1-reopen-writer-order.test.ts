@@ -25,6 +25,8 @@ const _db: {
 } = { calls: [], throwWith: null, hold: null };
 vi.mock('../../db.js', () => ({
   db: {
+    transaction: async (fn: (tx: { execute: () => Promise<{ rows: never[] }> }) => Promise<unknown>) =>
+      fn({ execute: async () => ({ rows: [] }) }),
     insert: () => ({
       values: (rows: any) => ({
         onConflictDoUpdate: async (cfg: any) => {
@@ -44,6 +46,7 @@ import {
   stopBatchWriter,
   flushAssetClass,
   dedupeLatestArrival,
+  dedupeLatestArrivalWithStats,
   getOhlcWriterCoalescedFlushes,
 } from '../../services/passive-archive/ohlc-batch-writer';
 
@@ -113,6 +116,15 @@ describe('P3 — the dedupe keeps the latest ARRIVAL, ties to the last inserted'
   it('CONTROL — different minutes or symbols are never merged', () => {
     const other = { ...bar('A/USD', 'b'), intervalBegin: new Date(MIN.getTime() + 60_000) };
     expect(dedupeLatestArrival([bar('A/USD', 'a'), other, bar('B/USD', 'c')])).toHaveLength(3);
+  });
+
+  it('counts same-buffer losers without inventing projection-attempt revisions', () => {
+    const first = bar('A/USD', 'first', { arrivedAt: t(1000) });
+    const later = bar('A/USD', 'later', { arrivedAt: t(2000) });
+    const result = dedupeLatestArrivalWithStats([first, later]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].close).toBe('later');
+    expect(result.bufferSuperseded).toBe(1);
   });
 });
 
@@ -204,10 +216,10 @@ describe('P2 — one flush per class, coalesced and counted', () => {
   it('the shutdown drain waits out a flight, then writes the rows that arrived during it', async () => {
     const gate = deferred();
     _db.hold = () => gate.promise;
-    bufferOhlcBar('xstock_spot', bar('D/USD', 'one'));
-    const flight = flushAssetClass('xstock_spot');
+    bufferOhlcBar('xstock_perp', bar('D/USD', 'one'));
+    const flight = flushAssetClass('xstock_perp');
     await new Promise((r) => setTimeout(r, 5));
-    bufferOhlcBar('xstock_spot', { ...bar('E/USD', 'two') });
+    bufferOhlcBar('xstock_perp', { ...bar('E/USD', 'two') });
     const drain = stopBatchWriter();
     await new Promise((r) => setTimeout(r, 5));
     gate.release();

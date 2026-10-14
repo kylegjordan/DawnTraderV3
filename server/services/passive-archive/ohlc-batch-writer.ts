@@ -26,6 +26,10 @@ import {
   cryptoPerpOhlc1m,
   type InsertEquitySpotOhlc1m,
 } from '../../../shared/schema.js';
+import {
+  repairPendingXstockCertificates,
+  writeXstockProjectionAttempts,
+} from './xstock-bar-availability.js';
 
 const BATCH_FLUSH_INTERVAL_MS = 5_000;
 const POOL_SLOT_TIMEOUT_MS = 5_000;
@@ -206,6 +210,21 @@ const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
   crypto_perp: [],
 };
 
+const xstockAvailabilityTelemetry = {
+  acceptedInputFrames: 0,
+  bufferSuperseded: 0,
+  projectionAttempts: 0,
+  repeatedPayloadAttempts: 0,
+  appliedWinners: 0,
+  rejectedOlderArrivals: 0,
+  certifiedAttempts: 0,
+  pendingRepairAttempts: 0,
+};
+
+export function getXstockAvailabilityWriterTelemetry(): Readonly<typeof xstockAvailabilityTelemetry> {
+  return { ...xstockAvailabilityTelemetry };
+}
+
 // Counting semaphore (max 2 concurrent inserts across all 3 archivers)
 let activeInserts = 0;
 const waitQueue: Array<() => void> = [];
@@ -254,6 +273,7 @@ function releaseSlot(): void {
  */
 export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): void {
   buffers[assetClass].push({ ...row, arrivedAt: new Date() });
+  if (assetClass === 'xstock_spot') xstockAvailabilityTelemetry.acceptedInputFrames++;
 }
 
 /** ms since epoch of a row's arrival stamp; `-Infinity` when absent, so an unstamped row never beats a stamped one. */
@@ -287,6 +307,14 @@ export function dedupeLatestArrival(rawRows: InsertEquitySpotOhlc1m[]): InsertEq
     if (prev === undefined || arrivalMs(row) >= arrivalMs(prev)) dedupedMap.set(key, row);
   }
   return Array.from(dedupedMap.values());
+}
+
+export function dedupeLatestArrivalWithStats(rawRows: InsertEquitySpotOhlc1m[]): {
+  rows: InsertEquitySpotOhlc1m[];
+  bufferSuperseded: number;
+} {
+  const rows = dedupeLatestArrival(rawRows);
+  return { rows, bufferSuperseded: rawRows.length - rows.length };
 }
 
 /**
@@ -336,8 +364,28 @@ export function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
  * be produced through `bufferOhlcBar`, which always stamps now.
  */
 export async function upsertOhlcRows(assetClass: ArchiveAssetClass, rows: InsertEquitySpotOhlc1m[]): Promise<void> {
-  const table = tableForAssetClass[assetClass];
   const CHUNK_SIZE = 1000;
+  if (assetClass === 'xstock_spot') {
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+      const slice = rows.slice(i, i + CHUNK_SIZE);
+      const result = await writeXstockProjectionAttempts(slice);
+      xstockAvailabilityTelemetry.projectionAttempts += result.attempts.length;
+      xstockAvailabilityTelemetry.repeatedPayloadAttempts += result.attempts
+        .filter((attempt) => attempt.payloadRepeatedFromWinner).length;
+      xstockAvailabilityTelemetry.appliedWinners += result.attempts
+        .filter((attempt) => attempt.projectionApplied).length;
+      xstockAvailabilityTelemetry.rejectedOlderArrivals += result.attempts
+        .filter((attempt) => !attempt.projectionApplied).length;
+      if (result.certification === 'certified') {
+        xstockAvailabilityTelemetry.certifiedAttempts += result.certificates.length;
+      } else {
+        xstockAvailabilityTelemetry.pendingRepairAttempts += result.attempts.length;
+      }
+    }
+    return;
+  }
+
+  const table = tableForAssetClass[assetClass];
   for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
     const slice = rows.slice(i, i + CHUNK_SIZE);
     await db.insert(table as any).values(slice as any)
@@ -376,7 +424,11 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
   // the flush are pushed BEHIND them, so the front `n` are exactly the rows written: P2 guarantees
   // no second flush of this class can touch the front while this one is in flight.
   const n = buf.length;
-  const rows = dedupeLatestArrival(buf.slice(0, n));
+  const deduped = dedupeLatestArrivalWithStats(buf.slice(0, n));
+  const rows = deduped.rows;
+  if (assetClass === 'xstock_spot') {
+    xstockAvailabilityTelemetry.bufferSuperseded += deduped.bufferSuperseded;
+  }
   try {
     await acquireSlot();
     try {
@@ -413,7 +465,10 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       // Reference: B_NEW_35_SCOPE.md §2 + Langston Step 1 Q4 ACK.
       // F-G-1 reopen: the chunked upsert and its arrival guard now live in `upsertOhlcRows` above.
       await upsertOhlcRows(assetClass, rows);
-      console.log(`[B74][batch-writer] ${assetClass} upserted ${rows.length} rows (coalesced=${coalescedFlushes[assetClass]})`);
+      const availability = assetClass === 'xstock_spot'
+        ? `, availability=${JSON.stringify(getXstockAvailabilityWriterTelemetry())}`
+        : '';
+      console.log(`[B74][batch-writer] ${assetClass} upserted ${rows.length} rows (coalesced=${coalescedFlushes[assetClass]}${availability})`);
     } finally {
       releaseSlot();
     }
@@ -470,6 +525,10 @@ export function startBatchWriter(): void {
   if (flushTimer) return; // already started
   flushTimer = setInterval(async () => {
     await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass));
+    // Reuse the existing writer cadence rather than inventing a second scheduler. A failed
+    // post-commit certificate never replays its arrival; this bounded pass certifies the exact
+    // committed IDs later and leaves them ineligible if repair still fails.
+    await repairPendingXstockCertificates();
   }, BATCH_FLUSH_INTERVAL_MS);
   console.log(`[B74][batch-writer] started (flush every ${BATCH_FLUSH_INTERVAL_MS / 1000}s, max ${MAX_CONCURRENT_INSERTS} concurrent inserts)`);
 }
@@ -487,6 +546,7 @@ export async function stopBatchWriter(): Promise<void> {
   // the shutdown drain skip a class. (The drain's race with `process.exit` stays `#1034`'s.)
   await Promise.allSettled(Object.values(inFlight));
   await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass)); // derived, see the timer above
+  await repairPendingXstockCertificates();
 }
 
 /**
