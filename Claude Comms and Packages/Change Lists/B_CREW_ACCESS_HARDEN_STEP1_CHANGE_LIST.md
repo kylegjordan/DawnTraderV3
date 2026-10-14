@@ -24,7 +24,9 @@ Delivery-board item `PVTI_lAHODmulEM4BfQP4zhAtr1o` was created with a plain-lang
 
 - Staging users: `kylegjordan|owner|true`, `testuser|owner|true`, `testuser123|editor|true`.
 - Shared laptop key: fingerprint `SHA256:8A/uD7…`, empty passphrase accepted; same unlabelled unrestricted fingerprint on staging root, staging deploy and Helsinki root.
+- Effective authorization census: both hosts use only `.ssh/authorized_keys .ssh/authorized_keys2`, no key command and no `Match` blocks; four resolved files exist across login-capable accounts, and the old fingerprint occurs in exactly the three named files (dtmint is the positive non-match population).
 - Windows OpenSSH agent stopped/disabled; PowerShell chooses Windows OpenSSH, Git Bash chooses its own client and has no agent socket.
+- Bounded laptop census: the target keypair and one distinct Copilot keypair exist under Kyle's `.ssh`; no SSH config exists there. Step 2 must census every governed wrapper/profile before the old key and any bounded copies are retired.
 - Staging effective SSH: password and keyboard-interactive auth off; public-key auth on. Helsinki: password auth on, keyboard-interactive off, public-key on; root/Langston/Coltrane/nova password states locked.
 - Retained auth population: five files per box, 2026-09-13 through 2026-10-14. Accepted password: 0 on each. Positive controls: accepted public key 29,167 staging / 12,952 Helsinki. Helsinki failed-password lines: 378,557. These are retained-window counts, never “ever” counts.
 - fail2ban binary absent and service inactive/not-found on both boxes.
@@ -39,7 +41,13 @@ Delivery-board item `PVTI_lAHODmulEM4BfQP4zhAtr1o` was created with a plain-lang
 ## Reviewer questions — return three verdicts
 
 1. **OBJ-1:** Does the non-admin crew-login plan preserve every required read while removing browser admin authority, and is the all-ten usage question an adequate execution gate?
-2. **OBJ-2:** Is add/prove/remove with Windows OpenSSH agent and a Git-Bash handoff the correct no-lockout design for the one physical key shared by eight identities?
-3. **OBJ-3:** Is the one-host-at-a-time password-off + fail2ban plan bounded and falsifiable, including its positive trigger, non-ban control and rollback requirements?
+2. **OBJ-2:** Is add/prove/cold-start/remove/retire with a complete effective authorization census, Windows OpenSSH agent, real wrapper-entry tests and authentication-log fingerprint proof the correct no-lockout design for the one physical key shared by eight identities?
+3. **OBJ-3:** Is the one-host-at-a-time password-off + fail2ban plan bounded and falsifiable, including syntax plus per-context evaluation and a real disposable-source ban through the production `sshd` jail followed by unban and access re-proof?
+
+## Review round 1 — Coltrane at `83dd24e120e12d245aabf2cb72f2e0bfb6e196da`
+
+- **OBJ-1 APPROVED.** No scope change required.
+- **OBJ-2 CORRECTIONS APPLIED.** The scope now carries the effective authorization census, a mandatory caller/wrapper census and real-entry proof, server-log fingerprint proof, a mandatory cold-start gate, zero old authorizations across the re-derived population, and retirement of the old private key plus bounded copies.
+- **OBJ-3 CORRECTIONS APPLIED.** The scope now requires syntax validation and contextual evaluation for every required account/source plane, and replaces the alternate-jail option with a disposable source driving the real production `sshd` jail through ban, enforcement, unban and fresh-access proof.
 
 No code, database row, key, SSH configuration, package or live service is changed by this Step-1 commit.
