@@ -1,4 +1,4 @@
-# B-XSTOCK-BAR-AVAILABILITY — Scope r3 (Step 1 correction draft)
+# B-XSTOCK-BAR-AVAILABILITY — Scope r3 (Step 1 APPROVED)
 
 change-class: architecture
 
@@ -9,6 +9,8 @@ change-class: architecture
 **Placement:** `SPRINT_TO_LIVE_PLAN` pre-sprint Stage 3, first item, after the completed CORZ investigation and before `B-CRON-MISSED-CATCHUP`.
 
 **Finding record:** `CORZ_QUOTE_VS_BARS_INVESTIGATION_2026-10-13.md` (Coltrane-approved at `08ac3e29923c0664d26392cac69acef69e18df5f`).
+
+**Step 1 review:** Coltrane APPROVED this scope at exact graded ref `cf011e6d748f7af373dfe867bbf6c4bf8b0f0336` on 2026-10-14. CI run `38574435663` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
 
 ## 1. Goal
 
