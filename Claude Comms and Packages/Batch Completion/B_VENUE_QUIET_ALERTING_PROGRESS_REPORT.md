@@ -1,4 +1,4 @@
-# B-VENUE-QUIET-ALERTING — PROGRESS REPORT — OPEN — waiting on the first weekday: the venue reopening, one US close and one regular session
+# B-VENUE-QUIET-ALERTING — PROGRESS REPORT — OPEN — waiting on a fresh off-session `not_quiet` session-gate carrier
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `architecture` · **Sprint plan row:** 3a1 (paired with 3a) · **Issues:** `#526`, `#994` (Kyle 2026-09-03), `#638`
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_VENUE_QUIET_ALERTING_SCOPE.md` r3, `…_PRE_AUDIT.md` · **Change list:** `Change Lists/B_VENUE_QUIET_ALERTING_STEP4_CHANGE_LIST.md` (r1-r5)
@@ -114,8 +114,8 @@ Code: `620b1b6b5`, **`pm_uptime` 2026-10-11T11:18:37.396Z** (re-anchor under §3
   - `REVIEWER: claim-only · 00:00Z ramp-up gate/absence claim · hit — named carrier was pre-latched; held sweeps do not exercise the gate · re-derived y`
 
 ## 4. What is unproven, stated as unproven
-- **The off-session session gate remains unproved on staging:** both registered windows were captured, but every fresh quiet-only crossing occurred on a `quiet` verdict before the later `not_quiet` sweeps. A decisive runtime carrier requires a fresh threshold crossing while off-session and `not_quiet`; `held=` on an already latched member is insufficient.
-- **Step 7 is also halted at the UI boundary:** the Codex failover environment cannot use Kyle's authenticated Chrome session; the verification here is API/log/database/object evidence, labelled **UI not yet checked**, per `AGENTS.md` §3a. Kyle can inspect the page, or the UI check can remain for Claude's return.
+- **Remaining Step-7 hold — the off-session session gate remains unproved on staging:** both registered windows were captured, but every fresh quiet-only crossing occurred on a `quiet` verdict before the later `not_quiet` sweeps. A decisive runtime carrier requires a fresh threshold crossing while off-session and `not_quiet`; `held=` on an already latched member is insufficient.
+- **UI verification — PASS (Kyle's Chrome, 2026-10-14 13:05-13:06Z).** Two user-supplied screenshots show the staging **System Alerts** page rendered rather than a login or loading/error surface. The page header shows a capture time and numeric counts (**81 active, 6 scheduled, 82 surfaceable now**); the active row **“xStock venue quiet or closed — exit checks waiting for the market”** renders as **info / health_check**, with its complete body readable and the Ack control present. Other alert rows render on the same table as a positive control. No blank value, clipped batch row or broken layout is visible, and Kyle did not acknowledge the row. This discharges the Step-7 UI boundary.
 - **US market holidays (`#392`, parked by Kyle, no calendar):** on a holiday `closed` is false and the session reads `regular`, so holds page on a shut venue and `T` likely reads `thin`. Named, not silenced — Langston, §13 disposition 5; the next holiday is its first test.
 
 ## 5. Governance files changed so far
