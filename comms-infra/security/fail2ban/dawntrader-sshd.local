@@ -1,0 +1,10 @@
+# B-CREW-ACCESS-HARDEN — one explicit production SSH jail.
+[sshd]
+enabled = true
+backend = systemd
+port = ssh
+filter = sshd
+bantime = 10m
+findtime = 10m
+maxretry = 5
+ignoreip = 127.0.0.1/8 ::1 __LAPTOP_ADDRESS__

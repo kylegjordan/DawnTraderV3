@@ -1,0 +1,11 @@
+{
+  "expectedFingerprint": "SHA256:REPLACE_WITH_NEW_KEY_FINGERPRINT",
+  "privateKeyPath": "C:\\Users\\kyleg\\.ssh\\REPLACE_WITH_NEW_KEY_NAME",
+  "markerPath": "C:\\Users\\kyleg\\AppData\\Local\\DawnTrader\\ssh-keyholder\\unlock.json",
+  "registryPath": "Software\\OpenSSH\\Agent\\Keys",
+  "clients": {
+    "ssh": "C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+    "scp": "C:\\Windows\\System32\\OpenSSH\\scp.exe",
+    "sftp": "C:\\Windows\\System32\\OpenSSH\\sftp.exe"
+  }
+}

@@ -118,6 +118,14 @@ jobs:
           # feed isn't actually polled during tests.
           COINGECKO_API_TIER: demo
 
+      - name: Access-hardening tool tests
+        run: |
+          python3 comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py
+          bash -n comms-infra/security/ssh/manage-ssh-hardening.sh
+          bash -n comms-infra/security/fail2ban/manage-fail2ban.sh
+          bash -n comms-infra/security/fail2ban/emit-invalid-ssh-attempts.sh
+          bash -n comms-infra/security/fail2ban/verify-live-ban.sh
+
       # B-PLAN-CURRENCY-CHECK P30 (OBJ-10, Langston Q10: mandatory). The
       # governance checker's own tests. A push to the checker deploys to the
       # staging box within ~30 min (its ExecStartPre fast-forward), outside

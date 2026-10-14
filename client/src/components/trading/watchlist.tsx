@@ -3,8 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTrading } from "@/hooks/use-trading";
 import { useQuery } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { WatchlistPair } from "@/lib/types";
+
+type LatestScanResponse = {
+  ok: boolean;
+  data?: {
+    nextScanInMs?: number;
+  };
+};
 
 function WatchlistCard({ pair }: { pair: WatchlistPair }) {
   // Phase 27.F.19b: Map real API fields, handle missing values with "—"
@@ -94,24 +102,30 @@ export default function Watchlist() {
   const { watchlist, watchlistLoading } = useTrading();
   const [countdown, setCountdown] = useState<string>('—:—');
   
-  // Phase 27.F.19b: Fetch diagnostics for nextScanAt
-  const { data: diagnosticsData } = useQuery<{ nextScanAt?: string }>({
-    queryKey: ['/api/active-engine/diagnostics/scan?mode=paper&limit=10&trace=false&strategies=false'],
+  // B-CREW-ACCESS-HARDEN: the dashboard only observes the latest completed scan.
+  // It must never start an on-demand scan, which is an administrator action.
+  const latestScan = useQuery<LatestScanResponse>({
+    queryKey: ['/api/active-engine/diagnostics/scan-latest', 'paper'],
+    queryFn: () => apiFetch('/api/active-engine/diagnostics/scan-latest?mode=paper'),
     staleTime: 10 * 1000, // 10 seconds
     refetchInterval: 10 * 1000, // Auto-refresh every 10 seconds
   });
-  
-  // Phase 27.F.19b: Countdown timer using nextScanAt
+
+  const nextScanInMs = latestScan.data?.data?.nextScanInMs;
+  const nextScanAtMs = typeof nextScanInMs === 'number'
+    ? (latestScan.dataUpdatedAt || Date.now()) + nextScanInMs
+    : null;
+
+  // Count down from the server-computed remaining interval, anchored to fetch time.
   useEffect(() => {
     const updateCountdown = () => {
-      if (!diagnosticsData?.nextScanAt) {
+      if (nextScanAtMs === null) {
         setCountdown('—:—');
         return;
       }
-      
+
       const now = Date.now();
-      const nextScan = new Date(diagnosticsData.nextScanAt).getTime();
-      const diff = Math.max(0, nextScan - now);
+      const diff = Math.max(0, nextScanAtMs - now);
       
       const minutes = Math.floor(diff / 60000);
       const seconds = Math.floor((diff % 60000) / 1000);
@@ -125,7 +139,7 @@ export default function Watchlist() {
     // Then update every second
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [diagnosticsData?.nextScanAt]);
+  }, [nextScanAtMs]);
   
   // Show only first 4 pairs for dashboard preview
   const displayPairs = watchlist.slice(0, 4);
