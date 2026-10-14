@@ -30,6 +30,9 @@ const _dbState: {
 } = { throwWith: null, inserted: [], onFlush: null };
 vi.mock('../../db.js', () => ({
   db: {
+    transaction: async (fn: (tx: { execute: () => Promise<unknown> }) => Promise<unknown>) => fn({
+      execute: async () => ({ rows: [] }),
+    }),
     insert: () => ({
       values: (rows: any) => ({
         onConflictDoUpdate: async () => {
@@ -62,6 +65,7 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
 
 import {
   isTransientWriteError,
+  clearPermanentAlertLatch,
   bufferOhlcBar,
   stopBatchWriter,
   drainArchiveBuffersForShutdown,
@@ -271,7 +275,10 @@ describe('F-G-1 OBJ-9 — RETRY vs DROP, observed through the buffer instead of 
   // MUTATION: delete the shed block, or raise the cap, and this fails.
   it('SHEDS at the cap instead of growing without limit, and sheds the OLDEST', async () => {
     _dbState.throwWith = new Error('deadlock detected');   // transient => every row is re-buffered
-    for (let i = 0; i < RETRY_BUFFER_MAX + 5; i++) bufferOhlcBar('xstock_spot', bar(i));
+    // Use the generic xstock_perp writer path: this fence owns retry-buffer
+    // mechanics, while xstock_spot now has its own immutable revision writer
+    // and dedicated contract tests.
+    for (let i = 0; i < RETRY_BUFFER_MAX + 5; i++) bufferOhlcBar('xstock_perp', bar(i));
     await stopBatchWriter();                               // fails, re-adds, trips the cap
 
     _dbState.throwWith = null;
@@ -358,9 +365,10 @@ describe('F-G-1 / BLOCKER-11 — the latch must not outlive the fault', () => {
   // CONTROL: while the fault PERSISTS, it must still be one alert, not one per flush. Without this
   // the fix above could be "delete the latch", which re-creates the flood it exists to prevent.
   it('CONTROL — a PERSISTING fault still raises only once', async () => {
+    clearPermanentAlertLatch('ohlc', 'xstock_perp');
     _dbState.throwWith = new Error('column "still-gone" does not exist');
     for (let i = 0; i < 3; i++) {
-      bufferOhlcBar('xstock_spot', bar(93 + i));
+      bufferOhlcBar('xstock_perp', bar(93 + i));
       await stopBatchWriter();
     }
     await waitFor(() => _alerts.length > 0);

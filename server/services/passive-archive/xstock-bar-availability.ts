@@ -171,10 +171,16 @@ async function raiseCertificationAlert(detail: string, revisionIds: readonly str
 }
 
 async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibilityCertificate[]> {
+  // Drizzle/node-postgres serializes a one-element JavaScript array as the
+  // scalar UUID text, which PostgreSQL cannot cast to uuid[].  Build the
+  // canonical text-array input explicitly; every value originated from the
+  // database as a UUID, and the exact-set checks below still reject duplicates
+  // or substitutions on either side of the certificate boundary.
+  const revisionIdArrayLiteral = `{${revisionIds.join(',')}}`;
   const certificates = await db.transaction(async (tx) => {
     const result = await tx.execute(sql`
       SELECT * FROM certify_xstock_bar_revision_events(
-        ${revisionIds}::uuid[],
+        ${revisionIdArrayLiteral}::uuid[],
         ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
       )
     `);

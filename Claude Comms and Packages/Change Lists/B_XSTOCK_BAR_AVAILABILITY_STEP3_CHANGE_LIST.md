@@ -22,3 +22,11 @@
 - `npx vitest run server/tests/unit/b-xstock-bar-availability-capture.test.ts server/tests/unit/f-g-1-reopen-writer-order.test.ts` — 2 files / 17 tests passed.
 - `node scripts/check-tsc-baseline.mjs` — 337 current errors / 337 baseline errors; no regression.
 - The new PostgreSQL integration test requires the migration-applied CI database and is therefore graded by the pushed four-job run, not represented as locally passed.
+
+### Increment-1 CI correction
+
+- CI run `38589282989` applied the migration successfully and passed TypeScript Check, Build, and Docker Build, but the Test Suite exposed that a one-element JavaScript UUID array was reaching PostgreSQL as scalar text rather than a `uuid[]`. Certification therefore failed closed exactly as designed, leaving the test revision pending instead of falsely certifying it.
+- The certificate call now supplies an explicit PostgreSQL array literal while retaining the database-generated UUID source and exact-set checks on both sides of the transaction boundary.
+- The pre-existing writer retry fence now mocks the new bounded repair transaction and exercises generic retry/latch mechanics on the unchanged xStock-perpetual path rather than accidentally entering the new xStock-spot revision contract with a crypto fixture.
+- Focused rerun: `npx vitest run server/tests/unit/f-g-1-writer-retry-fence.test.ts server/tests/unit/b-xstock-bar-availability-capture.test.ts server/tests/integration/b-xstock-bar-availability-revision.test.ts` — 3 files passed; 21 tests passed, 1 local-database integration case skipped.
+- `node scripts/check-tsc-baseline.mjs` — 337 current errors / 337 baseline errors; no regression.
