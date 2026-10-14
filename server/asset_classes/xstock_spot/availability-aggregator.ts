@@ -644,6 +644,10 @@ export async function buildEligibleXstockWindowEvidence(
     eligibleBars[0].sourceMaxVisibleBy,
   );
   const sourceMaxVisibleSeq = Math.max(...eligibleBars.map((bar) => bar.sourceMaxVisibleSeq));
+  if (manifest.readObservedAt < sourceMaxVisibleBy
+      || manifest.readObservedSeq < sourceMaxVisibleSeq) {
+    throw new Error('[B-XSTOCK-BAR-AVAILABILITY] decision read observation precedes source availability');
+  }
   return {
     bars: eligibleBars,
     evidence: {

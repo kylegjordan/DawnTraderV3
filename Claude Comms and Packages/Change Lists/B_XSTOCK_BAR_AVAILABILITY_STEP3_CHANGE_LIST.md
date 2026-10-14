@@ -57,6 +57,6 @@
 
 ## Increment 3 — decision-window evidence foundation
 
-- Added a fail-closed decision-window builder that accepts only a strictly ordered, homogeneous, fully eligible bar array and binds its forming aggregate revision to a content-addressed settled-window manifest without dropping or reordering unavailable bars.
+- Added a fail-closed decision-window builder that accepts only a strictly ordered, homogeneous, fully eligible bar array, proves the later read observation cannot precede any source availability bound/sequence, and binds its forming aggregate revision to a content-addressed settled-window manifest without dropping or reordering unavailable bars.
 - Manifest persistence now takes a later primary-database read observation in the same transaction, refuses a primary-identity crossing, and returns that exact observation beside the manifest identity. This is the typed handoff the scanner and RTB scalar-reduction paths will consume together with their provenance writes; neither live consumer is switched by this foundation commit.
 - Focused run: `server/tests/unit/b-xstock-bar-availability-aggregate.test.ts` passed 8 tests. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.

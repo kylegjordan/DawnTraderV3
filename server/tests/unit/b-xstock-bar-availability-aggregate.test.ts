@@ -169,7 +169,11 @@ describe('B-XSTOCK-BAR-AVAILABILITY aggregate contract', () => {
     };
     state.results.push(
       [{ manifest_id: '44444444-4444-4444-8444-444444444444' }],
-      [{ ...observation[0], read_observed_seq: '15' }],
+      [{
+        ...observation[0],
+        read_observed_at: '2026-10-14T15:06:00.567890Z',
+        read_observed_seq: '15',
+      }],
     );
 
     const exact = await buildEligibleXstockWindowEvidence([settled, forming]);
