@@ -13,7 +13,7 @@
   - names all six workflow sources, enumerates entry points before the trace, and records writer/reader/mutator/deleter/scheduler censuses;
   - separates vendor label, receipt, write time, primary-scoped post-commit certification, aggregation/cache availability, and decision observation;
   - plans immutable xStock 1-minute revisions, exact-ID primary certification with monotonic sequence and clock-health guard, revision-aware 15m/60m aggregation/cache, content-addressed settled-window manifests, live/replay/provenance/dashboard migration, and a staged capacity-gated rollout;
-  - preserves F-G-1 winner semantics with immutable applied/rejected projection outcomes and row-locked projection generations; as-of reads select the actual applied winner before testing its certificate, including older-arrival late-commit and equal-arrival inverted-certification mutations;
+  - preserves F-G-1 winner semantics with immutable applied/rejected projection outcomes and row-locked projection generations; identical payloads at later/equal arrivals retain distinct event identity and advance the watermark, while same-buffer losers are counted as `buffer_superseded`; as-of reads select the actual applied winner before testing its certificate, including older-arrival late-commit, equal-arrival inverted-certification, and identical-content watermark mutations;
   - carries a typed 60m manifest/read observation through RTB scalar reduction, persists every refresh outcome, links reconfirmation and promotion to the exact attempt, and requires replay/readback of the regime inputs;
   - defines the capacity gate against the live B75 200-GiB cap: 40-GiB operating reserve, explicit archive-delay and index-rebuild reserves, a full 8-day/five-session capture population, and a fixed pass inequality/capture-stop response;
   - defines rollback as a fail-closed pause of new xStock decisions with the prior reader shadow-only, critical alert/provenance treatment, Kyle-only resume authority, and a mutation-backed rehearsal proving zero falsely exact post-fault decisions;
@@ -49,7 +49,7 @@ The current batch does not perform destructive snapshot cleanup. It owns revisio
 3. Is the append-only revision + aggregate revision + content-addressed manifest shape proportionate to exact replay/provenance needs and current database capacity?
 4. Are all 15m/60m live, replay, calibration, dashboard, export, dormant, and historical readers either migrated or explicitly fenced, with 240m refused?
 5. Is `#1194` correctly separated and placed, or must any part of snapshot retention move into this availability batch before implementation?
-6. Does projection generation preserve F-G-1 maximum-arrival/equal-arrival-last-applied behavior under both cross-process mutations, without certificate order selecting a winner?
+6. Does the event/generation model preserve F-G-1 maximum-arrival/equal-arrival-last-applied behavior under all three cross-process mutations, including an identical-content later arrival advancing the watermark, while keeping same-buffer disposition consistent?
 7. Does the typed 60m RTB evidence survive scalar reduction and remain durable for every refresh outcome and promotion?
 8. Is the fixed `D_gate + R_archive + R_index <= 160 GiB` gate against the governed 200-GiB cap sufficiently conservative and operationally complete?
 9. Does the rollback contract prove that post-cutover faults pause new xStock decisions and cannot silently restore label-only trading or exact-era claims?
