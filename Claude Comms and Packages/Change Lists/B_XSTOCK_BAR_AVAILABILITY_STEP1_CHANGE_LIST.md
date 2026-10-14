@@ -1,4 +1,4 @@
-# B-XSTOCK-BAR-AVAILABILITY — Step 1 change list r2
+# B-XSTOCK-BAR-AVAILABILITY — Step 1 change list r3
 
 **Review target:** scope only; no runtime code or schema changed.
 
@@ -24,6 +24,10 @@ Coltrane accepted the three-way provenance conclusion and returned four load-bea
 2. records that the upsert destroys earlier revisions, adds the retained-ineligible/prior-unknown state, and limits exact replay to revision-aware post-cutover evidence;
 3. covers both production snapshot paths (15m scanner and 60m regime refresh) and fences the dormant 240m path;
 4. adds a table/API reader census with explicit migrate, fence, retire-or-migrate, historical-only, or remain-inert dispositions for every direct semantic reader found.
+
+## Coltrane second correction pass at `d66e685b4c96d4498234549f2a25580f43f0b41b`
+
+The first four blockers were confirmed resolved. Scope r3 closes the remaining census gap by adding the corporate-action SQL reader as historical-only, the Codex tape extraction boundary as raw-export/historical, and partition-family names (for example `xstock_spot_ohlc_1m_2026_09`) to Objective 6's source fence.
 
 ## Already in place before this scope commit
 
