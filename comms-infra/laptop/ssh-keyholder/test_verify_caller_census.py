@@ -127,6 +127,46 @@ class CallerCensusParserTests(unittest.TestCase):
         )
         self.assertFalse(has_guarded_invocation(path))
 
+    def test_python_function_shadow_decoy_is_rejected(self):
+        path = self.write(
+            "caller.py",
+            "from subprocess import run\nKEYHOLDER = " + repr(r"C:\Users\kyleg\.claude\ssh-keyholder\dt-ssh-keyholder.py") + "\ndef run(*args):\n    print(args)\nrun([KEYHOLDER, 'exec', '--client', 'ssh', '--', 'host'])\n",
+        )
+        self.assertFalse(has_guarded_invocation(path))
+
+    def test_python_reassigned_command_preserves_direct_launch_rejection(self):
+        path = self.write(
+            "caller.py",
+            "import subprocess\nKEYHOLDER = " + repr(r"C:\Users\kyleg\.claude\ssh-keyholder\dt-ssh-keyholder.py") + "\nCMD = 'ssh'\nsubprocess.run([CMD, 'host'])\nCMD = KEYHOLDER\nsubprocess.run([CMD, 'exec', '--client', 'ssh', '--', 'host'])\n",
+        )
+        self.assertFalse(has_guarded_invocation(path))
+
+    def test_python_binding_shadow_forms_are_rejected(self):
+        prefix = "from subprocess import run\nKEYHOLDER = " + repr(r"C:\Users\kyleg\.claude\ssh-keyholder\dt-ssh-keyholder.py") + "\n"
+        guard = "\nrun([KEYHOLDER, 'exec', '--client', 'ssh', '--', 'host'])\n"
+        mutations = {
+            "parameter": "def f(run):\n    pass\n",
+            "class": "class run:\n    pass\n",
+            "delete": "del run\n",
+            "loop": "for run in []:\n    pass\n",
+            "with": "with context() as run:\n    pass\n",
+            "except": "try:\n    pass\nexcept Exception as run:\n    pass\n",
+            "comprehension": "[run for run in []]\n",
+            "match": "match value:\n    case {'x': run}:\n        pass\n",
+            "module-realias": "import other as run\n",
+        }
+        for name, mutation in mutations.items():
+            with self.subTest(name=name):
+                path = self.write(f"caller-{name}.py", prefix + mutation + guard)
+                self.assertFalse(has_guarded_invocation(path))
+
+    def test_python_cross_scope_assignment_decoy_is_rejected(self):
+        path = self.write(
+            "caller.py",
+            "import subprocess\nKEYHOLDER = " + repr(r"C:\Users\kyleg\.claude\ssh-keyholder\dt-ssh-keyholder.py") + "\ndef fake_scope():\n    CMD = KEYHOLDER\nsubprocess.run([CMD, 'exec', '--client', 'ssh', '--', 'host'])\n",
+        )
+        self.assertFalse(has_guarded_invocation(path))
+
     def test_shell_comment_only_guard_is_rejected(self):
         path = self.write("caller", "# C:/Users/kyleg/.claude/ssh-keyholder/dt-ssh-keyholder.py exec --client scp --\nscp a host:b\n")
         self.assertFalse(has_guarded_invocation(path))

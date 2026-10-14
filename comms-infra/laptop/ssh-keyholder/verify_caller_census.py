@@ -125,6 +125,26 @@ def _python_launcher_name(
     return None
 
 
+def _python_bound_names(target: ast.AST) -> set[str]:
+    if isinstance(target, ast.Name):
+        return {target.id}
+    if isinstance(target, (ast.Tuple, ast.List)):
+        return set().union(*(_python_bound_names(item) for item in target.elts)) if target.elts else set()
+    if isinstance(target, ast.Starred):
+        return _python_bound_names(target.value)
+    return set()
+
+
+def _python_pattern_names(pattern: ast.pattern) -> set[str]:
+    names: set[str] = set()
+    for node in ast.walk(pattern):
+        if isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name:
+            names.add(node.name)
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            names.add(node.rest)
+    return names
+
+
 def python_process_commands(text: str) -> list[list[str]]:
     """Return only statically-provable argv vectors passed to recognized launch APIs."""
     try:
@@ -134,14 +154,38 @@ def python_process_commands(text: str) -> list[list[str]]:
     subprocess_modules: set[str] = set()
     os_modules: set[str] = set()
     imported_launchers: dict[str, str] = {}
+    invalid_bindings = False
+    import_bindings: dict[str, str] = {}
+    top_level = {id(node) for node in tree.body}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
+                local_name = alias.asname or alias.name
+                prior = import_bindings.get(local_name)
+                if prior is not None and prior != alias.name:
+                    invalid_bindings = True
+                import_bindings[local_name] = alias.name
                 if alias.name == "subprocess":
-                    subprocess_modules.add(alias.asname or alias.name)
+                    subprocess_modules.add(local_name)
+                    if id(node) not in top_level:
+                        invalid_bindings = True
                 elif alias.name == "os":
-                    os_modules.add(alias.asname or alias.name)
-        elif isinstance(node, ast.ImportFrom) and node.module in {"subprocess", "os"}:
+                    os_modules.add(local_name)
+                    if id(node) not in top_level:
+                        invalid_bindings = True
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name != "*":
+                    local_name = alias.asname or alias.name
+                    binding = f"{node.module}:{alias.name}"
+                    prior = import_bindings.get(local_name)
+                    if prior is not None and prior != binding:
+                        invalid_bindings = True
+                    import_bindings[local_name] = binding
+            if node.module not in {"subprocess", "os"}:
+                continue
+            if id(node) not in top_level:
+                invalid_bindings = True
             for alias in node.names:
                 if alias.name == "*":
                     if node.module == "subprocess":
@@ -156,22 +200,108 @@ def python_process_commands(text: str) -> list[list[str]]:
                     imported_launchers[local_name] = f"os.{alias.name}"
     assignments: dict[str, object] = {}
     rebound_launchers = False
+    binding_counts: dict[str, int] = {}
+    ambiguous_binding_names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             value = _python_static_value(node.value, assignments) if node.value else None
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
-                if isinstance(target, ast.Name):
-                    if target.id in subprocess_modules | os_modules | imported_launchers.keys():
+                for name in _python_bound_names(target):
+                    binding_counts[name] = binding_counts.get(name, 0) + 1
+                    if id(node) not in top_level:
+                        ambiguous_binding_names.add(name)
+                    if name in subprocess_modules | os_modules | imported_launchers.keys():
                         rebound_launchers = True
                     launcher = _python_launcher_name(
                         node.value, subprocess_modules, os_modules, imported_launchers
                     ) if node.value is not None else None
                     if launcher is not None:
-                        imported_launchers[target.id] = launcher
+                        if id(node) not in top_level:
+                            invalid_bindings = True
+                        imported_launchers[name] = launcher
                     if value is not None:
-                        assignments[target.id] = value
-    commands: list[list[str]] = [["<unresolved-launch>"]] if rebound_launchers else []
+                        assignments[name] = value
+
+        elif isinstance(node, (ast.AugAssign, ast.NamedExpr)):
+            for name in _python_bound_names(node.target):
+                binding_counts[name] = binding_counts.get(name, 0) + 1
+                ambiguous_binding_names.add(name)
+                if name in subprocess_modules | os_modules | imported_launchers.keys():
+                    rebound_launchers = True
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            for name in _python_bound_names(node.target):
+                binding_counts[name] = binding_counts.get(name, 0) + 1
+                ambiguous_binding_names.add(name)
+                if name in subprocess_modules | os_modules | imported_launchers.keys():
+                    rebound_launchers = True
+        elif isinstance(node, ast.comprehension):
+            for name in _python_bound_names(node.target):
+                binding_counts[name] = binding_counts.get(name, 0) + 1
+                ambiguous_binding_names.add(name)
+                if name in subprocess_modules | os_modules | imported_launchers.keys():
+                    rebound_launchers = True
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is None:
+                    continue
+                for name in _python_bound_names(item.optional_vars):
+                    binding_counts[name] = binding_counts.get(name, 0) + 1
+                    ambiguous_binding_names.add(name)
+                    if name in subprocess_modules | os_modules | imported_launchers.keys():
+                        rebound_launchers = True
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            binding_counts[node.name] = binding_counts.get(node.name, 0) + 1
+            ambiguous_binding_names.add(node.name)
+            if node.name in subprocess_modules | os_modules | imported_launchers.keys():
+                rebound_launchers = True
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            binding_counts[node.name] = binding_counts.get(node.name, 0) + 1
+            ambiguous_binding_names.add(node.name)
+            if node.name in subprocess_modules | os_modules | imported_launchers.keys():
+                rebound_launchers = True
+        elif isinstance(node, ast.arg):
+            binding_counts[node.arg] = binding_counts.get(node.arg, 0) + 1
+            ambiguous_binding_names.add(node.arg)
+            if node.arg in subprocess_modules | os_modules | imported_launchers.keys():
+                rebound_launchers = True
+        elif isinstance(node, ast.Delete):
+            for target in node.targets:
+                for name in _python_bound_names(target):
+                    binding_counts[name] = binding_counts.get(name, 0) + 1
+                    ambiguous_binding_names.add(name)
+                    if name in subprocess_modules | os_modules | imported_launchers.keys():
+                        rebound_launchers = True
+        elif isinstance(node, ast.match_case):
+            for name in _python_pattern_names(node.pattern):
+                binding_counts[name] = binding_counts.get(name, 0) + 1
+                ambiguous_binding_names.add(name)
+                if name in subprocess_modules | os_modules | imported_launchers.keys():
+                    rebound_launchers = True
+
+    launcher_names = subprocess_modules | os_modules | imported_launchers.keys()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local_name = alias.asname or alias.name
+                expected = (
+                    local_name in subprocess_modules and alias.name == "subprocess"
+                ) or (local_name in os_modules and alias.name == "os")
+                if local_name in launcher_names and not expected:
+                    invalid_bindings = True
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                local_name = alias.asname or alias.name
+                expected = (
+                    imported_launchers.get(local_name) == f"{node.module}.{alias.name}"
+                )
+                if local_name in launcher_names and not expected:
+                    invalid_bindings = True
+
+    commands: list[list[str]] = [["<unresolved-launch>"]] if rebound_launchers or invalid_bindings else []
+    command_names: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or _python_launcher_name(
             node.func, subprocess_modules, os_modules, imported_launchers
@@ -183,11 +313,19 @@ def python_process_commands(text: str) -> list[list[str]]:
         if command_node is None:
             commands.append(["<unresolved-launch>"])
             continue
+        command_names.update(
+            child.id for child in ast.walk(command_node) if isinstance(child, ast.Name)
+        )
         value = _python_static_value(command_node, assignments)
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             commands.append(value)
         else:
             commands.append(["<unresolved-launch>"])
+    if any(
+        binding_counts.get(name, 0) > 1 or name in ambiguous_binding_names
+        for name in command_names
+    ):
+        commands.append(["<unresolved-launch>"])
     return commands
 
 

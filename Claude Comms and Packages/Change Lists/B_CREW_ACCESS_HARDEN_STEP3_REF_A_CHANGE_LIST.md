@@ -61,7 +61,7 @@
 
 The lifecycle accepts exactly one configured fingerprint, removes its attributed persistent registry material while requiring current-service memory use to survive, and binds its owner-only marker to the current logon LUID and agent process epoch. Every assertion also requires an empty persistence store and exactly one expected in-memory identity before it can start an absolute Windows OpenSSH client. Lock attempts marker deletion, identity purge and verification, registry purge and verification, and service stop and verification independently; it aggregates failures only after every cleanup attempt and cannot emit `LOCKED` for a partial result.
 
-Eleven deterministic key-holder tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; complete lock cleanup; and injected failure at each lock cleanup stage. Thirty-two census-parser/evidence tests prove comment-only, print/echo, fake-launcher and unrelated strings cannot count as guards; direct, aliased, nested, wildcard-imported, from-imported, assigned, rebound, shell-backed or unresolved launchers invalidate a guarded Python, JavaScript or shell file; shell command boundaries cannot merge away a direct client; task arguments require the exact canonical source and sole action; and duplicate, raw-artifact-tampered, non-descendant, source-changed or binding-substituted evidence is rejected. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
+Eleven deterministic key-holder tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; complete lock cleanup; and injected failure at each lock cleanup stage. Thirty-six census-parser/evidence tests prove comment-only, print/echo, fake-launcher and unrelated strings cannot count as guards; direct, aliased, nested, wildcard-imported, from-imported, assigned, rebound, shadowed, cross-scope, shell-backed or unresolved launchers invalidate a guarded Python, JavaScript or shell file; multiply assigned command names cannot hide an earlier direct launch; shell command boundaries cannot merge away a direct client; task arguments require the exact canonical source and sole action; and duplicate, raw-artifact-tampered, non-descendant, source-changed or binding-substituted evidence is rejected. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
 
 ## Dormant server-hardening source
 
@@ -100,6 +100,10 @@ Object-level self-review after the round found that shell newlines were initiall
 2. **Exact task action:** the task argument string is parsed with Windows quote/backslash rules. The canonical source must be argument zero exactly and the sole task action must be that Exec; suffix, prefix, additional executable and second-action mutations reject.
 3. **Entry-bound raw capture:** the producer no longer accepts arbitrary plan commands. It reads one immutable byte snapshot of the repo-canonical ten-entry binding file, currently inert at Ref A, which Ref B must fill with reviewed source hashes and exact positive/negative command vectors. Those same parsed bytes are sealed and compared byte-for-byte with the reviewed repo source; helper substitution or row relabelling fails.
 4. **Added-package rollback:** the common added-package purge runs whether fail2ban was absent or already installed. The mutation self-test drives the same existing-install restoration helper used by rollback for an existing fail2ban version plus one new dependency, then proves the reconstructed package inventory is byte-equal to the captured pre-state.
+
+## Coltrane correction round at `178bfe8f2423e4875da8f4731d0a10d5a319b0b2`
+
+The remaining parser correction fails closed when a recognized module or launcher name is shadowed through a function/class definition, parameter, delete, loop, context-manager, exception target, nested import or module re-alias. A command-name input with multiple bindings is unresolved rather than evaluated from its final value. Coltrane's exact function-shadow decoy and direct-then-guard reassignment mutations are included.
 
 REVIEWER: claim-only · name the settling objects and alternate states for the four correction mechanisms · identified parser-alias, second-task-action, mutable-binding-read and synthetic-package-test risks; each actionable source-level hit was re-derived and corrected, while the real package transaction remains the separately gated P6 proof · re-derived y
 
@@ -296,7 +300,7 @@ Local evidence before dispatch:
 
 - Watchlist mounted test: 1/1 passed.
 - Key-holder tests: 11/11 passed.
-- Caller-census parser/evidence tests: 32/32 passed.
+- Caller-census parser/evidence tests: 36/36 passed.
 - Caller census inventory: 39/39 concrete runtime objects present and hash-consistent (32 repository selectors, four installed files, three task definitions); guarded count remains intentionally 0 at inert Ref A.
 - TypeScript baseline: 337 existing errors over the whole project, 0 new errors.
 - Production build: passed.
