@@ -121,10 +121,15 @@ jobs:
       - name: Access-hardening tool tests
         run: |
           python3 comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py
+          python3 comms-infra/laptop/ssh-keyholder/test_verify_caller_census.py
           bash -n comms-infra/security/ssh/manage-ssh-hardening.sh
+          bash comms-infra/security/ssh/manage-ssh-hardening.sh self-test
           bash -n comms-infra/security/fail2ban/manage-fail2ban.sh
+          bash comms-infra/security/fail2ban/manage-fail2ban.sh self-test
           bash -n comms-infra/security/fail2ban/emit-invalid-ssh-attempts.sh
           bash -n comms-infra/security/fail2ban/verify-live-ban.sh
+          pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/install.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
+          pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/rollback.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
 
       # B-PLAN-CURRENCY-CHECK P30 (OBJ-10, Langston Q10: mandatory). The
       # governance checker's own tests. A push to the checker deploys to the

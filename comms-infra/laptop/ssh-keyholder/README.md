@@ -2,8 +2,9 @@
 
 This directory is the repository source for the shared laptop key lifecycle. It is
 inactive until the reviewed installer is run from an elevated PowerShell window.
-The installer leaves `ssh-agent` in Manual mode and installs a logon/lock/disconnect
-task that purges identities; it does not create, copy, or authorize a private key.
+The installer leaves `ssh-agent` in Manual mode, installs synchronous local Group
+Policy logon/logoff cleanup, and adds a logon/lock/disconnect task as a second
+layer. It does not create, copy, or authorize a private key.
 
 ## Safety boundary
 
@@ -16,12 +17,23 @@ task that purges identities; it does not create, copy, or authorize a private ke
   persistence store all match. `exec` is the only supported route to the absolute
   Windows `ssh.exe`, `scp.exe`, or `sftp.exe` after activation.
 - `lock` removes the marker first, purges agent and registry state, proves the agent is
-  empty, and stops it. A stale marker with the expected key deliberately left loaded
-  must still refuse before any network client starts.
+  empty, and stops it. Every cleanup is attempted even when another one fails; a partial
+  cleanup raises an error and can never print `LOCKED`. A stale marker with the expected
+  key deliberately left loaded must still refuse before any network client starts.
+- Installation writes and secures its rollback manifest before the first service,
+  task, policy or installed-file mutation. Every later failure invokes exact rollback.
+  The installer refuses a non-cold starting state and prints `INSTALLED_LOCKED` only
+  after service, registry, marker and agent-unavailability checks all pass.
+- The local Group Policy logon script is synchronous, so raw Windows OpenSSH cannot
+  race an asynchronous scheduled task after sign-in; the matching logoff script removes
+  the in-memory identity as that session ends. The real sign-out/sign-in proof rejects
+  the mechanism if either boundary leaves the key usable. The scheduled task remains
+  defence in depth for lock and disconnect events.
 
 ## Review and activation order
 
-1. Run `python test_ssh_keyholder.py` and mutation-prove every refusal.
+1. Run `python test_ssh_keyholder.py` and `python test_verify_caller_census.py`,
+   then mutation-prove every refusal.
 2. With a disposable encrypted key that is authorized nowhere, install into the
    measured Windows account and run the load/remove/restart/logoff/reboot proof.
 3. Stop if registry removal destroys in-memory use, if registry material reappears,
@@ -30,8 +42,18 @@ task that purges identities; it does not create, copy, or authorize a private ke
    fingerprint and privately run `unlock`.
 5. Route and verify all 39 concrete objects plus both direct command classes. The
    census tool must report 32 guarded repository selectors, four installed runtime
-   files, three scheduled tasks, and a total governed population of 39.
+   files, three scheduled tasks, and a total governed population of 39. It parses
+   executable guard calls (comments do not count), validates task actions and installed
+   hashes, and requires real-entry evidence naming the spawned Windows OpenSSH clients,
+   accepted server fingerprint and zero locked-state client spawns for every logical
+   caller plus direct PowerShell and Git Bash.
 
 The passphrase must be entered only at the interactive `ssh-add` prompt. It must not
 appear in any argument, file, environment variable, task definition, repository
 record, or log.
+
+The disposable-key proof runs installer failure injection after files, service mode,
+Group Policy and task registration. Each injected failure must end at the captured
+pre-state using the reported manifest. The fault switch is accepted only when the key
+filename contains `disposable` and `DT_KEYHOLDER_ENABLE_FAULT_TESTS=I_UNDERSTAND` is
+set for that proof process.

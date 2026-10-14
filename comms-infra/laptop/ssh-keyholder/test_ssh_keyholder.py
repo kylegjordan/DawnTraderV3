@@ -23,21 +23,36 @@ class FakeBackend:
         self.create_registry_record = True
         self.drop_identity_on_registry_remove = False
         self.rewrite_registry_after_remove = False
+        self.fail_operations: set[str] = set()
+
+    def maybe_fail(self, operation):
+        if operation in self.fail_operations:
+            raise KeyholderError(f"injected {operation} failure")
 
     def current_luid(self): return self.luid
     def service_epoch(self):
         if not self.running: raise KeyholderError("stopped")
         return self.epoch
     def set_service_manual_and_start(self): self.running = True
-    def stop_service(self): self.running = False
-    def list_fingerprints(self): return list(self.fingerprints)
-    def purge_identities(self): self.fingerprints = []
+    def stop_service(self):
+        self.maybe_fail("stop_service")
+        self.running = False
+    def list_fingerprints(self):
+        self.maybe_fail("list_fingerprints")
+        return list(self.fingerprints)
+    def purge_identities(self):
+        self.maybe_fail("purge_identities")
+        self.fingerprints = []
     def add_identity(self, path):
         self.fingerprints = [EXPECTED]
         if self.create_registry_record:
             self.registry = {"k|Software\\OpenSSH\\Agent\\Keys\\record": "present"}
-    def registry_snapshot(self): return dict(self.registry)
-    def purge_registry(self): self.registry = {}
+    def registry_snapshot(self):
+        self.maybe_fail("registry_snapshot")
+        return dict(self.registry)
+    def purge_registry(self):
+        self.maybe_fail("purge_registry")
+        self.registry = {}
     def remove_registry_records(self, records):
         for record in records: self.registry.pop(record, None)
         if self.drop_identity_on_registry_remove: self.fingerprints = []
@@ -47,7 +62,9 @@ class FakeBackend:
         if self.marker is None: raise KeyholderError("missing marker")
         return dict(self.marker)
     def write_marker(self, marker): self.marker = dict(marker)
-    def remove_marker(self): self.marker = None
+    def remove_marker(self):
+        self.maybe_fail("remove_marker")
+        self.marker = None
     def run_client(self, client, args):
         self.spawned.append((client, list(args)))
         return 0
@@ -146,6 +163,37 @@ class KeyholderTests(unittest.TestCase):
         self.assertEqual(self.backend.fingerprints, [])
         self.assertEqual(self.backend.registry, {})
         self.assertFalse(self.backend.running)
+
+    def test_each_lock_cleanup_failure_attempts_every_independent_cleanup(self):
+        expectations = {
+            "remove_marker": {"marker": "present", "fingerprints": [], "registry": {}, "running": False},
+            "purge_identities": {"marker": None, "fingerprints": [EXPECTED], "registry": {}, "running": False},
+            "list_fingerprints": {"marker": None, "fingerprints": [], "registry": {}, "running": False},
+            "purge_registry": {
+                "marker": None,
+                "fingerprints": [],
+                "registry": {"k|Software\\OpenSSH\\Agent\\Keys\\record": "present"},
+                "running": False,
+            },
+            "registry_snapshot": {"marker": None, "fingerprints": [], "registry": {}, "running": False},
+            "stop_service": {"marker": None, "fingerprints": [], "registry": {}, "running": True},
+        }
+        for operation, expected in expectations.items():
+            with self.subTest(operation=operation):
+                backend = FakeBackend()
+                keyholder = Keyholder(self.config, backend)
+                keyholder.unlock()
+                backend.registry = {"k|Software\\OpenSSH\\Agent\\Keys\\record": "present"}
+                backend.fail_operations = {operation}
+                with self.assertRaisesRegex(KeyholderError, "lock incomplete"):
+                    keyholder.lock()
+                if expected["marker"] == "present":
+                    self.assertIsNotNone(backend.marker)
+                else:
+                    self.assertIsNone(backend.marker)
+                self.assertEqual(backend.fingerprints, expected["fingerprints"])
+                self.assertEqual(backend.registry, expected["registry"])
+                self.assertEqual(backend.running, expected["running"])
 
 
 if __name__ == "__main__":

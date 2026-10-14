@@ -463,24 +463,54 @@ class Keyholder:
             raise
 
     def lock(self) -> None:
-        self.backend.remove_marker()
+        errors: list[str] = []
+        try:
+            self.backend.remove_marker()
+        except Exception as exc:
+            errors.append(f"marker removal failed: {exc}")
+
+        agent_was_running = False
         try:
             self.backend.service_epoch()
         except KeyholderError:
             pass
         else:
-            self.backend.purge_identities()
-            if self.backend.list_fingerprints():
-                raise KeyholderError("Windows ssh-agent still holds an identity after purge")
-        self.backend.purge_registry()
-        if self.backend.registry_snapshot():
-            raise KeyholderError("Windows ssh-agent registry still holds identity material")
-        self.backend.stop_service()
+            agent_was_running = True
+
+        if agent_was_running:
+            try:
+                self.backend.purge_identities()
+            except Exception as exc:
+                errors.append(f"identity purge failed: {exc}")
+            try:
+                if self.backend.list_fingerprints():
+                    errors.append("Windows ssh-agent still holds an identity after purge")
+            except Exception as exc:
+                errors.append(f"identity verification failed: {exc}")
+
+        try:
+            self.backend.purge_registry()
+        except Exception as exc:
+            errors.append(f"registry purge failed: {exc}")
+        try:
+            if self.backend.registry_snapshot():
+                errors.append("Windows ssh-agent registry still holds identity material")
+        except Exception as exc:
+            errors.append(f"registry verification failed: {exc}")
+
+        try:
+            self.backend.stop_service()
+        except Exception as exc:
+            errors.append(f"service stop failed: {exc}")
         try:
             self.backend.service_epoch()
         except KeyholderError:
-            return
-        raise KeyholderError("Windows ssh-agent is still running after lock")
+            pass
+        else:
+            errors.append("Windows ssh-agent is still running after lock")
+
+        if errors:
+            raise KeyholderError("lock incomplete: " + "; ".join(errors))
 
     def execute(self, client_name: str, args: Sequence[str]) -> int:
         marker = self.assert_unlocked()

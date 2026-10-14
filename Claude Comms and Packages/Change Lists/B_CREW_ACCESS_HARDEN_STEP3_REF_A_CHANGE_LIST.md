@@ -53,11 +53,12 @@
 - `comms-infra/laptop/ssh-keyholder/rollback.ps1`
 - `comms-infra/laptop/ssh-keyholder/verify_caller_census.py`
 - `comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py`
+- `comms-infra/laptop/ssh-keyholder/test_verify_caller_census.py`
 - `comms-infra/laptop/ssh-keyholder/README.md`
 
-The lifecycle accepts exactly one configured fingerprint, removes its attributed persistent registry material while requiring current-service memory use to survive, and binds its owner-only marker to the current logon LUID and agent process epoch. Every assertion also requires an empty persistence store and exactly one expected in-memory identity before it can start an absolute Windows OpenSSH client. Lock deletes the marker first, purges identity and registry state, then stops the Manual service.
+The lifecycle accepts exactly one configured fingerprint, removes its attributed persistent registry material while requiring current-service memory use to survive, and binds its owner-only marker to the current logon LUID and agent process epoch. Every assertion also requires an empty persistence store and exactly one expected in-memory identity before it can start an absolute Windows OpenSSH client. Lock attempts marker deletion, identity purge and verification, registry purge and verification, and service stop and verification independently; it aggregates failures only after every cleanup attempt and cannot emit `LOCKED` for a partial result.
 
-Ten deterministic tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; and complete lock cleanup. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
+Eleven deterministic key-holder tests cover current-session success; zero, wrong and multiple identities; stale logon; restarted service; rewritten persistent material; missing attribution; registry removal that destroys memory use; absolute client selection; complete lock cleanup; and injected failure at each lock cleanup stage. Eight census-parser tests prove comment-only and unrelated strings cannot count as guards, named Python calls are recognized, task actions and working directories are validated, and duplicate evidence rows are rejected. The census tool fixes the denominator at 32 repository selectors, four installed runtime files and three scheduled task definitions, and will reject unguarded sources during Ref B activation.
 
 ## Dormant server-hardening source
 
@@ -70,7 +71,16 @@ Ten deterministic tests cover current-session success; zero, wrong and multiple 
 - `comms-infra/security/fail2ban/verify-live-ban.sh`
 - `comms-infra/security/fail2ban/README.md`
 
-The SSH manager requires two held laptop recovery sessions, saves only the exact replaced drop-in, validates syntax, reloads rather than restarts, and evaluates every required Helsinki account/source context. The fail2ban manager pins the audited package version, renders an ignore set containing loopback and the current laptop but not the peer test source, requires a real journal filter-match positive control, and preserves exact rollback state. Separate peer-attempt and target-observation tools drive the production jail/firewall proof without a valid password and explicitly unban the disposable source.
+The SSH manager requires two held laptop recovery sessions, saves only the exact replaced drop-in, validates syntax, reloads rather than restarts, and evaluates every required Helsinki account/source context. It accepts both safe canonical root values and requires an active service plus a nonempty port-22 listener attributed to `sshd`. Both server managers parse the peer endpoint column actually emitted by `ss`, with IPv4 and IPv6 self-tests, so the two-session gate cannot silently measure the wrong column. The fail2ban manager pins the audited package version, renders an ignore set containing loopback and the current laptop but not the peer test source, requires a real journal filter-match positive control, and preserves package inventory, exact version, active/enabled states, prior bans and local bytes for rollback. Separate peer-attempt and target-observation tools drive the production jail/firewall proof without a valid password and explicitly unban only the disposable source.
+
+## Coltrane correction round at `db0edf8bf93e035f8e3c8c0338ff5e9d347cc996`
+
+1. **Independent lock cleanup:** every cleanup and its verification now runs even if an earlier operation fails; errors are aggregated and eleven tests inject every failure class.
+2. **Transactional Windows install/rollback:** the secured manifest is written outside runtime state before the first runtime mutation; failures automatically invoke the source rollback; success is printed only after the installed lock runs and service, registry, marker and agent state are positively cold.
+3. **Real logoff boundary:** a synchronous local Group Policy command runs at both logoff and logon, with synchronous logon policy forced; the scheduled task remains defence in depth. The later disposable proof must use a real sign-out/sign-in and raw client, so an asynchronous race cannot pass.
+4. **Concrete caller verifier:** repository guards are parsed as executable calls, installed files must match their sources, task XML must select the exact guarded source, and ten real-entry evidence rows cover all eight logical callers plus direct PowerShell and Git Bash while naming spawned Windows OpenSSH clients.
+5. **SSH semantic and listener proof:** both OpenSSH key-only canonical values pass; unsafe root values, an empty listener and a non-`sshd` listener fail; live verify also requires the active production service.
+6. **fail2ban recovery and exact rollback:** install requires two held authenticated sessions, supports a pinned downgrade, preserves prior bans without global unban, restores active/enabled state and package inventory, and refuses unequal rollback. The required real install-to-rollback mutation remains deliberately deferred to the separately reviewed live P6 exact-ref gate; running it during Ref A would violate Coltrane's source/proof and live-mutation boundary.
 
 ## Load-bearing diff snippets
 
@@ -166,6 +176,96 @@ maxretry = 5
 ignoreip = 127.0.0.1/8 ::1 __LAPTOP_ADDRESS__
 ```
 
+### MODIFIED — lock cleanup is failure-closed as a whole
+
+Before:
+
+```python
+self.backend.remove_marker()
+self.backend.purge_identities()
+if self.backend.list_fingerprints():
+    raise KeyholderError("Windows ssh-agent still holds an identity after purge")
+self.backend.purge_registry()
+if self.backend.registry_snapshot():
+    raise KeyholderError("Windows ssh-agent registry still holds identity material")
+self.backend.stop_service()
+```
+
+After:
+
+```python
+try:
+    self.backend.remove_marker()
+except Exception as exc:
+    errors.append(f"marker removal failed: {exc}")
+# Identity, registry and service cleanup each run in their own try block.
+if errors:
+    raise KeyholderError("lock incomplete: " + "; ".join(errors))
+```
+
+### MODIFIED — manifest precedes runtime mutation
+
+Before:
+
+```powershell
+Set-Service -Name ssh-agent -StartupType Manual
+Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force | Out-Null
+$installState | ConvertTo-Json | Set-Content -LiteralPath $installStatePath
+Write-Output "INSTALLED_LOCKED fingerprint=$ExpectedFingerprint"
+```
+
+After:
+
+```powershell
+[IO.File]::WriteAllText($installStatePath, ($installState | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))
+Set-OwnerOnlyAcl $installStatePath $false
+try {
+    # Files, service, synchronous logon/logoff policy and task are installed here.
+    & $python $installedCli lock
+    Assert-LockedState
+    Write-Output "INSTALLED_LOCKED fingerprint=$ExpectedFingerprint rollback=$installStatePath"
+} catch {
+    & $rollbackScript -InstallState $installStatePath -Confirm:$false
+}
+```
+
+### MODIFIED — listener check discriminates absence
+
+Before:
+
+```bash
+ss -ltnp '( sport = :22 )'
+[[ $(effective_value root "$LAPTOP_ADDRESS" permitrootlogin) == prohibit-password ]]
+```
+
+After:
+
+```bash
+systemctl is-active --quiet ssh.service
+listener=$(ss -H -ltnp '( sport = :22 )')
+listener_is_production "$listener" || exit 1
+permit_root_is_key_only "$(effective_value root "$LAPTOP_ADDRESS" permitrootlogin)"
+```
+
+### MODIFIED — prior bans are reconciled, never globally erased
+
+Before:
+
+```bash
+fail2ban-client set sshd unbanip --all
+systemctl restart fail2ban.service
+```
+
+After:
+
+```bash
+comm -13 "$prior" "$current" > "$extra"
+comm -23 "$prior" "$current" > "$missing"
+while read -r address; do fail2ban-client set sshd unbanip "$address"; done < "$extra"
+while read -r address; do fail2ban-client set sshd banip "$address"; done < "$missing"
+cmp -s "$prior" "$current"
+```
+
 ## Continuous verification
 
 - `.github/workflows/ci.yml`
@@ -174,10 +274,12 @@ ignoreip = 127.0.0.1/8 ::1 __LAPTOP_ADDRESS__
 Local evidence before dispatch:
 
 - Watchlist mounted test: 1/1 passed.
-- Key-holder tests: 10/10 passed.
+- Key-holder tests: 11/11 passed.
+- Caller-census parser tests: 8/8 passed.
+- Caller census inventory: 39/39 concrete runtime objects present and hash-consistent (32 repository selectors, four installed files, three task definitions); guarded count remains intentionally 0 at inert Ref A.
 - TypeScript baseline: 337 existing errors over the whole project, 0 new errors.
 - Production build: passed.
-- Four server shell tools: syntax checks passed.
+- SSH and fail2ban manager syntax plus mutation self-tests: passed.
 - Two PowerShell tools: parser checks passed.
 
 ## Sequencing boundary
