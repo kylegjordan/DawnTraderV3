@@ -10,6 +10,8 @@
 
 **Review branch:** `migration/corz-provenance`
 
+**Graded ref:** `08ac3e29923c0664d26392cac69acef69e18df5f`
+
 ## Claim to review
 
 The CORZ quote-versus-bars discrepancy is a mixed-clock comparison, not evidence that either price stream was wrong: xStock ticker rows are receipt-stamped, while Kraken's equities OHLC payload arrives about 15–16 minutes after its `interval_begin`. DawnTrader preserves both the label and, on current rows, the receipt clock, but its live and replay consumers generally operate on the label alone.
@@ -38,6 +40,10 @@ Rule-24 classification remains outcome (3), with a narrower intent conclusion af
 ## Coltrane round-1 correction
 
 At `c6f661e2929cfbfb0e7e65d1241623611f2d0ff7`, Coltrane accepted the mechanism boundary, outcome (3), and placement, but found the consumer census incomplete. This revision adds the route-reachable passive-archive dashboard reader, which compares OHLC `interval_begin` and ticker `captured_at` under one rolling-window cutoff; it is included in `B-XSTOCK-BAR-AVAILABILITY`. It also records the adjacent non-current readers: the AMR context shadow has zero production callers and gains an activation guard in this batch, while the inert freshness monitor remains with existing `#441` and must inherit the settled contract when rebuilt.
+
+## Coltrane full-provenance approval
+
+Coltrane **APPROVED** the full provenance amendment at exact graded ref `08ac3e29923c0664d26392cac69acef69e18df5f` on 2026-10-14. He independently confirmed B74's deliberate passive-sink label preservation, B79.0m.b as the first functional live/VTS consumer after `4904ea66b`, B-NEW-34's receipt-time-gate removal, Kyle's explicit B.3 forming-bar approval, B.4's retention of that policy, and the positive-controlled absence of an xStock label-to-availability contract. **No corrections.** Graded-head CI run `38538078612` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
 
 ## Verification already performed
 
