@@ -15,7 +15,7 @@ import subprocess
 import tokenize
 import uuid
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 
 ROOTS = [
@@ -76,6 +76,8 @@ REQUIRED_CLIENTS = {
     "direct:powershell": {"ssh"},
     "direct:git-bash": {"ssh"},
 }
+CAPTURE_BINDINGS = Path(__file__).with_name("caller_capture_bindings.json")
+EXPECTED_SOURCES = {name: name for name in EVIDENCE_NAMES if not name.startswith("direct:")}
 
 
 def normalized_hash(path: Path) -> str:
@@ -99,12 +101,27 @@ def _python_static_value(node: ast.AST, assignments: dict[str, object]) -> objec
     return None
 
 
-def _python_launcher_name(node: ast.AST, imported_modules: set[str]) -> str | None:
+PYTHON_SUBPROCESS_LAUNCHERS = {"run", "Popen", "call", "check_call", "check_output"}
+PYTHON_OS_LAUNCHERS = {
+    "system", "popen",
+    "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe",
+    "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe",
+}
+
+
+def _python_launcher_name(
+    node: ast.AST,
+    subprocess_modules: set[str],
+    os_modules: set[str],
+    imported_launchers: dict[str, str],
+) -> str | None:
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-        if node.value.id == "subprocess" and "subprocess" in imported_modules and node.attr in {"run", "Popen", "call", "check_call", "check_output"}:
+        if node.value.id in subprocess_modules and node.attr in PYTHON_SUBPROCESS_LAUNCHERS:
             return f"subprocess.{node.attr}"
-        if node.value.id == "os" and "os" in imported_modules and (node.attr.startswith("exec") or node.attr.startswith("spawn")):
+        if node.value.id in os_modules and node.attr in PYTHON_OS_LAUNCHERS:
             return f"os.{node.attr}"
+    if isinstance(node, ast.Name):
+        return imported_launchers.get(node.id)
     return None
 
 
@@ -114,22 +131,51 @@ def python_process_commands(text: str) -> list[list[str]]:
         tree = ast.parse(uncommented_python(text))
     except (SyntaxError, tokenize.TokenError):
         return []
-    imported_modules = {
-        alias.asname or alias.name
-        for node in tree.body if isinstance(node, ast.Import)
-        for alias in node.names if alias.name in {"subprocess", "os"}
-    }
+    subprocess_modules: set[str] = set()
+    os_modules: set[str] = set()
+    imported_launchers: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "subprocess":
+                    subprocess_modules.add(alias.asname or alias.name)
+                elif alias.name == "os":
+                    os_modules.add(alias.asname or alias.name)
+        elif isinstance(node, ast.ImportFrom) and node.module in {"subprocess", "os"}:
+            for alias in node.names:
+                if alias.name == "*":
+                    if node.module == "subprocess":
+                        imported_launchers.update({name: f"subprocess.{name}" for name in PYTHON_SUBPROCESS_LAUNCHERS})
+                    else:
+                        imported_launchers.update({name: f"os.{name}" for name in PYTHON_OS_LAUNCHERS})
+                    continue
+                local_name = alias.asname or alias.name
+                if node.module == "subprocess" and alias.name in PYTHON_SUBPROCESS_LAUNCHERS:
+                    imported_launchers[local_name] = f"subprocess.{alias.name}"
+                elif node.module == "os" and alias.name in PYTHON_OS_LAUNCHERS:
+                    imported_launchers[local_name] = f"os.{alias.name}"
     assignments: dict[str, object] = {}
-    for node in tree.body:
+    rebound_launchers = False
+    for node in ast.walk(tree):
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             value = _python_static_value(node.value, assignments) if node.value else None
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             for target in targets:
-                if isinstance(target, ast.Name) and value is not None:
-                    assignments[target.id] = value
-    commands: list[list[str]] = []
+                if isinstance(target, ast.Name):
+                    if target.id in subprocess_modules | os_modules | imported_launchers.keys():
+                        rebound_launchers = True
+                    launcher = _python_launcher_name(
+                        node.value, subprocess_modules, os_modules, imported_launchers
+                    ) if node.value is not None else None
+                    if launcher is not None:
+                        imported_launchers[target.id] = launcher
+                    if value is not None:
+                        assignments[target.id] = value
+    commands: list[list[str]] = [["<unresolved-launch>"]] if rebound_launchers else []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or _python_launcher_name(node.func, imported_modules) is None:
+        if not isinstance(node, ast.Call) or _python_launcher_name(
+            node.func, subprocess_modules, os_modules, imported_launchers
+        ) is None:
             continue
         command_node = node.args[0] if node.args else next(
             (item.value for item in node.keywords if item.arg == "args"), None
@@ -290,6 +336,41 @@ def has_guarded_invocation(path: Path) -> bool:
     )
 
 
+def windows_command_line_args(command_line: str) -> list[str]:
+    """Parse the Windows CommandLineToArgvW quoting rules without invoking a shell."""
+    arguments: list[str] = []
+    index = 0
+    while index < len(command_line):
+        while index < len(command_line) and command_line[index] in " \t":
+            index += 1
+        if index >= len(command_line):
+            break
+        argument: list[str] = []
+        quoted = False
+        while index < len(command_line):
+            backslashes = 0
+            while index < len(command_line) and command_line[index] == "\\":
+                backslashes += 1
+                index += 1
+            if index < len(command_line) and command_line[index] == '"':
+                argument.extend("\\" for _ in range(backslashes // 2))
+                if backslashes % 2:
+                    argument.append('"')
+                else:
+                    quoted = not quoted
+                index += 1
+                continue
+            argument.extend("\\" for _ in range(backslashes))
+            if index >= len(command_line) or (not quoted and command_line[index] in " \t"):
+                break
+            argument.append(command_line[index])
+            index += 1
+        if quoted:
+            raise ValueError("unclosed quote in task arguments")
+        arguments.append("".join(argument))
+    return arguments
+
+
 def validate_task_xml(xml_text: str, expected: dict[str, str]) -> list[str]:
     failures: list[str] = []
     try:
@@ -297,17 +378,33 @@ def validate_task_xml(xml_text: str, expected: dict[str, str]) -> list[str]:
     except ET.ParseError as exc:
         return [f"task XML is invalid: {exc}"]
     namespace = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    action_nodes = root.findall(".//t:Actions/*", namespace)
     exec_nodes = root.findall(".//t:Actions/t:Exec", namespace)
-    if len(exec_nodes) != 1:
-        return [f"task must have exactly one Exec action, observed {len(exec_nodes)}"]
+    if len(action_nodes) != 1 or len(exec_nodes) != 1:
+        return [
+            "task must have exactly one action and it must be Exec: "
+            f"observed {len(action_nodes)} action(s), {len(exec_nodes)} Exec"
+        ]
     command = exec_nodes[0].findtext("t:Command", default="", namespaces=namespace)
     arguments = exec_nodes[0].findtext("t:Arguments", default="", namespaces=namespace)
     working = exec_nodes[0].findtext("t:WorkingDirectory", default="", namespaces=namespace)
     command = command.strip().strip('"')
     if command.casefold() != expected["command"].casefold():
         failures.append(f"task command differs: {command}")
-    if expected["argument_fragment"].casefold() not in arguments.casefold():
-        failures.append(f"task arguments do not select expected guarded source: {arguments}")
+    try:
+        argument_vector = windows_command_line_args(arguments)
+    except ValueError as exc:
+        failures.append(f"task arguments are invalid: {exc}")
+        argument_vector = []
+    expected_source = expected["argument_fragment"].casefold()
+    if not argument_vector or argument_vector[0].casefold() != expected_source:
+        failures.append(f"task first argument is not the exact guarded source: {arguments}")
+    executable_suffixes = (
+        ".py", ".pyw", ".js", ".mjs", ".cmd", ".bat", ".ps1",
+        ".exe", ".com", ".vbs", ".vbe", ".wsf", ".wsh", ".jar",
+    )
+    if any(value.casefold().endswith(executable_suffixes) for value in argument_vector[1:]):
+        failures.append(f"task arguments contain an extra executable decoy: {arguments}")
     if working.casefold() != expected["working_directory"].casefold():
         failures.append(f"task working directory differs: {working}")
     return failures
@@ -354,7 +451,63 @@ def _bounded_artifact(bundle: Path, name: object) -> Path | None:
     return candidate
 
 
-def validate_evidence(path: Path, expected_fingerprint: str) -> list[str]:
+def validate_capture_bindings(path: Path, source_root: Path = ROOTS[-1]) -> list[str]:
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return [f"cannot read canonical caller bindings: {exc}"]
+    if not isinstance(document, dict) or document.get("schema") != "dt-caller-bindings-v1":
+        return ["canonical caller binding schema differs"]
+    failures: list[str] = []
+    if document.get("active") is not True:
+        failures.append("canonical caller bindings are not active")
+    entries = document.get("entries")
+    if not isinstance(entries, list):
+        return failures + ["canonical caller binding entries are not an array"]
+    names = [entry.get("name") for entry in entries if isinstance(entry, dict)]
+    if (
+        len(entries) != len(EVIDENCE_NAMES)
+        or any(not isinstance(name, str) for name in names)
+        or set(name for name in names if isinstance(name, str)) != EVIDENCE_NAMES
+        or len(set(name for name in names if isinstance(name, str))) != len(names)
+    ):
+        failures.append("canonical caller bindings do not name the exact ten-entry population")
+    for entry in entries:
+        if not isinstance(entry, dict) or entry.get("name") not in EVIDENCE_NAMES:
+            continue
+        name = str(entry["name"])
+        expected_source = EXPECTED_SOURCES.get(name)
+        if entry.get("sourcePath") != expected_source:
+            failures.append(f"{name}: canonical source path differs")
+        if expected_source is None and entry.get("sourceSha256") is not None:
+            failures.append(f"{name}: direct entry must not claim a source hash")
+        if expected_source is not None and not re.fullmatch(r"[0-9a-f]{64}", str(entry.get("sourceSha256", ""))):
+            failures.append(f"{name}: canonical source hash is absent")
+        elif expected_source is not None:
+            source = source_root / expected_source
+            try:
+                observed_source_hash = normalized_hash(source)
+            except OSError as exc:
+                failures.append(f"{name}: cannot read bound source: {exc}")
+            else:
+                if entry.get("sourceSha256") != observed_source_hash:
+                    failures.append(f"{name}: canonical source hash differs from reviewed source")
+        for prefix in ("positive", "negative"):
+            command = entry.get(f"{prefix}Command")
+            arguments = entry.get(f"{prefix}Arguments")
+            if not isinstance(command, str) or not PureWindowsPath(command).is_absolute():
+                failures.append(f"{name}: {prefix} command is not an absolute reviewed executable")
+            if not isinstance(arguments, list) or any(not isinstance(item, str) for item in arguments):
+                failures.append(f"{name}: {prefix} arguments are not a reviewed string vector")
+    return failures
+
+
+def validate_evidence(
+    path: Path,
+    expected_fingerprint: str,
+    bindings_path: Path = CAPTURE_BINDINGS,
+    source_root: Path = ROOTS[-1],
+) -> list[str]:
     failures: list[str] = []
     try:
         bundle = json.loads(path.read_text(encoding="utf-8"))
@@ -370,11 +523,13 @@ def validate_evidence(path: Path, expected_fingerprint: str) -> list[str]:
         failures.append("captureId must use canonical UUID spelling")
     process_path = _bounded_artifact(path, bundle.get("processEventsFile"))
     journal_path = _bounded_artifact(path, bundle.get("serverJournalFile"))
-    if process_path is None or journal_path is None:
+    captured_bindings_path = _bounded_artifact(path, bundle.get("bindingsFile"))
+    if process_path is None or journal_path is None or captured_bindings_path is None:
         return failures + ["raw artifact names must be bounded sibling filenames"]
     for artifact, digest_name in (
         (process_path, "processEventsSha256"),
         (journal_path, "serverJournalSha256"),
+        (captured_bindings_path, "bindingsSha256"),
     ):
         try:
             observed = hashlib.sha256(artifact.read_bytes()).hexdigest()
@@ -383,6 +538,12 @@ def validate_evidence(path: Path, expected_fingerprint: str) -> list[str]:
             continue
         if bundle.get(digest_name) != observed:
             failures.append(f"{artifact.name}: SHA-256 differs from bundle")
+    try:
+        if hashlib.sha256(captured_bindings_path.read_bytes()).digest() != hashlib.sha256(bindings_path.read_bytes()).digest():
+            failures.append("captured caller bindings differ from the reviewed repo binding")
+    except OSError as exc:
+        failures.append(f"cannot compare reviewed caller bindings: {exc}")
+    failures.extend(validate_capture_bindings(bindings_path, source_root))
     process_events, process_failures = _read_json_lines(process_path)
     journal_rows, journal_failures = _read_json_lines(journal_path)
     failures.extend(process_failures + journal_failures)

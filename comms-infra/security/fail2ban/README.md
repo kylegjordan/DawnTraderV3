@@ -13,7 +13,9 @@ mode. Before mutation, the simulated transaction must show no removal and no ver
 transition for any already-installed dependency; only the separately captured/restorable
 `fail2ban` version may transition. This refusal prevents a dependency upgrade that an
 otherwise exact rollback could discover only after it had already failed to restore it.
-Rollback removes only bans added since capture, restores missing prior bans,
+Any package newly added by the permitted transaction is purged during rollback whether
+fail2ban was absent or already installed before the mutation. Rollback removes only bans
+added since capture, restores missing prior bans,
 restores the exact package/file/service state, and fails if the final package inventory
 or service state differs. It never issues a global unban.
 

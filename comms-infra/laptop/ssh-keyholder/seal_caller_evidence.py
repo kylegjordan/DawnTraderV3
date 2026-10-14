@@ -52,6 +52,13 @@ def main() -> int:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
     if manifest.get("schema") != "dt-caller-process-capture-v1":
         raise ValueError("capture manifest schema differs")
+    binding_name = manifest.get("bindingsFile")
+    if binding_name != "caller-bindings.json":
+        raise ValueError("capture manifest has no canonical caller binding artifact")
+    bindings_path = root / binding_name
+    bindings_digest = hashlib.sha256(bindings_path.read_bytes()).hexdigest()
+    if manifest.get("bindingsSha256") != bindings_digest:
+        raise ValueError("captured caller bindings differ from the process manifest")
     process_rows = read_json_lines(process_path)
     journal_rows = read_json_lines(journal_path)
     if any(
@@ -95,6 +102,8 @@ def main() -> int:
     bundle = {
         "schema": "dt-caller-capture-v1",
         "captureId": manifest.get("captureId"),
+        "bindingsFile": bindings_path.name,
+        "bindingsSha256": bindings_digest,
         "processEventsFile": process_path.name,
         "processEventsSha256": hashlib.sha256(process_path.read_bytes()).hexdigest(),
         "serverJournalFile": journal_path.name,

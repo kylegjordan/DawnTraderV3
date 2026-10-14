@@ -1,0 +1,17 @@
+{
+  "schema": "dt-caller-bindings-v1",
+  "active": false,
+  "note": "Ref A is intentionally inert. Ref B must fill and review every exact command, argument vector, source path and source hash before capture can run.",
+  "entries": [
+    {"name": ".claude\\memory\\MEMORY.md", "sourcePath": ".claude\\memory\\MEMORY.md", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": ".claude\\hooks\\inject-due-alerts.mjs", "sourcePath": ".claude\\hooks\\inject-due-alerts.mjs", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\codex-channel-mirror.py", "sourcePath": "comms-infra\\codex-channel-mirror.py", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\codex-discord-outbox.py", "sourcePath": "comms-infra\\codex-discord-outbox.py", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\laptop\\crew-status.py", "sourcePath": "comms-infra\\laptop\\crew-status.py", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\tools\\verify-agent-artifacts.py", "sourcePath": "comms-infra\\tools\\verify-agent-artifacts.py", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\laptop\\dt-media-get", "sourcePath": "comms-infra\\laptop\\dt-media-get", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "comms-infra\\laptop\\dt-media-post", "sourcePath": "comms-infra\\laptop\\dt-media-post", "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "direct:powershell", "sourcePath": null, "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null},
+    {"name": "direct:git-bash", "sourcePath": null, "sourceSha256": null, "positiveCommand": null, "positiveArguments": null, "negativeCommand": null, "negativeArguments": null}
+  ]
+}

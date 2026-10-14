@@ -1,6 +1,5 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$Plan,
     [Parameter(Mandatory = $true)][string]$OutputDirectory
 )
 
@@ -27,14 +26,57 @@ if (Test-Path -LiteralPath $resolvedOutput) {
     throw "capture output already exists: $resolvedOutput"
 }
 
-$rows = @(Get-Content -Raw -LiteralPath $Plan | ConvertFrom-Json)
+$bindingsPath = Join-Path $PSScriptRoot 'caller_capture_bindings.json'
+$bindingBytes = [IO.File]::ReadAllBytes($bindingsPath)
+$bindings = [Text.Encoding]::UTF8.GetString($bindingBytes) | ConvertFrom-Json
+if ($bindings.schema -ne 'dt-caller-bindings-v1' -or $bindings.active -ne $true) {
+    throw 'the repo-canonical caller bindings are not active; Ref B must review and activate them first'
+}
+$rows = @($bindings.entries)
 $observedNames = @($rows | ForEach-Object { [string]$_.name })
 if ($rows.Count -ne $expectedNames.Count -or
     @(Compare-Object -ReferenceObject $expectedNames -DifferenceObject $observedNames).Count -ne 0) {
-    throw 'capture plan must name each of the ten logical entries exactly once'
+    throw 'canonical bindings must name each of the ten logical entries exactly once'
+}
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
+foreach ($row in $rows) {
+    foreach ($prefix in @('positive', 'negative')) {
+        $command = [string]$row."${prefix}Command"
+        $arguments = @($row."${prefix}Arguments")
+        if (-not $command -or -not [IO.Path]::IsPathFullyQualified($command) -or $null -eq $row."${prefix}Arguments") {
+            throw "$($row.name): canonical $prefix command binding is incomplete"
+        }
+        if ($arguments | Where-Object { $_ -isnot [string] }) {
+            throw "$($row.name): canonical $prefix arguments must all be strings"
+        }
+    }
+    if ($null -ne $row.sourcePath) {
+        if ([string]$row.sourcePath -ne [string]$row.name -or [string]$row.sourceSha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "$($row.name): canonical source binding is incomplete"
+        }
+        $sourcePath = [IO.Path]::GetFullPath((Join-Path $repoRoot ([string]$row.sourcePath)))
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            throw "$($row.name): bound source does not exist"
+        }
+        $sourceBytes = [IO.File]::ReadAllBytes($sourcePath)
+        $sourceText = [Text.Encoding]::UTF8.GetString($sourceBytes).Replace("`r`n", "`n")
+        $sha256 = [Security.Cryptography.SHA256]::Create()
+        try {
+            $sourceDigest = -join ($sha256.ComputeHash([Text.Encoding]::UTF8.GetBytes($sourceText)) | ForEach-Object { $_.ToString('x2') })
+        } finally {
+            $sha256.Dispose()
+        }
+        if ($sourceDigest -ne $row.sourceSha256) {
+            throw "$($row.name): bound source hash differs"
+        }
+    }
 }
 New-Item -ItemType Directory -Path $resolvedOutput -Force | Out-Null
 & icacls.exe $resolvedOutput /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" /grant:r '*S-1-5-18:(OI)(CI)F' | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "failed to restrict capture directory ACL: icacls exit $LASTEXITCODE"
+}
+[IO.File]::WriteAllBytes((Join-Path $resolvedOutput 'caller-bindings.json'), $bindingBytes)
 
 $captureId = [guid]::NewGuid().ToString()
 $events = [Collections.Generic.List[object]]::new()
@@ -123,6 +165,8 @@ try {
     $manifest = [ordered]@{
         schema = 'dt-caller-process-capture-v1'
         captureId = $captureId
+        bindingsFile = 'caller-bindings.json'
+        bindingsSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $resolvedOutput 'caller-bindings.json')).Hash.ToLowerInvariant()
         rows = $manifestRows
     }
     $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $resolvedOutput 'capture-manifest.json') -Encoding utf8

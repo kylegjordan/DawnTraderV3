@@ -50,7 +50,7 @@ layer. It does not create, copy, or authorize a private key.
    newline remains a command boundary. It validates task actions and installed hashes.
 
 `capture_caller_processes.ps1` is the bounded producer for real-entry evidence. It
-requires an exact ten-row plan, subscribes to the Windows `Win32_ProcessStartTrace`
+loads only the repo-canonical `caller_capture_bindings.json`, subscribes to the Windows `Win32_ProcessStartTrace`
 provider before each positive and locked-negative entry, and records the process tree,
 invoked-entry pid, observed SSH-family executable image and UTC time. The verifier follows
 parent ids back to that invoked entry; an unrelated concurrent client cannot count. A
@@ -58,6 +58,14 @@ missing SSH-family executable image is a hard failure when
 `seal_caller_evidence.py` seals the result. Quiesce the three scheduled tasks and
 concurrent hooks before capture so an unrelated SSH process cannot be attributed to an
 entry window.
+
+Ref A deliberately ships the canonical binding file with `active=false` and no commands,
+so the producer refuses before creating output. Ref B must fill and review the exact
+positive/negative executable and argument vectors plus each source path and
+newline-normalized SHA-256, then activate that file. The producer parses and captures one
+immutable read of the exact binding bytes; the sealer and census verifier hash-bind them
+and require byte equality with the reviewed repo file. A helper substituted for a real
+entry—or another row relabelled with its name—cannot pass by changing a runtime plan.
 
 Copy the raw `journalctl -u ssh.service --since ... --until ... -o json` output covering
 the capture into `server-journal.jsonl` beside the process capture. The sealer selects

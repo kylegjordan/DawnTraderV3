@@ -63,6 +63,33 @@ existing_dependency_transitions() {
   '
 }
 
+added_package_names() {
+  local before=$1 after=$2
+  comm -13 <(cut -f1 "$before") <(cut -f1 "$after")
+}
+
+purge_added_packages() {
+  local list=$1
+  mapfile -t added < "$list"
+  ((${#added[@]})) || return 0
+  if [[ ${DT_FAIL2BAN_PACKAGE_SELF_TEST:-} == I_UNDERSTAND ]]; then
+    printf '%s\n' "${added[@]}"
+    return 0
+  fi
+  DEBIAN_FRONTEND=noninteractive apt-get purge -y "${added[@]}"
+}
+
+restore_existing_fail2ban_packages() {
+  local state_dir=$1 original_version
+  original_version=$(cat "$state_dir/original-version")
+  if [[ ${DT_FAIL2BAN_PACKAGE_SELF_TEST:-} == I_UNDERSTAND ]]; then
+    printf 'restore fail2ban=%s\n' "$original_version"
+  else
+    DEBIAN_FRONTEND=noninteractive apt-get install --allow-downgrades -y "fail2ban=$original_version"
+  fi
+  purge_added_packages "$state_dir/added-packages"
+}
+
 ban_snapshot() {
   fail2ban-client get sshd banip | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort -u
 }
@@ -133,6 +160,14 @@ if [[ $ACTION == self-test ]]; then
   [[ -z $(existing_dependency_transitions <<<"$safe_simulation") ]]
   unsafe_simulation=$'Inst fail2ban [1.0.2-2] (1.0.2-3ubuntu0.1 Ubuntu:24.04/noble-updates [all])\nInst python3-systemd [234-3build3] (235-1 Ubuntu:24.04/noble-updates [amd64])'
   [[ $(existing_dependency_transitions <<<"$unsafe_simulation") == Inst\ python3-systemd* ]]
+  printf 'base\t1\nfail2ban\t1.0.1\n' > "$temp/packages-before"
+  printf 'base\t1\nfail2ban\t1.0.2\nnew-dependency\t4\n' > "$temp/packages-after"
+  added_package_names "$temp/packages-before" "$temp/packages-after" > "$temp/added-packages"
+  printf '1.0.1\n' > "$temp/original-version"
+  expected_actions=$'restore fail2ban=1.0.1\nnew-dependency'
+  [[ $(DT_FAIL2BAN_PACKAGE_SELF_TEST=I_UNDERSTAND restore_existing_fail2ban_packages "$temp") == "$expected_actions" ]]
+  awk -F '\t' '$1 != "new-dependency" { if ($1 == "fail2ban") $2="1.0.1"; print $1 "\t" $2 }' "$temp/packages-after" > "$temp/packages-restored"
+  cmp -s "$temp/packages-before" "$temp/packages-restored"
   echo FAIL2BAN_STATE_SELF_TEST_OK
   exit 0
 fi
@@ -184,7 +219,7 @@ case "$ACTION" in
     if [[ -e $TARGET ]]; then cp -a -- "$TARGET" "$STATE_DIR/original.local"; : > "$STATE_DIR/had-target"; fi
     DEBIAN_FRONTEND=noninteractive apt-get install --allow-downgrades -y "fail2ban=$PINNED_VERSION"
     package_snapshot > "$STATE_DIR/packages.after"
-    comm -13 <(cut -f1 "$STATE_DIR/packages.before") <(cut -f1 "$STATE_DIR/packages.after") > "$STATE_DIR/added-packages"
+    added_package_names "$STATE_DIR/packages.before" "$STATE_DIR/packages.after" > "$STATE_DIR/added-packages"
     render_config > "$STATE_DIR/rendered.local"
     install -o root -g root -m 0644 "$STATE_DIR/rendered.local" "$TARGET"
     fail2ban-client -t
@@ -209,8 +244,7 @@ case "$ACTION" in
     fi
 
     if [[ -f $resolved/original-version ]]; then
-      original_version=$(cat "$resolved/original-version")
-      DEBIAN_FRONTEND=noninteractive apt-get install --allow-downgrades -y "fail2ban=$original_version"
+      restore_existing_fail2ban_packages "$resolved"
       fail2ban-client -t
       if [[ $(cat "$resolved/active.before") == active ]]; then
         systemctl restart fail2ban.service
@@ -225,10 +259,7 @@ case "$ACTION" in
       fi
     else
       systemctl disable --now fail2ban.service || true
-      mapfile -t added < "$resolved/added-packages"
-      if ((${#added[@]})); then
-        DEBIAN_FRONTEND=noninteractive apt-get purge -y "${added[@]}"
-      fi
+      purge_added_packages "$resolved/added-packages"
     fi
 
     package_snapshot > "$resolved/packages.restored"
