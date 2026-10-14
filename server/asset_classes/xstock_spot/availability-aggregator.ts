@@ -57,9 +57,29 @@ export interface XstockWindowManifest {
   lastBucketTs: Date;
   sourceMaxVisibleBy: string;
   sourceMaxVisibleSeq: number;
+  readObservedAt: string;
+  readObservedSeq: number;
   certificatePrimaryIdentity: string;
   contractVersion: typeof XSTOCK_BAR_AVAILABILITY_CONTRACT;
 }
+
+export interface XstockBarWindowEvidence {
+  symbol: string;
+  intervalMinutes: XstockAvailabilityInterval;
+  formingAggregateRevisionId: string;
+  settledWindowManifestId: string;
+  settledWindowHash: string;
+  sourceMaxVisibleBy: string;
+  sourceMaxVisibleSeq: number;
+  readObservedAt: string;
+  readObservedSeq: number;
+  certificatePrimaryIdentity: string;
+  contractVersion: typeof XSTOCK_BAR_AVAILABILITY_CONTRACT;
+  eligibilityState: 'eligible_certified';
+  providerCurrentnessState: 'provider_currentness_unknown';
+}
+
+export type Xstock60mBarEvidence = XstockBarWindowEvidence & { intervalMinutes: 60 };
 
 interface AggregateQueryRow {
   symbol: string;
@@ -540,21 +560,42 @@ export async function persistSettledXstockWindowManifest(
   };
   const windowHash = sha256(JSON.stringify(canonicalPayload));
   const payload = { ...canonicalPayload, windowHash, canonicalPayload };
-  const recordResult = await db.execute(sql`
-    SELECT record_xstock_bar_window_manifest(
-      ${JSON.stringify(payload)}::jsonb,
-      ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
-    ) AS manifest_id
-  `);
-  const recorded = resultRows<{ manifest_id: string }>(recordResult);
-  if (recorded.length !== 1 || !recorded[0].manifest_id) {
-    throw new Error(
-      `[B-XSTOCK-BAR-AVAILABILITY] expected one manifest identity, received ${recorded.length}`,
-    );
-  }
+  const persisted = await db.transaction(async (tx) => {
+    const recordResult = await tx.execute(sql`
+      SELECT record_xstock_bar_window_manifest(
+        ${JSON.stringify(payload)}::jsonb,
+        ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
+      ) AS manifest_id
+    `);
+    const recorded = resultRows<{ manifest_id: string }>(recordResult);
+    if (recorded.length !== 1 || !recorded[0].manifest_id) {
+      throw new Error(
+        `[B-XSTOCK-BAR-AVAILABILITY] expected one manifest identity, received ${recorded.length}`,
+      );
+    }
+    const observationResult = await tx.execute(sql`
+      SELECT
+        to_char(read_observed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+          AS read_observed_at,
+        read_observed_seq,
+        certificate_primary_identity
+      FROM observe_xstock_bar_read(${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text)
+    `);
+    const observations = resultRows<ReadObservationRow>(observationResult);
+    if (observations.length !== 1) {
+      throw new Error(
+        `[B-XSTOCK-BAR-AVAILABILITY] expected one manifest read observation, `
+        + `received ${observations.length}`,
+      );
+    }
+    if (observations[0].certificate_primary_identity !== certificatePrimaryIdentity) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] manifest read crossed primary identities');
+    }
+    return { manifestId: recorded[0].manifest_id, observation: observations[0] };
+  });
 
   return {
-    manifestId: recorded[0].manifest_id,
+    manifestId: persisted.manifestId,
     windowHash,
     symbol,
     intervalMinutes,
@@ -563,7 +604,62 @@ export async function persistSettledXstockWindowManifest(
     lastBucketTs: new Date(ordered[ordered.length - 1].timestamp),
     sourceMaxVisibleBy,
     sourceMaxVisibleSeq,
+    readObservedAt: persisted.observation.read_observed_at,
+    readObservedSeq: Number(persisted.observation.read_observed_seq),
     certificatePrimaryIdentity,
     contractVersion: XSTOCK_BAR_AVAILABILITY_CONTRACT,
+  };
+}
+
+/**
+ * Bind the exact ordered bar array consumed by a decision to one forming
+ * aggregate plus one content-addressed settled-window manifest. No bar may be
+ * dropped or reordered to turn an unavailable input into an eligible one.
+ */
+export async function buildEligibleXstockWindowEvidence(
+  bars: XstockAvailabilityAggregate[],
+): Promise<{ bars: EligibleXstockAvailabilityAggregate[]; evidence: XstockBarWindowEvidence }> {
+  if (bars.length < 2) {
+    throw new Error('[B-XSTOCK-BAR-AVAILABILITY] exact decision window requires settled and forming bars');
+  }
+  const eligibleBars: EligibleXstockAvailabilityAggregate[] = [];
+  for (let index = 0; index < bars.length; index++) {
+    const bar = bars[index];
+    assertEligibleXstockAggregate(bar);
+    if (index > 0 && bar.timestamp <= bars[index - 1].timestamp) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] exact decision window is not strictly ordered');
+    }
+    if (index > 0 && (bar.symbol !== bars[0].symbol
+        || bar.intervalMinutes !== bars[0].intervalMinutes
+        || bar.certificatePrimaryIdentity !== bars[0].certificatePrimaryIdentity)) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] exact decision window is not homogeneous');
+    }
+    eligibleBars.push(bar);
+  }
+
+  const forming = eligibleBars[eligibleBars.length - 1];
+  const manifest = await persistSettledXstockWindowManifest(eligibleBars.slice(0, -1));
+  const sourceMaxVisibleBy = eligibleBars.reduce(
+    (latest, bar) => bar.sourceMaxVisibleBy > latest ? bar.sourceMaxVisibleBy : latest,
+    eligibleBars[0].sourceMaxVisibleBy,
+  );
+  const sourceMaxVisibleSeq = Math.max(...eligibleBars.map((bar) => bar.sourceMaxVisibleSeq));
+  return {
+    bars: eligibleBars,
+    evidence: {
+      symbol: forming.symbol,
+      intervalMinutes: forming.intervalMinutes,
+      formingAggregateRevisionId: forming.aggregateRevisionId,
+      settledWindowManifestId: manifest.manifestId,
+      settledWindowHash: manifest.windowHash,
+      sourceMaxVisibleBy,
+      sourceMaxVisibleSeq,
+      readObservedAt: manifest.readObservedAt,
+      readObservedSeq: manifest.readObservedSeq,
+      certificatePrimaryIdentity: forming.certificatePrimaryIdentity,
+      contractVersion: XSTOCK_BAR_AVAILABILITY_CONTRACT,
+      eligibilityState: 'eligible_certified',
+      providerCurrentnessState: 'provider_currentness_unknown',
+    },
   };
 }

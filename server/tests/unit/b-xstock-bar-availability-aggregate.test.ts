@@ -24,6 +24,7 @@ vi.mock('../../db.js', () => ({
 import {
   aggregateAvailableXstockOHLC,
   assertEligibleXstockAggregate,
+  buildEligibleXstockWindowEvidence,
   persistSettledXstockWindowManifest,
   previewAvailableXstockOHLC,
 } from '../../asset_classes/xstock_spot/availability-aggregator.js';
@@ -132,13 +133,52 @@ describe('B-XSTOCK-BAR-AVAILABILITY aggregate contract', () => {
     );
     const result = await aggregateAvailableXstockOHLC(['CORZ/USD'], 15, 6);
     const bars = result.get('CORZ/USD') ?? [];
-    state.results.push([{ manifest_id: '44444444-4444-4444-8444-444444444444' }]);
+    state.results.push(
+      [{ manifest_id: '44444444-4444-4444-8444-444444444444' }],
+      observation,
+    );
 
     const manifest = await persistSettledXstockWindowManifest(bars);
     expect(manifest.manifestId).toBe('44444444-4444-4444-8444-444444444444');
     expect(manifest.aggregateRevisionIds).toEqual(['33333333-3333-4333-8333-333333333333']);
     expect(manifest.certificatePrimaryIdentity).toBe('test@primary');
+    expect(manifest.readObservedAt).toBe('2026-10-14T15:03:00.234567Z');
+    expect(manifest.readObservedSeq).toBe(12);
     expect(manifest.windowHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('binds one ordered eligible decision window to forming and settled identities', async () => {
+    state.results.push(
+      [aggregateRow()],
+      observation,
+      [{
+        client_key: 'CORZ/USD|15|2026-10-14T15:00:00.000Z',
+        aggregate_revision_id: '33333333-3333-4333-8333-333333333333',
+      }],
+    );
+    const result = await aggregateAvailableXstockOHLC(['CORZ/USD'], 15, 6);
+    const [settled] = result.get('CORZ/USD') ?? [];
+    const forming = {
+      ...settled,
+      timestamp: settled.timestamp + 15 * 60_000,
+      aggregateRevisionId: '55555555-5555-4555-8555-555555555555',
+      sourceMaxVisibleBy: '2026-10-14T15:04:00.345678Z',
+      sourceMaxVisibleSeq: 13,
+      readObservedAt: '2026-10-14T15:05:00.456789Z',
+      readObservedSeq: 14,
+    };
+    state.results.push(
+      [{ manifest_id: '44444444-4444-4444-8444-444444444444' }],
+      [{ ...observation[0], read_observed_seq: '15' }],
+    );
+
+    const exact = await buildEligibleXstockWindowEvidence([settled, forming]);
+    expect(exact.bars).toHaveLength(2);
+    expect(exact.evidence.formingAggregateRevisionId).toBe(forming.aggregateRevisionId);
+    expect(exact.evidence.settledWindowManifestId).toBe('44444444-4444-4444-8444-444444444444');
+    expect(exact.evidence.sourceMaxVisibleBy).toBe('2026-10-14T15:04:00.345678Z');
+    expect(exact.evidence.sourceMaxVisibleSeq).toBe(13);
+    expect(exact.evidence.readObservedSeq).toBe(15);
   });
 
   it('refuses to manifest aggregate revisions observed on different primaries', async () => {

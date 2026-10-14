@@ -53,3 +53,10 @@
 - CI run `38596665242` applied both migrations and passed TypeScript Check, Build, and Docker Build, but its Test Suite found one exactness defect in the new PostgreSQL integration case: the PostgreSQL driver rounded a certified `timestamptz` with microsecond precision through JavaScript `Date` milliseconds before aggregate persistence, so the database correctly rejected the altered availability bound.
 - Availability and read-observation bounds now cross the application boundary as fixed-width UTC database text with six fractional digits. Aggregate canonical payloads, snapshots, manifests, and comparisons retain that exact value; JavaScript parses a copy only when it needs temporal ordering.
 - Focused correction run: 4 test files passed; 15 tests passed and 1 local-database integration leg skipped. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.
+- Corrected CI run `38597553810` passed TypeScript Check, Test Suite, Build, and Docker Build individually; the migration-backed microsecond regression passed.
+
+## Increment 3 — decision-window evidence foundation
+
+- Added a fail-closed decision-window builder that accepts only a strictly ordered, homogeneous, fully eligible bar array and binds its forming aggregate revision to a content-addressed settled-window manifest without dropping or reordering unavailable bars.
+- Manifest persistence now takes a later primary-database read observation in the same transaction, refuses a primary-identity crossing, and returns that exact observation beside the manifest identity. This is the typed handoff the scanner and RTB scalar-reduction paths will consume together with their provenance writes; neither live consumer is switched by this foundation commit.
+- Focused run: `server/tests/unit/b-xstock-bar-availability-aggregate.test.ts` passed 8 tests. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.
