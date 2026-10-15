@@ -19,6 +19,7 @@ $expectedStateRoot = [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'DawnTr
 $expectedConfigPath = [IO.Path]::GetFullPath((Join-Path $expectedStateRoot 'config.json'))
 $expectedMarkerPath = [IO.Path]::GetFullPath((Join-Path $expectedStateRoot 'unlock.json'))
 $expectedGpoScriptsRoot = [IO.Path]::GetFullPath((Join-Path $env:SystemRoot 'System32\GroupPolicy\User\Scripts'))
+$expectedGpoLogoffRoot = [IO.Path]::GetFullPath((Join-Path $expectedGpoScriptsRoot 'Logoff'))
 $expectedGpoIni = [IO.Path]::GetFullPath((Join-Path $expectedGpoScriptsRoot 'scripts.ini'))
 $expectedGpoLogoff = [IO.Path]::GetFullPath((Join-Path $expectedGpoScriptsRoot 'Logoff\DawnTraderSshKeyholderLock.cmd'))
 $expectedBackupBase = [IO.Path]::GetFullPath((Join-Path $env:ProgramData 'DawnTrader\ssh-keyholder-backups'))
@@ -28,7 +29,7 @@ $sshAdd = 'C:\Windows\System32\OpenSSH\ssh-add.exe'
 $syncPolicyPath = 'Registry::HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System'
 $syncPolicyName = 'RunLogonScriptSync'
 
-if ([int]$state.version -ne 2) { throw 'Refusing rollback: unsupported install-state version.' }
+if ([int]$state.version -ne 3) { throw 'Refusing rollback: unsupported install-state version.' }
 if ([IO.Path]::GetFullPath($state.installRoot) -ne $expectedInstallRoot) { throw 'Refusing rollback: unexpected install root.' }
 if ([IO.Path]::GetFullPath($state.stateRoot) -ne $expectedStateRoot) { throw 'Refusing rollback: unexpected runtime state root.' }
 if ([IO.Path]::GetFullPath($state.configPath) -ne $expectedConfigPath) { throw 'Refusing rollback: unexpected config path.' }
@@ -86,6 +87,27 @@ if ([bool]$state.syncPolicyPresent) {
 & "$env:SystemRoot\System32\gpupdate.exe" /Target:User /Force /Wait:120 | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'Local Group Policy refresh failed during rollback.' }
 
+# Restore container presence as well as leaf/value presence. Installation can create these
+# otherwise-empty containers, and leaving them behind would make "exact rollback" false.
+if (-not [bool]$state.syncPolicyKeyPresent -and (Test-Path -LiteralPath $syncPolicyPath)) {
+    $policyKey = Get-Item -LiteralPath $syncPolicyPath
+    $policyValues = @($policyKey.Property)
+    $policyChildren = @(Get-ChildItem -LiteralPath $syncPolicyPath -ErrorAction Stop)
+    if ($policyValues.Count -eq 0 -and $policyChildren.Count -eq 0) {
+        Remove-Item -LiteralPath $syncPolicyPath -Force
+    }
+}
+if (-not [bool]$state.gpoLogoffRootPresent -and (Test-Path -LiteralPath $expectedGpoLogoffRoot)) {
+    if (@(Get-ChildItem -LiteralPath $expectedGpoLogoffRoot -Force).Count -eq 0) {
+        Remove-Item -LiteralPath $expectedGpoLogoffRoot -Force
+    }
+}
+if (-not [bool]$state.gpoScriptsRootPresent -and (Test-Path -LiteralPath $expectedGpoScriptsRoot)) {
+    if (@(Get-ChildItem -LiteralPath $expectedGpoScriptsRoot -Force).Count -eq 0) {
+        Remove-Item -LiteralPath $expectedGpoScriptsRoot -Force
+    }
+}
+
 $installedBackup = Join-Path $recordedBackupRoot 'installed'
 if (Test-Path -LiteralPath $expectedInstallRoot) { Remove-Item -LiteralPath $expectedInstallRoot -Recurse -Force }
 if (Test-Path -LiteralPath $installedBackup) { Copy-Item -LiteralPath $installedBackup -Destination $expectedInstallRoot -Recurse }
@@ -124,6 +146,13 @@ if ([bool](Test-Path -LiteralPath $expectedInstallRoot) -ne [bool]$state.previou
 if ([bool](Test-Path -LiteralPath $expectedStateRoot) -ne [bool]$state.previousStateRootPresent) { throw 'Rollback did not restore state-root presence.' }
 if ([bool](Test-Path -LiteralPath $expectedGpoIni) -ne [bool]$state.gpoIniPresent) { throw 'Rollback did not restore scripts.ini presence.' }
 if ([bool](Test-Path -LiteralPath $expectedGpoLogoff) -ne [bool]$state.gpoLogoffPresent) { throw 'Rollback did not restore logoff-script presence.' }
+if ([bool](Test-Path -LiteralPath $expectedGpoScriptsRoot) -ne [bool]$state.gpoScriptsRootPresent) { throw 'Rollback did not restore Group Policy Scripts directory presence.' }
+if ([bool](Test-Path -LiteralPath $expectedGpoLogoffRoot) -ne [bool]$state.gpoLogoffRootPresent) { throw 'Rollback did not restore Group Policy Logoff directory presence.' }
+if ([bool](Test-Path -LiteralPath $syncPolicyPath) -ne [bool]$state.syncPolicyKeyPresent) { throw 'Rollback did not restore synchronous-policy key presence.' }
+if ([bool]$state.gpoIniPresent) {
+    $restoredGpoIniSha256 = (Get-FileHash -LiteralPath $expectedGpoIni -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($restoredGpoIniSha256 -ne [string]$state.gpoIniSha256) { throw 'Rollback did not restore scripts.ini bytes.' }
+}
 if ([bool]$state.syncPolicyPresent) {
     if ((Get-ItemPropertyValue -LiteralPath $syncPolicyPath -Name $syncPolicyName) -ne [int]$state.syncPolicyValue) { throw 'Rollback did not restore synchronous-logon policy.' }
 } elseif ($null -ne (Get-ItemProperty -LiteralPath $syncPolicyPath -Name $syncPolicyName -ErrorAction SilentlyContinue)) {

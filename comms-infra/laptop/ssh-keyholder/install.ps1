@@ -139,8 +139,15 @@ Set-OwnerOnlyAcl $backupRoot $true
 
 if (Test-Path -LiteralPath $gpoIniPath) { Copy-Item -LiteralPath $gpoIniPath -Destination (Join-Path $backupRoot 'scripts.ini') }
 
+$gpoScriptsRootPresent = Test-Path -LiteralPath $gpoScriptsRoot
+$gpoLogoffRootPresent = Test-Path -LiteralPath $gpoLogoffRoot
+$syncPolicyKeyPresent = Test-Path -LiteralPath $syncPolicyPath
+$gpoIniSha256 = if (Test-Path -LiteralPath $gpoIniPath -PathType Leaf) {
+    (Get-FileHash -LiteralPath $gpoIniPath -Algorithm SHA256).Hash.ToLowerInvariant()
+} else { $null }
+
 $installState = [ordered]@{
-    version = 2
+    version = 3
     phase = 'captured'
     installedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     installRoot = $installRoot
@@ -156,8 +163,12 @@ $installState = [ordered]@{
     previousServiceState = $service.State
     gpoIniPath = $gpoIniPath
     gpoIniPresent = (Test-Path -LiteralPath $gpoIniPath)
+    gpoIniSha256 = $gpoIniSha256
+    gpoScriptsRootPresent = $gpoScriptsRootPresent
+    gpoLogoffRootPresent = $gpoLogoffRootPresent
     gpoLogoffPath = $gpoLogoffPath
     gpoLogoffPresent = (Test-Path -LiteralPath $gpoLogoffPath)
+    syncPolicyKeyPresent = $syncPolicyKeyPresent
     syncPolicyPresent = $false
     syncPolicyValue = $null
     backupRoot = $backupRoot
