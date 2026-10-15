@@ -1,4 +1,4 @@
-# B-ENTRY-CONSUMPTION-FRESHNESS — Step 3 implementation change list r1
+# B-ENTRY-CONSUMPTION-FRESHNESS — Step 3 implementation change list r2
 
 **Base:** `97f7a108a28e22e57ea3c1268984fd1935757b8c`
 **Step:** 3 of 11 — implementation
@@ -61,10 +61,16 @@
    - updates the typed snapshot fixture for the required anchor and source-age-validity fields.
 11. `server/tests/unit/b-xstock-feed-sanity-fence.test.ts`
    - updates the existing entry-gate source fence to locate the gate through its new carried-threshold return shape.
+12. `server/tests/unit/b-entry-consumption-freshness-engine.test.ts`
+   - drives the real `ActiveExecutionEngine.executeSimulatedTrade` branch on a prototype-backed engine with only external seams replaced;
+   - proves direct taker and maker→taker expiry each produce exactly one depth block plus one `CONSUMPTION_FRESHNESS` open failure, with no placement, trade write, or position write;
+   - proves an admitted immediate fill passes the identical asks array to `openOrder` and persists the ordered first-gate/final-consumption ages;
+   - proves pending maker neither calls `openOrder` nor stamps a consumption age.
 
 ## Verification run before commit
 
 - targeted unit suite: 5 files, 116 tests passed;
+- production-seam correction: 4 engine-path tests passed after restoration; bypassing the final guard made exactly the direct-taker and maker→taker expiry tests fail because each opened and persisted instead of refusing, then the restored guard returned all four tests to green;
 - TypeScript baseline gate: 335 current vs 337 baseline, zero regressions above baseline; the two absent errors are pre-existing `partition-exporter.ts` baseline entries and no changed file is involved;
 - `git diff --cached --check`: passed after explicit-path staging.
 
@@ -78,6 +84,10 @@
 - `.claude/launch.json` remains untouched.
 
 REVIEWER: claim-only · name settling objects and alternative consistent states · HIT: bounded the sole-call claim to `ActiveExecutionEngine` and clarified pending-maker read-versus-consumption semantics; source-clock and test-reach limits retained for Coltrane's judgement · re-derived yes
+
+## Step-4 correction after exact-ref review
+
+Coltrane returned `ae2b5d3eb07f33b3f7bfff7229749c7b39d4949e` because the original delay fixture wrapped the pure decision in a locally invented `attempt()` function and the branch/persistence assertions read source text. Those checks could remain green while the production branch, telemetry count, or persisted age was wrong. The new engine-path suite above replaces that missing proof at the production seam; the original pure and source-contract checks remain supplementary rather than carrying the runtime claim.
 
 ## Load-bearing diff snippets
 
