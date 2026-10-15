@@ -88,6 +88,8 @@ Coltrane confirmed the three production fixes at `106ea2c3d7ddc01d04530e3d22026b
 
 Both tests assert the expiry database update, the explicit close payload, and the final closed-row write. Mutation controls are discriminating: replacing the preserved-policy update with null fails 2/2 tests, and removing the explicit close payload fails 2/2 tests; production source was restored and the final focused suite is 18 files / 299 tests green. TypeScript remains 335 current vs 337 baseline with zero regressions above baseline; the same two unrelated `partition-exporter.ts` diagnostics remain below baseline.
 
+**Step 4 verdict:** Coltrane APPROVED the implementation with no blockers at exact ref `695a5841afb0b12919c2d87313432bec9730618d`; CI `38767436946` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
+
 ## Review focus
 
 1. Prove the policy overlay never substitutes raw maker EV/fees for adjusted maker EV and cannot be bypassed by exploration.
