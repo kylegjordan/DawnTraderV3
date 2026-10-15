@@ -652,3 +652,7 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 **DECISION 4 — CONDUCT CAP RAISED 4,096 → 6,144 TOKENS (Kyle), EXPLICITLY TEMPORARY.** The whole four-file auto-load allocation is revisited once `CLAUDE.md` is slimmed.
 **DECISION 5 — PIECE (5) ADOPTED (Langston):** pre-audit + implementation plan = ONE document, audit before plan, every plan item back-referencing its finding.
 **OPEN:** the weekly pass has never run (first firing 2026-08-27; until a dated row exists its liveness is unproven — the batch's own standard applied to itself). `wrong-object` sits in §13 with **no mechanism**, its home *approved-and-unbuilt* — the first real test of Decision 3.
+
+### 2026-10-15 P1b landing note — `B-ENTRY-CONSUMPTION-FRESHNESS`
+
+The entry-consumption half of row `3b.f-c` / sprint row 40 is deployed and Step-10 governed at `28c58fb8d`: the same gate snapshot is aged through later awaits and checked synchronously immediately before an immediate fill. The 5 s crypto / 15 s xStock limits remain unchanged; resting-maker placement is outside this consumption seam. This does not close the umbrella's separately placed alert/exit/dedupe work, and it creates no observation or deploy hold.

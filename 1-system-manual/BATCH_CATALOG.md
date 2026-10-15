@@ -1333,3 +1333,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **VERIFICATION.** Langston approved the initial design. Coltrane blocked the first live contract, then returned PROCEED at `25d7bcf2e` after the correction: 41/41 tests plus a mutation control; CI `38453885686` was four of four per job; installed and reviewed hashes matched. Live switch S1 collected four of four named outgoing receipts, read the Langston Discord bridge inactive/disabled, accepted one late incoming receipt and kept its reverse-order duplicate silent. S1 completed before the first reminder, so live nag delivery and actor-authenticated receipts are not claimed; both are explicit row-1z boundaries.
 
 **BOUNDARY.** No trading behaviour, schema, pricing, filter or setting changed. Automatic Codex wake/alert/hook coverage and first-class board identities are `#731`, sprint row 1z; existing homes carry the unrelated deploy-record, push-guard and generated-file findings.
+
+## B-ENTRY-CONSUMPTION-FRESHNESS (CC-C, sprint row 40 P1b; `#684` entry half) — change-class `sub_batch` — ⏳ **STEP 10 DONE 2026-10-15; Step 11 completion review next** (deployed `28c58fb8d`; Coltrane Step 8 approved; governance evidence `Change Lists/B_ENTRY_CONSUMPTION_FRESHNESS_STEP10_GOVERNANCE.md`)
+
+**WHAT IT DOES.** An immediate open can no longer consume a depth snapshot that was fresh at the gate but expired during the later liveness and venue-validation waits. The same snapshot is conservatively aged with a local monotonic clock immediately before `openOrder`; invalid clocks and over-limit ages fail closed. The original gate age and final consumption age are recorded separately.
+
+**BOUNDARY.** Limits remain 5 s crypto / 15 s xStock. Resting-maker placement is intentionally unstamped because it consumes no book. The umbrella's alert/exit/dedupe work remains separately placed, and no observation window blocks unrelated deployment.

@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-15-A — `B-ENTRY-CONSUMPTION-FRESHNESS` (`#684` entry half, CC-C) — a depth snapshot could pass the gate and expire during later awaits before the fill
+
+**CLASS: `sub_batch`. SYMPTOM:** the open depth gate checked one snapshot, then the engine awaited liveness and venue validation before walking that original snapshot. A book could therefore be fresh at admission but stale when consumed, while the stored `entry_book_age_ms` still described only the earlier gate instant.
+
+**FIX:** the gate snapshot now carries a process-monotonic read anchor. Immediately before the sole immediate `openOrder` side effect, the engine adds the local elapsed duration to the source age and refuses invalid clocks or an age over the unchanged class limit at `CONSUMPTION_FRESHNESS`. `entry_book_consumption_age_ms` records the final age separately; pending resting makers remain null because they do not consume a book.
+
+**VERIFIED:** unit and engine-path tests cover the boundary, elapsed-wait advance, invalid clocks, direct-taker and maker-to-taker coverage, resting-maker null, telemetry, schema/migration/export, and mutation controls. Deployed ref `28c58fb8d` produced a live pass, Step 7's registered terminal window closed, Coltrane independently approved Step 8, and CI `38732995231` passed all four jobs at Step 9. Live settings read back as 5,000 ms crypto and 15,000 ms xStock. **RESIDUAL:** the broader xStock session-freshness alert/exit/dedupe work remains separately placed; this batch creates no post-close soak or deployment hold.
+
 ## FIX-2026-10-13-A — `B-CODEX-FAILOVER` (`#1192`, CC-A / OLD Codex) — a completed handover refused the incoming session's required confirmation
 
 **CLASS: `non_architecture`.** The shift system completed an order when the final outgoing session confirmed, but the order message also required the incoming Codex session to confirm. If that incoming session opened after completion, `crew-switch` refused it with “no open order,” so the required receipt could never be recorded.

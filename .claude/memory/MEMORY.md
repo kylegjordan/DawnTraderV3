@@ -57,6 +57,8 @@
 
 **★ A COMPLETION REPORT WITHOUT THE T1 TASK-LIST ROW NOW RAISES `gov-ledgerrow` (checker, 2026-09-11, `#1009`)** — add the row and it clears itself; genuinely N/A ⇒ a confirmed `na-skip` `task_lists` row.
 
+**Entry freshness:** immediate opens recheck the same carried snapshot before `OrderPlacer`; resting makers are unstamped.
+
 - [Kyle: a batch close needs no acknowledgement from him](kyle-batch-close-no-ack-needed.md) — Langston's Step-11 confirm closes it; move the card, post the block, never block on Kyle for an ack (2026-09-02).
 
 **★★ NO INSTRUCTION STOPS THE RUNNING COMMENTARY — MEASURED THREE WAYS, ALL NEGATIVE (`B-WAKE-QUIET` `#995`, CLOSED 2026-09-05).** All three sessions answered **~97% of automatic wakes with text** against a rule forbidding exactly that. **The rule as written, the rule restated, and an instruction delivered AT the event all failed. Only NOT DELIVERING the wake worked.** ⛔ **DO NOT PROPOSE ANOTHER RULE — `B-RULES-LAYER` (`#998`, row 4.6) is the queued fourth attempt, failure condition pre-registered.** ⚠️ **A running watcher holds the code it armed with — the filter estate is heterogeneous until each session re-arms.**
