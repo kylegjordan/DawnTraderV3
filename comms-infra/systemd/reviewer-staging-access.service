@@ -1,0 +1,8 @@
+[Unit]
+Description=Verify Langston and Coltrane staging review access
+Documentation=https://github.com/kylegjordan/DawnTraderV3/blob/migration/aws-supabase/comms-infra/security/reviewer-staging-access/README.md
+
+[Service]
+Type=oneshot
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/local/sbin/reviewer-staging-access verify --actor all

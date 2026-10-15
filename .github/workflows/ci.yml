@@ -122,6 +122,7 @@ jobs:
         run: |
           python3 comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py
           python3 comms-infra/laptop/ssh-keyholder/test_verify_caller_census.py
+          python3 comms-infra/security/reviewer-staging-access/reviewer_staging_access.py self-test
           bash -n comms-infra/security/ssh/manage-ssh-hardening.sh
           bash comms-infra/security/ssh/manage-ssh-hardening.sh self-test
           bash -n comms-infra/security/fail2ban/manage-fail2ban.sh

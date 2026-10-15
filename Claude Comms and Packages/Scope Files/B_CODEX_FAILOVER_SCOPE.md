@@ -36,3 +36,16 @@ Kyle's weekly Claude allowance runs out before the week resets. Working on Anthr
 ## 4. OBSERVATION
 
 No observation window was specified. The switch was verified as a discrete live event; future automation work is separated into row `1z` rather than holding this batch open.
+
+## 5. POST-CLOSE ACCESS CORRECTION — 2026-10-15
+
+The original batch made Coltrane the Codex-shift Step-8 reviewer but did not give him the
+staging database/log path that Langston already used for independent verification. The gap
+blocked B-XSTOCK-BAR-AVAILABILITY Step 8 until ANALYST Codex added a distinct Coltrane key,
+restricted on staging to Helsinki's source address. Permanent parity is now recorded and
+checked by `comms-infra/security/reviewer-staging-access/`; this corrects the operational
+prerequisite without reopening the completed crew-switch mechanism.
+
+The path lands as full `deploy`, exactly like Langston's existing path. "Read-only review"
+is an allowed-use rule rather than an enforced Unix boundary; the ForceCommand restriction
+remains the pre-existing `RUNNING_ISSUES #110` residual.

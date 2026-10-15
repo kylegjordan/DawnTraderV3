@@ -43,13 +43,16 @@ WORKING DIRECTORY** (`/home/coltrane/work`). Infra Claude checked `browse-output
 images, and was one sentence from reporting that Coltrane had invented two filenames. **Both
 files existed, one directory away.** `wrong-object`, on the reviewer rather than the agent.
 
-## ⛔ THE STAGING UI IS BEHIND A LOGIN AND COLTRANE HAS NO ACCOUNT
+## ⛔ STAGING HAS TWO DIFFERENT REVIEW PATHS
 
-Every staging route redirects to `/login` in a real browser. `curl` returns `200` for those
-same URLs because the server hands back the single-page app's empty shell — **the redirect
-happens in JavaScript, so only a browser sees it.** A status code is not a rendered page.
+`curl` returns `200` for staging's single-page shell even when a real browser would redirect
+to `/login`, so a status code is not a rendered page. Coltrane's browser receives its own
+server-minted stored session before it starts; he never types a password. If it lands on
+`/login`, the stored session is stale and the browser check stops until Infra refreshes it.
 
-⇒ **Coltrane can browse the open internet and can reach staging, but cannot verify any
-authenticated screen.** `CLAUDE.md` §7 makes that a hard boundary: a session may not type a
-password into a form, and no session may log in with the staging credentials. Extending that
-is Kyle's call, not this file's.
+For Step 8 database and log evidence, Coltrane has a separate staging key at
+`/home/coltrane/.ssh/id_ed25519_staging`. It reaches `deploy@188.245.193.8` only from Helsinki,
+in parity with Langston's independently keyed path. The canonical verifier and risk boundary
+live in `comms-infra/security/reviewer-staging-access/`: intended use is read-only evidence,
+but the remote Unix account itself is full `deploy`, with the ForceCommand residual still
+governed by `RUNNING_ISSUES #110`.

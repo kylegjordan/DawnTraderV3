@@ -106,3 +106,16 @@ Copied from the filled Step-10 tier ledger in commit `7268da41f`; N/A rows are r
 ## 9. Step-11 close state
 
 Coltrane CONFIRMED at the exact pushed report ref `b4f6fbc66952cbee3d7f65028d874a62ff11377b`. Row 1y, issue #1192, the batch catalog, phase history, task list, board card and CURRENT POSITION are CLOSED / Complete. No Kyle acknowledgement is required.
+
+## 10. Post-close operational correction — 2026-10-15
+
+The completed failover record overstated readiness for Coltrane's Step-8 role: he could read
+the review ref but had no independent staging database/log path. B-XSTOCK-BAR-AVAILABILITY
+exposed the omission. ANALYST Codex restored service with a distinct Coltrane key restricted
+to the Helsinki source address; INFRA Codex then verified both Langston and Coltrane from
+their own keys and added the permanent parity verifier and records under
+`comms-infra/security/reviewer-staging-access/`.
+
+This is a prerequisite correction, not evidence that the reviewer path is structurally
+read-only. Both keys still land as `deploy`; `RUNNING_ISSUES #110` remains the home for that
+pre-existing ForceCommand residual.

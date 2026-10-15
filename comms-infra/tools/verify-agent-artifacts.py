@@ -34,6 +34,7 @@ PAIRS = [
     ("comms-infra/codex/coltrane-memory", "/usr/local/bin/coltrane-memory"),
     ("comms-infra/codex/coltrane-review", "/usr/local/bin/coltrane-review"),
     ("comms-infra/codex/coltrane-repo-refresh", "/usr/local/bin/coltrane-repo-refresh"),
+    ("comms-infra/security/reviewer-staging-access/reviewer_staging_access.py", "/usr/local/sbin/reviewer-staging-access"),
     ("comms-infra/agent-staging-session", "/usr/local/bin/agent-staging-session"),
     ("comms-infra/codex/coltrane-bot.py", "/usr/local/bin/coltrane-bot.py"),
     ("comms-infra/codex/AGENTS.md", "/home/coltrane/.codex/AGENTS.md"),

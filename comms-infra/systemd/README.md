@@ -11,6 +11,7 @@
 | `systemd/*.service`, `systemd/*.timer` | `/etc/systemd/system/` |
 | `systemd/onfailure.conf` | `/etc/systemd/system/<unit>.service.d/onfailure.conf` for each SCHEDULED job below |
 | `systemd/coltrane-bot.service.d/onfailure.conf` | `/etc/systemd/system/coltrane-bot.service.d/onfailure.conf` |
+| `systemd/reviewer-staging-access.{service,timer}` | `/etc/systemd/system/`; the service also gets `systemd/onfailure.conf` as its drop-in |
 | `tools/agent-unit-failure-alert` | `/usr/local/bin/agent-unit-failure-alert` (755) |
 | `tools/agent-work-sync` | `/usr/local/bin/agent-work-sync` (755) |
 | `langston-memory/bin/langston-memory-write` | `/usr/local/bin/langston-memory-write` (**750 root:langston** — runnable by root and langston only, the plan's condition; no unit, it is invoked per write) |
@@ -20,6 +21,7 @@
 | `langston-memory/bin/langston-selfmemory-backup` | `/usr/local/bin/langston-selfmemory-backup` (**750 root:root** — a root-only scheduled job: its unit has no `User=` and no langston unit or cron calls it, so 755 was a needless reader class. Was 755 until 2026-09-11, Langston Step-6 HOLE-2); its `.service` also gets `onfailure.conf` |
 | `langston-memory/bin/langston-promote-patterns` | `/usr/local/bin/langston-promote-patterns` (**750 root:root** — run by hand to produce a PROPOSAL; it refuses a non-root caller itself and drops to langston only for the read, so no other account needs to read it. Was 755 until 2026-09-11) |
 | `langston-memory/bin/langston-size-watch` | `/usr/local/bin/langston-size-watch` (**755 root:root, DELIBERATELY** — the scheduled measurement is root, but `--status` records nothing and is runnable by langston (measured exit 0 as langston, 2026-09-11), and `LANGSTON_ARCHITECTURE.md` names it as how the live ceiling is read. A reader class that is used, not a needless one); its `.service` also gets `onfailure.conf` |
+| `security/reviewer-staging-access/reviewer_staging_access.py` | `/usr/local/sbin/reviewer-staging-access` (**755 root:root** — root verifies both reviewer-owned private keys without exposing their bodies; the remote half runs from the same reviewed source over stdin, so staging has no second installed copy to drift) |
 
 Then `systemctl daemon-reload`.
 
@@ -53,7 +55,7 @@ asked whether Coltrane could read the repo and the answer was re-measured instea
 | covers | template | where it posts | pages Kyle's phone? |
 |---|---|---|---|
 | **Long-running bots** — `coltrane-bot`, `discord-langston-bridge`, `discord-cc-bridge` | `discord-bridge-failed-notify@.service` (pre-existing, #462) | crew channel, 🚨 | **yes** (`--notify`) |
-| **Scheduled jobs** — the six timers below, plus `agent-work-sync` | `agent-unit-failure@.service` → `agent-unit-failure-alert` | crew channel | no |
+| **Scheduled jobs** — the existing timers, `agent-work-sync`, and `reviewer-staging-access` | `agent-unit-failure@.service` → `agent-unit-failure-alert` | crew channel | no |
 
 **The split is urgency, not history.** A bot only reaches `failed` after crash-looping past its
 start limit and **stopping** — the agent is now unreachable, which is worth waking someone for. A
@@ -96,6 +98,16 @@ Keeps `DawnTraderV3-agent-work:migration/aws-supabase` **equal** to
 - **Proven on throwaway local repos, nothing on GitHub touched:** identical → `IN SYNC`;
   real ahead → `ADVANCED` to equal; diverged → `DIVERGED`, exit 3, **and the work-only commit
   survived**.
+
+## `reviewer-staging-access` — both Step-8 evidence paths
+
+Runs the canonical verifier daily at 06:20 UTC and pages through the scheduled-job failure
+path if either reviewer key, source restriction, staging host identity, log read, database
+read or wrong-key control fails. The remote half is the same installed Helsinki source sent
+over standard input, so no staging verifier copy can drift. Installation is complete only
+after the installed file hash matches the reviewed repository blob, the service is run by
+hand once, the timer is active/enabled, and both JSON rows name separate fingerprints and a
+refused wrong-key control.
 
 ## ⚠️ Honest limits
 

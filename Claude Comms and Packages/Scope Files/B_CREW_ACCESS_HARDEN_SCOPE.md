@@ -24,7 +24,7 @@ The finished result covers **ten named identities**: OLD/NEW/ANALYST/Infra Claud
 |---|---|---|
 | four Claude + four Codex sessions | one Windows account and one shared SSH key fingerprint `SHA256:8A/uD7…`; the eight sessions use the server-held `dt-api` read path | new passphrase-protected shared key through a key-holder; `dt-api` reads survive; no crew password is exposed |
 | Langston | its own browser storage state and its own Helsinki/staging keys | browser remains signed in as non-admin; existing dedicated keys stay distinct and working |
-| Coltrane | its own browser storage state and its own Helsinki/agent-work keys | browser remains signed in as non-admin; existing dedicated keys stay distinct and working |
+| Coltrane | its own browser storage state and distinct Helsinki/agent-work/staging keys | browser remains signed in as non-admin; existing dedicated keys stay distinct and working; the 2026-10-15 staging-review repair is retained and verified in parity with Langston |
 
 ### Explicit exclusions
 
@@ -44,7 +44,7 @@ Population and controls are stated because every zero below is load-bearing.
 5. **Helsinki SSH:** effective configuration is `PasswordAuthentication yes`, `KbdInteractiveAuthentication no`, `PubkeyAuthentication yes`, `PermitRootLogin without-password`. `root`, `langston`, `coltrane` and `nova` have locked/no-password status.
 6. **Retained auth-log population:** five log files per server spanning 2026-09-13 through 2026-10-14 contain zero accepted-password logins on either box. Positive control: accepted-public-key lines are 29,167 on staging and 12,952 on Helsinki. Helsinki also has 378,557 failed-password lines in that population; staging has zero because password authentication is already off.
 7. **fail2ban:** the binary is absent and the service is inactive/not-found on both boxes.
-8. **Existing key separation:** staging's forced mint key is restricted to `dt-api mint` from Helsinki; Langston's staging key is source-restricted; the Helsinki-root staging key and the shared laptop key remain unrestricted. This sub-batch labels and rotates only the shared laptop key. It does not claim to close `#924`'s full remediation.
+8. **Existing key separation:** staging's forced mint key is restricted to `dt-api mint` from Helsinki; Langston's and Coltrane's distinct staging-review keys are source-restricted; the separate Helsinki-root staging key and the shared laptop key remain unrestricted. Coltrane's path was added on 2026-10-15 after B-CODEX-FAILOVER omitted the capability needed for his Step-8 role. This sub-batch labels and rotates only the shared laptop key; the reviewer verifier records the two dedicated paths without claiming to close `#924` or the full-`deploy` residual in `#110`.
 
 ## 2. Mandatory architectural read
 

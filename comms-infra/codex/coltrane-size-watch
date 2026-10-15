@@ -8,9 +8,11 @@
     515 lines and is **under Langston's review at Step 4 right now** — round 6 went to him an
     hour before this was written. Editing it to add a `--agent` flag would change the bytes
     he is reviewing, mid-review. So this implements the same INVARIANT with the same
-    refusals, and deliberately omits the parts that are his alone: the alert plumbing that
-    SSHes to staging under his IP-restricted key (Coltrane has no such key), and the
-    logrotate ownership fix for his log directory.
+    refusals, and deliberately omitted the parts that were his alone at this tool's 2026-09-09
+    creation: the alert plumbing that SSHes to staging and the logrotate ownership fix for
+    his log directory. Coltrane gained a distinct, IP-restricted staging key on 2026-10-15;
+    reviewer access is now verified for both agents by `reviewer_staging_access.py`, while
+    alert ownership remains different.
     ⇒ **MERGING THE TWO INTO ONE `--agent` TOOL IS THE RIGHT END STATE** and is homed as
       such, AFTER his review closes. Two copies is the `#641` shape and it is accepted here
       only because the alternative was invalidating a live dispatch.

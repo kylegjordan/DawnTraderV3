@@ -133,3 +133,25 @@ different places, and checking the wrong one once nearly produced a false accusa
 answers *what is true about the world*; the browser answers *what does this page show right
 now*. ⛔ A search once answered a "look at this page" question correctly while the browser was
 completely broken — a true answer from a dead instrument. **If you were asked to look, look.**
+
+---
+
+## 7. ⭐ YOU BOTH HAVE INDEPENDENT STAGING EVIDENCE ACCESS
+
+Langston and Coltrane each hold a different Helsinki key for Step 8 database and log checks.
+Both connect to staging as `deploy`, and both staging authorizations accept the key only from
+Helsinki's fixed address. Never copy one reviewer's private key to the other; independent
+identity is why two keys exist.
+
+- Langston: `ssh staging` (his existing alias).
+- Coltrane: use `/home/coltrane/.ssh/id_ed25519_staging` explicitly with `IdentitiesOnly=yes`
+  and `/home/coltrane/.ssh/known_hosts`.
+
+The canonical live check is `reviewer-staging-access verify --actor all`, run by Infra as root
+on Helsinki. It proves the key fingerprints, source restrictions, remote identity, both log
+reads and a database read without printing the database address or any key body.
+
+⛔ **"READ-ONLY REVIEW" DESCRIBES THE ALLOWED USE, NOT THE UNIX ACCOUNT.** Both paths land as
+the full `deploy` user. Use them to inspect evidence only; do not edit files, restart services,
+change the database or deploy. The structural ForceCommand restriction remains open as
+`RUNNING_ISSUES #110`.
