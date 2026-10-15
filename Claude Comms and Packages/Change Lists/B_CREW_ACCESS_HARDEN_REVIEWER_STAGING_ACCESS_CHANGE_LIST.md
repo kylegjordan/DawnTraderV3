@@ -34,13 +34,13 @@ Helsinki source address. This change makes that capability reviewable and durabl
     arguments;
   - generates a fresh wrong key for each actor and requires an explicit public-key denial trace
     with every non-public-key authentication method disabled;
-  - includes eighteen positive/mutation checks covering authorization parsing, cross-file
+  - includes twenty positive/mutation checks covering authorization parsing, cross-file
     duplicates, alternate SSH authorization sources, raw-key trace binding, a real signed
     sidecar certificate plus unrestricted CA entry, explicit denial, authenticated remote
     failure and transport failure.
 - `comms-infra/security/reviewer-staging-access/README.md` — install, verification, recovery,
   fingerprints, backup provenance and the full-`deploy` residual.
-- `.github/workflows/ci.yml` — runs the eighteen-check self-test in the existing access-hardening
+- `.github/workflows/ci.yml` — runs the twenty-check self-test in the existing access-hardening
   test step.
 - `comms-infra/systemd/reviewer-staging-access.{service,timer}` — daily live parity check with
   the existing scheduled-job failure page; dormant until exact-ref review and installation.
@@ -68,7 +68,7 @@ Helsinki source address. This change makes that capability reviewable and durabl
   byte from both current logs, read the `users` application table under a read-only database
   transaction, and returned an explicit public-key denial trace for a fresh wrong key. The
   temporary directory was removed by the same command.
-- The eighteen-check self-test passed locally and on Helsinki, including a real signed
+- The twenty-check self-test passed locally and on Helsinki, including a real signed
   certificate positive control whose raw key and certificate returned the same fingerprint.
 
 ## Honest boundary
@@ -121,3 +121,13 @@ across the effective authorization-file population, and requires the accepted tr
 raw ED25519 type, expected key path and fingerprint. The new mutation generates and signs a real
 ED25519 certificate, proves its fingerprint matches the raw key, adds an unrestricted CA entry,
 and requires both the authorization and sidecar guards to reject the state.
+
+## Coltrane review round 3
+
+At exact ref `c46b9714572059cc8af979d3862901dfafbce02d`, Coltrane proved that OpenSSH
+accepts authorization option keywords case-insensitively while the verifier compared only the
+lowercase spelling. An uppercase `CERT-AUTHORITY` entry therefore passed the verifier.
+
+The correction normalizes every authorization option keyword before comparison and adds both
+uppercase and mixed-case CA-entry mutations. The effective authorization population is now
+refused for every tested spelling OpenSSH treats as the same option.

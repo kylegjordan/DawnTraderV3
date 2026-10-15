@@ -105,7 +105,8 @@ def validate_authorization_population(
             if not line or line.startswith("#"):
                 continue
             options, key_material, comment = public_key_fields(line)
-            if "cert-authority" in options.split(","):
+            option_keywords = [option.lower() for option in options.split(",")]
+            if "cert-authority" in option_keywords:
                 raise VerificationError(
                     "effective authorization files must not contain cert-authority entries"
                 )
@@ -675,6 +676,18 @@ def self_test() -> int:
                 "sidecar certificate plus cert-authority mutation survived"
             )
         checks += 1
+    for option in ("CERT-AUTHORITY", "CeRt-AuThOrItY"):
+        mutation = good + option + " ssh-ed25519 OTHER unrestricted-ca\n"
+        try:
+            validate_authorization_population(
+                [("/effective", mutation)], "coltrane", fake_fingerprint
+            )
+        except VerificationError:
+            checks += 1
+        else:
+            raise VerificationError(
+                "case-insensitive cert-authority mutation survived: %s" % option
+            )
     print("self-test passed: %d checks" % checks)
     return 0
 

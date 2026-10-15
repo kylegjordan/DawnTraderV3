@@ -30,8 +30,9 @@ reviewer-staging-access verify --actor all
 The live command checks both local key owners and modes, derives each private key's public
 fingerprint without printing its body, and connects with only that key. On staging it derives
 the effective per-connection SSH configuration, rejects command/CA and `cert-authority`
-authorization sources, and searches every configured authorization file for exactly one
-restricted match. Both reviewer keys must have no sidecar certificate, both SSH paths set
+authorization sources case-insensitively, and searches every configured authorization file for
+exactly one restricted match. Both reviewer keys must have no sidecar certificate, both SSH
+paths set
 `CertificateFile=none`, and the accepted trace must name the raw ED25519 key path and
 fingerprint. It then verifies the authorization label, deploy identity, both log reads and a
 one-row database read. Its fresh wrong key must produce an explicit public-key denial trace,
