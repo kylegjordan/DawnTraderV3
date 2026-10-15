@@ -143,7 +143,7 @@ describe('F-P9 — the entry seam reads BOTH sides and consults the guard, xStoc
   const gate = (() => {
     const src = code(AEE);
     const a = src.indexOf('private async _evaluateOpenDepthGate');
-    const b = src.indexOf('\n  }', src.indexOf("return { pass: true, reason: 'ok', snapshot };", a));
+    const b = src.indexOf('\n  }', src.indexOf("return { pass: true, reason: 'ok', snapshot, warmthMaxAgeMs: config.warmthMaxAgeMs };", a));
     return src.slice(a, b);
   })();
   it('CONTROL: the gate body was located and still contains its ask-side checks', () => {

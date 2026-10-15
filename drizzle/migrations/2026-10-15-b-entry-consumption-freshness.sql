@@ -3,6 +3,8 @@
 -- NULLABLE, NO DEFAULT, NO BACKFILL. A NULL means either the trade predates this
 -- cutover or the row represents a resting maker placement, which did not consume
 -- the captured depth snapshot. `entry_book_age_ms` remains the first-gate reading.
+-- Rollback: 2026-10-15-b-entry-consumption-freshness-rollback.sql (operator-only,
+-- never listed in MANIFEST.txt). Deploy the older code first, then drop the column.
 
 ALTER TABLE closed_trades
   ADD COLUMN IF NOT EXISTS entry_book_consumption_age_ms DOUBLE PRECISION;

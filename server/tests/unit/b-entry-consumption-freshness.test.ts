@@ -162,6 +162,7 @@ describe('the production seam and durable contract', () => {
   const engine = readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8');
   const schema = readFileSync(new URL('../../../shared/schema.ts', import.meta.url), 'utf8');
   const migration = readFileSync(new URL('../../../drizzle/migrations/2026-10-15-b-entry-consumption-freshness.sql', import.meta.url), 'utf8');
+  const rollback = readFileSync(new URL('../../../drizzle/migrations/2026-10-15-b-entry-consumption-freshness-rollback.sql', import.meta.url), 'utf8');
   const manifest = readFileSync(new URL('../../../drizzle/migrations/MANIFEST.txt', import.meta.url), 'utf8');
   const exportSql = readFileSync(new URL('../../../scripts/codex-export/export-data.sql', import.meta.url), 'utf8');
 
@@ -202,7 +203,9 @@ describe('the production seam and durable contract', () => {
     expect(schema).toContain('entryBookConsumptionAgeMs: doublePrecision("entry_book_consumption_age_ms"),');
     expect(migration).toMatch(/ADD COLUMN IF NOT EXISTS entry_book_consumption_age_ms DOUBLE PRECISION;/);
     expect(migration).not.toMatch(/entry_book_consumption_age_ms DOUBLE PRECISION\s+DEFAULT|\bUPDATE\s+closed_trades\b/i);
+    expect(rollback).toMatch(/DROP COLUMN IF EXISTS entry_book_consumption_age_ms;/);
     expect(manifest.trimEnd().endsWith('2026-10-15-b-entry-consumption-freshness.sql')).toBe(true);
+    expect(manifest).not.toContain('2026-10-15-b-entry-consumption-freshness-rollback.sql');
     expect(exportSql).toContain('entry_book_age_ms, entry_book_consumption_age_ms, exit_price_producer');
   });
 });
