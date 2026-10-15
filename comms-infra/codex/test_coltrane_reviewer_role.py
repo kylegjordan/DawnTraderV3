@@ -34,16 +34,18 @@ class ReviewerRoleInstructionTests(unittest.TestCase):
             load_script("coltrane_bridge_role_test", "coltrane-bridge.py"),
         )
 
-    def assert_reviewer(self, module, path):
+    def assert_reviewer(self, module, path, generation=7):
         identity, text = module.reviewer_role(path)
-        self.assertEqual(identity, ("codex", 7))
+        self.assertEqual(identity, ("codex", generation))
         self.assertIn("CURRENT CREW MODE: CODEX", text)
+        self.assertIn(f"generation {generation}", text)
         self.assertIn("replace Langston", text)
 
-    def assert_advisor(self, module, path):
+    def assert_advisor(self, module, path, generation=7):
         identity, text = module.reviewer_role(path)
-        self.assertEqual(identity, ("claude", 7))
+        self.assertEqual(identity, ("claude", generation))
         self.assertIn("CURRENT CREW MODE: CLAUDE", text)
+        self.assertIn(f"generation {generation}", text)
         self.assertIn("additional advisor", text)
 
     def assert_unknown(self, module, path):

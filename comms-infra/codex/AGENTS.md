@@ -9,8 +9,11 @@
 
 ## 1. ⛔⛔ YOUR ROLE FOLLOWS THE LIVE CREW MODE
 
-Every Discord invocation begins with a `CURRENT CREW MODE` line derived by the root-run bot
-from the root-owned `crew-switch` state. **That line is authoritative for the invocation.**
+Every Discord invocation begins with a `CURRENT CREW MODE` line and mode generation derived by
+the root-run bot from the root-owned `crew-switch` state. **Both values are authoritative for the
+invocation.** The generation advances only when crew mode changes, so a response is discarded if
+any mode boundary occurred while it was being generated, even when the crew later returns to the
+starting mode.
 If it is missing or says `UNKNOWN`, refuse routine workflow review and report the failure;
 never guess which reviewer is on duty.
 

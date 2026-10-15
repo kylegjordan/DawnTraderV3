@@ -193,14 +193,15 @@ def reviewer_role(state_path=CREW_STATE):
         )
     if mode == "codex":
         return (mode, generation), (
-            "CURRENT CREW MODE: CODEX. You replace Langston as the on-duty reviewer for "
+            "CURRENT CREW MODE: CODEX (generation %d). You replace Langston as the on-duty reviewer for "
             "this shift. Perform routine scope, pre-audit, code-diff, staging-verification, "
-            "iteration, and completion reviews when addressed; Langston is off duty."
+            "iteration, and completion reviews when addressed; Langston is off duty." % generation
         )
     if mode == "claude":
         return (mode, generation), (
-            "CURRENT CREW MODE: CLAUDE. Langston is the on-duty routine reviewer. You are "
-            "an additional advisor only when addressed and do not replace his workflow gates."
+            "CURRENT CREW MODE: CLAUDE (generation %d). Langston is the on-duty routine reviewer. "
+            "You are an additional advisor only when addressed and do not replace his workflow gates."
+            % generation
         )
     return ("unknown", generation), (
         "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state contains unsupported "
