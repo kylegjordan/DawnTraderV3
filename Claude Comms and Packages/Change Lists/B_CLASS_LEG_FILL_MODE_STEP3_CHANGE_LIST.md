@@ -92,6 +92,8 @@ Both tests assert the expiry database update, the explicit close payload, and th
 
 **Step 5 release gate:** branch head `18b240ce32358861c451b0c78fd4819c5dc6745c`; CI run `38768307088` completed successfully, with TypeScript Check, Test Suite, Build, and Docker Build each individually green. No observation hold or deployment freeze applies to this batch.
 
+**Step 6 deployment:** final-head CI run `38768822064` passed all four required jobs at exact commit `097306d1a91d5bb0dfc9cc9d376ec84887861aeb`. That commit was fast-forwarded to `migration/aws-supabase` and deployed to staging by `codex-c` at `2026-10-15T16:29:18Z`. `dt-deploy` applied `2026-10-15-b-class-leg-fill-mode.sql`, asserted the exact live build and resumed engine, and recorded an 11-second contiguous check-failure window.
+
 ## Review focus
 
 1. Prove the policy overlay never substitutes raw maker EV/fees for adjusted maker EV and cannot be bypassed by exploration.
