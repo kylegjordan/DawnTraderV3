@@ -1339,3 +1339,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT DOES.** An immediate open can no longer consume a depth snapshot that was fresh at the gate but expired during the later liveness and venue-validation waits. The same snapshot is conservatively aged with a local monotonic clock immediately before `openOrder`; invalid clocks and over-limit ages fail closed. The original gate age and final consumption age are recorded separately.
 
 **BOUNDARY.** Limits remain 5 s crypto / 15 s xStock. Resting-maker placement is intentionally unstamped because it consumes no book. The umbrella's alert/exit/dedupe work remains separately placed, and no observation window blocks unrelated deployment.
+
+## B-CLASS-LEG-FILL-MODE (CC-C, pre-sprint P1c; `#1170` + `[C3]`) — change-class `architecture` — 🟦 **STEP 10 COMPLETE 2026-10-15; STEP 11 NEXT** (deployed `097306d1a`; Coltrane Step-8 APPROVED at `09ca3633e`; CI `38769329916` four of four)
+
+**WHAT IT DOES.** A DB-governed policy now chooses which priced entry or target-exit arm each asset class may use after the existing two-arm economics are calculated: crypto is maker-only, xStock is maker-preferred with an independently admissible taker fallback, and stops remain taker. The decision, placement time and target policy are durable; a resting fill requires the strict local-receipt interval `placement < quote arrival < deadline`, without changing the separate freshness clock.
+
+**BOUNDARY.** Pre-cutover rows retain honest null provenance, legacy pending entries retire unfilled, and a legacy target rest clears without closing the position. VTS entries share the policy and later-quote rule, but VTS still has no target-rest lifecycle. Deterministic engine tests, two red mutations, live config/schema/read-path evidence and Coltrane's independent staging pass close the release evidence; no calendar window or deployment hold was created.

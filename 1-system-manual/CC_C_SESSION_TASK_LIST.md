@@ -21,6 +21,7 @@
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | built and reviewed; ship in the one held deploy |
 | 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15: deployed `3a2cd4ee5`, Coltrane Step 11 confirmed at `c3c8d7ce1`. Umbrella residual alert/exit/dedupe work remains separately placed. |
+| P1c | `B-CLASS-LEG-FILL-MODE` (`#1170` + `[C3]`) | STEP 10 COMPLETE 2026-10-15; deployed `097306d1a`, Coltrane Step-8 approved at `09ca3633e`, Step 11 next; no observation or deployment hold. |
 | — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle

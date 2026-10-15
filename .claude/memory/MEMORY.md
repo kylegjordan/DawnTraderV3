@@ -59,6 +59,8 @@
 
 **Entry freshness:** immediate opens recheck the same carried snapshot before `OrderPlacer`; resting makers are unstamped.
 
+**Fill policy:** after unchanged two-arm economics, crypto entries/target exits are maker-only and xStock entries/target exits are maker-preferred with an admissible taker fallback; stops stay taker. The policy and selected EV are durable, and a maker fill requires local receipt strictly between placement and deadline on a clock separate from freshness. No P1c observation or deployment hold exists.
+
 - [Kyle: a batch close needs no acknowledgement from him](kyle-batch-close-no-ack-needed.md) — Langston's Step-11 confirm closes it; move the card, post the block, never block on Kyle for an ack (2026-09-02).
 
 **★★ NO INSTRUCTION STOPS THE RUNNING COMMENTARY — MEASURED THREE WAYS, ALL NEGATIVE (`B-WAKE-QUIET` `#995`, CLOSED 2026-09-05).** All three sessions answered **~97% of automatic wakes with text** against a rule forbidding exactly that. **The rule as written, the rule restated, and an instruction delivered AT the event all failed. Only NOT DELIVERING the wake worked.** ⛔ **DO NOT PROPOSE ANOTHER RULE — `B-RULES-LAYER` (`#998`, row 4.6) is the queued fourth attempt, failure condition pre-registered.** ⚠️ **A running watcher holds the code it armed with — the filter estate is heterogeneous until each session re-arms.**

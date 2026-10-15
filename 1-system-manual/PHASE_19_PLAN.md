@@ -656,3 +656,7 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 ### 2026-10-15 P1b landing note — `B-ENTRY-CONSUMPTION-FRESHNESS`
 
 The entry-consumption half of row `3b.f-c` / sprint row 40 closed at deployed ref `3a2cd4ee5`; Coltrane confirmed Step 11 at report ref `c3c8d7ce1`, with CI `38740761810` four of four. The same gate snapshot is aged through later awaits and checked synchronously immediately before an immediate fill. The 5 s crypto / 15 s xStock limits remain unchanged; resting-maker placement is outside this consumption seam. This does not close the umbrella's separately placed alert/exit/dedupe work, and it creates no observation or deploy hold.
+
+### 2026-10-15 P1c landing note — `B-CLASS-LEG-FILL-MODE`
+
+The pre-sprint fill-policy batch reached Step 10 at deployed ref `097306d1a`; Coltrane independently approved the staging evidence at `09ca3633e`, and CI `38769329916` passed all four jobs. The existing two-arm economics remain intact, then a durable per-class/per-leg policy constrains the usable arm: crypto maker-only, xStock maker-preferred with an independently admissible taker fallback, and stops taker. `[C3]` is structural through the strict receipt-clock interval `placement < quote arrival < deadline`; freshness keeps its separate clock. Legacy nulls are not backfilled, VTS has no target-rest lifecycle, and this landing starts no observation or deployment hold.
