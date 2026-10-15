@@ -62,10 +62,10 @@
 
 ## Verification
 
-- focused affected suite: **17 test files, 297 tests passed**;
+- focused affected suite: **18 test files, 299 tests passed**;
 - TypeScript baseline: **335 current vs 337 baseline, 0 regressions above baseline**; the two lower counts are unrelated existing `partition-exporter.ts` diagnostics and the baseline was not resynced;
 - `git diff --check`: clean apart from Git's existing LF/CRLF working-copy notices;
-- one broad local Vitest run reached **351 passing files / 4,222 passing tests / 184 skipped**; its remaining 14 failing files were local full-suite prerequisites and repository-wide scanner pollution. All failures attributable to this change were corrected and are included in the final 297-test green run. CI remains the authoritative four-job gate.
+- one broad local Vitest run reached **351 passing files / 4,222 passing tests / 184 skipped**; its remaining 14 failing files were local full-suite prerequisites and repository-wide scanner pollution. All failures attributable to this change were corrected and are included in the final 299-test green run. CI remains the authoritative four-job gate.
 
 ## Step 4 round-1 corrections
 
@@ -78,6 +78,15 @@ Coltrane's exact-ref review at `353f8503b2476baa632f5f67c7e29081d99c014d` found 
 Behavioral coverage now includes both target-expiry policies, policy-controlled target fallback, four invalid selected-EV forms at the queue, and the same four invalid forms at the real ActiveExecutionEngine trade-creation seam. The latter refuses before order placement or trade persistence; the existing promotion claim still removes the RTB row first to preserve its double-activation guard.
 
 REVIEWER: claim-only · identify alternate states consistent with the three Step-4 corrections · HIT (additional target fallthrough states, RTB deletion precedes trade-time EV rejection, ambiguous expiry log) · re-derived yes; target fallthroughs and log corrected, RTB ordering claim narrowed because the pre-open delete is an intentional concurrency guard.
+
+## Step 4 round-2 correction
+
+Coltrane confirmed the three production fixes at `106ea2c3d7ddc01d04530e3d22026bbc103e145e`, but required production-seam evidence for the target-policy handoff. `server/tests/unit/b-class-leg-fill-mode-engine.test.ts` now drives the real exit monitor and real close sink through the mutable active-position row:
+
+1. a `maker_only` rest expires, clears its rest fields while preserving policy, remains open, and a later stop writes `maker_only` to the closed trade;
+2. a `maker_preferred` rest expires while the target is still hit, clears its rest fields while preserving policy, converts to a taker close in the same tick, and writes `maker_preferred` to the closed trade.
+
+Both tests assert the expiry database update, the explicit close payload, and the final closed-row write. Mutation controls are discriminating: replacing the preserved-policy update with null fails 2/2 tests, and removing the explicit close payload fails 2/2 tests; production source was restored and the final focused suite is 18 files / 299 tests green. TypeScript remains 335 current vs 337 baseline with zero regressions above baseline; the same two unrelated `partition-exporter.ts` diagnostics remain below baseline.
 
 ## Review focus
 
