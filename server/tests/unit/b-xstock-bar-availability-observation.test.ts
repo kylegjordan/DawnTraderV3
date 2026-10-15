@@ -40,6 +40,10 @@ function passingInputs(): CapacityGateInputs {
     telemetryRepeatedPayloadAttempts: 2_000,
     telemetryAppliedWinners: 95_000,
     telemetryRejectedOlderArrivals: 5_000,
+    writerBoots: 1,
+    contributingWriterBuildShas: ['a'.repeat(40)],
+    archiveProducingBuildShas: ['a'.repeat(40)],
+    gradedRef: 'a'.repeat(40),
     maxCompleteDayWholeStoreBytes: 2 * GIB,
     databaseBytes: 140 * GIB,
     newIndexBytes: 4 * GIB,
@@ -88,6 +92,10 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
       { telemetryRepeatedPayloadAttempts: 1_999 },
       { telemetryAppliedWinners: 94_999 },
       { telemetryRejectedOlderArrivals: 5_001 },
+      { writerBoots: 2 },
+      { contributingWriterBuildShas: ['a'.repeat(40), 'b'.repeat(40)] },
+      { contributingWriterBuildShas: ['b'.repeat(40)] },
+      { archiveProducingBuildShas: ['b'.repeat(40)] },
       { archiveProof: false },
       { cryptoControlRows: 0 },
       { buildIdentityMatches: false },
@@ -134,17 +142,28 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS xstock_bar_projection_flush_admission');
     expect(migration).toContain('CREATE TABLE IF NOT EXISTS xstock_bar_projection_flush_completion');
     expect(migration).toContain('writer_build_sha text NOT NULL');
+    expect(migration).toContain('population_hash text NOT NULL');
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS xstock_bar_archive_exact_evidence');
+    expect(migration).toContain('source_row_count = downloaded_row_count');
     expect(migration).toContain('ON CONFLICT (flush_id) DO NOTHING');
     expect(migration).toContain('FOR UPDATE');
     expect(migration).toContain('IF FOUND THEN');
     expect(migration).toContain('FROM apply_xstock_bar_revision_events(');
     expect(migration).toContain('BEFORE TRUNCATE ON xstock_bar_projection_flush_admission');
     expect(migration).toContain('BEFORE TRUNCATE ON xstock_bar_projection_flush_completion');
+    expect(migration).toContain('BEFORE TRUNCATE ON xstock_bar_archive_exact_evidence');
     expect(migration).toContain('ON xstock_bar_revision_event (arrived_at, revision_id)');
     expect(rollback).not.toMatch(/DROP TABLE|DROP INDEX|DELETE FROM xstock_bar_projection_flush/i);
     expect(sweep.match(/parent: 'xstock_bar_revision_event'/g)).toHaveLength(1);
     expect(sweep).toContain("exactCursorTieBreakerColumn: 'revision_id'");
     expect(sweep).toContain("exactCursorTieBreakerType: 'uuid'");
+    const uploadedAt = sweep.indexOf('await updateManifestUploaded');
+    const evidenceAt = sweep.indexOf('await recordExactArchiveEvidence', uploadedAt);
+    const verifiedAt = sweep.indexOf('await updateManifestVerified', evidenceAt);
+    expect(evidenceAt).toBeGreaterThan(0);
+    expect(evidenceAt).toBeGreaterThan(uploadedAt);
+    expect(verifiedAt).toBeGreaterThan(uploadedAt);
+    expect(verifiedAt).toBeGreaterThan(evidenceAt);
     expect(sweep).not.toMatch(/parent: 'xstock_bar_(aggregate_revision|window_manifest|projection_flush)'/);
   });
 });

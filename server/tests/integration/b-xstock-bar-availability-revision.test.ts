@@ -8,7 +8,12 @@ import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 import { db } from '../../db.js';
 import { upsertOhlcRows } from '../../services/passive-archive/ohlc-batch-writer.js';
-import { writeXstockProjectionAttempts } from '../../services/passive-archive/xstock-bar-availability.js';
+import {
+  XSTOCK_BAR_WRITER_BOOT_ID,
+  XSTOCK_BAR_WRITER_BUILD_SHA,
+  writeXstockProjectionAttempts,
+  xstockProjectionPayloadJson,
+} from '../../services/passive-archive/xstock-bar-availability.js';
 import {
   aggregateAvailableXstockOHLC,
   persistSettledXstockWindowManifest,
@@ -327,6 +332,48 @@ describe(TAG, () => {
     expect(evidence.revision_ids).toEqual([first.attempts[0].revisionId]);
   });
 
+  it('rejects same-count changed payloads before and after completion', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const original = {
+      ...bar('12', new Date()),
+      symbol: FLUSH_SYMBOL,
+      intervalBegin: new Date(Math.floor(Date.now() / 60_000) * 60_000),
+    };
+    const changed = { ...original, close: '13' };
+
+    const beforeCompletionId = randomUUID();
+    await db.execute(sql`
+      SELECT admit_xstock_bar_projection_flush(
+        ${beforeCompletionId}::uuid,
+        ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
+        ${XSTOCK_BAR_WRITER_BUILD_SHA},
+        'xstock-bar-availability/v1',
+        1,
+        0,
+        1,
+        ${xstockProjectionPayloadJson([original])}::jsonb
+      )
+    `);
+    await expect(writeXstockProjectionAttempts([changed], {
+      flushId: beforeCompletionId,
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+    })).rejects.toThrow(/admission replay does not match original population/);
+
+    const afterCompletionId = randomUUID();
+    await writeXstockProjectionAttempts([original], {
+      flushId: afterCompletionId,
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+    });
+    await expect(writeXstockProjectionAttempts([changed], {
+      flushId: afterCompletionId,
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+    })).rejects.toThrow(/admission replay does not match original population/);
+  });
+
   it('retains an orphan admission when projection cannot complete and keeps evidence append-only', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
 
@@ -340,7 +387,11 @@ describe(TAG, () => {
         'xstock-bar-availability/v1',
         1,
         0,
-        1
+        1,
+        ${xstockProjectionPayloadJson([{
+          ...bar('15', new Date()),
+          symbol: FLUSH_SYMBOL,
+        }])}::jsonb
       )
     `);
     await expect(db.execute(sql`

@@ -5,6 +5,8 @@
 
 BEGIN;
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TABLE IF NOT EXISTS xstock_bar_projection_flush_admission (
   flush_id uuid PRIMARY KEY,
   writer_boot_id uuid NOT NULL,
@@ -15,6 +17,7 @@ CREATE TABLE IF NOT EXISTS xstock_bar_projection_flush_admission (
     buffer_superseded >= 0 AND buffer_superseded < accepted_input_frames
   ),
   expected_projection_attempts integer NOT NULL CHECK (expected_projection_attempts > 0),
+  population_hash text NOT NULL CHECK (population_hash ~ '^[0-9a-f]{64}$'),
   admitted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK (accepted_input_frames - buffer_superseded = expected_projection_attempts)
 );
@@ -39,6 +42,7 @@ CREATE TABLE IF NOT EXISTS xstock_bar_projection_flush_completion (
     rejected_older_arrivals >= 0 AND rejected_older_arrivals <= projection_attempts
   ),
   revision_ids uuid[] NOT NULL CHECK (cardinality(revision_ids) = projection_attempts),
+  population_hash text NOT NULL CHECK (population_hash ~ '^[0-9a-f]{64}$'),
   completed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK (accepted_input_frames - buffer_superseded = projection_attempts),
   CHECK (applied_winners + rejected_older_arrivals = projection_attempts)
@@ -48,6 +52,28 @@ CREATE INDEX IF NOT EXISTS idx_xstock_bar_projection_flush_admission_time
   ON xstock_bar_projection_flush_admission (admitted_at, flush_id);
 CREATE INDEX IF NOT EXISTS idx_xstock_bar_projection_flush_completion_time
   ON xstock_bar_projection_flush_completion (completed_at, flush_id);
+
+-- The generic manifest is a mutable lifecycle row. Preserve the exact xStock
+-- export proof separately so source/export/download equality remains auditable
+-- after the hot partition has been dropped.
+CREATE TABLE IF NOT EXISTS xstock_bar_archive_exact_evidence (
+  manifest_id uuid PRIMARY KEY REFERENCES data_archive_manifest(id),
+  source_table text NOT NULL CHECK (source_table = 'xstock_bar_revision_event'),
+  partition_label text NOT NULL,
+  tier text NOT NULL CHECK (tier = 'warm'),
+  source_row_count bigint NOT NULL CHECK (source_row_count >= 0),
+  exported_row_count bigint NOT NULL CHECK (exported_row_count >= 0),
+  downloaded_row_count bigint NOT NULL CHECK (downloaded_row_count >= 0),
+  cursor_contract text NOT NULL CHECK (
+    cursor_contract = 'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid'
+  ),
+  producing_build_sha text NOT NULL CHECK (producing_build_sha ~ '^[0-9a-f]{40}$'),
+  object_checksum text NOT NULL CHECK (object_checksum <> ''),
+  verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (source_row_count = exported_row_count),
+  CHECK (source_row_count = downloaded_row_count),
+  UNIQUE (source_table, partition_label, tier)
+);
 
 -- Supports the exact B75 native (timestamptz, uuid) keyset cursor without a
 -- per-page full sort. Only returned cursor values use text transport.
@@ -84,6 +110,17 @@ CREATE TRIGGER trg_guard_xstock_bar_projection_completion_truncate
 BEFORE TRUNCATE ON xstock_bar_projection_flush_completion
 FOR EACH STATEMENT EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
 
+DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_mutation
+  ON xstock_bar_archive_exact_evidence;
+CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_mutation
+BEFORE UPDATE OR DELETE ON xstock_bar_archive_exact_evidence
+FOR EACH ROW EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
+DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_truncate
+  ON xstock_bar_archive_exact_evidence;
+CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_truncate
+BEFORE TRUNCATE ON xstock_bar_archive_exact_evidence
+FOR EACH STATEMENT EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
+
 -- Idempotent admission. A retry after an ambiguous admission COMMIT reuses the
 -- same flush ID and verifies that it names the same immutable population.
 CREATE OR REPLACE FUNCTION admit_xstock_bar_projection_flush(
@@ -93,20 +130,28 @@ CREATE OR REPLACE FUNCTION admit_xstock_bar_projection_flush(
   p_contract_version text,
   p_accepted_input_frames integer,
   p_buffer_superseded integer,
-  p_expected_projection_attempts integer
+  p_expected_projection_attempts integer,
+  p_rows jsonb
 )
 RETURNS void
 LANGUAGE plpgsql
 AS $$
 DECLARE
   admitted xstock_bar_projection_flush_admission%ROWTYPE;
+  computed_population_hash text;
 BEGIN
+  IF jsonb_typeof(p_rows) IS DISTINCT FROM 'array'
+     OR jsonb_array_length(p_rows) IS DISTINCT FROM p_expected_projection_attempts THEN
+    RAISE EXCEPTION 'xStock flush % admission rows do not match expected population', p_flush_id;
+  END IF;
+  computed_population_hash := encode(digest(convert_to(p_rows::text, 'UTF8'), 'sha256'), 'hex');
+
   INSERT INTO xstock_bar_projection_flush_admission (
     flush_id, writer_boot_id, writer_build_sha, contract_version, accepted_input_frames,
-    buffer_superseded, expected_projection_attempts
+    buffer_superseded, expected_projection_attempts, population_hash
   ) VALUES (
     p_flush_id, p_writer_boot_id, p_writer_build_sha, p_contract_version, p_accepted_input_frames,
-    p_buffer_superseded, p_expected_projection_attempts
+    p_buffer_superseded, p_expected_projection_attempts, computed_population_hash
   )
   ON CONFLICT (flush_id) DO NOTHING;
 
@@ -119,7 +164,8 @@ BEGIN
      OR admitted.contract_version IS DISTINCT FROM p_contract_version
      OR admitted.accepted_input_frames IS DISTINCT FROM p_accepted_input_frames
      OR admitted.buffer_superseded IS DISTINCT FROM p_buffer_superseded
-     OR admitted.expected_projection_attempts IS DISTINCT FROM p_expected_projection_attempts THEN
+     OR admitted.expected_projection_attempts IS DISTINCT FROM p_expected_projection_attempts
+     OR admitted.population_hash IS DISTINCT FROM computed_population_hash THEN
     RAISE EXCEPTION 'xStock flush % admission replay does not match original population', p_flush_id;
   END IF;
 END $$;
@@ -149,7 +195,13 @@ AS $$
 DECLARE
   admitted xstock_bar_projection_flush_admission%ROWTYPE;
   completed xstock_bar_projection_flush_completion%ROWTYPE;
+  computed_population_hash text;
 BEGIN
+  IF jsonb_typeof(p_rows) IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'xStock flush % projection payload is not an array', p_flush_id;
+  END IF;
+  computed_population_hash := encode(digest(convert_to(p_rows::text, 'UTF8'), 'sha256'), 'hex');
+
   SELECT * INTO admitted
   FROM xstock_bar_projection_flush_admission
   WHERE flush_id = p_flush_id
@@ -160,7 +212,8 @@ BEGIN
   IF admitted.writer_boot_id IS DISTINCT FROM p_writer_boot_id
      OR admitted.writer_build_sha IS DISTINCT FROM p_writer_build_sha
      OR admitted.contract_version IS DISTINCT FROM p_contract_version
-     OR admitted.expected_projection_attempts IS DISTINCT FROM jsonb_array_length(p_rows) THEN
+     OR admitted.expected_projection_attempts IS DISTINCT FROM jsonb_array_length(p_rows)
+     OR admitted.population_hash IS DISTINCT FROM computed_population_hash THEN
     RAISE EXCEPTION 'xStock flush % projection does not match durable admission', p_flush_id;
   END IF;
 
@@ -187,7 +240,7 @@ BEGIN
     INSERT INTO xstock_bar_projection_flush_completion (
       flush_id, writer_boot_id, writer_build_sha, contract_version, accepted_input_frames,
       buffer_superseded, projection_attempts, repeated_payload_attempts,
-      applied_winners, rejected_older_arrivals, revision_ids
+      applied_winners, rejected_older_arrivals, revision_ids, population_hash
     )
     SELECT
       p_flush_id, p_writer_boot_id, p_writer_build_sha, p_contract_version,
@@ -196,7 +249,8 @@ BEGIN
       count(*) FILTER (WHERE attempts.payload_repeated_from_winner)::integer,
       count(*) FILTER (WHERE attempts.projection_applied)::integer,
       count(*) FILTER (WHERE NOT attempts.projection_applied)::integer,
-      array_agg(attempts.revision_id ORDER BY attempts.revision_id)
+      array_agg(attempts.revision_id ORDER BY attempts.revision_id),
+      admitted.population_hash
     FROM attempts
     RETURNING 1
   )
@@ -246,5 +300,7 @@ COMMENT ON TABLE xstock_bar_projection_flush_admission IS
   'Append-only xStock logical flush population admitted before projection.';
 COMMENT ON TABLE xstock_bar_projection_flush_completion IS
   'Append-only xStock projection completion committed atomically with immutable revision events.';
+COMMENT ON TABLE xstock_bar_archive_exact_evidence IS
+  'Append-only exact source/export/download equality evidence retained after xStock revision hot-partition deletion.';
 
 COMMIT;

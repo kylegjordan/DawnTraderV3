@@ -15,6 +15,7 @@ import pg from 'pg';
 import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT } from '../services/data-archive/exact-archive-evidence.js';
 
 const { Client } = pg;
 const GIB = 1024 ** 3;
@@ -63,6 +64,10 @@ export interface CapacityGateInputs {
   telemetryRepeatedPayloadAttempts: number;
   telemetryAppliedWinners: number;
   telemetryRejectedOlderArrivals: number;
+  writerBoots: number;
+  contributingWriterBuildShas: string[];
+  archiveProducingBuildShas: string[];
+  gradedRef: string;
   maxCompleteDayWholeStoreBytes: number;
   databaseBytes: number;
   newIndexBytes: number;
@@ -132,6 +137,11 @@ export function evaluateCapacityGate(input: CapacityGateInputs) {
       && input.telemetryRejectedOlderArrivals === input.rejectedOlderArrivals
       && input.telemetryAppliedWinners + input.telemetryRejectedOlderArrivals
         === input.telemetryProjectionAttempts,
+    singleWriterBoot: input.writerBoots === 1,
+    allContributingBuildsReviewed: input.contributingWriterBuildShas.length === 1
+      && input.contributingWriterBuildShas[0] === input.gradedRef
+      && input.archiveProducingBuildShas.length > 0
+      && input.archiveProducingBuildShas.every((sha) => sha === input.gradedRef),
     archiveReadbackBeforeDrop: input.archiveProof,
     readInstrumentPositiveControl: input.cryptoControlRows > 0,
     gradedBuildIdentity: input.buildIdentityMatches,
@@ -160,7 +170,7 @@ export function evaluateCapacityGate(input: CapacityGateInputs) {
 }
 
 function refMatches(actual: string, supplied: string): boolean {
-  return /^[0-9a-f]{40}$/i.test(actual) && actual.toLowerCase().startsWith(supplied.toLowerCase());
+  return /^[0-9a-f]{40}$/i.test(actual) && actual.toLowerCase() === supplied.toLowerCase();
 }
 
 async function readBuildIdentity(gradedRef: string) {
@@ -186,8 +196,8 @@ function parseArgs(argv: string[]): GateArgs {
   if (!windowStart || !Number.isFinite(parsed.getTime())) {
     throw new Error('--window-start must be an ISO timestamp');
   }
-  if (!/^[0-9a-f]{7,40}$/i.test(gradedRef)) {
-    throw new Error('--graded-ref must be a 7-40 character git SHA');
+  if (!/^[0-9a-f]{40}$/i.test(gradedRef)) {
+    throw new Error('--graded-ref must be an exact 40-character git SHA');
   }
   return { windowStart: parsed, gradedRef };
 }
@@ -196,6 +206,10 @@ function num(value: unknown): number {
   const parsed = Number(value ?? 0);
   if (!Number.isFinite(parsed)) throw new Error(`non-numeric database value: ${String(value)}`);
   return parsed;
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String).sort() : [];
 }
 
 function completeUtcDayLabels(start: Date, end: Date): string[] {
@@ -323,6 +337,7 @@ async function main(): Promise<void> {
                   OR c.accepted_input_frames IS DISTINCT FROM a.accepted_input_frames
                   OR c.buffer_superseded IS DISTINCT FROM a.buffer_superseded
                   OR c.projection_attempts IS DISTINCT FROM a.expected_projection_attempts
+                  OR c.population_hash IS DISTINCT FROM a.population_hash
                 )
               )::bigint AS admission_completion_mismatches,
               count(*) FILTER (
@@ -430,6 +445,7 @@ async function main(): Promise<void> {
          UNION SELECT 'xstock_bar_window_manifest'::regclass::oid
          UNION SELECT 'xstock_bar_projection_flush_admission'::regclass::oid
          UNION SELECT 'xstock_bar_projection_flush_completion'::regclass::oid
+         UNION SELECT 'xstock_bar_archive_exact_evidence'::regclass::oid
          UNION SELECT 'xstock_bar_clock_guard'::regclass::oid
        ), rels AS (
          SELECT oid FROM revision_rels UNION SELECT oid FROM other_rels
@@ -449,24 +465,25 @@ async function main(): Promise<void> {
     )).rows[0] as JsonRow;
 
     const archiveRows = (await client.query(
-      `SELECT partition_label, state, tier, row_count::bigint, bytes_compressed::bigint,
-              checksum, verified_at::text, hot_partition_dropped_at::text,
+      `SELECT m.partition_label, m.state, m.tier, m.row_count::bigint,
+              m.bytes_compressed::bigint, m.checksum, m.verified_at::text,
+              m.hot_partition_dropped_at::text,
               to_regclass(
-                'xstock_bar_revision_event_' || replace(partition_label, '-', '_')
-              ) IS NULL AS hot_child_absent
-         FROM data_archive_manifest
-        WHERE source_table = 'xstock_bar_revision_event'
-          AND tier = 'warm'
-          AND state = 'active'
-          AND verified_at IS NOT NULL
-          AND hot_partition_dropped_at IS NOT NULL
-          AND checksum <> ''
-          AND row_count > 0
-          AND partition_label = to_char(
+                'xstock_bar_revision_event_' || replace(m.partition_label, '-', '_')
+              ) IS NULL AS hot_child_absent,
+              x.source_row_count::bigint, x.exported_row_count::bigint,
+              x.downloaded_row_count::bigint, x.cursor_contract,
+              x.producing_build_sha, x.object_checksum,
+              x.verified_at::text AS exact_evidence_verified_at
+         FROM data_archive_manifest m
+         LEFT JOIN xstock_bar_archive_exact_evidence x ON x.manifest_id = m.id
+        WHERE m.source_table = 'xstock_bar_revision_event'
+          AND m.tier = 'warm'
+          AND m.partition_label = to_char(
             ($1::timestamptz AT TIME ZONE 'UTC')::date - 1,
             'YYYY-MM-DD'
           )
-        ORDER BY hot_partition_dropped_at DESC`,
+        ORDER BY m.hot_partition_dropped_at DESC NULLS LAST`,
       [windowStart],
     )).rows as JsonRow[];
 
@@ -507,6 +524,25 @@ async function main(): Promise<void> {
           : num(row.max_event_gap_seconds),
       }, venueSessionMaxGapSeconds),
     }));
+    const archiveProducingBuildShas = [...new Set(
+      archiveRows
+        .map((row) => row.producing_build_sha)
+        .filter((value): value is string => typeof value === 'string'),
+    )].sort();
+    const archiveProof = archiveRows.length > 0 && archiveRows.every((row) =>
+      row.state === 'active'
+      && row.verified_at !== null
+      && row.hot_partition_dropped_at !== null
+      && typeof row.checksum === 'string' && row.checksum.length > 0
+      && num(row.row_count) > 0
+      && row.hot_child_absent === true
+      && num(row.source_row_count) === num(row.row_count)
+      && num(row.exported_row_count) === num(row.row_count)
+      && num(row.downloaded_row_count) === num(row.row_count)
+      && row.cursor_contract === XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT
+      && row.object_checksum === row.checksum
+      && row.exact_evidence_verified_at !== null,
+    );
 
     const inputs: CapacityGateInputs = {
       elapsedMs: observedAt.getTime() - windowStart.getTime(),
@@ -538,10 +574,14 @@ async function main(): Promise<void> {
       telemetryRepeatedPayloadAttempts: num(telemetry.repeated_payload_attempts),
       telemetryAppliedWinners: num(telemetry.applied_winners),
       telemetryRejectedOlderArrivals: num(telemetry.rejected_older_arrivals),
+      writerBoots: num(telemetry.writer_boots),
+      contributingWriterBuildShas: strings(telemetry.writer_build_shas),
+      archiveProducingBuildShas,
+      gradedRef: args.gradedRef.toLowerCase(),
       maxCompleteDayWholeStoreBytes,
       databaseBytes: num(meta.database_bytes),
       newIndexBytes: num(storeSizes.index_bytes),
-      archiveProof: archiveRows.length > 0 && archiveRows.every((row) => row.hot_child_absent === true),
+      archiveProof,
       cryptoControlRows: num(cryptoControl.retained_rows),
       buildIdentityMatches: buildIdentity.matches,
       planCapMb: num(meta.plan_cap_mb),

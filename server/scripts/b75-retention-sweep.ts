@@ -53,6 +53,11 @@ import {
   isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
 import { addAlert } from '../services/system-alerts.js';
+import {
+  assertExactArchiveEquality,
+  recordExactArchiveEvidence,
+  type ExactArchiveEvidenceInput,
+} from '../services/data-archive/exact-archive-evidence.js';
 
 const { Client } = pg;
 
@@ -536,6 +541,7 @@ async function archiveOneObject(
   });
 
   let verifyPath: string | null = null;
+  let exactEvidence: ExactArchiveEvidenceInput | null = null;
   try {
     const fileSize = fs.statSync(exportRes.localPath).size;
     if (fileSize > HARD_CAP_BYTES) {
@@ -564,15 +570,18 @@ async function archiveOneObject(
 
     if (spec.exactCursorTieBreakerColumn) {
       const downloadedLineCount = await countGzipJsonlLines(verifyPath);
-      if (exportRes.sourceRowCount === null
-          || downloadedLineCount !== exportRes.sourceRowCount
-          || exportRes.rowCount !== exportRes.sourceRowCount) {
-        throw new Error(
-          `[B75 sweep] exact readback row-count mismatch ${spec.parent}/${label}: `
-          + `source=${exportRes.sourceRowCount ?? 'unknown'} exported=${exportRes.rowCount} `
-          + `downloaded=${downloadedLineCount}`,
-        );
-      }
+      exactEvidence = {
+        manifestId,
+        sourceTable: 'xstock_bar_revision_event',
+        partitionLabel: label,
+        sourceRowCount: exportRes.sourceRowCount,
+        exportedRowCount: exportRes.rowCount,
+        downloadedRowCount: downloadedLineCount,
+        objectChecksum: exportRes.checksum,
+      };
+      // Corruption blocks even the mutable uploaded transition. The immutable
+      // proof itself lands after bounds validation and before verified/drop.
+      assertExactArchiveEquality(exactEvidence);
     }
 
     await updateManifestUploaded(
@@ -599,6 +608,8 @@ async function archiveOneObject(
         );
       }
     }
+
+    if (exactEvidence) await recordExactArchiveEvidence(ctlClient, exactEvidence);
 
     await updateManifestVerified(ctlClient, manifestId);
     return {

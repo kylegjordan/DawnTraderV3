@@ -158,6 +158,13 @@ function toDatabasePayload(row: InsertEquitySpotOhlc1m): Record<string, unknown>
   };
 }
 
+/** Canonical logical-flush payload. PostgreSQL stores and compares a SHA-256
+ * of the jsonb-normalized value, so array order and every row field are bound
+ * to the stable flush ID across ambiguous retries. */
+export function xstockProjectionPayloadJson(rows: InsertEquitySpotOhlc1m[]): string {
+  return JSON.stringify(rows.map(toDatabasePayload));
+}
+
 export function assertExactRevisionIdSet(expected: readonly string[], returned: readonly string[]): void {
   const expectedSet = new Set(expected);
   const returnedSet = new Set(returned);
@@ -280,7 +287,7 @@ export async function writeXstockProjectionAttempts(
       + `attempts=${rows.length})`,
     );
   }
-  const payloadJson = JSON.stringify(rows.map(toDatabasePayload));
+  const payloadJson = xstockProjectionPayloadJson(rows);
   const flushId = population.flushId ?? randomUUID();
 
   // This is intentionally a separate committed transaction. If projection
@@ -296,7 +303,8 @@ export async function writeXstockProjectionAttempts(
           ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text,
           ${population.acceptedInputFrames}::integer,
           ${population.bufferSuperseded}::integer,
-          ${rows.length}::integer
+          ${rows.length}::integer,
+          ${payloadJson}::jsonb
         )
       `);
     });

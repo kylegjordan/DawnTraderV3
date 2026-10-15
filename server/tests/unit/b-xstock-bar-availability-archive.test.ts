@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import {
+  recordExactArchiveEvidence,
+  XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
+} from '../../services/data-archive/exact-archive-evidence.js';
 
 const exportRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-exact-export-'));
 let exportPartition: typeof import('../../services/data-archive/partition-exporter.js').exportPartition;
@@ -107,5 +111,61 @@ describe('B75 exact xStock revision export', () => {
     expect(calls).toContain('ROLLBACK');
     expect(fs.existsSync(path.join(exportRoot, 'xstock_bar_revision_event', 'mismatch.jsonl.gz')))
       .toBe(false);
+  });
+
+  it('blocks durable verification before any write when downloaded line count is corrupt', async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (statement: string) => {
+        calls.push(statement);
+        return { rows: [] };
+      },
+    };
+    await expect(recordExactArchiveEvidence(client, {
+      manifestId: revisionId(50),
+      sourceTable: 'xstock_bar_revision_event',
+      partitionLabel: '2026-10-15',
+      sourceRowCount: 100,
+      exportedRowCount: 100,
+      downloadedRowCount: 99,
+      objectChecksum: 'checksum',
+      producingBuildSha: 'a'.repeat(40),
+    })).rejects.toThrow(/source=100 exported=100 downloaded=99/);
+    expect(calls).toEqual([]);
+  });
+
+  it('persists and re-reads the immutable exact proof before lifecycle verification', async () => {
+    const calls: string[] = [];
+    const client = {
+      query: async (statement: string) => {
+        calls.push(statement);
+        return statement.startsWith('SELECT')
+          ? { rows: [{
+              source_table: 'xstock_bar_revision_event',
+              partition_label: '2026-10-15',
+              tier: 'warm',
+              source_row_count: '100',
+              exported_row_count: '100',
+              downloaded_row_count: '100',
+              cursor_contract: XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
+              producing_build_sha: 'a'.repeat(40),
+              object_checksum: 'checksum',
+            }] }
+          : { rows: [] };
+      },
+    };
+    await recordExactArchiveEvidence(client, {
+      manifestId: revisionId(51),
+      sourceTable: 'xstock_bar_revision_event',
+      partitionLabel: '2026-10-15',
+      sourceRowCount: 100,
+      exportedRowCount: 100,
+      downloadedRowCount: 100,
+      objectChecksum: 'checksum',
+      producingBuildSha: 'a'.repeat(40),
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toContain('INSERT INTO xstock_bar_archive_exact_evidence');
+    expect(calls[1]).toContain('FROM xstock_bar_archive_exact_evidence');
   });
 });
