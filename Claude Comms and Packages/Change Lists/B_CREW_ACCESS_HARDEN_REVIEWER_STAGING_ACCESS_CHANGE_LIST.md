@@ -131,3 +131,24 @@ lowercase spelling. An uppercase `CERT-AUTHORITY` entry therefore passed the ver
 The correction normalizes every authorization option keyword before comparison and adds both
 uppercase and mixed-case CA-entry mutations. The effective authorization population is now
 refused for every tested spelling OpenSSH treats as the same option.
+
+## Approval and Helsinki installation
+
+Coltrane approved exact ref `efa0531a3c1884571546019dd1c1492151ca1690` after rerunning all
+twenty checks and mutation-proving that removing the option normalization makes the uppercase
+CA test fail. CI run `38684075114` passed Build, TypeScript Check, Test Suite and Docker Build
+individually at that exact ref.
+
+The reviewed verifier was installed on Helsinki at
+`/usr/local/sbin/reviewer-staging-access` as `root:root 0755`; its service, daily timer and
+standard failure drop-in were installed as `root:root 0644`. The installed verifier SHA-256 is
+`d72bb4f630df78cf1ae5e06f3b448c27b2a11e5cd3304f5c93342b53487543b2`, equal to the reviewed
+source. The service completed with `Result=success` and `ExecMainStatus=0`; the timer is enabled
+and active for 06:20 UTC daily. Its two emitted rows independently reported the expected
+Langston and Coltrane fingerprints, distinct restricted authorizations, deploy identity, both
+log byte reads, a read-only database read and `wrong_key_control=explicit_publickey_denial`.
+
+The full 18-pair install comparator found this new artifact `MATCH` at mode `755` and its
+deliberately mismatched positive control returned `DIFFERS`. It also reported three unrelated,
+pre-existing live differences (`coltrane-size-watch` and the two installed copies of
+`AGENT_AUTHORING_GUIDE.md`); those are not represented as part of this installation.
