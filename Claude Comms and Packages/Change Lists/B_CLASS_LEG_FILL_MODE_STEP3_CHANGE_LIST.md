@@ -94,6 +94,8 @@ Both tests assert the expiry database update, the explicit close payload, and th
 
 **Step 6 deployment:** final-head CI run `38768822064` passed all four required jobs at exact commit `097306d1a91d5bb0dfc9cc9d376ec84887861aeb`. That commit was fast-forwarded to `migration/aws-supabase` and deployed to staging by `codex-c` at `2026-10-15T16:29:18Z`. `dt-deploy` applied `2026-10-15-b-class-leg-fill-mode.sql`, asserted the exact live build and resumed engine, and recorded an 11-second contiguous check-failure window.
 
+**Step 7 verification:** backend PASS at the exact deployed ref. Live API, database, RTB decision-path, legacy-cut, and bounded log evidence is recorded in `B_CLASS_LEG_FILL_MODE_STEP7_VERIFICATION.md`; UI is explicitly not yet checked under the Codex browser restriction. The xStock availability observation remains continuous and independent, with no deployment hold.
+
 ## Review focus
 
 1. Prove the policy overlay never substitutes raw maker EV/fees for adjusted maker EV and cannot be bypassed by exploration.
