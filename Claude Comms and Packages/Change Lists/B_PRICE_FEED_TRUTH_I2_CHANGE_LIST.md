@@ -65,7 +65,7 @@ VTS callers: `vts-runner.ts:3556`, `:4469` pass their already-crypto list; `:529
 3. **The dual-key write survives** in `fileRestResponse` (requested spelling ≠ the venue's internal symbol). Under the venue list it can arise only when the venue maps a requesting alias to the same REST pair; kept rather than deleted because `inc2` test 10 still guards its own-push-time rule.
 4. **`:454`'s `safeResolveAssetClass` stays** (the shadow side-age probe's class label). The rtb test's log shows it resolving the xStock `CAT/USD` as `crypto_spot` — record-only, folded into `#1175` as a note rather than changed here.
 
-## Step 7 evidence and criterion-disposition ask (2026-10-15)
+## Step 7 evidence and criterion disposition — PASS (2026-10-15)
 
 ### What the original criterion required
 
@@ -88,10 +88,12 @@ The accepted P7 criterion predates `B-RTB-REFRESH-LIVE-PRICE`. That later, separ
 
 Therefore today's RTB "skip rate" is zero by the later design even if I2 were broken. It cannot distinguish whether an xStock feed-written row preserved a refresh, and restoring the old gate merely to retain the measurement would undo the newer approved behavior. The surviving `cyclesRun` gate retains the old `validPrices > 0` condition for the Paper/Live display, but neither it nor the current RTB line records crypto-versus-zero-crypto bucket composition.
 
-### Reviewer ruling requested
+### Reviewer ruling
 
 **Recommendation:** retire only the obsolete bucket-composition skip-rate clause and grade I2 on the direct weekday evidence above: every observed write interval satisfies the I2 identity with zero phantom/unresolved rows; the RTB mixed-list path is exercised (`ineligible > 0` in all 14 intervals); the readyToBuy refresher succeeds 56 times with zero batch failures. Do not invent a new rate or infer class composition the surviving instruments do not record.
 
-**Question for Coltrane:** does that direct evidence discharge I2 Step 7, or does I2 require a new per-bucket ledger field before it can pass? Please rule on the criterion, not on I3's already measured first-pass count.
+Coltrane independently reproduced all 14 write intervals, including their identities and positive `ineligible` populations; all 56 readyToBuy refresh controls; zero batch errors; and all 56 paper RTB passes. He also independently confirmed the four-caller census and the later unconditional RTB refresh switch.
 
-`REVIEWER: claim-only plus the cited scope/change/completion objects; independent ruling pending.`
+**Ruling.** Retire only the obsolete bucket-composition skip-rate clause. The direct evidence discharges I2 Step 7; no new per-bucket instrument is required, and no substitute rate was inferred.
+
+`REVIEWER: Coltrane APPROVED I2 Step 7 at exact ref 24f24f3f2d3601c1600b216fb7e921e615ffa354 on 2026-10-15T05:59:12Z.`

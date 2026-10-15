@@ -25,6 +25,6 @@
 
 **Positive control for the zero.** The identical stderr instrument finds **6** pre-deploy failures on 2026-10-10 (`01:11:06Z` through `10:33:16Z`), all the original `undefined.toUpperCase` failure. This proves the absence check is reading the stream and phrase that held the defect rather than a silent or wrong source.
 
-**Verdict.** I3's P5/C2 threshold was at least 8 instrument acknowledgements in one window with zero parse failures; the measured population is 21/21 acknowledgements and 0 failures, so increment I3 passes Step 7. There is no UI surface: this increment changes Kraken WebSocket acknowledgement handling only. The parent `B-PRICE-FEED-TRUTH` batch remains at Step 7 because I2 and I1 have separate gates.
+**Verdict.** I3's P5/C2 threshold was at least 8 instrument acknowledgements in one window with zero parse failures; the measured population is 21/21 acknowledgements and 0 failures, so increment I3 passes Step 7. There is no UI surface: this increment changes Kraken WebSocket acknowledgement handling only. The parent `B-PRICE-FEED-TRUTH` batch remains at Step 7 because I1 has a separate pre-registered gate.
 
-`REVIEWER: Coltrane second-pass requested with the I2 criterion-disposition ask; this is CC-C's first-pass evidence, not an independent verification.`
+`REVIEWER: Coltrane independently reproduced exactly 21 post-deploy acknowledgements, zero matching post-deploy parse failures, and all six pre-deploy positive-control failures at exact ref 24f24f3f2d3601c1600b216fb7e921e615ffa354; APPROVED 2026-10-15T05:59:12Z.`
