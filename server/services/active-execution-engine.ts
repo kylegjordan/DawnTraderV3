@@ -5662,7 +5662,7 @@ export class ActiveExecutionEngine {
     try { _entryFloor = getPerClassTargetGate(_openClass, signal.strategy).minRR; }
     catch (floorErr) { _entryFloorNote = ` floor_unresolved=${JSON.stringify(floorErr instanceof Error ? floorErr.message : String(floorErr))}`; }
     // B-ENTRY-CONSUMPTION-FRESHNESS: this is the final synchronous decision before the
-    // sole immediate order side effect. It advances the SAME gate snapshot with a
+    // active engine's sole immediate order-placement/consumption boundary. It advances the SAME gate snapshot with a
     // process-monotonic elapsed duration and reuses the exact threshold resolved by
     // `_evaluateOpenDepthGate`; there is no config reread and no awaited work between
     // this decision and `openOrder`.
@@ -5679,15 +5679,18 @@ export class ActiveExecutionEngine {
       return { opened: false, stage: 'CONSUMPTION_FRESHNESS', reason: _consumption.reason };
     }
     _entryBookConsumptionAgeMs = _consumption.ageMs;
+    // Invoke the port before PASS logging: a future live placer may submit synchronously
+    // before its Promise settles, so no potentially blocking log may sit after the guard.
+    const _openFillPromise = this.orderPlacer.openOrder({
+      symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
+      mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
+    });
     console.log(
       `[B-ENTRY-CONSUMPTION-FRESHNESS][CONSUMPTION_PASS] symbol=${signal.symbol} class=${_openClass} ` +
       `arm=${_consumptionArm} gateAgeMs=${_gate.snapshot.ageMs} elapsedMs=${_consumption.elapsedMs} ` +
       `ageMs=${_consumption.ageMs} limitMs=${_gate.warmthMaxAgeMs}`,
     );
-    const _openFill = await this.orderPlacer.openOrder({
-      symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
-      mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
-    });
+    const _openFill = await _openFillPromise;
     if (_openFill.status === 'rejected') {
       console.error(`[PaperExecution:${this.mode}][OPEN_FILL_REJECTED] ${signal.symbol} reason=${_openFill.reason} — skipping trade`);
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_REJECTED', `fill rejected: ${_openFill.reason ?? 'no fillable book'}`);

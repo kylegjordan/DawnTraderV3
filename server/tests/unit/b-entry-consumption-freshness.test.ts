@@ -166,16 +166,21 @@ describe('the production seam and durable contract', () => {
   const manifest = readFileSync(new URL('../../../drizzle/migrations/MANIFEST.txt', import.meta.url), 'utf8');
   const exportSql = readFileSync(new URL('../../../scripts/codex-export/export-data.sql', import.meta.url), 'utf8');
 
-  it('one final guard dominates the sole openOrder call with no await or config reread between them', () => {
-    expect(engine.match(/this\.orderPlacer\.openOrder\(/g)).toHaveLength(1); // positive control: sole production side effect exists
+  it('one final guard dominates the active engine openOrder call with no await, config reread, or PASS log before it', () => {
+    expect(engine.match(/this\.orderPlacer\.openOrder\(/g)).toHaveLength(1); // positive control: sole active-engine boundary exists
     const guard = engine.indexOf('const _consumption = assessConsumptionFreshness(_gate.snapshot, _gate.warmthMaxAgeMs);');
     const block = engine.indexOf("return { opened: false, stage: 'CONSUMPTION_FRESHNESS'", guard);
-    const order = engine.indexOf('const _openFill = await this.orderPlacer.openOrder({', guard);
+    const order = engine.indexOf('const _openFillPromise = this.orderPlacer.openOrder({', guard);
+    const passLog = engine.indexOf('[CONSUMPTION_PASS]', guard);
+    const awaitFill = engine.indexOf('const _openFill = await _openFillPromise;', guard);
     expect(guard).toBeGreaterThan(-1);
     expect(block).toBeGreaterThan(guard);
     expect(order).toBeGreaterThan(block);
+    expect(passLog).toBeGreaterThan(order);
+    expect(awaitFill).toBeGreaterThan(passLog);
     expect(engine.slice(guard, order)).not.toMatch(/\bawait\b/);
     expect(engine.slice(guard, order)).not.toContain('resolveFillDepthGateConfig');
+    expect(engine.slice(guard, order)).not.toContain('[CONSUMPTION_PASS]');
     expect(engine).toContain("return { pass: true, reason: 'ok', snapshot, warmthMaxAgeMs: config.warmthMaxAgeMs };");
   });
 

@@ -354,6 +354,13 @@ describe('B-ENTRY-CONSUMPTION-FRESHNESS — ActiveExecutionEngine production sea
     expect(result).toEqual({ opened: true, tradeId: 'trade-1' });
     expect(h.openOrder).toHaveBeenCalledTimes(1);
     expect(h.openOrder.mock.calls[0][0].bookAsks).toBe(capturedAsks);
+    const passLogIndex = vi.mocked(console.log).mock.calls.findIndex(
+      ([line]) => String(line).includes('[B-ENTRY-CONSUMPTION-FRESHNESS][CONSUMPTION_PASS]'),
+    );
+    expect(passLogIndex).toBeGreaterThan(-1);
+    expect(h.openOrder.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(console.log).mock.invocationCallOrder[passLogIndex],
+    );
     expect(h.createClosedTrade).toHaveBeenCalledTimes(1);
     const tradePayload = h.createClosedTrade.mock.calls[0][1];
     expect(tradePayload.entryBookAgeMs).toBe(4_000);
