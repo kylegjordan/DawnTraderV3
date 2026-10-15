@@ -6,6 +6,134 @@
 
 **Status:** Step 3 capture-phase implementation complete; ready for Step 4 review.
 
+## Step-4 dispatch header
+
+**DECLARED CHANGE-CLASS:** `architecture`
+
+**STEP-2 REFERENCE:** `Claude Comms and Packages/Scope Files/B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md` at approved ref `8623c6ce1`.
+
+### Architecture document set at this gate
+
+| document | gate state |
+|---|---|
+| batch `SCOPE` | **present** — `Claude Comms and Packages/Scope Files/B_XSTOCK_BAR_AVAILABILITY_SCOPE.md` |
+| batch `PRE_AUDIT` | **present** — `Claude Comms and Packages/Scope Files/B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md` |
+| `COMPLETION_REPORT` | **absent** — Step 11 is not reached; the batch must remain open through the capture observation and enforcement phases. |
+| `BATCH_CATALOG.md` | **absent** — content update is owed at Step 10. |
+| `PHASE_HISTORY.md` | **absent** — content update is owed at Step 10. |
+| `SYSTEM_MANUAL.md` | **absent** — required architecture content update is owed at Step 10. |
+| `SYSTEM_IMPACT_MAP.md` | **absent** — required architecture content update is owed at Step 10. |
+| `CHANGES_AND_FIXES.md` | **absent** — the availability/no-look-ahead risk entry is owed at Step 10. |
+| `RUNNING_ISSUES.md` | **absent** — issue `#707` remains open and is owed its Step-10 update. |
+| `POST_AUDIT_ROADMAP.md` | **judged N/A** — this diff changes the active pre-sprint batch, not the phase-level roadmap. |
+| `DELETED_COMPONENTS_LOG.md` | **judged N/A** — this diff deletes no component. |
+| `ADJUSTMENT_FRAMEWORK.md` | **judged N/A** — this diff changes no trading parameter or adjustment rule. |
+| `PHASE_19_PLAN.md` | **judged N/A** — this batch has no in-flight row there. |
+| active `SPRINT_TO_LIVE_PLAN.md` row | **present, open** — the Stage-3 row exists; its close/report update is owed at Step 10. |
+| shared `MEMORY.md` | **absent** — final shared-state update is owed at Step 10. |
+| own `MEMORY_CC_C.md` | **present** — advanced to Step 4 at this ref. |
+| Langston `MEMORY.md` | **absent** — Coltrane-shift handback update is owed at Step 10. |
+| four session task lists | **absent** — ANALYST list update and the three `N/A — not mine` ledger entries are owed at Step 10. |
+
+## Exact review object
+
+- **Graded ref:** `744a5a4c8` on `migration/b-xstock-bar-availability-step4-codex-c` and `migration/aws-supabase` (code; this change list is committed immediately after it).
+- **Batch commits:** `65d66a6aa`, `9e7a2c068`, `d0ded2877`, `a0d3a9c34`, `661b8e818`, `7235d3052`, Step-3 boundary record `37ef9f382`, and capture-only deployment correction `744a5a4c8`.
+- **Review boundary:** P14 phase 1 only. The scanner and RTB consumer switch is deliberately absent until the full capacity/quality population passes. The exact aggregate/cache/manifest APIs are present but dormant; manual and lifecycle prewarm remain on the legacy path during capture so the old consumers receive the same producer contract.
+
+**REVIEWER:** claim-only · asked what objects settle the capture-only/no-live-consumer-switch claim and what other worlds fit them · **HIT:** shared snapshot prewarm could affect legacy reads, the projection trigger would reject old-process writes during migration, and caller absence alone was not an activation lock · **re-derived yes** — the live prewarm caller and deployment order confirmed both effects; this ref keeps exact prewarm as a separately named dormant API, leaves lifecycle/manual prewarm legacy, and activates the projection guard durably only when the new writer first runs.
+
+## Load-bearing diff excerpts
+
+### NEW — xStock-only writer boundary; first transaction commits before certification
+
+```ts
+const attempts = await db.transaction(async (tx) => {
+  const result = await tx.execute(sql`
+    SELECT * FROM apply_xstock_bar_revision_events(
+      ${payloadJson}::jsonb,
+      ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
+      ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
+    )
+  `);
+  return resultRows<DbProjectionAttemptRow>(result).map((row) => ({
+    revisionId: row.revision_id,
+    arrivedAt: new Date(row.arrived_at),
+    projectionApplied: row.projection_applied,
+    projectionGeneration: row.projection_generation == null ? null : Number(row.projection_generation),
+    supersedesRevisionId: row.supersedes_revision_id,
+    observedWinnerRevisionId: row.observed_winner_revision_id,
+    payloadHash: row.payload_hash,
+    payloadRepeatedFromWinner: row.payload_repeated_from_winner,
+  }));
+});
+
+const revisionIds = attempts.map((attempt) => attempt.revisionId);
+const certificates = await certifyRevisionIds(revisionIds);
+```
+
+### NEW — row-locked projection generation updates the winning projection
+
+```sql
+SELECT o.winning_revision_id, o.projection_generation, o.arrived_at, o.winning_payload_hash
+  INTO prior_revision_id, prior_generation, prior_arrived_at, prior_payload_hash
+  FROM xstock_spot_ohlc_1m o
+  WHERE o.symbol = item->>'symbol' AND o.interval_begin = in_interval_begin
+  FOR UPDATE;
+
+did_apply := prior_arrived_at IS NULL OR prior_arrived_at <= in_arrived_at;
+next_generation := CASE WHEN did_apply THEN COALESCE(prior_generation, 0) + 1 ELSE NULL END;
+IF did_apply THEN
+  UPDATE xstock_spot_ohlc_1m SET
+    open = (item->>'open')::numeric,
+    arrived_at = in_arrived_at,
+    winning_revision_id = new_revision_id,
+    winning_payload_hash = hash_text,
+    projection_generation = next_generation
+  WHERE symbol = item->>'symbol' AND interval_begin = in_interval_begin;
+END IF;
+```
+
+### NEW — certification refuses the wrong server, clock regression, and partial ID sets
+
+```sql
+IF pg_is_in_recovery() THEN
+  RAISE EXCEPTION 'xstock visibility certification refused on a recovery/replica server';
+END IF;
+IF observed_at < prior_clock THEN
+  RAISE EXCEPTION 'xstock bar database clock regression: observed %, prior %', observed_at, prior_clock;
+END IF;
+IF matched_count <> expected_count THEN
+  RAISE EXCEPTION 'xstock visibility certificate exact-ID mismatch: expected %, matched %',
+    expected_count, matched_count;
+END IF;
+```
+
+### NEW — decision-window evidence preserves the forming revision and settled manifest separately
+
+```ts
+evidence: {
+  symbol: forming.symbol,
+  intervalMinutes: forming.intervalMinutes,
+  formingAggregateRevisionId: forming.aggregateRevisionId,
+  settledWindowManifestId: manifest.manifestId,
+  settledWindowHash: manifest.windowHash,
+  sourceMaxVisibleBy,
+  sourceMaxVisibleSeq,
+  readObservedAt: manifest.readObservedAt,
+  readObservedSeq: manifest.readObservedSeq,
+  certificatePrimaryIdentity: forming.certificatePrimaryIdentity,
+  eligibilityState: 'eligible_certified',
+}
+```
+
+## Judgement calls for Coltrane to attack
+
+1. Does the exact arrival/application ordering remain correct under cross-process overlap, equal-arrival inversion, identical-content later arrival, and delayed certification?
+2. Does the later primary observation prove only the bounded claim the documents make, while every NULL, clock, primary, set, and snapshot mismatch remains fail-closed?
+3. Is this genuinely additive capture: can any scanner, RTB, replay, calibration, or dashboard path accidentally consume the new evidence as certified decision input before the capacity/quality gate?
+4. Do the aggregate, snapshot, cache, manifest, and prewarm paths preserve one whole revision object—including microsecond database timestamps—without resurrecting an older eligible collision or permitting 240m fallback?
+
 ## Increment 1 — immutable raw revision capture and certification
 
 - Added a daily-partitioned, append-only `xstock_bar_revision_event` ledger and kept the existing `xstock_spot_ohlc_1m` table as the compact operational projection.
@@ -13,7 +141,7 @@
 - Added distinct immutable event identity for identical payloads, with payload-repetition telemetry and predecessor/winner linkage.
 - Added a later-transaction primary certificate with exact expected/returned-ID equality, monotonic `visible_seq`, a database-clock non-regression guard, and NULL/fail-closed repair semantics.
 - Added a bounded repair pass to the existing writer cadence and shutdown drain; a certificate failure never replays the original arrival transaction.
-- Added a compact-projection trigger that rejects rolling-deploy/legacy writes which mutate xStock OHLC values or the arrival watermark without rotating the immutable winner ID.
+- Added a compact-projection trigger with a durable writer-activation boundary: migration-time legacy writes remain valid until the new writer first runs, then rollback/legacy writes that mutate xStock OHLC values or the arrival watermark without rotating the immutable winner ID fail closed.
 - Added daily partition registry/bootstrap coverage, typed compact-projection columns, writer telemetry for accepted frames, same-buffer supersession, attempts, repeated payloads, winners, rejected arrivals, certificates, and pending repair.
 - Added focused unit tests for payload identity, exact-ID set equality, post-commit call order, and certificate failure; added a PostgreSQL integration mutation for `X@A1 -> identical X@A3 -> changed Y@A2` and exact replayable winner-chain evidence.
 
@@ -39,7 +167,7 @@
 - Added content-addressed settled-window manifests and database checks that the complete ordered aggregate set exists, belongs to one symbol/interval and stable primary identity, is time-ordered, and matches the declared bounds and canonical payload before reuse.
 - Added snapshot columns and database guards that allow legacy all-NULL rows or fully linked exact rows, reject value/evidence drift under one aggregate ID, and reject inserts whose values or source evidence do not match the immutable aggregate.
 - Added a separate availability-aware cache API for 15-minute and 60-minute bars. Snapshot reads cross-check persisted aggregate values/evidence; a newer ineligible live collision replaces the whole older object; TTL hits retain the original read evidence; 240-minute reads now fail before the database.
-- Migrated restart/manual prewarm to the same exact aggregate and awaited snapshot-write path. Dry-run uses the same winner/certificate query inside a read-only transaction and creates no identities or snapshot rows.
+- Added the exact aggregate/prewarm API and its awaited snapshot-write path, but kept it separately named and dormant during additive capture. Manual and lifecycle prewarm remain on the legacy implementation until the approved dual-read/cutover phase; the exact dry-run uses the same winner/certificate query inside a read-only transaction and creates no identities or snapshot rows.
 - Registered aggregate partitions in the shared daily partition lifecycle and added a rollback that removes only this aggregate/snapshot layer while preserving the raw revision ledger.
 
 ### Increment-2 verification before push
@@ -65,5 +193,11 @@
 
 - CI run `38599247157` passed TypeScript Check, Test Suite, Build, and Docker Build individually at `7235d3052`.
 - Fresh Step-3 closeout verification at the current shared head ran the seven focused availability/capture/cache/prewarm/writer suites: 7 files passed, 49 tests passed, and the one migration-backed local integration leg skipped as designed. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.
-- This is the approved P14 **additive-capture boundary**. It is intentionally deployable before live-consumer enforcement: revision capture, certification, exact 15m/60m aggregate identity, snapshots/cache/prewarm, manifests, and the decision-window evidence handoff are implemented; the scanner and RTB remain on the old reader during the required capacity/quality observation phase.
+- This is the approved P14 **additive-capture boundary**. It is intentionally deployable before live-consumer enforcement: revision capture and certification are active; exact 15m/60m aggregate identity, availability snapshots/cache/prewarm, manifests, and the decision-window evidence handoff are implemented but dormant. The scanner, RTB, and lifecycle/manual prewarm remain on the old path during the required capacity/quality observation phase.
 - P8-P14 enforcement work is not waived. After this capture-only deployment, the workflow must measure the full eight-day/five-session population and capacity terms, then return through Step 9 for dual-read, the atomic scanner/RTB switch, durable refresh-attempt/promotion provenance, replay/calibration/dashboard migration, dormant-reader fences, fault rehearsals, and final live verification. No label-only path may be represented as exact in the meantime.
+
+### Step-4 capture-only deployment correction
+
+- The exact prewarm is now a separately named dormant API. The manual command and lifecycle controller continue to call the legacy prewarm throughout P14 phases 1-2, so the supposedly additive deployment cannot change the snapshot values consumed by the legacy scanner/RTB path.
+- The projection guard now has a one-way durable activation state. It permits the still-running old process to finish legacy writes while the migration is installed, activates inside the first new-writer transaction, and thereafter rejects inserts or mutations without immutable winner rotation—including a rollback to the old writer.
+- Focused verification at code ref `744a5a4c8`: 9 test files passed; 68 tests passed; 2 migration-backed local legs skipped because the isolated PostgreSQL test database is not available locally. The TypeScript baseline remained 337 current errors / 337 baseline errors. The pushed CI database must execute the migration-overlap/activation integration leg before review approval.
