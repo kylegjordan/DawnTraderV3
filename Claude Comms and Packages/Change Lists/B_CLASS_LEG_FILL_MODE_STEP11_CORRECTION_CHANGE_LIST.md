@@ -35,4 +35,6 @@ The complete `_vtsMtDecision` consumer census found no other correction. Taker-o
 
 ## Review and release gates
 
-This correction must receive Coltrane review at its exact pushed ref, pass all four CI jobs, deploy as an exact SHA, and repeat bounded staging verification before the Step-11 completion report may close. It creates no observation window and no deployment hold.
+Coltrane independently **APPROVED** exact ref `30af855f2e4bdb4cc33ca22b69bf14321df6543e` with no corrections. He reproduced both policy-function probes, censused all remaining `_vtsMtDecision` property reads, and mutation-checked the production wiring fence. CI `38775865750` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
+
+The same exact ref deployed to staging at `2026-10-15T17:25:17Z`; the bounded post-deploy evidence is recorded in `B_CLASS_LEG_FILL_MODE_STEP11_CORRECTION_DEPLOY_VERIFICATION.md`. This correction creates no observation window and no deployment hold.
