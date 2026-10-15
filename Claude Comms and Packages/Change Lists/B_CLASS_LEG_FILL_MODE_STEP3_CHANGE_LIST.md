@@ -90,6 +90,8 @@ Both tests assert the expiry database update, the explicit close payload, and th
 
 **Step 4 verdict:** Coltrane APPROVED the implementation with no blockers at exact ref `695a5841afb0b12919c2d87313432bec9730618d`; CI `38767436946` passed TypeScript Check, Test Suite, Build, and Docker Build individually.
 
+**Step 5 release gate:** branch head `18b240ce32358861c451b0c78fd4819c5dc6745c`; CI run `38768307088` completed successfully, with TypeScript Check, Test Suite, Build, and Docker Build each individually green. No observation hold or deployment freeze applies to this batch.
+
 ## Review focus
 
 1. Prove the policy overlay never substitutes raw maker EV/fees for adjusted maker EV and cannot be bypassed by exploration.
