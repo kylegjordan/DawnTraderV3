@@ -39,6 +39,7 @@ from datetime import datetime, timezone
 
 INBOX = "/var/log/cc-discord-inbox.jsonl"
 RUNLOG = "/var/log/coltrane-invokes.jsonl"
+CREW_STATE = "/var/lib/crew-switch/state.json"
 USER = "coltrane"
 HOME = "/home/coltrane"
 NL = chr(10)
@@ -68,6 +69,26 @@ def log(row):
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
     except Exception:
         pass
+
+
+def reviewer_role_instruction(state_path=CREW_STATE):
+    """Use the live switch record; any failed read preserves the advisor-only default."""
+    try:
+        with open(state_path, encoding="utf-8") as fh:
+            mode = str(json.load(fh).get("mode") or "").strip().lower()
+    except Exception:
+        mode = ""
+    if mode == "codex":
+        return (
+            "Crew mode is CODEX. Kyle authorized you to replace Langston as the routine "
+            "reviewer for this shift. Perform requested scope, pre-audit, graded-ref code, "
+            "completion and staging-verification reviews for on-duty Codex sessions. Apply "
+            "the same evidence bar and independence Langston would."
+        )
+    return (
+        "Crew mode is not proven CODEX. You are NOT part of the routine batch and review "
+        "loop; that is Langston's. You are here because someone asked for you."
+    )
 
 
 def should_engage(row):
@@ -129,9 +150,7 @@ def invoke(message, why):
     prompt = (
         "You have been addressed in the DawnTrader crew channel on Discord." + NL
         + "Reason you were woken: " + why + "." + NL + NL
-        + "⛔ Follow your AGENTS.md. In particular: you are NOT part of the routine batch "
-        + "and review loop — that is Langston's, every time. You are here because someone "
-        + "asked for you specifically." + NL + NL
+        + "⛔ Follow your AGENTS.md. " + reviewer_role_instruction() + NL + NL
         + "⛔ Reply with the MESSAGE TEXT ONLY — no preamble, no 'here is my reply'. It is "
         + "posted verbatim to the channel as `Codex`." + NL
         + "⛔ LEAD your reply with the NAME of whoever you are answering, so their session "

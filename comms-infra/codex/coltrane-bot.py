@@ -36,6 +36,7 @@ TOKEN_FILE = "/etc/coltrane/discord-coltrane-bot.env"
 COMMS_FILE = "/etc/dawntrader/discord-comms.env"
 RUNLOG = "/var/log/coltrane-invokes.jsonl"
 INBOX = "/var/log/cc-discord-inbox.jsonl"
+CREW_STATE = "/var/lib/crew-switch/state.json"
 USER, HOME = "coltrane", "/home/coltrane"
 # ⛔ cwd is a SCRATCH directory, and that is the fence rather than a tidiness choice.
 #    Codex's workspace-write sandbox makes the working directory writable. With cwd
@@ -175,13 +176,36 @@ def log(row):
         pass
 
 
+def reviewer_role_instruction(state_path=CREW_STATE):
+    """Return the role boundary for this invocation from the live crew-switch record.
+
+    Fail closed to the normal advisor-only role: a missing, unreadable, malformed or unknown
+    state must never silently widen Coltrane's standing authority.
+    """
+    try:
+        with open(state_path, encoding="utf-8") as fh:
+            mode = str(json.load(fh).get("mode") or "").strip().lower()
+    except Exception:
+        mode = ""
+    if mode == "codex":
+        return (
+            "Crew mode is CODEX. Kyle authorized you to replace Langston as the routine "
+            "reviewer for this shift. Perform requested scope, pre-audit, graded-ref code, "
+            "completion and staging-verification reviews for on-duty Codex sessions. Apply "
+            "the same evidence bar and independence Langston would."
+        )
+    return (
+        "Crew mode is not proven CODEX. You are NOT part of the routine batch and review "
+        "loop; that is Langston's. You are here because someone asked for you."
+    )
+
+
 def invoke(message_text, why, history):
     """Run codex as the coltrane user. ⛔ Prompt on STDIN, never argv."""
     prompt = (
         "You have been addressed on Discord." + NL
         + "Reason you were woken: " + why + "." + NL + NL
-        + "⛔ Follow your AGENTS.md. You are NOT part of the routine batch and review "
-        + "loop — that is Langston's. You are here because someone asked for you." + NL
+        + "⛔ Follow your AGENTS.md. " + reviewer_role_instruction() + NL
         + "⛔ Reply with the MESSAGE TEXT ONLY. It is posted verbatim." + NL
         + "⛔ LEAD your reply with the NAME of whoever you are answering so their session "
         + "wakes. Answering Langston? His name must be the FIRST WORD." + NL
