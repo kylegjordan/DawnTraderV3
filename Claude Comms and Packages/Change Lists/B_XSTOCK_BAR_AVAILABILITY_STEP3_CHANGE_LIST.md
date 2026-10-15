@@ -212,4 +212,56 @@ Coltrane's exact-ref review at `744a5a4c8` returned five load-bearing blockers. 
 4. **Every exact snapshot source is revalidated against current winners.** Snapshot eligibility now requires every immutable source revision named by the stored aggregate to remain the current compact winner for that symbol. An older-than-overlay mutation returns the stale snapshot as the positive control but strips its exact identity and marks it legacy/unknown instead of resurrecting it.
 5. **Manifest persistence preserves and validates caller order.** The persistence path no longer sorts its input; it requires strictly increasing timestamps in the supplied array and rejects a reversed window before any manifest write.
 
+#### MODIFIED — activation boundary (before / after)
+
+```sql
+-- BEFORE: observed activation without joining its serialization boundary
+SELECT g.contract_active INTO contract_active
+  FROM xstock_bar_clock_guard g WHERE g.singleton = true;
+
+-- AFTER: every admitted legacy write holds a conflicting lock until commit
+SELECT g.contract_active INTO contract_active
+  FROM xstock_bar_clock_guard g WHERE g.singleton = true FOR SHARE;
+```
+
+#### MODIFIED — clock observation and sequence domain (before / after)
+
+```sql
+-- BEFORE: sampled while waiting; reads used an unrelated counter
+observed_at := clock_timestamp();
+SELECT last_observed_at INTO prior_clock
+  FROM xstock_bar_clock_guard WHERE singleton = true FOR UPDATE;
+observed_seq := nextval('xstock_bar_read_observed_seq');
+
+-- AFTER: sample follows the lock; reads and certificates share causal order
+SELECT last_observed_at INTO prior_clock
+  FROM xstock_bar_clock_guard WHERE singleton = true FOR UPDATE;
+observed_at := clock_timestamp();
+observed_seq := nextval('xstock_bar_visible_seq');
+```
+
+#### MODIFIED — snapshot winner validation (before / after)
+
+```ts
+// BEFORE: persisted evidence was checked only against its aggregate row
+&& row.persisted_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT;
+
+// AFTER: every named source revision must still be a current compact winner
+&& row.persisted_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT
+&& Number(row.current_source_revision_count) === row.source_revision_ids.length;
+```
+
+#### MODIFIED — manifest order (before / after)
+
+```ts
+// BEFORE: caller order was silently normalized
+const ordered = [...bars].sort((a, b) => a.timestamp - b.timestamp);
+
+// AFTER: caller order is retained and reversal/duplication is refused
+const ordered = [...bars];
+if (index > 0 && bar.timestamp <= ordered[index - 1].timestamp) {
+  throw new Error('[B-XSTOCK-BAR-AVAILABILITY] manifest window is not strictly ordered');
+}
+```
+
 Local closeout at code ref `12c0b7134`: 5 focused files passed; 24 tests passed and 4 migration-backed two-connection/database legs skipped because the isolated PostgreSQL test database is unavailable locally. The TypeScript check reported 337 current errors over the whole project against the 337-error baseline, with no regression. Exact-ref four-job CI is pending the review-branch push and must be green before re-dispatch.
