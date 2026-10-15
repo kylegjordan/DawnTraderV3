@@ -96,6 +96,8 @@ Both tests assert the expiry database update, the explicit close payload, and th
 
 **Step 7 verification:** backend PASS at the exact deployed ref. Live API, database, RTB decision-path, legacy-cut, and bounded log evidence is recorded in `B_CLASS_LEG_FILL_MODE_STEP7_VERIFICATION.md`; UI is explicitly not yet checked under the Codex browser restriction. The xStock availability observation remains continuous and independent, with no deployment hold.
 
+**Steps 8-9:** Coltrane independently APPROVED the staging outcome at evidence ref `09ca3633e72d4a9097c7e51e08b6cc578b5fe6e9` with no corrections. His re-runs, UI-N/A census, clean xStock handoff, and explicit admission of deployed ref `097306d1a` to the separate xStock final-gate reviewed-ref set are recorded in `B_CLASS_LEG_FILL_MODE_STEP8_VERIFICATION.md`. Step 9 therefore has zero iterations.
+
 ## Review focus
 
 1. Prove the policy overlay never substitutes raw maker EV/fees for adjusted maker EV and cannot be bypassed by exploration.
