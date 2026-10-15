@@ -1,4 +1,4 @@
-# B-ENTRY-CONSUMPTION-FRESHNESS — Step 1 change list r1
+# B-ENTRY-CONSUMPTION-FRESHNESS — Step 1 change list r2
 
 **Review target:** scope and plan placement only; no runtime code or schema changed.
 
@@ -22,7 +22,9 @@
   - names `B-ENTRY-CONSUMPTION-FRESHNESS` as the leading batch/reference for row 40's P1b entry half;
   - makes the P1b summary explicit without changing its sequence.
 - `Claude Comms and Packages/Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md`
-  - names the P1b sub-batch at the already-approved consumption-freshness item.
+  - names the P1b sub-batch at the already-approved consumption-freshness item;
+  - refreshes the four entry-path line citations at the reviewed ref: depth gate 5490,
+    xStock liveness 5508, venue validation 5617, and immediate fill 5659.
 - `Claude Comms and Packages/SCRATCH_CHECKLIST_2026-07-27_Kyle-CCC.md`
   - records the current unblocked pre-sprint work and the nonblocking state of the two event-window batches.
 
