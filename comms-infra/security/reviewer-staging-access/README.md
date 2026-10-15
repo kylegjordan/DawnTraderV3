@@ -28,10 +28,13 @@ reviewer-staging-access verify --actor all
 ```
 
 The live command checks both local key owners and modes, derives each private key's public
-fingerprint without printing its body, connects with only that key, and has staging verify the
-source restriction, authorization label, deploy identity, both log reads and a one-row database
-read. It sends its own reviewed source over standard input for the remote half, so no separately
-installed staging copy can drift.
+fingerprint without printing its body, and connects with only that key. On staging it derives
+the effective per-connection SSH configuration, rejects command/CA authorization sources,
+searches every configured authorization file for exactly one restricted match, and verifies
+the authorization label, deploy identity, both log reads and a one-row database read. Its
+fresh wrong key must produce an explicit public-key denial trace, not merely a nonzero exit.
+The verifier sends its own reviewed source over standard input for the remote half, so no
+separately installed staging copy can drift.
 
 Install `comms-infra/systemd/reviewer-staging-access.{service,timer}` on Helsinki with the
 standard scheduled-job `onfailure.conf` drop-in. The daily timer turns a later key, host,

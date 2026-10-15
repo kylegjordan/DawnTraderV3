@@ -102,12 +102,13 @@ Keeps `DawnTraderV3-agent-work:migration/aws-supabase` **equal** to
 ## `reviewer-staging-access` — both Step-8 evidence paths
 
 Runs the canonical verifier daily at 06:20 UTC and pages through the scheduled-job failure
-path if either reviewer key, source restriction, staging host identity, log read, database
-read or wrong-key control fails. The remote half is the same installed Helsinki source sent
+path if either reviewer key, effective authorization population, source restriction, staging
+host identity, log read, database read or explicit wrong-key denial fails. The remote half is
+the same installed Helsinki source sent
 over standard input, so no staging verifier copy can drift. Installation is complete only
 after the installed file hash matches the reviewed repository blob, the service is run by
 hand once, the timer is active/enabled, and both JSON rows name separate fingerprints and a
-refused wrong-key control.
+explicitly denied wrong-key control.
 
 ## ⚠️ Honest limits
 

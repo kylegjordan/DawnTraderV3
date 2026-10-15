@@ -148,8 +148,9 @@ identity is why two keys exist.
   and `/home/coltrane/.ssh/known_hosts`.
 
 The canonical live check is `reviewer-staging-access verify --actor all`, run by Infra as root
-on Helsinki. It proves the key fingerprints, source restrictions, remote identity, both log
-reads and a database read without printing the database address or any key body.
+on Helsinki. It proves the key fingerprints, the complete effective authorization population,
+source restrictions, remote identity, both log reads and a database read without printing the
+database address or any key body.
 
 ⛔ **"READ-ONLY REVIEW" DESCRIBES THE ALLOWED USE, NOT THE UNIX ACCOUNT.** Both paths land as
 the full `deploy` user. Use them to inspect evidence only; do not edit files, restart services,

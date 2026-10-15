@@ -87,20 +87,32 @@ def validate_authorization(
     actor: str,
     fingerprint: Callable[[str], str] = fingerprint_public_key,
 ) -> dict[str, str]:
+    return validate_authorization_population(
+        [("<inline>", text)], actor, fingerprint
+    )
+
+
+def validate_authorization_population(
+    sources: list[tuple[str, str]],
+    actor: str,
+    fingerprint: Callable[[str], str] = fingerprint_public_key,
+) -> dict[str, str]:
     expected = ACTORS[actor]
-    matches: list[tuple[str, str]] = []
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        options, key_material, comment = public_key_fields(line)
-        if fingerprint(key_material) == expected["fingerprint"]:
-            matches.append((options, comment))
+    matches: list[tuple[str, str, str]] = []
+    for source, text in sources:
+        for raw in text.splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            options, key_material, comment = public_key_fields(line)
+            if fingerprint(key_material) == expected["fingerprint"]:
+                matches.append((source, options, comment))
     if len(matches) != 1:
         raise VerificationError(
-            "%s fingerprint must occur exactly once; found %d" % (actor, len(matches))
+            "%s fingerprint must occur exactly once across effective authorization "
+            "files; found %d" % (actor, len(matches))
         )
-    options, comment = matches[0]
+    source, options, comment = matches[0]
     required_option = 'from="%s"' % HELSINKI_SOURCE
     if options != required_option:
         raise VerificationError(
@@ -112,7 +124,104 @@ def validate_authorization(
             "%s authorization comment is %r, expected %r"
             % (actor, comment or "<none>", expected["comment"])
         )
-    return {"options": options, "comment": comment}
+    return {"source": source, "options": options, "comment": comment}
+
+
+def parse_effective_authorization_sources(text: str) -> list[str]:
+    values: dict[str, list[str]] = {}
+    for raw in text.splitlines():
+        fields = raw.strip().split(None, 1)
+        if len(fields) == 2:
+            values.setdefault(fields[0], []).append(fields[1])
+
+    def one(name: str) -> str:
+        found = values.get(name, [])
+        if len(found) != 1:
+            raise VerificationError(
+                "effective sshd output must contain one %s value; found %d"
+                % (name, len(found))
+            )
+        return found[0]
+
+    for directive in (
+        "authorizedkeyscommand",
+        "trustedusercakeys",
+        "authorizedprincipalsfile",
+        "authorizedprincipalscommand",
+    ):
+        if one(directive) != "none":
+            raise VerificationError(
+                "effective sshd %s must be none so every public-key source is enumerable"
+                % directive
+            )
+    files = one("authorizedkeysfile").split()
+    if not files or files == ["none"] or "none" in files:
+        raise VerificationError("effective sshd authorizedkeysfile has no enumerable files")
+    return files
+
+
+def resolve_authorized_key_paths(tokens: list[str]) -> list[str]:
+    if pwd is None:
+        raise VerificationError("authorization path resolution requires a Unix host")
+    home = "/home/deploy"
+    uid = str(pwd.getpwnam("deploy").pw_uid)
+    paths = []
+    for token in tokens:
+        path = token.replace("%%", "\0")
+        path = path.replace("%h", home).replace("%u", "deploy").replace("%U", uid)
+        path = path.replace("\0", "%")
+        if "%" in path:
+            raise VerificationError(
+                "effective sshd authorizedkeysfile contains an unsupported token: %s"
+                % token
+            )
+        if not os.path.isabs(path):
+            path = os.path.join(home, path)
+        paths.append(os.path.normpath(path))
+    if len(paths) != len(set(paths)):
+        raise VerificationError("effective sshd authorizedkeysfile contains duplicate paths")
+    return paths
+
+
+def read_root_text_if_exists(path: str) -> str | None:
+    exists = subprocess.run(
+        ["sudo", "-n", "/usr/bin/test", "-e", path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if exists.returncode == 1:
+        return None
+    if exists.returncode != 0:
+        raise VerificationError("cannot test effective authorization file %s" % path)
+    result = subprocess.run(
+        ["sudo", "-n", "/usr/bin/cat", "--", path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise VerificationError("cannot read effective authorization file %s" % path)
+    return result.stdout
+
+
+def validate_wrong_key_refusal(returncode: int, stderr: str) -> None:
+    if returncode != 255:
+        raise VerificationError(
+            "wrong-key control returned %d rather than SSH authentication refusal 255"
+            % returncode
+        )
+    if "Server accepts key:" in stderr or "Authenticated to " in stderr:
+        raise VerificationError("wrong-key control reached an accepted authentication state")
+    required = (
+        "Authentications that can continue: publickey",
+        "No more authentication methods to try.",
+        "Permission denied (publickey).",
+    )
+    if any(marker not in stderr for marker in required):
+        raise VerificationError(
+            "wrong-key control did not contain an explicit public-key denial trace"
+        )
 
 
 def require_path(path: str, owner: str, mode: int, *, directory: bool = False) -> None:
@@ -154,8 +263,35 @@ def verify_remote(actor: str) -> int:
         raise VerificationError("remote verifier must run as deploy")
     require_path("/home/deploy/.ssh", "deploy", 0o700, directory=True)
     require_path("/home/deploy/.ssh/authorized_keys", "deploy", 0o600)
-    authorization = validate_authorization(
-        Path("/home/deploy/.ssh/authorized_keys").read_text(encoding="utf-8"), actor
+    effective = subprocess.run(
+        [
+            "sudo", "-n", "/usr/sbin/sshd", "-T", "-C",
+            "user=deploy,host=%s,addr=%s,laddr=%s,lport=22"
+            % (HELSINKI_SOURCE, HELSINKI_SOURCE, STAGING_HOST),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if effective.returncode != 0:
+        raise VerificationError("cannot resolve effective sshd authorization sources")
+    configured_files = resolve_authorized_key_paths(
+        parse_effective_authorization_sources(effective.stdout)
+    )
+    expected_file = "/home/deploy/.ssh/authorized_keys"
+    if expected_file not in configured_files:
+        raise VerificationError(
+            "expected staging authorization file is not effective for deploy"
+        )
+    authorization_sources = []
+    existing_files = []
+    for path in configured_files:
+        body = read_root_text_if_exists(path)
+        if body is not None:
+            existing_files.append(path)
+            authorization_sources.append((path, body))
+    authorization = validate_authorization_population(
+        authorization_sources, actor
     )
 
     logs = {}
@@ -236,6 +372,8 @@ raise SystemExit(result.returncode)
         "actor": actor,
         "remote_identity": "deploy",
         "authorization": authorization,
+        "effective_authorization_files": configured_files,
+        "existing_authorization_files": existing_files,
         "readable_log_sizes": logs,
         "database_read": "ok",
         "database_user": database_user,
@@ -312,11 +450,13 @@ def verify_actor(actor: str) -> int:
         failed = subprocess.run(
             negative, input="", text=True, capture_output=True, check=False, timeout=30
         )
-        if failed.returncode == 0:
-            raise VerificationError("%s wrong-key control authenticated" % actor)
+        try:
+            validate_wrong_key_refusal(failed.returncode, failed.stderr)
+        except VerificationError as error:
+            raise VerificationError("%s %s" % (actor, error)) from error
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
-    payload["wrong_key_control"] = "refused"
+    payload["wrong_key_control"] = "explicit_publickey_denial"
     print(json.dumps(payload, sort_keys=True))
     return 0
 
@@ -355,6 +495,61 @@ def self_test() -> int:
             checks += 1
         else:
             raise VerificationError("self-test mutation survived for %s" % actor)
+
+    try:
+        validate_authorization_population(
+            [
+                ("/one", good),
+                ("/two", 'ssh-ed25519 COLTRANE coltrane-dt-agent@204.168.141.77\n'),
+            ],
+            "coltrane",
+            fake_fingerprint,
+        )
+    except VerificationError:
+        checks += 1
+    else:
+        raise VerificationError("cross-file duplicate authorization mutation survived")
+
+    effective = (
+        "authorizedkeysfile .ssh/authorized_keys .ssh/authorized_keys2\n"
+        "authorizedkeyscommand none\n"
+        "trustedusercakeys none\n"
+        "authorizedprincipalsfile none\n"
+        "authorizedprincipalscommand none\n"
+    )
+    if parse_effective_authorization_sources(effective) != [
+        ".ssh/authorized_keys", ".ssh/authorized_keys2"
+    ]:
+        raise VerificationError("effective authorization parser returned wrong files")
+    checks += 1
+    for mutated in (
+        effective.replace("authorizedkeyscommand none", "authorizedkeyscommand /bin/true"),
+        effective.replace("trustedusercakeys none", "trustedusercakeys /etc/ssh/ca.pub"),
+    ):
+        try:
+            parse_effective_authorization_sources(mutated)
+        except VerificationError:
+            checks += 1
+        else:
+            raise VerificationError("alternate SSH authorization source mutation survived")
+
+    refusal = (
+        "debug1: Authentications that can continue: publickey\n"
+        "debug1: No more authentication methods to try.\n"
+        "deploy@188.245.193.8: Permission denied (publickey).\n"
+    )
+    validate_wrong_key_refusal(255, refusal); checks += 1
+    wrong_key_mutations = [
+        (1, 'Authenticated to 188.245.193.8 using "publickey".\n'),
+        (255, "ssh: connect to host 188.245.193.8 port 22: Connection timed out\n"),
+    ]
+    for returncode, stderr in wrong_key_mutations:
+        try:
+            validate_wrong_key_refusal(returncode, stderr)
+        except VerificationError:
+            checks += 1
+        else:
+            raise VerificationError("wrong-key refusal mutation survived")
     print("self-test passed: %d checks" % checks)
     return 0
 

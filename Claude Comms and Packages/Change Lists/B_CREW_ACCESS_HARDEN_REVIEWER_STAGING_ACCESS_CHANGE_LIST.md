@@ -24,17 +24,20 @@ Helsinki source address. This change makes that capability reviewable and durabl
     printing key material, and connects with only the named key;
   - executes the same reviewed source from standard input on staging, avoiding a second
     installed remote copy;
-  - requires exactly one matching authorization with the Helsinki-only source restriction,
-    the expected label, client trace binding the accepted fingerprint, remote identity
-    `deploy`, an actual byte read from each current log, and a read-only application-table
-    database positive control without putting the database address in process arguments;
-  - generates a fresh wrong key for each actor and requires it to fail with every non-public-
-    key authentication method disabled;
-  - includes six parser mutations covering both accepted lines plus missing restriction,
-    duplicate fingerprint, wrong label and wrong fingerprint.
+  - resolves the effective staging SSH configuration, rejects command/CA authorization
+    sources, and requires exactly one matching key across every configured authorization file
+    with the Helsinki-only restriction and expected label;
+  - binds the client trace to the accepted fingerprint, requires remote identity `deploy`, an
+    actual byte read from each current log, and a read-only application-table database positive
+    control without putting the database address in process arguments;
+  - generates a fresh wrong key for each actor and requires an explicit public-key denial trace
+    with every non-public-key authentication method disabled;
+  - includes thirteen positive/mutation checks covering authorization parsing, cross-file
+    duplicates, alternate SSH authorization sources, explicit denial, authenticated remote
+    failure and transport failure.
 - `comms-infra/security/reviewer-staging-access/README.md` — install, verification, recovery,
   fingerprints, backup provenance and the full-`deploy` residual.
-- `.github/workflows/ci.yml` — runs the six-check self-test in the existing access-hardening
+- `.github/workflows/ci.yml` — runs the thirteen-check self-test in the existing access-hardening
   test step.
 - `comms-infra/systemd/reviewer-staging-access.{service,timer}` — daily live parity check with
   the existing scheduled-job failure page; dormant until exact-ref review and installation.
@@ -53,14 +56,15 @@ Helsinki source address. This change makes that capability reviewable and durabl
 
 - Langston key fingerprint matched `SHA256:gvtY9j7vBwXruVXaGNLhot/lWac/zVt3omObdSTHIQs`.
 - Coltrane key fingerprint matched `SHA256:jbHGXwI7aVjXF/l/cizDWWmmdElO0Roy5ngQYPxUD1c`.
-- Each fingerprint occurred exactly once in staging's deploy authorization file with
-  `from="204.168.141.77"` and its own expected label.
+- Each fingerprint occurred exactly once across staging's effective deploy authorization-file
+  population with `from="204.168.141.77"` and its own expected label; command and CA sources
+  were disabled in the effective configuration.
 - The new verifier ran from a private temporary Helsinki directory and, for both actors,
   independently bound the accepted fingerprint, returned remote identity `deploy`, read a
   byte from both current logs, read the `users` application table under a read-only database
-  transaction, and refused a fresh wrong key. The temporary directory was removed by the
-  same command.
-- The six-check parser self-test passed locally and on Helsinki.
+  transaction, and returned an explicit public-key denial trace for a fresh wrong key. The
+  temporary directory was removed by the same command.
+- The thirteen-check self-test passed locally and on Helsinki.
 
 ## Honest boundary
 
@@ -81,3 +85,19 @@ publickey-only traces, byte reads, URI-to-libpq environment translation, a real 
 table query, per-actor wrong-key controls, same-source remote execution and a daily failing
 timer. Distinct keys are now stated as credential separation rather than failure isolation;
 installed-hash proof remains an installation condition after review · re-derived y
+
+## Coltrane review round 1
+
+At exact ref `88855908d4880f2b03f0334065a79af4b66812b7`, Coltrane found two alternate
+states that the first verifier admitted:
+
+1. The expected restricted key could also exist unrestricted in another effective
+   `AuthorizedKeysFile` or `AuthorizedKeysCommand` source.
+2. Any nonzero wrong-key SSH result was labelled a refusal, including a successful
+   authentication followed by a failing remote command or a transport failure.
+
+The correction now derives the effective per-connection SSH authorization configuration,
+requires every authorization source to be enumerable, searches every configured file as one
+population, and rejects command/CA sources. The wrong-key control now requires exit 255 plus
+the explicit public-key denial trace and rejects accepted-authentication and transport-failure
+mutations.
