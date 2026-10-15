@@ -10,7 +10,7 @@
 
 **Placement:** pre-sprint P1b, sprint row 40 entry half, before P1c
 
-**Implementation and deployed runtime:** `28c58fb8dc537242f7c1b320dd7e4d1f13af1b8a`
+**Implementation and deployed runtime:** `3a2cd4ee542bc96ee3fa40d39b3e05c0e0671f01`
 
 **Step-10 governance ref:** `77b3c45103e25ab8a8823b9d9305dc7aebb0f619`
 
@@ -44,10 +44,12 @@ The scope's pre-registered criterion was:
 
 ## 4. Verification
 
-- Local production-seam verification: 2 files, **26/26 tests passed**.
+- Local closing-correction verification: 3 files, **46/46 tests passed**, including the production seam and the source-order fence that requires port invocation before PASS logging.
 - Step-9 ref `7978c0aad`: CI `38732995231`, all four jobs green.
 - Step-10 ref `77b3c4510`: CI `38735770549` — Build **SUCCESS**, TypeScript Check **SUCCESS**, Test Suite **SUCCESS**, Docker Build **SUCCESS**.
-- Runtime identity: deploy record, live checkout, built artifact, and authenticated liveness all matched `28c58fb8d`; engine expected/running, unchanged process restart counter, zero unstable restarts.
+- Closing-correction ref `3a2cd4ee5`: batch-branch CI `38738031062` and shared-branch CI `38739356249` — Build **SUCCESS**, TypeScript Check **SUCCESS**, Test Suite **SUCCESS**, Docker Build **SUCCESS** in both runs.
+- Post-correction deployment: `3a2cd4ee5` deployed at `2026-10-15T13:05:20Z` by `codex-c`; the deploy record, live checkout, built artifact, and liveness endpoint all matched the full ref. The engine was expected and running, the main process was online at restart counter 648 with zero unstable restarts, and the deploy check's failure window was 11 seconds.
+- Independent xStock observation continuity across the correction deploy: new boot `9827d1d1-a163-4d49-8832-c76df80e2b56` started on `3a2cd4ee5` at `13:05:20.668974Z` and named predecessor `1aab5ae6-d372-4825-9fbe-5555b414f031`. That predecessor recorded a clean handoff at `13:05:10.010758Z`; its 1,117 admissions equalled 1,117 completions, all stored handoff counters matched the durable aggregate, with zero orphan admissions, zero admission/completion mismatches, and zero pending certificates. The current boot is correctly open. Therefore this normal reviewed deployment continued the separately governed xStock availability observation rather than resetting or blocking it.
 - Live migration: applied `2026-10-15T11:31:55.383297Z`; forward and rollback paths are registered.
 - Delivery board before final review: Status `Governance`, Owner `Analyst`, Type `Sub-batch`, Blocked on `Langston` (the board's reviewer label; Coltrane during this shift), Phase `Phase 19`, Review `Approved`.
 
@@ -102,7 +104,7 @@ The Step-10 ledger's future-tense completion-report row is satisfied by this fil
 
 `REVIEWER: claim-only · name the objects that settle the same-snapshot active immediate-open mechanism and other states consistent with them · active-path/VTS scope, paper-port terminology, and pre-call PASS-log gap hit · re-derived yes`
 
-The hits were re-derived at `77b3c4510` with these positive controls: the active engine contains exactly one production `this.orderPlacer.openOrder(...)` call; the VTS has separate immediate paths; `PaperOrderPlacer.openOrder` is a pure depth walk; and source order placed `[CONSUMPTION_PASS]` before the port call. The report now scopes the guarantee to the active engine and calls the port an order-placement/consumption boundary. The closing correction moves PASS logging after port invocation and adds a source-order test, eliminating the unbounded synchronous logging gap before a future live placer can submit.
+The hits were re-derived at `77b3c4510` with these positive controls: the active engine contains exactly one production `this.orderPlacer.openOrder(...)` call; the VTS has separate immediate paths; `PaperOrderPlacer.openOrder` is a pure depth walk; and source order placed `[CONSUMPTION_PASS]` before the port call. The report now scopes the guarantee to the active engine and calls the port an order-placement/consumption boundary. The closing correction moves PASS logging after port invocation and adds a source-order test, eliminating the unbounded synchronous logging gap before a future live placer can submit. Coltrane independently confirmed that correction was sound at `3a2cd4ee5`; his only remaining condition was to deploy it and record the post-correction staging identity and health, which the evidence in section 4 now satisfies.
 
 ## 8. Final reviewer confirmation
 
