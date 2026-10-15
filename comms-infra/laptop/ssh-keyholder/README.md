@@ -22,6 +22,9 @@ layer. It does not create, copy, or authorize a private key.
   key deliberately left loaded must still refuse before any network client starts.
 - Installation writes and secures its rollback manifest before the first service,
   task, policy or installed-file mutation. Every later failure invokes exact rollback.
+  The manifest records the pre-existing Group Policy directory and synchronous-policy
+  key containers, plus the SHA-256 of an existing `scripts.ini`; rollback removes only
+  containers that installation created and proves the original file bytes are restored.
   The installer refuses a non-cold starting state and prints `INSTALLED_LOCKED` only
   after service, registry, marker and agent-unavailability checks all pass.
 - The local Group Policy logon script is synchronous, so raw Windows OpenSSH cannot
