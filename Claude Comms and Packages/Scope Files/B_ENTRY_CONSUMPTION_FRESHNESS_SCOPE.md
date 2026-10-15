@@ -1,4 +1,4 @@
-# B-ENTRY-CONSUMPTION-FRESHNESS — Scope r1 (Step 1 review pending)
+# B-ENTRY-CONSUMPTION-FRESHNESS — Scope r2 (Step 1 approved)
 
 change-class: sub_batch
 
@@ -9,6 +9,8 @@ change-class: sub_batch
 **Issue:** `#684`
 
 **Reviewer:** Coltrane for the Codex shift; CC-B is the named cross-lane reviewer in the pre-sprint plan.
+
+**Step-1 disposition:** Coltrane APPROVED the scope at `ff5e4a928bea39cee1f1557e77410c6d2b7a77ff`; the rebased copies of the reviewed documents were byte-identical before the Step-1 boundary commit `fc85a41ce2104eeef4066fadd69147781bc815bc` (CI `38714172777`, all four jobs green).
 
 ## 1. Goal
 
