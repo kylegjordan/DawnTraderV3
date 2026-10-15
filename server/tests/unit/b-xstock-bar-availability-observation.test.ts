@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   evaluateCapacityGate,
   isCompleteVenueSession,
+  XSTOCK_AVAILABILITY_STORE_SIZE_SQL,
   type CapacityGateInputs,
 } from '../../scripts/b-xstock-bar-availability-capacity-gate.js';
 
@@ -41,6 +42,7 @@ function passingInputs(): CapacityGateInputs {
     telemetryAppliedWinners: 95_000,
     telemetryRejectedOlderArrivals: 5_000,
     writerBoots: 1,
+    boundaryWriterBoots: 1,
     writerBootStarts: 1,
     writerBootDistinctIds: 1,
     contributingBootsWithoutStart: 0,
@@ -103,6 +105,7 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
       { telemetryRepeatedPayloadAttempts: 1_999 },
       { telemetryAppliedWinners: 94_999 },
       { telemetryRejectedOlderArrivals: 5_001 },
+      { boundaryWriterBoots: 0 },
       { writerBootStarts: 2, writerBootDistinctIds: 1 },
       { contributingBootsWithoutStart: 1 },
       { requiredWriterHandoffs: 1, cleanWriterHandoffs: 0 },
@@ -150,6 +153,15 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(verdict.checks.continuousWriterHandoffs).toBe(true);
     expect(verdict.checks.allContributingBuildsReviewed).toBe(true);
     expect(verdict.pass).toBe(true);
+  });
+
+  it('counts both deploy-handoff stores and all of their indexes in capacity', () => {
+    expect(XSTOCK_AVAILABILITY_STORE_SIZE_SQL)
+      .toContain("'xstock_bar_writer_boot_start'::regclass::oid");
+    expect(XSTOCK_AVAILABILITY_STORE_SIZE_SQL)
+      .toContain("'xstock_bar_writer_handoff'::regclass::oid");
+    expect(XSTOCK_AVAILABILITY_STORE_SIZE_SQL)
+      .toContain('FROM pg_index i JOIN rels r ON r.oid = i.indrelid');
   });
 
   it('fails the gate when an admitted flush has no atomic completion', () => {

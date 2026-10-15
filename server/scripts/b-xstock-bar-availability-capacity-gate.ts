@@ -28,6 +28,116 @@ const EXPECTED_VENUE_SESSION_MAX_GAP_SECONDS = 60;
 const EXPECTED_GRADED_WINDOW_START = '2026-10-16T00:05:00.000Z';
 const EXPECTED_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1';
 
+// Exported so the integration fence executes the exact production query. The
+// chain begins with the writer that was active at the observation boundary,
+// even if that writer did not admit its first flush until after it died.
+export const XSTOCK_WRITER_BOOT_CHAIN_SQL = `WITH contributing AS MATERIALIZED (
+         SELECT DISTINCT a.writer_boot_id AS boot_id
+         FROM xstock_bar_projection_flush_admission a
+         WHERE a.admitted_at >= $1 AND a.admitted_at < $2
+       ), latest_before_boundary AS MATERIALIZED (
+         SELECT s.*
+         FROM xstock_bar_writer_boot_start s
+         WHERE s.started_at <= $1
+         ORDER BY s.started_at DESC, s.boot_id DESC
+         LIMIT 1
+       ), boundary_boot AS MATERIALIZED (
+         SELECT s.*
+         FROM latest_before_boundary s
+         LEFT JOIN xstock_bar_writer_handoff h USING (boot_id)
+         WHERE h.handed_off_at IS NULL OR h.handed_off_at > $1
+       ), chain_base AS MATERIALIZED (
+         SELECT s.*
+         FROM xstock_bar_writer_boot_start s
+         CROSS JOIN boundary_boot b
+         WHERE s.started_at >= b.started_at
+           AND s.started_at < $2
+       ), chain AS MATERIALIZED (
+         SELECT b.*,
+                lag(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS previous_boot_id,
+                lead(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS next_boot_id,
+                row_number() OVER (ORDER BY b.started_at DESC, b.boot_id DESC) AS newest_rank
+         FROM chain_base b
+       ), durable AS MATERIALIZED (
+         SELECT a.writer_boot_id AS boot_id,
+                count(a.flush_id)::bigint AS admission_flushes,
+                count(c.flush_id)::bigint AS completion_flushes,
+                COALESCE(sum(a.accepted_input_frames),0)::bigint AS accepted_input_frames,
+                COALESCE(sum(a.buffer_superseded),0)::bigint AS buffer_superseded,
+                COALESCE(sum(c.projection_attempts),0)::bigint AS projection_attempts,
+                COALESCE(sum(c.repeated_payload_attempts),0)::bigint AS repeated_payload_attempts,
+                COALESCE(sum(c.applied_winners),0)::bigint AS applied_winners,
+                COALESCE(sum(c.rejected_older_arrivals),0)::bigint AS rejected_older_arrivals
+         FROM xstock_bar_projection_flush_admission a
+         LEFT JOIN xstock_bar_projection_flush_completion c USING (flush_id)
+         GROUP BY a.writer_boot_id
+       )
+       SELECT
+         (SELECT count(*)::bigint FROM boundary_boot) AS boundary_boot_rows,
+         count(ch.boot_id)::bigint AS boot_start_rows,
+         count(DISTINCT ch.boot_id)::bigint AS boot_distinct_ids,
+         (SELECT count(*)::bigint
+            FROM contributing c
+            LEFT JOIN xstock_bar_writer_boot_start s USING (boot_id)
+           WHERE s.boot_id IS NULL) AS contributing_boots_without_start,
+         count(*) FILTER (WHERE ch.next_boot_id IS NOT NULL)::bigint AS required_handoffs,
+         count(*) FILTER (
+           WHERE ch.next_boot_id IS NOT NULL AND h.boot_id IS NOT NULL
+         )::bigint AS clean_handoffs,
+         count(*) FILTER (
+           WHERE ch.previous_boot_id IS NOT NULL
+             AND ch.predecessor_boot_id IS DISTINCT FROM ch.previous_boot_id
+         )::bigint AS chain_breaks,
+         count(*) FILTER (
+           WHERE h.boot_id IS NOT NULL AND (
+             h.writer_build_sha IS DISTINCT FROM ch.writer_build_sha
+             OR h.contract_version IS DISTINCT FROM ch.contract_version
+             OR h.accepted_input_frames IS DISTINCT FROM COALESCE(d.accepted_input_frames,0)
+             OR h.buffer_superseded IS DISTINCT FROM COALESCE(d.buffer_superseded,0)
+             OR h.projection_attempts IS DISTINCT FROM COALESCE(d.projection_attempts,0)
+             OR h.repeated_payload_attempts IS DISTINCT FROM COALESCE(d.repeated_payload_attempts,0)
+             OR h.applied_winners IS DISTINCT FROM COALESCE(d.applied_winners,0)
+             OR h.rejected_older_arrivals IS DISTINCT FROM COALESCE(d.rejected_older_arrivals,0)
+             OR h.admission_flushes IS DISTINCT FROM COALESCE(d.admission_flushes,0)
+             OR h.completion_flushes IS DISTINCT FROM COALESCE(d.completion_flushes,0)
+           )
+         )::bigint AS handoff_mismatches,
+         count(*) FILTER (WHERE ch.newest_rank = 1 AND h.boot_id IS NULL)::bigint
+           AS latest_boot_open,
+         max(ch.writer_build_sha) FILTER (WHERE ch.newest_rank = 1) AS latest_boot_build_sha,
+         array_agg(DISTINCT ch.writer_build_sha ORDER BY ch.writer_build_sha)
+           FILTER (WHERE ch.writer_build_sha IS NOT NULL) AS boot_build_shas
+       FROM chain ch
+       LEFT JOIN xstock_bar_writer_handoff h USING (boot_id)
+       LEFT JOIN durable d USING (boot_id)`;
+
+export const XSTOCK_AVAILABILITY_STORE_SIZE_SQL = `WITH revision_rels AS (
+         SELECT relid AS oid FROM pg_partition_tree('xstock_bar_revision_event'::regclass)
+       ), other_rels AS (
+         SELECT relid AS oid FROM pg_partition_tree('xstock_bar_aggregate_revision'::regclass)
+         UNION SELECT 'xstock_bar_window_manifest'::regclass::oid
+         UNION SELECT 'xstock_bar_projection_flush_admission'::regclass::oid
+         UNION SELECT 'xstock_bar_projection_flush_completion'::regclass::oid
+         UNION SELECT 'xstock_bar_archive_exact_evidence'::regclass::oid
+         UNION SELECT 'xstock_bar_clock_guard'::regclass::oid
+         UNION SELECT 'xstock_bar_writer_boot_start'::regclass::oid
+         UNION SELECT 'xstock_bar_writer_handoff'::regclass::oid
+       ), rels AS (
+         SELECT oid FROM revision_rels UNION SELECT oid FROM other_rels
+       ), indexes AS (
+         SELECT DISTINCT i.indexrelid
+         FROM pg_index i JOIN rels r ON r.oid = i.indrelid
+       )
+       SELECT COALESCE((SELECT sum(pg_relation_size(oid)) FROM rels),0)::bigint AS heap_bytes,
+              COALESCE((SELECT sum(CASE WHEN c.reltoastrelid = 0 THEN 0
+                                       ELSE pg_total_relation_size(c.reltoastrelid) END)
+                          FROM rels r JOIN pg_class c ON c.oid=r.oid),0)::bigint AS toast_bytes,
+              COALESCE((SELECT sum(pg_relation_size(indexrelid)) FROM indexes),0)::bigint AS index_bytes,
+              COALESCE((SELECT sum(pg_total_relation_size(oid)) FROM revision_rels),0)::bigint
+                AS revision_store_total_bytes,
+              COALESCE((SELECT sum(pg_total_relation_size(oid)) FROM other_rels),0)::bigint
+                AS non_revision_store_total_bytes`;
+
 type JsonRow = Record<string, unknown>;
 
 interface GateArgs {
@@ -67,6 +177,7 @@ export interface CapacityGateInputs {
   telemetryAppliedWinners: number;
   telemetryRejectedOlderArrivals: number;
   writerBoots: number;
+  boundaryWriterBoots: number;
   writerBootStarts: number;
   writerBootDistinctIds: number;
   contributingBootsWithoutStart: number;
@@ -151,6 +262,7 @@ export function evaluateCapacityGate(input: CapacityGateInputs) {
       && input.telemetryAppliedWinners + input.telemetryRejectedOlderArrivals
         === input.telemetryProjectionAttempts,
     continuousWriterHandoffs: input.writerBoots >= 1
+      && input.boundaryWriterBoots === 1
       && input.writerBootStarts === input.writerBootDistinctIds
       && input.contributingBootsWithoutStart === 0
       && input.cleanWriterHandoffs === input.requiredWriterHandoffs
@@ -395,78 +507,7 @@ async function main(): Promise<void> {
     )).rows[0] as JsonRow;
 
     const bootChain = (await client.query(
-      `WITH contributing AS MATERIALIZED (
-         SELECT DISTINCT a.writer_boot_id AS boot_id
-         FROM xstock_bar_projection_flush_admission a
-         WHERE a.admitted_at >= $1 AND a.admitted_at < $2
-       ), first_contributing AS (
-         SELECT min(s.started_at) AS started_at
-         FROM contributing c
-         JOIN xstock_bar_writer_boot_start s USING (boot_id)
-       ), chain_base AS MATERIALIZED (
-         SELECT s.*
-         FROM xstock_bar_writer_boot_start s
-         CROSS JOIN first_contributing f
-         WHERE f.started_at IS NOT NULL
-           AND s.started_at >= f.started_at
-           AND s.started_at < $2
-       ), chain AS MATERIALIZED (
-         SELECT b.*,
-                lag(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS previous_boot_id,
-                lead(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS next_boot_id,
-                row_number() OVER (ORDER BY b.started_at DESC, b.boot_id DESC) AS newest_rank
-         FROM chain_base b
-       ), durable AS MATERIALIZED (
-         SELECT a.writer_boot_id AS boot_id,
-                count(a.flush_id)::bigint AS admission_flushes,
-                count(c.flush_id)::bigint AS completion_flushes,
-                COALESCE(sum(a.accepted_input_frames),0)::bigint AS accepted_input_frames,
-                COALESCE(sum(a.buffer_superseded),0)::bigint AS buffer_superseded,
-                COALESCE(sum(c.projection_attempts),0)::bigint AS projection_attempts,
-                COALESCE(sum(c.repeated_payload_attempts),0)::bigint AS repeated_payload_attempts,
-                COALESCE(sum(c.applied_winners),0)::bigint AS applied_winners,
-                COALESCE(sum(c.rejected_older_arrivals),0)::bigint AS rejected_older_arrivals
-         FROM xstock_bar_projection_flush_admission a
-         LEFT JOIN xstock_bar_projection_flush_completion c USING (flush_id)
-         GROUP BY a.writer_boot_id
-       )
-       SELECT
-         count(ch.boot_id)::bigint AS boot_start_rows,
-         count(DISTINCT ch.boot_id)::bigint AS boot_distinct_ids,
-         (SELECT count(*)::bigint
-            FROM contributing c
-            LEFT JOIN xstock_bar_writer_boot_start s USING (boot_id)
-           WHERE s.boot_id IS NULL) AS contributing_boots_without_start,
-         count(*) FILTER (WHERE ch.next_boot_id IS NOT NULL)::bigint AS required_handoffs,
-         count(*) FILTER (
-           WHERE ch.next_boot_id IS NOT NULL AND h.boot_id IS NOT NULL
-         )::bigint AS clean_handoffs,
-         count(*) FILTER (
-           WHERE ch.previous_boot_id IS NOT NULL
-             AND ch.predecessor_boot_id IS DISTINCT FROM ch.previous_boot_id
-         )::bigint AS chain_breaks,
-         count(*) FILTER (
-           WHERE h.boot_id IS NOT NULL AND (
-             h.writer_build_sha IS DISTINCT FROM ch.writer_build_sha
-             OR h.contract_version IS DISTINCT FROM ch.contract_version
-             OR h.accepted_input_frames IS DISTINCT FROM COALESCE(d.accepted_input_frames,0)
-             OR h.buffer_superseded IS DISTINCT FROM COALESCE(d.buffer_superseded,0)
-             OR h.projection_attempts IS DISTINCT FROM COALESCE(d.projection_attempts,0)
-             OR h.repeated_payload_attempts IS DISTINCT FROM COALESCE(d.repeated_payload_attempts,0)
-             OR h.applied_winners IS DISTINCT FROM COALESCE(d.applied_winners,0)
-             OR h.rejected_older_arrivals IS DISTINCT FROM COALESCE(d.rejected_older_arrivals,0)
-             OR h.admission_flushes IS DISTINCT FROM COALESCE(d.admission_flushes,0)
-             OR h.completion_flushes IS DISTINCT FROM COALESCE(d.completion_flushes,0)
-           )
-         )::bigint AS handoff_mismatches,
-         count(*) FILTER (WHERE ch.newest_rank = 1 AND h.boot_id IS NULL)::bigint
-           AS latest_boot_open,
-         max(ch.writer_build_sha) FILTER (WHERE ch.newest_rank = 1) AS latest_boot_build_sha,
-         array_agg(DISTINCT ch.writer_build_sha ORDER BY ch.writer_build_sha)
-           FILTER (WHERE ch.writer_build_sha IS NOT NULL) AS boot_build_shas
-       FROM chain ch
-       LEFT JOIN xstock_bar_writer_handoff h USING (boot_id)
-       LEFT JOIN durable d USING (boot_id)`,
+      XSTOCK_WRITER_BOOT_CHAIN_SQL,
       [windowStart, observedAt],
     )).rows[0] as JsonRow;
 
@@ -545,32 +586,7 @@ async function main(): Promise<void> {
         ORDER BY c.relname`,
     )).rows as JsonRow[];
 
-    const storeSizes = (await client.query(
-      `WITH revision_rels AS (
-         SELECT relid AS oid FROM pg_partition_tree('xstock_bar_revision_event'::regclass)
-       ), other_rels AS (
-         SELECT relid AS oid FROM pg_partition_tree('xstock_bar_aggregate_revision'::regclass)
-         UNION SELECT 'xstock_bar_window_manifest'::regclass::oid
-         UNION SELECT 'xstock_bar_projection_flush_admission'::regclass::oid
-         UNION SELECT 'xstock_bar_projection_flush_completion'::regclass::oid
-         UNION SELECT 'xstock_bar_archive_exact_evidence'::regclass::oid
-         UNION SELECT 'xstock_bar_clock_guard'::regclass::oid
-       ), rels AS (
-         SELECT oid FROM revision_rels UNION SELECT oid FROM other_rels
-       ), indexes AS (
-         SELECT DISTINCT i.indexrelid
-         FROM pg_index i JOIN rels r ON r.oid = i.indrelid
-       )
-       SELECT COALESCE((SELECT sum(pg_relation_size(oid)) FROM rels),0)::bigint AS heap_bytes,
-              COALESCE((SELECT sum(CASE WHEN c.reltoastrelid = 0 THEN 0
-                                       ELSE pg_total_relation_size(c.reltoastrelid) END)
-                          FROM rels r JOIN pg_class c ON c.oid=r.oid),0)::bigint AS toast_bytes,
-              COALESCE((SELECT sum(pg_relation_size(indexrelid)) FROM indexes),0)::bigint AS index_bytes,
-              COALESCE((SELECT sum(pg_total_relation_size(oid)) FROM revision_rels),0)::bigint
-                AS revision_store_total_bytes,
-              COALESCE((SELECT sum(pg_total_relation_size(oid)) FROM other_rels),0)::bigint
-                AS non_revision_store_total_bytes`,
-    )).rows[0] as JsonRow;
+    const storeSizes = (await client.query(XSTOCK_AVAILABILITY_STORE_SIZE_SQL)).rows[0] as JsonRow;
 
     const archiveRows = (await client.query(
       `SELECT m.partition_label, m.state, m.tier, m.row_count::bigint,
@@ -683,6 +699,7 @@ async function main(): Promise<void> {
       telemetryAppliedWinners: num(telemetry.applied_winners),
       telemetryRejectedOlderArrivals: num(telemetry.rejected_older_arrivals),
       writerBoots: num(telemetry.writer_boots),
+      boundaryWriterBoots: num(bootChain.boundary_boot_rows),
       writerBootStarts: num(bootChain.boot_start_rows),
       writerBootDistinctIds: num(bootChain.boot_distinct_ids),
       contributingBootsWithoutStart: num(bootChain.contributing_boots_without_start),
