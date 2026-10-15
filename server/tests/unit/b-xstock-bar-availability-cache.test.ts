@@ -53,6 +53,7 @@ const exactSnapshotRow = {
   persisted_certificate_primary_identity: 'test@primary',
   persisted_contract_version: 'xstock-bar-availability/v1',
   current_primary_identity: 'test@primary',
+  current_source_revision_count: 1,
 };
 
 const ineligibleLive = {
@@ -90,6 +91,16 @@ beforeEach(() => {
 });
 
 describe('B-XSTOCK-BAR-AVAILABILITY cache contract', () => {
+  it('accepts an exact snapshot only while every source revision is still the compact winner', async () => {
+    execute.mockResolvedValueOnce({ rows: [exactSnapshotRow] });
+    aggregateAvailable.mockResolvedValueOnce(new Map([['CORZ/USD', []]]));
+
+    const result = await xstockOhlcCache.getAvailabilityDataBatch(['CORZ/USD'], 15);
+    const [bar] = result.get('CORZ/USD') ?? [];
+    expect(bar.aggregateRevisionId).toBe(exactSnapshotRow.aggregate_revision_id);
+    expect(bar.eligibilityState).toBe('eligible_certified');
+  });
+
   it('live collision replaces the entire snapshot revision object and TTL retains its read evidence', async () => {
     execute.mockResolvedValueOnce({ rows: [exactSnapshotRow] });
     aggregateAvailable.mockResolvedValueOnce(new Map([['CORZ/USD', [ineligibleLive]]]));
@@ -158,6 +169,20 @@ describe('B-XSTOCK-BAR-AVAILABILITY cache contract', () => {
     expect(bar.close).toBe(11); // positive control: the mismatched snapshot was read
     expect(bar.eligibilityState).toBe('metadata_unknown_legacy');
     expect(bar.aggregateRevisionId).toBeNull();
+  });
+
+  it('does not resurrect an exact snapshot whose source winner changed outside the live overlay', async () => {
+    execute.mockResolvedValueOnce({
+      rows: [{ ...exactSnapshotRow, current_source_revision_count: 0 }],
+    });
+    aggregateAvailable.mockResolvedValueOnce(new Map([['CORZ/USD', []]]));
+
+    const result = await xstockOhlcCache.getAvailabilityDataBatch(['CORZ/USD'], 15);
+    const [bar] = result.get('CORZ/USD') ?? [];
+    expect(bar.close).toBe(11); // positive control: the old snapshot bucket was returned
+    expect(bar.eligibilityState).toBe('metadata_unknown_legacy');
+    expect(bar.aggregateRevisionId).toBeNull();
+    expect(aggregateAvailable).toHaveBeenCalledWith(['CORZ/USD'], 15, 6);
   });
 
   it('prewarm awaits an exact snapshot write and reports ineligible buckets separately', async () => {

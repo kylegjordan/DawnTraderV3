@@ -208,4 +208,54 @@ describe('B-XSTOCK-BAR-AVAILABILITY aggregate contract', () => {
     ).rejects.toThrow(/mixes primary identities/);
     expect(state.calls).toHaveLength(3); // no manifest-record statement
   });
+
+  it('rejects a reversed manifest window instead of silently normalizing it', async () => {
+    state.results.push(
+      [aggregateRow()],
+      observation,
+      [{
+        client_key: 'CORZ/USD|15|2026-10-14T15:00:00.000Z',
+        aggregate_revision_id: '33333333-3333-4333-8333-333333333333',
+      }],
+    );
+    const result = await aggregateAvailableXstockOHLC(['CORZ/USD'], 15, 6);
+    const [first] = result.get('CORZ/USD') ?? [];
+    const second = {
+      ...first,
+      timestamp: first.timestamp + 15 * 60_000,
+      aggregateRevisionId: '55555555-5555-4555-8555-555555555555',
+    };
+
+    await expect(
+      persistSettledXstockWindowManifest([second, first]),
+    ).rejects.toThrow(/not strictly ordered/);
+    expect(state.calls).toHaveLength(3); // no manifest write or observation
+  });
+
+  it('rejects impossible evidence where source sequence is ahead of the later shared-sequence read', async () => {
+    state.results.push(
+      [aggregateRow()],
+      observation,
+      [{
+        client_key: 'CORZ/USD|15|2026-10-14T15:00:00.000Z',
+        aggregate_revision_id: '33333333-3333-4333-8333-333333333333',
+      }],
+    );
+    const result = await aggregateAvailableXstockOHLC(['CORZ/USD'], 15, 6);
+    const [settled] = result.get('CORZ/USD') ?? [];
+    const forming = {
+      ...settled,
+      timestamp: settled.timestamp + 15 * 60_000,
+      aggregateRevisionId: '55555555-5555-4555-8555-555555555555',
+      sourceMaxVisibleSeq: 1_000_000,
+    };
+    state.results.push(
+      [{ manifest_id: '44444444-4444-4444-8444-444444444444' }],
+      [{ ...observation[0], read_observed_seq: '15' }],
+    );
+
+    await expect(
+      buildEligibleXstockWindowEvidence([settled, forming]),
+    ).rejects.toThrow(/ineligible xStock aggregate/);
+  });
 });

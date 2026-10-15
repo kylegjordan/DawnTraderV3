@@ -27,6 +27,22 @@ VALUES (
 )
 ON CONFLICT (singleton) DO NOTHING;
 
+CREATE OR REPLACE FUNCTION guard_xstock_bar_contract_activation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF OLD.contract_active AND NOT NEW.contract_active THEN
+    RAISE EXCEPTION 'xStock bar availability contract activation is one-way';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_guard_xstock_bar_contract_activation ON xstock_bar_clock_guard;
+CREATE TRIGGER trg_guard_xstock_bar_contract_activation
+BEFORE UPDATE OF contract_active ON xstock_bar_clock_guard
+FOR EACH ROW EXECUTE FUNCTION guard_xstock_bar_contract_activation();
+
 CREATE TABLE IF NOT EXISTS xstock_bar_revision_event (
   revision_id uuid NOT NULL,
   arrived_at timestamptz NOT NULL,
@@ -99,8 +115,11 @@ AS $$
 DECLARE
   contract_active boolean;
 BEGIN
+  -- A legacy write holds this shared row lock until its transaction ends. The
+  -- first revision-aware writer must UPDATE the same row, so activation waits
+  -- for every pre-boundary write to finish before it can become visible.
   SELECT g.contract_active INTO contract_active
-    FROM xstock_bar_clock_guard g WHERE g.singleton = true;
+    FROM xstock_bar_clock_guard g WHERE g.singleton = true FOR SHARE;
   IF NOT contract_active THEN
     RETURN NEW;
   END IF;
@@ -390,13 +409,12 @@ BEGIN
   primary_id := current_database() || '@' || COALESCE(inet_server_addr()::text, 'local') || ':'
     || COALESCE(inet_server_port()::text, 'local') || '/system:'
     || (SELECT system_identifier::text FROM pg_control_system());
-  observed_at := clock_timestamp();
-
   SELECT last_observed_at INTO prior_clock
     FROM xstock_bar_clock_guard WHERE singleton = true FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'xstock bar clock guard row missing';
   END IF;
+  observed_at := clock_timestamp();
   IF observed_at < prior_clock THEN
     RAISE EXCEPTION 'xstock bar database clock regression: observed %, prior %', observed_at, prior_clock;
   END IF;

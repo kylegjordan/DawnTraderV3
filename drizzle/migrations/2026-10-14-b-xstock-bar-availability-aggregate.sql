@@ -4,8 +4,6 @@
 -- and availability pointers on the existing snapshot tables. Existing snapshot
 -- rows remain explicitly legacy/unknown until rebuilt from certified revisions.
 
-CREATE SEQUENCE IF NOT EXISTS xstock_bar_read_observed_seq AS bigint;
-
 CREATE TABLE IF NOT EXISTS xstock_bar_aggregate_revision (
   aggregate_revision_id uuid NOT NULL DEFAULT gen_random_uuid(),
   bucket_ts timestamptz NOT NULL,
@@ -94,18 +92,20 @@ BEGIN
   primary_id := current_database() || '@' || COALESCE(inet_server_addr()::text, 'local') || ':'
     || COALESCE(inet_server_port()::text, 'local') || '/system:'
     || (SELECT system_identifier::text FROM pg_control_system());
-  observed_at := clock_timestamp();
-
   SELECT last_observed_at INTO prior_clock
     FROM xstock_bar_clock_guard WHERE singleton = true FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'xstock bar clock guard row missing';
   END IF;
+  observed_at := clock_timestamp();
   IF observed_at < prior_clock THEN
     RAISE EXCEPTION 'xstock bar database clock regression: observed %, prior %', observed_at, prior_clock;
   END IF;
 
-  observed_seq := nextval('xstock_bar_read_observed_seq');
+  -- Certificates and reads share one causal sequence. Comparing values from
+  -- independent sequences cannot establish that this read followed a source
+  -- certificate, regardless of their numeric magnitude.
+  observed_seq := nextval('xstock_bar_visible_seq');
   UPDATE xstock_bar_clock_guard SET
     last_observed_at = observed_at,
     primary_identity = primary_id,

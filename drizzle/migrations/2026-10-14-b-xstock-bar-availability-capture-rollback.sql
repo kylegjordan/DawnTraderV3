@@ -9,6 +9,8 @@ DROP FUNCTION IF EXISTS guard_xstock_projection_revision_link();
 DROP TRIGGER IF EXISTS trg_guard_xstock_bar_revision_event_mutation ON xstock_bar_revision_event;
 DROP FUNCTION IF EXISTS guard_xstock_bar_revision_event_mutation();
 DROP TABLE IF EXISTS xstock_bar_revision_event CASCADE;
+DROP TRIGGER IF EXISTS trg_guard_xstock_bar_contract_activation ON xstock_bar_clock_guard;
+DROP FUNCTION IF EXISTS guard_xstock_bar_contract_activation();
 DROP TABLE IF EXISTS xstock_bar_clock_guard;
 DROP SEQUENCE IF EXISTS xstock_bar_visible_seq;
 

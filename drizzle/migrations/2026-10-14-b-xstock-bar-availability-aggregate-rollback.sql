@@ -40,7 +40,6 @@ DROP FUNCTION IF EXISTS observe_xstock_bar_read(text);
 DROP TRIGGER IF EXISTS trg_guard_xstock_bar_aggregate_revision_mutation ON xstock_bar_aggregate_revision;
 DROP FUNCTION IF EXISTS guard_xstock_bar_aggregate_revision_mutation();
 DROP TABLE IF EXISTS xstock_bar_aggregate_revision;
-DROP SEQUENCE IF EXISTS xstock_bar_read_observed_seq;
 
 DELETE FROM _migrations
 WHERE name = '2026-10-14-b-xstock-bar-availability-aggregate.sql';

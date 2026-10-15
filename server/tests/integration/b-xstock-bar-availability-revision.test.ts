@@ -4,6 +4,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
+import pg from 'pg';
 import { db } from '../../db.js';
 import { upsertOhlcRows } from '../../services/passive-archive/ohlc-batch-writer.js';
 import {
@@ -17,12 +18,16 @@ const IS_CI = !!process.env.CI;
 const TAG = 'B-XSTOCK-BAR-AVAILABILITY-REVISION';
 const SYMBOL = 'BAVAILTEST/USD';
 const LEGACY_SYMBOL = 'BAVAILLEGACY/USD';
+const ACTIVATE_SYMBOL = 'BAVAILACTIVATE/USD';
+const POST_ACTIVE_LEGACY_SYMBOL = 'BAVAILLEGACY2/USD';
 const now = Date.now();
 const minute = new Date(Math.floor((now - 60_000) / 60_000) * 60_000);
 const A1 = new Date(now - 30_000);
 const A2 = new Date(now - 20_000);
 const A3 = new Date(now - 10_000);
 let dbReachable = true;
+let activationRevisionId = '';
+const { Client } = pg;
 
 const bar = (close: string, arrivedAt: Date) => ({
   symbol: SYMBOL,
@@ -39,6 +44,20 @@ async function rows<T>(query: unknown): Promise<T[]> {
   return (result?.rows ?? result) as T[];
 }
 
+async function waitForDatabaseLock(applicationName: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const activity = await rows<{ wait_event_type: string | null }>(db.execute(sql`
+      SELECT wait_event_type
+      FROM pg_stat_activity
+      WHERE application_name = ${applicationName}
+    `));
+    if (activity.some((row) => row.wait_event_type === 'Lock')) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`[${TAG}] ${applicationName} never entered a database lock wait`);
+}
+
 async function cleanup(): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT set_config('dawntrader.archive_mode', 'on', true)`);
@@ -47,8 +66,11 @@ async function cleanup(): Promise<void> {
     await tx.execute(sql`DELETE FROM xstock_bar_window_manifest WHERE symbol = ${SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_bar_aggregate_revision WHERE symbol = ${SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_bar_revision_event WHERE symbol = ${SYMBOL}`);
+    await tx.execute(sql`DELETE FROM xstock_bar_revision_event WHERE symbol = ${ACTIVATE_SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${LEGACY_SYMBOL}`);
+    await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${ACTIVATE_SYMBOL}`);
+    await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${POST_ACTIVE_LEGACY_SYMBOL}`);
   });
 }
 
@@ -77,27 +99,57 @@ describe(TAG, () => {
   it('allows the migration overlap, then permanently rejects legacy projection writes', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
 
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`
-        UPDATE xstock_bar_clock_guard
-        SET contract_active = false
-        WHERE singleton = true
-      `);
-      await tx.execute(sql`
+    const legacyClient = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-legacy-holder',
+    });
+    const activationClient = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-activation-waiter',
+    });
+    await legacyClient.connect();
+    await activationClient.connect();
+    try {
+      const [initialState] = await rows<{ contract_active: boolean }>(db.execute(sql`
+        SELECT contract_active FROM xstock_bar_clock_guard WHERE singleton = true
+      `));
+      expect(initialState.contract_active).toBe(false);
+      await legacyClient.query('BEGIN');
+      await legacyClient.query(`
         INSERT INTO xstock_spot_ohlc_1m (
           symbol, asset_class, exchange, interval_begin, open, high, low, close,
           volume, metadata, captured_at, arrived_at
-        ) VALUES (
-          ${LEGACY_SYMBOL}, 'xstock_spot', 'kraken-equities', ${minute.toISOString()}::timestamptz,
-          1, 1, 1, 1, 1, '{"schema_version":1}'::jsonb, NOW(), ${A1.toISOString()}::timestamptz
+        ) VALUES ($1, 'xstock_spot', 'kraken-equities', $2::timestamptz,
+          1, 1, 1, 1, 1, '{"schema_version":1}'::jsonb, NOW(), $3::timestamptz)
+      `, [LEGACY_SYMBOL, minute.toISOString(), A1.toISOString()]);
+
+      const activationPayload = JSON.stringify([{
+        symbol: ACTIVATE_SYMBOL,
+        assetClass: 'xstock_spot',
+        exchange: 'kraken-equities',
+        intervalBegin: minute.toISOString(),
+        arrivedAt: A2.toISOString(),
+        open: '2', high: '2', low: '2', close: '2', volume: '2',
+        vwap: null, tradeCount: null, metadata: { schema_version: 1 },
+        payloadHash: 'a'.repeat(64),
+      }]);
+      const activation = activationClient.query(`
+        SELECT * FROM apply_xstock_bar_revision_events(
+          $1::jsonb, gen_random_uuid(), 'xstock-bar-availability/v1'
         )
-      `);
-      await tx.execute(sql`
-        UPDATE xstock_bar_clock_guard
-        SET contract_active = true
-        WHERE singleton = true
-      `);
-    });
+      `, [activationPayload]);
+
+      await waitForDatabaseLock('bavail-activation-waiter');
+      await legacyClient.query('COMMIT');
+      const activationResult = await activation;
+      expect(activationResult.rows).toHaveLength(1); // positive control: activation completed
+      activationRevisionId = activationResult.rows[0].revision_id;
+    } finally {
+      await legacyClient.query('ROLLBACK').catch(() => undefined);
+      await activationClient.query('ROLLBACK').catch(() => undefined);
+      await legacyClient.end();
+      await activationClient.end();
+    }
 
     const [legacy] = await rows<{ winning_revision_id: string | null }>(db.execute(sql`
       SELECT winning_revision_id
@@ -106,6 +158,14 @@ describe(TAG, () => {
     `));
     expect(legacy).toBeDefined(); // positive control: the migration-overlap write landed
     expect(legacy.winning_revision_id).toBeNull();
+
+    const [activationState] = await rows<{ contract_active: boolean }>(db.execute(sql`
+      SELECT contract_active FROM xstock_bar_clock_guard WHERE singleton = true
+    `));
+    expect(activationState.contract_active).toBe(true);
+    await expect(db.execute(sql`
+      UPDATE xstock_bar_clock_guard SET contract_active = false WHERE singleton = true
+    `)).rejects.toThrow(/activation is one-way/);
 
     await expect(db.execute(sql`
       UPDATE xstock_spot_ohlc_1m
@@ -117,14 +177,111 @@ describe(TAG, () => {
         symbol, asset_class, exchange, interval_begin, open, high, low, close,
         volume, metadata, captured_at, arrived_at
       ) VALUES (
-        'BAVAILLEGACY2/USD', 'xstock_spot', 'kraken-equities', ${minute.toISOString()}::timestamptz,
+        ${POST_ACTIVE_LEGACY_SYMBOL}, 'xstock_spot', 'kraken-equities', ${minute.toISOString()}::timestamptz,
         1, 1, 1, 1, 1, '{"schema_version":1}'::jsonb, NOW(), ${A2.toISOString()}::timestamptz
       )
     `)).rejects.toThrow(/missing immutable winner revision/);
   });
 
+  it('takes certificate wall time only after acquiring the clock-guard lock', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+    expect(activationRevisionId).toMatch(/^[0-9a-f-]{36}$/); // positive control: pending event exists
+
+    const holder = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-certificate-holder',
+    });
+    const waiter = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-certificate-waiter',
+    });
+    await holder.connect();
+    await waiter.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`
+        SELECT last_observed_at
+        FROM xstock_bar_clock_guard
+        WHERE singleton = true
+        FOR UPDATE
+      `);
+      const certificate = waiter.query(`
+        SELECT * FROM certify_xstock_bar_revision_events(
+          ARRAY[$1::uuid], 'xstock-bar-availability/v1'
+        )
+      `, [activationRevisionId]);
+      await waitForDatabaseLock('bavail-certificate-waiter');
+      const updated = await holder.query<{ last_observed_at: Date }>(`
+        UPDATE xstock_bar_clock_guard
+        SET last_observed_at = clock_timestamp()
+        WHERE singleton = true
+        RETURNING last_observed_at
+      `);
+      await holder.query('COMMIT');
+      const certified = await certificate;
+      expect(certified.rows).toHaveLength(1);
+      expect(new Date(certified.rows[0].visible_by).getTime()).toBeGreaterThanOrEqual(
+        new Date(updated.rows[0].last_observed_at).getTime(),
+      );
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      await waiter.query('ROLLBACK').catch(() => undefined);
+      await holder.end();
+      await waiter.end();
+    }
+  });
+
+  it('takes read wall time only after acquiring the clock-guard lock', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const holder = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-clock-holder',
+    });
+    const waiter = new Client({
+      connectionString: RAW_DB_URL,
+      application_name: 'bavail-clock-waiter',
+    });
+    await holder.connect();
+    await waiter.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`
+        SELECT last_observed_at
+        FROM xstock_bar_clock_guard
+        WHERE singleton = true
+        FOR UPDATE
+      `);
+      const observation = waiter.query(`
+        SELECT * FROM observe_xstock_bar_read('xstock-bar-availability/v1')
+      `);
+      await waitForDatabaseLock('bavail-clock-waiter');
+      const updated = await holder.query<{ last_observed_at: Date }>(`
+        UPDATE xstock_bar_clock_guard
+        SET last_observed_at = clock_timestamp()
+        WHERE singleton = true
+        RETURNING last_observed_at
+      `);
+      await holder.query('COMMIT');
+      const observed = await observation;
+      expect(observed.rows).toHaveLength(1); // positive control: the blocked observer resumed
+      expect(new Date(observed.rows[0].read_observed_at).getTime()).toBeGreaterThanOrEqual(
+        new Date(updated.rows[0].last_observed_at).getTime(),
+      );
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      await waiter.query('ROLLBACK').catch(() => undefined);
+      await holder.end();
+      await waiter.end();
+    }
+  });
+
   it('X@A1 -> identical X@A3 -> changed Y@A2 preserves the exact winner chain', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
+
+    // Advance the certificate/read sequence well beyond any retired independent
+    // read-sequence value. A later read must still order after its source cert.
+    await db.execute(sql`SELECT nextval('xstock_bar_visible_seq') FROM generate_series(1, 25)`);
 
     await upsertOhlcRows('xstock_spot', [bar('10', A1)]);
     await upsertOhlcRows('xstock_spot', [bar('10', A3)]);
@@ -204,6 +361,7 @@ describe(TAG, () => {
     expect(aggregate.sourceRevisionIds).toEqual([identicalLater.revision_id]);
     expect(aggregate.sourceMaxVisibleSeq).toBeGreaterThan(0);
     expect(aggregate.readObservedSeq).toBeGreaterThan(0);
+    expect(aggregate.readObservedSeq).toBeGreaterThan(aggregate.sourceMaxVisibleSeq!);
     expect(Date.parse(aggregate.readObservedAt!)).toBeGreaterThanOrEqual(
       Date.parse(aggregate.sourceMaxVisibleBy!),
     );

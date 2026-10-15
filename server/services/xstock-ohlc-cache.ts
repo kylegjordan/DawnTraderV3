@@ -172,6 +172,7 @@ interface AvailabilitySnapshotRow extends SnapshotRow {
   persisted_certificate_primary_identity: string | null;
   persisted_contract_version: string | null;
   current_primary_identity: string;
+  current_source_revision_count: number | string;
 }
 
 class XstockOHLCCache {
@@ -513,7 +514,13 @@ class XstockOHLCCache {
         a.source_max_visible_seq AS persisted_source_max_visible_seq,
         a.certificate_primary_identity AS persisted_certificate_primary_identity,
         a.contract_version AS persisted_contract_version,
-        c.primary_identity AS current_primary_identity
+        c.primary_identity AS current_primary_identity,
+        (
+          SELECT COUNT(*)
+          FROM xstock_spot_ohlc_1m current_projection
+          WHERE current_projection.symbol = r.symbol
+            AND current_projection.winning_revision_id = ANY(a.source_revision_ids)
+        ) AS current_source_revision_count
       FROM ranked r
       CROSS JOIN primary_context c
       LEFT JOIN xstock_bar_aggregate_revision a
@@ -551,7 +558,8 @@ class XstockOHLCCache {
         && Number(row.persisted_source_max_visible_seq) === Number(row.source_max_visible_seq)
         && row.persisted_certificate_primary_identity === row.certificate_primary_identity
         && row.certificate_primary_identity === row.current_primary_identity
-        && row.persisted_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT;
+        && row.persisted_contract_version === XSTOCK_BAR_AVAILABILITY_CONTRACT
+        && Number(row.current_source_revision_count) === row.source_revision_ids.length;
       const bar: XstockAvailabilityAggregate = {
         symbol: row.symbol,
         intervalMinutes,

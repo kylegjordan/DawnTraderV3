@@ -491,6 +491,7 @@ export function assertEligibleXstockAggregate(
       || !Number.isFinite(Date.parse(bar.sourceMaxVisibleBy ?? ''))
       || !Number.isFinite(Date.parse(bar.readObservedAt ?? ''))
       || Date.parse(bar.readObservedAt ?? '') < Date.parse(bar.sourceMaxVisibleBy ?? '')
+      || bar.readObservedSeq < bar.sourceMaxVisibleSeq
       || ![
         bar.timestamp,
         bar.open,
@@ -517,15 +518,19 @@ export async function persistSettledXstockWindowManifest(
   if (bars.length === 0) {
     throw new Error('[B-XSTOCK-BAR-AVAILABILITY] cannot manifest an empty xStock window');
   }
-  const ordered = [...bars].sort((a, b) => a.timestamp - b.timestamp);
+  const ordered = [...bars];
   assertEligibleXstockAggregate(ordered[0]);
   const symbol = ordered[0].symbol;
   const intervalMinutes = ordered[0].intervalMinutes;
   const certificatePrimaryIdentity = ordered[0].certificatePrimaryIdentity;
   const seenTimestamps = new Set<number>();
   const eligibleBars: EligibleXstockAvailabilityAggregate[] = [];
-  for (const bar of ordered) {
+  for (let index = 0; index < ordered.length; index++) {
+    const bar = ordered[index];
     assertEligibleXstockAggregate(bar);
+    if (index > 0 && bar.timestamp <= ordered[index - 1].timestamp) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] manifest window is not strictly ordered');
+    }
     if (bar.symbol !== symbol || bar.intervalMinutes !== intervalMinutes) {
       throw new Error('[B-XSTOCK-BAR-AVAILABILITY] manifest window mixes symbols or intervals');
     }
