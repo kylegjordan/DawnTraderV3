@@ -254,7 +254,11 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
     const [mode, tradeId, updates] = h.updateClosedTrade.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
     expect([mode, tradeId]).toEqual(['paper', 't-9']);
     expect(updates.closeReason).toBe('never_filled');
-    expect(Object.keys(updates).sort()).toEqual(['closeReason', 'closedAt']); // no exit price, no P&L
+    expect(Object.keys(updates).sort()).toEqual(['closeReason', 'closedAt', 'metadata']); // no exit price, no P&L
+    expect(updates.metadata).toEqual({
+      tradeId: 't-9',
+      neverFilledReason: 'pending maker cancelled by the engine stop, unfilled',
+    });
     expect(h.deleteActiveOpenPosition).toHaveBeenCalledWith('paper', 'p-P');
   });
 

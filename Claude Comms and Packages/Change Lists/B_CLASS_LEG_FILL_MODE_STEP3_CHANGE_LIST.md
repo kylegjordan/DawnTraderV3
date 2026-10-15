@@ -36,10 +36,10 @@
 
 ## Verification
 
-- focused affected suite: **16 test files, 269 tests passed**;
+- focused affected suite: **17 test files, 284 tests passed**;
 - TypeScript baseline: **335 current vs 337 baseline, 0 regressions above baseline**; the two lower counts are unrelated existing `partition-exporter.ts` diagnostics and the baseline was not resynced;
 - `git diff --check`: clean apart from Git's existing LF/CRLF working-copy notices;
-- one broad local Vitest run reached **351 passing files / 4,222 passing tests / 184 skipped**; its remaining 14 failing files were local full-suite prerequisites and repository-wide scanner pollution. All failures attributable to this change were corrected and are included in the final 269-test green run. CI remains the authoritative four-job gate.
+- one broad local Vitest run reached **351 passing files / 4,222 passing tests / 184 skipped**; its remaining 14 failing files were local full-suite prerequisites and repository-wide scanner pollution. All failures attributable to this change were corrected and are included in the final 284-test green run. CI remains the authoritative four-job gate.
 
 ## Review focus
 
