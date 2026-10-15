@@ -1,6 +1,6 @@
 # B-ENTRY-CONSUMPTION-FRESHNESS — Step 3 implementation change list r1
 
-**Base:** `e3fb8157b62392829cdd4238222cc42ada94b90c`
+**Base:** `97f7a108a28e22e57ea3c1268984fd1935757b8c`
 **Step:** 3 of 11 — implementation
 
 ## Mandatory Step-4 dispatch fields
