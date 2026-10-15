@@ -3,7 +3,7 @@
 ## CURRENT PRE-SPRINT SEQUENCE (2026-10-15)
 
 - [✅] **P1b `B-ENTRY-CONSUMPTION-FRESHNESS` — CLOSED 2026-10-15:** deployed `3a2cd4ee5`; Coltrane confirmed Step 11 at `c3c8d7ce1`; CI `38740761810` passed all four jobs.
-- [▶] **NEXT: P1c `#1170` fill-mode package — Step 1.** Scope the per-class switch together with its strict [C3] predecessor: a resting maker may fill only on a quote that arrived after placement. `B-PRICE-FEED-TRUTH` and `B-XSTOCK-BAR-AVAILABILITY` continue their October 19 and October 25 reads in parallel; neither blocks this work or unrelated reviewed deployments.
+- [▶] **P1c `B-CLASS-LEG-FILL-MODE` (`#1170` + [C3]) — STEP 1 IN PROGRESS.** The per-class/per-leg policy and the strictly-later local receipt-time fill guard are one architecture batch. `B-PRICE-FEED-TRUTH` and `B-XSTOCK-BAR-AVAILABILITY` continue their October 19 and October 25 reads in parallel; neither blocks this work or unrelated reviewed deployments.
 
 > **THIS BLOCK IS THE LIVE ORDERING AND SUPERSEDES EVERY SEQUENCE BELOW IT.** Kyle asked for one place holding: what is left, in order · what sits outside that list · what is done · what was discarded. **The detail behind each row stays where it already lives — this is the index, not a second copy.**
 > **Order ruled by Langston 2026-08-31 with five changes to my draft.** ★ **HIS ORDERING PRINCIPLE, WHICH I HAD WRONG: order by WHEN THE GATE LIFTS, not by how big the piece is.** A piece fenced a week out does not outrank one fenced on a question that can be answered today.
