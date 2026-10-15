@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const state: {
   results: unknown[];
   phases: string[];
-  holdFirst: Promise<void> | null;
+  holdOrdinal: number | null;
+  hold: Promise<void> | null;
   alertCalls: unknown[];
-} = { results: [], phases: [], holdFirst: null, alertCalls: [] };
+  queries: unknown[];
+} = { results: [], phases: [], holdOrdinal: null, hold: null, alertCalls: [], queries: [] };
 
 vi.mock('../../db.js', () => ({
   db: {
@@ -13,9 +16,10 @@ vi.mock('../../db.js', () => ({
       const ordinal = state.phases.filter((phase) => phase.startsWith('begin')).length + 1;
       state.phases.push(`begin-${ordinal}`);
       const value = await fn({
-        execute: async () => {
+        execute: async (query?: unknown) => {
+          state.queries.push(query);
           state.phases.push(`execute-${ordinal}`);
-          if (ordinal === 1 && state.holdFirst) await state.holdFirst;
+          if (ordinal === state.holdOrdinal && state.hold) await state.hold;
           const result = state.results.shift();
           if (result instanceof Error) throw result;
           return { rows: result };
@@ -33,6 +37,7 @@ vi.mock('../../services/system-alerts.js', () => ({
 
 import {
   assertExactRevisionIdSet,
+  isXstockAdmissionFailure,
   writeXstockProjectionAttempts,
   xstockBarPayloadHash,
 } from '../../services/passive-archive/xstock-bar-availability.js';
@@ -52,8 +57,10 @@ const bar = (close = '10', arrival = arrivedAt) => ({
 beforeEach(() => {
   state.results = [];
   state.phases = [];
-  state.holdFirst = null;
+  state.holdOrdinal = null;
+  state.hold = null;
   state.alertCalls = [];
+  state.queries = [];
 });
 
 describe('xStock availability capture boundary', () => {
@@ -73,7 +80,9 @@ describe('xStock availability capture boundary', () => {
 
   it('starts certification only after the immutable projection transaction resolves', async () => {
     let release!: () => void;
-    state.holdFirst = new Promise<void>((resolve) => { release = resolve; });
+    state.holdOrdinal = 2;
+    state.hold = new Promise<void>((resolve) => { release = resolve; });
+    state.results.push([]); // durable admission transaction
     state.results.push([
       {
         revision_id: '11111111-1111-4111-8111-111111111111',
@@ -96,19 +105,24 @@ describe('xStock availability capture boundary', () => {
     ]);
 
     const pending = writeXstockProjectionAttempts([bar()]);
-    await vi.waitFor(() => expect(state.phases).toEqual(['begin-1', 'execute-1']));
-    expect(state.phases).not.toContain('begin-2');
+    await vi.waitFor(() => expect(state.phases).toEqual([
+      'begin-1', 'execute-1', 'commit-1',
+      'begin-2', 'execute-2',
+    ]));
+    expect(state.phases).not.toContain('begin-3');
     release();
     const result = await pending;
     expect(state.phases).toEqual([
       'begin-1', 'execute-1', 'commit-1',
       'begin-2', 'execute-2', 'commit-2',
+      'begin-3', 'execute-3', 'commit-3',
     ]);
     expect(result.certification).toBe('certified');
     expect(result.certificates[0].visibleSeq).toBe(9);
   });
 
   it('leaves committed events pending repair instead of replaying the arrival on certificate failure', async () => {
+    state.results.push([]); // durable admission transaction
     state.results.push([
       {
         revision_id: '22222222-2222-4222-8222-222222222222',
@@ -129,5 +143,44 @@ describe('xStock availability capture boundary', () => {
     expect(result.certificates).toHaveLength(0);
     expect(state.phases.filter((phase) => phase === 'begin-1')).toHaveLength(1);
     expect(state.alertCalls).toHaveLength(1);
+  });
+
+  it('leaves durable admission evidence when projection fails permanently', async () => {
+    state.results.push([]); // admission commits
+    state.results.push(new Error('column does not exist')); // projection does not commit
+
+    await expect(writeXstockProjectionAttempts([bar()], {
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+      flushId: '33333333-3333-4333-8333-333333333333',
+    })).rejects.toThrow(/column does not exist/);
+    expect(state.phases).toEqual([
+      'begin-1', 'execute-1', 'commit-1',
+      'begin-2', 'execute-2',
+    ]);
+    expect(new PgDialect().sqlToQuery(state.queries[0] as any).sql)
+      .toContain('admit_xstock_bar_projection_flush');
+  });
+
+  it('marks a failed or ambiguously acknowledged admission as non-droppable', async () => {
+    state.results.push(new Error('column does not exist'));
+
+    const error = await writeXstockProjectionAttempts([bar()], {
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+      flushId: '44444444-4444-4444-8444-444444444444',
+    }).catch((caught) => caught);
+
+    expect(isXstockAdmissionFailure(error)).toBe(true);
+    expect(error.message).toContain('admission unconfirmed');
+    expect(state.phases).toEqual(['begin-1', 'execute-1']);
+  });
+
+  it('rejects a flush population that cannot reconcile to its projection attempts', async () => {
+    await expect(writeXstockProjectionAttempts([bar()], {
+      acceptedInputFrames: 3,
+      bufferSuperseded: 1,
+    })).rejects.toThrow(/invalid flush population/);
+    expect(state.phases).toEqual([]);
   });
 });

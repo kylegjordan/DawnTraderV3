@@ -9,12 +9,25 @@
  * certify the exact returned event-ID set.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { db } from '../../db.js';
 import type { InsertEquitySpotOhlc1m } from '../../../shared/schema.js';
 
 export const XSTOCK_BAR_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1' as const;
 export const XSTOCK_BAR_WRITER_BOOT_ID = randomUUID();
+export const XSTOCK_BAR_WRITER_BUILD_SHA = (() => {
+  try {
+    const value = readFileSync('dist/BUILD_SHA', 'utf8').trim();
+    if (/^[0-9a-f]{40}$/i.test(value)) return value.toLowerCase();
+  } catch {
+    // Tests and source-mode development do not necessarily have a built tree.
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[B-XSTOCK-BAR-AVAILABILITY] production build identity is unavailable');
+  }
+  return 'non-production';
+})();
 
 export interface XstockProjectionAttempt {
   revisionId: string;
@@ -38,6 +51,22 @@ export interface XstockRevisionWriteResult {
   attempts: XstockProjectionAttempt[];
   certificates: XstockVisibilityCertificate[];
   certification: 'certified' | 'pending_repair';
+}
+
+export interface XstockProjectionFlushPopulation {
+  acceptedInputFrames: number;
+  bufferSuperseded: number;
+  /** Stable across retries of one logical buffer snapshot. */
+  flushId?: string;
+}
+
+interface XstockAdmissionFailure extends Error {
+  xstockAdmissionFailed: true;
+}
+
+export function isXstockAdmissionFailure(error: unknown): error is XstockAdmissionFailure {
+  return error instanceof Error
+    && (error as Partial<XstockAdmissionFailure>).xstockAdmissionFailed === true;
 }
 
 interface DbProjectionAttemptRow {
@@ -227,24 +256,73 @@ export async function repairPendingXstockCertificates(limit = 1_000): Promise<nu
 }
 
 /**
- * Commit projection attempts, then certify the exact committed IDs in a later transaction.
+ * Commit an idempotent admission, then projection attempts, then certify the
+ * exact committed IDs in a later transaction.
  * A certificate failure does not retry the first transaction and create a false extra arrival
  * event; it leaves the committed events NULL/ineligible for the repair path.
  */
 export async function writeXstockProjectionAttempts(
   rows: InsertEquitySpotOhlc1m[],
+  population: XstockProjectionFlushPopulation = {
+    acceptedInputFrames: rows.length,
+    bufferSuperseded: 0,
+  },
 ): Promise<XstockRevisionWriteResult> {
   if (rows.length === 0) return { attempts: [], certificates: [], certification: 'certified' };
+  if (!Number.isInteger(population.acceptedInputFrames)
+      || !Number.isInteger(population.bufferSuperseded)
+      || population.acceptedInputFrames <= 0
+      || population.bufferSuperseded < 0
+      || population.acceptedInputFrames - population.bufferSuperseded !== rows.length) {
+    throw new Error(
+      `[B-XSTOCK-BAR-AVAILABILITY] invalid flush population `
+      + `(accepted=${population.acceptedInputFrames}, superseded=${population.bufferSuperseded}, `
+      + `attempts=${rows.length})`,
+    );
+  }
   const payloadJson = JSON.stringify(rows.map(toDatabasePayload));
+  const flushId = population.flushId ?? randomUUID();
+
+  // This is intentionally a separate committed transaction. If projection
+  // fails permanently or its COMMIT acknowledgement is ambiguous, the
+  // accepted population remains durable and the retry reuses this flush ID.
+  try {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        SELECT admit_xstock_bar_projection_flush(
+          ${flushId}::uuid,
+          ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
+          ${XSTOCK_BAR_WRITER_BUILD_SHA}::text,
+          ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text,
+          ${population.acceptedInputFrames}::integer,
+          ${population.bufferSuperseded}::integer,
+          ${rows.length}::integer
+        )
+      `);
+    });
+  } catch (error) {
+    // The admission COMMIT may have succeeded even when its acknowledgement
+    // was lost. Mark the phase so the buffer writer always retains this exact
+    // snapshot and retries the same flush ID; it must never classify an
+    // unconfirmed admission as a droppable permanent projection failure.
+    const detail = error instanceof Error ? error.message : String(error);
+    const admissionError = new Error(
+      `xStock flush admission unconfirmed: ${detail}`,
+    ) as XstockAdmissionFailure;
+    admissionError.xstockAdmissionFailed = true;
+    throw admissionError;
+  }
 
   // Awaiting this Drizzle transaction includes its COMMIT acknowledgement. The certificate call
   // below therefore cannot observe an uncommitted event from this transaction.
   const attempts = await db.transaction(async (tx) => {
     const result = await tx.execute(sql`
-      SELECT * FROM apply_xstock_bar_revision_events(
+      SELECT * FROM apply_xstock_bar_revision_flush(
         ${payloadJson}::jsonb,
         ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
-        ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
+        ${XSTOCK_BAR_WRITER_BUILD_SHA}::text,
+        ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text,
+        ${flushId}::uuid
       )
     `);
     return resultRows<DbProjectionAttemptRow>(result).map((row) => ({

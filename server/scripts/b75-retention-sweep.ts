@@ -39,7 +39,10 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
-import { exportPartition } from '../services/data-archive/partition-exporter.js';
+import {
+  countGzipJsonlLines,
+  exportPartition,
+} from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import {
   classifyPartition,
@@ -68,6 +71,9 @@ interface B74TableSpec {
   parent: string;
   timestampColumn: string;
   retentionConstantName: string; // key in module_constants under data_lifecycle
+  /** Immutable second cursor + database-rendered JSON for exact provenance tables. */
+  exactCursorTieBreakerColumn?: string;
+  exactCursorTieBreakerType?: 'uuid';
 }
 
 // P19-B-PERPFEED (#685 DEFECT-1 fix): the three OHLC entries named a `ts` column
@@ -86,6 +92,10 @@ const B74_TABLES: B74TableSpec[] = [
   { parent: 'xstock_perp_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'xstock_perp_ohlc_1m.hot_retention_days' },
   { parent: 'crypto_spot_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'crypto_spot_ohlc_1m.hot_retention_days' },
   { parent: 'crypto_perp_ohlc_1m',     timestampColumn: 'interval_begin', retentionConstantName: 'crypto_perp_ohlc_1m.hot_retention_days' },
+  // B-XSTOCK-BAR-AVAILABILITY P4: arrived_at is intentionally non-unique. The
+  // exact cursor preserves every tied immutable revision and database-rendered
+  // JSON preserves the certificate's microsecond timestamps.
+  { parent: 'xstock_bar_revision_event', timestampColumn: 'arrived_at', retentionConstantName: 'xstock_bar_revision_event.hot_retention_days', exactCursorTieBreakerColumn: 'revision_id', exactCursorTieBreakerType: 'uuid' },
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -521,6 +531,8 @@ async function archiveOneObject(
     partitionTableName,
     compressionLevel: 6,
     extraPredicate,
+    exactCursorTieBreakerColumn: spec.exactCursorTieBreakerColumn,
+    exactCursorTieBreakerType: spec.exactCursorTieBreakerType,
   });
 
   let verifyPath: string | null = null;
@@ -548,6 +560,19 @@ async function archiveOneObject(
         `[B75 sweep] CHECKSUM MISMATCH ${spec.parent}/${label}: ` +
           `local=${exportRes.checksum} upload=${upload.checksum} readback=${dl.checksum}`,
       );
+    }
+
+    if (spec.exactCursorTieBreakerColumn) {
+      const downloadedLineCount = await countGzipJsonlLines(verifyPath);
+      if (exportRes.sourceRowCount === null
+          || downloadedLineCount !== exportRes.sourceRowCount
+          || exportRes.rowCount !== exportRes.sourceRowCount) {
+        throw new Error(
+          `[B75 sweep] exact readback row-count mismatch ${spec.parent}/${label}: `
+          + `source=${exportRes.sourceRowCount ?? 'unknown'} exported=${exportRes.rowCount} `
+          + `downloaded=${downloadedLineCount}`,
+        );
+      }
     }
 
     await updateManifestUploaded(

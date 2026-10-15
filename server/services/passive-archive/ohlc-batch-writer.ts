@@ -18,6 +18,7 @@
  */
 
 import { sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { db } from '../../db.js';
 import {
   xstockSpotOhlc1m,
@@ -27,6 +28,7 @@ import {
   type InsertEquitySpotOhlc1m,
 } from '../../../shared/schema.js';
 import {
+  isXstockAdmissionFailure,
   repairPendingXstockCertificates,
   writeXstockProjectionAttempts,
 } from './xstock-bar-availability.js';
@@ -134,6 +136,39 @@ export const ALERT_RE_ARM_MS = 6 * 60 * 60 * 1000;
  * which is the behaviour we want: OHLC failing must not silence the ticker leg.
  */
 const _permanentAlerted: Record<string, number> = {};
+let _xstockBufferFailStopAlerted = false;
+
+async function alertXstockBufferFailStop(): Promise<void> {
+  if (_xstockBufferFailStopAlerted) return;
+  _xstockBufferFailStopAlerted = true;
+  try {
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'critical',
+      title: 'xStock archive intake fail-stopped at retry-buffer bound',
+      body: `The xStock OHLC buffer reached its ${RETRY_BUFFER_MAX}-frame hard bound while a flush was unresolved. `
+        + `The OHLC intake lane was stopped before accepting another frame; every previously accepted frame `
+        + `remains buffered and the xStock ticker lane must remain live for active exits. Repair the writer, drain `
+        + `the preserved buffer, then restart the archive intake. The Step 9 venue-session continuity gate must `
+        + `fail for this interruption.`,
+      metadata: {
+        assetClass: 'xstock_spot',
+        bufferRows: RETRY_BUFFER_MAX,
+        source: 'ohlc-batch-writer',
+        batch: 'B-XSTOCK-BAR-AVAILABILITY',
+      },
+      dedupe_key: 'xstock-bar-availability-buffer-fail-stop',
+    });
+  } catch (error) {
+    _xstockBufferFailStopAlerted = false;
+    console.error(
+      '[B-XSTOCK-BAR-AVAILABILITY] FAILED TO RAISE xStock buffer fail-stop alert:',
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
 
 /** Clear the latch for one writer:class — called when a flush SUCCEEDS, so a fault that is over
  *  does not silence the next, genuinely new one. */
@@ -154,6 +189,9 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
   // send burns the one-shot for nothing.
   _permanentAlerted[_latchKey] = Date.now();
   try {
+    const lossScope = writer === 'ohlc' && assetClass === 'xstock_spot'
+      ? `The atomic xStock projection did not report success; its durable admission remains as an orphan until repaired. `
+      : `Up to ${dropped} rows dropped in this flush (chunks commit one at a time, so rows in chunks before the failing one may have landed). `;
     // ⛔ THE JSONL ALERT SYSTEM, NOT `storage.createSystemAlert`. My first version wrote to the
     // Postgres `system_alerts` table — a DIFFERENT system, served by a different route, which
     // the per-turn alert check does not read. `/var/log/dawntrader/system-alerts.jsonl` is the
@@ -176,7 +214,7 @@ export async function alertPermanentWriteFailure(writer: 'ohlc' | 'ticker', asse
       // F-G-1 reopen (Langston Step-4 condition 4): "UP TO". Both writers upsert in 1,000-row chunks that commit one
       // at a time, so a permanent failure on chunk k leaves chunks 1..k-1 LANDED. Asserting all N dropped is the
       // over-claim this batch exists to remove.
-      body: `Up to ${dropped} rows dropped in this flush (chunks commit one at a time, so rows in chunks before the failing one may have landed). The error was classified permanent, so these rows were `
+      body: `${lossScope}The error was classified permanent, so these rows were `
         + `discarded rather than retried, which lets the next flush for this class succeed if the fault was `
         + `specific to them. If the fault persists, later flushes drop their rows too, and this alert is NOT `
         + `raised again while it is unresolved: resolve it once the cause is fixed. After that, a fault that is `
@@ -209,6 +247,17 @@ const buffers: Record<ArchiveAssetClass, InsertEquitySpotOhlc1m[]> = {
   crypto_spot: [],
   crypto_perp: [],
 };
+
+interface PendingXstockFlush {
+  flushId: string;
+  rawCount: number;
+  rows: InsertEquitySpotOhlc1m[];
+  bufferSuperseded: number;
+}
+
+// Retained across transient/ambiguous failures. New arrivals remain behind the
+// reserved rawCount and belong to the next logical flush.
+let pendingXstockFlush: PendingXstockFlush | null = null;
 
 const xstockAvailabilityTelemetry = {
   acceptedInputFrames: 0,
@@ -271,9 +320,18 @@ function releaseSlot(): void {
  * protecting nothing. A producer cannot omit what it does not supply. (Langston, Step 2.)
  * The spread puts the stamp LAST, so a stray `arrivedAt` on a producer row cannot override it.
  */
-export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): void {
+export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): boolean {
+  if (assetClass === 'xstock_spot' && buffers[assetClass].length >= RETRY_BUFFER_MAX) {
+    console.error(
+      `[B-XSTOCK-BAR-AVAILABILITY][FAIL-STOP] xStock retry buffer reached ${RETRY_BUFFER_MAX}; `
+      + `refusing new intake without discarding any previously accepted frame`,
+    );
+    void alertXstockBufferFailStop();
+    return false;
+  }
   buffers[assetClass].push({ ...row, arrivedAt: new Date() });
   if (assetClass === 'xstock_spot') xstockAvailabilityTelemetry.acceptedInputFrames++;
+  return true;
 }
 
 /** ms since epoch of a row's arrival stamp; `-Infinity` when absent, so an unstamped row never beats a stamped one. */
@@ -363,24 +421,39 @@ export function flushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
  * SQL with explicit arrival stamps — the cross-process case (a deploy overlaps two processes) cannot
  * be produced through `bufferOhlcBar`, which always stamps now.
  */
-export async function upsertOhlcRows(assetClass: ArchiveAssetClass, rows: InsertEquitySpotOhlc1m[]): Promise<void> {
+export async function upsertOhlcRows(
+  assetClass: ArchiveAssetClass,
+  rows: InsertEquitySpotOhlc1m[],
+  xstockPopulation?: { acceptedInputFrames: number; bufferSuperseded: number; flushId?: string },
+): Promise<void> {
   const CHUNK_SIZE = 1000;
   if (assetClass === 'xstock_spot') {
-    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-      const slice = rows.slice(i, i + CHUNK_SIZE);
-      const result = await writeXstockProjectionAttempts(slice);
-      xstockAvailabilityTelemetry.projectionAttempts += result.attempts.length;
-      xstockAvailabilityTelemetry.repeatedPayloadAttempts += result.attempts
-        .filter((attempt) => attempt.payloadRepeatedFromWinner).length;
-      xstockAvailabilityTelemetry.appliedWinners += result.attempts
-        .filter((attempt) => attempt.projectionApplied).length;
-      xstockAvailabilityTelemetry.rejectedOlderArrivals += result.attempts
-        .filter((attempt) => !attempt.projectionApplied).length;
-      if (result.certification === 'certified') {
-        xstockAvailabilityTelemetry.certifiedAttempts += result.certificates.length;
-      } else {
-        xstockAvailabilityTelemetry.pendingRepairAttempts += result.attempts.length;
-      }
+    const population = xstockPopulation ?? {
+      acceptedInputFrames: rows.length,
+      bufferSuperseded: 0,
+    };
+    if (population.acceptedInputFrames - population.bufferSuperseded !== rows.length) {
+      throw new Error(
+        `[B-XSTOCK-BAR-AVAILABILITY] flush population does not reconcile `
+        + `(accepted=${population.acceptedInputFrames}, superseded=${population.bufferSuperseded}, `
+        + `attempts=${rows.length})`,
+      );
+    }
+    // xStock binds one JSONB parameter, so the generic multi-value statement's
+    // bind limit does not apply. Preserve one logical flush as one transaction
+    // and one durable telemetry row.
+    const result = await writeXstockProjectionAttempts(rows, population);
+    xstockAvailabilityTelemetry.projectionAttempts += result.attempts.length;
+    xstockAvailabilityTelemetry.repeatedPayloadAttempts += result.attempts
+      .filter((attempt) => attempt.payloadRepeatedFromWinner).length;
+    xstockAvailabilityTelemetry.appliedWinners += result.attempts
+      .filter((attempt) => attempt.projectionApplied).length;
+    xstockAvailabilityTelemetry.rejectedOlderArrivals += result.attempts
+      .filter((attempt) => !attempt.projectionApplied).length;
+    if (result.certification === 'certified') {
+      xstockAvailabilityTelemetry.certifiedAttempts += result.certificates.length;
+    } else {
+      xstockAvailabilityTelemetry.pendingRepairAttempts += result.attempts.length;
     }
     return;
   }
@@ -423,11 +496,23 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
   // Now the first `n` rows stay where they are until the write succeeds. Rows that arrive during
   // the flush are pushed BEHIND them, so the front `n` are exactly the rows written: P2 guarantees
   // no second flush of this class can touch the front while this one is in flight.
-  const n = buf.length;
-  const deduped = dedupeLatestArrivalWithStats(buf.slice(0, n));
-  const rows = deduped.rows;
-  if (assetClass === 'xstock_spot') {
-    xstockAvailabilityTelemetry.bufferSuperseded += deduped.bufferSuperseded;
+  const existingXstockFlush = assetClass === 'xstock_spot' ? pendingXstockFlush : null;
+  const n = existingXstockFlush?.rawCount ?? buf.length;
+  const freshDedupe = existingXstockFlush
+    ? null
+    : dedupeLatestArrivalWithStats(buf.slice(0, n));
+  const rows = existingXstockFlush?.rows ?? freshDedupe!.rows;
+  const bufferSuperseded = existingXstockFlush?.bufferSuperseded ?? freshDedupe!.bufferSuperseded;
+  const xstockFlushId = existingXstockFlush?.flushId
+    ?? (assetClass === 'xstock_spot' ? randomUUID() : undefined);
+  if (assetClass === 'xstock_spot' && !existingXstockFlush) {
+    pendingXstockFlush = {
+      flushId: xstockFlushId!,
+      rawCount: n,
+      rows,
+      bufferSuperseded,
+    };
+    xstockAvailabilityTelemetry.bufferSuperseded += bufferSuperseded;
   }
   try {
     await acquireSlot();
@@ -464,7 +549,13 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       //
       // Reference: B_NEW_35_SCOPE.md §2 + Langston Step 1 Q4 ACK.
       // F-G-1 reopen: the chunked upsert and its arrival guard now live in `upsertOhlcRows` above.
-      await upsertOhlcRows(assetClass, rows);
+      await upsertOhlcRows(
+        assetClass,
+        rows,
+        assetClass === 'xstock_spot'
+          ? { acceptedInputFrames: n, bufferSuperseded, flushId: xstockFlushId }
+          : undefined,
+      );
       const availability = assetClass === 'xstock_spot'
         ? `, availability=${JSON.stringify(getXstockAvailabilityWriterTelemetry())}`
         : '';
@@ -475,19 +566,26 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     // P1: the write succeeded — NOW the snapshot leaves the buffer. Rows pushed during the flush
     // sit behind it and stay for the next one.
     buf.splice(0, n);
+    if (assetClass === 'xstock_spot') pendingXstockFlush = null;
     // BLOCKER-11: the fault is over, so the NEXT permanent failure is genuinely new and must
     // not be swallowed by a latch set hours ago.
     clearPermanentAlertLatch('ohlc', assetClass);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
-    if (!isTransientWriteError(err)) {
+    const admissionUnconfirmed = assetClass === 'xstock_spot' && isXstockAdmissionFailure(err);
+    if (!admissionUnconfirmed && !isTransientWriteError(err)) {
       // PERMANENT — do NOT re-buffer. Retrying rows that will fail identically forever is the
       // OOM #705 warns about, and #704 is the measured case: 15 hours, 4,802 stderr lines, and
       // ZERO alerts. The drop stays; the SILENCE is what this fixes.
       // The snapshot's `n` raw rows leave the buffer here, on the permanent branch only.
       buf.splice(0, n);
+      if (assetClass === 'xstock_spot') pendingXstockFlush = null;
       console.error(
-        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (up to ${rows.length} rows dropped, NOT retried; earlier chunks may have landed):`,
+        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (`
+        + (assetClass === 'xstock_spot'
+          ? `${rows.length} admitted attempts left without a successful completion`
+          : `up to ${rows.length} rows dropped, NOT retried; earlier chunks may have landed`)
+        + '):',
         detail,
       );
       void alertPermanentWriteFailure('ohlc', assetClass, detail.slice(0, 300), rows.length);
@@ -502,16 +600,29 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     // OLDEST is the honest policy. Langston's objection was that this makes the retry "silently stop
     // working": it is NOT silent, because the shed is counted and logged here. A bound that drops
     // quietly is the defect; a bound that drops loudly is the design.
-    if (buf.length > RETRY_BUFFER_MAX) {
-      const shed = buf.length - RETRY_BUFFER_MAX;
-      buf.splice(0, shed);
+    if (buf.length > RETRY_BUFFER_MAX && assetClass === 'xstock_spot') {
+      // xStock intake is synchronously bounded before acceptance, so this is
+      // an invariant breach. Preserve all accepted frames and keep failing
+      // closed; never turn the breach into an unrecorded shed.
       console.error(
-        `[B74][batch-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} oldest rows. `
-        + `The retry is not keeping up; this is data loss and it is being reported, not hidden.`,
+        `[B-XSTOCK-BAR-AVAILABILITY][FAIL-STOP] accepted xStock buffer exceeds `
+        + `${RETRY_BUFFER_MAX}; preserved all ${buf.length} rows`,
+      );
+      void alertXstockBufferFailStop();
+    } else if (buf.length > RETRY_BUFFER_MAX) {
+      const excess = buf.length - RETRY_BUFFER_MAX;
+      const shed = excess;
+      if (shed > 0) {
+        buf.splice(0, shed);
+      }
+      console.error(
+        `[B74][batch-writer] ${assetClass} retry buffer at cap ${RETRY_BUFFER_MAX} — SHED ${shed} `
+        + `oldest rows. The retry is not keeping up; this is data loss and it is being reported, not hidden.`,
       );
     }
     console.error(
-      `[B74][batch-writer] ${assetClass} TRANSIENT flush failure (${rows.length} rows RETAINED for retry, `
+      `[B74][batch-writer] ${assetClass} ${admissionUnconfirmed ? 'ADMISSION UNCONFIRMED' : 'TRANSIENT'} `
+      + `flush failure (${rows.length} rows RETAINED for retry, `
       + `buffer=${buf.length}):`,
       detail,
     );

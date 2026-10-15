@@ -41,6 +41,8 @@ interface ArchiverState {
   symbols: string[];
   backoff: BackoffPolicy;
   enabled: boolean;
+  /** Archive-only fail-stop. Ticker processing stays live for active exits. */
+  ohlcIntakeFailStopped: boolean;
   reconnectPending: boolean; // P19-B4a (C3): true between scheduleReconnect() and the next open
   lastMsgAt: number;
   /** #594: DATA-liveness. `lastMsgAt` answers "is the socket talking?" (stamped on ANY frame,
@@ -75,6 +77,7 @@ const state: ArchiverState = {
   symbols: [],
   backoff: makeBackoff(30),
   enabled: true,
+  ohlcIntakeFailStopped: false,
   reconnectPending: false,
   lastMsgAt: 0,
   lastDataMsgAt: 0,
@@ -128,7 +131,7 @@ function parseOhlcBar(data: any): void {
   }
   state.lastDataMsgAt = Date.now(); // #594: DATA-liveness — after the guard, same rule as parseTickerSnap.
   const bar = verdict.row;
-  bufferOhlcBar(ASSET_CLASS, {
+  const accepted = bufferOhlcBar(ASSET_CLASS, {
     symbol: bar.symbol,
     assetClass: ASSET_CLASS,
     exchange: 'kraken-equities',
@@ -141,6 +144,15 @@ function parseOhlcBar(data: any): void {
     vwap: bar.vwap,
     tradeCount: bar.tradeCount,
   } as any);
+  if (accepted === false) {
+    // Fail-stop only the OHLC intake lane. This WebSocket is also the sole
+    // xStock ticker source used by active exits; closing it here would turn an
+    // archive-capacity fault into a trading-price outage. The retained OHLC
+    // buffer continues retrying, ticker frames continue updating, and the
+    // archive gap makes the Step 9 continuity gate fail until restart.
+    state.ohlcIntakeFailStopped = true;
+    return;
+  }
   state.rowsPersistedLastMinute++;
   noteOhlcFrameAccepted(ASSET_CLASS, bar.symbol);
 }
@@ -393,7 +405,10 @@ function handleMessage(raw: WebSocket.RawData): void {
     return;
   }
   if (msg.channel === 'ohlc' && Array.isArray(msg.data)) {
-    for (const bar of msg.data) parseOhlcBar(bar);
+    for (const bar of msg.data) {
+      if (state.ohlcIntakeFailStopped) break;
+      parseOhlcBar(bar);
+    }
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
     for (const snap of msg.data) parseTickerSnap(snap, msg.type);
   } else {
@@ -593,6 +608,7 @@ export async function startEquitySpotArchiver(): Promise<void> {
     return;
   }
   state.enabled = true;
+  state.ohlcIntakeFailStopped = false;
   await connect();
 }
 
@@ -607,7 +623,7 @@ export function stopEquitySpotArchiver(): void {
 // P19-B4a (C3) test-only: patch the watchdog-relevant archiver state so unit
 // tests can exercise runStallWatchdogTick without a live socket.
 export function _setArchiverStateForTest(
-  patch: Partial<Pick<ArchiverState, 'enabled' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'closureSeenAt' | 'ws'
+  patch: Partial<Pick<ArchiverState, 'enabled' | 'ohlcIntakeFailStopped' | 'reconnectPending' | 'lastMsgAt' | 'lastDataMsgAt' | 'closureSeenAt' | 'ws'
     | 'cumulativeOhlcRows' | 'cumulativeTickerSnaps' | 'ohlcFramesSkipped' | 'rowsPersistedLastMinute'>>,
 ): void {
   Object.assign(state, patch);

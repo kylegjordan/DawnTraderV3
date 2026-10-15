@@ -5,8 +5,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { sql } from 'drizzle-orm';
 import pg from 'pg';
+import { randomUUID } from 'node:crypto';
 import { db } from '../../db.js';
 import { upsertOhlcRows } from '../../services/passive-archive/ohlc-batch-writer.js';
+import { writeXstockProjectionAttempts } from '../../services/passive-archive/xstock-bar-availability.js';
 import {
   aggregateAvailableXstockOHLC,
   persistSettledXstockWindowManifest,
@@ -20,6 +22,7 @@ const SYMBOL = 'BAVAILTEST/USD';
 const LEGACY_SYMBOL = 'BAVAILLEGACY/USD';
 const ACTIVATE_SYMBOL = 'BAVAILACTIVATE/USD';
 const POST_ACTIVE_LEGACY_SYMBOL = 'BAVAILLEGACY2/USD';
+const FLUSH_SYMBOL = 'BAVAILFLUSH/USD';
 const now = Date.now();
 const minute = new Date(Math.floor((now - 60_000) / 60_000) * 60_000);
 const A1 = new Date(now - 30_000);
@@ -274,6 +277,95 @@ describe(TAG, () => {
       await holder.end();
       await waiter.end();
     }
+  });
+
+  it('commits one completion with the exact revision set and replays it idempotently', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const flushId = randomUUID();
+    const flushBar = {
+      ...bar('12', new Date()),
+      symbol: FLUSH_SYMBOL,
+      intervalBegin: new Date(Math.floor(Date.now() / 60_000) * 60_000),
+    };
+    const population = {
+      flushId,
+      acceptedInputFrames: 1,
+      bufferSuperseded: 0,
+    };
+
+    const first = await writeXstockProjectionAttempts([flushBar], population);
+    const replay = await writeXstockProjectionAttempts([flushBar], population);
+    expect(first.attempts).toHaveLength(1); // positive control: projection completed
+    expect(first.certification).toBe('certified');
+    expect(replay.certification).toBe('certified');
+    expect(replay.attempts.map((attempt) => attempt.revisionId))
+      .toEqual(first.attempts.map((attempt) => attempt.revisionId));
+    expect(replay.certificates.map((certificate) => certificate.revisionId))
+      .toEqual(first.certificates.map((certificate) => certificate.revisionId));
+
+    const [evidence] = await rows<{
+      admissions: string;
+      completions: string;
+      revision_ids: string[];
+      linked_events: string;
+    }>(db.execute(sql`
+      SELECT
+        (SELECT count(*)::text FROM xstock_bar_projection_flush_admission
+          WHERE flush_id = ${flushId}::uuid) AS admissions,
+        (SELECT count(*)::text FROM xstock_bar_projection_flush_completion
+          WHERE flush_id = ${flushId}::uuid) AS completions,
+        (SELECT revision_ids FROM xstock_bar_projection_flush_completion
+          WHERE flush_id = ${flushId}::uuid) AS revision_ids,
+        (SELECT count(e.revision_id)::text
+           FROM xstock_bar_projection_flush_completion c
+           CROSS JOIN LATERAL unnest(c.revision_ids) saved(revision_id)
+           JOIN xstock_bar_revision_event e ON e.revision_id = saved.revision_id
+          WHERE c.flush_id = ${flushId}::uuid) AS linked_events
+    `));
+    expect(evidence).toMatchObject({ admissions: '1', completions: '1', linked_events: '1' });
+    expect(evidence.revision_ids).toEqual([first.attempts[0].revisionId]);
+  });
+
+  it('retains an orphan admission when projection cannot complete and keeps evidence append-only', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const flushId = randomUUID();
+    const writerBootId = randomUUID();
+    await db.execute(sql`
+      SELECT admit_xstock_bar_projection_flush(
+        ${flushId}::uuid,
+        ${writerBootId}::uuid,
+        'non-production',
+        'xstock-bar-availability/v1',
+        1,
+        0,
+        1
+      )
+    `);
+    await expect(db.execute(sql`
+      SELECT * FROM apply_xstock_bar_revision_flush(
+        '[]'::jsonb,
+        ${writerBootId}::uuid,
+        'non-production',
+        'xstock-bar-availability/v1',
+        ${flushId}::uuid
+      )
+    `)).rejects.toThrow(/does not match durable admission/);
+
+    const [orphan] = await rows<{ admissions: string; completions: string }>(db.execute(sql`
+      SELECT count(a.flush_id)::text AS admissions,
+             count(c.flush_id)::text AS completions
+      FROM xstock_bar_projection_flush_admission a
+      LEFT JOIN xstock_bar_projection_flush_completion c USING (flush_id)
+      WHERE a.flush_id = ${flushId}::uuid
+    `));
+    expect(orphan).toEqual({ admissions: '1', completions: '0' });
+    await expect(db.execute(sql`
+      UPDATE xstock_bar_projection_flush_admission
+      SET accepted_input_frames = 2
+      WHERE flush_id = ${flushId}::uuid
+    `)).rejects.toThrow(/append-only/);
   });
 
   it('X@A1 -> identical X@A3 -> changed Y@A2 preserves the exact winner chain', async (ctx) => {

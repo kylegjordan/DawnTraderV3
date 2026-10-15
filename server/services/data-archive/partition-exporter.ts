@@ -60,6 +60,20 @@ export interface ExportRequest {
    * (vts_open_trades archives closed rows only; open rows are never touched).
    */
   extraPredicate?: string;
+  /**
+   * Exact-provenance mode. The ordinary exporter historically paginates only
+   * by timestamp; that is sufficient only for tables whose timestamp values
+   * are effectively unique. Provenance ledgers can contain many rows with the
+   * same arrival timestamp, so they must advance on a stable second key.
+   *
+   * When present, rows are rendered to JSON by PostgreSQL (`to_jsonb`) rather
+   * than round-tripped through node-postgres values. This preserves
+   * microsecond timestamptz precision. The exporter also counts the source rows
+   * in the same REPEATABLE READ snapshot and refuses an incomplete export.
+   */
+  exactCursorTieBreakerColumn?: string;
+  /** Allow-listed PostgreSQL type for the text transport of the exact cursor. */
+  exactCursorTieBreakerType?: 'uuid';
 }
 
 export interface ExportResult {
@@ -77,6 +91,8 @@ export interface ExportResult {
   maxTs: Date;
   /** SHA-256 hex of the compressed file. */
   checksum: string;
+  /** Same-snapshot source count in exact mode; null in legacy timestamp-only mode. */
+  sourceRowCount: number | null;
 }
 
 function ensureDir(p: string): void {
@@ -96,6 +112,11 @@ export async function exportPartition(
   const tsCol = req.timestampColumn ?? 'timestamp';
   const target = req.partitionTableName ?? req.sourceTable;
   const compressionLevel = req.compressionLevel ?? 6;
+  const exactTieCol = req.exactCursorTieBreakerColumn;
+  if (exactTieCol && req.exactCursorTieBreakerType !== 'uuid') {
+    throw new Error('[B75 partition-exporter] exact cursor tie-breaker type must be allow-listed uuid');
+  }
+  const exactTieCast = req.exactCursorTieBreakerType;
 
   const dir = path.join(TMP_BASE, req.sourceTable);
   ensureDir(dir);
@@ -114,6 +135,7 @@ export async function exportPartition(
   let bytesUncompressed = 0;
   let minTs: Date | null = null;
   let maxTs: Date | null = null;
+  let sourceRowCount: number | null = null;
 
   try {
     // KEYSET pagination via timestamp cursor — uses the existing timestamp
@@ -122,10 +144,9 @@ export async function exportPartition(
     // optimize, leading to sequential scans and 2min statement_timeout
     // hits on Supabase Pro.
     //
-    // Trade-off: if two rows share the exact same timestamp value, we use
-    // strict `> lastTs` which would skip duplicates. For tables with random
-    // UUIDs and millisecond+ timestamp resolution, exact ties are rare. The
-    // row_count + min/max_ts verify steps in the sweep catch any anomaly.
+    // Legacy mode retains the historical timestamp-only cursor. Exact mode
+    // below uses (timestamp, immutable tie-breaker), because source-count and
+    // min/max checks cannot recover rows skipped at a timestamp boundary.
     //
     // BATCH=1000 (down from 5000) caps single-query payload size given
     // wide JSONB rows that TOAST to 20+ KB raw.
@@ -137,12 +158,46 @@ export async function exportPartition(
     const gzip = zlib.createGzip({ level: compressionLevel });
     gzip.pipe(out);
 
-    let lastTs: Date | null = null;
+    sourceRowCount = exactTieCol
+      ? Number((await client.query(
+        `SELECT count(*)::bigint AS source_count FROM ${quoteIdent(target)}
+          WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}`,
+        [req.rangeStart, req.rangeEnd],
+      )).rows[0]?.source_count ?? 0)
+      : null;
+
+    let lastTs: Date | string | null = null;
+    let lastTie: string | null = null;
     let firstBatch = true;
 
     while (true) {
       let r;
-      if (firstBatch) {
+      if (exactTieCol && firstBatch) {
+        r = await client.query(
+          `SELECT ${quoteIdent(tsCol)}::text AS __cursor_ts,
+                  ${quoteIdent(exactTieCol)}::text AS __cursor_tie,
+                  to_jsonb(src)::text AS __json
+             FROM ${quoteIdent(target)} AS src
+            WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
+            ORDER BY ${quoteIdent(tsCol)} ASC, ${quoteIdent(exactTieCol)} ASC
+            LIMIT ${BATCH}`,
+          [req.rangeStart, req.rangeEnd],
+        );
+        firstBatch = false;
+      } else if (exactTieCol) {
+        r = await client.query(
+          `SELECT ${quoteIdent(tsCol)}::text AS __cursor_ts,
+                  ${quoteIdent(exactTieCol)}::text AS __cursor_tie,
+                  to_jsonb(src)::text AS __json
+             FROM ${quoteIdent(target)} AS src
+            WHERE (${quoteIdent(tsCol)}, ${quoteIdent(exactTieCol)})
+                    > ($1::timestamptz, $2::${exactTieCast})
+              AND ${quoteIdent(tsCol)} < $3${extraAnd}
+            ORDER BY ${quoteIdent(tsCol)} ASC, ${quoteIdent(exactTieCol)} ASC
+            LIMIT ${BATCH}`,
+          [lastTs, lastTie, req.rangeEnd],
+        );
+      } else if (firstBatch) {
         r = await client.query(
           `SELECT * FROM ${quoteIdent(target)}
            WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
@@ -163,13 +218,13 @@ export async function exportPartition(
       if (r.rows.length === 0) break;
 
       for (const row of r.rows) {
-        const ts = row[tsCol];
+        const ts = exactTieCol ? row.__cursor_ts : row[tsCol];
         if (ts) {
           const tsDate = ts instanceof Date ? ts : new Date(ts);
           if (minTs === null || tsDate < minTs) minTs = tsDate;
           if (maxTs === null || tsDate > maxTs) maxTs = tsDate;
         }
-        const line = JSON.stringify(row) + '\n';
+        const line = (exactTieCol ? String(row.__json) : JSON.stringify(row)) + '\n';
         if (!gzip.write(line)) {
           // Respect backpressure — wait for drain before continuing.
           await new Promise<void>((resolve) => gzip.once('drain', () => resolve()));
@@ -179,9 +234,14 @@ export async function exportPartition(
       }
 
       // Advance the keyset cursor from the last row of this batch
-      const lastRow = r.rows[r.rows.length - 1];
-      const lastRowTs = lastRow[tsCol];
-      lastTs = lastRowTs instanceof Date ? lastRowTs : new Date(lastRowTs);
+      const lastRow: any = r.rows[r.rows.length - 1];
+      const lastRowTs: any = exactTieCol ? lastRow.__cursor_ts : lastRow[tsCol];
+      // Keep the exact cursor as database text. A node-postgres Date
+      // round-trip truncates microseconds and corrupts page boundaries.
+      lastTs = exactTieCol
+        ? String(lastRowTs)
+        : (lastRowTs instanceof Date ? lastRowTs : new Date(lastRowTs));
+      if (exactTieCol) lastTie = String(lastRow.__cursor_tie);
 
       if (r.rows.length < BATCH) break;
     }
@@ -191,6 +251,13 @@ export async function exportPartition(
       out.on('close', () => resolve());
       out.on('error', reject);
     });
+
+    if (sourceRowCount !== null && rowCount !== sourceRowCount) {
+      throw new Error(
+        `[B75 partition-exporter] exact source/export row-count mismatch `
+        + `${req.sourceTable}/${req.partitionLabel}: source=${sourceRowCount} exported=${rowCount}`,
+      );
+    }
 
     await client.query('COMMIT');
   } catch (err) {
@@ -218,7 +285,29 @@ export async function exportPartition(
     minTs: minTs ?? req.rangeStart,
     maxTs: maxTs ?? new Date(req.rangeEnd.getTime() - 1),
     checksum,
+    sourceRowCount,
   };
+}
+
+/** Count newline-delimited rows after inflating a downloaded JSONL.gz object. */
+export async function countGzipJsonlLines(filePath: string): Promise<number> {
+  const input = fs.createReadStream(filePath);
+  const gunzip = zlib.createGunzip();
+  input.pipe(gunzip);
+  let lines = 0;
+  let sawByte = false;
+  let lastByte = 0;
+  for await (const chunk of gunzip) {
+    const bytes = chunk as Buffer;
+    if (bytes.length === 0) continue;
+    sawByte = true;
+    lastByte = bytes[bytes.length - 1];
+    for (const byte of bytes) if (byte === 0x0a) lines++;
+  }
+  if (sawByte && lastByte !== 0x0a) {
+    throw new Error(`[B75 partition-exporter] JSONL object has an unterminated final row: ${filePath}`);
+  }
+  return lines;
 }
 
 /**

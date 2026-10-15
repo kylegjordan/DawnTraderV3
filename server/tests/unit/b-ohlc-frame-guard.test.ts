@@ -262,6 +262,35 @@ describe('producers — the counters (#1029)', () => {
     expect(h.bufferOhlcBar).toHaveBeenCalledTimes(1);
     expect(h.bufferOhlcBar.mock.calls[0][1]).toMatchObject({ symbol: 'AAPL/USD', exchange: 'kraken-equities', close: '2', volume: '0' });
   });
+  it('xStock spot: a bounded-writer refusal stops OHLC intake but keeps ticker marks live', () => {
+    const close = vi.fn();
+    h.bufferOhlcBar.mockReturnValue(false);
+    _setArchiverStateForTest({
+      enabled: true,
+      ohlcIntakeFailStopped: false,
+      ws: { close } as any,
+      cumulativeOhlcRows: 0,
+      ohlcFramesSkipped: 0,
+      rowsPersistedLastMinute: 0,
+    });
+
+    _handleMessageForTests(frame({ channel: 'ohlc', data: [goodBar] }));
+    _handleMessageForTests(frame({ channel: 'ohlc', data: [goodBar] }));
+    _handleMessageForTests(frame({
+      channel: 'ticker',
+      type: 'update',
+      data: [{ symbol: 'AAPL/USD', bid: 1, ask: 2 }],
+    }));
+
+    expect(_getArchiverCountersForTest()).toMatchObject({
+      scanned: 1,
+      skipped: 0,
+      persisted: 0,
+      tickerScanned: 1,
+    });
+    expect(h.bufferOhlcBar).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+  });
   it('xStock spot: a symbol-less ticker snap is still scanned', () => {
     _setArchiverStateForTest({ cumulativeTickerSnaps: 0 });
     _handleMessageForTests(frame({ channel: 'ticker', data: [{ bid: 1, ask: 2 }] }));
