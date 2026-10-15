@@ -1334,7 +1334,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **BOUNDARY.** No trading behaviour, schema, pricing, filter or setting changed. Automatic Codex wake/alert/hook coverage and first-class board identities are `#731`, sprint row 1z; existing homes carry the unrelated deploy-record, push-guard and generated-file findings.
 
-## B-ENTRY-CONSUMPTION-FRESHNESS (CC-C, sprint row 40 P1b; `#684` entry half) — change-class `sub_batch` — ⏳ **STEP 10 DONE 2026-10-15; Step 11 completion review next** (deployed `28c58fb8d`; Coltrane Step 8 approved; governance evidence `Change Lists/B_ENTRY_CONSUMPTION_FRESHNESS_STEP10_GOVERNANCE.md`)
+## B-ENTRY-CONSUMPTION-FRESHNESS (CC-C, sprint row 40 P1b; `#684` entry half) — change-class `sub_batch` — ✅ **CLOSED 2026-10-15; Coltrane confirmed Step 11** (deployed `3a2cd4ee5`; report ref `c3c8d7ce1`; CI `38740761810` four of four; completion report `Batch Completion/B_ENTRY_CONSUMPTION_FRESHNESS_COMPLETION_REPORT.md`)
 
 **WHAT IT DOES.** An immediate open can no longer consume a depth snapshot that was fresh at the gate but expired during the later liveness and venue-validation waits. The same snapshot is conservatively aged with a local monotonic clock immediately before `openOrder`; invalid clocks and over-limit ages fail closed. The original gate age and final consumption age are recorded separately.
 

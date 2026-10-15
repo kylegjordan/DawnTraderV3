@@ -20,7 +20,7 @@
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | built and reviewed; ship in the one held deploy |
 | 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |
-| 40 | `B-XSTOCK-SESSION-FRESHNESS` | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` Step 10 done: deployed and verified; Step 11 next. Umbrella residual alert/exit/dedupe work remains separately placed. |
+| 40 | `B-XSTOCK-SESSION-FRESHNESS` | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15: deployed `3a2cd4ee5`, Coltrane Step 11 confirmed at `c3c8d7ce1`. Umbrella residual alert/exit/dedupe work remains separately placed. |
 | — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle
@@ -63,7 +63,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 37 | B-BOOK-SUBSCRIPTION-REACH | QUEUED | after #506: subscribe the order book for the whole pool, not ~3 coins |
 | 38 | B-CRYPTO-MARK-AGE-GATE | PRE-SPRINT stage 2, after row 2 (Kyle 2026-10-10) | crypto mark age |
 | 39 | #977 — batch named at Step 1 | QUEUED | the shared price-cache refresh lane for open positions runs but nothing subscribes - staleness hits selection (CC-C) |
-| 40 | B-XSTOCK-SESSION-FRESHNESS | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` STEP 10 DONE; Step 11 next; umbrella residuals remain | xStock entry-age limit vs the exit standard Kyle ruled |
+| 40 | B-XSTOCK-SESSION-FRESHNESS | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15; umbrella residuals remain | xStock entry-age limit vs the exit standard Kyle ruled |
 | 42 | B-DECIDED-INTENT-INDEX | QUEUED | xStock's three definitions of 'the price' from one frame |
 | 43 | B-POST-GRID-MUTATION-CENSUS | QUEUED | what changes a stop after it is rounded |
 | 44 | plan row 7 | QUEUED | the VTS reads prices through the shared accessor |

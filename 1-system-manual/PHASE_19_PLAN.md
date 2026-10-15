@@ -655,4 +655,4 @@ ALL must be ✅ before the flip commit. Verify each at the **B8 switch-on** Step
 
 ### 2026-10-15 P1b landing note — `B-ENTRY-CONSUMPTION-FRESHNESS`
 
-The entry-consumption half of row `3b.f-c` / sprint row 40 is deployed and Step-10 governed at `28c58fb8d`: the same gate snapshot is aged through later awaits and checked synchronously immediately before an immediate fill. The 5 s crypto / 15 s xStock limits remain unchanged; resting-maker placement is outside this consumption seam. This does not close the umbrella's separately placed alert/exit/dedupe work, and it creates no observation or deploy hold.
+The entry-consumption half of row `3b.f-c` / sprint row 40 closed at deployed ref `3a2cd4ee5`; Coltrane confirmed Step 11 at report ref `c3c8d7ce1`, with CI `38740761810` four of four. The same gate snapshot is aged through later awaits and checked synchronously immediately before an immediate fill. The 5 s crypto / 15 s xStock limits remain unchanged; resting-maker placement is outside this consumption seam. This does not close the umbrella's separately placed alert/exit/dedupe work, and it creates no observation or deploy hold.
