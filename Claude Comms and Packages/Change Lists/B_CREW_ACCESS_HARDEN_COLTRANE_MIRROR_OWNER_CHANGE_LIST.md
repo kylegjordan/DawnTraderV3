@@ -46,6 +46,40 @@ mirror to shared ref `805a4b6bef2eb18f4177106a8952d34b4dee7f18`, wrote a matchin
 stamp, and left 0 of 3,159 mirror paths owned by another user or group. The timer remained active
 and enabled. This scheduled-path proof is separate from the earlier manual service proof.
 
+## Amendment — independent mirror objects
+
+The first correction fixed the scheduled writer but measured ownership only in Coltrane's
+mirror. A later whole-path census found 9 packed-object files with link count 2 across the source
+and Coltrane mirrors; changing their owner through either path changed the same inode in both.
+After concurrent exact-ref pins, 32 of 581 source-mirror paths were not owned by `langston`, even
+while 0 of 3,241 Coltrane-mirror paths had the wrong owner. The target-only census therefore could
+pass while the source mirror was being changed.
+
+This was not a new mechanism: the B-CREDENTIALS-PRIVATE-REPO pre-audit had already measured three
+shared packs and identified the original local `--mirror` clone as the likely mechanism, with a
+target-side repack as its prescribed correction. A fresh Linux control did not reproduce hardlink
+creation through the scheduled fetch command, so no unsupported fetch rewrite was retained. The
+live correction broke the 9 shared links and then restored source ownership. Acceptance requires zero
+shared object inodes, zero wrong-owner paths in both mirrors, successful Git integrity checks in
+both mirrors, an exact shared ref, a fresh success stamp and one real scheduled-account service
+run before the timer is restarted.
+
+The live correction left 0 shared object inodes across 369 source object files and 2,978 target
+object files. The complete ownership censuses found 0 of 628 source paths outside
+`langston:langston` and 0 of 3,276 target paths outside `coltrane:coltrane`; both mirrors passed
+Git's integrity check. With the timer still stopped, a service run under `coltrane:coltrane`
+completed successfully at 09:44:11 UTC, kept both mirrors at
+`159d16134a805eb9c9840bc1b4d199b88fb43f00`, wrote a fresh success stamp, and preserved all four
+zero-failure measurements. The timer was then returned to active/enabled state for its independent
+scheduled-run proof.
+
+The first scheduled run after that correction completed successfully at 09:59:18 UTC under
+`coltrane:coltrane`, kept both mirrors at
+`159d16134a805eb9c9840bc1b4d199b88fb43f00`, and wrote a matching success stamp. After the adjacent
+source-mirror sync settled, both mirrors passed Git's integrity check; the full censuses found 0 of
+650 source paths and 0 of 3,276 target paths under the wrong owner, plus 0 shared object inodes
+across 387 source object files and 2,978 target object files. The timer remained active and enabled.
+
 DISPOSITION: folded into B-CREW-ACCESS-HARDEN because exact-ref Langston/Coltrane review is a
 required gate for this batch and the stopped timer could not safely return to service without
 the correction.
