@@ -6,6 +6,32 @@
 
 **Review target:** the exact commit containing this file on `migration/b-class-leg-fill-mode`
 
+## Step 4 dispatch header
+
+**DECLARED CHANGE-CLASS:** `architecture`
+
+**STEP-2 REFERENCE:** `Claude Comms and Packages/Scope Files/B_CLASS_LEG_FILL_MODE_PRE_AUDIT.md`
+
+| Architecture document-set row | Step-4 state |
+|---|---|
+| batch `SCOPE` | **present** — `Claude Comms and Packages/Scope Files/B_CLASS_LEG_FILL_MODE_SCOPE.md` |
+| batch `PRE_AUDIT` | **present** — `Claude Comms and Packages/Scope Files/B_CLASS_LEG_FILL_MODE_PRE_AUDIT.md` |
+| `COMPLETION_REPORT` | **absent** — Step 11 deliverable, not valid before staging verification and governance reconciliation |
+| `BATCH_CATALOG.md` | **present; batch-content update due at Step 10** — `1-system-manual/BATCH_CATALOG.md` |
+| `PHASE_HISTORY.md` | **present; batch-content update due at Step 10** — `1-system-manual/PHASE_HISTORY.md` |
+| `SYSTEM_MANUAL.md` | **present; batch-content update due at Step 10** — `1-system-manual/SYSTEM_MANUAL.md` |
+| `SYSTEM_IMPACT_MAP.md` | **present; batch-content update due at Step 10** — `1-system-manual/SYSTEM_IMPACT_MAP.md` |
+| `CHANGES_AND_FIXES.md` | **present; applicable batch-content update due at Step 10** — `1-system-manual/CHANGES_AND_FIXES.md` |
+| `RUNNING_ISSUES.md` | **present; applicable `#1170` close/update due at Step 10** — `1-system-manual/RUNNING_ISSUES.md` |
+| `POST_AUDIT_ROADMAP.md` | **judged N/A** — this pre-sprint item is carried by the active sprint plan, not a roadmap row |
+| `DELETED_COMPONENTS_LOG.md` | **judged N/A** — the implementation deletes no component |
+| `ADJUSTMENT_FRAMEWORK.md` | **present; applicable configuration-policy update due at Step 10** — `1-system-manual/ADJUSTMENT_FRAMEWORK.md` |
+| `PHASE_19_PLAN.md` | **N/A — no row there**; the batch ID is not `P19-*` |
+| active plan, `SPRINT_TO_LIVE_PLAN.md` | **present; P1c row update due at Step 10** — `1-system-manual/SPRINT_TO_LIVE_PLAN.md` |
+| shared `MEMORY.md` + owner `MEMORY_CC_C.md` + reviewer memory | **present/local owner position updated; final reconciliation due at Step 10** — `.claude/memory/MEMORY.md`, `.claude/memory/MEMORY_CC_C.md`; Coltrane's reviewer-memory handoff is due with governance |
+| session task lists | **present; owner list update due at Step 10** — `1-system-manual/CC_C_SESSION_TASK_LIST.md`; CC-A, CC-B, and CC-INFRA lists are `N/A — not mine` |
+| Observation column | **applicable, no new hold** — the October/November windows continue under their registered cohort/handoff rules; the completion ledger will record this explicitly |
+
 ## Changed
 
 1. Policy and configuration
@@ -48,6 +74,100 @@
 3. Prove accepted price and arrival belong to the same quote while freshness and ordering clocks remain separate.
 4. Prove all strict interval boundaries, legacy cuts, stop precedence, target-expiry policies, and twin suppression.
 5. Confirm the shadow selection-quality lane remains deliberately unpriced: it creates no maker/taker execution leg, so it must not acquire `chosenEntryMode` and trip the existing lost-friction-input alert. The shared persistence/rehydrate seam carries the new fields whenever a priced VTS creator supplies them.
+
+## Load-bearing diff excerpts
+
+### MODIFIED — policy now overlays the already-priced arms
+
+Before:
+
+```ts
+export interface MakerTakerDecisionResult {
+  chosenMode: EntryMode;
+  chosenNetEV: number;
+  takerNetEV: number;
+  makerNetEVRaw: number;
+  makerNetEVAdjusted: number;
+  makerEntryAdvantagePct: number;
+  adverseSelectionPct: number;
+  nonFillCostPct: number;
+  hardFloorFired: boolean;
+}
+```
+
+After:
+
+```ts
+export function applyMakerTakerFillPolicy(
+  decision: MakerTakerDecisionResult,
+  policy: FillPolicy,
+  admissionFloor: number,
+): FillPolicyDecision {
+  if (policy === 'maker_only') {
+    if (decision.hardFloorFired) return { admitted: false, policy, reason: 'hard_floor' };
+    if (!(Number.isFinite(decision.makerNetEVAdjusted) && decision.makerNetEVAdjusted > 0)) {
+      return { admitted: false, policy, reason: 'maker_not_positive' };
+    }
+    return { admitted: true, policy, chosenMode: 'maker', chosenNetEV: decision.makerNetEVAdjusted };
+  }
+```
+
+### MODIFIED — a rest needs a quote that arrived inside its live interval
+
+Before:
+
+```ts
+const { side, transactablePrice, limit, nowMs, deadlineMs } = args;
+if (transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill';
+if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
+return 'rest';
+```
+
+After:
+
+```ts
+const { side, transactablePrice, limit, nowMs, deadlineMs, restPlacedAtMs, quoteArrivedAtMs } = args;
+const arrivalIsDuringRest =
+  restPlacedAtMs != null
+  && quoteArrivedAtMs != null
+  && Number.isFinite(restPlacedAtMs)
+  && Number.isFinite(quoteArrivedAtMs)
+  && quoteArrivedAtMs > restPlacedAtMs
+  && (deadlineMs == null || quoteArrivedAtMs < deadlineMs);
+if (arrivalIsDuringRest && transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill';
+if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
+return 'rest';
+```
+
+### MODIFIED — target-rest expiry follows the saved policy
+
+Before:
+
+```ts
+if (_restOutcome === 'drop') {
+  await storage.updateActiveOpenPosition(this.mode, position.id, {
+    exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null,
+  } as any);
+  _exitRestStamp = { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'convert' };
+  if (!exitCondition) continue;
+}
+```
+
+After:
+
+```ts
+if (_restOutcome === 'drop') {
+  await storage.updateActiveOpenPosition(this.mode, position.id, {
+    exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null, targetExitFillPolicy: null,
+  } as any);
+  if (_targetPolicy === 'maker_only') {
+    console.log(`[B-CLASS-LEG-FILL-MODE][EXIT_REST_EXPIRED] ${position.symbol}: maker_only rest cleared; position remains open`);
+    continue;
+  }
+  _exitRestStamp = { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'convert' };
+  if (!exitCondition) continue;
+}
+```
 
 ## Explicit non-changes
 
