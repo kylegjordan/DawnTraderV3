@@ -4,7 +4,7 @@
 
 **Approved plan:** `B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md`
 
-**Status:** implementation in increments; this file is cumulative until Step 3 closes.
+**Status:** Step 3 capture-phase implementation complete; ready for Step 4 review.
 
 ## Increment 1 — immutable raw revision capture and certification
 
@@ -60,3 +60,10 @@
 - Added a fail-closed decision-window builder that accepts only a strictly ordered, homogeneous, fully eligible bar array, proves the later read observation cannot precede any source availability bound/sequence, and binds its forming aggregate revision to a content-addressed settled-window manifest without dropping or reordering unavailable bars.
 - Manifest persistence now takes a later primary-database read observation in the same transaction, refuses a primary-identity crossing, and returns that exact observation beside the manifest identity. This is the typed handoff the scanner and RTB scalar-reduction paths will consume together with their provenance writes; neither live consumer is switched by this foundation commit.
 - Focused run: `server/tests/unit/b-xstock-bar-availability-aggregate.test.ts` passed 8 tests. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.
+
+### Increment-3 CI and Step-3 boundary
+
+- CI run `38599247157` passed TypeScript Check, Test Suite, Build, and Docker Build individually at `7235d3052`.
+- Fresh Step-3 closeout verification at the current shared head ran the seven focused availability/capture/cache/prewarm/writer suites: 7 files passed, 49 tests passed, and the one migration-backed local integration leg skipped as designed. `node scripts/check-tsc-baseline.mjs` remained 337 current errors / 337 baseline errors.
+- This is the approved P14 **additive-capture boundary**. It is intentionally deployable before live-consumer enforcement: revision capture, certification, exact 15m/60m aggregate identity, snapshots/cache/prewarm, manifests, and the decision-window evidence handoff are implemented; the scanner and RTB remain on the old reader during the required capacity/quality observation phase.
+- P8-P14 enforcement work is not waived. After this capture-only deployment, the workflow must measure the full eight-day/five-session population and capacity terms, then return through Step 9 for dual-read, the atomic scanner/RTB switch, durable refresh-attempt/promotion provenance, replay/calibration/dashboard migration, dormant-reader fences, fault rehearsals, and final live verification. No label-only path may be represented as exact in the meantime.
