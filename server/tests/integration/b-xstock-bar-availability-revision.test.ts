@@ -550,6 +550,68 @@ describe(TAG, () => {
     }
   });
 
+  it('rejects a contributing writer outside the boundary-anchored chain', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const client = new Client({ connectionString: RAW_DB_URL });
+    const outsideBoot = randomUUID();
+    const boundaryBoot = randomUUID();
+    const flushId = randomUUID();
+    const revisionId = randomUUID();
+    const populationHash = '1'.repeat(64);
+    const boundary = new Date('2099-01-03T00:00:00.000Z');
+    const observedAt = new Date('2099-01-03T00:05:00.000Z');
+    await client.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`
+        INSERT INTO xstock_bar_writer_boot_start (
+          boot_id, predecessor_boot_id, writer_build_sha, contract_version, started_at
+        ) VALUES
+          ($1::uuid, NULL, $3, 'xstock-bar-availability/v1', $5::timestamptz - interval '2 minutes'),
+          ($2::uuid, $1::uuid, $4, 'xstock-bar-availability/v1', $5::timestamptz - interval '1 minute')
+      `, [outsideBoot, boundaryBoot, 'a'.repeat(40), 'b'.repeat(40), boundary.toISOString()]);
+      await client.query(`
+        INSERT INTO xstock_bar_projection_flush_admission (
+          flush_id, writer_boot_id, writer_build_sha, contract_version,
+          accepted_input_frames, buffer_superseded, expected_projection_attempts,
+          population_hash, admitted_at
+        ) VALUES (
+          $1::uuid, $2::uuid, $3, 'xstock-bar-availability/v1',
+          1, 0, 1, $4, $5::timestamptz + interval '45 seconds'
+        )
+      `, [flushId, outsideBoot, 'a'.repeat(40), populationHash, boundary.toISOString()]);
+      await client.query(`
+        INSERT INTO xstock_bar_projection_flush_completion (
+          flush_id, writer_boot_id, writer_build_sha, contract_version,
+          accepted_input_frames, buffer_superseded, projection_attempts,
+          repeated_payload_attempts, applied_winners, rejected_older_arrivals,
+          revision_ids, population_hash, completed_at
+        ) VALUES (
+          $1::uuid, $2::uuid, $3, 'xstock-bar-availability/v1',
+          1, 0, 1, 0, 1, 0, ARRAY[$4::uuid], $5,
+          $6::timestamptz + interval '46 seconds'
+        )
+      `, [flushId, outsideBoot, 'a'.repeat(40), revisionId, populationHash, boundary.toISOString()]);
+
+      const result = await client.query(
+        XSTOCK_WRITER_BOOT_CHAIN_SQL,
+        [boundary, observedAt],
+      );
+      const chain = result.rows[0];
+      expect(chain.boundary_boot_rows).toBe('1');
+      expect(chain.boot_start_rows).toBe('1');
+      expect(chain.required_handoffs).toBe('0');
+      expect(chain.clean_handoffs).toBe('0');
+      expect(chain.contributing_boots_without_start).toBe('0');
+      expect(chain.contributing_boots_outside_chain).toBe('1');
+      expect(chain.latest_boot_open).toBe('1');
+    } finally {
+      await client.query('ROLLBACK').catch(() => {});
+      await client.end();
+    }
+  });
+
   it('X@A1 -> identical X@A3 -> changed Y@A2 preserves the exact winner chain', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
 

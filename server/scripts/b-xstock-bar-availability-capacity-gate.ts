@@ -80,6 +80,10 @@ export const XSTOCK_WRITER_BOOT_CHAIN_SQL = `WITH contributing AS MATERIALIZED (
             FROM contributing c
             LEFT JOIN xstock_bar_writer_boot_start s USING (boot_id)
            WHERE s.boot_id IS NULL) AS contributing_boots_without_start,
+         (SELECT count(*)::bigint
+            FROM contributing c
+            LEFT JOIN chain ch USING (boot_id)
+           WHERE ch.boot_id IS NULL) AS contributing_boots_outside_chain,
          count(*) FILTER (WHERE ch.next_boot_id IS NOT NULL)::bigint AS required_handoffs,
          count(*) FILTER (
            WHERE ch.next_boot_id IS NOT NULL AND h.boot_id IS NOT NULL
@@ -181,6 +185,7 @@ export interface CapacityGateInputs {
   writerBootStarts: number;
   writerBootDistinctIds: number;
   contributingBootsWithoutStart: number;
+  contributingBootsOutsideChain: number;
   requiredWriterHandoffs: number;
   cleanWriterHandoffs: number;
   writerChainBreaks: number;
@@ -265,6 +270,7 @@ export function evaluateCapacityGate(input: CapacityGateInputs) {
       && input.boundaryWriterBoots === 1
       && input.writerBootStarts === input.writerBootDistinctIds
       && input.contributingBootsWithoutStart === 0
+      && input.contributingBootsOutsideChain === 0
       && input.cleanWriterHandoffs === input.requiredWriterHandoffs
       && input.writerChainBreaks === 0
       && input.writerHandoffMismatches === 0
@@ -703,6 +709,7 @@ async function main(): Promise<void> {
       writerBootStarts: num(bootChain.boot_start_rows),
       writerBootDistinctIds: num(bootChain.boot_distinct_ids),
       contributingBootsWithoutStart: num(bootChain.contributing_boots_without_start),
+      contributingBootsOutsideChain: num(bootChain.contributing_boots_outside_chain),
       requiredWriterHandoffs: num(bootChain.required_handoffs),
       cleanWriterHandoffs: num(bootChain.clean_handoffs),
       writerChainBreaks: num(bootChain.chain_breaks),
