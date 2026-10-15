@@ -9,10 +9,33 @@ added to staging, Helsinki, GitHub or any other server.
 ## Reviewed source and current pre-state
 
 Coltrane approved the dormant Ref A source at exact ref
-`6474a2d4f7cab094010a549c8fed1c9645dbd51a`. A path-limited comparison from that ref to the
-current shared source returned no difference for `comms-infra/laptop/ssh-keyholder/`; all 12 Git
-blob ids are unchanged. The focused suites pass 11 of 11 key-holder tests and 36 of 36 caller
-census/parser tests.
+`6474a2d4f7cab094010a549c8fed1c9645dbd51a`. The exact path-limited Git blob population in
+this candidate is 12 files: 9 unchanged and 3 changed.
+The unchanged approved holder code, capture/sealing tools, configuration and tests are:
+
+| unchanged path | blob at both refs |
+|---|---|
+| `caller_capture_bindings.json` | `51ad685c46e5f7110fe04f36c3f6734645f140d7` |
+| `capture_caller_processes.ps1` | `ca589183822c3a44182dcaadb572dde170d71a68` |
+| `config.example.json` | `aca6b25db6c01b39659a5d276bc9007269421429` |
+| `dt-ssh-keyholder.py` | `2bd7c7939427e7d4a8462793ecf5c6dfa19caa37` |
+| `seal_caller_evidence.py` | `96910319befe043cad9829f0e94a48dd47ba1ccb` |
+| `ssh_keyholder.py` | `715cca9e3aa8f30a69da7eb287dc61ca3c9eb187` |
+| `test_ssh_keyholder.py` | `8914373fe12ac220c5da7b8acbc2175bad495c7e` |
+| `test_verify_caller_census.py` | `897981f5fbb90d42b8d8ea82f7e957e27742bd27` |
+| `verify_caller_census.py` | `6fc1fc077c6ee01606b6bc3025c5ae7a66cf4dfa` |
+
+The three files changed by this review round are:
+
+| changed path | approved-ref blob | review-ref blob |
+|---|---|---|
+| `README.md` | `53f7a8ea7469953b10c165f5a0ecb4c2fe3c964c` | `e7ad7d25a118710c868c3a887c99af8ed0547f6e` |
+| `install.ps1` | `5fd93c561e90e04a4ed3568c1284efc4a4a0098b` | `e38eaa7cfd79568bb51f34fdfd972f8f71bc902b` |
+| `rollback.ps1` | `46b5bfec42c8828783467c977e0e26f51624ee3f` | `da57d6a0166c462698650539e1c1e33610c09280` |
+
+The focused suites pass 11 of 11 key-holder tests and 36 of 36 caller census/parser tests.
+The prior approval therefore still covers the nine unchanged blobs; this review must separately
+approve the changed installer, rollback and documentation blobs plus this execution plan.
 
 The read-only laptop preflight on 2026-10-15 returned:
 
@@ -133,9 +156,9 @@ operator-run `lock` or service restart cannot be presented as the automatic boun
 ### E. Exact restoration
 
 Run the reviewed rollback from the recorded successful-install manifest. It must restore the
-captured Stopped/Disabled service state and absence of every bounded install, runtime, registry,
-task, Group Policy and synchronous-policy object, including the prior presence of the Scripts and
-Logoff directories and the synchronous-policy registry key. If `scripts.ini` existed before
+captured Stopped/Disabled service state and the captured presence or absence of every bounded
+install, runtime, registry, task, Group Policy and synchronous-policy object, including the
+Scripts and Logoff directories and the synchronous-policy registry key. If `scripts.ini` existed before
 installation, its restored bytes and SHA-256 must match the captured object. The owner-only backup
 manifests remain as the evidence exception. Re-run the cold preflight and focused tests. Only
 after exact runtime restoration and recorded public evidence may the two disposable

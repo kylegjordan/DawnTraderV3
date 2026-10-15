@@ -36,6 +36,7 @@ TOKEN_FILE = "/etc/coltrane/discord-coltrane-bot.env"
 COMMS_FILE = "/etc/dawntrader/discord-comms.env"
 RUNLOG = "/var/log/coltrane-invokes.jsonl"
 INBOX = "/var/log/cc-discord-inbox.jsonl"
+CREW_STATE = "/var/lib/crew-switch/state.json"
 USER, HOME = "coltrane", "/home/coltrane"
 # ⛔ cwd is a SCRATCH directory, and that is the fence rather than a tidiness choice.
 #    Codex's workspace-write sandbox makes the working directory writable. With cwd
@@ -115,6 +116,41 @@ def env(path, key):
 KYLE_ID = env(COMMS_FILE, "KYLE_DISCORD_ID") or ""
 
 
+def reviewer_role(state_path=CREW_STATE):
+    """Bind each invocation to the root-owned live crew mode, failing closed on ambiguity."""
+    try:
+        with open(state_path, encoding="utf-8") as fh:
+            mode = str(json.load(fh).get("mode", "")).strip().lower()
+    except Exception as exc:
+        return "unknown", (
+            "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state could not be read "
+            "(%s: %s). Refuse routine workflow reviews and report this exact failure; do "
+            "not guess which reviewer is on duty." % (type(exc).__name__, exc)
+        )
+    if mode == "codex":
+        return mode, (
+            "CURRENT CREW MODE: CODEX. You replace Langston as the on-duty reviewer for "
+            "this shift. Perform routine scope, pre-audit, code-diff, staging-verification, "
+            "iteration, and completion reviews when addressed; Langston is off duty."
+        )
+    if mode == "claude":
+        return mode, (
+            "CURRENT CREW MODE: CLAUDE. Langston is the on-duty routine reviewer. You are "
+            "an additional advisor only when addressed and do not replace his workflow gates."
+        )
+    return "unknown", (
+        "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state contains unsupported "
+        "mode %r. Refuse routine workflow reviews and report this exact failure; do not "
+        "guess which reviewer is on duty." % mode
+    )
+
+
+def reviewer_mode_transition(invocation_mode, state_path=CREW_STATE):
+    """Return whether the trusted mode changed and the mode observed before publication."""
+    publish_mode, _ = reviewer_role(state_path)
+    return publish_mode != invocation_mode, publish_mode
+
+
 def engage_reason(text, author_id, who, is_dm):
     """Why Coltrane should answer this message, or None. on_message's ONLY gate after its
     two brakes - a plain function so a replay drives the same decision the bot makes."""
@@ -175,13 +211,14 @@ def log(row):
         pass
 
 
-def invoke(message_text, why, history):
+def invoke(message_text, why, history, role_prompt):
     """Run codex as the coltrane user. ⛔ Prompt on STDIN, never argv."""
     prompt = (
         "You have been addressed on Discord." + NL
         + "Reason you were woken: " + why + "." + NL + NL
-        + "⛔ Follow your AGENTS.md. You are NOT part of the routine batch and review "
-        + "loop — that is Langston's. You are here because someone asked for you." + NL
+        + role_prompt + NL
+        + "⛔ Follow your AGENTS.md. The trusted current-mode line above decides whether "
+        + "you or Langston owns routine review for this invocation." + NL
         + "⛔ Reply with the MESSAGE TEXT ONLY. It is posted verbatim." + NL
         + "⛔ LEAD your reply with the NAME of whoever you are answering so their session "
         + "wakes. Answering Langston? His name must be the FIRST WORD." + NL
@@ -270,9 +307,17 @@ class Coltrane(discord.Client):
             except Exception:
                 history = ""
 
+        invocation_mode, role_prompt = reviewer_role()
         async with m.channel.typing():
             t0 = time.time()
-            rc, out, err = await asyncio.to_thread(invoke, text, why, history)
+            rc, out, err = await asyncio.to_thread(invoke, text, why, history, role_prompt)
+
+        role_changed, publish_mode = reviewer_mode_transition(invocation_mode)
+        if role_changed:
+            out = (who + " — Coltrane discarded the response because crew mode changed from "
+                   + invocation_mode.upper() + " to " + publish_mode.upper()
+                   + " while it was running. Re-send the request if it is still needed.")
+            rc = 0
 
         toks = ""
         mt = re.search(r"tokens used[\s:]*([\d,]+)", err)
@@ -295,6 +340,9 @@ class Coltrane(discord.Client):
         log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc,
              "seconds": round(time.time() - t0, 1), "tokens_used": toks,
              "silent": silent, "posted": posted, "mirrored": mirrored, "woken_by": who,
+             "reviewer_mode_at_invoke": invocation_mode,
+             "reviewer_mode_at_publish": publish_mode,
+             "response_discarded_for_mode_change": role_changed,
              "measures": ("one row per wake that led to an invoke; token count is the "
                           "spend surface, and nothing here is rate-limited by design")})
 

@@ -120,6 +120,7 @@ jobs:
 
       - name: Access-hardening tool tests
         run: |
+          python3 comms-infra/codex/test_coltrane_bot_mode.py
           python3 comms-infra/laptop/ssh-keyholder/test_ssh_keyholder.py
           python3 comms-infra/laptop/ssh-keyholder/test_verify_caller_census.py
           python3 comms-infra/security/reviewer-staging-access/reviewer_staging_access.py self-test
