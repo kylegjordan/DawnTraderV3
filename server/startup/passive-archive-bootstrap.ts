@@ -34,6 +34,7 @@ import { getConstant, prefetchModule } from '../services/module-constants-servic
 import { cutoverForTable } from '../services/data-archive/daily-partition-cutover.js';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
+import { registerXstockWriterBootStart } from '../services/passive-archive/xstock-bar-availability.js';
 
 // P19-B-PERPFEED OBJ-2-ii (renamed from SIX_TABLES — a constant named "six"
 // holding eight entries is the next reader's trap): the archive tables whose
@@ -219,6 +220,20 @@ export async function passiveArchiveBootstrap(): Promise<void> {
     console.warn('[B74][bootstrap] partition headroom check failed:', err instanceof Error ? err.message : err);
   });
 
+  try {
+    const predecessorBootId = await registerXstockWriterBootStart();
+    console.log(
+      `[B-XSTOCK-BAR-AVAILABILITY][BOOT] writer boot registered `
+      + `(predecessor=${predecessorBootId ?? 'none'})`,
+    );
+  } catch (error) {
+    // Do not take down the ticker source used by active exits. Capture may
+    // continue, but the missing boot fact makes the observation gate fail.
+    console.error(
+      '[B-XSTOCK-BAR-AVAILABILITY][BOOT] writer boot registration FAILED:',
+      error instanceof Error ? error.message : error,
+    );
+  }
   startBatchWriter();
   startTickerWriter();
 

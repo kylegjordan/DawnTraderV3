@@ -41,9 +41,20 @@ function passingInputs(): CapacityGateInputs {
     telemetryAppliedWinners: 95_000,
     telemetryRejectedOlderArrivals: 5_000,
     writerBoots: 1,
+    writerBootStarts: 1,
+    writerBootDistinctIds: 1,
+    contributingBootsWithoutStart: 0,
+    requiredWriterHandoffs: 0,
+    cleanWriterHandoffs: 0,
+    writerChainBreaks: 0,
+    writerHandoffMismatches: 0,
+    latestBootOpen: true,
+    latestBootBuildSha: 'a'.repeat(40),
     contributingWriterBuildShas: ['a'.repeat(40)],
+    writerBootBuildShas: ['a'.repeat(40)],
     archiveProducingBuildShas: ['a'.repeat(40)],
     gradedRef: 'a'.repeat(40),
+    reviewedRefs: ['a'.repeat(40)],
     maxCompleteDayWholeStoreBytes: 2 * GIB,
     databaseBytes: 140 * GIB,
     newIndexBytes: 4 * GIB,
@@ -92,9 +103,16 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
       { telemetryRepeatedPayloadAttempts: 1_999 },
       { telemetryAppliedWinners: 94_999 },
       { telemetryRejectedOlderArrivals: 5_001 },
-      { writerBoots: 2 },
+      { writerBootStarts: 2, writerBootDistinctIds: 1 },
+      { contributingBootsWithoutStart: 1 },
+      { requiredWriterHandoffs: 1, cleanWriterHandoffs: 0 },
+      { writerChainBreaks: 1 },
+      { writerHandoffMismatches: 1 },
+      { latestBootOpen: false },
+      { latestBootBuildSha: 'b'.repeat(40) },
       { contributingWriterBuildShas: ['a'.repeat(40), 'b'.repeat(40)] },
       { contributingWriterBuildShas: ['b'.repeat(40)] },
+      { writerBootBuildShas: ['b'.repeat(40)] },
       { archiveProducingBuildShas: ['b'.repeat(40)] },
       { archiveProof: false },
       { cryptoControlRows: 0 },
@@ -110,6 +128,28 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
       expect(evaluateCapacityGate({ ...passingInputs(), ...mutation }).pass, JSON.stringify(mutation))
         .toBe(false);
     }
+  });
+
+  it('accepts multiple reviewed builds only with a complete clean-handoff chain', () => {
+    const first = 'a'.repeat(40);
+    const second = 'b'.repeat(40);
+    const verdict = evaluateCapacityGate({
+      ...passingInputs(),
+      writerBoots: 2,
+      writerBootStarts: 2,
+      writerBootDistinctIds: 2,
+      requiredWriterHandoffs: 1,
+      cleanWriterHandoffs: 1,
+      latestBootBuildSha: second,
+      contributingWriterBuildShas: [first, second],
+      writerBootBuildShas: [first, second],
+      archiveProducingBuildShas: [first],
+      gradedRef: second,
+      reviewedRefs: [first, second],
+    });
+    expect(verdict.checks.continuousWriterHandoffs).toBe(true);
+    expect(verdict.checks.allContributingBuildsReviewed).toBe(true);
+    expect(verdict.pass).toBe(true);
   });
 
   it('fails the gate when an admitted flush has no atomic completion', () => {
@@ -134,6 +174,10 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
       'drizzle/migrations/2026-10-15-b-xstock-bar-availability-observation-rollback.sql',
     ), 'utf8');
     const sweep = fs.readFileSync(path.join(root, 'server/scripts/b75-retention-sweep.ts'), 'utf8');
+    const handoffMigration = fs.readFileSync(path.join(
+      root,
+      'drizzle/migrations/2026-10-15-c-xstock-bar-availability-handoff.sql',
+    ), 'utf8');
 
     expect(migration).toContain("'xstock_bar_revision_event.hot_retention_days', '8'::jsonb");
     expect(migration).toContain("'venue_session_max_gap_seconds', '60'::jsonb");
@@ -153,6 +197,12 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(migration).toContain('BEFORE TRUNCATE ON xstock_bar_projection_flush_completion');
     expect(migration).toContain('BEFORE TRUNCATE ON xstock_bar_archive_exact_evidence');
     expect(migration).toContain('ON xstock_bar_revision_event (arrived_at, revision_id)');
+    expect(handoffMigration).toContain('CREATE TABLE IF NOT EXISTS xstock_bar_writer_boot_start');
+    expect(handoffMigration).toContain('CREATE TABLE IF NOT EXISTS xstock_bar_writer_handoff');
+    expect(handoffMigration).toContain('accepted_input_frames - buffer_superseded = projection_attempts');
+    expect(handoffMigration).toContain('admission_flushes = completion_flushes');
+    expect(handoffMigration).toContain('BEFORE TRUNCATE ON xstock_bar_writer_boot_start');
+    expect(handoffMigration).toContain('BEFORE TRUNCATE ON xstock_bar_writer_handoff');
     expect(rollback).not.toMatch(/DROP TABLE|DROP INDEX|DELETE FROM xstock_bar_projection_flush/i);
     expect(sweep.match(/parent: 'xstock_bar_revision_event'/g)).toHaveLength(1);
     expect(sweep).toContain("exactCursorTieBreakerColumn: 'revision_id'");
@@ -165,5 +215,39 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(verifiedAt).toBeGreaterThan(uploadedAt);
     expect(verifiedAt).toBeGreaterThan(evidenceAt);
     expect(sweep).not.toMatch(/parent: 'xstock_bar_(aggregate_revision|window_manifest|projection_flush)'/);
+  });
+
+  it('owns shutdown in the exiting handler and orders intake fence, drain, handoff, then exit', () => {
+    const root = process.cwd();
+    const index = fs.readFileSync(path.join(root, 'server/index.ts'), 'utf8');
+    const orchestrator = fs.readFileSync(path.join(root, 'server/core/boot_orchestrator.ts'), 'utf8');
+    const bootstrap = fs.readFileSync(path.join(
+      root,
+      'server/startup/passive-archive-bootstrap.ts',
+    ), 'utf8');
+    const writer = fs.readFileSync(path.join(
+      root,
+      'server/services/passive-archive/ohlc-batch-writer.ts',
+    ), 'utf8');
+
+    const drainAt = index.indexOf('await drainArchiveBuffersForShutdown()');
+    const exitAt = index.indexOf('process.exit(0)', drainAt);
+    expect(drainAt).toBeGreaterThan(0);
+    expect(exitAt).toBeGreaterThan(drainAt);
+    expect(orchestrator).not.toContain('drainArchiveBuffersForShutdown');
+
+    const registerAt = bootstrap.indexOf('await registerXstockWriterBootStart()');
+    const writerStartAt = bootstrap.indexOf('startBatchWriter()', registerAt);
+    expect(registerAt).toBeGreaterThan(0);
+    expect(writerStartAt).toBeGreaterThan(registerAt);
+
+    const fenceAt = writer.indexOf('xstockIntakeAccepting = false');
+    const feedStopAt = writer.indexOf('stopEquitySpotArchiver()', fenceAt);
+    const finalDrainAt = writer.indexOf('stopBatchWriter()', feedStopAt);
+    const handoffAt = writer.indexOf('await recordXstockWriterHandoff(handoffState)', finalDrainAt);
+    expect(fenceAt).toBeGreaterThan(0);
+    expect(feedStopAt).toBeGreaterThan(fenceAt);
+    expect(finalDrainAt).toBeGreaterThan(feedStopAt);
+    expect(handoffAt).toBeGreaterThan(finalDrainAt);
   });
 });

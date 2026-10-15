@@ -1612,6 +1612,14 @@ app.use((req, res, next) => {
   const shutdownHandler = async (signal: string) => {
     console.log(`[A4.R10R-4][SHUTDOWN] Received ${signal}, initiating graceful shutdown...`);
     try {
+      // B-XSTOCK-BAR-AVAILABILITY: this is the shutdown owner that reaches
+      // process.exit. Stop intake, drain, and persist the writer handoff here
+      // so another signal listener cannot claim success while this one exits
+      // first and kills an unfinished drain.
+      const { drainArchiveBuffersForShutdown } = await import('./services/passive-archive/ohlc-batch-writer.js');
+      await drainArchiveBuffersForShutdown();
+      console.log('[B-XSTOCK-BAR-AVAILABILITY][SHUTDOWN] archive handoff persisted');
+
       // Phase 41F: Shutdown operation queues
       const { shutdownAllQueues } = await import('./utils/operation-queue.js');
       await shutdownAllQueues();

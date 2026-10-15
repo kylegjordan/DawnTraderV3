@@ -311,3 +311,17 @@ Local closeout at code ref `12c0b7134`: 5 focused files passed; 24 tests passed 
 - The post-deploy log read processed 221,418 timestamped lines from the two live streams beginning at the deploy record. It found 879 `XS_FRAME` positive controls, 1,351 ticker positive controls, and zero batch failure lines. Phase two has no user-facing surface, so no UI claim is made.
 - An immediate dry run of the final gate correctly matched the deployed build and governed constants, passed the current identity/link/certificate/capacity checks, and remained red on the intentionally unavailable time, session, population, single-window writer, archive, and positive-control requirements because the pre-registered window had not started. It is not represented as a capacity verdict.
 - The graded window starts at `2026-10-16T00:05:00Z`. Event-wait alert `3c8db17f-5761-4fd1-91c8-452855a9487f` is scheduled for `2026-10-25T00:15:00Z`, before the `02:15Z` retention sweep, with the exact closing and reset conditions. It remains unacknowledged while waiting. The delivery-board card stays in Verification, with Review Approved and Blocked on External.
+
+## Step 9 increment 5 — deploy-safe observation handoff
+
+- Kyle rejected the operational consequence of the single-writer-boot criterion: an eight-day observation may not freeze every other reviewed deployment. The observation still requires the full time, session, population, capacity, and archive evidence, but normal reviewed deploys may now cross it through a durable handoff.
+- Added append-only writer boot-start and handoff evidence. The outgoing process stops new xStock OHLC intake, closes the feed, drains every accepted frame, verifies zero remaining or in-flight work, reconciles its process counters to the durable admission/completion/revision population, and records the exact clean state. The incoming process records one boot start linked to its immediate predecessor.
+- Moved the archive drain into the shutdown owner that actually exits the process. The second signal listener still stops VTS, but can no longer race the archive drain and let an unfinished handoff be killed by the exiting listener.
+- Changed the final gate from one boot/one ref to an explicit set of independently reviewed refs plus a complete boot/handoff chain. Every contributing writer, boot, and archive build must be reviewed; every completed boot must have one exact reconciled handoff; the chain must not branch or skip; and the newest open boot must equal the final graded ref.
+- Added mutation coverage for duplicate boot identity, a missing handoff, a broken predecessor link, a counter mismatch, a closed newest boot, a wrong newest build, and unreviewed writer, boot, or archive builds. A two-build clean-handoff case is the positive control.
+
+### Increment-5 local verification before review push
+
+- Ten availability and shared-writer regression files passed: 54 tests passed and 8 database-backed tests skipped because the isolated PostgreSQL test database is unavailable locally.
+- The TypeScript baseline gate reported 335 current project diagnostics against the 337-diagnostic baseline, with zero regressions. The two below-baseline diagnostics are the already-reviewed exact-export type corrections, so the baseline was not changed.
+- The production build passed. Migration-backed handoff behavior, four-job CI, Coltrane review, deployment, and a real old-process/new-process handoff remain required before this increment is complete.

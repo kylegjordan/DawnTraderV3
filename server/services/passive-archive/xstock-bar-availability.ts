@@ -60,6 +60,18 @@ export interface XstockProjectionFlushPopulation {
   flushId?: string;
 }
 
+export interface XstockWriterHandoffState {
+  acceptedInputFrames: number;
+  bufferSuperseded: number;
+  projectionAttempts: number;
+  repeatedPayloadAttempts: number;
+  appliedWinners: number;
+  rejectedOlderArrivals: number;
+  remainingBufferRows: number;
+  pendingFlush: boolean;
+  inFlight: boolean;
+}
+
 interface XstockAdmissionFailure extends Error {
   xstockAdmissionFailed: true;
 }
@@ -94,6 +106,188 @@ function resultRows<T>(result: unknown): T[] {
     throw new Error('[B-XSTOCK-BAR-AVAILABILITY] unexpected database result shape');
   }
   return rows as T[];
+}
+
+function exactNonNegativeInteger(value: unknown, label: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`[B-XSTOCK-BAR-AVAILABILITY] invalid ${label}: ${String(value)}`);
+  }
+  return parsed;
+}
+
+/** Register this writer boot and link it to the immediately preceding boot.
+ * The database advisory lock makes two accidental concurrent starts form one
+ * chain rather than two branches. A missing predecessor handoff is retained as
+ * a fact and makes the final observation gate fail; startup never invents it. */
+export async function registerXstockWriterBootStart(): Promise<string | null> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('xstock-bar-writer-boot-chain'))`);
+    const predecessorResult = await tx.execute(sql`
+      SELECT boot_id
+      FROM xstock_bar_writer_boot_start
+      WHERE boot_id <> ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+      ORDER BY started_at DESC, boot_id DESC
+      LIMIT 1
+    `);
+    const predecessor = resultRows<{ boot_id: string }>(predecessorResult)[0]?.boot_id ?? null;
+    await tx.execute(sql`
+      INSERT INTO xstock_bar_writer_boot_start (
+        boot_id, predecessor_boot_id, writer_build_sha, contract_version
+      ) VALUES (
+        ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
+        ${predecessor}::uuid,
+        ${XSTOCK_BAR_WRITER_BUILD_SHA}::text,
+        ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
+      )
+      ON CONFLICT (boot_id) DO NOTHING
+    `);
+    const registeredResult = await tx.execute(sql`
+      SELECT predecessor_boot_id, writer_build_sha, contract_version
+      FROM xstock_bar_writer_boot_start
+      WHERE boot_id = ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+    `);
+    const registered = resultRows<{
+      predecessor_boot_id: string | null;
+      writer_build_sha: string;
+      contract_version: string;
+    }>(registeredResult)[0];
+    if (!registered
+        || registered.predecessor_boot_id !== predecessor
+        || registered.writer_build_sha !== XSTOCK_BAR_WRITER_BUILD_SHA
+        || registered.contract_version !== XSTOCK_BAR_AVAILABILITY_CONTRACT) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] writer boot registration identity mismatch');
+    }
+    return predecessor;
+  });
+}
+
+/** Persist a clean handoff only after intake is stopped and every accepted
+ * frame has reached its durable admission and atomic completion. */
+export async function recordXstockWriterHandoff(
+  state: XstockWriterHandoffState,
+): Promise<void> {
+  const localValues = Object.entries(state).filter(([, value]) => typeof value === 'number');
+  for (const [label, value] of localValues) exactNonNegativeInteger(value, label);
+  if (state.remainingBufferRows !== 0 || state.pendingFlush || state.inFlight) {
+    throw new Error(
+      `[B-XSTOCK-BAR-AVAILABILITY] refusing dirty writer handoff `
+      + `(buffer=${state.remainingBufferRows}, pendingFlush=${state.pendingFlush}, inFlight=${state.inFlight})`,
+    );
+  }
+  if (state.acceptedInputFrames - state.bufferSuperseded !== state.projectionAttempts
+      || state.appliedWinners + state.rejectedOlderArrivals !== state.projectionAttempts) {
+    throw new Error('[B-XSTOCK-BAR-AVAILABILITY] local writer handoff counters do not reconcile');
+  }
+
+  await db.transaction(async (tx) => {
+    const aggregateResult = await tx.execute(sql`
+      WITH admitted AS MATERIALIZED (
+        SELECT * FROM xstock_bar_projection_flush_admission
+        WHERE writer_boot_id = ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+      ), completed AS MATERIALIZED (
+        SELECT * FROM xstock_bar_projection_flush_completion
+        WHERE writer_boot_id = ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+      )
+      SELECT
+        count(a.flush_id)::bigint AS admission_flushes,
+        count(c.flush_id)::bigint AS completion_flushes,
+        count(*) FILTER (WHERE c.flush_id IS NULL)::bigint AS orphan_admissions,
+        count(*) FILTER (WHERE c.flush_id IS NOT NULL AND (
+          c.writer_build_sha IS DISTINCT FROM a.writer_build_sha
+          OR c.contract_version IS DISTINCT FROM a.contract_version
+          OR c.accepted_input_frames IS DISTINCT FROM a.accepted_input_frames
+          OR c.buffer_superseded IS DISTINCT FROM a.buffer_superseded
+          OR c.projection_attempts IS DISTINCT FROM a.expected_projection_attempts
+          OR c.population_hash IS DISTINCT FROM a.population_hash
+        ))::bigint AS mismatches,
+        COALESCE(sum(a.accepted_input_frames), 0)::bigint AS accepted_input_frames,
+        COALESCE(sum(a.buffer_superseded), 0)::bigint AS buffer_superseded,
+        COALESCE(sum(c.projection_attempts), 0)::bigint AS projection_attempts,
+        COALESCE(sum(c.repeated_payload_attempts), 0)::bigint AS repeated_payload_attempts,
+        COALESCE(sum(c.applied_winners), 0)::bigint AS applied_winners,
+        COALESCE(sum(c.rejected_older_arrivals), 0)::bigint AS rejected_older_arrivals,
+        (SELECT count(*)::bigint
+           FROM xstock_bar_revision_event e
+          WHERE e.writer_boot_id = ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+            AND e.visible_by IS NULL) AS pending_certificates
+      FROM admitted a
+      LEFT JOIN completed c USING (flush_id)
+    `);
+    const row = resultRows<Record<string, unknown>>(aggregateResult)[0];
+    if (!row) throw new Error('[B-XSTOCK-BAR-AVAILABILITY] writer handoff aggregate missing');
+    const durable = {
+      admissionFlushes: exactNonNegativeInteger(row.admission_flushes, 'admission flushes'),
+      completionFlushes: exactNonNegativeInteger(row.completion_flushes, 'completion flushes'),
+      orphanAdmissions: exactNonNegativeInteger(row.orphan_admissions, 'orphan admissions'),
+      mismatches: exactNonNegativeInteger(row.mismatches, 'admission/completion mismatches'),
+      acceptedInputFrames: exactNonNegativeInteger(row.accepted_input_frames, 'durable accepted frames'),
+      bufferSuperseded: exactNonNegativeInteger(row.buffer_superseded, 'durable buffer superseded'),
+      projectionAttempts: exactNonNegativeInteger(row.projection_attempts, 'durable projection attempts'),
+      repeatedPayloadAttempts: exactNonNegativeInteger(row.repeated_payload_attempts, 'durable repeated attempts'),
+      appliedWinners: exactNonNegativeInteger(row.applied_winners, 'durable applied winners'),
+      rejectedOlderArrivals: exactNonNegativeInteger(row.rejected_older_arrivals, 'durable rejected arrivals'),
+      pendingCertificates: exactNonNegativeInteger(row.pending_certificates, 'pending certificates'),
+    };
+    if (durable.orphanAdmissions !== 0 || durable.mismatches !== 0
+        || durable.pendingCertificates !== 0
+        || durable.admissionFlushes !== durable.completionFlushes
+        || durable.acceptedInputFrames !== state.acceptedInputFrames
+        || durable.bufferSuperseded !== state.bufferSuperseded
+        || durable.projectionAttempts !== state.projectionAttempts
+        || durable.repeatedPayloadAttempts !== state.repeatedPayloadAttempts
+        || durable.appliedWinners !== state.appliedWinners
+        || durable.rejectedOlderArrivals !== state.rejectedOlderArrivals) {
+      throw new Error(
+        `[B-XSTOCK-BAR-AVAILABILITY] refusing unreconciled writer handoff `
+        + JSON.stringify({ state, durable }),
+      );
+    }
+
+    await tx.execute(sql`
+      INSERT INTO xstock_bar_writer_handoff (
+        boot_id, writer_build_sha, contract_version,
+        accepted_input_frames, buffer_superseded, projection_attempts,
+        repeated_payload_attempts, applied_winners, rejected_older_arrivals,
+        admission_flushes, completion_flushes
+      ) VALUES (
+        ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid,
+        ${XSTOCK_BAR_WRITER_BUILD_SHA}::text,
+        ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text,
+        ${durable.acceptedInputFrames}::bigint,
+        ${durable.bufferSuperseded}::bigint,
+        ${durable.projectionAttempts}::bigint,
+        ${durable.repeatedPayloadAttempts}::bigint,
+        ${durable.appliedWinners}::bigint,
+        ${durable.rejectedOlderArrivals}::bigint,
+        ${durable.admissionFlushes}::bigint,
+        ${durable.completionFlushes}::bigint
+      )
+      ON CONFLICT (boot_id) DO NOTHING
+    `);
+    const proofResult = await tx.execute(sql`
+      SELECT writer_build_sha, contract_version, accepted_input_frames,
+             buffer_superseded, projection_attempts, repeated_payload_attempts,
+             applied_winners, rejected_older_arrivals, admission_flushes,
+             completion_flushes
+      FROM xstock_bar_writer_handoff
+      WHERE boot_id = ${XSTOCK_BAR_WRITER_BOOT_ID}::uuid
+    `);
+    const proof = resultRows<Record<string, unknown>>(proofResult)[0];
+    if (!proof
+        || proof.writer_build_sha !== XSTOCK_BAR_WRITER_BUILD_SHA
+        || proof.contract_version !== XSTOCK_BAR_AVAILABILITY_CONTRACT
+        || exactNonNegativeInteger(proof.accepted_input_frames, 'proof accepted frames') !== durable.acceptedInputFrames
+        || exactNonNegativeInteger(proof.buffer_superseded, 'proof buffer superseded') !== durable.bufferSuperseded
+        || exactNonNegativeInteger(proof.projection_attempts, 'proof projection attempts') !== durable.projectionAttempts
+        || exactNonNegativeInteger(proof.repeated_payload_attempts, 'proof repeated attempts') !== durable.repeatedPayloadAttempts
+        || exactNonNegativeInteger(proof.applied_winners, 'proof applied winners') !== durable.appliedWinners
+        || exactNonNegativeInteger(proof.rejected_older_arrivals, 'proof rejected arrivals') !== durable.rejectedOlderArrivals
+        || exactNonNegativeInteger(proof.admission_flushes, 'proof admissions') !== durable.admissionFlushes
+        || exactNonNegativeInteger(proof.completion_flushes, 'proof completions') !== durable.completionFlushes) {
+      throw new Error('[B-XSTOCK-BAR-AVAILABILITY] writer handoff readback mismatch');
+    }
+  });
 }
 
 function canonicalJson(value: unknown): string {

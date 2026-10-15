@@ -419,6 +419,75 @@ describe(TAG, () => {
     `)).rejects.toThrow(/append-only/);
   });
 
+  it('persists one append-only handoff and prevents a forked successor chain', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    const firstBoot = randomUUID();
+    const secondBoot = randomUUID();
+    const forkedBoot = randomUUID();
+    const firstBuild = 'a'.repeat(40);
+    const secondBuild = 'b'.repeat(40);
+    await db.execute(sql`
+      INSERT INTO xstock_bar_writer_boot_start (
+        boot_id, predecessor_boot_id, writer_build_sha, contract_version
+      ) VALUES (
+        ${firstBoot}::uuid, NULL, ${firstBuild}, 'xstock-bar-availability/v1'
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO xstock_bar_writer_handoff (
+        boot_id, writer_build_sha, contract_version,
+        accepted_input_frames, buffer_superseded, projection_attempts,
+        repeated_payload_attempts, applied_winners, rejected_older_arrivals,
+        admission_flushes, completion_flushes
+      ) VALUES (
+        ${firstBoot}::uuid, ${firstBuild}, 'xstock-bar-availability/v1',
+        0, 0, 0, 0, 0, 0, 0, 0
+      )
+    `);
+    await db.execute(sql`
+      INSERT INTO xstock_bar_writer_boot_start (
+        boot_id, predecessor_boot_id, writer_build_sha, contract_version
+      ) VALUES (
+        ${secondBoot}::uuid, ${firstBoot}::uuid, ${secondBuild},
+        'xstock-bar-availability/v1'
+      )
+    `);
+
+    const [chain] = await rows<{
+      starts: string;
+      handoffs: string;
+      second_predecessor: string;
+    }>(db.execute(sql`
+      SELECT
+        (SELECT count(*)::text FROM xstock_bar_writer_boot_start
+          WHERE boot_id IN (${firstBoot}::uuid, ${secondBoot}::uuid)) AS starts,
+        (SELECT count(*)::text FROM xstock_bar_writer_handoff
+          WHERE boot_id = ${firstBoot}::uuid) AS handoffs,
+        (SELECT predecessor_boot_id::text FROM xstock_bar_writer_boot_start
+          WHERE boot_id = ${secondBoot}::uuid) AS second_predecessor
+    `));
+    expect(chain).toEqual({
+      starts: '2',
+      handoffs: '1',
+      second_predecessor: firstBoot,
+    });
+
+    await expect(db.execute(sql`
+      INSERT INTO xstock_bar_writer_boot_start (
+        boot_id, predecessor_boot_id, writer_build_sha, contract_version
+      ) VALUES (
+        ${forkedBoot}::uuid, ${firstBoot}::uuid, ${secondBuild},
+        'xstock-bar-availability/v1'
+      )
+    `)).rejects.toThrow();
+    await expect(db.execute(sql`
+      UPDATE xstock_bar_writer_handoff
+      SET admission_flushes = 1, completion_flushes = 1
+      WHERE boot_id = ${firstBoot}::uuid
+    `)).rejects.toThrow(/append-only/);
+  });
+
   it('X@A1 -> identical X@A3 -> changed Y@A2 preserves the exact winner chain', async (ctx) => {
     if (!dbReachable || !isTestDb) ctx.skip();
 

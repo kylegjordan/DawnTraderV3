@@ -29,6 +29,7 @@ import {
 } from '../../../shared/schema.js';
 import {
   isXstockAdmissionFailure,
+  recordXstockWriterHandoff,
   repairPendingXstockCertificates,
   writeXstockProjectionAttempts,
 } from './xstock-bar-availability.js';
@@ -258,6 +259,7 @@ interface PendingXstockFlush {
 // Retained across transient/ambiguous failures. New arrivals remain behind the
 // reserved rawCount and belong to the next logical flush.
 let pendingXstockFlush: PendingXstockFlush | null = null;
+let xstockIntakeAccepting = true;
 
 const xstockAvailabilityTelemetry = {
   acceptedInputFrames: 0,
@@ -321,6 +323,7 @@ function releaseSlot(): void {
  * The spread puts the stamp LAST, so a stray `arrivedAt` on a producer row cannot override it.
  */
 export function bufferOhlcBar(assetClass: ArchiveAssetClass, row: InsertEquitySpotOhlc1m): boolean {
+  if (assetClass === 'xstock_spot' && !xstockIntakeAccepting) return false;
   if (assetClass === 'xstock_spot' && buffers[assetClass].length >= RETRY_BUFFER_MAX) {
     console.error(
       `[B-XSTOCK-BAR-AVAILABILITY][FAIL-STOP] xStock retry buffer reached ${RETRY_BUFFER_MAX}; `
@@ -634,6 +637,7 @@ let flushTimer: NodeJS.Timeout | null = null;
 /** Start the periodic flush timer. Called once at bootstrap. */
 export function startBatchWriter(): void {
   if (flushTimer) return; // already started
+  xstockIntakeAccepting = true;
   flushTimer = setInterval(async () => {
     await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass));
     // Reuse the existing writer cadence rather than inventing a second scheduler. A failed
@@ -681,6 +685,13 @@ export async function drainArchiveBuffersForShutdown(): Promise<void> {
   // the third was inside the commit whose own headline was the second.
   // ⇒ ROUTING SIGNAL, recorded because it clearly does not stick as a lesson: any change touching
   // the archive writers audits the TICKER leg last and separately, as its own step.
+  // Stop xStock intake before taking the final buffer snapshot. A WebSocket
+  // callback already queued behind shutdown is refused rather than accepted
+  // into a buffer after the handoff proof.
+  xstockIntakeAccepting = false;
+  const { stopEquitySpotArchiver } = await import('./equity-spot-archiver.js');
+  stopEquitySpotArchiver();
+
   // Independent: one failing drain must not skip the other.
   const { stopTickerWriter } = await import('./ticker-batch-writer.js');
   const results = await Promise.allSettled([stopBatchWriter(), stopTickerWriter()]);
@@ -689,4 +700,15 @@ export async function drainArchiveBuffersForShutdown(): Promise<void> {
       console.error('[B74][shutdown] archive drain leg FAILED:', r.reason);
     }
   }
+  const handoffState = {
+    ...getXstockAvailabilityWriterTelemetry(),
+    remainingBufferRows: buffers.xstock_spot.length,
+    pendingFlush: pendingXstockFlush !== null,
+    inFlight: inFlight.xstock_spot !== undefined,
+  };
+  await recordXstockWriterHandoff(handoffState);
+  console.log(
+    `[B-XSTOCK-BAR-AVAILABILITY][HANDOFF] clean writer handoff `
+    + JSON.stringify(handoffState),
+  );
 }

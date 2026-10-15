@@ -5,7 +5,8 @@
  * REPEATABLE READ READ ONLY snapshot. Usage:
  *
  *   npx tsx server/scripts/b-xstock-bar-availability-capacity-gate.ts \
- *     --window-start 2026-10-16T00:05:00Z --graded-ref <deployed-sha>
+ *     --window-start 2026-10-16T00:05:00Z --graded-ref <deployed-sha> \
+ *     --reviewed-ref <every-contributing-deployed-sha>
  *
  * The command prints one JSON evidence object. It never changes database or
  * application state and cannot authorize the later consumer switch by itself;
@@ -32,6 +33,7 @@ type JsonRow = Record<string, unknown>;
 interface GateArgs {
   windowStart: Date;
   gradedRef: string;
+  reviewedRefs: string[];
 }
 
 export interface CapacityGateInputs {
@@ -65,9 +67,20 @@ export interface CapacityGateInputs {
   telemetryAppliedWinners: number;
   telemetryRejectedOlderArrivals: number;
   writerBoots: number;
+  writerBootStarts: number;
+  writerBootDistinctIds: number;
+  contributingBootsWithoutStart: number;
+  requiredWriterHandoffs: number;
+  cleanWriterHandoffs: number;
+  writerChainBreaks: number;
+  writerHandoffMismatches: number;
+  latestBootOpen: boolean;
+  latestBootBuildSha: string;
   contributingWriterBuildShas: string[];
+  writerBootBuildShas: string[];
   archiveProducingBuildShas: string[];
   gradedRef: string;
+  reviewedRefs: string[];
   maxCompleteDayWholeStoreBytes: number;
   databaseBytes: number;
   newIndexBytes: number;
@@ -137,14 +150,24 @@ export function evaluateCapacityGate(input: CapacityGateInputs) {
       && input.telemetryRejectedOlderArrivals === input.rejectedOlderArrivals
       && input.telemetryAppliedWinners + input.telemetryRejectedOlderArrivals
         === input.telemetryProjectionAttempts,
-    singleWriterBoot: input.writerBoots === 1,
-    allContributingBuildsReviewed: input.contributingWriterBuildShas.length === 1
-      && input.contributingWriterBuildShas[0] === input.gradedRef
+    continuousWriterHandoffs: input.writerBoots >= 1
+      && input.writerBootStarts === input.writerBootDistinctIds
+      && input.contributingBootsWithoutStart === 0
+      && input.cleanWriterHandoffs === input.requiredWriterHandoffs
+      && input.writerChainBreaks === 0
+      && input.writerHandoffMismatches === 0
+      && input.latestBootOpen,
+    allContributingBuildsReviewed: input.reviewedRefs.includes(input.gradedRef)
+      && input.contributingWriterBuildShas.length > 0
+      && input.contributingWriterBuildShas.every((sha) => input.reviewedRefs.includes(sha))
+      && input.writerBootBuildShas.length > 0
+      && input.writerBootBuildShas.every((sha) => input.reviewedRefs.includes(sha))
       && input.archiveProducingBuildShas.length > 0
-      && input.archiveProducingBuildShas.every((sha) => sha === input.gradedRef),
+      && input.archiveProducingBuildShas.every((sha) => input.reviewedRefs.includes(sha)),
     archiveReadbackBeforeDrop: input.archiveProof,
     readInstrumentPositiveControl: input.cryptoControlRows > 0,
-    gradedBuildIdentity: input.buildIdentityMatches,
+    gradedBuildIdentity: input.buildIdentityMatches
+      && input.latestBootBuildSha === input.gradedRef,
     governedCapacityConstants: input.planCapMb === EXPECTED_PLAN_CAP_MB
       && input.criticalThreshold === EXPECTED_CRITICAL_THRESHOLD
       && input.venueSessionMaxGapSeconds === EXPECTED_VENUE_SESSION_MAX_GAP_SECONDS
@@ -187,9 +210,11 @@ async function readBuildIdentity(gradedRef: string) {
 function parseArgs(argv: string[]): GateArgs {
   let windowStart = '';
   let gradedRef = '';
+  const reviewedRefs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--window-start') windowStart = argv[++i] ?? '';
     else if (argv[i] === '--graded-ref') gradedRef = argv[++i] ?? '';
+    else if (argv[i] === '--reviewed-ref') reviewedRefs.push((argv[++i] ?? '').toLowerCase());
     else throw new Error(`unknown argument: ${argv[i]}`);
   }
   const parsed = new Date(windowStart);
@@ -199,7 +224,14 @@ function parseArgs(argv: string[]): GateArgs {
   if (!/^[0-9a-f]{40}$/i.test(gradedRef)) {
     throw new Error('--graded-ref must be an exact 40-character git SHA');
   }
-  return { windowStart: parsed, gradedRef };
+  if (reviewedRefs.length === 0 || reviewedRefs.some((ref) => !/^[0-9a-f]{40}$/i.test(ref))) {
+    throw new Error('--reviewed-ref must be repeated for every exact contributing build SHA');
+  }
+  return {
+    windowStart: parsed,
+    gradedRef: gradedRef.toLowerCase(),
+    reviewedRefs: [...new Set(reviewedRefs)].sort(),
+  };
 }
 
 function num(value: unknown): number {
@@ -360,6 +392,82 @@ async function main(): Promise<void> {
          FROM admitted a
          LEFT JOIN xstock_bar_projection_flush_completion c USING (flush_id)`,
       [windowStart, observedAt, EXPECTED_AVAILABILITY_CONTRACT],
+    )).rows[0] as JsonRow;
+
+    const bootChain = (await client.query(
+      `WITH contributing AS MATERIALIZED (
+         SELECT DISTINCT a.writer_boot_id AS boot_id
+         FROM xstock_bar_projection_flush_admission a
+         WHERE a.admitted_at >= $1 AND a.admitted_at < $2
+       ), first_contributing AS (
+         SELECT min(s.started_at) AS started_at
+         FROM contributing c
+         JOIN xstock_bar_writer_boot_start s USING (boot_id)
+       ), chain_base AS MATERIALIZED (
+         SELECT s.*
+         FROM xstock_bar_writer_boot_start s
+         CROSS JOIN first_contributing f
+         WHERE f.started_at IS NOT NULL
+           AND s.started_at >= f.started_at
+           AND s.started_at < $2
+       ), chain AS MATERIALIZED (
+         SELECT b.*,
+                lag(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS previous_boot_id,
+                lead(b.boot_id) OVER (ORDER BY b.started_at, b.boot_id) AS next_boot_id,
+                row_number() OVER (ORDER BY b.started_at DESC, b.boot_id DESC) AS newest_rank
+         FROM chain_base b
+       ), durable AS MATERIALIZED (
+         SELECT a.writer_boot_id AS boot_id,
+                count(a.flush_id)::bigint AS admission_flushes,
+                count(c.flush_id)::bigint AS completion_flushes,
+                COALESCE(sum(a.accepted_input_frames),0)::bigint AS accepted_input_frames,
+                COALESCE(sum(a.buffer_superseded),0)::bigint AS buffer_superseded,
+                COALESCE(sum(c.projection_attempts),0)::bigint AS projection_attempts,
+                COALESCE(sum(c.repeated_payload_attempts),0)::bigint AS repeated_payload_attempts,
+                COALESCE(sum(c.applied_winners),0)::bigint AS applied_winners,
+                COALESCE(sum(c.rejected_older_arrivals),0)::bigint AS rejected_older_arrivals
+         FROM xstock_bar_projection_flush_admission a
+         LEFT JOIN xstock_bar_projection_flush_completion c USING (flush_id)
+         GROUP BY a.writer_boot_id
+       )
+       SELECT
+         count(ch.boot_id)::bigint AS boot_start_rows,
+         count(DISTINCT ch.boot_id)::bigint AS boot_distinct_ids,
+         (SELECT count(*)::bigint
+            FROM contributing c
+            LEFT JOIN xstock_bar_writer_boot_start s USING (boot_id)
+           WHERE s.boot_id IS NULL) AS contributing_boots_without_start,
+         count(*) FILTER (WHERE ch.next_boot_id IS NOT NULL)::bigint AS required_handoffs,
+         count(*) FILTER (
+           WHERE ch.next_boot_id IS NOT NULL AND h.boot_id IS NOT NULL
+         )::bigint AS clean_handoffs,
+         count(*) FILTER (
+           WHERE ch.previous_boot_id IS NOT NULL
+             AND ch.predecessor_boot_id IS DISTINCT FROM ch.previous_boot_id
+         )::bigint AS chain_breaks,
+         count(*) FILTER (
+           WHERE h.boot_id IS NOT NULL AND (
+             h.writer_build_sha IS DISTINCT FROM ch.writer_build_sha
+             OR h.contract_version IS DISTINCT FROM ch.contract_version
+             OR h.accepted_input_frames IS DISTINCT FROM COALESCE(d.accepted_input_frames,0)
+             OR h.buffer_superseded IS DISTINCT FROM COALESCE(d.buffer_superseded,0)
+             OR h.projection_attempts IS DISTINCT FROM COALESCE(d.projection_attempts,0)
+             OR h.repeated_payload_attempts IS DISTINCT FROM COALESCE(d.repeated_payload_attempts,0)
+             OR h.applied_winners IS DISTINCT FROM COALESCE(d.applied_winners,0)
+             OR h.rejected_older_arrivals IS DISTINCT FROM COALESCE(d.rejected_older_arrivals,0)
+             OR h.admission_flushes IS DISTINCT FROM COALESCE(d.admission_flushes,0)
+             OR h.completion_flushes IS DISTINCT FROM COALESCE(d.completion_flushes,0)
+           )
+         )::bigint AS handoff_mismatches,
+         count(*) FILTER (WHERE ch.newest_rank = 1 AND h.boot_id IS NULL)::bigint
+           AS latest_boot_open,
+         max(ch.writer_build_sha) FILTER (WHERE ch.newest_rank = 1) AS latest_boot_build_sha,
+         array_agg(DISTINCT ch.writer_build_sha ORDER BY ch.writer_build_sha)
+           FILTER (WHERE ch.writer_build_sha IS NOT NULL) AS boot_build_shas
+       FROM chain ch
+       LEFT JOIN xstock_bar_writer_handoff h USING (boot_id)
+       LEFT JOIN durable d USING (boot_id)`,
+      [windowStart, observedAt],
     )).rows[0] as JsonRow;
 
     // A venue session is the SSOT's 24-hour xStock feed day, 20:00 ET to
@@ -575,9 +683,20 @@ async function main(): Promise<void> {
       telemetryAppliedWinners: num(telemetry.applied_winners),
       telemetryRejectedOlderArrivals: num(telemetry.rejected_older_arrivals),
       writerBoots: num(telemetry.writer_boots),
+      writerBootStarts: num(bootChain.boot_start_rows),
+      writerBootDistinctIds: num(bootChain.boot_distinct_ids),
+      contributingBootsWithoutStart: num(bootChain.contributing_boots_without_start),
+      requiredWriterHandoffs: num(bootChain.required_handoffs),
+      cleanWriterHandoffs: num(bootChain.clean_handoffs),
+      writerChainBreaks: num(bootChain.chain_breaks),
+      writerHandoffMismatches: num(bootChain.handoff_mismatches),
+      latestBootOpen: num(bootChain.latest_boot_open) === 1,
+      latestBootBuildSha: String(bootChain.latest_boot_build_sha ?? ''),
       contributingWriterBuildShas: strings(telemetry.writer_build_shas),
+      writerBootBuildShas: strings(bootChain.boot_build_shas),
       archiveProducingBuildShas,
-      gradedRef: args.gradedRef.toLowerCase(),
+      gradedRef: args.gradedRef,
+      reviewedRefs: args.reviewedRefs,
       maxCompleteDayWholeStoreBytes,
       databaseBytes: num(meta.database_bytes),
       newIndexBytes: num(storeSizes.index_bytes),
@@ -619,6 +738,7 @@ async function main(): Promise<void> {
       population,
       unlinkedRevisionEvidence: unlinked,
       flushAdmissionCompletion: telemetry,
+      writerBootChain: bootChain,
       venueSessions: venueSessionEvidence,
       cryptoControl,
       storage: {
