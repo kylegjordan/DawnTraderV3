@@ -106,5 +106,17 @@ same post-change log population there were two starts, two completions, zero “
 lines and zero self-check failures. This closes the scheduled-consumer control with completed
 cycles as its positive control.
 
-One final control remains open before P2 closes: Kyle's already-signed-in owner session must
-render Registered Users with admin users HTTP 200.
+## Owner-session UI control — 2026-10-15
+
+Kyle supplied a screenshot from his already-signed-in staging owner session at 10:42 UTC. The
+browser was on `/settings`, the sidebar identity was `kylegjordan`, the Users tab was selected,
+and Registered Users rendered all three expected rows: `kylegjordan` and `testuser` carried the
+Admin badge, while `testuser123` carried the User badge. This is the required owner-session
+positive control: the administrator-only users read returned data and the complete list rendered.
+The supplied PNG is 383,212 bytes with SHA-256
+`6889b3a2879ff58fa0f8be2bcbb9ffcc86263f212b5acc777d3c70981a7c2edf`.
+
+The settings table intentionally renders only `isAdmin`: true becomes `Admin` and false becomes
+`User`; it does not render the separate database `role`. The visible User badge therefore agrees
+with the already-proven `testuser123` database state `role=editor, is_admin=false` rather than
+contradicting it. Gate 6 is closed, and P2 is complete.
