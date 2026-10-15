@@ -271,6 +271,20 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     );
   }
 
+  // B-CLASS-LEG-FILL-MODE (#1170): module non-emptiness is not enough. Assert
+  // both legs for both supported classes so a partial migration fails at boot,
+  // before a signal can be reinterpreted by whichever rows happened to exist.
+  {
+    const { resolveFillPolicy } = await import('../services/maker-taker-config.js');
+    const verified: string[] = [];
+    for (const assetClass of ['crypto_spot', 'xstock_spot'] as const) {
+      for (const leg of ['entry', 'target_exit'] as const) {
+        verified.push(`${assetClass}.${leg}=${resolveFillPolicy(assetClass, leg)}`);
+      }
+    }
+    console.log(`[B-CLASS-LEG-FILL-MODE][warmup] verified ${verified.join(' ')}`);
+  }
+
   // B-5 AMR (Obj-2 boot assertion): explicit per-class rows must exist for
   // every ACTIVE class x mode across the AMR-governed modules — a partial
   // seed passes the generic zero-row gate yet hard-fails mid-cycle inside

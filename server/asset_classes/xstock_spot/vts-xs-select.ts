@@ -23,6 +23,7 @@ import type { XsLiveReason, XsQuoteRow } from './vts-xs-instrument.js';
 
 export interface XsSideSelection {
   price: number | null;
+  arrivedAtMs: number | null;
   ceilingMs: number | null;
   reason: XsLiveReason;
 }
@@ -49,28 +50,29 @@ export function selectVtsXstockSide(side: 'bid' | 'ask', symbol: string, row: Xs
       k.lastMs = nowMs;
       k.missed = 0;
     }
-    return { price: null, ceilingMs: null, reason: 'knobs_unavailable' };
+    return { price: null, arrivedAtMs: null, ceilingMs: null, reason: 'knobs_unavailable' };
   }
-  if (row === null) return { price: null, ceilingMs: msCfg.floorMs, reason: 'no_row' };
+  if (row === null) return { price: null, arrivedAtMs: null, ceilingMs: msCfg.floorMs, reason: 'no_row' };
   const sigma = getCachedSigma(symbol, sigmaCfg, nowMs);
   const ceiling = computeStalenessCeiling(
     { currentPrice: row.last, stopPrice: stop, sigmaRatePerSec: sigma?.sigmaRatePerSec ?? null, sigmaAgeMs: sigma?.ageMs ?? null },
     msCfg,
   );
   const g = guardXstockQuote(row, nowMs, { maxAgeMs: ceiling.ceilingMs, maxSpreadFraction: maxSpread });
-  return { price: g.sides ? g.sides[side] : null, ceilingMs: ceiling.ceilingMs, reason: g.reason };
+  const price = g.sides ? g.sides[side] : null;
+  return { price, arrivedAtMs: price !== null && Number.isFinite(row.atMs) ? row.atMs : null, ceilingMs: ceiling.ceilingMs, reason: g.reason };
 }
 
 /** EXIT: the guarded BID (3a-i). */
 export function selectVtsXstockExitBid(symbol: string, row: XsQuoteRow | null, stop: number | null, nowMs: number):
-  { bid: number | null; ceilingMs: number | null; reason: XsLiveReason } {
+  { bid: number | null; arrivedAtMs: number | null; ceilingMs: number | null; reason: XsLiveReason } {
   const s = selectVtsXstockSide('bid', symbol, row, stop, nowMs);
-  return { bid: s.price, ceilingMs: s.ceilingMs, reason: s.reason };
+  return { bid: s.price, arrivedAtMs: s.arrivedAtMs, ceilingMs: s.ceilingMs, reason: s.reason };
 }
 
 /** ENTRY: the guarded ASK, no spread ceiling (3b, P7a). */
 export function selectVtsXstockEntryAsk(symbol: string, row: XsQuoteRow | null, stop: number | null, nowMs: number):
-  { ask: number | null; ceilingMs: number | null; reason: XsLiveReason } {
+  { ask: number | null; arrivedAtMs: number | null; ceilingMs: number | null; reason: XsLiveReason } {
   const s = selectVtsXstockSide('ask', symbol, row, stop, nowMs);
-  return { ask: s.price, ceilingMs: s.ceilingMs, reason: s.reason };
+  return { ask: s.price, arrivedAtMs: s.arrivedAtMs, ceilingMs: s.ceilingMs, reason: s.reason };
 }

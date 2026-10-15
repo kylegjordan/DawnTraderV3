@@ -209,7 +209,7 @@ describe('the production seam and durable contract', () => {
     expect(migration).toMatch(/ADD COLUMN IF NOT EXISTS entry_book_consumption_age_ms DOUBLE PRECISION;/);
     expect(migration).not.toMatch(/entry_book_consumption_age_ms DOUBLE PRECISION\s+DEFAULT|\bUPDATE\s+closed_trades\b/i);
     expect(rollback).toMatch(/DROP COLUMN IF EXISTS entry_book_consumption_age_ms;/);
-    expect(manifest.trimEnd().endsWith('2026-10-15-b-entry-consumption-freshness.sql')).toBe(true);
+    expect(manifest).toContain('2026-10-15-b-entry-consumption-freshness.sql');
     expect(manifest).not.toContain('2026-10-15-b-entry-consumption-freshness-rollback.sql');
     expect(exportSql).toContain('entry_book_age_ms, entry_book_consumption_age_ms, exit_price_producer');
   });

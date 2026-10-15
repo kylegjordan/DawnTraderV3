@@ -33,6 +33,7 @@ vi.mock('../../services/module-constants-service.js', () => ({
 import { resolveMakerMaxPendingMs, resolveTwinEnabled } from '../../services/maker-taker-config.js';
 
 describe('P19-B7.2c — pending-maker pure logic (shared paper+VTS)', () => {
+  const liveRest = { restPlacedAtMs: 0, quoteArrivedAtMs: 500 };
   it('fill-on-trade-through: a resting BUY fills iff price <= limit (side-aware)', () => {
     expect(tradedThrough('buy', 99.99, 100)).toBe(true);
     expect(tradedThrough('buy', 100, 100)).toBe(true);      // touch-through boundary
@@ -43,27 +44,28 @@ describe('P19-B7.2c — pending-maker pure logic (shared paper+VTS)', () => {
   });
 
   it('no-fill-without-trade-through: a null/NaN price can NEVER fill', () => {
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 0, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 0, deadlineMs: null, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('rest');
     expect(tradedThrough('buy', NaN, 100)).toBe(false);
   });
 
   it('R2 precedence: trade-through AND past-deadline in the SAME tick → FILL WINS', () => {
     expect(evaluatePendingMaker({
       side: 'buy', transactablePrice: 99, limit: 100, nowMs: 2_000, deadlineMs: 1_000,
+      restPlacedAtMs: 0, quoteArrivedAtMs: 999,
     })).toBe('fill');
   });
 
   it('hard-drop: past the deadline with no trade-through → DROP, period (no convert outcome exists)', () => {
-    const out = evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 2_000, deadlineMs: 1_000 });
+    const out = evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 2_000, deadlineMs: 1_000, ...liveRest });
     expect(out).toBe('drop');
     // the outcome union has NO 'convert' member — the convert valve was cut by design
     expect(['fill', 'drop', 'rest']).toContain(out);
   });
 
   it('rest: before the deadline with no trade-through → keep resting (slot stays held)', () => {
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: 1_000 })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: 1_000, ...liveRest })).toBe('rest');
     // a pending with no deadline recorded rests indefinitely rather than guessing
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: 101, limit: 100, nowMs: 500, deadlineMs: null, ...liveRest })).toBe('rest');
   });
 
   it('marketable-at-placement: market already at/through the limit (a real post-only would reject)', () => {

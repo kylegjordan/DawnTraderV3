@@ -65,8 +65,8 @@ import {
 } from '../../services/vts-runner.js';
 // P19-B7.2d (#434): the SHARED maker/taker decision + B7.2c pending lifecycle, wired
 // into this lane at parity with crypto's vts-runner placement (B7.2b :1688 + B7.2c :1944).
-import { decideMakerTaker, entryUrgencyClassForFamily } from '../../core/math/maker-taker-decision.js';
-import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs } from '../../services/maker-taker-config.js';
+import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily } from '../../core/math/maker-taker-decision.js';
+import { resolveFillPolicy, resolveMakerTakerHaircut, resolveMakerMaxPendingMs } from '../../services/maker-taker-config.js';
 import { isMarketableAtPlacement } from '../../core/trading/pending-maker-logic.js';
 // P19-B4a (C2): xStock active-path dispatch (stamp-at-source wire-in; dormant until B7b).
 import { dispatchXstockActiveSignal } from './active-dispatch.js';
@@ -848,9 +848,48 @@ export async function evaluateXstockPairForVTS(
           console.warn(`[B79.0m.b2][EVAL_KERNEL_FAIL] ${symbol}/${strategyKey} lane=${lane.sourcePool}: ${kernelErr instanceof Error ? kernelErr.message : kernelErr}`);
           continue;
         }
-        console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategyKey}: chose ${_xMtDecision.chosenMode} (taker=${_xMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_xMtDecision.makerNetEVAdjusted.toFixed(6)})`);
+        const _xEntryFillPolicy = resolveFillPolicy(ASSET_CLASS, 'entry');
+        const _xPolicyDecision = applyMakerTakerFillPolicy(_xMtDecision, _xEntryFillPolicy, VTS_NET_EV_FLOOR);
+        if (!_xPolicyDecision.admitted) {
+          counters.signalsRejectedBySQE++;
+          if (lane.kind === 'pattern') counters.patternSignalsRejected++;
+          else counters.quantSignalsRejected++;
+          counters.byStrategy[strategyKey].rejected++;
+          counters.nullReasonAggregate['fill_policy_rejected'] =
+            (counters.nullReasonAggregate['fill_policy_rejected'] ?? 0) + 1;
+          if (lane.kind === 'pattern') {
+            counters.patternNullReasonAggregate['fill_policy_rejected'] =
+              (counters.patternNullReasonAggregate['fill_policy_rejected'] ?? 0) + 1;
+          } else {
+            counters.quantNullReasonAggregate['fill_policy_rejected'] =
+              (counters.quantNullReasonAggregate['fill_policy_rejected'] ?? 0) + 1;
+          }
+          try {
+            archiveSignalEval({
+              mode: 'vts',
+              ...archiveCommon,
+              rejectStage: 'sqe',
+              gateDecision: {
+                gate: 'fill_policy',
+                accepted: false,
+                reason: _xPolicyDecision.reason,
+                policy: _xEntryFillPolicy,
+                takerNetEv: _xMtDecision.takerNetEV,
+                makerNetEvAdjusted: _xMtDecision.makerNetEVAdjusted,
+                netEvFloor: VTS_NET_EV_FLOOR,
+              },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
+              provenance: _provBase
+                ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
+                : undefined,
+            });
+            counters.signalsArchived++;
+          } catch { counters.archiveFailures++; }
+          continue;
+        }
+        console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategyKey}: chose ${_xPolicyDecision.chosenMode} policy=${_xEntryFillPolicy} (taker=${_xMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_xMtDecision.makerNetEVAdjusted.toFixed(6)})`);
 
-        if (_xMtDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
+        if (_xPolicyDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
           counters.signalsRejectedBySQE++;
           if (lane.kind === 'pattern') counters.patternSignalsRejected++;
           else counters.quantSignalsRejected++;
@@ -887,8 +926,8 @@ export async function evaluateXstockPairForVTS(
                 // (B7.2b crypto parity). Both values recorded: `netEv` = the gated
                 // number; `takerNetEv` = the kernel's taker leg (chosen ≥ taker by
                 // construction, so both are below the floor on this reject path).
-                netEv: _xMtDecision.chosenNetEV,
-                chosenMode: _xMtDecision.chosenMode,
+                netEv: _xPolicyDecision.chosenNetEV,
+                chosenMode: _xPolicyDecision.chosenMode,
                 takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
@@ -957,21 +996,21 @@ export async function evaluateXstockPairForVTS(
         // honest trade-through or drops it at the hard deadline. EXCEPT marketable-at-
         // placement (market already at/through the buy limit — a real post-only would
         // REJECT): run the stored-taker check on the decision's OWN taker leg —
-        // takerNetEV>0 → open as TAKER now (effective-mode flip, accounting-only), else
+        // maker-preferred takerNetEV>VTS floor → open as TAKER now (effective-mode flip, accounting-only), else
         // skip the trade entirely (non-trade).
-        let _xEffectiveMode: 'taker' | 'maker' = _xMtDecision.chosenMode;
+        let _xEffectiveMode: 'taker' | 'maker' = _xPolicyDecision.chosenMode;
         let _xPendingMaker = false;
         // ⛔ `8a-P4c` 3b (P7a/P8c, X4 + X9 in one commit): the placement test and the taker booking read the GUARDED ASK —
         // paper's risk-derived age ceiling over the scanner's own quote, no spread ceiling on an entry leg. Never the bar
         // close, never the mark. `null` ⇒ a maker RESTS (P11, as paper and crypto) and a taker is REFUSED (P9, J4).
         const _xEntryAsk = selectVtsXstockEntryAsk(symbol, entryQuote, stopLoss, pairNowMs).ask;
-        if (_xMtDecision.chosenMode === 'maker') {
+        if (_xPolicyDecision.chosenMode === 'maker') {
           if (_xEntryAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _xEntryAsk, limit: entryPrice })) {
-            if (_xMtDecision.takerNetEV > 0) {
+            if (_xEntryFillPolicy === 'maker_preferred' && _xMtDecision.takerNetEV > VTS_NET_EV_FLOOR) {
               _xEffectiveMode = 'taker';
-              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} already marketable (ask=${_xEntryAsk}) — takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+              console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} already marketable (ask=${_xEntryAsk}) — maker_preferred takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)}>${VTS_NET_EV_FLOOR} → opening as taker now`);
             } else {
-              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} marketable (ask=${_xEntryAsk}) and takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+              console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategyKey} (xstock_spot): maker limit ${entryPrice} marketable (ask=${_xEntryAsk}) policy=${_xEntryFillPolicy} takerNetEV=${_xMtDecision.takerNetEV.toFixed(6)} — policy forbids fallback or taker does not clear ${VTS_NET_EV_FLOOR}; dropped (non-trade)`);
               counters.signalsRejectedBySQE++;
               if (lane.kind === 'pattern') counters.patternSignalsRejected++;
               else counters.quantSignalsRejected++;
@@ -1085,6 +1124,7 @@ export async function evaluateXstockPairForVTS(
           entryFee: _xEntryFee, exitFee: _xExitFee, slippage: costMetrics.slippage, spread: costMetrics.spread,
           entryPriceBasis: _xEntryPriceBasis, exitSideBooked: true,
         });
+        const _xMakerPlacedAtMs = _xPendingMaker ? Date.now() : null;
         const xOpenTrade = {
           symbol,
           assetClass: ASSET_CLASS,
@@ -1093,6 +1133,7 @@ export async function evaluateXstockPairForVTS(
           // fallback flips maker→taker; the fee shown is the fee actually paid). A
           // pending maker is born state='pending' resting at the limit + deadline.
           chosenEntryMode: _xEffectiveMode,
+          entryFillPolicy: _xEntryFillPolicy,
           entryFeeRate: _xEffectiveMode === 'maker' ? _xFriction.feeRateMaker : _xFriction.feeRateTaker,
           // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot (xstock lane — crypto parity).
           // realDiAtOpen: the FX5 pool is crypto-only, so xStock has NO real-DI source today —
@@ -1100,12 +1141,13 @@ export async function evaluateXstockPairForVTS(
           // reorg-B3 RUNNING_ISSUES item; a future xStock DI source fills this without a schema change).
           realDiAtOpen: null,
           kernelDiInputAtOpen: DI,                        // the proxy the kernel actually consumed
-          netEvAtOpen: _xMtDecision.chosenNetEV,          // the best-of-both EV the floor gated on
+          netEvAtOpen: _xPolicyDecision.chosenNetEV,      // the policy-selected EV the floor gated on
           predictedPwinAtOpen: _xMtDecision.taker.pWin,   // kernel taker-leg pWin (exposed)
           ...(_xPendingMaker ? {
             state: 'pending' as const,
             makerLimitPrice: entryPrice,
-            makerDeadline: Date.now() + resolveMakerMaxPendingMs(ASSET_CLASS),
+            makerPlacedAt: _xMakerPlacedAtMs as number,
+            makerDeadline: (_xMakerPlacedAtMs as number) + resolveMakerMaxPendingMs(ASSET_CLASS),
           } : {}),
           entryPrice: _xBookedEntry, // `8a-P4c` 3b (P9): a taker at the guarded ask; a maker at its limit
           stopLoss,
@@ -1180,8 +1222,8 @@ export async function evaluateXstockPairForVTS(
               // P19-B7.2d: the admit gate compares the best-of-both chosenNetEV
               // (B7.2b crypto parity). takerNetEv = the kernel's taker leg, kept
               // for row-comparability with pre-B7.2d records.
-              netEv: _xMtDecision.chosenNetEV,
-              chosenMode: _xMtDecision.chosenMode,
+              netEv: _xPolicyDecision.chosenNetEV,
+              chosenMode: _xPolicyDecision.chosenMode,
               takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
             },
             // B-NEW-53.2 (#208): at-entry economics + context, mirroring the crypto
@@ -1291,13 +1333,15 @@ export async function evaluateXstockPairForVTS(
           if (lane.kind === 'pattern') (counters as any).patternTradesOpened = ((counters as any).patternTradesOpened ?? 0) + 1;
           else (counters as any).quantTradesOpened = ((counters as any).quantTradesOpened ?? 0) + 1;
           counters.byStrategy[strategyKey].trades++;
-          console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} lane=${lane.sourcePool} netEV=${_xMtDecision.chosenNetEV.toFixed(4)} mode=${_xEffectiveMode}${_xPendingMaker ? ' (pending)' : ''} → trade ${tradeId} opened`);
+          console.log(`[B79.0m.b2][EVAL] ${symbol} (xstock_spot) regime=${regime} strategy=${strategyKey} lane=${lane.sourcePool} netEV=${_xPolicyDecision.chosenNetEV.toFixed(4)} mode=${_xEffectiveMode}${_xPendingMaker ? ' (pending)' : ''} → trade ${tradeId} opened`);
           // P19-B7.2d (#434): open the NON-chosen leg as a tagged twin through the
           // SHARED maybeOpenTwin seam (the same helper crypto's lane calls — parity by
           // construction; degenerate skips + kill-knob + TWIN_FAIL isolation inside).
           await maybeOpenTwin({
             chosenTradeId: tradeId,
-            decisionChosenMode: _xMtDecision.chosenMode,
+            decisionChosenMode: _xPolicyDecision.chosenMode,
+            entryFillPolicy: _xEntryFillPolicy,
+            takerNetEV: _xMtDecision.takerNetEV,
             effectiveMode: _xEffectiveMode,
             pendingMaker: _xPendingMaker,
             feeRateMaker: _xFriction.feeRateMaker,

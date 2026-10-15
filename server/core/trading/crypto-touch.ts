@@ -26,6 +26,8 @@ export interface CryptoBookTop {
   bids: ReadonlyArray<{ price: number }>;
   asks: ReadonlyArray<{ price: number }>;
   ageMs: number;
+  /** Exact local time this book frame was accepted. */
+  updatedAtMs: number;
 }
 
 export interface CryptoTouchReaders {
@@ -232,6 +234,7 @@ export function selectCryptoTouch(
             ask: book.asks.length > 0 ? book.asks[0].price : null,
             // The book hands back an AGE, not a capture instant, so the instant is reconstructed.
             stampMs: nowMs - book.ageMs,
+            arrivalMs: book.updatedAtMs,
             clockBasis: 'receipt',
             producer: 'kraken_ws_book',
           }

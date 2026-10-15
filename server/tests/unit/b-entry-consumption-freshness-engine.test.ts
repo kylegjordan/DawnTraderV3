@@ -269,6 +269,7 @@ function signal(chosenEntryMode: 'taker' | 'maker' = 'taker') {
     quantity: 1,
     estimatedValue: 100,
     chosenEntryMode,
+    entryFillPolicy: 'maker_preferred' as const,
     chosenNetEv: 0.1,
     takerNetEv: 0.1,
     metadata: { assetClass: 'crypto_spot', volume24h: 1_000_000 },

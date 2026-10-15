@@ -24,7 +24,7 @@ describe('8a-P4c 3b — P9 (C8): a TAKER entry books the guarded ask; no ask ⇒
     expect(VTS).toMatch(/quantity: _vtsBookedQuantity,/);
     expect(VTS).toMatch(/entry: _vtsBookedEntry,/);
     // the maker still rests at the LEVEL
-    expect(VTS).toMatch(/makerLimitPrice: entryPrice,\s*makerDeadline: Date\.now\(\) \+ resolveMakerMaxPendingMs\(tradeAssetClass\),/);
+    expect(VTS).toMatch(/makerLimitPrice: entryPrice,\s*makerPlacedAt,\s*makerDeadline: makerPlacedAt \+ resolveMakerMaxPendingMs\(tradeAssetClass\),/);
     // the stamp follows the booking
     expect(VTS).toMatch(/const _vtsEntryPriceBasis = entryPriceBasisFor\(_vtsEffectiveMode, true\);/);
   });
@@ -51,7 +51,7 @@ describe('8a-P4c 3b — P7a: the xStock entry quote is the scanner\'s own ticker
 
 describe('8a-P4c 3b — P8d (X5): a resting xStock buy fills on the guarded ask', () => {
   it('the pending resolve reads the entry selector for xStock (crypto keeps its own touch)', () => {
-    expect(VTS).toMatch(/_pFillPrice = selectVtsXstockEntryAsk\(trade\.symbol, _pxRow, trade\.stopLoss \?\? null, now\)\.ask;/);
+    expect(VTS).toMatch(/const _pXs = selectVtsXstockEntryAsk\(trade\.symbol, _pxRow, trade\.stopLoss \?\? null, now\);\s*_pFillPrice = _pXs\.ask;/);
     expect(VTS).toMatch(/_xsVtsInstrument\.recordPendingLook\(_pxRow, _pLimit\);/); // the S1 comparison survives
   });
 });
@@ -99,14 +99,11 @@ describe('8a-P4c 3b r1 fixes — by behaviour', () => {
   const base = {
     twinEnabled: true, limitPrice: 100, feeRateMaker: 0.004, feeRateTaker: 0.008, makerMaxPendingMs: () => 60_000,
     nowMs: 1_000, chosenSlippage: 0.0005, chosenSpread: 0.001,
+    entryFillPolicy: 'maker_preferred' as const, takerNetEV: 1, admissionFloor: -0.01,
   };
-  it('BLOCKER-1: a MAKER twin of a taker chosen leg records its OWN limit as entryPrice — not the chosen leg\'s ask', () => {
+  it('a maker-preferred taker decision cannot reopen its inadmissible maker arm as a twin', () => {
     const plan = planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker', placementTransactablePrice: 101 });
-    expect(plan.kind).toBe('open');
-    if (plan.kind !== 'open') return;
-    expect(plan.twinMode).toBe('maker');
-    expect(plan.overlay.entryPrice).toBe(100);         // the level
-    expect(plan.overlay.makerLimitPrice).toBe(100);    // limit == entry on a maker row again
+    expect(plan).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
   it('a TAKER twin records the ask', () => {
     const plan = planTwin({ ...base, pendingMaker: true, decisionChosenMode: 'maker', placementTransactablePrice: 101 });

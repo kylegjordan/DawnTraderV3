@@ -122,17 +122,12 @@ describe('8a-P4c 3a-ii (2) — NO DOUBLE COUNT, on the chosen leg and on the twi
   const base = {
     twinEnabled: true, limitPrice: 100, placementTransactablePrice: 101, feeRateMaker: FEE_M, feeRateTaker: FEE_T,
     makerMaxPendingMs: () => 60_000, nowMs: 1_000_000, chosenSlippage: SLIP, chosenSpread: S,
+    entryFillPolicy: 'maker_preferred' as const, takerNetEV: 1, admissionFloor: -0.01,
   };
 
-  it('maker twin: composes its OWN leg — no spread; neither the old full spread nor the old fee-delta', () => {
+  it('maker-preferred does not manufacture a maker twin after the maker arm failed admission', () => {
     const plan = planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker' });
-    expect(plan.kind).toBe('open');
-    if (plan.kind !== 'open') return;
-    expect(plan.overlay.entryPriceBasis).toBe('limit');
-    expect(plan.overlay.frictionCost).toBeCloseTo(FEE_M + FEE_T + 2 * SLIP, 12);
-    expect(plan.overlay.frictionCost).not.toBeCloseTo(OLD_FULL_SPREAD(FEE_M, FEE_T), 6);
-    const chosen = composeVtsLegFriction({ entryFee: FEE_T, exitFee: FEE_T, slippage: SLIP, spread: S, entryPriceBasis: 'level', exitSideBooked: true });
-    expect(plan.overlay.frictionCost).not.toBeCloseTo(chosen - FEE_T + FEE_M, 6); // BLOCKER-1's fee-delta mutant
+    expect(plan).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
 
   // `8a-P4c` 3b (P9): a taker twin books the guarded ask — on its side at both legs, so no spread half at all.
@@ -153,7 +148,7 @@ describe('8a-P4c 3a-ii (2) — NO DOUBLE COUNT, on the chosen leg and on the twi
   });
 
   it('the twin record recomposes at close to what planTwin stamped (one rule at both ends)', () => {
-    const plan = planTwin({ ...base, pendingMaker: false, decisionChosenMode: 'taker' });
+    const plan = planTwin({ ...base, pendingMaker: true, decisionChosenMode: 'maker' });
     if (plan.kind !== 'open') throw new Error('expected open');
     const twinRecord = { ...rec(), ...plan.overlay } as VtsFrictionRecord;
     const r = recomposeVtsCloseFriction(twinRecord, 'bid');

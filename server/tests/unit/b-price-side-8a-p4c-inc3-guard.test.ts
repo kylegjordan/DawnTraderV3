@@ -63,8 +63,8 @@ describe('8a-P4c inc 3 — the exit wiring', () => {
     expect((VTS.match(/selectVtsXstockExitBid\(trade\.symbol,/g) ?? []).length).toBe(2); // real + shadow
     expect(VTS).toMatch(/import \{ selectVtsXstockExitBid, selectVtsXstockEntryAsk \} from '\.\.\/asset_classes\/xstock_spot\/vts-xs-select\.js';/);
     expect(VTS).not.toMatch(/function selectVtsXstockExitBid/); // one definition, in the shared module
-    expect(SEL).toMatch(/return \{ price: null, ceilingMs: null, reason: 'knobs_unavailable' \};/);
-    expect(SEL).toMatch(/if \(row === null\) return \{ price: null, ceilingMs: msCfg\.floorMs, reason: 'no_row' \};/);
+    expect(SEL).toMatch(/return \{ price: null, arrivedAtMs: null, ceilingMs: null, reason: 'knobs_unavailable' \};/);
+    expect(SEL).toMatch(/if \(row === null\) return \{ price: null, arrivedAtMs: null, ceilingMs: msCfg\.floorMs, reason: 'no_row' \};/);
     expect(SEL).toMatch(/maxSpread = side === 'bid' \? readVtsXstockExitMaxSpread\(\) : Number\.POSITIVE_INFINITY;/);
     expect(VTS).not.toMatch(/'vts_xstock_touch'/); // one reader: vts-xs-touch-config.ts
     expect(SEL).toMatch(/computeStalenessCeiling\(/);
@@ -481,8 +481,8 @@ describe('8a-P4c 3b — vts-xs-select: exit BID (spread-capped) and entry ASK (n
 
   it('cold knobs ⇒ knobs_unavailable on BOTH sides, no ceiling applied, no price', () => {
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(selectVtsXstockSide('bid', 'AAA/USD', q(), 95, T)).toEqual({ price: null, ceilingMs: null, reason: 'knobs_unavailable' });
-    expect(selectVtsXstockSide('ask', 'AAA/USD', q(), 95, T)).toEqual({ price: null, ceilingMs: null, reason: 'knobs_unavailable' });
+    expect(selectVtsXstockSide('bid', 'AAA/USD', q(), 95, T)).toEqual({ price: null, arrivedAtMs: null, ceilingMs: null, reason: 'knobs_unavailable' });
+    expect(selectVtsXstockSide('ask', 'AAA/USD', q(), 95, T)).toEqual({ price: null, arrivedAtMs: null, ceilingMs: null, reason: 'knobs_unavailable' });
     errSpy.mockRestore();
   });
 
@@ -504,6 +504,6 @@ describe('8a-P4c 3b — vts-xs-select: exit BID (spread-capped) and entry ASK (n
     const stale = q({ atMs: T - 400_000 }); // past the 300 s cap
     expect(selectVtsXstockExitBid('AAA/USD', stale, 95, T)).toMatchObject({ bid: null, reason: 'too_old' });
     expect(selectVtsXstockEntryAsk('AAA/USD', stale, 95, T)).toMatchObject({ ask: null, reason: 'too_old' });
-    expect(selectVtsXstockEntryAsk('AAA/USD', null, 95, T)).toEqual({ ask: null, ceilingMs: 15_000, reason: 'no_row' });
+    expect(selectVtsXstockEntryAsk('AAA/USD', null, 95, T)).toEqual({ ask: null, arrivedAtMs: null, ceilingMs: 15_000, reason: 'no_row' });
   });
 });

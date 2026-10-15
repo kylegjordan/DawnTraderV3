@@ -355,7 +355,8 @@ import { getFrictionForAssetClass } from '../core/math/cost-model.js';
 // B-COST-MATH-CONSOLIDATION: the SINGLE source of trade P&L arithmetic (was inlined here).
 import { computeRealizedPnl } from '../core/math/trade-pnl.js';
 // P19-B7.2c: the pending-maker hard-drop timeout (per-class, fail-hard, load-time invariant).
-import { resolveMakerMaxPendingMs } from './maker-taker-config.js';
+import { resolveFillPolicy, resolveMakerMaxPendingMs } from './maker-taker-config.js';
+import type { FillPolicy } from '../core/math/maker-taker-decision.js';
 // P19-B7.2c (R3): the xStock hard-drop must not fire inside the weekend-closed window.
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
@@ -1752,8 +1753,17 @@ export class ActiveExecutionEngine {
     provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
     // ⛔ `8a-P4b` X1 — the xStock sides the book-state guard judged THIS tick (J1), or the unjudged raw sides with
     // the guard off (J2). REQUIRED, never re-read here: a later frame would be unjudged. Ignored on other classes.
-    xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null },
+    xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null; arrivedAtMs: number | null },
   ): Promise<void> {
+    const _placedAtMs = position.makerPlacedAt ? new Date(position.makerPlacedAt).getTime() : null;
+    const _entryFillPolicy = position.entryFillPolicy as FillPolicy | null | undefined;
+    if (
+      !Number.isFinite(_placedAtMs)
+      || (_entryFillPolicy !== 'maker_only' && _entryFillPolicy !== 'maker_preferred')
+    ) {
+      await this._dropUnfilledMaker(position, 'legacy_missing_fill_provenance');
+      return;
+    }
     const limit = position.makerLimitPrice != null ? parseFloat(position.makerLimitPrice) : NaN;
     if (!Number.isFinite(limit)) {
       console.error(`[P19-B7.2c][PENDING_INVALID:${this.mode}] ${position.symbol} pending with no maker_limit_price — leaving untouched (investigate)`);
@@ -1802,7 +1812,18 @@ export class ActiveExecutionEngine {
         console.error(`[8a-P3][ENTRY_FILL_RECORD_FAILED:${this.mode}] ${position.symbol}:`, err instanceof Error ? err.message : err);
       }
     }
-    const outcome = evaluatePendingMaker({ side, transactablePrice: fillPrice, limit, nowMs: Date.now(), deadlineMs });
+    const _quoteArrivedAtMs = _isCryptoPending
+      ? (_fillTouch !== null && _fillTouch.ok ? _fillTouch.quote.quoteArrivedAtMs : null)
+      : (_isXstockPending ? xstockSides.arrivedAtMs : null);
+    const outcome = evaluatePendingMaker({
+      side,
+      transactablePrice: fillPrice,
+      limit,
+      nowMs: Date.now(),
+      deadlineMs,
+      restPlacedAtMs: _placedAtMs,
+      quoteArrivedAtMs: _quoteArrivedAtMs,
+    });
     if (outcome !== 'rest') this._entryFillLooked.delete(position.id);
     if (outcome === 'fill') {
       // `8a-P3` — what DROVE the fill, for the durable stamp below.
@@ -1895,6 +1916,9 @@ export class ActiveExecutionEngine {
         // false failure, and the obvious "fix" is to stamp a price that never existed — which
         // is worse than the gap it would be closing.
         closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
+        // Keep the aggregate discriminator stable while preserving the exact
+        // disposition (including the pre-cutover provenance cut) durably.
+        metadata: { ...(position.metadata ?? {}), neverFilledReason: why },
       } as any);
     }
     await storage.deleteActiveOpenPosition(this.mode, position.id);
@@ -2040,6 +2064,7 @@ export class ActiveExecutionEngine {
         let xsBid: number | null = null;
         let xsAsk: number | null = null;
         let xsSideBasis: 'raw_guarded' | 'raw_unguarded' | null = null;
+        let xsArrivedAtMs: number | null = null;
         // `8a-P4b` Step 9 C1 (Langston condition 4) — the judged frame's spread and the guard's arm-(i) threshold,
         // carried to the exit check for the LOG ONLY: the bid-trigger measurement window the re-land row needs.
         let xsSpread: number | null = null;
@@ -2196,6 +2221,7 @@ export class ActiveExecutionEngine {
               if (_offSides) {
                 xsBid = _offSides.bid;
                 xsAsk = _offSides.ask;
+                xsArrivedAtMs = Number.isFinite(_offRaw?.atMs) ? (_offRaw!.atMs as number) : null;
                 xsSideBasis = 'raw_unguarded';
                 xsSpread = (_offSides.ask - _offSides.bid) / ((_offSides.ask + _offSides.bid) / 2);
               } else if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask > 0) {
@@ -2486,6 +2512,7 @@ export class ActiveExecutionEngine {
                 if (_gSides) {
                   xsBid = _gSides.bid;
                   xsAsk = _gSides.ask;
+                  xsArrivedAtMs = Number.isFinite(_raw.atMs) ? _raw.atMs : null;
                   xsSideBasis = 'raw_guarded';
                   xsSpread = _r.inputs.spreadFrac ?? null;
                   xsThr = _r.inputs.departureThresholdFrac ?? null;
@@ -2729,7 +2756,7 @@ export class ActiveExecutionEngine {
             producer: priceProducer,
             source: priceSource,
             observedAtMs: priceObservedAtMs,
-          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis }); // `8a-P4b` X1: the sides the guard judged THIS tick
+          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs }); // `8a-P4b` X1: same judged frame's sides + receipt
           positionsEvaluated++;
           continue;
         }
@@ -2838,6 +2865,7 @@ export class ActiveExecutionEngine {
                       // reconstructed rather than invented — the same line, for the same reason, as
                       // the level lane's. Do NOT "simplify" it into `Date.now()`.
                       stampMs: _lsNow - _bookX.ageMs,
+                      arrivalMs: _bookX.updatedAtMs,
                       // `bookUpdatedAt` is stamped when WE processed the frame. Receipt, not venue.
                       clockBasis: 'receipt' as const,
                       producer: 'kraken_ws_book',
@@ -3082,8 +3110,23 @@ export class ActiveExecutionEngine {
           const _restFillPrice: number | null = _posClass === 'crypto_spot' ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null)
             : _posClass === 'xstock_spot' ? xsBid
             : currentPrice;
+          const _targetPolicy = (position as any).targetExitFillPolicy as FillPolicy | null | undefined;
+          if (_targetPolicy !== 'maker_only' && _targetPolicy !== 'maker_preferred') {
+            await storage.updateActiveOpenPosition(this.mode, position.id, {
+              exitLimitPrice: null,
+              exitRestPlacedAt: null,
+              exitDeadline: null,
+              targetExitFillPolicy: null,
+            } as any);
+            console.log(`[B-CLASS-LEG-FILL-MODE][LEGACY_TARGET_REST_CLEARED] ${position.symbol}: legacy_missing_fill_provenance — position remains open`);
+            continue;
+          }
+          const _targetArrivalMs = _posClass === 'crypto_spot'
+            ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.quoteArrivedAtMs : null)
+            : (_posClass === 'xstock_spot' ? xsArrivedAtMs : null);
           const _restOutcome = evaluatePendingMaker({
             side: 'sell', transactablePrice: _restFillPrice, limit: _exitRestLimit, nowMs: Date.now(), deadlineMs: _restDeadline,
+            restPlacedAtMs: _restPlacedAtMs, quoteArrivedAtMs: _targetArrivalMs,
           });
           if (_restOutcome === 'fill' && _restFillPrice !== null) { // a fill requires a side — NARROWED here, never cast
             tpHits++;
@@ -3110,8 +3153,12 @@ export class ActiveExecutionEngine {
             // AC-2/OBJ-5 via the normal path); condition null → position simply continues.
             console.log(`[P19-B8.6][EXIT_REST_CONVERT] ${position.symbol}: rest at ${_exitRestLimit} hit the deadline unfilled — converting (taker path governs this tick)`);
             await storage.updateActiveOpenPosition(this.mode, position.id, {
-              exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null,
+              exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null, targetExitFillPolicy: null,
             } as any);
+            if (_targetPolicy === 'maker_only') {
+              console.log(`[B-CLASS-LEG-FILL-MODE][EXIT_REST_EXPIRED] ${position.symbol}: maker_only rest cleared; position remains open`);
+              continue;
+            }
             // ALL rest fields are cleared in DB (nothing load-bearing survives for a
             // future cleanup to break — Langston ①); the same-tick taker close gets its
             // stamps via the explicit exitRest option below, never from the DB row.
@@ -3130,20 +3177,25 @@ export class ActiveExecutionEngine {
           const _tecMode = (position as any).tradeMode ?? 'TARGET';
           if (_tecMode === 'TARGET') {
             let _restBudgetMs: number | null = null;
+            let _targetPolicy: FillPolicy | null = null;
             try {
               const _restClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
               _restBudgetMs = getCachedNumberRequired('maker_taker', 'exit_maker_max_pending_ms',
                 { exchange: '*', assetClass: _restClass, strategy: '*', regime: '*' });
+              _targetPolicy = resolveFillPolicy(_restClass, 'target_exit');
             } catch (knobErr) {
-              console.warn(`[P19-B8.6][EXIT_REST_SKIP] ${position.symbol}: exit_maker_max_pending_ms knob unavailable — falling back to the immediate taker exit (never strand):`, knobErr instanceof Error ? knobErr.message : knobErr);
+              _restBudgetMs = null;
+              _targetPolicy = null;
+              console.warn(`[P19-B8.6][EXIT_REST_SKIP] ${position.symbol}: target-rest config unavailable — falling back to the immediate taker exit (never strand):`, knobErr instanceof Error ? knobErr.message : knobErr);
             }
             const _restTarget = position.takeProfit != null ? parseFloat(String(position.takeProfit)) : NaN;
-            if (_restBudgetMs !== null && Number.isFinite(_restTarget) && _restTarget > 0) {
+            if (_restBudgetMs !== null && _targetPolicy !== null && Number.isFinite(_restTarget) && _restTarget > 0) {
               const _placedAt = new Date();
               await storage.updateActiveOpenPosition(this.mode, position.id, {
                 exitLimitPrice: _restTarget.toString(),
                 exitRestPlacedAt: _placedAt,
                 exitDeadline: new Date(_placedAt.getTime() + _restBudgetMs),
+                targetExitFillPolicy: _targetPolicy,
               } as any);
               console.log(`[P19-B8.6][EXIT_REST_PLACED] ${position.symbol}: target ${_restTarget} touched at ${currentPrice} — resting the exit as a maker sell (deadline +${Math.round(_restBudgetMs / 60000)}min); fill requires a LATER tick at/through the limit (D1)`);
               continue; // no close this tick — the rest is the exit order
@@ -4381,6 +4433,7 @@ export class ActiveExecutionEngine {
         exitRestDurationMs: options?.exitRest?.placedAtMs != null
           ? Math.max(0, Date.now() - options.exitRest.placedAtMs)
           : null,
+        targetExitFillPolicy: (position as any).targetExitFillPolicy ?? null,
         // ── B-EXIT-PROVENANCE P5 — persist the exit stamp (OBJ-1/2/3).
         // ⛔ `exit_price_source` falls back to the `priceSource` PARAMETER, never to a literal
         // string. `closePosition`'s `priceSource` DEFAULTS to `'manual_stop'` upstream, which is
@@ -5067,7 +5120,10 @@ export class ActiveExecutionEngine {
         // number), not a taker-only recompute — this is what lets a maker-chosen crypto
         // opener (taker-EV<0, maker-adjusted-EV>0) pass the gate. NULL (pre-B7.2 rows) →
         // the gate falls back to its taker recompute (no behavior change).
-        chosenEntryMode: (signal.chosenEntryMode as 'taker' | 'maker' | undefined) ?? 'taker',
+        // B-CLASS-LEG-FILL-MODE: absence is evidence, not a taker decision. The
+        // execution seam below rejects a missing/invalid decision snapshot.
+        chosenEntryMode: signal.chosenEntryMode as 'taker' | 'maker' | undefined,
+        ...({ entryFillPolicy: signal.entryFillPolicy as FillPolicy | undefined } as any),
         chosenNetEv: signal.chosenNetEv != null ? parseFloat(signal.chosenNetEv) : null,
         // P19-B7.2c: the gen-time TAKER-leg netEV (produced by the kernel inside
         // decideMakerTaker at signal-gen — taker-priced by construction). Read by the
@@ -5125,7 +5181,7 @@ export class ActiveExecutionEngine {
     // promoted signal (already parsed string→number at the rtb-row→StrategySignal conversion).
     // Optional → a non-promotion-path signal (FX5/orchestrator direct) simply has them undefined
     // → kernel documented defaults.
-    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; chosenNetEv?: number | null; takerNetEv?: number | null },
+    signal: StrategySignal & { quantity?: number; estimatedValue?: number; signalId?: string; diAtQueue?: number | null; dbsScoreAtQueue?: number | null; chosenEntryMode?: 'taker' | 'maker'; entryFillPolicy?: FillPolicy; chosenNetEv?: number | null; takerNetEv?: number | null },
     settings: TradingSettings,
   ): Promise<OpenOutcome> {
     // P19-B6.5e: returns a typed OpenOutcome. Every post-guardrail early-exit below
@@ -5342,7 +5398,16 @@ export class ActiveExecutionEngine {
     // The chosen-leg taker branch equals this recompute exactly (same at-queue DI,
     // same kernel, same friction), so a taker-chosen signal is unaffected.
     const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
-    const _b72ChosenMode: 'taker' | 'maker' = ((signal as any).chosenEntryMode as 'taker' | 'maker') ?? 'taker';
+    const _b72ChosenMode = (signal as any).chosenEntryMode as 'taker' | 'maker' | null | undefined;
+    const _entryFillPolicy = (signal as any).entryFillPolicy as FillPolicy | null | undefined;
+    if (
+      (_b72ChosenMode !== 'taker' && _b72ChosenMode !== 'maker')
+      || (_entryFillPolicy !== 'maker_only' && _entryFillPolicy !== 'maker_preferred')
+    ) {
+      console.error(`[B-CLASS-LEG-FILL-MODE][OPEN_REJECT] ${signal.symbol}: decision snapshot missing mode or entry policy`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'POLICY_SNAPSHOT_MISSING', 'decision snapshot missing mode or entry policy');
+      return { opened: false, stage: 'POLICY_SNAPSHOT_MISSING', reason: 'decision snapshot missing mode or entry policy' };
+    }
     let _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
     const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
 
@@ -5538,13 +5603,13 @@ export class ActiveExecutionEngine {
       const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
       if (_b72cBestAsk != null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _b72cBestAsk, limit: _b72cLimit })) {
         const _b72cStoredTakerEv = signal.takerNetEv;
-        if (_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
+        if (_entryFillPolicy === 'maker_preferred' && _b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
           _b72cEffectiveMode = 'taker';
           console.log(`[P19-B7.2c][MARKETABLE_TAKER_FALLBACK:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) — stored takerNetEv=${_b72cStoredTakerEv.toFixed(6)}>0 → opening as taker now`);
         } else {
-          console.log(`[P19-B7.2c][MAKER_MARKETABLE_DROPPED:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) and stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} not positive — dropped (non-trade)`);
-          rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'MAKER_MARKETABLE_DROPPED', 'maker limit marketable at placement; stored taker EV not positive');
-          return { opened: false, stage: 'MAKER_MARKETABLE_DROPPED', reason: 'maker marketable at placement; taker EV not positive' };
+          console.log(`[P19-B7.2c][MAKER_MARKETABLE_DROPPED:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) policy=${_entryFillPolicy} stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} — dropped (non-trade)`);
+          rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'MAKER_MARKETABLE_DROPPED', 'maker limit marketable at placement; policy forbids or taker EV not positive');
+          return { opened: false, stage: 'MAKER_MARKETABLE_DROPPED', reason: 'maker marketable at placement; policy forbids or taker EV not positive' };
         }
       } else {
         // ⛔ `8a-P3` P5 — NO USABLE ASK RESTS THE ORDER (the permissive arm), AND VTS NOW DOES THE SAME. Do NOT
@@ -5893,7 +5958,8 @@ export class ActiveExecutionEngine {
       // ── P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + its per-side fee RATE for
       // this trade's asset class, carried onto the paper-active open-position + closed-trade
       // records so the UI can show WHICH fee the ENTRY paid. _b72ChosenMode is the decision
-      // snapshot (from rtb_signals.chosen_entry_mode via the promoted signal; defaults taker).
+      // snapshot (from rtb_signals.chosen_entry_mode via the promoted signal). Missing
+      // mode/policy provenance is refused above; it must never collapse to taker.
       // The rate is the class's per-side rate for that mode (fail-hard via cost-model). Once
       // the B7.2c pending maker-fill sim lands, a maker-chosen promotion fills at the maker
       // rate; a taker-chosen fills immediately at taker — so the recorded rate matches the
@@ -5903,6 +5969,9 @@ export class ActiveExecutionEngine {
       // P19-B7.2c: keyed on the EFFECTIVE mode — the marketable-at-placement taker
       // fallback flips maker→taker, and the record must show the fee actually paid.
       const _b72EntryFeeRate = _b72cEffectiveMode === 'maker' ? _b72Friction.feeRateMaker : _b72Friction.feeRateTaker;
+      // One instant owns both durable placement and deadline. A restart therefore
+      // cannot reconstruct the live interval from a different clock read.
+      const _makerPlacedAtMs = _b72cPendingMaker ? Date.now() : null;
 
       // ── P19-B8.2 (OBJ-4): the balance-ratio calibration stamp — computed ONCE
       // here, written to BOTH the closed-trade and open-position rows below.
@@ -5991,6 +6060,7 @@ export class ActiveExecutionEngine {
         regimeConfidenceModulated: _b67_2_1_modulatedConf,
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
         chosenEntryMode: _b72cEffectiveMode,
+        entryFillPolicy: _entryFillPolicy,
         entryFeeRate: _b72EntryFeeRate.toString(),
         // P19-B8.2 (OBJ-4): the balance-ratio calibration stamp (or honest NULLs).
         ..._b82RatioStamp,
@@ -6077,6 +6147,7 @@ export class ActiveExecutionEngine {
         sourcePool: (signal as any)?.metadata?.sourcePool || (signal as any)?.sourcePool || null,
         // P19-B7.2b (OBJ-B): the maker/taker entry fee-mode + per-side rate.
         chosenEntryMode: _b72cEffectiveMode,
+        entryFillPolicy: _entryFillPolicy,
         entryFeeRate: _b72EntryFeeRate.toString(),
         // P19-B8.2 (OBJ-4): the same stamp as the closed-trade row (one compute,
         // two writes — same-vintage by construction).
@@ -6088,7 +6159,8 @@ export class ActiveExecutionEngine {
         ...(_b72cPendingMaker ? {
           state: 'pending',
           makerLimitPrice: _b72cLimit.toString(),
-          makerDeadline: new Date(Date.now() + resolveMakerMaxPendingMs(_openClass)),
+          makerPlacedAt: new Date(_makerPlacedAtMs as number),
+          makerDeadline: new Date((_makerPlacedAtMs as number) + resolveMakerMaxPendingMs(_openClass)),
         } : {}),
         metadata: {
           ...signal.metadata,

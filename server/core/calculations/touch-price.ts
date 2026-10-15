@@ -47,6 +47,8 @@ export interface TouchLegInput {
   ask: number | null | undefined;
   /** The ONE timestamp this leg's age is measured from, on the clock named in `clockBasis`. */
   stampMs: number | null | undefined;
+  /** Exact local receipt time for rest-ordering. Separate from the freshness clock above. */
+  arrivalMs: number | null | undefined;
   clockBasis: ClockBasis;
   producer: string;
 }
@@ -68,6 +70,8 @@ export interface TouchQuote {
   ask: number;
   basis: TouchBasis;
   ageMs: number;
+  /** Exact local receipt time of this same accepted quote. */
+  quoteArrivedAtMs: number | null;
   clockBasis: ClockBasis;
   producer: string;
 }
@@ -115,6 +119,7 @@ export function selectTouchPrice(
         ok: true,
         quote: {
           bid: b.basis.bid, ask: b.basis.ask, basis: 'book_top', ageMs: b.basis.ageMs,
+          quoteArrivedAtMs: input.book.arrivalMs ?? null,
           clockBasis: input.book.clockBasis, producer: input.book.producer,
         },
         bookRefusal: null,
@@ -129,6 +134,7 @@ export function selectTouchPrice(
       ok: true,
       quote: {
         bid: t.basis.bid, ask: t.basis.ask, basis: input.tickerBasis, ageMs: t.basis.ageMs,
+        quoteArrivedAtMs: input.ticker.arrivalMs ?? null,
         clockBasis: input.ticker.clockBasis, producer: input.ticker.producer,
       },
       bookRefusal,
@@ -177,6 +183,8 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
     ask: q.ask ?? null,
     // ⛔ NEVER `lastUpdatedAt`. See the docblock — it dates the mark, not the sides.
     stampMs: q.venueObservedAtMs ?? q.sidesCapturedAtMs ?? null,
+    // Local receipt ordering never borrows the venue clock used for freshness.
+    arrivalMs: q.sidesCapturedAtMs ?? null,
     // ⛔ `!= null`, NOT truthiness (Langston, Step-4 minor, 2026-09-13). The line above selects the
     // stamp with `??`, which treats `0` as PRESENT; a truthiness test here would treat the same `0`
     // as ABSENT and label a venue stamp `receipt`. Two tests on one field disagreeing is how a

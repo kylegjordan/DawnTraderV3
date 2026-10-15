@@ -227,3 +227,4 @@
 2026-10-15-b-xstock-bar-availability-observation.sql
 2026-10-15-c-xstock-bar-availability-handoff.sql
 2026-10-15-b-entry-consumption-freshness.sql
+2026-10-15-b-class-leg-fill-mode.sql

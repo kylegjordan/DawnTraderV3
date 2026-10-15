@@ -14,15 +14,15 @@ describe('[P19-B8.6] exit rest — sell-side honest trade-through', () => {
   });
 
   it('one tick, one outcome: fill / rest / drop — FILL WINS over the deadline (R2)', () => {
-    const base = { side: 'sell' as const, limit: 100, nowMs: 1_000_000 };
+    const base = { side: 'sell' as const, limit: 100, nowMs: 1_000_000, restPlacedAtMs: 0, quoteArrivedAtMs: 999_998 };
     expect(evaluatePendingMaker({ ...base, transactablePrice: 101, deadlineMs: 999_999 })).toBe('fill'); // both → FILL WINS
     expect(evaluatePendingMaker({ ...base, transactablePrice: 99, deadlineMs: 2_000_000 })).toBe('rest');
     expect(evaluatePendingMaker({ ...base, transactablePrice: 99, deadlineMs: 999_999 })).toBe('drop'); // the CONVERT trigger
   });
 
   it('a null/unavailable venue price can NEVER fill (venue-only discipline) but can still deadline-convert', () => {
-    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: null, limit: 100, nowMs: 1_000_000, deadlineMs: 2_000_000 })).toBe('rest');
-    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: null, limit: 100, nowMs: 1_000_000, deadlineMs: 999_999 })).toBe('drop');
+    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: null, limit: 100, nowMs: 1_000_000, deadlineMs: 2_000_000, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: null, limit: 100, nowMs: 1_000_000, deadlineMs: 999_999, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('drop');
   });
 
   it('the exit fill is at the LIMIT exactly — the inert-tier guard extends to exits (OBJ-7)', () => {

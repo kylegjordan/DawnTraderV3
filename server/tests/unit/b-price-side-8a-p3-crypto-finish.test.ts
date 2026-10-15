@@ -22,7 +22,7 @@ import { resolveVtsBookedExitPrice } from '../../core/trading/vts-exit-booking.j
 import { evaluatePendingMaker, isMarketableAtPlacement, planTwin } from '../../core/trading/pending-maker-logic.js';
 
 const NOW = 1_000_000_000;
-const book = (bid: number, ask: number, ageMs = 100): CryptoBookTop => ({ bids: [{ price: bid }], asks: [{ price: ask }], ageMs });
+const book = (bid: number, ask: number, ageMs = 100): CryptoBookTop => ({ bids: [{ price: bid }], asks: [{ price: ask }], ageMs, updatedAtMs: NOW - ageMs });
 const sides = (bid: number, ask: number, ageMs: number) => ({
   bid, ask, venueObservedAtMs: null, sidesCapturedAtMs: NOW - ageMs, lastSource: 'kraken_rest',
 });
@@ -75,7 +75,7 @@ describe('8a-P3 — the touch read', () => {
 });
 
 describe('8a-P3 — divergent fixtures: the midpoint and the transactable side disagree', () => {
-  const base = { limit: 100, nowMs: 0, deadlineMs: null };
+  const base = { limit: 100, nowMs: 0, deadlineMs: null, restPlacedAtMs: -2, quoteArrivedAtMs: -1 };
 
   it('C1/C3. a resting BUY: mid 100 reaches the limit, the ask 100.2 does not — only the ask decides', () => {
     expect(evaluatePendingMaker({ ...base, side: 'buy', transactablePrice: 100 })).toBe('fill'); // what the mid did
@@ -88,8 +88,8 @@ describe('8a-P3 — divergent fixtures: the midpoint and the transactable side d
   });
 
   it('C1/C3. no transactable side ⇒ no fill, but the hard-drop deadline still fires', () => {
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 5, deadlineMs: 10 })).toBe('rest');
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 10, deadlineMs: 10 })).toBe('drop');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 5, deadlineMs: 10, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 10, deadlineMs: 10, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('drop');
   });
 
   it('C4. placement is marketable on the ASK at or through the limit', () => {
@@ -99,18 +99,17 @@ describe('8a-P3 — divergent fixtures: the midpoint and the transactable side d
 
   const twin = (placementTransactablePrice: number | null) => planTwin({
     twinEnabled: true, pendingMaker: false, decisionChosenMode: 'taker', limitPrice: 100,
+    entryFillPolicy: 'maker_preferred', takerNetEV: 1, admissionFloor: -0.01,
     placementTransactablePrice, feeRateMaker: 0.004, feeRateTaker: 0.008, makerMaxPendingMs: () => 3_600_000, nowMs: 0,
     chosenSlippage: 0.0005, chosenSpread: 0.001, // `8a-P4c` 3a-ii FINDING-2: required
   });
 
   it('C7. the maker twin skips when the ASK is marketable', () => {
-    expect(twin(99)).toEqual({ kind: 'skip', reason: 'marketable_maker' });
+    expect(twin(99)).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
 
-  it('C7/P5. NO usable ask ⇒ the maker twin RESTS — the permissive arm, matching paper', () => {
-    const plan = twin(null);
-    expect(plan.kind).toBe('open');
-    expect(plan.kind === 'open' && plan.twinMode).toBe('maker');
+  it('C7/P5. a maker-preferred taker decision cannot recreate its inadmissible maker arm as a twin', () => {
+    expect(twin(null)).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
 
   // `3n.q3` P1: a clamp arm books NO price (it used to book the clamp).

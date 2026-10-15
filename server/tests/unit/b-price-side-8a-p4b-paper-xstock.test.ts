@@ -126,7 +126,7 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
   it('X1: a resting xStock entry fills on the judged ASK (a sell on the bid); any other class keeps the mark', () => {
     expect(AEE).toMatch(/const _isXstockPending = position\.assetClass === 'xstock_spot';/);
     expect(AEE).toMatch(/let fillPrice: number \| null = safePrice;\s*\n\s*if \(_isXstockPending\) \{\s*\n\s*fillPrice = side === 'buy' \? xstockSides\.ask : xstockSides\.bid;/);
-    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis \}\);/);
+    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs \}\);/);
   });
 
   it('X1: the xStock fill stamps the ask it filled on and names the rung', () => {
@@ -136,22 +136,23 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
 });
 
 describe('8a-P4b — the X1 decision, on the shared pure logic (red on the mark)', () => {
+  const liveRest = { restPlacedAtMs: 0, quoteArrivedAtMs: 1 };
   it('a resting xStock BUY does NOT fill when the mark has reached the limit but the ask has not', () => {
     const limit = 100;
     const mark = 99.95; // mid ≤ limit — the pre-8a-P4b input filled here
     const ask = 100.05; // no seller at the limit yet
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: mark, limit, nowMs: 1, deadlineMs: null })).toBe('fill');
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: ask, limit, nowMs: 1, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: mark, limit, nowMs: 1, deadlineMs: null, ...liveRest })).toBe('fill');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: ask, limit, nowMs: 1, deadlineMs: null, ...liveRest })).toBe('rest');
   });
 
   it('a resting xStock target SELL does NOT fill when the mark has reached the limit but the bid has not', () => {
     const limit = 110;
-    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: 110.02, limit, nowMs: 1, deadlineMs: null })).toBe('fill');
-    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: 109.97, limit, nowMs: 1, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: 110.02, limit, nowMs: 1, deadlineMs: null, ...liveRest })).toBe('fill');
+    expect(evaluatePendingMaker({ side: 'sell', transactablePrice: 109.97, limit, nowMs: 1, deadlineMs: null, ...liveRest })).toBe('rest');
   });
 
   it('a null side is no fill this tick (the rest persists), never a fallback', () => {
-    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 1, deadlineMs: null })).toBe('rest');
+    expect(evaluatePendingMaker({ side: 'buy', transactablePrice: null, limit: 100, nowMs: 1, deadlineMs: null, restPlacedAtMs: 0, quoteArrivedAtMs: null })).toBe('rest');
   });
 });
 

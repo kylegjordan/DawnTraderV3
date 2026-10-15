@@ -3601,6 +3601,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     asks: Array<{ price: number; qty: number }>;
     bids: Array<{ price: number; qty: number }>;
     ageMs: number;
+    updatedAtMs: number;
   } | null {
     const book = this.orderBooks.get(symbol);
     const updatedAt = this.bookUpdatedAt.get(symbol);
@@ -3616,7 +3617,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       .sort((a, b) => b[0] - a[0])
       .map(([price, qty]) => ({ price, qty }));
     if (asks.length === 0 || bids.length === 0) return null;
-    return { asks, bids, ageMs: Date.now() - updatedAt };
+    return { asks, bids, ageMs: Date.now() - updatedAt, updatedAtMs: updatedAt };
   }
 
   /**

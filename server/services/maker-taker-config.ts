@@ -10,9 +10,12 @@
  * failure, not a mid-scan one.
  */
 
-import { getCachedNumberRequired } from './module-constants-service.js';
+import { getCachedNumberRequired, getCachedStringRequired } from './module-constants-service.js';
 import type { AssetClass } from '../../shared/asset-classes.js';
-import type { MakerTakerHaircutConfig } from '../core/math/maker-taker-decision.js';
+import type { FillPolicy, MakerTakerHaircutConfig } from '../core/math/maker-taker-decision.js';
+
+export type FillPolicyLeg = 'entry' | 'target_exit';
+export const FILL_POLICIES = ['maker_only', 'maker_preferred'] as const satisfies readonly FillPolicy[];
 
 function classKey(assetClass: AssetClass) {
   return { exchange: '*', assetClass, strategy: '*', regime: '*' };
@@ -74,4 +77,17 @@ export function resolveMakerMaxPendingMs(assetClass: AssetClass): number {
  */
 export function resolveTwinEnabled(assetClass: AssetClass): boolean {
   return getCachedNumberRequired('maker_taker', 'twin_enabled', classKey(assetClass)) === 1;
+}
+
+/** Resolve a snapshotted fill policy. Only the two side-aware spot classes are supported. */
+export function resolveFillPolicy(assetClass: AssetClass, leg: FillPolicyLeg): FillPolicy {
+  if (assetClass !== 'crypto_spot' && assetClass !== 'xstock_spot') {
+    throw new Error(`[B-CLASS-LEG-FILL-MODE] unsupported asset class '${String(assetClass)}'`);
+  }
+  return getCachedStringRequired(
+    'maker_taker',
+    leg === 'entry' ? 'entry_fill_policy' : 'target_exit_fill_policy',
+    classKey(assetClass),
+    FILL_POLICIES,
+  ) as FillPolicy;
 }

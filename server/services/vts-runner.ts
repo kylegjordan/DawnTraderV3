@@ -84,8 +84,8 @@ import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass, com
 // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision (same pure
 // function the active path calls — F6) + its per-class DB-governed haircut resolver.
 // The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
-import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
-import { resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
+import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../core/math/maker-taker-decision.js';
+import { resolveFillPolicy, resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
 import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
@@ -702,6 +702,7 @@ interface Phase10TradeRecord {
   // UI can show WHICH fee the entry paid. ENTRY-leg only (exit pays taker today).
   // Optional — pre-B7.2b records lack it (UI renders NULL as an em-dash).
   chosenEntryMode?: 'taker' | 'maker';
+  entryFillPolicy?: FillPolicy;
   entryFeeRate?: number;
   // P19-B8.7 Step-9: the friction COMPONENTS behind frictionCost (per-leg
   // fractions from getCachedCostMetrics), captured at open so the UI cost 5-col
@@ -759,6 +760,7 @@ interface OpenVirtualTrade {
   // trades omit it → NULL, never coerced to a default mode). Carried to vts_open_trades
   // + the vts_trades_*.json closed payload for the fee-mode UI column.
   chosenEntryMode?: 'taker' | 'maker';
+  entryFillPolicy?: FillPolicy;
   entryFeeRate?: number;
   // F-G-2 OBJ-5b (2026-09-02): the cost fractions have been WRITTEN onto every open trade
   // since P19-B8.7 (:2128) and READ by the 5-col renderer (:5818+) without ever being declared
@@ -780,6 +782,7 @@ interface OpenVirtualTrade {
   // resting at makerLimitPrice (= entryPrice) until the resolve pre-pass fills it on an
   // honest trade-through or drops it past makerDeadline (epoch ms; never a closed trade).
   makerLimitPrice?: number;
+  makerPlacedAt?: number;
   makerDeadline?: number;
   // P19-B7.2c TWINS (Kyle): the NON-chosen maker/taker leg opened alongside the chosen
   // one for paired learning. mtTwin=true marks the twin (TYPED tag — the exemption
@@ -1772,6 +1775,7 @@ async function generatePhase10Signal(
               bid: _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
               ask: _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
               stampMs: _lbNow - _lbBook.ageMs,
+              arrivalMs: _lbBook.updatedAtMs,
               clockBasis: 'receipt',
               producer: 'kraken_ws_book',
             }
@@ -2153,9 +2157,16 @@ async function generatePhase10Signal(
     urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(strategy)]),
     haircut: resolveMakerTakerHaircut(_assetClass),
   });
+  const _vtsEntryFillPolicy = resolveFillPolicy(_assetClass, 'entry');
+  const _vtsPolicyDecision = applyMakerTakerFillPolicy(_vtsMtDecision, _vtsEntryFillPolicy, VTS_NET_EV_FLOOR);
+  if (!_vtsPolicyDecision.admitted) {
+    console.log(`[B-CLASS-LEG-FILL-MODE][VTS_POLICY_REJECT] ${symbol}/${strategy}: policy=${_vtsEntryFillPolicy} reason=${_vtsPolicyDecision.reason}`);
+    setNullReason('fill_policy_rejected');
+    return null;
+  }
   // The per-side entry fee actually used by the chosen mode (carried onto the trade record).
-  const _vtsEntryFeeRate = _vtsMtDecision.chosenMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker;
-  console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategy}: chose ${_vtsMtDecision.chosenMode} (taker=${_vtsMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_vtsMtDecision.makerNetEVAdjusted.toFixed(6)})`);
+  const _vtsEntryFeeRate = _vtsPolicyDecision.chosenMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker;
+  console.log(`[P19-B7.2b][VTS][MAKER_TAKER] ${symbol}/${strategy}: chose ${_vtsPolicyDecision.chosenMode} policy=${_vtsEntryFillPolicy} (taker=${_vtsMtDecision.takerNetEV.toFixed(6)}, maker-adj=${_vtsMtDecision.makerNetEVAdjusted.toFixed(6)})`);
 
   // Batch 52 Fix 19C: All byStrategy counter increments moved to caller (runPhase10SimulationCycle)
   // to prevent double-counting. Inner function only sets nullReason for caller to classify.
@@ -2166,7 +2177,7 @@ async function generatePhase10Signal(
   // Signals with slightly negative EV teach the model where the profitability edge is
   // P19-B7.2b (OBJ-A): gate on the CHOSEN best-of-both netEV — a taker-marginal /
   // maker-better signal is evaluated on its best option, consistent with the active path.
-  if (_vtsMtDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
+  if (_vtsPolicyDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
       reason: 'Net_EV_Negative',
@@ -2177,7 +2188,7 @@ async function generatePhase10Signal(
     });
     // P19-B8.5c (#503): taker/rawEV/friction now read from the decision's taker leg —
     // the single kernel site; friction prints in PRICE-UNIT dollars (was a fraction).
-    console.log(`[18L][NetEV] Skipping ${symbol}: chosen ${_vtsMtDecision.chosenMode} Net EV=${_vtsMtDecision.chosenNetEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (taker=${_vtsMtDecision.taker.netEV.toFixed(6)}, rawEV=${_vtsMtDecision.taker.rawEV.toFixed(6)}, friction=${_vtsMtDecision.taker.totalCost.toFixed(6)})`);
+    console.log(`[18L][NetEV] Skipping ${symbol}: chosen ${_vtsPolicyDecision.chosenMode} Net EV=${_vtsPolicyDecision.chosenNetEV.toFixed(6)} <= ${VTS_NET_EV_FLOOR} (taker=${_vtsMtDecision.taker.netEV.toFixed(6)}, rawEV=${_vtsMtDecision.taker.rawEV.toFixed(6)}, friction=${_vtsMtDecision.taker.totalCost.toFixed(6)})`);
     // Batch 50: Mark as post-signal rejection so caller doesn't count as strategy null
     setNullReason('net_ev_rejected');
     return null;
@@ -2392,9 +2403,10 @@ async function generatePhase10Signal(
   // on an honest trade-through or drops it at the hard-deadline. EXCEPT marketable-at-
   // placement (current price already ≤ the buy limit — a real post-only would REJECT):
   // run the stored-taker check on the decision's OWN taker leg (fresher than paper's —
-  // it was computed seconds ago in this same call): takerNetEV>0 → open as TAKER now
+  // it was computed seconds ago in this same call): maker-preferred takerNetEV above
+  // the VTS floor → open as TAKER now
   // (effective-mode flip, accounting-only), else skip the trade entirely (non-trade).
-  let _vtsEffectiveMode: 'taker' | 'maker' = _vtsMtDecision.chosenMode;
+  let _vtsEffectiveMode: 'taker' | 'maker' = _vtsPolicyDecision.chosenMode;
   let _vtsPendingMaker = false;
   // ⛔⛔ `8a-P3` P5 — THE PLACEMENT CHECK READS THE ASK: a post-only BUY is rejected iff the ASK is at or through its
   // limit. A SEPARATE variable, used ONLY here and at the twin — `currentMarketPrice` above stays the midpoint because
@@ -2407,13 +2419,13 @@ async function generatePhase10Signal(
     }).selection,
     'buy',
   );
-  if (_vtsMtDecision.chosenMode === 'maker') {
+  if (_vtsPolicyDecision.chosenMode === 'maker') {
     if (placementAsk !== null && isMarketableAtPlacement({ side: 'buy', transactablePrice: placementAsk, limit: entryPrice })) {
-      if (_vtsMtDecision.takerNetEV > 0) {
+      if (_vtsEntryFillPolicy === 'maker_preferred' && _vtsMtDecision.takerNetEV > VTS_NET_EV_FLOOR) {
         _vtsEffectiveMode = 'taker';
-        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} already marketable (ask=${placementAsk}) — takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>0 → opening as taker now`);
+        console.log(`[P19-B7.2c][VTS][MARKETABLE_TAKER_FALLBACK] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} already marketable (ask=${placementAsk}) — maker_preferred takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)}>${VTS_NET_EV_FLOOR} → opening as taker now`);
       } else {
-        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} marketable (ask=${placementAsk}) and takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} not positive — dropped (non-trade)`);
+        console.log(`[P19-B7.2c][VTS][MAKER_MARKETABLE_DROPPED] ${symbol}/${strategy} (${_assetClass}): maker limit ${entryPrice} marketable (ask=${placementAsk}) policy=${_vtsEntryFillPolicy} takerNetEV=${_vtsMtDecision.takerNetEV.toFixed(6)} — policy forbids fallback or taker does not clear ${VTS_NET_EV_FLOOR}; dropped (non-trade)`);
         setNullReason('maker_marketable_dropped');
         return null;
       }
@@ -2482,12 +2494,17 @@ async function generatePhase10Signal(
     // shown is the fee actually paid). A pending maker is born state='pending' resting
     // at the limit with the maker fee; taker/filled trades keep the default 'open'.
     chosenEntryMode: _vtsEffectiveMode,
+    entryFillPolicy: _vtsEntryFillPolicy,
     entryFeeRate: _vtsEffectiveMode === 'maker' ? _vtsFriction.feeRateMaker : _vtsFriction.feeRateTaker,
-    ...(_vtsPendingMaker ? {
+    ...(_vtsPendingMaker ? (() => {
+      const makerPlacedAt = Date.now();
+      return {
       state: 'pending' as const,
       makerLimitPrice: entryPrice,
-      makerDeadline: Date.now() + resolveMakerMaxPendingMs(tradeAssetClass),
-    } : {}),
+      makerPlacedAt,
+      makerDeadline: makerPlacedAt + resolveMakerMaxPendingMs(tradeAssetClass),
+      };
+    })() : {}),
     entryPrice: _vtsBookedEntry,      // `8a-P4c` 3b (P9): a taker at the guarded ask; a maker at its limit (the level)
     stopLoss: adjustedStopLoss,       // 11.7S: Mode-adjusted stop loss
     takeProfit: adjustedTakeProfit,   // 11.7S: Mode-adjusted take profit
@@ -2646,7 +2663,9 @@ async function generatePhase10Signal(
   // only; this function's PRIMARY open above stays inline.
   await maybeOpenTwin({
     chosenTradeId: tradeId,
-    decisionChosenMode: _vtsMtDecision.chosenMode,
+    decisionChosenMode: _vtsPolicyDecision.chosenMode,
+    entryFillPolicy: _vtsEntryFillPolicy,
+    takerNetEV: _vtsMtDecision.takerNetEV,
     effectiveMode: _vtsEffectiveMode,
     pendingMaker: _vtsPendingMaker,
     feeRateMaker: _vtsFriction.feeRateMaker,
@@ -3424,8 +3443,10 @@ async function archiveVtsExit(
         // that day. The data now agrees with the code: no path produces a maker-chosen
         // row without these columns. NOTHING TO FILE.
         chosenEntryMode: trade.chosenEntryMode,
+        entryFillPolicy: trade.entryFillPolicy,
         entryFeeRate: trade.entryFeeRate,
         makerLimitPrice: trade.makerLimitPrice,
+        makerPlacedAt: trade.makerPlacedAt,
         makerDeadline: trade.makerDeadline,
       },
     });
@@ -3709,16 +3730,50 @@ async function resolveOpenVirtualTrades(): Promise<{
         console.error(`[P19-B7.2c][VTS][PENDING_INVALID] ${tradeId} pending with no makerLimitPrice — leaving untouched (investigate)`);
         continue;
       }
+      const _pPlacedAtMs = trade.makerPlacedAt;
+      const _pEntryFillPolicy = trade.entryFillPolicy;
+      if (
+        _pPlacedAtMs == null
+        || !Number.isFinite(_pPlacedAtMs)
+        || (_pEntryFillPolicy !== 'maker_only' && _pEntryFillPolicy !== 'maker_preferred')
+      ) {
+        openVirtualTrades.delete(tradeId);
+        const { markOpenTradeClosed } = await import('./vts-trade-persistence.js');
+        await markOpenTradeClosed(tradeId);
+        await vtsService.persistNeverFilledRecord({
+          originalTradeId: tradeId,
+          symbol: trade.symbol,
+          assetClass: trade.assetClass,
+          strategy: trade.strategy,
+          regime: trade.regime,
+          signalType: trade.signalType,
+          pool: trade.pool,
+          sourcePool: trade.sourcePool,
+          makerLimitPrice: _pLimit,
+          openedAt: trade.openedAt,
+          droppedAt: now,
+          chosenEntryMode: trade.chosenEntryMode,
+          entryFillPolicy: trade.entryFillPolicy,
+          entryFeeRate: trade.entryFeeRate,
+          reason: 'legacy_missing_fill_provenance',
+          mtTwin: trade.mtTwin,
+          mtPairId: trade.mtPairId,
+        });
+        console.log(`[B-CLASS-LEG-FILL-MODE][VTS][MAKER_NEVER_FILLED] ${trade.symbol}: legacy pending maker lacked placement/policy provenance — retired unfilled`);
+        continue;
+      }
       // ONE outcome per tick via the shared PURE logic (same module as paper — R2 parity).
       // ⛔⛔ `8a-P3` C3 — A RESTING BUY FILLS ON THE ASK, NEVER THE MIDPOINT (paper's C1, same rule). Crypto reads the
       // touch fresh; xStock its guarded ask (`8a-P4c` 3b); `null` ⇒ no fill this tick. The initial value is overwritten
       // for both classes below.
       let _pFillPrice: number | null = currentPrice;
+      let _pQuoteArrivedAtMs: number | null = null;
       if (trade.assetClass === 'crypto_spot') {
         const _pt = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, now, {
           maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: ENTRY_LEG_NO_SPREAD_CEILING,
         });
         _pFillPrice = transactableSide(_pt.selection, 'buy');
+        _pQuoteArrivedAtMs = _pt.selection.ok ? _pt.selection.quote.quoteArrivedAtMs : null;
         const _pFirstLook = !_vtsEntryFillLooked.has(tradeId);
         _vtsEntryFillLooked.add(tradeId);
         _vtsTouch.entryFillLooks++;
@@ -3734,11 +3789,15 @@ async function resolveOpenVirtualTrades(): Promise<{
         _xsVtsInstrument.recordPendingLook(_pxRow, _pLimit);
         // ⛔ `8a-P4c` 3b (P8d, X5): A RESTING xSTOCK BUY FILLS ON THE GUARDED ASK — the same rule as crypto and paper. No
         // usable ask ⇒ no fill this tick (the rest keeps its deadline). Entry legs carry no spread ceiling (P7a).
-        _pFillPrice = selectVtsXstockEntryAsk(trade.symbol, _pxRow, trade.stopLoss ?? null, now).ask;
+        const _pXs = selectVtsXstockEntryAsk(trade.symbol, _pxRow, trade.stopLoss ?? null, now);
+        _pFillPrice = _pXs.ask;
+        _pQuoteArrivedAtMs = _pXs.arrivedAtMs;
       }
       const _pOutcome = evaluatePendingMaker({
         side: 'buy', // VTS trades are long-only by construction
         transactablePrice: _pFillPrice, limit: _pLimit, nowMs: now, deadlineMs: trade.makerDeadline ?? null,
+        restPlacedAtMs: _pPlacedAtMs,
+        quoteArrivedAtMs: _pQuoteArrivedAtMs,
       });
       if (_pOutcome !== 'rest') _vtsEntryFillLooked.delete(tradeId);
       if (_pOutcome === 'fill') {
@@ -3770,6 +3829,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           openedAt: trade.openedAt,
           droppedAt: now,
           chosenEntryMode: trade.chosenEntryMode,
+          entryFillPolicy: trade.entryFillPolicy,
           entryFeeRate: trade.entryFeeRate,
           mtTwin: trade.mtTwin,
           mtPairId: trade.mtPairId,
@@ -4145,6 +4205,7 @@ async function resolveOpenVirtualTrades(): Promise<{
           pool: trade.pool,
           sourcePool: trade.sourcePool,
           chosenEntryMode: trade.chosenEntryMode,
+          entryFillPolicy: trade.entryFillPolicy,
           entryFeeRate: trade.entryFeeRate,
           entryPrice: trade.entryPrice,
           exitPrice,
@@ -4214,6 +4275,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       // archive (from the OpenVirtualTrade record) → the vts_trades_*.json closed
       // payload → the VTS closed-trades UI fee-mode column. Entry-leg only.
       chosenEntryMode: trade.chosenEntryMode,
+      entryFillPolicy: trade.entryFillPolicy,
       entryFeeRate: trade.entryFeeRate,
     };
 
@@ -4334,6 +4396,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         // P19-B7.2b (OBJ-B): propagate the maker/taker entry fee-mode to the closed
         // VTS JSON record → the Closed Simulated Trades UI fee-mode column. Entry-leg only.
         chosenEntryMode: trade.chosenEntryMode,
+        entryFillPolicy: trade.entryFillPolicy,
         entryFeeRate: trade.entryFeeRate,
       });
       if (result.persisted) persisted++;
@@ -4884,10 +4947,12 @@ export interface RegisterOpenVtsTradeInput {
   // xstock eval-cycle (lane parity with crypto's inline open at ~:1971-1977). Absent →
   // undefined → the pre-B7.2d default (legacy rows stay dashed; dash-by-design).
   chosenEntryMode?: 'taker' | 'maker';
+  entryFillPolicy?: FillPolicy;
   entryFeeRate?: number;
   /** 'pending' = a maker-chosen open resting at the limit (B7.2c lifecycle). */
   state?: 'pending';
   makerLimitPrice?: number;
+  makerPlacedAt?: number;
   makerDeadline?: number;
   // P19-B8.5a (OBJ-2, FIX-2): honest calibration snapshot — xstock-lane parity with
   // crypto's inline open (see the OpenVirtualTrade interface note). Absent (legacy
@@ -4962,6 +5027,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     // maker is born state='pending' resting at the limit + deadline; taker/filled
     // opens keep the default 'open'. Absent (pre-B7.2d callers) → fields undefined.
     chosenEntryMode: input.chosenEntryMode,
+    entryFillPolicy: input.entryFillPolicy,
     entryFeeRate: input.entryFeeRate,
     // P19-B8.5a (OBJ-2): calibration-snapshot passthrough (xstock-lane parity).
     realDiAtOpen: input.realDiAtOpen,
@@ -4971,6 +5037,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     ...(input.state === 'pending' ? {
       state: 'pending' as const,
       makerLimitPrice: input.makerLimitPrice,
+      makerPlacedAt: input.makerPlacedAt,
       makerDeadline: input.makerDeadline,
     } : {}),
     entryPrice: input.entryPrice,
@@ -5098,6 +5165,8 @@ export interface MaybeOpenTwinInput {
   chosenTradeId: string;
   /** The DECISION's chosenMode (PRE-marketable-fallback) — drives twin-mode selection. */
   decisionChosenMode: 'taker' | 'maker';
+  entryFillPolicy: FillPolicy;
+  takerNetEV: number;
   /** The EFFECTIVE mode the chosen leg opened with (post-fallback) — log context only. */
   effectiveMode: 'taker' | 'maker';
   /** Whether the chosen leg opened as a resting pending maker. */
@@ -5129,6 +5198,9 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       twinEnabled: resolveTwinEnabled(tradeAssetClass),
       pendingMaker: input.pendingMaker,
       decisionChosenMode: input.decisionChosenMode,
+      entryFillPolicy: input.entryFillPolicy,
+      takerNetEV: input.takerNetEV,
+      admissionFloor: VTS_NET_EV_FLOOR,
       limitPrice: entryPrice,
       placementTransactablePrice: input.placementTransactablePrice,
       feeRateMaker: input.feeRateMaker,
@@ -5146,6 +5218,10 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
     if (plan.kind === 'skip') {
       if (plan.reason === 'marketable_maker') {
         console.log(`[P19-B7.2c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=marketable_maker: maker twin would be marketable at placement — no honest rest possible (limit=${entryPrice} ask=${input.placementTransactablePrice})`);
+      } else if (plan.reason === 'policy_forbidden') {
+        console.log(`[B-CLASS-LEG-FILL-MODE][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=policy_forbidden: fill policy does not permit the alternate arm`);
+      } else if (plan.reason === 'alternate_inadmissible') {
+        console.log(`[B-CLASS-LEG-FILL-MODE][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=alternate_inadmissible: alternate taker EV does not clear the VTS floor`);
       } else if (plan.reason === 'chosen_leg_unpriced') {
         console.error(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=chosen_leg_unpriced: the chosen leg carries no finite slippage/spread — its writer lost them (the twin is skipped rather than priced to neither leg)`);
       } else if (plan.reason === 'no_entry_ask') {
@@ -6473,10 +6549,12 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
   // opened on, surfaced to the Open Simulated Trades (VTS) UI fee-mode column.
   // NULL for pre-B7.2b trades (UI renders an em-dash). Entry-leg only.
   chosenEntryMode: 'taker' | 'maker' | null;
+  entryFillPolicy: FillPolicy | null;
   entryFeeRate: number | null;
   // P19-B7.2c: 'pending' = a resting maker order (PENDING badge); mtTwin/mtPairId =
   // the tagged non-chosen twin (the "chosen"/"twin" line under Entry Fee Mode).
   state: string;
+  makerPlacedAt: number | null;
   mtTwin: boolean;
   mtPairId: string | null;
 }>> {
@@ -6589,9 +6667,11 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
       sourcePool: trade.sourcePool || ("unknown" as string),
       // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
       chosenEntryMode: trade.chosenEntryMode ?? null,
+      entryFillPolicy: trade.entryFillPolicy ?? null,
       entryFeeRate: trade.entryFeeRate ?? null,
       // P19-B7.2c: PENDING badge + chosen/twin line.
       state: trade.state ?? 'open',
+      makerPlacedAt: trade.makerPlacedAt ?? null,
       mtTwin: trade.mtTwin === true,
       mtPairId: trade.mtPairId ?? null,
       dollarValue: parseFloat(tradeDollarValue.toFixed(2)),  // Directive 11.6H: Fixed USD exposure

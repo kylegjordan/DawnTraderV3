@@ -12115,11 +12115,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           tradeMode: (pos as any).tradeMode || 'TARGET', // TARGET or TRAILING_TAKE (MOONBAG)
           // P19-B7.2b (OBJ-B): maker/taker entry fee-mode for the fee-mode column.
           chosenEntryMode: (pos as any).chosenEntryMode ?? null,
+          entryFillPolicy: (pos as any).entryFillPolicy ?? null,
           entryFeeRate: (pos as any).entryFeeRate ?? null,
           // P19-B7.2c: a resting maker order shows a PENDING badge (state='pending').
           state: (pos as any).state ?? 'open',
           makerLimitPrice: (pos as any).makerLimitPrice ?? null,
-          makerDeadline: (pos as any).makerDeadline ?? null
+          makerPlacedAt: (pos as any).makerPlacedAt ?? null,
+          makerDeadline: (pos as any).makerDeadline ?? null,
+          targetExitFillPolicy: (pos as any).targetExitFillPolicy ?? null
         };
       }));
       
@@ -21581,6 +21584,8 @@ function generateTradeCSV(trades: any[]): string {
     'Side',
     'Strategy',
     'Mode',
+    'Entry Fill Policy',
+    'Target Exit Fill Policy',
     'Entry Price',
     'Exit Price',
     'Quantity',
@@ -21618,6 +21623,8 @@ function generateTradeCSV(trades: any[]): string {
       'BUY/SELL', // Simplified
       trade.strategy,
       trade.mode,
+      trade.entryFillPolicy || '',
+      trade.targetExitFillPolicy || '',
       trade.entryPrice,
       trade.exitPrice || '',
       trade.quantity,

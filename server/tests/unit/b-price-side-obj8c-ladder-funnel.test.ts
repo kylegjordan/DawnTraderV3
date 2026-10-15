@@ -62,10 +62,10 @@ const BOOK_CELL = { ...LANE, rung: 'book' as const };
 const LADDER_CELL = { ...LANE, rung: 'ladder' as const };
 
 const book = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
-  bid: 100, ask: 100.2, stampMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book', ...o,
+  bid: 100, ask: 100.2, stampMs: NOW - 1_000, arrivalMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book', ...o,
 });
 const ticker = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
-  bid: 99.9, ask: 100.3, stampMs: NOW - 2_000, clockBasis: 'receipt', producer: 'kraken_rest', ...o,
+  bid: 99.9, ask: 100.3, stampMs: NOW - 2_000, arrivalMs: NOW - 2_000, clockBasis: 'receipt', producer: 'kraken_rest', ...o,
 });
 
 /** One walk, recorded. Returns nothing — the assertions read the funnel, not a return value. */

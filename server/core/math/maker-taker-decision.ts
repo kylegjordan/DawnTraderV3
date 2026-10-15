@@ -52,6 +52,22 @@ import type { StrategyFamily } from '../../config/canonical-regime-strategy-map.
 
 export type EntryMode = 'taker' | 'maker';
 
+/** B-CLASS-LEG-FILL-MODE: the execution policy applied after both arms are priced. */
+export type FillPolicy = 'maker_only' | 'maker_preferred';
+
+export type FillPolicyDecision =
+  | {
+      admitted: true;
+      policy: FillPolicy;
+      chosenMode: EntryMode;
+      chosenNetEV: number;
+    }
+  | {
+      admitted: false;
+      policy: FillPolicy;
+      reason: 'hard_floor' | 'maker_not_positive' | 'no_admissible_arm';
+    };
+
 /**
  * The pre-calibration urgency prior derived from the strategy family. Needs NO
  * data (field survey addendum #1, Cartea-Wang): as the alpha signal strengthens
@@ -172,6 +188,64 @@ export interface MakerTakerDecisionResult {
   signalStrength: number;
   taker: NetExpectancyKernelResult;
   maker: NetExpectancyKernelResult;
+}
+
+/**
+ * Apply the class/leg policy to the already-priced maker/taker arms.
+ *
+ * The pricing kernel above remains the only economics authority. This overlay is
+ * deliberately pure and returns a structural rejection so the paper exploration
+ * lane cannot reinterpret a forbidden arm as an ordinary negative-EV signal.
+ */
+export function applyMakerTakerFillPolicy(
+  decision: MakerTakerDecisionResult,
+  policy: FillPolicy,
+  admissionFloor: number,
+): FillPolicyDecision {
+  if (!Number.isFinite(admissionFloor)) {
+    throw new Error(`applyMakerTakerFillPolicy: admissionFloor must be finite, got ${String(admissionFloor)}`);
+  }
+
+  if (policy === 'maker_only') {
+    if (decision.hardFloorFired) {
+      return { admitted: false, policy, reason: 'hard_floor' };
+    }
+    if (!(Number.isFinite(decision.makerNetEVAdjusted) && decision.makerNetEVAdjusted > 0)) {
+      return { admitted: false, policy, reason: 'maker_not_positive' };
+    }
+    return {
+      admitted: true,
+      policy,
+      chosenMode: 'maker',
+      chosenNetEV: decision.makerNetEVAdjusted,
+    };
+  }
+
+  if (policy !== 'maker_preferred') {
+    throw new Error(`applyMakerTakerFillPolicy: unsupported policy ${String(policy)}`);
+  }
+
+  if (
+    !decision.hardFloorFired
+    && Number.isFinite(decision.makerNetEVAdjusted)
+    && decision.makerNetEVAdjusted > admissionFloor
+  ) {
+    return {
+      admitted: true,
+      policy,
+      chosenMode: 'maker',
+      chosenNetEV: decision.makerNetEVAdjusted,
+    };
+  }
+  if (Number.isFinite(decision.takerNetEV) && decision.takerNetEV > admissionFloor) {
+    return {
+      admitted: true,
+      policy,
+      chosenMode: 'taker',
+      chosenNetEV: decision.takerNetEV,
+    };
+  }
+  return { admitted: false, policy, reason: 'no_admissible_arm' };
 }
 
 function clamp01(x: number): number {

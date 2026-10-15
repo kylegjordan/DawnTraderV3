@@ -111,19 +111,19 @@ function splitTradeForPersist(t: OpenVirtualTradeRecord): { core: any; context: 
     // columns (chosen_entry_mode / entry_fee_rate) so the VTS open-trades UI can
     // query it directly, consistent with the paper-active tables. Destructured out
     // of `...context` so it lives in ONE home (the typed column), not duplicated.
-    chosenEntryMode, entryFeeRate,
+    chosenEntryMode, entryFillPolicy, entryFeeRate,
     // P19-B7.2c: pending-maker lifecycle — typed columns (Langston Q3: not context
     // JSON; the resolve pre-pass reads them every cycle). `state` written at INSERT
     // so a pending row is born 'pending' (previously the DB default 'open' stood).
-    state, makerLimitPrice, makerDeadline,
+    state, makerLimitPrice, makerPlacedAt, makerDeadline,
     ...context
   } = t;
   return {
     core: {
       id, symbol, assetClass, entryPrice, stopLoss, takeProfit, positionSize,
       dollarValue, quantity, regime, signalType, strategy, pool, openedAt,
-      chosenEntryMode, entryFeeRate,
-      state, makerLimitPrice, makerDeadline,
+      chosenEntryMode, entryFillPolicy, entryFeeRate,
+      state, makerLimitPrice, makerPlacedAt, makerDeadline,
     },
     context,
   };
@@ -141,8 +141,8 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
     INSERT INTO vts_open_trades (
       id, symbol, asset_class, entry_price, stop_loss, take_profit,
       position_size, dollar_value, quantity, regime, signal_type, strategy,
-      pool, opened_at, chosen_entry_mode, entry_fee_rate,
-      state, maker_limit_price, maker_deadline,
+      pool, opened_at, chosen_entry_mode, entry_fill_policy, entry_fee_rate,
+      state, maker_limit_price, maker_placed_at, maker_deadline,
       context, inserted_at, updated_at
     ) VALUES (
       ${core.id}, ${core.symbol}, ${core.assetClass},
@@ -150,9 +150,10 @@ export async function insertOpenTrade(trade: OpenVirtualTradeRecord): Promise<vo
       ${core.positionSize}, ${core.dollarValue}, ${core.quantity},
       ${core.regime}, ${core.signalType}, ${core.strategy}, ${core.pool},
       to_timestamp(${core.openedAt} / 1000.0),
-      ${core.chosenEntryMode ?? null}, ${core.entryFeeRate ?? null},
+      ${core.chosenEntryMode ?? null}, ${core.entryFillPolicy ?? null}, ${core.entryFeeRate ?? null},
       ${core.state ?? 'open'},
       ${core.makerLimitPrice ?? null},
+      ${core.makerPlacedAt != null ? new Date(core.makerPlacedAt) : null},
       ${core.makerDeadline != null ? new Date(core.makerDeadline) : null},
       ${JSON.stringify(context)}::jsonb,
       NOW(), NOW()
@@ -329,15 +330,17 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     opened_at: Date;
     state: string;
     chosen_entry_mode: string | null;
+    entry_fill_policy: string | null;
     entry_fee_rate: string | null;
     maker_limit_price: string | null;
+    maker_placed_at: Date | null;
     maker_deadline: Date | null;
     context: Record<string, any>;
   }>(sql`
     SELECT id, symbol, asset_class, entry_price, stop_loss, take_profit,
            position_size, dollar_value, quantity, regime, signal_type, strategy,
-           pool, opened_at, state, chosen_entry_mode, entry_fee_rate,
-           maker_limit_price, maker_deadline, context
+           pool, opened_at, state, chosen_entry_mode, entry_fill_policy, entry_fee_rate,
+           maker_limit_price, maker_placed_at, maker_deadline, context
     FROM vts_open_trades
     WHERE closed = false
   `);
@@ -371,10 +374,12 @@ export async function rehydrateOpenTrades(): Promise<OpenVirtualTradeRecord[]> {
     // the context spread so a NEW row's typed column wins, with a fallback to legacy
     // context for pre-B7.2b rows that stored these in the jsonb blob.
     chosenEntryMode: r.chosen_entry_mode ?? (r.context as any)?.chosenEntryMode,
+    entryFillPolicy: r.entry_fill_policy ?? (r.context as any)?.entryFillPolicy,
     entryFeeRate: r.entry_fee_rate != null ? parseFloat(r.entry_fee_rate) : (r.context as any)?.entryFeeRate,
     // P19-B7.2c: pending-maker lifecycle fields (epoch ms in memory; typed cols in DB).
     // A rehydrated 'pending' flows into the resolve pre-pass like any live pending.
     makerLimitPrice: r.maker_limit_price != null ? parseFloat(r.maker_limit_price) : undefined,
+    makerPlacedAt: r.maker_placed_at != null ? new Date(r.maker_placed_at).getTime() : undefined,
     makerDeadline: r.maker_deadline != null ? new Date(r.maker_deadline).getTime() : undefined,
   }));
 }

@@ -687,7 +687,9 @@ export class VTSService extends EventEmitter {
     openedAt: number;
     droppedAt: number;
     chosenEntryMode?: 'taker' | 'maker';
+    entryFillPolicy?: 'maker_only' | 'maker_preferred';
     entryFeeRate?: number;
+    reason?: 'never_filled' | 'legacy_missing_fill_provenance';
     // P19-B7.2c TWINS: a never-filled maker TWIN is a paired fill-rate observation.
     mtTwin?: boolean;
     mtPairId?: string;
@@ -708,6 +710,7 @@ export class VTSService extends EventEmitter {
       pool: rec.pool,
       sourcePool: rec.sourcePool,
       chosenEntryMode: rec.chosenEntryMode ?? 'maker',
+      entryFillPolicy: rec.entryFillPolicy,
       entryFeeRate: rec.entryFeeRate,
       makerLimitPrice: rec.makerLimitPrice,
       entryPrice: null,  // never filled — there IS no entry
@@ -718,7 +721,7 @@ export class VTSService extends EventEmitter {
       entryTime: rec.openedAt,
       exitTime: rec.droppedAt, // the drop instant (satisfies the reader's exitTime cutoff)
       status: 'closed',
-      exitReason: 'never_filled',
+      exitReason: rec.reason ?? 'never_filled',
       schemaVersion: '1.6.7',
     };
     await this.logTrade(record as any);
@@ -745,6 +748,7 @@ export class VTSService extends EventEmitter {
     pool: 'ideal' | 'rotational';
     sourcePool?: string;
     chosenEntryMode?: 'taker' | 'maker';
+    entryFillPolicy?: 'maker_only' | 'maker_preferred';
     entryFeeRate?: number;
     entryPrice: number;
     exitPrice: number;
@@ -776,6 +780,7 @@ export class VTSService extends EventEmitter {
       pool: rec.pool,
       sourcePool: rec.sourcePool,
       chosenEntryMode: rec.chosenEntryMode,
+      entryFillPolicy: rec.entryFillPolicy,
       entryFeeRate: rec.entryFeeRate,
       entryPrice: rec.entryPrice,
       exitPrice: rec.exitPrice,
@@ -885,6 +890,7 @@ export class VTSService extends EventEmitter {
     // the closed VTS JSON so the Closed Simulated Trades fee-mode column can read it
     // back. Optional — omitted callers (and pre-B7.2b trades) read back as null.
     chosenEntryMode?: 'taker' | 'maker';
+    entryFillPolicy?: 'maker_only' | 'maker_preferred';
     entryFeeRate?: number;
   }): Promise<{ persisted: boolean; mlTriggered: boolean }> {
     // Compute expected edge at entry time (predicted profit based on take profit distance)
@@ -1037,6 +1043,7 @@ export class VTSService extends EventEmitter {
       // JSON record → read back by getClosedVTSTradesFromLogs → Closed Simulated
       // Trades fee-mode column. Entry-leg only.
       chosenEntryMode: tradeData.chosenEntryMode ?? null,
+      entryFillPolicy: tradeData.entryFillPolicy ?? null,
       entryFeeRate: tradeData.entryFeeRate ?? null,
     } as any;
 

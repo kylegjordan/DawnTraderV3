@@ -68,6 +68,8 @@ function baseInput(symbol: string, assetClass: any): any {
     riskScore: 0.5,
     profitRate: 0.1,
     finalScore: 0.7,
+    chosenEntryMode: 'taker',
+    entryFillPolicy: 'maker_preferred',
     quantity: 1,
     notional: 100,
     currentPrice: 100,

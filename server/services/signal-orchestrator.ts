@@ -181,8 +181,8 @@ import {
 // P19-B7.2: the shared maker/taker best-of-both entry decision (pure) + its
 // per-class DB-governed haircut resolver (fail-hard). Computed once at the
 // shared signal-build convergence, snapshotted onto the RTB row (OBJ-1/OBJ-3).
-import { decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
-import { resolveMakerTakerHaircut } from './maker-taker-config.js';
+import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js';
+import { resolveFillPolicy, resolveMakerTakerHaircut } from './maker-taker-config.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { emitMakerTaker } from './data-archive/switch-on-evidence-sink.js';
 // Directive 11.4H Task 1: Symbol normalization at data ingress
@@ -1094,8 +1094,18 @@ export class SignalOrchestrator {
       urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[_canonicalStrategy]),
       haircut: resolveMakerTakerHaircut(sizingContext.assetClass),
     });
+    const _entryFillPolicy = resolveFillPolicy(sizingContext.assetClass, 'entry');
+    const _mtPolicyDecision = applyMakerTakerFillPolicy(_mtDecision, _entryFillPolicy, 0);
+    if (!_mtPolicyDecision.admitted) {
+      console.log(
+        `[B-CLASS-LEG-FILL-MODE][POLICY_REJECT] ${rawSignal.symbol}/${strategyId}: ` +
+        `policy=${_entryFillPolicy} reason=${_mtPolicyDecision.reason} ` +
+        `taker=${_mtDecision.takerNetEV.toFixed(6)} maker_adj=${_mtDecision.makerNetEVAdjusted.toFixed(6)}`,
+      );
+      return null;
+    }
     console.log(
-      `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtDecision.chosenMode} ` +
+      `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtPolicyDecision.chosenMode} policy=${_entryFillPolicy} ` +
       `(taker netEV=${_mtDecision.takerNetEV.toFixed(6)}, maker-adj netEV=${_mtDecision.makerNetEVAdjusted.toFixed(6)}, ` +
       `A=${(_mtDecision.adverseSelectionPct * 100).toFixed(3)}% C=${(_mtDecision.nonFillCostPct * 100).toFixed(3)}% ` +
       `floor=${_mtDecision.hardFloorFired})`,
@@ -1106,7 +1116,7 @@ export class SignalOrchestrator {
     emitMakerTaker(
       { symbol: rawSignal.symbol, strategy: strategyId, assetClass: sizingContext.assetClass ?? 'unknown', regime: null, sourcePool: rawSignal.metadata?.sourcePool ?? null, mode: sizingContext.mode },
       {
-        chosenEntryMode: _mtDecision.chosenMode,
+        chosenEntryMode: _mtPolicyDecision.chosenMode,
         takerNetEv: _mtDecision.takerNetEV,
         makerNetEvAdjusted: _mtDecision.makerNetEVAdjusted,
         signalStrength: _mtDecision.signalStrength,
@@ -1122,7 +1132,7 @@ export class SignalOrchestrator {
       symbol: rawSignal.symbol,
       strategy: strategyId,
       assetClass: sizingContext.assetClass,
-      chosenMode: _mtDecision.chosenMode,
+      chosenMode: _mtPolicyDecision.chosenMode,
       takerNetEV: _mtDecision.takerNetEV,
       makerNetEVAdjusted: _mtDecision.makerNetEVAdjusted,
       adverseSelectionPct: _mtDecision.adverseSelectionPct,
@@ -1146,8 +1156,8 @@ export class SignalOrchestrator {
       // P19-B8.5a (OBJ-3): the upstream-computed best-of-both netEV for the SQE's
       // admission sign-check (gate-inside, calculation-outside — decideMakerTaker
       // above stays the calc home per Kyle's P19-B7.2b placement).
-      chosenNetEv: _mtDecision.chosenNetEV,
-      chosenEntryMode: _mtDecision.chosenMode,
+      chosenNetEv: _mtPolicyDecision.chosenNetEV,
+      chosenEntryMode: _mtPolicyDecision.chosenMode,
     };
 
     // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path gen — the HF8 confidence floor +
@@ -1179,12 +1189,12 @@ export class SignalOrchestrator {
         if (isNetEvOnlyFailure(sqeResult.failures)) {
           const d = await checkExplorationAdmit({
             assetClass: sizingContext.assetClass,
-            chosenNetEv: _mtDecision.chosenNetEV,
+            chosenNetEv: _mtPolicyDecision.chosenNetEV,
             entryPrice: rawSignal.entryPrice,
           });
           if (d.admit) {
             _exploAdmit = d;
-            console.log(`[P19-B8.5][EXPLORATION_ADMIT] ${rawSignal.symbol}/${strategyId}: ${d.reason} (netEV=${_mtDecision.chosenNetEV.toFixed(6)}, organic gate UNTOUCHED — lane admit)`);
+            console.log(`[P19-B8.5][EXPLORATION_ADMIT] ${rawSignal.symbol}/${strategyId}: ${d.reason} (netEV=${_mtPolicyDecision.chosenNetEV.toFixed(6)}, organic gate UNTOUCHED — lane admit)`);
           } else {
             console.log(`[P19-B8.5][EXPLORATION_DECLINE] ${rawSignal.symbol}/${strategyId}: ${d.reason}`);
           }
@@ -1419,8 +1429,9 @@ export class SignalOrchestrator {
       // P19-B7.2: the best-of-both maker/taker snapshot (OBJ-1/OBJ-3). chosenNetEV
       // is the SINGLE-CONSISTENT-NUMBER every downstream EV consumer reads (the
       // [11.8B] open-gate + the B7.1 ranker) — never the raw un-haircut maker EV.
-      chosenEntryMode: _mtDecision.chosenMode,
-      chosenNetEv: _mtDecision.chosenNetEV,
+      chosenEntryMode: _mtPolicyDecision.chosenMode,
+      entryFillPolicy: _entryFillPolicy,
+      chosenNetEv: _mtPolicyDecision.chosenNetEV,
       takerNetEv: _mtDecision.takerNetEV,
       makerNetEvAdjusted: _mtDecision.makerNetEVAdjusted,
       sourcePool: rawSignal.metadata?.sourcePool || undefined,
@@ -1440,7 +1451,7 @@ export class SignalOrchestrator {
         // = lane admit (paper-only) with the effective floor + policy version at
         // admit time, so the anneal's non-stationarity is reconstructable per row.
         admissionBasis: _exploAdmit ? 'exploration' : 'organic',
-        netEvAtAdmit: _mtDecision.chosenNetEV,
+        netEvAtAdmit: _mtPolicyDecision.chosenNetEV,
         ...(_exploAdmit ? { floorInEffect: _exploAdmit.floorInEffect, policyVersion: _exploAdmit.policyVersion } : {}),
         assetClass: sizingContext.assetClass,
         // ★ P19-B8.5f (OBJ-1, #550): CARRY THE MAX-HOLD. `stampMaxHoldingMs` (:531) stamps this
@@ -2691,6 +2702,7 @@ export class SignalOrchestrator {
                   // representations meet and it is written out so nobody later "simplifies" it
                   // into `Date.now()`.
                   stampMs: _lbNow - _lbBook.ageMs,
+                  arrivalMs: _lbBook.updatedAtMs,
                   clockBasis: 'receipt',
                   producer: 'kraken_ws_book',
                 }

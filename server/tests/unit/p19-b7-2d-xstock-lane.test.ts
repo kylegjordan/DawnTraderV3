@@ -34,6 +34,9 @@ function base(over: Partial<Parameters<typeof planTwin>[0]> = {}) {
     twinEnabled: true,
     pendingMaker: false,
     decisionChosenMode: 'taker' as const,
+    entryFillPolicy: 'maker_preferred' as const,
+    takerNetEV: 1,
+    admissionFloor: -0.01,
     limitPrice: 100,
     placementTransactablePrice: 101, // above the buy limit → NOT marketable
     ...FEES,
@@ -53,6 +56,7 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
       twinMode: 'taker',
       overlay: {
         chosenEntryMode: 'taker',
+        entryFillPolicy: 'maker_preferred',
         entryFeeRate: FEES.feeRateTaker,
         entryPriceBasis: 'ask', // `8a-P4c` 3b (P9): a taker twin books the guarded ask
         frictionCost: expect.closeTo(FEES.feeRateTaker * 2 + 2 * 0.0005, 12), // on its side at both legs: no spread half
@@ -61,31 +65,16 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
         costExitFeeFraction: FEES.feeRateTaker,
         state: 'open',
         makerLimitPrice: undefined,
+        makerPlacedAt: undefined,
         makerDeadline: undefined,
         entryPrice: 101, // the placement ask
       },
     });
   });
 
-  it('chosen leg taker BY DECISION, non-marketable limit → MAKER twin rests pending at the limit + deadline, maker fee', () => {
+  it('chosen leg taker BY DECISION means the maker arm was inadmissible, so no maker twin is opened', () => {
     const plan = planTwin(base({ pendingMaker: false, decisionChosenMode: 'taker' }));
-    expect(plan).toEqual({
-      kind: 'open',
-      twinMode: 'maker',
-      overlay: {
-        chosenEntryMode: 'maker',
-        entryFeeRate: FEES.feeRateMaker,
-        entryPriceBasis: 'limit', // `8a-P4c` 3a-ii: the twin stamps its OWN entry basis
-        frictionCost: expect.closeTo(FEES.feeRateMaker + FEES.feeRateTaker + 2 * 0.0005, 12),
-        costFeeFraction: (FEES.feeRateMaker + FEES.feeRateTaker) / 2,
-        costEntryFeeFraction: FEES.feeRateMaker,
-        costExitFeeFraction: FEES.feeRateTaker,
-        state: 'pending',
-        makerLimitPrice: 100,
-        makerDeadline: NOW + MAX_PENDING,
-        entryPrice: 100, // `8a-P4c` 3b r1 BLOCKER-1: the maker twin's OWN entry is its limit
-      },
-    });
+    expect(plan).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
 });
 
@@ -94,11 +83,9 @@ describe('P19-B7.2d — crypto-lane twin regression: planTwin ≡ the inline blo
     expect(planTwin(base({ twinEnabled: false }))).toEqual({ kind: 'skip', reason: 'twin_disabled' });
   });
 
-  it('maker twin would be MARKETABLE at placement (market ≤ buy limit) → skip, no honest rest', () => {
-    // market AT the limit — tradedThrough is <= for a buy, exactly the inline comparator.
-    expect(planTwin(base({ placementTransactablePrice: 100 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
-    // market BELOW the limit.
-    expect(planTwin(base({ placementTransactablePrice: 99.5 }))).toEqual({ kind: 'skip', reason: 'marketable_maker' });
+  it('maker-preferred suppresses the inadmissible maker alternate before placement details can revive it', () => {
+    expect(planTwin(base({ placementTransactablePrice: 100 }))).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
+    expect(planTwin(base({ placementTransactablePrice: 99.5 }))).toEqual({ kind: 'skip', reason: 'policy_forbidden' });
   });
 
   it('chosen leg was the marketable taker-FALLBACK (decision=maker, not pending) → degenerate, skip', () => {

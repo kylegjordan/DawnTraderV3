@@ -51,9 +51,19 @@ export function evaluatePendingMaker(args: {
   limit: number;
   nowMs: number;
   deadlineMs: number | null;
+  restPlacedAtMs: number | null;
+  quoteArrivedAtMs: number | null;
 }): PendingOutcome {
-  const { side, transactablePrice, limit, nowMs, deadlineMs } = args;
-  if (transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill'; // FILL WINS (R2)
+  const { side, transactablePrice, limit, nowMs, deadlineMs, restPlacedAtMs, quoteArrivedAtMs } = args;
+  const arrivalIsDuringRest =
+    restPlacedAtMs != null
+    && quoteArrivedAtMs != null
+    && Number.isFinite(restPlacedAtMs)
+    && Number.isFinite(quoteArrivedAtMs)
+    && quoteArrivedAtMs > restPlacedAtMs
+    && (deadlineMs == null || quoteArrivedAtMs < deadlineMs);
+  // A quote received inside the live interval may fill even if this evaluation happens after expiry.
+  if (arrivalIsDuringRest && transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill';
   if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
   return 'rest';
 }
@@ -84,7 +94,7 @@ export function makerFillPrice(limit: number): number {
 // `ask_at_or_through_target` / `ask_at_or_through_stop` (refuseTakerBooking, taker twin only) and
 // `booked_price_invalid` (bookedQuantity). A census of twin skips must read BOTH places.
 export type TwinPlan =
-  | { kind: 'skip'; reason: 'twin_disabled' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' | 'chosen_leg_unpriced' }
+  | { kind: 'skip'; reason: 'twin_disabled' | 'policy_forbidden' | 'alternate_inadmissible' | 'marketable_maker' | 'degenerate_fallback' | 'no_entry_ask' | 'chosen_leg_unpriced' }
   | {
       kind: 'open';
       twinMode: 'taker' | 'maker';
@@ -95,6 +105,8 @@ export type TwinPlan =
         state: 'pending' | 'open';
         makerLimitPrice: number | undefined;
         makerDeadline: number | undefined;
+        makerPlacedAt: number | undefined;
+        entryFillPolicy: import('../math/maker-taker-decision.js').FillPolicy;
         /**
          * F-G-2 OBJ-5b — the twin's OWN booked friction. Without these the twin inherits the
          * chosen leg's friction via `...chosenTrade` under the OPPOSITE mode's stamp — the exact
@@ -116,12 +128,13 @@ export type TwinPlan =
     };
 
 /**
- * One chosen leg → one twin plan. Transcription of the inline block's semantics:
+ * One chosen leg → one policy-constrained twin plan:
  *  - twin disabled (per-class `maker_taker.twin_enabled` knob) → skip.
- *  - chosen leg opened PENDING maker → the twin is the TAKER leg (opens filled now).
- *  - chosen leg opened taker BY DECISION → the twin is the MAKER leg (rests pending
- *    at the limit + deadline) — UNLESS that maker twin would be marketable at
- *    placement (no honest rest possible) → skip.
+ *  - maker-only policy → no alternate leg.
+ *  - maker-preferred chosen maker → open a TAKER twin only when its own EV
+ *    clears the lane floor.
+ *  - maker-preferred chosen taker → no maker twin, because that maker arm was
+ *    independently inadmissible (or hard-floor forbidden).
  *  - chosen leg was the marketable taker-FALLBACK (decision said maker, placement
  *    flipped it) → comparison degenerate → skip.
  */
@@ -131,22 +144,21 @@ export function planTwin(params: {
   pendingMaker: boolean;
   /** The DECISION's chosenMode (PRE-marketable-fallback). */
   decisionChosenMode: 'taker' | 'maker';
-  /** The signal's entry LEVEL — the maker twin's resting limit (`8a-P4c` 3b: never the chosen leg's booked price, which
-   *  is the ask when the chosen leg is a taker). */
+  entryFillPolicy: import('../math/maker-taker-decision.js').FillPolicy;
+  takerNetEV: number;
+  admissionFloor: number;
+  /** The signal's entry LEVEL. Retained for the shared overlay shape and legacy
+   *  marketability fence; current fill policies only permit taker twins. */
   limitPrice: number;
   /**
-   * The guarded ASK at placement — crypto's touch, xStock's scanner quote (`8a-P4c` 3b, P7a). Two jobs:
-   *  - the maker twin's marketability test; `null` = no usable ask ⇒ NOT marketable, so a maker twin RESTS (the no-ask
-   *    placement policy, P11 — the same arm as paper's `_b72cBestAsk != null &&`);
-   *  - the price a TAKER twin books (P9); `null` ⇒ the taker twin is SKIPPED (`no_entry_ask`), never booked at a level.
+   * The guarded ASK at placement — crypto's touch, xStock's scanner quote
+   * (`8a-P4c` 3b, P7a). It is the price a TAKER twin books (P9); `null`
+   * skips that twin (`no_entry_ask`) rather than fabricating a level fill.
    */
   placementTransactablePrice: number | null;
   feeRateMaker: number;
   feeRateTaker: number;
-  /** Per-class hard-drop budget (`maker_max_pending_ms`) as a LAZY provider —
-   *  invoked ONLY in the maker-twin open branch, exactly where the inline block
-   *  called the fail-hard resolver (behavior-identity: a missing knob throws at
-   *  the same point it used to, not on every twin evaluation). */
+  /** Per-class hard-drop budget retained by the shared overlay contract. */
   makerMaxPendingMs: () => number;
   nowMs: number;
   /** `8a-P4c` 3a-ii (BLOCKER-1): the chosen leg's slippage and spread — the twin composes its OWN friction over them.
@@ -157,6 +169,15 @@ export function planTwin(params: {
   chosenSpread: number | undefined;
 }): TwinPlan {
   if (!params.twinEnabled) return { kind: 'skip', reason: 'twin_disabled' };
+  if (params.entryFillPolicy === 'maker_only') return { kind: 'skip', reason: 'policy_forbidden' };
+  // Under maker_preferred a taker decision means the maker arm was independently
+  // inadmissible (or hard-floor forbidden), so recreating it as a twin would violate policy.
+  if (!params.pendingMaker && params.decisionChosenMode === 'taker') {
+    return { kind: 'skip', reason: 'policy_forbidden' };
+  }
+  if (params.pendingMaker && !(Number.isFinite(params.takerNetEV) && params.takerNetEV > params.admissionFloor)) {
+    return { kind: 'skip', reason: 'alternate_inadmissible' };
+  }
   const twinMode: 'taker' | 'maker' | null =
     params.pendingMaker ? 'taker'
     : (params.decisionChosenMode === 'taker' ? 'maker' : null); // null = marketable-fallback chosen leg → degenerate
@@ -197,12 +218,13 @@ export function planTwin(params: {
     twinMode,
     overlay: {
       chosenEntryMode: twinMode,
+      entryFillPolicy: params.entryFillPolicy,
       entryFeeRate: twinEntryFee,
       entryPriceBasis: twinEntryPriceBasis, // the twin's OWN basis, fenced
       ...repriced,
       ...(twinMode === 'maker'
-        ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerDeadline: params.nowMs + params.makerMaxPendingMs(), entryPrice: params.limitPrice }
-        : { state: 'open' as const, makerLimitPrice: undefined, makerDeadline: undefined, entryPrice: _ask as number }),
+        ? { state: 'pending' as const, makerLimitPrice: params.limitPrice, makerPlacedAt: params.nowMs, makerDeadline: params.nowMs + params.makerMaxPendingMs(), entryPrice: params.limitPrice }
+        : { state: 'open' as const, makerLimitPrice: undefined, makerPlacedAt: undefined, makerDeadline: undefined, entryPrice: _ask as number }),
     },
   };
 }

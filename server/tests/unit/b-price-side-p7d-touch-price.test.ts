@@ -13,10 +13,10 @@ import { selectTouchPrice, type TouchLegInput } from '../../core/calculations/to
 const NOW = 1_700_000_000_000;
 const POLICY = { maxAgeMs: 15_000, maxSpreadFraction: 0.5 };
 const book = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
-  bid: 100, ask: 100.2, stampMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book', ...o,
+  bid: 100, ask: 100.2, stampMs: NOW - 1_000, arrivalMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book', ...o,
 });
 const ticker = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
-  bid: 99.9, ask: 100.3, stampMs: NOW - 2_000, clockBasis: 'venue', producer: 'kraken_ws_ticker_mid', ...o,
+  bid: 99.9, ask: 100.3, stampMs: NOW - 2_000, arrivalMs: NOW - 2_000, clockBasis: 'venue', producer: 'kraken_ws_ticker_mid', ...o,
 });
 
 describe('P-7d — the touch price, by D3 order', () => {
@@ -24,7 +24,7 @@ describe('P-7d — the touch price, by D3 order', () => {
     const r = selectTouchPrice({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.quote).toEqual({ bid: 100, ask: 100.2, basis: 'book_top', ageMs: 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book' });
+    expect(r.quote).toEqual({ bid: 100, ask: 100.2, basis: 'book_top', ageMs: 1_000, quoteArrivedAtMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book' });
     expect(r.bookRefusal).toBeNull();
   });
 
@@ -95,6 +95,6 @@ describe('P-7f — the clock basis is a field, carried and never inferred', () =
     const r = selectTouchPrice({ book: book(), bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(Object.keys(r.quote).sort()).toEqual(['ageMs', 'ask', 'basis', 'bid', 'clockBasis', 'producer']);
+    expect(Object.keys(r.quote).sort()).toEqual(['ageMs', 'ask', 'basis', 'bid', 'clockBasis', 'producer', 'quoteArrivedAtMs']);
   });
 });

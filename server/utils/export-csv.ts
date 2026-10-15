@@ -165,6 +165,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
   // closed VTS JSON for the Closed Simulated Trades fee-mode column. null for pre-B7.2b
   // trades (UI renders an em-dash). Entry-leg only.
   chosenEntryMode: string | null;
+  entryFillPolicy: string | null;
   entryFeeRate: number | null;
   // P19-B7.2c: TYPED aggregates-exclusion flag. false for never-filled pending maker
   // records AND closed TWINS (both visible in the closed table, EXCLUDED from
@@ -233,7 +234,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
               globalRegime: null, pairFriction: null, globalFriction: null,
               pairDirectionalBias: null, globalDirectionalBias: null,
               pairDirectionalBiasScore: null, globalDirectionalBiasScore: null,
-              filterTier: null, tradeMode: 'TARGET', exitReason: 'never_filled',
+              filterTier: null, tradeMode: 'TARGET', exitReason: trade.exitReason || 'never_filled',
               ladderRungsHit: 0, originalStopPrice: null, latchTriggerPrice: null,
               rungTargetHistory: null, pairIdHash: null,
               regimeConfidenceRaw: null, macroModifierValue: null, phase: null,
@@ -241,6 +242,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
               entryLiquidityValue: null, amrClassification: null, amrMode: null,
               entryLiquidityKind: null,
               chosenEntryMode: trade.chosenEntryMode ?? 'maker',
+              entryFillPolicy: typeof trade.entryFillPolicy === 'string' ? trade.entryFillPolicy : null,
               entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
               // A never-filled TWIN maker is itself fill-rate data (paired) — tag flows through.
               mtTwin: trade.mtTwin === true,
@@ -395,6 +397,7 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
             amrMode: typeof trade.amrMode === 'string' ? trade.amrMode : null,
             // P19-B7.2b (OBJ-B): maker/taker entry fee-mode read-back for the fee-mode column.
             chosenEntryMode: typeof trade.chosenEntryMode === 'string' ? trade.chosenEntryMode : null,
+            entryFillPolicy: typeof trade.entryFillPolicy === 'string' ? trade.entryFillPolicy : null,
             entryFeeRate: typeof trade.entryFeeRate === 'number' ? trade.entryFeeRate : null,
             // P19-B7.2c: normal filled-and-closed trades COUNT in all aggregates; a
             // closed TWIN (complete outcome numbers, but the non-chosen counterfactual

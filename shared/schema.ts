@@ -1695,6 +1695,8 @@ export const closedTradesTable = pgTable("closed_trades", {
   // shows which fee mode this trade opened on. NULL for pre-B7.2b trades (never coerced
   // to a default mode — rule-10 / Langston Step-2). ENTRY-leg only (exit pays taker).
   chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
+  entryFillPolicy: varchar("entry_fill_policy", { length: 20 }),
+  targetExitFillPolicy: varchar("target_exit_fill_policy", { length: 20 }),
   entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
   quantity: decimal("quantity", { precision: 20, scale: 8 }).notNull(),
   entryPrice: decimal("entry_price", { precision: 20, scale: 8 }).notNull(),
@@ -1998,6 +2000,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   // rate used, carried from the signal onto this open position (and forward to the
   // closed trade). NULL for pre-B7.2b positions (never coerced — rule-10). ENTRY-leg only.
   chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL
+  entryFillPolicy: varchar("entry_fill_policy", { length: 20 }),
   entryFeeRate: decimal("entry_fee_rate", { precision: 10, scale: 6 }),
   // P19-B7.2c (SIMPLIFIED, Kyle 2026-07-02): post-promotion PENDING maker-order
   // lifecycle. A maker-chosen promotion rests as state='pending' (holds a slot, NOT
@@ -2010,6 +2013,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   state: varchar("state", { length: 16 }).default("open"), // 'open' | 'pending'
   makerLimitPrice: decimal("maker_limit_price", { precision: 20, scale: 10 }),
   makerDeadline: timestamp("maker_deadline"),
+  makerPlacedAt: timestamp("maker_placed_at", { withTimezone: true }),
   // P19-B8.6: resting maker TARGET-EXIT lifecycle (the B7.2c entry-rest machinery,
   // side flipped). An OPEN position whose target fires rests its exit as a maker sell
   // at the target (exit_limit_price) instead of exiting taker immediately; a LATER
@@ -2019,6 +2023,7 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   exitLimitPrice: decimal("exit_limit_price", { precision: 20, scale: 10 }),
   exitRestPlacedAt: timestamp("exit_rest_placed_at", { withTimezone: true }),
   exitDeadline: timestamp("exit_deadline", { withTimezone: true }),
+  targetExitFillPolicy: varchar("target_exit_fill_policy", { length: 20 }),
   // P19-B8.2 (OBJ-4): balance-ratio calibration tag, stamped ONCE at open (same-vintage
   // discipline, the di_at_queue precedent) TOGETHER with the anchor it was measured
   // against — a later re-anchor can never reinterpret this row. ratio = paperBalance /
@@ -2163,7 +2168,8 @@ export const rtbSignals = pgTable("rtb_signals", {
   // mode's value — for maker it is haircut-adjusted, NEVER the raw maker EV).
   // Class-agnostic (both classes share the decision — D1). netEV is in price
   // units; wide precision spans micro-cap → BTC entry scales.
-  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }).default('taker'), // 'taker' | 'maker'
+  chosenEntryMode: varchar("chosen_entry_mode", { length: 8 }), // 'taker' | 'maker' | NULL (pre-cutover only)
+  entryFillPolicy: varchar("entry_fill_policy", { length: 20 }),
   chosenNetEv: decimal("chosen_net_ev", { precision: 20, scale: 10 }),
   takerNetEv: decimal("taker_net_ev", { precision: 20, scale: 10 }),               // taker-leg netEV (diagnostic)
   makerNetEvAdjusted: decimal("maker_net_ev_adjusted", { precision: 20, scale: 10 }), // haircut-adjusted maker netEV

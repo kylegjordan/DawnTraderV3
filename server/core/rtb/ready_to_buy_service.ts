@@ -71,8 +71,8 @@ import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, ge
 // best-of-both decision on CURRENT market data so a signal sitting in the RTBQ keeps a
 // live entry-mode + chosen netEV (not frozen at gen-time). Same shared function the
 // signal orchestrator + VTS call (F6).
-import { decideMakerTaker, entryUrgencyClassForFamily } from '../math/maker-taker-decision.js';
-import { resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
+import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../math/maker-taker-decision.js';
+import { resolveFillPolicy, resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
 import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
@@ -168,7 +168,8 @@ export interface SQESignalInput {
   // rtb_signals columns so the [11.8B] open-gate + the B7.1 ranker read one
   // consistent value. chosenNetEv is the SINGLE-CONSISTENT-NUMBER (the
   // haircut-adjusted best netEV, NEVER the raw maker EV).
-  chosenEntryMode?: 'taker' | 'maker';  // the planned entry mode
+  chosenEntryMode: 'taker' | 'maker';   // the planned entry mode; never defaulted
+  entryFillPolicy: FillPolicy;
   chosenNetEv?: number | null;          // the best (chosen-mode) net-EV — what gates + ranks
   takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + the B7.2c marketable-at-placement stored-taker check)
   makerNetEvAdjusted?: number | null;   // the haircut-adjusted maker net-EV (diagnostic)
@@ -683,7 +684,8 @@ class ReadyToBuyService {
     geometryRefreshed: boolean;
     decayPenalty: number;
     refreshedFinalScore: number;
-    refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null;
+    refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number; entryFillPolicy: FillPolicy } | null;
+    policyRejection: { policy: FillPolicy; reason: string } | null;
     /**
      * `null` = NOT COMPUTED (a gate input was unavailable) — #546. Callers MUST reject the
      * signal rather than score it; never coerce this to a number. Distinct from every
@@ -745,7 +747,8 @@ class ReadyToBuyService {
     const currentVol = _liveVol ?? (typeof metadata.volatility === 'number' ? metadata.volatility : 0.3);
     let netExpectedEdge = metadata.netExpectedEdge;
     let geometryRefreshed = false;
-    let refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number } | null = null;
+    let refreshedMT: { chosenMode: 'taker' | 'maker'; chosenNetEV: number; takerNetEV: number; makerNetEVAdjusted: number; entryFeeRate: number; entryFillPolicy: FillPolicy } | null = null;
+    let policyRejection: { policy: FillPolicy; reason: string } | null = null;
     let _mtInputs:
       | { geomClass: AssetClass; costMetrics: ReturnType<typeof getCachedCostMetrics>; entryPrice: number; stopPrice: number; targetPrice: number }
       | null = null;
@@ -819,14 +822,21 @@ class ReadyToBuyService {
           urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
           haircut: resolveMakerTakerHaircut(geomClass),
         });
-        refreshedMT = {
-          chosenMode: _mt.chosenMode,
-          chosenNetEV: _mt.chosenNetEV,
-          takerNetEV: _mt.takerNetEV,
-          makerNetEVAdjusted: _mt.makerNetEVAdjusted,
-          entryFeeRate: _mt.chosenMode === 'maker' ? _mtFr.feeRateMaker : _mtFr.feeRateTaker,
-        };
-        console.log(`[P19-B7.2b][RTB_REFRESH][MAKER_TAKER] ${normalizedSymbol}: re-decided ${_mt.chosenMode} (chosen netEV=${_mt.chosenNetEV.toFixed(6)}, taker=${_mt.takerNetEV.toFixed(6)}) on current data + decayed score`);
+        const _policy = resolveFillPolicy(geomClass, 'entry');
+        const _effective = applyMakerTakerFillPolicy(_mt, _policy, 0);
+        if (_effective.admitted) {
+          refreshedMT = {
+            chosenMode: _effective.chosenMode,
+            chosenNetEV: _effective.chosenNetEV,
+            takerNetEV: _mt.takerNetEV,
+            makerNetEVAdjusted: _mt.makerNetEVAdjusted,
+            entryFeeRate: _effective.chosenMode === 'maker' ? _mtFr.feeRateMaker : _mtFr.feeRateTaker,
+            entryFillPolicy: _policy,
+          };
+          console.log(`[P19-B7.2b][RTB_REFRESH][MAKER_TAKER] ${normalizedSymbol}: re-decided ${_effective.chosenMode} policy=${_policy} (chosen netEV=${_effective.chosenNetEV.toFixed(6)}, taker=${_mt.takerNetEV.toFixed(6)}) on current data + decayed score`);
+        } else {
+          policyRejection = { policy: _policy, reason: _effective.reason };
+        }
       } catch (mtErr) {
         console.warn(`[P19-B7.2b][RTB_REFRESH][MAKER_TAKER] ${normalizedSymbol}: decision re-run failed (keeping gen-time snapshot):`, mtErr instanceof Error ? mtErr.message : mtErr);
       }
@@ -859,7 +869,7 @@ class ReadyToBuyService {
     // acquireRefreshedInputs must reject on null — see the field's doc on the return type.
     const refreshedRegimeWeight = _rwResult.ok ? _rwResult.value : null;
 
-    return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT, refreshedRegimeWeight };
+    return { currentVol, currentSpread, netExpectedEdge, geometryRefreshed, decayPenalty, refreshedFinalScore, refreshedMT, policyRejection, refreshedRegimeWeight };
   }
 
   /**
@@ -1021,6 +1031,14 @@ class ReadyToBuyService {
               const refreshedFinalScore = _acq.refreshedFinalScore;
               const refreshedRegimeWeight = _acq.refreshedRegimeWeight;
 
+              if (_acq.policyRejection) {
+                console.log(`[B-CLASS-LEG-FILL-MODE][RTB_POLICY_REJECT] ${normalizedSymbol}/${signal.strategy}: policy=${_acq.policyRejection.policy} reason=${_acq.policyRejection.reason}`);
+                this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', `fill_policy_${_acq.policyRejection.reason}`);
+                bulkDeletes.push(signal.id);
+                expiredCount++;
+                return;
+              }
+
               // ── #546 / OBJ-3 — the regimeWeight-absent guard. (OBJ-1 2026-07-22: this used to
               // read "parity with the single-refresh guard above"; that guard was Mechanism A's
               // and is now DELETED, so this is THE guard, not a mirror of one.) ──
@@ -1181,6 +1199,7 @@ class ReadyToBuyService {
                   // mis-gates. Atomic with the metadata write below (no half-updated row).
                   ...(_acq.refreshedMT ? {
                     chosenEntryMode: _acq.refreshedMT.chosenMode,
+                    entryFillPolicy: _acq.refreshedMT.entryFillPolicy,
                     chosenNetEv: _acq.refreshedMT.chosenNetEV.toString(),
                     takerNetEv: _acq.refreshedMT.takerNetEV.toString(),
                     makerNetEvAdjusted: _acq.refreshedMT.makerNetEVAdjusted.toString(),
@@ -2224,6 +2243,16 @@ class ReadyToBuyService {
         `(${String(input.assetClass)}) for symbol=${normalizedSymbol} strategy=${input.strategy} signalId=${input.signalId}.`,
       );
     }
+    if (
+      (input.chosenEntryMode !== 'maker' && input.chosenEntryMode !== 'taker')
+      || (input.entryFillPolicy !== 'maker_only' && input.entryFillPolicy !== 'maker_preferred')
+    ) {
+      throw new Error(
+        `[B-CLASS-LEG-FILL-MODE][SNAPSHOT_INVALID] queueSQESignal requires an explicit mode and fill policy; ` +
+        `symbol=${normalizedSymbol} strategy=${input.strategy} mode=${String(input.chosenEntryMode)} ` +
+        `policy=${String(input.entryFillPolicy)}.`,
+      );
+    }
 
     // Directive 8.8.4-A3.R8.5: Trust upstream SQE result
     // SQE evaluation already happened upstream before calling queueSQESignal
@@ -2504,7 +2533,8 @@ class ReadyToBuyService {
       // P19-B7.2: persist the best-of-both maker/taker snapshot to the typed
       // rtb_signals columns (class-agnostic per D1 — both classes share the
       // decision). chosenNetEv is what the [11.8B] open-gate + B7.1 ranker read.
-      chosenEntryMode: input.chosenEntryMode ?? 'taker',
+      chosenEntryMode: input.chosenEntryMode,
+      entryFillPolicy: input.entryFillPolicy,
       chosenNetEv: input.chosenNetEv != null ? input.chosenNetEv.toString() : null,
       takerNetEv: input.takerNetEv != null ? input.takerNetEv.toString() : null,
       makerNetEvAdjusted: input.makerNetEvAdjusted != null ? input.makerNetEvAdjusted.toString() : null,
