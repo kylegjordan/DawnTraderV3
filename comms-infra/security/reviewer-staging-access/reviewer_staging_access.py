@@ -105,6 +105,10 @@ def validate_authorization_population(
             if not line or line.startswith("#"):
                 continue
             options, key_material, comment = public_key_fields(line)
+            if "cert-authority" in options.split(","):
+                raise VerificationError(
+                    "effective authorization files must not contain cert-authority entries"
+                )
             if fingerprint(key_material) == expected["fingerprint"]:
                 matches.append((source, options, comment))
     if len(matches) != 1:
@@ -222,6 +226,48 @@ def validate_wrong_key_refusal(returncode: int, stderr: str) -> None:
         raise VerificationError(
             "wrong-key control did not contain an explicit public-key denial trace"
         )
+
+
+def validate_client_ssh_command(command: list[str]) -> None:
+    options = [
+        command[index + 1]
+        for index, value in enumerate(command[:-1])
+        if value == "-o"
+    ]
+    if options.count("CertificateFile=none") != 1:
+        raise VerificationError(
+            "SSH command must disable automatic sidecar certificates exactly once"
+        )
+
+
+def validate_no_sidecar_certificate(key_path: str) -> None:
+    certificate = key_path + "-cert.pub"
+    try:
+        os.lstat(certificate)
+    except FileNotFoundError:
+        return
+    raise VerificationError("reviewer key has a forbidden sidecar certificate: %s" % certificate)
+
+
+def validate_accepted_key_trace(
+    stderr: str, key_path: str, fingerprint: str
+) -> None:
+    accepted = [line for line in stderr.splitlines() if "Server accepts key:" in line]
+    if len(accepted) != 1:
+        raise VerificationError(
+            "SSH trace must contain exactly one accepted-key line; found %d"
+            % len(accepted)
+        )
+    line = accepted[0]
+    fields = line.split()
+    if (key_path not in fields or fingerprint not in fields or "ED25519" not in fields
+            or any("CERT" in field.upper() for field in fields)):
+        raise VerificationError(
+            "SSH trace did not bind acceptance to the raw ED25519 reviewer key"
+        )
+    if ('Authenticated to %s' % STAGING_HOST not in stderr
+            or 'using "publickey"' not in stderr):
+        raise VerificationError("SSH trace did not prove public-key authentication")
 
 
 def require_path(path: str, owner: str, mode: int, *, directory: bool = False) -> None:
@@ -391,6 +437,7 @@ def verify_actor(actor: str) -> int:
     require_path(config["home"] + "/.ssh", actor, 0o700, directory=True)
     require_path(config["key"], actor, 0o600)
     require_path(config["known_hosts"], actor, 0o600)
+    validate_no_sidecar_certificate(config["key"])
     actual_fingerprint = private_key_fingerprint(config["key"], actor)
     if actual_fingerprint != config["fingerprint"]:
         raise VerificationError(
@@ -403,6 +450,7 @@ def verify_actor(actor: str) -> int:
         "sudo", "-u", actor, "env", "HOME=" + config["home"],
         "ssh", "-F", "/dev/null", "-i", config["key"],
         "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+        "-o", "CertificateFile=none",
         "-o", "PreferredAuthentications=publickey",
         "-o", "PasswordAuthentication=no",
         "-o", "KbdInteractiveAuthentication=no",
@@ -414,6 +462,7 @@ def verify_actor(actor: str) -> int:
         "deploy@" + STAGING_HOST,
         "python3 - verify-remote --actor " + actor,
     ]
+    validate_client_ssh_command(command)
     result = subprocess.run(
         command, input=source, text=True, capture_output=True, check=False, timeout=60
     )
@@ -422,11 +471,12 @@ def verify_actor(actor: str) -> int:
             "%s live verification failed: %s"
             % (actor, (result.stderr or result.stdout).strip()[:500])
         )
-    if ("Server accepts key:" not in result.stderr
-            or config["fingerprint"] not in result.stderr
-            or 'Authenticated to %s' % STAGING_HOST not in result.stderr
-            or 'using "publickey"' not in result.stderr):
-        raise VerificationError("%s SSH trace did not bind the accepted fingerprint" % actor)
+    try:
+        validate_accepted_key_trace(
+            result.stderr, config["key"], config["fingerprint"]
+        )
+    except VerificationError as error:
+        raise VerificationError("%s %s" % (actor, error)) from error
     payload = json.loads(result.stdout)
     payload["local_key_fingerprint"] = actual_fingerprint
 
@@ -550,6 +600,81 @@ def self_test() -> int:
             checks += 1
         else:
             raise VerificationError("wrong-key refusal mutation survived")
+
+    client_command = ["ssh", "-o", "CertificateFile=none", "staging"]
+    validate_client_ssh_command(client_command); checks += 1
+    try:
+        validate_client_ssh_command(["ssh", "staging"])
+    except VerificationError:
+        checks += 1
+    else:
+        raise VerificationError("missing CertificateFile=none mutation survived")
+
+    raw_trace = (
+        "debug1: Server accepts key: /reviewer/key ED25519 "
+        + ACTORS["coltrane"]["fingerprint"] + " explicit\n"
+        + 'Authenticated to 188.245.193.8 using "publickey".\n'
+    )
+    validate_accepted_key_trace(
+        raw_trace, "/reviewer/key", ACTORS["coltrane"]["fingerprint"]
+    ); checks += 1
+    try:
+        validate_accepted_key_trace(
+            raw_trace.replace(" ED25519 ", " ED25519-CERT "),
+            "/reviewer/key",
+            ACTORS["coltrane"]["fingerprint"],
+        )
+    except VerificationError:
+        checks += 1
+    else:
+        raise VerificationError("accepted certificate trace mutation survived")
+
+    with tempfile.TemporaryDirectory(prefix="reviewer-certificate-mutation-") as temp:
+        user_key = os.path.join(temp, "reviewer")
+        ca_key = os.path.join(temp, "ca")
+        for path in (user_key, ca_key):
+            generated = subprocess.run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", path],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if generated.returncode != 0:
+                raise VerificationError("certificate mutation key generation failed")
+        signed = subprocess.run(
+            ["ssh-keygen", "-q", "-s", ca_key, "-I", "reviewer-mutation",
+             "-n", "deploy", user_key + ".pub"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if signed.returncode != 0:
+            raise VerificationError("certificate mutation signing failed")
+        raw_public = Path(user_key + ".pub").read_text(encoding="utf-8").strip()
+        cert_public = Path(user_key + "-cert.pub").read_text(encoding="utf-8").strip()
+        if fingerprint_public_key(raw_public) != fingerprint_public_key(cert_public):
+            raise VerificationError(
+                "certificate mutation positive control did not preserve key fingerprint"
+            )
+        ca_public = Path(ca_key + ".pub").read_text(encoding="utf-8").strip()
+        mutation = good + "cert-authority " + ca_public + " unrestricted-ca\n"
+        rejected_authority = False
+        rejected_sidecar = False
+        try:
+            validate_authorization_population(
+                [("/effective", mutation)], "coltrane", fake_fingerprint
+            )
+        except VerificationError:
+            rejected_authority = True
+        try:
+            validate_no_sidecar_certificate(user_key)
+        except VerificationError:
+            rejected_sidecar = True
+        if not rejected_authority or not rejected_sidecar:
+            raise VerificationError(
+                "sidecar certificate plus cert-authority mutation survived"
+            )
+        checks += 1
     print("self-test passed: %d checks" % checks)
     return 0
 

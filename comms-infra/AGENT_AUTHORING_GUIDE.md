@@ -150,7 +150,9 @@ identity is why two keys exist.
 The canonical live check is `reviewer-staging-access verify --actor all`, run by Infra as root
 on Helsinki. It proves the key fingerprints, the complete effective authorization population,
 source restrictions, remote identity, both log reads and a database read without printing the
-database address or any key body.
+database address or any key body. Reviewer staging keys are raw-key paths: do not add a sidecar
+certificate or a `cert-authority` route; the verifier rejects both because a certificate can
+share the raw key's fingerprint while bypassing its source restriction.
 
 ⛔ **"READ-ONLY REVIEW" DESCRIBES THE ALLOWED USE, NOT THE UNIX ACCOUNT.** Both paths land as
 the full `deploy` user. Use them to inspect evidence only; do not edit files, restart services,

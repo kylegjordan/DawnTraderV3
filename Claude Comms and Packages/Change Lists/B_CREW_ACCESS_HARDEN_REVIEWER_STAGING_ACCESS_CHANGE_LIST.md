@@ -24,20 +24,23 @@ Helsinki source address. This change makes that capability reviewable and durabl
     printing key material, and connects with only the named key;
   - executes the same reviewed source from standard input on staging, avoiding a second
     installed remote copy;
-  - resolves the effective staging SSH configuration, rejects command/CA authorization
+  - resolves the effective staging SSH configuration, rejects command/CA and `cert-authority`
     sources, and requires exactly one matching key across every configured authorization file
     with the Helsinki-only restriction and expected label;
-  - binds the client trace to the accepted fingerprint, requires remote identity `deploy`, an
-    actual byte read from each current log, and a read-only application-table database positive
-    control without putting the database address in process arguments;
+  - forbids a sidecar certificate, passes `CertificateFile=none` in both SSH paths, and binds
+    the accepted trace to the raw ED25519 key, expected path and fingerprint;
+  - requires remote identity `deploy`, an actual byte read from each current log, and a read-only
+    application-table database positive control without putting the database address in process
+    arguments;
   - generates a fresh wrong key for each actor and requires an explicit public-key denial trace
     with every non-public-key authentication method disabled;
-  - includes thirteen positive/mutation checks covering authorization parsing, cross-file
-    duplicates, alternate SSH authorization sources, explicit denial, authenticated remote
+  - includes eighteen positive/mutation checks covering authorization parsing, cross-file
+    duplicates, alternate SSH authorization sources, raw-key trace binding, a real signed
+    sidecar certificate plus unrestricted CA entry, explicit denial, authenticated remote
     failure and transport failure.
 - `comms-infra/security/reviewer-staging-access/README.md` — install, verification, recovery,
   fingerprints, backup provenance and the full-`deploy` residual.
-- `.github/workflows/ci.yml` — runs the thirteen-check self-test in the existing access-hardening
+- `.github/workflows/ci.yml` — runs the eighteen-check self-test in the existing access-hardening
   test step.
 - `comms-infra/systemd/reviewer-staging-access.{service,timer}` — daily live parity check with
   the existing scheduled-job failure page; dormant until exact-ref review and installation.
@@ -58,13 +61,15 @@ Helsinki source address. This change makes that capability reviewable and durabl
 - Coltrane key fingerprint matched `SHA256:jbHGXwI7aVjXF/l/cizDWWmmdElO0Roy5ngQYPxUD1c`.
 - Each fingerprint occurred exactly once across staging's effective deploy authorization-file
   population with `from="204.168.141.77"` and its own expected label; command and CA sources
-  were disabled in the effective configuration.
+  were disabled in the effective configuration, no authorization file contained a
+  `cert-authority` entry, and neither reviewer key had a sidecar certificate.
 - The new verifier ran from a private temporary Helsinki directory and, for both actors,
   independently bound the accepted fingerprint, returned remote identity `deploy`, read a
   byte from both current logs, read the `users` application table under a read-only database
   transaction, and returned an explicit public-key denial trace for a fresh wrong key. The
   temporary directory was removed by the same command.
-- The thirteen-check self-test passed locally and on Helsinki.
+- The eighteen-check self-test passed locally and on Helsinki, including a real signed
+  certificate positive control whose raw key and certificate returned the same fingerprint.
 
 ## Honest boundary
 
@@ -101,3 +106,18 @@ requires every authorization source to be enumerable, searches every configured 
 population, and rejects command/CA sources. The wrong-key control now requires exit 255 plus
 the explicit public-key denial trace and rejects accepted-authentication and transport-failure
 mutations.
+
+## Coltrane review round 2
+
+At exact ref `9784c170f89e31b134467c1fad714d2052115407`, Coltrane demonstrated that
+OpenSSH can auto-load `<IdentityFile>-cert.pub`, and that the raw key and its signed certificate
+report the same fingerprint. An unrestricted `cert-authority` entry could therefore authenticate
+the reviewer while the restricted raw-key line and the prior positive/negative checks stayed
+green.
+
+The correction now passes `CertificateFile=none` in the shared positive/negative SSH command,
+refuses any sidecar certificate beside either reviewer key, rejects `cert-authority` entries
+across the effective authorization-file population, and requires the accepted trace to name the
+raw ED25519 type, expected key path and fingerprint. The new mutation generates and signs a real
+ED25519 certificate, proves its fingerprint matches the raw key, adds an unrestricted CA entry,
+and requires both the authorization and sidecar guards to reject the state.
