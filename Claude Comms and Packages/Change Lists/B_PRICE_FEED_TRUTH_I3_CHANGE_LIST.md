@@ -18,3 +18,13 @@
 
 ## Step 7 reading (P5)
 `[KrakenWS] Error parsing message` = 0 in `error.log` over a window containing ≥ 1 `Sub OK: instrument (all pairs)` in `out.log`, the window inside `out.log`'s retained span.
+
+## Step 7 result — PASS (2026-10-15, CC-C first pass)
+
+**Object and population.** Fixed window `2026-10-14T03:58:39Z` through `2026-10-15T05:32:10Z`, wholly after the I3 deploy (`2026-10-10T11:59:18Z`) and wholly inside the retained stdout span. Across every retained stdout file intersecting that window, the exact positive-control line `Sub OK: instrument (all pairs)` occurs **21 times**. Across every stderr archive intersecting the same window, `[KrakenWS] Error parsing message` occurs **0 times**.
+
+**Positive control for the zero.** The identical stderr instrument finds **6** pre-deploy failures on 2026-10-10 (`01:11:06Z` through `10:33:16Z`), all the original `undefined.toUpperCase` failure. This proves the absence check is reading the stream and phrase that held the defect rather than a silent or wrong source.
+
+**Verdict.** I3's P5/C2 threshold was at least 8 instrument acknowledgements in one window with zero parse failures; the measured population is 21/21 acknowledgements and 0 failures, so increment I3 passes Step 7. There is no UI surface: this increment changes Kraken WebSocket acknowledgement handling only. The parent `B-PRICE-FEED-TRUTH` batch remains at Step 7 because I2 and I1 have separate gates.
+
+`REVIEWER: Coltrane second-pass requested with the I2 criterion-disposition ask; this is CC-C's first-pass evidence, not an independent verification.`

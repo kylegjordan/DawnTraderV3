@@ -64,3 +64,34 @@ VTS callers: `vts-runner.ts:3556`, `:4469` pass their already-crypto list; `:529
 2. **`refreshBucket` does not advance `lastRefresh` while waiting** — so it retries every second until ready (one `isReady()` call per second per bucket, no network).
 3. **The dual-key write survives** in `fileRestResponse` (requested spelling ≠ the venue's internal symbol). Under the venue list it can arise only when the venue maps a requesting alias to the same REST pair; kept rather than deleted because `inc2` test 10 still guards its own-push-time rule.
 4. **`:454`'s `safeResolveAssetClass` stays** (the shadow side-age probe's class label). The rtb test's log shows it resolving the xStock `CAT/USD` as `crypto_spot` — record-only, folded into `#1175` as a note rather than changed here.
+
+## Step 7 evidence and criterion-disposition ask (2026-10-15)
+
+### What the original criterion required
+
+Pre-audit P7 requires a weekday window publishing the REST write identity (`written = requested − unlisted`, `missing = unlisted`, `phantom = 0`, plus `unresolved`), zero `[readyToBuy] Batch fetch error` lines with at least one `[readyToBuy] refreshed` positive control, and the RTB skip rate split by bucket composition (zero-crypto passes versus passes with crypto) against the pre-fix baseline.
+
+### Measured current window
+
+Fixed weekday window `2026-10-15T05:32:11Z` through `05:47:00Z`, after the exact deployed restart:
+
+- **14** one-minute `getBatch` accumulator lines; **14/14** satisfy `written = requested − unlisted`, `missing = unlisted`, `phantomDistinct = 0`, and `unresolved = 0`; **10/14** contain at least one requested REST member.
+- **14/14** accumulator lines have `ineligible > 0`. This is a reach control for the mixed RTB caller: the three production VTS call sites pass their whole crypto list as `restEligible`, while the RTB call is the sole production caller whose read list can exceed its eligible set.
+- **56** `[PriceCache][readyToBuy] refreshed` lines and **0** `[PriceCache][readyToBuy] Batch fetch error` lines.
+- **56** paper RTB refresh passes: **54** with `priced > 0`, **2** with `priced = 0`.
+
+The `getBatch` ledger is deliberately accumulated across all four production callers between health lines, so it proves the shared write identity and the RTB mixed-list reach through `ineligible`, but it does not label an individual line `readyToBuy`.
+
+### Why the bucket-composition skip-rate is now obsolete
+
+The accepted P7 criterion predates `B-RTB-REFRESH-LIVE-PRICE`. That later, separately reviewed batch changed the RTB switch at `40306a0a08`: before, `refreshAndRank` ran only when the mark cache produced at least one `validPrices` member; after, it runs whenever the bucket has signals so every queued signal gets its live-price retirement check. Its pre-audit item 2 and Langston condition C9 explicitly name the switch and the resulting series break; its completion report closes the batch at `bb9ea7fc7`.
+
+Therefore today's RTB "skip rate" is zero by the later design even if I2 were broken. It cannot distinguish whether an xStock feed-written row preserved a refresh, and restoring the old gate merely to retain the measurement would undo the newer approved behavior. The surviving `cyclesRun` gate retains the old `validPrices > 0` condition for the Paper/Live display, but neither it nor the current RTB line records crypto-versus-zero-crypto bucket composition.
+
+### Reviewer ruling requested
+
+**Recommendation:** retire only the obsolete bucket-composition skip-rate clause and grade I2 on the direct weekday evidence above: every observed write interval satisfies the I2 identity with zero phantom/unresolved rows; the RTB mixed-list path is exercised (`ineligible > 0` in all 14 intervals); the readyToBuy refresher succeeds 56 times with zero batch failures. Do not invent a new rate or infer class composition the surviving instruments do not record.
+
+**Question for Coltrane:** does that direct evidence discharge I2 Step 7, or does I2 require a new per-bucket ledger field before it can pass? Please rule on the criterion, not on I3's already measured first-pass count.
+
+`REVIEWER: claim-only plus the cited scope/change/completion objects; independent ruling pending.`
