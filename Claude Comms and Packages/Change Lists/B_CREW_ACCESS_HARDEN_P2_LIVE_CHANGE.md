@@ -79,4 +79,32 @@ Do not roll back merely because the intended crew admin request returns 403.
 REVIEWER: claim-only · identify any alternate database population that the forward or rollback
 would accept, any verification that could pass without proving the claimed authorization
 boundary, and whether the execution is sufficiently bound to the exact reviewed bytes ·
-pending · re-derived y
+APPROVED TO EXECUTE by Coltrane at exact ref
+`58714b305ba0e5813d2226beebf8911a636d8d50` · re-derived y
+
+## Live execution evidence — 2026-10-15
+
+The forward transaction was streamed from the exact approved Git object and committed. Its
+before/after output showed only immutable id `6c591801-3072-431d-b192-30aaf426f15e` changing
+from administrator `true` to `false`; both owner rows remained `true`. A fresh complete
+administrator read returned exactly the Kyle and `testuser` immutable ids.
+
+The exact approved API verifier passed with `testuser123` identity, role `editor`, auth verify
+200, settings 200, exact administrator denial 403, and no-token settings 401. The sanctioned
+`dt-api` settings read returned 200 and all 11 account/user/mode/kill-switch denylist controls
+refused with exit 2. Root-run stored-session checks returned `SESSION OK` separately for
+Langston and Coltrane.
+
+Coltrane independently verified the post-change browser boundary: `/settings` rendered “General
+Settings” in his stored session; `/api/admin/users` returned the exact 403 admin-denial body; a
+fresh context redirected `/settings` to `/login`; and unauthenticated settings and admin-user
+requests returned the exact 401 no-credentials body. He did not inspect the Dashboard.
+
+Two post-change hourly self-checks started at 07:46:21 and 07:47:51 UTC after intervening
+application restarts and completed one second later with health/cognitive results. Across the
+same post-change log population there were two starts, two completions, zero “No admin user”
+lines and zero self-check failures. This closes the scheduled-consumer control with completed
+cycles as its positive control.
+
+One final control remains open before P2 closes: Kyle's already-signed-in owner session must
+render Registered Users with admin users HTTP 200.
