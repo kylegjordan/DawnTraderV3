@@ -34,21 +34,23 @@ class ReviewerRoleInstructionTests(unittest.TestCase):
             load_script("coltrane_bridge_role_test", "coltrane-bridge.py"),
         )
 
-    def assert_reviewer(self, module, path):
-        mode, text = module.reviewer_role(path)
-        self.assertEqual(mode, "codex")
+    def assert_reviewer(self, module, path, generation=7):
+        token, text = module.reviewer_role(path)
+        self.assertEqual(token, ("codex", generation))
         self.assertIn("CURRENT CREW MODE: CODEX", text)
+        self.assertIn(f"generation {generation}", text)
         self.assertIn("replace Langston", text)
 
-    def assert_advisor(self, module, path):
-        mode, text = module.reviewer_role(path)
-        self.assertEqual(mode, "claude")
+    def assert_advisor(self, module, path, generation=7):
+        token, text = module.reviewer_role(path)
+        self.assertEqual(token, ("claude", generation))
         self.assertIn("CURRENT CREW MODE: CLAUDE", text)
+        self.assertIn(f"generation {generation}", text)
         self.assertIn("additional advisor", text)
 
     def assert_unknown(self, module, path):
-        mode, text = module.reviewer_role(path)
-        self.assertEqual(mode, "unknown")
+        token, text = module.reviewer_role(path)
+        self.assertEqual(token[0], "unknown")
         self.assertIn("CURRENT CREW MODE: UNKNOWN", text)
         self.assertIn("Refuse routine workflow reviews", text)
 
@@ -56,12 +58,17 @@ class ReviewerRoleInstructionTests(unittest.TestCase):
         for raw_mode in ("codex", " CODEX "):
             with self.subTest(raw_mode=raw_mode), tempfile.TemporaryDirectory() as tmp:
                 path = Path(tmp) / "state.json"
-                path.write_text(json.dumps({"mode": raw_mode}), encoding="utf-8")
+                path.write_text(
+                    json.dumps({"mode": raw_mode, "mode_generation": 7}), encoding="utf-8"
+                )
                 for module in self.modules:
                     self.assert_reviewer(module, path)
 
     def test_claude_state_preserves_advisor_role(self):
-        cases = ({"mode": "claude"}, {"mode": " CLAUDE "})
+        cases = (
+            {"mode": "claude", "mode_generation": 7},
+            {"mode": " CLAUDE ", "mode_generation": 7},
+        )
         for payload in cases:
             with self.subTest(payload=payload), tempfile.TemporaryDirectory() as tmp:
                 path = Path(tmp) / "state.json"
@@ -77,7 +84,14 @@ class ReviewerRoleInstructionTests(unittest.TestCase):
             for module in self.modules:
                 self.assert_unknown(module, missing)
                 self.assert_unknown(module, malformed)
-                for payload in ({"mode": "other"}, {}, {"mode": None}):
+                for payload in (
+                    {"mode": "other", "mode_generation": 7},
+                    {},
+                    {"mode": None, "mode_generation": 7},
+                    {"mode": "codex"},
+                    {"mode": "codex", "mode_generation": True},
+                    {"mode": "codex", "mode_generation": -1},
+                ):
                     unsupported = Path(tmp) / "unsupported.json"
                     unsupported.write_text(json.dumps(payload), encoding="utf-8")
                     self.assert_unknown(module, unsupported)
@@ -89,24 +103,42 @@ class ReviewerRoleInstructionTests(unittest.TestCase):
             ):
                 self.assert_unknown(module, "unreadable-state.json")
 
-    def test_mode_change_before_publish_discards_generated_role(self):
+    def test_mode_or_generation_change_before_publish_discards_generated_role(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "state.json"
-            path.write_text(json.dumps({"mode": "codex"}), encoding="utf-8")
+            invocation_token = ("codex", 1)
+            path.write_text(
+                json.dumps({"mode": "codex", "mode_generation": 1}), encoding="utf-8"
+            )
             for module in self.modules:
                 discarded, response = module.response_after_mode_check(
-                    "codex", "generated review", "ANALYST Codex", path
+                    invocation_token, "generated review", "ANALYST Codex", path
                 )
                 self.assertFalse(discarded)
                 self.assertEqual(response, "generated review")
-            path.write_text(json.dumps({"mode": "claude"}), encoding="utf-8")
+            path.write_text(
+                json.dumps({"mode": "claude", "mode_generation": 2}), encoding="utf-8"
+            )
             for module in self.modules:
                 discarded, response = module.response_after_mode_check(
-                    "codex", "generated review", "ANALYST Codex", path
+                    invocation_token, "generated review", "ANALYST Codex", path
                 )
                 self.assertTrue(discarded)
                 self.assertNotIn("generated review", response)
-                self.assertIn("changed from CODEX to CLAUDE", response)
+                self.assertIn("changed from CODEX#1 to CLAUDE#2", response)
+
+            # ABA control: the mode returns to CODEX, but a later generation proves that
+            # a CLAUDE boundary occurred while the original response was being generated.
+            path.write_text(
+                json.dumps({"mode": "codex", "mode_generation": 3}), encoding="utf-8"
+            )
+            for module in self.modules:
+                discarded, response = module.response_after_mode_check(
+                    invocation_token, "generated review", "ANALYST Codex", path
+                )
+                self.assertTrue(discarded)
+                self.assertNotIn("generated review", response)
+                self.assertIn("changed from CODEX#1 to CODEX#3", response)
 
 
 if __name__ == "__main__":

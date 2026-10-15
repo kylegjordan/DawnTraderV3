@@ -55,6 +55,7 @@ ok('T1 unrelated ignored', C('hello there') is None)
 # T2 crew switch to codex: Langston OFF and DISABLED, read back; handover order is the FIRST post (finding 3)
 n = len(read_posts()); cs.start('codex'); st = cs.load(); p = since(n)
 ok('T2 mode + duty', st['mode'] == 'codex' and st['duty']['OLD Codex'] and not st['duty']['OLD Claude'])
+ok('T2 mode generation advances on crew change', st['mode_generation'] == 1)
 ok('T2 Langston inactive/disabled', lang() == 'inactive/disabled')
 ok('T2 first post is the handover order naming all four Claude sessions', 'OUTGOING' in text(p[0]) and all(x in text(p[0]) for x in cs.CREWS['claude']))
 ok('T2 on-duty notice names the Codex crew + Coltrane', all(x in text(p[1]) for x in cs.CREWS['codex'] + ['Coltrane']))
@@ -64,6 +65,7 @@ s1 = [o for o in st['orders'].values()][0]['id']
 # T3 BLOCKER-1: a repeated SWITCH TO CODEX keeps the order open and the nag armed, and reports who is missing
 cs.ack(s1, 'Claude Old'); n = len(read_posts()); cs.start('codex'); st = cs.load(); p = since(n)
 ok('T3 order still open', s1 in st['orders'])
+ok('T3 repeated same-mode command preserves generation', st['mode_generation'] == 1)
 ok('T3 reports already-on + who is missing', 'already on CODEX' in text(p[0]) and 'NEW Claude' in text(p[0]) and 'OLD Claude' not in text(p[0]))
 st['orders'][s1]['started_t'] -= 16 * 60; cs.save(st); n = len(read_posts()); cs.nag(); p = since(n)
 ok('T3 nag still fires after the repeat', len(p) == 2 and 'NEW Claude' in text(p[0]) and '--notify' in p[1])
@@ -96,11 +98,13 @@ n = len(read_posts()); cs.ack(s1, 'codex old')
 duplicate_receipt = next(o for o in cs.load()['history'] if o['id'] == s1)['acks']['OLD Codex']
 ok('T5 duplicate late incoming receipt is idempotent', len(read_posts()) == n and duplicate_receipt == first_receipt)
 cs.start('claude'); ok('T5 Langston active/enabled', lang() == 'active/enabled' and cs.load()['mode'] == 'claude')
+ok('T5 mode generation advances on return to Claude', cs.load()['mode_generation'] == 2)
 
 # T6 LANGSTON OFF / ON alone (the crew stays as it is)
 n = len(read_posts()); cs.langston(False); p = since(n)
 ok('T6 LANGSTON OFF', lang() == 'inactive/disabled' and 'Langston is OFF' in text(p[0]) and cs.load()['mode'] == 'claude')
 cs.langston(True); ok('T6 LANGSTON ON', lang() == 'active/enabled')
+ok('T6 reviewer-only change preserves mode generation', cs.load()['mode_generation'] == 2)
 
 # T7 single session ON hands its counterpart OFF (one worker per folder); counterpart OFF-duty -> no handover
 st = cs.load(); [cs._close(st, o, 'test') for o in list(st['orders'])]; cs.save(st)
@@ -112,6 +116,7 @@ cs.ack(oid, 'OLD Claude'); ok('T7 completes on the counterpart ack', oid not in 
 n = len(read_posts()); cs.session('codex old', True); p = since(n)
 ok('T7 already on duty, counterpart off: no handover order and NO ack asked for (condition 2)',
    'no handover' in text(p[0]) and 'crew-switch ack' not in text(p[0]) and 'Nothing to confirm' in text(p[0]))
+ok('T7 per-session changes preserve mode generation', cs.load()['mode_generation'] == 2)
 
 # T8 session OFF: the session gets a stand-down order; nag chases it
 n = len(read_posts()); cs.session('NEW CLAUDE', False); st = cs.load(); p = since(n)

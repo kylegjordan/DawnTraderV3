@@ -68,7 +68,11 @@ def load():
     try:
         with open(STATE) as f: st = json.load(f)
     except FileNotFoundError:
-        st = {'mode': 'claude', 'seq': 0, 'inbox_offset': None, 'history': []}
+        st = {'mode': 'claude', 'mode_generation': 0, 'seq': 0, 'inbox_offset': None, 'history': []}
+    # B-CODEX-FAILOVER reviewer binding: generation changes ONLY with crew mode. Existing
+    # pre-generation state starts at zero and is persisted by the installation migration;
+    # its absolute value is irrelevant, while equality across one invocation is load-bearing.
+    st.setdefault('mode_generation', 0)
     st.setdefault('orders', {}); st.setdefault('history', [])
     st.setdefault('duty', {n: (KIND[n] == st['mode']) for n in KIND})
     return st
@@ -172,6 +176,7 @@ def start(to, by='kyle'):
             superseded = _supersede(st, KIND.keys())
             oid = _new_order(st, 'crew', CREWS[frm], CREWS[to], f'crew {frm} -> {to}')
             st['mode'] = to
+            st['mode_generation'] += 1
             for n in KIND: st['duty'][n] = (KIND[n] == to)
             st['langston'] = {'on': to == 'claude', 'at': iso(), 'by': 'crew switch'}
             save(st)

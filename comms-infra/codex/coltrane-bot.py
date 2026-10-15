@@ -177,48 +177,56 @@ def log(row):
 
 
 def reviewer_role(state_path=CREW_STATE):
-    """Bind each invocation to the root-owned live crew mode, failing closed on ambiguity."""
+    """Return ((mode, generation), prompt) from the root-owned live crew-switch record."""
     try:
         with open(state_path, encoding="utf-8") as fh:
-            mode = str(json.load(fh).get("mode", "")).strip().lower()
+            state = json.load(fh)
+        mode = str(state.get("mode", "")).strip().lower()
+        generation = state.get("mode_generation")
+        if isinstance(generation, bool) or not isinstance(generation, int) or generation < 0:
+            raise ValueError("mode_generation must be a non-negative integer")
     except Exception as exc:
-        return "unknown", (
+        return ("unknown", None), (
             "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state could not be read "
             "(%s: %s). Refuse routine workflow reviews and report this exact failure; do "
             "not guess which reviewer is on duty." % (type(exc).__name__, exc)
         )
     if mode == "codex":
-        return mode, (
-            "CURRENT CREW MODE: CODEX. You replace Langston as the on-duty reviewer for "
+        return (mode, generation), (
+            "CURRENT CREW MODE: CODEX (generation %d). You replace Langston as the on-duty reviewer for "
             "this shift. Perform routine scope, pre-audit, code-diff, staging-verification, "
-            "iteration, and completion reviews when addressed; Langston is off duty."
+            "iteration, and completion reviews when addressed; Langston is off duty." % generation
         )
     if mode == "claude":
-        return mode, (
-            "CURRENT CREW MODE: CLAUDE. Langston is the on-duty routine reviewer. You are "
-            "an additional advisor only when addressed and do not replace his workflow gates."
+        return (mode, generation), (
+            "CURRENT CREW MODE: CLAUDE (generation %d). Langston is the on-duty routine reviewer. "
+            "You are an additional advisor only when addressed and do not replace his workflow gates."
+            % generation
         )
-    return "unknown", (
+    return ("unknown", generation), (
         "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state contains unsupported "
         "mode %r. Refuse routine workflow reviews and report this exact failure; do not "
         "guess which reviewer is on duty." % mode
     )
 
 
-def reviewer_mode_transition(invocation_mode, state_path=CREW_STATE):
-    """Return whether the trusted mode changed and the mode observed before publication."""
-    publish_mode, _ = reviewer_role(state_path)
-    return publish_mode != invocation_mode, publish_mode
+def reviewer_mode_transition(invocation_token, state_path=CREW_STATE):
+    """Compare both mode and root-owned generation immediately before publication."""
+    publish_token, _ = reviewer_role(state_path)
+    return publish_token != invocation_token, publish_token
 
 
-def response_after_mode_check(invocation_mode, response, recipient, state_path=CREW_STATE):
+def response_after_mode_check(invocation_token, response, recipient, state_path=CREW_STATE):
     """Discard a generated response when its reviewer authority changed while it ran."""
-    changed, publish_mode = reviewer_mode_transition(invocation_mode, state_path)
+    changed, publish_token = reviewer_mode_transition(invocation_token, state_path)
     if not changed:
         return False, response
+    old_mode, old_generation = invocation_token
+    new_mode, new_generation = publish_token
     return True, (
         recipient + " — Coltrane discarded the response because crew mode changed from "
-        + invocation_mode.upper() + " to " + publish_mode.upper()
+        + old_mode.upper() + "#" + str(old_generation) + " to "
+        + new_mode.upper() + "#" + str(new_generation)
         + " while it was running. Re-send the request if it is still needed."
     )
 
@@ -319,12 +327,12 @@ class Coltrane(discord.Client):
             except Exception:
                 history = ""
 
-        invocation_mode, role_prompt = reviewer_role()
+        invocation_token, role_prompt = reviewer_role()
         async with m.channel.typing():
             t0 = time.time()
             rc, out, err = await asyncio.to_thread(invoke, text, why, history, role_prompt)
 
-        role_changed, out = response_after_mode_check(invocation_mode, out, who)
+        role_changed, out = response_after_mode_check(invocation_token, out, who)
         if role_changed:
             rc = 0
 

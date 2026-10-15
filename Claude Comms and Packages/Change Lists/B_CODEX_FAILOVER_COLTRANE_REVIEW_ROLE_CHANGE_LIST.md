@@ -18,7 +18,10 @@ all four Codex sessions on duty and the Langston bridge inactive.
 - Keep the existing advisor-only role for proven `CLAUDE`; fail closed with an explicit refusal
   when the state is missing, unreadable, malformed or unsupported.
 - Re-read the trusted mode immediately before publication and discard the generated answer if the
-  crew changed while Coltrane was working, so a Codex-shift review cannot land in a Claude shift.
+  crew mode or its root-owned generation changed while Coltrane was working, so a review cannot
+  cross a `CODEX -> CLAUDE -> CODEX` boundary and still look current.
+- Have `crew-switch` advance that generation only on an actual whole-crew mode change. Repeating
+  the current mode, changing Langston alone, or changing an individual session preserves it.
 - Name both the Claude and Codex actors in Coltrane's routing table so the temporary crew has the
   same addressable roles instead of inheriting Claude-only labels.
 - Preserve every evidence, independence, sandbox, review-ref and communication rule. The correction
@@ -29,11 +32,15 @@ all four Codex sessions on duty and the Langston bridge inactive.
 1. Offline mutation matrix across both invocation modules: exact `codex` and case/whitespace
    variants select the temporary reviewer role; `claude` selects advisor-only; missing, malformed,
    unsupported and deterministically unreadable states select `UNKNOWN` and refuse routine review.
-2. A mode-transition mutation starts in `CODEX`, changes the isolated state to `CLAUDE`, and proves
-   the generated response is rejected before publication in both invocation modules.
-3. Exact-byte installation of the reviewed source into Coltrane's home and both invocation paths.
-4. A live Codex-mode invocation accepts and completes the queued routine Step 1 review.
-5. A non-live state-file mutation demonstrates that `claude` produces the advisor-only prompt and
+2. Publication-boundary mutations prove a same-generation response is preserved, a direct
+   `CODEX -> CLAUDE` change is rejected, and a `CODEX -> CLAUDE -> CODEX` change is still rejected
+   by its later generation in both invocation modules.
+3. The `crew-switch` suite proves the generation advances on actual whole-crew mode changes and is
+   stable across repeated same-mode commands, Langston-only changes and per-session changes.
+4. Exact-byte installation of the reviewed source into Coltrane's home, both invocation paths and
+   the root-owned `crew-switch` command, with a locked migration of the live state to generation 0.
+5. A live Codex-mode invocation accepts and completes the queued routine Step 1 review.
+6. A non-live state-file mutation demonstrates that `claude` produces the advisor-only prompt and
    an unreadable state produces an explicit `UNKNOWN` refusal, without changing the actual crew state.
 
 ## Bootstrap order
