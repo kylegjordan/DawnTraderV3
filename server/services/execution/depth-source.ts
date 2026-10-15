@@ -31,6 +31,18 @@ export interface DepthSnapshot {
   asks: BookLevel[]; // ascending (best-first)
   bids: BookLevel[]; // descending (best-first)
   ageMs: number;
+  /**
+   * Process-local monotonic instant captured BEFORE the source read starts. Consumption-time
+   * freshness adds elapsed time from this anchor to `ageMs`, so database query/return latency
+   * cannot disappear between the first gate and the order boundary.
+   */
+  ageReadStartedMonoMs: number;
+  /**
+   * Whether the source supplied a finite, non-negative age before any compatibility clamp.
+   * xStock historically clamps an invalid/negative database age to zero for existing readers;
+   * the final consumption guard must still fail closed instead of treating that clamp as fresh.
+   */
+  ageReadValid: boolean;
   source: 'crypto_ws_book' | 'xstock_ticker_snap';
   /**
    * xStock only (P4): the verdict on the NEWEST snapshot row, per side. Absent on crypto. A caller that may act on the
@@ -61,10 +73,18 @@ export async function getDepthSnapshot(
   assetClass: AssetClass,
   opts?: { allowLastTwoSided?: boolean },
 ): Promise<DepthSnapshot | null> {
+  const ageReadStartedMonoMs = performance.now();
   if (assetClass === 'crypto_spot') {
     const book = krakenWebSocketAdapter.getBookForFill(symbol);
     if (!book) return null;
-    return { asks: book.asks, bids: book.bids, ageMs: book.ageMs, source: 'crypto_ws_book' };
+    return {
+      asks: book.asks,
+      bids: book.bids,
+      ageMs: book.ageMs,
+      ageReadStartedMonoMs,
+      ageReadValid: Number.isFinite(book.ageMs) && book.ageMs >= 0,
+      source: 'crypto_ws_book',
+    };
   }
   if (assetClass === 'xstock_spot') {
     try {
@@ -85,6 +105,9 @@ export async function getDepthSnapshot(
       if (!r) return null;
       const num = (v: string | null) => (v === null ? NaN : parseFloat(v));
       const ask = num(r.ask), askQty = num(r.ask_qty), bid = num(r.bid), bidQty = num(r.bid_qty);
+      const rawAgeMs = parseFloat(r.age_ms);
+      const ageReadValid = Number.isFinite(rawAgeMs) && rawAgeMs >= 0;
+      const ageMs = ageReadValid ? rawAgeMs : 0;
       const sideVerdict = (price: number, qty: number): DepthSideVerdict =>
         !(price > 0) ? 'price_absent' : !(qty > 0) ? 'qty_absent' : 'ok';
       const verdict = { bid: sideVerdict(bid, bidQty), ask: sideVerdict(ask, askQty) };
@@ -92,7 +115,9 @@ export async function getDepthSnapshot(
         return {
           asks: [{ price: ask, qty: askQty }],
           bids: [{ price: bid, qty: bidQty }],
-          ageMs: Math.max(0, parseFloat(r.age_ms) || 0),
+          ageMs,
+          ageReadStartedMonoMs,
+          ageReadValid,
           source: 'xstock_ticker_snap',
           verdict,
         };
@@ -110,15 +135,22 @@ export async function getDepthSnapshot(
         if (!lr) return null;
         const la = num(lr.ask), laq = num(lr.ask_qty), lb = num(lr.bid), lbq = num(lr.bid_qty);
         if (!(la > 0 && laq > 0 && lb > 0 && lbq > 0)) return null;
+        const rawLastAgeMs = parseFloat(lr.age_ms);
+        const lastAgeReadValid = Number.isFinite(rawLastAgeMs) && rawLastAgeMs >= 0;
         return {
           asks: [{ price: la, qty: laq }], bids: [{ price: lb, qty: lbq }],
-          ageMs: Math.max(0, parseFloat(lr.age_ms) || 0), source: 'xstock_ticker_snap', verdict, fromLastTwoSided: true,
+          ageMs: lastAgeReadValid ? rawLastAgeMs : 0,
+          ageReadStartedMonoMs,
+          ageReadValid: lastAgeReadValid,
+          source: 'xstock_ticker_snap', verdict, fromLastTwoSided: true,
         };
       }
       return {
         asks: verdict.ask === 'price_absent' ? [] : [{ price: ask, qty: verdict.ask === 'ok' ? askQty : 0 }],
         bids: verdict.bid === 'price_absent' ? [] : [{ price: bid, qty: verdict.bid === 'ok' ? bidQty : 0 }],
-        ageMs: Math.max(0, parseFloat(r.age_ms) || 0),
+        ageMs,
+        ageReadStartedMonoMs,
+        ageReadValid,
         source: 'xstock_ticker_snap',
         verdict,
       };
@@ -198,6 +230,60 @@ export async function getTickerWitness(
  *  verdict must read `kind`, never split `reason`. */
 export type WarmthKind = 'warm' | 'no_book' | 'stale_book' | 'thin_book';
 export interface WarmthResult { warm: boolean; kind: WarmthKind; reason: string; }
+
+export type ConsumptionFreshnessKind = 'fresh' | 'stale_at_consumption' | 'consumption_clock_invalid';
+export type ConsumptionFreshnessResult =
+  | { fresh: true; kind: 'fresh'; reason: 'fresh'; ageMs: number; elapsedMs: number }
+  | {
+      fresh: false;
+      kind: Exclude<ConsumptionFreshnessKind, 'fresh'>;
+      reason: string;
+      ageMs: number | null;
+      elapsedMs: number | null;
+    };
+
+/**
+ * B-ENTRY-CONSUMPTION-FRESHNESS — advance the SAME captured snapshot to the instant
+ * it is about to be consumed. `performance.now()` protects only elapsed time after
+ * the pre-read anchor; it deliberately makes no claim about clock skew already
+ * embedded in the source-reported base age.
+ */
+export function assessConsumptionFreshness(
+  snapshot: DepthSnapshot,
+  limitMs: number,
+  nowMonoMs: number = performance.now(),
+): ConsumptionFreshnessResult {
+  const invalid = (field: string, value: unknown, elapsedMs: number | null = null): ConsumptionFreshnessResult => ({
+    fresh: false,
+    kind: 'consumption_clock_invalid',
+    reason: `consumption_clock_invalid field=${field} value=${String(value)}`,
+    ageMs: null,
+    elapsedMs,
+  });
+
+  if (snapshot.ageReadValid !== true) return invalid('source_age', snapshot.ageMs);
+  if (!Number.isFinite(snapshot.ageMs) || snapshot.ageMs < 0) return invalid('base_age_ms', snapshot.ageMs);
+  if (!Number.isFinite(snapshot.ageReadStartedMonoMs) || snapshot.ageReadStartedMonoMs < 0) {
+    return invalid('read_started_mono_ms', snapshot.ageReadStartedMonoMs);
+  }
+  if (!Number.isFinite(limitMs) || limitMs < 0) return invalid('limit_ms', limitMs);
+  if (!Number.isFinite(nowMonoMs)) return invalid('now_mono_ms', nowMonoMs);
+
+  const elapsedMs = nowMonoMs - snapshot.ageReadStartedMonoMs;
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return invalid('elapsed_ms', elapsedMs, elapsedMs);
+  const ageMs = snapshot.ageMs + elapsedMs;
+  if (!Number.isFinite(ageMs)) return invalid('consumption_age_ms', ageMs, elapsedMs);
+  if (ageMs > limitMs) {
+    return {
+      fresh: false,
+      kind: 'stale_at_consumption',
+      reason: `stale_at_consumption age=${Math.round(ageMs)}ms>${limitMs}ms`,
+      ageMs,
+      elapsedMs,
+    };
+  }
+  return { fresh: true, kind: 'fresh', reason: 'fresh', ageMs, elapsedMs };
+}
 
 /**
  * Warmth = the book exists, is fresh (age ≤ warmthMaxAgeMs), and has enough valid

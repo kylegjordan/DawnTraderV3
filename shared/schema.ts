@@ -1924,6 +1924,10 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  order-book age. An xStock row can carry a value here beside a structurally-NULL
    *  `exit_book_age_ms`, and the two are not comparable. */
   entryBookAgeMs: doublePrecision("entry_book_age_ms"),
+  /** B-ENTRY-CONSUMPTION-FRESHNESS: conservative age of the SAME depth snapshot immediately before
+   *  an immediate taker walk. NULL means the row predates the cutover or the entry was a resting
+   *  maker placement, which did not consume depth. Separate from `entry_book_age_ms` (first gate). */
+  entryBookConsumptionAgeMs: doublePrecision("entry_book_consumption_age_ms"),
   /** Venue observation time of the entry-driving tick. Same NULL discipline as the exit leg. */
   /** ⛔ `8a-P3`: on a crypto maker fill decided by a touch quote this still records the MARK's observation time, not the
    *  quote's — deliberately: reconstructing an instant from a ticker-rung AGE would be a fabricated stamp. The quote's

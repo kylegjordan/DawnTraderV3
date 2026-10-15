@@ -226,3 +226,4 @@
 2026-10-14-b-xstock-bar-availability-aggregate.sql
 2026-10-15-b-xstock-bar-availability-observation.sql
 2026-10-15-c-xstock-bar-availability-handoff.sql
+2026-10-15-b-entry-consumption-freshness.sql

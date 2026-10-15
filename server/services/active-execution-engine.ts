@@ -313,6 +313,9 @@ import { emitEvReject } from './data-archive/switch-on-evidence-sink.js';
 export type OpenOutcome =
   | { opened: true; tradeId: string }
   | { opened: false; stage: OpenFailStage; reason: string };
+type OpenDepthGateResult =
+  | { pass: false; reason: string; snapshot: DepthSnapshot | null; warmthMaxAgeMs: null }
+  | { pass: true; reason: 'ok'; snapshot: DepthSnapshot; warmthMaxAgeMs: number };
 import { normalizeToInternalSymbol, getKrakenRestPair } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service.js';
 import { marketVolumeCache } from './market-volume-cache.js';
@@ -337,6 +340,7 @@ import { validatePaperOrderWithVenue } from './execution/venue-validate.js';
 import {
   getDepthSnapshot,
   assessWarmth,
+  assessConsumptionFreshness,
   assessSufficiency,
   getTickerWitness,
   recordDepthGateBlock,
@@ -561,9 +565,9 @@ export class ActiveExecutionEngine {
     symbol: string,
     assetClass: AssetClass,
     orderNotional: number,
-  ): Promise<{ pass: boolean; reason: string; snapshot: DepthSnapshot | null }> {
+  ): Promise<OpenDepthGateResult> {
     const config = await resolveFillDepthGateConfig(assetClass);
-    if (!config) return { pass: false, reason: 'depth_gate_config_missing', snapshot: null };
+    if (!config) return { pass: false, reason: 'depth_gate_config_missing', snapshot: null, warmthMaxAgeMs: null };
     // ⛔ row 2 increment C (C-P3): inside a venue-transition pause an xStock entry is refused before any book is read —
     // the book at those minutes is the transient the pause exists for (pre-audit A1). Its own reason code.
     if (assetClass === 'xstock_spot') {
@@ -571,19 +575,19 @@ export class ActiveExecutionEngine {
       if (_vp.paused) {
         this._venuePauseEntriesRefused++;
         console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — venue_transition_pause ${_vp.window}`);
-        return { pass: false, reason: `venue_transition_pause ${_vp.window}`, snapshot: null };
+        return { pass: false, reason: `venue_transition_pause ${_vp.window}`, snapshot: null, warmthMaxAgeMs: null };
       }
     }
     const snapshot = await getDepthSnapshot(symbol, assetClass);
     // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]): the NEWEST xStock row must hold BOTH sides with size. Its own
     // reason code (`depth_verdict`), separate from P3's `implausible_spread_entry` so Step 8 can count each.
     if (snapshot?.verdict && (snapshot.verdict.bid !== 'ok' || snapshot.verdict.ask !== 'ok')) {
-      return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask}`, snapshot: null };
+      return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask}`, snapshot: null, warmthMaxAgeMs: null };
     }
     const warmth = assessWarmth(snapshot, 'asks', config);
-    if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null };
+    if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null, warmthMaxAgeMs: null };
     const suff = assessSufficiency(snapshot, 'asks', orderNotional, config);
-    if (!suff.sufficient) return { pass: false, reason: suff.reason, snapshot };
+    if (!suff.sufficient) return { pass: false, reason: suff.reason, snapshot, warmthMaxAgeMs: null };
     // ── B-XSTOCK-FEED-SANITY P9 (`#992`) — THE ENTRY SEAM READS BOTH SIDES, ON KYLE'S RULING. ────────
     // KYLE, 2026-09-03: ONE entry standard applied identically at every hour — *"hold the same standards
     // and protections … if those are not met, then we just don't enter trades in those hours for xStocks
@@ -604,7 +608,7 @@ export class ActiveExecutionEngine {
     // one per-reason counter Step 8 reads to say whether this gate fires (Langston Step-4 BLOCKER-1).
     if (assetClass === 'xstock_spot') {
       const bidWarmth = assessWarmth(snapshot, 'bids', config);
-      if (!bidWarmth.warm) return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot };
+      if (!bidWarmth.warm) return { pass: false, reason: `one_sided_book ${bidWarmth.reason}`, snapshot, warmthMaxAgeMs: null };
       // The same predicate the exit guard uses, on the same live tick: the pair's own recent quotes only —
       // never a second venue, never the clock, never the session. `unknown` (no comparator yet) and a guard
       // that did not run both PASS: this seam may refuse an entry, never invent one from an absence (`#546`).
@@ -646,7 +650,7 @@ export class ActiveExecutionEngine {
           (!_noUsableRef || bs.result.reasons.some((r) => r === 'absent_bid' || r === 'absent_ask'))) {
         const _why = `hollow_book ${bs.result.reasons.join('|')}`;
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
-        return { pass: false, reason: _why, snapshot };
+        return { pass: false, reason: _why, snapshot, warmthMaxAgeMs: null };
       }
       // ⛔⛔ B-XSTOCK-BID-TRIGGER-RELAND increment A, P3 — THE UNHELD-NAME ARM (`entry-spread-plausibility.ts`). Above, a
       // symbol with no comparator reaches only the absent-side arms; here its CURRENT spread (the live tick, the same
@@ -664,7 +668,7 @@ export class ActiveExecutionEngine {
             if (_j.refuse) {
               const _why = `implausible_spread_entry spread=${_spread.toFixed(5)} threshold=${_j.threshold.toFixed(5)} yardstick=${_ys.median.toFixed(5)} basis=${_ys.basis}`;
               console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][ENTRY_GATE] ${symbol}: entry refused — ${_why} n=${_ys.n}`);
-              return { pass: false, reason: _why, snapshot };
+              return { pass: false, reason: _why, snapshot, warmthMaxAgeMs: null };
             }
           } else {
             // Fail-OPEN on absence (#546), labelled — never a silent pass.
@@ -673,7 +677,7 @@ export class ActiveExecutionEngine {
         }
       }
     }
-    return { pass: true, reason: 'ok', snapshot };
+    return { pass: true, reason: 'ok', snapshot, warmthMaxAgeMs: config.warmthMaxAgeMs };
   }
   // B72: monitoring interval read at setInterval start from module='active_execution'.
   private get MONITOR_INTERVAL_MS(): number {
@@ -5488,7 +5492,7 @@ export class ActiveExecutionEngine {
     // replacing the B4a-C3 RTH liquid-fill-window clock proxy. Fail-closed — a missing
     // config / cold / thin / insufficient book skips the open loudly (observable counter).
     const _gate = await this._evaluateOpenDepthGate(signal.symbol, _openClass, signal.entryPrice * quantity);
-    if (!_gate.pass || !_gate.snapshot) {
+    if (!_gate.pass) {
       console.warn(`[P19-B4b.1][DEPTH_GATE_BLOCK:${this.mode}] ${signal.symbol} (${_openClass}) ${_gate.reason} — skipping open`);
       recordDepthGateBlock(_openClass, _gate.reason); // fine-grained per-class counter (unchanged)
       // P19-B6.5e: ALSO fold into the I3 invariant so the open no longer vanishes from attempts=opened+blocked+openFailed.
@@ -5638,6 +5642,7 @@ export class ActiveExecutionEngine {
     let actualEntryPrice: number;
     let entryFee: number;
     let totalSlippage: number;
+    let _entryBookConsumptionAgeMs: number | null = null;
     // B-ENTRY-DISTANCE-GUARD (Langston Step-4 CHANGE 1): the OBJ-2 shadow measurement, carried to the DURABLE archive row of
     // BOTH arms (admitted and refused) with one schema — out.log alone rotates away long before the promotion read needs it.
     // The plan's age rides with it (queuedAt / rtbQueueId), so a stale plan can be told from a fast move. On a maker the
@@ -5656,6 +5661,29 @@ export class ActiveExecutionEngine {
     let _entryFloorNote = '';
     try { _entryFloor = getPerClassTargetGate(_openClass, signal.strategy).minRR; }
     catch (floorErr) { _entryFloorNote = ` floor_unresolved=${JSON.stringify(floorErr instanceof Error ? floorErr.message : String(floorErr))}`; }
+    // B-ENTRY-CONSUMPTION-FRESHNESS: this is the final synchronous decision before the
+    // sole immediate order side effect. It advances the SAME gate snapshot with a
+    // process-monotonic elapsed duration and reuses the exact threshold resolved by
+    // `_evaluateOpenDepthGate`; there is no config reread and no awaited work between
+    // this decision and `openOrder`.
+    const _consumptionArm = _b72ChosenMode === 'maker' ? 'maker_to_taker' : 'direct_taker';
+    const _consumption = assessConsumptionFreshness(_gate.snapshot, _gate.warmthMaxAgeMs);
+    if (!_consumption.fresh) {
+      recordDepthGateBlock(_openClass, _consumption.reason);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'CONSUMPTION_FRESHNESS', _consumption.reason);
+      console.warn(
+        `[B-ENTRY-CONSUMPTION-FRESHNESS][CONSUMPTION_BLOCK] symbol=${signal.symbol} class=${_openClass} ` +
+        `arm=${_consumptionArm} gateAgeMs=${_gate.snapshot.ageMs} elapsedMs=${_consumption.elapsedMs ?? 'invalid'} ` +
+        `ageMs=${_consumption.ageMs ?? 'invalid'} limitMs=${_gate.warmthMaxAgeMs} reason=${_consumption.kind}`,
+      );
+      return { opened: false, stage: 'CONSUMPTION_FRESHNESS', reason: _consumption.reason };
+    }
+    _entryBookConsumptionAgeMs = _consumption.ageMs;
+    console.log(
+      `[B-ENTRY-CONSUMPTION-FRESHNESS][CONSUMPTION_PASS] symbol=${signal.symbol} class=${_openClass} ` +
+      `arm=${_consumptionArm} gateAgeMs=${_gate.snapshot.ageMs} elapsedMs=${_consumption.elapsedMs} ` +
+      `ageMs=${_consumption.ageMs} limitMs=${_gate.warmthMaxAgeMs}`,
+    );
     const _openFill = await this.orderPlacer.openOrder({
       symbol: signal.symbol, side: 'buy', quantity, intendedPrice: signal.entryPrice,
       mode: this.mode, assetClass: _openClass, bookAsks: _gate.snapshot.asks,
@@ -5936,6 +5964,10 @@ export class ActiveExecutionEngine {
         // ⛔ AND ON xSTOCK THIS IS A TICKER-SNAP ROW AGE, not an order-book age — `getDepthSnapshot`
         // computes it in SQL as `NOW() - captured_at`. Do not compare it across classes.
         entryBookAgeMs: _gate.snapshot.ageMs,
+        // B-ENTRY-CONSUMPTION-FRESHNESS: final conservative age at the immediate depth-walk
+        // boundary. NULL on pending-maker placement because that arm does not consume the book.
+        // Kept separate from entryBookAgeMs, which remains the first-gate reading.
+        entryBookConsumptionAgeMs: _entryBookConsumptionAgeMs,
         // The price the SIGNAL intended, kept beside the walked entry price above, so slippage is
         // reconstructable from the row alone without re-deriving it from a second table (OBJ-7).
         entryDecisionPrice: signal.entryPrice.toString(),

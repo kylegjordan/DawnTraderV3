@@ -50,6 +50,7 @@ export type OpenFailStage =
   | 'STAMP_MISSING'       // B-SIZING-DEC-RESTORE 2d: a signal reached execution entry with no valid carried class stamp (refused, never re-derived) — kept apart from UNCLASSIFIABLE so the two causes never share a counter
   | 'DEPTH_GATE'          // 24/5 book-depth-sufficiency gate (no_book/stale/thin/insufficient)
   | 'LIVENESS_GATE'       // P19-B6.6 (#236): xStock price-discovery-liveness (flat_last/no_data/sparse/timeout)
+  | 'CONSUMPTION_FRESHNESS' // B-ENTRY-CONSUMPTION-FRESHNESS: gate-passing snapshot expired/invalid before immediate order consumption
   | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
   | 'ENTRY_GEOMETRY'      // B-ENTRY-DISTANCE-GUARD (row 59): the taker fill sits at or through the signal's own stop or target (refuseTakerBooking)
@@ -156,7 +157,7 @@ class RtbMetricsService {
     }
     // P19-B6.5e: initialize the open-stage failure breakdown
     const stages: OpenFailStage[] = [
-      'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'STAMP_MISSING', 'DEPTH_GATE',
+      'DRY_RUN', 'EV_REJECT', 'SIZING_INVALID', 'UNCLASSIFIABLE', 'STAMP_MISSING', 'DEPTH_GATE', 'CONSUMPTION_FRESHNESS',
       'FILL_REJECTED', 'ENTRY_GEOMETRY', 'MAKER_MARKETABLE_DROPPED', 'DUP_POSITION', 'TRADE_INSERT_ERROR', 'OTHER'
     ];
     for (const stage of stages) {

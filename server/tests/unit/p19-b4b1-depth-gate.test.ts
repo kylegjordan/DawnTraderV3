@@ -37,6 +37,8 @@ const snap = (over: Partial<DepthSnapshot> = {}): DepthSnapshot => ({
   asks: [{ price: 100, qty: 5 }, { price: 101, qty: 5 }, { price: 102, qty: 5 }],
   bids: [{ price: 99, qty: 5 }, { price: 98, qty: 5 }, { price: 97, qty: 5 }],
   ageMs: 1000,
+  ageReadStartedMonoMs: 0,
+  ageReadValid: true,
   source: 'crypto_ws_book',
   ...over,
 });
