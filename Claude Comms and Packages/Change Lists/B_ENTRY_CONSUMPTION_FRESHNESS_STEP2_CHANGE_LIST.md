@@ -1,4 +1,4 @@
-# B-ENTRY-CONSUMPTION-FRESHNESS — Step 2 change list r1
+# B-ENTRY-CONSUMPTION-FRESHNESS — Step 2 change list r2
 
 **Audit ref:** `159d16134a805eb9c9840bc1b4d199b88fb43f00`
 **Step:** 2 of 11 — pre-implementation audit and implementation plan
@@ -15,6 +15,7 @@
    - chooses a conservative pre-read monotonic anchor, carries the attempt’s resolved limit, and places one final guard immediately before the order port;
    - incorporates the required fresh-context hit: the internal post-warmth xStock yardstick await, current paper placer purity, and the exact limit of post-anchor monotonic protection;
    - plans separate admitted provenance, distinct refusal telemetry, mutation tests and bounded same-day deployment verification;
+   - closes Coltrane's r1 verification blocker with the exact live denominator: first 50 reached-seam decisions, 15 minutes, or the next reviewed deployment, whichever comes first; zero-opportunity classes/arms end as reported zeros rather than extending the check;
    - creates no observation window or global deployment hold.
 
 ## Load-bearing review question

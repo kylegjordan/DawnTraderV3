@@ -150,7 +150,9 @@ Add the new primitive to `scripts/codex-export/export-data.sql`; no analytics or
 
 ### D5 — No waiting window
 
-Functional proof comes from deterministic clock/delay injection and a side-effecting fake placer that must remain uncalled on refusal. Step 7 then reads the first bounded post-deploy seam population by class and realised arm. A zero natural-expiry count is interpretable only beside positive `CONSUMPTION_PASS` opportunity counts. This creates no five-session/eight-day hold and blocks no unrelated reviewed deploy.
+Functional proof comes from deterministic clock/delay injection and a side-effecting fake placer that must remain uncalled on refusal. Step 7's live denominator is every immediate-open attempt on the deployed boot that reaches the consumption seam — `CONSUMPTION_PASS` plus `CONSUMPTION_BLOCK` — from the application-ready timestamp until the first of: 50 reached-seam attempts, 15 elapsed minutes, or the next reviewed deployment beginning. The report splits that exact denominator by asset class and realised arm, lists every refusal reason, and matches any admitted pass to its durable age fields.
+
+The cutoff is terminal, not a minimum sample requirement. A class/arm with no reached-seam attempt is reported as zero opportunities; zero total opportunities and zero natural expiries are also reported as zero and do not extend Step 7. Deterministic mutation proof is the functional acceptance control, while the bounded live read verifies wiring only when an opportunity naturally occurs. A reviewed deployment before the 15-minute cutoff ends the population at that boot boundary instead of blocking the deployment. This creates no five-session/eight-day hold and blocks no unrelated reviewed deploy.
 
 The bound is intentionally the instant the selected book is consumed for paper VWAP (and, by contract, immediately before future live venue submission), not the later durable trade/position writes. Those writes include further reads after the price has already been computed; re-age-checking there would not undo the consumed fill.
 
@@ -191,8 +193,8 @@ The bound is intentionally the instant the selected book is consumed for paper V
 ### P5 — Documentation and verification (from §2.3-2.5, D5)
 
 - Step 10 updates SIM §9.14/state registry, System Manual fill-safety section, catalog/plan/history, `#684` cross-reference and completion report.
-- Step 7 verifies migration/readback, HTTP/boot health, structured pass/block events and admitted DB stamps over a bounded reached-seam population.
-- Verification reports attempts by class and realised arm, every refusal reason, and the detector’s deterministic positive control. It does not wait for a calendar quota.
+- Step 7 verifies migration/readback, HTTP/boot health, structured pass/block events and admitted DB stamps over the exact D5 denominator: the deployed boot's first 50 reached-seam attempts, first 15 minutes, or next reviewed deployment, whichever comes first.
+- Verification reports attempts by class and realised arm, every refusal reason, and the detector’s deterministic positive control. A zero-opportunity class/arm is a completed zero, not a reason to wait; the check does not wait for a calendar quota or block a later reviewed deployment.
 
 ## 5. FILE SET PLANNED FOR STEP 3
 
