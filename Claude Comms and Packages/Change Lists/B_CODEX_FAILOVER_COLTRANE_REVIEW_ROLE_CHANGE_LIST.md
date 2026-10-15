@@ -61,3 +61,26 @@ remains owned exclusively by `crew-switch`; the reviewer reads it but cannot alt
 
 REVIEWER: verify the Codex-only exception, the fail-closed non-Codex states, the per-invocation read,
 and that no sender-controlled input can select the reviewer role.
+
+## Candidate proof — `e43a23ed0a6232e1bb9aeb067d87c15c9f08c69c`
+
+- CI run `38710215736`: Test Suite, TypeScript Check, Build and Docker Build each passed.
+- The installed instruction, live bot, dormant fallback and `crew-switch` command matched the
+  candidate's Git blobs byte-for-byte. SHA-256 respectively:
+  `1caffbb08c296ae7582ff32042a061716f79f1bb63a0a9dfc13e52f66ecd4d63`,
+  `3b96d4855cdc7bf6a8c8bad0e837aa7995e511c49bbe92460e201e1fe04db4de`,
+  `d380a691a24c0ebaa88b0201893725df5c4ad3e98c520fd943eed2bbe4773df8`, and
+  `e7aec0e79302cd0a50e8e2169a970b916ebecb55212307ad712a2c51885db309`.
+- The locked live-state migration added only `mode_generation: 0`; mode remained `codex`, the
+  order sequence remained 1, every duty/order/history value was unchanged, and the live state was
+  byte-identical before and after the isolated role probes.
+- The exact installed `crew-switch` source passed 46 of 46 tests. Controls prove generation 0 -> 1
+  on the first whole-crew change, remains 1 on a repeated same-mode command, advances to 2 on the
+  return change, and remains 2 through Langston-only and per-session changes.
+- Both exact installed invocation modules returned reviewer authority for live `CODEX#0`, advisor
+  authority for isolated `CLAUDE#1`, and explicit `UNKNOWN` refusal under deterministic
+  `PermissionError`. Both preserved the generated response at the same generation, discarded it
+  after direct `CODEX#0 -> CLAUDE#1`, and discarded it after the ABA
+  `CODEX#0 -> CLAUDE#1 -> CODEX#2` boundary even though the final mode matched the starting mode.
+- The live bot was restarted successfully and read back active. The pre-change files and state are
+  recoverable at `/root/coltrane-role-before-e43a23ed0`.
