@@ -170,7 +170,7 @@ export interface SQESignalInput {
   // haircut-adjusted best netEV, NEVER the raw maker EV).
   chosenEntryMode: 'taker' | 'maker';   // the planned entry mode; never defaulted
   entryFillPolicy: FillPolicy;
-  chosenNetEv?: number | null;          // the best (chosen-mode) net-EV — what gates + ranks
+  chosenNetEv: number;                  // the finite policy-selected net-EV — what gates + ranks
   takerNetEv?: number | null;           // the taker-leg net-EV (diagnostic + the B7.2c marketable-at-placement stored-taker check)
   makerNetEvAdjusted?: number | null;   // the haircut-adjusted maker net-EV (diagnostic)
   // P19-B8.5f (OBJ-2): was `Record<string, unknown>`, and THAT WAS THE HOLE. `Record<string,
@@ -2246,11 +2246,12 @@ class ReadyToBuyService {
     if (
       (input.chosenEntryMode !== 'maker' && input.chosenEntryMode !== 'taker')
       || (input.entryFillPolicy !== 'maker_only' && input.entryFillPolicy !== 'maker_preferred')
+      || !Number.isFinite(input.chosenNetEv)
     ) {
       throw new Error(
-        `[B-CLASS-LEG-FILL-MODE][SNAPSHOT_INVALID] queueSQESignal requires an explicit mode and fill policy; ` +
+        `[B-CLASS-LEG-FILL-MODE][SNAPSHOT_INVALID] queueSQESignal requires an explicit mode, fill policy, and finite selected EV; ` +
         `symbol=${normalizedSymbol} strategy=${input.strategy} mode=${String(input.chosenEntryMode)} ` +
-        `policy=${String(input.entryFillPolicy)}.`,
+        `policy=${String(input.entryFillPolicy)} chosenNetEv=${String(input.chosenNetEv)}.`,
       );
     }
 
@@ -2535,7 +2536,7 @@ class ReadyToBuyService {
       // decision). chosenNetEv is what the [11.8B] open-gate + B7.1 ranker read.
       chosenEntryMode: input.chosenEntryMode,
       entryFillPolicy: input.entryFillPolicy,
-      chosenNetEv: input.chosenNetEv != null ? input.chosenNetEv.toString() : null,
+      chosenNetEv: input.chosenNetEv.toString(),
       takerNetEv: input.takerNetEv != null ? input.takerNetEv.toString() : null,
       makerNetEvAdjusted: input.makerNetEvAdjusted != null ? input.makerNetEvAdjusted.toString() : null,
     };

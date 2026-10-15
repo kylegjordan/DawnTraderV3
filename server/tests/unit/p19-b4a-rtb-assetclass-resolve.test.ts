@@ -70,6 +70,7 @@ function baseInput(symbol: string, assetClass: any): any {
     finalScore: 0.7,
     chosenEntryMode: 'taker',
     entryFillPolicy: 'maker_preferred',
+    chosenNetEv: 0.01,
     quantity: 1,
     notional: 100,
     currentPrice: 100,
@@ -113,4 +114,15 @@ describe('P19-B4a C1 (stamp-at-source) — queueSQESignal honors the pipe-stampe
       readyToBuyService.queueSQESignal(baseInput('TSLA/USD', undefined)),
     ).rejects.toThrow(/STAMP_MISSING/);
   });
+
+  it.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY])(
+    'FAIL-LOUD: a non-finite policy-selected EV (%s) never reaches persistence',
+    async (chosenNetEv) => {
+      capturedInsert = null;
+      await expect(
+        readyToBuyService.queueSQESignal({ ...baseInput('BTC/USD', 'crypto_spot'), chosenNetEv }),
+      ).rejects.toThrow(/SNAPSHOT_INVALID/);
+      expect(capturedInsert).toBeNull();
+    },
+  );
 });

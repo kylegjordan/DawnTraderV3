@@ -19,6 +19,7 @@
  *    limit exactly (no haircut applied) until Phase-25 calibrates on real fill data.
  */
 import { composeVtsLegFriction, entryPriceBasisFor, type EntryPriceBasis } from './vts-friction.js';
+import type { FillPolicy } from '../math/maker-taker-decision.js';
 
 export type PendingSide = 'buy' | 'sell';
 export type PendingOutcome = 'fill' | 'drop' | 'rest';
@@ -66,6 +67,45 @@ export function evaluatePendingMaker(args: {
   if (arrivalIsDuringRest && transactablePrice != null && tradedThrough(side, transactablePrice, limit)) return 'fill';
   if (deadlineMs != null && nowMs >= deadlineMs) return 'drop';
   return 'rest';
+}
+
+export interface TargetRestExpiryDecision {
+  preservedPolicy: FillPolicy;
+  closeAsTakerNow: boolean;
+}
+
+/**
+ * Resolve an expired paper target rest without erasing the policy that governed it.
+ * A maker-only rest remains open; maker-preferred may convert only when the current
+ * evaluation still has a target hit. Both paths preserve policy for the eventual close.
+ */
+export function decideTargetRestExpiry(
+  policy: FillPolicy,
+  targetStillHit: boolean,
+): TargetRestExpiryDecision {
+  return {
+    preservedPolicy: policy,
+    closeAsTakerNow: policy === 'maker_preferred' && targetStillHit,
+  };
+}
+
+/**
+ * Select the target-exit policy persisted on the closed trade. An explicit policy
+ * carried by the close wins because the open-position row may have been updated or
+ * consumed before the closed row is written; otherwise preserve a valid stored policy.
+ */
+export function resolveTargetExitPolicyForClose(
+  explicitPolicy: unknown,
+  storedPolicy: unknown,
+): FillPolicy | null {
+  if (explicitPolicy === 'maker_only' || explicitPolicy === 'maker_preferred') return explicitPolicy;
+  if (storedPolicy === 'maker_only' || storedPolicy === 'maker_preferred') return storedPolicy;
+  return null;
+}
+
+/** A target may use an immediate taker fallback only when its saved policy allows it. */
+export function permitsTargetTakerFallback(policy: FillPolicy): boolean {
+  return policy === 'maker_preferred';
 }
 
 /**

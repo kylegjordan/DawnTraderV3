@@ -324,6 +324,26 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('B-ENTRY-CONSUMPTION-FRESHNESS — ActiveExecutionEngine production seam', () => {
+  it.each([undefined, null, Number.NaN, Number.POSITIVE_INFINITY])(
+    'refuses a policy-stamped promotion with non-finite selected EV (%s) before order placement or trade persistence',
+    async (chosenNetEv) => {
+      const candidate = { ...signal('taker'), chosenNetEv } as any;
+
+      const result = await execute(makeEngine(), candidate);
+
+      expect(result).toMatchObject({ opened: false, stage: 'POLICY_SNAPSHOT_MISSING' });
+      expect(h.openOrder).not.toHaveBeenCalled();
+      expect(h.createClosedTrade).not.toHaveBeenCalled();
+      expect(h.createActiveOpenPosition).not.toHaveBeenCalled();
+      expect(h.recordOpenFailed).toHaveBeenCalledWith(
+        'BTC/USD',
+        'test_strategy',
+        'POLICY_SNAPSHOT_MISSING',
+        'decision snapshot missing mode, entry policy, or finite selected EV',
+      );
+    },
+  );
+
   it.each([
     ['direct taker', 'taker' as const, [{ price: 101, qty: 10 }]],
     ['maker-to-taker', 'maker' as const, asks],

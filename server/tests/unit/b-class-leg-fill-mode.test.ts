@@ -5,7 +5,13 @@ import {
   applyMakerTakerFillPolicy,
   type MakerTakerDecisionResult,
 } from '../../core/math/maker-taker-decision.js';
-import { evaluatePendingMaker, planTwin } from '../../core/trading/pending-maker-logic.js';
+import {
+  decideTargetRestExpiry,
+  evaluatePendingMaker,
+  permitsTargetTakerFallback,
+  planTwin,
+  resolveTargetExitPolicyForClose,
+} from '../../core/trading/pending-maker-logic.js';
 import { selectTouchPrice } from '../../core/calculations/touch-price.js';
 
 const decision = (
@@ -152,6 +158,32 @@ describe('B-CLASS-LEG-FILL-MODE — VTS twin policy', () => {
   });
 });
 
+describe('B-CLASS-LEG-FILL-MODE — target-rest expiry policy', () => {
+  it('maker_only expiry stays open and preserves policy for a later stop close', () => {
+    const expired = decideTargetRestExpiry('maker_only', true);
+    expect(expired).toEqual({ preservedPolicy: 'maker_only', closeAsTakerNow: false });
+    expect(resolveTargetExitPolicyForClose(null, expired.preservedPolicy)).toBe('maker_only');
+  });
+
+  it('maker_preferred expiry converts on a current target hit and preserves policy on the close', () => {
+    const expired = decideTargetRestExpiry('maker_preferred', true);
+    expect(expired).toEqual({ preservedPolicy: 'maker_preferred', closeAsTakerNow: true });
+    expect(resolveTargetExitPolicyForClose(expired.preservedPolicy, null)).toBe('maker_preferred');
+  });
+
+  it('maker_preferred expiry stays open when the target is no longer hit', () => {
+    expect(decideTargetRestExpiry('maker_preferred', false)).toEqual({
+      preservedPolicy: 'maker_preferred',
+      closeAsTakerNow: false,
+    });
+  });
+
+  it('allows immediate target fallback only under maker_preferred', () => {
+    expect(permitsTargetTakerFallback('maker_only')).toBe(false);
+    expect(permitsTargetTakerFallback('maker_preferred')).toBe(true);
+  });
+});
+
 describe('B-CLASS-LEG-FILL-MODE — durable wiring fences', () => {
   const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
@@ -178,8 +210,31 @@ describe('B-CLASS-LEG-FILL-MODE — durable wiring fences', () => {
     expect(queue).toContain('chosenEntryMode: input.chosenEntryMode,');
     expect(queue).not.toContain("chosenEntryMode: input.chosenEntryMode ?? 'taker'");
     expect(engine).toContain("'POLICY_SNAPSHOT_MISSING'");
+    expect(engine).toContain('[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED]');
     expect(engine).toContain("neverFilledReason: why");
-    expect(engine).toMatch(/_restBudgetMs !== null && _targetPolicy !== null/);
+    expect(engine).toMatch(/_restBudgetMs !== null && Number\.isFinite\(_restTarget\)/);
+    expect(engine).toContain('targetExitFillPolicy: _expiryDecision.preservedPolicy');
+    expect(engine).toContain('targetExitFillPolicy: resolveTargetExitPolicyForClose(');
+    expect(queue).toContain('|| !Number.isFinite(input.chosenNetEv)');
+    expect(engine).toContain("|| typeof _b72ChosenNetEv !== 'number'");
+    expect(engine).toContain('|| !Number.isFinite(_b72ChosenNetEv)');
     expect(vtsExport).toContain("exitReason: trade.exitReason || 'never_filled'");
+  });
+
+  it('resolves target policy before the budget and fails closed on missing class or policy', () => {
+    const engine = read('server/services/active-execution-engine.ts');
+    const start = engine.indexOf("const _tecMode = (position as any).tradeMode ?? 'TARGET';");
+    const end = engine.indexOf('\n        if (exitCondition) {', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const placement = engine.slice(start, end);
+
+    expect(placement).not.toContain("?? 'crypto_spot'");
+    expect(placement.indexOf('asValidAssetClass')).toBeLessThan(placement.indexOf('resolveFillPolicy'));
+    expect(placement.indexOf('resolveFillPolicy')).toBeLessThan(placement.indexOf('getCachedNumberRequired'));
+    expect(placement).toMatch(/_restClass === null[\s\S]*?continue;/);
+    expect(placement).toMatch(/catch \(policyErr\)[\s\S]*?continue;/);
+    expect(placement).toContain('!permitsTargetTakerFallback(_targetPolicy)');
+    expect(engine).toContain('_rawExitRestLimit != null && !Number.isFinite(_exitRestLimit)');
   });
 });

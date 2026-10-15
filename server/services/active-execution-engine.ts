@@ -360,7 +360,7 @@ import type { FillPolicy } from '../core/math/maker-taker-decision.js';
 // P19-B7.2c (R3): the xStock hard-drop must not fire inside the weekend-closed window.
 import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
-import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement } from '../core/trading/pending-maker-logic.js';
+import { decideTargetRestExpiry, evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, permitsTargetTakerFallback, resolveTargetExitPolicyForClose } from '../core/trading/pending-maker-logic.js';
 import {
   selectCryptoTouch,
   transactableSide,
@@ -3078,17 +3078,30 @@ export class ActiveExecutionEngine {
         // (tec-evaluator.ts), and the TARGET-only placement gate (D2 below) excludes the
         // moonbag stop-above-target state — so a both-breached tick surfaces as a
         // stop-class condition and never reaches the rest evaluation (OBJ-3).
-        const _exitRestLimit = (position as any).exitLimitPrice != null ? parseFloat(String((position as any).exitLimitPrice)) : null;
+        const _rawExitRestLimit = (position as any).exitLimitPrice;
+        const _exitRestLimit = _rawExitRestLimit != null ? parseFloat(String(_rawExitRestLimit)) : null;
         const _isStopClass = exitCondition !== null && exitCondition.type !== 'target_hit';
         // Langston Step-4 ①: rest-cohort stamps travel EXPLICITLY via closePosition's
         // options — closePosition re-fetches the DB row, so stamps must never depend on
         // which rest fields happen to survive in the DB at close time.
         const _restPlacedAtMs = (position as any).exitRestPlacedAt ? new Date((position as any).exitRestPlacedAt).getTime() : null;
         let _exitRestStamp: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' } | null = null;
+        const _savedTargetPolicy = (position as any).targetExitFillPolicy as FillPolicy | null | undefined;
+        let _targetPolicyStamp: FillPolicy | null =
+          _savedTargetPolicy === 'maker_only' || _savedTargetPolicy === 'maker_preferred'
+            ? _savedTargetPolicy
+            : null;
         if (_isStopClass && _exitRestLimit !== null && Number.isFinite(_exitRestLimit)) {
           // Stop-during-rest: the rest is cancelled by the stop-class taker close below;
           // it stamps as a CONVERT — a maker miss for the AC-6 denominator.
           _exitRestStamp = { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'convert' };
+        }
+
+        // A malformed persisted rest must not be mistaken for "no rest" and routed
+        // through target placement/taker fallback. Stops remain outside target policy.
+        if (this.mode === 'paper' && _rawExitRestLimit != null && !Number.isFinite(_exitRestLimit) && !_isStopClass) {
+          console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: persisted target-rest limit is invalid — target action refused`);
+          continue;
         }
 
         if (this.mode === 'paper' && _exitRestLimit !== null && Number.isFinite(_exitRestLimit) && !_isStopClass) {
@@ -3121,6 +3134,7 @@ export class ActiveExecutionEngine {
             console.log(`[B-CLASS-LEG-FILL-MODE][LEGACY_TARGET_REST_CLEARED] ${position.symbol}: legacy_missing_fill_provenance — position remains open`);
             continue;
           }
+          _targetPolicyStamp = _targetPolicy;
           const _targetArrivalMs = _posClass === 'crypto_spot'
             ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.quoteArrivedAtMs : null)
             : (_posClass === 'xstock_spot' ? xsArrivedAtMs : null);
@@ -3138,6 +3152,7 @@ export class ActiveExecutionEngine {
             }, priceSource, {
               makerExitFill: { limit: _exitRestLimit },
               exitRest: { restedAtPrice: _exitRestLimit, placedAtMs: _restPlacedAtMs, outcome: 'fill' },
+              targetExitFillPolicy: _targetPolicy,
               // ★ THIS IS THE OBJ-2 CASE, AND IT IS THE WHOLE REASON THE COLUMN EXISTS.
               // The trade CLOSES at `_exitRestLimit` (the resting limit), but what DROVE the close
               // is the tick that traded through it (since `8a-P3`, the BID on crypto). Recording only the exit
@@ -3151,14 +3166,21 @@ export class ActiveExecutionEngine {
             // CONVERT (deadline fired): clear the rest; the tick's own evaluation decides —
             // condition still target_hit → taker close below (books the convert friction,
             // AC-2/OBJ-5 via the normal path); condition null → position simply continues.
-            console.log(`[P19-B8.6][EXIT_REST_CONVERT] ${position.symbol}: rest at ${_exitRestLimit} hit the deadline unfilled — converting (taker path governs this tick)`);
+            const _expiryDecision = decideTargetRestExpiry(_targetPolicy, exitCondition?.type === 'target_hit');
             await storage.updateActiveOpenPosition(this.mode, position.id, {
-              exitLimitPrice: null, exitRestPlacedAt: null, exitDeadline: null, targetExitFillPolicy: null,
+              exitLimitPrice: null,
+              exitRestPlacedAt: null,
+              exitDeadline: null,
+              targetExitFillPolicy: _expiryDecision.preservedPolicy,
             } as any);
-            if (_targetPolicy === 'maker_only') {
-              console.log(`[B-CLASS-LEG-FILL-MODE][EXIT_REST_EXPIRED] ${position.symbol}: maker_only rest cleared; position remains open`);
+            if (!_expiryDecision.closeAsTakerNow) {
+              const _stayOpenReason = exitCondition?.type === 'target_hit'
+                ? 'policy forbids taker conversion'
+                : 'no current target hit';
+              console.log(`[B-CLASS-LEG-FILL-MODE][EXIT_REST_EXPIRED] ${position.symbol}: ${_targetPolicy} rest cleared; ${_stayOpenReason}; position remains open`);
               continue;
             }
+            console.log(`[P19-B8.6][EXIT_REST_CONVERT] ${position.symbol}: maker_preferred rest at ${_exitRestLimit} hit the deadline unfilled — converting (taker path governs this tick)`);
             // ALL rest fields are cleared in DB (nothing load-bearing survives for a
             // future cleanup to break — Langston ①); the same-tick taker close gets its
             // stamps via the explicit exitRest option below, never from the DB row.
@@ -3172,24 +3194,37 @@ export class ActiveExecutionEngine {
           }
         } else if (this.mode === 'paper' && exitCondition?.type === 'target_hit' && _exitRestLimit === null) {
           // PLACEMENT: fresh target_hit, no rest up. D2 (Langston): the TEC guard —
-          // resting is only defined for plain TARGET mode; any other engine state falls
-          // back to the EXISTING immediate taker exit (never a stranded position).
+          // resting is only defined for plain TARGET mode. Policy is resolved before
+          // that distinction so no target action can bypass a missing/invalid policy.
           const _tecMode = (position as any).tradeMode ?? 'TARGET';
+          const _restClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass);
+          if (_restClass === null) {
+            console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: asset class is missing or unresolvable — target action refused`);
+            continue;
+          }
+          let _targetPolicy: FillPolicy;
+          try {
+            _targetPolicy = resolveFillPolicy(_restClass, 'target_exit');
+          } catch (policyErr) {
+            console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: target policy unavailable — target action refused:`, policyErr instanceof Error ? policyErr.message : policyErr);
+            continue;
+          }
+          _targetPolicyStamp = _targetPolicy;
+          const _restTarget = position.takeProfit != null ? parseFloat(String(position.takeProfit)) : NaN;
+          if (!Number.isFinite(_restTarget) || _restTarget <= 0) {
+            console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: target price is invalid — target action refused`);
+            continue;
+          }
           if (_tecMode === 'TARGET') {
             let _restBudgetMs: number | null = null;
-            let _targetPolicy: FillPolicy | null = null;
             try {
-              const _restClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken') ?? 'crypto_spot';
               _restBudgetMs = getCachedNumberRequired('maker_taker', 'exit_maker_max_pending_ms',
                 { exchange: '*', assetClass: _restClass, strategy: '*', regime: '*' });
-              _targetPolicy = resolveFillPolicy(_restClass, 'target_exit');
             } catch (knobErr) {
               _restBudgetMs = null;
-              _targetPolicy = null;
-              console.warn(`[P19-B8.6][EXIT_REST_SKIP] ${position.symbol}: target-rest config unavailable — falling back to the immediate taker exit (never strand):`, knobErr instanceof Error ? knobErr.message : knobErr);
+              console.warn(`[P19-B8.6][EXIT_REST_SKIP] ${position.symbol}: target-rest budget unavailable — falling back to the immediate taker exit (never strand):`, knobErr instanceof Error ? knobErr.message : knobErr);
             }
-            const _restTarget = position.takeProfit != null ? parseFloat(String(position.takeProfit)) : NaN;
-            if (_restBudgetMs !== null && _targetPolicy !== null && Number.isFinite(_restTarget) && _restTarget > 0) {
+            if (_restBudgetMs !== null && Number.isFinite(_restTarget) && _restTarget > 0) {
               const _placedAt = new Date();
               await storage.updateActiveOpenPosition(this.mode, position.id, {
                 exitLimitPrice: _restTarget.toString(),
@@ -3200,9 +3235,17 @@ export class ActiveExecutionEngine {
               console.log(`[P19-B8.6][EXIT_REST_PLACED] ${position.symbol}: target ${_restTarget} touched at ${currentPrice} — resting the exit as a maker sell (deadline +${Math.round(_restBudgetMs / 60000)}min); fill requires a LATER tick at/through the limit (D1)`);
               continue; // no close this tick — the rest is the exit order
             }
-            // knob/target unusable → fall through to the immediate taker exit (D2)
+            // The legacy no-budget fallback is permitted only by maker_preferred.
+            if (!permitsTargetTakerFallback(_targetPolicy)) {
+              console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: maker_only target cannot rest without a valid budget — target action refused`);
+              continue;
+            }
           } else {
-            console.warn(`[P19-B8.6][EXIT_REST_REFUSED] ${position.symbol}: TEC state '${_tecMode}' is non-TARGET — rest undefined under ratcheting; falling back to the immediate taker exit (D2 fail-closed, never strand)`);
+            if (!permitsTargetTakerFallback(_targetPolicy)) {
+              console.error(`[B-CLASS-LEG-FILL-MODE][TARGET_POLICY_REFUSED] ${position.symbol}: maker_only target cannot rest in TEC state '${_tecMode}' — target action refused`);
+              continue;
+            }
+            console.warn(`[P19-B8.6][EXIT_REST_REFUSED] ${position.symbol}: TEC state '${_tecMode}' is non-TARGET — rest undefined under ratcheting; maker_preferred falls back to the immediate taker exit (D2)`);
           }
         }
 
@@ -3227,6 +3270,7 @@ export class ActiveExecutionEngine {
 
           await this.closePosition(position.id, currentPrice, exitCondition, priceSource, {
             ...(_exitRestStamp ? { exitRest: _exitRestStamp } : {}),
+            ...(_targetPolicyStamp ? { targetExitFillPolicy: _targetPolicyStamp } : {}),
             // ⛔ `8a-P4b` P6 — CORRECTED. This read "the decision price IS the exit price … by construction", and it
             // is false on both classes: `currentPrice` here is the MARK, passed as the REQUESTED price, while the
             // booked `actual_exit_price` comes from the taker fill, which WALKS THE BIDS (`closePosition` → the depth
@@ -3898,6 +3942,8 @@ export class ActiveExecutionEngine {
        *  diverged/synthetic ones are EXCLUDED from learning capture. */
       flatten?: boolean;
       exitRest?: { restedAtPrice: number; placedAtMs: number | null; outcome: 'fill' | 'convert' };
+      /** The policy snapshot governing the target rest/action that led to this close. */
+      targetExitFillPolicy?: FillPolicy;
       // ── B-EXIT-PROVENANCE P5 — the EXIT stamp, carried on the SAME explicit-payload
       // mechanism Langston authored for `exitRest`, not a parallel one. Same constraint,
       // and it is his: this method RE-FETCHES the position row, so a stamp must never be
@@ -4433,7 +4479,10 @@ export class ActiveExecutionEngine {
         exitRestDurationMs: options?.exitRest?.placedAtMs != null
           ? Math.max(0, Date.now() - options.exitRest.placedAtMs)
           : null,
-        targetExitFillPolicy: (position as any).targetExitFillPolicy ?? null,
+        targetExitFillPolicy: resolveTargetExitPolicyForClose(
+          options?.targetExitFillPolicy,
+          (position as any).targetExitFillPolicy,
+        ),
         // ── B-EXIT-PROVENANCE P5 — persist the exit stamp (OBJ-1/2/3).
         // ⛔ `exit_price_source` falls back to the `priceSource` PARAMETER, never to a literal
         // string. `closePosition`'s `priceSource` DEFAULTS to `'manual_stop'` upstream, which is
@@ -5393,23 +5442,24 @@ export class ActiveExecutionEngine {
     // the haircut-adjusted, pFill-weighted maker netEV). Take the EV-SIGN pass/fail
     // from that snapshot so a maker-chosen crypto opener (taker netEV<0, chosen
     // netEV>0) passes while its taker recompute would reject. The taker recompute
-    // still supplies score/pWin/diagnostics. NULL snapshot (pre-B7.2 rows / a
-    // non-snapshotted path) → fall back to the taker isTradeable (no change).
-    // The chosen-leg taker branch equals this recompute exactly (same at-queue DI,
-    // same kernel, same friction), so a taker-chosen signal is unaffected.
+    // still supplies score/pWin/diagnostics. Policy-stamped rows without a finite
+    // selected EV now fail closed; substituting taker recomputation would erase
+    // the policy decision and violate the single-consistent-number invariant.
     const _b72ChosenNetEv = (signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : null;
     const _b72ChosenMode = (signal as any).chosenEntryMode as 'taker' | 'maker' | null | undefined;
     const _entryFillPolicy = (signal as any).entryFillPolicy as FillPolicy | null | undefined;
     if (
       (_b72ChosenMode !== 'taker' && _b72ChosenMode !== 'maker')
       || (_entryFillPolicy !== 'maker_only' && _entryFillPolicy !== 'maker_preferred')
+      || typeof _b72ChosenNetEv !== 'number'
+      || !Number.isFinite(_b72ChosenNetEv)
     ) {
-      console.error(`[B-CLASS-LEG-FILL-MODE][OPEN_REJECT] ${signal.symbol}: decision snapshot missing mode or entry policy`);
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'POLICY_SNAPSHOT_MISSING', 'decision snapshot missing mode or entry policy');
-      return { opened: false, stage: 'POLICY_SNAPSHOT_MISSING', reason: 'decision snapshot missing mode or entry policy' };
+      console.error(`[B-CLASS-LEG-FILL-MODE][OPEN_REJECT] ${signal.symbol}: decision snapshot missing mode, entry policy, or finite selected EV`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'POLICY_SNAPSHOT_MISSING', 'decision snapshot missing mode, entry policy, or finite selected EV');
+      return { opened: false, stage: 'POLICY_SNAPSHOT_MISSING', reason: 'decision snapshot missing mode, entry policy, or finite selected EV' };
     }
-    let _b72IsTradeable = _b72ChosenNetEv != null ? (_b72ChosenNetEv > 0) : expectancyResult.isTradeable;
-    const _b72EffectiveNetEv = _b72ChosenNetEv != null ? _b72ChosenNetEv : expectancyResult.netEV;
+    let _b72IsTradeable = _b72ChosenNetEv > 0;
+    const _b72EffectiveNetEv = _b72ChosenNetEv;
 
     // ── [11.8B] SHADOW CONVERSION (Kyle override 2026-07-16; Langston ruling AMENDED —
     // "an alarm whose stated job is drift detection has no business blocking") ────────
