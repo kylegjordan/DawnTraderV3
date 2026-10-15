@@ -322,6 +322,6 @@ Local closeout at code ref `12c0b7134`: 5 focused files passed; 24 tests passed 
 
 ### Increment-5 local verification before review push
 
-- Ten availability and shared-writer regression files passed: 54 tests passed and 8 database-backed tests skipped because the isolated PostgreSQL test database is unavailable locally.
+- Eleven availability and shared-writer regression files passed: 71 tests passed and 8 database-backed tests skipped because the isolated PostgreSQL test database is unavailable locally. The shutdown fence explicitly proves that a ticker-drain failure does not skip the xStock handoff, while a handoff-persistence failure fails shutdown instead of recording a false clean boundary.
 - The TypeScript baseline gate reported 335 current project diagnostics against the 337-diagnostic baseline, with zero regressions. The two below-baseline diagnostics are the already-reviewed exact-export type corrections, so the baseline was not changed.
 - The production build passed. Migration-backed handoff behavior, four-job CI, Coltrane review, deployment, and a real old-process/new-process handoff remain required before this increment is complete.

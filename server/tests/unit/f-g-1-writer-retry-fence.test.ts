@@ -63,6 +63,19 @@ vi.mock('../../services/passive-archive/ticker-batch-writer.js', () => ({
   },
 }));
 
+const _handoffs: unknown[] = [];
+let _handoffRejects = false;
+vi.mock('../../services/passive-archive/xstock-bar-availability.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/passive-archive/xstock-bar-availability.js')>();
+  return {
+    ...actual,
+    recordXstockWriterHandoff: async (state: unknown) => {
+      _handoffs.push(state);
+      if (_handoffRejects) throw new Error('handoff persistence failed');
+    },
+  };
+});
+
 import {
   isTransientWriteError,
   clearPermanentAlertLatch,
@@ -103,6 +116,8 @@ beforeEach(() => {
   _alerts.length = 0;
   _tickerStops.length = 0;
   _tickerStopRejects = false;
+  _handoffs.length = 0;
+  _handoffRejects = false;
 });
 afterEach(async () => {
   _dbState.throwWith = null;
@@ -303,6 +318,7 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
     await drainArchiveBuffersForShutdown();
     expect(_tickerStops).toHaveLength(1);             // the UNRECOVERABLE leg ran
     expect(_dbState.inserted.flat()).toHaveLength(1); // and so did the OHLC leg
+    expect(_handoffs).toHaveLength(1);                // and the clean boundary was persisted
   });
 
   // MUTATION: swap Promise.allSettled for Promise.all and this fails — one failing leg would
@@ -313,6 +329,14 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
     await expect(drainArchiveBuffersForShutdown()).resolves.toBeUndefined();
     expect(_tickerStops).toHaveLength(1);
     expect(_dbState.inserted.flat()).toHaveLength(1);
+  });
+
+  // MUTATION: swallow the handoff failure and this fails. A process that exits
+  // cleanly without durable proof would make the final observation false-green.
+  it('fails shutdown when the durable xStock handoff cannot be persisted', async () => {
+    _handoffRejects = true;
+    await expect(drainArchiveBuffersForShutdown()).rejects.toThrow(/handoff persistence failed/);
+    expect(_handoffs).toHaveLength(1); // positive control: the persistence path ran
   });
 
   // ⚠️ THE ONE SOURCE-TEXT ASSERTION I KEPT — AND MY FIRST VERSION OF IT WAS SATISFIED BY THE
@@ -327,11 +351,15 @@ describe('F-G-1 #918 — the drain that had no caller', () => {
   // ⚠️ AND IT WEAKENS MY OWN J5 ARGUMENT TO LANGSTON: I defended keeping this against his ruling
   // on the grounds that it was "the only thing that made #918 real". It was not doing that job.
   it('is actually CALLED from the live shutdown handler — a call, not an import', () => {
-    const raw = readFileSync(join(process.cwd(), 'server/core/boot_orchestrator.ts'), 'utf8');
+    const raw = readFileSync(join(process.cwd(), 'server/index.ts'), 'utf8');
     const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     expect(code).toMatch(/await\s+drainArchiveBuffersForShutdown\s*\(\s*\)/);
-    const i = code.search(/await\s+drainArchiveBuffersForShutdown\s*\(/);
-    expect(code.slice(Math.max(0, i - 400), i + 400)).toContain('catch');
+    const callAt = code.search(/await\s+drainArchiveBuffersForShutdown\s*\(/);
+    const exitAt = code.indexOf('process.exit(0)', callAt);
+    const catchAt = code.indexOf('catch (error)', exitAt);
+    expect(callAt).toBeGreaterThan(0);
+    expect(exitAt).toBeGreaterThan(callAt);
+    expect(catchAt).toBeGreaterThan(exitAt);
   });
 });
 
