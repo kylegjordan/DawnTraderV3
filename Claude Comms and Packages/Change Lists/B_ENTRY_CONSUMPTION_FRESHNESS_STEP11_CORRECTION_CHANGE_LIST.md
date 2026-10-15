@@ -17,8 +17,8 @@ The required one-pass fresh reader found three load-bearing qualifications in th
 
 ## Verification before review
 
-- `npx vitest run server/tests/unit/b-entry-consumption-freshness.test.ts server/tests/unit/b-entry-consumption-freshness-engine.test.ts`
-- Result: 2 test files passed; 26/26 tests passed.
+- `npx vitest run server/tests/unit/b-entry-distance-guard.test.ts server/tests/unit/b-entry-consumption-freshness.test.ts server/tests/unit/b-entry-consumption-freshness-engine.test.ts`
+- Result: 3 test files passed; 46/46 tests passed. The adjacent entry-distance source fence was updated to follow the renamed fill-promise binding while preserving its floor-before-fill assertion.
 - `git -c core.whitespace=cr-at-eol diff --check`: clean.
 
 `REVIEWER: claim-only · name the objects that settle the same-snapshot active immediate-open mechanism and other states consistent with them · active-path/VTS scope, paper-port terminology, and pre-call PASS-log gap hit · re-derived yes`

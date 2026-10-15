@@ -84,7 +84,7 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
   });
   it('the floor is read BEFORE the fill, inside a catch (Langston Step-1 FINDING-1: a throw past the fill is an uncounted exit)', () => {
     const floor = at('try { _entryFloor = getPerClassTargetGate(_openClass, signal.strategy).minRR; }');
-    const fill = at('const _openFill = await this.orderPlacer.openOrder({');
+    const fill = at('const _openFillPromise = this.orderPlacer.openOrder({');
     expect(floor).toBeLessThan(fill);
     expect(src).toContain('catch (floorErr) { _entryFloorNote =');
   });
