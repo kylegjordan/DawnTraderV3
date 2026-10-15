@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS xstock_bar_clock_guard (
   last_observed_at timestamptz NOT NULL,
   primary_identity text NOT NULL,
   contract_version text NOT NULL,
+  contract_active boolean NOT NULL DEFAULT false,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
@@ -87,14 +88,22 @@ ALTER TABLE xstock_spot_ohlc_1m
   ADD COLUMN IF NOT EXISTS winning_payload_hash text,
   ADD COLUMN IF NOT EXISTS projection_generation bigint NOT NULL DEFAULT 0;
 
--- Once the additive schema is present, no writer may change the compact xStock projection without
--- rotating its immutable winner ID. This closes the rolling-deploy overlap where an old process
--- knows the F-G-1 arrived_at guard but not the revision ledger.
+-- Before the first immutable event exists, the still-running pre-deploy process may finish its
+-- legacy writes while the migration is being installed. The first new-writer event is the durable
+-- activation boundary. From then onward, rollback/legacy writes may not mutate the projection
+-- without rotating its immutable winner ID.
 CREATE OR REPLACE FUNCTION guard_xstock_projection_revision_link()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  contract_active boolean;
 BEGIN
+  SELECT g.contract_active INTO contract_active
+    FROM xstock_bar_clock_guard g WHERE g.singleton = true;
+  IF NOT contract_active THEN
+    RETURN NEW;
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.arrived_at IS NOT NULL AND NEW.winning_revision_id IS NULL THEN
       RAISE EXCEPTION 'xStock projection write missing immutable winner revision';
@@ -224,6 +233,13 @@ BEGIN
   IF p_contract_version IS DISTINCT FROM 'xstock-bar-availability/v1' THEN
     RAISE EXCEPTION 'unsupported xstock bar availability contract: %', p_contract_version;
   END IF;
+
+  -- This is the one-way cutover from migration-compatible legacy writes to the
+  -- revision-linked projection contract. A rollback to the old writer remains
+  -- fail-closed because no rollback clears this durable state.
+  UPDATE xstock_bar_clock_guard
+  SET contract_active = true, updated_at = clock_timestamp()
+  WHERE singleton = true AND NOT contract_active;
 
   FOR item IN SELECT value FROM jsonb_array_elements(p_rows) LOOP
     IF item->>'assetClass' IS DISTINCT FROM 'xstock_spot' THEN

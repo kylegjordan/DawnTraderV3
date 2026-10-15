@@ -12,7 +12,7 @@ vi.mock('../../services/xstock-ohlc-cache.js', () => ({
   xstockOhlcCache: { prewarmAvailabilitySnapshot: prewarm },
 }));
 
-import { runPrewarm } from '../../../scripts/b-new-34b-prewarm-snapshot.js';
+import { runAvailabilityPrewarm } from '../../../scripts/b-new-34b-prewarm-snapshot.js';
 
 beforeEach(() => {
   preview.mockReset();
@@ -35,7 +35,7 @@ describe('B-XSTOCK-BAR-AVAILABILITY restart/prewarm contract', () => {
         snapshotRowsWritten: 4,
       });
 
-    const result = await runPrewarm({ symbols: ['CORZ/USD'], lookbackDays: 14 });
+    const result = await runAvailabilityPrewarm({ symbols: ['CORZ/USD'], lookbackDays: 14 });
     expect(prewarm.mock.calls).toEqual([
       ['CORZ/USD', 60, 336],
       ['CORZ/USD', 15, 336],
@@ -56,7 +56,7 @@ describe('B-XSTOCK-BAR-AVAILABILITY restart/prewarm contract', () => {
       ],
     ]]));
 
-    const result = await runPrewarm({
+    const result = await runAvailabilityPrewarm({
       symbols: ['CORZ/USD'],
       lookbackDays: 2,
       dryRun: true,

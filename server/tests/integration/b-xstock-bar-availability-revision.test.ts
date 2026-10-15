@@ -16,6 +16,7 @@ const isTestDb = /^postgres(ql)?:\/\/[^@]*@(localhost|127\.0\.0\.1|postgres)(:\d
 const IS_CI = !!process.env.CI;
 const TAG = 'B-XSTOCK-BAR-AVAILABILITY-REVISION';
 const SYMBOL = 'BAVAILTEST/USD';
+const LEGACY_SYMBOL = 'BAVAILLEGACY/USD';
 const now = Date.now();
 const minute = new Date(Math.floor((now - 60_000) / 60_000) * 60_000);
 const A1 = new Date(now - 30_000);
@@ -47,6 +48,7 @@ async function cleanup(): Promise<void> {
     await tx.execute(sql`DELETE FROM xstock_bar_aggregate_revision WHERE symbol = ${SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_bar_revision_event WHERE symbol = ${SYMBOL}`);
     await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${SYMBOL}`);
+    await tx.execute(sql`DELETE FROM xstock_spot_ohlc_1m WHERE symbol = ${LEGACY_SYMBOL}`);
   });
 }
 
@@ -70,6 +72,55 @@ afterAll(async () => {
 describe(TAG, () => {
   it('runs only against the isolated test database', () => {
     if (IS_CI) expect(isTestDb).toBe(true);
+  });
+
+  it('allows the migration overlap, then permanently rejects legacy projection writes', async (ctx) => {
+    if (!dbReachable || !isTestDb) ctx.skip();
+
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        UPDATE xstock_bar_clock_guard
+        SET contract_active = false
+        WHERE singleton = true
+      `);
+      await tx.execute(sql`
+        INSERT INTO xstock_spot_ohlc_1m (
+          symbol, asset_class, exchange, interval_begin, open, high, low, close,
+          volume, metadata, captured_at, arrived_at
+        ) VALUES (
+          ${LEGACY_SYMBOL}, 'xstock_spot', 'kraken-equities', ${minute.toISOString()}::timestamptz,
+          1, 1, 1, 1, 1, '{"schema_version":1}'::jsonb, NOW(), ${A1.toISOString()}::timestamptz
+        )
+      `);
+      await tx.execute(sql`
+        UPDATE xstock_bar_clock_guard
+        SET contract_active = true
+        WHERE singleton = true
+      `);
+    });
+
+    const [legacy] = await rows<{ winning_revision_id: string | null }>(db.execute(sql`
+      SELECT winning_revision_id
+      FROM xstock_spot_ohlc_1m
+      WHERE symbol = ${LEGACY_SYMBOL}
+    `));
+    expect(legacy).toBeDefined(); // positive control: the migration-overlap write landed
+    expect(legacy.winning_revision_id).toBeNull();
+
+    await expect(db.execute(sql`
+      UPDATE xstock_spot_ohlc_1m
+      SET close = 2, arrived_at = ${A2.toISOString()}::timestamptz
+      WHERE symbol = ${LEGACY_SYMBOL}
+    `)).rejects.toThrow(/did not rotate immutable winner revision/);
+    await expect(db.execute(sql`
+      INSERT INTO xstock_spot_ohlc_1m (
+        symbol, asset_class, exchange, interval_begin, open, high, low, close,
+        volume, metadata, captured_at, arrived_at
+      ) VALUES (
+        'BAVAILLEGACY2/USD', 'xstock_spot', 'kraken-equities', ${minute.toISOString()}::timestamptz,
+        1, 1, 1, 1, 1, '{"schema_version":1}'::jsonb, NOW(), ${A2.toISOString()}::timestamptz
+      )
+    `)).rejects.toThrow(/missing immutable winner revision/);
   });
 
   it('X@A1 -> identical X@A3 -> changed Y@A2 preserves the exact winner chain', async (ctx) => {
