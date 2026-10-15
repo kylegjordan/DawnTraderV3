@@ -57,6 +57,13 @@ has SHA-256 `a275f0e9389fa74f0509cb87f1532aab8885709d20df1a8bc659a1aeccb9648b`.
 The different digest sent in the first Step-8 request was not the graded Git blob and is
 withdrawn.
 
+The first Step-8 request also incorrectly instructed Coltrane to run the browser-session
+mint/check executable himself. That executable is intentionally `root:root 0750`, and its
+scheduled service runs as root; direct reviewer execution is neither permitted nor required.
+The root-run check returned `SESSION OK`, while Coltrane's successful browser render and
+independent authenticated read directly proved that his stored session was usable. The
+reviewer-side pre-check requirement is withdrawn; the root-only scheduled health check remains.
+
 Kyle's 2026-10-15 direction is that the main Dashboard is a low-priority legacy surface that
 will be reconsidered and redesigned later. This batch does not preserve, improve or redesign
 the Ready to Buy card. Its only obligation was to remove the hidden administrator-only action
