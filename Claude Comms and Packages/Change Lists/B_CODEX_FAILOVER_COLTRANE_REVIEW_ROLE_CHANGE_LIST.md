@@ -15,19 +15,26 @@ all four Codex sessions on duty and the Langston bridge inactive.
   invocation proves crew mode `CODEX`, Coltrane replaces Langston for the normal review gates.
 - Read `/var/lib/crew-switch/state.json` for every invocation in both the live Discord bot and the
   dormant log-tail fallback, rather than inferring the mode from the sender or a stale startup.
-- Fail closed to the existing advisor-only role when the state is missing, unreadable, malformed,
-  unknown or `CLAUDE`.
+- Keep the existing advisor-only role for proven `CLAUDE`; fail closed with an explicit refusal
+  when the state is missing, unreadable, malformed or unsupported.
+- Re-read the trusted mode immediately before publication and discard the generated answer if the
+  crew changed while Coltrane was working, so a Codex-shift review cannot land in a Claude shift.
+- Name both the Claude and Codex actors in Coltrane's routing table so the temporary crew has the
+  same addressable roles instead of inheriting Claude-only labels.
 - Preserve every evidence, independence, sandbox, review-ref and communication rule. The correction
   changes only which reviewer owns the normal gates during the already-authorized Codex shift.
 
 ## Required proof
 
-1. Offline mutation matrix: exact `codex` and case/whitespace variants select the temporary reviewer
-   role; `claude`, missing, malformed and unknown states all select advisor-only.
-2. Exact-byte installation of the reviewed source into Coltrane's home and the live bot path.
-3. A live Codex-mode invocation accepts and completes the queued routine Step 1 review.
-4. A non-live state-file mutation demonstrates that `claude` and an unreadable state produce the
-   advisor-only prompt without changing the actual crew state.
+1. Offline mutation matrix across both invocation modules: exact `codex` and case/whitespace
+   variants select the temporary reviewer role; `claude` selects advisor-only; missing, malformed,
+   unsupported and deterministically unreadable states select `UNKNOWN` and refuse routine review.
+2. A mode-transition mutation starts in `CODEX`, changes the isolated state to `CLAUDE`, and proves
+   the generated response is rejected before publication in both invocation modules.
+3. Exact-byte installation of the reviewed source into Coltrane's home and both invocation paths.
+4. A live Codex-mode invocation accepts and completes the queued routine Step 1 review.
+5. A non-live state-file mutation demonstrates that `claude` produces the advisor-only prompt and
+   an unreadable state produces an explicit `UNKNOWN` refusal, without changing the actual crew state.
 
 ## Bootstrap order
 

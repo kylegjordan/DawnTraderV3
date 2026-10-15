@@ -71,23 +71,50 @@ def log(row):
         pass
 
 
-def reviewer_role_instruction(state_path=CREW_STATE):
-    """Use the live switch record; any failed read preserves the advisor-only default."""
+def reviewer_role(state_path=CREW_STATE):
+    """Bind each invocation to the root-owned live crew mode, failing closed on ambiguity."""
     try:
         with open(state_path, encoding="utf-8") as fh:
-            mode = str(json.load(fh).get("mode") or "").strip().lower()
-    except Exception:
-        mode = ""
-    if mode == "codex":
-        return (
-            "Crew mode is CODEX. Kyle authorized you to replace Langston as the routine "
-            "reviewer for this shift. Perform requested scope, pre-audit, graded-ref code, "
-            "completion and staging-verification reviews for on-duty Codex sessions. Apply "
-            "the same evidence bar and independence Langston would."
+            mode = str(json.load(fh).get("mode", "")).strip().lower()
+    except Exception as exc:
+        return "unknown", (
+            "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state could not be read "
+            "(%s: %s). Refuse routine workflow reviews and report this exact failure; do "
+            "not guess which reviewer is on duty." % (type(exc).__name__, exc)
         )
-    return (
-        "Crew mode is not proven CODEX. You are NOT part of the routine batch and review "
-        "loop; that is Langston's. You are here because someone asked for you."
+    if mode == "codex":
+        return mode, (
+            "CURRENT CREW MODE: CODEX. You replace Langston as the on-duty reviewer for "
+            "this shift. Perform routine scope, pre-audit, code-diff, staging-verification, "
+            "iteration, and completion reviews when addressed; Langston is off duty."
+        )
+    if mode == "claude":
+        return mode, (
+            "CURRENT CREW MODE: CLAUDE. Langston is the on-duty routine reviewer. You are "
+            "an additional advisor only when addressed and do not replace his workflow gates."
+        )
+    return "unknown", (
+        "CURRENT CREW MODE: UNKNOWN. The trusted crew-switch state contains unsupported "
+        "mode %r. Refuse routine workflow reviews and report this exact failure; do not "
+        "guess which reviewer is on duty." % mode
+    )
+
+
+def reviewer_mode_transition(invocation_mode, state_path=CREW_STATE):
+    """Return whether the trusted mode changed and the mode observed before publication."""
+    publish_mode, _ = reviewer_role(state_path)
+    return publish_mode != invocation_mode, publish_mode
+
+
+def response_after_mode_check(invocation_mode, response, recipient, state_path=CREW_STATE):
+    """Discard a generated response when its reviewer authority changed while it ran."""
+    changed, publish_mode = reviewer_mode_transition(invocation_mode, state_path)
+    if not changed:
+        return False, response
+    return True, (
+        recipient + " — Coltrane discarded the response because crew mode changed from "
+        + invocation_mode.upper() + " to " + publish_mode.upper()
+        + " while it was running. Re-send the request if it is still needed."
     )
 
 
@@ -143,14 +170,16 @@ def recent_context(n=25):
         return ""
 
 
-def invoke(message, why):
+def invoke(message, why, role_prompt):
     """Run codex as the coltrane user. ⛔ The prompt goes in on STDIN, never in argv —
     it is arbitrary channel prose, and this project has had six separate artifacts
     mangled by putting text on a command line."""
     prompt = (
         "You have been addressed in the DawnTrader crew channel on Discord." + NL
         + "Reason you were woken: " + why + "." + NL + NL
-        + "⛔ Follow your AGENTS.md. " + reviewer_role_instruction() + NL + NL
+        + role_prompt + NL
+        + "⛔ Follow your AGENTS.md. The trusted current-mode line above decides whether "
+        + "you or Langston owns routine review for this invocation." + NL + NL
         + "⛔ Reply with the MESSAGE TEXT ONLY — no preamble, no 'here is my reply'. It is "
         + "posted verbatim to the channel as `Codex`." + NL
         + "⛔ LEAD your reply with the NAME of whoever you are answering, so their session "
@@ -216,7 +245,13 @@ def main():
 
             text = str(row.get("text") or row.get("message") or "")
             t0 = time.time()
-            rc, out, err = invoke(text, why)
+            invocation_mode, role_prompt = reviewer_role()
+            rc, out, err = invoke(text, why, role_prompt)
+
+            recipient = str(row.get("sender") or row.get("kind") or "Crew")
+            role_changed, out = response_after_mode_check(invocation_mode, out, recipient)
+            if role_changed:
+                rc = 0
 
             toks = ""
             m = re.search(r"tokens used[\s:]*([\d,]+)", err)
