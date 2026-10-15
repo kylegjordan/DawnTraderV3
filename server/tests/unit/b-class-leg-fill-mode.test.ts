@@ -47,6 +47,14 @@ describe('B-CLASS-LEG-FILL-MODE — policy overlay', () => {
     )).toEqual({ admitted: false, policy: 'maker_only', reason: 'maker_not_positive' });
   });
 
+  it('maker_only selects maker EV even when the pre-policy best-of-both arm was taker', () => {
+    expect(applyMakerTakerFillPolicy(
+      decision({ chosenMode: 'taker', chosenNetEV: 3, takerNetEV: 3, makerNetEVAdjusted: 2 }),
+      'maker_only',
+      -0.01,
+    )).toMatchObject({ admitted: true, chosenMode: 'maker', chosenNetEV: 2 });
+  });
+
   it('maker_preferred takes maker first, then independently-admissible taker, then rejects', () => {
     expect(applyMakerTakerFillPolicy(decision(), 'maker_preferred', 0)).toMatchObject({ admitted: true, chosenMode: 'maker' });
     expect(applyMakerTakerFillPolicy(
@@ -201,6 +209,16 @@ describe('B-CLASS-LEG-FILL-MODE — durable wiring fences', () => {
     expect(persistence).toMatch(/maker_limit_price, maker_placed_at, maker_deadline/);
     expect(persistence).toMatch(/entryFillPolicy: r\.entry_fill_policy/);
     expect(persistence).toMatch(/makerPlacedAt: r\.maker_placed_at/);
+  });
+
+  it('crypto VTS persists, rechecks, and logs the policy-selected EV', () => {
+    const runner = read('server/services/vts-runner.ts');
+    expect(runner).toContain('netEvAtOpen: _vtsPolicyDecision.chosenNetEV');
+    expect(runner).toContain('netEV: _vtsPolicyDecision.chosenNetEV');
+    expect(runner).toContain('entryMode=${_vtsPolicyDecision.chosenMode} netEV=${_vtsPolicyDecision.chosenNetEV.toFixed(6)}');
+    expect(runner).not.toContain('netEvAtOpen: _vtsMtDecision.chosenNetEV');
+    expect(runner).not.toContain('netEV: _vtsMtDecision.chosenNetEV');
+    expect(runner).not.toContain('netEV=${_vtsMtDecision.taker.netEV.toFixed(6)}');
   });
 
   it('refuses missing active snapshots and preserves explicit legacy dispositions', () => {

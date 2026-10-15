@@ -83,7 +83,7 @@ import { computeExposureBias, getExposureMultiplierSync } from '../utils/strateg
 import { getCachedCostMetrics, computeNetGeometry, getFrictionForAssetClass, computePairFrictionIndex } from '../core/math/cost-model.js';
 // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision (same pure
 // function the active path calls — F6) + its per-class DB-governed haircut resolver.
-// The VTS calls it before its Net-EV gate so VTS evaluates on best-of-both too.
+// The VTS calls it before its Net-EV gate, then overlays the configured fill policy.
 import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../core/math/maker-taker-decision.js';
 import { resolveFillPolicy, resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
@@ -854,7 +854,7 @@ interface OpenVirtualTrade {
   // paper-active runs; honest NULL during pure-passive — never fabricated).
   // kernelDiInputAtOpen = the value the kernel ACTUALLY consumed as DI (the proxy today),
   // so the calibrator can distinguish real-DI rows from proxy rows.
-  // netEvAtOpen = the best-of-both chosenNetEV the VTS gate evaluated.
+  // netEvAtOpen = the policy-selected chosenNetEV the VTS gate evaluated.
   // predictedPwinAtOpen = the kernel's taker-leg pWin (exposed, not recomputed).
   // Persistence: rides the record → vts_open_trades `context` jsonb + the closed-trade
   // JSON store (the calibration reader — same store the §4 probe read). No migration;
@@ -2080,8 +2080,8 @@ async function generatePhase10Signal(
   const decayPenalty = computeRealDecayPenalty(); // Phase 14: 0 for fresh signals
 
   // #558 A3: the DERIVED consumers of this finalScore are re-sourced off it — expectedEdge →
-  // taker.netEV/entryPrice, predictedProfit → taker.rawEV/entryPrice, the VTS log → netEV, the
-  // ablation metadata dropped. ⚠️ The call itself is KEPT (not removed as Step-1 planned): the
+  // taker.netEV/entryPrice, predictedProfit → taker.rawEV/entryPrice, and the VTS log → the
+  // policy-selected netEV; the ablation metadata dropped. ⚠️ The call itself is KEPT (not removed as Step-1 planned): the
   // crypto archiveSignalEval at ~:2623 ALSO reads this const and feeds the #582 signal_eval sink
   // (active-path co-fed) — a consumer past the Step-1/2 enumeration range, caught by tsc here. So
   // the crypto computeFinalScore call rides #582 alongside the xStock eval-cycle:656 caller; both
@@ -2108,13 +2108,15 @@ async function generatePhase10Signal(
   // round-trip FRACTION where the kernel contract requires PRICE-UNIT dollars, mis-scaling
   // friction by ~entryPrice× (direction flips at $1). The ONE computation site is now the
   // shared decideMakerTaker below, whose taker leg multiplies correctly (×entryPrice) —
-  // every former kernelResult consumer reads `_vtsMtDecision.taker.*` / `.chosenNetEV`.
+  // former kernelResult consumers read `_vtsMtDecision.taker.*`; policy-selected
+  // consumers read `_vtsPolicyDecision.chosenNetEV` after the overlay below.
 
   // ══════════════════════════════════════════════════════════════════════════════
   // P19-B7.2b (OBJ-A): the SHARED maker/taker best-of-both entry decision.
   // The VTS calls the SAME `decideMakerTaker` the active path uses (F6 — one shared
   // function, no duplicated economics), HERE, BEFORE the VTS Net-EV gate below, so the
-  // VTS evaluates on the best-of-both netEV too (Kyle: the decision is a service
+  // VTS first prices both arms, then the fill-policy overlay selects the admissible
+  // arm whose netEV the gate evaluates (Kyle: the decision is a service
   // SHARED across active-live, active-paper, AND the VTS). NOTE (Kyle 2026-07-01): the
   // VTS has NO SQE — this decision is standalone and unrelated to the SQE; on the
   // ACTIVE path the shared decision sits just BEFORE the SQE (not inside it — the SQE
@@ -2175,8 +2177,8 @@ async function generatePhase10Signal(
   // Active trading still uses strict netEV > 0 (in signal-orchestrator.ts)
   // VTS allows marginally negative EV for ML boundary learning
   // Signals with slightly negative EV teach the model where the profitability edge is
-  // P19-B7.2b (OBJ-A): gate on the CHOSEN best-of-both netEV — a taker-marginal /
-  // maker-better signal is evaluated on its best option, consistent with the active path.
+  // B-CLASS-LEG-FILL-MODE: gate on the policy-selected netEV. For maker_only this
+  // is the adjusted maker arm even when the pre-policy best-of-both arm was taker.
   if (_vtsPolicyDecision.chosenNetEV <= VTS_NET_EV_FLOOR) {
     logSkippedSignal({
       symbol,
@@ -2601,7 +2603,7 @@ async function generatePhase10Signal(
     // ACTUALLY consumed — post-#500 that IS the real DI (or honest-absent → kernel default).
     realDiAtOpen: propagatedDi ?? null,
     kernelDiInputAtOpen: DI,                       // == propagatedDi post-#500 (proxy DELETED)
-    netEvAtOpen: _vtsMtDecision.chosenNetEV,       // the best-of-both EV the VTS gate used
+    netEvAtOpen: _vtsPolicyDecision.chosenNetEV,   // the policy-selected EV the VTS gate used
     predictedPwinAtOpen: _vtsMtDecision.taker.pWin, // kernel taker-leg pWin (exposed, not recomputed)
     // B65.4.2: capture the original stop at trade-open time so it survives
     // ratcheting and is available on closed-trade record + open-trade API.
@@ -2720,12 +2722,12 @@ async function generatePhase10Signal(
     source: 'vts', // Phase 14: Source tag for fresh VTS data (legacy 'simulation' records flagged by migration)
     // P19-B3b: attach the computed net expected value so the caller-side Net-EV
     // floor check (Batch 26, ~line 3746) actually works (it was a dead branch before).
-    // P19-B8.5c (#503, Langston-blessed): attach the CHOSEN best-of-both netEV — the
+    // B-CLASS-LEG-FILL-MODE: attach the policy-selected netEV — the
     // SAME number this lane's primary floor gated above — so the caller-side guard is
     // a consistent re-check of the identical value, never a second opinion. (In the
     // maker-chosen case this differs from the taker leg BY DESIGN: the signal carries
     // what the gate actually used.)
-    netEV: _vtsMtDecision.chosenNetEV,
+    netEV: _vtsPolicyDecision.chosenNetEV,
   };
   
   // Directive 11.6: Trade record marked as pending - exit determined by resolveOpenVirtualTrades()
@@ -2769,7 +2771,7 @@ async function generatePhase10Signal(
     executionContext: isMultiStrategy ? 'VTS_MULTI' : 'VTS', // 11.8C
   };
   
-  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} netEV=${_vtsMtDecision.taker.netEV.toFixed(6)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
+  console.log(`[11.0E.1][VTS] Trade: ${symbol} regime=${regime} signalType=${signalType} strategy=${strategy} entryMode=${_vtsPolicyDecision.chosenMode} netEV=${_vtsPolicyDecision.chosenNetEV.toFixed(6)} pool=${pool} sourcePool=${sourcePool ?? 'quant'} context=${isMultiStrategy ? 'VTS_MULTI' : 'VTS'}`);
 
   // B67.0 — Factor ablation emit hook (VTS path mirror).
   // Today fires with empty alternates and no-ops (no factors deployed). When
