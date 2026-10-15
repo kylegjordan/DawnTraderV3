@@ -4,7 +4,7 @@
 
 **Approved plan:** `B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md`
 
-**Status:** Step 3 capture-phase implementation complete; ready for Step 4 review.
+**Status:** Step 3 capture-phase implementation complete; Step 4 corrections ready for exact-ref re-review.
 
 ## Step-4 dispatch header
 
@@ -37,8 +37,8 @@
 
 ## Exact review object
 
-- **Graded ref:** `744a5a4c8` on `migration/b-xstock-bar-availability-step4-codex-c` and `migration/aws-supabase` (code; this change list is committed immediately after it).
-- **Batch commits:** `65d66a6aa`, `9e7a2c068`, `d0ded2877`, `a0d3a9c34`, `661b8e818`, `7235d3052`, Step-3 boundary record `37ef9f382`, and capture-only deployment correction `744a5a4c8`.
+- **Graded code ref:** `12c0b71341939d60c92ce19c6ffe6faadb370fa2` on `migration/b-xstock-bar-availability-step4-codex-c`; this change list is committed immediately after it on that review branch. `origin/migration/aws-supabase` remains at `37ef9f382` until Step 4 approval, so none of the review-only commits is represented as shared yet.
+- **Batch commits:** `65d66a6aa`, `9e7a2c068`, `d0ded2877`, `a0d3a9c34`, `661b8e818`, `7235d3052`, Step-3 boundary record `37ef9f382`, capture-only deployment correction `744a5a4c8`, and Step-4 blocker closure `12c0b7134`.
 - **Review boundary:** P14 phase 1 only. The scanner and RTB consumer switch is deliberately absent until the full capacity/quality population passes. The exact aggregate/cache/manifest APIs are present but dormant; manual and lifecycle prewarm remain on the legacy path during capture so the old consumers receive the same producer contract.
 
 **REVIEWER:** claim-only · asked what objects settle the capture-only/no-live-consumer-switch claim and what other worlds fit them · **HIT:** shared snapshot prewarm could affect legacy reads, the projection trigger would reject old-process writes during migration, and caller absence alone was not an activation lock · **re-derived yes** — the live prewarm caller and deployment order confirmed both effects; this ref keeps exact prewarm as a separately named dormant API, leaves lifecycle/manual prewarm legacy, and activates the projection guard durably only when the new writer first runs.
@@ -163,7 +163,7 @@ evidence: {
 ## Increment 2 — exact aggregate, snapshot/cache, manifest, and prewarm identity
 
 - Added immutable daily-partitioned 15-minute and 60-minute aggregate revisions whose canonical payload names the exact ordered winning 1-minute revision set, its maximum certified availability bound/sequence, and the aggregate values.
-- Added a primary read-observation sequence and clock check after each exact source read. Primary identity uses the stable database system identity plus database/listener identity, so an ordinary database restart does not invalidate every historical certificate while a different cluster/listener still fails closed. Historical reads anchor both the source window and eligibility test to the requested cutoff; an uncertified or later actual winner cannot resurrect a lower certified revision.
+- Added a read observation and clock check after each exact source read. Certificates and reads now allocate from one causal sequence, so their order can be compared; primary identity uses the stable database system identity plus database/listener identity, so an ordinary database restart does not invalidate every historical certificate while a different cluster/listener still fails closed. Historical reads anchor both the source window and eligibility test to the requested cutoff; an uncertified or later actual winner cannot resurrect a lower certified revision.
 - Added content-addressed settled-window manifests and database checks that the complete ordered aggregate set exists, belongs to one symbol/interval and stable primary identity, is time-ordered, and matches the declared bounds and canonical payload before reuse.
 - Added snapshot columns and database guards that allow legacy all-NULL rows or fully linked exact rows, reject value/evidence drift under one aggregate ID, and reject inserts whose values or source evidence do not match the immutable aggregate.
 - Added a separate availability-aware cache API for 15-minute and 60-minute bars. Snapshot reads cross-check persisted aggregate values/evidence; a newer ineligible live collision replaces the whole older object; TTL hits retain the original read evidence; 240-minute reads now fail before the database.
@@ -201,3 +201,15 @@ evidence: {
 - The exact prewarm is now a separately named dormant API. The manual command and lifecycle controller continue to call the legacy prewarm throughout P14 phases 1-2, so the supposedly additive deployment cannot change the snapshot values consumed by the legacy scanner/RTB path.
 - The projection guard now has a one-way durable activation state. It permits the still-running old process to finish legacy writes while the migration is installed, activates inside the first new-writer transaction, and thereafter rejects inserts or mutations without immutable winner rotation—including a rollback to the old writer.
 - Focused verification at code ref `744a5a4c8`: 9 test files passed; 68 tests passed; 2 migration-backed local legs skipped because the isolated PostgreSQL test database is not available locally. The TypeScript baseline remained 337 current errors / 337 baseline errors. The pushed CI database must execute the migration-overlap/activation integration leg before review approval.
+
+### Step-4 review blocker closure
+
+Coltrane's exact-ref review at `744a5a4c8` returned five load-bearing blockers. Code ref `12c0b71341939d60c92ce19c6ffe6faadb370fa2` closes each one:
+
+1. **Activation is serialized.** Every legacy projection write now holds a shared lock on the durable activation row until commit, while the first revision-aware writer must take the conflicting update lock before it can activate. Activation therefore waits for every already-admitted legacy mutation; the state is one-way, and every later legacy write fails closed. A real two-connection integration mutation proves the waiter blocks, the pre-boundary transaction commits first, activation completes, deactivation is refused, and later legacy update/insert paths reject.
+2. **Wall-clock observations are taken inside the serialized boundary.** Certification and read observation acquire the clock-guard lock before sampling database wall time. Two separate two-connection mutations hold that lock, prove each observer is genuinely waiting on a database lock, advance the guarded clock, and prove the resumed observer cannot report an earlier time.
+3. **Certificate/read order uses one sequence domain.** The independent read sequence was removed; both source certificates and later reads allocate from `xstock_bar_visible_seq`. Eligibility now rejects a read sequence behind its source maximum, with a far-ahead source mutation plus a migration-backed positive path proving a later read orders after its source certificates.
+4. **Every exact snapshot source is revalidated against current winners.** Snapshot eligibility now requires every immutable source revision named by the stored aggregate to remain the current compact winner for that symbol. An older-than-overlay mutation returns the stale snapshot as the positive control but strips its exact identity and marks it legacy/unknown instead of resurrecting it.
+5. **Manifest persistence preserves and validates caller order.** The persistence path no longer sorts its input; it requires strictly increasing timestamps in the supplied array and rejects a reversed window before any manifest write.
+
+Local closeout at code ref `12c0b7134`: 5 focused files passed; 24 tests passed and 4 migration-backed two-connection/database legs skipped because the isolated PostgreSQL test database is unavailable locally. The TypeScript check reported 337 current errors over the whole project against the 337-error baseline, with no regression. Exact-ref four-job CI is pending the review-branch push and must be green before re-dispatch.
