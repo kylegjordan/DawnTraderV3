@@ -68,7 +68,14 @@ def load():
     try:
         with open(STATE) as f: st = json.load(f)
     except FileNotFoundError:
-        st = {'mode': 'claude', 'seq': 0, 'inbox_offset': None, 'history': []}
+        st = {'mode': 'claude', 'mode_generation': 0, 'seq': 0, 'inbox_offset': None, 'history': []}
+    # B-CODEX-FAILOVER: this is the ABA fence for reviewer authority.  The mode
+    # alone cannot distinguish CODEX -> CLAUDE -> CODEX during one invocation.
+    # Older state files predate the field and are initialized without claiming
+    # that a new mode transition occurred.  Only start() advances it.
+    st.setdefault('mode_generation', 0)
+    if type(st['mode_generation']) is not int or st['mode_generation'] < 0:
+        raise SystemExit('crew-switch: invalid mode_generation in state')
     st.setdefault('orders', {}); st.setdefault('history', [])
     st.setdefault('duty', {n: (KIND[n] == st['mode']) for n in KIND})
     return st
@@ -171,6 +178,7 @@ def start(to, by='kyle'):
             already = False
             superseded = _supersede(st, KIND.keys())
             oid = _new_order(st, 'crew', CREWS[frm], CREWS[to], f'crew {frm} -> {to}')
+            st['mode_generation'] += 1
             st['mode'] = to
             for n in KIND: st['duty'][n] = (KIND[n] == to)
             st['langston'] = {'on': to == 'claude', 'at': iso(), 'by': 'crew switch'}
@@ -288,6 +296,7 @@ def ack(oid, name):
 def status():
     st = load()
     print(f"crew mode: {st['mode'].upper()}")
+    print(f"mode generation: {st['mode_generation']}")
     print('on duty: ' + ', '.join(n for n, v in st['duty'].items() if v))
     a, e = langston_state(True)[1].split('/')
     print(f'Langston bridge: {a}/{e}')
