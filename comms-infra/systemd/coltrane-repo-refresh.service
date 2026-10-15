@@ -4,4 +4,6 @@ Documentation=repo comms-infra/codex/coltrane-repo-refresh
 
 [Service]
 Type=oneshot
+User=coltrane
+Group=coltrane
 ExecStart=/usr/local/bin/coltrane-repo-refresh
