@@ -122,7 +122,11 @@ _HEARTBEAT_BAD = re.compile(
     # and must still be delivered; "not armed" and "all alive" are not verdicts of failure.
     # STUCK (Step 7, Langston): a running watcher that cannot save — the heartbeat reports it instead of DEAD, because
     # re-arming it adds a duplicate. It is a problem too, and the stuck session is reachable, so it must be delivered.
-    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK)\b|\bcontrol:\s*NOT answered\b",
+    # CHECK FAILED (B-WAKE-HEARTBEAT-CONTROL-DATE, #1162, Langston Step-2 BLOCKER-1): the heartbeat's control decision
+    # (control_state.py) pages Kyle for states that are NOT an unanswered control - the record new/RESET/NOT PERSISTING,
+    # UNDETERMINED, ISSUER NOT RUN, a failed remote read. Each is its own true verdict, so this arm names it rather than
+    # borrowing "NOT answered", and every post that pages Kyle still wakes the sessions (NOTIFY is a subset of BAD).
+    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK)\b|\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b",
     re.I)
 
 def is_allclear_heartbeat(sender, text):

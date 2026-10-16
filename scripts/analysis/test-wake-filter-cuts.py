@@ -41,6 +41,13 @@ HB_STUCK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly 
 HB_DEAD_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
              "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
              "watchers: DEAD: CC-C | control: not run.")
+# B-WAKE-HEARTBEAT-CONTROL-DATE (#1162): the control decision's own failure verdict, everything else healthy.
+HB_CHECK_FAILED = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+                   "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
+                   "watchers: all alive | control: CHECK FAILED — control record new; CC-A answered.")
+HB_CONTROL_OK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+                 "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
+                 "watchers: all alive | control: CC-A answered; CC-B awaiting; CC-C re-issued; CC-INFRA DEAD.")
 HB_ALIVE_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
               "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
               "watchers: all alive | control: answered.")
@@ -99,6 +106,8 @@ CASES = [
     ("cc_outbound", "Heartbeat",   HB_BORDERLINE,  False, "Q2: \"borderline stale\" is hedged, not a verdict -> SUPPRESSED"),
     ("cc_outbound", "Heartbeat",   HB_STUCK,       True,  "Step 7: a heartbeat reporting a STUCK watcher (running, not saving) is a problem -> WAKES"),
     ("cc_outbound", "Heartbeat",   HB_DEAD_W,      True,  "POSITIVE CONTROL: a heartbeat reporting a DEAD watcher -> WAKES"),
+    ("cc_outbound", "Heartbeat",   HB_CHECK_FAILED, True, "#1162: control: CHECK FAILED is a verdict -> WAKES (every page also wakes)"),
+    ("cc_outbound", "Heartbeat",   HB_CONTROL_OK,  False, "#1162: a control field of non-paging states is an all-clear -> SUPPRESSED"),
     ("cc_outbound", "Heartbeat",   HB_ALIVE_W,     False, "REGRESSION GUARD: watchers all alive, control answered -> SUPPRESSED"),
     ("cc_outbound", "Push notice", PUSH_ROUTINE,   False, "REGRESSION GUARD: routine push notice still suppressed"),
     ("langston_outbound", None,    LANG_MARKER_MINE,       False, "marker owns me but prose names someone else -> no wake (the duplicate, cut)"),
