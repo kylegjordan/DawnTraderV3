@@ -285,8 +285,11 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
         reason: 'xstock_weekend_closure',
       };
     }
-    // (b) Strategy whitelist — only the 6 well-understood, regime-based
-    // strategies are enabled for xstock_spot in B79 (Langston Q2 conservative ship).
+    // (b) Per-class strategy gate. Membership is DATA, not code: the
+    // module_constants `strategy_gates` rows (B79.0m.a), read through
+    // isStrategyEnabledForAssetClass. B79 launched xstock_spot with 6 strategies
+    // (Langston Q2 conservative ship); the live set has changed since — read the
+    // rows, never a count written here.
     // B79.0b N3 cleanup: dropped redundant `input.strategy &&` truthy guard —
     // SQEInput.strategy is typed `string` non-optional (line 75), so the
     // truthy check was dead code (TS guarantees it's never undefined; an
