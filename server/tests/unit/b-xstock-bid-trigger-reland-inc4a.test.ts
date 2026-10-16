@@ -330,6 +330,19 @@ describe('the rail end to end, on the fake store', () => {
     expect((sh.metadata?.lastTrades as Array<Record<string, unknown>>)[0]).toMatchObject({ symbol: 'A/USD', hold: '7d 0h', lastRefusal: 'no_transactable_side' });
     expect(d.rows.filter((r) => r.dedupe_key === 'vts-shadow-unpriced-xstock_spot')).toHaveLength(1);
   });
+  it('Coltrane Step 4 r3 BLOCKER — two CONCURRENT shadow unpriced closes on one class are both counted and both kept', async () => {
+    const d = makeStore(); d.setClock(WED);
+    // both calls start before either awaits: without serialisation each reads count 0 from addAlert and writes count 1
+    await Promise.all([
+      onShadowUnpriced({ tradeId: 'c1', symbol: 'A/USD', assetClass: XS, hold: '7d', lastRefusal: null }, WED, d),
+      onShadowUnpriced({ tradeId: 'c2', symbol: 'B/USD', assetClass: XS, hold: '7d', lastRefusal: null }, WED, d),
+      onShadowUnpriced({ tradeId: 'c3', symbol: 'C/USD', assetClass: XS, hold: '7d', lastRefusal: null }, WED, d),
+    ]);
+    const sh = d.rows.find((r) => r.dedupe_key === 'vts-shadow-unpriced-xstock_spot')!;
+    expect(sh.metadata?.count).toBe(3);
+    expect(sh.metadata?.[`day_${easternDate(WED)}`]).toBe(3);
+    expect((sh.metadata?.lastTrades as Array<{ tradeId: string }>).map((x) => x.tradeId)).toEqual(['c1', 'c2', 'c3']);
+  });
   it('the decided mark on a MEMBER uses its own key on the record (single-key merge, never a map rewrite)', async () => {
     const d = makeStore(); d.setClock(WED);
     await onCrossing(crossing('d1', 'XYL/USD', WIDE, WED), WED, d);

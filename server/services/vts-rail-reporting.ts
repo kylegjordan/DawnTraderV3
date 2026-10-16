@@ -378,7 +378,24 @@ export async function onUnpricedClose(t: { tradeId: string; symbol: string; asse
 }
 
 /** Shadow lane (objective 12): no page (~6 a day would be a new flood) — one standing count row per class, merged. */
-export async function onShadowUnpriced(t: { tradeId: string; symbol: string; assetClass: string; hold: string; lastRefusal: string | null }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert' | 'mergeAlertMetadata'>): Promise<void> {
+/** Per-key serial queues (Coltrane Step 4 r3 BLOCKER): a read-modify-write on a shared count row must not overlap another
+ *  on the same row, or both compute `count = n + 1` and the later merge drops the earlier trade. One process writes these
+ *  rows, so an in-process chain per key is sufficient; each step reads the row AFTER the previous step's merge. */
+const _serialChains = new Map<string, Promise<void>>();
+function serialPerKey(key: string, step: () => Promise<void>): Promise<void> {
+  const prev = _serialChains.get(key) ?? Promise.resolve();
+  const next = prev.then(step, step);
+  const tail = next.catch(() => undefined);
+  _serialChains.set(key, tail);
+  void tail.then(() => { if (_serialChains.get(key) === tail) _serialChains.delete(key); });
+  return next;
+}
+
+export function onShadowUnpriced(t: { tradeId: string; symbol: string; assetClass: string; hold: string; lastRefusal: string | null }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert' | 'mergeAlertMetadata'>): Promise<void> {
+  return serialPerKey(shadowUnpricedKey(t.assetClass), () => shadowUnpricedStep(t, nowMs, deps));
+}
+
+async function shadowUnpricedStep(t: { tradeId: string; symbol: string; assetClass: string; hold: string; lastRefusal: string | null }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert' | 'mergeAlertMetadata'>): Promise<void> {
   const row = await deps.addAlert({
     triggers_at: new Date(nowMs), category: 'health_check', severity: 'info',
     title: `VTS shadow lane: trades closed with no price (${t.assetClass})`,

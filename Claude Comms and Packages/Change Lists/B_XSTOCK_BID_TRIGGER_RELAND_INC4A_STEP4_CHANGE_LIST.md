@@ -78,3 +78,6 @@ Resolved by the EXISTING `active-exit-monitor` when the position decided after t
 - **Pre-registration reading replaced** (plan r5e): crossings conserved · joins the expected share · pagesAttempted falling · `dedupeHits == 0` a separate tripwire.
 - Escalation clears `decided_` too. CI is cited at the graded ref from now on.
 **Tests:** inc4a 38/38. `tsc` = baseline.
+
+## STEP 4 r4 — COLTRANE'S SEND-BACK (14:54Z, at `af1b3f5b6`) FOLDED: concurrent shadow closes
+The shadow count row's update was a read-modify-write launched fire-and-forget per close, so two same-class unpriced closes in one pass could both write `count = n + 1` and the later merge dropped the earlier trade. `onShadowUnpriced` now runs through `serialPerKey` (`server/services/vts-rail-reporting.ts`) — one in-process queue per count-row key; each step reads the row after the previous step's merge (one process writes these rows). Barrier test: three closes started together via `Promise.all` ⇒ count 3, day count 3, all three trades kept, in order. Mutation (no queue) → 1 red. inc4a 39/39; `tsc` = baseline.
