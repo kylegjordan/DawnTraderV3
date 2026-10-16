@@ -124,7 +124,7 @@ Sources:
 - **Prompt-only, with the decision as a printed script result.** ⚠️ **AMENDED AT STEP 2 (Langston BLOCKER-1, pre-audit r2):** the filter changes by ONE regex arm, `\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b`, so a failed check has its own true verdict instead of borrowing `NOT answered`. Otherwise the filter is untouched. The late line is delivered through the normal path, so the control stays a delivery proof (C3).
 - **Rejected: the filter replaying its own control at arm time.** That is `.alive` with extra steps (Langston confirmed).
 - **JUDGEMENT CALL A (answered by Langston):** read `taken_at` from inside the lease, not the file mtime. In r3 it is used only against the heartbeat's own re-issue write times — both UTC, both machine-written.
-- **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). At most 2 re-issues per (alias, token); the third distinct arm pages, and so does or once a re-issue lands while the arm is live and goes unanswered, it pages in state 5 (r3; R1).
+- **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). At most 2 re-issues per (alias, token); the third distinct arm pages in state 5, and so does an arm that was live when a re-issue landed and left it unanswered (r3; R1).
 - **JUDGEMENT CALL C (r3, in Langston's form):**
   - `ISSUER GATED BY <alias>` is reported, not paged, and names who held it.
   - `ISSUER NOT RUN` (all alive and the write failed) pages on the second consecutive run.
