@@ -62,3 +62,12 @@ change-class: hotfix
   - `xstock_spot_ticker_snap` 2,912,818 / 2,912,818 / 2,912,818 (294 s);
   - `signal_eval_archive` 2,284,067 / 2,284,067 / 2,284,067 (223 s), against 2,235,422 under the old rule.
   - Export time only, at gzip level 1 with no upload or readback, so not comparable to the sweep log durations. Temporary directory removed and confirmed absent.
+
+## 5. LANGSTON SECOND PASS (2026-10-16 11:08Z, at r1 `292f546d3`) — PROCEED, four non-blocking findings
+
+He reviewed r1, the gate-only version. r2, which deployed, removes the hold-back his first three findings measure.
+- **F1, the clock:** 134.11 GB at 11:04Z against 130.9 GB at 10-13T18:36Z gives +1.2 GB/day net while drops run, or about 4.3 GB/day with drops stopped, against 65.9 GB of headroom: **about 15 days to the 200 GB cap if drops ever stop.** Under r2 drops continue, so this is the deadline for any future hold-back, not a live one. Recorded here as he asked.
+- **F2, alert volume:** `raiseSweepAlert` passes no dedupe key, and a failed partition stays eligible, so a persistent failure mints one new alert per partition per night. This predates the hotfix and applies to any sweep failure. **DISPOSITION: added to `B-B75-EXPORT-COMPLETENESS`** — a key per parent and label.
+- **F3, the 6 h sweep lock** against a growing backlog: reachable only after about 39 nights of hold-back; under r2 there is no hold-back. **DISPOSITION: no work, withdrawn under r2**, citing this scope's §3.
+- **F4, the plain-archive lane's catch still says "retried next run"** for a count mismatch: unreachable today (both trade tables are at 365-day retention, `plain_deleted=0`). **DISPOSITION: added to `B-B75-EXPORT-COMPLETENESS`** with F2.
+- He also found the old cursor allowed a latent infinite loop (1,000 or more rows inside one millisecond), now impossible; and that `rows=240000` appears on 8 of 8 nights 09-08 to 09-15.

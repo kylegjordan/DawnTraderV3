@@ -11085,3 +11085,4 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 - recovery: Supabase backups (Kyle to read the retention in the dashboard), and re-fetching crypto one-minute bars from the exchange. Ticker snapshots and SQE evaluations have no second source.
 - the per-table key census.
 ⚠️ The database is at 65.4% of its 200 GB cap (alert `545762f9`).
+**Added from Langston's second pass (2026-10-16): the sweep failure alert needs a dedupe key per parent and label (F2), and the plain-archive lane's catch must name a count mismatch rather than calling it transient (F4).** Disposition 2, folded into this batch.
