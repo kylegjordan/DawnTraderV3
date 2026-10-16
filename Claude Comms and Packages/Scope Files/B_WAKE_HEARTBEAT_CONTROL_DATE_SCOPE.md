@@ -1,9 +1,9 @@
-# B-WAKE-HEARTBEAT-CONTROL-DATE — SCOPE r4 (2026-10-16)
+# B-WAKE-HEARTBEAT-CONTROL-DATE — SCOPE r5 (2026-10-16)
 
 change-class: non_architecture
 
 **Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row **1q**, after row 1n · **Issue:** `#1162` · **Reviewer:** Langston
-**r2:** answered Langston's Step-1 CHANGES on r1 (`4346c1d80`). **r3:** answers his CHANGES on r2 (`894adb15a`, 15:36Z): §3 is rewritten on BYTE OFFSETS, not instants (his option (b)); the issue gate is no longer a local time; state 2 is split into GATED and NOT RUN; plus record items R1-R5. **r4:** answers his CHANGES on r3 (`ca035c52a`, 15:45Z) — a bound on *awaiting*, a refusing record file, and the issue made per alias with post-issue reads. Tables of what changed where are at the end.
+**r2:** answered Langston's Step-1 CHANGES on r1 (`4346c1d80`). **r3:** answers his CHANGES on r2 (`894adb15a`, 15:36Z): §3 is rewritten on BYTE OFFSETS, not instants (his option (b)); the issue gate is no longer a local time; state 2 is split into GATED and NOT RUN; plus record items R1-R5. **r4:** answers his CHANGES on r3 (`ca035c52a`, 15:45Z) — a bound on *awaiting*, a refusing record file, and the issue made per alias with post-issue reads. **r5:** answers his CHANGES on r4 (`1773280ed`, 15:54Z) — the table is made TOTAL (step 2b's STUCK and CENSUS-FAILED carried, plus a final else that cannot read as all-clear), and the record is read back in the same run. Tables of what changed where are at the end.
 
 ## 0. WHY
 The hourly heartbeat task (`comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md`; live copy `~/.claude/scheduled-tasks/wake-watcher-heartbeat/SKILL.md`, the same content apart from line endings, measured 2026-10-16) is meant to page Kyle only when a wake watcher has really failed. **On 2026-10-16 it paged his phone five times (08:16, 10:16, 11:15, 12:16 and 15:15 UTC) with "control NOT answered: CC-A, CC-B, CC-C, CC-INFRA" while the CC-A and CC-C watchers were alive and delivering.** That teaches Kyle to ignore the one line that should mean something.
@@ -68,12 +68,13 @@ Sources:
   - the previous run's ISSUER state.
 
   Named without an alias prefix, so `_sweep_tmp` (`:637-652`, which deletes only `<ALIAS>.*` files containing `.tmp` or `.lease.stale.`) and the lease rename-aside (`:552-563`) cannot touch it (R4, measured; Langston re-derived it at the ref).
-  - **It also holds each alias's `P` from the previous run** (for the awaiting bound below).
+  - **It also holds each alias's `P` from the previous run** (for the awaiting bound below) **and the log's inode from the previous run** (r5 record 1: rotation is detected by the log's own inode changing between runs, not by all four aliases agreeing).
   - **It refuses rather than degrades (r4 BLOCKER-2):**
     - **absent** → created empty and reported as `control record: new`;
     - **unparseable** → moved aside to `heartbeat-control.json.bad-<utc>`, started empty, and reported as `control record: RESET (unreadable)`.
 
-    In either case **no NOT answered, re-issue or NOT-delivering decision is drawn on that run**: states 1-4 still print, and states 4b, 5 and 6 print `held (record reset)`.
+    In either case **no NOT answered, re-issue, NOT-delivering or ISSUER NOT RUN decision is drawn on that run** (r5 record 2: ISSUER NOT RUN's second-run test cannot evaluate on a reset record either). States 1-4 still print, and states 4b, 5, 6 and ISSUER NOT RUN print `held (record reset)`.
+  - **And it is READ BACK in the same run (r5 BLOCKER-2):** after every write — create, reset, prune, a re-issue entry or the run's `P`s — the script re-reads the file and compares it with what it wrote. **A mismatch, or a failed read, is `control record NOT PERSISTING` and pages that run.** No cross-run memory is needed, which matters because the memory is the broken thing. A record that cannot persist can therefore never park the fleet in permanent `held`.
   - **Prune rule:** on every run, drop every entry whose token is not that alias's current `N`. The file is then bounded at four aliases × at most three re-issues + four `P`s.
 
 **THE ISSUE RULE (BLOCKER-2) — replaces the 09:00-local gate in step 2c.**
@@ -91,12 +92,15 @@ Sources:
 | order | state | predicate | action |
 |---|---|---|---|
 | 1 | **DEAD** | step 2b says DEAD | as now; never re-issue; never a control page |
+| 1a | **STUCK (control pending)** | step 2b says STUCK, and the alias is not already answered (state 3 is checked first for STUCK: the `.control` write is independent of the position save, so a STUCK watcher that reaches the line answers normally) | reported; **no page and no re-issue** — 2b already reports STUCK, and re-arming a STUCK watcher is the wrong fix (Langston) |
+| 1b | **CENSUS-FAILED (control not judged)** | step 2b's watcher census failed | reported; no page, no re-issue, as 2b |
 | 2 | **not armed** | no `.alive` | reported; it is what gates the issue above |
 | 3 | **answered** | `A == N` (exact token) | — |
 | 4 | **awaiting** | `P` has the same inode as the log, `P <= O`, and `P` differs from the `P` recorded for this `(alias, N)` on the previous run, or there is no previous `P` | — the watcher has not reached the line yet; a lagging save fails toward this state for one run |
 | 4b | **NOT delivering** | `P <= O` and `P` **unchanged** from the previous run on the same `(alias, N)`, while `.alive` is fresh | `--notify` — **the control's own target failure (C3):** `.alive` is refreshed by `#@KEEPALIVE` (`:959-975`) while `pos['/var/log/cc-wake.log']` is frozen, so the watcher started but does not deliver this source. Bounded at **two runs**: one run of awaiting, then a page. A line written seconds before a run is always passed by a live watcher before the next hourly run. |
-| 5 | **NOT answered** | `P > O` (or inode differs), `A != N`, and the record holds a re-issue for `(alias, N)` whose write time is **later than `T`** (the arm was live before that re-issue and consumed it) — **or** 3 distinct `T`s already re-issued against this `N` (R1) | `--notify` |
+| 5 | **NOT answered** | `P > O`, the log inode unchanged since the last run (a rotation goes to state 6, r5 record 1), `A != N`, and the record holds a re-issue for `(alias, N)` whose write time is **later than `T`** (the arm was live before that re-issue and consumed it) — **or** 3 distinct `T`s already re-issued against this `N` (R1) | `--notify` |
 | 6 | **re-issued** | `P > O` (or inode differs) and `A != N`, otherwise | append one `WATCHER-CONTROL <alias> <N>` line (that alias only), record `(offset, write time, T)`; **no `--notify`** |
+| 7 | **UNDETERMINED (<the inputs>)** | **anything not matched above — the table is TOTAL** (r5 BLOCKER-1) | prints the raw `N`, `O`, inode, `A`, `P`, `T` and 2b state, and **pages**. An unmatched combination is by construction a case this design did not foresee, so it is never allowed to read as an all-clear. The two-run awaiting bound and 2b's 40 s re-check make the known transients (a reconnect's 30 s sleep that skips the keepalive save, `:623`) land in states 1a/4, not here. |
 
 **Why 5 before 6, and why `P > O` alone is not enough (measured 2026-10-16, CC-A):**
 - The stale reset at `:857-870` moves `pos` to the end and the next save records it, so `P = 90455 > O = 90331` while the 10-16 line was never read. `P > O` cannot tell "consumed and failed" from "skipped by a start-from-end".
@@ -108,9 +112,9 @@ Sources:
 |---|---|---|
 | OBJ-1 | Steps 2c to 4 use only the reads above; **no local-date or local-time test remains** — the issue rule and the decision table both run on the issuer's UTC date and byte offsets. | prompt text; fixture **yesterday's token, answered** → *answered* (discriminates: the old test read it as NOT answered between local midnight and the issue) |
 | OBJ-2 | A watcher that skipped its line gets a re-issue on the run that sees `P > O`, at most 3 per (alias, token). The line travels the normal pipeline, so the control stays a delivery proof. | fixture: `P > O`, no record → re-issued and recorded; same inputs plus a later re-issue write time → NOT answered; a new `T` after the re-issue → re-issued; a third `T` → NOT answered |
-| OBJ-3 | Control `--notify` only in states 4b and 5 and for ISSUER NOT RUN on its second consecutive run; never on DEAD, not armed, awaiting, re-issued, GATED, or any run with a reset record. | fixtures for each state, including: `P <= O` unchanged for two runs → NOT delivering on the second; a record file deleted between runs → `new`, no decisions drawn; a corrupt record → `RESET`, moved aside, no decisions drawn |
+| OBJ-3 | Control `--notify` only in states 4b, 5 and 7, for `control record NOT PERSISTING`, and for ISSUER NOT RUN on its second consecutive run; never on DEAD, STUCK, CENSUS-FAILED, not armed, awaiting, re-issued, GATED, or a run whose record was new or RESET and read back correctly. | fixtures for each state, including: `P <= O` unchanged for two runs → NOT delivering on the second; a record file deleted between runs → `new`, no decisions drawn; a corrupt record → `RESET`, moved aside, no decisions drawn; a record whose write does not read back → `NOT PERSISTING`, paged; a STUCK alias short of its line → `STUCK (control pending)`, no page; a combination matching no row → `UNDETERMINED`, paged; **a totality test that enumerates the 2b states × {answered, P<=O moved, P<=O unchanged, P>O} × {record ok, new, reset} and asserts every cell prints exactly one state** |
 | OBJ-4 | ISSUER GATED BY / ISSUER NOT RUN are their own states, computed from `N`, `D` and the `.alive` set. | fixtures: one `.alive` missing → GATED BY that alias; all alive, write fails twice → NOT RUN, paged on the second |
-| OBJ-5 | Step 3's labels are enumerated: answered / awaiting / re-issued / NOT answered / NOT delivering / ISSUER GATED BY / ISSUER NOT RUN / control record new or RESET / **log rotated** (r4 record (c): an inode change on all four at once is one rotation, not a fleet failure — reported once, and the four re-issues that follow are labelled as caused by it), with DEAD and not armed carried from 2b. "not run" is removed. | prompt text; a fixture with a changed inode for all four → `log rotated`, four re-issues, no page |
+| OBJ-5 | Step 3's labels are enumerated: answered / awaiting / re-issued / NOT answered / NOT delivering / STUCK (control pending) / CENSUS-FAILED (control not judged) / UNDETERMINED / ISSUER GATED BY / ISSUER NOT RUN / control record new, RESET or NOT PERSISTING / **log rotated** (r4 record (c), r5 record 1: the log's own inode differing from the recorded one is one rotation — reported once, its re-issues labelled as caused by it, and state 5 not evaluated that run), with DEAD and not armed carried from 2b. "not run" is removed. | prompt text; a fixture with a changed inode for all four → `log rotated`, four re-issues, no page |
 
 **The decision is one python script in the prompt** that reads the Helsinki print and the laptop files and prints one state per alias. The model copies its output; the fixtures run that same script over a temp directory and a log copy.
 
@@ -139,7 +143,8 @@ Sources:
 - the change list;
 - the completion report;
 - `BATCH_CATALOG`, `PHASE_HISTORY`, `SYSTEM_IMPACT_MAP` (wake-watcher block), `CLAUDE_CODE_WAKE_WATCHER_RUNBOOK` layer 3, `RUNNING_ISSUES` `#1162`, the sprint plan rows 1q and 1z, and CC-A's task list;
-- the board card.
+- the board card;
+- CC-A's `MEMORY_CC_A.md` position row (graded by the Step-10 tier ledger; r5 record 3).
 
 `SYSTEM_MANUAL`: N/A.
 
@@ -177,3 +182,12 @@ Sources:
 | record (a) `.control` write without `except` | §5, row 1z |
 | record (b) `ONCE` gate | §2 tier 2 |
 | record (c) rotation | OBJ-5 `log rotated` |
+
+## r4 → r5, by Langston's item
+| item | where |
+|---|---|
+| BLOCKER-1 table not total; STUCK and CENSUS-FAILED not carried | states 1a, 1b, 7 (UNDETERMINED, paged); OBJ-5 labels; OBJ-3 totality test |
+| BLOCKER-2 a record that cannot persist parks the fleet in `held` forever | §3 read-back in the same run → `NOT PERSISTING`, paged |
+| record 1 partial rotation | §3 record holds the log inode; state 5 excludes a rotated run; OBJ-5 |
+| record 2 ISSUER NOT RUN on a reset record | §3 "no decision drawn" list |
+| record 3 the MEMORY row | §6 |
