@@ -115,7 +115,8 @@ export function markDecided(tradeId: string, nowMs: number, deps: Pick<VtsRailDe
   const rowId = state.rowByTrade.get(tradeId);
   // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
   // resolved, so an unwritten mark is counted (`markMisses`, the seventh count) rather than assumed. Either way the index
-  // entry goes: a resolved or vanished row has nothing left to mark.
+  // entry goes, and that is deliberate (Langston r5 condition 2, the markDecided half): null means the row is already
+  // resolved or gone, so nothing is owed — there is no later decision that could usefully retry it.
   // Store cost, stated (condition 4): each mark is one whole-file rewrite of the alert file, made at most ONCE per open row
   // or membership (the entry leaves the index on the first attempt) — so a pass costs at most (open rail rows + members)
   // rewrites, measured max 118 concurrent open rail rows (2026-10-15T13:41Z), before the standing record absorbs the
@@ -188,7 +189,15 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
     if (prev) member.reason = c.lastReason;
     if (member.sessionDateEt !== etDate) { member.sessionClockStartMs = c.pageSinceMs; member.sessionDateEt = etDate; }
     const suppressedPages = (typeof rec.metadata?.suppressedPages === 'number' ? rec.metadata.suppressedPages : 0) + 1;
-    await deps.mergeAlertMetadata(rec.id, { [memberField(c.tradeId)]: member, [decidedField(c.tradeId)]: null, suppressedPages });
+    // ⛔ Langston r5 condition 2: a null return means the record was resolved (or vanished) between `addAlert` and here —
+    // the member was NOT written, so this crossing must not be swallowed: fall back to paging on its own key (A4's
+    // default-to-page). Member and decision keys are single-key merges; a removed member is a `null` TOMBSTONE that every
+    // reader filters (`&& v`), bounded by the record's own lifetime (it resolves when empty) — r5 record item (ii).
+    const merged = await deps.mergeAlertMetadata(rec.id, { [memberField(c.tradeId)]: member, [decidedField(c.tradeId)]: null, suppressedPages });
+    if (merged === null) {
+      await pageOwnKey(c, nowMs, deps);
+      return 'paged';
+    }
     state.memberRecord.set(c.tradeId, rec.id);
     railCounts.joins++;
     return 'joined';
@@ -250,7 +259,27 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
         remaining++;
       }
       if (Object.keys(patch).length) await deps.mergeAlertMetadata(record.id, patch);
-      if (remaining === 0) await deps.resolveAlert(record.id, VTS_RAIL_ACTOR, `STANDING-RECORD-EMPTY ${VTS_RAIL_REF}`, 'engine');
+      if (remaining === 0) {
+        // ⛔ Langston r5 condition 1: `remaining` comes from the snapshot read at the top of this sweep, and the sweep is NOT
+        // inside the runner's cycle guard — a join can land while it awaits. Re-read the record IMMEDIATELY before resolving
+        // and require zero live members; then re-read once more, and page any member whose join landed between that check and
+        // the resolve (it is now stranded on a resolved row, and its streak is already latched — it would never page again).
+        const liveMembers = (r: RailAlertRow | undefined) => Object.entries(r?.metadata ?? {})
+          .filter(([k, v]) => k.startsWith('member_') && v).map(([k, v]) => [k.slice('member_'.length), v as RailMember] as const);
+        const fresh = deps.readAllAlerts().find((r) => r.id === record.id);
+        if (fresh && isOpen(fresh) && liveMembers(fresh).length === 0) {
+          await deps.resolveAlert(record.id, VTS_RAIL_ACTOR, `STANDING-RECORD-EMPTY ${VTS_RAIL_REF}`, 'engine');
+          for (const [tid, m] of liveMembers(deps.readAllAlerts().find((r) => r.id === record.id))) {
+            await pageOwnKey({
+              tradeId: tid, symbol: m.symbol, assetClass: 'xstock_spot', lastReason: m.reason, pageSinceMs: m.sessionClockStartMs ?? nowMs,
+              title: `VTS exit decisions unavailable — no decision for ${m.symbol} (joined as the standing record closed)`,
+              body: `Open virtual trade ${tid} in ${m.symbol} (most recent reason: ${m.reason}) joined the VTS standing record in the `
+                + `instant it resolved, so it is paged on its own key rather than lost (row 2 increment (4a), r5 condition 1). `
+                + `This row clears itself when the trade decides or closes (${VTS_RAIL_REF}).`,
+            }, nowMs, deps);
+          }
+        }
+      }
     }
     loadVtsRailIndex(deps);
     state.sweepFailures = 0;

@@ -223,6 +223,48 @@ describe('the rail end to end, on the fake store', () => {
     await runVtsRailSweep(WED + 13 * 60_000, d);                                     // old clock: 38 min; new: 11 min
     expect(d.rows.some((r) => r.dedupe_key === railKey('ORCL/USD', 'q1'))).toBe(false);
   });
+  it('r5 condition 1 (Langston) — a join that lands WHILE the sweep awaits keeps the record open (re-read before resolving)', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('e1', 'EL/USD', WIDE, WED - 5 * 60_000), WED, d);
+    markDecided('e1', WED + 10_000, d); await flush();                 // e1 will leave ⇒ the snapshot reads remaining = 0
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const real = d.closedTradeIds;
+    d.closedTradeIds = async (ids) => { await gate; return real(ids); };
+    const sweep = runVtsRailSweep(WED + 2 * 60_000, d);                 // snapshot taken, now awaiting
+    await flush();
+    expect(await onCrossing(crossing('e2', 'ES/USD', WIDE, WED), WED + 2 * 60_000, d)).toBe('joined'); // lands mid-sweep
+    release(); await sweep;
+    const rec = d.rows.find((r) => r.dedupe_key === VTS_STANDING_KEY)!;
+    expect(rec.state).not.toBe('resolved');                             // mutation "resolve on the snapshot" reads resolved
+    expect(rec.metadata?.[memberField('e2')]).toBeTruthy();
+  });
+  it('r5 condition 1 — a join that lands between the re-read and the resolve is PAGED on its own key, not lost', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('f1', 'FE/USD', WIDE, WED - 5 * 60_000), WED, d);
+    markDecided('f1', WED + 10_000, d); await flush();
+    const realResolve = d.resolveAlert;
+    d.resolveAlert = async (id, by, ev, t) => {                          // the join's merge lands just before the resolve
+      const rec = d.rows.find((r) => r.id === id);
+      if (rec?.dedupe_key === VTS_STANDING_KEY) rec.metadata = { ...rec.metadata, [memberField('f2')]: { symbol: 'FI/USD', reason: WIDE, joinedAtMs: WED, sessionClockStartMs: WED, sessionDateEt: easternDate(WED) } };
+      return realResolve(id, by, ev, t);
+    };
+    await runVtsRailSweep(WED + 2 * 60_000, d);
+    expect(d.rows.find((r) => r.dedupe_key === VTS_STANDING_KEY)!.state).toBe('resolved');
+    expect(d.rows.some((r) => r.dedupe_key === railKey('FI/USD', 'f2'))).toBe(true); // mutation "no post-resolve check": false
+  });
+  it('r5 condition 2 (Langston) — a join whose member write returns null (record resolved underneath) PAGES instead', async () => {
+    const d = makeStore(); d.setClock(WED);
+    const realMerge = d.mergeAlertMetadata;
+    d.mergeAlertMetadata = async (id, patch) => {
+      const r = d.rows.find((x) => x.id === id);
+      if (r?.dedupe_key === VTS_STANDING_KEY) { r.state = 'resolved'; }  // resolved between addAlert and the merge
+      return realMerge(id, patch);
+    };
+    expect(await onCrossing(crossing('g1', 'GD/USD', WIDE, WED), WED, d)).toBe('paged'); // mutation "ignore null": 'joined'
+    expect(d.rows.some((r) => r.dedupe_key === railKey('GD/USD', 'g1'))).toBe(true);
+    expect(railCounts.joins).toBe(0);
+  });
   it('10 min stays the JOIN threshold and 30 min is a separate clock: a member at 25 min does not page', async () => {
     const d = makeStore(); d.setClock(WED);
     const start = WED - 10 * 60_000;
