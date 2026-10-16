@@ -5045,6 +5045,8 @@ return currentPrice <= state.currentStopPrice;
 
 `HOME: B-CODEX-FAILOVER-AUTOMATION, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1z, after row 1y` — §9.4 disposition 3. OPEN.
 
+**Added 2026-10-16 (Kyle, after switch S2) — §9.4 disposition 2, folded into this row:** the switch must WAKE every outgoing and incoming session itself. On S2 (`crew-switch` history, started 07:10:42Z) no session confirmed until Kyle opened each one by hand: the last acks landed 07:57-08:01Z. The Claude-directed order text says *"When Kyle opens you"*, and no Codex session has any wake path. Kyle's constraint, verbatim in substance: **a one-shot PUSH sent by the switch, not a heartbeat or a continuously running per-session poll.** The design question to settle at Step 1 is what on the laptop can receive that push without becoming the polling loop he ruled out.
+
 ### #702 OPEN 2026-08-20 (CC-A; raised by Langston at the B-CONDUCT-FILE Step-2 gate, after my own #699/#697 collided with CC-C's) — ISSUE-NUMBER MINTING HAS NO RESERVATION SCHEME, AND SIX ENTRIES CURRENTLY SHARE A NUMBER WITH ANOTHER ENTRY
 HOME (CC-A, W40 census 2026-09-30): `B-GATE-GUARD` (with #745), owner CC-A, placed in PRE_LIVE_SPRINT — the range split was SETTLED 2026-08-20 (`B_CONDUCT_FILE_COMPLETION_REPORT.md`:81); what remains is the minting guard and the four legacy doubles (#642, #646, #660, #668).
 
