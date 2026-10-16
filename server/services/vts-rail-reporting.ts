@@ -60,7 +60,10 @@ export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0
 
 const state = {
   /** tradeId → id of its open `no-trigger-vts-*` row. */
-  rowByTrade: new Map<string, string>(),
+  // A SET per trade (Langston (4a) Step 4, §13 disposition 1): in the migration window a legacy per-SYMBOL row and a new
+  // per-TRADE row for the same trade can both be open (different keys, so dedupe does not stop the second mint). With one
+  // id per trade the newer row won and the legacy row never got its decision mark — stranded until the trade closed.
+  rowByTrade: new Map<string, Set<string>>(),
   /** tradeId of each standing-record member → the record's id. */
   memberRecord: new Map<string, string>(),
   loaded: false,
@@ -77,11 +80,16 @@ export function _resetVtsRailState(): void {
   state.loaded = false; state.sweepInFlight = false; state.lastSweepMs = 0; state.sweepFailures = 0; state.closedMemberSweeps.clear();
   for (const k of Object.keys(railCounts) as Array<keyof typeof railCounts>) railCounts[k] = 0;
 }
-export function _vtsRailIndex(): { rowByTrade: Map<string, string>; memberRecord: Map<string, string> } {
+export function _vtsRailIndex(): { rowByTrade: Map<string, Set<string>>; memberRecord: Map<string, string> } {
   return { rowByTrade: state.rowByTrade, memberRecord: state.memberRecord };
 }
 
 function isOpen(r: RailAlertRow): boolean { return r.state !== 'resolved'; }
+function indexRow(tradeId: string, rowId: string): void {
+  const set = state.rowByTrade.get(tradeId) ?? new Set<string>();
+  set.add(rowId);
+  state.rowByTrade.set(tradeId, set);
+}
 
 /** Rebuild the index from the alert file (durable state). Called before the first pass and by every sweep. */
 export function loadVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): void {
@@ -91,7 +99,7 @@ export function loadVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): void
     if (!isOpen(r)) continue;
     if ((r.dedupe_key ?? '').startsWith(RAIL_KEY_PREFIX)) {
       const tid = railRowTradeId(r);
-      if (tid) state.rowByTrade.set(tid, r.id);
+      if (tid) indexRow(tid, r.id);
     } else if (r.dedupe_key === VTS_STANDING_KEY) {
       for (const [k, v] of Object.entries(r.metadata ?? {})) {
         if (k.startsWith('member_') && v) state.memberRecord.set(k.slice('member_'.length), r.id);
@@ -112,7 +120,7 @@ export function ensureVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): vo
  * decision time onto the DURABLE row now (fire-and-forget; a failed write keeps the index entry so the next decision retries).
  */
 export function markDecided(tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata'>): void {
-  const rowId = state.rowByTrade.get(tradeId);
+  const rowIds = [...(state.rowByTrade.get(tradeId) ?? [])];
   // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
   // resolved, so an unwritten mark is counted (`markMisses`, the seventh count) rather than assumed. Either way the index
   // entry goes, and that is deliberate (Langston r5 condition 2, the markDecided half): null means the row is already
@@ -121,9 +129,13 @@ export function markDecided(tradeId: string, nowMs: number, deps: Pick<VtsRailDe
   // or membership (the entry leaves the index on the first attempt) — so a pass costs at most (open rail rows + members)
   // rewrites, measured max 118 concurrent open rail rows (2026-10-15T13:41Z), before the standing record absorbs the
   // expected wide books.
-  if (rowId) {
+  for (const rowId of rowIds) {
     deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs })
-      .then((row) => { if (row === null) railCounts.markMisses++; if (state.rowByTrade.get(tradeId) === rowId) state.rowByTrade.delete(tradeId); })
+      .then((row) => {
+        if (row === null) railCounts.markMisses++;
+        const set = state.rowByTrade.get(tradeId);
+        if (set) { set.delete(rowId); if (set.size === 0) state.rowByTrade.delete(tradeId); }
+      })
       .catch((err) => console.error(`[VTS_RAIL][DECIDED_MARK_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err));
   }
   const recId = state.memberRecord.get(tradeId);
@@ -155,7 +167,7 @@ async function pageOwnKey(c: Crossing, nowMs: number, deps: VtsRailDeps): Promis
   // A fresh row is created at or after the pre-call stamp; an existing (deduped) one before it (`system-alerts.ts:539-545`).
   const mintedNow = Date.parse(row.created_at) >= nowMs;
   if (mintedNow) railCounts.minted++; else railCounts.dedupeHits++;
-  if (row.metadata?.tradeId === c.tradeId && isOpen(row)) state.rowByTrade.set(c.tradeId, row.id); // at-mint index (r3)
+  if (row.metadata?.tradeId === c.tradeId && isOpen(row)) indexRow(c.tradeId, row.id); // at-mint index (r3)
 }
 
 /** A streak crossed the page threshold. An expected wide/quiet xStock book joins the standing record; all else pages. */

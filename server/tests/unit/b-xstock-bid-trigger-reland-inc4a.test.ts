@@ -174,6 +174,17 @@ describe('the rail end to end, on the fake store', () => {
     expect(railCounts.markMisses).toBe(1);
     expect(_vtsRailIndex().rowByTrade.has('x1')).toBe(false); // nothing left to mark
   });
+  it('Langston Step 4 — a LEGACY per-symbol row and a new per-trade row for ONE trade are BOTH marked and BOTH resolve', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await d.addAlert({ dedupe_key: 'no-trigger-vts-TSN/USD', body: 'VTS has made NO exit decision … on open virtual trade L1 in TSN/USD (most recent reason: x)' });
+    loadVtsRailIndex(d);                                                  // the legacy row is indexed from its body
+    await onCrossing(crossing('L1', 'TSN/USD', 'no_usable_mark', WED), WED, d); // a new per-trade row for the same trade
+    expect(_vtsRailIndex().rowByTrade.get('L1')?.size).toBe(2);           // mutation "one id per trade" reads 1
+    markDecided('L1', WED + 5_000, d); await flush();
+    await runVtsRailSweep(WED + 60_000, d);
+    expect(d.rows.find((r) => r.dedupe_key === 'no-trigger-vts-TSN/USD')!.state).toBe('resolved');
+    expect(d.rows.find((r) => r.dedupe_key === railKey('TSN/USD', 'L1'))!.state).toBe('resolved');
+  });
   it('the trade closed ⇒ TRADE-CLOSED', async () => {
     const d = makeStore(); d.setClock(WED);
     await onCrossing(crossing('c1', 'DE/USD', 'no_usable_mark', WED), WED, d);
