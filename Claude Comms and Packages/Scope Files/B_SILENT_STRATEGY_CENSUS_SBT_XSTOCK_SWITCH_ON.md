@@ -17,6 +17,8 @@ strong_bull_trend on crypto is roughly flat before fees (−0.26 % per trade) an
 **Population:** paper strong_bull_trend xStock trades OPENED after the switch time (recorded below), filled. **Window:** the first **20 filled closes**, or **21 days**, whichever comes first.
 - **PASS (stays on):** average net P&L per filled trade **≥ 0 %** over the window.
 - **FAIL (switched back off at window end):** average net per filled trade **< 0 %**.
+- **At day 21 with 1-19 filled closes:** the verdict uses the mean of the closes accrued (PASS ≥ 0 %, FAIL < 0 %). *(Coltrane r1 correction 2.)*
+- **At day 21 with ZERO filled closes:** insufficient evidence — no verdict; observation continues for one more 21-day window under the same rules, and if that also ends with zero closes it goes to Kyle with the evaluation counts (a strategy that never opens costs nothing but proves nothing).
 - **EARLY STOP (switched off at once):** after **10 or more** filled closes, average net **≤ −1.5 %** per trade.
 - **Reported each week, not a pass/fail input:** its share of xStock opens (crowding, `#1095` precedent: > 50 % is flagged to Kyle); how many of its stop-outs fired outside US regular hours and how far past the stop they filled.
 **Read with:** the weekly six-settings read (successor `510a2e6a`, 2026-10-21), which adds this cell.
@@ -32,7 +34,8 @@ UPDATE module_constants SET value='false'::jsonb, updated_by='b-silent-strategy-
  WHERE module_name='strategy_gates' AND constant_name='enabled' AND asset_class='xstock_spot' AND strategy='strong_bull_trend'
    AND exchange='*' AND regime='*' RETURNING *;
 ```
-**Verification after the switch:** within a few minutes the xStock loop and the SQE log strong_bull_trend evaluations for xStock symbols (`[B79.0m.b2][EVAL] … strategy=strong_bull_trend` / SQE archive rows `strategy=strong_bull_trend`, `asset_class=xstock_spot`), where there were none before.
+**The activation gate (Coltrane r1 correction 1):** the UPDATE must return **exactly one row**; that row is re-read as `true`; the UTC time is recorded below. **That is the switch.** The first loop/SQE evidence after the 60 s refresh is **follow-up evidence, not the gate** — strong_bull_trend only reaches the SQE archive once a signal exists (`signal-orchestrator.ts:1166`) and the eval log line prints only when a trade opens (`eval-cycle.ts:1336`), so neither is guaranteed within minutes.
+**Pre-switch zero, with its positive control** (`signal_eval_archive`, `asset_class='xstock_spot'`, non-VTS, last 24 h, read 2026-10-16 10:38:13Z): **strong_bull_trend 0 rows; vwap_pullback 527 rows** (the control — the same query sees an enabled xStock strategy).
 
 ## 5. Record
 - Switch time (UTC): _filled in when applied_
