@@ -1,5 +1,7 @@
 # B-WAKE-HEARTBEAT-CONTROL-DATE (#1162, sprint row 1q) — COMPLETION REPORT
 
+✅ **CLOSED 2026-10-16 — Langston Step-11 CONFIRMED 20:28Z.**
+
 **Owner:** CC-A (OLD Claude) · **Class:** `non_architecture` · **Reviewer:** Langston · **Code:** `10eacd39df34345d923fe31ac0b6b928b151a483` · **Installed:** 2026-10-16 18:58Z (laptop) · **Step 8:** CONFIRMED by Langston 20:20Z
 
 ## OPEN AT CLOSE — stated first
@@ -79,7 +81,7 @@ CHANGE-CLASS: non_architecture
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | the Observation column | N/A | scope r5 has no observation window; the outcome was proven over three live runs at Step 7 |
 | T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | CC-A: this batch closed, and the B75 hotfix line added |
-| T1 | Langston's MEMORY.md | BLOCKED — Langston writes his own line via `langston-memory-write` at his Step-11 confirm (requested in the Step-11 dispatch); the cell is updated with his commit/line when he does | his file is size-capped and written only through his tool |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston at his Step-11 confirm via `langston-memory-write --part 00-legacy.md` (part sha `63c7d3e20a31` → `e553ce92d748`; composed `61af7a733992` → `c467c0a10102`): `MEMORY.md:135`, the `CC-A closed 10-16:` bullet, carrying the #661-leg-3 warning that the hourly silence is not evidence the NOT-answered page works |
 | T2 | SYSTEM_MANUAL.md | N/A | nothing under `server/`, `client/` or `shared/` changed |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | wake-watcher block: the daily control, `control_state.py`, `heartbeat-control.json`, the run lock, the new log writer, the filter arm and its invariant, and `TOKEN_RE` (the block had been silent on the control, found at Step 2) |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1162` closed; `#1202` opened (row 1qa); `#731` annotated (the push wake and three filter items) |
