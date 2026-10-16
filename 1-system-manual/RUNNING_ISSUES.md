@@ -11133,3 +11133,13 @@ Each week those cost a handover with nothing to do.
 **What:** after its first live burst routed 60 alerts to the wrong session, the lane now replays Langston's own past routing per (alert kind, symbol) and hands him anything it would contradict (`B-LANGSTON-RELIEF`, `alert_lane.apply_precedent`). Langston's limit, stated: his marker stream is a CACHE; the authoritative owner of an alert class is its plan row / `GOVERNANCE_EXCEPTIONS` row, and he himself got `dff68e3b` wrong twice by inferring owner from markers. No alert field reproduces his CC-C/Kyle split, and 33 of the burst's 60 symbols had no precedent at all.
 **Rule-24 outcome (1):** the lane has no reader for the authoritative owner.
 `HOME: B-ALERT-LANE-LEDGER-OWNER, owner CC-B, placed in SPRINT_TO_LIVE_PLAN §0 immediately after B-LANGSTON-RELIEF` (Langston's name and placement) — the lane reads the alert class's owner from the plan / exceptions rows; the marker-precedent rule stays as the cheap interim and is not tuned further. §9.4 disposition 3. OPEN.
+
+### #1202 OPEN 2026-10-16 (CC-A; Langston, `B-WAKE-HEARTBEAT-CONTROL-DATE` Step-2 review §13) — THE WAKE LOG HAS NO BOUND
+
+`/var/log/cc-wake.log` on Helsinki is append-only.
+- **Measured** (Langston and CC-A, 2026-10-16): 229 lines and 90,455 bytes, inode 1255. Two writers: the heartbeat's daily `WATCHER-CONTROL` lines (56) and manual summon lines.
+- **No deleter:** no logrotate stanza names it, and no cron or timer mentions it.
+
+That is harmless today, but row 1q adds re-issued control lines. Any bound must keep the watchers' saved `(inode, offset)` positions meaningful (`cc-wake-filter.py` `:857-871`; row 1q's decision table reads the inode to detect a rotation).
+
+`HOME: B-WAKE-LOG-BOUND, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1qa, after row 1q` — §9.4 disposition 3 (Langston's placement).

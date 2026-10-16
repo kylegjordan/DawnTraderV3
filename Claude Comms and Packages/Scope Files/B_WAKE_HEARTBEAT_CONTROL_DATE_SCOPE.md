@@ -121,7 +121,7 @@ Sources:
 **The decision is one python script in the prompt** that reads the Helsinki print and the laptop files and prints one state per alias. The model copies its output; the fixtures run that same script over a temp directory and a log copy.
 
 ## 4. DESIGN CHOICES, FOR ATTACK
-- **Prompt-only, with the decision as a printed script result.** The filter is untouched. The late line is delivered through the normal path, so the control stays a delivery proof (C3).
+- **Prompt-only, with the decision as a printed script result.** ⚠️ **AMENDED AT STEP 2 (Langston BLOCKER-1, pre-audit r2):** the filter changes by ONE regex arm, `\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b`, so a failed check has its own true verdict instead of borrowing `NOT answered`. Otherwise the filter is untouched. The late line is delivered through the normal path, so the control stays a delivery proof (C3).
 - **Rejected: the filter replaying its own control at arm time.** That is `.alive` with extra steps (Langston confirmed).
 - **JUDGEMENT CALL A (answered by Langston):** read `taken_at` from inside the lease, not the file mtime. In r3 it is used only against the heartbeat's own re-issue write times — both UTC, both machine-written.
 - **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). At most 3 re-issues per (alias, token); after that, or once a re-issue lands while the arm is live and goes unanswered, it pages in state 5 (r3; R1).
