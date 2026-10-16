@@ -89,6 +89,87 @@ async def scenario():
         await c2.on_ready()
         check("a reconnect does not run recovery again", q2.qsize() == 0 and len(seen_after) == 1)
 
+def grp_msg(gid, k, n, text, created=PRE):
+    return msg(CCBOT, ("Langston, " if k == 1 else "") + text + " ⟨grp=%s %d/%d⟩" % (gid, k, n),
+               created=created, name="OLD Claude")
+
+
+async def failure_scenarios():
+    """Coltrane send-back (2026-10-16): a failed pass must keep its floor and retry; a started chunk group
+    must be skipped whole. Each case is red on e47e52eff and green after the fix."""
+    with tempfile.TemporaryDirectory() as d:
+        lq.RECOVER_FLOOR_FILE = os.path.join(d, "recover-since")
+        b.gw.inbox_message_ids = lambda *_a, **_k: set()
+        b.dc.rest_send = lambda *a, **k: None                 # no post leaves the probe
+
+        # (1) channel missing, then present on the next gateway ready
+        open(lq.RECOVER_FLOOR_FILE, "w").write("2026-10-16T07:10:43Z")
+        q, c = fresh_client(FLOOR)
+        waiting = msg(KYLE, "Langston, waiting through a failed pass")
+        c.get_channel = lambda _cid: None
+        async def no_fetch(_cid):
+            raise RuntimeError("fetch failed")
+        c.fetch_channel = no_fetch
+        await c.on_ready()
+        check("missing channel: the floor file is KEPT", os.path.exists(lq.RECOVER_FLOOR_FILE))
+        check("missing channel: nothing enqueued yet", q.qsize() == 0)
+        class Ch1:
+            def history(self, **_k):
+                async def gen():
+                    yield waiting
+                return gen()
+        c.get_channel = lambda _cid: Ch1()
+        await c.on_ready()
+        check("missing channel: the retry on the next ready recovers the message", q.qsize() == 1)
+        check("missing channel: floor removed only after the successful pass", not os.path.exists(lq.RECOVER_FLOOR_FILE))
+
+        # (2) history raises part-way, then succeeds; nothing is enqueued twice
+        open(lq.RECOVER_FLOOR_FILE, "w").write("2026-10-16T07:10:43Z")
+        q, c = fresh_client(FLOOR)
+        m1, m2 = msg(KYLE, "Langston, first"), msg(KYLE, "Langston, second")
+        state = {"fail": True}
+        class Ch2:
+            def history(self, **_k):
+                async def gen():
+                    yield m1
+                    if state["fail"]:
+                        raise RuntimeError("history broke")
+                    yield m2
+                return gen()
+        c.get_channel = lambda _cid: Ch2()
+        await c.on_ready()
+        check("history failure: the floor file is KEPT", os.path.exists(lq.RECOVER_FLOOR_FILE))
+        state["fail"] = False
+        await c.on_ready()
+        got = [q.get()["content"] for _ in range(q.qsize())]
+        check("history failure: the retry recovers both, each exactly once", got == ["Langston, first", "Langston, second"])
+
+        # (3) an already-started three-piece group is skipped whole; a later message triggers no INCOMPLETE flush
+        open(lq.RECOVER_FLOOR_FILE, "w").write("2026-10-16T07:10:43Z")
+        q, c = fresh_client(FLOOR)
+        p1, p2, p3 = (grp_msg("abcdef12", k, 3, "piece %d" % k) for k in (1, 2, 3))
+        u1, u2, u3 = (grp_msg("0011aa22", k, 3, "fresh %d" % k) for k in (1, 2, 3))
+        b.gw.inbox_message_ids = lambda *_a, **_k: {p1.id}
+        class Ch3:
+            def history(self, **_k):
+                async def gen():
+                    for m in (p1, p2, p3, u1, u2, u3):
+                        yield m
+                return gen()
+        c.get_channel = lambda _cid: Ch3()
+        await c.on_ready()
+        got = [q.get()["content"] for _ in range(q.qsize())]
+        check("started group: none of its pieces is re-fed", not any("piece" in g for g in got))
+        check("unstarted group: reassembled into ONE task", len(got) == 1 and all(("fresh %d" % k) in got[0] for k in (1, 2, 3)))
+        for e in b._chunk_groups.values():
+            e["t0"] -= 3600                                  # make any leftover buffer look long silent
+        later = msg(CCBOT, "Langston, a later post", created=dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5),
+                    name="OLD Claude")
+        await c.on_message(later)
+        got = [q.get()["content"] for _ in range(q.qsize())]
+        check("no INCOMPLETE duplicate flushes after the timeout", got == ["Langston, a later post"])
+
 asyncio.run(scenario())
+asyncio.run(failure_scenarios())
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)

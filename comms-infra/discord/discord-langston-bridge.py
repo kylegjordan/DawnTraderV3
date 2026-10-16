@@ -700,40 +700,68 @@ def build_client(task_q, recover_floor=None):
     seen = deque(maxlen=512)       # message-id dedup (review: RESUME can redeliver MESSAGE_CREATE)
     seen_set = set()
 
-    recovered = {"done": False}
+    recovered = {"done": False, "running": False}
 
     @client.event
     async def on_ready():
         log(f"gateway connected as {client.user} (id={client.user.id})")
         # B-LANGSTON-RELIEF OBJ-1: one-shot recovery of people's messages queued before a restart.
-        # Runs once per process, only when main() found a valid recover-since floor. Re-feeds the
-        # channel since the floor, oldest first, through on_message with _recover=True; ids the
-        # worker has already STARTED (langston_inbound in the inbox) are skipped, alerts are refused
-        # inside on_message, and the seen-set stops the watchdog backfill from enqueuing them twice.
-        if recover_floor is None or recovered["done"]:
+        # Runs only when main() found a valid recover-since floor. Re-feeds the channel since the floor,
+        # oldest first, through on_message with _recover=True; ids the worker has already STARTED
+        # (langston_inbound in the inbox) are skipped, alerts are refused inside on_message, and the
+        # seen-set stops the watchdog backfill (and a retry) from enqueuing anything twice.
+        # ⛔ Coltrane send-back 1 (2026-10-16): it is DONE, and the floor file is deleted, ONLY after a
+        #    found channel and a COMPLETE history read and re-feed. Any failure keeps the floor, says so
+        #    loudly, and the pass runs again at the next gateway ready - a failed recovery must never
+        #    destroy its own retry authority.
+        if recover_floor is None or recovered["done"] or recovered["running"]:
             return
-        recovered["done"] = True
+        recovered["running"] = True
         try:
             started = gw.inbox_message_ids(dc.INBOX_LOG, kinds={"langston_inbound"})
             ch = client.get_channel(CFG["channel_id"])
+            if ch is None:
+                ch = await client.fetch_channel(CFG["channel_id"])
+            if ch is None:
+                raise RuntimeError("channel %s not found" % CFG["channel_id"])
+            msgs = [m async for m in ch.history(after=recover_floor, oldest_first=True, limit=None)]
+            # ⛔ Coltrane send-back 2: a chunked dispatch is ONE task, recorded under ONE piece's id. If the
+            #    worker started any piece of a group, skip EVERY piece, or the rest rebuild an N-1/N buffer
+            #    that later flushes as an INCOMPLETE duplicate.
+            started_groups = set()
+            for m in msgs:
+                g = GROUP_MARKER_RE.search(getattr(m, "content", "") or "")
+                if g and m.id in started:
+                    started_groups.add(g.group(1))
             fed = skipped = 0
-            if ch is not None:
-                async for m in ch.history(after=recover_floor, oldest_first=True, limit=None):
-                    if m.id in started:
-                        skipped += 1
-                        continue
-                    await on_message(m, _recover=True)
-                    fed += 1
-            log(f"recovery: re-read channel since {recover_floor.isoformat()} - {fed} message(s) re-fed through "
-                f"the handler, {skipped} already started by the worker (only people's messages addressed to "
-                f"Langston are enqueued; alerts are not)")
+            for m in msgs:
+                g = GROUP_MARKER_RE.search(getattr(m, "content", "") or "")
+                if m.id in started or (g and g.group(1) in started_groups):
+                    skipped += 1
+                    continue
+                await on_message(m, _recover=True)
+                fed += 1
         except Exception as e:
-            log(f"recovery: FAILED ({type(e).__name__}: {e}) - messages from before the restart were NOT recovered")
-        finally:
+            recovered["running"] = False
+            log(f"recovery: FAILED ({type(e).__name__}: {e}) - the floor file is KEPT and recovery retries at "
+                f"the next gateway ready; nothing waiting has been dropped yet")
             try:
-                os.remove(lq.RECOVER_FLOOR_FILE)
-            except OSError:
+                dc.rest_send(BOT_TOKEN, CFG["channel_id"],
+                             f"Langston bridge: recovering messages from before my restart FAILED "
+                             f"({type(e).__name__}). I kept the recovery point and will retry on reconnect; "
+                             f"Infra Claude can also restart me.", LOG_FILE, mention_user_id=CFG["kyle_id"])
+            except Exception:
                 pass
+            return
+        recovered["done"] = True
+        recovered["running"] = False
+        log(f"recovery: re-read channel since {recover_floor.isoformat()} - {fed} message(s) re-fed through "
+            f"the handler, {skipped} skipped as already started by the worker (whole chunk groups included; "
+            f"only people's messages addressed to Langston are enqueued, never alerts)")
+        try:
+            os.remove(lq.RECOVER_FLOOR_FILE)
+        except OSError as e:
+            log(f"recovery: done, but the floor file could not be removed ({e}); remove it before the next restart")
 
     @client.event
     async def on_message(message, _recover=False):
