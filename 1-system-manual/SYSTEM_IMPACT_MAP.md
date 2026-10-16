@@ -2874,6 +2874,13 @@ These two Python bridges run on the Hetzner Helsinki agent box (`204.168.141.77`
 
 ## Discord Comms Fabric (Hetzner Helsinki) — Added B-DISCORD (2026-06-20)
 
+> **★ CONTENT UPDATE — B-LANGSTON-RELIEF (2026-10-16; Kyle: the lasting fix for Langston's delays): system alerts NO LONGER INVOKE LANGSTON, and people go ahead of alerts in his queue.**
+> - **People first + restart recovery (OBJ-1, live 10:48Z, `7bd58f282`).** The bridge's task queue is `langston_queue.TaskPriorityQueue` — a heap ordered PERSON (escalated alert work included) → self-advance → ALERT, FIFO within a class. On restart, the bridge re-feeds the channel since the recover floor `/home/langston/.discord-bridge/recover-since` (refused if absent, unparseable, future, or >24 h old) so people's posts queued before a restart are not lost; started ids and every piece of a started chunk group are skipped.
+> - **The alert lane (OBJ-2, live 12:33Z, `7c33c236a`; precedent rules at `cf89e0c0b` pending install).** An alert post (alerts webhook) goes to the lane worker, not Langston: batches (20 s settle, ≤15) invoke `claude-sonnet-5-5` in `/srv/alert-lane` (its own `CLAUDE.md`; never Langston's model or memory), which emits `[[ALERT id=.. owner=..]]` markers. The bridge publishes ONLY markers rebuilt from the validated result, requires a real Discord message id AND a direct inbox record (tagged `lane: "alert"`) before routing counts, and hands anything unaccounted for to Langston as escalated (PERSON-class) work. ⛔ **The lane never acks or resolves** — rows stay active for their owner. **Precedent (Langston's ruling after the first live burst):** routing is checked per (title template, symbol) against LANGSTON-sourced markers of the last 7 days; a contradiction, a symbol he split, or a unanimity alarm goes to him; no precedent is labelled, never extended.
+> - **Durability:** `/home/langston/.alert-lane/spool/<message id>.json` (pending → posting, with any owed escalation) survives a restart; `restore_alert_spool` re-queues it at start; a failed spool write posts a loud line naming the alert.
+> - **First live run, 2026-10-16 13:47Z:** 61 alerts → 61 routed in 5 batches (~29 s each), 0 Langston invocations, 0 errors; 60 had been mis-routed by the static rulebook (fixed by the precedent rules; re-routed by Langston himself).
+> - **If I change X, check Y:** the lane's markers must stay in the wake filter's trusted form (`langston_outbound`); `inbox_evidence` and `langston_precedent` key on `lane: "alert"` — drop that tag and the lane starts citing itself. Scope `Scope Files/B_LANGSTON_RELIEF_SCOPE.md`.
+
 > **★ CONTENT UPDATE — B-COMMS-IMAGES-2 (2026-08-07):** `cc-wake-filter.py` — the wake path for all three desktop sessions — is repo-canonical at **`comms-infra/laptop/`** (moved there from `comms-infra/telegram-reference/`, where the only versioned copy sat **three weeks stale**, predating ANALYST Claude; a restore from it would have silently broken CC-C routing). It now appends saved image paths to wake lines (fail-open; a failed save states SAVE FAILED rather than resembling no image), and the helpers `dt-media-get` / `dt-media-post` live beside it. **Hand-deployed to the laptop's `.claude/` directory — there is no automatic deploy, and a RUNNING watcher holds the OLD code until that session re-arms** (a background task since B-TOKEN-BURN-CUT; it was a Monitor before), so a change here is inert for any session that has not re-armed.
 
 > **★ CONTENT UPDATE — B-REPO-RELOCATE (2026-07-23): Langston's REVIEW-READ PATH is now part of this fabric and has NO working copy.**
@@ -3824,9 +3831,34 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 | **BACKUP** | the archive is the only copy of removed content, so `langston-selfmemory-backup` carries it as a second, reproduction-verified source |
 | **CONTROLS** | `--self-test` drives the real entry point in a subprocess for every case. **Mutation-proved: disabling the compare-and-swap, the rule-2 refusal, the restore, the lock, or rule 1's continuation check each makes it fail** |
 
+> **★ CONTENT UPDATE — B-LANGSTON-RELIEF OBJ-3 (live 2026-10-16): Langston's memory is now THREE files, and it trims itself.**
+> | file | role | written by | loaded every invoke? |
+> |---|---|---|---|
+> | `/home/langston/MEMORY.md` (composed from `memory-parts/00-legacy.md`) | current state: protected `## ★` sections, the REVIEWER LEDGER's rulings, and OPEN batch sections | `langston-memory-write` (whole-file, `--compose`, `--trim`) | **yes** (`@MEMORY.md`) |
+> | `/home/langston/LEDGER.md` | his RETRACTIONS — the recall reader's priority source (`langston-recall` prints relevant ones before any hit) | `--split-ledger` (once, 12:32Z) then `--ledger-append` | no |
+> | `/home/langston/MEMORY-ARCHIVE.md` | CLOSED batch sections, verbatim, append-only, each stamped `<!-- evicted <ts> … batch <id> -->`; a recall shard | `--trim` only | no |
+> - **The trim:** every batch section ends with a declared `STATE: closed · batch: <id> · superseded-by: <report>` or `STATE: open · batch: <id>` line (fixed position, never inferred from prose). `langston-memory-trim.timer` (03:50Z daily, before the 04:10Z recall index; `OnFailure` = the scheduled-job page) moves every closed section to the archive and leaves one index line + its `keep:` lines; it REFUSES if any batch section lacks a STATE line, and warns when an evicted heading carries a pre-2026-06-19 date.
+> - **Every version is kept:** each write archives the old AND (for LEDGER.md / MEMORY-ARCHIVE.md) the new bytes to `.memory-archive/<sha>.md`, which the daily backup carries.
+> - **Sizes, measured 2026-10-16:** MEMORY.md 825,371 → 67,768 B; his loaded set 918,745 → 161,142 B vs ceiling 143,856 — the remainder is his `CLAUDE.md` + auto-memory index (`#1197`).
+> - **If I change X, check Y:** the reader's `RETRACTIONS_HEADING_PATTERN` and the writer's split-mode guards must agree (MEMORY.md must hold NO `### Retractions` while LEDGER.md exists); a new batch section without a STATE line pages the trim; the recall shard keys on the eviction stamp's exact form.
+
 ⛔ **ITS REACH, STATED:**
 - **What it does not stop:** it guarantees only writes that go THROUGH it. A root session that edits the file by hand bypasses every check.
 - **What makes that visible:** the next writer call refuses on the changed sha (exit 4). The daily size watch reports the size change.
+
+### ⭐ Coltrane's library — `coltrane-memory` and his Telegram-era copy — Added B-LANGSTON-RELIEF OBJ-4b (2026-10-16)
+
+**WHY IT EXISTS:** Kyle, 2026-10-16: Coltrane should archive and search the way Langston does — nothing recorded is ever lost, and old decisions, findings, conversations and transcripts can be found.
+
+| field | value |
+|---|---|
+| **HOST** | Helsinki: `/usr/local/bin/coltrane-memory` (755 root:root); store `/home/coltrane/memory` (coltrane) |
+| **WRITES** | `remember` → `<type>_<slug>.md` in the store; `--update` first copies the old entry to `.history/<name>.<UTC>.md` by exclusive create (refuses, replacing nothing, if it cannot) |
+| **READS (recall, in order)** | `retraction` entries FIRST · the store · `.history/` (labelled SUPERSEDED) · the crew channel `/var/log/cc-discord-inbox.jsonl` (de-dup on message id + FULL text; 40 a page, `--offset`; totals always printed) · the Telegram-era copy `.corpus/telegram/` (re-hashed against its `PROVENANCE.json` every search) · his own `~/.codex/sessions/` |
+| **FAILURE MODE** | any source that cannot be read prints UNREADABLE / MISSING / DEGRADED and is named in the summary — never a silent zero |
+| **BACKUP** | `.history/` and `.corpus/` are inside the store, so the reproduction-verified `coltrane-selfmemory-backup` (05:30Z, 30 kept) carries them |
+| **THE CORPUS COPY** | `/usr/local/sbin/coltrane-telegram-corpus-install` (750 root), run once 2026-10-16 14:10Z: built in root-only staging `/home/.coltrane-corpus-staging`, ownership handed over by fd, placed by one `renameat2(RENAME_NOREPLACE)`; no by-name operation inside Coltrane's tree (three review rounds closed a symlink-write, two swap windows and a source-side leak) |
+| **DOES NOT COVER** | other agents' private sessions (Langston's), by design |
 
 ### `B-CODEX-FAILOVER` — temporary crew identity and shift control (2026-10-13)
 
