@@ -16,8 +16,11 @@
  *    closed. Measured 2026-10-16: 242 `position_closed` log rows vs 251 paper closes over 14 days — a close that writes no
  *    log row leaves its alert open for a human, which is the safe direction (a stale row is a visibility cost; a wrong
  *    resolve is a lost alarm).
- * Keyed per SYMBOL, unchanged: paper holds at most ONE open position per symbol (measured, audit r4 P1b), so the per-trade
- * key the VTS rail needed (Langston r4 BLOCKER-1) does not arise here.
+ * Keyed per SYMBOL, unchanged: at most ONE open position per symbol is an INVARIANT, not a measurement (Langston r4
+ * condition 5): the unique index `active_open_positions_symbol_idx` on `active_open_positions.symbol` (`shared/schema.ts`)
+ * makes a second row impossible, and the open path turns the refused insert into `DUP_POSITION`
+ * (`active-execution-engine.ts`, `_posCreated`). So the per-trade key the VTS rail needed (Langston r4 BLOCKER-1) cannot
+ * arise here; if that index is ever dropped, this key must become per-position.
  */
 import { railRowClear } from '../core/trading/vts-rail.js';
 
@@ -47,6 +50,8 @@ export class PaperNoTriggerRail {
   private loaded = false;
   private lastSweepMs = 0;
   private sweepInFlight = false;
+  /** `mergeAlertMetadata` returned null (row missing or already resolved) — counted, never assumed (Langston r4 condition 3). */
+  markMisses = 0;
 
   constructor(private readonly mode: string) {}
 
@@ -77,7 +82,7 @@ export class PaperNoTriggerRail {
     const rowId = this.rowByPosition.get(positionId);
     if (!rowId) return;
     deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs })
-      .then(() => { if (this.rowByPosition.get(positionId) === rowId) this.rowByPosition.delete(positionId); })
+      .then((row) => { if (row === null) this.markMisses++; if (this.rowByPosition.get(positionId) === rowId) this.rowByPosition.delete(positionId); })
       .catch((err) => console.error(`[NO_TRIGGER_RAIL][DECIDED_MARK_FAILED] mode=${this.mode} position=${positionId}:`, err instanceof Error ? err.message : err));
   }
 
@@ -108,7 +113,7 @@ export class PaperNoTriggerRail {
         }
       }
       this.load(deps);
-      console.log(`[NO_TRIGGER_RAIL][SWEEP] mode=${this.mode} rowsOpen=${rows.length} resolved=${resolved} unattributed=${unattributed}`);
+      console.log(`[NO_TRIGGER_RAIL][SWEEP] mode=${this.mode} rowsOpen=${rows.length} resolved=${resolved} unattributed=${unattributed} markMisses=${this.markMisses}`);
     } catch (err) {
       console.error(`[NO_TRIGGER_RAIL][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
     } finally {

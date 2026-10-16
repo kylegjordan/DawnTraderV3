@@ -18,6 +18,7 @@ import {
   unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, type MemberClock,
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
+import fs from 'node:fs';
 
 /** `decided_<tradeId>` on the standing record: a member decided at this time (single-key merge, never a map rewrite). */
 export const decidedField = (tradeId: string) => `decided_${tradeId}`;
@@ -49,11 +50,13 @@ export interface VtsRailDeps {
   xstockVerdict: (nowMs: number) => ClassVerdict | null;
   /** Is `nowMs` inside the US regular session on a trading day? */
   isRegularSession: (nowMs: number) => boolean;
+  /** r5 (Langston condition 4): the alert file's size in bytes — every write rewrites it whole; null when unreadable. */
+  alertFileBytes?: () => number | null;
 }
 
 /** The six pre-registered counts (audit A3 / objective 11, r4), cumulative since start. `dedupeHits` = an `addAlert` that
  *  returned an EXISTING row; `escalations` = 30-min member pages. Joins are read against A3's attempted column, not zero. */
-export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0 };
+export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0 };
 
 const state = {
   /** tradeId → id of its open `no-trigger-vts-*` row. */
@@ -110,15 +113,22 @@ export function ensureVtsRailIndex(deps: Pick<VtsRailDeps, 'readAllAlerts'>): vo
  */
 export function markDecided(tradeId: string, nowMs: number, deps: Pick<VtsRailDeps, 'mergeAlertMetadata'>): void {
   const rowId = state.rowByTrade.get(tradeId);
+  // r5 (Langston condition 3): `mergeAlertMetadata` RETURNS null (it does not throw) when the row is missing or already
+  // resolved, so an unwritten mark is counted (`markMisses`, the seventh count) rather than assumed. Either way the index
+  // entry goes: a resolved or vanished row has nothing left to mark.
+  // Store cost, stated (condition 4): each mark is one whole-file rewrite of the alert file, made at most ONCE per open row
+  // or membership (the entry leaves the index on the first attempt) — so a pass costs at most (open rail rows + members)
+  // rewrites, measured max 118 concurrent open rail rows (2026-10-15T13:41Z), before the standing record absorbs the
+  // expected wide books.
   if (rowId) {
     deps.mergeAlertMetadata(rowId, { decidedAtMs: nowMs })
-      .then(() => { if (state.rowByTrade.get(tradeId) === rowId) state.rowByTrade.delete(tradeId); })
+      .then((row) => { if (row === null) railCounts.markMisses++; if (state.rowByTrade.get(tradeId) === rowId) state.rowByTrade.delete(tradeId); })
       .catch((err) => console.error(`[VTS_RAIL][DECIDED_MARK_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err));
   }
   const recId = state.memberRecord.get(tradeId);
   if (recId) {
     deps.mergeAlertMetadata(recId, { [decidedField(tradeId)]: nowMs })
-      .then(() => { if (state.memberRecord.get(tradeId) === recId) state.memberRecord.delete(tradeId); })
+      .then((row) => { if (row === null) railCounts.markMisses++; if (state.memberRecord.get(tradeId) === recId) state.memberRecord.delete(tradeId); })
       .catch((err) => console.error(`[VTS_RAIL][MEMBER_DECIDED_MARK_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err));
   }
 }
@@ -249,7 +259,8 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
     console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
       + `crossings=${railCounts.crossings} joins=${railCounts.joins} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
-      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} sinceStart`);
+      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMisses=${railCounts.markMisses} sinceStart `
+      + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
   } catch (err) {
     state.sweepFailures++;
     console.error(`[VTS_RAIL][SWEEP_ERROR] consecutive=${state.sweepFailures}`, err instanceof Error ? err.message : err);
@@ -338,5 +349,6 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     },
     xstockVerdict: (nowMs) => vq.classVerdict(vq.measureXstockTicking(nowMs), vq.readVenueQuietConfig(), nowMs),
     isRegularSession: (nowMs) => !isInXstockWeekendClose(new Date(nowMs)) && getXstockSession(nowMs) === 'regular',
+    alertFileBytes: () => { try { return fs.statSync(alerts.ALERTS_FILE).size; } catch { return null; } },
   };
 }

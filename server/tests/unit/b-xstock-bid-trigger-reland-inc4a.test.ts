@@ -165,6 +165,15 @@ describe('the rail end to end, on the fake store', () => {
     await runVtsRailSweep(WED + 120_000, d);
     expect(d.rows.find((r) => r.dedupe_key === railKey('SBUX/USD', 'n1'))!.state).toBe('scheduled');
   });
+  it('r5 (Langston condition 3) — a decision mark on a row already resolved is COUNTED as markMisses, not assumed written', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('x1', 'LIN/USD', 'no_usable_mark', WED), WED, d);
+    const row = d.rows.find((r) => r.dedupe_key === railKey('LIN/USD', 'x1'))!;
+    row.state = 'resolved';                                   // resolved by hand between the mint and the decision
+    markDecided('x1', WED + 1_000, d); await flush();
+    expect(railCounts.markMisses).toBe(1);
+    expect(_vtsRailIndex().rowByTrade.has('x1')).toBe(false); // nothing left to mark
+  });
   it('the trade closed ⇒ TRADE-CLOSED', async () => {
     const d = makeStore(); d.setClock(WED);
     await onCrossing(crossing('c1', 'DE/USD', 'no_usable_mark', WED), WED, d);
