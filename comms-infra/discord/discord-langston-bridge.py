@@ -674,6 +674,13 @@ def task_worker(task_q, state):
                 log(f"task worker error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
             finally:
                 task_q.task_done()
+                # B-LANGSTON-RELIEF OBJ-2 (Coltrane r2): an alert Langston has now processed - escalated by the lane,
+                # or restored from the spool with the lane off - is durably done; drop its spooled work.
+                if task.get("is_alert"):
+                    try:
+                        al.spool_remove(al.SPOOL_DIR, task["message_id"])
+                    except Exception as e:
+                        log(f"alert spool: could not remove {task.get('message_id')}: {e}")
             if time.time() - last_heartbeat >= HEARTBEAT:
                 _people, _adv, _alerts = task_q.depth_by_class()
                 log(f"task worker alive, queue depth={task_q.qsize()} "
@@ -719,6 +726,54 @@ def invoke_lane(prompt):
     return r.stdout.strip(), None
 
 
+def escalate_alert(task_q, t, reason):
+    """Hand one alert to Langston, durably: the spool records it as escalated before it is queued, and the
+    worker removes that record only after processing it (Coltrane send-back r2)."""
+    try:
+        al.spool_write(al.SPOOL_DIR, t, "escalated", reason=reason)
+    except Exception as e:
+        log(f"alert spool: WRITE FAILED for escalated msg {t.get('message_id')} ({type(e).__name__}: {e}) - "
+            f"it is queued for Langston but would not survive a restart")
+    task_q.put({**t, "escalated": True,
+                "content": f"[ESCALATED to you by the alert lane — {reason}]\n\n" + t["content"]})
+    log(f"alert lane: escalated msg {t['message_id']} to Langston ({reason})")
+
+
+def restore_alert_spool(alert_q, task_q):
+    """At start: re-queue every alert whose work was not durably finished before the last stop. Routing the
+    lane already RECORDED, or an escalation Langston already ANSWERED, is cleared instead, so nothing is done
+    twice; everything else goes back to the lane (or to Langston when the lane is off / it was escalated)."""
+    recs, problems = al.spool_load(al.SPOOL_DIR)
+    for p in problems:
+        log(f"alert spool: {p}")
+    if not recs:
+        return
+    routed, replied = al.inbox_evidence(dc.INBOX_LOG)
+    counts = {"lane": 0, "langston": 0, "already done": 0}
+    for r in recs:
+        t, st = r["task"], r.get("state")
+        mid = int(t["message_id"])
+        if st == "posting" and r.get("aid") in routed:
+            al.spool_remove(al.SPOOL_DIR, mid)
+            counts["already done"] += 1
+        elif st == "escalated" and mid in replied:
+            al.spool_remove(al.SPOOL_DIR, mid)
+            counts["already done"] += 1
+        elif st == "escalated":
+            task_q.put({**t, "escalated": True,
+                        "content": f"[ESCALATED to you by the alert lane — {r.get('reason', 'restored after restart')}]"
+                                   f"\n\n" + t["content"]})
+            counts["langston"] += 1
+        elif alert_q is not None:
+            alert_q.put(t)
+            counts["lane"] += 1
+        else:
+            task_q.put(t)
+            counts["langston"] += 1
+    log(f"alert spool: restored after restart - {counts['lane']} to the lane, {counts['langston']} to Langston, "
+        f"{counts['already done']} already done and cleared")
+
+
 def run_alert_batch(batch, task_q):
     """Triage one batch of alert tasks; escalate whatever the lane does not account for."""
     channel_id = batch[0]["channel_id"]
@@ -748,6 +803,11 @@ def run_alert_batch(batch, task_q):
             #    (the wake filters' input) succeed. rest_send returns None when any chunk fails, and mirror_event
             #    swallows its own failure, so both are checked here; on either failure EVERY alert in the batch
             #    goes to Langston - a Kyle-owned row must never lose its mention silently.
+            for aid, t in ided:                      # Coltrane r2: publishing is a recorded state
+                try:
+                    al.spool_write(al.SPOOL_DIR, t, "posting", aid=aid)
+                except Exception as e:
+                    log(f"alert spool: could not mark msg {t['message_id']} posting ({type(e).__name__}: {e})")
             sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE,
                                    mention_user_id=CFG["kyle_id"] if kyle_owned else None)
             delivered, why = sent_id is not None, "the lane's Discord post failed"
@@ -760,15 +820,16 @@ def run_alert_batch(batch, task_q):
                 except Exception as e:
                     delivered, why = False, f"the lane's inbox record failed ({type(e).__name__}: {e})"
             if delivered:
+                for aid, t in ided:                  # routing durably recorded: its spooled work is done
+                    if aid not in esc:
+                        al.spool_remove(al.SPOOL_DIR, t["message_id"])
                 escalate += [(by_id[aid], reason) for aid, reason in esc.items()]
                 log(f"alert lane: batch of {len(batch)} - routed {len(routed)}, escalated {len(esc)}")
             else:
                 log(f"alert lane: DELIVERY FAILED ({why}) - handing all {len(ided)} alert(s) of this batch to Langston")
                 escalate += [(t, why) for _, t in ided]
     for t, reason in escalate:
-        task_q.put({**t, "escalated": True,
-                    "content": f"[ESCALATED to you by the alert lane — {reason}]\n\n" + t["content"]})
-        log(f"alert lane: escalated msg {t['message_id']} to Langston ({reason})")
+        escalate_alert(task_q, t, reason)
 
 
 def alert_worker(alert_q, task_q):
@@ -790,9 +851,7 @@ def alert_worker(alert_q, task_q):
             except Exception as e:
                 log(f"alert lane: batch error {type(e).__name__}: {e} - escalating the batch to Langston")
                 for t in batch:
-                    task_q.put({**t, "escalated": True,
-                                "content": f"[ESCALATED to you: the alert lane errored ({type(e).__name__})]\n\n"
-                                           + t["content"]})
+                    escalate_alert(task_q, t, f"the alert lane errored ({type(e).__name__})")
         except Exception as e:
             log(f"alert lane: worker outer error (resuming): {type(e).__name__}: {e}")
             time.sleep(1)
@@ -1018,7 +1077,13 @@ def build_client(task_q, recover_floor=None, alert_q=None):
             base["image_atts"] = _imeta
         if is_alert and not voice:
             if alert_q is not None:                  # B-LANGSTON-RELIEF OBJ-2: the alert lane, not Langston
-                alert_q.put({**base, "kind": "alert", "content": content})
+                _t = {**base, "kind": "alert", "content": content}
+                try:                                 # Coltrane r2: on disk BEFORE it is queued
+                    al.spool_write(al.SPOOL_DIR, _t, "pending")
+                except Exception as _e:
+                    log(f"alert spool: WRITE FAILED for msg {message.id} ({type(_e).__name__}: {_e}) - "
+                        f"queued, but it would not survive a restart")
+                alert_q.put(_t)
                 log(f"ALERT to lane: msg {message.id} via alerts webhook")
                 return
             task_q.put({**base, "kind": "alert", "content": content})
@@ -1074,6 +1139,10 @@ def main():
         alert_q = queue.Queue()
         threading.Thread(target=alert_worker, args=(alert_q, task_q), daemon=True, name="alert-lane").start()
         log(f"alert lane ON ({al.LANE_MODEL}, {al.LANE_DIR}): system alerts no longer invoke Langston")
+    try:
+        restore_alert_spool(alert_q, task_q)       # Coltrane r2: alert work left over from before this start
+    except Exception as e:
+        log(f"alert spool: RESTORE FAILED ({type(e).__name__}: {e}) - spooled alerts remain on disk, not queued")
     client = build_client(task_q, recover_floor, alert_q)
     # discord.py manages gateway reconnects internally; run() blocks forever.
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)

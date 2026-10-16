@@ -64,5 +64,31 @@ ok("publishable defuses an unterminated opener", "stray [ALERT" in pub)
 ok("publishable sanitises the action", '"quoted"' not in pub and "] ] y" in pub)
 ok("publishable lists escalations in plain text, no marker", ("handed to Langston: %s" % B) in pub and "[[ESCALATE" not in pub)
 
+# spool (Coltrane send-back r2): durable, atomic, unreadable files kept aside, oldest message first
+import json as _json, tempfile as _tf
+with _tf.TemporaryDirectory() as _d:
+    sp = os.path.join(_d, "spool")
+    al.spool_write(sp, {"message_id": 20, "content": "b"}, "pending")
+    al.spool_write(sp, {"message_id": 10, "content": "a"}, "pending")
+    al.spool_write(sp, {"message_id": 10, "content": "a"}, "escalated", reason="r")
+    recs, probs = al.spool_load(sp)
+    ok("spool: one record per message, latest state wins", [r["task"]["message_id"] for r in recs] == [10, 20]
+       and recs[0]["state"] == "escalated" and recs[0]["reason"] == "r")
+    ok("spool: no temp files left", not any(n.endswith(".tmp") for n in os.listdir(sp)))
+    open(os.path.join(sp, "30.json"), "w").write("{not json")
+    recs, probs = al.spool_load(sp)
+    ok("spool: an unreadable file is reported and set aside, not dropped", len(probs) == 1 and os.path.exists(os.path.join(sp, "30.json.bad")))
+    al.spool_remove(sp, 20); al.spool_remove(sp, 999)
+    ok("spool: remove is idempotent", [r["task"]["message_id"] for r in al.spool_load(sp)[0]] == [10])
+    inbox = os.path.join(_d, "inbox.jsonl")
+    with open(inbox, "w", encoding="utf-8") as fh:
+        fh.write(_json.dumps({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % A}) + NL)
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 555, "text": "his reply"}) + NL)
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": "adv-Q1", "text": "self-advance"}) + NL)
+        fh.write("garbage" + NL)
+    routed_ids, replied = al.inbox_evidence(inbox)
+    ok("inbox evidence: lane-recorded alert ids", routed_ids == {A})
+    ok("inbox evidence: Langston's replies by message id, odd ids ignored", replied == {555})
+
 print("\nalert_lane tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

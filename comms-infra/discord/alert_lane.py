@@ -11,9 +11,13 @@
 This module is the testable part: batching, the prompt, and reading the lane's answer.
 The bridge (discord-langston-bridge.py) owns the thread, the invocation and the posting.
 """
+import json
+import os
 import re
+import time
 
-LANE_DIR = "/srv/alert-lane"                # cwd of the lane invoke: its CLAUDE.md, never Langston's
+LANE_DIR = "/srv/alert-lane"
+SPOOL_DIR = "/home/langston/.alert-lane/spool"   # durable alert work (Coltrane send-back r2, 2026-10-16)                # cwd of the lane invoke: its CLAUDE.md, never Langston's
 LANE_MODEL = "claude-sonnet-5-5"            # cheaper than Langston's; confirmed by a live one-off invoke at install
 LANE_TIMEOUT_S = 600
 BATCH_SETTLE_S = 20                         # after the first alert, wait this long for the rest of a burst
@@ -57,6 +61,97 @@ def publishable(answer, routed, escalate):
         clean = action.replace('"', "'").replace("]]", "] ]").replace("\n", " ")
         out.append('[[ALERT id=%s owner=%s action="%s"]]' % (aid, owner, clean))
     return "\n".join(out)
+
+
+# ---------------- durable alert work (Coltrane send-back r2) ----------------
+# The bridge's queues are in memory and a restart recovers only PEOPLE's messages (OBJ-1), while some alert
+# classes are never re-surfaced by the dispatcher (info-severity governance/breakage). So every alert is
+# spooled to disk BEFORE it is queued and the file is removed only when its work is durably done:
+#   pending   - waiting for the lane
+#   posting   - the lane is publishing routing for it (recorded => done; not recorded => triage again)
+#   escalated - handed to Langston; done when the worker has processed his task for it
+# On start the bridge re-queues whatever is left, after checking the inbox so nothing is done twice.
+
+def spool_path(spool_dir, message_id):
+    return os.path.join(spool_dir, "%d.json" % int(message_id))
+
+
+def spool_write(spool_dir, task, state, **extra):
+    """Atomically record (or move) one alert's state: temp file, fsync, rename, fsync the directory."""
+    os.makedirs(spool_dir, mode=0o700, exist_ok=True)
+    path = spool_path(spool_dir, task["message_id"])
+    rec = dict(extra, state=state, ts=time.time(), task=task)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, default=str))
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    dfd = os.open(spool_dir, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
+def spool_remove(spool_dir, message_id):
+    try:
+        os.remove(spool_path(spool_dir, message_id))
+    except FileNotFoundError:
+        pass
+
+
+def spool_load(spool_dir):
+    """(records oldest message first, problems). An unreadable file is renamed *.bad and reported, never dropped."""
+    recs, problems = [], []
+    if not os.path.isdir(spool_dir):
+        return recs, problems
+    for name in sorted(os.listdir(spool_dir)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(spool_dir, name)
+        try:
+            with open(path, encoding="utf-8") as fh:
+                rec = json.load(fh)
+            int(rec["task"]["message_id"])
+            recs.append(rec)
+        except Exception as e:
+            problems.append("unreadable spool file %s (%s: %s) - renamed .bad" % (name, type(e).__name__, e))
+            try:
+                os.replace(path, path + ".bad")
+            except OSError:
+                pass
+    recs.sort(key=lambda r: int(r["task"]["message_id"]))
+    return recs, problems
+
+
+def inbox_evidence(inbox_path, tail_bytes=8_000_000):
+    """(alert ids the lane has RECORDED routing for, message ids Langston has REPLIED to) from the tail of the
+    inbox - the two durable facts that mean a spooled alert's work is already done."""
+    routed, replied = set(), set()
+    try:
+        size = os.path.getsize(inbox_path)
+        with open(inbox_path, "rb") as fh:
+            if size > tail_bytes:
+                fh.seek(size - tail_bytes)
+                fh.readline()
+            for raw in fh:
+                try:
+                    e = json.loads(raw)
+                except ValueError:
+                    continue
+                if e.get("kind") != "langston_outbound":
+                    continue
+                if e.get("lane") == "alert":
+                    routed.update(a.lower() for a, _o, _x in MARKER_RE.findall(e.get("text") or ""))
+                elif e.get("reply_to") is not None:
+                    try:
+                        replied.add(int(e["reply_to"]))
+                    except (TypeError, ValueError):
+                        pass                      # e.g. a self-advance id, never an alert's message id
+    except FileNotFoundError:
+        pass
+    return routed, replied
 
 
 def build_prompt(batch):

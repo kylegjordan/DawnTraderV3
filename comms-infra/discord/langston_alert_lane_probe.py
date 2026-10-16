@@ -26,11 +26,19 @@ APPEND = {"fail": False}
 b.dc.rest_send = lambda tok, ch, text, logf, mention_user_id=None: (
     None if SEND["fail"] else (posts.append((text, mention_user_id)), 777)[1])
 b.mirror_event = lambda kind, **f: mirrors.append((kind, f))
+import json as _json, tempfile as _tempfile
+_TMP = _tempfile.mkdtemp(prefix="lane-probe-")
+al.SPOOL_DIR = os.path.join(_TMP, "spool")              # never the live spool
+b.dc.INBOX_LOG = os.path.join(_TMP, "inbox.jsonl")      # never the live inbox
 def fake_append(entry):
     if APPEND["fail"]:
         raise OSError("disk full")
     mirrors.append((entry["kind"], entry))
+    with open(b.dc.INBOX_LOG, "a", encoding="utf-8") as fh:
+        fh.write(_json.dumps(entry) + chr(10))
 b.dc.append_inbox = fake_append
+def spooled():
+    return sorted(os.listdir(al.SPOOL_DIR)) if os.path.isdir(al.SPOOL_DIR) else []
 LANE_ANSWER = {"text": None, "why": None}
 def fake_lane(prompt):
     invokes.append(prompt)
@@ -147,6 +155,51 @@ check("record failure: both alerts escalated to Langston", tq.qsize() == 2)
 _reasons = [tq.get_nowait()["content"] for _ in range(tq.qsize())]
 check("record failure: the reason names the inbox record",
       len(_reasons) == 2 and all("inbox record failed" in r for r in _reasons))
+
+# (11) Coltrane send-back r2: an alert queued before a restart is routed exactly once after it
+for f in spooled():
+    os.remove(os.path.join(al.SPOOL_DIR, f))
+reset()
+tq1, aq1 = lq.TaskPriorityQueue(), queue.Queue()
+c1 = b.build_client(tq1, None, aq1)
+c1._connection.user = types.SimpleNamespace(id=999999)
+info_alert = m(1, "info breakage alert\n_Category:_ breakage  ·  _Alert ID:_ `%s`" % A, webhook_id=CFG["alerts_webhook_id"])
+asyncio.run(c1.on_message(info_alert))
+check("restart: the alert is on disk before the lane touches it", spooled() == ["%d.json" % info_alert.id] and aq1.qsize() == 1)
+# --- the process dies here: aq1 and tq1 are gone ---
+aq2, tq2 = queue.Queue(), lq.TaskPriorityQueue()
+b.restore_alert_spool(aq2, tq2)
+check("restart: the alert is back in the lane queue exactly once", aq2.qsize() == 1 and tq2.qsize() == 0)
+LANE_ANSWER.update(text='[[ALERT id=%s owner=CC-B action="a"]]' % A, why=None)
+b.run_alert_batch([aq2.get_nowait()], tq2)
+check("restart: routed once, recorded, spool cleared", len(posts) == 1 and spooled() == [] and tq2.qsize() == 0)
+aq3, tq3 = queue.Queue(), lq.TaskPriorityQueue()
+b.restore_alert_spool(aq3, tq3)
+check("restart: a second restart does not route it again", aq3.qsize() == 0 and tq3.qsize() == 0 and len(posts) == 1)
+
+# (12) died after recording routing but before clearing the spool: cleared on restore, not re-triaged
+reset()
+t12 = alert_task(B, 12)
+al.spool_write(al.SPOOL_DIR, t12, "posting", aid=B)
+fake_append({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-C action="x"]]' % B,
+             "reply_to": t12["message_id"], "channel_id": CFG["channel_id"], "message_id": 1})
+aq4, tq4 = queue.Queue(), lq.TaskPriorityQueue()
+b.restore_alert_spool(aq4, tq4)
+check("posting + recorded: cleared, not triaged again", aq4.qsize() == 0 and tq4.qsize() == 0 and spooled() == [])
+
+# (13) died while the alert was escalated to Langston: restored to his queue; his processing clears it
+reset()
+t13 = alert_task(A, 13)
+al.spool_write(al.SPOOL_DIR, t13, "escalated", reason="critical")
+aq5, tq5 = queue.Queue(), lq.TaskPriorityQueue()
+b.restore_alert_spool(aq5, tq5)
+check("escalated: restored to Langston as people-class", tq5.depth_by_class() == (1, 0, 0) and aq5.qsize() == 0)
+_orig_pt = b.process_task
+b.process_task = lambda task, state, breaker, task_q=None: None
+_stop = threading.Thread(target=b.task_worker, args=(tq5, {}), daemon=True)
+_stop.start(); time.sleep(1.0)
+b.process_task = _orig_pt
+check("escalated: Langston's processing clears the spool", spooled() == [])
 
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)
