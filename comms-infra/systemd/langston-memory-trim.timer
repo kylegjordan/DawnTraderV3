@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily run of the Langston MEMORY.md supersession trim
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 UTC
+# 05:30Z: after the 04:10Z recall index rebuild and before the 05:40Z size watch, so the watch measures the
+# trimmed file and the next index rebuild picks up what the trim archived. The 05:20Z self-memory backup
+# runs first, so the pre-trim state is in that day's backup as well as in .memory-archive/.
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

@@ -49,6 +49,10 @@ MODES
                    ONE-TIME (B-LANGSTON-RELIEF OBJ-3): the '### Retractions' block moves verbatim to LEDGER.md, the
                    <=4096 B stub replaces it, the header recipe gains the new line, MEMORY.md is recomposed. Read-back is
                    set equality both ways on the reader's fingerprints; any mismatch restores everything.
+   trim:           langston-memory-write --trim [--dry-run] --by WHO --reason WHY
+                   (B-LANGSTON-RELIEF OBJ-3 Q3) moves every batch section whose LAST line is `STATE: closed · batch: ID
+                   · superseded-by: PATH` verbatim to MEMORY-ARCHIVE.md, leaving an index line + its `keep: ` lines.
+                   Refuses if any non-protected section has no STATE line. Run daily by langston-memory-trim.timer.
    self-test:      langston-memory-write --self-test          (only as the sole argument)
 
 EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4 compare-and-swap mismatch (nothing
@@ -83,7 +87,7 @@ READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/lang
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
 STATED_CAP = 24576      # the byte cap Langston quotes for this file; the loaded-set ceiling is `langston-size-watch --status`
-KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger")
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run")
 VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to")
 NL = chr(10)
 
@@ -125,6 +129,14 @@ def parse_args(argv):
     elif "--entries" in out:
         raise Refused(2, "REFUSED: --entries applies only to --ledger-append; a whole-file write declares "
                          "--ledger-delta and --retractions-delta")
+    if out.get("--trim"):
+        for bad in ("--expect-sha", "--compose", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries",
+                    "--part", "--rename-part", "--to", "--split-ledger"):
+            if bad in out:
+                raise Refused(2, "REFUSED: %s does not apply to --trim (it evicts every STATE: closed section under the "
+                                 "lock and takes no content)" % bad)
+    elif "--dry-run" in out:
+        raise Refused(2, "REFUSED: --dry-run applies only to --trim")
     if out.get("--split-ledger"):
         for bad in ("--compose", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries", "--part",
                     "--rename-part", "--to"):
@@ -1066,8 +1078,212 @@ def do_split_ledger(opts, stub):
         os.close(lfd)
 
 
+# ---------------- the trim (B-LANGSTON-RELIEF OBJ-3 Q3, Langston's ruling + allowlist r1, 2026-10-16) ----------------
+# Eviction by SUPERSESSION, never by age (PHASE_19_PLAN 2.8a). A batch section's state is a DECLARED FIELD at a fixed
+# position - its last non-blank line - never read from its prose (his BLOCKER-2: a heading quotes its own history):
+#     STATE: closed · batch: <id> · superseded-by: <path>        STATE: open · batch: <id>
+# --trim moves every `STATE: closed` section VERBATIM to MEMORY-ARCHIVE.md (not auto-loaded; indexed by langston-recall),
+# leaves one index line per section plus its `keep: ` lines under `## Archived batch sections`, and REFUSES - before any
+# write - if any non-protected `## ` section carries no STATE line, naming the count, so an absent marker announces
+# itself instead of reading as "nothing to evict". Same lock, archive, guards and fail-toward-the-breach rollback.
+ARCHIVE_FILE = os.path.join(LANGSTON_HOME, "MEMORY-ARCHIVE.md")
+ARCHIVE_PREAMBLE = ("# Langston — MEMORY-ARCHIVE.md: closed batch sections evicted from MEMORY.md (B-LANGSTON-RELIEF OBJ-3)\n\n"
+                    "Not auto-loaded. `langston-recall <batch-id | term>` searches it. Written ONLY by "
+                    "`langston-memory-write --trim`, append-only; every version is in `.memory-archive/<sha>.md`.\n\n")
+TRIM_PROTECTED = ("## ★", "## RULINGS OF YOURS EXECUTED", "## Archived batch sections")
+TRIM_INDEX_HEADING = ("## Archived batch sections — evicted verbatim to `/home/langston/MEMORY-ARCHIVE.md` "
+                      "(search: `langston-recall <batch-id>`)")
+STATE_RE = re.compile(r"^STATE: (closed|open) · batch: (.+?)(?: · superseded-by: (.+))?$")
+
+
+def trim_plan(text):
+    """Pure: (keep_text, evicted [(id, superseded, section_lines)], added_index_lines, open_count) or Refused.
+    The part is split at column-0 '## ' headings; the header block before the first is untouched."""
+    lines = text.split(NL)
+    if lines and lines[-1] == "":
+        lines = lines[:-1]
+    heads = [i for i, l in enumerate(lines) if l.startswith("## ")]
+    if not heads:
+        raise Refused(2, "REFUSED: no '## ' sections in the part")
+    out = lines[:heads[0]]
+    evicted, unmarked, open_n, index_at = [], [], 0, None
+    for k, h in enumerate(heads):
+        sec = lines[h:(heads[k + 1] if k + 1 < len(heads) else len(lines))]
+        title = sec[0]
+        if title.startswith(TRIM_INDEX_HEADING[:26]):
+            index_at = len(out)
+        if title.startswith(TRIM_PROTECTED):
+            if any(l.startswith("STATE: ") for l in sec):
+                raise Refused(2, "REFUSED: a STATE line inside protected section %r" % title[:60])
+            out += sec
+            continue
+        nonblank = [l for l in sec if l.strip()]
+        states = [l for l in sec if l.startswith("STATE: ")]
+        if len(states) != 1 or nonblank[-1] != states[0]:
+            unmarked.append(title[:70])
+            out += sec
+            continue
+        m = STATE_RE.match(states[0])
+        if not m:
+            raise Refused(2, "REFUSED: unparseable STATE line in %r: %r" % (title[:50], states[0][:80]))
+        if m.group(1) == "open":
+            open_n += 1
+            out += sec
+            continue
+        if not m.group(3):
+            raise Refused(2, "REFUSED: a closed section must name superseded-by: %r" % title[:60])
+        evicted.append((m.group(2), m.group(3).strip(), sec))
+    if unmarked:
+        raise Refused(2, "REFUSED: %d batch section(s) carry no STATE line as their last line - declare one before any "
+                         "trim (first: %r). Nothing was evicted." % (len(unmarked), unmarked[0]))
+    added = []
+    for bid, sup, sec in evicted:
+        added.append("- `%s` — archived %s; record `%s`" % (bid, utc()[:10], sup))
+        added += [l for l in sec if l.startswith("keep: ")]
+    if evicted:
+        while out and out[-1] == "":
+            out.pop()
+        if index_at is None:
+            out += ["", TRIM_INDEX_HEADING, ""] + added
+            added = [TRIM_INDEX_HEADING] + added
+        else:
+            # append to the existing index section (it is protected and only ever grows by these lines)
+            nxt = next((i for i in range(index_at + 1, len(out)) if out[i].startswith("## ")), len(out))
+            seg = out[index_at:nxt]
+            while seg and seg[-1] == "":
+                seg.pop()
+            out = out[:index_at] + seg + added + ([""] + out[nxt:] if nxt < len(out) else [])
+    keep_text = NL.join(out).rstrip(NL) + NL
+    return keep_text, evicted, added, open_n
+
+
+def do_trim(opts):
+    st = os.stat(TARGET)
+    lfd = open_lock(st)
+    try:
+        fcntl.flock(lfd, fcntl.LOCK_EX)
+        with open(TARGET, "rb") as fh:
+            mem_old = fh.read()
+        mem_old_sha = sha(mem_old)
+        state = read_compose_state()
+        if mem_old_sha not in ({state.get("last_written_sha"), state.get("pending_sha")} - {None}):
+            raise Refused(4, "REFUSED: %s was written outside the composer - reconcile with --compose first" % TARGET)
+        parts = read_parts()
+        if state.get("parts_sha") and state["parts_sha"] != parts_digest(parts):
+            raise Refused(4, "REFUSED: a part changed since the last compose - run --compose first")
+        if len(parts) != 1:
+            raise Refused(2, "REFUSED: the trim handles the single-part layout only; %d parts exist" % len(parts))
+        name, part_old_sha, _pb, part_old = parts[0]
+        part_path = os.path.join(PARTS_DIR, name)
+        pst = os.stat(part_path)
+        keep_text, evicted, added, open_n = trim_plan(part_old.decode("utf-8"))
+        if not evicted:
+            return "TRIM: nothing to evict (%d open batch section(s), 0 unmarked); nothing written" % open_n
+        if opts.get("--dry-run"):
+            return "TRIM DRY RUN: would evict %d section(s) [%s], %d open stay; part %d -> %d B; nothing written" % (
+                len(evicted), ", ".join(b for b, _s, _x in evicted), open_n, len(part_old), len(keep_text.encode("utf-8")))
+        reader = load_reader()
+        reader_requires_offsets(reader)
+        arch_existed = os.path.isfile(ARCHIVE_FILE)
+        arch_old = open(ARCHIVE_FILE, "rb").read() if arch_existed else b""
+        block = ""
+        for bid, _sup, sec in evicted:
+            body = list(sec)
+            while body and body[-1] == "":
+                body.pop()
+            block += "<!-- evicted %s from MEMORY.md by langston-memory-write --trim; batch %s -->%s%s%s%s" % (
+                utc(), bid, NL, NL.join(body), NL, NL)
+        arch_new = (arch_old.decode("utf-8") if arch_existed else ARCHIVE_PREAMBLE) + block
+        arch_new_b = arch_new.encode("utf-8")
+        part_new = keep_text.encode("utf-8")
+        # line conservation (checked BEFORE any write): the old part's non-blank lines == the new part's minus the lines
+        # this trim added to the index, plus the evicted sections' lines
+        from collections import Counter
+        nb = lambda ls: Counter(l for l in ls if l.strip())
+        lhs = nb(part_old.decode("utf-8").split(NL))
+        rhs = nb(keep_text.split(NL)) - nb(added)
+        for _b, _s, sec in evicted:
+            rhs += nb(sec)
+        if lhs != rhs:
+            raise Refused(6, "REFUSED: trim line conservation does not close (%d lost, %d extra) - nothing written"
+                          % (sum((lhs - rhs).values()), sum((rhs - lhs).values())))
+        new_parts = [(name, sha(part_new), part_body(part_new), part_new)]
+        body_, parts_sha, body_sha = compose_body(new_parts)
+        mem_new = body_ + stamp_line(1, parts_sha, body_sha).encode("utf-8") + b"\n"
+        mem_new_sha = sha(mem_new)
+        r_before = retraction_count(reader, TARGET)
+        part_arch, _ = archive_old(part_old, part_old_sha, st)
+        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        if arch_existed:
+            archive_old(arch_old, sha(arch_old), st)
+        archive_old(arch_new_b, sha(arch_new_b), st)
+        row = {"ts": utc(), "target": TARGET, "part": name, "mode": "trim", "part_old_sha": part_old_sha,
+               "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
+               "memory_archive_sha": sha(arch_new_b), "evicted": [b for b, _s, _x in evicted], "open_left": open_n,
+               "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"]}
+        append_index(dict(row, outcome="attempted"), st)
+        old_state = dict(state)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        try:
+            replace_file(ARCHIVE_FILE, arch_new_b, pst)           # the superset first - fail toward the breach
+            replace_file(part_path, part_new, pst)
+            replace_target(mem_new, st)
+            problems = []
+            with open(ARCHIVE_FILE, "rb") as fh:
+                got = fh.read()
+            if sha(got) != sha(arch_new_b) or not got.startswith(arch_old if arch_existed else ARCHIVE_PREAMBLE.encode("utf-8")):
+                problems.append("MEMORY-ARCHIVE.md read-back mismatch, or its prior content is not a prefix of it")
+            with open(TARGET, "rb") as fh:
+                if sha(fh.read()) != mem_new_sha:
+                    problems.append("MEMORY.md read-back mismatch")
+            if any(l.startswith("STATE: closed") for l in keep_text.split(NL)):
+                problems.append("a closed section survived the trim")
+            if retraction_count(reader, TARGET) != r_before:
+                problems.append("the retraction count moved")
+            problems += ledger_guard_after_recompose(reader, body_, new_parts)
+            if problems:
+                raise Refused(5, "REFUSED (trim): " + "; ".join(problems))
+        except BaseException as e:
+            try:
+                replace_file(part_path, part_old, pst)
+                replace_target(mem_old, st)
+                write_compose_state(old_state, st)
+                if arch_existed:
+                    replace_file(ARCHIVE_FILE, arch_old, pst)
+                elif os.path.exists(ARCHIVE_FILE):
+                    os.remove(ARCHIVE_FILE)
+                with open(TARGET, "rb") as fh:
+                    ok = sha(fh.read()) == mem_old_sha
+                with open(part_path, "rb") as fh:
+                    ok = ok and sha(fh.read()) == part_old_sha
+            except BaseException as re_err:
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                raise Refused(6, "REFUSED: TRIM RESTORE FAILED (%s). part at %s, MEMORY.md at %s - tell Infra Claude."
+                              % (type(re_err).__name__, part_arch, mem_arch))
+            append_index(dict(row, ts=utc(), outcome="restored" if ok else "restore-incomplete", why=str(e)[:300]), st)
+            if not ok:
+                raise Refused(6, "REFUSED: the trim rollback was NOT complete (cause: %s). part at %s, MEMORY.md at %s"
+                              % (str(e)[:160], part_arch, mem_arch))
+            base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
+            raise Refused(5, "REFUSED: " + base + " - part, MEMORY.md, compose-state and MEMORY-ARCHIVE.md restored")
+        write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
+                             "parts_sha": parts_sha, "part_count": 1}, st)
+        append_index(dict(row, ts=utc(), outcome="written"), st)
+        return "TRIM: evicted %d section(s) [%s] to MEMORY-ARCHIVE.md; %d open stay; MEMORY.md %d -> %d B; %s" % (
+            len(evicted), ", ".join(b for b, _s, _x in evicted), open_n, len(mem_old), len(mem_new), size_line(len(mem_new)))
+    finally:
+        os.close(lfd)
+
+
 def run(argv, stdin_bytes):
     opts = parse_args(argv)
+    if opts.get("--trim"):
+        for req in ("--by", "--reason"):
+            if req not in opts or not str(opts[req]).strip():
+                raise Refused(2, "REFUSED: %s is required" % req)
+        if os.geteuid() not in (0, pwd.getpwnam(OWNER).pw_uid):
+            raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
+        return do_trim(opts)
     if opts.get("--split-ledger"):
         for req in ("--expect-sha", "--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
@@ -1907,7 +2123,10 @@ def main():
     # ⛔ --compose and --rename-part read NO stdin: they act on the parts, not on new content. Reading stdin here
     #    blocked a `--compose` invoked over ssh with no redirection (the channel never sends EOF) - a live hang the
     #    fixture-always-passes-stdin tests missed. A rename carries no content, so the same EOF hang would bite it.
-    stdin_bytes = b"" if ("--compose" in argv or "--rename-part" in argv) else sys.stdin.buffer.read()
+    #    --trim is the same shape (it evicts what the part already declares) and hung the same way over ssh on its first
+    #    real dry run, 2026-10-16 - the tests passed stdin, so they could not see it. Both are now in this list.
+    no_stdin = ("--compose", "--rename-part", "--trim")
+    stdin_bytes = b"" if any(f in argv for f in no_stdin) else sys.stdin.buffer.read()
     try:
         print(run(argv, stdin_bytes))
         return 0

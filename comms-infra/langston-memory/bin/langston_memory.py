@@ -28,6 +28,10 @@ SHARDS = [
 #    A wrong value in production fails closed: no ledger at that home -> refusal.
 LANGSTON_HOME = os.environ.get("LANGSTON_HOME", "/home/langston")
 LEDGER_SOURCES = [os.path.join(LANGSTON_HOME, "LEDGER.md"), os.path.join(LANGSTON_HOME, "MEMORY.md")]
+# B-LANGSTON-RELIEF OBJ-3 Q3: closed batch sections the trim moves out of MEMORY.md stay SEARCHABLE here. Not required:
+#   before the first trim the file does not exist, and a missing optional shard is not a degraded corpus.
+SHARDS.append(("memory-archive", os.path.join(LANGSTON_HOME, "MEMORY-ARCHIVE.md"), False))
+EVICT_RE = re.compile(r"^<!-- evicted (\S+) from MEMORY\.md by langston-memory-write --trim; batch (.+?) -->$", re.M)
 
 MAX_STORE = 20000        # stored+searchable text cap (the tail must be findable)
 MAX_DISPLAY = 3000       # display clip; truncation is MARKED, never silent
@@ -108,6 +112,7 @@ def rec(ts, cls, ref, text, ts_quality="exact"):
             "ids": sorted(set(ID_RE.findall(t))), "shas": sorted(set(SHA_RE.findall(t)))[:8], "text": t}
 
 def shard_of(ref):
+    if ref.startswith("memory-archive/"): return "memory-archive"
     if ref.startswith("openclaw/"): return "openclaw"
     if ref.startswith("telegram/"): return "telegram"
     if ref.startswith("transcript/"): return "transcripts"
@@ -121,7 +126,7 @@ def tier_of(r):
         return 3
     if r["cls"] == "tool-evidence":
         return 2
-    if r["cls"] in ("telegram-archive", "openclaw-langston", "openclaw-channel", "system-notice"):
+    if r["cls"] in ("telegram-archive", "openclaw-langston", "openclaw-channel", "system-notice", "memory-archive"):
         return 1
     return 0
 
@@ -242,6 +247,17 @@ def parse_telegram(path, out):
             r = rec(ts, "telegram-archive", f"telegram/{fname} lines={start+1}-{min(start+60,len(lines))}", chunk, ts_quality=tq)
             if r: out.append(r)
 
+def parse_memory_archive(path, out):
+    """One record per evicted section, dated by the trim's own eviction stamp (never by file mtime)."""
+    text = open(path, encoding="utf-8", errors="replace").read()
+    marks = list(EVICT_RE.finditer(text))
+    for k, m in enumerate(marks):
+        end = marks[k + 1].start() if k + 1 < len(marks) else len(text)
+        lineno = text.count(chr(10), 0, m.start()) + 1
+        r = rec(m.group(1), "memory-archive", f"memory-archive/{os.path.basename(path)} batch={m.group(2)} line={lineno}",
+                text[m.end():end])
+        if r: out.append(r)
+
 def build_index():
     os.makedirs(os.path.dirname(INDEX), exist_ok=True)
     out, counts = [], {}
@@ -260,6 +276,7 @@ def build_index():
                 elif name == "openclaw": parse_openclaw(p, out)
                 elif name == "transcripts": parse_transcript(p, out)
                 elif name == "telegram": parse_telegram(p, out)
+                elif name == "memory-archive": parse_memory_archive(p, out)
             except (PermissionError, OSError) as ex:
                 print(f"REFUSING TO INDEX: {p}: {ex}", file=sys.stderr)
                 sys.exit(2)
@@ -358,6 +375,13 @@ def _split_evidence():
                 "(`langston-memory-write --compose`) or restore MEMORY.md from .memory-archive/" % idx)
     last = [r.get("ledger_new_sha") or r.get("ledger_sha") for r in rows
             if r.get("outcome") == "written" and r.get("mode") in ("split-ledger", "ledger-file-append")]
+    arch = os.path.join(LANGSTON_HOME, ".memory-archive", "%s.md" % last[-1])
+    # name the archive only after SEEING it (Langston record item, 2026-10-16): a named file that is not there is the
+    # same invented-recovery shape one layer down
+    if not os.path.isfile(arch):
+        return ("the split IS recorded (%s) but the archive of its newest LEDGER.md (%s) is NOT present, so the "
+                "cause of the loss and the recovery are UNKNOWN - the pre-split MEMORY.md archives still hold every "
+                "retraction" % (split[-1].get("ts"), arch))
     return ("the split IS recorded (%s), so LEDGER.md was removed after it - its newest written version is "
             ".memory-archive/%s.md; restore that file to %s" % (split[-1].get("ts"), last[-1], LEDGER_SOURCES[0]))
 
@@ -540,7 +564,7 @@ def query(terms):
     warn = " — ⚠ a miss here is NOT an absence" if (newer_rows or newer_files or newer_rows is None or newer_files is None) else ""
     print(f"INDEX: built {built}, {meta['total']} records ({meta.get('duplicates_removed',0)} dupes removed at build). Newer than index: {fr_disc}, {fr_tr}{warn}")
     cov = []
-    for name in ("openclaw", "telegram", "discord", "transcripts"):
+    for name in ("openclaw", "telegram", "discord", "transcripts", "memory-archive"):
         sp = (meta["counts"].get(name) or {}).get("span")
         cov.append(f"{name} {sp['min']}→{sp['max']}" if sp else f"{name} EMPTY")
     print("COVERAGE: " + " · ".join(cov) + " — a query outside a shard's span cannot hit that shard; thin results there are not absences")

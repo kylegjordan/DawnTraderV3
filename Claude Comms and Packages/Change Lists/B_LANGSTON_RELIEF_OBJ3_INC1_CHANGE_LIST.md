@@ -121,3 +121,37 @@ exactly the L118 line, which is present once in MEMORY.md under its new heading.
 - **Tests:** `test_ledger_split.py` **66 PASS / 0 FAIL** (adds: split-recorded refusal names an archive that exists and
   holds the live bytes; your forged no-split state names `--compose` and NOT a restore; unreadable index ⇒ UNKNOWN);
   `--self-test` 70/0.
+
+## Q4 — APPLIED LIVE 12:4xZ
+
+`obj3_q4_relabel.py` (`1d76f7eff`) through the writer, deltas 0/0: F-G-1's heading now says WINDOW CLOSED 2026-09-04
+(crypto PASS n=24, xStock UNDERPOWERED n=19), only the completion report OWED (CC-C) — so it stays **open**;
+B-WAKE-LEAD-NAME's says ✅ CLOSED 2026-09-11, Step 11 confirmed by you 17:38Z (Kyle's 2026-09-02 no-ack rule) — so
+**closed**. MEMORY.md 137,390 → 137,712 B. Your archive-stat record item is folded (`_split_evidence` names the archive
+only after `os.path.isfile`; test added, 67/0).
+
+## Q3 — increment 2 (normalise + trim), NOT YET LIVE
+
+- **`obj3_normalise.py`** — your allowlist r1 §4/§5/§6 as a line-number spec PINNED to the post-split, post-Q4 part,
+  every named line prefix-checked (refuses on any other object). Promotes the 24 records (13 bullets + bold paragraphs,
+  B-PRICE-SIDE-BY-JOB hand-placed from L794+L799), merges L798 into F-G-1, splits L865, attaches L802→DAA, L807→WQ,
+  L808 + L813-815→B-DEPLOY-DRIFT-LINE, ends every batch section with `STATE: closed · batch · superseded-by:
+  <completion report>` or `STATE: open · batch`, and prefixes the six `keep:` lines. Checks: every original line exactly
+  once, the split halves rejoin, REVIEWER LEDGER unchanged, no STATE in a protected section, **id→section mapping equal
+  to the spec both ways**. **Dry run on the live part: 49 sections (36 closed, 13 open), 56 headings, 6 keep lines,
+  137,510 → 146,237 B; written through the writer on a private copy, guards clean.**
+  Deviations from your table, each for you to rule: **B-PRICE-AGE-TRUTH open** (single-line record, a `keep:` would keep
+  all of it — your rider-1 alternative) · **B-WAKE-LEAD-NAME closed** (your rider 3: Q4 ran first, its label now says
+  closed) · F-G-1 open (Q4 label: report owed).
+- **`langston-memory-write --trim [--dry-run]`** — evicts every section whose LAST non-blank line is `STATE: closed`
+  verbatim to `/home/langston/MEMORY-ARCHIVE.md` (append-only, each section stamped `<!-- evicted <ts> … batch <id> -->`),
+  leaves an index line + its `keep:` lines under `## Archived batch sections`; refuses before any write on an unmarked
+  section, a STATE line in a protected section, or a closed one without superseded-by; line conservation checked before
+  writing; superset first, rollback toward the breach; reads NO stdin (it hung over ssh on its first dry run — fixed,
+  tested with an open silent stdin).
+- **Recall:** `MEMORY-ARCHIVE.md` is a non-required shard, one record per evicted section dated by its eviction stamp.
+- **Timer:** `langston-memory-trim.{service,timer}` 05:30Z daily (after the 05:20Z backup and 04:10Z index, before the
+  05:40Z size watch), `OnFailure` → the scheduled-job page, `StandardInput=null`.
+- **Tests:** `test_memory_trim.py` 31/0, `test_ledger_split.py` 67/0, `--self-test` 70/0.
+- **Trim on the normalised private copy:** 36 evicted, 13 open stay, **MEMORY.md 146,439 → 67,198 B**, archive 91,852 B;
+  loaded set ≈ **160,572 vs 143,856** — over by ≈16.7 KB, your predicted 16,596 B residual, and it is CLAUDE.md + index.

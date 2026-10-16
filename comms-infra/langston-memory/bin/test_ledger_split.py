@@ -209,6 +209,12 @@ def main():
           ("split IS recorded" in lst[4], (".memory-archive/%s.md" % live_sha) in lst[4]), (True, True))
     check("  ...and that archive file exists and holds the live LEDGER.md bytes",
           rd(os.path.join(h.top, ".memory-archive", live_sha + ".md")) == rd(h.ledger + ".aside"), True)
+    ap = os.path.join(h.top, ".memory-archive", live_sha + ".md")
+    os.rename(ap, ap + ".aside")
+    lst = h.reader().ledger_state()
+    check("  ...with that archive ALSO gone, it names no restore and says UNKNOWN",
+          ("NOT present" in lst[4], "UNKNOWN" in lst[4], "restore that file" in lst[4]), (True, True, False))
+    os.rename(ap + ".aside", ap)
     os.rename(h.ledger + ".aside", h.ledger)
     h.done()
 

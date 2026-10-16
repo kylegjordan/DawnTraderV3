@@ -1,0 +1,16 @@
+[Unit]
+Description=Langston MEMORY.md - daily supersession trim (B-LANGSTON-RELIEF OBJ-3 Q3)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+# A missed or failed trim is worth knowing about and not worth a phone push: the scheduled-job page.
+OnFailure=agent-unit-failure@%N.service
+
+[Service]
+Type=oneshot
+# Evicts every batch section whose LAST line is `STATE: closed ...` verbatim to MEMORY-ARCHIVE.md, under the
+# writer's lock, archive, guards and fail-toward-the-breach rollback. It REFUSES (exit 2 => this unit fails and
+# pages) if any batch section carries no STATE line - an absent marker must announce itself, never read as
+# "nothing to evict". Nothing to evict is a clean exit 0.
+ExecStart=/usr/local/bin/langston-memory-write --trim --by langston-memory-trim --reason "daily supersession trim"
+StandardInput=null
+# NOT Restart= - the next daily run is the retry.
+TimeoutStartSec=300
