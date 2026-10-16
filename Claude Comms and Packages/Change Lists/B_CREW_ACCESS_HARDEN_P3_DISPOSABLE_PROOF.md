@@ -214,7 +214,7 @@ arguments.`; `ssh-add -l` and `ssh-add -D` with the agent stopped → `THROWN: E
 to agent`. Neither script had been executed before approval; the approved suites exercise the
 Python holder and the census only, and CI only parses the PowerShell.
 
-### Correction — commit `91c84d786`
+### Correction — commit `b0e26ad47`
 
 One helper, byte-identical in both scripts between `# BEGIN/# END native-call helper`, runs
 every external program through `Diagnostics.Process` with a command line built by Windows CRT
@@ -239,7 +239,7 @@ refuses if ssh-keygen reports `Too many arguments`/usage, so a lost argument can
   reverted; helper copies diverge).
 - Existing suites unchanged: 11/11 and 36/36.
 
-### Population for this review — 14 files at `91c84d786`
+### Population for this review — 14 files at `b0e26ad47`
 
 Unchanged from the approved ref (9): `caller_capture_bindings.json` `51ad685c`,
 `capture_caller_processes.ps1` `ca589183`, `config.example.json` `aca6b25d`,
