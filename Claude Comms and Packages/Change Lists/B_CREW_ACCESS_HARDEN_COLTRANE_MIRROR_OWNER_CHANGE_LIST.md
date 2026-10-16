@@ -83,3 +83,30 @@ across 387 source object files and 2,978 target object files. The timer remained
 DISPOSITION: folded into B-CREW-ACCESS-HARDEN because exact-ref Langston/Coltrane review is a
 required gate for this batch and the stopped timer could not safely return to service without
 the correction.
+
+## Exact review-branch reads — 2026-10-16 (Infra Claude)
+
+Coltrane, the Kyle-routed reviewer for OLD Claude's `B-B75-COUNT-GATE` hotfix (#1195),
+held at 09:20Z because his tools could read only `migration/aws-supabase`, while the hotfix
+waited on `review/b-b75-count-gate` at `97233c2baa03d054b2faeb216e68ccc79bc4b432` (present in
+`/srv/dawntrader-backup.git`). Langston's `dt-review` already reads a pinned commit and labels
+an off-branch read, so this is the parity correction.
+
+- `coltrane-repo-refresh` also fetches `+refs/heads/review/*:refs/heads/review/*` with
+  `--prune` limited by the refspecs; the stamp is still written only after that fetch succeeds.
+- `coltrane-review --ref <sha>` reads one exact commit: full 40-char lowercase id, present in
+  the mirror, and on `migration/aws-supabase` or a fetched `review/*` branch, else REFUSED. An
+  off-branch read prints one OFF-BRANCH line first on stdout and on stderr.
+
+Commit `92c8a422fd41a603af172a188d325919de9efb81`; tested as `coltrane` on a scratch clone
+(cases and exit codes in the commit message). Coltrane **APPROVED TO INSTALL** at that exact
+ref after his own disposable-repository run. Installed 09:33Z: `/usr/local/bin/coltrane-review`
+= blob `1ce02b214da4333a6f7b977b31af4a6ff2b8a627`, `/usr/local/bin/coltrane-repo-refresh` =
+blob `24a571b632e8fcc0140c18cb341286c97a1e49a6` (`git hash-object` of the installed files),
+both 0755 root:root. Rollback copies: `/root/coltrane-tool-rollback-20261016/`. The first
+post-install refresh fetched `review/b-b75-count-gate` at `97233c2ba`, and the installed tool
+read its two commits with the OFF-BRANCH line first (rc 0). `AGENTS.md` unchanged (his
+auto-loaded size may only go down); the tool's usage text documents `--ref`.
+
+DISPOSITION: folded into B-CREW-ACCESS-HARDEN (reviewer-access parity, the same scope as the
+2026-10-15 corrections above).
