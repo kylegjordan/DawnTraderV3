@@ -71,3 +71,10 @@ Resolved by the EXISTING `active-exit-monitor` when the position decided after t
 3. **Objective 12's evidence.** Real lane: the warning carries the hold and the last refusal reason (`_vtsLastRefusal`, kept apart from the streak because the max-hold close is itself a decision that clears the streak); metadata `{symbol, hold, lastRefusal}`. Shadow lane: each entry in the count row's `lastTrades` carries `{symbol, hold, lastRefusal}` (`_vtsShadowLastRefusal`). Test + mutation (drop the reason → 1 red).
 **Judgement calls (Coltrane):** fire-and-forget cost accepted; positive `position_closed` evidence accepted; `joins + dedupeHits` accepted as the post-deploy decomposition, not a renaming of A3's suppressed — the pre-registration reads it that way.
 **Tests:** inc4a 37/37; 68 engine/runner/rail files 1112/1112 (one file fails to parse locally — `b-tsc-baseline-fix`, untouched, environmental). `tsc` = baseline.
+
+## STEP 4 r3 — LANGSTON'S SEND-BACK (14:17Z) FOLDED
+- **Paper key per POSITION** (`paperRailKey(mode, symbol, positionId)`; engine mint uses it). Succession test + mutation (per-symbol key → 1 red). Plan r5e.
+- **The cited `active_open_positions_symbol_idx` does not exist in the database** (`#1113`); comment corrected — the live constraint is `UNIQUE (symbol, side)`.
+- **Pre-registration reading replaced** (plan r5e): crossings conserved · joins the expected share · pagesAttempted falling · `dedupeHits == 0` a separate tripwire.
+- Escalation clears `decided_` too. CI is cited at the graded ref from now on.
+**Tests:** inc4a 38/38. `tsc` = baseline.

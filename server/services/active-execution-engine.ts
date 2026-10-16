@@ -494,7 +494,7 @@ import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
 // HF9: applyGovernance + getGovernanceStateForUI removed (dead imports — never called in function body)
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
-import { PaperNoTriggerRail, productionPaperRailDeps, type PaperRailDeps } from './paper-no-trigger-clear.js';
+import { PaperNoTriggerRail, productionPaperRailDeps, paperRailKey, type PaperRailDeps } from './paper-no-trigger-clear.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { INTERIM_NO_POSTURE_MODE, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
@@ -3790,9 +3790,12 @@ export class ActiveExecutionEngine {
                 + `the dedupe key permanently — and this rail is the only observability on a selector `
                 + `that has never once executed on crypto. Resolving is what re-arms it for the next run. `
                 + `Since row 2 (4a) it clears ITSELF once the position decides or closes (server/services/paper-no-trigger-clear.ts:1).`,
-              // row 2 (4a) P1b: the position id makes the row re-measurable; the row is indexed AT THE MINT.
+              // row 2 (4a) P1b: the position id makes the row re-measurable; the row is indexed AT THE MINT. ⛔ The key is
+              // per POSITION (Langston Step 4 BLOCKER): a per-SYMBOL key let a stale row — from a position that closed with
+              // no deciding cycle and no `position_closed` row — be handed by dedupe to the NEXT position on that symbol,
+              // which then could never page. Same succession hazard `_noTriggerStreak` keys on `position.id` for.
               metadata: { positionId: position.id },
-              dedupe_key: `no-trigger-${this.mode}-${position.symbol}`,
+              dedupe_key: paperRailKey(this.mode, position.symbol, position.id as string),
             });
             const _ntPid = position.id as string;
             void this._noTriggerRailCtx().then(({ rail }) => rail.noteMint(_ntPid, _ntRow as any))

@@ -294,7 +294,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
               + `book (row 2 increment (4a), audit A5: 421 of 423 such streaks ended within 30 min). While this lasts its stop and `
               + `target are NOT evaluated. This row clears itself when the trade decides or closes (${VTS_RAIL_REF}).`,
           }, nowMs, deps);
-          patch[memberField(tid)] = null; escalated++; railCounts.escalations++; continue;
+          patch[memberField(tid)] = null; patch[decidedField(tid)] = null; escalated++; railCounts.escalations++; continue;
         }
         if (clock.sessionClockStartMs !== m.sessionClockStartMs || clock.sessionDateEt !== m.sessionDateEt) {
           patch[memberField(tid)] = { ...m, sessionClockStartMs: clock.sessionClockStartMs, sessionDateEt: clock.sessionDateEt };

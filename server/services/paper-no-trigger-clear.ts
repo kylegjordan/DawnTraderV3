@@ -16,17 +16,20 @@
  *    closed. Measured 2026-10-16: 242 `position_closed` log rows vs 251 paper closes over 14 days — a close that writes no
  *    log row leaves its alert open for a human, which is the safe direction (a stale row is a visibility cost; a wrong
  *    resolve is a lost alarm).
- * Keyed per SYMBOL, unchanged: at most ONE open position per symbol is an INVARIANT, not a measurement (Langston r4
- * condition 5): the unique index `active_open_positions_symbol_idx` on `active_open_positions.symbol` (`shared/schema.ts`)
- * makes a second row impossible, and the open path turns the refused insert into `DUP_POSITION`
- * (`active-execution-engine.ts`, `_posCreated`). So the per-trade key the VTS rail needed (Langston r4 BLOCKER-1) cannot
- * arise here; if that index is ever dropped, this key must become per-position.
+ * ⛔ KEYED PER POSITION — `no-trigger-<mode>-<SYMBOL>-<positionId>` (Langston (4a) Step 4 BLOCKER). The hazard is not two
+ * positions open at once (that is prevented: the LIVE database's `UNIQUE (symbol, side)` with `side` always 'buy' — NOT the
+ * `active_open_positions_symbol_idx` that `shared/schema.ts` declares, which the database does not have, `#1113`). It is
+ * SUCCESSION: a position that closes with no deciding cycle and no `position_closed` row leaves its row open forever, and a
+ * per-symbol key would hand that row by dedupe to the NEXT position on the symbol, which could then never page. Per-position
+ * keys make a stale row block nothing. Rows minted before (4a) (per symbol, no `positionId`) stay unattributed and suppress
+ * nothing new.
  */
 import { railRowClear } from '../core/trading/vts-rail.js';
 
 export const PAPER_RAIL_REF = 'server/services/paper-no-trigger-clear.ts:1';
 export const PAPER_RAIL_ACTOR = 'active-exit-monitor';
 export const paperRailPrefix = (mode: string) => `no-trigger-${mode}-`;
+export const paperRailKey = (mode: string, symbol: string, positionId: string) => `no-trigger-${mode}-${symbol}-${positionId}`;
 
 export interface PaperRailRow {
   id: string;

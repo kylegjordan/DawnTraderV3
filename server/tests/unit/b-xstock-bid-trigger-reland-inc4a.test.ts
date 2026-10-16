@@ -359,7 +359,7 @@ describe('P1b — the paper sibling `no-trigger-<mode>-*` clears itself, restart
     return { d, deps, closedPos };
   };
   const mint = async (d: ReturnType<typeof makeStore>, pid: string, sym: string) =>
-    d.addAlert({ dedupe_key: `no-trigger-paper-${sym}`, body: 'b', metadata: { positionId: pid } });
+    d.addAlert({ dedupe_key: `no-trigger-paper-${sym}-${pid}`, body: 'b', metadata: { positionId: pid } });
 
   it('mint → decision → RESTART before the sweep ⇒ resolves by the existing active-exit-monitor actor', async () => {
     const { d, deps } = mk(); d.setClock(WED);
@@ -388,9 +388,26 @@ describe('P1b — the paper sibling `no-trigger-<mode>-*` clears itself, restart
     await d.addAlert({ dedupe_key: 'no-trigger-paper-OLD/USD', body: 'legacy' });
     closedPos.add('p3');
     expect(await rail.sweep(WED + 60_000, deps)).toBe(1);
-    expect((d.rows.find((r) => r.dedupe_key === 'no-trigger-paper-DE/USD') as any).evidence).toMatch(/^POSITION-CLOSED position=p3 /);
-    expect(d.rows.find((r) => r.dedupe_key === 'no-trigger-paper-SBUX/USD')!.state).toBe('scheduled');
+    expect((d.rows.find((r) => r.dedupe_key === 'no-trigger-paper-DE/USD-p3') as any).evidence).toMatch(/^POSITION-CLOSED position=p3 /);
+    expect(d.rows.find((r) => r.dedupe_key === 'no-trigger-paper-SBUX/USD-p4')!.state).toBe('scheduled');
     expect(d.rows.find((r) => r.dedupe_key === 'no-trigger-paper-OLD/USD')!.state).toBe('scheduled');
+  });
+  it('Langston Step 4 BLOCKER — SUCCESSION: a stale row from a closed position cannot swallow the NEXT position on that symbol', async () => {
+    const { paperRailKey } = await import('../../services/paper-no-trigger-clear');
+    const { d, deps } = mk(); d.setClock(WED);
+    const rail = new PaperNoTriggerRail('paper'); rail.ensureLoaded(deps);
+    // position A pages, then closes OUT OF BAND: no deciding cycle, no position_closed row ⇒ its row stays open forever
+    const a = await d.addAlert({ dedupe_key: paperRailKey('paper', 'NOW/USD', 'posA'), body: 'b', metadata: { positionId: 'posA' } });
+    rail.noteMint('posA', a);
+    expect(await rail.sweep(WED + 60_000, deps)).toBe(0);                   // A's row cannot clear
+    // position B on the SAME symbol pages: it gets its OWN row (mutation "per-symbol key" ⇒ B dedupes onto A's row)
+    const b = await d.addAlert({ dedupe_key: paperRailKey('paper', 'NOW/USD', 'posB'), body: 'b', metadata: { positionId: 'posB' } });
+    expect(b.id).not.toBe(a.id);
+    rail.noteMint('posB', b);
+    rail.markDecided('posB', WED + 70_000, deps); await flush();
+    expect(await rail.sweep(WED + 130_000, deps)).toBe(1);                  // B's own row clears on B's decision
+    expect(d.rows.find((r) => r.id === a.id)!.state).toBe('scheduled');      // A's is left for a human, blocking nothing
+    expect(paperRailKey('paper', 'NOW/USD', 'posA').startsWith('no-trigger-paper-')).toBe(true); // the family prefix still selects it
   });
   it('the live mode never touches the paper rows', async () => {
     const { d, deps } = mk(); d.setClock(WED);
@@ -406,7 +423,8 @@ describe('P1b fence — the engine mints the paper row WITH its position id and 
   it('reads the engine source', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('server/services/active-execution-engine.ts', 'utf8');
-    expect(src).toMatch(/metadata: \{ positionId: position\.id \},\s*\r?\n\s*dedupe_key: `no-trigger-\$\{this\.mode\}-\$\{position\.symbol\}`/);
+    expect(src).toMatch(/metadata: \{ positionId: position\.id \},\s*\r?\n\s*dedupe_key: paperRailKey\(this\.mode, position\.symbol, position\.id as string\),/);
+    expect(src).not.toContain('dedupe_key: `no-trigger-${this.mode}-${position.symbol}`'); // the per-symbol key Langston sent back
     expect(src).toContain('rail.noteMint(_ntPid, _ntRow as any)');
     expect(src).toContain('this._noteNoTriggerRailDecision(position.id as string, decision.noDecisionReason);');
     expect(src).toContain('void this._runNoTriggerRailSweep(); // row 2 (4a) P1b');
