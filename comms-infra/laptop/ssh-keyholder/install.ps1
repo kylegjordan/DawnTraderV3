@@ -9,6 +9,43 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# BEGIN native-call helper (identical in install.ps1 and rollback.ps1; test_ps_native.py checks both)
+# Windows PowerShell 5.1 drops an empty-string argument to a native program and, under
+# ErrorActionPreference Stop, turns any redirected native stderr line into a terminating
+# error. Both broke this script on the stock laptop shell. Every OpenSSH tool call therefore
+# goes through this helper: it builds the command line itself (CRT quoting, so '' arrives
+# as an empty argument), captures stdout and stderr as text, closes stdin so no tool can
+# wait on a prompt, and reports the exit code. It behaves the same on PowerShell 5.1 and 7.
+function ConvertTo-NativeArgument([string]$Value) {
+    if ($Value -eq '') { return '""' }
+    if ($Value -notmatch '[\s"]') { return $Value }
+    $escaped = [regex]::Replace($Value, '(\\*)"', '$1$1\"')
+    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    return '"' + $escaped + '"'
+}
+
+function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments) {
+    $startInfo = [Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $startInfo.Arguments = (@($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' ')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardInput = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $process = [Diagnostics.Process]::Start($startInfo)
+    try {
+        $process.StandardInput.Close()
+        $stderrTask = $process.StandardError.ReadToEndAsync()
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderrTask.GetAwaiter().GetResult() }
+    } finally {
+        $process.Dispose()
+    }
+}
+# END native-call helper
+
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw 'Run the installer from an elevated PowerShell window.'
@@ -39,8 +76,8 @@ $rollbackScript = Join-Path $sourceRoot 'rollback.ps1'
 function Set-OwnerOnlyAcl([string]$Path, [bool]$Directory) {
     $grant = if ($Directory) { "*$sid`:(OI)(CI)F" } else { "*$sid`:F" }
     $systemGrant = if ($Directory) { '*S-1-5-18:(OI)(CI)F' } else { '*S-1-5-18:F' }
-    & "$env:SystemRoot\System32\icacls.exe" $Path '/inheritance:r' '/grant:r' $grant $systemGrant | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Could not secure $Path" }
+    $aclResult = Invoke-NativeTool "$env:SystemRoot\System32\icacls.exe" @($Path, '/inheritance:r', '/grant:r', $grant, $systemGrant)
+    if ($aclResult.ExitCode -ne 0) { throw "Could not secure $Path : $($aclResult.StdErr.Trim())" }
 }
 
 function Assert-LockedState {
@@ -50,8 +87,7 @@ function Assert-LockedState {
     }
     if (Test-Path -LiteralPath $registryPath) { throw 'Windows ssh-agent registry material remains.' }
     if (Test-Path -LiteralPath $markerPath) { throw 'The key-holder unlock marker remains.' }
-    & $sshAdd -l *> $null
-    if ($LASTEXITCODE -eq 0) { throw 'ssh-add still reports a usable in-memory identity while locked.' }
+    if ((Invoke-NativeTool $sshAdd @('-l')).ExitCode -eq 0) { throw 'ssh-add still reports a usable in-memory identity while locked.' }
 }
 
 function Invoke-TestFailure([string]$Point) {
@@ -108,12 +144,16 @@ if (-not (Test-Path -LiteralPath $python -PathType Leaf)) { throw "Python not fo
 foreach ($path in @($sshKeygen, $sshAdd, $rollbackScript)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required installer dependency not found: $path" }
 }
-$fingerprintOutput = & $sshKeygen -l -E sha256 -f $privateKey 2>&1
-if ($LASTEXITCODE -ne 0) { throw "Private key fingerprint could not be read: $privateKey" }
-$observedFingerprint = [regex]::Match(($fingerprintOutput -join "`n"), 'SHA256:[A-Za-z0-9+/]{43}').Value
+$fingerprintResult = Invoke-NativeTool $sshKeygen @('-l', '-E', 'sha256', '-f', $privateKey)
+if ($fingerprintResult.ExitCode -ne 0) { throw "Private key fingerprint could not be read: $privateKey" }
+$observedFingerprint = [regex]::Match($fingerprintResult.StdOut, 'SHA256:[A-Za-z0-9+/]{43}').Value
 if ($observedFingerprint -ne $ExpectedFingerprint) { throw "Private key fingerprint does not match ExpectedFingerprint: $observedFingerprint" }
-& $sshKeygen -y -P '' -f $privateKey *> $null
-if ($LASTEXITCODE -eq 0) { throw 'The configured private key has no passphrase; installation refused.' }
+# An empty passphrase must be refused by the key itself. ssh-keygen reports a wrong
+# passphrase with a non-zero exit; "Too many arguments" would mean the empty argument was
+# lost, which is why this goes through the helper rather than the call operator.
+$emptyPassphraseResult = Invoke-NativeTool $sshKeygen @('-y', '-P', '', '-f', $privateKey)
+if ($emptyPassphraseResult.ExitCode -eq 0) { throw 'The configured private key has no passphrase; installation refused.' }
+if ($emptyPassphraseResult.StdErr -match 'Too many arguments|usage:') { throw 'The passphrase check did not receive its arguments; installation refused.' }
 
 $requiredSources = @('dt-ssh-keyholder.py', 'ssh_keyholder.py')
 foreach ($name in $requiredSources) {
@@ -209,8 +249,7 @@ try {
     Add-LocalGpoScript 'Logon' $gpoLogoffPath
     New-Item -Path $syncPolicyPath -Force | Out-Null
     New-ItemProperty -LiteralPath $syncPolicyPath -Name $syncPolicyName -PropertyType DWord -Value 1 -Force | Out-Null
-    & "$env:SystemRoot\System32\gpupdate.exe" /Target:User /Force /Wait:120 | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Local Group Policy refresh failed.' }
+    if ((Invoke-NativeTool "$env:SystemRoot\System32\gpupdate.exe" @('/Target:User', '/Force', '/Wait:120')).ExitCode -ne 0) { throw 'Local Group Policy refresh failed.' }
     Invoke-TestFailure 'after-logoff'
 
     $installedCli = Join-Path $installRoot 'dt-ssh-keyholder.py'
@@ -235,8 +274,8 @@ try {
     Register-ScheduledTask -TaskName $taskName -Xml $taskXml -Force | Out-Null
     Invoke-TestFailure 'after-task'
 
-    & $python $installedCli lock
-    if ($LASTEXITCODE -ne 0) { throw 'Installed key-holder lock failed.' }
+    $lockResult = Invoke-NativeTool $python @($installedCli, 'lock')
+    if ($lockResult.ExitCode -ne 0) { throw "Installed key-holder lock failed: $($lockResult.StdErr.Trim())" }
     Assert-LockedState
     $gpoRegistrations = @(Select-String -LiteralPath $gpoIniPath -SimpleMatch $gpoLogoffPath)
     if ($gpoRegistrations.Count -ne 2) { throw 'Synchronous local Group Policy logon and logoff commands are not both registered.' }

@@ -33,9 +33,21 @@ layer. It does not create, copy, or authorize a private key.
   the mechanism if either boundary leaves the key usable. The scheduled task remains
   defence in depth for lock and disconnect events.
 
+## Windows PowerShell 5.1
+
+`install.ps1` and `rollback.ps1` run on the stock Windows PowerShell 5.1 that an elevated
+"Run as administrator" window opens. That shell drops an empty-string argument to a native
+program and, under `ErrorActionPreference = 'Stop'`, turns redirected native stderr into a
+terminating error; the first live run (2026-10-16) refused at its first call for that reason,
+before any change. Every external program in both scripts is therefore called through the
+identical `Invoke-NativeTool` helper, never the call operator. `test_ps_native.py` runs the
+helper on the real stock shell, after first proving that shell reproduces the original
+failure; off Windows it runs only its static checks and skips the rest.
+
 ## Review and activation order
 
-1. Run `python test_ssh_keyholder.py` and `python test_verify_caller_census.py`,
+1. Run `python test_ssh_keyholder.py`, `python test_verify_caller_census.py` and,
+   on the laptop itself, `python test_ps_native.py` and `python ps_native_mutations.py`,
    then mutation-prove every refusal.
 2. With a disposable encrypted key that is authorized nowhere, install into the
    measured Windows account and run the load/remove/restart/logoff/reboot proof.
