@@ -22,13 +22,14 @@ Test seams (never touch live files from a test - the #1192 fixture-not-process l
     --now ISO         the current UTC instant (re-issue write times, lock age)
     --ssh-target / --ssh-port   the remote, so the failure branch can run against a real refusing host
 """
-import argparse, json, os, subprocess, sys
+import argparse, json, os, re, subprocess, sys
 from datetime import datetime, timezone, timedelta
 
 ALIASES = ("CC-A", "CC-B", "CC-C", "CC-INFRA")
 LIVE_LOG = "/var/log/cc-wake.log"      # the key the watchers use in pos{} and the file on Helsinki
 LOCK_STALE = timedelta(minutes=30)     # Langston, Step 2: self-healing against the 60-min cadence
-MAX_REISSUE_ARMS = 3                   # R1: page at the third distinct arm re-issued against one token
+MAX_REISSUE_ARMS = 3                   # R1: two re-issues, then page AT the third distinct arm against one token
+TOKEN_RE = re.compile(r"[A-Za-z0-9_-]+")   # a control token that is safe to echo back into the log
 
 # The remote scan: ONE pass over the WHOLE log, never a tail (step 2's own lesson). It mirrors the filter's
 # own parse of a control line (`cc-wake-filter.py:996-1002`: strip, startswith WATCHER-CONTROL, alias =
@@ -302,16 +303,22 @@ def decide(a, now):
         # P > O, or a rotation: consumed-and-failed, or skipped by a start from the log end
         if held:
             say("held (record reset)"); continue
-        if pino != ino:
-            reissues = []                                              # a rotation voids old offsets: re-issue,
-        live_before = [r for r in reissues if (parse_iso(r.get("at")) or now) > T]   # never page on them
+        if rotated or pino != ino:
+            reissues = []                                              # a rotation voids old offsets: re-issue, never
+                                                                       # page on them (gate B condition 1: on `rotated`
+                                                                       # too, not only on a foreign position inode)
+        # an unparseable re-issue stamp counts as "now", i.e. later than T: it errs toward paging, never toward silence
+        live_before = [r for r in reissues if (parse_iso(r.get("at")) or now) > T]
         arms = {r.get("T") for r in reissues} | {utc_iso(T)}        # this arm counts: page AT the third
         if live_before or len(arms) >= MAX_REISSUE_ARMS:
             not_answered.append(f"{x} NOT answered"); continue        # 5
+        if not TOKEN_RE.fullmatch(str(N)):                             # N is read back out of the log and goes into
+            checks.append(f"UNDETERMINED {x} (unsafe token {N!r})"); continue   # a shell command: validate it first
         try:
             off = remote.append(x, N)                                  # 6: one re-issue, no page
         except (RemoteFailed, OSError, subprocess.TimeoutExpired) as e:
             checks.append(f"re-issue failed {x} ({e})"); continue
+        # "offset" is DIAGNOSTIC only (where the line landed, for a human reading the record); no decision reads it
         reissues.append({"offset": off, "at": utc_iso(now), "T": utc_iso(T)})
         new_aliases[x]["reissues"] = reissues
         say("re-issued" + (" (log rotated)" if rotated else ""))
@@ -346,13 +353,23 @@ def main(argv=None):
     ap.add_argument("--ssh-target", default="root@204.168.141.77")
     ap.add_argument("--ssh-port", type=int)
     ap.add_argument("--emit-states", action="store_true", help="tests: print per-alias state counts to stderr")
-    a = ap.parse_args(argv)
-    a.liveness = dict(kv.split("=", 1) for kv in a.liveness)
-    now = parse_iso(a.now) if a.now else datetime.now(timezone.utc)
-    if a.log and not a.today:
-        a.today = now.strftime("%Y%m%d")
-    lock = os.path.join(a.state_dir, "heartbeat-control.lock")
-    taken, note = take_lock(lock, now)
+    # The prologue is inside the same fail-loud guard as decide() (Langston Step-4 gate B, condition 2): a malformed
+    # --liveness, an unparseable --now or a missing state folder must still print a control line and NOTIFY, or step 3
+    # is back to a model inferring the state - the one thing this script exists to remove.
+    try:
+        a = ap.parse_args(argv)
+        a.liveness = dict(kv.split("=", 1) for kv in a.liveness)
+        now = parse_iso(a.now) if a.now else datetime.now(timezone.utc)
+        if now is None:
+            raise ValueError(f"--now {a.now!r} is not an ISO instant")
+        if a.log and not a.today:
+            a.today = now.strftime("%Y%m%d")
+        lock = os.path.join(a.state_dir, "heartbeat-control.lock")
+        taken, note = take_lock(lock, now)
+    except (Exception, SystemExit) as e:
+        print(f"control: CHECK FAILED — UNDETERMINED (script start failed: {type(e).__name__}: {e})")
+        print("NOTIFY yes")
+        return 0
     if not taken:
         print("control: held — another heartbeat run is in progress")
         print("NOTIFY no")

@@ -299,6 +299,50 @@ finally:
 case("P8: an exception still releases the lock and pages", not os.path.exists(os.path.join(fx2.state, "heartbeat-control.lock"))
      and o[0].startswith("control: CHECK FAILED") and o[1] == "NOTIFY yes", o)
 
+# ── gate B condition 1: a rotated run with the position already on the NEW inode never pages on old re-issues ──
+fx = skipped()
+fx.run()                                                          # CC-A re-issued; the record holds an entry with at > T
+rec = json.load(open(os.path.join(fx.state, "heartbeat-control.json")))
+rec["log_ino"] = rec["log_ino"] + 99999                           # the log rotated since the last run...
+fx.record(rec)
+fx.pos("CC-A", fx.size())                                         # ...and CC-A's position is already on the new inode, past O
+rc, o, _ = fx.run(now="2026-10-16T13:00:00Z")
+case("gate B C1: rotated AND pino == ino AND P > O -> re-issued, never paged on void evidence",
+     "CC-A re-issued" in o[0] and "CC-A NOT answered" not in o[0] and o[1] == "NOTIFY no", o)
+
+# ── gate B condition 2: the prologue fails loud, never silent ────────────────────────────────────────────
+def run_raw(argv):
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        rc = cs.main(argv)
+    o = out.getvalue().splitlines()
+    if len(o) == 2:
+        ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
+    return rc, o
+fx = Fx(); fx.ok_record(); all_ready(fx)
+for label, argv in [
+    ("malformed --liveness", ["--state-dir", fx.state, "--log", fx.log, "--liveness", "CC-A-alive"]),
+    ("unparseable --now", ["--state-dir", fx.state, "--log", fx.log, "--now", "yesterday", "--liveness", "CC-A=alive"]),
+    ("missing state folder", ["--state-dir", os.path.join(fx.d, "nope"), "--log", fx.log, "--liveness", "CC-A=alive"]),
+    ("missing --liveness", ["--state-dir", fx.state, "--log", fx.log]),
+]:
+    rc, o = run_raw(argv)
+    case(f"gate B C2: {label} -> control: CHECK FAILED, NOTIFY yes, exit 0",
+         rc == 0 and len(o) == 2 and o[0].startswith("control: CHECK FAILED — UNDETERMINED (script start failed") and o[1] == "NOTIFY yes", o)
+
+# ── a token read back out of the log is validated before it goes into a shell command ───────────────────
+fx = Fx(); fx.ok_record()
+for x in ALIASES:
+    fx.control(x, "20261016")
+fx.control("CC-A", "2026'1016")
+for x in ALIASES:
+    fx.answer(x, "20261016"); fx.pos(x, fx.size()); fx.lease(x, "2026-10-16T09:00:00Z")
+before = len(fx.lines())
+# Reachable only while the issue is GATED (otherwise N is re-written as the issuer's safe date D first): CC-B not armed.
+rc, o, _ = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive"})
+case("token validation: a quote in N is never echoed back -> UNDETERMINED, paged, nothing appended",
+     "unsafe token" in o[0] and len(fx.lines()) == before and o[1] == "NOTIFY yes", o)
+
 # ── TOTALITY: every 2b state x position case x record state prints exactly one state per alias ─────────
 LV = ["alive", "DEAD", "STUCK", "CENSUS-FAILED", "not armed"]
 POS = ["answered", "P<=O moved", "P<=O unchanged", "P>O", "P absent", "foreign inode"]
@@ -348,6 +392,8 @@ for node in tree.body:
         keep.append(node)
 ns = {}
 exec(compile(ast.fix_missing_locations(ast.Module(body=keep, type_ignores=[])), FILTER, "exec"), ns)
+case("P4 extraction: _HEARTBEAT_OK, _HEARTBEAT_BAD and is_allclear_heartbeat all found in the filter",
+     all(k in ns for k in ("_HEARTBEAT_OK", "_HEARTBEAT_BAD", "is_allclear_heartbeat")), sorted(k for k in ns if not k.startswith("__")))
 allclear = ns["is_allclear_heartbeat"]
 HEALTHY = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: bridges active: y | "
            "inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | watchers: all alive | {ctl}.")
