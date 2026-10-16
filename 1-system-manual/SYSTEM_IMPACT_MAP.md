@@ -3775,6 +3775,23 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 > - ⚠️ **HONEST LIMIT (Step 8, Langston):** an arm with no `--loop` (the pre-lease text) is not refused when no holder exists — forcing it would LOSE wakes silently (OBJ-9 measured inert, not shipped). It refuses to a live holder, and a second such arm is announced as `WATCHER-ORPHAN` in its own output. Record: `Change Lists/B_WAKE_ARM_EXCLUSIVE_STEP7_VERIFICATION.md`.
 > ⛔ **STILL HAND-INSTALLED (`#1004` class):** `cc-wake-filter.py`, `cc-wake-count.sh` and the heartbeat skill are copied by hand from `comms-infra/laptop/`, verified by sha256 against the blob.
 
+> **★ CONTENT UPDATE — B-WAKE-HEARTBEAT-CONTROL-DATE (2026-10-16, `#1162`, row 1q): THE DAILY CONTROL IS DECIDED BY A SCRIPT FROM FILES, NOT INFERRED BY A MODEL.**
+> **Background:** this block was silent on the daily control until now (the gap was found at the batch's own Step 2).
+> - **The daily control** — a `WATCHER-CONTROL <ALIAS> <YYYYMMDD>` line in `/var/log/cc-wake.log`. The watcher answers it by writing `<ALIAS>.json.control` = `"<token> <utc>"` (`cc-wake-filter.py:1002`, gated on `--once`), with no wake. It is the end-to-end DELIVERY proof that `.alive` (a start proof) cannot give.
+> - **The decision: `~/.claude/scheduled-tasks/wake-watcher-heartbeat/control_state.py`**, whose repo copy is `comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/`, run by the heartbeat's step 2c every hour.
+>   - **Inputs.** On Helsinki, one whole-file scan per run (the newest token `N` and its byte offset `O` per alias, the inode, and the issuer's UTC date `D`). On the laptop: `.control` (first field), `pos['/var/log/cc-wake.log']`, the lease `taken_at`, and step 2b's liveness.
+>   - **Issue:** per alias whenever `N != D` and all four `.alive` files exist (`ISSUER GATED BY` otherwise; `ISSUER NOT RUN` pages on the second consecutive failed run).
+>   - **Ordered states:** DEAD · not armed · CENSUS-FAILED · not yet issued · answered · STUCK · awaiting / NOT delivering (`P <= O`; a position frozen across two runs pages) · held · re-issued (once per arm, bounded at the third arm) / NOT answered · UNDETERMINED. It prints `control: …` and `NOTIFY yes|no` and always exits 0.
+> - **New state: `~/.claude/cc-wake-state/heartbeat-control.json`.**
+>   - **Writer and reader:** the decision script only.
+>   - **Content:** the previous run's `P` per alias, the re-issues for the current token, `log_ino` and `issuer_fail`.
+>   - **Integrity:** it is read back after every write (`NOT PERSISTING` pages). Absent means `new` and unparseable means `RESET`; both page.
+>   - **Deleters:** none. It is outside `_sweep_tmp`'s `<ALIAS>.*` predicate.
+> - **New: `heartbeat-control.lock`** in the same folder — an `O_CREAT|O_EXCL` run lock. It is released in `finally`, and a lock older than 30 min is taken over. Two invokers exist: the hourly task and the app's "Run now".
+> - **New writer to `/var/log/cc-wake.log`:** re-issued control lines, at most two per alias per token. The other writers are the daily issue and manual summons. **The log has no bound** (`#1202`, row 1qa).
+> - **The filter, `_HEARTBEAT_BAD` (`cc-wake-filter.py:133`):** the control arm is now field-scoped, `\bcontrol:[^|]*\b(?:NOT answered|CHECK FAILED)\b`, and the watchers arm gains `CENSUS-FAILED`. **Invariant: `NOTIFY ⊆ BAD`** — every post that pages Kyle also wakes the sessions. STUCK and the bridge/inbox arms are delivered without paging, on purpose.
+> - **A token read back out of the log is validated** (`TOKEN_RE`, `[A-Za-z0-9_-]+`) before a re-issue echoes it into an SSH command to root on Helsinki. The log is group-writable by `langston`, so before this it was a langston→root path.
+
 
 ### ⭐ `dt-deploy-drift.sh` — THE DEPLOYED-VS-BRANCH DRIFT LINE — Added B-DEPLOY-DRIFT-LINE (2026-09-07, `#1002`)
 

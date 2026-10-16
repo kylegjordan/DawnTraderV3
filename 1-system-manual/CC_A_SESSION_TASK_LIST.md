@@ -107,6 +107,8 @@
 - **`#1001`** — raised by me, **owned by CC-C**: staging's deploy gap. Re-measured 2026-09-05 (see below); not mine to close.
 
 ### ✅ CLOSED SINCE THIS FILE WAS LAST WRITTEN
+- **`B-WAKE-HEARTBEAT-CONTROL-DATE`** (`#1162`, sprint row 1q) — CLOSED 2026-10-16. The heartbeat's daily check-in is decided from files and pages only for a real miss; proven live over three runs. Spawned `#1202` (row 1qa, the wake log's bound) and three filter items on row 1z.
+- **`B-B75-COUNT-GATE`** (hotfix, `#1195`) — deployed 2026-10-16 `b678ef0f6`; verification is the 02:15Z sweep (alert `35efa642`). The parent `B-B75-EXPORT-COMPLETENESS` stays open.
 - **`B-TASK-LIST-SLOT`** (`#1009`, row 4.57) — CLOSED 2026-09-18. P5 passed 3 of 3 at close (1 caught by the check, 2 unprompted); Langston confirmed. Slot-time half is row 4.8.
 - **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) — CLOSED 2026-09-09. All four criteria met; `#1021` folded in.
 - **`B-CANONICAL-BRIDGE-CHURN`** (`#402`, row 4.56a) — CLOSED 2026-09-11. Langston ruled U-1 met. Five residuals at `P19-B12`; spawned `#1039`.
