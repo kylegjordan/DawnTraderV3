@@ -158,9 +158,9 @@ export async function exportPartition(
     // optimize, leading to sequential scans and 2min statement_timeout
     // hits on Supabase Pro.
     //
-    // Legacy mode retains the historical timestamp-only cursor. Exact mode
-    // below uses (timestamp, immutable tie-breaker), because source-count and
-    // min/max checks cannot recover rows skipped at a timestamp boundary.
+    // Legacy mode retains the timestamp-only cursor, but since #1195 it reads
+    // each boundary tie group whole and is held to a same-snapshot source
+    // count. Exact mode below uses (timestamp, immutable tie-breaker).
     //
     // BATCH=1000 (down from 5000) caps single-query payload size given
     // wide JSONB rows that TOAST to 20+ KB raw.
@@ -231,14 +231,33 @@ export async function exportPartition(
         );
       }
       if (r.rows.length === 0) break;
+      const fullPage = r.rows.length === BATCH;
 
+      let pageRows: any[] = r.rows;
       let legacyCursor: string | null = null;
-      for (const row of r.rows) {
+      if (!exactTieCol) {
+        // Exact database text for the cursor (no millisecond Date floor), so a
+        // page can never re-export a row and mask a skipped one in the count.
+        legacyCursor = String(r.rows[r.rows.length - 1][LEGACY_CURSOR_COL]);
+        if (fullPage) {
+          // B-B75-COUNT-GATE (#1195): a full page can end PART-WAY through a
+          // group of rows sharing the last timestamp, and the next page asks
+          // for `> lastTs`, so the rest of that group would never be read.
+          // Hold back this page's share of the group and read the WHOLE group
+          // by equality (the timestamp index serves it) before moving on.
+          pageRows = r.rows.filter((row: any) => String(row[LEGACY_CURSOR_COL]) !== legacyCursor);
+          const tie = await client.query(
+            `SELECT *, ${quoteIdent(tsCol)}::text AS ${LEGACY_CURSOR_COL} FROM ${quoteIdent(target)}
+             WHERE ${quoteIdent(tsCol)} = $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}`,
+            [legacyCursor, req.rangeEnd],
+          );
+          pageRows = pageRows.concat(tie.rows);
+        }
+      }
+
+      for (const row of pageRows) {
         if (!exactTieCol) {
-          // Exact database text for the cursor (no millisecond Date floor, so a
-          // page can never re-export a row and mask a skipped one in the count),
-          // then removed so the archived row shape is unchanged.
-          legacyCursor = String(row[LEGACY_CURSOR_COL]);
+          // The cursor column is removed so the archived row shape is unchanged.
           delete row[LEGACY_CURSOR_COL];
         }
         const ts = exactTieCol ? row.__cursor_ts : row[tsCol];
@@ -263,7 +282,7 @@ export async function exportPartition(
       lastTs = exactTieCol ? String(lastRow.__cursor_ts) : legacyCursor;
       if (exactTieCol) lastTie = String(lastRow.__cursor_tie);
 
-      if (r.rows.length < BATCH) break;
+      if (!fullPage) break;
     }
 
     gzip.end();
