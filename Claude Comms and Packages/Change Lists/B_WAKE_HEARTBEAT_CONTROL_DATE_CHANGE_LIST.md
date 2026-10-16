@@ -91,8 +91,8 @@ else: append one WATCHER-CONTROL <x> <N>; record (offset, at, T)       # 6
 ## r2 — GATE A, BLOCKER-A1 and the folded item
 **The arm is now field-scoped, not anchored** (`cc-wake-filter.py`):
 ```diff
--    r"|watchers:\s*[^|]*(?:DEAD|STUCK)|control:\s*(?:NOT answered|CHECK FAILED)",
-+    r"|watchers:\s*[^|]*(?:DEAD|STUCK|CENSUS-FAILED)|control:[^|]*(?:NOT answered|CHECK FAILED)",
+-    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK)\b|\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b",
++    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK|CENSUS-FAILED)\b|\bcontrol:[^|]*\b(?:NOT answered|CHECK FAILED)\b",
 ```
 - **`control:[^|]*`** — a verdict mid-field wakes, using the same idiom as the watchers arm. It is pipe-bounded, so it cannot reach a neighbouring field. No non-paging state's text contains `NOT answered` or `CHECK FAILED`; the table below shows each state's text.
 - **`CENSUS-FAILED` in the watchers arm** (Langston's §13, disposition 2, folded): a failed liveness census means liveness is unknown. Step 2b reports it without `--notify`, so before this it posted an all-clear-shaped line that every filter suppressed. It now wakes the sessions. It still does not page Kyle: the sessions are reachable, the same reasoning as STUCK.
