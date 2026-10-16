@@ -33,6 +33,13 @@ No trading decision — paper or VTS, entry or exit, crypto or xStock — acts o
 - ✅ **DISCHARGED 2026-10-12:** the arm-(d) narrowing (`1e48298ab`) went live in CC-B's `e8f575d3c` deploy (2026-10-12T08:58:11Z, carried with CC-C's clearance); the run line now prints `operatorRows=0 operatorMaxAgeMs=none` (08:58:06Z `lookback=restart_24h`, 09:08:07Z `lookback=watermark`).
 **Close = that data AND a decision on it** (close the batch on PASS; reopen Step 3 on FAIL).
 
+## 3a. A live stall during the session, on the P2 build — the watchdog still fires on a real silence (2026-10-16, CC-C)
+Not the pre-registered read (§3 is the Sunday reopen and is unchanged); recorded because it is the positive control §3's zero needs — P2 must not have blinded the watchdog to a genuine silence.
+- **The silence was real and upstream:** `xstock_spot_ticker_snap` holds no rows from 2026-10-13 14:32:45Z to 14:34:05Z (79 s) while the socket read OPEN; the process logged ~3,800 `error.log` lines per 10 s through it and the `equity-perp` / `crypto-perp` feeds kept running, so our event loop was not blocked.
+- **The watchdog fired once and recovered:** one `[B74][equity-spot][STALL] open socket silent 78930ms > 75000ms (inLiquid=true)` line at 14:34:04Z, `reconnecting … (attempt 1)`, then 467 snaps at 14:34:05Z and normal flow after. Alert `a123914a-3c2e-4c04-ba29-95b433175826` (the one row it minted) resolved 2026-10-16, citing this section.
+- **No recurrence:** zero `[B74][equity-spot][STALL]` lines in the error logs for 10-14, 10-15 and 10-16 to 09:15Z.
+- **Population and limit:** one event; it shows the RTH arm still fires after P2, not the closure arm §3 grades.
+
 ## 4. Unproven, stated as unproven (none blocks the close; each is a standing mechanism that announces itself)
 - **The tripwire on a real row** — 0 `kraken_rest_rate_limited_reserve` closes since the deploy. Falsified by: a reserve-priced close whose stored row breaks an arm with no alert raised.
 - **The cold-unobserved escalation** — `equity_tick_stale_cold_unobserved` has not yet dominated a 40-tick streak, so its join/page routing is untested live (unit-tested). Falsified by: such a streak paging on a quiet/closed class.
