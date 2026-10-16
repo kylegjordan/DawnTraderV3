@@ -72,10 +72,11 @@ PROMOTE = [
     (108, [(134, "- **B-INSTRUMENTS-OVER-RULES")], "B-INSTRUMENTS-OVER-RULES", "closed"),
     (191, [(209, "**B-SCANNER-EGRESS-NORMALISE"), (210, "⛔ **STANDING INVARIANT, SysManual B63.6"),
            (211, "⚠️ **THE GUARD IS UNEXERCISED"), (212, "➕ **PLACED: `#965`")], "B-SCANNER-EGRESS-NORMALISE", "closed"),
-    # Langston marked this closed with a keep: on its D7/8g forward-binding, but the record is ONE line, so a keep would
-    # keep all of it; his offered alternative is to state it open (rider 1).
-    (191, [(214, "**B-PRICE-AGE-TRUTH (#951")], "B-PRICE-AGE-TRUTH", "open"),
-    (240, [(242, "**B-XSTOCK-FEED-SANITY"), (245, "**⚠️ SHA CORRECTION (CC-C, 2026-09-04)")], "B-XSTOCK-FEED-SANITY", "closed"),
+    # closed WITH its keep on line 214 (Langston 12:5xZ): a one-line record, so the keep keeps all of it - same bytes as
+    # open, but a confirmed-closed batch must not wear an open STATE cell.
+    (191, [(214, "**B-PRICE-AGE-TRUTH (#951")], "B-PRICE-AGE-TRUTH", "closed"),
+    (240, [(242, "**B-XSTOCK-FEED-SANITY"), (245, "**⚠️ SHA CORRECTION (CC-C, 2026-09-04)"),
+           (246, "**WINDOW RE-ANCHORED (your conditions")], "B-XSTOCK-FEED-SANITY", "closed"),     # 246: Langston 12:5xZ
     (240, [(243, "**KYLE DELEGATED THE PRICE-SIDE DECISION"), (248, "**`B-PRICE-SIDE-BY-JOB`: P4's rule")],
      "B-PRICE-SIDE-BY-JOB", "open"),
     (240, [(250, "**B-DEPLOY-ACTOR-ALLOWLIST CLOSED"), (251, "**⛔ `#1004` OPENED ON YOUR RULING")],
@@ -93,7 +94,9 @@ PROMOTE = [
      "B-XSTOCK-FEE-CONTRACT", "closed"),
 ]
 MERGE = (247, "**F-G-1: window CLOSED 2026-09-04T16:08:02Z", 191)          # old L798 -> the F-G-1 section
-KEEP = {210: "⛔ **STANDING INVARIANT", 211: "⚠️ **THE GUARD IS UNEXERCISED", 217: "Record: `Claude Comms and Packages/Batch Completion/F_G_2_PROGRESS_REPORT.md`",
+# Langston 12:5xZ: NO keep on F-G-2's line 217 - it points at F_G_2_PROGRESS_REPORT.md, which does not exist at the ref
+#   (the superseded-by trailer names the live report); and not line 219 either, which carries a RETIRED A3 clause.
+KEEP = {210: "⛔ **STANDING INVARIANT", 211: "⚠️ **THE GUARD IS UNEXERCISED", 214: "**B-PRICE-AGE-TRUTH (#951",
         238: "⛔ **RATCHET at 2.4g-3", 251: "**⛔ `#1004` OPENED", 256: "**⛔ `#1005` OPENED"}
 EXPECT_HEADINGS = 32
 EXPECT_SECTIONS = 49
