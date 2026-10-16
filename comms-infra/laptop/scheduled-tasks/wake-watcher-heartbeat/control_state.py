@@ -307,6 +307,9 @@ def decide(a, now):
             say("held (record reset)"); continue
         if rotated or pino != ino:
             reissues = []                                              # a rotation voids old offsets: re-issue, never
+            new_aliases[x]["reissues"] = reissues                      # persist the clear HERE, before any early exit
+                                                                       # (gate B r2 blocker: a failed append kept the
+                                                                       # void stamp and paged two runs later)
                                                                        # page on them (gate B condition 1: on `rotated`
                                                                        # too, not only on a foreign position inode)
         # an unparseable re-issue stamp counts as "now", i.e. later than T: it errs toward paging, never toward silence
@@ -368,7 +371,8 @@ def main(argv=None):
             a.today = now.strftime("%Y%m%d")
         lock = os.path.join(a.state_dir, "heartbeat-control.lock")
         taken, note = take_lock(lock, now)
-    except (Exception, SystemExit) as e:
+    except (Exception, SystemExit) as e:          # SystemExit too: argparse exits on a bad argument (and on --help,
+                                                  # which therefore prints a CHECK FAILED line - harmless, never run so)
         print(f"control: CHECK FAILED — UNDETERMINED (script start failed: {type(e).__name__}: {e})")
         print("NOTIFY yes")
         return 0

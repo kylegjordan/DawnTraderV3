@@ -310,6 +310,28 @@ rc, o, _ = fx.run(now="2026-10-16T13:00:00Z")
 case("gate B C1: rotated AND pino == ino AND P > O -> re-issued, never paged on void evidence",
      "CC-A re-issued" in o[0] and "CC-A NOT answered" not in o[0] and o[1] == "NOTIFY no", o)
 
+# gate B r2 blocker: the clear must PERSIST even when the re-issue append fails on the rotated run
+fx = skipped()
+fx.run()                                                          # run 1: CC-A re-issued; the record holds at > T
+rec = json.load(open(os.path.join(fx.state, "heartbeat-control.json")))
+rec["log_ino"] = rec["log_ino"] + 99999
+fx.record(rec)
+fx.pos("CC-A", fx.size())
+real_append = cs.Remote.append
+def fail_append3(self, alias, token):
+    raise cs.RemoteFailed("ssh exit 255")
+cs.Remote.append = fail_append3
+try:
+    rc, o2, _ = fx.run(now="2026-10-16T13:00:00Z")                # run 2: rotated, append fails
+finally:
+    cs.Remote.append = real_append
+rec2 = json.load(open(os.path.join(fx.state, "heartbeat-control.json")))
+case("gate B r2: rotated + failed re-issue -> paged as re-issue failed, AND the void history is cleared in the record",
+     "re-issue failed CC-A" in o2[0] and o2[1] == "NOTIFY yes" and rec2["aliases"]["CC-A"]["reissues"] == [], (o2, rec2["aliases"]["CC-A"]))
+rc, o3, _ = fx.run(now="2026-10-16T14:00:00Z")                    # run 3: no rotation now; must NOT page on the void stamp
+case("gate B r2: the run after never pages on the voided stamp (re-issued instead)",
+     "CC-A NOT answered" not in o3[0] and "CC-A re-issued" in o3[0], o3)
+
 # ── gate B condition 2: the prologue fails loud, never silent ────────────────────────────────────────────
 def run_raw(argv):
     out = io.StringIO()
