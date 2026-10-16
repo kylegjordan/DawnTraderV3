@@ -21,8 +21,16 @@ def check(name, cond):
         fails += 1
 
 posts, mirrors, invokes = [], [], []
-b.dc.rest_send = lambda tok, ch, text, logf, mention_user_id=None: (posts.append((text, mention_user_id)), 777)[1]
+SEND = {"fail": False}
+APPEND = {"fail": False}
+b.dc.rest_send = lambda tok, ch, text, logf, mention_user_id=None: (
+    None if SEND["fail"] else (posts.append((text, mention_user_id)), 777)[1])
 b.mirror_event = lambda kind, **f: mirrors.append((kind, f))
+def fake_append(entry):
+    if APPEND["fail"]:
+        raise OSError("disk full")
+    mirrors.append((entry["kind"], entry))
+b.dc.append_inbox = fake_append
 LANE_ANSWER = {"text": None, "why": None}
 def fake_lane(prompt):
     invokes.append(prompt)
@@ -101,6 +109,44 @@ threading.Thread(target=b.alert_worker, args=(aq, tq), daemon=True).start()
 aq.put(alert_task(A, 1)); time.sleep(0.2); aq.put(alert_task(B, 2))
 time.sleep(2.0)
 check("burst: two alerts, one lane invocation", len(invokes) == 1 and A in invokes[0] and B in invokes[0])
+
+# (7) Coltrane send-back 1: a hallucinated out-of-batch marker is never published
+C = "f41812ab-c0fe-4406-8d38-d549470a8f89"
+NL = chr(10)
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text=NL.join(["ok", '[[ALERT id=%s owner=CC-B action="a"]]' % A,
+                                 '[[ALERT id=%s owner=Kyle action="hijack"]]' % C]), why=None)
+b.run_alert_batch([alert_task(A, 1)], tq)
+outs = [f["text"] for k, f in mirrors if k == "langston_outbound"]
+check("out-of-batch marker absent from the post and the record",
+      bool(posts) and C not in posts[0][0] and bool(outs) and C not in outs[0])
+check("the valid marker is published in canonical form", '[[ALERT id=%s owner=CC-B action="a"]]' % A in posts[0][0])
+
+# (8) conflicting markers for one id: no marker for it is published; it goes to Langston
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text=NL.join(['[[ALERT id=%s owner=CC-B action="a"]]' % A,
+                                 '[[ALERT id=%s owner=CC-C action="b"]]' % A]), why=None)
+b.run_alert_batch([alert_task(A, 1)], tq)
+check("conflicting markers: no [[ALERT for that id in the post", bool(posts) and ("[[ALERT id=%s" % A) not in posts[0][0])
+check("conflicting markers: escalated to Langston", tq.qsize() == 1)
+
+# (9) Coltrane send-back 2: a failed Discord post hands the whole batch to Langston, nothing recorded
+reset(); tq = lq.TaskPriorityQueue(); SEND["fail"] = True
+LANE_ANSWER.update(text=NL.join(['[[ALERT id=%s owner=Kyle action="a"]]' % A,
+                                 '[[ALERT id=%s owner=CC-B action="b"]]' % B]), why=None)
+b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
+SEND["fail"] = False
+check("post failure: both alerts escalated to Langston", tq.qsize() == 2 and tq.depth_by_class() == (2, 0, 0))
+check("post failure: no langston_outbound recorded", not any(k == "langston_outbound" for k, _ in mirrors))
+
+# (10) a failed inbox record also hands the whole batch to Langston
+reset(); tq = lq.TaskPriorityQueue(); APPEND["fail"] = True
+b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
+APPEND["fail"] = False
+check("record failure: both alerts escalated to Langston", tq.qsize() == 2)
+_reasons = [tq.get_nowait()["content"] for _ in range(tq.qsize())]
+check("record failure: the reason names the inbox record",
+      len(_reasons) == 2 and all("inbox record failed" in r for r in _reasons))
 
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)

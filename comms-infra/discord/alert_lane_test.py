@@ -52,5 +52,17 @@ ok("empty answer escalates everything", e == {A: "the alert lane gave no routing
 r, e, pr = al.read_answer('[[ESCALATE id=%s reason="r"]]' % C, [A])
 ok("escalation for an id outside the batch ignored", C not in e)
 
+# publishable (Coltrane send-back 1): only validated markers, rebuilt; raw and unterminated markers removed
+NL = chr(10)
+raw = NL.join(["Summary line.", '[[ALERT id=%s owner=CC-B action="x"]]' % A, '[[ALERT id=%s owner=Kyle action="evil"]]' % C,
+               '[[ESCALATE id=%s reason="r"]]' % B, "stray [[ALERT id=%s owner=CC-A" % A])
+pub = al.publishable(raw, {A: ("CC-B", 'x "quoted" ]] y')}, {B: "r"})
+ok("publishable keeps the prose", pub.startswith("Summary line."))
+ok("publishable drops the out-of-batch marker", C not in pub)
+ok("publishable emits exactly one marker, canonical", pub.count("[[ALERT") == 1 and ("[[ALERT id=%s owner=CC-B" % A) in pub)
+ok("publishable defuses an unterminated opener", "stray [ALERT" in pub)
+ok("publishable sanitises the action", '"quoted"' not in pub and "] ] y" in pub)
+ok("publishable lists escalations in plain text, no marker", ("handed to Langston: %s" % B) in pub and "[[ESCALATE" not in pub)
+
 print("\nalert_lane tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

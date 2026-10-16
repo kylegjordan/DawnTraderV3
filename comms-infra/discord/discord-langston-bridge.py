@@ -740,15 +740,31 @@ def run_alert_batch(batch, task_q):
             routed, esc, problems = al.read_answer(answer, [aid for aid, _ in ided])
             for p in problems:
                 log(f"alert lane: {p}")
+            by_id = dict(ided)
             kyle_owned = any(owner == "Kyle" for owner, _ in routed.values())
-            text = "Alert lane — " + answer
+            # ⛔ Coltrane send-back 1: only markers rebuilt from the VALIDATED result are published.
+            text = "Alert lane — " + al.publishable(answer, routed, esc)
+            # ⛔ Coltrane send-back 2: routing counts only when BOTH the post and the langston_outbound record
+            #    (the wake filters' input) succeed. rest_send returns None when any chunk fails, and mirror_event
+            #    swallows its own failure, so both are checked here; on either failure EVERY alert in the batch
+            #    goes to Langston - a Kyle-owned row must never lose its mention silently.
             sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE,
                                    mention_user_id=CFG["kyle_id"] if kyle_owned else None)
-            mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id,
-                         reply_to=ided[0][1]["message_id"], text=text, lane="alert")
-            by_id = dict(ided)
-            escalate += [(by_id[aid], reason) for aid, reason in esc.items()]
-            log(f"alert lane: batch of {len(batch)} - routed {len(routed)}, escalated {len(esc)}")
+            delivered, why = sent_id is not None, "the lane's Discord post failed"
+            if delivered:
+                try:
+                    dc.append_inbox({"ts": datetime.datetime.now().astimezone().isoformat(),
+                                     "source": "discord-langston-bridge", "transport": "discord",
+                                     "kind": "langston_outbound", "channel_id": channel_id, "message_id": sent_id,
+                                     "reply_to": ided[0][1]["message_id"], "text": text, "lane": "alert"})
+                except Exception as e:
+                    delivered, why = False, f"the lane's inbox record failed ({type(e).__name__}: {e})"
+            if delivered:
+                escalate += [(by_id[aid], reason) for aid, reason in esc.items()]
+                log(f"alert lane: batch of {len(batch)} - routed {len(routed)}, escalated {len(esc)}")
+            else:
+                log(f"alert lane: DELIVERY FAILED ({why}) - handing all {len(ided)} alert(s) of this batch to Langston")
+                escalate += [(t, why) for _, t in ided]
     for t, reason in escalate:
         task_q.put({**t, "escalated": True,
                     "content": f"[ESCALATED to you by the alert lane — {reason}]\n\n" + t["content"]})

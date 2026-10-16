@@ -38,6 +38,27 @@ def alert_id_of(content):
     return ids.pop() if len(ids) == 1 else None
 
 
+_ANY_MARKER = re.compile(r"\[\[\s*(ALERT|ESCALATE)\b[^\n]*?\]\]", re.I)
+_MARKER_OPEN = re.compile(r"\[\[(?=\s*(ALERT|ESCALATE)\b)", re.I)
+
+
+def publishable(answer, routed, escalate):
+    """The text the bridge posts and mirrors (Coltrane send-back 1, 2026-10-16). The wake filters record EVERY
+    `[[ALERT ...]]` they see and keep the last, so the lane's raw markers are never published: every marker
+    and every unterminated `[[ALERT`/`[[ESCALATE` opener is removed from its prose, and the ONLY markers in
+    the post are rebuilt from the VALIDATED `routed` result. Escalations are listed in plain text."""
+    prose = _ANY_MARKER.sub("", answer or "")
+    prose = _MARKER_OPEN.sub("[", prose)
+    prose = re.sub(r"\n{3,}", "\n\n", prose).strip()
+    out = [prose] if prose else []
+    for aid, reason in escalate.items():
+        out.append("(handed to Langston: %s - %s)" % (aid, reason))
+    for aid, (owner, action) in routed.items():
+        clean = action.replace('"', "'").replace("]]", "] ]").replace("\n", " ")
+        out.append('[[ALERT id=%s owner=%s action="%s"]]' % (aid, owner, clean))
+    return "\n".join(out)
+
+
 def build_prompt(batch):
     """batch: [(alert_id, content)]. The instructions live in the lane's own CLAUDE.md; this is the data."""
     lines = ["System alerts to triage (%d). For EACH alert id below, end with exactly one [[ALERT ...]] line, "
