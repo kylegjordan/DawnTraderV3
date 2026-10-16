@@ -1345,3 +1345,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT DOES.** A DB-governed policy now chooses which priced entry or target-exit arm each asset class may use after the existing two-arm economics are calculated: crypto is maker-only, xStock is maker-preferred with an independently admissible taker fallback, and stops remain taker. The decision, placement time and target policy are durable; a resting fill requires the strict local-receipt interval `placement < quote arrival < deadline`, without changing the separate freshness clock.
 
 **BOUNDARY.** Pre-cutover rows retain honest null provenance, legacy pending entries retire unfilled, and a legacy target rest clears without closing the position. VTS entries share the policy and later-quote rule, but VTS still has no target-rest lifecycle. The Step-11 audit corrected three crypto VTS selected-EV consumers before closure; deterministic engine tests, red mutations, live config/schema/read-path evidence and Coltrane's independent correction/runtime/report reviews close the release evidence. No calendar window or deployment hold was created.
+
+## B-B75-COUNT-GATE (CC-A, hotfix, Kyle-directed 2026-10-16; `#1195`) — change-class `hotfix` — ⏳ **DEPLOYED 2026-10-16, VERIFICATION PENDING** (Coltrane hotfix gate PROCEED at `97233c2ba`; deployed `b678ef0f6`; tonight's sweep is the check, alert `35efa642`)
+
+**WHAT WAS BROKEN.** The nightly archive deleted each old day from the database after copying it to cold storage, but the copy skipped rows wherever many rows shared a timestamp at a 1,000-row page boundary. Measured on one day: 1 in 10 crypto one-minute bars and 2% of SQE signal evaluations. Nothing counted the original, so the short copy passed and the original was dropped.
+
+**THE FIX.** The copy now reads each shared-timestamp group whole, so every row is copied on the same run. Before anything is deleted, it counts the original rows in the same snapshot and refuses on any difference. A read-only run on tonight's four days copied every row.
+
+**LEFT.** Days already archived short since 2026-05-06 — what can be recovered, and from where — are `B-B75-EXPORT-COMPLETENESS` (CC-A).

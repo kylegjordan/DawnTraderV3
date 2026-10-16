@@ -1,5 +1,28 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-16-A — `B-B75-COUNT-GATE` (hotfix, `#1195`, CC-A, Kyle-directed) — the nightly archive dropped originals whose cold copy was missing rows
+
+**CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_B75_COUNT_GATE_SCOPE.md`.
+**SYMPTOM:** the B75 sweep verified and dropped daily partitions whose warm copy was short. A read-only replay of the old page rule on the 2026-09-16 children: `crypto_perp_ohlc_1m` exported 240,000 of 264,960; `signal_eval_archive` 2,235,422 of 2,284,067; `crypto_perp_ticker_snap` missed 4,933; `xstock_spot_ticker_snap` missed 2,242. **Positive control:** the sweep log's `rows=240000` for the 09-14 and 09-15 drops matches the replay exactly.
+**MECHANISM:** `partition-exporter.ts` legacy mode paged `ts > lastTs ORDER BY ts LIMIT 1000`, so a page ending inside a group of rows sharing one timestamp never read the rest of that group. The cursor came from a millisecond-floored Date. No source count existed in legacy mode, and the manifest's row count and min/max are derived from the export itself. The page rule dates from `565b605f0` (2026-05-06), so archives since then are short.
+**BLAST RADIUS:** three deleting callers, all through `exportPartition`:
+- the sweep's partitioned lane (whole and sliced);
+- the sweep's plain-archive lane;
+- `context-bridge-log-ttl`.
+
+The remaining `DROP`/`DELETE` sites are one-off migrations or the by-design unarchived plain age-delete.
+**FIX:**
+- (r1) a same-snapshot source count in both modes; `ExportRowCountMismatchError` thrown before COMMIT, so no caller uploads, drops or deletes; the cursor carried as database text.
+- (r2, Kyle: "handle it all in one operation") a full page holds back its last-timestamp rows and reads that whole group by equality before advancing, so copies are complete the same night.
+- The sweep alert names a count mismatch instead of calling it transient.
+
+Test `b-b75-count-gate.test.ts` (4), each mutation-proved.
+**REAL-DATA PROOF (read-only, staging, the changed exporter on the 09-16 children):** source = exported = file lines for all four tables (264,960 · 1,475,260 · 2,912,818 · 2,284,067).
+**REVIEW:** Coltrane, by Kyle's direction in place of Langston (whose queue was ~116 deep): PROCEED at exact ref `97233c2ba`; 39/39 relevant tests; TypeScript errors 335 at base and 335 at the candidate. Infra Claude added the exact-ref read to Coltrane's review tools to make this possible (`92c8a422f`). Langston gets it as a second pass.
+**DEPLOYED:** `b678ef0f695447d5666f448568cb1e4f711f0ca7` at 2026-10-16T09:45:18Z (rebased over documentation-only commits; the code under `server/` is byte-identical to the reviewed `97233c2ba`); CI 4/4 run `38882226794`; staging blobs of both changed files equal the deployed sha's.
+**VERIFICATION — PENDING:** the 2026-10-17 02:15Z sweep log is the same instrument that showed the defect. PASS means each 09-16 partition drops with `rows=` equal to its source. Alert `35efa642` fires at 03:15Z to check it.
+**NOT IN THIS FIX:** the objects already dropped since 2026-05-06, and what backups or exchange history can recover. These stay in `B-B75-EXPORT-COMPLETENESS`.
+
 ## FIX-2026-10-15-A — `B-ENTRY-CONSUMPTION-FRESHNESS` (`#684` entry half, CC-C) — a depth snapshot could pass the gate and expire during later awaits before the fill
 
 **CLASS: `sub_batch`. SYMPTOM:** the open depth gate checked one snapshot, then the engine awaited liveness and venue validation before walking that original snapshot. A book could therefore be fresh at admission but stale when consumed, while the stored `entry_book_age_ms` still described only the earlier gate instant.
