@@ -9,17 +9,17 @@ Today `spread_blown` is built and OFF (`book-state.ts:279`, `spreadBlownEnabled:
 
 ## The evidence (measured; script `scripts/analysis/xstock-wide-book-stop-vs-next-open.py`, rerunnable)
 **Population:** every paper xStock `stop_hit` close since 2026-09-19 whose exit book (`exit_ticker_bid`/`exit_ticker_ask`) was >= 3% wide, outside the US regular session (Mon-Fri 09:30-16:00 ET): **22 closes**. For each: the fill vs the stop, and the next regular session's open (median mid of <1%-wide snaps, 09:35-10:00 ET) vs the stop and vs the fill.
-**Control (same query, the regular session):** 86 regular-session stop exits since 09-19, 85 on a <1% book and 1 on 1-3%, average fill 0.03% under the stop; none filled 3%+ under.
+**Control (the regular session, Mon-Fri 09:30-16:00 ET):** 86 stop exits since 09-19 — 85 on a <1% book (average fill 0.0287% under the stop) and 1 on a 1.133% book (NET, 0.0883% above); none on a book of 3% or more. Every figure on this page is printed by the script (rows `ALL`, `INSIDE_PAUSE`, `OUTSIDE_PAUSE`, `CONTROL_RTH`).
 
 | | n | opened ABOVE the stop | opened above the fill | avg open vs fill |
 |---|---|---|---|---|
 | all 22 (21 with an open read) | 21 | **17** | 20 | +6.38% |
-| inside today's pause windows (9: 10-06/07 at 16:15-16:33 and 20:15, before the pause existed) | 9 | 5 | 8 | — |
-| **outside the pause windows — the residual the pause cannot cover** | **12** (CCI: no open read) | **12 of 12** | **12 of 12** | **+7.17%** |
+| inside today's pause windows (9: 10-06/07 at 16:15-16:33 and 20:15, before the pause existed) | 9 | 5 | 8 | +5.34% |
+| **outside the pause windows — the residual the pause cannot cover** | **13 exits, 12 evaluable** (CCI: no open read) | **12 of 12 evaluable** | **12 of 12 evaluable** | **+7.17%** |
 
 The residual 12 (symbol, ET time, spread, fill vs stop, open vs stop): ANET 09-18 20:54 7.8% −0.09% +4.57% · GILD 10-07 23:45 6.1% −3.62% +1.98% · HUM 10-08 08:58 11.3% −5.06% +1.29% · BDX 10-09 05:35 7.9% −2.35% +2.04% · PCAR 10-12 20:37 12.3% −6.37% +0.47% · APO 10-14 00:53 13.7% −5.79% +0.68% · DXCM 10-14 04:15 5.9% −3.06% +3.42% · CBOE 10-14 17:10 3.6% −1.75% +3.15% · WAT 10-14 19:52 5.8% −2.75% +1.27% · EWC 10-15 03:18 14.1% −6.03% +0.91% · GRMN 10-15 04:15 29.0% −14.30% +6.64% · INVH 10-15 04:42 7.7% +0.02% +2.57%.
 **Reading:** on every residual case the stock was back above its stop at the next open; selling into the overnight book locked in a loss the regular-session market did not confirm, by 7.17% on average against the fill.
-**Limits, stated:** (i) n = 12, one month, one class; (ii) hindsight — a stop exists for the night the price does NOT come back, and none of the 12 is such a night, so this window cannot show the cost of holding through a real overnight crash; (iii) "opened above the stop" is judged on a <1%-wide regular-session mid, the fair-price yardstick, not a fill a stop order would have had; (iv) the 4 cases that opened BELOW the stop (PPG −0.34%, NVT −0.90%, ARKK −1.92%, ROK −0.17%) are all inside today's pause windows, so the pause now holds them anyway.
+**Limits, stated:** (i) 12 of 12 evaluable out of 13 residual exits, one month, one class; (v) the outcome evidence covers STOPS only — target-side cost is unmeasured here, and the target side of the ruling rests on Kyle's transactability principle, not this sample; (ii) hindsight — a stop exists for the night the price does NOT come back, and none of the 12 is such a night, so this window cannot show the cost of holding through a real overnight crash; (iii) "opened above the stop" is judged on a <1%-wide regular-session mid, the fair-price yardstick, not a fill a stop order would have had; (iv) the 4 cases that opened BELOW the stop (PPG −0.34%, NVT −0.90%, ARKK −1.92%, ROK −0.17%) are all inside today's pause windows, so the pause now holds them anyway.
 
 ## The options
 **A — arm it with a yardstick that does not move overnight (CC-C recommends).** A stop or target may not DECIDE on a book wider than an absolute ceiling tied to the symbol's own regular-session norm (the session where 85 of 86 exits were on a <1% book) — not the trailing overnight spread. While the book is wider, the position is HELD (the refusal-duration report records it; no page — objective 9). It decides as soon as the book is plausible. *For:* matches Kyle's principle (paper does not decide where a sensible trader would not), and on the residual it would have kept 12 of 12 positions that recovered. *Against:* the overnight-crash case is unmeasured here; a position can sit past its stop until the book narrows, and on a genuine collapse the eventual exit is worse. Bounded today by the plan's design: no forced exit (Kyle).
@@ -34,3 +34,8 @@ The residual 12 (symbol, ET time, spread, fill vs stop, open vs stop): ANET 09-1
 
 ## Ask (one gate, each reviewer separately)
 Rule on: (a) A, B or C; (b) if A, whether the yardstick is per-symbol regular-session or the class's absolute ceiling, or left to Step 2; (c) anything in the evidence you would count differently (re-derive it with the script).
+
+## r1a — COLTRANE'S RULING (2026-10-16, re-derived by him at the exact ref on staging) and the record fixes
+**Coltrane: A, with ONE class-wide absolute ceiling.** A per-symbol percentile may NOT widen it — chronic illiquidity would certify itself exactly as the overnight trailing yardstick does now; Step 2 may allow a per-symbol value only to TIGHTEN the class ceiling. Start from the governed 1.0% value already present (`book-state.ts:87`, `ri_abs_spread_ceiling_pct`) and preferably rename/generalise that one knob rather than create two ceilings that can drift. He reproduced 22 / 21 / 17 / 20 / +6.38% and the 86-row control (85 under 1%, NET at 1.133%, zero at 3%+, average 0.0274% under the stop).
+**Record fixes, all three taken:** the residual is "12/12 of 13 residual exits"; the script now prints every published denominator (pause split and the control); and the stop-only scope is stated (limit (v)).
+**CC-C agrees with the class-wide ceiling** — it is the stronger form of A and removes question (b). **Consensus is pending Langston.**

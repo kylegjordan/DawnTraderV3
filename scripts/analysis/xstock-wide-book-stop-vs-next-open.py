@@ -25,5 +25,19 @@ for sym,ca,sl,ep,spr in rows:
     sl=float(sl); ep=float(ep)
     out.append((sym,e.strftime('%m-%d %H:%M ET'),round(float(spr)*100,1),round((ep-sl)/sl*100,2),None if om is None else round((om-sl)/sl*100,2),None if om is None else round((om-ep)/ep*100,2),r[0][1]))
 for o in out: print('|'.join(map(str,o)))
-n=[o for o in out if o[4] is not None]
-print('N',len(out),'with_open',len(n),'open_above_stop',sum(1 for o in n if o[4]>=0),'open_above_fill',sum(1 for o in n if o[5]>0),'avg_open_vs_fill',round(sum(o[5] for o in n)/max(1,len(n)),2))
+def summ(label, rows):
+    n=[o for o in rows if o[4] is not None]
+    print(label,'exits',len(rows),'evaluable',len(n),'open_above_stop',sum(1 for o in n if o[4]>=0),'open_above_fill',sum(1 for o in n if o[5]>0),'avg_open_vs_fill',round(sum(o[5] for o in n)/max(1,len(n)),2))
+summ('ALL', out)
+# the venue-transition pause windows (row 2 increment C): 16:14-16:34 and 20:14-20:34 ET Mon-Fri (Sunday reopen excluded above)
+def in_pause(o):
+    hh,mm=map(int,o[1].split(' ')[1].split(':')); m=hh*60+mm
+    return 974<=m<995 or 1214<=m<1235
+summ('INSIDE_PAUSE', [o for o in out if in_pause(o)])
+summ('OUTSIDE_PAUSE', [o for o in out if not in_pause(o)])
+# CONTROL: every regular-session paper xStock stop exit since 2026-09-19 (Mon-Fri 09:30-16:00 ET), bucketed by exit spread
+ctl=q("""select case when s<0.01 then 'lt1' when s<0.03 then '1to3' else 'ge3' end, count(*), round(avg((exit_price-stop_loss)/stop_loss)*100,4)
+from (select exit_price, stop_loss, (exit_ticker_ask-exit_ticker_bid)/((exit_ticker_ask+exit_ticker_bid)/2) s, closed_at at time zone 'America/New_York' e
+ from closed_trades where asset_class='xstock_spot' and close_reason='stop_hit' and closed_at>='2026-09-19' and exit_ticker_bid>0 and exit_ticker_ask>0) x
+where extract(dow from e) between 1 and 5 and extract(hour from e)*60+extract(minute from e) between 570 and 959 group by 1 order by 1""")
+for r in ctl: print('CONTROL_RTH', '|'.join(r))
