@@ -433,7 +433,9 @@ if want bridges; then
       [ -d "$d" ] || continue
       for f in "$d"/*; do
         [ -e "$f" ] || continue
-        case "$f" in "$UNITS/discord-langston-bridge.service.d/self-advance.conf") continue ;; esac
+        # Managed = an install target in the MANIFEST (the one list), never a second hand-kept list:
+        # a hard-coded self-advance.conf exception flagged the alert-lane.conf this run had just installed.
+        if printf '%s\n' "$MANIFEST" | cut -d'|' -f3 | grep -Fxq -- "$f"; then continue; fi
         echo "   ⚠ UNMANAGED DROP-IN: $f changes $u and is not installed or verified by this script"
       done
     done
