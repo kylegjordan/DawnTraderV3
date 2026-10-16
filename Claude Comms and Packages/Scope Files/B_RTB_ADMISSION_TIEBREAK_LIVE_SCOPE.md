@@ -5,6 +5,8 @@ change-class: non_architecture
 **Issue:** `#1190` (Langston ruled a defect, `B-RTB-REFRESH-LIVE-PRICE` Step 2) · **Plan row:** `SPRINT_TO_LIVE_PLAN` 59f, after row 59e · **Owner:** CC-B (NEW Claude)
 *Read at `origin/migration/aws-supabase` after `8165382f7`.*
 
+> ✅ **DECIDED 2026-10-16 — option (b), newest wins.** Kyle delegated the choice (*"you and Langston decide on 59f"*, Desktop 2026-10-16); Langston concurred with (b) on 2026-10-12 (§2, §3). Objectives §4 stand as written for (b); Step 2 next.
+
 ## 0. What is broken, measured
 `queueSQESignal` (`server/core/rtb/ready_to_buy_service.ts:~2201-2244`) decides what happens when a strategy issues a signal for a `symbol × strategy` already in the queue. It looks the incumbent up with `getQueuedSignal(mode, symbol, strategy)` (`:1380`), which filters `status: 'queued'`. **No row ever carries that status:** inserts write `active`, the refresh writes `reconfirmed`; `'queued'` is only the column default and every insert sets a status. **Measured 2026-10-12:** 0 `queued` rows (99 `reconfirmed` + 2 `active` at 08:01Z, Langston); 0 `RTB_TIEBREAK` lines in ~5 h of retained logs against 128 upsert lines in 16 minutes. ⇒ the incumbent is never found, the tiebreak never runs, and the upsert (`ON CONFLICT (mode, symbol, strategy) DO UPDATE`, `server/storage.ts:4401-4433`) overwrites the row with the new signal's levels every time: **newest wins, always.**
 
