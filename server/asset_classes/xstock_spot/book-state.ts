@@ -39,15 +39,16 @@
  * read INERT (reason `feed_read_inert`), never actionable-by-emptiness; F4 it is INERT by knob
  * (`feed_read_enabled = 0`) until its fraction is re-measured on the guard's own telemetry.
  *
- * ★ THE THIRTEEN KNOB NAMES BELOW ARE THE ONE LIST (the thirteenth, `ri_abs_spread_ceiling_pct`, is row 2 increment A's
- * ring-independent release, 2026-10-10). The seed migration, the config resolver
+ * ★ THE FOURTEEN KNOB NAMES BELOW ARE THE ONE LIST (the thirteenth, `ri_abs_spread_ceiling_pct`, is row 2 increment A's
+ * ring-independent release, 2026-10-10; the fourteenth, `spread_blown_enabled`, is row 2 objective 6's switch, ON by
+ * Kyle's direction 2026-10-16). The seed migration, the config resolver
  * (`book-state-config.ts`) and the boot assertion (`b72-warmup.ts`) all read THIS array, so the
  * three cannot drift (`#641`; Langston Step-2 condition C2). Adding a knob = adding it here.
  */
 
 export const BOOK_STATE_MODULE = 'book_state' as const;
 
-/** Exactly thirteen. The boot assertion asserts the count, so a twelfth or a fourteenth refuses. */
+/** Exactly fourteen. The boot assertion asserts the count, so a thirteenth or a fifteenth refuses. */
 export const BOOK_STATE_KNOBS = [
   'enabled',
   'single_side_departure_k_rel',
@@ -64,6 +65,9 @@ export const BOOK_STATE_KNOBS = [
   // B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 (objective 1b): the ring-independent release's ABSOLUTE spread
   // ceiling, in percent. No code default (rule 15): a missing row refuses boot like the other twelve.
   'ri_abs_spread_ceiling_pct',
+  // Row 2 objective 6 (Kyle 2026-10-16: "turn it on, then review and observe"): the ABSOLUTE `spread_blown` arm's switch.
+  // 1 = on. No code default (rule 15): a missing row refuses boot like the others.
+  'spread_blown_enabled',
 ] as const;
 export type BookStateKnob = (typeof BOOK_STATE_KNOBS)[number];
 
@@ -85,6 +89,8 @@ export const BOOK_STATE_SEED: Readonly<Record<BookStateKnob, number>> = {
   // Langston gate 1 r2 (2026-10-10): 1% stands. Above the regular-session p99 of all eight stranding symbols (max HUT
   // 0.8336%), below every blown seed (seedImplausible median 5.53%). A change is a DB write, recorded PREVIOUSLY/NOW.
   ri_abs_spread_ceiling_pct: 1.0,
+  // Row 2 objective 6: ON. Design `Langston Design Asks/B-XSTOCK-BID-TRIGGER-RELAND_spread-blown-arming_r1.md` r1-r2.
+  spread_blown_enabled: 1,
 };
 
 export interface BookStateConfig {
@@ -143,6 +149,12 @@ export interface BookStateInput {
 }
 
 export type BookState = 'two_sided' | 'hollow' | 'unknown';
+
+/** Row 2 objective 6 — the hollow reasons that are judged AGAINST A REFERENCE (the comparator's prior sides or mid). The
+ *  entry seam drops ONLY these when it has no usable reference; every other hollow reason (`absent_bid`, `absent_ask`,
+ *  `spread_blown`, `feed_burst`) needs no reference and refuses entry. A WHITELIST, so a new reference-free reason refuses
+ *  by default — a fence test pins the set against the predicate's own `reasons.push` list. */
+export const BOOK_STATE_REFERENCE_RELATIVE_REASONS: ReadonlySet<string> = new Set(['bid_collapsed', 'ask_spiked', 'mark_deviation']);
 
 export interface BookStateResult {
   state: BookState;
@@ -213,6 +225,21 @@ export function assessBookState(input: BookStateInput, cfg: BookStateConfig): Bo
     return { state: 'hollow', reasons, inputs };
   }
 
+  // (0-b) Row 2 objective 6 — THE SPREAD ITSELF HAS BLOWN OUT, judged ABSOLUTELY and BEFORE any comparator is consulted.
+  // Kyle 2026-10-16 directed it ON as a live function. The ceiling is the ONE governed absolute ceiling the ring-independent
+  // release already uses as "plausible" (`ri_abs_spread_ceiling_pct`, 1.0%; Coltrane r1a: one ceiling, never two).
+  // ⛔ WHY HERE AND NOT AFTER THE COMPARATOR (the arm it replaces sat after `no_comparator` on the chain's TRAILING
+  // threshold): a hollow YIELD clears the comparator every `hollow_skip_cap` ticks, the next seed is taken ON the wide book,
+  // and a comparator-relative test then reads it as normal and releases the exit — PCAR/USD 2026-10-13: YIELD 00:19:42Z →
+  // EXIT_RELEASED 00:19:47Z, sold at the bid 7.2% under entry on a 12.3% book. An absolute test does not care what the
+  // comparator is, so no re-seed can release a book wider than the ceiling. The evidence that holding is right: of 13
+  // overnight stop exits on a >= 3% book outside the transition pause since 09-19, the 12 with a next-open read ALL
+  // opened back above the stop (script `scripts/analysis/xstock-wide-book-stop-vs-next-open.py`).
+  if (cfg.spreadBlownEnabled && spreadFrac !== null && spreadFrac > cfg.riAbsSpreadCeilingPct / 100) {
+    reasons.push('spread_blown');
+    return { state: 'hollow', reasons, inputs };
+  }
+
   // No comparator yet (first frames after boot, or a symbol never seen two-sided): undecidable.
   // The caller treats `unknown` as ACTIONABLE (there is nothing to withhold on) and LABELS it.
   if (priorMid === null || priorBid === null || priorAsk === null) {
@@ -266,18 +293,6 @@ export function assessBookState(input: BookStateInput, cfg: BookStateConfig): Bo
   }
   if (askDep > threshold && bidHeld && lastHeld) {
     reasons.push('ask_spiked');
-    return { state: 'hollow', reasons, inputs };
-  }
-
-  // (i-b) `3n.q7` increment 2 — THE SPREAD ITSELF HAS BLOWN OUT (§L (V); OFF until increment 3). The absolute test the
-  // D1 note above says the relative arms cannot give: a SYMMETRIC widening holds neither side (so (i) passes) and keeps
-  // the mid near fair (so (iii) passes) — the MDB/USD 2026-09-19 00:15Z stub bid (`#1065`). Judged against the SAME
-  // threshold as (i), so it adds no knob and no second yardstick.
-  // ⚠️ ITS LIMIT, pinned as a test rather than claimed: the threshold is built from the CHAIN'S OWN trailing spread, so on
-  // a chain seeded inside the blowout (no retained ring to judge the seed) the threshold is itself blown and this arm
-  // cannot fire. Only the seed-implausibility test against a retained ring reaches that chain.
-  if (cfg.spreadBlownEnabled && spreadFrac !== null && spreadFrac > threshold) {
-    reasons.push('spread_blown');
     return { state: 'hollow', reasons, inputs };
   }
 

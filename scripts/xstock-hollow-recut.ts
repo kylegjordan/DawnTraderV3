@@ -57,10 +57,10 @@ const CFG: BookStateConfig = {
   hollowSkipCap: BOOK_STATE_SEED.hollow_skip_cap,
   ownMarkDeviationDPct: BOOK_STATE_SEED.own_mark_deviation_d_pct,
   riAbsSpreadCeilingPct: BOOK_STATE_SEED.ri_abs_spread_ceiling_pct,
-  // `3n.q7` increment 2: the `spread_blown` arm, OFF exactly as production resolves it today (`book-state-config.ts`).
-  // ⛔ tsc does not check this file (scripts/ is outside tsconfig), so this line is kept in step BY HAND — when increment
-  // 3 makes the arm a knob, this labeller must follow it or it cuts historical labels under a different predicate.
-  spreadBlownEnabled: false,
+  // The `spread_blown` arm, exactly as production resolves it: row 2 objective 6 made it the fourteenth knob, ON
+  // (`book-state-config.ts`), so the labeller reads the same seed. ⛔ tsc does not check this file (scripts/ is outside
+  // tsconfig), so a test pins this line to the seed.
+  spreadBlownEnabled: BOOK_STATE_SEED.spread_blown_enabled === 1,
 };
 
 interface Row { id: string; symbol: string; close_reason: string; closed_at: Date; exit_decision_price: number | null; }

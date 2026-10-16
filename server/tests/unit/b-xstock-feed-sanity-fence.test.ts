@@ -22,7 +22,8 @@ const AEE = readFileSync(join(SERVER, 'services', 'active-execution-engine.ts'),
 const WARMUP = readFileSync(join(SERVER, 'startup', 'b72-warmup.ts'), 'utf8');
 // The knob list is seeded by TWO migrations: the original twelve, and row 2 increment A's thirteenth (2026-10-10).
 const MIGRATION = readFileSync(join(ROOT, 'drizzle', 'migrations', '2026-09-03-b-xstock-feed-sanity.sql'), 'utf8')
-  + readFileSync(join(ROOT, 'drizzle', 'migrations', '2026-10-10-b-xstock-bid-trigger-reland-inca.sql'), 'utf8');
+  + readFileSync(join(ROOT, 'drizzle', 'migrations', '2026-10-10-b-xstock-bid-trigger-reland-inca.sql'), 'utf8')
+  + readFileSync(join(ROOT, 'drizzle', 'migrations', '2026-10-16-b-xstock-bid-trigger-reland-obj6.sql'), 'utf8');
 
 function code(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
@@ -60,8 +61,8 @@ describe('F-C1 — the hollow SKIP branch writes nothing to the shared price cac
 
 describe('F-C2 — one knob list: migration == BOOK_STATE_KNOBS == warmup', () => {
   const seeded = Array.from(MIGRATION.matchAll(/\('book_state','\*','xstock_spot','\*','\*','([a-z_]+)'/g)).map(m => m[1]);
-  it('the migrations seed exactly the thirteen names, each once', () => {
-    expect(seeded.length).toBe(13);
+  it('the migrations seed exactly the fourteen names, each once', () => {
+    expect(seeded.length).toBe(14);
     expect(new Set(seeded)).toEqual(new Set(BOOK_STATE_KNOBS));
   });
   it('the warmup prefetches the module and calls the boot assertion', () => {

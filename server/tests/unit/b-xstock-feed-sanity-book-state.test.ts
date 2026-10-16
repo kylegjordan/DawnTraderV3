@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, type BookStateConfig, type BookStateInput } from '../../asset_classes/xstock_spot/book-state.js';
+import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, BOOK_STATE_REFERENCE_RELATIVE_REASONS, type BookStateConfig, type BookStateInput } from '../../asset_classes/xstock_spot/book-state.js';
 
 const CFG: BookStateConfig = {
   enabled: true, kRel: 3, floorPct: 1.0, otherSideHoldPct: 0.5, lastHoldPct: 0.5, trailingSpreadWindowSnaps: 20,
@@ -223,11 +223,11 @@ describe('B-XSTOCK-FEED-SANITY — every threshold is mutation-proved (one bound
 });
 
 describe('B-XSTOCK-FEED-SANITY — the one list', () => {
-  it('BOOK_STATE_KNOBS has exactly thirteen names and the seed covers each once', () => {
-    expect(BOOK_STATE_KNOBS.length).toBe(13);
-    expect(new Set(BOOK_STATE_KNOBS).size).toBe(13);
+  it('BOOK_STATE_KNOBS has exactly fourteen names and the seed covers each once', () => {
+    expect(BOOK_STATE_KNOBS.length).toBe(14);
+    expect(new Set(BOOK_STATE_KNOBS).size).toBe(14);
     for (const k of BOOK_STATE_KNOBS) expect(typeof BOOK_STATE_SEED[k]).toBe('number');
-    expect(Object.keys(BOOK_STATE_SEED).length).toBe(13);
+    expect(Object.keys(BOOK_STATE_SEED).length).toBe(14);
   });
   it('medianOf: odd, even, empty', () => {
     expect(medianOf([3, 1, 2])).toBe(2); expect(medianOf([4, 1, 3, 2])).toBe(2.5); expect(medianOf([])).toBeNull();
@@ -515,54 +515,86 @@ describe('B-XSTOCK-FEED-SANITY — D1: a STATIC WIDE BOOK IS NOT A COLLAPSED BID
   });
 });
 
-// `3n.q7` increment 2 OBJ-1 — the `spread_blown` arm, OFF by config; tested with the flag injected.
-describe('3n.q7 inc-2 OBJ-1 — spread_blown', () => {
+// Row 2 objective 6 (Kyle 2026-10-16: ON as a live function) — the `spread_blown` arm, ABSOLUTE and judged BEFORE any
+// comparator. It replaced the `3n.q7` increment-2 arm, which sat after `no_comparator` on the chain's TRAILING threshold.
+describe('row 2 objective 6 — spread_blown, absolute and comparator-independent', () => {
   // The MDB/USD 2026-09-19 frame: a warm, tight history (the 385.00/386.79 snapshot), then the 00:15:00.592Z stub-bid frame
   // (bid 335.12, ask 465.00 — derived in 8A_P4B_AUDIT_AND_PLAN §L; mid 400.06, spread ~32.5%).
   const prior = { bid: 385.0, ask: 386.79, last: 386.0 };
   const warm = (now: { bid: number; ask: number; last: number | null }) => ({ ...frame(now, prior), trailingMedianSpreadFrac: 0.0046 });
   const MDB = { bid: 335.12, ask: 465.0, last: 386.0 };
   const ON: BookStateConfig = { ...CFG, spreadBlownEnabled: true };
+  // PCAR/USD 2026-10-13 00:37:22Z: bid 100.80 / ask 114.00 (12.29%) on a chain re-seeded inside the blowout (trailing 13.29%).
+  const PCAR = { bid: 100.8, ask: 114.0, last: 107.4 };
+  const pcarChain = { ...frame(PCAR, { bid: 98.79, ask: 114.0, last: 108.12 }), trailingMedianSpreadFrac: 0.13293 };
 
-  it('OFF (the shipped config): the MDB frame reads two_sided exactly as before — the arm is inert', () => {
-    const r = assessBookState(warm(MDB), CFG);
-    expect(r.state).toBe('two_sided');
-    expect(r.reasons).toEqual(['two_sided']);
+  it('OFF: the MDB frame reads two_sided — the switch, not the predicate, decides', () => {
+    expect(assessBookState(warm(MDB), CFG).reasons).toEqual(['two_sided']);
   });
-  it('ON: the MDB frame reads hollow:spread_blown; the relative arms alone never saw it', () => {
+  it('ON: the MDB frame reads hollow:spread_blown (32.5% over the 1% ceiling)', () => {
     const r = assessBookState(warm(MDB), ON);
     expect(r.state).toBe('hollow');
     expect(r.reasons).toEqual(['spread_blown']);
-    expect(r.inputs.spreadFrac!).toBeGreaterThan(r.inputs.departureThresholdFrac!);
   });
-  it('ON: a normal-width frame on the same history reads two_sided', () => {
+  it('ON: a normal-width frame (0.44%) on the same history reads two_sided', () => {
     expect(assessBookState(warm({ bid: 385.4, ask: 387.1, last: 386.2 }), ON).state).toBe('two_sided');
   });
-  it('ON: every earlier branch still wins first (branch order is the design)', () => {
+  it('THE CASE THAT REQUIRED THE CHANGE: a chain seeded INSIDE the blowout now HOLDS (PCAR) — the old trailing arm passed it', () => {
+    const r = assessBookState(pcarChain, ON);
+    expect(r.state).toBe('hollow');
+    expect(r.reasons).toEqual(['spread_blown']);
+    // control: the same frame with the arm OFF is what released PCAR's exit
+    expect(assessBookState(pcarChain, CFG).state).not.toBe('hollow');
+  });
+  it('ON: NO comparator needed — a symbol with no reference and a blown book is spread_blown, not no_comparator', () => {
+    expect(assessBookState(frame(MDB, null), ON).reasons).toEqual(['spread_blown']);
+    // a tight book with no reference is still undecidable, as before
+    expect(assessBookState(frame({ bid: 385.4, ask: 387.1, last: 386.2 }, null), ON).reasons).toEqual(['no_comparator']);
+  });
+  it('ON: the absent-side arms still win first (branch order is the design)', () => {
     expect(assessBookState(warm({ bid: 0, ask: 465, last: 386 }), ON).reasons).toEqual(['absent_bid']);
-    expect(assessBookState(frame(MDB, null), ON).reasons).toEqual(['no_comparator']);
-    // a one-sided collapse is still bid_collapsed, not spread_blown
-    expect(assessBookState(warm({ bid: 360, ask: 386.8, last: 386.0 }), ON).reasons).toEqual(['bid_collapsed']);
   });
-  it('THE LIMIT, pinned: a chain seeded INSIDE the blowout (its own trailing spread is blown) does NOT fire', () => {
-    const blownSeed = { bid: 335.12, ask: 465.0, last: 386.0 };
-    const r = assessBookState({ ...frame({ bid: 335.5, ask: 464.5, last: 386.0 }, blownSeed), trailingMedianSpreadFrac: 0.3246 }, ON);
-    expect(r.state).toBe('two_sided');
-    expect(r.reasons).not.toContain('spread_blown');
+  it('the ceiling is the governed knob, not a constant: raise it to 15% and PCAR passes while MDB still holds', () => {
+    const wide: BookStateConfig = { ...ON, riAbsSpreadCeilingPct: 15 };
+    expect(assessBookState(pcarChain, wide).reasons).not.toContain('spread_blown');
+    expect(assessBookState(warm(MDB), wide).reasons).toEqual(['spread_blown']);
   });
-  it('the shipped resolver sets it false, and spread_blown is still not a knob (thirteen, its row lands with objective 6)', () => {
+  it('the resolver reads the FOURTEENTH knob, and the seed is ON', () => {
     const src = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state-config.ts'), 'utf8');
-    expect(src).toMatch(/spreadBlownEnabled: false,/);
-    expect(BOOK_STATE_KNOBS.length).toBe(13);
-    expect(BOOK_STATE_KNOBS as readonly string[]).not.toContain('spread_blown_enabled');
+    expect(src).toMatch(/spreadBlownEnabled: r\.spread_blown_enabled === 1,/);
+    expect(BOOK_STATE_KNOBS.length).toBe(14);
+    expect(BOOK_STATE_KNOBS as readonly string[]).toContain('spread_blown_enabled');
+    expect(BOOK_STATE_SEED.spread_blown_enabled).toBe(1);
+  });
+});
+
+// Row 2 objective 6 (S4, the scope's forward-binding note) — the entry seam drops ONLY the reference-RELATIVE hollow reasons
+// when it has no usable reference. This fence reads the predicate's own `reasons.push` list and the `return { state:
+// 'hollow'` that follows each, so a NEW hollow reason cannot slip into the dropped set by being forgotten: the whitelist
+// is exactly three, and every other hollow reason (reference-free) refuses entry.
+describe('row 2 objective 6 — the entry whitelist of reference-relative reasons', () => {
+  it('the whitelist is exactly bid_collapsed, ask_spiked, mark_deviation — and spread_blown is NOT in it', () => {
+    expect([...BOOK_STATE_REFERENCE_RELATIVE_REASONS].sort()).toEqual(['ask_spiked', 'bid_collapsed', 'mark_deviation']);
+    expect(BOOK_STATE_REFERENCE_RELATIVE_REASONS.has('spread_blown')).toBe(false);
+  });
+  it('every HOLLOW reason the predicate can emit is either whitelisted or reference-free (named here, so a new one fails)', () => {
+    const src = readFileSync(join(process.cwd(), 'server/asset_classes/xstock_spot/book-state.ts'), 'utf8').replace(/\r/g, '');
+    const hollow = [...src.matchAll(/reasons\.push\('([a-z_]+)'\);\n\s*return \{ state: 'hollow'/g)].map((m) => m[1]).sort();
+    expect(hollow.length).toBeGreaterThan(0); // the extraction itself works (positive control)
+    const REFERENCE_FREE = ['absent_ask', 'absent_bid', 'feed_burst', 'spread_blown'];
+    expect(hollow).toEqual([...new Set([...REFERENCE_FREE, ...BOOK_STATE_REFERENCE_RELATIVE_REASONS])].sort());
+  });
+  it('the entry seam uses the whitelist (source fence on active-execution-engine.ts)', () => {
+    const src = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf8');
+    expect(src).toMatch(/!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS\.has\(r\)\)/);
   });
 });
 
 // Langston inc-2 Step-4 BLOCKER-2: tsc does not check scripts/ (outside tsconfig) and tsx strips types, so the historical
 // hollow-recut labeller's config literal must be kept in step by hand — this fence is the check the compiler cannot make.
 describe('3n.q7 inc-2 — the recut labeller judges with the production predicate', () => {
-  it('scripts/xstock-hollow-recut.ts carries spreadBlownEnabled: false, as the production resolver does', () => {
+  it('scripts/xstock-hollow-recut.ts reads spreadBlownEnabled from the seed, as the production resolver reads the knob', () => {
     const src = readFileSync(join(process.cwd(), 'scripts/xstock-hollow-recut.ts'), 'utf8');
-    expect(src).toMatch(/const CFG: BookStateConfig = \{[\s\S]*?spreadBlownEnabled: false,[\s\S]*?\};/);
+    expect(src).toMatch(/const CFG: BookStateConfig = \{[\s\S]*?spreadBlownEnabled: BOOK_STATE_SEED\.spread_blown_enabled === 1,[\s\S]*?\};/);
   });
 });

@@ -5,17 +5,16 @@
 // book-state predicate (`spreadBlownEnabled: true` injected through the config seam):
 //   1. WARM    — a normal two-sided book that moves; the comparator seeds, validates, and the evaluator runs (no exit).
 //   2. BLOWOUT — a SYMMETRIC widening (both sides move OUT, the mid stays near fair: the MDB/USD 2026-09-19 00:15Z
-//                shape). It reads `hollow/spread_blown` ⇒ SKIP, SKIP, then YIELD at `hollow_skip_cap` (alert raised,
-//                `book_state_yield_refused` recorded, comparator cleared, the healthy chain's ring RETAINED).
-//   3. RESEED  — the next blown frame reseeds; the retained ring judges it IMPLAUSIBLE (`SEED_IMPLAUSIBLE`), so every
-//                frame while the book stays wide is `REFUSE unvalidated` (`book_state_unvalidated`).
-//   4. RECOVER — the book goes tight again and MOVES; once the chain's ring is mostly tight and the book has moved twice
-//                inside its plausible run, `SEED_ESCAPED` ends the chain; the escape seed validates on the next
-//                two-sided frame (which still refuses on its pre-advance snapshot), and the frame after that acts.
+//                shape). It reads `hollow/spread_blown` ⇒ SKIP, SKIP, then YIELD at `hollow_skip_cap` (NO alert — row 2
+//                objective 6: a spread_blown-only hold pages nobody; `book_state_yield_refused` recorded; comparator cleared).
+//   3. STILL WIDE — row 2 objective 6 made the arm ABSOLUTE and comparator-independent, so a wide frame with the reference
+//                gone is STILL `hollow/spread_blown`: it never seeds on the blown book and the hold simply continues.
+//   4. RECOVER — the first TIGHT frame has no reference ⇒ `no_comparator` ⇒ it seeds on the plausible book and refuses
+//                (unvalidated); the next validates (still refusing on its pre-advance snapshot); the third acts.
 //   5. DECIDE  — the recovered mark is BELOW the stop ⇒ the real evaluator decides `stop_hit` ⇒ the engine calls
 //                `closePosition` (a stub capturing its arguments — the real close path's fill contract could refuse,
 //                which would let the negative arm pass for the wrong reason).
-// Negative arm: the book never recovers ⇒ `closePosition` is never called; the yield alert was captured.
+// Negative arm: the book never recovers ⇒ `closePosition` is never called, the comparator is never seeded, nothing pages.
 // Control arm: the SAME frames with the arm OFF (`spreadBlownEnabled: false`, the production value today) ⇒ the first
 //   blown frame reads `two_sided`, is acted on, and fires a stop on the blown book's mark — the MDB false stop. This is
 //   what makes the positive arm's refusals attributable to the arm and not to something else in the harness.
@@ -329,10 +328,10 @@ async function blowoutToYield(eng: Stub) {
   expect(count(ty.warns, YIELD)).toBe(1);
   expect(ty.warns.find((l) => YIELD.test(l))).toMatch(/YIELD after 3 hollow ticks \(cap 3\) reasons=spread_blown/);
   expect(has(ty.warns, /COMPARATOR_CLEARED reason=yield_after_3_hollow validated=true .*observedMovement=true ringAfter=true/)).toBe(true);
-  expect(ty.alerts).toBe(1);
-  const alert = h.addAlert.mock.calls.at(-1)![0] as { title: string; dedupe_key: string; category: string };
-  expect(alert.title).toBe('Hollow book held MDB/USD for 3 ticks — exit evaluation YIELDED');
-  expect(alert.dedupe_key).toBe('book-state-hollow-paper-MDB/USD');
+  // Row 2 objective 6 (objective 9): a yield whose ONLY reason is `spread_blown` is the expected wide-book hold — logged,
+  // recorded (bookEvents below) and refused, but it mints NO `book-state-hollow-*` page. (Mutation: drop the
+  // `_expectedWideHold` guard in the engine and this reads 1.) The non-spread_blown yield still pages — pinned below.
+  expect(ty.alerts).toBe(0);
   expect(ty.bookEvents).toEqual([expect.objectContaining({ kind: 'yield', streak: 3, reasons: ['spread_blown'] })]);
   expect(ty.priceSkips).toEqual(['book_state_yield_refused']);
   expect(count(ty.warns, XS_FRAME)).toBe(0);
@@ -346,18 +345,25 @@ async function blowoutToYield(eng: Stub) {
 }
 
 /** The reseed while the book stays wide: SEED_IMPLAUSIBLE + REFUSE (unknown), then REFUSE (two_sided) × n. */
-async function wideReseed(eng: Stub, extraWideFrames: number) {
-  const ts = await tick(eng, BLOWN);
-  expect(count(ts.warns, SEED_IMPLAUSIBLE)).toBe(1);
-  expectRefused(ts, 'unknown');
-  expect(has(ts.warns, /REFUSAL_BASIS seedImplausible=true /)).toBe(true);
-  expect(readBookStateComparator(SYMBOL)?.seedImplausible).toBe(true);
-  expect(_peekRetainedRingForTest(SYMBOL)).not.toBeNull(); // an implausible seed does NOT consume the ring (r4)
-  for (let i = 0; i < extraWideFrames; i++) {
+/**
+ * Row 2 objective 6 — the blown book AFTER the yield. The arm is ABSOLUTE and runs before `no_comparator`, so a wide frame
+ * with the reference gone is STILL `hollow/spread_blown`: it never seeds (no `SEED_IMPLAUSIBLE`, the comparator stays
+ * empty), the hold continues (SKIP … YIELD at the cap, again and again), nothing is decided, and nothing pages.
+ * (Before objective 6 this frame read `unknown/no_comparator`, seeded ON the blown book, and the exit was later released
+ * against that seed — PCAR/USD 2026-10-13.)
+ */
+async function wideAfterYield(eng: Stub, wideFrames: number) {
+  for (let i = 0; i < wideFrames; i++) {
     const t = await tick(eng, BLOWN);
-    expectRefused(t, 'two_sided');
-    expect(has(t.warns, SKIP) || has(t.warns, YIELD) || has(t.warns, SEED_ESCAPED)).toBe(false);
+    expect(count(t.warns, XS_FRAME)).toBe(0);
+    expect(has(t.warns, SEED_IMPLAUSIBLE)).toBe(false);
+    expect(has(t.logs, /COMPARATOR_SEEDED/)).toBe(false);
+    expect(readBookStateComparator(SYMBOL)).toBeNull();
+    const line = t.warns.find((l) => SKIP.test(l) || YIELD.test(l));
+    expect(line).toBeDefined();
+    expect(line).toContain('reasons=spread_blown');
     expect(t.alerts).toBe(0);
+    expect(t.closes).toEqual([]);
   }
 }
 
@@ -389,80 +395,57 @@ afterEach(() => {
 });
 
 describe('3n.q7 inc-2 OBJ-3 — the chain, driven through the real exit loop', () => {
-  it('★ warm → symmetric blowout (SKIP, SKIP, YIELD) → implausible reseed (REFUSE) → recovery + SEED_ESCAPED → stop decided on the recovered mark', async () => {
+  it('★ warm → symmetric blowout (SKIP, SKIP, YIELD) → the hold CONTINUES without ever seeding on the wide book → recovery re-seeds on a TIGHT frame → stop decided on the recovered mark', async () => {
     const eng = makeEngine();
     await warm(eng);
     await blowoutToYield(eng);
-    await wideReseed(eng, 2);
+    await wideAfterYield(eng, 4); // 4 more blown ticks: SKIP 1/3, SKIP 2/3, YIELD, SKIP 1/3 — all held, none seeded
 
-    // ── RECOVERY. R1, R2: tight and moving, still judged by the implausible chain ⇒ REFUSE (and the mark is BELOW the
-    // stop the whole time: the refusal is what holds the position, not the price).
-    for (const f of RECOVER.slice(0, 2)) {
-      const t = await tick(eng, f);
-      expectRefused(t, 'two_sided');
-      expect(has(t.warns, SEED_ESCAPED)).toBe(false);
-    }
-    expect(readBookStateComparator(SYMBOL)?.plausibleRunMoves).toBe(2);
-
-    // R3: the chain's ring is now mostly tight and the book has moved ≥2× in its plausible run ⇒ SEED_ESCAPED; the new
-    // chain seeds on R3, consumes the retained ring, and — seeded BY an escape — does not validate on its own seed frame.
-    const t3 = await tick(eng, RECOVER[2]);
-    expect(count(t3.warns, SEED_ESCAPED)).toBe(1);
-    expect(t3.warns.find((l) => SEED_ESCAPED.test(l))).toMatch(/runMoves=3 /);
-    expect(has(t3.warns, /COMPARATOR_CLEARED reason=seed_escape_recovered /)).toBe(true);
-    expect(has(t3.logs, /COMPARATOR_SEEDED/)).toBe(true);
-    expectRefused(t3, 'two_sided');
-    expect(has(t3.warns, /REFUSAL_BASIS seedImplausible=false /)).toBe(true); // the NEW chain's first refusal
-    const esc = readBookStateComparator(SYMBOL)!;
-    expect(esc.seedImplausible).toBe(false);
-    expect(esc.validated).toBe(false);
-    expect(_peekRetainedRingForTest(SYMBOL)).toBeNull(); // a plausible seed consumed the ring
-
-    // R4: the next two_sided frame VALIDATES the chain — but refuses on its pre-advance snapshot (two ticks, FINDING-3).
-    const t4 = await tick(eng, RECOVER[3]);
-    expectRefused(t4, 'two_sided');
+    // RECOVERY: the first tight frame has no reference ⇒ `no_comparator` ⇒ it SEEDS — on a plausible book — and refuses
+    // (an unvalidated chain); the next validates and still refuses on its pre-advance snapshot; the third acts.
+    const R1 = RECOVER[0];
+    const t1 = await tick(eng, R1);
+    expect(has(t1.logs, /COMPARATOR_SEEDED/)).toBe(true);
+    expectRefused(t1, 'unknown');
+    expect(readBookStateComparator(SYMBOL)?.seedImplausible).toBe(false); // seeded on the TIGHT book, never the blown one
+    const t2 = await tick(eng, RECOVER[1]);
+    expectRefused(t2, 'two_sided');
     expect(readBookStateComparator(SYMBOL)?.validated).toBe(true);
 
-    // R5: validated ⇒ the evaluator runs on the recovered mark, which is below the stop ⇒ stop ⇒ closePosition.
-    const R5 = RECOVER[4];
-    const t5 = await tick(eng, R5);
-    expectEvaluated(t5, R5, 'y');
-    expect(t5.warns.find((l) => XS_FRAME.test(l))).toContain('exitReason=stop_hit');
-    expect(t5.warns.find((l) => XS_FRAME.test(l))).toContain('bidWouldFire=stop');
-    expect(has(t5.logs, /\[EXIT_TRIGGER\] symbol=MDB\/USD type=stop_hit trigger=/)).toBe(true);
-    expect(t5.closes).toHaveLength(1);
-    const [positionId, requestedPrice, exitCondition, priceSource, opts] = t5.closes[0] as [string, number, any, string, any];
+    const R3 = RECOVER[2];
+    const t3 = await tick(eng, R3);
+    expectEvaluated(t3, R3, 'y');
+    expect(t3.warns.find((l) => XS_FRAME.test(l))).toContain('exitReason=stop_hit');
+    expect(has(t3.logs, /\[EXIT_TRIGGER\] symbol=MDB\/USD type=stop_hit trigger=/)).toBe(true);
+    expect(t3.closes).toHaveLength(1);
+    const [positionId, requestedPrice, exitCondition, priceSource, opts] = t3.closes[0] as [string, number, any, string, any];
     expect(positionId).toBe('pos-MDB-chain');
-    expect(requestedPrice).toBe(mid(R5));
+    expect(requestedPrice).toBe(mid(R3));
     expect(requestedPrice).toBeLessThan(STOP);
-    expect(exitCondition).toMatchObject({ type: 'stop_hit', price: mid(R5) });
+    expect(exitCondition).toMatchObject({ type: 'stop_hit', price: mid(R3) });
     expect(priceSource).toBe('kraken_equities_ws');
-    expect(opts.exitProvenance).toMatchObject({
-      decisionPrice: mid(R5),
-      bookStateAtDecision: 'two_sided',
-      bookStateYielded: false,
-      producer: 'kraken_equities_ws_mid',
-      source: 'kraken_equities_ws',
-    });
+    expect(opts.exitProvenance).toMatchObject({ decisionPrice: mid(R3), bookStateAtDecision: 'two_sided', bookStateYielded: false });
 
-    // Across the whole run: exactly one close, exactly one alert (the yield), and the frame population reconciled.
+    // Across the whole run: exactly one close (on the RECOVERED book), NO alert (every hold was spread_blown-only), and
+    // the frame population reconciled.
     expect(eng.closePosition).toHaveBeenCalledTimes(1);
-    expect(h.addAlert).toHaveBeenCalledTimes(1);
+    expect(h.addAlert).toHaveBeenCalledTimes(0);
     expect(errSpy.mock.calls.map((c) => String(c[0])).filter((l) => /RECONCILE_BROKEN|PARTITION_BROKEN|Error checking position/.test(l))).toEqual([]);
   });
 
-  it('NEGATIVE: the book never recovers ⇒ closePosition is never called; the yield alert was captured', async () => {
+  it('NEGATIVE: the book never recovers ⇒ closePosition is never called; the spread_blown yield is LOGGED but pages nobody', async () => {
     const eng = makeEngine();
     await warm(eng);
     await blowoutToYield(eng);
     // Twenty more ticks on the blown book (mid 382.50, BELOW the stop 385): every one refuses, none yields again,
     // none escapes, and nothing reaches the evaluator.
-    await wideReseed(eng, 20);
+    await wideAfterYield(eng, 20);
     expect(eng.closePosition).not.toHaveBeenCalled();
-    expect(h.addAlert).toHaveBeenCalledTimes(1);
-    expect((h.addAlert.mock.calls[0][0] as { dedupe_key: string }).dedupe_key).toBe('book-state-hollow-paper-MDB/USD');
+    // Row 2 objective 6 (objective 9): the yield happened and is on the log — but a spread_blown-only hold mints no page.
+    expect(warnSpy.mock.calls.map((c) => String(c[0])).some((l) => /YIELD after \d+ hollow ticks .*reasons=spread_blown /.test(l))).toBe(true);
+    expect(h.addAlert).toHaveBeenCalledTimes(0);
     expect(mid(BLOWN)).toBeLessThan(STOP); // non-vacuous: an unguarded evaluator WOULD have fired on this mark
-    expect(readBookStateComparator(SYMBOL)?.validated).toBe(false);
+    expect(readBookStateComparator(SYMBOL)).toBeNull(); // never seeded on the wide book
     expect(errSpy.mock.calls.map((c) => String(c[0])).filter((l) => /RECONCILE_BROKEN|PARTITION_BROKEN|Error checking position/.test(l))).toEqual([]);
   });
 

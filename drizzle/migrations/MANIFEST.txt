@@ -228,3 +228,4 @@
 2026-10-15-c-xstock-bar-availability-handoff.sql
 2026-10-15-b-entry-consumption-freshness.sql
 2026-10-15-b-class-leg-fill-mode.sql
+2026-10-16-b-xstock-bid-trigger-reland-obj6.sql

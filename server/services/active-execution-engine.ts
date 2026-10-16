@@ -389,7 +389,7 @@ import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparato
 import { resolveEntryYardstick, judgeEntrySpread } from '../asset_classes/xstock_spot/entry-spread-plausibility.js';
 import { isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
 import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
-import type { BookState } from '../asset_classes/xstock_spot/book-state.js';
+import { BOOK_STATE_REFERENCE_RELATIVE_REASONS, type BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
 
@@ -647,8 +647,12 @@ export class ActiveExecutionEngine {
       // reference) are taken from it; the spread is judged by P3's arm below, as for a symbol with no comparator.
       const _cmpAtEntry = readBookStateComparator(symbol);
       const _noUsableRef = _cmpAtEntry === null || _cmpAtEntry.seedImplausible;
+      // ⛔ Row 2 objective 6 (the scope's forward-binding note): with no usable reference, ONLY the reference-RELATIVE
+      // reasons are dropped — a WHITELIST (`BOOK_STATE_REFERENCE_RELATIVE_REASONS`). Every reference-free hollow reason —
+      // `absent_bid`, `absent_ask`, and now `spread_blown` — refuses entry, so arming `spread_blown` cannot let a blown book
+      // pass this seam on a symbol whose comparator is missing or implausible.
       if (bs.ok && bs.result.state === 'hollow' &&
-          (!_noUsableRef || bs.result.reasons.some((r) => r === 'absent_bid' || r === 'absent_ask'))) {
+          (!_noUsableRef || bs.result.reasons.some((r) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS.has(r)))) {
         const _why = `hollow_book ${bs.result.reasons.join('|')}`;
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
         return { pass: false, reason: _why, snapshot, warmthMaxAgeMs: null };
@@ -744,14 +748,15 @@ export class ActiveExecutionEngine {
    *  that follows a venue price, so an accumulating streak is left exactly where it was (Langston Step-2 condition 1). */
   private _coldMarkTicks = 0;
   private _coldMarkPending: Map<string, { symbol: string; sinceMs: number; ticks: number; expired: boolean }> = new Map();
-  private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null }, kind: ExitRefusalKind): ExitRefusalTally {
+  private _noteExitRefusal(position: { id: string; openedAt?: Date | string | null; stopLoss?: string | null }, kind: ExitRefusalKind, spreadBlown = false, bid: number | null = null): ExitRefusalTally {
     let t = this._exitRefusalTally.get(position.id);
     if (!t) {
       const _openedMs = position.openedAt ? new Date(position.openedAt).getTime() : NaN;
       t = newExitRefusalTally(!(Number.isFinite(_openedMs) && _openedMs >= this._engineConstructedAt));
       this._exitRefusalTally.set(position.id, t);
     }
-    noteRefusal(t, kind, Date.now());
+    const _stop = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
+    noteRefusal(t, kind, Date.now(), spreadBlown, bid, Number.isFinite(_stop) ? _stop : null);
     return t;
   }
   // ── `8a-P2` BLOCKER-2 — CONSECUTIVE NO-TRANSACTABLE-SIDE REFUSALS, PER POSITION ────────────
@@ -2276,7 +2281,12 @@ export class ActiveExecutionEngine {
                   bookStateYielded = true;
                   hollowYields++;
                   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} YIELD after ${_next} hollow ticks (cap ${_c.hollowSkipCap}) reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
-                  try {
+                  // Row 2 objective 6 (objective 9; Kyle 2026-10-09 #2 "no overnight alert flood"): a hold whose ONLY reason is
+                  // `spread_blown` is the EXPECTED thin-book hold Kyle directed on 2026-10-16 — it is logged above, recorded
+                  // below (`_recordBookStateEvent`, the refusal-duration report) and pages nobody. Every other hollow reason
+                  // still raises the page exactly as before.
+                  const _expectedWideHold = _r.reasons.length === 1 && _r.reasons[0] === 'spread_blown';
+                  if (!_expectedWideHold) try {
                     const { addAlert } = await import('./system-alerts.js');
                     await addAlert({
                       triggers_at: new Date(),
@@ -2336,14 +2346,14 @@ export class ActiveExecutionEngine {
                   //    (Langston C1): the engine did NOT act on this mark, so the cache must not show
                   //    that it did.
                   withoutPrice++;
-                  this._noteExitRefusal(position, 'yield_refused');
+                  this._noteExitRefusal(position, 'yield_refused', _r.reasons.includes('spread_blown'), _r.inputs.bid ?? null);
                   await this._recordPriceSkip(position, 'book_state_yield_refused');
                   continue;
                 } else {
                   this._bookStateSkipStreak.set(position.id, _next);
                   hollowSkips++;
                   withoutPrice++;
-                  this._noteExitRefusal(position, 'hollow_skip');
+                  this._noteExitRefusal(position, 'hollow_skip', _r.reasons.includes('spread_blown'), _r.inputs.bid ?? null);
                   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
                   await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
                   // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
@@ -2494,7 +2504,7 @@ export class ActiveExecutionEngine {
                 {
                   const _t = this._exitRefusalTally.get(position.id);
                   const _stopNum = position.stopLoss ? parseFloat(position.stopLoss) : NaN;
-                  if (_t && noteRelease(_t, _gSides ? _gSides.bid : null, Number.isFinite(_stopNum) ? _stopNum : null)) {
+                  if (_t && noteRelease(_t, _gSides ? _gSides.bid : null, Number.isFinite(_stopNum) ? _stopNum : null, Date.now())) {
                     // Langston Step 4 gate 2 C-2: the suppressed range since the last RI_NEAR_MISS line is FLUSHED here, not
                     // dropped — a stable refusal prints one near-miss line, so its whole range would otherwise be lost.
                     const _accR = this._riMissAcc.get(position.id);
@@ -4445,7 +4455,7 @@ export class ActiveExecutionEngine {
           }
           // row 2 increment A, P5 — the durable refusal-duration record. ALLOWLIST, like every key in this block.
           const _erTally = this._exitRefusalTally.get(position.id);
-          if (_erTally) _carry.exitRefusal = snapshotExitRefusal(_erTally);
+          if (_erTally) _carry.exitRefusal = snapshotExitRefusal(_erTally, Date.now());
           return Object.keys(_carry).length
             ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), ..._carry } }
             : {};

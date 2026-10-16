@@ -379,14 +379,14 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
   // ── B-XSTOCK-FEED-SANITY (#943) — the book-state guard's knobs, asserted at BOOT. ──────────────
   // Same reasoning as the mark_staleness block above: the guard's fail-safe on a cold or missing
   // knob is to REFUSE the tick (its own skip reason), so an unseeded deploy would silently stop the
-  // guard while the server looked healthy. The thirteen names, the count and the ranges are asserted
+  // guard while the server looked healthy. The fourteen names, the count and the ranges are asserted
   // by `assertBookStateKnobsAtBoot`, which reads the SAME `BOOK_STATE_KNOBS` array the seed and the
   // resolver read — one list, so the three cannot drift (Langston Step-2 condition C2, #641).
   // xstock_spot ONLY, for the same reason as above: no crypto read-path exists for this guard.
   {
     const { assertBookStateKnobsAtBoot } = await import('../asset_classes/xstock_spot/book-state-config.js');
     const r = assertBookStateKnobsAtBoot();
-    console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (13 rows; enabled=${r.enabled} k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled} ri_ceiling=${r.ri_abs_spread_ceiling_pct}%)`);
+    console.log(`[B-XSTOCK-FEED-SANITY][warmup] book_state knobs verified for xstock_spot (14 rows; enabled=${r.enabled} spread_blown=${r.spread_blown_enabled} ceiling=${r.ri_abs_spread_ceiling_pct}% k_rel=${r.single_side_departure_k_rel} floor=${r.single_side_departure_floor_pct}% hold=${r.other_side_hold_pct}% cap=${r.hollow_skip_cap} feed_read=${r.feed_read_enabled} ri_ceiling=${r.ri_abs_spread_ceiling_pct}%)`);
   }
 
   // ── `8a-P4c` increment 3 (Langston Step-4 BLOCKER-1) — the VTS xStock exit spread ceiling, asserted at BOOT. ────────

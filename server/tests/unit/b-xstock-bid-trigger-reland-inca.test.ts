@@ -144,9 +144,11 @@ describe('P2 — the hollow yield keeps a seedImplausible chain (fence on the en
 
 describe('Step 4 gate 1 — the entry seam treats an implausible chain as NO usable reference; RI_NEAR_MISS carries the suppressed range', () => {
   const AEE = readFileSync(join(__dirname, '..', '..', 'services', 'active-execution-engine.ts'), 'utf8');
-  it('an implausible comparator is not a reference at entry: only absent-side hollow refuses, and P3 runs', () => {
+  it('an implausible comparator is not a reference at entry: only reference-FREE hollow refuses (row 2 objective 6 whitelist), and P3 runs', () => {
     expect(AEE).toContain('const _noUsableRef = _cmpAtEntry === null || _cmpAtEntry.seedImplausible;');
-    expect(AEE).toMatch(/\(!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => r === 'absent_bid' \|\| r === 'absent_ask'\)\)/);
+    // Row 2 objective 6 S4: the absent-side pair became a WHITELIST of the reference-relative reasons dropped, so
+    // `spread_blown` (reference-free) also refuses entry; the set is pinned in b-xstock-feed-sanity-book-state.test.ts.
+    expect(AEE).toMatch(/\(!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS\.has\(r\)\)\)/);
     expect(AEE).toContain('if (bs.ok && _noUsableRef) {');
     expect(AEE).not.toContain('if (bs.ok && readBookStateComparator(symbol) === null) {'); // the r1 form, held-only
   });
@@ -256,5 +258,46 @@ describe('P5 — the refusal-duration tally', () => {
     noteRefusal(tl, 'unvalidated', 0);
     expect(noteRelease(tl, null, 100)).toBe(true);
     expect(tl.lastReleaseBidToStopPct).toBeNull();
+  });
+});
+
+// Row 2 objective 6 S6 (Coltrane r2 BLOCKER) — THE HOLDING-COST TRIPWIRE records the FIRST spread_blown-refused tick whose
+// bid is AT OR BELOW the stop (the first tick the stop would have fired absent the guard), never the first WIDE tick, and
+// times the held stop from there to the release / the close.
+describe('row 2 objective 6 S6 — the spread-blown stop-hold tripwire', () => {
+  it('a wide book that starts ABOVE the stop, later crosses below it, then closes below: the cost is the first BELOW-stop bid', async () => {
+    const { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal } = await import('../../services/exit-refusal-tally.js');
+    const STOP = 100;
+    const t = newExitRefusalTally(false);
+    noteRefusal(t, 'hollow_skip', 1_000, true, 104, STOP);   // wide, bid above the stop — NOT a held stop
+    noteRefusal(t, 'hollow_skip', 2_000, true, 102, STOP);   // still above
+    expect(t.spreadBlownFirstStopRefusedBid).toBeNull();
+    noteRefusal(t, 'hollow_skip', 3_000, true, 98, STOP);    // first tick AT/BELOW the stop ⇒ the stop is now held
+    noteRefusal(t, 'yield_refused', 4_000, true, 95, STOP);
+    expect(t.spreadBlownFirstStopRefusedBid).toBe(98);       // mutation "capture the first wide tick" would read 104
+    expect(t.spreadBlownTicks).toBe(4);
+    // released on a recovered book at 9_000: the stop was held 3_000 → 9_000
+    expect(noteRelease(t, 97, STOP, 9_000)).toBe(true);
+    const snap = snapshotExitRefusal(t, 9_500);
+    expect(snap.spreadBlownStopHeldMs).toBe(6_000);
+    expect(snap.spreadBlownFirstStopRefusedBid).toBe(98);
+    expect(snap.lastReleaseBidToStopPct).toBeCloseTo(-3, 6);
+    expect('stopHoldStartMs' in snap).toBe(false);
+  });
+  it('a hold still open at the close is counted UP TO the close', async () => {
+    const { newExitRefusalTally, noteRefusal, snapshotExitRefusal } = await import('../../services/exit-refusal-tally.js');
+    const t = newExitRefusalTally(false);
+    noteRefusal(t, 'hollow_skip', 10_000, true, 90, 100);
+    expect(snapshotExitRefusal(t, 25_000).spreadBlownStopHeldMs).toBe(15_000);
+  });
+  it('NEGATIVE: a hollow tick that is NOT spread_blown, or a bid above the stop, never starts a held stop', async () => {
+    const { newExitRefusalTally, noteRefusal, snapshotExitRefusal } = await import('../../services/exit-refusal-tally.js');
+    const t = newExitRefusalTally(false);
+    noteRefusal(t, 'hollow_skip', 1_000, false, 90, 100); // bid_collapsed etc.: below the stop, but not a spread_blown hold
+    noteRefusal(t, 'hollow_skip', 2_000, true, 101, 100); // spread_blown, but above the stop
+    const s = snapshotExitRefusal(t, 5_000);
+    expect(s.spreadBlownFirstStopRefusedBid).toBeNull();
+    expect(s.spreadBlownStopHeldMs).toBe(0);
+    expect(s.spreadBlownTicks).toBe(1);
   });
 });
