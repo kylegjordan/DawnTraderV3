@@ -233,5 +233,39 @@ ok("L3 direct post: led, no marker (unchanged)",
 ok("L4 no requester: led with the label and no marker, exactly as before this batch",
    q.lead_with_addressee("ok", _adv(None), KY) == "self-advance — ok")
 
+# ── B-LANGSTON-RELIEF OBJ-1: people before self-advance before alerts; FIFO inside a class ──
+import datetime as _dt
+tq = q.TaskPriorityQueue()
+for t in [{"id": "a1", "is_alert": True}, {"id": "a2", "is_alert": True}, {"id": "s1", "self_advance": True},
+          {"id": "k1", "kind": "text"}, {"id": "a3", "is_alert": True}, {"id": "k2", "kind": "voice"}]:
+    tq.put(t)
+ok("JAM depth_by_class counts each class", tq.depth_by_class() == (2, 1, 3))
+order = [tq.get()["id"] for _ in range(6)]
+ok("JAM order: people FIFO, then self-advance, then alerts FIFO", order == ["k1", "k2", "s1", "a1", "a2", "a3"])
+ok("JAM empty after draining", tq.qsize() == 0 and tq.depth_by_class() == (0, 0, 0))
+tq.put({"id": "a9", "is_alert": True}); tq.put({"id": "k9"})
+ok("JAM a person's message put AFTER an alert still goes first", tq.get()["id"] == "k9")
+for _ in range(2):
+    try:
+        tq.task_done()
+    except ValueError:
+        pass
+ok("JAM a task with is_alert False and no self_advance is a person's", q.task_priority({"is_alert": False}) == q.PRIORITY_PERSON)
+
+import tempfile as _tf
+_now = _dt.datetime(2026, 10, 16, 10, 0, 0, tzinfo=_dt.timezone.utc)
+with _tf.TemporaryDirectory() as _d:
+    _f = os.path.join(_d, "recover-since")
+    ok("JAM floor absent -> None/absent", q.read_recover_floor(_f, _now) == (None, "absent"))
+    for raw, want in [("2026-10-16T07:10:43Z", "ok"), ("2026-10-16T11:00:00Z", "in the future"),
+                      ("2026-10-15T09:59:59Z", "older than 24 h"), ("yesterday", "unparseable"),
+                      ("2026-10-16 07:10:43", "unparseable")]:
+        open(_f, "w").write(raw + "\n")
+        fl, why = q.read_recover_floor(_f, _now)
+        ok(f"JAM floor {raw!r} -> {want}", why.startswith(want) and ((fl is not None) == (want == "ok")))
+    open(_f, "w").write("2026-10-16T07:10:43Z")
+    ok("JAM floor value parsed exactly, as UTC",
+       q.read_recover_floor(_f, _now)[0] == _dt.datetime(2026, 10, 16, 7, 10, 43, tzinfo=_dt.timezone.utc))
+
 print(f"\nlangston_queue tests: {P} passed, {F} failed")
 sys.exit(0 if F == 0 else 1)

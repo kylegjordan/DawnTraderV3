@@ -477,3 +477,90 @@ def save_queue(path, items, keep_done=100000, _locked=False):
     else:
         with queue_lock(path):
             _write()
+
+
+# ---------------- the bridge's in-memory task queue: who goes first (B-LANGSTON-RELIEF OBJ-1) ----------------
+# MEASURED 2026-10-16: the bridge's single FIFO queue.Queue held ~117 tasks, ~93% of them system alerts
+# (120 "ALERT enqueued" against 9 people's messages since the 07:10Z restart), at ~8-10 min per invoke.
+# A message from Kyle or a session waited behind every alert queued before it - about 13 hours.
+# Order is now: people's messages (text/voice from Kyle or a session) first, then self-advance
+# re-invokes, then system alerts; FIFO within each class. Nothing is dropped and no class is starved
+# by a FINITE backlog - alerts still run whenever no person's message is waiting.
+PRIORITY_PERSON, PRIORITY_SELF_ADVANCE, PRIORITY_ALERT = 0, 1, 2
+
+
+def task_priority(task):
+    """The class a bridge task belongs to. An alert is identified by the bridge's own is_alert flag
+    (set only for the dedicated alerts webhook id); a self-advance re-invoke by its self_advance flag."""
+    if task.get("is_alert"):
+        return PRIORITY_ALERT
+    if task.get("self_advance"):
+        return PRIORITY_SELF_ADVANCE
+    return PRIORITY_PERSON
+
+
+import heapq as _heapq
+import itertools as _itertools
+import queue as _queue
+
+
+class TaskPriorityQueue(_queue.Queue):
+    """queue.Queue with the documented subclass hooks (_init/_qsize/_put/_get, as queue.PriorityQueue
+    uses) so put/get/qsize/task_done/join and their locking are the standard library's own. The
+    sequence number keeps FIFO order inside a class and means tasks (dicts) are never compared."""
+
+    def _init(self, maxsize):
+        self.queue = []
+        self._seq = _itertools.count()
+
+    def _qsize(self):
+        return len(self.queue)
+
+    def _put(self, task):
+        _heapq.heappush(self.queue, (task_priority(task), next(self._seq), task))
+
+    def _get(self):
+        return _heapq.heappop(self.queue)[2]
+
+    def depth_by_class(self):
+        """(people, self_advance, alerts) waiting now - for the worker's liveness line."""
+        with self.mutex:
+            counts = [0, 0, 0]
+            for prio, _seq, _task in self.queue:
+                counts[prio] += 1
+            return tuple(counts)
+
+
+# ---------------- one-shot recovery of people's messages across a restart (B-LANGSTON-RELIEF OBJ-1) ----------------
+# The task queue is in memory, so a restart loses everything waiting. The gateway watchdog's backfill
+# was meant to recover missed requests, but the bridge's replay guard (B-COMMS-CHUNK-FIX, 2026-07-22)
+# drops every message older than the process, so after a restart NOTHING queued came back.
+# An operator who must restart writes ONE UTC timestamp to RECOVER_FLOOR_FILE first; the new process
+# then re-reads the channel from that moment and re-feeds people's messages Langston has not started
+# (not system alerts - a still-live alert is re-posted by the dispatcher's re-surface). The file is
+# consumed once; without it nothing changes.
+RECOVER_FLOOR_FILE = "/home/langston/.discord-bridge/recover-since"
+RECOVER_MAX_AGE_S = 24 * 3600
+
+
+def read_recover_floor(path=RECOVER_FLOOR_FILE, now=None):
+    """(floor datetime | None, reason). Refuses - returns None with the reason - on a missing,
+    unparseable, future or older-than-24h value, so a forgotten file can never replay old traffic."""
+    import datetime as _dt
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    try:
+        raw = open(path, encoding="utf-8").read().strip()
+    except FileNotFoundError:
+        return None, "absent"
+    except OSError as e:
+        return None, "unreadable: %s" % e
+    try:
+        floor = _dt.datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_dt.timezone.utc)
+    except ValueError:
+        return None, "unparseable %r (want YYYY-MM-DDTHH:MM:SSZ)" % raw[:40]
+    if floor > now:
+        return None, "in the future"
+    if (now - floor).total_seconds() > RECOVER_MAX_AGE_S:
+        return None, "older than 24 h"
+    return floor, "ok"
+

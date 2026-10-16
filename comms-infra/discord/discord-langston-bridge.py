@@ -675,7 +675,9 @@ def task_worker(task_q, state):
             finally:
                 task_q.task_done()
             if time.time() - last_heartbeat >= HEARTBEAT:
-                log(f"task worker alive, queue depth={task_q.qsize()}")
+                _people, _adv, _alerts = task_q.depth_by_class()
+                log(f"task worker alive, queue depth={task_q.qsize()} "
+                    f"(people={_people} self-advance={_adv} alerts={_alerts})")
                 last_heartbeat = time.time()
         except Exception as e:
             log(f"task worker outer error (resuming): {type(e).__name__}: {e}")
@@ -684,7 +686,7 @@ def task_worker(task_q, state):
 
 # ─── Gateway client (receive only) ───────────────────────────────────────────
 
-def build_client(task_q):
+def build_client(task_q, recover_floor=None):
     intents = discord.Intents.default()
     intents.message_content = True
     # enable_debug_events=True so on_socket_raw_receive fires — the true receive-liveness signal (#462).
@@ -698,12 +700,43 @@ def build_client(task_q):
     seen = deque(maxlen=512)       # message-id dedup (review: RESUME can redeliver MESSAGE_CREATE)
     seen_set = set()
 
+    recovered = {"done": False}
+
     @client.event
     async def on_ready():
         log(f"gateway connected as {client.user} (id={client.user.id})")
+        # B-LANGSTON-RELIEF OBJ-1: one-shot recovery of people's messages queued before a restart.
+        # Runs once per process, only when main() found a valid recover-since floor. Re-feeds the
+        # channel since the floor, oldest first, through on_message with _recover=True; ids the
+        # worker has already STARTED (langston_inbound in the inbox) are skipped, alerts are refused
+        # inside on_message, and the seen-set stops the watchdog backfill from enqueuing them twice.
+        if recover_floor is None or recovered["done"]:
+            return
+        recovered["done"] = True
+        try:
+            started = gw.inbox_message_ids(dc.INBOX_LOG, kinds={"langston_inbound"})
+            ch = client.get_channel(CFG["channel_id"])
+            fed = skipped = 0
+            if ch is not None:
+                async for m in ch.history(after=recover_floor, oldest_first=True, limit=None):
+                    if m.id in started:
+                        skipped += 1
+                        continue
+                    await on_message(m, _recover=True)
+                    fed += 1
+            log(f"recovery: re-read channel since {recover_floor.isoformat()} - {fed} message(s) re-fed through "
+                f"the handler, {skipped} already started by the worker (only people's messages addressed to "
+                f"Langston are enqueued; alerts are not)")
+        except Exception as e:
+            log(f"recovery: FAILED ({type(e).__name__}: {e}) - messages from before the restart were NOT recovered")
+        finally:
+            try:
+                os.remove(lq.RECOVER_FLOOR_FILE)
+            except OSError:
+                pass
 
     @client.event
-    async def on_message(message):
+    async def on_message(message, _recover=False):
         # Loop guard: never react to our own messages.
         if message.author.id == client.user.id:
             return
@@ -713,11 +746,18 @@ def build_client(task_q):
         # Pre-startup replay guard (see PROC_START). FAIL-OPEN: an unreadable
         # timestamp means PROCESS, never drop - a comms bridge must not discard
         # real traffic to protect itself from duplicates.
+        # B-LANGSTON-RELIEF OBJ-1: the one exception is the explicit recovery pass in on_ready
+        # (_recover=True), and even then never a system alert: a still-live alert is re-posted by
+        # the dispatcher, and the stale alert backlog is exactly what a restart is meant to shed.
         try:
             _created = getattr(message, 'created_at', None)
             if _created is not None and _created < PROC_START:
-                log(f'skip replay: msg {message.id} predates process start')
-                return
+                _wh = getattr(message, "webhook_id", None)
+                _from_alerts = (_wh is not None and CFG.get("alerts_webhook_id") is not None
+                                and _wh == CFG["alerts_webhook_id"])
+                if not _recover or _from_alerts:
+                    log(f'skip replay: msg {message.id} predates process start')
+                    return
         except Exception as _e:
             log(f'replay-guard check failed ({_e}) - processing anyway (fail-open)')
 
@@ -873,11 +913,17 @@ def main():
     state = load_state()
     save_state(state)
     log(f"Discord Langston bridge starting. session_id={state['session_id']} channel={CFG['channel_id']}")
-    task_q = queue.Queue()
+    # B-LANGSTON-RELIEF OBJ-1: people's messages are served before system alerts (lq.TaskPriorityQueue).
+    task_q = lq.TaskPriorityQueue()
+    recover_floor, why = lq.read_recover_floor()
+    if recover_floor is not None:
+        log(f"recovery: will re-read people's messages since {recover_floor.isoformat()} once the gateway is ready")
+    elif why != "absent":
+        log(f"recovery: floor file ignored ({why}); nothing from before this start will be recovered")
     worker = threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name="task-worker")
     worker.start()
     log("task worker thread started")
-    client = build_client(task_q)
+    client = build_client(task_q, recover_floor)
     # discord.py manages gateway reconnects internally; run() blocks forever.
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 
