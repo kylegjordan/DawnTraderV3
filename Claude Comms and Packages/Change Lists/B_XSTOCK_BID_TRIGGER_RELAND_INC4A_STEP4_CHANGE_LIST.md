@@ -48,7 +48,7 @@ void this._noTriggerRailCtx().then(({ rail, deps }) => rail.markDecided(_dPid, _
 // after the cycle, beside the venue-quiet sweep
 void this._runNoTriggerRailSweep(); // row 2 (4a) P1b
 ```
-Resolved by the EXISTING `active-exit-monitor` when the position decided after the mint, or a `position_closed` row in `active_trade_logs` names it. Key stays per symbol: unique index `active_open_positions_symbol_idx`.
+Resolved by the EXISTING `active-exit-monitor` when the position decided after the mint, or a `position_closed` row in `active_trade_logs` names it. The key is per POSITION — `paperRailKey(mode, symbol, positionId)` (Step 4 r3, Langston's succession blocker); the per-symbol key and its cited index (`active_open_positions_symbol_idx`, which the live database does not have, `#1113`) are retired.
 
 **`server/services/system-alerts.ts`:** `ALERT_ACTORS` gains `vts-exit-monitor` (machine); `active-exit-monitor`'s description names its `no-trigger-<mode>` rows.
 
@@ -56,7 +56,7 @@ Resolved by the EXISTING `active-exit-monitor` when the position decided after t
 `server/tests/unit/b-xstock-bid-trigger-reland-inc4a.test.ts` 30/30, on an in-memory alert store with the production dedupe rule. **Named mutations, each red then restored:** (a) no durable row mark → 2 red · (b) no at-mint index write → 2 red · (c) no Eastern-date check (Thursday → Friday) → 1 red · (r5) no member-decision write → 4 red · re-join inherits the stored member → 1 red · (r5b) resolve on the snapshot → 1 red · no post-resolve check → 1 red · ignore a null member write → 1 red. Cold-window fence: `VTS_NO_TRIGGER_ALERT_AFTER_MS` (10 min) > `NOT_WARM_GRACE_MS`. `b-price-side-8a-p3-crypto-finish.test.ts:186` re-pointed to the per-trade route. `tsc` 335 = baseline. CI on `7977b2d01`: green.
 
 ## MEASURED RESIDUALS, STATED
-1. Paper: 242 `position_closed` log rows vs 251 paper closes in 14 days — a close with no log row leaves its alert for a human (the safe direction).
+1. Paper: 259 paper closes in 14 days, 250 with a `position_closed` row — 9 missing (3.5%), joined `active_trade_logs.trade_id = closed_trades.id` (Langston's re-derivation) — a close with no log row leaves its own per-position alert for a human (the safe direction; it blocks no later position).
 2. Store: per-trade keys turn A3's suppressed pages into mints for the EXCEPTIONAL set; nothing prunes resolved rows (Langston: ~+0.7 MB/day estimate on a 4.26 MB file every writer rewrites). The sweep line now prints the size; the pre-registration fails above ~1 MB/day.
 3. A row minted before this change with no `tradeId` in metadata is matched by its body (`open virtual trade <id> in`); one that matches nothing is left for a human.
 

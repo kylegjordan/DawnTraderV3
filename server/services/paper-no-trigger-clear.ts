@@ -13,7 +13,8 @@
  *     decided after the mint, or when a `position_closed` trade-log row names the position. It is resolved by the EXISTING
  *     `active-exit-monitor` actor (no paper twin of `vts-exit-monitor`).
  * ⛔ CLOSED IS A PRESENT ROW SAYING SO, NEVER AN ABSENT ONE: a position missing from `active_open_positions` is not read as
- *    closed. Measured 2026-10-16: 242 `position_closed` log rows vs 251 paper closes over 14 days — a close that writes no
+ *    closed. Measured 2026-10-16 (Langston, joined `active_trade_logs.trade_id = closed_trades.id`): 259 paper closes over 14 days,
+ *    250 with a `position_closed` row — 9 (3.5%) without one. A close that writes no
  *    log row leaves its alert open for a human, which is the safe direction (a stale row is a visibility cost; a wrong
  *    resolve is a lost alarm).
  * ⛔ KEYED PER POSITION — `no-trigger-<mode>-<SYMBOL>-<positionId>` (Langston (4a) Step 4 BLOCKER). The hazard is not two
