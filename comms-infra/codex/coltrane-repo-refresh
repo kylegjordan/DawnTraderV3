@@ -33,7 +33,15 @@ if [ ! -d "$SRC" ]; then
   exit 1
 fi
 
-if ! git --git-dir="$REPO" fetch --quiet "$SRC" "+refs/heads/$BRANCH:refs/heads/$BRANCH"; then
+# ★ REVIEW BRANCHES TOO (2026-10-16, parity with Langston's dt-review, which can read an
+#   off-branch commit and says so loudly). A hotfix is reviewed BEFORE it reaches
+#   $BRANCH, on a `review/*` branch, so a reviewer that can only see $BRANCH cannot read
+#   the exact ref it is asked to approve. `coltrane-review --ref <sha>` reads such a commit
+#   only when a fetched review/* branch contains it, and labels the read OFF-BRANCH.
+#   --prune is limited by the refspecs, so it removes a review/* branch deleted upstream
+#   and touches nothing else.
+if ! git --git-dir="$REPO" fetch --quiet --prune "$SRC" "+refs/heads/$BRANCH:refs/heads/$BRANCH" \
+     "+refs/heads/review/*:refs/heads/review/*"; then
   echo "coltrane-repo-refresh: fetch FAILED — NOT stamping. Reads will refuse once the" >&2
   echo "coltrane-repo-refresh: existing stamp ages out, which is the intended behaviour." >&2
   exit 1

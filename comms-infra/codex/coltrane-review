@@ -56,6 +56,55 @@ if [ -z "$REF" ]; then
   exit 1
 fi
 
+# ★ PINNED READS (2026-10-16, parity with dt-review's pinned, labelled off-branch read).
+#   `--ref <sha>` reads one exact commit instead of the branch head. It must be the full
+#   40-character id of a commit that is either on $BRANCH or on a review/* branch this
+#   mirror fetched; anything else has no known provenance and is REFUSED. A commit that is
+#   not on $BRANCH gets ONE loud line on stdout (first) and stderr, because a review-branch
+#   read is not a read of the graded ref and must never be quoted as one.
+LOUD=""
+if [ "$1" = "--ref" ]; then
+  if [ $# -lt 2 ]; then
+    echo "coltrane-review: --ref needs a full 40-character commit id. REFUSING." >&2
+    exit 2
+  fi
+  PIN="$2"; shift 2
+  case "$PIN" in
+    *[!0-9a-f]*|"") echo "coltrane-review: --ref '$PIN' is not a lowercase hex commit id. REFUSING." >&2; exit 2 ;;
+  esac
+  if [ ${#PIN} -ne 40 ]; then
+    echo "coltrane-review: --ref must be the full 40-character id, not a prefix. REFUSING." >&2
+    exit 2
+  fi
+  if [ "$(git --git-dir="$REPO" cat-file -t "$PIN" 2>&1)" != "commit" ]; then
+    echo "coltrane-review: $PIN is not a commit in the mirror (refreshed ${age} min ago). REFUSING." >&2
+    echo "coltrane-review: that is the absence of the OBJECT here, not proof it does not exist upstream." >&2
+    exit 1
+  fi
+  git --git-dir="$REPO" merge-base --is-ancestor "$PIN" "$REF"
+  rc=$?
+  case "$rc" in
+    0) ;;
+    1)
+      holders=$(git --git-dir="$REPO" for-each-ref --contains "$PIN" --format='%(refname:short)' refs/heads/review/ | tr '\n' ' ')
+      if [ -z "$holders" ]; then
+        echo "coltrane-review: $PIN is on neither $BRANCH nor any fetched review/* branch. Its provenance is unknown. REFUSING." >&2
+        exit 1
+      fi
+      LOUD="OFF-BRANCH: $PIN is not an ancestor of $BRANCH; it is on ${holders% }. This is a review-branch read, NOT the graded ref."
+      ;;
+    *)
+      echo "coltrane-review: could not tell whether $PIN is on $BRANCH (merge-base exit $rc). REFUSING." >&2
+      exit 1
+      ;;
+  esac
+  REF="$PIN"
+fi
+if [ -n "$LOUD" ]; then
+  echo "$LOUD"
+  echo "$LOUD" >&2
+fi
+
 cmd="$1"; shift 2>/dev/null
 case "$cmd" in
   grep)
@@ -75,7 +124,7 @@ case "$cmd" in
     git --git-dir="$REPO" ls-tree -r --name-only "$REF"
     ;;
   log)
-    git --git-dir="$REPO" log --oneline -n "${1:-20}" "$BRANCH"
+    git --git-dir="$REPO" log --oneline -n "${1:-20}" "$REF"
     ;;
   ref)
     echo "$REF"
@@ -90,6 +139,9 @@ coltrane-review — read the repo at the graded ref ($BRANCH).
   coltrane-review ls                       every path at the ref
   coltrane-review log [n]                  recent commits on the branch
   coltrane-review ref                      the ref, and how fresh the mirror is
+  coltrane-review --ref <40-char sha> ...  any of the above at that exact commit; it must be
+                                           on $BRANCH or a fetched review/* branch, and an
+                                           off-branch read is labelled OFF-BRANCH
 
 ⛔ Quote path:line from THIS, never from a copy in your scratch directory. A copy is a
    copy and goes stale; every line number in a review has to resolve at the ref.
