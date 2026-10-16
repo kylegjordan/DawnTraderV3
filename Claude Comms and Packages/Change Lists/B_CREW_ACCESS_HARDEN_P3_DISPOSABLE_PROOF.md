@@ -175,3 +175,93 @@ server authorizations remain the recovery path and are not changed by this proof
 REVIEWER: claim-only · verify that the sequence discriminates transactional rollback,
 nonpersistent current-session use, pre-client refusal, real sign-out and reboot cold states, and
 exact restoration without authorizing a disposable key anywhere · pending · re-derived y
+
+## Live attempt 1 — 2026-10-16, refused before any mutation (Infra Claude)
+
+Crew mode returned to Claude (order S2) and Infra Claude resumed P3a. Pre-flight at
+`d0f743dde`: the 12-file population was blob-identical to the approved `159d16134`; focused
+suites 11/11 and 36/36; cold pre-state as recorded above (service Stopped/Disabled pid 0;
+agent registry, install root, runtime root, backup root, task, Group Policy `Scripts`
+directory and synchronous-policy value all absent); production key
+`SHA256:8A/uD7oibDmK87ZMHYkWeiXGUFLAJQUY3773YcDkUOw` present and untouched.
+
+Kyle created both disposable keys at the interactive prompt (no passphrase was seen by any
+session). Public fingerprints, both confirmed encrypted (empty passphrase refused):
+expected `SHA256:uwDouLcdC1w6KmU9ynKb+w6xN44U94ejCeIqUVCTPyU`
+(`%USERPROFILE%\.ssh\dt_disposable_expected_20261016`), wrong
+`SHA256:cBrcLlF7SSwZcH6RPnLurfukbUG+SzRi2LIJT/X588A`
+(`%USERPROFILE%\.ssh\dt_disposable_wrong_20261016`).
+
+Section A was run from Kyle's elevated window through the evidence harness. All four cases
+ended with `Too many arguments.` and **no backup manifest was created** — the installer refused
+before its first mutation, so the four `EQUAL-TO-PRE True` lines proved nothing about
+rollback. **This attempt is not evidence for section A.** The harness has been corrected so
+that shape cannot read as a pass (below).
+
+### Cause — reproduced outside the installer
+
+The laptop has only Windows PowerShell 5.1 (`5.1.26100.9711`; no `pwsh`), which an elevated
+"Run as administrator" window opens. Under `ErrorActionPreference = 'Stop'` that shell:
+
+| site | old form | failure on 5.1 |
+|---|---|---|
+| `install.ps1` passphrase check (every run) | `& $sshKeygen -y -P '' -f $privateKey *> $null` | the empty argument is dropped; ssh-keygen sees `-y -P -f <key>` and writes `Too many arguments.`, which becomes a terminating error |
+| `install.ps1` `Assert-LockedState` (success path) | `& $sshAdd -l *> $null` | with the agent stopped, ssh-add writes `Error connecting to agent` → throws, so a correct install would fail its own final check |
+| `rollback.ps1` purge | `& $sshAdd -D *> $null` | throws whenever ssh-add writes stderr → **rollback stops half-way**, i.e. an injected or real install failure could not finish restoring |
+
+Reproduced directly on the laptop: `ssh-keygen -y -P '' … *> $null` → `THROWN: Too many
+arguments.`; `ssh-add -l` and `ssh-add -D` with the agent stopped → `THROWN: Error connecting
+to agent`. Neither script had been executed before approval; the approved suites exercise the
+Python holder and the census only, and CI only parses the PowerShell.
+
+### Correction — commit `91c84d786`
+
+One helper, byte-identical in both scripts between `# BEGIN/# END native-call helper`, runs
+every external program through `Diagnostics.Process` with a command line built by Windows CRT
+quoting (`''` arrives as `""`), stdin closed (no tool can wait on a prompt), stdout and stderr
+captured as text, and the exit code returned. All seven native calls use it (ssh-keygen ×2,
+ssh-add ×2 — `-l` in install, `-D` in rollback — icacls, gpupdate ×2, the installed `lock`);
+only the call to `rollback.ps1` keeps the call operator. The passphrase check additionally
+refuses if ssh-keygen reports `Too many arguments`/usage, so a lost argument cannot read as
+"encrypted".
+
+- `test_ps_native.py` (new): runs the helper on the real stock `powershell.exe` after a
+  **positive control proving that shell reproduces the original `Too many arguments` failure**;
+  then empty-argument delivery (unencrypted throwaway key → exit 0 + public key), encrypted
+  throwaway key refuses an empty passphrase without throwing, stderr + non-zero exit without a
+  throw, `ssh-add -l` returns an exit code, exact quoting round-trip of eight awkward values,
+  and static checks (identical helper; no call operator, `*>`, `2>&1` or `$LASTEXITCODE`
+  outside it). **8/8 on the laptop.** Off Windows the runtime class is skipped and labelled
+  "not evidence"; CI now runs the file for its static checks.
+- `ps_native_mutations.py` (new): **7 mutations, 7 killed cleanly, 0 problems** (empty
+  argument dropped; spaces unquoted; backslash-before-quote not doubled; trailing backslash
+  not doubled; installer passphrase check reverted to the call operator; rollback purge
+  reverted; helper copies diverge).
+- Existing suites unchanged: 11/11 and 36/36.
+
+### Population for this review — 14 files at `91c84d786`
+
+Unchanged from the approved ref (9): `caller_capture_bindings.json` `51ad685c`,
+`capture_caller_processes.ps1` `ca589183`, `config.example.json` `aca6b25d`,
+`dt-ssh-keyholder.py` `2bd7c793`, `seal_caller_evidence.py` `96910319`, `ssh_keyholder.py`
+`715cca9e`, `test_ssh_keyholder.py` `8914373f`, `test_verify_caller_census.py` `897981f5`,
+`verify_caller_census.py` `6fc1fc07`.
+Changed (3): `README.md` `e7ad7d25` → `a775e8e3`; `install.ps1` `e38eaa7c` → `117478f2`;
+`rollback.ps1` `da57d6a0` → `0b47ba54`. New (2): `test_ps_native.py` `3b62e189`,
+`ps_native_mutations.py` `7f0f810c`. Plus one line in `.github/workflows/ci.yml`.
+
+### Evidence harness (section A)
+
+`B_CREW_ACCESS_HARDEN_P3A_FAULT_HARNESS.ps1` (this folder) runs the reviewed installer
+unchanged. A case now PASSES only when the installer's message names the injected point AND
+its automatic restore, exactly one new backup manifest exists, and every measured object
+equals the captured pre-state; the first non-PASS stops the run. It never handles a
+passphrase.
+
+Sections B–E and the stop conditions above are unchanged. The two disposable keys stay in
+place for the re-run; they are authorized nowhere.
+
+REVIEWER: claim-only · does the helper close all three 5.1 failure sites without opening a
+new one (argument injection through the built command line, a hang on stdin or a full pipe,
+a lost exit code), and does the new harness PASS criterion discriminate a refused run from a
+restored one · pending · re-derived y
