@@ -62,7 +62,7 @@ Resolved by the EXISTING `active-exit-monitor` when the position decided after t
 
 ## JUDGEMENT CALLS TO ATTACK
 1. **The engine touch (CC-B):** three fire-and-forget calls on the exit path (`noteMint`, `markDecided`, the sweep). Each `markDecided` call is a resolved-promise hop per deciding position per tick, and writes only when that position holds an open rail row. Acceptable on the exit loop, or gate the call on a cheap in-memory "has a row" check?
-2. **Closed = a `position_closed` trade-log row**, not absence from `active_open_positions`. Right call given the 9-of-251 gap, or should an absent open-position row ALSO count after N sweeps?
+2. **Closed = a `position_closed` trade-log row**, not absence from `active_open_positions`. Right call given the ~~9-of-251~~ *(superseded — see residual 1 above for the joined figure)* gap, or should an absent open-position row ALSO count after N sweeps?
 3. **A3's `suppressed` → `dedupeHits` + `joins`** in the pre-registration mapping. Is that the right comparison for the post-deploy read?
 
 ## STEP 4 r2 — COLTRANE'S SEND-BACK (14:10Z, at `d35353fb6`) FOLDED: three blockers
