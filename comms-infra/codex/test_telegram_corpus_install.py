@@ -8,6 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "coltrane-telegram-corpus-install")
 OWNER = "coltrane"
 ok = True
+STAGING = [None]
 
 
 def check(name, got, want):
@@ -23,15 +24,22 @@ def meta(p):
         return (hashlib.sha256(fh.read()).hexdigest(), st.st_mode & 0o7777, st.st_uid, st.st_gid)
 
 
-def run(src, dest):
-    p = subprocess.run([sys.executable, TOOL, "--source", src, "--dest", dest, "--owner", OWNER],
-                       capture_output=True, timeout=60)
+def run(src, dest, hook=None, tool=None, staging=None):
+    env = dict(os.environ)
+    env.pop("CTCI_TEST_BEFORE_PLACE", None)
+    if hook:
+        env["CTCI_TEST_BEFORE_PLACE"] = hook
+    cmd = [sys.executable] + (tool or [TOOL]) + ["--source", src, "--dest", dest, "--owner", OWNER]
+    if not tool:                       # every case gets its OWN root-only staging, never the live default
+        cmd += ["--staging", staging or STAGING[0]]
+    p = subprocess.run(cmd, capture_output=True, timeout=60, env=env)
     return p.returncode, (p.stdout + p.stderr).decode("utf-8", "replace")
 
 
 def fixture():
-    top = tempfile.mkdtemp(prefix="tgci-", dir="/root")
+    top = tempfile.mkdtemp(prefix="tgci-", dir="/home")      # same filesystem as a real store, root-owned parent
     os.chmod(top, 0o755)
+    STAGING[0] = os.path.join(top, "staging")
     src = os.path.join(top, "src")
     os.makedirs(src)
     for n, b in (("A.md", b"alpha quokka\n"), ("B.jsonl", b'{"text": "beta"}\n')):
@@ -65,9 +73,10 @@ def main():
     check("dest handed over: owner %s, mode 0750, a real dir" % OWNER,
           (st.st_uid, st.st_mode & 0o7777, os.path.islink(dest)), (pw.pw_uid, 0o750, False))
     man = json.load(open(os.path.join(dest, "PROVENANCE.json")))
-    check("every file 0640 owned by %s with its source hash" % OWNER, all(
-        meta(os.path.join(dest, f["name"]))[1:3] == (0o640, pw.pw_uid)
-        and meta(os.path.join(dest, f["name"]))[0] == f["sha256"] for f in man["files"]), True)
+    check("every file, PROVENANCE.json included, is 0640 %s:%s, and each copy has its source hash" % (OWNER, OWNER),
+          all(meta(os.path.join(dest, n))[1:4] == (0o640, pw.pw_uid, pw.pw_gid)
+              for n in [f["name"] for f in man["files"]] + ["PROVENANCE.json"])
+          and all(meta(os.path.join(dest, f["name"]))[0] == f["sha256"] for f in man["files"]), True)
     rc, out = run(src, dest)
     check("a second run refuses (dest exists)", rc != 0, True)
     shutil.rmtree(top)
@@ -101,6 +110,7 @@ def main():
     rc, out = run(src, os.path.join(store, ".corpus", "telegram"))
     check("refuses (non-zero)", rc != 0, True)
     check("  ...nothing created inside the victim", sorted(os.listdir(victim)), ["A.md"])
+    check("  ...the victim file unchanged", meta(os.path.join(victim, "A.md")), before)
     shutil.rmtree(top)
 
     print("5. a symlink planted in the SOURCE (A.md -> a root-only secret)")
@@ -122,6 +132,34 @@ def main():
               (dst.st_uid, dst.st_mode & 0o7777), (0, 0o700))
     check("  ...the secret's bytes were NOT copied", leaked, False)
     check("  ...the secret is unchanged", meta(secret), before)
+    shutil.rmtree(top)
+
+    print("6. ACTIVE SWAP at the last window, parent exists (.corpus renamed away, a decoy dir put in its place)")
+    top, src, store, victim, secret = fixture()
+    corpus = os.path.join(store, ".corpus")
+    os.makedirs(corpus)
+    os.chown(corpus, pw.pw_uid, pw.pw_gid)
+    decoy_canary = os.path.join(top, "decoy-canary")
+    hook = "mv %s %s.moved && mkdir %s && cp %s %s/A.md" % (corpus, corpus, corpus, os.path.join(victim, "A.md"), corpus)
+    rc, out = run(src, os.path.join(corpus, "telegram"), hook=hook, staging=os.path.join(top, "staging"))
+    landed = os.path.join(corpus + ".moved", "telegram")
+    check("the copy lands in the ORIGINAL directory it opened (now .corpus.moved), not the decoy",
+          (rc, os.path.isdir(landed), os.path.exists(os.path.join(corpus, "telegram"))), (0, True, False))
+    dst = os.lstat(os.path.join(corpus, "A.md"))
+    check("  ...the decoy and its file are untouched (still root-owned, no chown followed the swap)",
+          (sorted(os.listdir(corpus)), dst.st_uid), (["A.md"], 0))
+    shutil.rmtree(top)
+
+    print("7. ACTIVE SWAP at the last window, parent ABSENT (the attacker creates .corpus first)")
+    top, src, store, victim, secret = fixture()
+    corpus = os.path.join(store, ".corpus")
+    hook = "mkdir %s && cp %s %s/A.md" % (corpus, os.path.join(victim, "A.md"), corpus)
+    rc, out = run(src, os.path.join(corpus, "telegram"), hook=hook, staging=os.path.join(top, "staging"))
+    check("the no-replace rename refuses (non-zero)", rc != 0, True)
+    check("  ...the attacker's .corpus is untouched", (sorted(os.listdir(corpus)), os.lstat(os.path.join(corpus, "A.md")).st_uid),
+          (["A.md"], 0))
+    check("  ...the partial copy stays in the root-only staging dir", os.path.isdir(os.path.join(top, "staging", ".corpus")),
+          True)
     shutil.rmtree(top)
 
     print("ALL PASS" if ok else "FAILURES")

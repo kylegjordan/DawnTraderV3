@@ -2,105 +2,127 @@
 """B-LANGSTON-RELIEF OBJ-4b (Coltrane r1, 2026-10-16): give Coltrane his OWN read copy of the Telegram-era crew
 history, inside his store so his verified daily backup carries it. Run as ROOT on the agent box, once:
 
-    coltrane-telegram-corpus-install [--source DIR] [--dest DIR] [--owner USER]
+    coltrane-telegram-corpus-install [--source DIR] [--dest DIR] [--owner USER] [--staging DIR]
 
-⛔ IT RUNS AS ROOT AND WRITES INTO A TREE ANOTHER ACCOUNT CONTROLS, so every path is walked WITHOUT following a symlink
-   (Coltrane r2: the first version's copyfile/chmod/chown followed a planted `dest/payload -> victim` link, measured -
-   the victim's bytes, owner and mode changed and the run still reported every hash matched):
-   - every directory on --dest and --source is opened component by component from `/` with O_NOFOLLOW|O_DIRECTORY;
-     a symlink anywhere on either path refuses;
-   - the destination must NOT exist; it is created with mkdirat (which does not follow a final symlink), root-owned
-     0700 while it is filled, so the other account cannot plant anything in it;
-   - every source file is opened O_NOFOLLOW and must be a regular file (a link planted in the SOURCE would otherwise
-     make root copy any file it can read into the other account's store);
-   - every destination file is created relative to the directory descriptor with O_CREAT|O_EXCL|O_NOFOLLOW, its mode
-     and owner set through its own descriptor (fchmod/fchown), never through a path;
-   - only when every file is written and re-hashed is the directory handed over (fchown + 0750).
-It writes PROVENANCE.json (each file's source path, bytes, source mtime, sha256, plus the copy time); `coltrane-memory
-recall` re-hashes every file against it on each search and says DEGRADED if one moved."""
-import argparse, datetime, hashlib, json, os, pwd, stat, sys
+⛔ IT RUNS AS ROOT AND PLACES FILES IN A TREE ANOTHER ACCOUNT CONTROLS. Two review rounds (Coltrane r2, r3) found that
+   every operation BY NAME inside that tree is a race the other account can win - following a planted link (r2), or
+   swapping a freshly made entry between mkdir and open (r3). So nothing is created, opened-to-write, chmod'd or
+   chown'd by name inside the other account's tree at all:
+   1. the whole copy is BUILT in a root-only staging directory (default /home/.coltrane-corpus-staging, mode 0700,
+      on the SAME filesystem as the destination - checked by st_dev), every file created O_CREAT|O_EXCL|O_NOFOLLOW
+      relative to a directory fd, its owner and mode set through its own fd, then re-read by hash;
+   2. ownership is handed over (fchown/fchmod through fds) while the tree is still unreachable by the other account;
+   3. it is PLACED with ONE renameat2(RENAME_NOREPLACE) into the destination's parent, which was opened by an
+      O_NOFOLLOW walk from / - the kernel refuses if the name already exists, and a parent swapped after it was opened
+      only moves where OUR inode lands; it cannot redirect a write, because there are no more writes.
+   If the destination's parent (e.g. `.corpus`) does not exist, the parent is staged too and placed the same way.
+   Every source file is opened O_NOFOLLOW and must be a regular file (a link planted in the SOURCE would otherwise make
+   root copy any file it can read). A refusal leaves its partial copy in the root-only staging dir, never in the
+   other account's tree. PROVENANCE.json records each file's source path, bytes, source mtime and sha256, plus the copy
+   time; `coltrane-memory recall` re-hashes every file against it on each search."""
+import argparse, ctypes, datetime, errno, hashlib, json, os, pwd, stat, sys
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--source", default="/opt/langston-memory/corpus/telegram")
 ap.add_argument("--dest", default="/home/coltrane/memory/.corpus/telegram")
 ap.add_argument("--owner", default="coltrane")
+ap.add_argument("--staging", default="/home/.coltrane-corpus-staging")
 a = ap.parse_args()
 DIRFLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+RENAME_NOREPLACE = 1
+_libc = ctypes.CDLL(None, use_errno=True)
 
 
 def refuse(msg):
-    # once the destination exists it stays ROOT-OWNED 0700 until the very end, so a refusal mid-copy leaves a
-    # partial copy the other account cannot read or use - stated, and left for inspection, never handed over
     sys.exit("REFUSED: " + msg)
 
 
-def open_dir_nofollow(path, create_last=False, mode=0o700):
-    """Walk an absolute path from / one component at a time, never following a symlink. Returns a directory fd.
-    With create_last, the final component must NOT exist and is created with mkdirat (which does not follow)."""
+def renameat2_noreplace(old_dfd, old, new_dfd, new):
+    if _libc.renameat2(old_dfd, old.encode(), new_dfd, new.encode(), RENAME_NOREPLACE) != 0:
+        e = ctypes.get_errno()
+        refuse("could not place %r (%s)%s" % (new, os.strerror(e),
+               " - it already exists; move it aside deliberately first" if e == errno.EEXIST else ""))
+
+
+def open_dir_nofollow(path):
+    """Walk an absolute path from / one component at a time, never following a symlink; return a directory fd."""
     if not os.path.isabs(path):
         refuse("%s is not an absolute path" % path)
-    parts = [p for p in path.split("/") if p]
     fd = os.open("/", DIRFLAGS)
-    for i, p in enumerate(parts):
-        last = i == len(parts) - 1
+    for p in [p for p in path.split("/") if p]:
         try:
-            if last and create_last:
-                try:
-                    os.mkdir(p, mode, dir_fd=fd)
-                except FileExistsError:
-                    refuse("%s already exists (it may be a planted link) - move it aside deliberately first" % path)
             nfd = os.open(p, DIRFLAGS, dir_fd=fd)
         except OSError as e:
-            refuse("cannot open %r on %s without following a link (%s)" % (p, path, e.strerror))
-        finally:
             os.close(fd)
+            refuse("cannot open %r on %s without following a link (%s)" % (p, path, e.strerror))
+        os.close(fd)
         fd = nfd
     return fd
 
 
+def exists_at(dfd, name):
+    try:
+        os.stat(name, dir_fd=dfd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+
+
 def main():
+    if os.geteuid() != 0:
+        refuse("run as root")
     pw = pwd.getpwnam(a.owner)
-    parent, leaf = os.path.split(a.dest.rstrip("/"))
+    dest = a.dest.rstrip("/")
+    parent, leaf = os.path.split(dest)
+    gp, pleaf = os.path.split(parent)
     src_fd = open_dir_nofollow(a.source)
     names = sorted(os.listdir(src_fd))
     if not names:
         refuse("no files in %s (an empty source is a finding, not a success)" % a.source)
-    # the destination's parent: created if absent (owned by the target account at the end), never followed
-    gp, pleaf = os.path.split(parent)
+    # the destination side: the grandparent is opened, and whether the parent exists decides what is placed
     gfd = open_dir_nofollow(gp)
+    parent_exists = exists_at(gfd, pleaf)
+    place_dfd, place_name = (open_dir_nofollow(parent), leaf) if parent_exists else (gfd, pleaf)
+    if exists_at(place_dfd, place_name):
+        refuse("%s already exists - move it aside deliberately first" % os.path.join(parent if parent_exists else gp,
+                                                                                   place_name))
+    # the root-only staging dir (created if absent; must be root-owned 0700, a real dir, same filesystem)
+    sgp, sleaf = os.path.split(a.staging.rstrip("/"))
+    sgfd = open_dir_nofollow(sgp)
     try:
-        os.mkdir(pleaf, 0o750, dir_fd=gfd)
-        made_parent = True
+        os.mkdir(sleaf, 0o700, dir_fd=sgfd)
     except FileExistsError:
-        made_parent = False
-    try:
-        pfd = os.open(pleaf, DIRFLAGS, dir_fd=gfd)
-    except OSError as e:
-        refuse("cannot open %s without following a link (%s)" % (parent, e.strerror))
-    if made_parent:
-        os.fchown(pfd, pw.pw_uid, pw.pw_gid)
-    try:
-        os.mkdir(leaf, 0o700, dir_fd=pfd)
-    except FileExistsError:
-        refuse("%s already exists (it may be a planted link) - move it aside deliberately first" % a.dest)
-    dfd = os.open(leaf, DIRFLAGS, dir_fd=pfd)
-    st = os.fstat(dfd)
-    if st.st_uid != 0 or (st.st_mode & 0o077):
-        refuse("the new destination is not root-owned 0700 while it is filled (uid %d, mode %o)" % (st.st_uid, st.st_mode))
+        pass
+    sfd = os.open(sleaf, DIRFLAGS, dir_fd=sgfd)
+    sst = os.fstat(sfd)
+    if sst.st_uid != 0 or (sst.st_mode & 0o077) or not stat.S_ISDIR(sst.st_mode):
+        refuse("staging %s must be a root-owned 0700 directory (uid %d, mode %o)" % (a.staging, sst.st_uid, sst.st_mode))
+    if sst.st_dev != os.fstat(place_dfd).st_dev:
+        refuse("staging and destination are on different filesystems - an atomic rename is impossible")
+    if exists_at(sfd, place_name):
+        refuse("a previous attempt left %s/%s - inspect and remove it first" % (a.staging, place_name))
+    # build: <staging>/<place_name>[/<leaf>] - root-owned 0700 throughout the build
+    os.mkdir(place_name, 0o700, dir_fd=sfd)
+    top_fd = os.open(place_name, DIRFLAGS, dir_fd=sfd)
+    if parent_exists:
+        dfd = top_fd
+    else:
+        os.mkdir(leaf, 0o700, dir_fd=top_fd)
+        dfd = os.open(leaf, DIRFLAGS, dir_fd=top_fd)
     files = []
     for n in names:
         try:
-            sfd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=src_fd)
+            ifd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=src_fd)
         except OSError as e:
             refuse("source %s/%s cannot be opened without following a link (%s)" % (a.source, n, e.strerror))
         try:
-            sst = os.fstat(sfd)
-            if not stat.S_ISREG(sst.st_mode):
+            ist = os.fstat(ifd)
+            if not stat.S_ISREG(ist.st_mode):
                 refuse("source %s/%s is not a regular file" % (a.source, n))
-            with os.fdopen(sfd, "rb", closefd=False) as fh:
+            with os.fdopen(ifd, "rb", closefd=False) as fh:
                 data = fh.read()
         finally:
-            os.close(sfd)
+            os.close(ifd)
         h = hashlib.sha256(data).hexdigest()
         ofd = os.open(n, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dfd)
         try:
@@ -113,9 +135,9 @@ def main():
         rfd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
         with os.fdopen(rfd, "rb") as fh:
             if hashlib.sha256(fh.read()).hexdigest() != h:
-                refuse("%s did not read back with its source hash" % n)
-        files.append({"name": n, "source": os.path.join(a.source, n), "bytes": sst.st_size, "sha256": h,
-                      "source_mtime": datetime.datetime.fromtimestamp(sst.st_mtime, datetime.timezone.utc).isoformat()})
+                refuse("%s did not read back with its source hash (partial copy left in %s)" % (n, a.staging))
+        files.append({"name": n, "source": os.path.join(a.source, n), "bytes": ist.st_size, "sha256": h,
+                      "source_mtime": datetime.datetime.fromtimestamp(ist.st_mtime, datetime.timezone.utc).isoformat()})
     man = {"copied_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "source_dir": a.source,
            "by": "coltrane-telegram-corpus-install (B-LANGSTON-RELIEF OBJ-4b)", "files": files}
     mfd = os.open("PROVENANCE.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
@@ -127,10 +149,18 @@ def main():
         os.fchown(mfd, pw.pw_uid, pw.pw_gid)
     finally:
         os.close(mfd)
-    os.fchown(dfd, pw.pw_uid, pw.pw_gid)          # hand over only now, through the descriptor
+    # hand over while still unreachable, through the fds - never by name in the other account's tree
+    os.fchown(dfd, pw.pw_uid, pw.pw_gid)
     os.fchmod(dfd, 0o750)
-    print("COPIED %d file(s), %d B, to %s; every file re-read with its source hash; PROVENANCE.json written" % (
-        len(files), sum(f["bytes"] for f in files), a.dest))
+    if not parent_exists:
+        os.fchown(top_fd, pw.pw_uid, pw.pw_gid)
+        os.fchmod(top_fd, 0o750)
+    hook = os.environ.get("CTCI_TEST_BEFORE_PLACE")            # test seam: an attacker's move at the last window
+    if hook and dest != ap.get_default("dest"):
+        os.system(hook)
+    renameat2_noreplace(sfd, place_name, place_dfd, place_name)
+    print("COPIED %d file(s), %d B, placed at %s by one no-replace rename; every file re-read with its source hash; "
+          "PROVENANCE.json written" % (len(files), sum(f["bytes"] for f in files), dest))
 
 
 if __name__ == "__main__":
