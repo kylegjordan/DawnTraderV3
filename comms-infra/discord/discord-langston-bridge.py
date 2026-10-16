@@ -719,14 +719,37 @@ import alert_lane as al
 ALERT_LANE_ENABLED = os.environ.get("LANGSTON_ALERT_LANE", "0") == "1"
 
 
+def read_live_rows(ids):
+    """The alerts' live rows from staging, read by the BRIDGE (the lane has no tools). {id: row}; an id absent from
+    the result is reported to the lane as unreadable, which its rules escalate. Never raises."""
+    if not ids:
+        return {}
+    cmd = "grep -F " + " ".join("-e %s" % i for i in ids if re.fullmatch(al.UUID, i)) + \
+          " /var/log/dawntrader/system-alerts.jsonl"
+    try:
+        r = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "staging", cmd],
+                           env=dict(os.environ, HOME=WORK_DIR), capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        log(f"alert lane: live-row read FAILED ({type(e).__name__}: {e}) - every row reported unreadable")
+        return {}
+    if r.returncode not in (0, 1):            # grep: 1 = no match, which the lane is told per id
+        log(f"alert lane: live-row read exit {r.returncode}: {(r.stderr or '')[:200]} - rows reported unreadable")
+        return {}
+    return al.parse_live_rows(r.stdout, ids)
+
+
 def invoke_lane(prompt):
     """One fresh lane invocation. Returns (answer, None) or (None, why)."""
     env = os.environ.copy()
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
     env["HOME"] = WORK_DIR
     env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    # ⛔ NO TOOLS (Langston r2, 2026-10-16): measured, the lane ran with HOME=/home/langston, whose settings allow Bash,
+    #    and langston's key reaches deploy@staging - so "never ack" was only an instruction. Every tool is disallowed
+    #    (a deny outranks any allow); the bridge reads the live rows and the precedent and puts them in the prompt.
     args = ["/usr/bin/claude", "-p", prompt, "--session-id", str(uuid.uuid4()),
-            "--model", al.LANE_MODEL, "--permission-mode", "acceptEdits"]
+            "--model", al.LANE_MODEL, "--permission-mode", "default",
+            "--disallowedTools", ",".join(al.LANE_DENIED_TOOLS)]
     log(f"alert lane: invoking {al.LANE_MODEL} (prompt={len(prompt)} chars)")
     t0 = time.time()
     try:
@@ -810,12 +833,18 @@ def run_alert_batch(batch, task_q):
         # Langston's precedent ruling (2026-10-16): his OWN past assignments per (template, symbol), shown to the lane
         # AND enforced after its answer - a contradiction, a split, or a unanimity alarm goes to him.
         keys = {aid: al.alert_key(t["content"]) for aid, t in ided}
+        conflicts = []
         try:
-            prec = al.langston_precedent(dc.INBOX_LOG, datetime.datetime.now(datetime.timezone.utc).isoformat())
+            prec = al.langston_precedent(dc.INBOX_LOG, datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                                         conflicts=conflicts)
         except Exception as e:
             log(f"alert lane: precedent read FAILED ({type(e).__name__}: {e}) - every alert is treated as unprecedented")
             prec = {}
-        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec))
+        if conflicts:
+            log(f"alert lane: {len(conflicts)} alert id(s) carry two title templates after the re-surface strip; "
+                f"first kept, e.g. {conflicts[0][0]}: {conflicts[0][1]} vs {conflicts[0][2]}")
+        rows = read_live_rows([aid for aid, _ in ided])
+        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec, rows))
         if answer is None:
             log(f"alert lane: FAILED ({why}) - escalating all {len(ided)} alert(s) of this batch to Langston")
             escalate += [(t, f"the alert lane failed ({why})") for _, t in ided]
