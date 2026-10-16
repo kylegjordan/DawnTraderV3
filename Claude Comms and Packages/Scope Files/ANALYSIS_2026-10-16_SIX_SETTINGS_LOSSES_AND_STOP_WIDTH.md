@@ -63,9 +63,27 @@ Halving the target lifts the hit rate by 10 points but halves what each winner p
 | the same 233 trades, taker entry (replay) | 233 | | | −0.57 % |
 | the same 233 trades, **as they really happened** | 233 | | | −1.00 % |
 | the 55 a maker order would have MISSED, as they really happened | 55 | | | −1.51 % |
-⇒ **Maker entries by themselves do not turn these strategies profitable: on the trades that would have filled, the result is the same as taking (−0.59 % vs −0.57 %).** The fee saving is real (0.4 % a round trip on crypto) but it is cancelled by **adverse selection** — a resting buy fills when the price falls through it, so the maker trades start out moving toward their stop (strong_bull_trend crypto: −1.93 % maker vs −1.80 % taker). **What does help:** the trades a maker order would never have filled were worse than average (−1.51 %), so skipping them improves the total; and the large gap between the replay (−0.57 %) and reality (−1.00 %) is the off-session xStock exit damage of §3, which maker entries do not touch.
+~~⇒ Maker entries … the fee saving … is cancelled by adverse selection~~ ⛔ **WITHDRAWN 2026-10-16 (CC-B, after Kyle questioned it): the explanation was wrong.** Decomposed on the same 233 trades, **not one trade changed outcome** between the taker and maker replays (59 target / 171 stop / 3 open in both). The real cause was the MODEL: the maker order was placed at the trade's *planned* price, which sat **0.32 % (crypto) / 0.23 % (xStock) ABOVE the price the market actually gave the taker** — so the "maker" bought worse than the taker. **Corrected in §5d.** **What does help:** the trades a maker order would never have filled were worse than average (−1.51 %), so skipping them improves the total; and the large gap between the replay (−0.57 %) and reality (−1.00 %) is the off-session xStock exit damage of §3, which maker entries do not touch.
 **Per cell (maker, filled trades):** reverse_impulse crypto +3.77 % (n = 8); sma_trend_ride xStock +0.80 % (n = 19); morning_star crypto −0.20 %; vwap_pullback xStock −0.78 % (71 of 105 would fill); strong_bull_trend crypto −1.93 % (47 of 52 would fill); morning_star xStock −0.64 %; pivot_shift xStock −0.52 % (12 of 21 would fill).
 **Limits:** the planned price is close to the ask at the signal, so this is roughly a bid-side order; a resting order placed lower would fill less often at a better price. Same 3½-week sample as above.
 ### 5c. Conclusion across §2, §5a and §5b
 **Neither the stop distance, the target distance, nor maker entries fix the result — the signals in the two big cells (strong_bull_trend crypto, vwap_pullback xStock) do not win often enough for their reward : risk, with any of these levers.** The two levers that do move money are (1) **not letting xStock stops fire into thin off-session books** (≈ 0.5-1 % per trade on vwap_pullback / sma_trend_ride xStock) and (2) **selection** — fewer, better entries. Both belong to the sprint's calibration work.
 
+### 5d. Maker entries, CORRECTED — the resting order at the price the market actually offered (2026-10-16)
+**Model:** a resting buy at the trade's actual fill price (the price the market offered when the taker bought); filled only if the market trades **below** it within 60 minutes; target exit maker, stop taker; the same stop and target levels.
+| | trades | fill | average per trade after fees | profitable |
+|---|---|---|---|---|
+| **all** | 288 | 253 | **taker −0.52 % → maker −0.28 %** | 74 of 253 (29 %) |
+| crypto | 107 | 107 | taker −0.84 % → **maker −0.44 %** | 39 of 107 (36 %) |
+| xStock | 181 | 146 | taker −0.33 % → **maker −0.16 %** | 35 of 146 (24 %) |
+Per cell (maker): strong_bull_trend crypto −1.74 → −1.34 %; vwap_pullback xStock −0.59 → −0.35 % (86 of 105 fill); morning_star crypto −0.42 → −0.02 %; sma_trend_ride xStock +0.88 → +1.17 %; reverse_impulse crypto +2.91 → +3.31 %.
+⇒ **Maker entries help — about +0.24 % per trade overall, +0.40 % on crypto, which is the fee saving — but they do not make the losing cells profitable on their own.** A real resting bid sits at the BID, below this price: it would fill a little less often at a slightly better price.
+
+### 5e. Why every trade passed the Net Expectancy gate and the average still lost (asked by Kyle 2026-10-16)
+The gate admits a trade when the system's **forecast** of its expected value is positive; it does not know the outcome. **Every one of the 310 filled trades since 09-20 had a positive forecast at admission** (`closed_trades.metadata.netEvAtAdmit`; 0 at or below zero), and the realized averages are crypto −0.85 %, xStock −1.24 %. **Is the forecast predictive at all?** Trades split into quarters by their own forecast, within each class (ranks, so the field's differing scale between classes does not matter):
+| class | lowest-forecast quarter | 2nd | 3rd | highest-forecast quarter |
+|---|---|---|---|---|
+| crypto (29/29/28/28) | −2.36 % | +0.23 % | −1.62 % | +0.38 % |
+| xStock (49 each) | −1.10 % | −1.12 % | −1.06 % | **−1.66 %** |
+⇒ **On xStock the forecast does not separate better trades from worse — the highest-rated quarter did worst; on crypto it is noisy at best.** So raising the gate's bar today would not pick better trades. **Making the forecast predictive is the calibration work** — once its win-rate estimates match reality, the same gate automatically turns away the marginal trades.
+⚠️ `netEvAtAdmit` runs on different scales by class (crypto median 0.0023, xStock 0.88, max 75.6); the quartile comparison is within class and unaffected, but the field's unit is not established here.
