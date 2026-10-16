@@ -49,7 +49,10 @@ SESSIONS = os.environ.get("COLTRANE_SESSIONS", "/home/coltrane/.codex/sessions")
 #   replaced version and searches the crew channel's whole history; Coltrane's did neither.
 HISTORY = os.path.join(STORE, ".history")          # inside the store, so the daily backup carries it; never pruned
 CREW_LOG = os.environ.get("COLTRANE_CREW_LOG", "/var/log/cc-discord-inbox.jsonl")
-CREW_SHOW = 40                                      # channel hits shown, newest first; the TOTAL is always printed
+CREW_SHOW = 40                                      # hits per PAGE, newest first; `--offset` pages; the TOTAL is always printed
+# The Telegram-era crew history (before the 2026-06-19 Discord cutover): a provenance-checked COPY inside the store, so
+#   the verified daily backup carries it (Coltrane's own ask, 2026-10-16; the original sits behind Langston's account).
+TELEGRAM_DIR = os.environ.get("COLTRANE_TELEGRAM_DIR", os.path.join(STORE, ".corpus", "telegram"))
 USAGE = os.path.join(STORE, ".usage", "memory-usage.jsonl")
 NL = chr(10)
 
@@ -249,7 +252,9 @@ def crew_messages(path):
             text = (d.get("text") or "").strip()
             if not text:
                 continue
-            key = (str(d.get("message_id") or ""), text[:200])
+            # LOSSLESS (Coltrane r1): one message id legitimately carries several distinct fragments (measured: 7), so
+            #   the key is the id AND the FULL text - only an exact mirrored row collapses.
+            key = (str(d.get("message_id") or ""), text)
             if key[0] and key in seen:
                 continue
             seen.add(key)
@@ -257,10 +262,67 @@ def crew_messages(path):
             yield (d.get("ts") or "")[:19], str(who), text
 
 
+def telegram_hits(rx):
+    """(hits [(ts, file, line)], state). The copy's PROVENANCE.json names each file and its sha256 at copy time; a
+    missing directory, a missing manifest or a file whose hash moved is a STATED state, never a silent zero."""
+    import hashlib
+    man = os.path.join(TELEGRAM_DIR, "PROVENANCE.json")
+    if not os.path.isdir(TELEGRAM_DIR):
+        return [], "MISSING: no copy at %s" % TELEGRAM_DIR
+    try:
+        prov = json.load(open(man, encoding="utf-8"))
+    except Exception as e:
+        return [], "UNREADABLE provenance (%s)" % type(e).__name__
+    out, bad = [], []
+    for f in prov.get("files", []):
+        p = os.path.join(TELEGRAM_DIR, f["name"])
+        try:
+            raw = open(p, "rb").read()
+        except Exception as e:
+            bad.append("%s unreadable (%s)" % (f["name"], type(e).__name__))
+            continue
+        if hashlib.sha256(raw).hexdigest() != f.get("sha256"):
+            bad.append("%s does not match its recorded sha256" % f["name"])
+        text = raw.decode("utf-8", "replace")
+        if f["name"].endswith(".jsonl"):
+            for line in text.split(NL):
+                try:
+                    d = json.loads(line)
+                except Exception:
+                    continue
+                t = (d.get("text") or "").strip()
+                if t and rx.search(t):
+                    hit = next((x for x in t.split(NL) if rx.search(x)), t)
+                    out.append(((d.get("ts") or "")[:19], f["name"], hit.strip()))
+        else:
+            for line in text.split(NL):
+                if rx.search(line):
+                    m = re.search(r"20\d\d-\d\d-\d\dT\d\d:\d\d:\d\d", line)
+                    out.append((m.group(0) if m else "", f["name"], line.strip()))
+    return out, ("ok" if not bad else "DEGRADED: " + "; ".join(bad))
+
+
+def show_page(rows, offset, label):
+    """Print one page of (ts, who, text) rows, newest first, and ALWAYS the total and the page."""
+    rows = sorted(rows, key=lambda r: r[0], reverse=True)
+    page = rows[offset:offset + CREW_SHOW]
+    for ts, who, text in page:
+        print("      [%s %s] %s" % (ts, who, text[:300]))
+    if rows:
+        print("  — %s: %d matching; showing %d-%d (newest first)%s" % (
+            label, len(rows), offset + 1 if page else 0, offset + len(page),
+            "; next page: --offset %d" % (offset + CREW_SHOW) if offset + CREW_SHOW < len(rows) else ""))
+    else:
+        print("  — %s: 0 matching" % label)
+
+
 def cmd_recall(a):
     q = a.query.strip()
     if not q:
         print("REFUSED: empty query.")
+        return 2
+    if a.offset < 0:
+        print("REFUSED: --offset must be 0 or more.")
         return 2
     rx = re.compile(re.escape(q) if not a.regex else q, re.I)
 
@@ -313,22 +375,23 @@ def cmd_recall(a):
     print("=== CREW CHANNEL HISTORY (%s)" % CREW_LOG)
     crew_total, crew_state = 0, "ok"
     try:
-        found = [m for m in crew_messages(CREW_LOG) if rx.search(m[2])]
+        found = [(ts, who, next((x for x in text.split(NL) if rx.search(x)), text).strip())
+                 for ts, who, text in crew_messages(CREW_LOG) if rx.search(text)]
         crew_total = len(found)
-        found.sort(key=lambda m: m[0], reverse=True)
-        for ts, who, text in found[:CREW_SHOW]:
-            line = next((x for x in text.split(NL) if rx.search(x)), text)
-            print("      [%s %s] %s" % (ts, who, line.strip()[:300]))
         hits += crew_total
-        if crew_total > CREW_SHOW:
-            print("  ⚠️ showing the newest %d of %d matching channel messages — narrow the query to see the rest"
-                  % (CREW_SHOW, crew_total))
-        elif not crew_total:
-            print("  (no channel message matches)")
+        show_page(found, a.offset, "channel")
     except Exception as e:
         crew_state = "UNREADABLE: %s" % type(e).__name__
         print("  ⛔ COULD NOT READ the channel history (%s: %s) — a miss here is NOT an absence"
               % (type(e).__name__, e))
+
+    print()
+    print("=== TELEGRAM-ERA CREW HISTORY (%s — a provenance-checked copy; before 2026-06-19)" % TELEGRAM_DIR)
+    tg, tg_state = telegram_hits(rx)
+    if tg_state != "ok":
+        print("  ⛔ %s — a miss here is NOT an absence" % tg_state)
+    hits += len(tg)
+    show_page(tg, a.offset, "telegram-era")
 
     print()
     print("=== OWN SESSIONS (%s)" % SESSIONS)
@@ -354,11 +417,11 @@ def cmd_recall(a):
                     print("      [%s %s] %s" % (ts[:19], role, line.strip()[:300]))
 
     print()
-    print("--- %d hit%s. Scanned %d entr%s in the store, %d superseded version%s, the crew channel (%s), and "
-          "%d message%s across %d session%s."
+    print("--- %d hit%s. Scanned %d entr%s in the store, %d superseded version%s, the crew channel (%s), the "
+          "Telegram-era copy (%s), and %d message%s across %d session%s."
           % (hits, "" if hits == 1 else "s",
              len(files), "y" if len(files) == 1 else "ies", len(hist), "" if len(hist) == 1 else "s", crew_state,
-             scanned, "" if scanned == 1 else "s",
+             tg_state, scanned, "" if scanned == 1 else "s",
              len(rolls), "" if len(rolls) == 1 else "s"))
     if harness_skipped and not a.include_harness:
         print("--- %d harness-injected message%s excluded (plugin/skill/multi-agent preambles). "
@@ -368,11 +431,12 @@ def cmd_recall(a):
         # ⛔ AN EMPTY RESULT IS NOT AN ABSENCE UNTIL THE CORPUS IS NAMED. Whoever reads this
         #    must be able to tell "it never happened" from "it happened before I existed".
         print("--- ⚠️ ZERO HITS. Before reading that as an absence: this corpus is your store and its superseded")
-        print("    versions, your own sessions (from 2026-09-08), and the crew channel (from the Discord cutover,")
-        print("    2026-06-19). It holds NO Telegram-era history and no other agent's private sessions. Ask")
-        print("    Langston (langston-recall) for anything older.")
+        print("    versions, your own sessions (from 2026-09-08), the crew channel (from 2026-06-19) and the")
+        print("    Telegram-era copy (2026-03 to 2026-06). It holds no other agent's private sessions, and a")
+        print("    source marked UNREADABLE/MISSING/DEGRADED above was not searched. Ask Langston")
+        print("    (langston-recall) for those.")
     usage("recall", query=q, hits=hits, store_entries=len(files), sessions=len(rolls), history=len(hist),
-          crew_hits=crew_total, crew_state=crew_state)
+          crew_hits=crew_total, crew_state=crew_state, telegram_hits=len(tg), telegram_state=tg_state)
     return 0
 
 
@@ -398,6 +462,9 @@ def main():
                                       "history and your own past sessions")
     c.add_argument("query")
     c.add_argument("--regex", action="store_true", help="treat the query as a regular expression")
+    c.add_argument("--offset", type=int, default=0,
+                   help="page through channel / Telegram-era hits, %d per page (the output names the next offset)"
+                        % CREW_SHOW)
     c.add_argument("--include-harness", action="store_true",
                    help="also search Codex's own injected preambles")
     c.set_defaults(fn=cmd_recall)

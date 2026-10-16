@@ -181,10 +181,10 @@ coltrane-memory list
 ```
 It searches, in this order: **your retractions** (read them first), **your store**, the
 **superseded versions** of entries you replaced, the **crew channel's whole history** (from
-2026-06-19), and **your own past sessions** (from 2026-09-08).
-⚠️ **ZERO HITS IS NOT AN ABSENCE UNTIL YOU KNOW THE CORPUS.** There is no Telegram-era
-history and no other agent's private sessions in it. **Ask Langston (`langston-recall`)
-for anything older.** The tool prints this warning on an empty result; do not skip it.
+2026-06-19), your **Telegram-era copy** (2026-03 to 06), and **your own past sessions**.
+Channel hits come 40 a page: `--offset N`. A source marked UNREADABLE/MISSING/DEGRADED
+was NOT searched. ⚠️ **ZERO HITS IS NOT AN ABSENCE UNTIL YOU KNOW THE CORPUS** — it has no
+other agent's private sessions; ask Langston (`langston-recall`) for those.
 
 ### Writing it
 ```

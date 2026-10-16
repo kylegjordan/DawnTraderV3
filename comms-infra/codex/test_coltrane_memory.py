@@ -45,6 +45,23 @@ def main():
     rows.append(dict(rows[0]))                                              # a mirrored duplicate of message 1000
     rows.append({"ts": "2026-10-02T09:00:00+00:00", "kind": "langston_outbound", "message_id": "2000",
                  "text": "Langston on the narwhal-ruling, line one\nand a second line"})
+    # same message id, DISTINCT fragments (measured live: one id with 7) - both must survive; and two fragments that
+    # share their first 200 characters but differ after (a 200-char key would have collapsed them)
+    stem = "okapi-fragment " + "x" * 220
+    for j, tail in enumerate(("one", "two")):
+        rows.append({"ts": "2026-10-03T09:00:0%d+00:00" % j, "kind": "cc_outbound", "message_id": "3000",
+                     "text": "okapi-fragment part %s" % tail})
+        rows.append({"ts": "2026-10-03T09:01:0%d+00:00" % j, "kind": "cc_outbound", "message_id": "3001",
+                     "text": stem + tail})
+    tgd = os.path.join(store, ".corpus", "telegram")
+    os.makedirs(tgd)
+    import hashlib
+    tfiles = {"ARCHIVE_2026-05.md": "*[2026-05-07T10:00:00Z]* the quokka-decision from the old forum\nother line\n",
+              "INBOX_RAW.jsonl": json.dumps({"ts": "2026-05-08T11:00:00+00:00", "text": "a raw quokka-decision row"}) + NL}
+    for n, body in tfiles.items():
+        open(os.path.join(tgd, n), "w", encoding="utf-8", newline="").write(body)
+    json.dump({"files": [{"name": n, "sha256": hashlib.sha256(b.encode("utf-8")).hexdigest()} for n, b in tfiles.items()]},
+              open(os.path.join(tgd, "PROVENANCE.json"), "w", encoding="utf-8"))
     with open(log, "w", encoding="utf-8") as fh:
         for r in rows:
             fh.write(json.dumps(r) + NL)
@@ -85,13 +102,38 @@ def main():
     check("  ...and carries the matching retraction", "I withdraw the walrus claim" in out[r_at:s_at], True)
 
     print("4. the crew channel history is searched, capped visibly, de-duplicated")
-    check("45 distinct matches -> shows 40 and says so", "showing the newest 40 of 45" in out, True)
-    check("  ...the mirrored duplicate is counted once (45, not 46)", "of 46" in out, False)
+    check("45 distinct matches -> page 1 shows 1-40 and names the next offset",
+          "channel: 45 matching; showing 1-40 (newest first); next page: --offset 40" in out, True)
+    check("  ...the mirrored duplicate is counted once (45, not 46)", "channel: 46 matching" in out, False)
     check("  ...newest first", out.find("2026-10-15T10:00:00") < out.find("2026-10-01T10:00:00") or
           "2026-10-01T10:00:00" not in out, True)
+    rc, out = run("recall", "walrus-ledger", "--offset", "40")
+    check("--offset 40 shows the remaining 41-45 and no next page",
+          ("channel: 45 matching; showing 41-45 (newest first)" in out, "next page" in out.split("=== TELEGRAM")[0]),
+          (True, False))
+    rc, out = run("recall", "walrus-ledger", "--offset", "-1")
+    check("a negative --offset refuses (exit 2)", rc, 2)
     rc, out = run("recall", "narwhal-ruling")
     check("a multi-line message shows its matching line", "Langston on the narwhal-ruling" in out, True)
+    check("the channel total prints even under one page", "channel: 1 matching; showing 1-1" in out, True)
     check("the summary names the crew channel as read", "the crew channel (ok)" in out, True)
+    rc, out = run("recall", "okapi-fragment")
+    check("same-id DISTINCT fragments all survive de-duplication (4 rows, 2 ids)", "channel: 4 matching" in out, True)
+
+    print("4b. the Telegram-era copy is searched, labelled, and provenance-checked")
+    rc, out = run("recall", "quokka-decision")
+    tg = out.split("=== TELEGRAM-ERA CREW HISTORY")[1] if "=== TELEGRAM-ERA CREW HISTORY" in out else ""
+    check("both Telegram files hit, under their own label", ("ARCHIVE_2026-05.md" in tg, "INBOX_RAW.jsonl" in tg,
+          "telegram-era: 2 matching" in tg), (True, True, True))
+    check("  ...and the summary says the copy was read ok", "the Telegram-era copy (ok)" in out, True)
+    open(os.path.join(tgd, "ARCHIVE_2026-05.md"), "a", encoding="utf-8").write("tampered\n")
+    rc, out = run("recall", "quokka-decision")
+    check("a file whose hash moved reports DEGRADED", "DEGRADED: ARCHIVE_2026-05.md does not match" in out, True)
+    env["COLTRANE_TELEGRAM_DIR"] = os.path.join(top, "no-such-dir")
+    rc, out = run("recall", "quokka-decision")
+    check("a missing copy is said loudly, not a silent zero", ("MISSING: no copy" in out, "NOT an absence" in out),
+          (True, True))
+    env.pop("COLTRANE_TELEGRAM_DIR")
 
     print("5. an unreadable channel log is said, not silent")
     env["COLTRANE_CREW_LOG"] = os.path.join(top, "missing.jsonl")

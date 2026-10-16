@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+"""B-LANGSTON-RELIEF OBJ-4b (Coltrane r1, 2026-10-16): give Coltrane his OWN read copy of the Telegram-era crew
+history, inside his store so his verified daily backup carries it. Run as ROOT on the agent box, once:
+
+    coltrane-telegram-corpus-install [--source DIR] [--dest DIR]
+
+It copies every regular file in the source (default /opt/langston-memory/corpus/telegram - behind Langston's account,
+which Coltrane cannot read) to the destination (default /home/coltrane/memory/.corpus/telegram), owned by coltrane,
+then writes PROVENANCE.json: for each file its source path, size, source mtime and sha256, plus the copy time.
+coltrane-memory recall re-hashes every file against that manifest on each search and says DEGRADED if one moved.
+It REFUSES if the destination already holds a manifest (re-copying would silently replace the evidence of what was
+copied when); move the old copy aside first, deliberately. Every copied file is hash-checked after the copy."""
+import argparse, datetime, hashlib, json, os, pwd, shutil, sys
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--source", default="/opt/langston-memory/corpus/telegram")
+ap.add_argument("--dest", default="/home/coltrane/memory/.corpus/telegram")
+ap.add_argument("--owner", default="coltrane")
+a = ap.parse_args()
+
+
+def sha(p):
+    with open(p, "rb") as fh:
+        return hashlib.sha256(fh.read()).hexdigest()
+
+
+if os.path.exists(os.path.join(a.dest, "PROVENANCE.json")):
+    sys.exit("REFUSED: %s already holds a PROVENANCE.json - move the old copy aside deliberately first" % a.dest)
+names = sorted(n for n in os.listdir(a.source) if os.path.isfile(os.path.join(a.source, n)))
+if not names:
+    sys.exit("REFUSED: no files in %s - nothing copied (an empty source is a finding, not a success)" % a.source)
+pw = pwd.getpwnam(a.owner)
+os.makedirs(a.dest, mode=0o750, exist_ok=True)
+for d in (os.path.dirname(a.dest), a.dest):
+    os.chown(d, pw.pw_uid, pw.pw_gid)
+files = []
+for n in names:
+    src, dst = os.path.join(a.source, n), os.path.join(a.dest, n)
+    shutil.copyfile(src, dst)
+    os.chmod(dst, 0o640)
+    os.chown(dst, pw.pw_uid, pw.pw_gid)
+    s_src, s_dst = sha(src), sha(dst)
+    if s_src != s_dst:
+        sys.exit("REFUSED: %s copied with a different hash (%s vs %s) - copy left in place for inspection" % (n, s_src, s_dst))
+    st = os.stat(src)
+    files.append({"name": n, "source": src, "bytes": st.st_size, "sha256": s_src,
+                  "source_mtime": datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).isoformat()})
+man = {"copied_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "source_dir": a.source,
+       "by": "coltrane-telegram-corpus-install (B-LANGSTON-RELIEF OBJ-4b)", "files": files}
+mp = os.path.join(a.dest, "PROVENANCE.json")
+with open(mp, "w", encoding="utf-8") as fh:
+    json.dump(man, fh, indent=2)
+os.chmod(mp, 0o640)
+os.chown(mp, pw.pw_uid, pw.pw_gid)
+print("COPIED %d file(s), %d B, to %s; every hash matched; PROVENANCE.json written" % (
+    len(files), sum(f["bytes"] for f in files), a.dest))
