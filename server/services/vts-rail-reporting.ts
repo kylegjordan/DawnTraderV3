@@ -331,7 +331,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
     console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
       + `crossings=${railCounts.crossings} joins=${railCounts.joins} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
-      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMisses=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
+      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMissedRowMarks=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
       + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
   } catch (err) {
     state.sweepFailures++;
