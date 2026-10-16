@@ -494,6 +494,7 @@ import { evaluateTradeExpectancy } from '../core/calculations/expectancy.js';
 // HF9: applyGovernance + getGovernanceStateForUI removed (dead imports — never called in function body)
 import { getCachedStability, computeGlobalStability } from '../core/governance/regime-stability.js';
 import { isStrategyEligible, logGovernanceBlock } from '../core/governance/strategy-eligibility.js';
+import { PaperNoTriggerRail, productionPaperRailDeps, type PaperRailDeps } from './paper-no-trigger-clear.js';
 import { getStrategyDependency, type RegimeStability } from '../config/strategy-governance.js';
 import { INTERIM_NO_POSTURE_MODE, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
@@ -716,6 +717,10 @@ export class ActiveExecutionEngine {
   private _venueQuiet = new VenueQuietState();
   private _engineConstructedAt = Date.now();
   private _lastVenueQuietSweepAt = 0;
+  /** row 2 (4a) P1b: the `no-trigger-<mode>-*` rail's restart-safe clear (`paper-no-trigger-clear.ts`). Created lazily so
+   *  `this.mode` is set; its deps are one cached promise, so nothing on the exit path awaits an import. */
+  private _noTriggerRail: PaperNoTriggerRail | null = null;
+  private _noTriggerRailDeps: Promise<PaperRailDeps> | null = null;
   /** row 33 P4 (8g-bis): the stored-row tripwire's watermark — 0 until its first run, which looks back 24 h. */
   private _reserveTripwireSinceMs = 0;
   private _lastReserveTripwireAt = 0;
@@ -935,6 +940,20 @@ export class ActiveExecutionEngine {
    * B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep, at most once a minute, AFTER the exit cycle and awaited by
    * nothing on the exit path. Re-measures (never remembers) and resolves cleared rows; never throws.
    */
+  private _noTriggerRailCtx(): Promise<{ rail: PaperNoTriggerRail; deps: PaperRailDeps }> {
+    if (!this._noTriggerRail) this._noTriggerRail = new PaperNoTriggerRail(this.mode);
+    if (!this._noTriggerRailDeps) this._noTriggerRailDeps = productionPaperRailDeps();
+    const rail = this._noTriggerRail;
+    return this._noTriggerRailDeps.then((deps) => { rail.ensureLoaded(deps); return { rail, deps }; });
+  }
+
+  /** row 2 (4a) P1b: once a minute, after the cycle, NOT awaited — resolves `no-trigger-<mode>-*` rows whose position
+   *  decided after the mint or closed. Never throws. */
+  private async _runNoTriggerRailSweep(): Promise<void> {
+    try { const { rail, deps } = await this._noTriggerRailCtx(); await rail.sweep(Date.now(), deps); }
+    catch (err) { console.error(`[NO_TRIGGER_RAIL][SWEEP_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err); }
+  }
+
   private async _runVenueQuietSweep(open: Array<{ id: string; symbol: string; assetClass?: string | null }>): Promise<void> {
     const now = Date.now();
     if (now - this._lastVenueQuietSweepAt < 60_000) return;
@@ -3301,6 +3320,7 @@ export class ActiveExecutionEngine {
     // B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep — after the cycle, NOT awaited, throttled to once a minute.
     void this._runVenueQuietSweep(openPositions.map((p) => ({ id: p.id, symbol: p.symbol, assetClass: p.assetClass })));
     void this._runReserveRowTripwire(); // row 33 P4 (8g-bis)
+    void this._runNoTriggerRailSweep(); // row 2 (4a) P1b
     // F-G-2 OBJ-0 (Langston FINDING-2): per-cycle denominator counters, reset after the read-out.
     // ⛔⛔ `8a-P2` F2 — THE PARTITION IS FENCED IN CODE, NOT ASSERTED IN PROSE.
     // `invoked === refused + noMark + noHit + hit` is exact BY EVALUATOR SCOPE. If it ever stops,
@@ -3709,7 +3729,7 @@ export class ActiveExecutionEngine {
             + `fresh enough to act on — raising system alert`);
           try {
             const { addAlert } = await import('./system-alerts.js');
-            await addAlert({
+            const _ntRow = await addAlert({
               triggers_at: new Date(),
               category: 'breakage',
               severity: 'warning',
@@ -3724,9 +3744,15 @@ export class ActiveExecutionEngine {
                 + `— not the mark, which is fine by construction here. `
                 + `DISPOSITION: RESOLVE this row, do not ACK it. An ack is non-terminal, so it silences `
                 + `the dedupe key permanently — and this rail is the only observability on a selector `
-                + `that has never once executed on crypto. Resolving is what re-arms it for the next run.`,
+                + `that has never once executed on crypto. Resolving is what re-arms it for the next run. `
+                + `Since row 2 (4a) it clears ITSELF once the position decides or closes (server/services/paper-no-trigger-clear.ts:1).`,
+              // row 2 (4a) P1b: the position id makes the row re-measurable; the row is indexed AT THE MINT.
+              metadata: { positionId: position.id },
               dedupe_key: `no-trigger-${this.mode}-${position.symbol}`,
             });
+            const _ntPid = position.id as string;
+            void this._noTriggerRailCtx().then(({ rail }) => rail.noteMint(_ntPid, _ntRow as any))
+              .catch((e) => console.error('[NO_TRIGGER_RAIL][INDEX_AT_MINT_FAILED]', e instanceof Error ? e.message : e));
           } catch (alertErr) {
             console.error(`[8a-P2][NO_TRIGGER_ESCALATION] addAlert failed for ${position.symbol}:`, alertErr);
           }
@@ -3741,6 +3767,10 @@ export class ActiveExecutionEngine {
       }
       // Any cycle that actually decided clears the streak — including one that decides NOT to exit.
       this._noTriggerStreak.delete(position.id as string);
+      // row 2 (4a) P1b: and writes the decision onto this position's open rail row, if it has one (fire-and-forget).
+      { const _dPid = position.id as string; const _dAt = Date.now();
+        void this._noTriggerRailCtx().then(({ rail, deps }) => rail.markDecided(_dPid, _dAt, deps))
+          .catch((e) => console.error('[NO_TRIGGER_RAIL][DECIDED_MARK_FAILED]', e instanceof Error ? e.message : e)); }
 
       if (decision.modeChanged) {
         await storage.updateActiveOpenPosition(this.mode, position.id, {

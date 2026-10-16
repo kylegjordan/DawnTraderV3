@@ -101,6 +101,7 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
+import { markDecided, onCrossing, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
@@ -220,6 +221,15 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 // timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
 // It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
 const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak>();
+// Row 2 increment (4a): the rail's reporting dependencies, resolved once (production alert file, DB, cohort verdict).
+// `null` on failure — the rail then logs and the decision path carries on unchanged (fail-open for the PAGE only).
+let _vtsRailDepsP: Promise<VtsRailDeps | null> | null = null;
+function vtsRailDeps(): Promise<VtsRailDeps | null> {
+  if (!_vtsRailDepsP) _vtsRailDepsP = productionVtsRailDeps().catch((err) => {
+    console.error('[VTS_RAIL][DEPS_UNAVAILABLE]', err instanceof Error ? err.message : err); _vtsRailDepsP = null; return null;
+  });
+  return _vtsRailDepsP;
+}
 // The shadow lane's floor (BLOCKER-1): one count, not a streak, so its starvation is visible without pooling into the real lane.
 // `3n.q3` P7: per asset class, as on the real lane — it counted crypto only, so every xStock unpriced close would read 0.
 const _vtsShadowByClass = newVtsExitCounters();
@@ -3591,6 +3601,9 @@ async function resolveOpenVirtualTrades(): Promise<{
   let timeouts = 0;
   let unpriced = 0; // `3n.q3` P2: unpriced closes are not stops, targets or timeouts — counted on their own
 
+  // Row 2 increment (4a) P1: the rail index is loaded from the alert file BEFORE the first decision of the process, so a
+  // decision for a trade whose row was minted before a restart is still written onto that row.
+  { const _rd = await vtsRailDeps(); if (_rd) ensureVtsRailIndex(_rd); }
   if (openVirtualTrades.size === 0) {
     return { resolved, stopHits, targetHits, timeouts };
   }
@@ -3976,6 +3989,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         VTS_NO_TRIGGER_ALERT_AFTER_MS);
       if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
       else _vtsNoTriggerStreak.delete(tradeId);
+      // Row 2 increment (4a) P1: a DECISION is written onto this trade's open rail row / standing-record membership NOW, so the
+      // minute sweep can clear it from durable state even across a restart (fire-and-forget; never on the decision's path).
+      if (_ntReason === undefined) { const _rd = await vtsRailDeps(); if (_rd) markDecided(tradeId, _ntNow, _rd); }
       if (_ntStep.ended !== null && _ntNow - _ntStep.ended.sinceMs >= 60_000) {
         console.warn(`[8a-P4c][VTS_NO_TRIGGER_END] ${trade.symbol} trade ${tradeId} class=${trade.assetClass} `
           + `streakMs=${_ntNow - _ntStep.ended.sinceMs} lastReason=${_ntStep.ended.lastReason} paged=${_ntStep.ended.alerted}`);
@@ -3986,11 +4002,12 @@ async function resolveOpenVirtualTrades(): Promise<{
         const _ntTotalMins = Math.round((_ntNow - _nt.sinceMs) / 60_000);
         console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] ${trade.symbol} trade ${tradeId}: no exit decision for ${_ntMins} min in paging time (${_ntTotalMins} min in all) (last reason ${_nt.lastReason}) — raising system alert`);
         try {
-          const { addAlert } = await import('./system-alerts.js');
-          await addAlert({
-            triggers_at: new Date(),
-            category: 'breakage',
-            severity: 'warning',
+          // Row 2 increment (4a) P2/P3: an expected wide/quiet xStock book joins ONE standing record; everything else pages
+          // on its own key as before (`vts-rail-reporting.ts`; the rules are pure in `core/trading/vts-rail.ts`).
+          const _rd = await vtsRailDeps();
+          if (!_rd) throw new Error('rail deps unavailable');
+          await onCrossing({
+            tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _nt.lastReason, pageSinceMs: _nt.pageSinceMs ?? _ntNow,
             title: `VTS exit decisions unavailable — ${_ntMins} min with no decision for ${trade.symbol}`,
             body: `VTS has made NO exit decision for ${_ntMins} minutes of paging time (${_ntTotalMins} minutes in all) on open `
               + `virtual trade ${tradeId} in ${trade.symbol} (most recent reason: ${_nt.lastReason}). \`no_transactable_side\` means a mark exists but no usable BID within the VTS `
@@ -4004,9 +4021,8 @@ async function resolveOpenVirtualTrades(): Promise<{
               + `in brackets is the selector's own refusal: a ceiling (\`too_old\`, \`too_wide\`, a stale age) can be tuned; a `
               + `\`crossed_book\` or a one-sided book cannot be fixed by any ceiling. Read the symbol's cached sides first (a bid `
               + `equal to the ask means the cache never received real sides) before touching either ceiling. `
-              + `DISPOSITION: RESOLVE this row, do not ACK it — an ack silences the dedupe key permanently; resolving re-arms it.`,
-            dedupe_key: `no-trigger-vts-${trade.symbol}`,
-          });
+              + `This row CLEARS ITSELF when the trade decides or closes (row 2 increment (4a)); if you resolve it by hand, never ACK it — an ack silences the dedupe key permanently.`,
+          }, _ntNow, _rd);
         } catch (alertErr) {
           console.error(`[8a-P3][VTS_NO_TRIGGER_ESCALATION] addAlert failed for ${trade.symbol}:`, alertErr);
         }
@@ -4168,6 +4184,9 @@ async function resolveOpenVirtualTrades(): Promise<{
     if (exitPrice === null || exitReason === 'timeout_unpriced') {
       await closeVtsTradeUnpriced(id, trade, exitArm, now, holdDurationStr);
       unpriced++;
+      // Row 2 increment (4a) P4: an unpriced real-lane close is a warning in ANY session, left for a human.
+      void vtsRailDeps().then((d) => d && onUnpricedClose({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass, hold: holdDurationStr, exitArm: String(exitArm), session: d.isRegularSession(now) ? 'regular' : 'off_session' }, now, d))
+        .catch((err) => console.error(`[VTS_RAIL][UNPRICED_ALERT_FAILED] trade=${id}:`, err instanceof Error ? err.message : err));
       continue;
     }
 
@@ -4730,6 +4749,9 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     if (exitPrice === null) {
       const _c = countersFor(_vtsShadowByClass, trade.assetClass);
       if (_c) _c.closedUnpriced++;
+      // Row 2 increment (4a) P4: the shadow lane is recorded on a per-class count row, never paged (~6 a day).
+      void vtsRailDeps().then((d) => d && onShadowUnpriced({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass }, now, d))
+        .catch((err) => console.error(`[VTS_RAIL][SHADOW_UNPRICED_FAILED] trade=${id}:`, err instanceof Error ? err.message : err));
     }
   }
   if (shadowResolved > 0) {
@@ -5306,6 +5328,8 @@ async function runPhase10SimulationCycle(): Promise<VTSCycleMetrics> {
 
   // Directive 11.6: First resolve any open trades before creating new ones
   await resolveOpenVirtualTrades();
+  // Row 2 increment (4a) P1/P3: the rail's clearing sweep — at most once a minute, AFTER the pass, awaited by nothing.
+  void vtsRailDeps().then((d) => (d ? runVtsRailSweep(Date.now(), d) : undefined));
 
   // reorg-B4: drain the SEPARATE shadow-trade Map (telemetry-only selection-quality
   // layer, booked to `rtb_shadow_pairings`). LIVE since paper-mode active trading turned on — `8a-P4c` (2026-09-22)
