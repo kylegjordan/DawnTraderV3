@@ -90,5 +90,72 @@ with _tf.TemporaryDirectory() as _d:
     ok("inbox evidence: lane-recorded alert ids", routed_ids == {A})
     ok("inbox evidence: Langston's replies by message id, odd ids ignored", replied == {555})
 
+# ---- Langston precedent (his ruling after the lane's first live burst, 2026-10-16) ----
+def _alert(aid, title, body="body text"):
+    return "🚨 **SYSTEM ALERT — WARNING**\n**%s**\n%s\n_Category:_ breakage  ·  _Alert ID:_ `%s`" % (title, body, aid)
+
+ok("key: template + symbol from the title, digits -> <N>",
+   al.alert_key(_alert(A, "VTS exit decisions unavailable — 10 min with no decision for SBAC/USD"))
+   == ("VTS exit decisions unavailable — <N> min with no decision for <SYM>", "SBAC/USD"))
+ok("key: a symbol in the BODY only is not the key's symbol",
+   al.alert_key(_alert(A, "Change-class undeclared for B-SILENT", "for HUT/USD")) == ("Change-class undeclared for B-SILENT", None))
+ok("key: no title -> None", al.alert_key("plain text") is None)
+ok("prompt carries the precedent line", "LANGSTON PRECEDENT" in al.build_prompt([(A, "x")], {A: None}, {}))
+ok("prompt without precedent stays as before", "LANGSTON PRECEDENT" not in al.build_prompt([(A, "x")]))
+
+D_ = "11111111-1111-4111-8111-111111111111"; E_ = "22222222-2222-4222-8222-222222222222"
+F_ = "33333333-3333-4333-8333-333333333333"; G_ = "44444444-4444-4444-8444-444444444444"
+T_ = "VTS exit decisions unavailable — <N> min with no decision for <SYM>"
+with _tf.TemporaryDirectory() as _d2:
+    inbox = os.path.join(_d2, "inbox.jsonl")
+    rows = [
+        {"kind": "langston_alert_inbound", "ts": "2026-10-15T10:00:00", "text": _alert(D_, "VTS exit decisions unavailable — 10 min with no decision for AAA/USD")},
+        {"kind": "langston_alert_inbound", "ts": "2026-10-15T10:00:00", "text": _alert(E_, "VTS exit decisions unavailable — 12 min with no decision for BBB/USD")},
+        {"kind": "langston_alert_inbound", "ts": "2026-10-15T10:00:00", "text": _alert(F_, "VTS exit decisions unavailable — 10 min with no decision for CCC/USD")},
+        {"kind": "langston_alert_inbound", "ts": "2026-10-15T10:00:00", "text": _alert(G_, "VTS exit decisions unavailable — 10 min with no decision for CCC/USD")},
+        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % D_},
+        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=Kyle action="a"]]' % E_},
+        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % F_},
+        {"kind": "langston_outbound", "ts": "2026-10-15T12:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % G_},
+        # a LANE marker must never be precedent (Blocker 2): it would make BBB look settled on CC-B
+        {"kind": "langston_outbound", "lane": "alert", "ts": "2026-10-15T13:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % E_},
+        # older than the window: ignored
+        {"kind": "langston_outbound", "ts": "2026-09-01T11:00:00", "text": '[[ALERT id=%s owner=CC-A action="a"]]' % D_},
+    ]
+    with open(inbox, "w", encoding="utf-8") as fh:
+        for r_ in rows:
+            fh.write(_json.dumps(r_) + "\n")
+    prec = al.langston_precedent(inbox, "2026-10-16T13:47:00")
+    ok("precedent: Langston-sourced only, lane markers excluded", prec.get((T_, "BBB/USD")) == [("2026-10-15T11:00:00", "Kyle")])
+    ok("precedent: outside the 7-day window ignored", prec.get((T_, "AAA/USD")) == [("2026-10-15T11:00:00", "CC-C")])
+    ok("precedent: a symbol he split keeps both, newest first",
+       prec.get((T_, "CCC/USD")) == [("2026-10-15T12:00:00", "CC-B"), ("2026-10-15T11:00:00", "CC-C")])
+    ok("precedent: an unreadable inbox is {} (never agreement)", al.langston_precedent(os.path.join(_d2, "none"), "2026-10-16T13:47:00") == {})
+
+    H_ = "55555555-5555-4555-8555-555555555555"; I_ = "66666666-6666-4666-8666-666666666666"
+    J_ = "77777777-7777-4777-8777-777777777777"; K_ = "88888888-8888-4888-8888-888888888888"
+    keys = {H_: (T_, "AAA/USD"), I_: (T_, "BBB/USD"), J_: (T_, "CCC/USD"), K_: (T_, "ZZZ/USD")}
+    routed = {H_: ("CC-C", "x"), I_: ("CC-B", "x"), J_: ("CC-C", "x"), K_: ("CC-B", "x")}
+    r2, e2, n2 = al.apply_precedent(routed, {}, keys, prec)
+    ok("agrees with Langston -> kept, cites the precedent", r2.get(H_, ("", ""))[0] == "CC-C" and "Langston precedent" in r2[H_][1])
+    ok("contradicts Langston -> to him, never routed", I_ not in r2 and "contradicting Langston's assignment" in e2.get(I_, ""))
+    ok("a symbol he split -> to him", J_ not in r2 and "may not choose" in e2.get(J_, ""))
+    ok("no precedent -> rulebook routing kept and SAYS so", r2.get(K_, ("", ""))[1].endswith("(no Langston precedent)"))
+    ok("every alert accounted for (routed or escalated)", set(r2) | set(e2) == set(routed))
+
+    many = {("%08d-0000-4000-8000-000000000000" % n): ("CC-B", "x") for n in range(12)}
+    mk = {a_: (T_, "N%d/USD" % i) for i, a_ in enumerate(many)}
+    r3, e3, n3 = al.apply_precedent(many, {}, mk, prec)
+    ok("unanimity guard: 12 to one owner on a class he split -> one sample to him", len(e3) == 1 and len(r3) == 11 and n3)
+    few = dict(list(many.items())[:9])
+    r4, e4, n4 = al.apply_precedent(few, {}, mk, prec)
+    ok("unanimity guard: below N it stays quiet", not e4 and not n4)
+    r5, e5, n5 = al.apply_precedent(many, {}, mk, {})
+    ok("unanimity guard: needs a split in HIS history, not just volume", not e5)
+
+# the stated invariant: the lane never acks or resolves (its own instruction file says so)
+_lane_md = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alert-lane", "CLAUDE.md"), encoding="utf-8").read()
+ok("invariant: the lane's instructions forbid ack/resolve", "Never ack, resolve or change anything" in _lane_md)
+
 print("\nalert_lane tests: %d passed, %d failed" % (P, F))
 sys.exit(0 if F == 0 else 1)

@@ -807,13 +807,22 @@ def run_alert_batch(batch, task_q):
         else:
             ided.append((aid, t))
     if ided:
-        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided]))
+        # Langston's precedent ruling (2026-10-16): his OWN past assignments per (template, symbol), shown to the lane
+        # AND enforced after its answer - a contradiction, a split, or a unanimity alarm goes to him.
+        keys = {aid: al.alert_key(t["content"]) for aid, t in ided}
+        try:
+            prec = al.langston_precedent(dc.INBOX_LOG, datetime.datetime.now(datetime.timezone.utc).isoformat())
+        except Exception as e:
+            log(f"alert lane: precedent read FAILED ({type(e).__name__}: {e}) - every alert is treated as unprecedented")
+            prec = {}
+        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided], keys, prec))
         if answer is None:
             log(f"alert lane: FAILED ({why}) - escalating all {len(ided)} alert(s) of this batch to Langston")
             escalate += [(t, f"the alert lane failed ({why})") for _, t in ided]
         else:
             routed, esc, problems = al.read_answer(answer, [aid for aid, _ in ided])
-            for p in problems:
+            routed, esc, pnotes = al.apply_precedent(routed, esc, keys, prec)
+            for p in problems + pnotes:
                 log(f"alert lane: {p}")
             by_id = dict(ided)
             kyle_owned = any(owner == "Kyle" for owner, _ in routed.values())

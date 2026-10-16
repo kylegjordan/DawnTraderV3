@@ -154,12 +154,150 @@ def inbox_evidence(inbox_path, tail_bytes=8_000_000):
     return routed, replied
 
 
-def build_prompt(batch):
-    """batch: [(alert_id, content)]. The instructions live in the lane's own CLAUDE.md; this is the data."""
+# ---- LANGSTON PRECEDENT (Langston's ruling, 2026-10-16 ~13:55Z, after the lane's first live burst) ----------------
+# The lane's first burst routed 60 "VTS exit decisions unavailable … for <SYM>" alerts to CC-B by its static rulebook,
+# against Langston's own recent routing of that class. His ruling, enforced HERE in code, not only asked of the model:
+#   1. key on (title template, SYMBOL) - per symbol his routing is clean (0 of 52 symbols split on 10-12); per template
+#      it is mixed on every day the class has fired, so a template key would escalate the whole class forever;
+#   2. precedent is LANGSTON-SOURCED ONLY - a lane marker (inbox `lane: "alert"`) is never precedent, or the lane
+#      cites its own errors;
+#   3. NEVER CONTRADICT a Langston assignment (not "follow the newest"): a contradiction, or a symbol he has routed to
+#      two owners in the window, goes to him;
+#   4. NEVER EXTEND a decision to an unseen symbol - no precedent means the rulebook routes it AND says so;
+#   5. a UNANIMITY GUARD: one owner for >= UNANIMITY_N alerts of one template in a batch, on a template his routing has
+#      split across owners, is itself the alarm signature - one sample goes to him.
+# Honest limit (his): no alert field reproduces his CC-C/Kyle split, so this REPLAYS his decisions per symbol without
+# justifying them; on 2026-10-16's burst it would have caught 14 of 60 (19 had precedent; 33 had none).
+# ⛔ STATED INVARIANT: the lane never acks or resolves an alert - it only routes (its CLAUDE.md rule 4; tested).
+PRECEDENT_DAYS = 7
+UNANIMITY_N = 10
+_SYM = re.compile(r"\b[A-Z0-9][A-Z0-9.\-]{0,11}/(?:USD|USDT|USDC|EUR|XBT|BTC)\b")
+_BOLD = re.compile(r"^\*\*(.+?)\*\*\s*$", re.M)
+
+
+def alert_key(content):
+    """(template, symbol) from the alert's TITLE - its first bold line that is not the `SYSTEM ALERT` banner. The
+    symbol is the first `XXX/USD`-shaped token in the title (None when the title names none); the template is the
+    title with that symbol -> <SYM> and every digit run -> <N>. No title -> None."""
+    for m in _BOLD.finditer(content or ""):
+        title = m.group(1).strip()
+        if title.upper().startswith("SYSTEM ALERT"):
+            continue
+        sm = _SYM.search(title)
+        sym = sm.group(0) if sm else None
+        tmpl = _SYM.sub("<SYM>", title) if sym else title
+        return re.sub(r"\d+", "<N>", tmpl), sym
+    return None
+
+
+def langston_precedent(inbox_path, now_iso, days=PRECEDENT_DAYS, until_iso=None):
+    """{(template, symbol): [(ts, owner), ...] newest first} from Langston's OWN markers in the last `days` days,
+    joined to the alert each marker names (its inbound post gives the key). Lane posts (`lane: "alert"`) and
+    every other kind are ignored. An unreadable inbox returns {} - the caller then treats every alert as having no
+    precedent and SAYS so, never as agreeing with one. `until_iso` (a replay's cut) ignores markers at or after it."""
+    cutoff = _iso_minus_days(now_iso, days)
+    keys, marks = {}, []
+    try:
+        with open(inbox_path, "rb") as fh:
+            for raw in fh:
+                if b"ALERT" not in raw:
+                    continue
+                try:
+                    e = json.loads(raw)
+                except ValueError:
+                    continue
+                kind, text = e.get("kind"), e.get("text") or ""
+                if kind == "langston_alert_inbound":
+                    aid = alert_id_of(text)
+                    k = alert_key(text)
+                    if aid and k:
+                        keys[aid] = k
+                elif kind == "langston_outbound" and e.get("lane") != "alert":
+                    ts = (e.get("ts") or "")[:19]
+                    if ts < cutoff or (until_iso and ts >= until_iso[:19]):
+                        continue
+                    for aid, owner, _a in MARKER_RE.findall(text):
+                        if owner in OWNERS:
+                            marks.append((ts, aid.lower(), owner))
+    except OSError:
+        return {}
+    out = {}
+    for ts, aid, owner in marks:
+        k = keys.get(aid)
+        if k:
+            out.setdefault(k, []).append((ts, owner))
+    for k in out:
+        out[k].sort(reverse=True)
+    return out
+
+
+def _iso_minus_days(now_iso, days):
+    import datetime
+    t = datetime.datetime.fromisoformat(now_iso[:19])
+    return (t - datetime.timedelta(days=days)).isoformat()[:19]
+
+
+def precedent_line(key, prec):
+    if not key:
+        return "LANGSTON PRECEDENT: none (no title could be read)"
+    rows = prec.get(key)
+    if not rows:
+        return "LANGSTON PRECEDENT: none for %s - route by your rules; do not guess his intent" % (key[1] or key[0])
+    owners = sorted(set(o for _t, o in rows))
+    return ("LANGSTON PRECEDENT for %s: %s (newest %s %s). Route to THAT owner; if you disagree, ESCALATE - never "
+            "contradict him." % (key[1] or key[0], "/".join(owners), rows[0][1], rows[0][0][:16]))
+
+
+def apply_precedent(routed, escalate, keys, prec):
+    """Enforce the ruling on the lane's VALIDATED routing. Returns (routed, escalate, notes); never drops an alert:
+    whatever leaves `routed` lands in `escalate` with its reason."""
+    routed, escalate, notes = dict(routed), dict(escalate), []
+    for aid in list(routed):
+        owner, action = routed[aid]
+        key = keys.get(aid)
+        rows = prec.get(key) if key else None
+        if rows:
+            owners = set(o for _t, o in rows)
+            if len(owners) > 1:
+                del routed[aid]
+                escalate[aid] = ("Langston has routed %s to %s within %d days - the lane may not choose between them"
+                                 % (key[1] or key[0], "/".join(sorted(owners)), PRECEDENT_DAYS))
+            elif owner != rows[0][1]:
+                del routed[aid]
+                escalate[aid] = ("the lane chose %s, contradicting Langston's assignment of %s to %s (%s)"
+                                 % (owner, key[1] or key[0], rows[0][1], rows[0][0][:16]))
+            else:
+                routed[aid] = (owner, (action + " (Langston precedent %s)" % rows[0][0][:10]).strip())
+        else:
+            routed[aid] = (owner, (action + " (no Langston precedent)").strip())
+    # unanimity guard: one owner for >= UNANIMITY_N of one template in this batch, on a template he has split
+    by_tmpl = {}
+    for aid, (owner, _a) in routed.items():
+        if keys.get(aid):
+            by_tmpl.setdefault((keys[aid][0], owner), []).append(aid)
+    for (tmpl, owner), aids in by_tmpl.items():
+        if len(aids) < UNANIMITY_N:
+            continue
+        split = set(o for (t, _s), rows in prec.items() if t == tmpl for _ts, o in rows)
+        if len(split) > 1:
+            sample = sorted(aids)[0]
+            del routed[sample]
+            escalate[sample] = ("unanimity alarm: the lane sent %d alerts of \"%s\" to %s in one batch, a class you "
+                                "have split across %s - sample for your check" % (len(aids), tmpl[:80], owner,
+                                                                                  "/".join(sorted(split))))
+            notes.append("unanimity guard fired on %r (%d -> %s)" % (tmpl[:60], len(aids), owner))
+    return routed, escalate, notes
+
+
+def build_prompt(batch, keys=None, prec=None):
+    """batch: [(alert_id, content)]. The instructions live in the lane's own CLAUDE.md; this is the data, with each
+    alert's LANGSTON PRECEDENT line (the code enforces it after the answer as well)."""
     lines = ["System alerts to triage (%d). For EACH alert id below, end with exactly one [[ALERT ...]] line, "
              "and add one [[ESCALATE ...]] line when your rules say Langston must see it." % len(batch), ""]
     for n, (aid, content) in enumerate(batch, 1):
         lines.append("=== ALERT %d - id %s ===" % (n, aid))
+        if prec is not None:
+            lines.append(precedent_line((keys or {}).get(aid), prec))
         lines.append((content or "").strip())
         lines.append("")
     return "\n".join(lines)
