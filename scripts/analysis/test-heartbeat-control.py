@@ -19,6 +19,7 @@ spec = importlib.util.spec_from_file_location("control_state", CS_PATH)
 cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
 
 PASS, FAIL = [], []
+ALL_LINES = []          # every (control line, NOTIFY yes?) the suite produced - P4 checks them ALL (gate-B condition 1)
 def case(name, ok, detail=""):
     (PASS if ok else FAIL).append(name)
     print(("PASS " if ok else "FAIL ") + name + ("" if ok else f"\n     {detail}"))
@@ -81,6 +82,8 @@ class Fx:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = cs.main(argv)
         o = out.getvalue().splitlines()
+        if len(o) == 2:
+            ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
         per = None
         for l in err.getvalue().splitlines():
             try:
@@ -357,8 +360,9 @@ for fn in [lambda: (lambda f: (f.ok_record(), all_ready(f), f.run()[1]))(Fx())[2
     collect(fn())
 fx = skipped(); collect(fx.run()[1]); fx.pos("CC-A", fx.size()); collect(fx.run(now="2026-10-16T13:00:00Z")[1])
 fx = Fx(); fx.ok_record(); all_ready(fx); fx.answer("CC-B", "20261013"); fx.nopos("CC-B"); collect(fx.run()[1])
-paging = [s for s in SAMPLES if s[1]]; quiet = [s for s in SAMPLES if not s[1]]
-wrong = [(c, p) for c, p in SAMPLES if allclear("Heartbeat", HEALTHY.format(ctl=c)) == p]
+POOL = SAMPLES + ALL_LINES
+paging = [s for s in POOL if s[1]]; quiet = [s for s in POOL if not s[1]]
+wrong = [(c, p) for c, p in POOL if allclear("Heartbeat", HEALTHY.format(ctl=c)) == p]
 case(f"P4: {len(paging)} paging and {len(quiet)} quiet control lines; NOTIFY yes <=> delivered, NOTIFY no <=> suppressed",
      paging and quiet and not wrong, wrong)
 case("P4 control: the filter really suppresses a healthy all-clear and delivers a DEAD watcher",
@@ -372,6 +376,13 @@ with contextlib.redirect_stdout(out):
     rc = cs.main(["--state-dir", d, "--ssh-target", "root@204.168.141.77", "--ssh-port", "1",
                   "--liveness"] + [f"{x}=alive" for x in ALIASES])
 o = out.getvalue().splitlines()
+ALL_LINES.append((o[0], o[-1] == "NOTIFY yes"))
+paging_kinds = {k for k in ("NOT answered", "NOT delivering", "control record new", "control record RESET",
+                            "control record NOT PERSISTING", "ISSUER NOT RUN", "UNDETERMINED", "remote read failed")
+                if any(k in c for c, p in ALL_LINES if p)}
+case(f"P4 coverage: every paging state was produced and routed ({len(paging_kinds)}/8 kinds)", len(paging_kinds) == 8, paging_kinds)
+wrong2 = [(c, p) for c, p in ALL_LINES if allclear("Heartbeat", HEALTHY.format(ctl=c)) == p]
+case("P4 (all lines, incl. P9): NOTIFY yes <=> delivered, NOTIFY no <=> suppressed", not wrong2, wrong2)
 case("P9: a refused connection -> CHECK FAILED — remote read failed (ssh exit 255), NOTIFY yes, exit 0, lock released",
      rc == 0 and o == ["control: CHECK FAILED — remote read failed (ssh exit 255)", "NOTIFY yes"]
      and not os.path.exists(os.path.join(d, "heartbeat-control.lock")), o)

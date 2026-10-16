@@ -126,7 +126,11 @@ _HEARTBEAT_BAD = re.compile(
     # (control_state.py) pages Kyle for states that are NOT an unanswered control - the record new/RESET/NOT PERSISTING,
     # UNDETERMINED, ISSUER NOT RUN, a failed remote read. Each is its own true verdict, so this arm names it rather than
     # borrowing "NOT answered", and every post that pages Kyle still wakes the sessions (NOTIFY is a subset of BAD).
-    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK)\b|\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b",
+    # FIELD-SCOPED, not anchored (Langston Step-4 gate A, BLOCKER-A1): the control field lists a state per session, so
+    # a verdict can sit mid-field; `[^|]*` keeps it inside the field, the same idiom as the watchers arm.
+    # CENSUS-FAILED (gate A, folded §9.4 disposition 2): a failed liveness census means liveness UNKNOWN; step 2b reports
+    # it without --notify, so before this arm it posted an all-clear-shaped line that every filter suppressed.
+    r"|\bwatchers:\s*[^|]*\b(?:DEAD|STUCK|CENSUS-FAILED)\b|\bcontrol:[^|]*\b(?:NOT answered|CHECK FAILED)\b",
     re.I)
 
 def is_allclear_heartbeat(sender, text):

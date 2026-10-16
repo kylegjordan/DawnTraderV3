@@ -1,4 +1,6 @@
-# B-WAKE-HEARTBEAT-CONTROL-DATE (#1162, sprint row 1q) — CHANGE LIST (Step 4, r1)
+# B-WAKE-HEARTBEAT-CONTROL-DATE (#1162, sprint row 1q) — CHANGE LIST (Step 4, r2)
+
+**r2:** answers Langston's Step-4 gate A (18:17Z). The r1 whole-batch dispatch hit the 900 s ceiling (bridge error 16:50:57Z) and was split into gate A (the filter arm, SKILL.md and the filter tests) and gate B (`control_state.py`).
 
 | field | value |
 |---|---|
@@ -85,3 +87,31 @@ else: append one WATCHER-CONTROL <x> <N>; record (offset, at, T)       # 6
 ## NOT YET DONE (Steps 5-7)
 - **Install (Step 6, P5):** copy the three files to `~/.claude/`; verify each against the blob; tell Kyle the first run pages once (`CHECK FAILED — control record new`); "Run now"; ask all four sessions to re-arm.
 - Until then the live heartbeat and filter are unchanged.
+
+## r2 — GATE A, BLOCKER-A1 and the folded item
+**The arm is now field-scoped, not anchored** (`cc-wake-filter.py`):
+```diff
+-    r"|watchers:\s*[^|]*(?:DEAD|STUCK)|control:\s*(?:NOT answered|CHECK FAILED)",
++    r"|watchers:\s*[^|]*(?:DEAD|STUCK|CENSUS-FAILED)|control:[^|]*(?:NOT answered|CHECK FAILED)",
+```
+- **`control:[^|]*`** — a verdict mid-field wakes, using the same idiom as the watchers arm. It is pipe-bounded, so it cannot reach a neighbouring field. No non-paging state's text contains `NOT answered` or `CHECK FAILED`; the table below shows each state's text.
+- **`CENSUS-FAILED` in the watchers arm** (Langston's §13, disposition 2, folded): a failed liveness census means liveness is unknown. Step 2b reports it without `--notify`, so before this it posted an all-clear-shaped line that every filter suppressed. It now wakes the sessions. It still does not page Kyle: the sessions are reachable, the same reasoning as STUCK.
+- **Tests:** `test-wake-filter-cuts.py` gains a mid-field `NOT answered` case and a `CENSUS-FAILED` case, both expecting a wake. **35 of 35 pass on the repo filter. Both new cases FAIL on the r1 arm** (`5a486de9d`'s filter, run as argv[1]: "2 FAILED"), so the tests discriminate.
+
+## GATE-B CONDITION 1 — every state, its NOTIFY value, and whether its text matches the arm
+| state (as printed) | NOTIFY | how it reaches the sessions |
+|---|---|---|
+| answered · awaiting · re-issued · re-issued (log rotated) · log rotated · not yet issued · held (record reset) · ISSUER GATED BY · ISSUER NOT RUN (first run) · `held — another heartbeat run is in progress` | no | suppressed as an all-clear (correct: nothing is wrong) |
+| STUCK (control pending) | no | **delivered by the watchers field** (`watchers: STUCK: …`, step 2b), not paged |
+| CENSUS-FAILED (control not judged) | no | **delivered by the watchers field** (`watchers: CENSUS-FAILED: …`, the r2 arm) |
+| not armed | no | not a failure (step 2b; it gates the issue) |
+| DEAD | no from this script | **paged by step 4's DEAD rule** and delivered by the watchers field (unchanged) |
+| NOT answered (state 5) · NOT delivering (4b) | **yes** | line starts `control: NOT answered —` |
+| control record new · RESET · NOT PERSISTING · UNDETERMINED · ISSUER NOT RUN (second run) · re-issue failed · remote read failed · script error | **yes** | line starts `control: CHECK FAILED —` |
+
+**Asserted, not tabulated only:** `test-heartbeat-control.py` now records EVERY control line the suite produces, 131 of them (80 paging, 51 quiet). It asserts `NOTIFY yes` ⇔ delivered and `NOTIFY no` ⇔ suppressed against the repo filter with healthy other fields, and that all 8 paging kinds were produced (P4 coverage). **34 of 34 pass.**
+
+## GATE-B CONDITION 2 — the all-four `.alive` gate
+It exists in exactly one place, `control_state.py` `decide()`:
+`alive_files = [x for x in ALIASES if a.liveness.get(x) != "not armed"]`; `gated = …`; the issue loop runs only `if not gated`.
+Step 2b reports "not armed" exactly when the `.alive` file is missing (`SKILL.md` 2b: *"No file = 'not armed'"*), so the script's gate is the old human gate. Tests: `ISSUER GATED BY CC-B: nothing written` and the TOTALITY grid's `not armed` column.
