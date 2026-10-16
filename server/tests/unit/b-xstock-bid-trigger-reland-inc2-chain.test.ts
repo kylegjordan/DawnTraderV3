@@ -203,6 +203,7 @@ function makeEngine(): Stub {
     _exitRefusalTally: new Map(),
     _riMissSig: new Map<string, string>(),
     _riMissAcc: new Map(),
+    _spreadBlownSkipAcc: new Map(), // row 2 objective 6, Step 4 (the spread_blown SKIP summary)
     _engineConstructedAt: 0,
     // B-XSTOCK-BID-TRIGGER-RELAND increment C fields the real constructor sets.
     _venuePauseExitTicks: 0,
@@ -310,14 +311,20 @@ async function warm(eng: Stub) {
   expect(cmp.spreads).toHaveLength(5);
 }
 
-/** The blowout up to and including the yield (cap 3): SKIP 1/3, SKIP 2/3, YIELD. */
+/** The blowout up to and including the yield (cap 3): SKIP 1/3 (printed), SKIP 2/3 (counted, not printed), YIELD. */
 async function blowoutToYield(eng: Stub) {
   for (const n of [1, 2]) {
     const t = await tick(eng, BLOWN);
-    expect(count(t.warns, SKIP)).toBe(1);
-    const line = t.warns.find((l) => SKIP.test(l))!;
-    expect(line).toContain(`streak=${n}/3`);
-    expect(line).toContain('reasons=spread_blown');
+    // Row 2 objective 6, Step 4 (Coltrane send-back 2 / Langston JC2): a spread_blown run prints its FIRST SKIP line; later
+    // ticks are COUNTED, not printed, and summarised when the run ends. The tally and the event record still see every tick.
+    expect(count(t.warns, SKIP)).toBe(n === 1 ? 1 : 0);
+    if (n === 1) {
+      const line = t.warns.find((l) => SKIP.test(l))!;
+      expect(line).toContain(`streak=${n}/3`);
+      expect(line).toContain('reasons=spread_blown');
+      expect(line).toContain('spread_blown run: further ticks are counted');
+    }
+    expect((eng as any)._exitRefusalTally.get('pos-MDB-chain')?.spreadBlownTicks).toBe(n);
     expect(t.bookEvents).toEqual([expect.objectContaining({ kind: 'skip', streak: n, reasons: ['spread_blown'] })]);
     expect(count(t.warns, XS_FRAME)).toBe(0);
     expect(t.priceSkips).toEqual([]);
@@ -326,6 +333,9 @@ async function blowoutToYield(eng: Stub) {
   }
   const ty = await tick(eng, BLOWN);
   expect(count(ty.warns, YIELD)).toBe(1);
+  // the run's summary is FLUSHED at the yield: one suppressed tick (SKIP 2/3), with its spread range
+  expect(ty.warns.filter((l) => /SPREAD_BLOWN_SKIPS pos=pos-MDB-chain at=yield suppressedTicks=1 suppressedMinSpread=0\.\d{5} suppressedMaxSpread=0\.\d{5}/.test(l))).toHaveLength(1);
+  expect((eng as any)._exitRefusalTally.get('pos-MDB-chain')?.spreadBlownTicks).toBe(3);
   expect(ty.warns.find((l) => YIELD.test(l))).toMatch(/YIELD after 3 hollow ticks \(cap 3\) reasons=spread_blown/);
   expect(has(ty.warns, /COMPARATOR_CLEARED reason=yield_after_3_hollow validated=true .*observedMovement=true ringAfter=true/)).toBe(true);
   // Row 2 objective 6 (objective 9): a yield whose ONLY reason is `spread_blown` is the expected wide-book hold — logged,
@@ -360,8 +370,9 @@ async function wideAfterYield(eng: Stub, wideFrames: number) {
     expect(has(t.logs, /COMPARATOR_SEEDED/)).toBe(false);
     expect(readBookStateComparator(SYMBOL)).toBeNull();
     const line = t.warns.find((l) => SKIP.test(l) || YIELD.test(l));
-    expect(line).toBeDefined();
-    expect(line).toContain('reasons=spread_blown');
+    // a mid-run SKIP is counted, not printed (Step 4): then the event record carries it
+    if (line) expect(line).toContain('reasons=spread_blown');
+    else expect(t.bookEvents).toEqual([expect.objectContaining({ kind: 'skip', reasons: ['spread_blown'] })]);
     expect(t.alerts).toBe(0);
     expect(t.closes).toEqual([]);
   }

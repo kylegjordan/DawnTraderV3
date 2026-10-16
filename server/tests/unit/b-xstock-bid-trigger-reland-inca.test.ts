@@ -148,7 +148,8 @@ describe('Step 4 gate 1 — the entry seam treats an implausible chain as NO usa
     expect(AEE).toContain('const _noUsableRef = _cmpAtEntry === null || _cmpAtEntry.seedImplausible;');
     // Row 2 objective 6 S4: the absent-side pair became a WHITELIST of the reference-relative reasons dropped, so
     // `spread_blown` (reference-free) also refuses entry; the set is pinned in b-xstock-feed-sanity-book-state.test.ts.
-    expect(AEE).toMatch(/\(!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS\.has\(r\)\)\)/);
+    // Step 4 (Coltrane send-back 1): the TERMINAL hollow cause is judged, never every entry (feed telemetry precedes it).
+    expect(AEE).toMatch(/\(!_noUsableRef \|\| !hollowCauseIsReferenceRelative\(bs\.result\.reasons\)\)/);
     expect(AEE).toContain('if (bs.ok && _noUsableRef) {');
     expect(AEE).not.toContain('if (bs.ok && readBookStateComparator(symbol) === null) {'); // the r1 form, held-only
   });

@@ -389,7 +389,7 @@ import { assessBookStateNow, advanceBookStateComparator, clearBookStateComparato
 import { resolveEntryYardstick, judgeEntrySpread } from '../asset_classes/xstock_spot/entry-spread-plausibility.js';
 import { isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
 import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
-import { BOOK_STATE_REFERENCE_RELATIVE_REASONS, type BookState } from '../asset_classes/xstock_spot/book-state.js';
+import { hollowCauseIsReferenceRelative, type BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
 
@@ -652,8 +652,10 @@ export class ActiveExecutionEngine {
       // reasons are dropped — a WHITELIST (`BOOK_STATE_REFERENCE_RELATIVE_REASONS`). Every reference-free hollow reason —
       // `absent_bid`, `absent_ask`, and now `spread_blown` — refuses entry, so arming `spread_blown` cannot let a blown book
       // pass this seam on a symbol whose comparator is missing or implausible.
+      // ⛔ Step 4 (Coltrane send-back 1): it is the TERMINAL reason that is judged — earlier entries can be non-terminal
+      // feed telemetry (`feed_quiet` before `mark_deviation`), which must not turn a droppable cause into a refusal.
       if (bs.ok && bs.result.state === 'hollow' &&
-          (!_noUsableRef || bs.result.reasons.some((r) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS.has(r)))) {
+          (!_noUsableRef || !hollowCauseIsReferenceRelative(bs.result.reasons))) {
         const _why = `hollow_book ${bs.result.reasons.join('|')}`;
         console.warn(`[B-XSTOCK-FEED-SANITY][ENTRY_GATE] ${symbol}: entry refused — ${_why} inputs=${JSON.stringify(bs.result.inputs)}`);
         return { pass: false, reason: _why, snapshot, warmthMaxAgeMs: null };
@@ -734,6 +736,11 @@ export class ActiveExecutionEngine {
   private _riMissSig: Map<string, string> = new Map();
   // Step 4 gate 1 condition 1: the ticks suppressed since the last `RI_NEAR_MISS` line, with their spread range.
   private _riMissAcc: Map<string, { n: number; min: number; max: number }> = new Map();
+  // Row 2 objective 6, Step 4 (Coltrane send-back 2 + Langston JC2): a `spread_blown` hold SKIPs every ~1.5 s tick for as
+  // long as the book stays wide. The FIRST tick of a run prints the full SKIP line; later ticks are COUNTED here (with their
+  // spread range) and printed as ONE summary line when the run ends — a YIELD, a change of reason, a recovered book, or the
+  // close — the `RI_NEAR_MISS` shape: nothing is dropped, the long stable hold is the population that tunes the ceiling.
+  private _spreadBlownSkipAcc: Map<string, { n: number; min: number; max: number }> = new Map();
   // ── row 2 increment C (objective 7) — THE VENUE-TRANSITION PAUSE's own record (pre-audit C-P2/C-P5). Never the price-skip
   // streak (that pages) and never `_recordPriceSkip`: a paused tick is a deliberate fidelity deviation, not a fault.
   private _venuePauseExitTicks = 0;
@@ -940,6 +947,17 @@ export class ActiveExecutionEngine {
    * B-VENUE-QUIET-ALERTING (objective 9): the clearing sweep, at most once a minute, AFTER the exit cycle and awaited by
    * nothing on the exit path. Re-measures (never remembers) and resolves cleared rows; never throws.
    */
+  /** Row 2 objective 6, Step 4: print the summary of a `spread_blown` SKIP run, if one is open, and end the run. */
+  private _flushSpreadBlownSkips(position: { id: string; symbol: string }, at: string): void {
+    const acc = this._spreadBlownSkipAcc.get(position.id);
+    if (!acc) return;
+    this._spreadBlownSkipAcc.delete(position.id);
+    if (acc.n === 0) return;
+    console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][BOOK_STATE] ${position.symbol} SPREAD_BLOWN_SKIPS pos=${position.id} at=${at} ` +
+      `suppressedTicks=${acc.n} suppressedMinSpread=${Number.isFinite(acc.min) ? acc.min.toFixed(5) : 'none'} ` +
+      `suppressedMaxSpread=${Number.isFinite(acc.max) ? acc.max.toFixed(5) : 'none'}`);
+  }
+
   private _noTriggerRailCtx(): Promise<{ rail: PaperNoTriggerRail; deps: PaperRailDeps }> {
     if (!this._noTriggerRail) this._noTriggerRail = new PaperNoTriggerRail(this.mode);
     if (!this._noTriggerRailDeps) this._noTriggerRailDeps = productionPaperRailDeps();
@@ -2298,6 +2316,7 @@ export class ActiveExecutionEngine {
                   }
                   bookStateAtDecision = 'hollow';
                   bookStateYielded = true;
+                  this._flushSpreadBlownSkips(position, 'yield'); // row 2 objective 6, Step 4
                   hollowYields++;
                   console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} YIELD after ${_next} hollow ticks (cap ${_c.hollowSkipCap}) reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
                   // Row 2 objective 6 (objective 9; Kyle 2026-10-09 #2 "no overnight alert flood"): a hold whose ONLY reason is
@@ -2373,13 +2392,27 @@ export class ActiveExecutionEngine {
                   hollowSkips++;
                   withoutPrice++;
                   this._noteExitRefusal(position, 'hollow_skip', _r.reasons.includes('spread_blown'), _r.inputs.bid ?? null);
-                  console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}`);
+                  // Row 2 objective 6, Step 4: a `spread_blown`-only SKIP prints on the run's FIRST tick and is counted after
+                  // that (summary at the run's end); the tally above and the event record below still see EVERY tick.
+                  const _sbOnly = _r.reasons.length === 1 && _r.reasons[0] === 'spread_blown';
+                  const _sbAcc = _sbOnly ? this._spreadBlownSkipAcc.get(position.id) : undefined;
+                  if (_sbAcc) {
+                    const _sp = _r.inputs.spreadFrac;
+                    _sbAcc.n++;
+                    if (typeof _sp === 'number' && Number.isFinite(_sp)) { _sbAcc.min = Math.min(_sbAcc.min, _sp); _sbAcc.max = Math.max(_sbAcc.max, _sp); }
+                  } else {
+                    if (!_sbOnly) this._flushSpreadBlownSkips(position, 'reason_change');
+                    console.warn(`[B-XSTOCK-FEED-SANITY][BOOK_STATE] ${position.symbol} SKIP hollow streak=${_next}/${_c.hollowSkipCap} reasons=${_r.reasons.join('|')} ${_cmpV} inputs=${_inputs}` +
+                      (_sbOnly ? ' (spread_blown run: further ticks are counted and summarised when it ends)' : ''));
+                    if (_sbOnly) this._spreadBlownSkipAcc.set(position.id, { n: 0, min: Infinity, max: -Infinity });
+                  }
                   await this._recordBookStateEvent(position, { kind: 'skip', streak: _next, reasons: _r.reasons, inputs: _r.inputs });
                   // ⛔ NO `updateCache` ON THIS BRANCH (Langston C1) — the same as the two skips above.
                   continue;
                 }
               } else {
                 if (_streak > 0) this._bookStateSkipStreak.delete(position.id);
+                this._flushSpreadBlownSkips(position, 'book_not_hollow');
                 bookStateAtDecision = _r.state; // 'two_sided' | 'unknown' (no comparator yet)
                 // ⛔⛔ SEEDING — THE FIRST SNAPSHOT MUST ALSO BE TAKEN ON `no_comparator`, OR THE
                 // GUARD DEADLOCKS AND IS INERT. As first shipped this advanced ONLY on `two_sided`,
@@ -4677,6 +4710,7 @@ export class ActiveExecutionEngine {
           `suppressedTicks=${_accC.n} suppressedMinSpread=${_accC.min.toFixed(5)} suppressedMaxSpread=${_accC.max.toFixed(5)}`,
         );
       }
+      this._flushSpreadBlownSkips(position, 'close'); // row 2 objective 6, Step 4
       this._exitRefusalTally.delete(position.id);
       this._riMissSig.delete(position.id);
       this._riMissAcc.delete(position.id);

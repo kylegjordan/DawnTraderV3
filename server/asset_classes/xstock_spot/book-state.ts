@@ -26,10 +26,12 @@
  * `single_side_departure_floor_pct`), so a name that normally quotes 0.1 % wide trips on a 1 %
  * departure and a name that normally quotes 3 % wide does not.
  *
- * ⛔ THE FAIL DIRECTION IS THE WHOLE DESIGN (scope §17.1 constraints 1 + 7): a HOLLOW verdict may
- * WITHHOLD a decision; it may never trap a position — the CALLER bounds the withholding with
- * `hollow_skip_cap` and then YIELDS. Nothing in this file closes, re-prices, widens or narrows a
- * stop. It answers one question about one quote.
+ * ⛔ THE FAIL DIRECTION (scope §17.1 constraints 1 + 7): a HOLLOW verdict may WITHHOLD a decision. For the
+ * reference-RELATIVE reasons the CALLER bounds the withholding with `hollow_skip_cap` and then YIELDS. ⚠️ EXCEPT
+ * `spread_blown` (row 2 objective 6, Kyle 2026-10-16): it is judged absolutely, so a yield cannot release it — the hold on
+ * a book wider than `ri_abs_spread_ceiling_pct` is INTENTIONALLY INDEFINITE and ends only when the book narrows (its cost
+ * is measured by `spreadBlownStopHeldMs` in `server/services/exit-refusal-tally.ts`). Nothing in this file closes,
+ * re-prices, widens or narrows a stop. It answers one question about one quote.
  *
  * ⛔ CANDIDATE (ii) — THE FEED-HEALTH READ — IS GATE-ONLY AND INERT BY KNOB. It reads how many of
  * the OTHER books on the SAME feed stubbed at the same instant (publisher health, not a comparator
@@ -110,15 +112,14 @@ export interface BookStateConfig {
   hollowSkipCap: number;
   ownMarkDeviationDPct: number;
   /**
-   * B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 — the ring-independent release's ABSOLUTE spread ceiling, PERCENT of
-   * mid (`ri_abs_spread_ceiling_pct`). Read by the tracker's release on a `seedImplausible` chain, never by
-   * `assessBookState` itself: the predicate's verdicts are unchanged by it.
+   * B-XSTOCK-BID-TRIGGER-RELAND increment A, P1 — the ONE governed absolute spread ceiling, PERCENT of mid
+   * (`ri_abs_spread_ceiling_pct`). Read by the tracker's ring-independent release on a `seedImplausible` chain AND, since
+   * row 2 objective 6, by `assessBookState`'s `spread_blown` arm (Coltrane r1a: one ceiling, never two).
    */
   riAbsSpreadCeilingPct: number;
   /**
-   * `3n.q7` increment 2 (OBJ-1) — the `spread_blown` arm. ⛔ NOT A KNOB YET: the resolver sets it `false` as a code
-   * constant (`book-state-config.ts`), and only a test injects `true`. Row 2's objective 6 makes it the FOURTEENTH knob when it
-   * becomes tunable, gated on the bid-trigger window's read and Kyle's overnight-hold decision. Required (not optional),
+   * The `spread_blown` arm — the FOURTEENTH knob (`spread_blown_enabled`, seeded ON by row 2 objective 6, Kyle 2026-10-16;
+   * `0` turns it off without a revert). Built `false` as a code constant in `3n.q7` increment 2. Required (not optional),
    * but ⛔ tsc does NOT list every config literal: `tsconfig.json` covers `server/`, `shared/` and `client/src` only and
    * excludes test files, so `scripts/` and the tests are invisible to it (Langston inc-2 Step-4 BLOCKER-2). The literal
    * census is a repo-wide grep for `ownMarkDeviationDPct` (a field every literal carries): the resolver, three tests, and
@@ -155,6 +156,15 @@ export type BookState = 'two_sided' | 'hollow' | 'unknown';
  *  `spread_blown`, `feed_burst`) needs no reference and refuses entry. A WHITELIST, so a new reference-free reason refuses
  *  by default — a fence test pins the set against the predicate's own `reasons.push` list. */
 export const BOOK_STATE_REFERENCE_RELATIVE_REASONS: ReadonlySet<string> = new Set(['bid_collapsed', 'ask_spiked', 'mark_deviation']);
+
+/** Row 2 objective 6, Step 4 (Coltrane send-back 1): the hollow CAUSE is the TERMINAL reason — the one the predicate returned
+ *  on. Earlier entries can be non-terminal telemetry (`feed_read_unavailable`, `feed_read_inert`, `feed_quiet` precede a
+ *  terminal `mark_deviation`), so testing EVERY entry refused entry on `['feed_quiet','mark_deviation']` with no usable
+ *  reference. True only when the terminal reason is reference-relative; an empty list or any other terminal reason
+ *  (including a new one) is false — fail-closed, the entry seam refuses. */
+export function hollowCauseIsReferenceRelative(reasons: readonly string[]): boolean {
+  return reasons.length > 0 && BOOK_STATE_REFERENCE_RELATIVE_REASONS.has(reasons[reasons.length - 1]);
+}
 
 export interface BookStateResult {
   state: BookState;

@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, BOOK_STATE_REFERENCE_RELATIVE_REASONS, type BookStateConfig, type BookStateInput } from '../../asset_classes/xstock_spot/book-state.js';
+import { assessBookState, medianOf, BOOK_STATE_KNOBS, BOOK_STATE_SEED, BOOK_STATE_REFERENCE_RELATIVE_REASONS, hollowCauseIsReferenceRelative, type BookStateConfig, type BookStateInput } from '../../asset_classes/xstock_spot/book-state.js';
 
 const CFG: BookStateConfig = {
   enabled: true, kRel: 3, floorPct: 1.0, otherSideHoldPct: 0.5, lastHoldPct: 0.5, trailingSpreadWindowSnaps: 20,
@@ -584,9 +584,31 @@ describe('row 2 objective 6 — the entry whitelist of reference-relative reason
     const REFERENCE_FREE = ['absent_ask', 'absent_bid', 'feed_burst', 'spread_blown'];
     expect(hollow).toEqual([...new Set([...REFERENCE_FREE, ...BOOK_STATE_REFERENCE_RELATIVE_REASONS])].sort());
   });
-  it('the entry seam uses the whitelist (source fence on active-execution-engine.ts)', () => {
+  it('the entry seam judges the TERMINAL cause through the whitelist (source fence on active-execution-engine.ts)', () => {
     const src = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf8');
-    expect(src).toMatch(/!_noUsableRef \|\| bs\.result\.reasons\.some\(\(r\) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS\.has\(r\)\)/);
+    expect(src).toMatch(/\(!_noUsableRef \|\| !hollowCauseIsReferenceRelative\(bs\.result\.reasons\)\)/);
+    expect(src).not.toMatch(/bs\.result\.reasons\.some\(/); // the every-entry form Coltrane's Step 4 sent back
+  });
+  // Step 4 (Coltrane send-back 1): feed telemetry is NOT a cause. With the feed read enabled, a frame that ends on
+  // `mark_deviation` carries `feed_quiet` in front of it; testing every entry refused it, the terminal cause drops it.
+  it('DISCRIMINATOR, feed read ON: terminal mark_deviation (after feed_quiet) is droppable; terminal spread_blown refuses', () => {
+    const FEED: BookStateConfig = { ...CFG, feedReadEnabled: true, spreadBlownEnabled: true };
+    const md = assessBookState({ ...frame({ bid: 100.3, ask: 100.4, last: 100.1 }, { bid: 100.0, ask: 100.2, last: 100.1 }),
+      trailingMedianSpreadFrac: 0.002, feedStubFraction: 0.01, feedCohortN: 400 }, { ...FEED, ownMarkDeviationDPct: 0.1, otherSideHoldPct: 0.5, kRel: 100 });
+    expect(md.state).toBe('hollow');
+    expect(md.reasons).toEqual(['feed_quiet', 'mark_deviation']);   // the shape that was refused
+    expect(hollowCauseIsReferenceRelative(md.reasons)).toBe(true);  // dropped with no usable reference
+    expect(md.reasons.some((r) => !BOOK_STATE_REFERENCE_RELATIVE_REASONS.has(r))).toBe(true); // the old test would have REFUSED
+    const sb = assessBookState({ ...frame({ bid: 335.12, ask: 465.0, last: 386.0 }, null), feedStubFraction: 0.01, feedCohortN: 400 }, FEED);
+    expect(sb.reasons).toEqual(['spread_blown']);
+    expect(hollowCauseIsReferenceRelative(sb.reasons)).toBe(false); // refuses
+  });
+  it('fail-closed: an empty list, an unknown terminal cause, or telemetry ending on a reference-free cause all refuse', () => {
+    expect(hollowCauseIsReferenceRelative([])).toBe(false);
+    expect(hollowCauseIsReferenceRelative(['some_new_cause'])).toBe(false);
+    expect(hollowCauseIsReferenceRelative(['feed_quiet', 'some_new_cause'])).toBe(false);
+    expect(hollowCauseIsReferenceRelative(['feed_read_inert', 'feed_burst'])).toBe(false);
+    for (const r of ['bid_collapsed', 'ask_spiked', 'mark_deviation']) expect(hollowCauseIsReferenceRelative(['feed_read_unavailable', r])).toBe(true);
   });
 });
 
