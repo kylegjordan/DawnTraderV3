@@ -57,7 +57,7 @@ def rd(p):
 
 
 class Home:
-    def __init__(self, text=FIXTURE):
+    def __init__(self, text=FIXTURE, compose=True):
         self.top = tempfile.mkdtemp(prefix="lmw-split-", dir=HERE)
         self.mem = os.path.join(self.top, "MEMORY.md")
         self.ledger = os.path.join(self.top, "LEDGER.md")
@@ -70,6 +70,11 @@ class Home:
             fh.write(text)
         os.makedirs(self.parts)
         shutil.copyfile(self.mem, self.part)
+        if not compose:          # a hand-forged home: the composer would refuse a part with no ledger section
+            os.makedirs(os.path.dirname(self.state))
+            with open(os.path.join(self.top, ".memory-archive", "index.jsonl"), "w", encoding="utf-8") as fh:
+                fh.write(json.dumps({"mode": "compose", "outcome": "composed"}) + NL)
+            return
         rc, out = self.call(["--compose", "--by", "t", "--reason", "fixture"])
         assert rc == 0, out
 
@@ -196,9 +201,28 @@ def main():
     check("with LEDGER.md gone, an append refuses (exit 2)", rc, 2)
     check("  ...and does NOT recreate LEDGER.md", os.path.exists(h.ledger), False)
     check("  ...nothing else changed", h.snap() == snap, True)
+    lst = h.reader().ledger_state()
     check("with LEDGER.md gone, recall refuses as priority-source-ABSENT (not zero matches)",
-          h.reader().ledger_state()[0], "ledger-priority-source-absent")
+          lst[0], "ledger-priority-source-absent")
+    live_sha = sha(rd(h.ledger + ".aside"))
+    check("  ...the refusal says the split IS recorded and names the newest LEDGER.md archive",
+          ("split IS recorded" in lst[4], (".memory-archive/%s.md" % live_sha) in lst[4]), (True, True))
+    check("  ...and that archive file exists and holds the live LEDGER.md bytes",
+          rd(os.path.join(h.top, ".memory-archive", live_sha + ".md")) == rd(h.ledger + ".aside"), True)
     os.rename(h.ledger + ".aside", h.ledger)
+    h.done()
+
+    print("2b. an absent LEDGER.md with NO split recorded (Langston's forged state) names the other cause")
+    h = Home(FIXTURE.replace("### Retractions (things I asserted and then withdrew — do NOT re-assert)",
+                             "### Withdrawn (heading lost by hand)"), compose=False)
+    lst = h.reader().ledger_state()
+    check("recall refuses priority-source-absent", lst[0], "ledger-priority-source-absent")
+    check("  ...says NO split is recorded and names --compose, NOT 'restore LEDGER.md'",
+          ("NO split is recorded" in lst[4], "--compose" in lst[4], "restore that file" in lst[4]), (True, True, False))
+    os.remove(os.path.join(h.top, ".memory-archive", "index.jsonl"))
+    lst = h.reader().ledger_state()
+    check("  ...with the archive index unreadable it says the cause is UNKNOWN and names both",
+          ("UNKNOWN" in lst[4], "split out" in lst[4], "without a split" in lst[4]), (True, True, True))
     h.done()
 
     print("3. split refusals leave everything byte-identical")

@@ -341,6 +341,27 @@ def _fingerprint(entries):
     return set(hashlib.sha1(e["text"].strip().encode("utf-8", "replace")).hexdigest() for e in entries)
 
 
+def _split_evidence():
+    """The recovery for an absent LEDGER.md depends on WHY it is absent, and the refusal must not assert a cause it has
+    not read (Langston Step-4 condition, 2026-10-16). The writer's archive index is the evidence: a `split-ledger` row
+    with outcome `written` means the split happened and names the archived LEDGER.md sha; no such row means MEMORY.md
+    lost its section some other way. Returns a sentence for the refusal; never raises."""
+    idx = os.path.join(LANGSTON_HOME, ".memory-archive", "index.jsonl")
+    try:
+        rows = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
+    except Exception as e:
+        return ("the writer's archive index %s could not be read (%s), so the cause is UNKNOWN: either the ledger was "
+                "split out and LEDGER.md is gone, or MEMORY.md lost its section without a split" % (idx, type(e).__name__))
+    split = [r for r in rows if r.get("mode") == "split-ledger" and r.get("outcome") == "written"]
+    if not split:
+        return ("NO split is recorded in %s, so MEMORY.md lost its section WITHOUT a split - recompose it from the part "
+                "(`langston-memory-write --compose`) or restore MEMORY.md from .memory-archive/" % idx)
+    last = [r.get("ledger_new_sha") or r.get("ledger_sha") for r in rows
+            if r.get("outcome") == "written" and r.get("mode") in ("split-ledger", "ledger-file-append")]
+    return ("the split IS recorded (%s), so LEDGER.md was removed after it - its newest written version is "
+            ".memory-archive/%s.md; restore that file to %s" % (split[-1].get("ts"), last[-1], LEDGER_SOURCES[0]))
+
+
 def ledger_state():
     """(state, winning source, entries, per-source [(path, status, entries-or-None)], detail).
     ⛔ C-3 (Langston 2026-09-04/05): LEDGER_SOURCES[0] is the PRIORITY slot. Two rulings bind this:
@@ -361,7 +382,7 @@ def ledger_state():
     #    file can never read as a parsed ledger with zero matches. (Before the split MEMORY.md still parses ok and is used.)
     if first_path != LEDGER_SOURCES[0] and not any(st == "ok" for _s, st, _e in parsed) \
             and any(st == "no-section" for _s, st, _e in parsed):
-        return "ledger-priority-source-absent", None, [], parsed, LEDGER_SOURCES[0]
+        return "ledger-priority-source-absent", None, [], parsed, _split_evidence()
     if first_path == LEDGER_SOURCES[0] and first_status != "ok":
         return "ledger-priority-source-unparseable", None, [], parsed, first_status
     usable = [(s, e) for s, st, e in parsed if st == "ok"]
@@ -430,9 +451,9 @@ def query(terms):
     if lstate != "ok":
         why = {"no-ledger-at-home": "no ledger file exists at this home",
                "ledger-unparseable": "ledger files exist but none yielded a retraction entry",
-               "ledger-priority-source-absent": "the PRIORITY ledger source " + ldetail + " is MISSING and MEMORY.md "
-                   "holds no Retractions section (the ledger was split out) - refusing rather than reporting zero "
-                   "retractions; restore LEDGER.md from .memory-archive/",
+               "ledger-priority-source-absent": "the PRIORITY ledger source " + LEDGER_SOURCES[0] + " is MISSING and "
+                   "MEMORY.md holds no Retractions section - refusing rather than reporting zero retractions. " + ldetail
+                   + ". Never hand-write either file; tell Infra Claude",
                "ledger-priority-source-unparseable": "the PRIORITY ledger source exists but is " + ldetail
                    + " - refusing rather than falling back to the lower-priority, likely stale, source",
                "ledger-sources-disagree": "two ledger sources parse but their entry SETS differ (by " + ldetail

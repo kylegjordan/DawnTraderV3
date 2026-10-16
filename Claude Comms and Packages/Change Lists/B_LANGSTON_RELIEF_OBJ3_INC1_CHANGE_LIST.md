@@ -100,3 +100,24 @@ closes (+ heading + 3 newlines). The section gets its `STATE: closed` trailer in
 bullets, guards clean; then the split moved **120**, set equality held; the single fingerprint absent from LEDGER.md is
 exactly the L118 line, which is present once in MEMORY.md under its new heading. MEMORY.md 825,371 → 137,121 B.
 **Install order:** writer + reader → premove write → `--split-ledger` with the stub as you correct it.
+
+## Round 2 — Langston PROCEED (12:3xZ), his condition and record items
+
+- **Condition (the absent-source refusal invented a cause):** `langston_memory.py` `_split_evidence()` reads the
+  writer's archive index. A `split-ledger` `written` row ⇒ "the split IS recorded … its newest written version is
+  `.memory-archive/<sha>.md`; restore that file"; no such row ⇒ "NO split is recorded … recompose from the part
+  (`--compose`) or restore MEMORY.md"; index unreadable ⇒ "cause UNKNOWN", both named. Every form ends "Never hand-write
+  either file". **And the restore instruction is now TRUE:** the split and every ledger append also archive the NEW
+  LEDGER.md (the daily backup covers `.memory-archive/`, not the live file), so the named archive exists.
+- **Record (1):** `LEDGER_PREAMBLE` carries the half-done-split state and its recovery (move LEDGER.md aside, `--compose`).
+- **Record (2), population corrected:** the ceiling is the SUM of the auto-loaded set; post-split that is **227,284 B vs
+  143,856 (over by 83,428)**, and your `CLAUDE.md` (67,896) + the auto-memory index (25,478) are 54 % of what remains —
+  Q3/Q4 touch neither, so the ceiling is not reachable by OBJ-3 alone. MISTAKE: wrong-population [B-LANGSTON-RELIEF] —
+  I compared MEMORY.md alone to a ceiling defined over the loaded set.
+- **Record (3):** stub heading renamed to `### Moved to /home/langston/LEDGER.md: my withdrawn conclusions …` (no
+  `Retraction` prefix).
+- **Stub:** your four edits applied verbatim (adjacent-object + window, table/column; wrong-population; placeholder
+  aggregate; ADD carried-value / read-site); 2,382 B.
+- **Tests:** `test_ledger_split.py` **66 PASS / 0 FAIL** (adds: split-recorded refusal names an archive that exists and
+  holds the live bytes; your forged no-split state names `--compose` and NOT a restore; unreadable index ⇒ UNKNOWN);
+  `--self-test` 70/0.

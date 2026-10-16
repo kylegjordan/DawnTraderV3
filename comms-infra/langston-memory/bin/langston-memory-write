@@ -833,7 +833,11 @@ STUB_MAX = 4096
 LEDGER_PREAMBLE = ("# Langston — LEDGER.md: my retractions (moved out of MEMORY.md 2026-10-16, B-LANGSTON-RELIEF OBJ-3)\n\n"
                    "Not auto-loaded. `langston-recall <term>` reads this file FIRST and prints the relevant entries before "
                    "any result. Append only with `langston-memory-write --ledger-append` (`--expect-sha` = THIS file's "
-                   "sha256). Every prior version is in `.memory-archive/`.\n\n")
+                   "sha256). EVERY version this tool wrote, the current one included, is in `.memory-archive/<sha>.md` "
+                   "(the index row's `ledger_sha` / `ledger_new_sha`); that directory is backed up daily.\n"
+                   "If this file exists while MEMORY.md STILL holds a `### Retractions` block, a split was interrupted "
+                   "between its writes: recall refuses `ledger-sources-disagree` or serves identical sets, and the writer "
+                   "refuses. Recovery: move this file aside, then `langston-memory-write --compose`; never hand-edit.\n\n")
 RECIPE_ANCHOR = "> ⛔⛔ **HOW YOU WRITE THIS FILE"
 RECIPE_NOTE = ("> ⛔ **SINCE 2026-10-16 YOUR RETRACTIONS LIVE IN `/home/langston/LEDGER.md` (B-LANGSTON-RELIEF OBJ-3).** "
                "`--ledger-append` now writes THAT file: pass `--expect-sha $(sha256sum /home/langston/LEDGER.md)` - not the "
@@ -871,6 +875,7 @@ def do_ledger_file_append(opts, content, n):
             raise Refused(6, "REFUSED: the reader cannot parse LEDGER.md before the append (status %s) - nothing written" % s0)
         new = (old.decode("utf-8").rstrip(NL) + NL + content.strip(NL) + NL).encode("utf-8")
         arch, _ = archive_old(old, old_sha, st)
+        archive_old(new, sha(new), st)          # the current version is restorable from the backed-up archive too
         # ledger_* keys, never old_sha/new_sha: final_sha_of() reads those as MEMORY.md's sha
         row = {"ts": utc(), "target": LEDGER_FILE, "mode": "ledger-file-append", "ledger_old_sha": old_sha,
                "ledger_new_sha": sha(new),
@@ -981,6 +986,9 @@ def do_split_ledger(opts, stub):
         mem_new_sha = sha(mem_new)
         part_arch, _ = archive_old(part_old, part_old_sha, st)
         mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        # the NEW LEDGER.md is archived too: the daily backup covers .memory-archive/, not the live file, so this is what
+        # makes "restore LEDGER.md from .memory-archive/" true (Langston Step-4 condition, 2026-10-16)
+        archive_old(ledger_new, sha(ledger_new), st)
         row = {"ts": utc(), "target": TARGET, "part": name, "mode": "split-ledger", "part_old_sha": part_old_sha,
                "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
                "ledger_sha": sha(ledger_new), "by_claimed": opts["--by"], "via_uid": os.getuid(),
