@@ -9,22 +9,26 @@ Set-StrictMode -Version Latest
 # BEGIN native-call helper (identical in install.ps1 and rollback.ps1; test_ps_native.py checks both)
 # Windows PowerShell 5.1 drops an empty-string argument to a native program and, under
 # ErrorActionPreference Stop, turns any redirected native stderr line into a terminating
-# error. Both broke this script on the stock laptop shell. Every OpenSSH tool call therefore
+# error. Both broke this script on the stock laptop shell. Every external program therefore
 # goes through this helper: it builds the command line itself (CRT quoting, so '' arrives
-# as an empty argument), captures stdout and stderr as text, closes stdin so no tool can
-# wait on a prompt, and reports the exit code. It behaves the same on PowerShell 5.1 and 7.
+# as an empty argument), starts the program in the current directory with stdin closed so
+# no tool can wait on a prompt, reads stdout and stderr concurrently, stops a program that
+# outlives TimeoutSeconds, and reports the exit code. Output still held open by a
+# descendant after exit is reported as OutputComplete=$false with empty text, so a caller
+# that needs the text fails closed. It behaves the same on PowerShell 5.1 and 7.
 function ConvertTo-NativeArgument([string]$Value) {
     if ($Value -eq '') { return '""' }
     if ($Value -notmatch '[\s"]') { return $Value }
     $escaped = [regex]::Replace($Value, '(\\*)"', '$1$1\"')
-    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    $escaped = [regex]::Replace($escaped, '(\\+)\z', '$1$1')
     return '"' + $escaped + '"'
 }
 
-function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments) {
+function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds = 300) {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $FilePath
     $startInfo.Arguments = (@($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' ')
+    $startInfo.WorkingDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardInput = $true
@@ -33,10 +37,16 @@ function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments) {
     $process = [Diagnostics.Process]::Start($startInfo)
     try {
         $process.StandardInput.Close()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $process.WaitForExit()
-        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderrTask.GetAwaiter().GetResult() }
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $process.Kill() } catch { }
+            throw "$FilePath did not exit within $TimeoutSeconds seconds and was stopped."
+        }
+        $complete = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), 30000)
+        $stdout = if ($complete) { $stdoutTask.Result } else { '' }
+        $stderr = if ($complete) { $stderrTask.Result } else { '' }
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr; OutputComplete = $complete }
     } finally {
         $process.Dispose()
     }

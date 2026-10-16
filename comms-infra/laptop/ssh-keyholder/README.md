@@ -40,7 +40,11 @@ layer. It does not create, copy, or authorize a private key.
 program and, under `ErrorActionPreference = 'Stop'`, turns redirected native stderr into a
 terminating error; the first live run (2026-10-16) refused at its first call for that reason,
 before any change. Every external program in both scripts is therefore called through the
-identical `Invoke-NativeTool` helper, never the call operator. `test_ps_native.py` runs the
+identical `Invoke-NativeTool` helper, never the call operator. The helper stops a program
+that outlives its time limit and reports output still held by a descendant as incomplete,
+so a caller that needs the text fails closed. The installer's passphrase check accepts a
+key only on ssh-keygen's own "incorrect passphrase" answer to an empty passphrase; any other
+refusal (for example a plain key with loose permissions) is not proof of encryption. `test_ps_native.py` runs the
 helper on the real stock shell, after first proving that shell reproduces the original
 failure; off Windows it runs only its static checks and skips the rest.
 

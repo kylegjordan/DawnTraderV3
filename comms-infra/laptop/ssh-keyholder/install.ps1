@@ -12,22 +12,26 @@ Set-StrictMode -Version Latest
 # BEGIN native-call helper (identical in install.ps1 and rollback.ps1; test_ps_native.py checks both)
 # Windows PowerShell 5.1 drops an empty-string argument to a native program and, under
 # ErrorActionPreference Stop, turns any redirected native stderr line into a terminating
-# error. Both broke this script on the stock laptop shell. Every OpenSSH tool call therefore
+# error. Both broke this script on the stock laptop shell. Every external program therefore
 # goes through this helper: it builds the command line itself (CRT quoting, so '' arrives
-# as an empty argument), captures stdout and stderr as text, closes stdin so no tool can
-# wait on a prompt, and reports the exit code. It behaves the same on PowerShell 5.1 and 7.
+# as an empty argument), starts the program in the current directory with stdin closed so
+# no tool can wait on a prompt, reads stdout and stderr concurrently, stops a program that
+# outlives TimeoutSeconds, and reports the exit code. Output still held open by a
+# descendant after exit is reported as OutputComplete=$false with empty text, so a caller
+# that needs the text fails closed. It behaves the same on PowerShell 5.1 and 7.
 function ConvertTo-NativeArgument([string]$Value) {
     if ($Value -eq '') { return '""' }
     if ($Value -notmatch '[\s"]') { return $Value }
     $escaped = [regex]::Replace($Value, '(\\*)"', '$1$1\"')
-    $escaped = [regex]::Replace($escaped, '(\\+)$', '$1$1')
+    $escaped = [regex]::Replace($escaped, '(\\+)\z', '$1$1')
     return '"' + $escaped + '"'
 }
 
-function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments) {
+function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds = 300) {
     $startInfo = [Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $FilePath
     $startInfo.Arguments = (@($Arguments | ForEach-Object { ConvertTo-NativeArgument $_ }) -join ' ')
+    $startInfo.WorkingDirectory = (Get-Location -PSProvider FileSystem).ProviderPath
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
     $startInfo.RedirectStandardInput = $true
@@ -36,15 +40,36 @@ function Invoke-NativeTool([string]$FilePath, [string[]]$Arguments) {
     $process = [Diagnostics.Process]::Start($startInfo)
     try {
         $process.StandardInput.Close()
+        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $process.WaitForExit()
-        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderrTask.GetAwaiter().GetResult() }
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try { $process.Kill() } catch { }
+            throw "$FilePath did not exit within $TimeoutSeconds seconds and was stopped."
+        }
+        $complete = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]]@($stdoutTask, $stderrTask), 30000)
+        $stdout = if ($complete) { $stdoutTask.Result } else { '' }
+        $stderr = if ($complete) { $stderrTask.Result } else { '' }
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; StdOut = $stdout; StdErr = $stderr; OutputComplete = $complete }
     } finally {
         $process.Dispose()
     }
 }
 # END native-call helper
+
+# BEGIN key-encryption check (test_ps_native.py runs this function for real)
+# The key must PROVE it is passphrase-protected: an empty passphrase has to be refused with
+# ssh-keygen's own "incorrect passphrase" answer. Any other non-zero exit (a lost argument,
+# "UNPROTECTED PRIVATE KEY FILE" for a loose-permission plain key, an unreadable file) is
+# not proof of encryption and refuses installation.
+function Assert-KeyIsPassphraseProtected([string]$Keygen, [string]$KeyPath) {
+    $result = Invoke-NativeTool $Keygen @('-y', '-P', '', '-f', $KeyPath) 60
+    if ($result.ExitCode -eq 0) { throw 'The configured private key has no passphrase; installation refused.' }
+    if (-not $result.OutputComplete -or $result.StdErr -notmatch 'incorrect passphrase') {
+        throw "The private key's passphrase protection could not be confirmed (ssh-keygen exit $($result.ExitCode): $($result.StdErr.Trim())); installation refused."
+    }
+}
+# END key-encryption check
+
 
 $principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
@@ -148,12 +173,7 @@ $fingerprintResult = Invoke-NativeTool $sshKeygen @('-l', '-E', 'sha256', '-f', 
 if ($fingerprintResult.ExitCode -ne 0) { throw "Private key fingerprint could not be read: $privateKey" }
 $observedFingerprint = [regex]::Match($fingerprintResult.StdOut, 'SHA256:[A-Za-z0-9+/]{43}').Value
 if ($observedFingerprint -ne $ExpectedFingerprint) { throw "Private key fingerprint does not match ExpectedFingerprint: $observedFingerprint" }
-# An empty passphrase must be refused by the key itself. ssh-keygen reports a wrong
-# passphrase with a non-zero exit; "Too many arguments" would mean the empty argument was
-# lost, which is why this goes through the helper rather than the call operator.
-$emptyPassphraseResult = Invoke-NativeTool $sshKeygen @('-y', '-P', '', '-f', $privateKey)
-if ($emptyPassphraseResult.ExitCode -eq 0) { throw 'The configured private key has no passphrase; installation refused.' }
-if ($emptyPassphraseResult.StdErr -match 'Too many arguments|usage:') { throw 'The passphrase check did not receive its arguments; installation refused.' }
+Assert-KeyIsPassphraseProtected $sshKeygen $privateKey
 
 $requiredSources = @('dt-ssh-keyholder.py', 'ssh_keyholder.py')
 foreach ($name in $requiredSources) {
@@ -275,7 +295,8 @@ try {
     Invoke-TestFailure 'after-task'
 
     $lockResult = Invoke-NativeTool $python @($installedCli, 'lock')
-    if ($lockResult.ExitCode -ne 0) { throw "Installed key-holder lock failed: $($lockResult.StdErr.Trim())" }
+    if ($lockResult.StdOut) { Write-Host $lockResult.StdOut.TrimEnd() }
+    if ($lockResult.ExitCode -ne 0) { throw "Installed key-holder lock failed: $($lockResult.StdOut.Trim()) $($lockResult.StdErr.Trim())" }
     Assert-LockedState
     $gpoRegistrations = @(Select-String -LiteralPath $gpoIniPath -SimpleMatch $gpoLogoffPath)
     if ($gpoRegistrations.Count -ne 2) { throw 'Synchronous local Group Policy logon and logoff commands are not both registered.' }

@@ -25,6 +25,8 @@ function Snap {
         gpoScriptsRoot = Test-Path -LiteralPath $gpo
         gpoLogoffRoot = Test-Path -LiteralPath (Join-Path $gpo 'Logoff')
         gpoIni = Test-Path -LiteralPath (Join-Path $gpo 'scripts.ini')
+        gpoIniSha256 = if (Test-Path -LiteralPath (Join-Path $gpo 'scripts.ini')) { (Get-FileHash -LiteralPath (Join-Path $gpo 'scripts.ini') -Algorithm SHA256).Hash } else { 'absent' }
+        gpoLogoffCmd = Test-Path -LiteralPath (Join-Path $gpo 'Logoff\DawnTraderSshKeyholderLock.cmd')
         syncPolicyKey = Test-Path -LiteralPath $pol
         syncPolicyValue = if ($null -ne $v) { [string]$v.RunLogonScriptSync } else { 'absent' }
     } | ConvertTo-Json -Compress
@@ -34,7 +36,8 @@ $p = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdent
 if (-not $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Not elevated - open PowerShell as administrator.' }
 
 $backupBase = Join-Path $env:ProgramData 'DawnTrader\ssh-keyholder-backups'
-$env:DT_KEYHOLDER_ENABLE_FAULT_TESTS = 'I_UNDERSTAND'   # process-scoped only; removed below
+$env:DT_KEYHOLDER_ENABLE_FAULT_TESTS = 'I_UNDERSTAND'   # process-scoped only; removed in finally
+try {
 $pre = Snap
 "PRE $pre" | Tee-Object -FilePath $out -Append
 foreach ($point in @('after-files', 'after-service', 'after-logoff', 'after-task')) {
@@ -55,6 +58,8 @@ foreach ($point in @('after-files', 'after-service', 'after-logoff', 'after-task
     "RESULT $point $verdict reachedInjectedPoint=$reached newManifest=$manifestOk equalToPre=$($post -eq $pre)" | Tee-Object -FilePath $out -Append
     if ($verdict -ne 'PASS') { "STOP: case $point did not pass; later cases not run" | Tee-Object -FilePath $out -Append; break }
 }
-Remove-Item Env:\DT_KEYHOLDER_ENABLE_FAULT_TESTS
+} finally {
+    Remove-Item Env:\DT_KEYHOLDER_ENABLE_FAULT_TESTS -ErrorAction SilentlyContinue
+}
 "BACKUPS $((Get-ChildItem $backupBase -Name -ErrorAction SilentlyContinue) -join ',')" | Tee-Object -FilePath $out -Append
 "DONE log=$out" | Tee-Object -FilePath $out -Append
