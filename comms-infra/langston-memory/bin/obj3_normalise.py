@@ -98,6 +98,15 @@ MERGE = (247, "**F-G-1: window CLOSED 2026-09-04T16:08:02Z", 191)          # old
 #   (the superseded-by trailer names the live report); and not line 219 either, which carries a RETIRED A3 clause.
 KEEP = {210: "⛔ **STANDING INVARIANT", 211: "⚠️ **THE GUARD IS UNEXERCISED", 214: "**B-PRICE-AGE-TRUTH (#951",
         238: "⛔ **RATCHET at 2.4g-3", 251: "**⛔ `#1004` OPENED", 256: "**⛔ `#1005` OPENED"}
+RECIPE_AFTER = "> ⛔ **SINCE 2026-10-16 YOUR RETRACTIONS LIVE IN"
+HEADER_NOTE = ("> ⛔ **EVERY BATCH SECTION ENDS WITH A DECLARED STATE LINE (B-LANGSTON-RELIEF Q3, 2026-10-16).** Its LAST line "
+               "is `STATE: open · batch: <id>` or `STATE: closed · batch: <id> · superseded-by: <completion report path>`. "
+               "A new batch section must carry one, or the daily 03:50Z `langston-memory-write --trim` REFUSES and pages. "
+               "To close a batch, change its line to `closed` with the path: the trim then moves the section VERBATIM to "
+               "`/home/langston/MEMORY-ARCHIVE.md` (searchable with `langston-recall`) and leaves one index line. ⛔ **BEFORE "
+               "you close one, prefix with `keep: ` every line that must stay loaded** (a forward-binding rule, a ratchet, "
+               "a standing invariant) - nothing else prompts it, and an unmarked line leaves with its section. Never "
+               "trimmed: `## ★…`, `## RULINGS OF YOURS EXECUTED`, `## Archived batch sections`.")
 EXPECT_HEADINGS = 32
 EXPECT_SECTIONS = 49
 
@@ -205,7 +214,14 @@ def main():
             out += [("keep: " + line(n)) if n in KEEP else line(n) for n, _p in recs]
             out += ["", trailer(bid, st), ""]
             sections[bid] = sections.get(bid, 0) + 1
-    head0 = L[:heads[0] - 1]                       # the header block before the first heading, untouched
+    # the header block before the first heading is untouched EXCEPT for one added line documenting the convention, right
+    # after the retractions recipe line (Langston BLOCKER, 13:0xZ: a convention enforced by a refusal and documented
+    # nowhere he loads - and the keep: absence, unlike the STATE absence, cannot announce itself)
+    head0 = L[:heads[0] - 1]
+    at = [i for i, l in enumerate(head0) if l.startswith(RECIPE_AFTER)]
+    if len(at) != 1:
+        fail("the recipe line %r must appear exactly once in the header block" % RECIPE_AFTER)
+    head0 = head0[:at[0] + 1] + [HEADER_NOTE] + head0[at[0] + 1:]
     out = head0 + out
     while out and out[-1] == "":
         out.pop()
@@ -221,6 +237,7 @@ def main():
     co, cg = Counter(orig), Counter(got)
     for hl in added_heads:
         cg[hl] -= 1
+    cg[HEADER_NOTE] -= 1
     full = line(SPLIT_LINE)
     i = full.index(SPLIT_AT)
     cg[full[:i]] -= 1

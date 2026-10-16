@@ -118,7 +118,7 @@ def main():
         l in arch for l in ("## B-CLOSED-ONE — a closed batch", "**B-CLOSED-ONE body** with detail.",
                             "- its record, unique text zebra-42")), True)
     check("their bodies left MEMORY.md", ("**B-CLOSED-ONE body**" in mem, "zebra-42" in mem), (False, False))
-    check("one index line per evicted section", sum(1 for l in mem.split(NL) if l.startswith("- `B-CLOSED-")), 2)
+    check("one index line per evicted section, worded evicted", sum(1 for l in mem.split(NL) if l.startswith("- `B-CLOSED-") and " — evicted " in l), 2)
     check("the keep: line survives in the index", "keep: a pointer line that must survive in the index" in mem, True)
     check("each archived section carries an eviction stamp", arch.count("<!-- evicted "), 2)
     # line conservation, recomputed here (not trusting the tool's own check)
@@ -144,6 +144,7 @@ def main():
     check("  ...dated by the eviction stamp and carrying the batch id",
           (all(x["ts"].startswith("20") for x in recs), any("B-CLOSED-TWO" in x["ref"] for x in recs)), (True, True))
     check("  ...and the section text is searchable", any("zebra-42" in x["text"] for x in recs), True)
+    check("  ...labelled as an EVICTION time, not a per-record timestamp", all(x["tq"] == "eviction-time(trim)" for x in recs), True)
     print("3. a new closed section on a later run appends to the archive and the index")
     part = rd(h.part).decode("utf-8").replace("STATE: open · batch: B-OPEN-ONE",
                                                "STATE: closed · batch: B-OPEN-ONE · superseded-by: Batch Completion/X.md")

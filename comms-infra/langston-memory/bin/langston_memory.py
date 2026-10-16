@@ -255,7 +255,7 @@ def parse_memory_archive(path, out):
         end = marks[k + 1].start() if k + 1 < len(marks) else len(text)
         lineno = text.count(chr(10), 0, m.start()) + 1
         r = rec(m.group(1), "memory-archive", f"memory-archive/{os.path.basename(path)} batch={m.group(2)} line={lineno}",
-                text[m.end():end])
+                text[m.end():end], ts_quality="eviction-time(trim)")
         if r: out.append(r)
 
 def build_index():

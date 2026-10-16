@@ -2,10 +2,10 @@
 Description=Daily run of the Langston MEMORY.md supersession trim
 
 [Timer]
-OnCalendar=*-*-* 05:30:00 UTC
-# 05:30Z: after the 04:10Z recall index rebuild and before the 05:40Z size watch, so the watch measures the
-# trimmed file and the next index rebuild picks up what the trim archived. The 05:20Z self-memory backup
-# runs first, so the pre-trim state is in that day's backup as well as in .memory-archive/.
+OnCalendar=*-*-* 03:50:00 UTC
+# 03:50Z, BEFORE the 04:10Z recall index rebuild (Langston, 2026-10-16: at 05:30Z an evicted section was unsearchable
+# for ~22h40m, the day he would look for it), the 05:20Z self-memory backup and the 05:40Z size watch - so the same
+# night's index and backup both carry what the trim archived, and the watch measures the trimmed file.
 Persistent=true
 RandomizedDelaySec=60
 

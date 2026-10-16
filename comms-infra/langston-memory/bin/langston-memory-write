@@ -1020,6 +1020,11 @@ def do_split_ledger(opts, stub):
             with open(TARGET, "rb") as fh:
                 if sha(fh.read()) != mem_new_sha:
                     problems.append("MEMORY.md read-back mismatch")
+            # the PART is the file of record and MEMORY.md is composed in memory, so MEMORY.md's read-back cannot see a
+            # bad part write (Langston, 13:0xZ - the write and rename paths read it back; this did not)
+            with open(part_path, "rb") as fh:
+                if sha(fh.read()) != sha(part_new):
+                    problems.append("part read-back mismatch")
             s_l, e_l = reader._parse_ledger(LEDGER_FILE)
             s_m, _e_m = reader._parse_ledger(TARGET)
             if s_l != "ok":
@@ -1138,7 +1143,7 @@ def trim_plan(text):
                          "trim (first: %r). Nothing was evicted." % (len(unmarked), unmarked[0]))
     added = []
     for bid, sup, sec in evicted:
-        added.append("- `%s` — archived %s; record `%s`" % (bid, utc()[:10], sup))
+        added.append("- `%s` — evicted %s; record `%s`" % (bid, utc()[:10], sup))
         added += [l for l in sec if l.startswith("keep: ")]
     if evicted:
         while out and out[-1] == "":
@@ -1236,6 +1241,9 @@ def do_trim(opts):
             with open(TARGET, "rb") as fh:
                 if sha(fh.read()) != mem_new_sha:
                     problems.append("MEMORY.md read-back mismatch")
+            with open(part_path, "rb") as fh:                  # the file of record (Langston, 13:0xZ)
+                if sha(fh.read()) != sha(part_new):
+                    problems.append("part read-back mismatch")
             if any(l.startswith("STATE: closed") for l in keep_text.split(NL)):
                 problems.append("a closed section survived the trim")
             if retraction_count(reader, TARGET) != r_before:
