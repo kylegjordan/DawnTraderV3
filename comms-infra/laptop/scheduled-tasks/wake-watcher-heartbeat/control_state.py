@@ -224,8 +224,10 @@ def decide(a, now):
         return f"control: CHECK FAILED — remote read failed ({e})", True
 
     D = s1["D"]
-    alive_files = [x for x in ALIASES if a.liveness.get(x) != "not armed"]
-    gated = [x for x in ALIASES if x not in alive_files]
+    # ARMED, not alive: a session has a .alive file (DEAD, STUCK and CENSUS-FAILED all have one); "not armed" = none.
+    # This is the old step-2c human gate, which now lives only here (Langston gate A r2, condition 2).
+    armed = [x for x in ALIASES if a.liveness.get(x) != "not armed"]
+    gated = [x for x in ALIASES if x not in armed]
     issued = []
     if not gated:
         for x in ALIASES:

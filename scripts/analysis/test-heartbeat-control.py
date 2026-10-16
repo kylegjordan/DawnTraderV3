@@ -82,8 +82,8 @@ class Fx:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             rc = cs.main(argv)
         o = out.getvalue().splitlines()
-        if len(o) == 2:
-            ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
+        assert len(o) == 2, f"control_state printed {len(o)} lines, not 2: {o}"   # the pool may never shrink silently
+        ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
         per = None
         for l in err.getvalue().splitlines():
             try:
@@ -316,8 +316,8 @@ def run_raw(argv):
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
         rc = cs.main(argv)
     o = out.getvalue().splitlines()
-    if len(o) == 2:
-        ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
+    assert len(o) == 2, f"control_state printed {len(o)} lines, not 2: {o}"
+    ALL_LINES.append((o[0], o[1] == "NOTIFY yes"))
     return rc, o
 fx = Fx(); fx.ok_record(); all_ready(fx)
 for label, argv in [
@@ -342,6 +342,19 @@ before = len(fx.lines())
 rc, o, _ = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive"})
 case("token validation: a quote in N is never echoed back -> UNDETERMINED, paged, nothing appended",
      "unsafe token" in o[0] and len(fx.lines()) == before and o[1] == "NOTIFY yes", o)
+
+# ── re-issue failed: the append of a re-issue fails -> CHECK FAILED, paged (Langston gate A r2, condition A3) ─
+fx = skipped()
+real_append = cs.Remote.append
+def failing_append2(self, alias, token):
+    raise cs.RemoteFailed("ssh exit 1")
+cs.Remote.append = failing_append2
+try:
+    rc, o, _ = fx.run()
+finally:
+    cs.Remote.append = real_append
+case("re-issue failed: a failed re-issue append -> CHECK FAILED — re-issue failed CC-A, paged",
+     o[0].startswith("control: CHECK FAILED") and "re-issue failed CC-A" in o[0] and o[1] == "NOTIFY yes", o)
 
 # ── TOTALITY: every 2b state x position case x record state prints exactly one state per alias ─────────
 LV = ["alive", "DEAD", "STUCK", "CENSUS-FAILED", "not armed"]
@@ -424,9 +437,10 @@ with contextlib.redirect_stdout(out):
 o = out.getvalue().splitlines()
 ALL_LINES.append((o[0], o[-1] == "NOTIFY yes"))
 paging_kinds = {k for k in ("NOT answered", "NOT delivering", "control record new", "control record RESET",
-                            "control record NOT PERSISTING", "ISSUER NOT RUN", "UNDETERMINED", "remote read failed")
+                            "control record NOT PERSISTING", "ISSUER NOT RUN", "UNDETERMINED", "remote read failed",
+                            "re-issue failed")
                 if any(k in c for c, p in ALL_LINES if p)}
-case(f"P4 coverage: every paging state was produced and routed ({len(paging_kinds)}/8 kinds)", len(paging_kinds) == 8, paging_kinds)
+case(f"P4 coverage: every paging state was produced and routed ({len(paging_kinds)}/9 kinds)", len(paging_kinds) == 9, paging_kinds)
 wrong2 = [(c, p) for c, p in ALL_LINES if allclear("Heartbeat", HEALTHY.format(ctl=c)) == p]
 case("P4 (all lines, incl. P9): NOTIFY yes <=> delivered, NOTIFY no <=> suppressed", not wrong2, wrong2)
 case("P9: a refused connection -> CHECK FAILED — remote read failed (ssh exit 255), NOTIFY yes, exit 0, lock released",
