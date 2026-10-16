@@ -554,7 +554,28 @@ def process_task(task, state, breaker, task_q=None):
     if not task.get("is_alert"):
         cleaned = lq.lead_with_addressee(cleaned, task, CFG.get("kyle_id"))
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
-    mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
+    if task.get("is_alert"):
+        # B-LANGSTON-RELIEF OBJ-2 (Coltrane r3): an alert's spooled work is done ONLY when his answer is durably
+        # out - a real Discord message id AND a successful direct inbox record of it (mirror_event swallows its
+        # failures). Anything else - a failed post, a failed record, an exception, a suppressed bridge error -
+        # leaves the spool record in place for the restore at the next start.
+        _done = False
+        if sent_id is not None:
+            try:
+                dc.append_inbox({"ts": datetime.datetime.now().astimezone().isoformat(),
+                                 "source": "discord-langston-bridge", "transport": "discord",
+                                 "kind": "langston_outbound", "channel_id": channel_id, "message_id": sent_id,
+                                 "reply_to": msg_id, "text": cleaned})
+                _done = True
+            except Exception as e:
+                log(f"alert spool: Langston's reply to msg {msg_id} posted but NOT recorded ({type(e).__name__}: {e}) "
+                    f"- kept for restore")
+        else:
+            log(f"alert spool: Langston's reply to msg {msg_id} was NOT posted - kept for restore")
+        if _done:
+            al.spool_remove(al.SPOOL_DIR, msg_id)
+    else:
+        mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
     # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload
     # failure is announced in-channel, never silently dropped (Langston (d)).
     for _fp in _attach_files:
@@ -674,13 +695,8 @@ def task_worker(task_q, state):
                 log(f"task worker error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
             finally:
                 task_q.task_done()
-                # B-LANGSTON-RELIEF OBJ-2 (Coltrane r2): an alert Langston has now processed - escalated by the lane,
-                # or restored from the spool with the lane off - is durably done; drop its spooled work.
-                if task.get("is_alert"):
-                    try:
-                        al.spool_remove(al.SPOOL_DIR, task["message_id"])
-                    except Exception as e:
-                        log(f"alert spool: could not remove {task.get('message_id')}: {e}")
+                # (Coltrane r3: an alert's spool record is removed in process_task only after his reply is posted AND
+                #  recorded - never here, where "dequeued" would be mistaken for "answered".)
             if time.time() - last_heartbeat >= HEARTBEAT:
                 _people, _adv, _alerts = task_q.depth_by_class()
                 log(f"task worker alive, queue depth={task_q.qsize()} "
@@ -753,7 +769,11 @@ def restore_alert_spool(alert_q, task_q):
     for r in recs:
         t, st = r["task"], r.get("state")
         mid = int(t["message_id"])
-        if st == "posting" and r.get("aid") in routed:
+        if st == "posting" and r.get("aid") in routed and r.get("escalate"):
+            # Coltrane r3: routing was recorded but the escalation it also owed Langston never happened.
+            escalate_alert(task_q, t, r["escalate"])
+            counts["langston"] += 1
+        elif st == "posting" and r.get("aid") in routed:
             al.spool_remove(al.SPOOL_DIR, mid)
             counts["already done"] += 1
         elif st == "escalated" and mid in replied:
@@ -804,8 +824,11 @@ def run_alert_batch(batch, task_q):
             #    swallows its own failure, so both are checked here; on either failure EVERY alert in the batch
             #    goes to Langston - a Kyle-owned row must never lose its mention silently.
             for aid, t in ided:                      # Coltrane r2: publishing is a recorded state
-                try:
-                    al.spool_write(al.SPOOL_DIR, t, "posting", aid=aid)
+                try:                                 # Coltrane r3: carrying any escalation it still owes Langston
+                    if aid in esc:
+                        al.spool_write(al.SPOOL_DIR, t, "posting", aid=aid, escalate=esc[aid])
+                    else:
+                        al.spool_write(al.SPOOL_DIR, t, "posting", aid=aid)
                 except Exception as e:
                     log(f"alert spool: could not mark msg {t['message_id']} posting ({type(e).__name__}: {e})")
             sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE,
@@ -1081,8 +1104,18 @@ def build_client(task_q, recover_floor=None, alert_q=None):
                 try:                                 # Coltrane r2: on disk BEFORE it is queued
                     al.spool_write(al.SPOOL_DIR, _t, "pending")
                 except Exception as _e:
+                    # Coltrane r3: never silently memory-only. Say so in the channel, to Kyle, naming the alert, so a
+                    # restart cannot lose it unseen; the lane still gets it.
                     log(f"alert spool: WRITE FAILED for msg {message.id} ({type(_e).__name__}: {_e}) - "
-                        f"queued, but it would not survive a restart")
+                        f"announcing it, then queueing it")
+                    try:
+                        dc.rest_send(BOT_TOKEN, CFG["channel_id"],
+                                     f"Langston bridge: could not save an incoming alert to disk ({type(_e).__name__}). "
+                                     f"It is being triaged now, but a restart before then would lose it. Alert: "
+                                     f"{(al.alert_id_of(content) or 'id unreadable')} (message {message.id}).",
+                                     LOG_FILE, mention_user_id=CFG["kyle_id"])
+                    except Exception:
+                        pass
                 alert_q.put(_t)
                 log(f"ALERT to lane: msg {message.id} via alerts webhook")
                 return

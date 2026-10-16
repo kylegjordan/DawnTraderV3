@@ -187,19 +187,78 @@ aq4, tq4 = queue.Queue(), lq.TaskPriorityQueue()
 b.restore_alert_spool(aq4, tq4)
 check("posting + recorded: cleared, not triaged again", aq4.qsize() == 0 and tq4.qsize() == 0 and spooled() == [])
 
-# (13) died while the alert was escalated to Langston: restored to his queue; his processing clears it
+# (13) Coltrane r3: an escalated alert is cleared ONLY when Langston's answer is posted AND recorded. The REAL
+#      process_task runs; only the model call and the outside world are stubbed.
+b.invoke_claude = lambda prompt, sid, state=None, **k: "Triage: real answer."
+STATE13 = {"session_id": "probe"}
+def escalated_once(tag):
+    reset()
+    for f in spooled():
+        os.remove(os.path.join(al.SPOOL_DIR, f))
+    t = alert_task(A, 13)
+    al.spool_write(al.SPOOL_DIR, t, "escalated", reason="critical")
+    aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+    b.restore_alert_spool(aq, tq)
+    return tq.get_nowait(), t
+def run_task(task):
+    """Through the REAL task_worker loop (so a dequeue-time cleanup would show), then wait for it to finish."""
+    q = lq.TaskPriorityQueue()
+    q.put(task)
+    threading.Thread(target=b.task_worker, args=(q, STATE13), daemon=True).start()
+    q.join()
+    time.sleep(0.2)
+def restored_once():
+    aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+    b.restore_alert_spool(aq, tq)
+    return tq.qsize() + aq.qsize()
+
+task, t13 = escalated_once("raise")
+_orig_invoke = b.invoke_claude
+b.invoke_claude = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("model crashed"))
+run_task(task)
+b.invoke_claude = _orig_invoke
+check("escalated + process_task raises: work kept on disk", spooled() == ["%d.json" % t13["message_id"]])
+check("escalated + process_task raises: restored exactly once", restored_once() == 1)
+
+task, t13 = escalated_once("post")
+SEND["fail"] = True; run_task(task); SEND["fail"] = False
+check("escalated + Langston's post fails: work kept", spooled() == ["%d.json" % t13["message_id"]])
+check("escalated + Langston's post fails: restored exactly once", restored_once() == 1)
+
+task, t13 = escalated_once("record")
+APPEND["fail"] = True; run_task(task); APPEND["fail"] = False
+check("escalated + his reply's record fails: work kept", spooled() == ["%d.json" % t13["message_id"]])
+check("escalated + his reply's record fails: restored exactly once", restored_once() == 1)
+
+task, t13 = escalated_once("ok")
+run_task(task)
+check("escalated + answer posted and recorded: spool cleared", spooled() == [] and len(posts) == 1)
+check("escalated + answered: a restart restores nothing", restored_once() == 0)
+
+# (14) Coltrane r3 crash window: routing recorded but the owed escalation not yet made -> goes to Langston
 reset()
-t13 = alert_task(A, 13)
-al.spool_write(al.SPOOL_DIR, t13, "escalated", reason="critical")
-aq5, tq5 = queue.Queue(), lq.TaskPriorityQueue()
-b.restore_alert_spool(aq5, tq5)
-check("escalated: restored to Langston as people-class", tq5.depth_by_class() == (1, 0, 0) and aq5.qsize() == 0)
-_orig_pt = b.process_task
-b.process_task = lambda task, state, breaker, task_q=None: None
-_stop = threading.Thread(target=b.task_worker, args=(tq5, {}), daemon=True)
-_stop.start(); time.sleep(1.0)
-b.process_task = _orig_pt
-check("escalated: Langston's processing clears the spool", spooled() == [])
+for f in spooled():
+    os.remove(os.path.join(al.SPOOL_DIR, f))
+t14 = alert_task(B, 14)
+al.spool_write(al.SPOOL_DIR, t14, "posting", aid=B, escalate="critical severity")
+fake_append({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-B action="x"]]' % B,
+             "reply_to": t14["message_id"], "channel_id": CFG["channel_id"], "message_id": 2})
+aq6, tq6 = queue.Queue(), lq.TaskPriorityQueue()
+b.restore_alert_spool(aq6, tq6)
+check("posting + recorded + owed escalation: handed to Langston, not cleared",
+      tq6.qsize() == 1 and "critical severity" in tq6.get_nowait()["content"] and spooled() == ["%d.json" % t14["message_id"]])
+
+# (15) Coltrane r3: a failed spool write is announced loudly (Kyle mentioned, alert named), and still triaged
+reset()
+_orig_sw = al.spool_write
+al.spool_write = lambda *a, **k: (_ for _ in ()).throw(OSError("read-only file system"))
+tq7, aq7 = lq.TaskPriorityQueue(), queue.Queue()
+c7 = b.build_client(tq7, None, aq7)
+c7._connection.user = types.SimpleNamespace(id=999999)
+asyncio.run(c7.on_message(m(1, "alert\n_Alert ID:_ `%s`" % A, webhook_id=CFG["alerts_webhook_id"])))
+al.spool_write = _orig_sw
+check("spool write failure: announced to Kyle, naming the alert", bool(posts) and posts[-1][1] == CFG["kyle_id"] and A in posts[-1][0])
+check("spool write failure: still queued for the lane", aq7.qsize() == 1)
 
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)
