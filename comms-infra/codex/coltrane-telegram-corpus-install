@@ -2,55 +2,136 @@
 """B-LANGSTON-RELIEF OBJ-4b (Coltrane r1, 2026-10-16): give Coltrane his OWN read copy of the Telegram-era crew
 history, inside his store so his verified daily backup carries it. Run as ROOT on the agent box, once:
 
-    coltrane-telegram-corpus-install [--source DIR] [--dest DIR]
+    coltrane-telegram-corpus-install [--source DIR] [--dest DIR] [--owner USER]
 
-It copies every regular file in the source (default /opt/langston-memory/corpus/telegram - behind Langston's account,
-which Coltrane cannot read) to the destination (default /home/coltrane/memory/.corpus/telegram), owned by coltrane,
-then writes PROVENANCE.json: for each file its source path, size, source mtime and sha256, plus the copy time.
-coltrane-memory recall re-hashes every file against that manifest on each search and says DEGRADED if one moved.
-It REFUSES if the destination already holds a manifest (re-copying would silently replace the evidence of what was
-copied when); move the old copy aside first, deliberately. Every copied file is hash-checked after the copy."""
-import argparse, datetime, hashlib, json, os, pwd, shutil, sys
+⛔ IT RUNS AS ROOT AND WRITES INTO A TREE ANOTHER ACCOUNT CONTROLS, so every path is walked WITHOUT following a symlink
+   (Coltrane r2: the first version's copyfile/chmod/chown followed a planted `dest/payload -> victim` link, measured -
+   the victim's bytes, owner and mode changed and the run still reported every hash matched):
+   - every directory on --dest and --source is opened component by component from `/` with O_NOFOLLOW|O_DIRECTORY;
+     a symlink anywhere on either path refuses;
+   - the destination must NOT exist; it is created with mkdirat (which does not follow a final symlink), root-owned
+     0700 while it is filled, so the other account cannot plant anything in it;
+   - every source file is opened O_NOFOLLOW and must be a regular file (a link planted in the SOURCE would otherwise
+     make root copy any file it can read into the other account's store);
+   - every destination file is created relative to the directory descriptor with O_CREAT|O_EXCL|O_NOFOLLOW, its mode
+     and owner set through its own descriptor (fchmod/fchown), never through a path;
+   - only when every file is written and re-hashed is the directory handed over (fchown + 0750).
+It writes PROVENANCE.json (each file's source path, bytes, source mtime, sha256, plus the copy time); `coltrane-memory
+recall` re-hashes every file against it on each search and says DEGRADED if one moved."""
+import argparse, datetime, hashlib, json, os, pwd, stat, sys
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--source", default="/opt/langston-memory/corpus/telegram")
 ap.add_argument("--dest", default="/home/coltrane/memory/.corpus/telegram")
 ap.add_argument("--owner", default="coltrane")
 a = ap.parse_args()
+DIRFLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
 
 
-def sha(p):
-    with open(p, "rb") as fh:
-        return hashlib.sha256(fh.read()).hexdigest()
+def refuse(msg):
+    # once the destination exists it stays ROOT-OWNED 0700 until the very end, so a refusal mid-copy leaves a
+    # partial copy the other account cannot read or use - stated, and left for inspection, never handed over
+    sys.exit("REFUSED: " + msg)
 
 
-if os.path.exists(os.path.join(a.dest, "PROVENANCE.json")):
-    sys.exit("REFUSED: %s already holds a PROVENANCE.json - move the old copy aside deliberately first" % a.dest)
-names = sorted(n for n in os.listdir(a.source) if os.path.isfile(os.path.join(a.source, n)))
-if not names:
-    sys.exit("REFUSED: no files in %s - nothing copied (an empty source is a finding, not a success)" % a.source)
-pw = pwd.getpwnam(a.owner)
-os.makedirs(a.dest, mode=0o750, exist_ok=True)
-for d in (os.path.dirname(a.dest), a.dest):
-    os.chown(d, pw.pw_uid, pw.pw_gid)
-files = []
-for n in names:
-    src, dst = os.path.join(a.source, n), os.path.join(a.dest, n)
-    shutil.copyfile(src, dst)
-    os.chmod(dst, 0o640)
-    os.chown(dst, pw.pw_uid, pw.pw_gid)
-    s_src, s_dst = sha(src), sha(dst)
-    if s_src != s_dst:
-        sys.exit("REFUSED: %s copied with a different hash (%s vs %s) - copy left in place for inspection" % (n, s_src, s_dst))
-    st = os.stat(src)
-    files.append({"name": n, "source": src, "bytes": st.st_size, "sha256": s_src,
-                  "source_mtime": datetime.datetime.fromtimestamp(st.st_mtime, datetime.timezone.utc).isoformat()})
-man = {"copied_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "source_dir": a.source,
-       "by": "coltrane-telegram-corpus-install (B-LANGSTON-RELIEF OBJ-4b)", "files": files}
-mp = os.path.join(a.dest, "PROVENANCE.json")
-with open(mp, "w", encoding="utf-8") as fh:
-    json.dump(man, fh, indent=2)
-os.chmod(mp, 0o640)
-os.chown(mp, pw.pw_uid, pw.pw_gid)
-print("COPIED %d file(s), %d B, to %s; every hash matched; PROVENANCE.json written" % (
-    len(files), sum(f["bytes"] for f in files), a.dest))
+def open_dir_nofollow(path, create_last=False, mode=0o700):
+    """Walk an absolute path from / one component at a time, never following a symlink. Returns a directory fd.
+    With create_last, the final component must NOT exist and is created with mkdirat (which does not follow)."""
+    if not os.path.isabs(path):
+        refuse("%s is not an absolute path" % path)
+    parts = [p for p in path.split("/") if p]
+    fd = os.open("/", DIRFLAGS)
+    for i, p in enumerate(parts):
+        last = i == len(parts) - 1
+        try:
+            if last and create_last:
+                try:
+                    os.mkdir(p, mode, dir_fd=fd)
+                except FileExistsError:
+                    refuse("%s already exists (it may be a planted link) - move it aside deliberately first" % path)
+            nfd = os.open(p, DIRFLAGS, dir_fd=fd)
+        except OSError as e:
+            refuse("cannot open %r on %s without following a link (%s)" % (p, path, e.strerror))
+        finally:
+            os.close(fd)
+        fd = nfd
+    return fd
+
+
+def main():
+    pw = pwd.getpwnam(a.owner)
+    parent, leaf = os.path.split(a.dest.rstrip("/"))
+    src_fd = open_dir_nofollow(a.source)
+    names = sorted(os.listdir(src_fd))
+    if not names:
+        refuse("no files in %s (an empty source is a finding, not a success)" % a.source)
+    # the destination's parent: created if absent (owned by the target account at the end), never followed
+    gp, pleaf = os.path.split(parent)
+    gfd = open_dir_nofollow(gp)
+    try:
+        os.mkdir(pleaf, 0o750, dir_fd=gfd)
+        made_parent = True
+    except FileExistsError:
+        made_parent = False
+    try:
+        pfd = os.open(pleaf, DIRFLAGS, dir_fd=gfd)
+    except OSError as e:
+        refuse("cannot open %s without following a link (%s)" % (parent, e.strerror))
+    if made_parent:
+        os.fchown(pfd, pw.pw_uid, pw.pw_gid)
+    try:
+        os.mkdir(leaf, 0o700, dir_fd=pfd)
+    except FileExistsError:
+        refuse("%s already exists (it may be a planted link) - move it aside deliberately first" % a.dest)
+    dfd = os.open(leaf, DIRFLAGS, dir_fd=pfd)
+    st = os.fstat(dfd)
+    if st.st_uid != 0 or (st.st_mode & 0o077):
+        refuse("the new destination is not root-owned 0700 while it is filled (uid %d, mode %o)" % (st.st_uid, st.st_mode))
+    files = []
+    for n in names:
+        try:
+            sfd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=src_fd)
+        except OSError as e:
+            refuse("source %s/%s cannot be opened without following a link (%s)" % (a.source, n, e.strerror))
+        try:
+            sst = os.fstat(sfd)
+            if not stat.S_ISREG(sst.st_mode):
+                refuse("source %s/%s is not a regular file" % (a.source, n))
+            with os.fdopen(sfd, "rb", closefd=False) as fh:
+                data = fh.read()
+        finally:
+            os.close(sfd)
+        h = hashlib.sha256(data).hexdigest()
+        ofd = os.open(n, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600, dir_fd=dfd)
+        try:
+            os.write(ofd, data)
+            os.fsync(ofd)
+            os.fchmod(ofd, 0o640)
+            os.fchown(ofd, pw.pw_uid, pw.pw_gid)
+        finally:
+            os.close(ofd)
+        rfd = os.open(n, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC, dir_fd=dfd)
+        with os.fdopen(rfd, "rb") as fh:
+            if hashlib.sha256(fh.read()).hexdigest() != h:
+                refuse("%s did not read back with its source hash" % n)
+        files.append({"name": n, "source": os.path.join(a.source, n), "bytes": sst.st_size, "sha256": h,
+                      "source_mtime": datetime.datetime.fromtimestamp(sst.st_mtime, datetime.timezone.utc).isoformat()})
+    man = {"copied_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "source_dir": a.source,
+           "by": "coltrane-telegram-corpus-install (B-LANGSTON-RELIEF OBJ-4b)", "files": files}
+    mfd = os.open("PROVENANCE.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600,
+                  dir_fd=dfd)
+    try:
+        os.write(mfd, (json.dumps(man, indent=2) + "\n").encode("utf-8"))
+        os.fsync(mfd)
+        os.fchmod(mfd, 0o640)
+        os.fchown(mfd, pw.pw_uid, pw.pw_gid)
+    finally:
+        os.close(mfd)
+    os.fchown(dfd, pw.pw_uid, pw.pw_gid)          # hand over only now, through the descriptor
+    os.fchmod(dfd, 0o750)
+    print("COPIED %d file(s), %d B, to %s; every file re-read with its source hash; PROVENANCE.json written" % (
+        len(files), sum(f["bytes"] for f in files), a.dest))
+
+
+if __name__ == "__main__":
+    main()

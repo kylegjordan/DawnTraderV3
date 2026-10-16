@@ -526,11 +526,13 @@ def query(terms):
             # C3 ruling: exact cross-corpus predicate, no invented threshold.
             # ⚠️ GATED ON ERA (Langston, 2026-10-16): the caution exists because the TELEGRAM/OPENCLAW id namespaces
             #   predate today's; a hit pair that is entirely post-cutover (discord <-> memory-archive) cannot cross that
-            #   boundary, and flagged it falsely on every archived hit. Measured basis, 2026-10-16: MEMORY-ARCHIVE.md held
-            #   0 lines naming Telegram / OpenClaw / topic 21 against 77 carrying 2026-10 (positive control), and no date
-            #   token earlier than 2026-09. ⇒ the caution still fires whenever EITHER side is a legacy shard OR either
-            #   record is dated before the 2026-06-19 Discord cutover - re-check this if a pre-cutover section is ever
-            #   evicted into the archive (its records are dated by eviction time, so the date leg would not see it).
+            #   boundary, and flagged it falsely on every archived hit. Measured basis, 2026-10-16 (Langston re-derived):
+            #   all 37 sections in MEMORY-ARCHIVE.md are July-October batches, and 0 lines name Telegram / OpenClaw /
+            #   topic 21. Against the live index: 1,389 cross-shard forced pairs, 685 now silenced - every one
+            #   post-cutover (discord<->transcripts 580, discord<->memory-archive 71, transcripts<->memory-archive 34).
+            #   ⇒ the caution still fires whenever EITHER side is a legacy shard OR either record is dated before the
+            #   2026-06-19 Discord cutover. Archived records are dated by EVICTION time, so the date leg cannot see a
+            #   pre-cutover section in the archive; the trim warns when it evicts one (`--trim`, pre_cutover_heading).
             legacy = {"telegram", "openclaw"}
             if newest and shard_of(oldest["ref"]) != shard_of(newest["ref"]) and (
                     {shard_of(oldest["ref"]), shard_of(newest["ref"])} & legacy

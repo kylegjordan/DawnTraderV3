@@ -159,6 +159,21 @@ def main():
     check("  ...ONE index heading, three index lines", (mem.count("## Archived batch sections"),
           sum(1 for l in mem.split(NL) if l.startswith("- `B-"))), (1, 3))
     h.done()
+    print("3b. a pre-cutover section is named when evicted (recall cannot date it)")
+    h = Home(BASE.replace("## B-CLOSED-ONE — a closed batch", "## B-CLOSED-ONE — a closed batch from 2026-05-01"))
+    rc, out = h.trim()
+    rows = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8")
+            if l.strip()]
+    trim_rows = [r for r in rows if r.get("mode") == "trim" and r.get("outcome") == "written"]
+    check("the trim names the pre-cutover section, and only it", (rc, "PRE-CUTOVER ERA in the heading of B-CLOSED-ONE"
+          in out, "B-CLOSED-TWO -" in out.split("PRE-CUTOVER")[-1]), (0, True, False))
+    check("  ...and records it on the index row", trim_rows[-1].get("pre_cutover_heading"), ["B-CLOSED-ONE"])
+    h.done()
+    h = Home()
+    rc, out = h.trim()
+    check("no pre-cutover heading -> no warning (negative control)", (rc, "PRE-CUTOVER" in out), (0, False))
+    h.done()
+
     print("4. refusals write nothing")
     h = Home(BASE.replace("STATE: open · batch: B-OPEN-ONE", "- (no state line)"))
     snap = h.snap()

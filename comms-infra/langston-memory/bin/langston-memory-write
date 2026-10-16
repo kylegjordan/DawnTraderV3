@@ -1222,9 +1222,16 @@ def do_trim(opts):
         if arch_existed:
             archive_old(arch_old, sha(arch_old), st)
         archive_old(arch_new_b, sha(arch_new_b), st)
+        # ⚠️ ERA WARNING (Langston, 2026-10-16): recall dates an archived section by EVICTION time, so its cross-corpus
+        #    caution cannot see a section from before the 2026-06-19 Discord cutover. The trim is the only writer of
+        #    the archive, so it names any section whose heading lines carry a pre-cutover date - stated, never blocking.
+        pre_cutover = [bid for bid, _s, sec in evicted
+                       if any(d < "2026-06-19" for l in sec if l.startswith("#")
+                              for d in re.findall(r"20\d\d-\d\d-\d\d", l))]
         row = {"ts": utc(), "target": TARGET, "part": name, "mode": "trim", "part_old_sha": part_old_sha,
                "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
                "memory_archive_sha": sha(arch_new_b), "evicted": [b for b, _s, _x in evicted], "open_left": open_n,
+               "pre_cutover_heading": pre_cutover,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"]}
         append_index(dict(row, outcome="attempted"), st)
         old_state = dict(state)
@@ -1277,8 +1284,12 @@ def do_trim(opts):
         write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
                              "parts_sha": parts_sha, "part_count": 1}, st)
         append_index(dict(row, ts=utc(), outcome="written"), st)
-        return "TRIM: evicted %d section(s) [%s] to MEMORY-ARCHIVE.md; %d open stay; MEMORY.md %d -> %d B; %s" % (
-            len(evicted), ", ".join(b for b, _s, _x in evicted), open_n, len(mem_old), len(mem_new), size_line(len(mem_new)))
+        warn = ("" if not pre_cutover else
+                "; ⚠️ PRE-CUTOVER ERA in the heading of %s - recall dates these by eviction time, so its cross-corpus "
+                "caution will NOT fire for them" % ", ".join(pre_cutover))
+        return "TRIM: evicted %d section(s) [%s] to MEMORY-ARCHIVE.md; %d open stay; MEMORY.md %d -> %d B; %s%s" % (
+            len(evicted), ", ".join(b for b, _s, _x in evicted), open_n, len(mem_old), len(mem_new),
+            size_line(len(mem_new)), warn)
     finally:
         os.close(lfd)
 
