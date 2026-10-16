@@ -44,3 +44,28 @@ vwap_pullback xStock stop-outs average −4.09 % off-session vs −2.07 % in ses
 - **➕ FOUND TODAY — 2026-05-24, `B79.0n.STRATEGY`:** its seed lists a **different** xStock set — strong_bull_trend and support_bounce **on**, pivot_shift and vwap_bounce **off** — while claiming to match the original list. Written `ON CONFLICT DO NOTHING`, it changed nothing; its report verified the **row count** (19), not the values, and attributed the 9/10 split to ORB alone. **Harmless — the live rows are the original intent — but the record has carried a wrong list for five months.** Recorded on `#1070`.
 - **2026-09-20, `B-REACH-BASELINE-ADJUST`:** it set two xStock strong_bull_trend rows without checking the strategy was switched on — **an oversight, found by the first weekly read (2026-09-30).**
 - **2026-09-30, Kyle:** switch the five candidates on one or two at a time, **strong_bull_trend first**, each with a pass/fail written before it goes on; the overdue check of the nine already on runs first. **Placed:** sprint row 52 `B-SILENT-STRATEGY-CENSUS` (CC-B) — **queued, not started.** ⚠️ **Given §3, switching strong_bull_trend on for xStocks now would add a strategy that is losing on crypto to a class losing off-session; the row's pass/fail should be written with that in view.**
+
+## 5. Follow-up asked by Kyle 2026-10-16 — a closer target, and maker entries (same 288 trades; replay run 10:25-10:50Z UTC)
+**Fees used (per side), matched to the recorded round trips:** crypto taker 0.80 % / maker 0.40 %; xStock taker 0.10 % / maker −0.02 % (a rebate). A target exit is a maker fill; a stop is always a taker fill.
+### 5a. A closer target — trades reach it more often, and the result still gets worse
+| target placed at … of today's distance | trades reaching it | average per trade after fees |
+|---|---|---|
+| ½ | 38.5 % | −1.10 % |
+| ⅔ | 32.6 % | −1.01 % |
+| ⅘ | 29.9 % | −0.88 % |
+| **today's (×1)** | **28.1 %** | **−0.52 %** |
+Halving the target lifts the hit rate by 10 points but halves what each winner pays, while the losers stay the same size. **No target distance makes any cell with enough trades profitable** (pivot_shift xStock at ½ reaches −0.03 %, n = 21). strong_bull_trend crypto: 38.5 % hits at ½ but −3.69 % per trade.
+### 5b. Maker entries at the planned price — would they have filled, and what would they have earned?
+**Fill test:** a resting buy at the planned entry price fills only if the market **trades through** it (a 1-minute low strictly below the price) within 60 minutes of the signal — touching it is not enough, because a resting order queues behind others at that price. **233 of 288 would have filled within 60 min (81 %); 204 within 15 min.**
+| | trades | reach target | profitable | average per trade after fees |
+|---|---|---|---|---|
+| **maker entry, maker target exit, taker stop** (filled ones) | 233 | 59 | **62 (26.6 %)** | **−0.59 %** |
+| the same 233 trades, taker entry (replay) | 233 | | | −0.57 % |
+| the same 233 trades, **as they really happened** | 233 | | | −1.00 % |
+| the 55 a maker order would have MISSED, as they really happened | 55 | | | −1.51 % |
+⇒ **Maker entries by themselves do not turn these strategies profitable: on the trades that would have filled, the result is the same as taking (−0.59 % vs −0.57 %).** The fee saving is real (0.4 % a round trip on crypto) but it is cancelled by **adverse selection** — a resting buy fills when the price falls through it, so the maker trades start out moving toward their stop (strong_bull_trend crypto: −1.93 % maker vs −1.80 % taker). **What does help:** the trades a maker order would never have filled were worse than average (−1.51 %), so skipping them improves the total; and the large gap between the replay (−0.57 %) and reality (−1.00 %) is the off-session xStock exit damage of §3, which maker entries do not touch.
+**Per cell (maker, filled trades):** reverse_impulse crypto +3.77 % (n = 8); sma_trend_ride xStock +0.80 % (n = 19); morning_star crypto −0.20 %; vwap_pullback xStock −0.78 % (71 of 105 would fill); strong_bull_trend crypto −1.93 % (47 of 52 would fill); morning_star xStock −0.64 %; pivot_shift xStock −0.52 % (12 of 21 would fill).
+**Limits:** the planned price is close to the ask at the signal, so this is roughly a bid-side order; a resting order placed lower would fill less often at a better price. Same 3½-week sample as above.
+### 5c. Conclusion across §2, §5a and §5b
+**Neither the stop distance, the target distance, nor maker entries fix the result — the signals in the two big cells (strong_bull_trend crypto, vwap_pullback xStock) do not win often enough for their reward : risk, with any of these levers.** The two levers that do move money are (1) **not letting xStock stops fire into thin off-session books** (≈ 0.5-1 % per trade on vwap_pullback / sma_trend_ride xStock) and (2) **selection** — fewer, better entries. Both belong to the sprint's calibration work.
+
