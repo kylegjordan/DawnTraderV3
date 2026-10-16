@@ -4,8 +4,8 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 337,
-  "file_count": 44,
+  "total_errors": 335,
+  "file_count": 43,
   "files": [
     {
       "path": "client/src/components/alerts/alert-banner.tsx",
@@ -346,17 +346,6 @@
       }
     },
     {
-      "path": "server/services/data-archive/partition-exporter.ts",
-      "phase_tag": "TBD (audit pending)",
-      "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
-      "errors": {
-        "TS7022": {
-          "'lastRow' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.": 1,
-          "'lastRowTs' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.": 1
-        }
-      }
-    },
-    {
       "path": "server/services/diagnostic-controller.ts",
       "phase_tag": "TBD (audit pending)",
       "context": "Per-(code, message) baseline (v2, #579). CI fails on any current (file, code, message) count rising above these OR any new message appearing for a (file, code) — closing the pre-fix headroom hole where a new error hid under a stale (file, code) count ceiling.",
@@ -680,6 +669,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-10-06T21:56:00.017Z",
-  "last_synced_by_batch": "B-ENGINE-HEARTBEAT-DEAD-PATHS"
+  "last_synced_at_iso": "2026-10-16T08:06:33.741Z",
+  "last_synced_by_batch": "B-XSTOCK-BAR-AVAILABILITY"
 }
