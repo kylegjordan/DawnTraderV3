@@ -38,4 +38,6 @@ UPDATE module_constants SET value='false'::jsonb, updated_by='b-silent-strategy-
 **Pre-switch zero, with its positive control** (`signal_eval_archive`, `asset_class='xstock_spot'`, non-VTS, last 24 h, read 2026-10-16 10:38:13Z): **strong_bull_trend 0 rows; vwap_pullback 527 rows** (the control — the same query sees an enabled xStock strategy).
 
 ## 5. Record
-- Switch time (UTC): _filled in when applied_
+- **Coltrane APPROVED 2026-10-16 10:47:21Z at `b554b120fe3d8a8482984eca6583542011dd87fb`** (r1 send-back at `c043699bc`, two text corrections folded).
+- **SWITCHED ON 2026-10-16 10:47:40.263Z UTC** on staging: `UPDATE 1`, the returned and re-read row `strong_bull_trend | true | b-silent-strategy-census` (before: `false`, `b79.0m.a`, 2026-05-11). **The window opens here: day 21 = 2026-11-06T10:47Z.**
+- Follow-up evidence (first xStock strong_bull_trend loop/SQE rows after the 60 s refresh): _recorded when seen_
