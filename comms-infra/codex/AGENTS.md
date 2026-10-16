@@ -146,45 +146,15 @@ wrong answer gets caught and a plausible one gets used.**
   repo, never the real one** (your key is refused there, by GitHub, structurally) · **a
   pushed branch nobody has been told about is invisible work — say so in Discord and NAME
   the session that should pick it up.**
-- ⭐ **A REAL BROWSER — you can open pages, click, and take screenshots.** Tools named
-  `browser_navigate`, `browser_snapshot`, `browser_take_screenshot` and friends. It is a
-  real headless Chromium, so **it runs the page's JavaScript** — which is the whole point:
-  our staging app is a single-page app, and `curl` returns only an empty shell that renders
-  nothing.
-- ⭐ **WEB SEARCH — use it freely for RESEARCH, and prefer it over the browser for that.**
-  Looking something up, checking a library's current version, reading how an API behaves,
-  finding what other people hit: **search is the right instrument and it is much cheaper
-  than driving a browser around.** Kyle asked for this explicitly. **Cite the source.**
-
-★ **THE DIVIDING LINE, because getting it wrong is not a style question:**
-  **SEARCH answers "what is true about the world."** **THE BROWSER answers "what does THIS
-  page actually show right now."** Anything about OUR system — a deployed screen, a number
-  on a dashboard, whether a change is live — is the second, always.
-  ⛔ **AND THIS EXACT CONFUSION ALREADY FOOLED A RUN.** Asked to open a page and report its
-  heading, the first attempt answered **from a web search** — correctly — at a moment when
-  the browser was completely broken and had never started. **The answer was true and the
-  instrument was dead**, which is the hardest failure to catch.
-  ⇒ **If you were asked to LOOK at a page, use the browser, and if it fails SAY IT FAILED.**
-  Never let a search stand in for an observation of our own system.
-  ✅ **ALWAYS SAVE A SCREENSHOT AND REPORT ITS FULL PATH**, so what you claim to have seen
-  can be checked against the image by someone who was not there.
-  ⚠️ **THE TWO OUTPUTS GO TO DIFFERENT PLACES, AND THE MISMATCH HAS ALREADY CAUSED A FALSE
-  ACCUSATION.** Page snapshots and console logs go to `/home/coltrane/browse-output/`;
-  a **screenshot you name goes to your WORKING DIRECTORY**. Infra Claude checked
-  `browse-output`, found no images, and was one sentence away from reporting that you had
-  invented the filenames — the files existed the whole time, one directory away.
-  ⇒ **Report the path you can `ls`, not the path you assume.**
-  ✅ **YOUR BROWSER OPENS STAGING ALREADY SIGNED IN** (Kyle's ruling, 2026-09-09) — the same
-  position his own browser is in. You can verify any deployed screen: navigate, look, report
-  what is actually rendered. **`https://188.245.193.8.sslip.io`**
-  ⛔ **YOU STILL NEVER TYPE INTO THE SIGN-IN FORM.** The session is handed to your browser
-  before it starts. **If you ever land on `/login`, the session has expired — SAY SO and
-  stop.** Do not try to get past it; a human refreshes it with one command.
-  ⚠️ **YOU ARE SIGNED IN AS THE OWNER, NOT AS A READ-ONLY VIEWER, AND KYLE CHOSE THAT
-  KNOWINGLY** — the app has no working read-only role (`#1022`). **So the restraint is
-  yours, not the software's: LOOK, DO NOT CLICK THINGS THAT CHANGE STATE.** Reading a page,
-  scrolling and screenshotting are always fine. Anything that saves, starts, stops, resets
-  or submits is not yours to click unless you were asked for it by name.
+- ⭐ **A REAL BROWSER** (`browser_navigate`, `browser_snapshot`, `browser_take_screenshot`) - a headless
+  Chromium that runs our single-page app's JavaScript, signed in to staging (`https://188.245.193.8.sslip.io`)
+  as the shared crew login, a **non-admin editor** since 2026-10-15. **Read `/home/coltrane/BROWSER_GUIDE.md`
+  before you use it.** Even if you read nothing else: ⛔ **never type into the sign-in form** - on `/login`
+  say the session expired and stop · ⛔ **look, do not click anything that saves, starts, stops, resets or
+  submits** unless asked by name · ✅ **report the screenshot path you can `ls`**.
+- ⭐ **WEB SEARCH - for research, cheaper than the browser; cite the source.** Search answers what is true
+  about the world; only the browser answers what OUR page shows right now. **Never let one stand in for the
+  other**, and if the browser fails, say it failed.
 - **The channel**, through the mirror file — check its `GENERATED` stamp before trusting it.
 - ⛔ **You do NOT see** what Kyle says to a session privately, any session's own reasoning,
   or the moment a message arrives.
