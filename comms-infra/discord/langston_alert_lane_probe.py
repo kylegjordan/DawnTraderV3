@@ -1,0 +1,106 @@
+"""Behaviour probe for B-LANGSTON-RELIEF OBJ-2 (the alert lane), run on Helsinki as root with the bridge venv:
+   /opt/discord-bridges/venv/bin/python3 langston_alert_lane_probe.py
+from a directory holding the bridge files (PROBE_BRIDGE_DIR overrides). Nothing is posted and no model is
+invoked: rest_send, mirror_event and invoke_lane are replaced with recorders. It reads the real CFG."""
+import asyncio, datetime as dt, importlib.util, os, queue, sys, threading, time, types
+
+HERE = os.environ.get("PROBE_BRIDGE_DIR") or os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import gateway_watchdog as gw
+gw.install_watchdog = lambda *a, **k: None
+spec = importlib.util.spec_from_file_location("bridge", os.path.join(HERE, "discord-langston-bridge.py"))
+b = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(b)
+al, lq, CFG = b.al, b.lq, b.CFG
+
+fails = 0
+def check(name, cond):
+    global fails
+    print(("ok   " if cond else "FAIL ") + name)
+    if not cond:
+        fails += 1
+
+posts, mirrors, invokes = [], [], []
+b.dc.rest_send = lambda tok, ch, text, logf, mention_user_id=None: (posts.append((text, mention_user_id)), 777)[1]
+b.mirror_event = lambda kind, **f: mirrors.append((kind, f))
+LANE_ANSWER = {"text": None, "why": None}
+def fake_lane(prompt):
+    invokes.append(prompt)
+    return LANE_ANSWER["text"], LANE_ANSWER["why"]
+b.invoke_lane = fake_lane
+
+A = "91e923a4-55f0-49e6-8f2d-558af8f68192"
+B = "0292fa4c-02f9-4ba6-a8a8-2cabaf936880"
+def alert_task(aid, n):
+    body = "SYSTEM ALERT %d\n_Category:_ breakage  ·  _Alert ID:_ `%s`" % (n, aid) if aid else "SYSTEM ALERT %d, no id" % n
+    return {"channel_id": CFG["channel_id"], "message_id": 5000 + n, "author_id": 1, "author_name": "Alerts",
+            "author_display": "Alerts", "is_alert": True, "is_dm": False, "kind": "alert", "content": body}
+
+def reset():
+    posts.clear(); mirrors.clear(); invokes.clear()
+
+# (1) the lane routes both: one post, markers mirrored as langston_outbound, nothing to Langston
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text='Two alerts.\n[[ALERT id=%s owner=CC-B action="a"]]\n[[ALERT id=%s owner=CC-C action="b"]]' % (A, B), why=None)
+b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
+check("routed batch: one invocation", len(invokes) == 1)
+check("routed batch: one post, led 'Alert lane —', no Kyle mention", len(posts) == 1 and posts[0][0].startswith("Alert lane —") and posts[0][1] is None)
+check("routed batch: the post is mirrored as langston_outbound (the wake filter's input)",
+      any(k == "langston_outbound" and "[[ALERT id=%s" % A in f["text"] for k, f in mirrors))
+check("routed batch: nothing goes to Langston", tq.qsize() == 0)
+
+# (2) a Kyle-owned row mentions Kyle
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text='[[ALERT id=%s owner=Kyle action="decide"]]' % A, why=None)
+b.run_alert_batch([alert_task(A, 1)], tq)
+check("Kyle-owned: the post mentions Kyle", posts and posts[0][1] == CFG["kyle_id"])
+
+# (3) the lane fails: every alert in the batch goes to Langston, as people-class, marked escalated
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text=None, why="exit 1: boom")
+b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
+check("lane failure: nothing posted", posts == [])
+check("lane failure: both escalated to Langston", tq.qsize() == 2 and tq.depth_by_class() == (2, 0, 0))
+t = tq.get()
+check("lane failure: the escalated task keeps is_alert (triage prompt) and says why",
+      t["is_alert"] and t["escalated"] and "alert lane failed" in t["content"])
+
+# (4) an alert with no id never reaches the lane and goes to Langston; the lane's own escalation is honoured
+reset(); tq = lq.TaskPriorityQueue()
+LANE_ANSWER.update(text='[[ALERT id=%s owner=CC-B action="a"]]\n[[ESCALATE id=%s reason="critical"]]' % (A, A), why=None)
+b.run_alert_batch([alert_task(A, 1), alert_task(None, 2)], tq)
+contents = [tq.get()["content"] for _ in range(tq.qsize())]
+check("no-id alert escalated without a lane call for it", any("could not read an alert id" in c for c in contents))
+check("lane ESCALATE honoured", any("critical" in c for c in contents) and len(contents) == 2)
+check("only the id'd alert was sent to the lane", len(invokes) == 1 and A in invokes[0] and "no id" not in invokes[0])
+
+# (5) with the lane on, on_message sends alerts to alert_q and people to task_q
+reset()
+tq, aq = lq.TaskPriorityQueue(), queue.Queue()
+c = b.build_client(tq, None, aq)
+c._connection.user = types.SimpleNamespace(id=999999)
+now = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)
+def m(author_id, content, webhook_id=None, mid=[9000]):
+    mid[0] += 1
+    return types.SimpleNamespace(id=mid[0], author=types.SimpleNamespace(id=author_id, display_name="x", name="x", bot=False),
+        guild=object(), channel=types.SimpleNamespace(id=CFG["channel_id"]), created_at=now, webhook_id=webhook_id,
+        content=content, attachments=[], embeds=[], reference=None)
+async def feed():
+    await c.on_message(m(1, "alert body", webhook_id=CFG["alerts_webhook_id"]))
+    await c.on_message(m(CFG["kyle_id"], "Langston, a question"))
+asyncio.run(feed())
+check("lane on: the alert went to the lane queue", aq.qsize() == 1)
+check("lane on: Kyle's message went to Langston's queue", tq.qsize() == 1 and tq.depth_by_class() == (1, 0, 0))
+
+# (6) the worker batches a burst into ONE invocation
+reset()
+al.BATCH_SETTLE_S, al.BATCH_MAX = 1.0, 15
+LANE_ANSWER.update(text="\n".join('[[ALERT id=%s owner=CC-B action="a"]]' % x for x in (A, B)), why=None)
+aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+threading.Thread(target=b.alert_worker, args=(aq, tq), daemon=True).start()
+aq.put(alert_task(A, 1)); time.sleep(0.2); aq.put(alert_task(B, 2))
+time.sleep(2.0)
+check("burst: two alerts, one lane invocation", len(invokes) == 1 and A in invokes[0] and B in invokes[0])
+
+print("probe failures:", fails)
+sys.exit(1 if fails else 0)

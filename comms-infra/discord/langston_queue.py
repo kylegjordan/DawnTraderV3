@@ -492,6 +492,8 @@ PRIORITY_PERSON, PRIORITY_SELF_ADVANCE, PRIORITY_ALERT = 0, 1, 2
 def task_priority(task):
     """The class a bridge task belongs to. An alert is identified by the bridge's own is_alert flag
     (set only for the dedicated alerts webhook id); a self-advance re-invoke by its self_advance flag."""
+    if task.get("escalated"):        # OBJ-2: an alert the alert lane handed to Langston waits like a person's message
+        return PRIORITY_PERSON
     if task.get("is_alert"):
         return PRIORITY_ALERT
     if task.get("self_advance"):

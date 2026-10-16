@@ -684,9 +684,107 @@ def task_worker(task_q, state):
             time.sleep(1)
 
 
+# ─── The alert lane (B-LANGSTON-RELIEF OBJ-2) ─────────────────────────────────
+# Kyle 2026-10-08: system alerts stop invoking Langston. With LANGSTON_ALERT_LANE=1 the bridge sends
+# alert-webhook posts to alert_q instead of task_q; ONE lane worker batches a burst (settle
+# al.BATCH_SETTLE_S, at most al.BATCH_MAX), invokes the lane agent (al.LANE_MODEL, cwd al.LANE_DIR with
+# its own CLAUDE.md - never Langston's memory), posts its answer through this bot so the session wake
+# filters record its [[ALERT ...]] markers exactly as they record Langston's, and hands Langston an
+# escalated task (people-class priority) for every alert the lane escalated, could not mark validly,
+# or could not identify. A lane failure escalates the whole batch: an alert is never silently dropped.
+import alert_lane as al
+ALERT_LANE_ENABLED = os.environ.get("LANGSTON_ALERT_LANE", "0") == "1"
+
+
+def invoke_lane(prompt):
+    """One fresh lane invocation. Returns (answer, None) or (None, why)."""
+    env = os.environ.copy()
+    env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
+    env["HOME"] = WORK_DIR
+    env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    args = ["/usr/bin/claude", "-p", prompt, "--session-id", str(uuid.uuid4()),
+            "--model", al.LANE_MODEL, "--permission-mode", "acceptEdits"]
+    log(f"alert lane: invoking {al.LANE_MODEL} (prompt={len(prompt)} chars)")
+    t0 = time.time()
+    try:
+        r = subprocess.run(args, env=env, cwd=al.LANE_DIR, capture_output=True, text=True,
+                           timeout=al.LANE_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None, f"timed out after {al.LANE_TIMEOUT_S}s"
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+    if r.returncode != 0 or not (r.stdout or "").strip():
+        return None, f"exit {r.returncode}: {(r.stderr or '')[:300]}"
+    log(f"alert lane: returned {len(r.stdout)} chars in {time.time() - t0:.1f}s")
+    return r.stdout.strip(), None
+
+
+def run_alert_batch(batch, task_q):
+    """Triage one batch of alert tasks; escalate whatever the lane does not account for."""
+    channel_id = batch[0]["channel_id"]
+    ided, escalate = [], []                 # escalate: [(task, reason)]
+    for t in batch:
+        mirror_event("langston_alert_inbound", channel_id=t["channel_id"], message_id=t["message_id"],
+                     author_id=t["author_id"], sender_username=t["author_name"], text=t["content"], lane="alert")
+        aid = al.alert_id_of(t.get("content"))
+        if aid is None:
+            escalate.append((t, "the alert lane could not read an alert id in it"))
+        else:
+            ided.append((aid, t))
+    if ided:
+        answer, why = invoke_lane(al.build_prompt([(aid, t["content"]) for aid, t in ided]))
+        if answer is None:
+            log(f"alert lane: FAILED ({why}) - escalating all {len(ided)} alert(s) of this batch to Langston")
+            escalate += [(t, f"the alert lane failed ({why})") for _, t in ided]
+        else:
+            routed, esc, problems = al.read_answer(answer, [aid for aid, _ in ided])
+            for p in problems:
+                log(f"alert lane: {p}")
+            kyle_owned = any(owner == "Kyle" for owner, _ in routed.values())
+            text = "Alert lane — " + answer
+            sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE,
+                                   mention_user_id=CFG["kyle_id"] if kyle_owned else None)
+            mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id,
+                         reply_to=ided[0][1]["message_id"], text=text, lane="alert")
+            by_id = dict(ided)
+            escalate += [(by_id[aid], reason) for aid, reason in esc.items()]
+            log(f"alert lane: batch of {len(batch)} - routed {len(routed)}, escalated {len(esc)}")
+    for t, reason in escalate:
+        task_q.put({**t, "escalated": True,
+                    "content": f"[ESCALATED to you by the alert lane — {reason}]\n\n" + t["content"]})
+        log(f"alert lane: escalated msg {t['message_id']} to Langston ({reason})")
+
+
+def alert_worker(alert_q, task_q):
+    """Single lane worker: take one alert, gather the rest of the burst, triage them in one invocation."""
+    while True:
+        try:
+            batch = [alert_q.get()]
+            deadline = time.time() + al.BATCH_SETTLE_S
+            while len(batch) < al.BATCH_MAX:
+                left = deadline - time.time()
+                if left <= 0:
+                    break
+                try:
+                    batch.append(alert_q.get(timeout=left))
+                except queue.Empty:
+                    break
+            try:
+                run_alert_batch(batch, task_q)
+            except Exception as e:
+                log(f"alert lane: batch error {type(e).__name__}: {e} - escalating the batch to Langston")
+                for t in batch:
+                    task_q.put({**t, "escalated": True,
+                                "content": f"[ESCALATED to you: the alert lane errored ({type(e).__name__})]\n\n"
+                                           + t["content"]})
+        except Exception as e:
+            log(f"alert lane: worker outer error (resuming): {type(e).__name__}: {e}")
+            time.sleep(1)
+
+
 # ─── Gateway client (receive only) ───────────────────────────────────────────
 
-def build_client(task_q, recover_floor=None):
+def build_client(task_q, recover_floor=None, alert_q=None):
     intents = discord.Intents.default()
     intents.message_content = True
     # enable_debug_events=True so on_socket_raw_receive fires — the true receive-liveness signal (#462).
@@ -903,6 +1001,10 @@ def build_client(task_q, recover_floor=None):
         if _imeta:
             base["image_atts"] = _imeta
         if is_alert and not voice:
+            if alert_q is not None:                  # B-LANGSTON-RELIEF OBJ-2: the alert lane, not Langston
+                alert_q.put({**base, "kind": "alert", "content": content})
+                log(f"ALERT to lane: msg {message.id} via alerts webhook")
+                return
             task_q.put({**base, "kind": "alert", "content": content})
             log(f"ALERT enqueued: msg {message.id} via alerts webhook")
             return
@@ -951,7 +1053,12 @@ def main():
     worker = threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name="task-worker")
     worker.start()
     log("task worker thread started")
-    client = build_client(task_q, recover_floor)
+    alert_q = None
+    if ALERT_LANE_ENABLED:
+        alert_q = queue.Queue()
+        threading.Thread(target=alert_worker, args=(alert_q, task_q), daemon=True, name="alert-lane").start()
+        log(f"alert lane ON ({al.LANE_MODEL}, {al.LANE_DIR}): system alerts no longer invoke Langston")
+    client = build_client(task_q, recover_floor, alert_q)
     # discord.py manages gateway reconnects internally; run() blocks forever.
     client.run(BOT_TOKEN, reconnect=True, log_handler=None)
 

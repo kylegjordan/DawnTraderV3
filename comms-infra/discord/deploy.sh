@@ -66,11 +66,14 @@ bridges|comms-infra/discord/discord-langston-bridge.py|$BRIDGE_DIR/discord-langs
 bridges|comms-infra/discord/discord_common.py|$BRIDGE_DIR/discord_common.py|0755
 bridges|comms-infra/discord/gateway_watchdog.py|$BRIDGE_DIR/gateway_watchdog.py|0755
 bridges|comms-infra/discord/langston_queue.py|$BRIDGE_DIR/langston_queue.py|0755
+bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
+bridges|comms-infra/discord/alert-lane/CLAUDE.md|/srv/alert-lane/CLAUDE.md|0644
 bridges|comms-infra/discord/crew-status-post.py|$BRIDGE_DIR/crew-status-post.py|0755
 bridges|comms-infra/discord/bridge-failed-notify.sh|$BRIDGE_DIR/bridge-failed-notify.sh|0755
 bridges|comms-infra/discord/discord-cc-bridge.service|$UNITS/discord-cc-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service|$UNITS/discord-langston-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service.d/self-advance.conf|$UNITS/discord-langston-bridge.service.d/self-advance.conf|0644
+bridges|comms-infra/discord/discord-langston-bridge.service.d/alert-lane.conf|$UNITS/discord-langston-bridge.service.d/alert-lane.conf|0644
 bridges|comms-infra/discord/discord-bridge-failed-notify@.service|$UNITS/discord-bridge-failed-notify@.service|0644
 notices|comms-infra/discord/cc-send|/usr/local/bin/cc-send|0755
 notices|comms-infra/discord/dt-push-notice.sh|/usr/local/bin/dt-push-notice.sh|0755
