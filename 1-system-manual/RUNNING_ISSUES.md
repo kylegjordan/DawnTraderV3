@@ -11111,3 +11111,14 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 **Not a regression:** before objective 6 the same book released on the next frame at ANY spread (PCAR/USD 12.3%, 2026-10-13). Nothing held today is exposed (16 open xStock positions, max regular-session median spread 0.17%), but those 22 symbols are enterable.
 **Rule-24 outcome (2), working as designed but unaddressed:** whether the release after a `spread_blown` hold must also pass the movement pair is a scope decision, never a unilateral fix. Row 2's completion report states the release test as it is, rather than letting the ring-independent escape stand in for it.
 `HOME: B-SPREAD-BLOWN-RELEASE-MOVEMENT, owner CC-C, placed in SPRINT_TO_LIVE_PLAN at row 2, after objective 6's observation read` — §9.4 disposition 3 (Langston's placement). OPEN.
+
+### #1200 OPEN 2026-10-16 (CC-A; W42 plan census `cf101c38`) — THE PLAN CENSUS DOES NOT READ THE §0a PRE-SPRINT STAGE TABLE, SO ISSUES PLACED THERE READ AS UNPLACED EVERY WEEK
+
+`placement()` in `scripts/governance-checker/census.mjs` (around `:426-447`) counts an issue as placed when its number, or its HOME batch, appears in a sprint-plan §4 row, the after-live list, or the parked list. The §0a pre-sprint stage table (`SPRINT_TO_LIVE_PLAN.md` "## 0a", the `| stage | rows (owner) |` table) is not among them. W42 measured four issues placed in §0a and only there, all reported `U5 HOME batch in no list`:
+- `#707` and `#1194`: stage 3, line 57;
+- `#1195`: stage 3, line 57 (`B-B75-EXPORT-COMPLETENESS`);
+- `#1199`: line 56.
+
+Each week those cost a handover with nothing to do.
+
+`HOME: B-CENSUS-PRESPRINT-LIST, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1za, after row 1z` — §9.4 disposition 3. The fix must carry a positive control: an issue placed only in §0a reads `number` or `homeBatch`, and one removed from §0a reads `U5` again.
