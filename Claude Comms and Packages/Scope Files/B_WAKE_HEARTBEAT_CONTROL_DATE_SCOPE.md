@@ -1,9 +1,9 @@
-# B-WAKE-HEARTBEAT-CONTROL-DATE — SCOPE r2 (2026-10-16)
+# B-WAKE-HEARTBEAT-CONTROL-DATE — SCOPE r3 (2026-10-16)
 
 change-class: non_architecture
 
 **Owner:** CC-A (OLD Claude) · **Plan:** `SPRINT_TO_LIVE_PLAN.md` row **1q**, after row 1n · **Issue:** `#1162` · **Reviewer:** Langston
-**r2:** answers Langston's Step-1 CHANGES on r1 (`4346c1d80`, his reply 2026-10-16): BLOCKERS 1-4, (A), (B), the §0/§1 record items, the label set and the discriminating fixture. A table of what changed where is at the end.
+**r2:** answered Langston's Step-1 CHANGES on r1 (`4346c1d80`). **r3:** answers his CHANGES on r2 (`894adb15a`, 15:36Z): §3 is rewritten on BYTE OFFSETS, not instants (his option (b)); the issue gate is no longer a local time; state 2 is split into GATED and NOT RUN; plus record items R1-R5. Tables of what changed where are at the end.
 
 ## 0. WHY
 The hourly heartbeat task (`comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md`; live copy `~/.claude/scheduled-tasks/wake-watcher-heartbeat/SKILL.md`, the same content apart from line endings, measured 2026-10-16) is meant to page Kyle only when a wake watcher has really failed. **On 2026-10-16 it paged his phone five times (08:16, 10:16, 11:15, 12:16 and 15:15 UTC) with "control NOT answered: CC-A, CC-B, CC-C, CC-INFRA" while the CC-A and CC-C watchers were alive and delivering.** That teaches Kyle to ignore the one line that should mean something.
@@ -52,39 +52,64 @@ Sources:
   - **The filter is not changed.**
 
 ## 3. OBJECTIVES
-**The per-alias decision, evaluated in this ORDER (BLOCKER-4).** Inputs, all read as files, never inferred:
-- `N` = the newest `WATCHER-CONTROL <alias> <token>` token in `cc-wake.log`, and the time of that line;
-- `A` = the token in `<alias>.json.control`;
-- `T` = `taken_at` from `<alias>.lease`;
-- liveness from step 2b;
-- the re-issue record `<alias>.json.control-reissued` (new; holds `<token> <taken_at>`).
+**All inputs are read as files or computed by machines, never inferred (r3, Langston BLOCKER-1, option (b)).**
+- **On Helsinki** — ONE remote python run that scans the **whole** `/var/log/cc-wake.log`, never a tail (R3; step 2's own lesson). For each alias it prints three things:
+  - `N`, the newest `WATCHER-CONTROL <alias> <token>` token;
+  - `O`, that line's **byte offset**;
+  - the file's **inode**, plus today's UTC date `D` (`date -u +%Y%m%d`, the issuer's own clock).
+- **On the laptop**, under `C:/Users/kyleg/.claude/cc-wake-state/`:
+  - `A` = the FIRST whitespace field of `<alias>.json.control` (R2: `:1002` writes `"<token> <utc>"`, so it is `split()[0]`, not `startswith`);
+  - `P` = `(ino, offset)` from `pos['/var/log/cc-wake.log']` in `<alias>.json`;
+  - `T` = `taken_at` from `<alias>.lease`;
+  - `.alive` age (step 2b).
+- **The heartbeat's own record** `C:/Users/kyleg/.claude/cc-wake-state/heartbeat-control.json`:
+  - for each alias and token, its re-issues: offset, UTC write time and the arm's `taken_at` at the time;
+  - the previous run's ISSUER state.
 
+  Named without an alias prefix, so `_sweep_tmp` (`:637-652`, which deletes only `<ALIAS>.*` files containing `.tmp` or `.lease.stale.`) and the lease rename-aside (`:552-563`) cannot touch it (R4, measured).
+
+**THE ISSUE RULE (BLOCKER-2) — replaces the 09:00-local gate in step 2c.**
+- **Issue** a control for all four when `N != D` **and** all four `.alive` exist. This is the issuer's UTC day, so there is no local date anywhere, and it self-heals on the first run back.
+- If `N != D` and some `.alive` is missing → **`ISSUER GATED BY <aliases>`**, reported and not paged (not armed must not page — Langston).
+- If all four are alive, `N != D`, and the issue write failed (re-read `N` still `!= D`) → **`ISSUER NOT RUN`**, **paged on the second consecutive run** (the previous state comes from the record).
+
+**THE PER-ALIAS DECISION, in this ORDER, after the issue rule:**
 | order | state | predicate | action |
 |---|---|---|---|
-| 1 | **DEAD** (or not armed) | step 2b says DEAD / no `.alive` | report DEAD as now; **never re-issue, never a control page** — it already pages as DEAD |
-| 2 | **ISSUER NOT RUN (last `<N>`)** | `N` older than 26 h | its own label, reported for every alias; this is the delivery proof not being taken |
-| 3 | **answered** | `A == N` (exact token match) | — |
-| 4 | **re-issued** | `A != N`, **`T` newer than the newest control line for that alias**, and the re-issue record is not already `<N> <T>` | append one `WATCHER-CONTROL <alias> <N>` line (that alias only), write `<N> <T>` to the record, **no `--notify`** |
-| 5 | **awaiting** | `A != N`, `T` older than that line, and the line was written by THIS run or the previous one | — (one run's grace) |
-| 6 | **NOT answered** | `A != N`, `T` older than the newest control line for that alias (including a re-issue), and at least one full run since that line | `--notify` |
+| 1 | **DEAD** | step 2b says DEAD | as now; never re-issue; never a control page |
+| 2 | **not armed** | no `.alive` | reported; it is what gates the issue above |
+| 3 | **answered** | `A == N` (exact token) | — |
+| 4 | **awaiting** | `P` has the same inode as the log and `P <= O` | — the watcher has not reached the line yet; a lagging save fails toward this state |
+| 5 | **NOT answered** | `P > O` (or inode differs), `A != N`, and the record holds a re-issue for `(alias, N)` whose write time is **later than `T`** (the arm was live before that re-issue and consumed it) — **or** 3 distinct `T`s already re-issued against this `N` (R1) | `--notify` |
+| 6 | **re-issued** | `P > O` (or inode differs) and `A != N`, otherwise | append one `WATCHER-CONTROL <alias> <N>` line (that alias only), record `(offset, write time, T)`; **no `--notify`** |
+
+**Why 5 before 6, and why `P > O` alone is not enough (measured 2026-10-16, CC-A):**
+- The stale reset at `:857-870` moves `pos` to the end and the next save records it, so `P = 90455 > O = 90331` while the 10-16 line was never read. `P > O` cannot tell "consumed and failed" from "skipped by a start-from-end".
+- A re-issue separates them. It lands after `P`, so a live watcher must consume it, and the record's write time against `T` says whether it was live when it landed.
+- A genuine failure therefore pages **one run later** than today. That run is the retry.
+- A watcher that re-arms from the end again after the re-issue (`T` later) is re-issued again, bounded at three (R1). That closes r1's BLOCKER-3 without counting runs.
 
 | obj | objective | verified by |
 |---|---|---|
-| OBJ-1 | Steps 2c and 3 use the table's file reads and exact token match. No local-date test remains anywhere in steps 2c to 4. | prompt text; **the discriminating fixture**: newest token is yesterday's and `.control` holds it → must read **answered** (the old test read this as NOT answered between local midnight and 09:00) |
-| OBJ-2 | A watcher armed after the newest control line (case i or ii) gets **one re-issue per (alias, token, arm)**, keyed by `taken_at` (BLOCKER-2). The re-issued line travels the normal pipeline, so the control still proves delivery. | fixture: `T` after the line → one re-issue and the record written; a second run with the same `T` → no second line; a new arm (new `T`) after the re-issue line → one more re-issue, not a page (BLOCKER-3) |
-| OBJ-3 | `--notify` for the control fires only in state 6. It never fires on top of DEAD, never in states 4 or 5, and never for ISSUER NOT RUN (that is reported, not paged; JUDGEMENT CALL C). | fixtures for states 1, 4, 5 and 6; a live day where a late arm reads re-issued, then answered |
-| OBJ-4 | **ISSUER NOT RUN**: if `N` for an alias is older than 26 h, step 3 says so as its own state (BLOCKER-1). | fixture with `N` 2 days old → `control: ISSUER NOT RUN (last <token>)` |
-| OBJ-5 | **Step 3's label set is enumerated in full:** answered / awaiting / re-issued / NOT answered / ISSUER NOT RUN, plus DEAD carried from 2b. "not run" is removed, because it has no referent without the local-date test. | prompt text |
+| OBJ-1 | Steps 2c to 4 use only the reads above; **no local-date or local-time test remains** — the issue rule and the decision table both run on the issuer's UTC date and byte offsets. | prompt text; fixture **yesterday's token, answered** → *answered* (discriminates: the old test read it as NOT answered between local midnight and the issue) |
+| OBJ-2 | A watcher that skipped its line gets a re-issue on the run that sees `P > O`, at most 3 per (alias, token). The line travels the normal pipeline, so the control stays a delivery proof. | fixture: `P > O`, no record → re-issued and recorded; same inputs plus a later re-issue write time → NOT answered; a new `T` after the re-issue → re-issued; a third `T` → NOT answered |
+| OBJ-3 | Control `--notify` only in state 5 and for ISSUER NOT RUN on its second consecutive run; never on DEAD, not armed, awaiting, re-issued or GATED. | fixtures for each state |
+| OBJ-4 | ISSUER GATED BY / ISSUER NOT RUN are their own states, computed from `N`, `D` and the `.alive` set. | fixtures: one `.alive` missing → GATED BY that alias; all alive, write fails twice → NOT RUN, paged on the second |
+| OBJ-5 | Step 3's labels are enumerated: answered / awaiting / re-issued / NOT answered / ISSUER GATED BY / ISSUER NOT RUN, with DEAD and not armed carried from 2b. "not run" is removed. | prompt text |
 
-**The fixtures** run as a small script over a temp directory that imitates the laptop's state folder and a copy of `cc-wake.log`. The heartbeat's decision is written as **one python one-liner in the prompt that reads the files and prints the state per alias**, so the model copies a computed result rather than judging. That one-liner is also what the fixture runs (OBJ-1 to OBJ-5).
+**The decision is one python script in the prompt** that reads the Helsinki print and the laptop files and prints one state per alias. The model copies its output; the fixtures run that same script over a temp directory and a log copy.
 
 ## 4. DESIGN CHOICES, FOR ATTACK
 - **Prompt-only, with the decision as a printed script result.** The filter is untouched. The late line is delivered through the normal path, so the control stays a delivery proof (C3).
 - **Rejected: the filter replaying its own control at arm time.** That is `.alive` with extra steps (Langston confirmed).
-- **JUDGEMENT CALL A (answered by Langston):** read `taken_at` from inside the lease, not the file mtime.
-- **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). A session that re-arms often and never answers would get at most one line per heartbeat run, hourly; it pages in state 6 once a run passes without an answer.
-- **JUDGEMENT CALL C:** ISSUER NOT RUN is reported, not paged. The heartbeat is the issuer, so a skipped issue while the heartbeat runs is its own gate holding: step 2c issues only when all four `.alive` files exist. A heartbeat that is not running at all cannot report anything, and that is out of scope (see §5).
-- **The 26 h threshold:** one daily issue plus two runs of slack.
+- **JUDGEMENT CALL A (answered by Langston):** read `taken_at` from inside the lease, not the file mtime. In r3 it is used only against the heartbeat's own re-issue write times — both UTC, both machine-written.
+- **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). At most 3 re-issues per (alias, token); after that, or once a re-issue lands while the arm is live and goes unanswered, it pages in state 5 (r3; R1).
+- **JUDGEMENT CALL C (r3, in Langston's form):**
+  - `ISSUER GATED BY <alias>` is reported, not paged, and names who held it.
+  - `ISSUER NOT RUN` (all alive and the write failed) pages on the second consecutive run.
+  - A heartbeat that is not running at all cannot report itself; that observer is on row 1z (§5).
+- **Why `N != D` and not 26 h:** both self-heal. The UTC-day test needs no instant for the 56 unstamped legacy lines, so there is no transition rule to write.
+- **R5:** the live copy matching the repo copy apart from line endings is measured on the laptop by CC-A; Langston cannot reach it, so for him it is RULED ON REPORTED FACT and decision-inert. Step 6 installs the repo copy and re-measures both sides.
 
 ## 5. OUT OF SCOPE
 - Waking dead watchers, and the switch-driven push wake Kyle asked for today: row 1z `B-CODEX-FAILOVER-AUTOMATION` (`#731`).
@@ -114,3 +139,15 @@ Sources:
 | UTC token vs local date; inferred state vs file read | §0 |
 | label set | OBJ-5 |
 | a fixture that discriminates | OBJ-1 |
+
+## r2 → r3, by Langston's item
+| item | where |
+|---|---|
+| BLOCKER-1 states not computable (token is a day, `T` an instant) → byte offsets | §3 inputs and table, states 4-6; the measured CC-A case for why `P > O` alone is not enough |
+| BLOCKER-2 the 09:00-local issue gate unaddressed | §3 issue rule (`N != D` and all four alive) |
+| BLOCKER-3 / call C a false premise; split state 2 | §3 issue rule: GATED BY reported, NOT RUN paged on the second run; §4 call C |
+| R1 an unbounded state 4 → count distinct `T`s, page at the third | state 5 |
+| R2 `split()[0]` | §3 inputs |
+| R3 Helsinki vs laptop, whole file | §3 inputs |
+| R4 the new file must not be swept | §3 inputs (named file, measured sweep predicate) |
+| R5 live copy | §4 |
