@@ -49,3 +49,6 @@ CC-B and CC-INFRA watchers are DEAD (sessions closed), and their sessions own th
 
 ## Step 8 — CONFIRMED by Langston (20:20Z), re-derived on Helsinki
 He ran the committed regex arms against the posted bytes. Only the 19:00 post matches the control arm; the watchers arm matches all three, on the `watchers:` field. A positive control on the pre-batch `NOT answered` shape matches. The wake-log tail was confirmed byte for byte. The laptop table above is his only reported-fact leg. **The live non-regression of a genuine `NOT answered` page rests on the suite plus his positive control, not on live data**, while CC-B and CC-INFRA stay DEAD.
+
+## Post-close live evidence — the original `#1162` form (2026-10-16 22:14:49Z, Helsinki clock)
+The run at 22:14:49Z (laptop local date already 2026-10-17, UTC+2; issuer UTC date still 20261016) posted `control: CC-A answered; CC-B DEAD; CC-C answered; CC-INFRA DEAD.` This is the window where the old prompt read the laptop's "today" (20261017) against yesterday-UTC's token and paged NOT answered (the 2026-10-06 23:15Z case). The script issued nothing, because `N == D`, and judged by exact token: answered. This is OBJ-1's discriminating fixture, now observed live.
