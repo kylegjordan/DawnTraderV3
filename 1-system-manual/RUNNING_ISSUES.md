@@ -11122,3 +11122,5 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 Each week those cost a handover with nothing to do.
 
 `HOME: B-CENSUS-PRESPRINT-LIST, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1za, after row 1z` — §9.4 disposition 3. The fix must carry a positive control: an issue placed only in §0a reads `number` or `homeBatch`, and one removed from §0a reads `U5` again.
+
+**Added 2026-10-16 (W42 mistake pass, §9.4 disposition 2):** `STEP_SKIP_RE` in the same file (`census.mjs` ~`:795`) misses the declared form `NO STEP 2`. `B-CODEX-FAILOVER`'s Kyle-directed Step-2 skip did not register. The fix rides this batch, with a positive control on that commit text.
