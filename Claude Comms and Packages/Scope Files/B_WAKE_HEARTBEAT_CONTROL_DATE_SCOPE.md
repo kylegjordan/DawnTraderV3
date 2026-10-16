@@ -47,10 +47,10 @@ Sources:
 
   The control is not in the System Manual (crew tooling).
 - **Disposition: (2) relevant, needs updating to today's intent.**
-- **Tier 2 (read, not changed):**
+- **Tier 2 (read; the filter is CHANGED by one pattern line, see below):**
   - `cc-wake-filter.py`: the control branch, where another alias's line is ignored by the `cparts[1].upper() == ALIAS` test at `:1000` and the `continue` at `:1003`; the `.control` write at `:1002`; the start-from-end at `:857`/`:871`; `_lease_create` at `:487-497`.
   - the `.control` write is gated on `ONCE` (`:1000`), which is true in live operation (every arm runs `--once`), so a streaming-mode filter would never answer (r4 record (b));
-  - **The filter is not changed.**
+  - ⚠️ **The filter IS changed by this batch, by one pattern line** (`cc-wake-filter.py:133`): the control arm made field-scoped and `CHECK FAILED` added, and `CENSUS-FAILED` added to the watchers arm (Step-2 amendment, Step-4 gate A). Everything else listed here is read, not changed. *(Corrected at Step 4 — this line read "The filter is not changed" from r1 until Langston's gate A r3 condition; the class-wide search for the same claim is in the commit.)*
 
 ## 3. OBJECTIVES
 **All inputs are read as files or computed by machines, never inferred (r3, Langston BLOCKER-1, option (b)).**
@@ -121,7 +121,7 @@ Sources:
 **The decision is one python script in the prompt** that reads the Helsinki print and the laptop files and prints one state per alias. The model copies its output; the fixtures run that same script over a temp directory and a log copy.
 
 ## 4. DESIGN CHOICES, FOR ATTACK
-- **Prompt-only, with the decision as a printed script result.** ⚠️ **AMENDED AT STEP 2 (Langston BLOCKER-1, pre-audit r2):** the filter changes by ONE regex arm, `\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b`, so a failed check has its own true verdict instead of borrowing `NOT answered`. Otherwise the filter is untouched. The late line is delivered through the normal path, so the control stays a delivery proof (C3).
+- **Prompt-only, with the decision as a printed script result.** ⚠️ **AMENDED AT STEP 2 (Langston BLOCKER-1, pre-audit r2):** the filter changes by ONE regex arm, `\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b`, so a failed check has its own true verdict instead of borrowing `NOT answered`. Nothing else in the filter changes. The late line is delivered through the normal path, so the control stays a delivery proof (C3). ⚠️ **AS SHIPPED (Step 4, gate A r1-r3):** the control arm is FIELD-SCOPED, `control:[^|]*`, so a verdict mid-field still wakes (BLOCKER-A1), and the watchers arm gains `CENSUS-FAILED` (Langston's folded item, BLOCKER-A2). The full shipped line, `cc-wake-filter.py:133`: `\bwatchers:\s*[^|]*\b(?:DEAD|STUCK|CENSUS-FAILED)\b|\bcontrol:[^|]*\b(?:NOT answered|CHECK FAILED)\b`.
 - **Rejected: the filter replaying its own control at arm time.** That is `.alive` with extra steps (Langston confirmed).
 - **JUDGEMENT CALL A (answered by Langston):** read `taken_at` from inside the lease, not the file mtime. In r3 it is used only against the heartbeat's own re-issue write times — both UTC, both machine-written.
 - **JUDGEMENT CALL B:** a re-issue costs one log line per (alias, token, arm). It costs zero turns for every alias, because a control line never reaches `addressed_to_me` (`:1004`). At most 2 re-issues per (alias, token); the third distinct arm pages in state 5, and so does an arm that was live when a re-issue landed and left it unanswered (r3; R1).
@@ -137,7 +137,7 @@ Sources:
 - Detecting that the heartbeat task itself did not run (10-13 20:15Z → 10-16 07:13Z had no heartbeat posts): this needs an observer other than the heartbeat. **DISPOSITION: added to row 1z** with the wake work, where an out-of-band observer is already in scope.
 - Re-arming CC-B and CC-INFRA: their sessions' own job.
 - The 12 h stale threshold: by design.
-- The silent no-position start (case ii) printing no notice. **DISPOSITION: added to row 1z**, since it changes the filter, which this batch deliberately does not touch.
+- The silent no-position start (case ii) printing no notice. **DISPOSITION: added to row 1z**, since it changes the filter's arm logic, beyond the one pattern line this batch changes.
 - **The `.control` write at `:1001-1002` has no local `except`** (unlike `:966`/`:974`). An OSError is swallowed as a generic `LINE DROPPED` (`:1220-1226`) while the position still advances, so the alias would read `P > O, A != N` and this batch would page "not answered" when delivery worked (Langston r4 record (a)). **DISPOSITION: added to row 1z** with the other filter items.
 
 ## 6. DOCUMENT SET (class `non_architecture`)
