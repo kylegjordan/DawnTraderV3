@@ -56,7 +56,7 @@ export interface VtsRailDeps {
 
 /** The six pre-registered counts (audit A3 / objective 11, r4), cumulative since start. `dedupeHits` = an `addAlert` that
  *  returned an EXISTING row; `escalations` = 30-min member pages. Joins are read against A3's attempted column, not zero. */
-export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0 };
+export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0, reasonExits: 0 };
 
 const state = {
   /** tradeId → id of its open `no-trigger-vts-*` row. */
@@ -214,8 +214,39 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
     railCounts.joins++;
     return 'joined';
   }
+  await leaveStandingRecord(c.tradeId, deps);
   await pageOwnKey(c, nowMs, deps);
   return 'paged';
+}
+
+/** Remove a trade's membership (single-key `null` tombstones) — used when it pages on its own key instead. */
+async function leaveStandingRecord(tradeId: string, deps: Pick<VtsRailDeps, 'mergeAlertMetadata'>): Promise<void> {
+  const recId = state.memberRecord.get(tradeId);
+  if (!recId) return;
+  state.memberRecord.delete(tradeId);
+  await deps.mergeAlertMetadata(recId, { [memberField(tradeId)]: null, [decidedField(tradeId)]: null });
+}
+
+/** Is this trade currently a standing-record member? (cheap, in-memory; the runner calls it every refusing pass) */
+export function isStandingMember(tradeId: string): boolean { return state.memberRecord.has(tradeId); }
+
+/**
+ * P3's REASON-TRANSITION rule (Coltrane Step 4 BLOCKER-2): a member joined on an EXPECTED reason (`too_wide`, or `too_old`
+ * on a quiet/closed verdict). If its trade keeps refusing for a reason that is NOT expected, it leaves the record and pages
+ * on its own key AT ONCE — the streak's page latch fired at the join, so without this it would neither leave nor page.
+ * Called by the runner on every refusing pass of a member, inside the paging session only. Returns whether it paged.
+ */
+export async function onMemberReason(c: Crossing, nowMs: number, deps: VtsRailDeps): Promise<boolean> {
+  if (!state.memberRecord.has(c.tradeId)) return false;
+  let verdict: ClassVerdict | null = null;
+  if (c.lastReason.startsWith('no_transactable_side (too_old')) {
+    try { verdict = deps.xstockVerdict(nowMs); } catch { verdict = null; }
+  }
+  if (vtsXstockJoinsStandingRecord(c.lastReason, verdict)) return false;
+  railCounts.reasonExits++;
+  await leaveStandingRecord(c.tradeId, deps);
+  await pageOwnKey(c, nowMs, deps);
+  return true;
 }
 
 /** The once-a-minute sweep — off the exit path, re-measured from durable state, never throws. */
@@ -300,7 +331,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
     console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
       + `crossings=${railCounts.crossings} joins=${railCounts.joins} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
-      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMisses=${railCounts.markMisses} sinceStart `
+      + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMisses=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
       + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
   } catch (err) {
     state.sweepFailures++;
@@ -332,22 +363,22 @@ async function reportStuck(why: string | null, nowMs: number, deps: VtsRailDeps)
 }
 
 /** Real lane (objective 12): every unpriced close is a warning on its own key, in ANY session, left for a human. */
-export async function onUnpricedClose(t: { tradeId: string; symbol: string; assetClass: string; hold: string; exitArm: string; session: 'regular' | 'off_session' }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert'>): Promise<void> {
+export async function onUnpricedClose(t: { tradeId: string; symbol: string; assetClass: string; hold: string; exitArm: string; session: 'regular' | 'off_session'; lastRefusal: string | null }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert'>): Promise<void> {
   await deps.addAlert({
     triggers_at: new Date(nowMs), category: 'breakage', severity: 'warning',
     title: `VTS trade closed with NO price — ${t.symbol}`,
     body: `Virtual trade ${t.tradeId} (${t.symbol}, ${t.assetClass}) reached the max-hold valve after ${t.hold} with no usable `
-      + `price (arm ${t.exitArm}), so it closed \`timeout_unpriced\` with empty outcomes (\`exit_decision_archive\` `
+      + `price (arm ${t.exitArm}; last refusal reason: ${t.lastRefusal ?? 'none recorded'}), so it closed \`timeout_unpriced\` with empty outcomes (\`exit_decision_archive\` `
       + `\`time_stop_unpriced\`). Its stop or target may have been missed and the trade is lost to the learning record. `
       + `Raised in ANY session — ${t.session === 'regular' ? 'this one closed inside the US regular session' : 'this one closed OUTSIDE the US regular session, where the no-decision rail never pages'} `
       + `(row 2 increment (4a), objective 12). Its key is this trade's own, so it is a RECORD, not a mute: it cannot block any later page. Resolve by hand once read.`,
-    metadata: { tradeId: t.tradeId, symbol: t.symbol, assetClass: t.assetClass, exitArm: t.exitArm, session: t.session },
+    metadata: { tradeId: t.tradeId, symbol: t.symbol, assetClass: t.assetClass, hold: t.hold, exitArm: t.exitArm, session: t.session, lastRefusal: t.lastRefusal },
     dedupe_key: unpricedCloseKey(t.tradeId),
   });
 }
 
 /** Shadow lane (objective 12): no page (~6 a day would be a new flood) — one standing count row per class, merged. */
-export async function onShadowUnpriced(t: { tradeId: string; symbol: string; assetClass: string }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert' | 'mergeAlertMetadata'>): Promise<void> {
+export async function onShadowUnpriced(t: { tradeId: string; symbol: string; assetClass: string; hold: string; lastRefusal: string | null }, nowMs: number, deps: Pick<VtsRailDeps, 'addAlert' | 'mergeAlertMetadata'>): Promise<void> {
   const row = await deps.addAlert({
     triggers_at: new Date(nowMs), category: 'health_check', severity: 'info',
     title: `VTS shadow lane: trades closed with no price (${t.assetClass})`,
@@ -361,7 +392,8 @@ export async function onShadowUnpriced(t: { tradeId: string; symbol: string; ass
   await deps.mergeAlertMetadata(row.id, {
     count: (typeof md.count === 'number' ? md.count : 0) + 1,
     [dayKey]: (typeof md[dayKey] === 'number' ? (md[dayKey] as number) : 0) + 1,
-    lastTrades: [...last, { tradeId: t.tradeId, symbol: t.symbol, atMs: nowMs }].slice(-20),
+    // Objective 12 (Coltrane Step 4 BLOCKER-3): symbol, hold time and the last refusal reason, per trade.
+    lastTrades: [...last, { tradeId: t.tradeId, symbol: t.symbol, hold: t.hold, lastRefusal: t.lastRefusal, atMs: nowMs }].slice(-20),
   });
 }
 

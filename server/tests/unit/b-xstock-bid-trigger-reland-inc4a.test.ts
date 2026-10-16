@@ -10,7 +10,7 @@ import {
   MEMBER_ESCALATE_AFTER_MS, VTS_STANDING_KEY, VTS_STUCK_KEY, memberField,
 } from '../../core/trading/vts-rail';
 import {
-  onCrossing, markDecided, runVtsRailSweep, loadVtsRailIndex, ensureVtsRailIndex, onUnpricedClose, onShadowUnpriced,
+  onCrossing, markDecided, runVtsRailSweep, loadVtsRailIndex, ensureVtsRailIndex, onUnpricedClose, onShadowUnpriced, onMemberReason,
   _resetVtsRailState, _vtsRailIndex, railCounts, decidedField, type VtsRailDeps, type RailAlertRow,
 } from '../../services/vts-rail-reporting';
 
@@ -276,6 +276,23 @@ describe('the rail end to end, on the fake store', () => {
     expect(d.rows.some((r) => r.dedupe_key === railKey('GD/USD', 'g1'))).toBe(true);
     expect(railCounts.joins).toBe(0);
   });
+  it('Coltrane Step 4 BLOCKER-2 — a member whose reason turns NON-expected leaves the record and pages at once', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('t1', 'TT/USD', WIDE, WED), WED, d);           // joined on too_wide
+    expect(await onMemberReason(crossing('t1', 'TT/USD', WIDE, WED), WED + 60_000, d)).toBe(false); // still expected: stays
+    expect(await onMemberReason(crossing('t1', 'TT/USD', 'no_usable_mark', WED), WED + 120_000, d)).toBe(true);
+    expect(d.rows.find((r) => r.dedupe_key === VTS_STANDING_KEY)!.metadata?.[memberField('t1')]).toBeNull();
+    expect(d.rows.some((r) => r.dedupe_key === railKey('TT/USD', 't1'))).toBe(true);
+    expect(railCounts.reasonExits).toBe(1);
+    // and a non-member is never paged by this path
+    expect(await onMemberReason(crossing('zz', 'ZZ/USD', 'no_usable_mark', WED), WED, d)).toBe(false);
+  });
+  it('Coltrane Step 4 BLOCKER-2 — an exceptional crossing for a trade that is a member also tombstones the membership', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('t2', 'TU/USD', WIDE, WED), WED, d);
+    await onCrossing(crossing('t2', 'TU/USD', 'no_usable_mark', WED), WED + 60_000, d);
+    expect(d.rows.find((r) => r.dedupe_key === VTS_STANDING_KEY)!.metadata?.[memberField('t2')]).toBeNull();
+  });
   it('10 min stays the JOIN threshold and 30 min is a separate clock: a member at 25 min does not page', async () => {
     const d = makeStore(); d.setClock(WED);
     const start = WED - 10 * 60_000;
@@ -298,15 +315,19 @@ describe('the rail end to end, on the fake store', () => {
 
   it('objective 12 — a real-lane unpriced close is a per-trade warning that names its session; the shadow lane only counts', async () => {
     const d = makeStore(); d.setClock(WED);
-    await onUnpricedClose({ tradeId: 'u1', symbol: 'PPL/USD', assetClass: XS, hold: '7d', exitArm: 'clamp_mark', session: 'off_session' }, WED, d);
+    await onUnpricedClose({ tradeId: 'u1', symbol: 'PPL/USD', assetClass: XS, hold: '7d', exitArm: 'clamp_mark', session: 'off_session', lastRefusal: WIDE }, WED, d);
     const u = d.rows.find((r) => r.dedupe_key === 'vts-unpriced-close-u1')!;
     expect(u.body).toMatch(/OUTSIDE the US regular session/);
     expect(u.body).toMatch(/RECORD, not a mute/);
-    await onShadowUnpriced({ tradeId: 'sh1', symbol: 'A/USD', assetClass: XS }, WED, d);
-    await onShadowUnpriced({ tradeId: 'sh2', symbol: 'B/USD', assetClass: XS }, WED + 1, d);
+    // objective 12 (Coltrane Step 4 BLOCKER-3): symbol, hold and the last refusal reason are on the record
+    expect(u.body).toContain('last refusal reason: no_transactable_side (too_wide)');
+    expect(u.metadata).toMatchObject({ symbol: 'PPL/USD', hold: '7d', lastRefusal: WIDE });
+    await onShadowUnpriced({ tradeId: 'sh1', symbol: 'A/USD', assetClass: XS, hold: '7d 0h', lastRefusal: 'no_transactable_side' }, WED, d);
+    await onShadowUnpriced({ tradeId: 'sh2', symbol: 'B/USD', assetClass: XS, hold: '6d 23h', lastRefusal: null }, WED + 1, d);
     const sh = d.rows.find((r) => r.dedupe_key === 'vts-shadow-unpriced-xstock_spot')!;
     expect(sh.metadata?.count).toBe(2);                 // merged, not a repeated addAlert (which changes nothing)
     expect((sh.metadata?.lastTrades as unknown[]).length).toBe(2);
+    expect((sh.metadata?.lastTrades as Array<Record<string, unknown>>)[0]).toMatchObject({ symbol: 'A/USD', hold: '7d 0h', lastRefusal: 'no_transactable_side' });
     expect(d.rows.filter((r) => r.dedupe_key === 'vts-shadow-unpriced-xstock_spot')).toHaveLength(1);
   });
   it('the decided mark on a MEMBER uses its own key on the record (single-key merge, never a map rewrite)', async () => {
@@ -387,7 +408,50 @@ describe('P1b fence — the engine mints the paper row WITH its position id and 
     const src = readFileSync('server/services/active-execution-engine.ts', 'utf8');
     expect(src).toMatch(/metadata: \{ positionId: position\.id \},\s*\r?\n\s*dedupe_key: `no-trigger-\$\{this\.mode\}-\$\{position\.symbol\}`/);
     expect(src).toContain('rail.noteMint(_ntPid, _ntRow as any)');
-    expect(src).toContain('rail.markDecided(_dPid, _dAt, deps)');
+    expect(src).toContain('this._noteNoTriggerRailDecision(position.id as string, decision.noDecisionReason);');
     expect(src).toContain('void this._runNoTriggerRailSweep(); // row 2 (4a) P1b');
+  });
+});
+
+describe('Coltrane Step 4 BLOCKER-1 — the paper engine marks a rail row DECIDED only on a real decision (the real method)', async () => {
+  const { ActiveExecutionEngine } = await import('../../services/active-execution-engine');
+  const proto = (ActiveExecutionEngine as any).prototype;
+  const make = () => {
+    const calls: string[] = [];
+    const eng = Object.create(proto);
+    eng.mode = 'paper';
+    eng._noTriggerRailCtx = () => Promise.resolve({ rail: { markDecided: (pid: string) => { calls.push(pid); } }, deps: {} });
+    return { eng, calls };
+  };
+  it('no_usable_mark (which DOES reach the decision site) cannot clear the row; no_transactable_side cannot either', async () => {
+    const { eng, calls } = make();
+    expect(eng._noteNoTriggerRailDecision('p1', 'no_usable_mark')).toBe(false);
+    expect(eng._noteNoTriggerRailDecision('p1', 'no_transactable_side')).toBe(false);
+    await flush();
+    expect(calls).toEqual([]);
+  });
+  it('a real decision (reason undefined) marks the row', async () => {
+    const { eng, calls } = make();
+    expect(eng._noteNoTriggerRailDecision('p2', undefined)).toBe(true);
+    await flush();
+    expect(calls).toEqual(['p2']);
+  });
+  it('the decision site passes the evaluator reason through that method (source fence)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('server/services/active-execution-engine.ts', 'utf8');
+    expect(src).toContain('this._noteNoTriggerRailDecision(position.id as string, decision.noDecisionReason);');
+    expect(src).not.toContain('rail.markDecided(_dPid, _dAt, deps)');
+  });
+});
+
+describe('Coltrane Step 4 BLOCKER-2/3 — the runner wiring (source fence; the behaviour is tested above)', () => {
+  it('a refusing member is checked on every paging pass; the closes carry hold and the last refusal', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('server/services/vts-runner.ts', 'utf8');
+    expect(src).toMatch(/if \(_ntReason !== undefined && _ntPages && !_ntStep\.page && _ntStep\.next !== null && isStandingMember\(tradeId\)\)/);
+    expect(src).toContain('await onMemberReason({');
+    expect(src).toContain("lastRefusal: _lastRefusal }, now, d))");
+    expect(src).toContain('hold: _sHold, lastRefusal: _sLastRefusal }, now, d))');
+    expect(src).toContain('if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);');
   });
 });

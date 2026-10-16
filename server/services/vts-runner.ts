@@ -101,7 +101,7 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
-import { markDecided, onCrossing, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
+import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
 import { isInXstockWeekendClose, isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
@@ -221,6 +221,11 @@ const VTS_NO_TRIGGER_ALERT_AFTER_MS = 10 * 60_000;
 // timeout at the mark), and clearing on the other reason let a feed that flaps between them reset the clock forever.
 // It clears ONLY on a real decision (`noDecisionReason === undefined`). The last reason rides into the alert body.
 const _vtsNoTriggerStreak = new Map<string, NoTriggerStreak>();
+// Row 2 increment (4a), objective 12 (Coltrane Step 4 BLOCKER-3): the most recent refusal reason per open trade, per lane.
+// Kept apart from the streak, which a decision clears — an unpriced max-hold close is itself a decision, so the streak no
+// longer holds the reason at the close. Pruned with the streak; deleted at the close that reads it.
+const _vtsLastRefusal = new Map<string, string>();
+const _vtsShadowLastRefusal = new Map<string, string>();
 // Row 2 increment (4a): the rail's reporting dependencies, resolved once (production alert file, DB, cohort verdict).
 // `null` on failure — the rail then logs and the decision path carries on unchanged (fail-open for the PAGE only).
 let _vtsRailDepsP: Promise<VtsRailDeps | null> | null = null;
@@ -3989,6 +3994,24 @@ async function resolveOpenVirtualTrades(): Promise<{
         VTS_NO_TRIGGER_ALERT_AFTER_MS);
       if (_ntStep.next) _vtsNoTriggerStreak.set(tradeId, _ntStep.next);
       else _vtsNoTriggerStreak.delete(tradeId);
+      if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);
+      // Row 2 increment (4a) P3 (Coltrane Step 4 BLOCKER-2): a standing-record MEMBER whose refusal reason turns
+      // non-expected leaves the record and pages on its own key NOW — its streak latch fired at the join, so the crossing
+      // path below would never run for it again. Paging session only, as for every rail page.
+      if (_ntReason !== undefined && _ntPages && !_ntStep.page && _ntStep.next !== null && isStandingMember(tradeId)) {
+        try {
+          const _rd = await vtsRailDeps();
+          if (_rd) await onMemberReason({
+            tradeId, symbol: trade.symbol, assetClass: trade.assetClass, lastReason: _ntReason, pageSinceMs: _ntStep.next.pageSinceMs ?? _ntNow,
+            title: `VTS exit decisions unavailable — ${trade.symbol} left the wide-book list (now: ${_ntReason})`,
+            body: `Open virtual trade ${tradeId} in ${trade.symbol} was waiting on the standing record for an EXPECTED wide or quiet `
+              + `book, and its exit is now refused for a reason that is NOT expected (most recent reason: ${_ntReason}), so it pages `
+              + `on its own key at once (row 2 increment (4a), P3). This row clears itself when the trade decides or closes.`,
+          }, _ntNow, _rd);
+        } catch (err) {
+          console.error(`[VTS_RAIL][MEMBER_REASON_FAILED] trade=${tradeId}:`, err instanceof Error ? err.message : err);
+        }
+      }
       // Row 2 increment (4a) P1: a DECISION is written onto this trade's open rail row / standing-record membership NOW, so the
       // minute sweep can clear it from durable state even across a restart (fire-and-forget; never on the decision's path).
       if (_ntReason === undefined) { const _rd = await vtsRailDeps(); if (_rd) markDecided(tradeId, _ntNow, _rd); }
@@ -4164,6 +4187,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   _xsVtsInstrument.endPass(); // `8a-P4c` increment 1 — `console.warn`, so it lands in the ~14-day error.log
   // Prune per-trade state for trades that left by ANY path, not only the fill/decision paths (Langston Step-4 nit).
   for (const id of Array.from(_vtsNoTriggerStreak.keys())) if (!openVirtualTrades.has(id)) _vtsNoTriggerStreak.delete(id);
+  for (const id of Array.from(_vtsLastRefusal.keys())) if (!openVirtualTrades.has(id)) _vtsLastRefusal.delete(id);
   for (const id of Array.from(_vtsEntryFillLooked)) if (!openVirtualTrades.has(id)) _vtsEntryFillLooked.delete(id);
 
   // Directive 11.6C: Track persistence and ML queue counts
@@ -4185,7 +4209,9 @@ async function resolveOpenVirtualTrades(): Promise<{
       await closeVtsTradeUnpriced(id, trade, exitArm, now, holdDurationStr);
       unpriced++;
       // Row 2 increment (4a) P4: an unpriced real-lane close is a warning in ANY session, left for a human.
-      void vtsRailDeps().then((d) => d && onUnpricedClose({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass, hold: holdDurationStr, exitArm: String(exitArm), session: d.isRegularSession(now) ? 'regular' : 'off_session' }, now, d))
+      const _lastRefusal = _vtsLastRefusal.get(id) ?? null;
+      _vtsLastRefusal.delete(id);
+      void vtsRailDeps().then((d) => d && onUnpricedClose({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass, hold: holdDurationStr, exitArm: String(exitArm), session: d.isRegularSession(now) ? 'regular' : 'off_session', lastRefusal: _lastRefusal }, now, d))
         .catch((err) => console.error(`[VTS_RAIL][UNPRICED_ALERT_FAILED] trade=${id}:`, err instanceof Error ? err.message : err));
       continue;
     }
@@ -4724,6 +4750,7 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       const _c = countersFor(_vtsShadowByClass, trade.assetClass);
       if (_c) _c.exitNoTransactableSide++;
     }
+    if (decision.noDecisionReason !== undefined) _vtsShadowLastRefusal.set(tradeId, decision.noDecisionReason);
     if (!decision.shouldExit) continue;
     // F-G-2 OBJ-5a: same resolver as the real lane — the shadow lane books the same way.
     // ⛔ `3n.q3` P1/P3: a clamp arm books NO price ⇒ `timeout_unpriced`. That includes every `stale_timeout` (no mark), so
@@ -4750,10 +4777,14 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       const _c = countersFor(_vtsShadowByClass, trade.assetClass);
       if (_c) _c.closedUnpriced++;
       // Row 2 increment (4a) P4: the shadow lane is recorded on a per-class count row, never paged (~6 a day).
-      void vtsRailDeps().then((d) => d && onShadowUnpriced({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass }, now, d))
+      const _sLastRefusal = _vtsShadowLastRefusal.get(id) ?? null;
+      const _sHold = formatHoldDuration(now - trade.openedAt);
+      void vtsRailDeps().then((d) => d && onShadowUnpriced({ tradeId: id, symbol: trade.symbol, assetClass: trade.assetClass, hold: _sHold, lastRefusal: _sLastRefusal }, now, d))
         .catch((err) => console.error(`[VTS_RAIL][SHADOW_UNPRICED_FAILED] trade=${id}:`, err instanceof Error ? err.message : err));
     }
   }
+  for (const { id } of toClose) _vtsShadowLastRefusal.delete(id);
+  for (const id of Array.from(_vtsShadowLastRefusal.keys())) if (!openShadowTrades.has(id)) _vtsShadowLastRefusal.delete(id);
   if (shadowResolved > 0) {
     console.log(`[reorg-B4][SHADOW_RESOLVE] closed ${shadowResolved} shadow trades, ${openShadowTrades.size} still open (dropCount=${shadowDropCount})`);
   }

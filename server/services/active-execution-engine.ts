@@ -965,6 +965,17 @@ export class ActiveExecutionEngine {
     return this._noTriggerRailDeps.then((deps) => { rail.ensureLoaded(deps); return { rail, deps }; });
   }
 
+  /** row 2 (4a) P1b (Coltrane Step 4 BLOCKER-1): mark the position's rail row DECIDED only when the evaluator actually
+   *  decided (`noDecisionReason === undefined`). `no_usable_mark` falls through to the decision site too (only
+   *  `no_transactable_side` returns early), and it must never clear the row. Fire-and-forget. Returns whether it marked. */
+  private _noteNoTriggerRailDecision(positionId: string, noDecisionReason: string | undefined): boolean {
+    if (noDecisionReason !== undefined) return false;
+    const at = Date.now();
+    void this._noTriggerRailCtx().then(({ rail, deps }) => rail.markDecided(positionId, at, deps))
+      .catch((e) => console.error('[NO_TRIGGER_RAIL][DECIDED_MARK_FAILED]', e instanceof Error ? e.message : e));
+    return true;
+  }
+
   /** row 2 (4a) P1b: once a minute, after the cycle, NOT awaited — resolves `no-trigger-<mode>-*` rows whose position
    *  decided after the mint or closed. Never throws. */
   private async _runNoTriggerRailSweep(): Promise<void> {
@@ -3800,10 +3811,9 @@ export class ActiveExecutionEngine {
       }
       // Any cycle that actually decided clears the streak — including one that decides NOT to exit.
       this._noTriggerStreak.delete(position.id as string);
-      // row 2 (4a) P1b: and writes the decision onto this position's open rail row, if it has one (fire-and-forget).
-      { const _dPid = position.id as string; const _dAt = Date.now();
-        void this._noTriggerRailCtx().then(({ rail, deps }) => rail.markDecided(_dPid, _dAt, deps))
-          .catch((e) => console.error('[NO_TRIGGER_RAIL][DECIDED_MARK_FAILED]', e instanceof Error ? e.message : e)); }
+      // row 2 (4a) P1b: and writes the decision onto this position's open rail row — ONLY for a real decision (Coltrane
+      // Step 4 BLOCKER-1: `no_usable_mark` also reaches this line and is NOT a decision).
+      this._noteNoTriggerRailDecision(position.id as string, decision.noDecisionReason);
 
       if (decision.modeChanged) {
         await storage.updateActiveOpenPosition(this.mode, position.id, {
