@@ -87,3 +87,16 @@ you listed. ⚠️ **The one-line gloss on each class is MINE** — correct any 
 3. **Ledger append writes at EOF of LEDGER.md**, not before an anchor — LEDGER.md has nothing after the block.
 4. **`do_ledger_file_append` takes MEMORY.md's stat for lock/archive ownership** (as every verb does) and LEDGER.md's
    for its own mode.
+
+## Addendum — your L118 finding (allowlist r1 §2, 12:18Z)
+
+`comms-infra/langston-memory/bin/obj3_premove.py` lifts the ONE `- **✅ B-ATR-BAD-PRINT (`#1153`` bullet out of
+`### Retractions` into its own `## B-ATR-BAD-PRINT — ✅ STEP 11 CONFIRMED BY ME 2026-10-10 (…)` section placed
+immediately before `## ★ STANDING NOTES`, verbatim. It only prints the new part; the write goes through the writer with
+`--ledger-delta -1 --retractions-delta -1` (CAS, archive, counts, ledger guards, rollback). It refuses unless the
+prefix matches exactly one line, inside the Retractions block, that line is one physical line, and the byte arithmetic
+closes (+ heading + 3 newlines). The section gets its `STATE: closed` trailer in Q3, as your §5 row says.
+**Dry run on the private copy (part sha `03275c5b…` = yours):** premove write 121 → 120 retractions, 142 → 141 ledger
+bullets, guards clean; then the split moved **120**, set equality held; the single fingerprint absent from LEDGER.md is
+exactly the L118 line, which is present once in MEMORY.md under its new heading. MEMORY.md 825,371 → 137,121 B.
+**Install order:** writer + reader → premove write → `--split-ledger` with the stub as you correct it.
