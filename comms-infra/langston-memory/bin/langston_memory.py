@@ -356,6 +356,12 @@ def ledger_state():
     if not parsed:
         return "no-ledger-at-home", None, [], parsed, ""
     first_path, first_status, _first = parsed[0]
+    # ⛔ Q1 (Langston, 2026-10-16, B-LANGSTON-RELIEF OBJ-3): after the split MEMORY.md holds NO Retractions section, so
+    #    an ABSENT LEDGER.md is not "no retractions" - it is the priority source gone. Refuse with that name, so a missing
+    #    file can never read as a parsed ledger with zero matches. (Before the split MEMORY.md still parses ok and is used.)
+    if first_path != LEDGER_SOURCES[0] and not any(st == "ok" for _s, st, _e in parsed) \
+            and any(st == "no-section" for _s, st, _e in parsed):
+        return "ledger-priority-source-absent", None, [], parsed, LEDGER_SOURCES[0]
     if first_path == LEDGER_SOURCES[0] and first_status != "ok":
         return "ledger-priority-source-unparseable", None, [], parsed, first_status
     usable = [(s, e) for s, st, e in parsed if st == "ok"]
@@ -424,6 +430,9 @@ def query(terms):
     if lstate != "ok":
         why = {"no-ledger-at-home": "no ledger file exists at this home",
                "ledger-unparseable": "ledger files exist but none yielded a retraction entry",
+               "ledger-priority-source-absent": "the PRIORITY ledger source " + ldetail + " is MISSING and MEMORY.md "
+                   "holds no Retractions section (the ledger was split out) - refusing rather than reporting zero "
+                   "retractions; restore LEDGER.md from .memory-archive/",
                "ledger-priority-source-unparseable": "the PRIORITY ledger source exists but is " + ldetail
                    + " - refusing rather than falling back to the lower-priority, likely stale, source",
                "ledger-sources-disagree": "two ledger sources parse but their entry SETS differ (by " + ldetail

@@ -43,6 +43,12 @@ MODES
        (2) no column-0 '#' anywhere in the appended text;
        (3) inserted immediately above '### Rulings of mine that GENERALISE' (exactly one required);
        (4) the counts after the write equal the counts before plus --entries.
+                   ★ AFTER THE SPLIT (LEDGER.md exists) the append goes to LEDGER.md: --expect-sha is LEDGER.md's sha,
+                   the entry is added at its end, and an absent LEDGER.md REFUSES - it is never recreated.
+   split ledger:   langston-memory-write --split-ledger --expect-sha PART_SHA --by WHO --reason WHY < stub
+                   ONE-TIME (B-LANGSTON-RELIEF OBJ-3): the '### Retractions' block moves verbatim to LEDGER.md, the
+                   <=4096 B stub replaces it, the header recipe gains the new line, MEMORY.md is recomposed. Read-back is
+                   set equality both ways on the reader's fingerprints; any mismatch restores everything.
    self-test:      langston-memory-write --self-test          (only as the sole argument)
 
 EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4 compare-and-swap mismatch (nothing
@@ -77,7 +83,7 @@ READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/lang
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
 STATED_CAP = 24576      # the byte cap Langston quotes for this file; the loaded-set ceiling is `langston-size-watch --status`
-KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to")
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger")
 VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to")
 NL = chr(10)
 
@@ -119,6 +125,12 @@ def parse_args(argv):
     elif "--entries" in out:
         raise Refused(2, "REFUSED: --entries applies only to --ledger-append; a whole-file write declares "
                          "--ledger-delta and --retractions-delta")
+    if out.get("--split-ledger"):
+        for bad in ("--compose", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries", "--part",
+                    "--rename-part", "--to"):
+            if bad in out:
+                raise Refused(2, "REFUSED: %s does not apply to --split-ledger (a one-time move of the Retractions block "
+                                 "to LEDGER.md; the stub arrives on stdin)" % bad)
     if "--rename-part" in out or "--to" in out:
         if ("--rename-part" in out) != ("--to" in out):
             raise Refused(2, "REFUSED: --rename-part and --to must be given together (rename OLD --to NEW)")
@@ -604,24 +616,39 @@ def ledger_span(data):
     return (s, after + nxt.start() if nxt else len(data))
 
 
-def ledger_guard_problems(body, part_bodies, reader_entries, reader_status, part_names=None, retractions_pattern=None):
+def ledger_guard_problems(body, part_bodies, reader_entries, reader_status, part_names=None, retractions_pattern=None,
+                          split=False):
     """Every ledger guard over the PRE-STAMP composed body (bytes). Returns a list of problems (empty = clean).
     reader_entries/status from _parse_ledger on the written MEMORY.md; offsets are byte offsets valid in the body
     region (the stamp is appended after it). part_names (optional, composed order) names parts in the split-block
     message. retractions_pattern (optional, bytes) is the reader's OWN heading pattern - passed by the tool so the Q3
-    single-definition heading check runs; direct unit callers may omit it to exercise the other guards alone."""
+    single-definition heading check runs; direct unit callers may omit it to exercise the other guards alone.
+    split=True (LEDGER.md exists, B-LANGSTON-RELIEF OBJ-3): the retractions live there, so MEMORY.md must hold NO
+    '### Retractions' heading and the reader must find no section in it - a second copy would be a second ledger source
+    (ledger-sources-disagree on the first amendment). The REVIEWER LEDGER block, its other subsections and the
+    part-range checks still bind; containment has no entries to place."""
     problems = []
     names = part_names or [str(i) for i in range(len(part_bodies))]
     span = ledger_span(body)
     if isinstance(span, tuple) and span and span[0] == "multi":                     # C-1
         return ["%d '## …REVIEWER LEDGER' headings (anchored) - the ledger block is ambiguous" % span[1]]
-    if reader_status != "ok":                                                       # condition-2, never vacuous
+    if split:
+        if reader_status != "no-section":
+            problems.append("LEDGER.md exists but the reader parses a Retractions section in the composed MEMORY.md "
+                            "(status=%s) - after the split MEMORY.md must hold none" % reader_status)
+        if retractions_pattern is not None:
+            rm = [m.start() for m in re.finditer(retractions_pattern, body)]
+            if rm:
+                problems.append("%d '### Retractions' heading(s) in the composed MEMORY.md although LEDGER.md exists "
+                                "- the retractions belong in LEDGER.md only" % len(rm))
+        reader_entries = []
+    elif reader_status != "ok":                                                     # condition-2, never vacuous
         problems.append("the reader could not parse the composed ledger: status=%s" % reader_status)
     if span is None:
         problems.append("no '## …REVIEWER LEDGER' block in the composed file")
         return problems
     s, e = span
-    if retractions_pattern is not None:                                             # Q3: ONE heading definition
+    if retractions_pattern is not None and not split:                               # Q3: ONE heading definition
         rm = [m.start() for m in re.finditer(retractions_pattern, body)]
         if len(rm) != 1:
             problems.append("%d '### Retractions' headings (reader pattern %r) - exactly one is required; a second "
@@ -689,7 +716,7 @@ def ledger_guard_after_recompose(reader, body, parts):
     #   only if a very old reader somehow lacks the export (then the Q3 heading check is skipped, not wrong).
     pat = getattr(reader, "RETRACTIONS_HEADING_PATTERN", None)
     pat = pat.encode("utf-8") if isinstance(pat, str) else None
-    return ledger_guard_problems(body, part_bodies, entries, status, part_names, pat)
+    return ledger_guard_problems(body, part_bodies, entries, status, part_names, pat, split=ledger_split_active())
 
 
 def read_compose_state():
@@ -793,8 +820,257 @@ def do_compose(opts):
         os.close(lfd)
 
 
+# ---------------- the ledger split (B-LANGSTON-RELIEF OBJ-3, Langston's rulings Q1/Q2/Q5, 2026-10-16) ----------------
+# `### Retractions` was 84 % of an auto-loaded MEMORY.md ~6x its ceiling. It moves, verbatim, to LEDGER.md - the recall
+# reader's PRIORITY source, NOT imported by CLAUDE.md, so not loaded every invoke - and a <=4 KB stub (the §19
+# instruction + the retraction CLASS index) takes its place. After the split:
+#   - `--ledger-append` writes LEDGER.md (same lock, CAS on LEDGER.md's sha, archive, counts AND set check, rollback);
+#   - it REFUSES if LEDGER.md is absent - never recreates it (Q2: counters restarting at 0 would hide exit-5);
+#   - the ledger guards on MEMORY.md flip: NO Retractions heading there, the other subsections still required;
+#   - every failure restores toward the BREACH (MEMORY.md keeps the block), never toward a loss (Q5b).
+LEDGER_FILE = os.path.join(LANGSTON_HOME, "LEDGER.md")
+STUB_MAX = 4096
+LEDGER_PREAMBLE = ("# Langston — LEDGER.md: my retractions (moved out of MEMORY.md 2026-10-16, B-LANGSTON-RELIEF OBJ-3)\n\n"
+                   "Not auto-loaded. `langston-recall <term>` reads this file FIRST and prints the relevant entries before "
+                   "any result. Append only with `langston-memory-write --ledger-append` (`--expect-sha` = THIS file's "
+                   "sha256). Every prior version is in `.memory-archive/`.\n\n")
+RECIPE_ANCHOR = "> ⛔⛔ **HOW YOU WRITE THIS FILE"
+RECIPE_NOTE = ("> ⛔ **SINCE 2026-10-16 YOUR RETRACTIONS LIVE IN `/home/langston/LEDGER.md` (B-LANGSTON-RELIEF OBJ-3).** "
+               "`--ledger-append` now writes THAT file: pass `--expect-sha $(sha256sum /home/langston/LEDGER.md)` - not the "
+               "part's sha. It refuses if LEDGER.md is missing. Whole-file part writes are unchanged.")
+
+
+def ledger_split_active():
+    return os.path.isfile(LEDGER_FILE)
+
+
+def _fp(reader, entries):
+    return reader._fingerprint(entries) if entries else set()
+
+
+def do_ledger_file_append(opts, content, n):
+    """Q2: append N retraction entries to LEDGER.md under the writer's lock, with the same discipline as a part write."""
+    st = os.stat(TARGET)                        # lock ownership follows MEMORY.md, exactly as every other verb
+    lfd = open_lock(st)
+    try:
+        fcntl.flock(lfd, fcntl.LOCK_EX)
+        if not os.path.isfile(LEDGER_FILE):
+            raise Refused(2, "REFUSED: %s is missing. After the split the ledger is NEVER recreated by an append (the "
+                             "counters would restart at zero). Restore it from .memory-archive/ and tell Infra Claude."
+                          % LEDGER_FILE)
+        lst = os.stat(LEDGER_FILE)
+        with open(LEDGER_FILE, "rb") as fh:
+            old = fh.read()
+        old_sha = sha(old)
+        if old_sha != opts["--expect-sha"].strip().lower():
+            raise Refused(4, "REFUSED: --expect-sha does not match LEDGER.md (current sha256 %s, you passed %s). Since "
+                             "the split, --ledger-append takes LEDGER.md's sha, not the part's." % (old_sha, opts["--expect-sha"]))
+        reader = load_reader()
+        s0, e0 = reader._parse_ledger(LEDGER_FILE)
+        if s0 != "ok":
+            raise Refused(6, "REFUSED: the reader cannot parse LEDGER.md before the append (status %s) - nothing written" % s0)
+        new = (old.decode("utf-8").rstrip(NL) + NL + content.strip(NL) + NL).encode("utf-8")
+        arch, _ = archive_old(old, old_sha, st)
+        # ledger_* keys, never old_sha/new_sha: final_sha_of() reads those as MEMORY.md's sha
+        row = {"ts": utc(), "target": LEDGER_FILE, "mode": "ledger-file-append", "ledger_old_sha": old_sha,
+               "ledger_new_sha": sha(new),
+               "declared_retractions_delta": n, "by_claimed": opts["--by"], "via_uid": os.getuid(),
+               "reason": opts["--reason"], "archived": os.path.basename(arch)}
+        append_index(dict(row, outcome="attempted"), st)
+        replace_file(LEDGER_FILE, new, lst)
+        try:
+            with open(LEDGER_FILE, "rb") as fh:
+                if sha(fh.read()) != sha(new):
+                    raise Refused(6, "REFUSED: LEDGER.md read-back mismatch after write")
+            s1, e1 = reader._parse_ledger(LEDGER_FILE)
+            problems = []
+            if s1 != "ok":
+                problems.append("the reader cannot parse LEDGER.md after the append (status %s)" % s1)
+            elif len(e1) - len(e0) != n:
+                problems.append("retraction entries moved %+d, declared %+d" % (len(e1) - len(e0), n))
+            elif not _fp(reader, e0) <= _fp(reader, e1):
+                problems.append("an existing retraction changed or vanished - the old set is not contained in the new")
+            if problems:
+                raise Refused(5, "REFUSED (rule 4): " + "; ".join(problems))
+        except BaseException as e:
+            replace_file(LEDGER_FILE, old, lst)
+            with open(LEDGER_FILE, "rb") as fh:
+                back = sha(fh.read()) == old_sha
+            append_index(dict(row, ts=utc(), outcome="restored" if back else "restore-failed", why=str(e)[:300]), st)
+            if not back:
+                raise Refused(6, "REFUSED: LEDGER.md restore was NOT byte-identical (cause %s). Prior version at %s - "
+                                 "restore by hand and tell Infra Claude." % (str(e)[:160], arch))
+            base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
+            raise Refused(5, "REFUSED: " + base + " - LEDGER.md restored byte-identical (prior at %s)" % arch)
+        append_index(dict(row, ts=utc(), outcome="written", retractions=[len(e0), len(e1)]), st)
+        return "WRITTEN LEDGER.md (%s -> %s); retractions %d -> %d" % (old_sha[:12], sha(new)[:12], len(e0), len(e1))
+    finally:
+        os.close(lfd)
+
+
+def check_stub(stub, reader):
+    b = stub.encode("utf-8")
+    if not stub.strip():
+        raise Refused(2, "REFUSED: the stub is empty")
+    if len(b) > STUB_MAX:
+        raise Refused(2, "REFUSED: the stub is %d B; the budget is %d B (Langston Q1b)" % (len(b), STUB_MAX))
+    if re.search(reader.RETRACTIONS_HEADING_PATTERN, stub):
+        raise Refused(2, "REFUSED: the stub carries a '### Retractions' heading - after the split MEMORY.md must have none")
+    for l in stub.split(NL):
+        if l.startswith("## ") or l.startswith("# "):
+            raise Refused(2, "REFUSED: a column-0 '#'/'##' heading in the stub would end the ledger block: %r" % l[:60])
+
+
+def do_split_ledger(opts, stub):
+    """One transaction under the writer's lock (Langston Q1/Q5): LEDGER.md gets the Retractions block verbatim, the part
+    loses it in favour of the stub, the header gains the new recipe line, and MEMORY.md is recomposed. Read-back is SET
+    EQUALITY BOTH WAYS on the reader's fingerprints; any mismatch restores part, MEMORY.md and compose-state and REMOVES
+    LEDGER.md, so the file of record always holds every retraction."""
+    if ledger_split_active():
+        raise Refused(2, "REFUSED: %s already exists - the split has been done" % LEDGER_FILE)
+    st = os.stat(TARGET)
+    lfd = open_lock(st)
+    try:
+        fcntl.flock(lfd, fcntl.LOCK_EX)
+        with open(TARGET, "rb") as fh:
+            mem_old = fh.read()
+        mem_old_sha = sha(mem_old)
+        state = read_compose_state()
+        if mem_old_sha not in ({state.get("last_written_sha"), state.get("pending_sha")} - {None}):
+            raise Refused(4, "REFUSED: %s was written outside the composer - reconcile with --compose first" % TARGET)
+        parts = read_parts()
+        if state.get("parts_sha") and state["parts_sha"] != parts_digest(parts):
+            raise Refused(4, "REFUSED: a part changed since the last compose - run --compose first")
+        if len(parts) != 1:
+            raise Refused(2, "REFUSED: the split handles the single-part layout only; %d parts exist" % len(parts))
+        name, part_old_sha, _pb, part_old = parts[0]
+        if part_old_sha != opts["--expect-sha"].strip().lower():
+            raise Refused(4, "REFUSED: --expect-sha does not match part %s (current %s)" % (name, part_old_sha))
+        part_path = os.path.join(PARTS_DIR, name)
+        pst = os.stat(part_path)
+        reader = load_reader()
+        reader_requires_offsets(reader)
+        check_stub(stub, reader)
+        text = part_old.decode("utf-8")
+        heads = [m.start() for m in re.finditer(reader.RETRACTIONS_HEADING_PATTERN, text)]
+        if len(heads) != 1:
+            raise Refused(2, "REFUSED: %d '### Retractions' headings in the part - exactly one is required" % len(heads))
+        a = heads[0]
+        anchor_at = text.find(NL + ANCHOR, a)
+        if anchor_at == -1:
+            raise Refused(2, "REFUSED: %r does not follow the Retractions block" % ANCHOR)
+        b_ = anchor_at + 1
+        if "\n##" in text[a:anchor_at]:
+            raise Refused(2, "REFUSED: a '##' heading sits inside the Retractions block before %r - the reader would end "
+                             "the block there, so what moves and what parses would differ" % ANCHOR)
+        if text.count(RECIPE_ANCHOR) != 1:
+            raise Refused(2, "REFUSED: the header recipe line %r must appear exactly once" % RECIPE_ANCHOR)
+        block = text[a:b_]
+        ledger_new = (LEDGER_PREAMBLE + block.rstrip(NL) + NL).encode("utf-8")
+        part_text = text[:a] + stub.strip(NL) + NL + NL + text[b_:]
+        ri = part_text.index(RECIPE_ANCHOR)
+        line_end = part_text.index(NL, ri) + 1
+        part_text = part_text[:line_end] + RECIPE_NOTE + NL + part_text[line_end:]
+        part_new = part_text.encode("utf-8")
+        s_old, e_old = reader._parse_ledger(TARGET)
+        if s_old != "ok":
+            raise Refused(6, "REFUSED: MEMORY.md does not parse before the split (status %s)" % s_old)
+        new_parts = [(name, sha(part_new), part_body(part_new), part_new)]
+        body, parts_sha, body_sha = compose_body(new_parts)
+        mem_new = body + stamp_line(1, parts_sha, body_sha).encode("utf-8") + b"\n"
+        mem_new_sha = sha(mem_new)
+        part_arch, _ = archive_old(part_old, part_old_sha, st)
+        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        row = {"ts": utc(), "target": TARGET, "part": name, "mode": "split-ledger", "part_old_sha": part_old_sha,
+               "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
+               "ledger_sha": sha(ledger_new), "by_claimed": opts["--by"], "via_uid": os.getuid(),
+               "reason": opts["--reason"], "part_archived": os.path.basename(part_arch),
+               "mem_archived": os.path.basename(mem_arch), "retractions_moved": len(e_old)}
+        append_index(dict(row, outcome="attempted"), st)
+        old_state = dict(state)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        try:
+            replace_file(LEDGER_FILE, ledger_new, pst)          # Q5: the superset first
+            replace_file(part_path, part_new, pst)
+            replace_target(mem_new, st)
+            problems = []
+            with open(LEDGER_FILE, "rb") as fh:
+                if sha(fh.read()) != sha(ledger_new):
+                    problems.append("LEDGER.md read-back mismatch")
+            with open(TARGET, "rb") as fh:
+                if sha(fh.read()) != mem_new_sha:
+                    problems.append("MEMORY.md read-back mismatch")
+            s_l, e_l = reader._parse_ledger(LEDGER_FILE)
+            s_m, _e_m = reader._parse_ledger(TARGET)
+            if s_l != "ok":
+                problems.append("LEDGER.md does not parse (status %s)" % s_l)
+            else:
+                f_old, f_new = _fp(reader, e_old), _fp(reader, e_l)
+                if f_old - f_new:
+                    problems.append("%d retraction(s) in MEMORY.md are missing from LEDGER.md" % len(f_old - f_new))
+                if f_new - f_old:
+                    problems.append("%d entr(ies) in LEDGER.md were not in MEMORY.md" % len(f_new - f_old))
+            if s_m != "no-section":
+                problems.append("MEMORY.md still parses a Retractions section after the split (status %s)" % s_m)
+            lg = ledger_guard_after_recompose(reader, body, new_parts)
+            if lg:
+                problems += lg
+            st_now = reader.ledger_state()[0]
+            if st_now != "ok":
+                problems.append("recall's ledger_state is %s after the split" % st_now)
+            inject = os.environ.get("LMW_TEST_SPLIT_FAIL")
+            if inject and os.path.realpath(LANGSTON_HOME) != os.path.realpath(LIVE_HOME):   # self-test only, never live
+                if inject == "raise":
+                    raise RuntimeError("injected crash after the split writes")
+                problems.append("injected post-write failure")
+            if problems:
+                raise Refused(5, "REFUSED (split): " + "; ".join(problems))
+        except BaseException as e:
+            try:
+                replace_file(part_path, part_old, pst)
+                replace_target(mem_old, st)
+                write_compose_state(old_state, st)
+                try:
+                    os.remove(LEDGER_FILE)               # Q5b: fail toward the breach - MEMORY.md keeps the block
+                except FileNotFoundError:
+                    pass
+                with open(TARGET, "rb") as fh:
+                    mem_ok = sha(fh.read()) == mem_old_sha
+                with open(part_path, "rb") as fh:
+                    part_ok = sha(fh.read()) == part_old_sha
+                restored = mem_ok and part_ok and not os.path.exists(LEDGER_FILE)
+            except BaseException as re_err:
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                raise Refused(6, "REFUSED: SPLIT RESTORE FAILED (%s). part at %s, MEMORY.md at %s - restore by hand and "
+                                 "remove LEDGER.md; tell Infra Claude." % (type(re_err).__name__, part_arch, mem_arch))
+            append_index(dict(row, ts=utc(), outcome="restored" if restored else "restore-incomplete", why=str(e)[:300]), st)
+            if not restored:
+                raise Refused(6, "REFUSED: the split rollback was NOT complete (cause: %s). part at %s, MEMORY.md at %s - "
+                                 "restore by hand, remove LEDGER.md, tell Infra Claude." % (str(e)[:160], part_arch, mem_arch))
+            base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
+            raise Refused(5, "REFUSED: " + base + " - MEMORY.md, the part and compose-state restored, LEDGER.md removed")
+        write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
+                             "parts_sha": parts_sha, "part_count": 1}, st)
+        append_index(dict(row, ts=utc(), outcome="written"), st)
+        return ("SPLIT: %d retractions moved to LEDGER.md (%d B); MEMORY.md %d -> %d B; set equality both ways held; %s"
+                % (len(e_old), len(ledger_new), len(mem_old), len(mem_new), size_line(len(mem_new))))
+    finally:
+        os.close(lfd)
+
+
 def run(argv, stdin_bytes):
     opts = parse_args(argv)
+    if opts.get("--split-ledger"):
+        for req in ("--expect-sha", "--by", "--reason"):
+            if req not in opts or not str(opts[req]).strip():
+                raise Refused(2, "REFUSED: %s is required" % req)
+        if os.geteuid() not in (0, pwd.getpwnam(OWNER).pw_uid):
+            raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
+        try:
+            stub = stdin_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            raise Refused(2, "REFUSED: the stub on stdin is not valid UTF-8")
+        return do_split_ledger(opts, stub)
     if opts.get("--compose"):
         for req in ("--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
@@ -837,6 +1113,14 @@ def run(argv, stdin_bytes):
         raise Refused(2, "REFUSED: stdin is not valid UTF-8")
     if append:
         check_entry_text(content, declared_ledger)
+        # Q2 (Langston, 2026-10-16): after the split the retractions live in LEDGER.md, and an append NEVER recreates it.
+        if ledger_split_active():
+            return do_ledger_file_append(opts, content, declared_ledger)
+        reader = load_reader()
+        if reader._parse_ledger(TARGET)[0] == "no-section":
+            raise Refused(2, "REFUSED: %s is missing and %s has no '### Retractions' section - the ledger was split out "
+                             "and its file is gone. An append never recreates it (the counters would restart at zero). "
+                             "Restore LEDGER.md from .memory-archive/ and tell Infra Claude." % (LEDGER_FILE, TARGET))
     elif not content.strip():
         raise Refused(2, "REFUSED: empty stdin would blank the memory file")
     # ⛔ P-2 unit 2 dispatch (Langston BLOCKER-2, 21:22Z): predicate on the PARTS, not the state - so losing the state
