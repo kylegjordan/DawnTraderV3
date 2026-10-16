@@ -8,7 +8,7 @@
 | **(ii) DOC SET for the class** | **SCOPE** — present, `Claude Comms and Packages/Scope Files/B_WAKE_HEARTBEAT_CONTROL_DATE_SCOPE.md` (APPROVED at Step 1 `f565e42c4`; amended at Step 2 for the filter arm; three sentences corrected to the code at Step 4) · **PRE_AUDIT** — present, `…/B_WAKE_HEARTBEAT_CONTROL_DATE_PRE_AUDIT.md` (APPROVED at Step 2 `49b9bde4d`) · **CHANGE LIST** — this file · **COMPLETION_REPORT** — Step 11 · **BATCH_CATALOG, PHASE_HISTORY** — Step 10 · **SYSTEM_IMPACT_MAP** — Step 10, **required** · **RUNNING_ISSUES `#1162`** — Step 10 · **SPRINT_TO_LIVE_PLAN row 1q** — Step 10 · **CLAUDE_CODE_WAKE_WATCHER_RUNBOOK** layer 3 — Step 10 · **CC-A task list** — Step 10 · **CC-A `MEMORY_CC_A.md`** and **Langston's `MEMORY.md` row** — Step 10, required · **board card** — present (`PVTI_lAHODmulEM4BfQP4zhBSS5Q`) · **SYSTEM_MANUAL** — N/A (no trading logic) · **DELETED_COMPONENTS_LOG** — N/A (nothing removed) |
 | **(iii) STEP-2 REFERENCE** | `Claude Comms and Packages/Scope Files/B_WAKE_HEARTBEAT_CONTROL_DATE_PRE_AUDIT.md`, APPROVED by Langston at `49b9bde4d` |
 
-**REF: `review/b-wake-heartbeat-control-date`** — the commit carrying this r3 file, named in the dispatch. It sits on top of `migration/aws-supabase` `4be562e14` and is **not on that branch yet**.
+**REF: `10eacd39df34345d923fe31ac0b6b928b151a483`** — the head of BOTH `review/b-wake-heartbeat-control-date` and `migration/aws-supabase` since 18:52Z, after Step 4 PROCEED (corrected at Langston's Step-4 close: this line read "not on that branch yet", false at the head it described).
 - CI does not run on `review/**`, and none of the four CI jobs exercise these files.
 - The review branch reaches Langston's mirror through `agent-work-sync.timer` (every 15 min), not `dt-review` (his gate A r2 provenance note), so a fresh head can take up to 15 min to be readable.
 
@@ -18,7 +18,7 @@
 | `comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/control_state.py` | **NEW** — the decision script |
 | `comms-infra/laptop/scheduled-tasks/wake-watcher-heartbeat/SKILL.md` | steps 2c, 3 and 4 |
 | `comms-infra/laptop/cc-wake-filter.py` | one `_HEARTBEAT_BAD` line (`:133`) |
-| `scripts/analysis/test-heartbeat-control.py` | **NEW**, 42 cases |
+| `scripts/analysis/test-heartbeat-control.py` | **NEW**, 44 cases |
 | `scripts/analysis/test-wake-filter-cuts.py` | four `#1162` cases (35 in all) |
 
 ## THE LOAD-BEARING HUNKS (current)
@@ -66,7 +66,7 @@
 | control record new / RESET / NOT PERSISTING · UNDETERMINED · ISSUER NOT RUN (second run) · re-issue failed · remote read failed · script start failed · script error | **yes** | the line starts `control: CHECK FAILED —` |
 
 ## TESTS, run on the laptop at this ref
-- `python3 scripts/analysis/test-heartbeat-control.py` → **42 passed, 0 failed.**
+- `python3 scripts/analysis/test-heartbeat-control.py` → **44 passed, 0 failed** (Langston re-ran it at `10eacd39d`: 44/0; P4 87 paging and 55 quiet, 9/9 kinds, 90 cells).
   - **P4** checks EVERY control line the suite produces, in both directions, against `_HEARTBEAT_OK`, `_HEARTBEAT_BAD` and `is_allclear_heartbeat`, parsed out of the repo filter. The extraction asserts that all three names were found.
   - **P4 coverage** requires **all 9** paging kinds, including `re-issue failed` (gate A r2, condition A3).
   - Every run must print exactly two lines (an assert, so the pool cannot shrink silently).
@@ -100,3 +100,13 @@
 - **r1** (`62dc9b3b5`): the arm was `\bcontrol:\s*(?:NOT answered|CHECK FAILED)\b` (anchored), with 32 cases. The whole-batch Step-4 dispatch hit the 900 s ceiling and was split into gates A and B.
 - **r2** (`59c2c6ffc`): the arm became field-scoped and CENSUS-FAILED was added; P4 covered all lines, with 8 paging kinds; the per-state table was added.
 - **r3** (this): step 3 gains the `CENSUS-FAILED` slot (A2); `re-issue failed` gets a fixture and a coverage kind (A3); the two-line assert; `alive_files` renamed `armed`; gate B conditions C1 and C2 and its record items; this body rewritten to the current code.
+
+## STEP-4 CLOSE (Langston, 19:05Z, at `10eacd39d`): PROCEED on the code, Review = Approved
+**For the completion report — named here so it is not buried in a comment:**
+- **`TOKEN_RE` closes a real privilege path.** `/var/log/cc-wake.log` is `-rw-rw-r-- root:langston`, so the langston account can write it. `N` is read out of that file and interpolated into `echo '<line>'` inside an SSH command to `root@204.168.141.77`. Before validation that was a langston→root path on Helsinki. The issue path's `D` is safe for a different reason: it is generated locally on Helsinki and never derived from the log.
+- **Record items, no action:**
+  1. `issuer_fail` resets on a gated run, so an ISSUER NOT RUN streak straddling a not-armed run pages one run late.
+  2. `awaiting` has no bound inside this script. Its bound is the filter's 12 h `STALE_S` (`:864-879`): a stuck arm restarts from the log end, then gets the re-issue path, then NOT answered at the third arm.
+  3. `read_A` catches only `OSError`, so a non-UTF-8 `.control` degrades the whole run to `script error`. That is fail-loud, the right direction.
+  4. A new or RESET record plus a rotated log reads `UNDETERMINED` rather than `held`. Both page.
+- His r1 queue item is retired, `status=done`.
