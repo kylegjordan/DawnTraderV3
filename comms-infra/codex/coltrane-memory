@@ -41,15 +41,22 @@ import os
 import re
 import sys
 
-STORE = "/home/coltrane/memory"
-SESSIONS = "/home/coltrane/.codex/sessions"
+# TEST SEAM (same shape as Langston's LANGSTON_HOME): the env overrides exist so a test drives the real CLI against a
+#   scratch store; a wrong value in production reads an empty corpus and SAYS so, never a silent zero.
+STORE = os.environ.get("COLTRANE_MEMORY_STORE", "/home/coltrane/memory")
+SESSIONS = os.environ.get("COLTRANE_SESSIONS", "/home/coltrane/.codex/sessions")
+# B-LANGSTON-RELIEF OBJ-4b (Kyle, 2026-10-16: "the two should function the same"): Langston's library keeps every
+#   replaced version and searches the crew channel's whole history; Coltrane's did neither.
+HISTORY = os.path.join(STORE, ".history")          # inside the store, so the daily backup carries it; never pruned
+CREW_LOG = os.environ.get("COLTRANE_CREW_LOG", "/var/log/cc-discord-inbox.jsonl")
+CREW_SHOW = 40                                      # channel hits shown, newest first; the TOTAL is always printed
 USAGE = os.path.join(STORE, ".usage", "memory-usage.jsonl")
 NL = chr(10)
 
 # ⚠️ THE STATED HEURISTIC. A harness preamble opens with a lowercase xml-ish tag on line 1.
 HARNESS_RE = re.compile(r"^<[a-z][a-z0-9_]*>")
 
-TYPES = ("decision", "lesson", "finding", "reference")
+TYPES = ("decision", "lesson", "finding", "reference", "retraction")
 
 
 def utc():
@@ -124,6 +131,24 @@ def cmd_remember(a):
         usage("remember", result="refused", reason="exists", path=path)
         return 3
 
+    if os.path.exists(path):
+        # ⛔ A REPLACED ENTRY IS KEPT, never overwritten (parity with Langston's .memory-archive): the old bytes go to
+        #    .history/ by exclusive create BEFORE the new ones are written; if that fails nothing is replaced.
+        try:
+            os.makedirs(HISTORY, exist_ok=True)
+            with open(path, "rb") as fh:
+                old = fh.read()
+            stamp = utc().replace("-", "").replace(":", "")
+            hp = os.path.join(HISTORY, "%s.%s.md" % (os.path.basename(path)[:-3], stamp))
+            fd = os.open(hp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(old)
+        except Exception as e:
+            print("REFUSED: could not keep the old version before replacing it (%s: %s) - nothing replaced."
+                  % (type(e).__name__, e))
+            usage("remember", result="refused", reason="history-write-failed", path=path, error=str(e))
+            return 4
+        print("KEPT the previous version at " + hp)
     doc = (
         "---" + NL
         + "title: " + a.title.strip() + NL
@@ -207,6 +232,31 @@ def rollout_messages(path):
             yield role, text, kind, d.get("timestamp") or ""
 
 
+def history_files():
+    return sorted(glob.glob(os.path.join(HISTORY, "*.md")))
+
+
+def crew_messages(path):
+    """Yield (ts, sender, text) for every channel message with text, de-duplicated on (message id, text) - the bridge
+    mirrors some posts under two kinds. A bad line is skipped; an unreadable FILE raises to the caller."""
+    seen = set()
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                d = json.loads(line)
+            except Exception:
+                continue
+            text = (d.get("text") or "").strip()
+            if not text:
+                continue
+            key = (str(d.get("message_id") or ""), text[:200])
+            if key[0] and key in seen:
+                continue
+            seen.add(key)
+            who = d.get("sender") or d.get("sender_username") or d.get("kind") or "?"
+            yield (d.get("ts") or "")[:19], str(who), text
+
+
 def cmd_recall(a):
     q = a.query.strip()
     if not q:
@@ -215,18 +265,70 @@ def cmd_recall(a):
     rx = re.compile(re.escape(q) if not a.regex else q, re.I)
 
     hits = 0
-    print("=== DECISION STORE (%s)" % STORE)
     files = store_files()
+    entries = [read_entry(p) for p in files]
+    # ⛔ RETRACTIONS FIRST, like Langston's ledger overlay: what you withdrew is read before anything that might
+    #    re-assert it.
+    retr = [e for e in entries if e["type"] == "retraction" and rx.search(e["raw"])]
+    print("=== YOUR RETRACTIONS — read these BEFORE using any hit below")
+    if not retr:
+        n_all = sum(1 for e in entries if e["type"] == "retraction")
+        print("  (none match; %d retraction entr%s on file)" % (n_all, "y" if n_all == 1 else "ies"))
+    for e in retr:
+        hits += 1
+        print("  %s — %s" % (os.path.basename(e["path"]), e["title"]))
+        for line in e["body"].split(NL):
+            if line.strip():
+                print("      " + line.strip()[:300])
+
+    print()
+    print("=== DECISION STORE (%s)" % STORE)
     if not files:
         print("  (store is empty — nothing has been recorded yet)")
-    for p in files:
-        e = read_entry(p)
+    for e in entries:
+        if e["type"] == "retraction":
+            continue
         if rx.search(e["raw"]):
             hits += 1
-            print("  %s — %s" % (os.path.basename(p), e["title"]))
+            print("  %s — %s" % (os.path.basename(e["path"]), e["title"]))
             for line in e["body"].split(NL):
                 if rx.search(line):
                     print("      " + line.strip()[:300])
+
+    print()
+    hist = history_files()
+    print("=== SUPERSEDED VERSIONS (%s) — replaced by a later entry of the same name; NOT current" % HISTORY)
+    if not hist:
+        print("  (none kept yet)")
+    for p in hist:
+        e = read_entry(p)
+        if rx.search(e["raw"]):
+            hits += 1
+            print("  %s — %s  [SUPERSEDED]" % (os.path.basename(p), e["title"]))
+            for line in e["body"].split(NL):
+                if rx.search(line):
+                    print("      " + line.strip()[:300])
+
+    print()
+    print("=== CREW CHANNEL HISTORY (%s)" % CREW_LOG)
+    crew_total, crew_state = 0, "ok"
+    try:
+        found = [m for m in crew_messages(CREW_LOG) if rx.search(m[2])]
+        crew_total = len(found)
+        found.sort(key=lambda m: m[0], reverse=True)
+        for ts, who, text in found[:CREW_SHOW]:
+            line = next((x for x in text.split(NL) if rx.search(x)), text)
+            print("      [%s %s] %s" % (ts, who, line.strip()[:300]))
+        hits += crew_total
+        if crew_total > CREW_SHOW:
+            print("  ⚠️ showing the newest %d of %d matching channel messages — narrow the query to see the rest"
+                  % (CREW_SHOW, crew_total))
+        elif not crew_total:
+            print("  (no channel message matches)")
+    except Exception as e:
+        crew_state = "UNREADABLE: %s" % type(e).__name__
+        print("  ⛔ COULD NOT READ the channel history (%s: %s) — a miss here is NOT an absence"
+              % (type(e).__name__, e))
 
     print()
     print("=== OWN SESSIONS (%s)" % SESSIONS)
@@ -252,9 +354,10 @@ def cmd_recall(a):
                     print("      [%s %s] %s" % (ts[:19], role, line.strip()[:300]))
 
     print()
-    print("--- %d hit%s. Scanned %d entr%s in the store and %d message%s across %d session%s."
+    print("--- %d hit%s. Scanned %d entr%s in the store, %d superseded version%s, the crew channel (%s), and "
+          "%d message%s across %d session%s."
           % (hits, "" if hits == 1 else "s",
-             len(files), "y" if len(files) == 1 else "ies",
+             len(files), "y" if len(files) == 1 else "ies", len(hist), "" if len(hist) == 1 else "s", crew_state,
              scanned, "" if scanned == 1 else "s",
              len(rolls), "" if len(rolls) == 1 else "s"))
     if harness_skipped and not a.include_harness:
@@ -264,11 +367,12 @@ def cmd_recall(a):
     if hits == 0:
         # ⛔ AN EMPTY RESULT IS NOT AN ABSENCE UNTIL THE CORPUS IS NAMED. Whoever reads this
         #    must be able to tell "it never happened" from "it happened before I existed".
-        print("--- ⚠️ ZERO HITS. Before reading that as an absence: this corpus is ONLY")
-        print("    Coltrane's own store and its own sessions. It holds nothing from before")
-        print("    2026-09-08, and nothing any other agent said. Ask Langston or a Claude")
-        print("    session for anything older.")
-    usage("recall", query=q, hits=hits, store_entries=len(files), sessions=len(rolls))
+        print("--- ⚠️ ZERO HITS. Before reading that as an absence: this corpus is your store and its superseded")
+        print("    versions, your own sessions (from 2026-09-08), and the crew channel (from the Discord cutover,")
+        print("    2026-06-19). It holds NO Telegram-era history and no other agent's private sessions. Ask")
+        print("    Langston (langston-recall) for anything older.")
+    usage("recall", query=q, hits=hits, store_entries=len(files), sessions=len(rolls), history=len(hist),
+          crew_hits=crew_total, crew_state=crew_state)
     return 0
 
 
@@ -283,13 +387,15 @@ def main():
     r.add_argument("--why", required=True, help="why it is true — the evidence or the incident")
     r.add_argument("--apply", required=True, help="what a future session should DO about it")
     r.add_argument("--links", default="", help="comma-separated names of related entries")
-    r.add_argument("--update", action="store_true", help="deliberately replace an existing entry")
+    r.add_argument("--update", action="store_true",
+                   help="deliberately replace an existing entry (the old version is KEPT in .history/)")
     r.set_defaults(fn=cmd_remember)
 
     l = sub.add_parser("list", help="list the decision store")
     l.set_defaults(fn=cmd_list)
 
-    c = sub.add_parser("recall", help="search the store and Coltrane's own past sessions")
+    c = sub.add_parser("recall", help="search your retractions, store, superseded versions, the crew channel "
+                                      "history and your own past sessions")
     c.add_argument("query")
     c.add_argument("--regex", action="store_true", help="treat the query as a regular expression")
     c.add_argument("--include-harness", action="store_true",

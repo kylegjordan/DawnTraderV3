@@ -179,20 +179,24 @@ There is no background injection of your past. **Recall is a command you run.**
 coltrane-memory recall "<what you are trying to remember>"
 coltrane-memory list
 ```
-It searches **your decision store** and **your own past sessions** — nothing else.
-⚠️ **ZERO HITS IS NOT AN ABSENCE UNTIL YOU KNOW THE CORPUS.** Yours starts on 2026-09-08
-and contains only what *you* did. Anything older, or anything another agent knows, is not
-in there and never was. **Ask Langston or a Claude session instead of concluding it never
-happened.** The tool prints this warning on an empty result; do not skip past it.
+It searches, in this order: **your retractions** (read them first), **your store**, the
+**superseded versions** of entries you replaced, the **crew channel's whole history** (from
+2026-06-19), and **your own past sessions** (from 2026-09-08).
+⚠️ **ZERO HITS IS NOT AN ABSENCE UNTIL YOU KNOW THE CORPUS.** There is no Telegram-era
+history and no other agent's private sessions in it. **Ask Langston (`langston-recall`)
+for anything older.** The tool prints this warning on an empty result; do not skip it.
 
 ### Writing it
 ```
-coltrane-memory remember --type lesson|decision|finding|reference   --title "..." --body "what is true" --why "the evidence or the incident"   --apply "what a future session should DO about it"
+coltrane-memory remember --type lesson|decision|finding|reference|retraction   --title "..." --body "what is true" --why "the evidence or the incident"   --apply "what a future session should DO about it"
 ```
 ⛔ **`--why` and `--apply` are REQUIRED and the tool refuses without them.** A statement
 with no reason and no application is a note: the next reader cannot tell whether it still
 holds, or what to do about it. **Langston's store — 37 entries, started unprompted — carries
 both on every entry, and that is what makes his usable by someone who was not there.**
+
+`--update` replaces an entry and **keeps the old version** in `.history/` (never deleted).
+**Withdrawing a conclusion you stated? Record it as `--type retraction`** so recall shows it first.
 
 ### ★ WHEN TO WRITE ONE — the trigger, so this is not left to taste
 - **A ruling you were given**, especially one that overrode what you would have done.
