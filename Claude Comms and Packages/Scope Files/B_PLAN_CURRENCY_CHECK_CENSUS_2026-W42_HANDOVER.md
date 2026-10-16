@@ -50,4 +50,4 @@ The census does not read the §0a pre-sprint stage table as a placement list. Is
 `HOME: B-CENSUS-PRESPRINT-LIST (#1200), owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md at row 1za, after row 1z.` Until it lands, treat those four as placed.
 
 ## STATE, per item
-Handed over 2026-10-16 in one Discord `#general` post naming ANALYST Claude, NEW Claude and Infra Claude, each with their items by number (post id recorded in the resolve evidence). CC-A's own three items are done at `c5c65e663`, `0779b02a1` and `75546ad0a`.
+Every item above is **handed over 2026-10-16** in one Discord `#general` post naming ANALYST Claude, NEW Claude and Infra Claude, each with their items by number (post id recorded in the resolve evidence). CC-A's own three items are done at `c5c65e663`, `0779b02a1` and `75546ad0a`.
