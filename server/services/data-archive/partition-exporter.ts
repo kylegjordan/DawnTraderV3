@@ -28,6 +28,20 @@ import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 
 const TMP_BASE = process.env.B75_EXPORT_TMP_DIR ?? '/tmp/b75-export';
+/** Legacy-mode cursor column: the timestamp as database text, stripped before the row is written. */
+const LEGACY_CURSOR_COL = '__b75_cursor_ts';
+
+/**
+ * B-B75-COUNT-GATE hotfix (#1195): the export did not contain every source row
+ * in its snapshot. Thrown BEFORE the caller uploads, verifies or drops anything,
+ * so the source partition/rows stay in place and the next run retries.
+ */
+export class ExportRowCountMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExportRowCountMismatchError';
+  }
+}
 
 export interface ExportRequest {
   /** Source table name (parent if partitioned, or the table itself). */
@@ -91,7 +105,7 @@ export interface ExportResult {
   maxTs: Date;
   /** SHA-256 hex of the compressed file. */
   checksum: string;
-  /** Same-snapshot source count in exact mode; null in legacy timestamp-only mode. */
+  /** Same-snapshot source count (both modes since #1195; an export that differs throws). */
   sourceRowCount: number | null;
 }
 
@@ -158,13 +172,14 @@ export async function exportPartition(
     const gzip = zlib.createGzip({ level: compressionLevel });
     gzip.pipe(out);
 
-    sourceRowCount = exactTieCol
-      ? Number((await client.query(
-        `SELECT count(*)::bigint AS source_count FROM ${quoteIdent(target)}
-          WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}`,
-        [req.rangeStart, req.rangeEnd],
-      )).rows[0]?.source_count ?? 0)
-      : null;
+    // B-B75-COUNT-GATE hotfix (#1195): count the source in BOTH modes, inside
+    // the same REPEATABLE READ snapshot as the pages, so an incomplete export
+    // is refused before any caller can verify and drop/delete the source.
+    sourceRowCount = Number((await client.query(
+      `SELECT count(*)::bigint AS source_count FROM ${quoteIdent(target)}
+        WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}`,
+      [req.rangeStart, req.rangeEnd],
+    )).rows[0]?.source_count ?? 0);
 
     let lastTs: Date | string | null = null;
     let lastTie: string | null = null;
@@ -199,7 +214,7 @@ export async function exportPartition(
         );
       } else if (firstBatch) {
         r = await client.query(
-          `SELECT * FROM ${quoteIdent(target)}
+          `SELECT *, ${quoteIdent(tsCol)}::text AS ${LEGACY_CURSOR_COL} FROM ${quoteIdent(target)}
            WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
            ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
@@ -208,7 +223,7 @@ export async function exportPartition(
         firstBatch = false;
       } else {
         r = await client.query(
-          `SELECT * FROM ${quoteIdent(target)}
+          `SELECT *, ${quoteIdent(tsCol)}::text AS ${LEGACY_CURSOR_COL} FROM ${quoteIdent(target)}
            WHERE ${quoteIdent(tsCol)} > $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
            ORDER BY ${quoteIdent(tsCol)} ASC
            LIMIT ${BATCH}`,
@@ -217,7 +232,15 @@ export async function exportPartition(
       }
       if (r.rows.length === 0) break;
 
+      let legacyCursor: string | null = null;
       for (const row of r.rows) {
+        if (!exactTieCol) {
+          // Exact database text for the cursor (no millisecond Date floor, so a
+          // page can never re-export a row and mask a skipped one in the count),
+          // then removed so the archived row shape is unchanged.
+          legacyCursor = String(row[LEGACY_CURSOR_COL]);
+          delete row[LEGACY_CURSOR_COL];
+        }
         const ts = exactTieCol ? row.__cursor_ts : row[tsCol];
         if (ts) {
           const tsDate = ts instanceof Date ? ts : new Date(ts);
@@ -235,12 +258,9 @@ export async function exportPartition(
 
       // Advance the keyset cursor from the last row of this batch
       const lastRow: any = r.rows[r.rows.length - 1];
-      const lastRowTs: any = exactTieCol ? lastRow.__cursor_ts : lastRow[tsCol];
-      // Keep the exact cursor as database text. A node-postgres Date
+      // Keep the cursor as database text in both modes. A node-postgres Date
       // round-trip truncates microseconds and corrupts page boundaries.
-      lastTs = exactTieCol
-        ? String(lastRowTs)
-        : (lastRowTs instanceof Date ? lastRowTs : new Date(lastRowTs));
+      lastTs = exactTieCol ? String(lastRow.__cursor_ts) : legacyCursor;
       if (exactTieCol) lastTie = String(lastRow.__cursor_tie);
 
       if (r.rows.length < BATCH) break;
@@ -252,9 +272,9 @@ export async function exportPartition(
       out.on('error', reject);
     });
 
-    if (sourceRowCount !== null && rowCount !== sourceRowCount) {
-      throw new Error(
-        `[B75 partition-exporter] exact source/export row-count mismatch `
+    if (rowCount !== sourceRowCount) {
+      throw new ExportRowCountMismatchError(
+        `[B75 partition-exporter] ${exactTieCol ? 'exact' : 'legacy'} source/export row-count mismatch `
         + `${req.sourceTable}/${req.partitionLabel}: source=${sourceRowCount} exported=${rowCount}`,
       );
     }

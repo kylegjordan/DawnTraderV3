@@ -42,6 +42,7 @@ import pg from 'pg';
 import {
   countGzipJsonlLines,
   exportPartition,
+  ExportRowCountMismatchError,
 } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import {
@@ -648,6 +649,8 @@ interface ProcessResult {
   durationMs: number;
   reason?: string;
   isChecksumMismatch?: boolean;
+  /** B-B75-COUNT-GATE (#1195): the export held fewer/more rows than the source snapshot. */
+  isCountMismatch?: boolean;
 }
 
 async function processPartition(
@@ -804,6 +807,7 @@ async function processPartition(
     };
   } catch (err) {
     const isChecksumMismatch = err instanceof ChecksumMismatchError;
+    const isCountMismatch = err instanceof ExportRowCountMismatchError;
     return {
       status: 'failed',
       mode,
@@ -814,6 +818,7 @@ async function processPartition(
       durationMs: Date.now() - start,
       reason: err instanceof Error ? err.message : String(err),
       isChecksumMismatch,
+      isCountMismatch,
     };
   } finally {
     await exportClient.end().catch(() => {});
@@ -1155,7 +1160,10 @@ async function runSweep(): Promise<boolean> {
             `Reason: ${res.reason}. ${
               res.isChecksumMismatch
                 ? 'CHECKSUM MISMATCH = possible data corruption — investigate before retry.'
-                : 'Likely transient; the next nightly run retries from the last verified slice.'
+                : res.isCountMismatch
+                  ? 'ROW-COUNT MISMATCH = the archive copy is incomplete, so the drop was refused (#1195). '
+                    + 'Not transient: this partition keeps failing safely until B-B75-EXPORT-COMPLETENESS lands.'
+                  : 'Likely transient; the next nightly run retries from the last verified slice.'
             }`,
           res.isChecksumMismatch ? 'critical' : 'warning',
           {
@@ -1164,6 +1172,7 @@ async function runSweep(): Promise<boolean> {
             child: partition.child,
             mode: res.mode,
             is_checksum_mismatch: Boolean(res.isChecksumMismatch),
+            is_count_mismatch: Boolean(res.isCountMismatch),
           },
         );
       }
