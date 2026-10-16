@@ -209,3 +209,6 @@ Kyle: *"yes, decide it with Langston and Coltrane."* Objective 6 (`spread_blown`
 
 ### §INC-4A r2 — COLTRANE'S r1 SEND-BACK FOLDED (2026-10-16 09:57Z)
 He read at `a38b912d6` (the r1 ref `83da0a5cb` had not reached his mirror). The (4a)/(4b) split: SOUND. Reusing the venue-quiet primitives: SOUND with the call-in, CC-B's review and no change to the paper semantics. **BLOCKER-1** (objective 11 deferred the safety rule): the default is now bound in objective 11 — only a positively identified expected wide/quiet book joins; everything else pages. **BLOCKER-2** (the verification could not discriminate a fix from dedupe suppression): objective 11 now pre-registers five counts on one population. Langston's r1 review is still queued (his bridge backlog, Infra's lane).
+
+### §INC-4A r2 — APPROVED BY COLTRANE (2026-10-16 10:03Z, at `74803cef2c5b4a74fc0b0cc8d87e61612c88b732`): proceed to Step 2
+Both blockers closed; objectives 10 and 12 sufficiently bound. **Step 2 must name:** the exact population, the classification predicate, the standing-member recovery/removal lifecycle, and the operator-visible sink. Langston's Step-1 review is still queued (his bridge backlog); it is folded here when it lands, and a send-back from him reopens Step 1.
