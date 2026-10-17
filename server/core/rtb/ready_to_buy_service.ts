@@ -2414,7 +2414,7 @@ class ReadyToBuyService {
 
   /**
    * Phase 8.8.4-C.5: Get the current pool size for a mode
-   * Directive 8.8.4-A3.R8: Include active/reconfirmed/queued statuses
+   * Directive 8.8.4-A3.R8: the queue's two live statuses, active and reconfirmed (row 59g)
    * @returns Number of signals in RTB queue
    */
   async getPoolSize(mode: TradingMode): Promise<number> {

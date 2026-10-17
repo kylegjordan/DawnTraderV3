@@ -22,8 +22,8 @@ vi.mock('../../db.js', () => ({
   },
 }));
 
-const store: { rows: any[]; deletes: string[][]; updates: any[]; deleteGate: Promise<void> | null; deleteThrows: boolean; deleteZero: boolean; updatedRow: any[] } = {
-  rows: [], deletes: [], updates: [], deleteGate: null, deleteThrows: false, deleteZero: false, updatedRow: [],
+const store: { rows: any[]; deletes: string[][]; updates: any[]; deleteGate: Promise<void> | null; deleteThrows: boolean; deleteZero: boolean } = {
+  rows: [], deletes: [], updates: [], deleteGate: null, deleteThrows: false, deleteZero: false,
 };
 vi.mock('../../storage.js', () => ({
   storage: {
@@ -47,7 +47,6 @@ vi.mock('../../storage.js', () => ({
       return 1;
     },
     updateRtbSignalsBatch: async (u: any[]) => { store.updates.push(...u); return u.length; },
-    updateRtbSignal: async (id: string, u: any) => { store.updatedRow.push({ id, u }); return null; },
   },
 }));
 vi.mock('../../services/context-bridge', () => ({ contextBridge: { broadcast: async () => undefined } }));
@@ -130,7 +129,7 @@ const keyOf = (r: any) => `paper:${r.symbol}:${r.strategy}`;
 
 describe('2. refreshAndRank — the price check inside the refresh', () => {
   beforeEach(() => {
-    store.rows = []; store.deletes = []; store.updates = []; store.deleteGate = null; store.deleteThrows = false; store.deleteZero = false; store.updatedRow = [];
+    store.rows = []; store.deletes = []; store.updates = []; store.deleteGate = null; store.deleteThrows = false; store.deleteZero = false;
     archived.length = 0;
     vi.spyOn(readyToBuyService as any, 'acquireRefreshedInputs').mockResolvedValue({
       decayPenalty: 0, refreshedFinalScore: 0.6, refreshedRegimeWeight: 0.6, currentVol: 0.02, refreshedMT: null,
@@ -202,7 +201,7 @@ describe('2. refreshAndRank — the price check inside the refresh', () => {
 
 // ── 3. the promotion claim ([C1](b) + C7) ──────────────────────────────────────────────────────────────────────────────
 describe('3. promoteSignal — a claim with an outcome', () => {
-  beforeEach(() => { store.rows = []; store.deletes = []; store.deleteThrows = false; store.deleteZero = false; store.updatedRow = []; });
+  beforeEach(() => { store.rows = []; store.deletes = []; store.updates = []; store.deleteThrows = false; store.deleteZero = false; });
   it("'deleted' when the row is there and nothing is refreshing it", async () => {
     store.rows = [row('p1', 'BTC/USD', 'crypto_spot', 100, 95, 110)];
     expect(await readyToBuyService.promoteSignal('p1')).toBe('deleted');
@@ -227,7 +226,7 @@ describe('3. promoteSignal — a claim with an outcome', () => {
     store.rows = [row('p3', 'SOL/USD', 'crypto_spot', 100, 95, 110)];
     store.deleteThrows = true;
     expect(await readyToBuyService.promoteSignal('p3')).toBe('delete_failed');
-    expect(store.updatedRow).toEqual([]);
+    expect(store.updates).toEqual([]); // nothing written to the row (row 59g: updateRtbSignal no longer exists; the batch writer is the only one)
     expect(store.rows.map((r) => r.id)).toEqual(['p3']);
   });
 });

@@ -2098,6 +2098,10 @@ export const activeEngineSessions = pgTable("active_engine_sessions", {
 // Phase 8.8.4-B: RTB Signal Status Enum
 // Directive 8.8.4-A3.R7: Added "reconfirmed" status for signals successfully refreshed before expiry
 // Directive 8.8.4-A3.R8: Added "active" status for newly validated signals pending first refresh
+// B-RTB-QUEUED-STATUS-SWEEP (row 59g; Langston §13 disposition 5, no work): the LIVE status set is 'active' (the one insert)
+// and 'reconfirmed' (the refresh). 'queued', 'promoted', 'expired' and 'rejected' are retained as labels only — no writer
+// produces them, and Postgres cannot drop an enum value without recreating the type on a live table. Do not read this
+// list as the status contract.
 export const rtbSignalStatusEnum = pgEnum("rtb_signal_status", ["queued", "promoted", "expired", "rejected", "reconfirmed", "active"]);
 
 // Phase 8.8.4-B: Ready-to-Buy (RTB) Signals Queue
