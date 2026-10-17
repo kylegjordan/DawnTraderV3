@@ -27,6 +27,7 @@ import os
 import queue
 import re
 import datetime as _dt
+import signal
 import subprocess
 import sys
 import threading
@@ -195,6 +196,56 @@ REVIEW_SOURCE_FAIL_NOTE = (
 )
 
 
+# ─── Agent sessions run in their OWN process group, and a stop ends them (B-LANGSTON-RELIEF, measured 2026-10-17) ──
+# The first planned restart through langston-bridge-restart (08:18:16Z) took 90 s and was recorded FAILED: on SIGTERM
+# the python process exited but the claude child it was running stayed in the unit's cgroup, one of its helpers (a
+# bun plugin server) ignored SIGTERM, systemd hit TimeoutStopSec, SIGKILLed, marked the unit failed - and OnFailure
+# paged Kyle with "crash-looped past its restart limit", which was false. subprocess.run's own timeout had the same
+# hole: it kills the child, never the child's children. So every agent session (Langston and the alert lane) is
+# started with start_new_session=True, registered while it runs, and its whole GROUP is killed on timeout and on stop.
+# A killed review is not lost: it was started and is unanswered, so restart recovery re-feeds it.
+_AGENTS = set()
+_AGENTS_LOCK = threading.Lock()
+
+
+def _kill_group(p):
+    try:
+        os.killpg(p.pid, signal.SIGKILL)       # the session leader's pid is its group id
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def run_agent(args, env, cwd, timeout):
+    """subprocess.run(capture_output, text, timeout) for an agent CLI - but in its own process group, so a timeout or
+    a stop kills everything it started, not just the CLI."""
+    p = subprocess.Popen(args, env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         start_new_session=True)
+    with _AGENTS_LOCK:
+        _AGENTS.add(p)
+    try:
+        try:
+            out, err = p.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_group(p)
+            p.communicate()
+            raise
+        return subprocess.CompletedProcess(args, p.returncode, out, err)
+    finally:
+        with _AGENTS_LOCK:
+            _AGENTS.discard(p)
+
+
+def stop_cleanly(signum=None, _frame=None):
+    """SIGTERM: end every running agent session's process group, then exit 0, so systemd sees a clean stop in
+    seconds instead of a 90 s timeout recorded as a failure."""
+    with _AGENTS_LOCK:
+        running = list(_AGENTS)
+    log(f"stop requested (signal {signum}): ending {len(running)} running agent session(s), then exiting")
+    for p in running:
+        _kill_group(p)
+    os._exit(0)
+
+
 def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
     """Identical contract to the Telegram bridge: claude -p with a stable session-id,
     Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
@@ -226,8 +277,7 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
     log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry={_retry_count})")
     t0 = time.time()
     try:
-        result = subprocess.run(args, env=env, cwd=WORK_DIR,
-                                capture_output=True, text=True, timeout=CLAUDE_TIMEOUT)
+        result = run_agent(args, env, WORK_DIR, CLAUDE_TIMEOUT)
         elapsed = time.time() - t0
         if result.returncode != 0:
             stderr_lc = (result.stderr or "").lower()
@@ -765,8 +815,7 @@ def invoke_lane(prompt):
     log(f"alert lane: invoking {al.LANE_MODEL} (prompt={len(prompt)} chars)")
     t0 = time.time()
     try:
-        r = subprocess.run(args, env=env, cwd=al.LANE_DIR, capture_output=True, text=True,
-                           timeout=al.LANE_TIMEOUT_S)
+        r = run_agent(args, env, al.LANE_DIR, al.LANE_TIMEOUT_S)
     except subprocess.TimeoutExpired:
         return None, f"timed out after {al.LANE_TIMEOUT_S}s"
     except Exception as e:
@@ -1212,6 +1261,7 @@ def build_client(task_q, recover_floor=None, alert_q=None):
 
 
 def main():
+    signal.signal(signal.SIGTERM, stop_cleanly)
     state = load_state()
     save_state(state)
     log(f"Discord Langston bridge starting. session_id={state['session_id']} channel={CFG['channel_id']}")
