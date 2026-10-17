@@ -1375,3 +1375,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT DOES.** xStock trades open and close only where a real trade could. Shipped so far: the broken-book guard's ring-independent release and duration report (A), the Eastern-time venue-transition pause (C), `spread_blown` ON — a book wider than 1% is held, not sold, with no page (objective 6), and the VTS and paper no-decision alerts that clear themselves (4a).
 
 **OPEN ON:** (4a)'s three-session window (2026-10-19/20/21), A and C's EST reads, objective 6's first exercised stop-hold — criteria pre-registered in the progress report. Still to build: the bid/ask trigger with the size check (2) and the shared VTS trigger module (4b).
+
+## B-VENUE-QUIET-ALERTING (CC-B, sprint row 3a1; `#526` + Kyle `#994`) — change-class `architecture` — ⏳ **STEP 10 → 11** (deployed `fe830d69c` 2026-10-10, r7 `efb78babb` 2026-10-13, Step 9 `e399a449f` 2026-10-17; Step 8 CONFIRMED by Langston 2026-10-17 and by Coltrane on the staging facts; record `Claude Comms and Packages/Batch Completion/B_VENUE_QUIET_ALERTING_PROGRESS_REPORT.md`)
+
+**WHAT WAS BROKEN.** Every xStock position whose price went stale paged as a breakage, including when the US market was simply closed or quiet — on 2026-10-10 a single restart paged 16 positions, and the alert lane was hours behind under the noise.
+
+**THE FIX.** A stale streak is judged against the whole xStock class: if the class is closed or quiet (or, outside regular hours, whatever the count says) the position joins one standing info record instead of paging; it pages when the class is updating and this symbol is not, or when it stays unpriced 30 minutes after the class resumes. Every alert clears itself when the engine prices the position again, and an off-session alert is handed back at the open so the position is judged in session.
+
+**RESULT.** Restarts and closes page nothing (10-13, 10-17: 0 pages, 549-row control); the hand-back fired once, correctly (INVH 2026-10-13 13:30:13Z); both pre-registered carriers were seen (CF 10-15, LECO 10-16). **Left:** no duration page has ever fired (criterion 4, unproven); US holidays read as regular (`#392`).
