@@ -1400,6 +1400,14 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging the columns are gone, the refresh rewrote all 21 pool signals under the new shape with no errors; new signals save as "active" with no default — 29 upserts after the first deploy, and the first after the column drop (TIA/USD, 14:28Z). **Left:** the four old status names stay as unused labels (the database cannot drop them from a live table); `rtb_shadow_pairings.promoted_trade_id` is a different table's question (`#1124`).
 
+## B-ORCHESTRATOR-ROUTES-REMOVAL (CC-B, sprint row 59g1; `#1210`) — change-class `non_architecture` — ⏳ **STEP 11 (2026-10-17) — report written, at Langston** (deployed `f0abf8494` 16:47:34Z; record `Claude Comms and Packages/Batch Completion/B_ORCHESTRATOR_ROUTES_REMOVAL_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** The AI Command Center tab on the AI Transparency page was blank apart from an error line. Four server routes it relied on still loaded an AI module that was retired and deleted in November 2025, so they failed every time — and a working card (Formula Health) sat inside the broken section, so it never showed either.
+
+**THE FIX.** The four routes are removed, with every piece of the page that depended on them: the never-shown cards, the "Trigger Analysis" and "Run System Audit" buttons, and the AI Analysis tab. The system audit was removed rather than repaired, because a repair would still have reported the database as "0 MB, healthy" and the AI as "running" from hard-coded values. The Formula Health card is drawn on its own.
+
+**RESULT.** On staging the tab shows Formula Health (10 formulas, 9 passing, 1 minor warning) and Feed Health; the page asks for none of the removed routes, and the server's "missing module" errors went from 116 that afternoon to none. **Left:** the card's "last audit" line always reads "just now" (`#1214`); the health-check address registered three times (`#1212`).
+
 ## B-SILENT-STRATEGY-CENSUS (CC-B, sprint row 52; `#1070`) — change-class `non_architecture` — ⏳ **OPEN, IN OBSERVATION (2026-10-17)** — waiting on strong_bull_trend's xStock verdict (alert `dd588f0d`, first 20 filled closes or 2026-11-06T10:47:40Z), then the other four candidates (record `Claude Comms and Packages/Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md`)
 
 **WHAT IT IS.** Ten of nineteen strategies had been off for xStock since May with no recorded reason for five, and three wired crypto strategies were never evaluated. Kyle (2026-09-30): switch the five candidates on one or two at a time, each with a pass/fail written first, strong_bull_trend first, after a check of the nine already on.

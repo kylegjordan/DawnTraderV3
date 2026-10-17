@@ -1152,6 +1152,7 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **What**: 25 pages (14 active, 7 dead), 91 tab sub-pages. React SPA.
 - **Blast Radius**: **LOW** per component — frontend changes are isolated from backend logic
 - **Note**: 7 dead pages and Walter-related tabs to be removed (Phase 12.2)
+- **`client/src/pages/ai-transparency.tsx` — what the AI Command Center tab reads (row 59g1, `B-ORCHESTRATOR-ROUTES-REMOVAL`, 2026-10-17):** the Formula Health card (`GET /api/system/formula-audit`, which RUNS the audit per request) and the Feed Health card (`GET /api/system/feed-health`), each on its own query and drawn ungated. Until 2026-10-17 the tab's body was gated on `GET /api/orchestrator/telemetry`, which imported a module deleted 2025-11-05 and returned 500 — so the tab drew nothing but an error line for eleven months, and this map never recorded the dependency. The page's other live `/orchestrator` reads: `logs` (GET/POST/PATCH) and `learning-summary`. Removed: `telemetry`, `analysis`, `analyze`, `audit` and the AI Analysis tab (`DELETED_COMPONENTS_LOG`).
 - **Batch 19E updates**:
   - `client/src/pages/active-trades-v2.tsx`: Source Pool column with colored badges (blue QUANT / purple PATTERN) added to open simulated trades table.
   - `client/src/pages/trade-history-tab.tsx`: Source Pool column with colored badges added to closed simulated trades table.
