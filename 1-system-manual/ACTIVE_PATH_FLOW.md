@@ -102,11 +102,10 @@ Seeing `ready_to_buy_service` **and** `rtb-refresh-service` both subscribed to t
 ### ★ THE REAL CONTENT THAT NEAR-MISS EXPOSED — and it validates the spine choice
 
 The same comment documents a trap that is **exactly** what this doc is supposed to own, and that neither the Manual nor the SIM does: **queue-LIFECYCLE exits and refresh-PASS outcomes are DIFFERENT SETS, and summing them produces an identity that can never hold.**
-- `promoted` fires in `active-execution-engine.ts:2223` — **a different service**, not a pass outcome.
+- `promoted` is counted in `active-execution-engine.ts:5380` after the claim **deletes** the row — **a different service**, not a pass outcome. Nothing writes status `'promoted'` (row 59g).
 - The unclassifiable drop **returns before `refreshedAttempted` increments** — it never enters the denominator.
-- Expiry lives in `cleanupExpiredSignals`, **outside `refreshAndRank` entirely.**
 
-⇒ **Eight distinct ways a row can leave `rtb_signals`**, only some of which are refresh-pass outcomes. That is an edge-semantics fact about a handoff — precisely the "what silently drops the payload" content Langston ruled should be the spine. It is recorded here as the model for how each hop gets written.
+⇒ **Six production exits from `rtb_signals`** (re-derived at `B-RTB-QUEUED-STATUS-SWEEP`, row 59g, 2026-10-17 — the earlier count of eight included the never-firing `removeSignalBySymbol` and the always-empty `cleanupExpiredSignals`, both deleted), only some of which are refresh-pass outcomes: (1) `refreshAndRank` duplicate pair `ready_to_buy_service.ts:866` · (2) `refreshAndRank` bulk delete `:1193` · (3) `expireSignal` via `reEvaluateQueue` `:1553` · (4) `promoteSignal`, the claim before an open `:1595` · (5) `clearQueue` (reset / stop) `:2049` · (6) `POST /active-engine/clear-data` `routes.ts:11461`. The queue's live statuses are `active` and `reconfirmed` only. That is an edge-semantics fact about a handoff — precisely the "what silently drops the payload" content Langston ruled should be the spine. It is recorded here as the model for how each hop gets written.
 
 **Method note, generalisable:** the deleter/scheduler census is what surfaced this in one pass. A forward trace would have found *a* refresh, produced a coherent story, and moved on — which is how this class survived two audits.
 

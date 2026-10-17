@@ -127,7 +127,8 @@ describe('P19-B8.4 active-funnel-tracker (S21)', () => {
     const s = getActiveFunnelStats('paper', 'crypto_spot');
     // B-RTB-REFRESH-CONSOLIDATE OBJ-4 (2026-07-19): the counter shape gained three exit buckets
     // (droppedUnclassifiable / droppedError / droppedExpired) so every queue exit is counted —
-    // the §9.5(a) census found EIGHT deleters against rtb_signals of which only two were tallied.
+    // the §9.5(a) census then counted eight deleters against rtb_signals; row 59g re-derived SIX production exits at the ref
+    // (enumerated in active-funnel-tracker.ts) after deleting the dead ones.
     // This exact-shape assertion correctly caught the extension; the pin updates deliberately.
     expect(s.rtbRefresh).toEqual({ cyclesRun: 2, refreshedAttempted: 4, reconfirmed: 3, rejectedInRefresh: 1, promoted: 2, droppedError: 0 });
     expect(hasActiveFunnelActivity('paper', 'crypto_spot')).toBe(true);

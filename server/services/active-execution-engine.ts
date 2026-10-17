@@ -1366,16 +1366,6 @@ export class ActiveExecutionEngine {
       console.error(`[PaperExecution:${this.mode}] WebSocket adapter start failed (continuing with REST fallback):`, error);
     }
 
-    // Directive 8.8.4-A3.R2 #6: Clean up expired signals before starting refresh cycle
-    try {
-      const expiredCount = await readyToBuyService.cleanupExpiredSignals(this.mode);
-      if (expiredCount > 0) {
-        console.log(`[A3.R2][PaperExecution:${this.mode}] Cleaned ${expiredCount} expired signals on startup`);
-      }
-    } catch (cleanupError) {
-      console.warn(`[A3.R2][PaperExecution:${this.mode}] Expired signal cleanup failed:`, cleanupError);
-    }
-
     // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): the 30s per-signal refresh cycle
     // (Mechanism A) is RETIRED — this starter is removed, not disabled (rule 18).
     // The RTB refresh is now driven SOLELY by the bucketed RTBRefreshService, which was built

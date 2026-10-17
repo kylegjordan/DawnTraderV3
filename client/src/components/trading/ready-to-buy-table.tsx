@@ -35,7 +35,7 @@ interface TradingSignal {
   stopPrice: number;
   targetPrice: number;
   volume24h: number | null;
-  status: 'active' | 'reconfirmed' | 'promoted' | 'expired' | 'executed';
+  status: 'active' | 'reconfirmed'; // the queue's only live statuses (row 59g)
   detectedAt: string;
   // Kyle 2026-07-17: queue-entry timestamp (rtb_signals.queued_at, rides the
   // route's row spread) — the Duration column's anchor.
@@ -578,11 +578,9 @@ export default function ReadyToBuyTable() {
                           "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
                           signal.status === 'active' ? "bg-blue-500/10 text-blue-500" :
                           signal.status === 'reconfirmed' ? "bg-success/10 text-success" :
-                          signal.status === 'promoted' ? "bg-amber-500/10 text-amber-500" :
-                          signal.status === 'expired' ? "bg-destructive/10 text-destructive" :
                           "bg-muted text-muted-foreground"
                         )}>
-                          {signal.status || 'queued'}
+                          {signal.status}
                         </span>
                       </td>
                     </tr>

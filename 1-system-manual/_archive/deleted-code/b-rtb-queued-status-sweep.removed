@@ -1,0 +1,151 @@
+// ARCHIVED by B-RTB-QUEUED-STATUS-SWEEP (row 59g, #1204), 2026-10-17. NOT COMPILABLE. git history is the authoritative archive.
+
+// ===== ready_to_buy_service.registerPromotionHandler+removeSignalBySymbol =====
+  /**
+   * Directive 8.8.4-A1: Register PROMOTION event handler for cleanup
+   * When a signal is promoted to active trade, immediately remove it from RTB queue
+   * and broadcast rtb:cleared to all clients
+   */
+  private registerPromotionHandler(): void {
+    if (this.promotionHandlerRegistered) {
+      return;
+    }
+
+    eventBus.onPromotion(async (event: PromotionEvent) => {
+      try {
+        console.log(`[8.8.4-A1][RTB_CLEANUP] Processing promotion event: ${event.symbol}/${event.strategy} (mode=${event.mode})`);
+        
+        // Remove the promoted signal from the queue by symbol/mode
+        const removed = await this.removeSignalBySymbol(event.symbol, event.mode);
+        
+        if (removed) {
+          // Broadcast rtb:cleared for the promoted symbol
+          await contextBridge.broadcast({
+            type: 'rtb:cleared',
+            payload: {
+              mode: event.mode,
+              symbol: event.symbol,
+              reason: 'promoted',
+              timestamp: new Date().toISOString()
+            },
+            mode: event.mode
+          });
+          console.log(`[8.8.4-A1][RTB_CLEANUP] ✅ Signal ${event.symbol} removed and rtb:cleared broadcasted`);
+        }
+      } catch (err: any) {
+        console.error(`[8.8.4-A1][RTB_CLEANUP][ERROR] Failed to cleanup promoted signal:`, err);
+      }
+    });
+
+    this.promotionHandlerRegistered = true;
+    console.log('[8.8.4-A1][RTB_CLEANUP] PROMOTION event handler registered');
+  }
+
+
+  /**
+   * Directive 8.8.4-A1: Remove a signal by symbol and mode
+   * Used when a signal is promoted to an active trade
+   * 
+   * @param symbol - The symbol to remove (e.g., 'BTC/USD')
+   * @param mode - Trading mode ('paper' or 'live')
+   * @returns true if a signal was removed
+   */
+  async removeSignalBySymbol(symbol: string, mode: TradingMode): Promise<boolean> {
+    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
+    const matchingSignal = signals.find(s => s.symbol === symbol);
+    
+    if (matchingSignal) {
+      // Mark as promoted (removes from queued pool)
+      await storage.updateRtbSignal(matchingSignal.id, {
+        status: 'promoted',
+        promotedAt: new Date()
+      });
+      performanceMonitor.recordQueueRemove(1);
+      console.log(`[A3.R9.2][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
+      return true;
+    }
+    
+    return false;
+  }
+
+
+// ===== ready_to_buy_service.cleanupExpiredSignals =====
+  /**
+   * Directive 8.8.4-A3.R9.3-C: Legacy cleanup only
+   * 
+   * R9.3-C: TTL-based expiry removed. Lifecycle governed by SQE only.
+   * This method now only handles legacy 'expired' status signals (immediate delete).
+   * Active signal expiry is handled by SQE revalidation in the bucketed refresh
+   * (RTBRefreshService → refreshAndRank). [B-RTB-REFRESH-CONSOLIDATE OBJ-1: was
+   * executePerSignalRefresh, retired 2026-07-22.]
+   */
+  async cleanupExpiredSignals(mode: TradingMode): Promise<number> {
+    let cleanedCount = 0;
+    
+    // R9.3-C: Only handle legacy 'expired' status signals
+    const expiredSignals = await storage.getRtbSignals({
+      mode,
+      status: 'expired',
+    });
+    
+    for (const signal of expiredSignals) {
+      // A3.R9.0.C: Normalize symbol for consistent logging
+      const normalizedSymbol = normalizePairKey(signal.symbol);
+      await storage.deleteRtbSignals({ mode, id: signal.id });
+      performanceMonitor.recordQueueRemove(1);
+      console.log(`[A3.R9.3][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
+      cleanedCount++;
+    }
+    
+    // R9.3-C: TTL-based expiry removed - no longer checking expiresAt
+    // Signal lifecycle is now governed solely by SQE revalidation
+
+    if (cleanedCount > 0) {
+      console.log(`[A3.R9.3][RTB] Cleaned up ${cleanedCount} legacy signals for ${mode} mode`);
+    }
+
+    return cleanedCount;
+  }
+
+
+// ===== routes.uiStatus =====
+        // A3.R9.0: Map internal status to UI display status with statusUpdatedAt
+        let uiStatus: string;
+        switch (signal.status) {
+          case 'active': uiStatus = 'Active'; break;
+          case 'reconfirmed': uiStatus = 'Reconfirmed'; break;
+          case 'promoted': uiStatus = 'Promoted'; break;
+          case 'expired': uiStatus = 'Expired'; break;
+          case 'queued': uiStatus = 'Queued'; break;
+          default: uiStatus = signal.status || 'Unknown'; break;
+        }
+        
+
+// ===== active-execution-engine.startup-expired-cleanup =====
+    // Directive 8.8.4-A3.R2 #6: Clean up expired signals before starting refresh cycle
+    try {
+      const expiredCount = await readyToBuyService.cleanupExpiredSignals(this.mode);
+      if (expiredCount > 0) {
+        console.log(`[A3.R2][PaperExecution:${this.mode}] Cleaned ${expiredCount} expired signals on startup`);
+      }
+    } catch (cleanupError) {
+      console.warn(`[A3.R2][PaperExecution:${this.mode}] Expired signal cleanup failed:`, cleanupError);
+    }
+
+
+// ===== trading-bootstrap.step3-expired-cleanup =====
+          console.log(`[A3.R7][Startup] Step 3: Cleanup expired signals for ${mode}...`);
+          const expiredCount = await readyToBuyService.cleanupExpiredSignals(mode);
+          console.log(`[A3.R7][Startup] Cleaned ${expiredCount} expired signals for ${mode} mode`);
+          
+
+// ===== storage.updateRtbSignal =====
+  async updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal> {
+    const [updated] = await db
+      .update(rtbSignals)
+      .set(updates)
+      .where(eq(rtbSignals.id, id))
+      .returning();
+    return updated;
+  }
+

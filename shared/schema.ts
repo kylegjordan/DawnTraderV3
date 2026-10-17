@@ -2134,16 +2134,16 @@ export const rtbSignals = pgTable("rtb_signals", {
   currentPrice: decimal("current_price", { precision: 20, scale: 8 }), // Current market price at queue time
   volume24h: decimal("volume_24h", { precision: 20, scale: 2 }), // 24h USD volume
   // Queue management
-  status: rtbSignalStatusEnum("status").notNull().default("queued"),
+  // B-RTB-QUEUED-STATUS-SWEEP (row 59g): NO default — an insert that omits the status fails (the one insert passes
+  // 'active'); a 'queued' default would land a row in a status nothing reads. promoted_at / expired_at /
+  // promoted_trade_id were dropped: no writer could reach them and nothing read them (DELETED_COMPONENTS_LOG).
+  status: rtbSignalStatusEnum("status").notNull(),
   queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
-  promotedAt: timestamp("promoted_at", { withTimezone: true }),
-  expiredAt: timestamp("expired_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }), // R9.3-C: Made optional - lifecycle governed by SQE, not TTL
   // Directive 8.8.4-A3.R7: Refresh tracking for Central Clock integration
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }), // Last successful refresh timestamp
   missedRefreshes: integer("missed_refreshes").default(0), // Count of failed refresh attempts
   blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
-  promotedTradeId: varchar("promoted_trade_id"), // Trade ID if promoted to execution
   metadata: jsonb("metadata"), // Original signal data for re-evaluation
   // B79.0n.RTB (2026-05-27, Phase 1): per-class queue partitioning key.
   // NULL allowed only during Phase 1+2 backfill window. Post-Phase-3 CHECK

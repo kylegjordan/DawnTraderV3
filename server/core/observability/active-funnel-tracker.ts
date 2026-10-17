@@ -105,12 +105,21 @@ export interface RtbRefreshCounters {
   // ── B-RTB-REFRESH-CONSOLIDATE OBJ-4 (2026-07-19, CORRECTED after Langston CHANGES-NEEDED).
   //
   // CC-A's first cut conflated TWO different denominators: queue-LIFECYCLE exits (every way a
-  // row can leave rtb_signals — the §9.5(a) census's eight deleters) and refresh-PASS outcomes
+  // row can leave rtb_signals; see the enumeration below) and refresh-PASS outcomes
   // (what happens to a signal that entered THIS pass's re-evaluation). They are not the same
   // set, and summing them produced an identity that could never hold:
-  //   • `promoted` fires in active-execution-engine.ts:2223 — a DIFFERENT service, not a pass outcome.
+  //   • `promoted` is counted in active-execution-engine.ts:5380 (`recordActiveRtbRefresh(this.mode, _fProm, { promoted: 1 })`)
+  //     after the claim DELETES the row (exit 4) — a DIFFERENT service, not a pass outcome. Nothing writes status 'promoted'.
   //   • the unclassifiable drop RETURNS BEFORE `refreshedAttempted` increments — it never enters.
-  //   • expiry lives in cleanupExpiredSignals, outside refreshAndRank entirely.
+  //   • the SIX production exits from rtb_signals, enumerated at B-RTB-QUEUED-STATUS-SWEEP (row 59g, 2026-10-17):
+  //     1. refreshAndRank, duplicate pair       — ready_to_buy_service.ts:866  `await storage.deleteRtbSignals({ mode, id: signal.id });`
+  //     2. refreshAndRank, bulk                 — ready_to_buy_service.ts:1193 `const deleted = await storage.deleteRtbSignalsByIds(bulkDeletes);`
+  //     3. expireSignal (reEvaluateQueue)       — ready_to_buy_service.ts:1553 `await storage.deleteRtbSignals({`
+  //     4. promoteSignal, the claim             — ready_to_buy_service.ts:1595 `const removed = await storage.deleteRtbSignals({ mode, id: signal.id });`
+  //     5. clearQueue (reset / stop trading)    — ready_to_buy_service.ts:2049 `const deleted = await storage.deleteRtbSignals({ mode });`
+  //     6. POST /active-engine/clear-data       — routes.ts:11461              `const signalsDeleted = await storage.deleteRtbSignals({ mode });`
+  //   Whether the old count of eight included the never-reachable `removeSignalBySymbol` write is not recoverable by arithmetic;
+  //   this list is re-derived from the code, not decremented.
   // Only ONE new bucket is a genuine refresh-pass outcome. The others were removed rather than
   // wired, because wiring them would have made the identity wrong in a way that still "passed".
   droppedError: number;          // exception mid-pass → row bulk-deleted. This one IS in the

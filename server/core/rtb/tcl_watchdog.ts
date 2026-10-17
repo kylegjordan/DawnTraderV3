@@ -156,19 +156,17 @@ class TCLWatchdog {
   /**
    * Directive 8.8.4-A3.R8.5: Query live pool count from database
    * Replaces cached snapshot approach with real-time query
-   * FIX: Includes only active pool statuses (queued, active, reconfirmed)
-   * Explicitly excludes promoted (already executed) and expired (pending cleanup)
+   * The queue's two live statuses, 'active' and 'reconfirmed' — no writer produces any other on rtb_signals (row 59g:
+   * the 'queued' term read a status no row had carried since 2025-12-18, and 'promoted' / 'expired' have no writer).
    */
   private async getLivePoolCount(mode: TradingMode): Promise<number> {
-    // A3.R8.5: Active pool statuses that count toward TCL threshold
-    // Excluded: 'promoted' (already executed), 'expired' (pending cleanup)
+    // A3.R8.5: the pool statuses that count toward the TCL threshold — the queue's two live statuses.
     const active = await storage.getRtbSignals({ mode, status: 'active' });
     const reconfirmed = await storage.getRtbSignals({ mode, status: 'reconfirmed' });
-    const queued = await storage.getRtbSignals({ mode, status: 'queued' });
-    
-    const total = active.length + reconfirmed.length + queued.length;
-    console.log(`[A3.R8.5][TCL_LIVE_COUNT] mode=${mode} active=${active.length} reconfirmed=${reconfirmed.length} queued=${queued.length} total=${total}`);
-    
+
+    const total = active.length + reconfirmed.length;
+    console.log(`[A3.R8.5][TCL_LIVE_COUNT] mode=${mode} active=${active.length} reconfirmed=${reconfirmed.length} total=${total}`);
+
     return total;
   }
 

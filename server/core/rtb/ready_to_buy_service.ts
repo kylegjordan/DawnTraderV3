@@ -51,7 +51,6 @@ import { getPerClassTargetGate } from '../calculations/expectancy.js';
 
 import type { RtbSignal, InsertRtbSignal } from '@shared/schema';
 import { tclWatchdog } from './tcl_watchdog';
-import { eventBus, type PromotionEvent } from '../../lib/event-bus';
 import { contextBridge } from '../../services/context-bridge';
 import { centralClock, ClockTick } from '../../services/central-clock';
 // P19-B6.5b (F1b/F2/#320/#321): per-asset-class active gate defense-in-depth at the single RTB
@@ -488,7 +487,6 @@ class ReadyToBuyService {
   private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // P19-B4b D5: key = `${mode}:${signalId}`
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
-  private promotionHandlerRegistered = false; // Directive 8.8.4-A1: Track handler registration
 
   // P19-B3b (2026-06-13, landmine #2): observable counter for SQE-signal queue
   // DROPS. queueSQESignal is called fire-and-forget from the orchestrator; a throw
@@ -522,76 +520,8 @@ class ReadyToBuyService {
 
   constructor() {
     console.log('[RTB] Ready-to-Buy Queue Service initialized');
-    this.registerPromotionHandler();
     // A3.R9.0: Start performance monitor for metrics collection
     performanceMonitor.start();
-  }
-
-  /**
-   * Directive 8.8.4-A1: Register PROMOTION event handler for cleanup
-   * When a signal is promoted to active trade, immediately remove it from RTB queue
-   * and broadcast rtb:cleared to all clients
-   */
-  private registerPromotionHandler(): void {
-    if (this.promotionHandlerRegistered) {
-      return;
-    }
-
-    eventBus.onPromotion(async (event: PromotionEvent) => {
-      try {
-        console.log(`[8.8.4-A1][RTB_CLEANUP] Processing promotion event: ${event.symbol}/${event.strategy} (mode=${event.mode})`);
-        
-        // Remove the promoted signal from the queue by symbol/mode
-        const removed = await this.removeSignalBySymbol(event.symbol, event.mode);
-        
-        if (removed) {
-          // Broadcast rtb:cleared for the promoted symbol
-          await contextBridge.broadcast({
-            type: 'rtb:cleared',
-            payload: {
-              mode: event.mode,
-              symbol: event.symbol,
-              reason: 'promoted',
-              timestamp: new Date().toISOString()
-            },
-            mode: event.mode
-          });
-          console.log(`[8.8.4-A1][RTB_CLEANUP] ✅ Signal ${event.symbol} removed and rtb:cleared broadcasted`);
-        }
-      } catch (err: any) {
-        console.error(`[8.8.4-A1][RTB_CLEANUP][ERROR] Failed to cleanup promoted signal:`, err);
-      }
-    });
-
-    this.promotionHandlerRegistered = true;
-    console.log('[8.8.4-A1][RTB_CLEANUP] PROMOTION event handler registered');
-  }
-
-
-  /**
-   * Directive 8.8.4-A1: Remove a signal by symbol and mode
-   * Used when a signal is promoted to an active trade
-   * 
-   * @param symbol - The symbol to remove (e.g., 'BTC/USD')
-   * @param mode - Trading mode ('paper' or 'live')
-   * @returns true if a signal was removed
-   */
-  async removeSignalBySymbol(symbol: string, mode: TradingMode): Promise<boolean> {
-    const signals = await storage.getRtbSignals({ mode, status: 'queued' });
-    const matchingSignal = signals.find(s => s.symbol === symbol);
-    
-    if (matchingSignal) {
-      // Mark as promoted (removes from queued pool)
-      await storage.updateRtbSignal(matchingSignal.id, {
-        status: 'promoted',
-        promotedAt: new Date()
-      });
-      performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.2][RTB] Removed signal ${symbol} (id=${matchingSignal.id}) from ${mode} queue`);
-      return true;
-    }
-    
-    return false;
   }
 
   /**
@@ -987,9 +917,9 @@ class ReadyToBuyService {
             // GATE PROVEN BEFORE WIRING (Langston's condition — partial coverage here would
             // recreate the same bug flipped): `refreshAndRank` is the ONLY path that REFRESHES a
             // signal — sole caller of `acquireRefreshedInputs` and sole writer of
-            // `lastRefreshedAt`/the refreshed fields. Every other `updateRtbSignal` site
-            // (`removeSignalBySymbol`, the promotion-cleanup fallback; `criteria-limiter` was deleted by B-SIZING-DEC-RESTORE, rule 18) writes
-            // `status:'promoted'` + `promotedAt` — EXIT writes that touch no decision input.
+            // `lastRefreshedAt`/the refreshed fields. No other path writes a queued row's fields at all: the last
+            // other writer (`removeSignalBySymbol`, a `status:'promoted'` EXIT write that could never match) and
+            // `storage.updateRtbSignal` itself were deleted by B-RTB-QUEUED-STATUS-SWEEP (row 59g, rule 18).
             const _refreshState = this.getSignalRefreshState(mode, signal.signalId);
             _refreshState.isRefreshing = true;
             try {
@@ -1502,7 +1432,8 @@ class ReadyToBuyService {
 
   /**
    * Get all queued signals for a mode
-   * Directive 8.8.4-A3.R8: Include both 'active' and 'reconfirmed' statuses
+   * Directive 8.8.4-A3.R8: the queue's two live statuses, 'active' (pending first refresh) and 'reconfirmed'. No writer
+   * produces any other status on rtb_signals (row 59g; the legacy 'queued' leg read rows none had carried since 2025-12-18).
    */
   async getQueuedSignals(mode: TradingMode, assetClass?: AssetClass): Promise<RtbSignal[]> {
     // B79.0n.RTB (2026-05-27): optional assetClass filter for per-class
@@ -1528,15 +1459,7 @@ class ReadyToBuyService {
       orderDir: 'desc',
     });
 
-    // Also include legacy 'queued' status for backward compatibility
-    const queuedSignals = await storage.getRtbSignals({
-      ...baseFilter,
-      status: 'queued',
-      orderBy: 'queuedAt', // #558 A1: was 'finalScore' (retired) — true ranking is downstream
-      orderDir: 'desc',
-    });
-
-    const allSignals = [...activeSignals, ...reconfirmedSignals, ...queuedSignals];
+    const allSignals = [...activeSignals, ...reconfirmedSignals];
     // #558 A1: was a finalScore sort (retired). Order this raw queue read newest-first;
     // the decision-grade ranking is applied in getRankedSignals via computeRankKey (r_multiple).
     allSignals.sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
@@ -1685,43 +1608,6 @@ class ReadyToBuyService {
       console.error(`[B-RTB-REFRESH-LIVE-PRICE][PROMOTION_DELETE_FAILED] symbol=${normalizedSymbol} id=${signalId} — not opened; the row stays queued:`, error);
       return 'delete_failed';
     }
-  }
-
-  /**
-   * Directive 8.8.4-A3.R9.3-C: Legacy cleanup only
-   * 
-   * R9.3-C: TTL-based expiry removed. Lifecycle governed by SQE only.
-   * This method now only handles legacy 'expired' status signals (immediate delete).
-   * Active signal expiry is handled by SQE revalidation in the bucketed refresh
-   * (RTBRefreshService → refreshAndRank). [B-RTB-REFRESH-CONSOLIDATE OBJ-1: was
-   * executePerSignalRefresh, retired 2026-07-22.]
-   */
-  async cleanupExpiredSignals(mode: TradingMode): Promise<number> {
-    let cleanedCount = 0;
-    
-    // R9.3-C: Only handle legacy 'expired' status signals
-    const expiredSignals = await storage.getRtbSignals({
-      mode,
-      status: 'expired',
-    });
-    
-    for (const signal of expiredSignals) {
-      // A3.R9.0.C: Normalize symbol for consistent logging
-      const normalizedSymbol = normalizePairKey(signal.symbol);
-      await storage.deleteRtbSignals({ mode, id: signal.id });
-      performanceMonitor.recordQueueRemove(1);
-      console.log(`[A3.R9.3][CLEANUP] Deleted legacy expired signal ${normalizedSymbol}/${signal.strategy}`);
-      cleanedCount++;
-    }
-    
-    // R9.3-C: TTL-based expiry removed - no longer checking expiresAt
-    // Signal lifecycle is now governed solely by SQE revalidation
-
-    if (cleanedCount > 0) {
-      console.log(`[A3.R9.3][RTB] Cleaned up ${cleanedCount} legacy signals for ${mode} mode`);
-    }
-
-    return cleanedCount;
   }
 
   /**
@@ -2473,7 +2359,7 @@ class ReadyToBuyService {
     };
 
     // Directive 8.8.4-A3.R8: Log trace event for new signal insertion
-    this.logRtbTrace(input.mode, normalizedSymbol, input.strategy, 'queued', 'active', 'insertion');
+    this.logRtbTrace(input.mode, normalizedSymbol, input.strategy, 'none', 'active', 'insertion'); // a new row: no prior status
 
     // Phase 8.8.4-C.13.B: Use upsert to prevent duplicate key errors
     const signal = await storage.upsertRtbSignal(insertData);

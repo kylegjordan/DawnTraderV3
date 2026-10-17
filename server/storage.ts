@@ -661,7 +661,6 @@ export interface IStorage {
     limit?: number
   }): Promise<RtbSignal[]>;
   getRtbSignalById(id: string): Promise<RtbSignal | undefined>;
-  updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal>;
   deleteRtbSignals(filters: { mode: 'live' | 'paper'; id?: string; symbol?: string; strategy?: string; status?: string }): Promise<number>;
   
   // Directive 8.8.4-A4.R10R-3.T3: Batch RTB operations for concurrent refresh
@@ -4411,9 +4410,9 @@ export class DatabaseStorage implements IStorage {
           // would survive with the key present. Every NULLABLE column is written `?? null` — absent means absent, never kept.
           // Mechanism: drizzle-orm 0.39.1 `mapUpdateSet` (node_modules/drizzle-orm/utils.js:82) filters
           // `Object.entries(values).filter(([, value]) => value !== void 0)`. Do NOT remove a `?? null` below without reading that.
-          // Columns in NEITHER this SET nor the insert, on purpose: finalScore, expiresAt (#558 / R9.3-C residue), promotedAt,
-          // expiredAt, lastRefreshedAt (written elsewhere; they survive a re-issue, and no reader of them on rtb_signals was found
-          // at row 59f), missedRefreshes, promotedTradeId, id.
+          // Columns in NEITHER this SET nor the insert, on purpose: finalScore, expiresAt (#558 / R9.3-C residue),
+          // lastRefreshedAt (written elsewhere; it survives a re-issue), missedRefreshes, id. (promotedAt, expiredAt and
+          // promotedTradeId were dropped by row 59g — no writer could reach them.)
           targetPrice: data.targetPrice ?? null,
           quantity: data.quantity ?? null,
           notional: data.notional ?? null,
@@ -4514,15 +4513,6 @@ export class DatabaseStorage implements IStorage {
       .from(rtbSignals)
       .where(eq(rtbSignals.id, id));
     return result;
-  }
-
-  async updateRtbSignal(id: string, updates: Partial<RtbSignal>): Promise<RtbSignal> {
-    const [updated] = await db
-      .update(rtbSignals)
-      .set(updates)
-      .where(eq(rtbSignals.id, id))
-      .returning();
-    return updated;
   }
 
   async deleteRtbSignals(filters: { mode: 'live' | 'paper'; id?: string; symbol?: string; strategy?: string; status?: string }): Promise<number> {

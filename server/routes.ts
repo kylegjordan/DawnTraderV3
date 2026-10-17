@@ -4899,17 +4899,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         const quantity = Number.isFinite(storedQuantity) ? storedQuantity : 0;
         const estimatedValue = Number.isFinite(storedNotional) ? storedNotional : 0;
         
-        // A3.R9.0: Map internal status to UI display status with statusUpdatedAt
-        let uiStatus: string;
-        switch (signal.status) {
-          case 'active': uiStatus = 'Active'; break;
-          case 'reconfirmed': uiStatus = 'Reconfirmed'; break;
-          case 'promoted': uiStatus = 'Promoted'; break;
-          case 'expired': uiStatus = 'Expired'; break;
-          case 'queued': uiStatus = 'Queued'; break;
-          default: uiStatus = signal.status || 'Unknown'; break;
-        }
-        
         // A3.R9.0: Extract statusUpdatedAt from metadata for traceability
         const metadata = signal.metadata as Record<string, any> || {};
         const statusUpdatedAt = metadata.statusUpdatedAt || null;
@@ -4936,7 +4925,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           ...signal,
           estimatedQuantity: quantity,
           estimatedValue: estimatedValue,
-          uiStatus,
           statusUpdatedAt,
           strategyWeight,
           rankScore: rank.value,
@@ -9295,19 +9283,18 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { readyToBuyService } = await import('./core/rtb/ready_to_buy_service.js');
       const mode = (req.query.mode as 'live' | 'paper') || 'paper';
       
-      // Manually trigger cleanup and re-evaluation
-      const expiredCount = await readyToBuyService.cleanupExpiredSignals(mode);
+      // Manually trigger re-evaluation (the legacy expired-status cleanup that stood here was deleted by row 59g: no row on
+      // rtb_signals has ever been written 'expired' since expiry became an immediate delete)
       const { removed, remaining } = await readyToBuyService.reEvaluateQueue(mode);
       const tclStatus = await readyToBuyService.getTCLStatus(mode);
       
-      console.log(`[8.8.4-C.6][FORCE_REFRESH] mode=${mode}, expired=${expiredCount}, removed=${removed}, remaining=${remaining}`);
+      console.log(`[8.8.4-C.6][FORCE_REFRESH] mode=${mode}, removed=${removed}, remaining=${remaining}`);
       
       res.json({
         ok: true,
         phase: '8.8.4-C.6',
         message: 'RTB Queue refresh forced successfully via ReadyToBuyService',
         mode,
-        expiredCount,
         removedCount: removed,
         remainingCount: remaining,
         tclStatus,
@@ -12242,7 +12229,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       try {
         const qr: any = await tailDb.execute(tailSql`
           SELECT COUNT(*)::int AS depth FROM rtb_signals
-          WHERE mode = ${mode} AND status IN ('queued', 'active', 'reconfirmed')
+          WHERE mode = ${mode} AND status IN ('active', 'reconfirmed')
         `);
         const row: any = (qr as any).rows?.[0] ?? (qr as any)[0];
         rtbQueueDepth = Number(row?.depth ?? 0);

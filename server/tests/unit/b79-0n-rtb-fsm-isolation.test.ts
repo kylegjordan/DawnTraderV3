@@ -57,10 +57,6 @@ vi.mock('../../storage', () => ({
     }),
     getActiveTrades: vi.fn(async () => []),
     getRtbSignalById: vi.fn(async (id: string) => table[id]),
-    updateRtbSignal: vi.fn(async (id: string, updates: any) => {
-      table[id] = { ...table[id], ...updates };
-      return table[id];
-    }),
     upsertRtbSignal: vi.fn(async (data: any) => {
       const id = `id-${data.symbol}-${data.strategy}-${data.assetClass}`;
       table[id] = { ...table[id], ...data, id };
@@ -75,7 +71,11 @@ vi.mock('../../services/central-clock', () => ({
 }));
 
 import { readyToBuyService } from '../../core/rtb/ready_to_buy_service';
-import { storage } from '../../storage';
+
+// Row 59g (B-RTB-QUEUED-STATUS-SWEEP): storage.updateRtbSignal was deleted (its only production caller could never match), so
+// a state change in these probes is written to the in-memory table directly. The probes test that a per-class READ surfaces
+// only that class's rows; the write is the fixture, not the subject.
+function setStatus(id: string, status: string) { table[id] = { ...table[id], status }; }
 
 function seedSignal(id: string, mode: string, symbol: string, strategy: string, assetClass: string, status: string = 'active') {
   table[id] = {
@@ -96,7 +96,7 @@ describe('B79.0n.RTB — FSM transition integrity across classes (T3)', () => {
     seedSignal('xp-1', 'paper', 'PF_BTCUSD', 'fx5', 'xstock_perp', 'active');
 
     // ACT: promote the crypto_spot row.
-    await storage.updateRtbSignal('cs-1', { status: 'promoted' as any });
+    setStatus('cs-1', 'promoted');
 
     expect(table['cs-1'].status).toBe('promoted');
     expect(table['xp-1'].status).toBe('active'); // untouched
@@ -108,7 +108,7 @@ describe('B79.0n.RTB — FSM transition integrity across classes (T3)', () => {
     seedSignal('cs-b', 'paper', 'ETH/USD', 'fx5', 'crypto_spot', 'active');
     seedSignal('xp-a', 'paper', 'PF_BTCUSD', 'fx5', 'xstock_perp', 'active');
 
-    await storage.updateRtbSignal('cs-a', { status: 'reconfirmed' as any });
+    setStatus('cs-a', 'reconfirmed');
 
     const cryptoActive = await readyToBuyService.getQueuedSignals('paper' as any, 'crypto_spot' as any);
     const cryptoActiveStatuses = cryptoActive.map((s) => s.status).sort();
@@ -128,7 +128,7 @@ describe('B79.0n.RTB — FSM transition integrity across classes (T3)', () => {
     seedSignal('cs-eth', 'paper', 'ETH/USD', 'fx5', 'crypto_spot', 'active');
     seedSignal('cp-eth', 'paper', 'ETH/USD', 'fx5', 'crypto_perp', 'active');
 
-    await storage.updateRtbSignal('cs-eth', { status: 'promoted' as any });
+    setStatus('cs-eth', 'promoted');
 
     expect(table['cs-eth'].status).toBe('promoted');
     expect(table['cp-eth'].status).toBe('active'); // sibling row in different class untouched
@@ -138,17 +138,18 @@ describe('B79.0n.RTB — FSM transition integrity across classes (T3)', () => {
     expect(cpRows[0].status).toBe('active');
   });
 
-  it('T3.4 — all 3 lifecycle statuses (active / reconfirmed / queued) are surfaced per-class', async () => {
+  it('T3.4 — the two live statuses (active / reconfirmed) are surfaced per-class; retired labels are not (row 59g)', async () => {
     seedSignal('cs-a', 'paper', 'BTC/USD', 'fx5', 'crypto_spot', 'active');
     seedSignal('cs-r', 'paper', 'ETH/USD', 'fx5', 'crypto_spot', 'reconfirmed');
-    seedSignal('cs-q', 'paper', 'SOL/USD', 'fx5', 'crypto_spot', 'queued');
+    seedSignal('cs-q', 'paper', 'SOL/USD', 'fx5', 'crypto_spot', 'queued');   // a retired label: no writer produces it
     seedSignal('cs-p', 'paper', 'ADA/USD', 'fx5', 'crypto_spot', 'promoted'); // should NOT surface
     seedSignal('xp-a', 'paper', 'PF_AAPLXUSD', 'fx5', 'xstock_perp', 'active');
 
     const cryptoRows = await readyToBuyService.getQueuedSignals('paper' as any, 'crypto_spot' as any);
-    expect(cryptoRows).toHaveLength(3);
+    expect(cryptoRows).toHaveLength(2);
     const statuses = cryptoRows.map((s) => s.status).sort();
-    expect(statuses).toEqual(['active', 'queued', 'reconfirmed']);
+    expect(statuses).toEqual(['active', 'reconfirmed']);
+    expect(cryptoRows.find((s) => s.id === 'cs-q')).toBeUndefined();
     expect(cryptoRows.find((s) => s.id === 'cs-p')).toBeUndefined();
   });
 });
