@@ -83,6 +83,7 @@
 - ▶ **QUEUED: `B-ALERT-OWNER-ON-ROW`** (`#1137`) — sprint row 1l: each alert's owner on the alert record itself, so Langston stops re-guessing it.
 - ▶ **QUEUED: `B-FEATURE-WATCH-ROUTING`** (`#1128`) — sprint row 1i: a feature-watch finding that changes how sessions operate gets a disposition the day it is surfaced.
 - ▶ **QUEUED: `B-GOV-ENROLMENT-WINDOW-OBJECT`** (`#1133`) — sprint row 1j: the checker's enrolment window becomes a chosen object, not the last 300 commits.
+- ▶ **QUEUED: `B-EXCEPTIONS-CONFIRMER-GRAMMAR`** (`#1203`) — sprint row 1j1, after 1j (placed 2026-10-17 by NEW Claude on Langston's ruling): the exceptions parser must read the confirmer cell's leading word, not the whole string, and the V2 parser flip gets a placed home.
 - ▶ **QUEUED: `B-PLAN-ROW-DISAPPEARANCE`** (`#1134`) — sprint row 1k: deleting a batch's plan row must not silently resolve its plan alert.
 - ✅ **`B-CENSUS-OWNERLESS-REMAINDER` CLOSED 2026-10-08** (`#1167`, sprint row 1s; Step 8 and Step 11 CONFIRMED by Langston; report `Batch Completion/B_CENSUS_OWNERLESS_REMAINDER_COMPLETION_REPORT.md`) — the 48 placed-but-ownerless issues: 3 closed with citations, 45 given an owner and handed over by number; the census lists any that reappear ("placed but ownerless", 0 live).
 - ✅ **`B-LEDGER-TAIL-DISPOSITION` CLOSED 2026-10-08** (`#1169`, sprint row 1u; Step 8 and Step 11 CONFIRMED by Langston; report `Batch Completion/B_LEDGER_TAIL_DISPOSITION_COMPLETION_REPORT.md`) — `#395`/`#398` closed with citations; the census lists an open issue whose last cell says it is finished.
