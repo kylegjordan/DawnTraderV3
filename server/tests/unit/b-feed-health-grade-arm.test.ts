@@ -1,6 +1,6 @@
 /**
  * B-FEED-HEALTH-GRADE-ARM (#1123, SPRINT_TO_LIVE_PLAN row 3a) — the feed-liveness grade is armed (feed_health prefetched)
- * and its dashboard alerts clear on recovery (acknowledged once per non-healthy -> healthy transition); the check-failed
+ * and its dashboard alerts clear on every healthy cycle (Step 9 r3 — idempotent, never edge-gated); the check-failed
  * path is throttled; the per-cycle liveness line separates "graded healthy" from "not graded"; and the recorder names
  * every admitted pair by its venue base (the 8 pairs the old base table mis-named).
  */
@@ -28,8 +28,11 @@ vi.mock('../../services/cluster-bus', () => ({ clusterBus: { on: vi.fn(), emit: 
 vi.mock('../../exchanges/kraken/kraken-websocket-adapter.js', () => ({
   krakenWebSocketAdapter: { getI8EWsHealth: () => [], getConnectionStats: () => ({}), on: vi.fn() },
 }));
+vi.mock('../../services/passive-archive/equity-spot-archiver.js', () => ({
+  getEquityTickerUpdateAges: () => [], isEquityTickingCountWarm: () => false,
+}));
 
-import { runFeedIntegrityCheck, sessionSegmentUtc, formatLivenessLines } from '../../jobs/feed-integrity-auto-check';
+import { runFeedIntegrityCheck, sessionSegment, formatLivenessLines } from '../../jobs/feed-integrity-auto-check';
 import { getFeedIntegrityMonitor } from '../../services/feed-integrity-monitor';
 import { loadCryptoSpotUniverse } from '../../services/passive-archive/universe-loader';
 
@@ -37,8 +40,8 @@ const ADMIN = { id: 'admin-1', isAdmin: true };
 function report(status: 'healthy' | 'warning' | 'critical', grade: string) {
   return {
     timestamp: new Date().toISOString(), overallGrade: grade, issues: [], summary: [],
-    metrics: { feedType: 'websocket', latencyMs: 1, stalenessSec: 0, uptimePercent: 100, pairCount: 1, errorRate: 0,
-      reconnectCount: 0, tickAgeSec: 0, status, lastUpdateISO: new Date().toISOString() },
+    metrics: { feedType: 'websocket', latencyMs: 1, stalenessSec: 0, uptimePercent: 100, reconnectBasis: 'ring', ringSpanMs: 3_300_000, ringSamples: 12, pairCount: 1, errorRate: 0,
+      reconnectCount: 0, tickAgeSec: 0, livenessGrade: 'healthy', status, lastUpdateISO: new Date().toISOString() },
   } as any;
 }
 let mon: ReturnType<typeof getFeedIntegrityMonitor>;
@@ -54,29 +57,38 @@ beforeEach(() => {
   vi.spyOn(mon, 'saveReport').mockImplementation(() => undefined);
 });
 
-describe('the clear: acknowledged once per recovery, read off the recorded status (Langston C1)', () => {
+describe('the clear: acknowledged on every healthy cycle, idempotent (Step 9 r3, Langston BLOCKER-2)', () => {
   it('a non-healthy cycle mints; the next healthy cycle acknowledges for each admin and records healthy', async () => {
     vi.spyOn(mon, 'generateReport').mockReturnValueOnce(report('critical', 'F')).mockReturnValueOnce(report('healthy', 'A'));
     await runFeedIntegrityCheck('auto');
     expect(m.createAlert).toHaveBeenCalledTimes(2); // live + paper for the one admin
+    expect(m.acknowledgeFeedHealthAlerts).not.toHaveBeenCalled(); // a non-healthy cycle acknowledges nothing
     expect(mon.getLastStatus()).toBe('critical');
     await runFeedIntegrityCheck('auto');
     expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(1);
     expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledWith('admin-1');
     expect(mon.getLastStatus()).toBe('healthy');
   });
-  it('C2 discriminator: healthy every cycle but the GRADE changes each cycle -> acknowledged exactly once, not every cycle', async () => {
-    // shouldSendAlert is true on every grade change (:612), so a `shouldAlert && healthy` predicate would ack each cycle.
-    vi.spyOn(mon, 'generateReport')
-      .mockReturnValueOnce(report('warning', 'C'))
-      .mockReturnValueOnce(report('healthy', 'A'))
-      .mockReturnValueOnce(report('healthy', 'B'))
-      .mockReturnValueOnce(report('healthy', 'A'));
-    for (let i = 0; i < 4; i++) await runFeedIntegrityCheck('auto');
-    expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(1);
-  });
-  it('a healthy start with nothing raised acknowledges nothing', async () => {
+  it('THE RESTART CASE: the recorded status starts healthy, rows are waiting — the FIRST healthy cycle acknowledges them', async () => {
+    // Under the old edge (`healthy && lastStatus !== healthy`) this acknowledged nothing: lastStatus starts 'healthy'.
+    expect(mon.getLastStatus()).toBe('healthy');
+    const log = vi.spyOn(console, 'log');
     vi.spyOn(mon, 'generateReport').mockReturnValue(report('healthy', 'A'));
+    await runFeedIntegrityCheck('auto');
+    expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(1);
+    expect(log.mock.calls.some((c) => /\[FeedIntegrity\]\[CLEAR\] .*acknowledged 2 feed alert/.test(String(c[0])))).toBe(true);
+  });
+  it('drained: a second healthy cycle acknowledges nothing and prints no CLEAR line', async () => {
+    m.acknowledgeFeedHealthAlerts.mockResolvedValueOnce([{ mode: 'live' }]).mockResolvedValue([]);
+    vi.spyOn(mon, 'generateReport').mockReturnValue(report('healthy', 'A'));
+    await runFeedIntegrityCheck('auto');
+    const log = vi.spyOn(console, 'log');
+    await runFeedIntegrityCheck('auto');
+    expect(m.acknowledgeFeedHealthAlerts).toHaveBeenCalledTimes(2); // called each healthy cycle — idempotent by its WHERE
+    expect(log.mock.calls.some((c) => /\[FeedIntegrity\]\[CLEAR\]/.test(String(c[0])))).toBe(false);
+  });
+  it('a warning or critical cycle never acknowledges', async () => {
+    vi.spyOn(mon, 'generateReport').mockReturnValueOnce(report('warning', 'C')).mockReturnValueOnce(report('critical', 'F'));
     await runFeedIntegrityCheck('auto');
     await runFeedIntegrityCheck('auto');
     expect(m.acknowledgeFeedHealthAlerts).not.toHaveBeenCalled();
@@ -99,12 +111,24 @@ describe('the check-failed path is throttled through the shared state (Langston 
 });
 
 describe('the per-cycle liveness line (Langston C3 — not graded never prints as healthy)', () => {
-  it('session segments use the fixed UTC bounds and Saturday/Sunday read weekend', () => {
-    expect(sessionSegmentUtc(new Date('2026-10-07T13:29:00Z'))).toBe('pre_market');
-    expect(sessionSegmentUtc(new Date('2026-10-07T13:30:00Z'))).toBe('regular');
-    expect(sessionSegmentUtc(new Date('2026-10-07T20:00:00Z'))).toBe('after_hours');
-    expect(sessionSegmentUtc(new Date('2026-10-07T03:00:00Z'))).toBe('overnight');
-    expect(sessionSegmentUtc(new Date('2026-10-10T15:00:00Z'))).toBe('weekend');
+  it('session segments follow New York time — in daylight time (EDT, UTC-4)', () => {
+    expect(sessionSegment(new Date('2026-10-07T13:29:00Z'))).toBe('pre_market'); // 09:29 ET
+    expect(sessionSegment(new Date('2026-10-07T13:30:00Z'))).toBe('regular');    // 09:30 ET
+    expect(sessionSegment(new Date('2026-10-07T20:00:00Z'))).toBe('after_hours'); // 16:00 ET
+    expect(sessionSegment(new Date('2026-10-07T03:00:00Z'))).toBe('overnight');  // 23:00 ET
+    expect(sessionSegment(new Date('2026-10-10T15:00:00Z'))).toBe('weekend');    // Saturday
+  });
+  it('... and after 2026-11-01 in standard time (EST, UTC-5) — where the fixed UTC bounds would have been an hour off', () => {
+    expect(sessionSegment(new Date('2026-11-04T13:30:00Z'))).toBe('pre_market'); // 08:30 ET (the old bounds said regular)
+    expect(sessionSegment(new Date('2026-11-04T14:30:00Z'))).toBe('regular');    // 09:30 ET
+    expect(sessionSegment(new Date('2026-11-04T20:30:00Z'))).toBe('regular');    // 15:30 ET (the old bounds said after_hours)
+    expect(sessionSegment(new Date('2026-11-04T21:00:00Z'))).toBe('after_hours'); // 16:00 ET
+  });
+  it('the weekend is the xStock close, Friday 20:00 ET to Sunday 20:00 ET', () => {
+    expect(sessionSegment(new Date('2026-10-16T23:59:00Z'))).toBe('after_hours'); // Fri 19:59 ET
+    expect(sessionSegment(new Date('2026-10-17T00:00:00Z'))).toBe('weekend');     // Fri 20:00 ET
+    expect(sessionSegment(new Date('2026-10-18T23:59:00Z'))).toBe('weekend');     // Sun 19:59 ET
+    expect(sessionSegment(new Date('2026-10-19T00:00:00Z'))).toBe('overnight');   // Sun 20:00 ET
   });
   it('config missing prints not_graded; a class without a threshold prints threshold=absent, not a bare healthy', () => {
     const now = new Date('2026-10-07T03:00:00Z');

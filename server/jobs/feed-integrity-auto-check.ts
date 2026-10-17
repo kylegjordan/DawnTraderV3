@@ -5,20 +5,19 @@ import { storage } from '../storage';
 import { tradingStateSync } from '../services/trading-state-sync';
 import { clusterBus } from '../services/cluster-bus';
 import type { FeedHealthReport, LivenessReading } from '../services/feed-integrity-monitor';
+import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day';
+import { isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours';
 
 /**
- * B-FEED-HEALTH-GRADE-ARM (#1123): the trading-session segment of a UTC instant, for the per-cycle liveness line.
- * FIXED UTC bounds (Langston Step-1 Q2) — valid for US daylight time only, i.e. until 2026-11-01; a report that reads
- * these lines states its date and that limit. Saturday and Sunday read `weekend`.
+ * B-FEED-HEALTH-GRADE-ARM (#1123): the trading-session segment of an instant, for the per-cycle liveness line. New York time
+ * through the xStock calendar (`getXstockSession` + `isInXstockWeekendClose`), so it follows daylight saving — the fixed UTC
+ * bounds it replaced were valid only until 2026-11-01. The labels are unchanged: regular 09:30-16:00 ET, after_hours
+ * 16:00-20:00, overnight 20:00-04:00, pre_market 04:00-09:30, weekend Fri 20:00 → Sun 20:00 ET.
  */
-export function sessionSegmentUtc(d: Date): 'regular' | 'after_hours' | 'overnight' | 'pre_market' | 'weekend' {
-  const day = d.getUTCDay();
-  if (day === 0 || day === 6) return 'weekend';
-  const m = d.getUTCHours() * 60 + d.getUTCMinutes();
-  if (m >= 810 && m < 1200) return 'regular';      // 13:30-20:00
-  if (m >= 1200) return 'after_hours';              // 20:00-24:00
-  if (m < 480) return 'overnight';                  // 00:00-08:00
-  return 'pre_market';                              // 08:00-13:30
+export function sessionSegment(d: Date): 'regular' | 'after_hours' | 'overnight' | 'pre_market' | 'weekend' {
+  if (isInXstockWeekendClose(d)) return 'weekend';
+  const seg = getXstockSession(d);
+  return seg === 'regular' ? 'regular' : seg === 'after' ? 'after_hours' : seg === 'pre' ? 'pre_market' : 'overnight';
 }
 
 /**
@@ -26,7 +25,7 @@ export function sessionSegmentUtc(d: Date): 'regular' | 'after_hours' | 'overnig
  * the grader returns `healthy` for a class with no DB threshold, and that must never print like a graded healthy (#546).
  */
 export function formatLivenessLines(reading: LivenessReading | null, now: Date): string[] {
-  const segment = sessionSegmentUtc(now);
+  const segment = sessionSegment(now);
   if (!reading) return [`[FeedIntegrity][liveness] not_graded=no_reading segment=${segment}`];
   if (reading.configMissing) return [`[FeedIntegrity][liveness] not_graded=config_missing segment=${segment}`];
   return reading.classes.map((c) =>
@@ -83,11 +82,15 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
           feedType: 'websocket',
           latencyMs: 0,
           stalenessSec: 0,
-          uptimePercent: 100,
+          uptimePercent: null, // not graded while dormant — never a fabricated 100 (#546)
+          reconnectBasis: 'interval',
+          ringSpanMs: null,
+          ringSamples: 0,
           pairCount: 0,
           errorRate: 0,
           reconnectCount: 0,
           tickAgeSec: 0,
+          livenessGrade: 'healthy',
           status: 'healthy',
           lastUpdateISO: new Date().toISOString(),
         },
@@ -119,21 +122,24 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     
     for (const line of formatLivenessLines(monitor.getLastLiveness(), new Date())) console.log(line);
 
-    // B-FEED-HEALTH-GRADE-ARM (#1123): the CLEAR. On a recorded non-healthy -> healthy transition (the read site is
-    // getLastStatus, Langston Step-1 C1), ACKNOWLEDGE every unacknowledged feed alert for each admin, both modes — this
-    // clears grade-path and check-failed rows alike (both mint alertType 'feed_health'). Then record healthy, so it runs
-    // once per recovery. The verb is acknowledge: `system_alerts` has no resolve state (the crew's resolve-never-ack rule is
-    // about system-alerts.jsonl, a different store). The dead `getActiveAlertId()` branch that stood here is removed.
-    if (metrics.status === 'healthy' && monitor.getLastStatus() !== 'healthy') {
+    // B-FEED-HEALTH-GRADE-ARM (#1123): the CLEAR — on EVERY healthy cycle, not on a transition (Step 9 r3, Langston BLOCKER-2).
+    // The transition read (`getLastStatus`) is in-memory and starts `healthy` on every restart, so the restart that ships a fix
+    // and grades healthy at once would never acknowledge a persisted backlog. `acknowledgeFeedHealthAlerts` is idempotent (it
+    // filters `acknowledged = false`), so a drained table returns nothing; the line prints only when it acknowledged >= 1. It
+    // clears grade-path and check-failed rows alike (both mint alertType 'feed_health'). The verb is acknowledge:
+    // `system_alerts` has no resolve state. The dead `getActiveAlertId()` branch that stood here is removed.
+    if (metrics.status === 'healthy') {
+      const was = monitor.getLastStatus();
       const admins = (await storage.getAllUsers()).filter((u) => u.isAdmin);
       for (const admin of admins) {
         const cleared = await AlertsService.acknowledgeFeedHealthAlerts(admin.id);
+        if (cleared.length === 0) continue;
         const live = cleared.filter((a) => a.mode === 'live').length;
-        console.log(`[FeedIntegrity][CLEAR] recovered (was ${monitor.getLastStatus()}): acknowledged ${cleared.length} feed alert(s) for user ${admin.id} (live ${live}, paper ${cleared.length - live})`);
+        console.log(`[FeedIntegrity][CLEAR] healthy (recorded ${was}): acknowledged ${cleared.length} feed alert(s) for user ${admin.id} (live ${live}, paper ${cleared.length - live})`);
       }
-      monitor.updateAlertState('healthy', overallGrade);
+      if (was !== 'healthy') monitor.updateAlertState('healthy', overallGrade);
     }
-    
+
     // Handle new alerts (warnings/critical) with deduplication
     const shouldAlert = monitor.shouldSendAlert(metrics.status, overallGrade);
     
@@ -184,7 +190,9 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               metadata: {
                 grade: overallGrade,
                 latencyMs: metrics.latencyMs,
-                uptimePercent: metrics.uptimePercent,
+                uptimePercent: metrics.uptimePercent ?? 'warming',
+                reconnectBasis: metrics.reconnectBasis,
+                ringSpanMs: metrics.ringSpanMs,
                 reconnectCount: metrics.reconnectCount,
                 tickAgeSec: metrics.tickAgeSec,
                 feedType: metrics.feedType,
@@ -203,7 +211,9 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
               metadata: {
                 grade: overallGrade,
                 latencyMs: metrics.latencyMs,
-                uptimePercent: metrics.uptimePercent,
+                uptimePercent: metrics.uptimePercent ?? 'warming',
+                reconnectBasis: metrics.reconnectBasis,
+                ringSpanMs: metrics.ringSpanMs,
                 reconnectCount: metrics.reconnectCount,
                 tickAgeSec: metrics.tickAgeSec,
                 feedType: metrics.feedType,
@@ -225,7 +235,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
     const duration = Date.now() - startTime;
     
     console.log(`[FeedIntegrity:${trigger}] ✅ Check complete in ${duration}ms - Grade: ${overallGrade}, Status: ${metrics.status}`);
-    console.log(`[FeedIntegrity:${trigger}] Metrics: Latency=${metrics.latencyMs}ms, Uptime=${metrics.uptimePercent}%, Reconnects=${metrics.reconnectCount}, TickAge=${metrics.tickAgeSec}s`);
+    console.log(`[FeedIntegrity:${trigger}] Metrics: Heartbeat=${metrics.latencyMs}ms, Uptime=${metrics.uptimePercent === null ? `warming(${metrics.ringSamples})` : `${metrics.uptimePercent}%`}, Reconnects=${metrics.reconnectCount}(${metrics.reconnectBasis}), TickAge=${metrics.tickAgeSec}s`);
     
     return {
       ...report,

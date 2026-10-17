@@ -934,11 +934,13 @@ export default function AITransparencyPage() {
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-latency">
                             {feedHealthData.metrics.latencyMs}ms
                           </div>
-                          <div className="text-xs text-muted-foreground">Latency</div>
+                          <div className="text-xs text-muted-foreground">Heartbeat interval</div>
                         </div>
                         <div className="text-center p-3 bg-muted/30 rounded-lg">
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-uptime">
-                            {feedHealthData.metrics.uptimePercent}%
+                            {feedHealthData.metrics.uptimePercent === null || feedHealthData.metrics.uptimePercent === undefined
+                              ? 'warming up'
+                              : `${feedHealthData.metrics.uptimePercent}%`}
                           </div>
                           <div className="text-xs text-muted-foreground">Uptime</div>
                         </div>
@@ -946,7 +948,9 @@ export default function AITransparencyPage() {
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-reconnects">
                             {feedHealthData.metrics.reconnectCount}
                           </div>
-                          <div className="text-xs text-muted-foreground">Reconnects (last 5min)</div>
+                          <div className="text-xs text-muted-foreground">
+                            {feedHealthData.metrics.reconnectBasis === 'ring' ? 'Reconnects (last hour)' : 'Reconnects (last 5 min, warming up)'}
+                          </div>
                         </div>
                         <div className="text-center p-3 bg-muted/30 rounded-lg">
                           <div className="text-2xl font-bold text-foreground" data-testid="text-feed-pairs">

@@ -388,6 +388,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private lastGlobalHeartbeat: number = 0;
   private lastMessageTime: number = 0;
   private reconnectRetries: number = 0;
+  // B-FEED-HEALTH-GRADE-ARM F-3 (#1123, row 3a): completed reconnects since process start — +1 per open that follows a drop,
+  // NEVER reset. `reconnectAttempts` resets to 0 on every successful open (`handleOpen`) and is incremented on one path only
+  // (`scheduleReconnect`), so a reader sampling it every 5 minutes almost never saw a reconnect. This is the counter the
+  // feed-integrity monitor differences per interval. Counted at the OPEN, so a drop that takes three attempts counts once.
+  private reconnectsCompleted: number = 0;
   private globalHeartbeatMonitorInterval: NodeJS.Timeout | null = null;
   private channelWatchdogTimers: Map<string, NodeJS.Timeout> = new Map();
   private healthMetricsLoggerInterval: NodeJS.Timeout | null = null;
@@ -591,6 +596,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // Phase 8.8.3-I8C: Detect reconnect scenario
     const wasReconnect = this.i8cIsReconnecting;
     this.i8cIsReconnecting = false;
+    // F-3: every reconnect path sets the flag before its connect() (`scheduleReconnect`, `reconnectWithBackoff`, the 9.0
+    // safe-resubscribe); only `start()` opens with it false — so this counts every reconnect and no process start.
+    if (wasReconnect) this.reconnectsCompleted++;
     
     this.isConnected = true;
     this.isConnecting = false;
@@ -2159,6 +2167,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       subscribedCount: this.subscribedSymbols.size,
       pendingCount: this.pendingSubscriptions.size,
       reconnectAttempts: this.reconnectAttempts,
+      reconnectsCompleted: this.reconnectsCompleted,
       healthy: this.isHealthy()
     };
   }

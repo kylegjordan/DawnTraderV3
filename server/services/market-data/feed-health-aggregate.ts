@@ -26,6 +26,10 @@ export interface SymbolFreshness {
   symbol: string;
   /** ms since this symbol's last tick; null = it has never ticked (no data yet). */
   ageMs: number | null;
+  /** B-FEED-HEALTH-GRADE-ARM F-2 (row 3a): the class, ASSERTED by the source that produced the entry (the xStock recorder
+   *  feeds `xstock_spot`). When present it is used as-is and the symbol is never re-resolved — a plain `AAPL/USD` name
+   *  cannot tell an xStock from a crypto ticker (33 collide). Absent ⇒ the grader's `classify` decides. */
+  assetClass?: string;
 }
 
 /**
@@ -161,7 +165,7 @@ export function gradeFeedAliveness(
  * Crypto has no market-closed concept → always graded (its threshold absorbs weekend
  * thin-book). Pure + dependency-injected so it unit-tests without a live adapter/clock/DB.
  */
-export type ClassSuppressReason = 'market_closed' | 'warmup_grace' | 'no_symbols' | null;
+export type ClassSuppressReason = 'market_closed' | 'warmup_grace' | 'no_symbols' | 'recorder_warming' | null;
 export interface PerClassThresholds { warningMs: number; criticalMs: number; }
 export interface ClassLivenessResult {
   assetClass: string;
@@ -182,6 +186,11 @@ export interface PerClassLivenessOpts {
   isXstockSymbolOpen: (symbol: string) => boolean;
   /** ms of post-open warmup grace still in effect (>0 ⇒ suppress xStock critical/warning). */
   xstockWarmupRemainingMs: number;
+  /** B-FEED-HEALTH-GRADE-ARM F-2 (row 3a): is the xStock SOURCE a reading yet? The recorder's per-symbol map is in memory and
+   *  empty after every restart, so an empty map is not a dead feed. When this is passed the xStock class is always reported
+   *  (even with no entries); `false` ⇒ suppressed `recorder_warming` — never `market_closed`, which would make a dead feed
+   *  read as a closed market. Omitted ⇒ the class appears only when entries exist (the pre-F-2 behaviour). */
+  xstockSourceWarm?: boolean;
 }
 export function gradePerClassFeedLiveness(
   health: SymbolFreshness[],
@@ -189,10 +198,11 @@ export function gradePerClassFeedLiveness(
 ): { classes: ClassLivenessResult[]; overall: FeedAliveGrade } {
   const byClass = new Map<string, SymbolFreshness[]>();
   for (const h of health) {
-    const cls = opts.classify(h.symbol);
+    const cls = h.assetClass ?? opts.classify(h.symbol);
     const arr = byClass.get(cls);
     if (arr) arr.push(h); else byClass.set(cls, [h]);
   }
+  if (opts.xstockSourceWarm !== undefined && !byClass.has(opts.xstockClassKey)) byClass.set(opts.xstockClassKey, []);
 
   const rank: Record<FeedAliveGrade, number> = { healthy: 0, warning: 1, critical: 2 };
   const classes: ClassLivenessResult[] = [];
@@ -203,7 +213,13 @@ export function gradePerClassFeedLiveness(
     let suppressed = false;
     let suppressReason: ClassSuppressReason = null;
 
-    if (cls === opts.xstockClassKey) {
+    if (cls === opts.xstockClassKey && opts.xstockSourceWarm === false) {
+      suppressed = true;
+      suppressReason = 'recorder_warming'; // the source holds no reading yet (restart) — not a closed market, not a dead feed
+    } else if (cls === opts.xstockClassKey && syms.length === 0) {
+      suppressed = true;
+      suppressReason = 'no_symbols';
+    } else if (cls === opts.xstockClassKey) {
       considered = syms.filter((sym) => opts.isXstockSymbolOpen(sym.symbol));
       if (considered.length === 0) {
         suppressed = true;

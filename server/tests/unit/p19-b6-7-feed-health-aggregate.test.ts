@@ -267,6 +267,44 @@ describe('P19-B6.7 feed-health-aggregate — gradePerClassFeedLiveness (ALARM, O
     );
     expect(r.overall).toBe('critical');
   });
+
+  // B-FEED-HEALTH-GRADE-ARM F-2 (row 3a, Step 9 r2 CHANGE 2/3): the xStock leg fed from the recorder, class ASSERTED.
+  it('F-2: an entry carrying its class is never re-resolved — a collision ticker fed as xStock lands in xstock_spot', () => {
+    // STX/USD classifies as crypto here (no "x/USD" suffix), exactly as the 33 real collision names re-resolve.
+    const r = gradePerClassFeedLiveness(
+      [s('XBT/USD', 700), { symbol: 'STX/USD', ageMs: 200000, assetClass: 'xstock_spot' }],
+      base({ xstockSourceWarm: true }),
+    );
+    const x = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
+    expect(x.symbolCount).toBe(1);
+    expect(x.grade).toBe('critical');
+    expect(r.classes.find((c) => c.assetClass === 'crypto_spot')!.symbolCount).toBe(1);
+  });
+  it('F-2: a cold source reports the xStock class as recorder_warming — never market_closed, never absent', () => {
+    const r = gradePerClassFeedLiveness([s('XBT/USD', 700)], base({ xstockSourceWarm: false }));
+    const x = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
+    expect(x).toBeDefined();
+    expect(x.suppressed).toBe(true);
+    expect(x.suppressReason).toBe('recorder_warming');
+    expect(r.overall).toBe('healthy');
+  });
+  it('F-2: warm and stale while the market is open → graded, not suppressed', () => {
+    const r = gradePerClassFeedLiveness(
+      [{ symbol: 'AAPL/USD', ageMs: 90000, assetClass: 'xstock_spot' }],
+      base({ xstockSourceWarm: true }),
+    );
+    const x = r.classes.find((c) => c.assetClass === 'xstock_spot')!;
+    expect(x.suppressed).toBe(false);
+    expect(x.grade).toBe('warning');
+  });
+  it('F-2: warm with no entries reads no_symbols, not market_closed', () => {
+    const r = gradePerClassFeedLiveness([s('XBT/USD', 700)], base({ xstockSourceWarm: true }));
+    expect(r.classes.find((c) => c.assetClass === 'xstock_spot')!.suppressReason).toBe('no_symbols');
+  });
+  it('control: without xstockSourceWarm the grader behaves as before (no xStock class when none was fed)', () => {
+    const r = gradePerClassFeedLiveness([s('XBT/USD', 700)], base());
+    expect(r.classes.map((c) => c.assetClass)).toEqual(['crypto_spot']);
+  });
 });
 
 describe('P19-B6.9 (#398) — computeRollingWindowReadiness (rolling-window WS uptime)', () => {

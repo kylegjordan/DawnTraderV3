@@ -272,7 +272,9 @@ export class AlertsService {
       .where(
         and(
           eq(systemAlerts.userId, userId),
-          sql`${systemAlerts.alertType} LIKE '%feed%'`,
+          // B-FEED-HEALTH-GRADE-ARM (row 3a): exactly the type both feed-health mint paths write. It now runs on every healthy
+          // cycle, so a pattern would silently acknowledge any future type that merely contains "feed".
+          eq(systemAlerts.alertType, 'feed_health'),
           eq(systemAlerts.acknowledged, false)
         )
       )

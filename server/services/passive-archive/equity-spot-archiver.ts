@@ -243,6 +243,16 @@ export function countEquitySymbolsUpdatedSince(sinceMs: number): number {
   return n;
 }
 
+/** B-FEED-HEALTH-GRADE-ARM F-2 (#1123, row 3a): each xStock symbol's age since its last ticker UPDATE (receipt time, the
+ *  same clock `T` counts) — the source of the feed-integrity monitor's xStock liveness leg. Read-only. The symbols are plain
+ *  `AAPL/USD` names: the caller asserts the class (`xstock_spot`) and must never re-resolve them, because 33 of them collide
+ *  with crypto tickers. Empty after every restart until frames arrive — gate it on `isEquityTickingCountWarm`. */
+export function getEquityTickerUpdateAges(nowMs: number): { symbol: string; ageMs: number }[] {
+  const out: { symbol: string; ageMs: number }[] = [];
+  for (const [symbol, at] of lastTickerUpdateAt) out.push({ symbol, ageMs: Math.max(0, nowMs - at) });
+  return out;
+}
+
 /** Test-only: the per-symbol update clock. */
 export function _resetTickerUpdateClockForTests(): void {
   lastTickerUpdateAt.clear();
