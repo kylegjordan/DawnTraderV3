@@ -16,6 +16,16 @@ spec.loader.exec_module(b)
 lq = b.lq
 CFG = b.CFG
 REAL_INBOX_IDS, REAL_INBOX_EVIDENCE = gw.inbox_message_ids, b.al.inbox_evidence   # the readers, before any stub
+# ⛔ NOTHING THE PROBE DOES MAY LAND IN A LIVE FILE (Langston, gate B 2026-10-17: probe runs had written 161 lines
+# with fake ids 1000-1999 into /var/log/discord-langston-bridge.log, a population trap for anyone grepping it).
+# Every path the bridge writes is pointed into a scratch dir BEFORE any scenario, and the end of the run checks the
+# live log and inbox did not grow.
+_SCRATCH = tempfile.mkdtemp(prefix="probe-bridge-")
+LIVE = [b.LOG_FILE, b.dc.INBOX_LOG]
+_live_size = {p: (os.path.getsize(p) if os.path.exists(p) else None) for p in LIVE}
+b.LOG_FILE = os.path.join(_SCRATCH, "bridge.log")
+b.dc.INBOX_LOG = os.path.join(_SCRATCH, "inbox.jsonl")
+b.QUEUE_FILE = os.path.join(_SCRATCH, "queue.json")
 
 fails = 0
 def check(name, cond):
@@ -250,5 +260,15 @@ async def delivery_scenario():
 asyncio.run(scenario())
 asyncio.run(failure_scenarios())
 asyncio.run(delivery_scenario())
+# the live bridge may append to its own log/inbox while the probe runs, so "did not grow" is checked against lines
+# the PROBE would write: none of its fake ids may appear in what was appended
+for p, n0 in _live_size.items():
+    if n0 is None or not os.path.exists(p):
+        continue
+    with open(p, "rb") as fh:
+        fh.seek(n0)
+        tail = fh.read().decode("utf-8", "replace")
+    check("nothing the probe wrote reached the live file %s" % p,
+          not any(("msg %d " % i) in tail or ('"message_id": %d,' % i) in tail for i in range(1000, 2000)))
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)
