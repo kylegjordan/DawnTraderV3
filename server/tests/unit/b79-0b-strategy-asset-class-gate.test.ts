@@ -8,8 +8,9 @@
  * code constant DELETED. `isStrategyEnabledForAssetClass` now reads from
  * `module_constants.strategy_gates.<assetClass>.<strategy>.enabled` via the
  * synchronous `getCachedConstant` resolver. DB seed migration
- * 2026-05-11-b79-0m-a-xstock-strategy-gates-seeds.sql provides the 19
- * explicit rows for xstock_spot (10 enabled, 9 disabled).
+ * 2026-05-11-b79-0m-a-xstock-strategy-gates-seeds.sql provides 18 explicit
+ * xstock_spot rows (9 on, 9 off); the 19th, `orb`, predates it (B79). The mock
+ * lists below describe that history, not live membership.
  *
  * These tests mock the module-constants-service cache to verify the gating
  * helper's logic in isolation from real DB state.

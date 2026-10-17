@@ -1184,11 +1184,11 @@ export const MULTI_FAMILY_ELIGIBILITY: Record<string, StrategyFamily[]> = {
 //                 <assetClass>.<strategy>.enabled` (boolean).
 //
 // Default-open semantics preserved: an asset class with NO `strategy_gates`
-// rows is treated as "all strategies enabled" — back-compat for crypto_spot
-// (which has no rows) and future asset classes prior to their B79.x onboarding.
+// rows is treated as "all strategies enabled" — back-compat for future asset classes
+// prior to their B79.x onboarding. (crypto_spot HAS rows: 19, `p19-b8-5-gate12-seed`, 2026-07-14.)
 //
-// xstock_spot: 10 rows seeded by B79.0m.a (8 enabled by default; orb gated
-// separately by its existing strategy_gates row).
+// xstock_spot: B79.0m.a (`2026-05-11-b79-0m-a-xstock-strategy-gates-seeds.sql`) seeded 18 xstock_spot rows, 9 on and 9 off; the 19th, `orb`, predates it (B79, `2026-05-07-b79-xstock-module-constants.sql`).
+// Membership is data and has changed since — read the rows, never a count written here.
 //
 // Module `strategy_gates` is prefetched at boot via b72-warmup.ts so this
 // sync helper can read from the in-memory cache. Cold-cache reads throw;
@@ -1213,8 +1213,9 @@ import {
  *     (crypto_perp / xstock_perp pre-B80 etc. have none). ⚠️ crypto_spot DOES have rows: all 19,
  *     seeded 2026-07-14 by `p19-b8-5-gate12-seed` (B-SILENT-STRATEGY-CENSUS corrected this line).
  *
- * B79.0m.a seeded all 19 xstock_spot rows explicitly (10 enabled, 9 disabled AT THE SEED). Membership
- * is DATA and has changed since — read the rows, never a count written here.
+ * B79.0m.a (`drizzle/migrations/2026-05-11-b79-0m-a-xstock-strategy-gates-seeds.sql`)
+ * seeded 18 xstock_spot rows, 9 on and 9 off; the 19th, `orb`, predates it (B79, `2026-05-07-b79-xstock-module-constants.sql`).
+ * Membership is DATA and has changed since — read the rows, never a count written here.
  *
  * Throws on cold cache — b72-warmup.ts must have prefetched `strategy_gates`.
  */
