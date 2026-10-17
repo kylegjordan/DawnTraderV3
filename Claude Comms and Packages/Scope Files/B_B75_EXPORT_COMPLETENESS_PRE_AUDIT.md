@@ -1,4 +1,11 @@
-# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r4, 2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r5, 2026-10-17)
+
+> **r5 answers Langston's r4 blocker (07:4xZ):**
+> - the premise "every call has source rows present" is withdrawn for the whole path, which enumerates children by name and age (`listOldPartitions`, `:244-281`), not by rows;
+> - the decision now takes a **measured** `rowsPresent` from a `LIMIT 1` probe at `:517`, and the refuse arms that claim new rows require it;
+> - record 1 → P9;
+> - record 2 → P3.6.
+> r4 was `e3fdb9e07`.
 
 > **r4 answers Langston's r3 blocker (07:1xZ):**
 > - the whole path's `already-active` short-circuit (`b75-retention-sweep.ts:703`) is now a gate in the census (§3.1, §3.4(e)). It is **deleted**, so the whole path reaches the one decision;
@@ -198,22 +205,31 @@ Everything that starts work against the manifest or the evidence table:
    **The rule, one row per state, decided at ONE site BEFORE any upload.** It is a pure function, `decideExistingCopy(row, evidenceExists)`, returning `export | reuse | refuse(reason)`.
    - **Called from:** `archiveOneObject` (`:517`), used by the whole, sliced and plain lanes; and the ctx lane's skip (`ctx:133-138`).
    - **The whole path's short-circuit at `:703-714` is deleted,** so the whole path reaches it through `archiveOneObject` (Langston r3: hoist or route; I route).
-   - **Every call has source rows present for the label,** because each lane enumerates only labels with rows still in the source (§3.4). So `active` at the call means **rows found outside a copy that was already closed out.**
+   - **Row presence is MEASURED, not assumed (Langston r4).**
+     - The sliced path (`listPresentDates`, `:745`) and the plain lane (`:900`, `:923`) enumerate labels from rows.
+     - **The whole path does not:** `listOldPartitions` (`:244-281`) enumerates child partitions by name and age, and `:703` passed `partition.partitionLabel` straight through. The deleted short-circuit was the only thing between an empty re-created past child and the decision.
+     - So `archiveOneObject` runs one probe before deciding: `SELECT 1 FROM <partitionTableName or table> WHERE <ts> >= rangeStart AND <ts> < rangeEnd <extraPredicate> LIMIT 1`. All of those are in scope at `:517`.
+     - The result, `rowsPresent`, is an input to `decideExistingCopy`. **A refusal that claims new rows can fire only when the probe found one,** so its body is a measured claim.
 
    | existing warm row for the label | decision | why |
    |---|---|---|
    | none | export | the normal path |
    | `verified`, basis `source-count-matched` | **reuse** (skip) | proven, and the source was not yet dropped or deleted. This is the legitimate mid-run resume (the sliced path's day loop, a crash between verify and drop). No alert. |
    | `verified`, any other basis | **refuse** | C-6: a re-export could only prove the leftover rows |
-   | **`active`, ANY basis** (Langston r3) | **refuse** | `active` is set only after the drop or delete (P3.6 makes the plain lane true too), so rows present now are new rows outside a closed copy. Reusing would run `dropAndMarkActive` and destroy them; re-exporting would overwrite the closed copy with only the new rows. **Refusing is right even when the basis is `source-count-matched`.** |
-   | `migrated` / `migrating`, any basis | **refuse** | the cold copy is the copy of record; a re-export would split one label into two partial copies |
+   | **`active`, ANY basis, `rowsPresent`** (Langston r3) | **refuse** | `active` is set only after the drop or delete (P3.6 makes the plain lane true too), so rows present now are new rows outside a closed copy. Reusing would run `dropAndMarkActive` and destroy them; re-exporting would overwrite the closed copy with only the new rows. **Refusing is right even when the basis is `source-count-matched`.** |
+   | **`active`, any basis, NOT `rowsPresent`** (Langston r4) | **skip**, `skipped: already-active`, as today; no alert | an empty re-created past child; nothing to protect and nothing to claim |
+   | `migrated` / `migrating`, any basis, `rowsPresent` | **refuse** | the cold copy is the copy of record; a re-export would split one label into two partial copies |
+   | `migrated` / `migrating`, any basis, NOT `rowsPresent` | **skip**, no alert | same reasoning as the empty `active` case |
    | `pending` / `uploaded` | export **only if no evidence row exists for M**; otherwise **refuse** | an existing proof for M with a non-final state means the state was reset under a proof |
 
    - The refusal body names which row fired. The `active` row's body says *"rows found for a label already archived and dropped/deleted — they are NOT in the archived copy, and they are kept hot"*. That separates it from the `verified` reuse, which raises no alert.
    - **Every refusal** uses the `isNonProven` class (P3.4): `critical`, permanent until a human acts, and it names the retained hot size. Nothing is uploaded, no evidence is written, and no object or manifest field is overwritten. The hot rows stay.
    - **Reach today:** none. 0 of 568 pre-hotfix rows overlap a live hot child, and 0 evidence rows exist. After deploy, a refusal needs hot rows to appear for a label already archived — rows written with an old timestamp.
    - **The tests change accordingly:**
-     - **the WHOLE path specifically** (Langston r3): an `active` row with a live child now refuses with `isNonProven`, where the deleted short-circuit returned `skipped`. This is the regression case for `:703`;
+     - **the WHOLE path specifically:**
+       - an `active` row with a live child **holding rows** now refuses with `isNonProven`, where the deleted short-circuit returned `skipped` (Langston r3);
+       - an `active` row with an **empty** re-created child still returns `skipped: already-active`, with no alert (Langston r4);
+       - both are regression cases for `:703`. The probe is mutation-proved: forced to `true`, the empty case must page.
      - `active` refuses even with `source-count-matched`; `verified` + `source-count-matched` reuses, with no alert;
      - `migrated` refuses, `migrating` refuses;
      - `pending` with no evidence exports;
@@ -228,9 +244,13 @@ Everything that starts work against the manifest or the evidence table:
    - `non-proven-existing` has **no** automatic resolver; it needs a human disposition.
    - Bodies name the run start time and point at the log; no counts.
 5. **Wording (OBJ-6).** The plain catch (`:999-1005`) names a count mismatch; the `:1165` promise is rewritten to say a mismatch keeps failing safely and needs investigation.
-6. **The plain lane marks its labels `active` after the delete (A14, new).** Today the plain-archive lane leaves every label `verified` forever (the only `active` writers are `:729` and `:796`, both in the partition lane). So a late row with an old timestamp would meet a `verified` + proven row, be reused at (c), and **be deleted by the age-delete without being in the archive.** After its delete loop finishes, the lane runs `markLabelsActive` (`:400`) for every present label (`labels`, `:923`). Those are exactly the days whose rows the delete just removed, so the `active` row above refuses that case.
+6. **The plain lane marks its labels `active` after the delete (A14, new).** Today the plain-archive lane leaves every label `verified` forever (the only `active` writers are `:729` and `:796`, both in the partition lane). So a late row with an old timestamp would meet a `verified` + proven row, be reused at (c), and **be deleted by the age-delete without being in the archive.** After its delete loop finishes, the lane runs `markLabelsActive` (`:400`) for every present label. Those are exactly the days whose rows the delete just removed.
+   - **Mechanics (Langston r4 record 2):** `labels` (`:923`) is block-scoped inside the `present.length > 0` branch, which closes at `:966`, while the delete loop is `:973-987`. The implementation hoists `labels` (and `present`) to the table's scope before the branch, and calls `markLabelsActive` after the loop only when the archive branch ran.
+   - `markLabelsActive` pins `AND state = 'verified'` (`:411`)., so the `active` row above refuses that case.
    - **Reach today:** none. The plain-archive tables have 0 manifest rows.
-   - **Semantic note:** `active` then means "the source rows for this label were removed", for both lanes. The SIM states it.
+   - **Semantic note:** `active` then means "the source rows for this label were removed", for both lanes.
+     - **The timestamp moves with it:** `markLabelsActive` also stamps `hot_partition_dropped_at = NOW()` (`:408`). In the plain lane nothing is dropped, so the column means "the source rows were deleted at". A later reader dates the removal from that column.
+     - The SIM states both the state value and the column, and the System Manual chapter states the column's two lane meanings.
 
 **P4 — `system-alerts.ts` (A7, A12).**
 - Add `{ value: 'b75-retention-sweep', tag: 'machine', why: … }` to `ALERT_ACTORS` (`:212`).
@@ -272,6 +292,9 @@ Everything that starts work against the manifest or the evidence table:
 **P9 — `perpfeed-gate-test.ts` (A8, Langston C-1).** **Reorder `--clean`, rather than only comment it.** Today it runs `DROP TABLE` (`:124`) before the manifest `DELETE` (`:126`). For a proven object the `DELETE` is blocked, so the harness would be left half-cleaned: partition gone, manifest row permanent. A later `--seed` would then pass, the resume skip would reuse the proven row, and the gate test would pass without exercising the export.
 - **Fix:** delete the manifest rows first. If that delete is refused, stop **before** the drop, with a message that names the cause.
 - **Then the comment:** after this deploy, the harness is single-use for any label it has proven, and the only recovery is P1.5's rollback.
+- **Record 1 (Langston r4):** `--seed` (`:74`) creates a past child, `2025-01-15`, and its manifest row is live today (`xstock_perp_ohlc_1m` warm `active`).
+  - An aborted run leaves that child behind. With r5's probe, an empty leftover child only skips; a leftover child **with rows** would page `critical` nightly with no resolver.
+  - So the recovery note says: drop the leftover child (`DROP TABLE xstock_perp_ohlc_1m_2025_01_15`) as well as running the rollback. `--clean`'s reordered path refuses before the drop, which leaves exactly that state on purpose.
 - A test covers the refused-delete path.
 
 **P10 — documents (A4, A5).**
