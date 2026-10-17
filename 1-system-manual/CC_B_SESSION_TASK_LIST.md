@@ -31,12 +31,12 @@
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
 - 3a2 `B-WS-RECONNECT-BACKOFF-RESET` (`#1209`, placed 2026-10-17 by Langston's 3a Step-9 ruling): the heartbeat-timeout backoff counter never resets, so after ~6 lifetime reconnects the WebSocket always waits the 60 s cap. After row 3a.
-- 3a3 `B-AI-COMMAND-CENTER-DEAD-ROUTES` (`#1210`, placed 2026-10-17): the AI Command Center is blank because four routes load a module deleted in 2025 — reconnect or remove the panel, census first. After row 3a2.
 - ✅ 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`) — CLOSED 2026-10-11 (Langston Step 11): the cluster bus is in-memory only; its table, enum and retention entry are dropped.
 - ✅ 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`) — CLOSED 2026-10-10 (Langston Step 11).
 - ✅ 59 inc 1 `B-ENTRY-DISTANCE-GUARD` (`#915`, `#1168`) — CLOSED 2026-10-12 (Langston Step 11): a taker fill at or through its stop or target is refused; reward-to-risk at the fill logged in shadow.
 - ✅ 59e `B-RTB-REFRESH-LIVE-PRICE` (`#1168`, `#1189`) — CLOSED 2026-10-12 (Langston Step 11): the RTB refresh reads the live ask and retires a signal past its stop or target; a rejected signal can no longer be opened.
 - 59f `B-RTB-ADMISSION-TIEBREAK-LIVE` (`#1190`) — the queue's R-multiple tiebreak never runs; restore it with a decision on which copy should win.
+- 59g1 `B-ORCHESTRATOR-ROUTES-REMOVAL` (`#1210`, placed 2026-10-17 after 59g): four orchestrator routes load a module deleted in 2025 and fail — telemetry, analysis, re-analyse, formula audit; the learning-summary and logs routes are alive and stay. Census per section of the AI Command Center first.
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).
 - 59c `B-ENTRY-BAND-SHADOW` (`#1186`) — log the fill's distance from the plan against spread and ATR at every taker open; ATR absent on xStock ⇒ log the inputs and refuse the leg (row 59 increment 4).

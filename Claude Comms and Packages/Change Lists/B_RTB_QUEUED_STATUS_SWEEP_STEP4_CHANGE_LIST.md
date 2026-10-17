@@ -14,7 +14,7 @@
 
 ## Gate B — schema and migration
 - `shared/schema.ts`: `status` loses `.default("queued")`; `promotedAt`, `expiredAt`, `promotedTradeId` removed. Edited per line, line endings preserved (the file is mixed).
-- `drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep.sql` (hand-written; MANIFEST; tracked rollback): `ALTER COLUMN status DROP DEFAULT`; `DROP COLUMN IF EXISTS promoted_at, promoted_trade_id, expired_at`. Touches no index — `#1006` (the four-wide drizzle snapshot) stays open.
+- `drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep.sql` (hand-written; MANIFEST; tracked rollback): **`ALTER COLUMN status DROP DEFAULT` only** — *corrected after Langston's Step-4 ruling (b), expand/contract: the three column drops are part 2, a separate file in the next deploy (as first written, this line said the file dropped them).* Touches no index — `#1006` (the four-wide drizzle snapshot) stays open.
 - **Your A3 conditions:** `promoted_trade_id` taken with `promoted_at`. **I also took `expired_at`** — same class: no writer (expiry is an immediate DELETE since A3.R9.0), no reader, 0 non-null of 24 on staging — please confirm. `finalScore` / `expiresAt` stay with `#558`. The evidence is the mechanism (the sole `promoted_at` writer sat inside a `status:'queued'` branch no writer can produce), stated in the migration header; DELETED_COMPONENTS_LOG at Step 10.
 
 ## Gate C — the exit enumeration (your GATE 2)

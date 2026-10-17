@@ -4871,7 +4871,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // [8.8.4-C.10] Map RTB signal fields to frontend expected format
       // RtbSignal has: quantity, notional (instead of estimatedValue)
-      // Directive 8.8.4-A3.R8.5.A: Add UI status mapping for reconfirmed signals
       // P19-B8.7 Step-9 (Kyle directive + Langston E2/E3 rulings, 2026-07-17):
       //  - rankScore/rankArm ATTACHED by the ranker's own getDisplayRankKey (never
       //    recomputed here — formula-blind, survives a ranker-config change).

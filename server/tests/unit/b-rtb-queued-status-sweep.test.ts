@@ -44,6 +44,19 @@ describe('the queue reads only the statuses a writer produces', () => {
   });
 });
 
+describe('migration part 2 — the contraction, shipped after the code that stops naming the columns', () => {
+  it('drops exactly the three writer-less columns, touches no index or default, and is registered after part 1', () => {
+    const m = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-part2.sql');
+    for (const col of ['promoted_at', 'promoted_trade_id', 'expired_at']) expect(m).toMatch(new RegExp(`DROP COLUMN IF EXISTS ${col};`));
+    expect(m.match(/DROP COLUMN/g)).toHaveLength(3);
+    expect(m).not.toMatch(/INDEX|DEFAULT/);
+    const manifest = read('drizzle/migrations/MANIFEST.txt').split(/\r?\n/);
+    expect(manifest.indexOf('2026-10-17-b-rtb-queued-status-sweep-part2.sql')).toBeGreaterThan(manifest.indexOf('2026-10-17-b-rtb-queued-status-sweep.sql'));
+    const rb = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-part2-rollback.sql');
+    for (const col of ['promoted_at', 'promoted_trade_id', 'expired_at']) expect(rb).toMatch(new RegExp(`ADD COLUMN IF NOT EXISTS ${col}`));
+  });
+});
+
 describe('fences — the deleted names and the retired status', () => {
   const rts = read('server/core/rtb/ready_to_buy_service.ts');
   it('the dead promotion clean-up, its lookup and the expired-status clean-up are gone', () => {
