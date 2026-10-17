@@ -1,5 +1,21 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-16-B — `B-XSTOCK-BID-TRIGGER-RELAND` objective 6 (row 2, CC-C) — an xStock exit could be released, and sold, on a blown-out book
+
+**CLASS: `architecture`. SYMPTOM:** the `spread_blown` arm sat after the comparator and used the chain's trailing threshold; a hollow YIELD cleared the comparator, the next frame seeded ON the wide book, and a comparator-relative test then released the exit — PCAR/USD 2026-10-13, YIELD 00:19:42Z → EXIT_RELEASED 00:19:47Z, sold at the bid 7.2% under entry on a 12.3% book. Of 13 such overnight stop exits outside the venue-transition pause, the 12 with a next-open read all reopened above the stop.
+
+**FIX:** an absolute arm before the comparator (`ri_abs_spread_ceiling_pct`, 1%), switched ON as the 14th `book_state` knob (Kyle 2026-10-16); entry refused on a reference-free terminal cause; no page for a spread_blown-only yield; summarised SKIP log; a stop-hold tripwire.
+
+**Verified:** deployed `5cab7b820` 2026-10-16 15:10:55Z; first night 16 held, 0 closes, 53 releases all above the stop, 0 pages — Langston CONFIRMED Step 8. **NOT IN THIS FIX:** the release's movement test (`#1199`). Record `Claude Comms and Packages/Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md`.
+
+## FIX-2026-10-16-C — `B-XSTOCK-BID-TRIGGER-RELAND` increment (4a) (row 2, `#1191`, CC-C) — the no-decision rails never cleared, and an open row silenced the next page
+
+**CLASS: `architecture`. SYMPTOM:** the VTS rail paged 60-76 times every weekday at 13:40Z on genuinely wide books; nothing resolved a row (335/335 by hand), and each open per-symbol row blocked its key's next page; the paper rail had the same gap (9/9 by hand).
+
+**FIX:** per-trade VTS keys and per-position paper keys; expected wide/quiet books join one info record (page after 30 min of session time); decisions written onto the durable row so a minute sweep resolves rows across a restart; unpriced closes recorded with hold and last refusal.
+
+**Verified:** deployed `5cab7b820`; the 60 rows from the 10-16 open cleared on the first sweeps, 28/28 closed-trade rows `TRADE-CLOSED`, 32/32 open-trade rows `DECIDED-AFTER-MINT`, none wrong. **PENDING:** the three-session window 2026-10-19/20/21. Record `Claude Comms and Packages/Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md`.
+
 ## FIX-2026-10-16-A — `B-B75-COUNT-GATE` (hotfix, `#1195`, CC-A, Kyle-directed) — the nightly archive dropped originals whose cold copy was missing rows
 
 **CLASS: `hotfix`.** Scope: `Claude Comms and Packages/Scope Files/B_B75_COUNT_GATE_SCOPE.md`.

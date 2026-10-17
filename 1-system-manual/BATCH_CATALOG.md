@@ -1369,3 +1369,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **THE FIX.** A small script now makes the decision from the actual files: who is dead, who answered, who is still catching up, and who restarted late. It re-sends the check-in once to a watcher that started late, and pages only for a genuine miss or a broken check. Every page also wakes the sessions. A new safety check stops a value read from the shared log being run as a command on the server.
 
 **RESULT.** Live, 19:00-20:15Z: one expected page while it set up its record; then a re-send to OLD and ANALYST Claude; then "answered" for both, with no further check-in pages. 44 and 35 tests pass. **Left:** waking dead watchers and the switch push-wake (row 1z), and a bound on the wake log (`#1202`, row 1qa).
+
+## B-XSTOCK-BID-TRIGGER-RELAND (CC-C, sprint plan row 2 — merged 2026-10-09 with rows 66, 41 and the xStock legs of 64 and 189; `#1191`, `#1199`) — change-class `architecture` — ⏳ **OPEN — OBSERVATION** (increments A and C at Step 7, EST reads 2026-11-01/02/03; objective 6 and increment (4a) deployed `5cab7b820` 2026-10-16, objective 6 Step 8 CONFIRMED; progress report `Claude Comms and Packages/Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md`)
+
+**WHAT IT DOES.** xStock trades open and close only where a real trade could. Shipped so far: the broken-book guard's ring-independent release and duration report (A), the Eastern-time venue-transition pause (C), `spread_blown` ON — a book wider than 1% is held, not sold, with no page (objective 6), and the VTS and paper no-decision alerts that clear themselves (4a).
+
+**OPEN ON:** (4a)'s three-session window (2026-10-19/20/21), A and C's EST reads, objective 6's first exercised stop-hold — criteria pre-registered in the progress report. Still to build: the bid/ask trigger with the size check (2) and the shared VTS trigger module (4b).

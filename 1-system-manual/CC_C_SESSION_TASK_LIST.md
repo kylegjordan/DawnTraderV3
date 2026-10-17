@@ -1,4 +1,4 @@
-# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-10-15
+# CC-C (ANALYST Claude) — SESSION TASK LIST — as of 2026-10-17
 
 > ⛔ **KYLE'S STANDING RULE, 2026-09-05:** every session keeps its own task list.
 > - **It holds:** the batches assigned to this session, the sub-batches already identified, the hotfixes, and the findings still to investigate — in working order.
@@ -37,7 +37,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 
 | plan row | item | state | what it is |
 |---|---|---|---|
-| 2 | B-XSTOCK-BID-TRIGGER-RELAND — ONE BATCH (merged 2026-10-09: + rows 66, 41, the xStock legs of 64 and 189) | PRE-SPRINT stage 2; increments A and C deployed and at Step 7 (EST reads 11-01/02/03); **NEXT (Kyle 2026-10-16): increment (4a), the VTS no-decision rail's reporting (`#1191`), Step 1**; then Kyle's spread_blown switch, then B, then (4b) | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
+| 2 | B-XSTOCK-BID-TRIGGER-RELAND — ONE BATCH (merged 2026-10-09: + rows 66, 41, the xStock legs of 64 and 189) | PRE-SPRINT stage 2; ⏳ OPEN — OBSERVATION: increments A and C at Step 7 (EST reads 11-01/02/03); **objective 6 (`spread_blown` ON) and increment (4a) DEPLOYED `5cab7b820` 2026-10-16** — objective 6 Step 8 CONFIRMED 10-17 (S6 unexercised), (4a) three-session window 10-19/20/21; progress report `Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md`; **NEXT: (4a) window read, then B (the bid/ask trigger + size check), then (4b)**; `B-SPREAD-BLOWN-RELEASE-MOVEMENT` (`#1199`) after objective 6's observation read | midpoint off (Kyle 2026-09-28: finished and deployed BEFORE the sprint starts): paper xStock stop/target triggers back on the bid |
 | pre-sprint stage 3 | B-CRON-MISSED-CATCHUP (`#691` reopened 2026-10-10) | PRE-SPRINT stage 3, after the CORZ quote-vs-bars investigation (placed 2026-10-10) | a wall-clock step makes node-cron drop the next run of every pending schedule; the registry runs a missed occurrence once instead |
 | 4 | B-VTS-NO-DECISION-VALVE | STEP 7 of 11 — deployed in release deploy B 2026-10-06; weekend reopen count open | midpoint off, before the sprint: a VTS trade with no usable sell price no longer books its timeout at the midpoint |
 | 4a | B-VTS-TELEMETRY-AGGREGATES (`#1141`) | STEP 4 r2 of 11 — with Langston | after row 4: NARROWED 2026-10-02 (Langston) to the telemetry lookup's `SKIPPED` fallback (`:283`), stale-cell overwrite (`:218-219`) and the regime-level skipped denominator (`:212-213`) — measure first — plus two rule-18 deletions and one comment record-fix; the never-count / class-pooling half moved to row 148a (CC-A) |
