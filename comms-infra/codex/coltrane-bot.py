@@ -182,18 +182,23 @@ def log(row):
 # on what was seen (a seen-watermark would skip a post whose invoke was in flight when the process died): at a ready,
 # every channel post since max(FLOOR, now - 24 h) is re-fed through on_message - which applies the same brakes and
 # gate - unless the run log records it as answered. The floor is written once, at the first ready of this code, so
-# posts handled by the earlier code (0 of 283 of its run-log rows carry a message id) are never replayed.
+# posts handled by the earlier code (none of its run-log rows carry a message id - 305 rows, Langston's read
+# 2026-10-17) are never replayed.
 # ⛔ NO DUPLICATE INVOKES (Langston r1, exercised): an invalid-session re-IDENTIFY fires a second on_ready while the
 #    first pass is still running, and invoke times vary 4.5 s -> 864 s, so a slower first pass reached ids the second had
 #    already answered - fed order [11, 12, 13, 12, 13]. So: a second pass SKIPS while one runs (`_recovering`), and every
-#    id is re-checked against the run log at FEED time, not only in a start-of-pass snapshot (the leg that also covers
-#    two processes, where the in-memory in-flight set is blind).
+#    id is re-checked against the run log at FEED time, not only in a start-of-pass snapshot. That re-check covers ONLY
+#    an id answered AND logged between the snapshot and its feed. It does NOT cover two processes: the run-log row is
+#    written at the END of _handle, after the invoke, so a second process reading during the first's in-flight invoke
+#    sees no answer and feeds the same id (Langston r2). Two processes are not guarded here.
 # ⛔ THE WINDOW IS THE CLOCK, NOT A COUNT: the history read is `after=` the window start with no limit - a 500-message cap
 #    bound at ~10-17 h on busy days (>500 channel messages/day on 6 of 14 days, peak ~1,134).
 # ⚠️ The answered-dedupe depends on the run log NOT being rotated inside 24 h (no logrotate rule exists for it today,
 #    measured 2026-10-17); a sub-24 h rotation would re-enable replays of answered posts.
 # Limits, stated: DMs are not recovered (no single history to read); a post older than 24 h is not; an invoke that
-# FAILED (nothing posted) is recorded `answered: false` and IS retried at the next ready.
+# FAILED (nothing posted) is recorded `answered: false` and IS retried at the next ready; an invoke that TIMED OUT
+# raises before its log row, so it is retried by the ABSENCE of a row. There is no attempt cap: an unanswerable post is
+# re-invoked at every ready for 24 h (homed on B-LANGSTON-RELIEF's own list, Langston r2).
 FLOOR = "/var/lib/coltrane-bot/recover-floor.json"
 RECOVER_MAX_AGE_S = 24 * 3600
 
@@ -499,9 +504,10 @@ class Coltrane(discord.Client):
         elif rc != 0:
             posted = "invoke failed rc=%d" % rc
 
-        # `answered` is what restart recovery keys on: true only when the reply was POSTED or the model chose SILENT.
-        # A failed invoke, a failed send or an empty reply is `false`, so it is retried at the next ready.
-        answered = bool(silent or (posted or "").startswith("ok "))
+        # `answered` is what restart recovery keys on: true only when the reply was POSTED, or the invoke SUCCEEDED and
+        # the model chose SILENT. A failed invoke (even one whose stdout reads SILENT - Langston r2, measured), a failed
+        # send or an empty reply is `false`, so it is retried at the next ready.
+        answered = bool((rc == 0 and silent) or (posted or "").startswith("ok "))
         log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc, "message_id": m.id, "recovered": _recovered,
              "answered": answered,
              "seconds": round(time.time() - t0, 1), "tokens_used": toks,

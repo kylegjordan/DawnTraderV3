@@ -218,7 +218,8 @@ class Recovery(unittest.TestCase):
         bot.mirror_to_inbox = lambda *a, **k: "ok"
         c = bot.Coltrane.__new__(bot.Coltrane)
         for mid, result, want in ((1, (0, "an answer", ""), True), (2, (0, "SILENT", ""), True),
-                                  (3, (1, "", "boom"), False), (4, (0, "", ""), False)):
+                                  (3, (1, "", "boom"), False), (4, (0, "", ""), False),
+                                  (6, (1, "SILENT", "boom"), False), (7, (2, "SILENT\n", ""), False)):
             bot.invoke = lambda *a, _r=result: _r
             chan = Chan([])
             asyncio.run(c._handle(Msg(mid, 0, channel=chan), "q", "NEW Claude", True, "dm", True))
