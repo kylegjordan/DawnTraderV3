@@ -7,7 +7,7 @@
 | item | owner | home | closes when |
 |---|---|---|---|
 | **The legacy tail** (Langston, measured): at Step 8, **26 of 28** queued rows predated the deploy (never re-issued since), 21 with `dbs_score_at_queue` ≠ the admission's `metadata.pairDirectionalBiasScore`, oldest queued 2026-10-15 15:20Z — such a row can still promote with its first signal's DI/DBS. **Not backfilled, on purpose:** `metadata` carries no DI, so a DBS-only backfill would pair admission-N DBS with admission-1 DI — a patch. | — | drains by re-issue, promotion or expiry | no pre-deploy row remains in the queue |
-| Two comment-only record items (the `mapUpdateSet` / `utils.js:82` pin and the keep-list of the 8 columns in neither list) are committed after `e01d63329` | CC-B | ride the next staging deploy | the deployed sha contains them |
+| Two comment-only record items (the `mapUpdateSet` / `utils.js:82` pin and the keep-list of the 8 columns in neither list) are committed after `e01d63329` | CC-B | ✅ **DISCHARGED** — deployed 2026-10-17 07:56Z inside Analyst Claude's `93dce9cb9` (row 2 increment B), which contains `b7ab18989` | — |
 | The open path (`active-execution-engine.ts:5257-5541`, `di_at_open` at `:6324`) is **unexercised since the deploy** — 0 opens after 05:29:21Z at Step 8 (20 positions held) | — | the next paper open | sound on inspection; nobody may cite the quiet as proof (#661 leg 3) |
 | `#1204` — `removeSignalBySymbol` and the `getQueuedSignals` legacy leg read the same dead status; `ngc` / `source_pool` live columns absent from the schema literal | CC-B | sprint row 59g, after 59f | its own batch |
 | `#378` — the `?? 50` DI default at `di_at_open`, now reachable on a NULL re-issue (0 such re-issues observed so far) | CC-B | `#378` | its own fix |
