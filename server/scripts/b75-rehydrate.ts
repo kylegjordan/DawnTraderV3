@@ -166,8 +166,10 @@ async function main(): Promise<void> {
   let skippedCold = 0;
   let provenRows = 0;
   let unprovenRows = 0;
+  let mismatchRows = 0;
   let totalBytes = 0;
   const unproven: string[] = [];
+  const mismatched: string[] = [];
 
   console.log(
     `[B75 rehydrate] table=${args.table} window=${args.from.toISOString().slice(0, 10)}..${args.to.toISOString().slice(0, 10)} → ${args.out}`,
@@ -238,7 +240,10 @@ async function main(): Promise<void> {
         partition_label: label,
         tier: download.tier,
         completeness_basis: basis,
+        // The basis proves the EXPORT; checksum_ok is whether the file now on disk is that
+        // object. A sidecar with proven=true and checksum_ok=false is NOT a usable copy.
         proven,
+        checksum_ok: checksumOk,
         row_count: download.row_count,
         row_count_meaning: proven
           ? 'source = exported = downloaded, stored as evidence (data_archive_exact_evidence)'
@@ -250,7 +255,12 @@ async function main(): Promise<void> {
         })),
       }, null, 1),
     );
-    if (proven) {
+    // Langston Step-4 gate C (C-1): the deciding predicate rides every aggregate that uses
+    // it. A checksum mismatch counts in neither proven nor unproven — it has its own bucket.
+    if (!checksumOk) {
+      mismatchRows += download.row_count;
+      mismatched.push(`${label} (${download.tier}, ${basis})`);
+    } else if (proven) {
       provenRows += download.row_count;
     } else {
       unprovenRows += download.row_count;
@@ -263,10 +273,17 @@ async function main(): Promise<void> {
   for (const u of unproven) {
     console.warn(`[B75 rehydrate] WARNING: ${u} is NOT proven complete — rows may be missing inside it (#1195)`);
   }
+  for (const m of mismatched) {
+    console.error(`[B75 rehydrate] CHECKSUM MISMATCH: ${m} — the file on disk is NOT the archived object; do not use it`);
+  }
   console.log(
     `[B75 rehydrate] DONE downloaded=${downloaded} skipped_cold=${skippedCold} ` +
-      `rows_proven=${provenRows} rows_unproven=${unprovenRows} unproven_objects=${unproven.length} total_bytes=${totalBytes}`,
+      `rows_proven=${provenRows} rows_unproven=${unprovenRows} rows_checksum_mismatch=${mismatchRows} ` +
+      `unproven_objects=${unproven.length} mismatched_objects=${mismatched.length} total_bytes=${totalBytes}`,
   );
+  // A mismatched download is a failed rehydrate: exit non-zero so a wrapping scheduler
+  // cannot read the run as clean.
+  if (mismatched.length > 0) process.exit(2);
 }
 
 main().catch((err) => {

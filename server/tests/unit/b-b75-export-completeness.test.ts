@@ -304,6 +304,13 @@ describe('sweep wiring (structure at the source)', () => {
     expect([b, ev, stamp, ver, c].every((x) => x > 0)).toBe(true);
     expect(b < ev && ev < stamp && stamp < ver && ver < c).toBe(true);
   });
+  it('R-1 binds the CONNECTION: BEGIN, every write and COMMIT are on ctlClient (gate C, C-2)', () => {
+    // A BEGIN on exportClient would leave the three writes auto-committing with the ordering test green.
+    expect(archive).toMatch(
+      /ctlClient\.query\('BEGIN'\)[\s\S]*recordExactArchiveEvidence\(ctlClient[\s\S]*ctlClient\.query\([\s\S]*SET completeness_basis = \$2[\s\S]*updateManifestVerified\(ctlClient[\s\S]*ctlClient\.query\('COMMIT'\)/,
+    );
+    expect(archive).not.toMatch(/exportClient\.query\('BEGIN'\)/);
+  });
   it('the whole path: the already-active short-circuit is gone; a skip returns BEFORE dropAndMarkActive', () => {
     expect(process_).not.toMatch(/existing\.state === 'active'/);
     const whole = process_.slice(process_.indexOf("if (mode === 'whole')"), process_.indexOf('SLICED PATH'));
@@ -373,6 +380,12 @@ describe('the other lanes and readers', () => {
     const b = CTX.indexOf("query('BEGIN')");
     expect(CTX.indexOf('recordExactArchiveEvidence(', b)).toBeGreaterThan(b);
     expect(CTX.indexOf('completeness_basis = $7', b)).toBeGreaterThan(CTX.indexOf('recordExactArchiveEvidence(', b));
+    // gate C, C-2: the transaction is on ctlClient throughout
+    expect(CTX).toMatch(/ctlClient\.query\('BEGIN'\)[\s\S]*recordExactArchiveEvidence\(ctlClient[\s\S]*ctlClient\.query\('COMMIT'\)/);
+    expect(CTX).not.toMatch(/exportClient\.query\('BEGIN'\)/);
+    // gate C, C-3: the verified UPDATE writes the tier the object actually landed in
+    expect(CTX).toMatch(/completeness_basis = \$7,\s*tier = \$8/);
+    expect(CTX).toMatch(/PROVEN_BASIS,\s*actualTier,/);
   });
   it('rotator: the basis is carried in the INSERT list and the ON CONFLICT update (Langston r3)', () => {
     expect(ROTATOR).toMatch(/verified_at, completeness_basis\s*\)\s*SELECT/);
@@ -386,6 +399,17 @@ describe('the other lanes and readers', () => {
     expect(REHYDRATE).toContain('.completeness.json');
     expect(REHYDRATE).toContain('rows_proven=');
   });
+  it('rehydrate: a checksum mismatch rides the sidecar and the aggregate, and fails the run (gate C, C-1)', () => {
+    expect(REHYDRATE).toContain('checksum_ok: checksumOk,');
+    // the mismatch branch comes FIRST, so a corrupt proven object never reaches rows_proven
+    const bucket = REHYDRATE.indexOf('if (!checksumOk) {');
+    const provenAdd = REHYDRATE.indexOf('provenRows += download.row_count');
+    expect(bucket).toBeGreaterThan(0);
+    expect(provenAdd).toBeGreaterThan(bucket);
+    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= download\.row_count;[\s\S]*\} else if \(proven\) \{/);
+    expect(REHYDRATE).toContain('rows_checksum_mismatch=');
+    expect(REHYDRATE).toContain('if (mismatched.length > 0) process.exit(2);');
+  });
   it('perpfeed --clean deletes the manifest rows BEFORE dropping, and stops if refused', () => {
     const clean = PERPFEED.slice(PERPFEED.indexOf("if (mode === 'clean')"));
     const del = clean.indexOf('DELETE FROM data_archive_manifest');
@@ -394,8 +418,12 @@ describe('the other lanes and readers', () => {
     expect(drop).toBeGreaterThan(del);
     expect(clean.slice(del, drop)).toContain('process.exit(1)');
   });
-  it('system-alerts: timer-script replaces the dead governance-checker transport; the sweep is a machine actor', () => {
-    expect(ALERTS).toContain("export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'engine' | 'timer-script';");
+  it('system-alerts: timer-script added, the three dead transport values removed; the sweep is a machine actor', () => {
+    expect(ALERTS).toContain("export type ResolveTransport = 'cli' | 'engine' | 'timer-script';");
+    // every value left has a caller; none of the removed three is passed anywhere (gate C record iii)
+    for (const dead of ['governance-checker', 'dispatcher', 'api']) {
+      expect(ALERTS).not.toMatch(new RegExp(`ResolveTransport = [^;]*'${dead}'`));
+    }
     expect(ALERTS).toMatch(/\{ value: 'b75-retention-sweep',\s+tag: 'machine'/);
   });
 });

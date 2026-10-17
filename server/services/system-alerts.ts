@@ -151,9 +151,15 @@ export function shouldDeliverToDiscord(alert: Pick<SystemAlert, 'severity' | 'ca
 //   a scheduled process OUTSIDE the server runtime resolving IN-PROCESS, without the CLI. The
 //   timer scripts that go through the CLI (governance-checker, deploy-drift-monitor) stamp `cli`,
 //   truthfully; `engine` excludes timer scripts by definition. First member: the B75 sweep.
-//   (`governance-checker` was a value here with 0 resolved rows ever and no caller passing it —
-//   the checker resolves through the CLI as `cli` — so it was removed under rule 18.)
-export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'engine' | 'timer-script';
+//   REMOVED under rule 18 (B-B75-EXPORT-COMPLETENESS, Langston Step-4 gate C record iii):
+//   `governance-checker`, `dispatcher` and `api`. The discriminating evidence, for each of the
+//   three: (a) NO caller passes it — every resolveAlert / resolveAlertsByDedupeKey call site in
+//   server/, scripts/ and client/ hands `cli`, `engine` or (now) `timer-script`; and (b) NO row
+//   carries it — resolved_by_transport over all 2,104 queue rows is cli 1726 / engine 109 /
+//   null 269 (Langston's read, 2026-10-17). A value with no writer and no stored instance is a
+//   dead branch of the enum, and keeping two of three would make the rule's argument fail to
+//   discriminate. A future channel adds its class back when it gains its first caller.
+export type ResolveTransport = 'cli' | 'engine' | 'timer-script';
 
 // Sanctioned sentinels: the ONLY non-reference strings resolution_evidence may
 // hold. `NO-EVIDENCE-GIVEN` forces an HONEST admission (better than a fake

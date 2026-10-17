@@ -282,8 +282,12 @@ async function exportAndUploadMonth(
              min_ts = $4,
              max_ts = $5,
              checksum = $6,
-             completeness_basis = $7
+             completeness_basis = $7,
+             tier = $8
        WHERE id = $1`,
+      // tier = $8 (Langston Step-4 gate C, C-3): the row may have been read from a cold row
+      // (either-tier lookup), and the success path never wrote tier — so the manifest row,
+      // its URI and its proof must agree on where the object actually landed.
       [
         manifestId,
         exportRes.rowCount,
@@ -292,6 +296,7 @@ async function exportAndUploadMonth(
         exportRes.maxTs,
         exportRes.checksum,
         PROVEN_BASIS,
+        actualTier,
       ],
     );
     await ctlClient.query('COMMIT');

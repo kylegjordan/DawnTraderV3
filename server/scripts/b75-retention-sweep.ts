@@ -974,7 +974,9 @@ async function raiseSweepAlert(
       title,
       body: `${body} First seen in sweep run ${RUN_ID} (${new Date().toISOString()}); ` +
         `the current state of this partition is in ${SWEEP_LOG}.`,
-      metadata: { batch: 'B-NEW-47', source: 'b75-retention-sweep', run_id: RUN_ID, ...metadata },
+      // batch = the batch that owns this keyed alert path (B-NEW-47 built the original
+      // unkeyed one); metadata.batch is a routing read-site (Langston gate C record iv).
+      metadata: { batch: 'B-B75-EXPORT-COMPLETENESS', source: 'b75-retention-sweep', run_id: RUN_ID, ...metadata },
       dedupe_key: dedupeKey,
     });
   } catch (alertErr) {
