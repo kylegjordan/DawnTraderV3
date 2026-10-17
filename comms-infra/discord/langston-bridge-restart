@@ -38,13 +38,18 @@ Exit codes: 0 recovered · 2 refused before acting (not root, bad start time, jo
 remains · 7 floor REFUSED by the bridge · 8 no summary in 180 s · 9 waiting messages fall outside the floor ·
 10 the installed delivered-reply rule failed its self-check.
 
+Reach, stated (Langston r3 record): exit-10's self-check certifies ONE property of ONE function -
+inbox_evidence's delivered-only rule. A clean --dry-run is NOT proof the installed bridges group is at branch head.
+Runbook: the reply-wait starts AFTER the early floor write, so a reply posted in that gap is missed and the
+helper waits out --wait-s (exit 3, floor kept): re-run it. Fail-safe, a wasted wait, not a lost message.
+
 Limits, stated: (a) a post Langston answered by replying to a DIFFERENT post (a superseded revision) reads as
 unanswered and is re-fed - OLD Claude's B75 r5, 2026-10-17; (b) a message dropped by an EARLIER restart that
 had no floor is older than this process and is not covered - repair that by hand, once; (c) it needs the
 journal to still hold this process's start (it refuses otherwise - an enqueue line it cannot see is a message
 it cannot protect); (d) it trusts that systemd reports UTC (it refuses any other zone token).
 """
-import argparse, datetime as dt, importlib.util, os, pwd, re, shutil, subprocess, sys, tempfile, time
+import argparse, datetime as dt, importlib.util, os, pwd, re, select, shutil, subprocess, sys, tempfile, time
 
 UNIT = "discord-langston-bridge.service"
 BRIDGE_DIR = os.environ.get("LBR_BRIDGE_DIR", "/opt/discord-bridges")
@@ -181,29 +186,46 @@ def write_floor(floor):
     os.replace(tmp, FLOOR_FILE)
 
 
-def follow(pattern_fn, timeout_s, since=None):
-    """Feed live journal lines to pattern_fn until it returns a value; None on timeout. `since` is formatted as a
-    naked UTC string with --utc: sound only because parse_systemd_ts refuses any zone but UTC - the two are coupled."""
+def journal_cmd(since=None):
+    """`since` is formatted as a naked UTC string with --utc: sound only because parse_systemd_ts refuses any zone
+    but UTC - the two are coupled."""
     cmd = ["journalctl", "-u", UNIT, "-f", "--no-pager", "-o", "cat"]
-    cmd += ["--since", since.strftime("%Y-%m-%d %H:%M:%S"), "--utc"] if since else ["-n0"]
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+    return cmd + (["--since", since.strftime("%Y-%m-%d %H:%M:%S"), "--utc"] if since else ["-n0"])
+
+
+def follow(pattern_fn, timeout_s, since=None, cmd=None):
+    """Feed live lines of `cmd` (default: the bridge's journal) to pattern_fn until it returns a value; (None, None)
+    on timeout or when the stream ends.
+    ⛔ MEASURED 2026-10-17 07:28Z, the first live run: the r1-r3 body read a TEXT-mode pipe set non-blocking, and
+    TextIOWrapper.read() raised `TypeError: can't concat NoneType to bytes` the moment no data was waiting - the
+    helper crashed before restarting anything (fail-safe, but it never worked). Only the pure functions were tested.
+    Now: raw bytes, select() for readiness, os.read() of what is there - and the test drives this function against a
+    real child process."""
+    p = subprocess.Popen(cmd or journal_cmd(since), stdout=subprocess.PIPE)
+    fd = p.stdout.fileno()
     deadline = time.time() + timeout_s
+    buf = b""
     try:
-        os.set_blocking(p.stdout.fileno(), False)
-        buf = ""
-        while time.time() < deadline:
-            chunk = p.stdout.read() or ""
+        while True:
+            left = deadline - time.time()
+            if left <= 0:
+                return None, None
+            ready, _w, _x = select.select([fd], [], [], min(left, 1.0))
+            if not ready:
+                continue
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                return None, None
             buf += chunk
-            *lines, buf = buf.split("\n")
-            for l in lines:
+            *lines, buf = buf.split(b"\n")
+            for raw in lines:
+                l = raw.decode("utf-8", "replace")
                 v = pattern_fn(l)
                 if v is not None:
                     return v, l
-            if not chunk:
-                time.sleep(0.2)
-        return None, None
     finally:
         p.kill()
+        p.wait()
 
 
 def show(start, floor, pending, outside, clamped):
