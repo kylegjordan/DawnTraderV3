@@ -8046,7 +8046,7 @@ When enabled, these 4 services start as fire-and-forget promises. Failures are c
 
 **Note:** The AI Orchestrator import is already commented out with "Phase 0: Removed AI Orchestrator (legacy module)". This confirms the orchestrator was deprecated before the Walter shutdown gate was added.
 
-**Its routes, removed 2026-10-17 (row 59g1, `B-ORCHESTRATOR-ROUTES-REMOVAL`, `#1210`):** the module itself (`server/orchestrator/orchestrator.ts`) was deleted 2025-11-05 (`b5eba38a7`), but four routes still imported it — `GET /orchestrator/telemetry`, `GET /orchestrator/analysis`, `POST /orchestrator/analyze`, `POST /orchestrator/audit` — and returned 500 until they were removed with the AI Transparency pieces that depended on them. The live `/orchestrator/logs` and `/orchestrator/learning-summary` routes do not import it and stay.
+**Its routes, removed 2026-10-17 (row 59g1, `B-ORCHESTRATOR-ROUTES-REMOVAL`, `#1210`):** the module itself (`server/orchestrator/orchestrator.ts`) was deleted 2025-11-05 (`b5eba38a7`), but four routes still imported it — `GET /orchestrator/telemetry`, `GET /orchestrator/analysis`, `POST /orchestrator/analyze`, `POST /orchestrator/audit` — and returned 500 until they were removed with the AI Transparency pieces that depended on them. The live `/orchestrator` routes do not import it and stay: `learning-summary` (GET), `logs` (GET and POST on one path, PATCH on `logs/:id`), `updateGoal` (POST) and `updateStrategy` (POST) — five path literals, six registrations.
 
 ---
 

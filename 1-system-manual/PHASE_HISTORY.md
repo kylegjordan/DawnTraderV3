@@ -1383,7 +1383,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **The RTB queue's code now matches the two statuses it actually writes.** Reads of a "queued" status nothing has written since December 2025 are gone, with two clean-ups that could never fire, a count term that was always zero, and three empty database columns — the columns dropped in a second deploy, after the build that stopped naming them. Verified on staging: columns gone, the refresh writes the whole pool, a new signal saves, no errors. Record: `Batch Completion/B_RTB_QUEUED_STATUS_SWEEP_COMPLETION_REPORT.md`.
 
-### 2026-10-17 — B-ORCHESTRATOR-ROUTES-REMOVAL (CC-B; sprint row 59g1, `#1210`) — ⏳ STEP 11 (at Langston)
+### 2026-10-17 — B-ORCHESTRATOR-ROUTES-REMOVAL (CC-B; sprint row 59g1, `#1210`) — ✅ CLOSED
 
 **The AI Command Center tab shows its working cards again.** Four routes that loaded an AI module deleted in November 2025 — and failed every time — are removed with the page pieces that relied on them (including the AI Analysis tab and the System Audit, removed rather than repaired). The Formula Health card, hidden inside the broken section, is drawn. Verified in Chrome and by Langston.
 

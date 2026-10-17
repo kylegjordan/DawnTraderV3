@@ -1,4 +1,4 @@
-# B-ORCHESTRATOR-ROUTES-REMOVAL — COMPLETION REPORT
+# B-ORCHESTRATOR-ROUTES-REMOVAL — COMPLETION REPORT · ✅ CLOSED 2026-10-17 (Langston confirmed Step 11 at `48ad3b86b`)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` · **Sprint plan row:** 59g1 · **Issue:** `#1210`
 **Scope / audit / change list:** `Scope Files/B_ORCHESTRATOR_ROUTES_REMOVAL_SCOPE.md` (r2), `…_PRE_AUDIT.md`, `Change Lists/B_ORCHESTRATOR_ROUTES_REMOVAL_STEP4_CHANGE_LIST.md` (with the Steps 5-7 record)
@@ -48,8 +48,8 @@ CHANGE-CLASS: `non_architecture`
 | T1 | the batch PRE_AUDIT | ✅ | audit A1-A6 and plan B1-B9; A3 corrected at the pre-`#1158` code |
 | T1 | COMPLETION_REPORT | ✅ | this report |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: row 59g1 in the open table, rows 59g1a and 59g3 queued; CC-A, CC-C, CC-INFRA not mine (row 59g1b is placed in the plan for CC-C) |
-| T1 | Langston's MEMORY.md | BLOCKED — Langston's own write | asked in the Step-11 dispatch |
-| T2 | SYSTEM_MANUAL.md | ✅ | §22 (and its section copy): the orchestrator's four routes removed, the live ones named |
+| T1 | Langston's MEMORY.md | ✅ (his write) | 59g1 recorded closed (Langston, Step 11) |
+| T2 | SYSTEM_MANUAL.md | ✅ | §22 (and its section copy): the orchestrator's four routes removed; the live ones named in full — five path literals, six registrations (Langston's Step-11 condition: the first version named two of four) |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | `:142` the `#1158` reader census; §10.3 what the AI Command Center tab reads, and the eleven-month gap the map never recorded |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1210` closed; `#1212`, `#1213`, `#1214` filed and placed |
 | T2 | CHANGES_AND_FIXES.md | N/A | a legacy removal, no bug or risk registry item |
