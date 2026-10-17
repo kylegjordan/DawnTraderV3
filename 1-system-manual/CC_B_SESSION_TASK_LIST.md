@@ -38,6 +38,7 @@
 - ✅ 59e `B-RTB-REFRESH-LIVE-PRICE` (`#1168`, `#1189`) — CLOSED 2026-10-12 (Langston Step 11): the RTB refresh reads the live ask and retires a signal past its stop or target; a rejected signal can no longer be opened.
 - 59f `B-RTB-ADMISSION-TIEBREAK-LIVE` (`#1190`) — the queue's R-multiple tiebreak never runs; restore it with a decision on which copy should win.
 - 59g1 `B-ORCHESTRATOR-ROUTES-REMOVAL` (`#1210`, placed 2026-10-17 after 59g): four orchestrator routes load a module deleted in 2025 and fail — telemetry, analysis, re-analyse, formula audit; the learning-summary and logs routes are alive and stay. Census per section of the AI Command Center first.
+- 59g2 `B-CRON-VERIFIER-QUERY-FAIL` (`#1211`, placed 2026-10-17 after 59g1, Langston): when the cron verifier's history query fails it reads every job as never-fired and pages the hourly/daily ones; fix = a loud, distinguishable skip with an escalation after N skips, the no-alert test with its minting twin, and the interlock with B-CRON-MISSED-CATCHUP leg (a) named.
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).
 - 59c `B-ENTRY-BAND-SHADOW` (`#1186`) — log the fill's distance from the plan against spread and ATR at every taker open; ATR absent on xStock ⇒ log the inputs and refuse the leg (row 59 increment 4).
