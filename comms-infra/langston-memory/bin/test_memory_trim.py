@@ -118,17 +118,21 @@ def main():
         l in arch for l in ("## B-CLOSED-ONE — a closed batch", "**B-CLOSED-ONE body** with detail.",
                             "- its record, unique text zebra-42")), True)
     check("their bodies left MEMORY.md", ("**B-CLOSED-ONE body**" in mem, "zebra-42" in mem), (False, False))
-    check("one index line per evicted section, worded evicted", sum(1 for l in mem.split(NL) if l.startswith("- `B-CLOSED-") and " — evicted " in l), 2)
-    check("the keep: line survives in the index", "keep: a pointer line that must survive in the index" in mem, True)
+    check("NO index line is added for an evicted section (Langston 2026-10-17: the STATE line in the archive is the record)",
+          sum(1 for l in mem.split(NL) if l.startswith("- `B-CLOSED-")), 0)
+    ks = mem.split(NL)
+    kh = next((i for i, l in enumerate(ks) if l.startswith("## ★ Kept lines from closed batches")), None)
+    check("the keep: line survives, hoisted into the protected kept-lines section",
+          (kh is not None, kh is not None and "keep: a pointer line that must survive in the index" in ks[kh:]), (True, True))
     check("each archived section carries an eviction stamp", arch.count("<!-- evicted "), 2)
     # line conservation, recomputed here (not trusting the tool's own check)
     from collections import Counter
     nb = lambda t: Counter(l for l in t.split(NL) if l.strip())
-    added = Counter(l for l in mem.split(NL) if l.startswith("## Archived batch sections") or l.startswith("- `B-CLOSED-"))
+    added = Counter(l for l in mem.split(NL) if l.startswith("## ★ Kept lines from closed batches"))
     added["keep: a pointer line that must survive in the index"] += 1
     arch_lines = Counter(l for l in arch.split(NL) if l.strip() and not l.startswith("<!-- evicted ")
                          and not l.startswith("# Langston") and not l.startswith("Not auto-loaded"))
-    check("line conservation: old part == new part - index lines + archived lines",
+    check("line conservation: old part == new part - hoisted lines + archived lines",
           nb(before) == (nb(rd(h.part).decode("utf-8")) - added) + arch_lines, True)
     state = json.loads(rd(h.state))
     check("compose-state matches MEMORY.md", state["last_written_sha"], sha(rd(h.mem)))
@@ -204,6 +208,45 @@ def main():
           "no recorded write" in msg, True)
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write(good)
+    print("1d. THE RATCHET AT WRITE TIME: while the loaded set is in BREACH, a growing write is refused (Langston 2026-10-17)")
+    rs = os.path.join(h.top, ".ratchet-state.json")
+    with open(rs, "w", encoding="utf-8") as fh:
+        json.dump({"ceiling_bytes": 100, "last_total_bytes": 999, "last_status": "BREACH", "last_run_ts": "t"}, fh)
+    part0 = rd(h.part).decode("utf-8")
+    snap0 = h.snap()
+    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
+                      "--reason", "grow"], part0 + "- one more line" + NL)
+    check("  a growing write in BREACH refuses (exit 7) and writes nothing", (rc, "in breach" in out, h.snap() == snap0),
+          (7, True, True))
+    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
+                      "--reason", "grow", "--allow-growth", "a test override"], part0 + "- one more line" + NL)
+    rows_g = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8") if l.strip()]
+    ov = rows_g[-1].get("growth_override") or {}
+    check("  ...with --allow-growth it proceeds and the index row records who, how many bytes, and why",
+          (rc, ov.get("by"), ov.get("delta_bytes", 0) > 0, ov.get("reason"), ov.get("ratchet_status")),
+          (0, "t", True, "a test override", "BREACH"))
+    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
+                      "--reason", "shrink"], part0)
+    rows_g = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8") if l.strip()]
+    check("  ...a SHRINKING write in BREACH proceeds with no override (non-increase gate, not a ceiling lockout)",
+          (rc, rows_g[-1].get("growth_override")), (0, None))
+    with open(rs, "w", encoding="utf-8") as fh:
+        json.dump({"ceiling_bytes": 10 ** 9, "last_total_bytes": 1, "last_status": "OK", "last_run_ts": "t"}, fh)
+    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
+                      "--reason", "grow ok"], part0 + "- one more line" + NL)
+    check("  ...not in breach, growth proceeds with no override", rc, 0)
+    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
+                      "--reason", "restore"], part0)
+    os.remove(rs)
+    wm.LANGSTON_HOME = wm.LIVE_HOME = h.top
+    wm.RATCHET_STATE = os.path.join(h.top, "no-such-state.json")
+    try:
+        wm.growth_gate(b"a", b"ab", {"--by": "t"})
+        got = "passed"
+    except wm.Refused as e:
+        got = (e.args[0] if e.args else None, "UNREADABLE" in str(e))
+    check("  ...on the LIVE home an unreadable ratchet state refuses growth (never a silent pass)", got[1] if isinstance(got, tuple) else got, True)
+    check("  ...and a shrink still passes there", wm.growth_gate(b"ab", b"a", {"--by": "t"}), None)
     print("1c. C-2: a prior write whose REASON is 'trim-noop' does not suppress the first row's note")
     h2 = Home()
     rc, out = h2.call(["--compose", "--by", "t", "--reason", "trim-noop"])
@@ -227,7 +270,7 @@ def main():
           (all(x["ts"].startswith("20") for x in recs), any("B-CLOSED-TWO" in x["ref"] for x in recs)), (True, True))
     check("  ...and the section text is searchable", any("zebra-42" in x["text"] for x in recs), True)
     check("  ...labelled as an EVICTION time, not a per-record timestamp", all(x["tq"] == "eviction-time(trim)" for x in recs), True)
-    print("3. a new closed section on a later run appends to the archive and the index")
+    print("3. a new closed section on a later run appends to the archive, and still adds no index line")
     part = rd(h.part).decode("utf-8").replace("STATE: open · batch: B-OPEN-ONE",
                                                "STATE: closed · batch: B-OPEN-ONE · superseded-by: Batch Completion/X.md")
     rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
@@ -238,8 +281,8 @@ def main():
     check("the next trim evicts it (exit 0)", (rc, "B-OPEN-ONE" in out), (0, True))
     check("  ...the old archive is a byte PREFIX of the new one (append-only)", rd(h.arch).startswith(arch_before), True)
     mem = rd(h.mem).decode("utf-8")
-    check("  ...ONE index heading, three index lines", (mem.count("## Archived batch sections"),
-          sum(1 for l in mem.split(NL) if l.startswith("- `B-"))), (1, 3))
+    check("  ...no index lines at all, ONE kept-lines heading", (sum(1 for l in mem.split(NL) if l.startswith("- `B-")),
+          mem.count("## ★ Kept lines from closed batches")), (0, 1))
     h.done()
     print("3b. a pre-cutover section is named when evicted (recall cannot date it)")
     h = Home(BASE.replace("## B-CLOSED-ONE — a closed batch", "## B-CLOSED-ONE — a closed batch from 2026-05-01"))
