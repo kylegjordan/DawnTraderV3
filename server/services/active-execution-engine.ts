@@ -6131,8 +6131,14 @@ export class ActiveExecutionEngine {
       rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',
       planQueuedAt: (signal.metadata as Record<string, unknown> | undefined)?.queuedAt ?? null,
       rtbQueueId: (signal.metadata as Record<string, unknown> | undefined)?.rtbQueueId ?? null,
+      // B-RR-FLOOR-HEADROOM (row 59a): WHICH taker this was — `direct_taker` (a taker decision) or `maker_to_taker` (a maker
+      // already marketable, opened as a taker under `maker_preferred`, whose fill starts at or below intended). The two arms
+      // slip differently, and the fill check's promotion read is gated on the direct arm. Inside the record, so it reaches
+      // BOTH archive rows (admitted and the `entry_fill` refusal) and never a maker row. Present ⇒ the row is a taker
+      // (`entryArm='taker'` is entailed); absent on a taker row ⇒ written before this deploy, never "direct" (#546).
+      consumptionArm: _consumptionArm,
     };
-    console.log(`[ENTRY_GEOMETRY][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} ` +
+    console.log(`[ENTRY_GEOMETRY][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} arm=${_consumptionArm} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} ` +
       `rr_fill=${_shadow.rrFill === null ? 'n/a' : _shadow.rrFill.toFixed(4)} floor=${_entryFloor ?? 'n/a'} adverse_r=${_shadow.adverseR === null ? 'n/a' : _shadow.adverseR.toFixed(4)} would_refuse=${_shadow.wouldRefuse ?? 'n/a'}${_entryFloorNote}`);
     // OBJ-1 LIVE: a taker fill at or through the signal's own stop or target is a trade dead or spent the moment it opens
     // (13 of 117 W1 xStock taker opens, pre-audit §1.1). The shared primitive the VTS and the xStock booking already use.

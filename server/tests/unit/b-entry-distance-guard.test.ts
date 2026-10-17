@@ -113,6 +113,21 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
     expect(spreads).toBe(2); // the refused row and the admitted row
     expect(at("gate: 'admitted', accepted: true")).toBeLessThan(src.lastIndexOf('...(_entryShadowRec ?? {})'));
   });
+  it('B-RR-FLOOR-HEADROOM (row 59a): the taker arm rides INSIDE the shadow record, so both archive rows carry it', () => {
+    const decl = at("const _consumptionArm = _b72ChosenMode === 'maker' ? 'maker_to_taker' : 'direct_taker';");
+    const recStart = at('_entryShadowRec = {');
+    const recEnd = src.indexOf('};', recStart);
+    const key = src.indexOf('consumptionArm: _consumptionArm,', recStart);
+    const shadowLine = at('[ENTRY_GEOMETRY][SHADOW]');
+    expect(decl).toBeGreaterThan(-1);
+    expect(decl).toBeLessThan(recStart);                    // in scope where the record is built
+    expect(key).toBeGreaterThan(recStart);                  // inside the record literal...
+    expect(key).toBeLessThan(recEnd);                       // ...not after it
+    expect(key).toBeLessThan(shadowLine);                   // upper anchor: not displaced into a later literal
+    // DISPLACEMENT guard (Langston Step 2): placed in the entry_fill gateDecision literal instead, it would reach one row.
+    expect(src.split('consumptionArm: _consumptionArm').length - 1).toBe(1);
+    expect(src).toContain('class=${_openClass} arm=${_consumptionArm} fill=');
+  });
 });
 
 describe('the stage is counted, so attempts still reconcile (P19-B6.5e)', () => {
