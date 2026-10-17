@@ -1,0 +1,239 @@
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r1, 2026-10-17)
+
+change-class: architecture
+
+**Owner:** CC-A (OLD Claude) · **Issue:** `#1195` · **Scope:** `B_B75_EXPORT_COMPLETENESS_SCOPE.md` r6 at `253f27c4d` (Step 1 APPROVED by Langston on r5 `29d23c2e9`, 2026-10-17 04:00Z) · **Board:** `PVTI_lAHODmulEM4BfQP4zhBZsXA` · **Reviewer:** Langston
+All code citations are at `origin/migration/aws-supabase` `253f27c4d`. All database reads are staging, 2026-10-17.
+**Fresh reader:** none spawned. The load-bearing claims are §2's entry-point list, §3's census lists and A8's FK behaviour. **They ship `NOT RE-READ`; Langston is the reader.**
+
+## 0. PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED** (scope r1/r2): 567 legacy-window objects plus 1 "pre-page-rule" object. **NOW:** 568, one group. **REASON:** the "pre-page-rule" object's `created_at` is a placeholder (scope r3 §1, Langston re-derived). *(Already corrected in the scope; repeated here because it is a number the plan rests on.)*
+- **PREVIOUSLY STATED** (scope r3 OBJ-8): "no legacy row is `verified`" bounds the resume-skip exposure. **NOW:** the bound is "0 of 568 overlap a live hot child". **REASON:** the skip reads `verified` OR `active` (Langston C-6).
+- **NEW, not in the scope:**
+  - the context-bridge lane is **not scheduled at all** (§2);
+  - the sweep has raised **4** failure alerts in its history, all unkeyed and all resolved, 2 of them for the same partition on consecutive nights (§3.7).
+- **No other number moved.** 572 / 568 / 4, 810,604,186 + 6,937,105 rows, and the 0-overlap result all stand as the scope states them.
+
+## 1. THE SIX SOURCES — WHICH I READ
+| # | source | read | what it gave |
+|---|---|---|---|
+| 1 | code at the ref | ✅ every file in §3 | the census below |
+| 2 | logs + database | ✅ `b75-retention.log` (138 DONE lines; the last 3 read), `system-alerts.jsonl` (every row with `source = b75-retention-sweep`), `data_archive_manifest` (all 572), `pg_inherits` (276 children), the evidence table's constraints, triggers and indexes, root and deploy crontabs, `/etc/cron.d`, systemd timers | §2, §3 |
+| 3 | `SYSTEM_IMPACT_MAP.md` | ✅ the B75 block (`:2358-2440`) and its component inventory | §4 — one self-contradiction |
+| 4 | `SYSTEM_MANUAL.md` | ✅ "Data Lifecycle Policy (B75)" (`:12190-12250`) | §4 — silent on completeness |
+| 5 | ledger + reports | ✅ `RUNNING_ISSUES` (searched for `data_archive_manifest`, `exact_evidence`, `rehydrate`, `context-bridge-log-ttl`; read `#169`, `#1195`), `BATCH_CATALOG` B75, `STORAGE_POLICY.md` §9, the `B-B75-COUNT-GATE` note | §5 |
+| 6 | `bridge/canonical/` | ✅ searched for `archive_manifest`, `retention sweep`, `b75`, `warm tier`, `cold tier` — **no coverage of this component** (it postdates the corpus) | §6 |
+
+## 2. ENTRY POINTS, ENUMERATED FIRST (repo-wide, then on the box)
+Everything that starts work against the manifest or the evidence table:
+
+| entry point | schedule (measured on staging) | touches |
+|---|---|---|
+| `b75-retention-sweep.ts` | root crontab `15 2 * * *` | manifest (insert, update), evidence (insert), hot DROP and DELETE, alerts |
+| `b75-cold-rotator.ts` | root crontab `0 3 1 * *` | manifest (insert cold, update warm), deletes warm objects |
+| `context-bridge-log-ttl.ts` | **NOT SCHEDULED** — absent from the root crontab, the deploy crontab, `/etc/cron.d` and systemd timers; there is no `b75-ctx-bridge.log`. Its manifest rows (6) came from manual runs. Already recorded: SIM `:2396-2398` and `#169`. | manifest (insert, update), hot DELETE |
+| `b75-rehydrate.ts` | manual CLI | manifest (read) |
+| `b-xstock-bar-availability-capacity-gate.ts` | manual CLI (CC-C) | manifest + evidence (read), evidence relation size |
+| `perpfeed-gate-test.ts` | manual harness | manifest (read; **delete** in `--clean`) |
+| `scripts/db-migrate.ts` (via `dt-deploy`) | each deploy, between build and restart | schema (applies each MANIFEST file once by name) |
+
+- **Not entry points, checked:** `b75-cold-liveness.ts` (weekly; touches B2 only, no manifest reference) and `b-storage-archival-health.ts` (daily; reads log files only).
+- **Population:** a `git grep` for `data_archive_manifest` and for `xstock_bar_archive_exact_evidence` over `server`, `shared` and `scripts`, tests excluded, plus `drizzle/migrations`. **Concurrency:** the sweep holds an O_EXCL run-lock. The rotator runs at 03:00 on the 1st, after the sweep's 02:15 run has finished (the last three runs took 543-745 s). The ctx lane is manual. No two schedulers write the same row at the same time.
+
+## 3. COMPONENT CENSUS AT EVERY HOP
+### 3.1 `data_archive_manifest` (B75, `2026-05-06-b75-data-lifecycle.sql:39-69`)
+| question | members (`file:line`) |
+|---|---|
+| **creates** | sweep `upsertManifestPending` `:337`; ctx `:162`; rotator `:303` (cold row, `INSERT … SELECT` from warm) |
+| **mutates** | sweep `:368` uploaded, `:383` verified, `:392` active, `:407` `markLabelsActive`; ctx `:157` pending, `:217` tier→cold (413 fallback), `:225` verified, `:293` `markMonthsActive`; rotator `:333` warm→migrating/migrated |
+| **reads** | sweep `:304` `getManifestRow` (the resume skip), `:320`, `:778` DROP gate, `:925` plain gate; ctx `:119` (the active skip); rotator `:134`; rehydrate `:101`; capacity gate `:608`; perpfeed `:108` |
+| **deletes** | **exactly one:** `perpfeed-gate-test.ts:126`, `--clean`, for the synthetic `xstock_perp_ohlc_1m/2025-01-15` only. That is also the one `xstock_perp_ohlc_1m` manifest row. |
+| **schedules** | §2 |
+
+### 3.2 `xstock_bar_archive_exact_evidence` (CC-C, `2026-10-15-…-observation.sql:59-77`, `:113-121`, `:303`)
+| question | members |
+|---|---|
+| creates | **exactly one:** `exact-archive-evidence.ts:63` (`recordExactArchiveEvidence`), called from sweep `:613` |
+| mutates / deletes | **none possible** — the BEFORE UPDATE/DELETE and TRUNCATE triggers raise; the FK to the manifest has no `ON DELETE` clause |
+| reads | `exact-archive-evidence.ts:85` (replay compare); capacity gate `:609` (joined, filtered), `:125` (whole-relation size, unfiltered — C-9) |
+| rows | **0** (Langston's control: `xstock_bar_revision_event` is in none of the 572 manifest rows) |
+| names (staging) | 13 constraints, 2 triggers, 2 indexes (scope §2b lists them) |
+
+### 3.3 The exporter (`partition-exporter.ts`)
+- **Unchanged.** It counts the source inside its `REPEATABLE READ READ ONLY` snapshot (`:146`, `:178`) and throws `ExportRowCountMismatchError` before COMMIT (`:294`); it returns `sourceRowCount` (`:109`, `:327`).
+- Its two callers are the sweep and the ctx lane. **One caller is scheduled.**
+
+### 3.4 The four gates (OBJ-8)
+| gate | today | reached by |
+|---|---|---|
+| (a) partition DROP gate `:775-793` | every present label must be `verified`/`active` | the partition lane, after its day loop |
+| (b) plain delete gate `:922-935` | every present label `verified`/`active`, else `console.error` + `continue` (no alert) | the plain-archive tables only — `closed_trades` and `vts_open_trades`, **0 manifest rows** (365-day window) |
+| (c) resume skip `:516-520` | `verified`/`active` with a checksum → reuse, no re-export | both sweep lanes |
+| (d) ctx active skip `ctx:133-138` | `active` → skip | the unscheduled ctx lane |
+
+- **Exposure, measured:** 0 of 568 pre-hotfix rows overlap a live hot child. The control: the same query enumerated all 11 partitioned parents' 276 children; Langston's own control returned 921 pairs once the key was dropped. `context_bridge_log`'s oldest row is 2026-04-01 00:00:00.151Z, which is the end of its newest archived month.
+
+### 3.5 The cold rotator
+- Its cold row is an `INSERT … SELECT` from the warm row, with `ON CONFLICT … DO UPDATE SET` (`:303-317`).
+- Its candidate query (`:134-145`) selects warm rows past the warm window with no cold sibling.
+- **An aside it explains, with no work owed:** the rotator ages by `created_at` (`:137`), so the placeholder `2026-01-01` row (`exit_decision_archive` `2026-05`) went to cold on 07-08, months early. The cold copy was verified by re-download (`:290-295`), so nothing was lost.
+- **It does not consult completeness, and should not:** moving a short copy to cold changes nothing about its shortness. It must only carry the label (OBJ-2).
+
+### 3.6 The rehydrate CLI
+- It reads the manifest (`:98-107`), then prints per object `rows=<row_count>` (`:178`, `:205`) and sums the total (`:181`, `:208`, `:220`).
+- **It is the one reader a future analytics job inherits** (SIM "B75 forward-couples").
+
+### 3.7 The sweep's alerts (OBJ-5)
+- **Three call sites** of `raiseSweepAlert` (`:833`): `:999` plain, `:1156` per partition, `:1201` fatal. None passes a `dedupe_key`.
+- **History (measured, every row with `source = b75-retention-sweep`):** 4 rows, all resolved, all unkeyed:
+  - `xstock_spot_ticker_snap/2026-06` ×2 (consecutive nights for one partition — the duplicate F2 is about);
+  - `xstock_spot_ticker_snap/2026-07` ×1;
+  - `xstock_perp_ohlc_1m/2025-01-15` ×1 (the perpfeed harness's deliberate negative leg).
+- The last three runs: `failed=0`, `examined=4 dropped=4`.
+
+## 4. SYSTEM_IMPACT_MAP AND SYSTEM_MANUAL
+- **SIM — one self-contradiction, folded into this batch's SIM update:** the B75 inventory row 7 marks `context-bridge-log-ttl.ts` "✅ LIVE" with "cron 02:30 UTC", while the same section's cron note (`:2396-2398`) says it is "NOT installed (deferred)". **The cron note is right** (measured, §2). Row 7 is corrected to "code live; not scheduled; manual runs only (`#169`)".
+- **SIM — silent, a governance gap:** nothing in the B75 block says what an archive object's row count *means*, or that `xstock_bar_archive_exact_evidence` exists. This batch adds both, and the trigger that ties them.
+- **System Manual — silent:** "Data Lifecycle Policy (B75)" (`:12190-12250`) describes the manifest as the "single source of truth" and the "rehydration seam", with no word on completeness. Under `architecture` it gets a content update: the basis column, its four values, what `source-count-matched` does and does not prove, and the four gates.
+- **No contradiction** between the scope and either document: both are silent, not opposed.
+
+## 5. LEDGER (§9.5(b-ii)) — SEARCHED BEFORE ANY FINDING
+- **`#1195`** (CC-C, 2026-10-15) — the parent; this batch is its recording half. Kyle's option 3 is recorded on it.
+- **`#169`** (OPEN, 2026-06-01) — the ctx lane's buffered upload could run out of memory, which is why it was never scheduled. **Cross-reference, not a finding.** This batch touches the ctx lane only for consistency (label, evidence, the active-skip rule) and does **not** schedule it. Scheduling stays with `#169`.
+- **`STORAGE_POLICY.md` §9.A** heads 12 tables "ARCHIVED **then** dropped — safe". **For every copy made from 2026-05-06 to 2026-10-16 that word is now unproven.** Corrected under OBJ-4 (finding A4).
+- **`STORAGE_POLICY.md` §9.D** says `context_bridge_log` "**Is** tiered". That is true of its 6 objects. It is now annotated "not scheduled since B75 (`#169`)".
+- No existing issue records any of A1-A7 below. Each is either new or a scope objective, and none is a decided design reported as a defect.
+
+## 6. PROVENANCE (§9.5(b))
+- `bridge/canonical/`: **no coverage** — B75 is from 2026-05, after the corpus.
+- Git origins (scope §2a, re-read):
+  - B75 `f4e6a73f6` (manifest, sweep, ctx, rehydrate);
+  - page rule `565b605f0`, quoted verbatim in the scope;
+  - cold rotator `1ee802fd3`, then B-STORAGE-HARDEN;
+  - plain-archive lane `f3d5fa54a` (`#599`);
+  - evidence table and module: B-XSTOCK-BAR-AVAILABILITY `4be3426e9`, `6dadbb614` (CC-C).
+- **The intent, verbatim (SIM B75):** *"we don't ever drop data"*; the manifest is *"the rehydration seam"*.
+- **The batch serves that intent directly:** a seam that reports a short copy as whole breaks the never-drop promise at the one place it is checked later.
+
+## 7. FINDINGS (each falls into the plan in §8)
+| # | finding | evidence | disposition |
+|---|---|---|---|
+| A1 | The manifest has no completeness field, and `row_count` is the exported count only | §3.1; the hotfix note | scope OBJ-1 |
+| A2 | The proof table exists, is pinned to one table, and is empty | §3.2 | scope §2b, OBJ-7 |
+| A3 | The evidence writer hard-codes `source_table`, `tier` and `cursor_contract` (sweep `:576`; `exact-archive-evidence.ts` VALUES and the replay compare) | Langston condition 1 | OBJ-7 |
+| A4 | `STORAGE_POLICY.md` §9.A calls the archived tables "safe" | §5 | OBJ-4 |
+| A5 | SIM row 7 contradicts the SIM's own cron note | §4 | folded: SIM update |
+| A6 | The four gates accept presence; the resume skip would manufacture a proof on re-export | §3.4, Langston C-6 | OBJ-8 |
+| A7 | 4 sweep alerts, none keyed; 2 for one partition | §3.7 | OBJ-5 |
+| A8 | `perpfeed-gate-test --clean` deletes manifest rows. Once a proven object has an evidence row, the FK (no `ON DELETE`) **blocks that delete** and the append-only trigger blocks removing the evidence. | §3.1, §3.2 | **folded, and no code change:** the harness's own header says `--clean` is "abort path only — after a successful positive leg there is nothing to clean". Its only row today is legacy (no evidence), so `--clean` still works for it. A comment is added at `:121` saying a proven object cannot be cleaned. |
+| A9 | The ctx lane is unscheduled | §2 | cross-reference to `#169`; no work |
+
+## 8. IMPLEMENTATION PLAN (each item names its finding)
+**P1 — migration `2026-10-17-b-b75-export-completeness.sql` + rollback (A1, A2, A6).** One transaction:
+1. **The manifest column.**
+   - `ALTER TABLE data_archive_manifest ADD COLUMN completeness_basis TEXT NOT NULL DEFAULT 'unrecorded'`, with a CHECK over the four values.
+   - **Backfill:** `unverified-legacy` where `created_at < '2026-10-16T09:45:18Z'`; `gate-deployed-unrecorded` for the rest. At deploy time "the rest" is every row exported since the hotfix. Ordering is safe: `created_at` and `verified_at` agree on all 572 rows (§1 of the scope), and the placeholder row falls in the legacy group.
+2. **The evidence table, generalised (scope §2b).**
+   - Drop `…_source_table_check` and `…_tier_check`.
+   - Replace `…_cursor_contract_check` with a two-value CHECK.
+   - Rename the table, its 11 remaining constraints, its 2 triggers and its 2 indexes.
+   - `COMMENT ON TABLE` states the two-column key intent.
+3. **The tie, as a trigger.** A `BEFORE INSERT OR UPDATE OF completeness_basis` trigger on the manifest raises when `NEW.completeness_basis = 'source-count-matched'` and no evidence row exists for `(NEW.source_table, NEW.partition_label)`.
+   - **A plain trigger, not `DEFERRABLE`,** so it fires inside the same transaction as the evidence insert (P3 orders evidence first).
+4. **The replay guard.** The 10-15 file's evidence statements (`:59-77`, `:113-121`, `:303`) are wrapped in `DO` blocks that skip when `to_regclass('data_archive_exact_evidence') IS NOT NULL`. **This is CC-C's applied file;** CC-C agreed at 04:2xZ.
+5. **The rollback.**
+   - Drop the tie trigger and the column.
+   - Reverse the renames.
+   - Restore the single-value contract CHECK and the two pins **only if no row violates them**; otherwise leave them off, keep every row, and `RAISE NOTICE` (Langston condition 2).
+6. **Registered in `MANIFEST.txt`.** Both files are force-added; the rollback is tracked, per the shared `MEMORY.md` correction.
+
+**P2 — `exact-archive-evidence.ts` (A2, A3).**
+- `recordExactArchiveEvidence` takes `sourceTable`, `tier` and `cursorContract` as inputs, and writes and compares against them, not literals.
+- A `producing_build_sha` mismatch on replay is **logged** with both shas and does not refuse; the stored value is kept (JC-4).
+- The exported names (`XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT`) stay, so CC-C's capacity gate import is unchanged.
+- A new `LEGACY_TS_TIEGROUP_CURSOR_CONTRACT = 'text-ts-tiegroup-v1'`.
+
+**P3 — the sweep, `b75-retention-sweep.ts` (A1, A3, A6, A7).**
+1. **Every export writes evidence, inside one transaction (OBJ-7, R-1).**
+   - After the download verify (`:563-569`), build the evidence for every spec, not only the exact lane (`:572`), with `sourceTable: spec.parent` (fixing `:576`), the export's tier, and the spec's contract.
+   - Then, in one transaction, run three writes in this order: evidence insert → `completeness_basis = 'source-count-matched'` → `verified`, replacing the bare statements at `:613` and `:615`.
+2. **The resume skip (`:516-520`), C-6 rule.**
+   - An existing row in `verified`/`active`/`migrated` is reused **only** if `source-count-matched`. Otherwise the sweep throws `NonProvenExistingCopyError`: no upload, no evidence, no overwrite.
+   - The partition lane catches it as a failure of that partition (the DROP never runs); the plain lane's catch treats it as a failure of that table (the delete never runs).
+   - `pending`/`uploaded` rows re-export as today.
+3. **The DROP gate (`:775-793`) and the plain gate (`:922-935`)** add `completeness_basis = 'source-count-matched'` to their state predicate. The plain gate's refusal mints an alert instead of only logging.
+4. **Alerts (OBJ-5).**
+   - Keys `b75-sweep:<parent>:<label>:<class>`, `b75-plain:<table>:<class>` and `b75-sweep:fatal`, plus `…:non-proven-existing` from item 2.
+   - On each success, `resolveAlertsByDedupeKey` for that parent+label's three classes (or that table's), as `b75-retention-sweep`. At the DONE line, the same for `b75-sweep:fatal`.
+   - `non-proven-existing` has **no** automatic resolver; it needs a human disposition.
+   - Bodies name the run start time and point at the log; no counts.
+5. **Wording (OBJ-6).** The plain catch (`:999-1005`) names a count mismatch; the `:1165` promise is rewritten to say a mismatch keeps failing safely and needs investigation.
+
+**P4 — `system-alerts.ts` (A7).**
+- Add `{ value: 'b75-retention-sweep', tag: 'machine', why: … }` to `ALERT_ACTORS` (`:212`), with transport `engine`, as the other machine resolvers use. The transport set is `cli | dispatcher | api | governance-checker | engine` (`system-alerts.ts:150`). `engine` is the closest fit for a script resolving its own row, but it is not a perfect fit — **for attack**.
+- Check `dt-deploy`'s derived table: machine actors are excluded, per the shared MEMORY note.
+
+**P5 — `context-bridge-log-ttl.ts` (A1, A3, A6).**
+- After verify, the same transactional evidence + stamp, using the export's actual tier (it may be `cold` after the 413 fallback, `:214-219`).
+- The active skip (`:133-138`) follows the C-6 rule.
+- **Still unscheduled** (`#169`).
+
+**P6 — `b75-cold-rotator.ts` (A1).** `completeness_basis` goes into both the `INSERT` column list and the `ON CONFLICT … DO UPDATE SET` list (`:303-317`).
+
+**P7 — `b75-rehydrate.ts` (A1).**
+- `queryManifest` selects `completeness_basis`.
+- Per object it prints `completeness=<basis>`, and `rows(unproven)=` for anything not `source-count-matched`.
+- The total splits into proven and unproven.
+- One warning per non-proven object names its range.
+- Writes `<file>.completeness.json` beside each file.
+
+**P8 — the capacity gate (CC-C's file, A2).**
+- The two table references (`:125`, `:609`) take the new name.
+- A comment at `:125` says the relation now holds every lane's evidence (C-9, CC-C's choice).
+
+**P9 — `perpfeed-gate-test.ts` (A8).** A comment only, at `:121`.
+
+**P10 — documents (A4, A5).**
+- `STORAGE_POLICY.md`: §9.A wording, §9.D annotation, and a new subsection for the window, the cause, Kyle's decision and the four values, saying what the label does not mean.
+- The SIM B75 block: row 7 corrected; the evidence table, the trigger and the gates added.
+- The System Manual Data Lifecycle chapter.
+- Plus the architecture-class document set at Step 10.
+
+**Tests (one file per area, all mutation-proved):**
+- `b-b75-completeness-migration.test.ts`:
+  - the four-value CHECK;
+  - the tie trigger refuses without evidence and admits with it (Langston condition 1, non-xStock);
+  - the replay guard leaves exactly one evidence table;
+  - the rollback's conditional pin restore.
+- `b-b75-completeness-sweep.test.ts`:
+  - the evidence row carries `spec.parent` and the actual tier;
+  - the transaction order;
+  - the C-6 refusals at (c) and (d) write no evidence and overwrite nothing;
+  - `pending` re-exports;
+  - gates (a) and (b);
+  - OBJ-5's suppression, its positive control (a different parent/label/class mints), resolve-on-success, and re-mint after a resolve.
+- `exact-archive-evidence` tests:
+  - first-write-wins (CC-C);
+  - the xStock contract still passes the capacity gate's proof (CC-C);
+  - a build-sha mismatch logs and does not refuse.
+- Rehydrate and rotator: one test each.
+
+**Deploy:**
+- One `dt-deploy` (migrate between build and restart), **outside 02:00-02:30Z**.
+- The first proof is the next 02:15Z sweep: every new row is `source-count-matched` with one evidence row whose three counts are equal.
+- Then the census reads 568 / N / 0 / 0.
+
+**Nothing in this plan is UNAUDITED.** Every item names a finding above.
+
+## 9. PLAIN-LANGUAGE SUMMARY
+The audit found what the plan expected, plus three things worth knowing:
+- **The internal message log's archive job has never been scheduled.** It is a known, recorded memory issue, so this batch leaves the schedule alone.
+- **Two of our documents were wrong or contradicted themselves.** The storage policy calls the old archive copies "safe". The system map lists that unscheduled job as live. Both get corrected.
+- **A test script can no longer delete a proven copy's record.** That is the right outcome, and it gets a comment.
+
+**The plan:**
+- add the "complete / possibly incomplete" label to every archive record;
+- widen ANALYST Claude's proof record to cover every table;
+- have the nightly archive store a proof for every new copy and refuse to delete, or to reuse, anything unproven;
+- stop repeat alerts piling up night after night;
+- make the reload tool show which copies are unproven.
