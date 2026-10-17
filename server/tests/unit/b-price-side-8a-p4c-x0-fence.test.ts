@@ -51,7 +51,11 @@ describe('8a-P4c X0 — the fence on vts-runner.ts', () => {
   });
 
   it('positive control — the undefaulted quote is still carried on both lanes', () => {
-    const carried = /rawQuote: \{ last: price, bid: parseQuoteNumber\(r\.bid\), ask: parseQuoteNumber\(r\.ask\), atMs: parseQuoteNumber\(r\.at_ms\) \}/g;
-    expect(count(VTS, carried)).toBe(2); // real lane + shadow lane
+    // row 2 increment B (P4): the REAL lane also carries its undefaulted shown QUANTITIES (never `?? 0`); the SHADOW lane is
+    // excluded from the size test (r2 condition 1: no notional in scope), so it states `null` and selects no quantity column.
+    const base = 'rawQuote: \\{ last: price, bid: parseQuoteNumber\\(r\\.bid\\), ask: parseQuoteNumber\\(r\\.ask\\), atMs: parseQuoteNumber\\(r\\.at_ms\\),\\s*\\n\\s*';
+    expect(count(VTS, new RegExp(base + 'bidQty: parseQuoteNumber\\(r\\.bid_qty\\), askQty: parseQuoteNumber\\(r\\.ask_qty\\) \\}', 'g'))).toBe(1);
+    expect(count(VTS, new RegExp(base + 'bidQty: null, askQty: null \\}', 'g'))).toBe(1);
+    expect(count(VTS, /bid_qty::text AS bid_qty/g)).toBe(1); // the real lane's query only
   });
 });

@@ -391,7 +391,19 @@ import { isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/marke
 import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
 import { hollowCauseIsReferenceRelative, type BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { xstockTransactableSides } from '../asset_classes/xstock_spot/transactable-sides.js';
+import { xstockTransactableSides, xstockSideSize, type XstockSideSizeVerdict } from '../asset_classes/xstock_spot/transactable-sides.js';
+// Row 2 increment B (Langston Step-2 call 3, r2 condition 3) — the size tripwire's window and bar. An ALARM threshold, not a
+// trading knob: it changes no decision. DERIVED FROM THE PER-HOUR DISTRIBUTION, not a daily mean: missing quantities arrive
+// as WHOLE-SNAPSHOT bursts (every symbol null for one minute, e.g. 00:15Z). Over 14 days of `xstock_spot_ticker_snap`
+// (bid > 0), the 238 LIVE-feed hours (≥ 50 snapshot minutes) peak at 1.854% null bid_qty (p99 1.581%, p95 1.119%; the
+// 00:xx hour averages 1.09% over 7 days); the 28 thin hours (≤ 4 minutes of data, the venue closed) read 100% and are where
+// the exit evaluates nothing, so they land `too_few`. 10% is ~5× the worst live hour; a wholesale loss reads near 100%.
+// `too_few` is EXPECTED in any hour with no open xStock position, or whose positions spent the hour refused (the weekend
+// close, venue-quiet holds): looks are per evaluated position tick with a judged bid, so the bar's reach moves with how
+// many xStock positions we hold, and a `too_few` hour is UNEXERCISED, never clean (#661 leg 2).
+const XS_SIZE_TRIPWIRE_WINDOW_MS = 3_600_000;
+const XS_SIZE_TRIPWIRE_SHARE = 0.10;
+const XS_SIZE_TRIPWIRE_MIN_N = 200;
 
 // `8a-P4c` P2: `xstockTransactableSides` — the one usable-side predicate — lives in the shared module
 // `asset_classes/xstock_spot/transactable-sides.ts`, so the VTS lane calls the same function (Langston, 2026-09-22).
@@ -583,8 +595,9 @@ export class ActiveExecutionEngine {
     const snapshot = await getDepthSnapshot(symbol, assetClass);
     // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]): the NEWEST xStock row must hold BOTH sides with size. Its own
     // reason code (`depth_verdict`), separate from P3's `implausible_spread_entry` so Step 8 can count each.
-    if (snapshot?.verdict && (snapshot.verdict.bid !== 'ok' || snapshot.verdict.ask !== 'ok')) {
-      return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask}`, snapshot: null, warmthMaxAgeMs: null };
+    if (snapshot?.verdict && (snapshot.verdict.bid !== 'ok' || snapshot.verdict.ask !== 'ok' || snapshot.verdict.crossed)) {
+      // Row 2 increment B (P5): a crossed book refuses here too, under the same reason code with `crossed=true`.
+      return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask} crossed=${snapshot.verdict.crossed}`, snapshot: null, warmthMaxAgeMs: null };
     }
     const warmth = assessWarmth(snapshot, 'asks', config);
     if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null, warmthMaxAgeMs: null };
@@ -1814,7 +1827,7 @@ export class ActiveExecutionEngine {
     provenance: { producer: PriceProducer; source: string; observedAtMs: number | null },
     // ⛔ `8a-P4b` X1 — the xStock sides the book-state guard judged THIS tick (J1), or the unjudged raw sides with
     // the guard off (J2). REQUIRED, never re-read here: a later frame would be unjudged. Ignored on other classes.
-    xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null; arrivedAtMs: number | null },
+    xstockSides: { bid: number | null; ask: number | null; basis: 'raw_guarded' | 'raw_unguarded' | null; arrivedAtMs: number | null; bidQty: number | null; askQty: number | null },
   ): Promise<void> {
     const _placedAtMs = position.makerPlacedAt ? new Date(position.makerPlacedAt).getTime() : null;
     const _entryFillPolicy = position.entryFillPolicy as FillPolicy | null | undefined;
@@ -1852,6 +1865,9 @@ export class ActiveExecutionEngine {
     let fillPrice: number | null = safePrice;
     if (_isXstockPending) {
       fillPrice = side === 'buy' ? xstockSides.ask : xstockSides.bid;
+      // ⭐ Row 2 increment B (P3) — X1 SIZE: a rest cannot fill beyond the quantity the touched side shows (partial fills
+      //   are not modelled). Short or unknown ⇒ NO FILL this tick; the rest persists and its deadline still applies.
+      fillPrice = this._xsRestSizeGate('x1', side === 'buy' ? 'ask' : 'bid', xstockSides, position, fillPrice, limit, side);
     }
     if (_isCryptoPending) {
       const _ft = selectCryptoTouch(position.symbol, CRYPTO_TOUCH_READERS, Date.now(), {
@@ -2126,6 +2142,9 @@ export class ActiveExecutionEngine {
         let xsAsk: number | null = null;
         let xsSideBasis: 'raw_guarded' | 'raw_unguarded' | null = null;
         let xsArrivedAtMs: number | null = null;
+        // Row 2 increment B (P2/P3): the SAME judged frame's shown quantities, carried with its sides (never re-read).
+        let xsBidQty: number | null = null;
+        let xsAskQty: number | null = null;
         // `8a-P4b` Step 9 C1 (Langston condition 4) — the judged frame's spread and the guard's arm-(i) threshold,
         // carried to the exit check for the LOG ONLY: the bid-trigger measurement window the re-land row needs.
         let xsSpread: number | null = null;
@@ -2135,6 +2154,15 @@ export class ActiveExecutionEngine {
         // `3n.q7` increment 1 (Langston condition 2) — WHY an evaluated xStock tick has no transactable sides. Set on the
         // four arms that reach the evaluator with `xsBid` null; every other failure `continue`s before the evaluator.
         let xsFrameReason: string | null = null;
+        // ⭐ Row 2 increment B (P1) — THE xSTOCK TRIGGER IS THE BID ONLY WHILE ARMED: the book-state guard RAN this tick
+        //   (not the guard-off arm) AND `spread_blown_enabled` is on in the same resolved config. Objective 6 is what makes
+        //   the bid safe — a blown book is held before any trigger runs, which is the MDB/USD shape (`#1065`) Step 9 C1
+        //   reverted for. If an operator turns either switch off this stays false and the trigger is the MARK, exactly as
+        //   since C1 — never the raw unjudged bid. Armed with `xsBid` null (a crossed or non-finite judged frame) ⇒ NO
+        //   DECISION this tick, the crypto rule (evaluator branch 2b); never a fall-back to the mark.
+        let xsBidTriggerArmed = false;
+        // Langston Step-2 call 1: WHICH switch left it on the mark, so "armed" is never confused with "silently fell back".
+        let xsBidTriggerOff: 'guard_off' | 'spread_blown_off' | null = null;
 
         // ── P19-B8.5 xSTOCK MARKS (Langston design-APPROVED 2026-07-16) ────────────────
         // Kraken spot REST carries NO tokenized equities (empirically proven: Ticker
@@ -2277,12 +2305,15 @@ export class ActiveExecutionEngine {
               // choice not to judge the book, and refusing every xStock exit because of it would turn a diagnostics knob
               // into a trading halt; falling back to the mark is the midpoint `3n` forbids. `_bs` carries no `raw` on this
               // arm (the `ok:false` union), so the frame is `_eqTick.raw` — the one the mark came from (J2c, Langston).
+              xsBidTriggerOff = 'guard_off'; // row 2 increment B (P7): the mark decides, and the line says why
               const _offRaw = _eqTick?.raw;
               const _offSides = xstockTransactableSides(_offRaw); // the SAME predicate as J1 (Step 4 BLOCKER-1)
               if (_offSides) {
                 xsBid = _offSides.bid;
                 xsAsk = _offSides.ask;
                 xsArrivedAtMs = Number.isFinite(_offRaw?.atMs) ? (_offRaw!.atMs as number) : null;
+                xsBidQty = _offRaw?.bidQty ?? null;
+                xsAskQty = _offRaw?.askQty ?? null;
                 xsSideBasis = 'raw_unguarded';
                 xsSpread = (_offSides.ask - _offSides.bid) / ((_offSides.ask + _offSides.bid) / 2);
               } else if (_offRaw && _offRaw.bid !== null && _offRaw.ask !== null && _offRaw.bid > 0 && _offRaw.ask > 0) {
@@ -2293,6 +2324,8 @@ export class ActiveExecutionEngine {
               }
             } else {
               const { result: _r, cfg: _c, raw: _raw } = _bs;
+              xsBidTriggerArmed = _c.spreadBlownEnabled === true; // P1: guard ran + spread_blown on (see the declaration)
+              if (!xsBidTriggerArmed) xsBidTriggerOff = 'spread_blown_off';
               // ⛔ D3 (2026-09-05) — THE CONSUMER `validated` NEVER HAD. Carried onto every
               // BOOK_STATE line below so a `two_sided` verdict from a comparator that was never
               // validated can be told apart from a trusted one when this batch's window is graded.
@@ -2594,6 +2627,8 @@ export class ActiveExecutionEngine {
                   xsBid = _gSides.bid;
                   xsAsk = _gSides.ask;
                   xsArrivedAtMs = Number.isFinite(_raw.atMs) ? _raw.atMs : null;
+                  xsBidQty = _raw.bidQty;
+                  xsAskQty = _raw.askQty;
                   xsSideBasis = 'raw_guarded';
                   xsSpread = _r.inputs.spreadFrac ?? null;
                   xsThr = _r.inputs.departureThresholdFrac ?? null;
@@ -2837,7 +2872,7 @@ export class ActiveExecutionEngine {
             producer: priceProducer,
             source: priceSource,
             observedAtMs: priceObservedAtMs,
-          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs }); // `8a-P4b` X1: same judged frame's sides + receipt
+          }, { bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty }); // `8a-P4b` X1: same judged frame's sides + receipt (+ sizes, row 2 inc B)
           positionsEvaluated++;
           continue;
         }
@@ -3135,9 +3170,19 @@ export class ActiveExecutionEngine {
           //   (i) needs the other side to HOLD; (iii) keeps the mid near fair). `_lsSel` is `null` on xStock by
           //   construction, so this slot is `null` for xStock and the evaluator's xStock arm takes the mark.
           //   The bid trigger re-lands under row `3n.q7` (`B-XSTOCK-BID-TRIGGER-RELAND`), on Langston's three conditions.
-          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null,
+          // ⭐ Row 2 increment B (P1): xStock passes the judged `xsBid` while ARMED; the evaluator's xStock arm reads it
+          //   only then, and the mark otherwise. `_lsSel` stays `null` on xStock by construction.
+          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' && xsBidTriggerArmed ? xsBid : null),
           // Log only: the frame X3 WOULD have read, so the containment interval is the re-land's measurement window.
-          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis?.trail ?? null, ret: xsThrBasis?.ret ?? null, tb: xsThrBasis?.tb ?? null } : null,
+          _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis?.trail ?? null, ret: xsThrBasis?.ret ?? null, tb: xsThrBasis?.tb ?? null,
+            // Row 2 increment B (P3/P7): can the judged bid hold our size? LOG + COUNT ONLY — an exit is never blocked on it.
+            armOff: xsBidTriggerOff,
+            size: xsBid === null ? null : (() => {
+              const _q = parseFloat(position.quantity);
+              if (!(Number.isFinite(_q) && _q > 0)) { this._noteInvalidQuantity(position, 'trigger'); return 'size_invalid' as const; }
+              return xstockSideSize('bid', { bid: xsBid, ask: xsAsk, bidQty: xsBidQty, askQty: xsAskQty }, _q * xsBid);
+            })() } : null,
+          _posClass === 'xstock_spot' && xsBidTriggerArmed, // Row 2 increment B (P1): the xStock arm's gate
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -3202,7 +3247,8 @@ export class ActiveExecutionEngine {
           // xStock (`8a-P4b` X2): the guard-validated BID (`xsBid`, J1/J2); `null` ⇒ no fill this tick. Any other class
           // (`crypto_perp`, `xstock_perp`): the mark, EXACTLY as before — outside `3n` (r1 BLOCKER-1).
           const _restFillPrice: number | null = _posClass === 'crypto_spot' ? (_lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : null)
-            : _posClass === 'xstock_spot' ? xsBid
+            // ⭐ Row 2 increment B (P3) — X2 SIZE: the bid must show our quantity, else no fill this tick (rest persists).
+            : _posClass === 'xstock_spot' ? this._xsRestSizeGate('x2', 'bid', { bid: xsBid, ask: xsAsk, bidQty: xsBidQty, askQty: xsAskQty }, position, xsBid, _exitRestLimit, 'sell')
             : currentPrice;
           const _targetPolicy = (position as any).targetExitFillPolicy as FillPolicy | null | undefined;
           if (_targetPolicy !== 'maker_only' && _targetPolicy !== 'maker_preferred') {
@@ -3392,6 +3438,14 @@ export class ActiveExecutionEngine {
       console.error(`[3n.q7][XS_FRAME_RECONCILE_BROKEN] emitted=${this._xsFramesEmitted} invoked=${this._exitEvalByClass.xstock.invoked}`
         + ` — the frame line and the xStock invocation count have drifted apart; the frame population is no longer the evaluated one.`);
     }
+    const _xz = this._xsSizeCounts;
+    // Printed on every cycle that evaluated an xStock position (its own denominator, `xsInvoked`), so a zero is a
+    // measured zero on a cycle that looked — and a cycle with no xStock positions prints nothing (no log volume).
+    // `console.warn` ⇒ error.log (~14-day retention), so the overnight leg of the Step-7 window survives to Step 8.
+    if (this._exitEvalByClass.xstock.invoked > 0 || Object.values(_xz).some((v) => v > 0)) console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][XS_SIZE] cycleId=${this.lastCycleAt} xsInvoked=${this._exitEvalByClass.xstock.invoked} x1Short=${_xz.x1Short} x1Unknown=${_xz.x1Unknown} ` +
+      `x2Short=${_xz.x2Short} x2Unknown=${_xz.x2Unknown} trigShort=${_xz.trigShort} trigUnknown=${_xz.trigUnknown} invalidQty=${_xz.invalidQty} closeCrossedWalks=${_xz.closeCrossedWalks}`);
+    this._xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
+    void this._runXsSizeTripwire();
     this._xsFramesEmitted = 0;
     this._xsFrameClassMismatch = 0;
     this._noTriggerRefusals = 0;
@@ -3468,6 +3522,108 @@ export class ActiveExecutionEngine {
   // `8a-P4b` Step 9 C1 — per-position open bid-vs-mark divergence runs (log only). Bounded by held xStock positions; an
   // entry is left behind only when a position closes by a path that skips the exit check (a rest fill, a flatten).
   private _xsBidDivergence = new Map<string, { startMs: number; ticks: number; leg: 'stop' | 'target' }>();
+  // ⭐ Row 2 increment B (P3/P7) — per-cycle xStock size verdicts by site, printed on EVAL_EXIT and reset there.
+  //   x1/x2 count a REFUSED fill (the side touched the limit but could not hold our size, or did not say);
+  //   trig counts a stop/target that FIRED on a short or unknown top-of-book (an exit is never blocked on size).
+  private _xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
+  // r2 condition 3(c): positions already paged for a non-positive quantity (an internal invariant break, paged ONCE each).
+  private _xsInvalidQtyPaged = new Set<string>();
+  // ⭐ Row 2 increment B (Langston Step-2 judgement call 3) — THE STANDING SIZE TRIPWIRE. An exit trigger ACCEPTS
+  //   `size_unknown` (an exit must never wait on size), so if the venue's quantity fields went null wholesale the trigger
+  //   would silently lose its size term. Every evaluated xStock tick with a judged bid is counted in an hourly window; a
+  //   window with at least XS_SIZE_TRIPWIRE_MIN_N looks and an unknown share above XS_SIZE_TRIPWIRE_SHARE pages (baseline
+  //   measured at the Step-2 audit: 0.068% of 24 h of rows), and the next clean window resolves it.
+  private _xsSizeWindow = { startMs: Date.now(), n: 0, unknown: 0 };
+
+  /** r2 condition 3(c): a non-positive `position.quantity` is an internal invariant break. Counted on `[XS_SIZE]`
+   *  (`invalidQty`), logged at error, and paged on the FIRST occurrence per position; it never blocks an exit trigger. */
+  private _noteInvalidQuantity(position: any, site: 'x1' | 'x2' | 'trigger'): void {
+    this._xsSizeCounts.invalidQty++;
+    console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE_INVALID] ${position.symbol} pos=${position.id} site=${site} quantity=${position.quantity} — not a positive number`);
+    const id = String(position.id);
+    if (this._xsInvalidQtyPaged.has(id)) return;
+    this._xsInvalidQtyPaged.add(id);
+    void (async () => {
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(), category: 'breakage', severity: 'warning',
+          title: `Paper xStock position ${position.symbol} has an invalid quantity (${this.mode})`,
+          body: `Position ${id} (${position.symbol}) carries quantity "${position.quantity}", which is not a positive number. Its resting ` +
+            `fills are refused and its size check cannot run; stops and targets still fire. This is our own data, not the market.`,
+          metadata: { mode: this.mode, positionId: id, symbol: position.symbol, quantity: position.quantity, site },
+          dedupe_key: `xstock-invalid-quantity-${this.mode}-${id}`,
+        });
+      } catch (err) {
+        console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE_INVALID_ALERT_FAILED] pos=${id}:`, err instanceof Error ? err.message : err);
+      }
+    })();
+  }
+
+  /** Row 2 increment B (Langston Step-2 call 3): close the hourly size window; page on a wholesale loss of quantities,
+   *  resolve on a clean window. Awaited by nothing on the exit path; a window with too few looks decides nothing. */
+  private async _runXsSizeTripwire(): Promise<void> {
+    const now = Date.now();
+    const w = this._xsSizeWindow;
+    if (now - w.startMs < XS_SIZE_TRIPWIRE_WINDOW_MS) return;
+    this._xsSizeWindow = { startMs: now, n: 0, unknown: 0 };
+    const share = w.n > 0 ? w.unknown / w.n : 0;
+    const verdict = w.n < XS_SIZE_TRIPWIRE_MIN_N ? 'too_few' : share > XS_SIZE_TRIPWIRE_SHARE ? 'trip' : 'clean';
+    console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][XS_SIZE_TRIPWIRE] mode=${this.mode} windowStart=${new Date(w.startMs).toISOString()} ` +
+      `looks=${w.n} sizeUnknown=${w.unknown} share=${share.toFixed(5)} threshold=${XS_SIZE_TRIPWIRE_SHARE} minLooks=${XS_SIZE_TRIPWIRE_MIN_N} verdict=${verdict}`);
+    if (verdict === 'too_few') return;
+    const key = `xstock-quote-size-unknown-${this.mode}`;
+    try {
+      const { addAlert, resolveAlertsByDedupeKey } = await import('./system-alerts.js');
+      if (verdict === 'trip') {
+        await addAlert({
+          triggers_at: new Date(), category: 'breakage', severity: 'warning',
+          title: `xStock quote sizes missing on ${(share * 100).toFixed(1)}% of exit looks (${this.mode})`,
+          body: `In the hour from ${new Date(w.startMs).toISOString()}, ${w.unknown} of ${w.n} evaluated xStock exit ticks had a bid ` +
+            `with no usable shown quantity (baseline about 0.07%). Stops and targets still fire, but the top-of-book size check is ` +
+            `blind and resting fills are refused while it lasts. Check the xStock quote feed's bid_qty/ask_qty. Clears itself on ` +
+            `the next clean hour.`,
+          metadata: { mode: this.mode, windowStartMs: w.startMs, looks: w.n, sizeUnknown: w.unknown, share },
+          dedupe_key: key,
+        });
+      } else {
+        await resolveAlertsByDedupeKey(key, 'active-exit-monitor', '#1191', 'engine');
+      }
+    } catch (err) {
+      console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][XS_SIZE_TRIPWIRE_ERROR] mode=${this.mode}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  /** Row 2 increment B (P3): the resting-fill size gate. Returns `price` when the side shows our size, else `null`
+   *  (no fill this tick). Counted only when the side TOUCHED the limit, so a refusal is a fill that would have happened. */
+  private _xsRestSizeGate(
+    site: 'x1' | 'x2',
+    sizeSide: 'bid' | 'ask',
+    sides: { bid: number | null; ask: number | null; bidQty: number | null; askQty: number | null },
+    position: any,
+    price: number | null,
+    limit: number,
+    orderSide: 'buy' | 'sell',
+  ): number | null {
+    if (price === null) return null;
+    const qty = parseFloat(position.quantity);
+    if (!Number.isFinite(qty) || !(qty > 0)) {
+      // r2 condition 3(c): NOT a market state — our own row is broken. Its own verdict, never pooled into `size_unknown`
+      // (that would contaminate the tripwire's numerator); no fill; counted; paged once per position.
+      this._noteInvalidQuantity(position, site);
+      return null;
+    }
+    const verdict: XstockSideSizeVerdict = xstockSideSize(sizeSide, sides, qty * price);
+    if (verdict === 'ok') return price;
+    const touched = orderSide === 'buy' ? price <= limit : price >= limit;
+    if (touched) {
+      if (verdict === 'size_short') this._xsSizeCounts[site === 'x1' ? 'x1Short' : 'x2Short']++;
+      else this._xsSizeCounts[site === 'x1' ? 'x1Unknown' : 'x2Unknown']++;
+      console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE] ${position.symbol} pos=${position.id} site=${site} ${verdict} ` +
+        `${sizeSide}=${price} shownQty=${(sizeSide === 'bid' ? sides.bidQty : sides.askQty) ?? 'none'} ourQty=${position.quantity} limit=${limit} — no fill this tick`);
+    }
+    return null;
+  }
   // `3n.q7` increment 1 — per-cycle frame-line counters (reset with the other exit counters).
   private _xsFramesEmitted = 0;
   private _xsFrameClassMismatch = 0;
@@ -3503,7 +3659,10 @@ export class ActiveExecutionEngine {
     //    on the mark, unchanged (the explicit third arm at the evaluator call).
     triggerBid: number | null = null,
     // `8a-P4b` Step 9 C1 — LOG ONLY, never a decision input: the xStock frame the bid trigger would have read.
-    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null; trail?: number | null; ret?: number | null; tb?: 'j' | 'v' | null } | null = null,
+    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null; trail?: number | null; ret?: number | null; tb?: 'j' | 'v' | null; size?: XstockSideSizeVerdict | 'size_invalid' | null; armOff?: 'guard_off' | 'spread_blown_off' | null } | null = null,
+    // ⭐ Row 2 increment B (P1) — xStock ONLY: true ⇒ the trigger is `triggerBid` (the judged bid; `null` ⇒ no decision),
+    //   false ⇒ the MARK. The caller sets it only when the book-state guard ran AND `spread_blown_enabled` is on.
+    xsBidArmed: boolean = false,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -3595,7 +3754,8 @@ export class ActiveExecutionEngine {
         //   loop is class-total): the mark, EXACTLY as before. They are outside `3n`; a new class must be added HERE
         //   deliberately. An else-arm of `xsBid` would hand such a row `null` forever (Langston, 8a-P4b r1 BLOCKER-1).
         triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid
-          : positionAssetClass === 'xstock_spot' ? currentPrice // `8a-P4b` Step 9 C1: the mark until row `3n.q7` re-lands the bid
+          // ⭐ Row 2 increment B (P1): the BID while armed (guard ran + `spread_blown` on), else the MARK as since C1.
+          : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? triggerBid : currentPrice)
           : currentPrice,
         atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
@@ -3642,9 +3802,22 @@ export class ActiveExecutionEngine {
       const _xsBidTarget = xsFrame !== null && xsFrame.bid !== null && takeProfit !== null && xsFrame.bid >= takeProfit;
       const _xs5 = (v: number | null) => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
       const _xsTag = xsFrame === null ? '' :
-        ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}`;
+        ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}` +
+        ` basis=${xsBidArmed ? 'bid' : `mark reason=${xsFrame.armOff ?? 'unset'}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size
+      if (xsFrame !== null && xsFrame.size != null) {
+        this._xsSizeWindow.n++;
+        if (xsFrame.size === 'size_unknown') this._xsSizeWindow.unknown++;
+      }
+      if (xsFrame !== null && decision.shouldExit && (xsFrame.size === 'size_short' || xsFrame.size === 'size_unknown')) {
+        this._xsSizeCounts[xsFrame.size === 'size_short' ? 'trigShort' : 'trigUnknown']++; // fired anyway (P3), counted
+      }
       if (xsFrame !== null) {
-        const _div = !decision.shouldExit && (_xsBidStop || _xsBidTarget);
+        // Row 2 increment B (P7): the divergence question ("the bid would fire and the mark does not") IS the decision
+        // while armed, so a run can only START on the gated-off arm (the mark decides); an open run still ENDS normally.
+        // ⛔ KEPT, not a rule-18 leftover (Langston Step-2 call 5): it is the only instrument that could re-justify re-arming
+        //   if `spread_blown` is ever switched off. Its population is ZERO WHILE ARMED BY CONSTRUCTION, so a silent
+        //   X3_BID_DIVERGENCE while armed is UNEXERCISED — never a measurement of "no divergence" (#661 leg 3).
+        const _div = !xsBidArmed && !decision.shouldExit && (_xsBidStop || _xsBidTarget);
         const _open = this._xsBidDivergence.get(position.id);
         if (_div && !_open) {
           this._xsBidDivergence.set(position.id, { startMs: Date.now(), ticks: 1, leg: _xsBidStop ? 'stop' : 'target' });
@@ -3682,6 +3855,7 @@ export class ActiveExecutionEngine {
           symbol: position.symbol, positionId: String(position.id), evalCls: _evalCls, frame: xsFrame,
           mark: currentPrice, stopLoss, takeProfit,
           bidWouldFire: _xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no', markExit: !!decision.shouldExit,
+          decidedOn: xsBidArmed && positionAssetClass === 'xstock_spot' ? 'bid' : 'mark', // row 2 inc B (P7)
           exitReason: decision.exitReason ?? null, // Step-4 C1: a non-level exit is not a bid-vs-mark divergence
         });
         if (_xsLine !== null) {
@@ -4182,6 +4356,15 @@ export class ActiveExecutionEngine {
       // P4 ([C5]): a FLATTEN keeps the pre-P4 read (the last complete row); every other close reads the newest row and
       // refuses below when a side lacks size or price, so the position holds instead of filling on an older book.
       const _closeSnap = _closeClass ? await getDepthSnapshot(position.symbol, _closeClass, { allowLastTwoSided: _isFlatten }) : null;
+      // ⛔ Row 2 increment B (P5; Langston Step-2 BLOCKER-3 and r2 condition 2): `crossed` is deliberately NOT in this refusal
+      //   AND changes no fill — the close walks the NEWEST row exactly as before. A substituted older row would have no age
+      //   bound (the fallback query has no time predicate, and `assessWarmth` runs after the walk), and refusing would never
+      //   yield (`canYield=false` below) — an unbounded hold. Recorded and counted so the learning-data defect it leaves
+      //   (a crossed walk books a sell above the ask) can be sized; that defect keeps its own home.
+      if (_closeSnap?.verdict?.crossed) {
+        this._xsSizeCounts.closeCrossedWalks++;
+        console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][CLOSE_FILL] ${position.symbol} pos=${positionId} newest row CROSSED bid=${_closeSnap.bids[0]?.price ?? 'none'} ask=${_closeSnap.asks[0]?.price ?? 'none'} flatten=${_isFlatten} — walking it as before (crossed=true recorded)`);
+      }
       if (!_isFlatten && _closeSnap?.verdict && (_closeSnap.verdict.bid !== 'ok' || _closeSnap.verdict.ask !== 'ok')) {
         console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][CLOSE_FILL] ${position.symbol} pos=${positionId} depth_verdict bid=${_closeSnap.verdict.bid} ask=${_closeSnap.verdict.ask} — position left OPEN, retry next cycle`);
         await this._countCloseRefusal(position, _closeContract, `depth_verdict_${_closeSnap.verdict.bid}_${_closeSnap.verdict.ask}`, false, _isFlatten);

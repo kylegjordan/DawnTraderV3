@@ -206,14 +206,14 @@ describe('P4 — the newest xStock row and its per-side verdict', () => {
   it('a complete newest row returns as before, verdict ok/ok', async () => {
     dbExecute.mockResolvedValueOnce(row('100', '5', '100.2', '7'));
     const s = await getDepthSnapshot('ABC/USD', 'xstock_spot');
-    expect(s?.verdict).toEqual({ bid: 'ok', ask: 'ok' });
+    expect(s?.verdict).toEqual({ bid: 'ok', ask: 'ok', crossed: false }); // row 2 inc B (P5): crossed is a separate flag
     expect(s?.bids[0]).toEqual({ price: 100, qty: 5 });
     expect(dbExecute).toHaveBeenCalledTimes(1);
   });
   it('a newest row with the bid SIZE missing returns qty_absent with qty 0 — never the older row', async () => {
     dbExecute.mockResolvedValueOnce(row('100', null, '100.2', '7'));
     const s = await getDepthSnapshot('ABC/USD', 'xstock_spot');
-    expect(s?.verdict).toEqual({ bid: 'qty_absent', ask: 'ok' });
+    expect(s?.verdict).toEqual({ bid: 'qty_absent', ask: 'ok', crossed: false });
     expect(s?.bids[0]).toEqual({ price: 100, qty: 0 });
     expect(s?.fromLastTwoSided).toBeUndefined();
     expect(dbExecute).toHaveBeenCalledTimes(1);
@@ -230,8 +230,37 @@ describe('P4 — the newest xStock row and its per-side verdict', () => {
     const s = await getDepthSnapshot('ABC/USD', 'xstock_spot', { allowLastTwoSided: true });
     expect(s?.fromLastTwoSided).toBe(true);
     expect(s?.bids[0]).toEqual({ price: 99.9, qty: 4 }); // an off-hours flatten still resolves a price
-    expect(s?.verdict).toEqual({ bid: 'qty_absent', ask: 'ok' });
+    expect(s?.verdict).toEqual({ bid: 'qty_absent', ask: 'ok', crossed: false });
     expect(JSON.stringify(dbExecute.mock.calls[1][0])).toContain('bid_qty > 0');
+  });
+  // ⭐ Row 2 increment B (P5, P8f; Langston Step-2 BLOCKER-3 and r2 condition 2) — a CROSSED newest row: both sides sized,
+  //   ask below bid. The flag is recorded; the levels are the NEWEST row's, exactly as before (no older-row substitution).
+  it('a CROSSED newest row carries crossed=true and returns the NEWEST levels — one read, no substitution', async () => {
+    dbExecute.mockResolvedValueOnce(row('100.3', '5', '100.1', '7')); // ask < bid
+    const s = await getDepthSnapshot('ABC/USD', 'xstock_spot');
+    expect(s?.verdict).toEqual({ bid: 'ok', ask: 'ok', crossed: true });
+    expect(s?.bids[0]).toEqual({ price: 100.3, qty: 5 });
+    expect(s?.fromLastTwoSided).toBeUndefined();
+    expect(dbExecute).toHaveBeenCalledTimes(1);
+  });
+  it('the FLATTEN on a crossed newest row also walks the newest row (its fallback is for a missing side only)', async () => {
+    dbExecute.mockResolvedValueOnce(row('100.3', '5', '100.1', '7'));
+    const s = await getDepthSnapshot('ABC/USD', 'xstock_spot', { allowLastTwoSided: true });
+    expect(s?.verdict?.crossed).toBe(true);
+    expect(s?.fromLastTwoSided).toBeUndefined();
+    expect(dbExecute).toHaveBeenCalledTimes(1);
+  });
+  it('the flatten\'s fallback row (a side missing on the newest) must itself be uncrossed', async () => {
+    dbExecute.mockResolvedValueOnce(row('100', null, '100.2', '7'));
+    dbExecute.mockResolvedValueOnce(row('99.9', '4', '100.1', '6'));
+    await getDepthSnapshot('ABC/USD', 'xstock_spot', { allowLastTwoSided: true });
+    expect(JSON.stringify(dbExecute.mock.calls[1][0])).toContain('ask >= bid');
+  });
+  it('CONTROL: a LOCKED book (ask == bid) is not crossed', async () => {
+    dbExecute.mockResolvedValueOnce(row('100', '5', '100', '7'));
+    const s = await getDepthSnapshot('ABC/USD', 'xstock_spot');
+    expect(s?.verdict).toEqual({ bid: 'ok', ask: 'ok', crossed: false });
+    expect(s?.fromLastTwoSided).toBeUndefined();
   });
 });
 

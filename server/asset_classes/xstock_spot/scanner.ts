@@ -151,6 +151,9 @@ interface TickerSnapRow extends Record<string, unknown> {
   // bidAskSpreadPct ("skip check") per the global-filter contract.
   bid: string | null;
   ask: string | null;
+  // Row 2 increment B (P4): shown top-of-book quantities, null when the venue sent none.
+  bidQty: string | null;
+  askQty: string | null;
   capturedAt: Date;
 }
 
@@ -637,6 +640,8 @@ class XstockSpotScannerService {
           COALESCE(volume_24h, 0)::text AS "volume24h",
           bid::text AS bid,
           ask::text AS ask,
+          bid_qty::text AS "bidQty",
+          ask_qty::text AS "askQty",
           captured_at AS "capturedAt"
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '30 minutes'
@@ -667,6 +672,9 @@ class XstockSpotScannerService {
             bid: parseQuoteNumber(row.bid),
             ask: parseQuoteNumber(row.ask),
             atMs: Number.isFinite(capturedMs) ? capturedMs : null,
+            // Row 2 increment B (P4): the shown sizes, for the VTS entry's top-of-book size test.
+            bidQty: parseQuoteNumber(row.bidQty),
+            askQty: parseQuoteNumber(row.askQty),
           },
         });
       }

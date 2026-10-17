@@ -61,7 +61,8 @@ const SEL = read('server/asset_classes/xstock_spot/vts-xs-select.ts'); // `8a-P4
 describe('8a-P4c inc 3 — the exit wiring', () => {
   it('both lanes route xStock exits through ONE shared helper (vts-xs-select.ts), and it fails closed on knobs and rows', () => {
     expect((VTS.match(/selectVtsXstockExitBid\(trade\.symbol,/g) ?? []).length).toBe(2); // real + shadow
-    expect(VTS).toMatch(/import \{ selectVtsXstockExitBid, selectVtsXstockEntryAsk \} from '\.\.\/asset_classes\/xstock_spot\/vts-xs-select\.js';/);
+    // row 2 increment B (P3): the same import now also brings the shared VTS size wrapper from the same module.
+    expect(VTS).toMatch(/import \{ selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize \} from '\.\.\/asset_classes\/xstock_spot\/vts-xs-select\.js';/);
     expect(VTS).not.toMatch(/function selectVtsXstockExitBid/); // one definition, in the shared module
     expect(SEL).toMatch(/return \{ price: null, arrivedAtMs: null, ceilingMs: null, reason: 'knobs_unavailable' \};/);
     expect(SEL).toMatch(/if \(row === null\) return \{ price: null, arrivedAtMs: null, ceilingMs: msCfg\.floorMs, reason: 'no_row' \};/);

@@ -43,7 +43,9 @@ describe('8a-P4c 3b — P9 (C8): a TAKER entry books the guarded ask; no ask ⇒
 
 describe('8a-P4c 3b — P7a: the xStock entry quote is the scanner\'s own ticker read, carried to the evaluator', () => {
   it('the scanner keeps bid, ask, last and capture time (sides never defaulted), and passes the quote', () => {
-    expect(SCAN).toMatch(/quote: \{\s*last: parseQuoteNumber\(row\.price\) \?\? NaN,\s*bid: parseQuoteNumber\(row\.bid\),\s*ask: parseQuoteNumber\(row\.ask\),\s*atMs: Number\.isFinite\(capturedMs\) \? capturedMs : null,\s*\}/);
+    // row 2 increment B (P4): the entry quote also carries the shown quantities, undefaulted, for the entry size test.
+    expect(SCAN).toMatch(/quote: \{\s*last: parseQuoteNumber\(row\.price\) \?\? NaN,\s*bid: parseQuoteNumber\(row\.bid\),\s*ask: parseQuoteNumber\(row\.ask\),\s*atMs: Number\.isFinite\(capturedMs\) \? capturedMs : null,\s*(\/\/[^\n]*\n\s*)*bidQty: parseQuoteNumber\(row\.bidQty\),\s*askQty: parseQuoteNumber\(row\.askQty\),\s*\}/);
+    expect(SCAN).toMatch(/bid_qty::text AS "bidQty",\s*\n\s*ask_qty::text AS "askQty",/);
     expect(SCAN).toMatch(/enrich\?\.quote \?\? null,/);
     expect(XS).toMatch(/entryQuote: XsQuoteRow \| null = null,\s*\): Promise<void> \{/);
   });

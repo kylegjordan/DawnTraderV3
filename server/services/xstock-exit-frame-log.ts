@@ -63,6 +63,13 @@ export interface XsExitFrameLineInput {
    * reason, a time close would enter the bid-vs-mark discordant cell as a false divergence.
    */
   exitReason: string | null;
+  /**
+   * Row 2 increment B (P7) — WHICH price decided this tick. Optional, default `mark` (every frame before increment B).
+   * ⛔ `markExit` MEANS "THE MARK TRIGGER FIRED" in every read so far (`WINDOW_READ.md` cross-tab). On a tick the BID
+   * decided, the same boolean is printed as `bidExit=` instead, so no harvest of `markExit=` can count a bid decision
+   * as a mark one — a matching name is not a matching thing.
+   */
+  decidedOn?: 'bid' | 'mark';
 }
 
 const f5 = (v: number | null): string => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
@@ -101,5 +108,5 @@ export function xsExitFrameLine(i: XsExitFrameLineInput): string | null {
   const sides = i.frame === null ? ''
     : ` bid=${i.frame.bid ?? 'none'} ask=${i.frame.ask ?? 'none'} spread=${f5(i.frame.spread)} thr=${f5(i.frame.thr)}` +
       ` trail=${trailText(i.frame)} ret=${f5(i.frame.ret ?? null)} tb=${i.frame.tb ?? 'none'}`;
-  return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} markExit=${i.markExit ? 'y' : 'n'} exitReason=${i.exitReason ?? 'none'}`;
+  return `[3n.q7][XS_FRAME] ${i.symbol} pos=${i.positionId} ${state}${mismatch} mark=${i.mark} sl=${i.stopLoss ?? 'none'} tp=${i.takeProfit ?? 'none'}${sides} bidWouldFire=${i.bidWouldFire} ${(i.decidedOn ?? 'mark') === 'bid' ? 'bidExit' : 'markExit'}=${i.markExit ? 'y' : 'n'} exitReason=${i.exitReason ?? 'none'} on=${i.decidedOn ?? 'mark'}`;
 }

@@ -19,6 +19,10 @@
  *   a spread failing `judgeEntrySpread` against the symbol's own regular-session yardstick — which stands in for `ask_spiked`,
  *   whose comparator exists only for HELD symbols (`active-execution-engine.ts`, the entry seam's note); an unavailable yardstick ⇒
  *   not admissible.
+ * ⛔ THE `askQty` TEST BELOW IS NOT THE SIZE TEST (row 2 increment B, Langston Step-2 BLOCKER-1, deliberately a different job):
+ *   `xstockSideSize` asks "can this side hold OUR notional?" and its callers decide what `unknown` means; here there is no trade
+ *   and no notional — the question is "is this a hollow book?", and because admissible means DELETE, an absent quantity must
+ *   KEEP the signal. So it stays a presence test that refuses on unknown, and is fenced as a named non-size site.
  */
 import { asValidAssetClass } from '../../shared/asset-classes.js';
 import { selectCryptoTouch, EXIT_TRIGGER_MAX_AGE_MS, EXIT_TRIGGER_MAX_SPREAD_FRACTION } from '../core/trading/crypto-touch.js';

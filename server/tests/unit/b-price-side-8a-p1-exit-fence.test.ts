@@ -24,6 +24,11 @@ const AEE = readFileSync(join(process.cwd(), 'server/services/active-execution-e
 /** Strip line comments so a prohibition cannot be "satisfied" by prose that merely mentions it. */
 const code = (s: string) => s.replace(/^\s*\/\/.*$/gm, '');
 
+/** Row 2 increment B (P8a): the xStock trigger arm is the GATED three-way — the judged bid while armed, else the mark. */
+function xstockArmIsGated(expr: string): boolean {
+  return /'xstock_spot'\s*\?\s*\(\s*xsBidArmed\s*\?\s*triggerBid\s*:\s*currentPrice\s*\)/.test(expr);
+}
+
 function extractFunctionBody(src: string, signaturePrefix: string): string {
   const start = src.indexOf(signaturePrefix);
   if (start === -1) throw new Error(`function not found: ${signaturePrefix}`);
@@ -136,7 +141,10 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(classes).toEqual(["'crypto_spot'", "'xstock_spot'"]);
     // each named class takes the transactable slot, and every OTHER class falls to the mark (the named default arm)
     expect(expr).toMatch(/'crypto_spot'\s*\?\s*triggerBid/);
-    expect(expr).toMatch(/'xstock_spot'\s*\?\s*currentPrice/);   // C1: the mark, until row 3n.q7
+    // ⛔ AMENDED A THIRD TIME, DELIBERATELY — row 2 increment B (P1, P8a): xStock takes the BID ONLY WHILE ARMED (the
+    //   book-state guard ran AND `spread_blown` is on), else the MARK exactly as since C1. The gate is the point: an
+    //   ungated bid re-opens `#1065`, and a mark-only arm is the pre-B state. Both go red (2g).
+    expect(xstockArmIsGated(expr)).toBe(true);
     expect(expr.trim()).toMatch(/:\s*currentPrice$/);
     // ⛔ IF THIS GOES RED AGAIN: a THIRD class reaches the transactable trigger. Every class that does changes what the
     //    stateful sentinel sees (it is xStock-only today, but a perp class may join it). Re-open the question for THAT
@@ -162,6 +170,17 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     expect(args[0]).toMatch(/sentinelLane:\s*this\.mode,/);
   });
 
+
+  it('2g. ⭐ MUTATIONS — row 2 increment B: the UNGATED bid and the MARK-ONLY arm both go red; the gated arm passes', () => {
+    const gated = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? triggerBid : currentPrice) : currentPrice";
+    const ungated = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? triggerBid : currentPrice";
+    const markOnly = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? currentPrice : currentPrice";
+    const inverted = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? currentPrice : triggerBid) : currentPrice";
+    expect(xstockArmIsGated(gated)).toBe(true);
+    expect(xstockArmIsGated(ungated)).toBe(false);
+    expect(xstockArmIsGated(markOnly)).toBe(false);
+    expect(xstockArmIsGated(inverted)).toBe(false);
+  });
 
   it('2e. ⭐ CONTROL — a WIDENED predicate goes red, an INVERTED one does not', () => {
     const widened = "positionAssetClass === 'crypto_spot' || positionAssetClass === 'xstock_spot' ? triggerBid : null";

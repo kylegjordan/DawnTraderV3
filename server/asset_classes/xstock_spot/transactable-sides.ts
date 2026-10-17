@@ -22,3 +22,31 @@ export function xstockTransactableSides(
   if (!(raw.bid > 0) || !(raw.ask >= raw.bid)) return null; // also rejects NaN
   return { bid: raw.bid, ask: raw.ask };
 }
+
+export type XstockSideSizeVerdict = 'ok' | 'size_short' | 'size_unknown';
+
+/**
+ * Row 2 increment B, objective 8 (P2) — THE ONE TOP-OF-BOOK SIZE TEST, shared by paper and the VTS.
+ *
+ * Does the shown quantity on `side` cover `notionalUsd` at that side's price? `bid` is the side a SELL fills against,
+ * `ask` the side a BUY fills against. A missing or non-finite quantity or price ⇒ `size_unknown` — NEVER `?? 0`
+ * (reads as short) or `?? Infinity` (reads as ok); the caller decides what unknown means for its job and counts it.
+ * A non-finite or non-positive notional THROWS: that is a caller bug, not a market state.
+ *
+ * What each site does with the verdict is the caller's (pre-audit P3): exit TRIGGERS fire regardless and count it;
+ * resting fills (X1, X2) and the VTS entry refuse on `size_short` or `size_unknown`.
+ */
+export function xstockSideSize(
+  side: 'bid' | 'ask',
+  raw: { bid: number | null; ask: number | null; bidQty: number | null; askQty: number | null },
+  notionalUsd: number,
+): XstockSideSizeVerdict {
+  if (!Number.isFinite(notionalUsd) || !(notionalUsd > 0)) {
+    throw new Error(`xstockSideSize: notional must be a positive finite number, got ${notionalUsd}`);
+  }
+  const price = side === 'bid' ? raw.bid : raw.ask;
+  const qty = side === 'bid' ? raw.bidQty : raw.askQty;
+  if (price === null || qty === null || !Number.isFinite(price) || !Number.isFinite(qty)) return 'size_unknown';
+  if (!(price > 0) || qty < 0) return 'size_unknown';
+  return qty * price >= notionalUsd ? 'ok' : 'size_short';
+}

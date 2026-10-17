@@ -20,6 +20,7 @@ import { readXstockMarkStalenessConfig, readXstockSigmaCacheConfig } from './mar
 import { readVtsXstockExitMaxSpread } from './vts-xs-touch-config.js';
 import { getCachedSigma } from './sigma-rate-cache.js';
 import type { XsLiveReason, XsQuoteRow } from './vts-xs-instrument.js';
+import { xstockSideSize, type XstockSideSizeVerdict } from './transactable-sides.js';
 
 export interface XsSideSelection {
   price: number | null;
@@ -68,6 +69,16 @@ export function selectVtsXstockExitBid(symbol: string, row: XsQuoteRow | null, s
   { bid: number | null; arrivedAtMs: number | null; ceilingMs: number | null; reason: XsLiveReason } {
   const s = selectVtsXstockSide('bid', symbol, row, stop, nowMs);
   return { bid: s.price, arrivedAtMs: s.arrivedAtMs, ceilingMs: s.ceilingMs, reason: s.reason };
+}
+
+/** Row 2 increment B (P3/P4): can `row`'s `side` hold `notionalUsd` at the guarded `price`? The ONE size test
+ *  (`xstockSideSize`) over the VTS quote row's undefaulted quantities. `null` when there is no row or no guarded price
+ *  (the selector already made no decision). What a verdict MEANS is the caller's: entries and rest fills refuse on
+ *  short/unknown; exit triggers fire anyway and count it. */
+export function vtsXstockSideSize(side: 'bid' | 'ask', row: XsQuoteRow | null, price: number | null, notionalUsd: number):
+  XstockSideSizeVerdict | null {
+  if (row === null || price === null) return null;
+  return xstockSideSize(side, { bid: row.bid, ask: row.ask, bidQty: row.bidQty, askQty: row.askQty }, notionalUsd);
 }
 
 /** ENTRY: the guarded ASK, no spread ceiling (3b, P7a). */

@@ -145,7 +145,8 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
   it('paper C2: the resting target sale fills on the exit trigger\'s own bid; xStock on its guard-validated bid (`8a-P4b`); any other class keeps the mark', () => {
     // ⛔ AMENDED DELIBERATELY by `8a-P4b` X2 (2026-09-18): this pinned "xStock keeps the mark explicitly", which was the
     // `8a-P3` statement of scope. xStock now fills on `xsBid`; the mark survives only as the named default arm.
-    expect(AEE).toMatch(/_restFillPrice:\s*number \| null = _posClass === 'crypto_spot'\s*\?\s*\(_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null\)\s*\n\s*:\s*_posClass === 'xstock_spot' \? xsBid\s*\n\s*:\s*currentPrice;/);
+    // row 2 increment B (P3): xStock's bid now passes the X2 size gate before it can fill.
+    expect(AEE).toMatch(/_restFillPrice:\s*number \| null = _posClass === 'crypto_spot'\s*\?\s*\(_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null\)\s*\n(\s*\/\/[^\n]*\n)*\s*:\s*_posClass === 'xstock_spot' \? this\._xsRestSizeGate\('x2', 'bid', [^\n]*\n\s*:\s*currentPrice;/);
     expect(AEE).toMatch(/transactablePrice:\s*_restFillPrice/);
   });
 

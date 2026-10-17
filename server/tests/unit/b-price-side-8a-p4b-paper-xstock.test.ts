@@ -50,7 +50,8 @@ describe('8a-P4b — J1: the sides are captured once, from the frame the guard j
     // predicate at exactly these two sites; the definition moved to `transactable-sides.ts`, so it is counted THERE.
     expect(count(/xstockTransactableSides\(/g)).toBe(2); // the two sites, nothing else — no second definition in the engine
     expect(count(/function xstockTransactableSides/g)).toBe(0);
-    expect(count(/import \{ xstockTransactableSides \} from '\.\.\/asset_classes\/xstock_spot\/transactable-sides\.js';/g)).toBe(1);
+    // row 2 increment B (P2): the same import line now also brings the ONE size test from the same leaf module.
+    expect(count(/import \{ xstockTransactableSides, xstockSideSize, type XstockSideSizeVerdict \} from '\.\.\/asset_classes\/xstock_spot\/transactable-sides\.js';/g)).toBe(1);
     expect((SIDES.match(/export function xstockTransactableSides\(/g) ?? []).length).toBe(1);
     expect(AEE.indexOf('const _gSides = xstockTransactableSides(_raw);')).toBeLessThan(AEE.indexOf('xsBid = _gSides.bid;'));
     expect(AEE.indexOf('const _offSides = xstockTransactableSides(_offRaw);')).toBeLessThan(AEE.indexOf('xsBid = _offSides.bid;'));
@@ -92,13 +93,18 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
   it('X3 (Step 9 C1): the trigger slot carries ONLY the crypto ladder bid; xStock passes its frame to the LOG argument', () => {
     // C1 (Langston, 2026-09-19): the xStock trigger is the mark again. `xsBid` must NOT reach the trigger slot.
     expect(AEE).not.toMatch(/_posClass === 'xstock_spot' \? xsBid : \(_lsSel/);
-    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : null,\s*\n(\s*\/\/[^\n]*\n)*\s*_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null \} : null,\s*\n\s*\);/);
+    // ⛔ AMENDED DELIBERATELY — row 2 increment B (P1): the slot now carries xStock's JUDGED bid while ARMED (guard ran +
+    //   `spread_blown` on), else null; the log argument gained the off-switch reason and the size verdict, and the call
+    //   gained the arm flag. The bid enters the decision ONLY through this slot.
+    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : \(_posClass === 'xstock_spot' && xsBidTriggerArmed \? xsBid : null\),/);
+    expect(AEE).toMatch(/_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null,/);
+    expect(AEE).toMatch(/_posClass === 'xstock_spot' && xsBidTriggerArmed, \/\/ Row 2 increment B \(P1\): the xStock arm's gate\s*\n\s*\);/);
     // `3n.q7` increment 1 (2026-09-29) extended the LOG argument with the side basis and the no-sides reason; it is still
     // the log argument only — the trigger slot above is unchanged.
   });
 
-  it('X3 (Step 9 C1): the evaluator trigger is three-way — crypto the ladder bid, xStock and any other class the mark', () => {
-    expect(AEE).toMatch(/triggerPrice: positionAssetClass === 'crypto_spot' \? triggerBid\s*\n\s*: positionAssetClass === 'xstock_spot' \? currentPrice[^\n]*\n\s*: currentPrice,/);
+  it('X3 (row 2 increment B, P1): the evaluator trigger is three-way — crypto the ladder bid, xStock the bid WHILE ARMED else the mark, any other class the mark', () => {
+    expect(AEE).toMatch(/triggerPrice: positionAssetClass === 'crypto_spot' \? triggerBid\s*\n(\s*\/\/[^\n]*\n)*\s*: positionAssetClass === 'xstock_spot' \? \(xsBidArmed \? triggerBid : currentPrice\)\s*\n\s*: currentPrice,/);
   });
 
   it('X3 (Step 9 C1): the xStock frame is LOG ONLY — it never enters the evaluator input', () => {
@@ -107,7 +113,10 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
     expect(start).toBeGreaterThan(0);
     const codeOnly = AEE.slice(start, end).replace(/\/\/[^\n]*/g, ''); // comments may NAME the variables; code may not USE them
     expect(codeOnly).toMatch(/triggerPrice:/); // instrument control: the slice is the evaluator input
-    expect(codeOnly).not.toMatch(/xsFrame|xsBid|xsAsk|xsSpread|xsThr/);
+    // ⛔ AMENDED DELIBERATELY — row 2 increment B: the arm FLAG (`xsBidArmed`) now enters the input, and the judged bid
+    //   arrives only through the `triggerBid` slot. The LOG frame and the raw capture variables still may not.
+    expect(codeOnly).not.toMatch(/xsFrame|\bxsBid\b|xsAsk|xsSpread|xsThr/);
+    expect(codeOnly).toMatch(/xsBidArmed \? triggerBid : currentPrice/);
   });
 
   it('X3 (Step 9 C1, Langston condition 4): every EXIT_TRIGGER line carries the frame tag, and bid/mark divergence runs are logged', () => {
@@ -120,13 +129,16 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
   });
 
   it('X2: the resting target fill is three-way — xStock on xsBid, any other class the mark', () => {
-    expect(AEE).toMatch(/_restFillPrice: number \| null = _posClass === 'crypto_spot' \? [^\n]*\n\s*: _posClass === 'xstock_spot' \? xsBid\s*\n\s*: currentPrice;/);
+    // ⛔ AMENDED DELIBERATELY — row 2 increment B (P3): xStock's bid passes the X2 size gate first (no fill on short/unknown).
+    expect(AEE).toMatch(/_restFillPrice: number \| null = _posClass === 'crypto_spot' \? [^\n]*\n(\s*\/\/[^\n]*\n)*\s*: _posClass === 'xstock_spot' \? this\._xsRestSizeGate\('x2', 'bid', \{ bid: xsBid, ask: xsAsk, bidQty: xsBidQty, askQty: xsAskQty \}, position, xsBid, _exitRestLimit, 'sell'\)\s*\n\s*: currentPrice;/);
   });
 
   it('X1: a resting xStock entry fills on the judged ASK (a sell on the bid); any other class keeps the mark', () => {
     expect(AEE).toMatch(/const _isXstockPending = position\.assetClass === 'xstock_spot';/);
     expect(AEE).toMatch(/let fillPrice: number \| null = safePrice;\s*\n\s*if \(_isXstockPending\) \{\s*\n\s*fillPrice = side === 'buy' \? xstockSides\.ask : xstockSides\.bid;/);
-    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs \}\);/);
+    // row 2 increment B (P3): the same judged frame's sizes ride with its sides, and X1 passes the size gate.
+    expect(AEE).toMatch(/\}, \{ bid: xsBid, ask: xsAsk, basis: xsSideBasis, arrivedAtMs: xsArrivedAtMs, bidQty: xsBidQty, askQty: xsAskQty \}\);/);
+    expect(AEE).toMatch(/fillPrice = this\._xsRestSizeGate\('x1', side === 'buy' \? 'ask' : 'bid', xstockSides, position, fillPrice, limit, side\);/);
   });
 
   it('X1: the xStock fill stamps the ask it filled on and names the rung', () => {

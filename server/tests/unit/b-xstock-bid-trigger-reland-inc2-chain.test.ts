@@ -204,6 +204,8 @@ function makeEngine(): Stub {
     _riMissSig: new Map<string, string>(),
     _riMissAcc: new Map(),
     _spreadBlownSkipAcc: new Map(), // row 2 objective 6, Step 4 (the spread_blown SKIP summary)
+    _xsSizeCounts: { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 }, _xsInvalidQtyPaged: new Set(), // row 2 increment B (P3/P7)
+    _xsSizeWindow: { startMs: Date.now(), n: 0, unknown: 0 }, // row 2 increment B (the size tripwire)
     _engineConstructedAt: 0,
     // B-XSTOCK-BID-TRIGGER-RELAND increment C fields the real constructor sets.
     _venuePauseExitTicks: 0,
@@ -269,13 +271,16 @@ const SEED_IMPLAUSIBLE = /\[BOOK_STATE\] MDB\/USD SEED_IMPLAUSIBLE /;
 const SEED_ESCAPED = /\[8a-P4a\]\[BOOK_STATE\] MDB\/USD SEED_ESCAPED /;
 
 /** A tick that reached the evaluator: one frame line, no guard verdict line, no skip recorded. */
-function expectEvaluated(t: TickOut, frame: Frame, markExit: 'y' | 'n') {
+// ⛔ Row 2 increment B (P1, P8b): with the guard ON and `spread_blown` ON (this harness's default) the BID decides, and the
+//   frame line prints the decision as `bidExit=` with `on=bid`; with either switch off it is `markExit=` with `on=mark`.
+function expectEvaluated(t: TickOut, frame: Frame, exit: 'y' | 'n', on: 'bid' | 'mark' = 'bid') {
   expect(count(t.warns, XS_FRAME)).toBe(1);
   const line = t.warns.find((l) => XS_FRAME.test(l))!;
   expect(line).toContain('frame=ok basis=raw_guarded');
   expect(line).toContain(`mark=${mid(frame)}`);
   expect(line).toContain(`bid=${frame.bid} ask=${frame.ask}`);
-  expect(line).toContain(`markExit=${markExit}`);
+  expect(line).toContain(`${on === 'bid' ? 'bidExit' : 'markExit'}=${exit}`);
+  expect(line).toContain(` on=${on}`);
   for (const re of [SKIP, YIELD, REFUSE, SEED_IMPLAUSIBLE]) expect(has(t.warns, re)).toBe(false);
   expect(t.priceSkips).toEqual([]);
   expect(t.bookEvents).toEqual([]);
@@ -291,7 +296,7 @@ function expectRefused(t: TickOut, state: 'unknown' | 'two_sided') {
 }
 
 /** Warm the book: seed (REFUSE unknown), validate (REFUSE two_sided on the pre-advance snapshot), then act ×4. */
-async function warm(eng: Stub) {
+async function warm(eng: Stub, on: 'bid' | 'mark' = 'bid') {
   const t1 = await tick(eng, WARM[0]);
   expect(has(t1.logs, /COMPARATOR_SEEDED/)).toBe(true);
   expectRefused(t1, 'unknown');
@@ -302,7 +307,7 @@ async function warm(eng: Stub) {
   expect(readBookStateComparator(SYMBOL)?.validated).toBe(true); // the W2 advance validated the chain
   for (const f of WARM.slice(2)) {
     const t = await tick(eng, f);
-    expectEvaluated(t, f, 'n');
+    expectEvaluated(t, f, 'n', on);
     expect(t.warns.find((l) => XS_FRAME.test(l))).toContain('tb=v'); // the cold chain seeded vacuously
     expect(t.closes).toEqual([]);
   }
@@ -463,11 +468,14 @@ describe('3n.q7 inc-2 OBJ-3 — the chain, driven through the real exit loop', (
   it('CONTROL: the same frames with the arm OFF — the first blown frame reads two_sided and fires the stop on its mark (the MDB false stop)', async () => {
     h.spreadBlownEnabled = false;
     const eng = makeEngine();
-    await warm(eng);
+    await warm(eng, 'mark'); // row 2 increment B (P1): spread_blown OFF ⇒ the trigger falls back to the MARK
     const t = await tick(eng, BLOWN);
     for (const re of [SKIP, YIELD, REFUSE, SEED_IMPLAUSIBLE]) expect(has(t.warns, re)).toBe(false);
     expect(count(t.warns, XS_FRAME)).toBe(1);
     expect(t.warns.find((l) => XS_FRAME.test(l))).toContain('markExit=y');
+    expect(t.warns.find((l) => XS_FRAME.test(l))).toContain(' on=mark');
+    // Langston Step-2 call 1: the trigger line says WHICH switch left it on the mark — never a silent fall-back.
+    expect(has(t.logs, /\[EXIT_TRIGGER\] symbol=MDB\/USD type=stop_hit .* basis=mark reason=spread_blown_off /)).toBe(true);
     expect(t.closes).toHaveLength(1);
     const [, requestedPrice, exitCondition, , opts] = t.closes[0] as [string, number, any, string, any];
     expect(exitCondition.type).toBe('stop_hit');
@@ -481,13 +489,14 @@ describe('row 2 increment C (C-P2, Langston Step 4 C1) — the venue-transition 
   const RESUMED = /\[VENUE_PAUSE_RESUMED\] MDB\/USD /;
   it('a paused tick decides nothing, records no skip, closes nothing, still advances the guard; the bid arm is counted; the first tick after decides', async () => {
     // A stop just under the warm book, so the BID crosses it while the MARK does not (the C2 case).
-    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '400.0' }]);
+    // ⛔ Row 2 increment B: moved 400.0 → 399.5 — the warm bids (399.60-399.85) would now fire a 400.0 stop on the BID.
+    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '399.5' }]);
     const eng = makeEngine();
     await warm(eng);
     const framesBefore = readBookStateComparator(SYMBOL)!.framesSinceSeed;
 
     vi.setSystemTime(new Date('2026-10-14T20:20:00Z')); // Wed 16:20 ET — inside the 16:15 window
-    const t1 = await tick(eng, { bid: 399.9, ask: 400.7, last: 400 }); // mark 400.3 > stop; bid 399.9 <= stop
+    const t1 = await tick(eng, { bid: 399.4, ask: 400.2, last: 400 }); // mark 399.8 > stop; bid 399.4 <= stop
     expect(t1.closes).toEqual([]);
     expect(t1.priceSkips).toEqual([]);
     expect(t1.alerts).toBe(0);
@@ -503,31 +512,34 @@ describe('row 2 increment C (C-P2, Langston Step 4 C1) — the venue-transition 
     expect(eng._venuePauseWouldFire).toBe(0);
     expect(eng._venuePausePending.size).toBe(1);
 
-    const t2 = await tick(eng, { bid: 399.95, ask: 400.75, last: 400 });
+    const t2 = await tick(eng, { bid: 399.45, ask: 400.25, last: 400 });
     expect(t2.warns.filter((l) => PAUSE.test(l))).toHaveLength(0); // one line per position per window
     expect(t2.closes).toEqual([]);
     expect(eng._venuePauseExitTicks).toBe(2);
 
     vi.setSystemTime(new Date('2026-10-14T20:40:00Z')); // 16:40 ET — the window has ended
-    const f3: Frame = { bid: 400.0, ask: 400.8, last: 400 };
+    const f3: Frame = { bid: 399.42, ask: 400.22, last: 400 };
     const t3 = await tick(eng, f3);
     const r = t3.warns.filter((l) => RESUMED.test(l));
     expect(r).toHaveLength(1);
     expect(r[0]).toContain('window=16:15');
     expect(r[0]).toContain('pausedS=1200');
     expect(r[0]).toContain('bidWouldFireDuring=stop');
-    expectEvaluated(t3, f3, 'n');
+    // Row 2 increment B: the first tick after the window decides ON THE BID — and the bid is through the stop, so it exits.
+    expectEvaluated(t3, f3, 'y');
+    expect(t3.closes).toHaveLength(1);
     expect(eng._venuePausePending.size).toBe(0);
   });
 
   it('CONTROL: the same tick outside a window is decided, with no pause line', async () => {
-    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '400.0' }]);
+    h.getActiveOpenPositions.mockImplementation(async () => [{ ...makePosition(), stopLoss: '399.5' }]);
     const eng = makeEngine();
     await warm(eng);
-    const f: Frame = { bid: 399.9, ask: 400.7, last: 400 };
+    const f: Frame = { bid: 399.4, ask: 400.2, last: 400 };
     const t = await tick(eng, f);
     expect(t.warns.filter((l) => PAUSE.test(l))).toHaveLength(0);
-    expectEvaluated(t, f, 'n');
+    expectEvaluated(t, f, 'y'); // row 2 increment B: decided on the BID, which is through the stop (the mark is not)
+    expect(t.closes).toHaveLength(1);
     expect(eng._venuePauseExitTicks).toBe(0);
   });
 });

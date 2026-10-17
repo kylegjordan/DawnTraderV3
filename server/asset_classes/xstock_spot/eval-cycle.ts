@@ -89,7 +89,11 @@ import { getPredictiveConfidence } from '../../core/utils/score-calculator.js';
 import { calculateRegimeScore } from '../../core/metrics/market-regime.js';
 import { getCachedCostMetrics, getFrictionForAssetClass } from '../../core/math/cost-model.js';
 import { composeVtsLegFriction, entryPriceBasisFor } from '../../core/trading/vts-friction.js';
-import { selectVtsXstockEntryAsk } from './vts-xs-select.js';
+import { selectVtsXstockEntryAsk, vtsXstockSideSize } from './vts-xs-select.js';
+
+/** The VTS xStock entry's fixed USD exposure — the booked `dollarValue` AND the size test's notional (row 2 inc B, P3),
+ *  one constant so the two can never disagree. */
+const VTS_XSTOCK_ENTRY_DOLLAR_VALUE = 150;
 import { refuseTakerBooking, bookedQuantity } from '../../core/trading/entry-booking.js';
 import type { XsQuoteRow } from './vts-xs-instrument.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
@@ -1084,6 +1088,16 @@ export async function evaluateXstockPairForVTS(
           _xRefuseBooking('taker_no_entry_ask', `taker entry at level ${entryPrice} — no usable ask`);
           continue;
         }
+        // ⭐ Row 2 increment B (P3) — a TAKER entry must find our size on the ask: short or unknown ⇒ REFUSED, parity with
+        //   paper's market entry (which already refuses on depth). Never `?? 0` / `?? Infinity` on a missing quantity.
+        if (_xEffectiveMode === 'taker') {
+          const _xSize = vtsXstockSideSize('ask', entryQuote, _xEntryAsk, VTS_XSTOCK_ENTRY_DOLLAR_VALUE);
+          if (_xSize !== 'ok') {
+            _xRefuseBooking(_xSize === 'size_short' ? 'taker_entry_size_short' : 'taker_entry_size_unknown',
+              `ask ${_xEntryAsk} shows qty ${entryQuote?.askQty ?? 'none'} vs our $${VTS_XSTOCK_ENTRY_DOLLAR_VALUE}`);
+            continue;
+          }
+        }
         // The booked entry: a taker at the guarded ask, a maker at its limit (the level). Stop and target stay the levels —
         // and a taker's ask AT OR THROUGH either one would invert the trade, so it is refused (FINDING-1).
         const _xBookedEntry = _xEffectiveMode === 'taker' ? (_xEntryAsk as number) : entryPrice;
@@ -1103,7 +1117,7 @@ export async function evaluateXstockPairForVTS(
         // `quantity` is `bookedQuantity(dollarValue, _xBookedEntry)` at the BOOKED price (8a-P4c 3b), and nothing
         // between here and the register call mutates an input. Archive-before-register
         // ordering preserved (admitted-archival stays decoupled from open success).
-        const dollarValue = 150;
+        const dollarValue = VTS_XSTOCK_ENTRY_DOLLAR_VALUE;
         // At the BOOKED price, through the one quantity rule (RIDER-A): no size ⇒ refused, never a zero-size trade.
         const _xQty = bookedQuantity(dollarValue, _xBookedEntry);
         if (_xQty === null) {

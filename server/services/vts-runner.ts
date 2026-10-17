@@ -98,7 +98,7 @@ import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-n
 import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
-import { selectVtsXstockExitBid, selectVtsXstockEntryAsk } from '../asset_classes/xstock_spot/vts-xs-select.js';
+import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
@@ -200,6 +200,12 @@ const _vtsTouch = {
   entryFillLooks: 0,
   entryFillRefusedFirstLook: 0,
   entryFillRefusedSteady: 0,
+  // Row 2 increment B (P3/P7) — xStock size: a rest fill REFUSED because the touched ask could not hold our size (or did
+  // not say), and a stop/target that FIRED on a short or unknown bid (an exit is never blocked on size).
+  xsRestSizeShort: 0,
+  xsRestSizeUnknown: 0,
+  xsExitFiredSizeShort: 0,
+  xsExitFiredSizeUnknown: 0,
 };
 // ⛔ `3n.q3` P7 (Langston C1): the EXIT counters are keyed per asset class (`vts-exit-counters.ts` says why). The entry-fill
 // counters above stay crypto-only because the entry-fill guard is crypto-only.
@@ -3665,6 +3671,8 @@ async function resolveOpenVirtualTrades(): Promise<{
           last::text AS price,
           bid::text AS bid,
           ask::text AS ask,
+          bid_qty::text AS bid_qty,
+          ask_qty::text AS ask_qty,
           (EXTRACT(EPOCH FROM captured_at) * 1000)::text AS at_ms
         FROM xstock_spot_ticker_snap
         WHERE captured_at > NOW() - INTERVAL '5 minutes'
@@ -3673,12 +3681,13 @@ async function resolveOpenVirtualTrades(): Promise<{
       `));
       const rows = (result as any).rows ?? result;
       if (Array.isArray(rows)) {
-        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; at_ms: string }>) {
+        for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; bid_qty: string | null; ask_qty: string | null; at_ms: string }>) {
           const price = parseFloat(r.price);
           if (Number.isFinite(price) && price > 0) {
             xstockPriceMap.set(r.symbol, {
               price,
-              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
+              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms),
+                bidQty: parseQuoteNumber(r.bid_qty), askQty: parseQuoteNumber(r.ask_qty) },
             });
           }
         }
@@ -3812,6 +3821,17 @@ async function resolveOpenVirtualTrades(): Promise<{
         const _pXs = selectVtsXstockEntryAsk(trade.symbol, _pxRow, trade.stopLoss ?? null, now);
         _pFillPrice = _pXs.ask;
         _pQuoteArrivedAtMs = _pXs.arrivedAtMs;
+        // ⭐ Row 2 increment B (P3) — a rest cannot fill beyond the ask's shown quantity: short or unknown ⇒ no fill this
+        //   tick (the rest keeps its deadline). Counted only when the ask TOUCHED the limit — a refused would-be fill.
+        const _pSize = vtsXstockSideSize('ask', _pxRow, _pFillPrice, trade.dollarValue);
+        if (_pSize !== null && _pSize !== 'ok') {
+          if (_pFillPrice !== null && _pFillPrice <= _pLimit) {
+            if (_pSize === 'size_short') _vtsTouch.xsRestSizeShort++; else _vtsTouch.xsRestSizeUnknown++;
+            console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][VTS][SIZE] ${trade.symbol} trade=${tradeId} site=rest ${_pSize} ask=${_pFillPrice} `
+              + `shownQty=${_pxRow?.askQty ?? 'none'} notional=$${trade.dollarValue} limit=${_pLimit} — no fill this tick`);
+          }
+          _pFillPrice = null;
+        }
       }
       const _pOutcome = evaluatePendingMaker({
         side: 'buy', // VTS trades are long-only by construction
@@ -3921,10 +3941,12 @@ async function resolveOpenVirtualTrades(): Promise<{
     // `3n.q3` P8 (OBJ-4): the selector's OWN refusal, carried into the no-decision streak and the alert body — the two
     // ceilings cannot explain a crossed book.
     let _vtsExitRefusal: string | null = null;
+    let _xsExitRow: XsQuoteRow | null = null; // row 2 increment B: the SAME row that decided, kept for the size count
     if (trade.assetClass === 'xstock_spot') {
       // `8a-P4c` increment 3 (P8a): xStock triggers on the GUARDED BID — `null` ⇒ no decision this cycle. The instrument
       // records the look with the ceiling actually applied (S1).
       const _xsRow = xstockPriceMap.get(trade.symbol)?.rawQuote ?? null;
+      _xsExitRow = _xsRow;
       const _xsExit = selectVtsXstockExitBid(trade.symbol, _xsRow, trade.stopLoss ?? null, Date.now());
       _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit);
       _vtsExitBid = _xsExit.bid;
@@ -3977,6 +3999,15 @@ async function resolveOpenVirtualTrades(): Promise<{
       if (decision.noDecisionReason === 'no_transactable_side') {
         const _c = countersFor(_vtsExitByClass, trade.assetClass);
         if (_c) _c.exitNoTransactableSide++;
+      }
+      // ⭐ Row 2 increment B (P3/P7): an xStock exit FIRED — could the bid hold the position (quantity × bid)? Counted on
+      //   `[8a-P3][VTS_TOUCH]`, never a block: the close prices any shortfall, and a stop must not wait on size.
+      if (trade.assetClass === 'xstock_spot' && decision.shouldExit && _vtsExitBid !== null
+        && Number.isFinite(trade.quantity) && trade.quantity > 0) {
+        const _xsExSize = vtsXstockSideSize('bid', _xsExitRow, _vtsExitBid,
+          trade.quantity * _vtsExitBid);
+        if (_xsExSize === 'size_short') _vtsTouch.xsExitFiredSizeShort++;
+        else if (_xsExSize === 'size_unknown') _vtsTouch.xsExitFiredSizeUnknown++;
       }
       // `8a-P4c` increment 3 (P10, rule C / Kyle's `#994`; Langston Step-4 FINDING-1): xStock JOINS the rail, keyed on the
       // trade id. Kyle cut the PAGE, not the measurement: the STREAK is tracked in every session for both classes, and
@@ -4178,8 +4209,9 @@ async function resolveOpenVirtualTrades(): Promise<{
   // `8a-P3` — one line per resolve pass when there was anything to look at, denominators beside numerators, then reset.
   // `3n.q3` P7: printed when ANY class has a count (a pass holding only xStock trades used to print nothing). The reset
   // runs BEFORE the close loop below, so a pass's `closedUnpriced` lands on the NEXT pass's line.
-  if (anyVtsExitCount(_vtsExitByClass) || _vtsTouch.entryFillLooks > 0) {
-    console.log(`[8a-P3][VTS_TOUCH] ${formatVtsExitCounters(_vtsExitByClass)} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} openNoTriggerStreaks=${_vtsNoTriggerStreak.size} `
+  if (anyVtsExitCount(_vtsExitByClass) || _vtsTouch.entryFillLooks > 0 || _vtsTouch.xsRestSizeShort + _vtsTouch.xsRestSizeUnknown > 0) {
+    console.log(`[8a-P3][VTS_TOUCH] ${formatVtsExitCounters(_vtsExitByClass)} entryFillLooks=${_vtsTouch.entryFillLooks} entryFillRefusedFirstLook=${_vtsTouch.entryFillRefusedFirstLook} entryFillRefusedSteady=${_vtsTouch.entryFillRefusedSteady} `
+      + `xsRestSizeShort=${_vtsTouch.xsRestSizeShort} xsRestSizeUnknown=${_vtsTouch.xsRestSizeUnknown} xsExitFiredSizeShort=${_vtsTouch.xsExitFiredSizeShort} xsExitFiredSizeUnknown=${_vtsTouch.xsExitFiredSizeUnknown} openNoTriggerStreaks=${_vtsNoTriggerStreak.size} `
       + `frictionSinceBoot=${(({ recomposed, legacyBasis, refused, unpriced }) => `recomposed:${recomposed},legacyBasis:${legacyBasis},refused:${refused},unpriced:${unpriced}`)(vtsFrictionSinceBoot())}`);
   }
   for (const k of Object.keys(_vtsTouch) as Array<keyof typeof _vtsTouch>) _vtsTouch[k] = 0;
@@ -4644,13 +4676,17 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       `));
       const rows = (result as any).rows ?? result;
       if (Array.isArray(rows)) {
-        // `8a-P4c` P4b — the sides and capture time are carried for the instrument ONLY; every shadow decision still reads `last`.
+        // The sides and capture time feed the instrument AND the shadow lane's exit TRIGGER (`selectVtsXstockExitBid` →
+        // `_sExitBid`, since `8a-P4c` increment 3 — the old note here, "every shadow decision still reads `last`", was false).
+        // ⛔ Row 2 increment B (r2 condition 1): the shadow lane is EXCLUDED from the size test — no notional is in scope here
+        //   (no `quantity`, no `dollarValue`) — so its quantities are NOT selected; `null` is stated, never a column with no reader.
         for (const r of rows as Array<{ symbol: string; price: string; bid: string; ask: string; at_ms: string }>) {
           const price = parseFloat(r.price);
           if (Number.isFinite(price) && price > 0) {
             xstockPriceMap.set(r.symbol, {
               price,
-              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms) },
+              rawQuote: { last: price, bid: parseQuoteNumber(r.bid), ask: parseQuoteNumber(r.ask), atMs: parseQuoteNumber(r.at_ms),
+                bidQty: null, askQty: null },
             });
           }
         }

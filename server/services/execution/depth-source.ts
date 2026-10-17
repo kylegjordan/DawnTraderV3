@@ -48,7 +48,7 @@ export interface DepthSnapshot {
    * xStock only (P4): the verdict on the NEWEST snapshot row, per side. Absent on crypto. A caller that may act on the
    * current book (entry, a normal exit fill) must refuse unless both sides are `ok`; see `getDepthSnapshot`.
    */
-  verdict?: { bid: DepthSideVerdict; ask: DepthSideVerdict };
+  verdict?: { bid: DepthSideVerdict; ask: DepthSideVerdict; crossed: boolean };
   /** xStock only: true when the levels are the last fully two-sided row, returned because the caller asked for it. */
   fromLastTwoSided?: boolean;
 }
@@ -110,8 +110,15 @@ export async function getDepthSnapshot(
       const ageMs = ageReadValid ? rawAgeMs : 0;
       const sideVerdict = (price: number, qty: number): DepthSideVerdict =>
         !(price > 0) ? 'price_absent' : !(qty > 0) ? 'qty_absent' : 'ok';
-      const verdict = { bid: sideVerdict(bid, bidQty), ask: sideVerdict(ask, askQty) };
-      if (verdict.bid === 'ok' && verdict.ask === 'ok') {
+      // ⭐ Row 2 increment B (P5) — CROSSED: both sides present and sized, but the ask is BELOW the bid. Each side alone
+      //   reads `ok`, so without this a crossed book passed the entry gate (the entry spread arm only judges `ask >= bid`
+      //   books). The flag is SEPARATE from the side verdicts ON PURPOSE (Langston Step-2 BLOCKER-3, r2 condition 2): the
+      //   entry gate REFUSES on it; every close walks the NEWEST row exactly as before and only records the flag — folding
+      //   it into the side verdicts would hold a position on a venue artifact, and substituting an older row would give the
+      //   close an unbounded-age fill path.
+      const _bv = sideVerdict(bid, bidQty), _av = sideVerdict(ask, askQty);
+      const verdict = { bid: _bv, ask: _av, crossed: _bv === 'ok' && _av === 'ok' && ask < bid };
+      if (verdict.bid === 'ok' && verdict.ask === 'ok') { // crossed or not: the newest row, with the flag recorded
         return {
           asks: [{ price: ask, qty: askQty }],
           bids: [{ price: bid, qty: bidQty }],
@@ -124,17 +131,18 @@ export async function getDepthSnapshot(
       }
       if (opts?.allowLastTwoSided) {
         // The flatten's policy: exactly the pre-P4 read (the last complete row), with the newest row's verdict attached.
+        // Row 2 increment B (P5): the fallback row must itself be uncrossed (`ask >= bid`).
         const lr = first(await db.execute<Row>(sql`
           SELECT ask::text, ask_qty::text, bid::text, bid_qty::text,
                  EXTRACT(EPOCH FROM (NOW() - captured_at)) * 1000 AS age_ms
           FROM xstock_spot_ticker_snap
-          WHERE symbol = ${symbol} AND ask > 0 AND ask_qty > 0 AND bid > 0 AND bid_qty > 0
+          WHERE symbol = ${symbol} AND ask > 0 AND ask_qty > 0 AND bid > 0 AND bid_qty > 0 AND ask >= bid
           ORDER BY captured_at DESC
           LIMIT 1
         `));
         if (!lr) return null;
         const la = num(lr.ask), laq = num(lr.ask_qty), lb = num(lr.bid), lbq = num(lr.bid_qty);
-        if (!(la > 0 && laq > 0 && lb > 0 && lbq > 0)) return null;
+        if (!(la > 0 && laq > 0 && lb > 0 && lbq > 0 && la >= lb)) return null;
         const rawLastAgeMs = parseFloat(lr.age_ms);
         const lastAgeReadValid = Number.isFinite(rawLastAgeMs) && rawLastAgeMs >= 0;
         return {

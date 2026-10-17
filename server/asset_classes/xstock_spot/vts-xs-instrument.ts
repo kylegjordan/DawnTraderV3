@@ -56,6 +56,10 @@ export interface XsQuoteRow {
   bid: number | null;
   ask: number | null;
   atMs: number | null;
+  /** Row 2 increment B (P4): the shown top-of-book QUANTITIES, undefaulted. REQUIRED, so every constructor must say
+   *  where its sizes come from; the size test (`xstockSideSize`) reads them and treats `null` as unknown. */
+  bidQty: number | null;
+  askQty: number | null;
 }
 
 export interface XsLook {
