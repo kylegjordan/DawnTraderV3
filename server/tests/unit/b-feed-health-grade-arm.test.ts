@@ -201,6 +201,9 @@ describe('fences', () => {
     expect(gateElse).toBeGreaterThan(-1);
     expect(card).toBeGreaterThan(gateElse); // after the ternary's else-arm, i.e. outside it
     expect(src.indexOf('</TabsContent>', gateElse)).toBeGreaterThan(card); // still inside the AI Command Center tab
+    // UNGATED, not only positioned (Langston): nothing between the ternary's close and the card may re-gate it.
+    const between = src.slice(src.indexOf(')}', gateElse), card);
+    expect(between).not.toMatch(/&&|\? \(/);
   });
   it('feed_health is prefetched', () => {
     expect(read('server/startup/b72-warmup.ts')).toMatch(/^\s*'feed_health',/m);
