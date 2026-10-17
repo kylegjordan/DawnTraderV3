@@ -74,8 +74,9 @@ f AS (
 gr AS (
   SELECT f.asset_class, f.strategy, (f.g->>'rrFloor')::numeric AS floor, f.g->>'consumptionArm' AS arm,
     (f.g->>'adverseR')::float8 AS adv, f.g->>'rrWouldRefuse' = 'true' AS wr,
-    ((f.g->>'targetPrice')::numeric - (f.g->>'intendedEntryPrice')::numeric)
-      / NULLIF((f.g->>'intendedEntryPrice')::numeric - (f.g->>'stopPrice')::numeric, 0) AS rr_plan,
+    (((f.g->>'targetPrice')::numeric - (f.g->>'intendedEntryPrice')::numeric)
+      / NULLIF((f.g->>'intendedEntryPrice')::numeric - (f.g->>'stopPrice')::numeric, 0)
+      - (f.g->>'rrFloor')::numeric) / (1 + (f.g->>'rrFloor')::numeric) AS s_own,   -- this row's own bound (RR_plan - floor)/(1 + floor)
     f.g->>'rtbQueueId' AS q
   FROM f WHERE f.graded),
 cls AS (SELECT asset_class, count(*) n FROM gr GROUP BY asset_class)
@@ -87,10 +88,17 @@ SELECT gr.asset_class, gr.strategy, gr.floor,
   count(*) FILTER (WHERE gr.wr)                                  AS would_refuse,
   count(*) FILTER (WHERE gr.adv > 0)                             AS positive_slips,
   (count(*) >= 5 AND count(*) FILTER (WHERE gr.adv > 0) >= 5)    AS qualifies,
-  percentile_disc(0.9) WITHIN GROUP (ORDER BY gr.adv) FILTER (WHERE gr.adv > 0) AS p90_positive_adverse_r,  -- percentile_disc = nearest-rank
-  min((gr.rr_plan - gr.floor) / (1 + gr.floor))                  AS s_star_min,
-  max((gr.rr_plan - gr.floor) / (1 + gr.floor))                  AS s_star_max,
-  count(*) FILTER (WHERE gr.adv > (gr.rr_plan - gr.floor) / (1 + gr.floor)) AS slips_over_own_s_star,
+  -- C1, DECIDING: nearest-rank p90 of adverseR / s_own over positive-adverse rows with s_own > 0; FAIL at > 1.0
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY gr.adv / gr.s_own) FILTER (WHERE gr.adv > 0 AND gr.s_own > 0) AS p90_slip_over_own_bound,
+  -- C2: rows planned at or below their own floor — enumerated, never divided; breaches by construction; a PLANNER finding
+  count(*) FILTER (WHERE gr.s_own IS NULL OR gr.s_own <= 0)      AS s_own_nonpositive,
+  count(*) FILTER (WHERE gr.adv > 0 AND gr.s_own > 0 AND gr.adv > gr.s_own) AS slips_over_own_bound,
+  -- C3, SHADOW (describes, never decides): p90 positive adverseR against the cell's minimum bound
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY gr.adv) FILTER (WHERE gr.adv > 0) AS shadow_p90_positive_adverse_r,
+  min(gr.s_own)                                                  AS s_own_min,
+  percentile_disc(0.1) WITHIN GROUP (ORDER BY gr.s_own)          AS s_own_p10,
+  percentile_disc(0.5) WITHIN GROUP (ORDER BY gr.s_own)          AS s_own_median,
+  max(gr.s_own)                                                  AS s_own_max,
   count(ct.id) FILTER (WHERE ct.close_reason = 'stop_hit')       AS stop_hit,
   count(ct.id) FILTER (WHERE ct.close_reason = 'target_hit')     AS target_hit,
   count(ct.id) FILTER (WHERE ct.closed_at IS NOT NULL AND ct.close_reason NOT IN ('stop_hit','target_hit')) AS other_close,
@@ -101,7 +109,14 @@ LEFT JOIN closed_trades ct ON ct.metadata->>'rtbQueueId' = gr.q AND ct.mode = 'p
 GROUP BY gr.asset_class, gr.strategy, gr.floor
 ORDER BY gr.asset_class, graded_opens DESC;
 ```
-- ⚠️ **OPEN FOR LANGSTON BEFORE THE 10-24 FIRE — `s*` is not a cell constant.** The control run shows the planned RR varies inside a cell: vwap_pullback `s*` runs **0.0133 → 1.33** (rows whose target sits far above the floor's RR). The scope's 0.0135 R is the cell's **minimum**. **Pre-registered default, stated now: the cell's bound is `s_star_min` (the strictest, the scope's own figure); `s_star_max` and `slips_over_own_s_star` (each slip against its own row's bound) print beside it** so the spread is visible. If Langston rules the per-row form instead, it is recorded here before the first fire.
+- ✅ **RULED by Langston 2026-10-17 (before any graded row exists — the window held 0 graded rows at the ruling; the row-count line in the class query is what shows that zero is a measured empty, not a failed control): GRADE PER ROW.** `s*` is not a cell constant — the control run shows vwap_pullback's own bounds spanning **0.0133 → 1.33** over 17 rows. Conditions, all now in the query above:
+  - **C1 — the deciding statistic:** the nearest-rank p90 (`percentile_disc(0.9)`) of `adverseR / s_own` over the cell's positive-adverse graded rows, **FAIL at > 1.0**. Only the comparator moves; the pre-registered 90th-percentile semantics and its outlier resistance stay.
+  - **C2 — a row with `s_own ≤ 0`** (planned at or below its own floor) is enumerated (`s_own_nonpositive`), never divided, counted as a breach by construction and printed separately: a non-zero count is a **planner** finding (an admit with planned RR at or below its floor) with its own §9.4 disposition, not a rule-(a) FAIL. Control window: 0.
+  - **C3 — the shadow comparator prints beside it, never decides:** p90 positive `adverseR` against `s_own_min`, plus the cell's bound distribution n / min / p10 / median / max.
+  - **C4 — no pooled breach rate is reported without that distribution:** a cell spanning 0.0133 → 1.33 R is a mixture, and a pooled near-zero would read "safe" while its low-headroom rows breach.
+  - **C5 — the scope's 0.0135 R** (scope objective 2: *"vwap_pullback: 0.04/2.96 = 0.0135 R"*) was computed from the strategy's planned RR 2.0 against its 1.96 floor — a design figure, not measured rows. On the pre-registered sample it is the cell's **median** row (0.01353); the measured **minimum** is 0.01333. **Superseded as a decision input by C1** (each row carries its own bound).
+  - **Unchanged:** qualification (≥ 5 graded, ≥ 5 positive-adverse, ≥ 50 % coverage) and both INSUFFICIENT tests — `positive_slips` does not depend on `s*`.
+  - **Control run of this query** (pre-registered sample, key predicate dropped, 10-15 16:29:07Z → 10-16 20:57:22Z inclusive): 30 graded, 0 `s_own_nonpositive`; the one positive slip is ORCL in the one-row vwap_bounce cell, `adverseR / s_own` = **58.24** against its own row's bound (0.0169) — so the §3 prediction's "58× its cell's s*" is a per-row figure and holds under C1. Post-deploy window (to 15:00Z): 0 rows.
 - **Crypto's own baseline** — printed beside crypto's row at every fire (a missing day is a zero):
 ```sql
 -- crypto's own baseline, printed beside its row at every fire: AEE archive rows per day (any stage) over the 14 days before the fire
