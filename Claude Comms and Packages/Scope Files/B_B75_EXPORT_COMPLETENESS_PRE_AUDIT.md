@@ -1,4 +1,10 @@
-# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r2, 2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r3, 2026-10-17)
+
+> **r3 answers Langston's r2 CHANGES (05:4xZ):**
+> - **the blocker** → P3.2, the resume decision rewritten as a five-row table: `migrated` joins the refusal, and any existing evidence refuses a re-export;
+> - **record item 1** → A12 corrected to 67, and the dead `governance-checker` transport value is removed under rule 18 (P4);
+> - **record item 2** → P7 excludes `migrating` alongside `migrated`.
+> r2 was `3651e8c7a`.
 
 > **r2 answers Langston's r1 CHANGES (05:0xZ):**
 > - **B-1** → P3.2: `migrated` falls through to re-export, plus the shadowing it creates (A10);
@@ -137,9 +143,9 @@ Everything that starts work against the manifest or the evidence table:
 | A7 | 4 sweep alerts, none keyed; 2 for one partition | §3.7 | OBJ-5 |
 | A8 | `perpfeed-gate-test --clean` deletes manifest rows. Once a proven object has an evidence row, the FK (no `ON DELETE`) **blocks that delete** and the append-only trigger blocks removing the evidence. | §3.1, §3.2 | **folded, and no code change:** the harness's own header says `--clean` is "abort path only — after a successful positive leg there is nothing to clean". Its only row today is legacy (no evidence), so `--clean` still works for it. A comment is added at `:121` saying a proven object cannot be cleaned. |
 | A9 | The ctx lane is unscheduled | §2 | cross-reference to `#169`; no work |
-| A10 | A `migrated` label that re-exports gains a warm copy that shadows its cold copy in the rehydrate CLI (warm preferred by label, `:165-181`) | Langston B-1, followed through | P3.2, P7 |
+| A10 | A `migrated` label that re-exported would gain a warm copy that shadows its cold copy in the rehydrate CLI (warm preferred by label, `:148-153`) | Langston B-1, followed through | **made unreachable by P3.2's refusal**; P7 still lists every tier |
 | A11 | The partition lane's alert has three classes (`:1156-1170`), so a fourth failure kind would land in the "likely transient" arm | Langston B-2 | P3.4 |
-| A12 | `engine` is defined as "no timer script" (`system-alerts.ts:146-149`). At runtime, the two machine timer scripts resolve as `cli`: `governance-checker` 66 rows and `deploy-drift-monitor` 30 (measured across every resolved row on staging), because they go through the CLI. The sweep would be the first timer script to resolve in-process. | Langston B-4 | P4 |
+| A12 | `engine` is defined as "no timer script" (`system-alerts.ts:146-149`). At runtime, the two machine timer scripts resolve as `cli`: `governance-checker` 67 rows (Langston's read; mine was 66, taken earlier) and `deploy-drift-monitor` 30 (measured across every resolved row on staging), because they go through the CLI. The sweep would be the first timer script to resolve in-process. | Langston B-4 | P4 |
 | A13 | **The rehydrate CLI crashes on every rotated label (new, measured).** `queryManifest` admits `migrated` (`b75-rehydrate.ts:103`), and the warm-first map (`:148-153`) then picks the warm `migrated` row, whose object the rotator deleted by design (`b75-cold-rotator.ts:343`). Run on staging, read-only into a temp folder (`--table context_bridge_log --from 2026-02-05 --to 2026-02-06`): `manifest matches: warm=1 cold=1`, then `fatal: … warm download (file) failed: … 404 … NoSuchKey` at `:175`, and nothing written. The control is the matched pair and the error naming the deleted object. **Reach:** all 3 `migrated` labels today; and since warm rotates to cold after 365 days, every object eventually. **Provenance:** the reader was written at B75, when cold was dry-run; the rotator was activated at B-STORAGE-HARDEN Wave A (07-08), and the reader's tier choice never changed. No ledger entry (searched `rehydrate`). | **folded into P7 (disposition 1):** P7 already rewrites the tier choice. Recorded on `#1195` at Step 10. |
 
 ## 8. IMPLEMENTATION PLAN (each item names its finding)
@@ -176,12 +182,29 @@ Everything that starts work against the manifest or the evidence table:
 1. **Every export writes evidence, inside one transaction (OBJ-7, R-1).**
    - After the download verify (`:563-569`), build the evidence for every spec, not only the exact lane (`:572`), with `sourceTable: spec.parent` (fixing `:576`), the export's tier, and the spec's contract.
    - Then, in one transaction, run three writes in this order: evidence insert → `completeness_basis = 'source-count-matched'` → `verified`, replacing the bare statements at `:613` and `:615`.
-2. **The resume skip (`:516-520`), C-6 rule.**
-   - An existing row in `verified`/`active` is reused **only** if `source-count-matched`. Otherwise the sweep throws `NonProvenExistingCopyError`: no upload, no evidence, no overwrite.
-   - **`migrated` is NOT in the predicate (Langston B-1).** It means the rotator moved the copy to cold and deleted the warm object by design (`b75-cold-rotator.ts:331-336`, then `:343`). Today it falls through `:517` and re-exports, which is the correct recovery, and it keeps doing so. There are 3 live `migrated` rows: `context_bridge_log/2026-01`, `/2026-02` and `exit_decision_archive/2026-05`. None is reachable tonight, because none overlaps a live hot child (Langston's re-derivation). A test covers it.
-   - ⚠ **What a `migrated` re-export creates (A10, new):** a fresh warm object beside the existing legacy cold copy, for the same label. The rehydrate CLI prefers warm by label (`b75-rehydrate.ts:165-181`), so the new warm copy, which holds only the rows still hot, would **shadow** the cold copy, which holds the older rows. That is the same reader-misled failure this batch exists to prevent. P7 therefore lists every tier's object when a label has more than one, each with its basis.
-   - The partition lane catches it as a failure of that partition (the DROP never runs); the plain lane's catch treats it as a failure of that table (the delete never runs).
-   - `pending`/`uploaded` rows re-export as today.
+2. **The resume decision (`:516-520`), rewritten — the DECISION (Langston's r2 blocker).** r2's "`migrated` falls through and re-exports" is withdrawn, and the reason is the evidence writer's conflict target:
+   - `upsertManifestPending` returns the **existing** row's id on conflict (`b75-retention-sweep.ts:337-353`).
+   - `recordExactArchiveEvidence` conflicts on `manifest_id` and does nothing (`exact-archive-evidence.ts:68`). A re-export of a label that already has evidence would therefore keep the old proof, fail the replay compare (`:81-105`) with a bare `Error`, land in the "likely transient" arm every night, and leave row M `uploaded` with a short `row_count` under a proof that describes other bytes.
+   - That is the general case after this ships, not an xStock edge: after deploy every new object has evidence.
+
+   **The rule, one row per state, decided BEFORE any upload:**
+
+   | existing warm row for the label | decision | why |
+   |---|---|---|
+   | none | export | the normal path |
+   | `verified` / `active`, basis `source-count-matched` | **reuse** (skip) | proven |
+   | `verified` / `active`, any other basis | **refuse** — `NonProvenExistingCopyError` | C-6: a re-export could only prove the leftover rows |
+   | **`migrated` / `migrating`, any basis** | **refuse** — the same error | the cold copy is the copy of record. A re-export of the rows still hot would split one label into two partial copies: one warm and genuinely proven for what it exported, one cold and legacy. That still loses the old rows, and it leaves no single copy that is whole. |
+   | `pending` / `uploaded` | export **only if no evidence row exists for M**; otherwise **refuse** | an existing proof for M with a non-final state means the state was reset under a proof. Re-exporting would test the old proof against new bytes — the case above. |
+
+   - **Every refusal** uses the `isNonProven` class (P3.4): `critical`, permanent until a human acts, and it names the retained hot size. Nothing is uploaded, no evidence is written, and no object or manifest field is overwritten. The hot rows stay.
+   - **Reach today:** none. 0 of 568 pre-hotfix rows overlap a live hot child, and 0 evidence rows exist. After deploy, a refusal needs hot rows to appear for a label already archived — rows written with an old timestamp.
+   - **The tests change accordingly:**
+     - `migrated` refuses, `migrating` refuses;
+     - `pending` with no evidence exports;
+     - `pending` with evidence refuses before the upload;
+     - in every refusal: no `uploadWarmFile` call, no evidence insert, no manifest update.
+   - **A10, re-read against this rule:** the sweep can no longer create a warm copy beside a cold one, so the shadowing cannot arise from the sweep. P7 still lists every tier per label: the `migrated` warm row plus its cold row is today's normal state for 3 labels, and any future mixed state must be visible, never silently chosen.
 3. **The DROP gate (`:775-793`) and the plain gate (`:922-935`)** add `completeness_basis = 'source-count-matched'` to their state predicate. The plain gate's refusal mints an alert instead of only logging.
 4. **Alerts (OBJ-5).**
    - **A fourth class, `isNonProven` (Langston B-2).** `ProcessResult` gains it beside `isChecksumMismatch` and `isCountMismatch`, so the C-6 refusal never lands in the `:1166` "likely transient" arm. Its body says the refusal is **permanent until a human acts**: the existing copy is not proven, a re-export could only prove the rows still hot, and the hot partition is kept, so its bytes stay on the database disk every night it refuses. It names the label's hot size. **Severity `critical`**, because the disk is the measured constraint (`e656e5d4`, 67.5% of the 200 GB cap) and a refusal grows it daily.
@@ -198,6 +221,7 @@ Everything that starts work against the manifest or the evidence table:
   - **Not `cli`:** `cli` records that a resolve arrived through the CLI, and the two timer scripts that use it do go through the CLI (A12). The sweep would not, so `cli` would be a false provenance stamp.
   - **A class, not a per-caller value:** the sweep is told apart by its actor. Any later timer script that resolves in-process uses the same class.
   - `ResolveTransport` has one consumer file (Langston), so the change has no drift surface.
+- **The dead `governance-checker` transport value is removed (rule 18; Langston record item 1).** It has **0** resolved rows ever (Langston's read of every resolved row). No code passes it: a whole-tree grep finds the literal only in the type at `:150` and in unrelated `source:` metadata fields (`census.mjs:736`, `:825`, `poller.mjs:619`). The checker resolves through the CLI, as `cli`. The removal is logged in `DELETED_COMPONENTS_LOG.md` at Step 10.
 - My r1 wording "as the other machine resolvers use" was a wrong-population claim, and it is withdrawn.
 - Check `dt-deploy`'s derived table: machine actors are excluded, per the shared MEMORY note.
 
@@ -213,7 +237,7 @@ Everything that starts work against the manifest or the evidence table:
 - Per object it prints `completeness=<basis>`, and `rows(unproven)=` for anything not `source-count-matched`.
 - The total splits into proven and unproven.
 - One warning per non-proven object names its range.
-- **A13:** a warm row in state `migrated` is never a download candidate, because its object is gone by design. The label falls to its cold row, using `--restore-cold` as today.
+- **A13:** a warm row in state `migrated` **or `migrating`** is never a download candidate, because its object is gone by design or is being removed. `migrating` is declared in the CHECK and admitted at `:103`, but no code writes it (Langston's whole-tree grep, positive control 8 hits). It is excluded so the reader cannot pick a half-moved copy if a writer ever appears. The label falls to its cold row, using `--restore-cold` as today.
 - **A10:** when a label has objects in more than one tier, every tier's object is listed with its basis. A warning says which one is downloaded and that the other exists. The CLI never silently picks one.
 - Writes `<file>.completeness.json` beside each file.
 
@@ -248,7 +272,7 @@ Everything that starts work against the manifest or the evidence table:
   - the evidence row carries `spec.parent` and the actual tier;
   - the transaction order;
   - the C-6 refusals at (c) and (d) write no evidence and overwrite nothing;
-  - `pending` re-exports, **and `migrated` re-exports** (B-1);
+  - the five-row resume decision in P3.2, each row its own case;
   - the refusal carries `isNonProven` with its own body and `critical` severity, and never the "likely transient" text (B-2);
   - gates (a) and (b);
   - OBJ-5's suppression, its positive control (a different parent/label/class mints), resolve-on-success, and re-mint after a resolve.
