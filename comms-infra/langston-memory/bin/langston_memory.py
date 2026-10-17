@@ -393,24 +393,31 @@ def _split_evidence():
                 "(`langston-memory-write --compose`) or restore MEMORY.md from .memory-archive/" % idx)
     last = [r.get("ledger_new_sha") or r.get("ledger_sha") for r in rows
             if r.get("outcome") == "written" and r.get("mode") in ("split-ledger", "ledger-file-append")]
-    # Langston r3 C-7: a torn record is most likely the LAST line - a ledger write NEWER than the newest readable one -
-    # so with any unreadable line the named archive may be a generation stale
-    stale = ("" if not bad else " - but %d line(s) of the index could not be read and a LATER ledger write may be among "
-             "them, so that archive may be a generation stale: check it holds every retraction before restoring" % bad)
+    # Langston r3 C-7: a torn record is most likely the LAST line - a ledger write NEWER than the newest readable one.
+    # r4 C-8: the hedge must fit its branch. Only the branch that NAMES an archive may say "check it before restoring";
+    # where nothing restorable is named, it must not instruct a restore - it says a newer archive may exist unnamed.
+    stale_named = ("" if not bad else " - but %d line(s) of the index could not be read and a LATER ledger write may be "
+                   "among them, so that archive may be a generation stale: check it holds every retraction before "
+                   "restoring" % bad)
+    stale_unnamed = ("" if not bad else " - and %d line(s) of the index could not be read; a LATER ledger write may be "
+                     "among them, so an archive this refusal cannot name may exist: have Infra Claude read the index "
+                     "before concluding anything is lost" % bad)
+    # A FENCE, not a live shape: both writers record a sha on every written ledger row (`ledger_sha` on split-ledger,
+    # `ledger_new_sha` on ledger-file-append, langston-memory-write) - only a legacy or hand-edited row can lack one.
     if not last[-1]:
         return ("the split IS recorded (%s) but its newest ledger row records no ledger sha, so no archive can be named "
                 "and the recovery is UNKNOWN - the pre-split MEMORY.md archives still hold every retraction%s"
-                % (split[-1].get("ts"), stale))
+                % (split[-1].get("ts"), stale_unnamed))
     arch = os.path.join(LANGSTON_HOME, ".memory-archive", "%s.md" % last[-1])
     # name the archive only after SEEING it (Langston record item, 2026-10-16): a named file that is not there is the
     # same invented-recovery shape one layer down
     if not os.path.isfile(arch):
         return ("the split IS recorded (%s) but the archive of its newest LEDGER.md (%s) is NOT present, so the "
                 "cause of the loss and the recovery are UNKNOWN - the pre-split MEMORY.md archives still hold every "
-                "retraction%s" % (split[-1].get("ts"), arch, stale))
+                "retraction%s" % (split[-1].get("ts"), arch, stale_unnamed))
     return ("the split IS recorded (%s), so LEDGER.md was removed after it - its newest written version is "
             ".memory-archive/%s.md; restore that file to %s%s" % (split[-1].get("ts"), last[-1], LEDGER_SOURCES[0],
-                                                                    stale))
+                                                                    stale_named))
 
 
 def ledger_state():

@@ -214,6 +214,28 @@ def main():
     lst = h.reader().ledger_state()
     check("  ...with that archive ALSO gone, it names no restore and says UNKNOWN",
           ("NOT present" in lst[4], "UNKNOWN" in lst[4], "restore that file" in lst[4]), (True, True, False))
+    ip0 = os.path.join(h.top, ".memory-archive", "index.jsonl")
+    with open(ip0, encoding="utf-8") as fh:
+        idx0 = fh.read()
+    with open(ip0, "w", encoding="utf-8") as fh:
+        fh.write(idx0 + "{torn last li" + NL)
+    lst = h.reader().ledger_state()
+    check("  ...C-8: archive absent AND a torn line -> hedged, but NO restore instruction of any kind",
+          ("could not be read" in lst[4], "before restoring" in lst[4], "restore that file" in lst[4],
+           "cannot name may exist" in lst[4]), (True, False, False, True))
+    rows0 = [json.loads(l) for l in idx0.split(NL) if l.strip()]
+    for r_ in rows0:
+        if r_.get("mode") in ("split-ledger", "ledger-file-append") and r_.get("outcome") == "written":
+            r_.pop("ledger_sha", None)
+            r_.pop("ledger_new_sha", None)
+    with open(ip0, "w", encoding="utf-8") as fh:
+        fh.write(NL.join(json.dumps(r_) for r_ in rows0) + NL + "{torn last li" + NL)
+    lst = h.reader().ledger_state()
+    check("  ...C-8: a ledger row with NO sha (legacy fence) AND a torn line -> no archive named, no restore instruction",
+          ("records no ledger sha" in lst[4], "before restoring" in lst[4], "cannot name may exist" in lst[4]),
+          (True, False, True))
+    with open(ip0, "w", encoding="utf-8") as fh:
+        fh.write(idx0)
     os.rename(ap + ".aside", ap)
     ip = os.path.join(h.top, ".memory-archive", "index.jsonl")
     with open(ip, encoding="utf-8") as fh:
