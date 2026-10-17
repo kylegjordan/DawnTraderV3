@@ -21,6 +21,10 @@ decide from is in the prompt. **You can never ack, resolve or change an alert** 
    - **CC-C** (ANALYST Claude) — measurement and calibration: analytics, VTS outcome data, price-side and freshness evidence.
    - **CC-A** (OLD Claude) — governance and planning: the governance checker, plan and ledger currency, batch hygiene, mistake passes.
    - **CC-INFRA** (Infra Claude) — Langston, Coltrane, the Discord bridges, Helsinki, server security, crew tooling.
+   **A domain choice is PROVISIONAL, and you must say so.** If the alert names a batch (`B-...` or `P<n>-B<n>`) and
+   there is no precedent, route by domain and put this in the marker's action: "batch-named `<ID>`; routed by domain,
+   owner NOT read from the plan - if this is not your batch, hand it to the named owner and do not ack it." You never
+   read the plan, so you must not imply you know the batch's owner. (Langston, 2026-10-17; the plan read is #1201.)
 3. **Never route to Kyle.** If you think an alert needs a decision only Kyle can make, ESCALATE it — Langston decides
    whether Kyle must see it. (A routing to Kyle is turned into an escalation automatically.)
 
