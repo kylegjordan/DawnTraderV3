@@ -70,6 +70,7 @@ bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
 bridges|comms-infra/discord/alert-lane/CLAUDE.md|/srv/alert-lane/CLAUDE.md|0644
 bridges|comms-infra/discord/crew-status-post.py|$BRIDGE_DIR/crew-status-post.py|0755
 bridges|comms-infra/discord/bridge-failed-notify.sh|$BRIDGE_DIR/bridge-failed-notify.sh|0755
+bridges|comms-infra/discord/langston-bridge-restart|/usr/local/sbin/langston-bridge-restart|0755
 bridges|comms-infra/discord/discord-cc-bridge.service|$UNITS/discord-cc-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service|$UNITS/discord-langston-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service.d/self-advance.conf|$UNITS/discord-langston-bridge.service.d/self-advance.conf|0644
@@ -440,7 +441,13 @@ if want bridges; then
       done
     done
     if [ "$since_s" -le "$INSTALL_TS" ]; then
-      echo "   ⚠ NOT RESTARTED: $u has run since $since — it still executes the code from BEFORE this install. Restart it in a window with no queued review: systemctl restart $u"
+      if [ "$u" = discord-langston-bridge.service ]; then
+        # Never a bare systemctl restart for this one: it holds Langston's queue in memory, and a restart
+        # without a recovery floor drops every waiting message (measured 2026-10-17, B-LANGSTON-RELIEF).
+        echo "   ⚠ NOT RESTARTED: $u has run since $since — it still executes the code from BEFORE this install. Restart it ONLY with: langston-bridge-restart   (writes the recovery floor, waits for a posted reply)"
+      else
+        echo "   ⚠ NOT RESTARTED: $u has run since $since — it still executes the code from BEFORE this install. Restart it in a window with no queued review: systemctl restart $u"
+      fi
     fi
   done
   DONE_STEPS="$DONE_STEPS units"

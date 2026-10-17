@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+"""langston-bridge-restart — THE way to restart Langston's Discord bridge. Root, on Helsinki.
+
+    langston-bridge-restart [--now] [--wait-s N] [--dry-run]
+
+⛔ WHY THIS EXISTS (B-LANGSTON-RELIEF, measured 2026-10-17): the bridge holds its queue IN MEMORY. A
+restart without a recovery floor drops every message waiting in it. At 04:35:04Z a hand-typed
+`systemctl restart` - timed correctly, one second after a posted reply - still dropped seven sessions'
+review requests, because the floor file was not written first. The procedure was in prose and nothing
+made the floor part of the act. This helper does all of it, in order, or nothing:
+
+  1. computes the floor: the earliest of (this process's start, the creation time of every message this
+     process enqueued and Langston has not answered with a DELIVERED reply), less 1 s, never older than
+     24 h less a minute (the bridge refuses an older floor);
+  2. writes it to /home/langston/.discord-bridge/recover-since, atomically, owned by langston;
+  3. waits for a `responded to msg` line - a reply posted, nothing in flight - unless --now;
+  4. restarts the unit only if the floor file is still there, then waits for the bridge's own
+     `recovery:` summary line and prints it. Exit 0 only on a recovery that re-fed without failing.
+
+"Answered" here is the bridge's own rule: a langston_outbound row with a message id (a reply that reached
+Discord). --dry-run prints the floor and the unanswered messages and changes nothing.
+
+Limits, stated: (a) a post Langston answered by replying to a DIFFERENT post (a superseded revision) reads
+as unanswered and is re-fed - OLD Claude's B75 r5, 2026-10-17; (b) a message dropped by an EARLIER restart
+that had no floor is older than this process and is not covered - repair that by hand, once.
+"""
+import argparse, datetime as dt, json, os, pwd, re, subprocess, sys, tempfile, time
+
+UNIT = "discord-langston-bridge.service"
+FLOOR_FILE = "/home/langston/.discord-bridge/recover-since"
+INBOX = "/var/log/cc-discord-inbox.jsonl"
+MAX_AGE = dt.timedelta(hours=24) - dt.timedelta(minutes=1)
+DISCORD_EPOCH_MS = 1420070400000
+UTC = dt.timezone.utc
+
+
+def sh(*cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+
+def snowflake_time(mid):
+    return dt.datetime.fromtimestamp(((int(mid) >> 22) + DISCORD_EPOCH_MS) / 1000, UTC)
+
+
+def process_start():
+    raw = sh("systemctl", "show", "-p", "ExecMainStartTimestamp", "--value", UNIT).stdout.strip()
+    if not raw:
+        return None
+    return dt.datetime.strptime(" ".join(raw.split()[1:3]), "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+
+
+def journal_since(start):
+    return sh("journalctl", "-u", UNIT, "--since", start.strftime("%Y-%m-%d %H:%M:%S"), "--utc",
+              "--no-pager", "-o", "cat").stdout
+
+
+def delivered_replies(path=INBOX):
+    out = set()
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"langston_outbound"' not in line:
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and r.get("lane") != "alert" and r.get("message_id") is not None:
+                try:
+                    out.add(int(r["reply_to"]))
+                except (KeyError, TypeError, ValueError):
+                    pass
+    return out
+
+
+def compute_floor(now):
+    start = process_start()
+    if start is None:
+        sys.exit("refusing: cannot read %s's start time" % UNIT)
+    enq = [int(m) for m in re.findall(r"text enqueued: msg (\d+)", journal_since(start))]
+    answered = delivered_replies()
+    pending = sorted({m for m in enq if m not in answered})
+    floor = min([start] + [snowflake_time(m) for m in pending]) - dt.timedelta(seconds=1)
+    return max(floor, now - MAX_AGE).replace(microsecond=0), start, pending
+
+
+def write_floor(floor):
+    pw = pwd.getpwnam("langston")
+    d = os.path.dirname(FLOOR_FILE)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".recover-since-")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(floor.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    os.chown(tmp, pw.pw_uid, pw.pw_gid)
+    os.chmod(tmp, 0o640)
+    os.replace(tmp, FLOOR_FILE)
+
+
+def wait_for_line(pattern, timeout_s, since=None):
+    """First journal line matching pattern within timeout_s, followed live; None on timeout."""
+    cmd = ["journalctl", "-u", UNIT, "-f", "--no-pager", "-o", "cat"]
+    cmd += ["--since", since.strftime("%Y-%m-%d %H:%M:%S"), "--utc"] if since else ["-n0"]
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+    deadline = time.time() + timeout_s
+    try:
+        os.set_blocking(p.stdout.fileno(), False)
+        buf = ""
+        while time.time() < deadline:
+            chunk = p.stdout.read() or ""
+            buf += chunk
+            *lines, buf = buf.split("\n")
+            for l in lines:
+                if re.search(pattern, l):
+                    return l
+            if not chunk:
+                time.sleep(0.2)
+        return None
+    finally:
+        p.kill()
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--now", action="store_true", help="restart without waiting for a posted reply")
+    ap.add_argument("--wait-s", type=int, default=1800, help="how long to wait for a posted reply")
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+    if os.geteuid() != 0:
+        sys.exit("refusing: run as root")
+    now = dt.datetime.now(UTC)
+    floor, start, pending = compute_floor(now)
+    print("process start %sZ; %d enqueued message(s) without a delivered reply%s" % (
+        start.strftime("%Y-%m-%dT%H:%M:%S"), len(pending), (": " + " ".join(map(str, pending))) if pending else ""))
+    print("floor %s" % floor.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    if a.dry_run:
+        return 0
+    write_floor(floor)
+    print("floor written to %s" % FLOOR_FILE)
+    if not a.now:
+        print("waiting up to %d s for a posted reply ..." % a.wait_s)
+        line = wait_for_line(r"responded to msg \d+", a.wait_s)
+        if line is None:
+            print("NOT restarted: no reply posted in %d s (the floor file stays; re-run, or use --now)" % a.wait_s)
+            return 2
+        print("seen: " + line.strip())
+    if not os.path.exists(FLOOR_FILE):
+        print("NOT restarted: the floor file vanished before the restart")
+        return 3
+    t0 = dt.datetime.now(UTC)
+    r = sh("systemctl", "restart", UNIT)
+    if r.returncode != 0:
+        print("restart FAILED: " + (r.stderr or "").strip())
+        return 4
+    print("restarted at %sZ" % t0.strftime("%Y-%m-%dT%H:%M:%S"))
+    line = wait_for_line(r"recovery: ", 180, since=t0)
+    print(("recovery line: " + line.strip()) if line else "NO recovery line within 180 s - check the journal")
+    return 0 if line and "FAILED" not in line else 5
+
+
+if __name__ == "__main__":
+    sys.exit(main())
