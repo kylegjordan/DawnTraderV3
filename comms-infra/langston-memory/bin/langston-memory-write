@@ -501,46 +501,60 @@ def watched_paths():
     return [os.path.join(LANGSTON_HOME, "CLAUDE.md"), TARGET, os.path.join(LANGSTON_HOME, AUTO_MEMORY_INDEX)]
 
 
-def growth_gate(old_bytes, new_bytes, opts, st, mode):
-    """What the gate saw (a dict for the index row), or Refused(7) after recording the refusal."""
-    delta = len(new_bytes) - len(old_bytes)
+def read_ratchet(mem_len):
+    """THE ONE READ of the ratchet, shared by growth_gate and size_line (Langston, 2026-10-17: two copies of one read is
+    the fix-follows-pointer generator). Returns {state, live, no_state, ceiling_bytes, other, missing, total, unknown}:
+    `total` = the other watched files by stat + mem_len; `unknown` names the first thing that could not be established
+    (state unreadable, no valid positive integer ceiling, the watch's persisted list != watched_paths() on the live
+    home, a watched file missing on the live home). A test home uses ITS OWN state file, never the live one."""
     live = os.path.realpath(LANGSTON_HOME) == os.path.realpath(LIVE_HOME)
     path = RATCHET_STATE if (live or os.environ.get("LMW_RATCHET_STATE")) else os.path.join(LANGSTON_HOME, ".ratchet-state.json")
-    seen = {"delta_bytes": delta, "state": path}
-    unknown = None
+    r = {"state": path, "live": live, "no_state": False, "ceiling_bytes": None, "other": None, "missing": [],
+         "total": None, "unknown": None}
     try:
         with open(path, encoding="utf-8") as fh:
             rs = json.load(fh)
         if not isinstance(rs, dict):
             raise ValueError("not an object")
     except (OSError, ValueError) as e:
-        rs, unknown = None, "the ratchet state %s cannot be read (%s)" % (path, type(e).__name__)
-    if rs is not None:
-        ceiling = rs.get("ceiling_bytes")
-        seen["ceiling_bytes"] = ceiling
-        mine = watched_paths()
-        theirs = rs.get("watched")
-        if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling <= 0:
-            unknown = "the ratchet state carries no valid ceiling_bytes (%r)" % (ceiling,)
-        elif live and theirs != mine:
-            unknown = ("the size watch's persisted file list %r does not match this writer's %r - a loaded file could "
-                       "be uncounted" % (theirs, mine))
-        else:
-            other, missing = 0, []
-            for f in mine:
-                if os.path.realpath(f) == os.path.realpath(TARGET):
-                    continue
-                try:
-                    other += os.stat(f).st_size
-                except OSError:
-                    missing.append(f)
-            if missing and live:
-                unknown = "a watched file is missing (%s) - the sum is meaningless until it is resolved" % missing[0]
-            seen.update({"total_before": other + len(old_bytes), "total_after": other + len(new_bytes),
-                         "missing": missing})
-    elif not live:
-        seen["note"] = "test home with no ratchet state: not gated"
-        return seen
+        if not live and isinstance(e, FileNotFoundError):
+            r["no_state"] = True
+        r["unknown"] = "the ratchet state %s cannot be read (%s)" % (path, type(e).__name__)
+        return r
+    ceiling = rs.get("ceiling_bytes")
+    r["ceiling_bytes"] = ceiling
+    mine = watched_paths()
+    if not isinstance(ceiling, int) or isinstance(ceiling, bool) or ceiling <= 0:
+        r["unknown"] = "the ratchet state carries no valid ceiling_bytes (%r)" % (ceiling,)
+        return r
+    if live and rs.get("watched") != mine:
+        r["unknown"] = ("the size watch's persisted file list %r does not match this writer's %r - a loaded file could "
+                        "be uncounted" % (rs.get("watched"), mine))
+        return r
+    other, missing = 0, []
+    for f in mine:
+        if os.path.realpath(f) == os.path.realpath(TARGET):
+            continue
+        try:
+            other += os.stat(f).st_size
+        except OSError:
+            missing.append(f)
+    r.update({"other": other, "missing": missing, "total": other + mem_len})
+    if missing and live:
+        r["unknown"] = "a watched file is missing (%s) - the sum is meaningless until it is resolved" % missing[0]
+    return r
+
+
+def growth_gate(old_bytes, new_bytes, opts, st, mode):
+    """What the gate saw (a dict for the index row), or Refused(7) after recording the refusal."""
+    delta = len(new_bytes) - len(old_bytes)
+    r = read_ratchet(len(new_bytes))
+    if r["no_state"]:
+        return {"delta_bytes": delta, "state": r["state"], "note": "test home with no ratchet state: not gated"}
+    unknown = r["unknown"]
+    seen = {"delta_bytes": delta, "state": r["state"], "ceiling_bytes": r["ceiling_bytes"]}
+    if r["total"] is not None:
+        seen.update({"total_before": r["other"] + len(old_bytes), "total_after": r["total"], "missing": r["missing"]})
     seen["unknown"] = unknown
     if delta <= 0:
         return seen
@@ -660,20 +674,16 @@ def resolve_target_part(parts, append, explicit_part=None):
 
 
 def size_line(n):
-    """MEMORY.md's size and the LOADED SET against its ceiling (PHASE_19_PLAN row 2.8b). It used to print a per-file
-    "24576 B cap" - the fifth surviving copy of a cap 2.8b retired, printed on every write (found at the 2026-10-17
-    install, the same day the header copy was struck). Read the same way the growth gate reads it; never a stored total."""
-    try:
-        with open(RATCHET_STATE, encoding="utf-8") as fh:
-            ceiling = json.load(fh).get("ceiling_bytes")
-        other = sum(os.stat(f).st_size for f in watched_paths() if os.path.realpath(f) != os.path.realpath(TARGET))
-    except (OSError, ValueError, AttributeError):
-        return "size %d B; loaded-set ceiling UNKNOWN (see `langston-size-watch --status`)" % n
-    if not isinstance(ceiling, int):
-        return "size %d B; loaded-set ceiling UNKNOWN (see `langston-size-watch --status`)" % n
-    total = other + n
-    return "size %d B; loaded set %d B vs ceiling %d B (%s by %d B; row 2.8b)" % (
-        n, total, ceiling, "OVER" if total > ceiling else "under", abs(total - ceiling))
+    """MEMORY.md's size and the LOADED SET against its ceiling (PHASE_19_PLAN row 2.8b), through read_ratchet - the
+    same read the growth gate makes (one function, not a copy). It used to print a per-file "24576 B cap", the fifth
+    surviving copy of a cap 2.8b retired, on every write (found at the 2026-10-17 install)."""
+    r = read_ratchet(n)
+    if r["unknown"]:
+        return "size %d B; loaded-set ceiling UNKNOWN - %s (see `langston-size-watch --status`)" % (n, r["unknown"])
+    miss = (" - %d watched file(s) absent from this home, not counted" % len(r["missing"])) if r["missing"] else ""
+    return "size %d B; loaded set %d B vs ceiling %d B (%s by %d B; row 2.8b)%s" % (
+        n, r["total"], r["ceiling_bytes"], "OVER" if r["total"] > r["ceiling_bytes"] else "under",
+        abs(r["total"] - r["ceiling_bytes"]), miss)
 
 
 def corrupt_switch_armed(home):
@@ -2123,8 +2133,11 @@ def self_test():
         check("control: a valid append lands -> exit", rc, 0)
         check("  ...the reader counts 3", retr(), 3)
         check("  ...the success line reports both counters", "REVIEWER LEDGER bullets 5 -> 6" in out, True)
-        check("  ...and the size against the LOADED-SET ceiling, never a per-file cap", ("loaded-set ceiling" in out or
-              "loaded set" in out, "B cap by" in out), (True, False))
+        check("  ...no per-file cap is printed", "B cap by" in out, False)
+        # two NAMED branches of size_line (Langston, 2026-10-17: an `or` over both accepted the UNKNOWN string, so the
+        # suite had never produced the real wording) - the UNKNOWN branch here, the staged branches at the end
+        check("  size line, UNKNOWN branch (this test home has no ratchet state): says UNKNOWN and why",
+              ("loaded-set ceiling UNKNOWN" in out, "cannot be read" in out), (True, True))
         check("  ...the archive gained exactly one file, named by the OLD sha", archived(), [s0 + ".md"])
         check("  ...the index records the ATTEMPT first, then the outcome (FINDING-2)", index_outcomes(), ["attempted", "written"])
         check("  ...and the target is written OWNER-ONLY, from a 644 start (the 18:37Z ruling)",
@@ -2314,6 +2327,34 @@ def self_test():
                 shutil.rmtree(home3, ignore_errors=True)
         else:
             print("  N/A  BLOCKER-3 root-then-owner case needs root; run the self-test as root to exercise it")
+        # size line, staged branches - LAST, after reset(), so their extra writes cannot move any count checked above
+        reset()
+        claude_p = os.path.join(top, "CLAUDE.md")
+        amem = os.path.join(top, ".claude", "projects", "-home-langston", "memory")
+        os.makedirs(amem, exist_ok=True)
+        with open(claude_p, "w", encoding="utf-8") as fh:
+            fh.write("c" * 1234)
+        with open(os.path.join(amem, "MEMORY.md"), "w", encoding="utf-8") as fh:
+            fh.write("i" * 567)
+        with open(os.path.join(top, ".ratchet-state.json"), "w", encoding="utf-8") as fh:
+            json.dump({"ceiling_bytes": 10 ** 9}, fh)
+        b1, s1 = current()
+        rc, out = call(appendargs(s1), "- **fourth retraction**, appended for the size-line case." + NL)
+        want = "loaded set %d B vs ceiling %d B (under by %d B; row 2.8b)" % (
+            1234 + 567 + len(open(target, "rb").read()), 10 ** 9, 10 ** 9 - (1234 + 567 + len(open(target, "rb").read())))
+        check("  size line, REAL branch (state + both other watched files staged): the computed numbers, exactly",
+              (rc, want in out), (0, True))
+        with open(os.path.join(top, ".ratchet-state.json"), "w", encoding="utf-8") as fh:
+            json.dump({"ceiling_bytes": True}, fh)
+        b2, s2 = current()
+        # the gate refuses growth on an UNKNOWN ratchet, so the override lets the write land and size_line print
+        rc, out = call(appendargs(s2) + ["--allow-growth", "size-line test"],
+                       "- **fifth retraction**, appended for the invalid-ceiling case." + NL)
+        check("  size line: a bool ceiling is UNKNOWN in the SUCCESS line, never printed as a real ceiling",
+              (rc, "loaded-set ceiling UNKNOWN - the ratchet state carries no valid ceiling_bytes" in out,
+               "vs ceiling 1 B" in out), (0, True, False))
+        for f_ in (claude_p, os.path.join(amem, "MEMORY.md"), os.path.join(top, ".ratchet-state.json")):
+            os.remove(f_)
     finally:
         shutil.rmtree(top, ignore_errors=True)
     print("self-test %s" % ("PASSED" if ok else "FAILED"))
