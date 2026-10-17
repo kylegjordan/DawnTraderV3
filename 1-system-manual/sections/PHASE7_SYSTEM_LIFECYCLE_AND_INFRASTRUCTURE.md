@@ -527,24 +527,26 @@ Comprehensive engine-level health monitoring with 5-second heartbeat, auto-recov
 ### Purpose
 Monitors Kraken WebSocket and REST fallback feed health with configurable thresholds, grading, and alert deduplication.
 
-### Health Categories
-| Status | Criteria |
-|--------|----------|
-| Healthy | <3 reconnects AND <5s tick age |
-| Warning | ≥3 reconnects OR ≥5s tick age |
-| Critical | ≥5 reconnects OR ≥10s tick age |
+### Health Categories — the worse of two terms (`B-FEED-HEALTH-GRADE-ARM`, row 3a, 2026-10-17)
+| Status | Freshness (per asset class, on the freshest symbol, DB thresholds) | Connection (completed reconnects — ring when ready, latest interval while warming) |
+|--------|----------|----------|
+| Healthy | freshest age < class `warning_age_ms` | < 3 |
+| Warning | freshest age ≥ class `warning_age_ms` | ≥ 3 |
+| Critical | freshest age ≥ class `critical_age_ms`, or no symbol has ticked | ≥ 5 |
+Latency grades nothing (it is Kraken's heartbeat cadence). The full rule is `SYSTEM_MANUAL.md`, the Feed Integrity Monitor section.
 
-### Grading System (A-F)
-| Grade | Max Latency | Min Uptime | Max Reconnects | Max Tick Age |
-|-------|------------|-----------|---------------|-------------|
-| A | 500ms | 99% | 0 | 2s |
-| B | 1000ms | 95% | 2 | 5s |
-| C | 2000ms | 90% | 5 | 10s |
-| D | 3000ms | 80% | 10 | 20s |
-| F | Worse than D | | | |
+### Grading System (A-F) — `B-FEED-HEALTH-GRADE-ARM` (row 3a, 2026-10-17)
+| Grade | Connection, ring ready (min uptime %) | Connection, ring warming (max completed reconnects in the latest interval) | Freshness (per class, each on its own DB thresholds) |
+|-------|------------|-----------|---------------|
+| A | 99 | 0 | every graded class healthy |
+| B | 95 | 2 | every graded class healthy |
+| C | 90 | 5 | a class at warning caps the grade here |
+| D | 80 | 10 | |
+| F | worse than D — or any graded class critical | | |
+The ring's uptime is `(1 − Σ completed reconnects / snapshots present) × 100`, quantised at 8.33 % per reconnect over 12 samples: **one reconnect in a 12-sample ring = 91.67 % ⇒ C; at 6 samples 83.33 % ⇒ D.** **Latency is not graded** — it is the averaged inter-heartbeat interval, Kraken's push cadence (~1 s by construction), and stays as labelled telemetry. A class present but without a DB threshold is reported `NOT GRADED`, never healthy.
 
 ### Configuration
-All thresholds are env-configurable via `FEED_*` environment variables with sensible defaults.
+Freshness thresholds are DB-governed (`module_constants 'feed_health'`: `warning_age_ms`, `critical_age_ms`, xStock `warmup_grace_ms`). The reconnect status thresholds (`FEED_WARNING_RECONNECTS` 3, `FEED_CRITICAL_RECONNECTS` 5) and the A–D rungs remain env-configurable (`FEED_*`); whether they move into the DB namespace is a review at row 3a's Step 11 (`#1209`).
 
 ### Tracking
 - Rolling 12-snapshot history (1 hour at 5-min intervals)

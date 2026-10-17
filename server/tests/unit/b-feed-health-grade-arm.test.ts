@@ -202,8 +202,10 @@ describe('fences', () => {
     expect(card).toBeGreaterThan(gateElse); // after the ternary's else-arm, i.e. outside it
     expect(src.indexOf('</TabsContent>', gateElse)).toBeGreaterThan(card); // still inside the AI Command Center tab
     // UNGATED, not only positioned (Langston): nothing between the ternary's close and the card may re-gate it.
-    const between = src.slice(src.indexOf(')}', gateElse), card);
-    expect(between).not.toMatch(/&&|\? \(/);
+    const ternaryClose = src.indexOf(')}', gateElse);
+    expect(card).toBeGreaterThan(ternaryClose); // AFTER the close — inside the else-arm would draw the card only when telemetry FAILS (Langston hole a)
+    const between = src.slice(ternaryClose, card);
+    expect(between).not.toMatch(/&&|\?\s*\(/); // hole b: '?(' without a space
   });
   it('feed_health is prefetched', () => {
     expect(read('server/startup/b72-warmup.ts')).toMatch(/^\s*'feed_health',/m);
