@@ -236,6 +236,9 @@ async function main(): Promise<void> {
     if (!checksumOk) {
       outPath = `${localPath}.CORRUPT`;
       fs.renameSync(localPath, outPath);
+      // A reused --out directory may hold an earlier run's good-named sidecar; remove it so
+      // no checksum_ok:true record is left with no object behind it (Langston gate C record 1).
+      fs.rmSync(`${localPath}.completeness.json`, { force: true });
     }
 
     console.log(

@@ -418,6 +418,7 @@ describe('the other lanes and readers', () => {
     // the rider: a mismatched file is renamed out of the <table>_*.jsonl.gz glob
     expect(REHYDRATE).toMatch(/if \(!checksumOk\) \{\s*outPath = `\$\{localPath\}\.CORRUPT`;\s*fs\.renameSync\(localPath, outPath\);/);
     expect(REHYDRATE).toContain('`${outPath}.completeness.json`');
+    expect(REHYDRATE).toContain('fs.rmSync(`${localPath}.completeness.json`, { force: true });');
   });
   it('perpfeed --clean deletes the manifest rows BEFORE dropping, and stops if refused', () => {
     const clean = PERPFEED.slice(PERPFEED.indexOf("if (mode === 'clean')"));
