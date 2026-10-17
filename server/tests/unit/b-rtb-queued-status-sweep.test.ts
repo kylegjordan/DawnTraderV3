@@ -49,7 +49,8 @@ describe('migration part 2 — the contraction, shipped after the code that stop
     const m = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-part2.sql');
     for (const col of ['promoted_at', 'promoted_trade_id', 'expired_at']) expect(m).toMatch(new RegExp(`DROP COLUMN IF EXISTS ${col};`));
     expect(m.match(/DROP COLUMN/g)).toHaveLength(3);
-    expect(m).not.toMatch(/INDEX|DEFAULT/);
+    // statements only — the header comment may name either word (Langston, Step 8 record item)
+    expect(m.split(/\r?\n/).filter((l) => !l.trim().startsWith('--')).join('\n')).not.toMatch(/INDEX|DEFAULT/);
     const manifest = read('drizzle/migrations/MANIFEST.txt').split(/\r?\n/);
     expect(manifest.indexOf('2026-10-17-b-rtb-queued-status-sweep-part2.sql')).toBeGreaterThan(manifest.indexOf('2026-10-17-b-rtb-queued-status-sweep.sql'));
     const rb = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-part2-rollback.sql');
