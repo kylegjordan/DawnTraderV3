@@ -1,33 +1,53 @@
-# B-RR-FLOOR-HEADROOM — SCOPE (Step 1, r1)
+# B-RR-FLOOR-HEADROOM — SCOPE (Step 1, r2)
 
-change-class: non_architecture
+change-class: architecture
 
 **Issue:** `#1183` · **Plan row:** `SPRINT_TO_LIVE_PLAN` 59a (row 59 increment 2, pre-sprint P1a) · **Owner:** CC-B (NEW Claude)
-*Read at `origin/migration/aws-supabase` after `191ab383c`; staging read 2026-10-17 ~08:20Z UTC.*
+*Read at `origin/migration/aws-supabase` after `e51bbe2c4`; staging read 2026-10-17 ~09:30Z UTC. r2 folds Langston's r1 CHANGES (F1-F7 + the class) — 2026-10-17 09:09Z.*
 
-## 0. What `#1183` measured, and why it has to be re-measured before anything changes
-At `B-ENTRY-DISTANCE-GUARD` Step 2 (staging 2026-10-10, windows W1/W2), the reward-to-risk measured **at the fill** would have refused **7 of 24 crypto** and **31 of 104 xStock** taker opens against the live `expectancy_gates.min_rr` floors, because constant-RR cells are floored 0.05 below their own RR (≈ 0.017 R headroom) against a p90 adverse slip of ≈ 0.57 R. So that batch shipped the fill-time check in **SHADOW** (`[ENTRY_GEOMETRY][SHADOW]`, `entry-booking.ts` `entryFillShadow()`).
-**Two things changed after that measurement:**
-- **Crypto entries are maker-only since 2026-10-15** (`B-CLASS-LEG-FILL-MODE`, `30af855f2`): a maker fills at its limit, so the adverse slip that drove the crypto breaches no longer exists on that path.
-- **The RTB refresh retires a signal whose live entry has left its levels** (`B-RTB-REFRESH-LIVE-PRICE`, row 59e, 2026-10-12) — stale entries no longer reach the fill.
-**First read since (retained logs, 2026-10-16 03:50Z → 2026-10-17 07:51Z — a population, not a decision):** 29 `[ENTRY_GEOMETRY][SHADOW]` lines, **all xStock, 0 crypto** (no crypto taker opens), **0 of 25 graded `would_refuse=true`** (4 read `n/a`). ⇒ the premise of `#1183` may have dissolved; Step 2 must re-measure on the full post-cutover population before any floor moves.
+## PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED: 0 of 25 graded would refuse. NOW: 1 of 30 (3.33 %). REASON:** r1 read `out.log`, whose retention ended before the window began; the durable archive holds the breach (ORCL/USD `vwap_bounce`, 2026-10-15 20:11:55.551Z, `rrFill` 0.5111 vs floor 1.95, `adverseR` +0.9853). Langston's 1 of 28 was over r1's stated start; the 30 is over the corrected start below.
+- **PREVIOUSLY STATED: window starts 2026-10-15 19:15Z. NOW: 16:29:07Z. REASON:** 19:15 was `30af855f2`'s commit time in +02:00, read as UTC — and that commit is a VTS-provenance fix, not the active-path change. The boundary is the `entry_fill_policy` write (both rows `updated_at` 16:29:07Z, `b-class-leg-fill-mode`), one tick after the deploy that introduced the stamp (`097306d1a`, staging reflog 16:28:54Z). Shown, not asserted: xStock `closed_trades` opened 10-15 13:06→16:08Z carry a null policy (18 rows); every one from 17:19:26Z carries `maker_preferred` (54 rows); there are no opens in between.
+- **PREVIOUSLY STATED: floors = 15 `reorg-b2-3` + 2 `b-reach-baseline-adjust`; xStock `vwap_pullback` 1.95. NOW: 14 + 3; 1.96. REASON:** miscount — r1's own prose names the three.
+- **PREVIOUSLY STATED: crypto is closed because "a maker fills at its limit". NOW: crypto is closed by POLICY (`maker_only`). REASON:** under `maker_preferred` a marketable maker opens as a taker (`active-execution-engine.ts:5944`, `MARKETABLE_TAKER_FALLBACK`); `maker_only` drops it instead (`:5948`).
+- **PREVIOUSLY STATED: change-class `non_architecture`. NOW: `architecture`. REASON:** objective 3 can turn on a live refusal on the active path.
 
-## 1. Provenance (TIER 1 — the behaviour this batch could change)
-- **The floors** (`module_constants` `expectancy_gates` / `min_rr`, read 2026-10-17): 15 rows `reorg-b2-3` 2026-06-27 + 2 rows `b-reach-baseline-adjust` 2026-09-20. **reorg-B2.3** (`#380`, 2026-06-24/27): *"calibrate from realized outcomes on the full population"* — per-strategy floors fitted at signal generation; **B-REACH-BASELINE-ADJUST** (row `3n.v`, CC-B, 2026-09-20) seeded `vwap_bounce`/`vwap_pullback` crypto and `strong_bull_trend` xStock at 1.95 — just under the strategies' own constant RR (2.0), **so those cells pass at GENERATION.** ⇒ **the floors were designed as generation gates.** Using them unchanged as a FILL gate is the mismatch `#1183` measured — not a mis-set floor.
-- **The fill-time check** (`B-ENTRY-DISTANCE-GUARD` OBJ-2, 2026-10-11): pre-registered to go LIVE only if rule (a) headroom ≥ class p90 slip and rule (b) would-refuse ≤ 5 %; both failed then ⇒ SHADOW.
-- Ledger searched: `#1183`, `#372` (Phase-25 per-strategy minRR calibration, *"the reorg-B2 `min_rr=2.5` seed SUPPRESSES most of the strategy suite"*), `#380`, the `B-ENTRY-DISTANCE-GUARD` report.
+## 0. What `#1183` measured, and the population since
+At `B-ENTRY-DISTANCE-GUARD` Step 2 (2026-10-10), RR measured **at the fill** would have refused **7 of 24 crypto** and **31 of 104 xStock** taker opens against the live `min_rr` floors, so the fill-time check shipped in **SHADOW**. Constant-RR cells sit 0.04-0.05 below their own RR.
+**Population since the cutover — DESCRIPTIVE, not the decision** (`signal_eval_archive`, `source='active-execution-engine'`, `mode='paper_sim'`, 2026-10-15 16:29:07Z → last row 2026-10-16 20:57:22Z, xStock only):
+| stage | arm | rows | graded (`rrFill` non-null) | would refuse |
+|---|---|---|---|---|
+| `admitted` | taker | 30 | 30 | **1** (ORCL, above) |
+| `admitted` | maker | 24 | — (no shadow on a maker, by design) | — |
+| `entry_fill` | taker | 4 | 0 — ungradeable: ask at/through stop, `risk = fill − stop ≤ 0` ⇒ `rrFill` null; **already refused live** by OBJ-1 | — |
+Reconciliation: 30 + 24 = 54 admitted = the 54 xStock `closed_trades` carrying `maker_preferred`. **Crypto: 0 taker opens since the cutover** (last crypto taker open 2026-10-15 08:49:20Z).
+Per cell (strategy × floor, graded takers): `vwap_pullback` 1.96 n=17 · `pivot_shift` 2.16 n=5 · `morning_star` 1.00 n=3 · `range_trading` 2.00 n=3 · `sma_trend_ride` 1.95 n=1 · `vwap_bounce` 1.95 n=1. **Positive (adverse) slips: 1 of 30** — 29 fills were at or better than intended; signed p90 `adverseR` = −0.106 R.
+⚠️ **Both of us have now seen this population, so it cannot be the read of record.** The decision read is forward (objective 3).
 
-## 2. The decision this batch carries (options; recommendation after the Step-2 read)
+## 1. Provenance (TIER 1) and the five dispositions
+- **The floors** (`expectancy_gates.min_rr`, 17 rows): 14 `reorg-b2-3` 2026-06-27 (`#380`, *"calibrate from realized outcomes on the full population"*) + 3 `b-reach-baseline-adjust` 2026-09-20 (row `3n.v`: crypto `vwap_bounce`, crypto `vwap_pullback`, xStock `strong_bull_trend`, seeded just under their own constant RR so they pass **at generation**). **Built as generation gates; using them unchanged as a fill gate is the mismatch `#1183` measured.** → **Disposition 1 (still relevant and correct) — as generation gates. Not changed here; recalibration is `#372` (Phase 25).**
+- **The fill-time check** (`B-ENTRY-DISTANCE-GUARD` OBJ-2, 2026-10-11, `entry-booking.ts` / the shadow block at `active-execution-engine.ts:6049-6050`): pre-registered to go live only if rule (a) and rule (b) passed; both failed ⇒ shadow. → **Disposition 2 (relevant, needs updating to today's intent): the promotion read is re-run on the post-cutover system.**
+- **`_consumptionArm`** (`active-execution-engine.ts:6072`, `'maker_to_taker' | 'direct_taker'`): computed at the open, written only to log lines (`:6079`, `:6093`), so the archive cannot split the xStock taker population into its two halves. → **Disposition 3 (disconnected, should be RECONNECTED) — §9.4 disposition 1, folded into this batch (Langston F4).**
+- **`maker_taker.entry_fill_policy`** (crypto `maker_only`, xStock `maker_preferred`, `B-CLASS-LEG-FILL-MODE`): read, not changed. → Disposition 1.
+- Ledger searched: `#1183`, `#372`, `#380`, the `B-ENTRY-DISTANCE-GUARD` and `B-CLASS-LEG-FILL-MODE` reports.
+
+## 2. The decision this batch carries
 | | what | consequence |
 |---|---|---|
-| **(a) re-run the pre-registered promotion read on the post-cutover population; if it passes, the fill-time check goes LIVE at today's floors** | no floor moves; the same rule (a)/(b) bar that kept it in shadow decides | a taker fill whose RR fell below its floor is refused live — protects against a bad fill; if it fails again, stays shadow with the new numbers |
-| (b) keep generation floors; give the fill check its own tolerance (floor − a slip allowance) | a second number per cell | two floors to calibrate; risks the `#641` two-copies shape |
-| (c) lower the generation floors for margin | the original `#1183` framing | loosens selection at generation for every signal to fix a fill-time question — **not recommended** (Kyle's mission: risk limits bound growth, never loosened to make room) |
-**Recommendation: (a).** It answers the question the batch exists for with the rule already pre-registered, moves no floor, and either turns the protection on or records why not with current numbers. Floor recalibration stays where `#372` puts it (Phase 25).
+| **(a) re-run the promotion read, corrected, on a forward post-cutover window; if a class passes, the fill-time check goes LIVE for it at today's floors** | no floor moves | a taker fill whose RR fell below its floor is refused live; otherwise shadow stays with current numbers |
+| (b) a separate fill tolerance per cell | a second number per cell | two floors to calibrate — the `#641` two-copies shape |
+| (c) lower generation floors for margin | the original `#1183` framing | loosens selection for every signal to fix a fill question — **not recommended** (risk limits bound growth, never loosened to make room) |
+**Recommendation: (a).** ⚠️ **Expected outcome, stated now:** at the observed rate (1 adverse slip in 30), rule (a)'s minimum adverse population is unlikely to accrue inside the cap, so the likely result is **INSUFFICIENT → shadow stays → re-home to `#372`**. The batch still earns its place: it records the read honestly and reconnects the arm field the next read needs.
 
 ## 3. Objectives
-1. **Step 2 read (pre-registered here, before the data):** population = taker opens with an `[ENTRY_GEOMETRY][SHADOW]` line, **from 2026-10-15 19:15Z (maker-only cutover) to the read**, per class; plus `closed_trades` (paper, filled) for the same window as a second instrument (RR at fill from `actual_entry_price`, `original_stop_price`, `take_profit` vs the live floor per cell). **Rule (a):** per constant-RR cell with ≥ 5 opens, headroom ≥ that class's p90 adverse slip in the window. **Rule (b):** would-refuse ≤ 5 % per class with ≥ 20 opens; a class under 20 opens is INSUFFICIENT and stays shadow. Both must pass for that class to go live.
-2. **If a class passes:** the fill check goes live for that class (refuse the taker open; logged with the same line, `would_refuse` → `refused`); test that a sub-floor fill is refused and an at-floor fill opens.
-3. **If a class fails or is insufficient:** shadow stays; the numbers are recorded on `#1183` and the item re-homes to `#372` (Phase 25).
-4. Record: System Manual §19 (the fill-time check's state per class), `#1183` closed with the outcome.
-**Out of scope:** changing any `min_rr` value (Phase 25, `#372`); maker entries (row 59b).
+1. **Reconnect the arm (Step 3).** Stamp `consumptionArm` (`direct_taker` | `maker_to_taker`) on the archive row of every taker open — `admitted` and `entry_fill` — from the value already computed at `:6072`. **Test:** a direct taker and a marketable-maker fallback each produce an archive row carrying their own arm; a maker fill carries none.
+2. **The read of record — PRE-REGISTERED HERE, forward.** Population: `signal_eval_archive`, `source='active-execution-engine'`, `mode='paper_sim'`, `reject_stage='admitted'`, `gate_decision.entryArm='taker'`, `rrFill` non-null, **from the Step-6 deploy of objective 1** until **30 graded taker opens per class or 21 days**, whichever first. **Denominator:** graded admitted takers. `entry_fill` rows are counted and reported beside it, never in it. Every figure is split by `consumptionArm`; the decision is on the pooled class.
+   - **Rule (b):** would-refuse ≤ 5 % per class with ≥ 20 graded opens; under 20 ⇒ **INSUFFICIENT**.
+   - **Rule (a):** a cell (strategy × floor) qualifies with ≥ 5 graded opens **and** ≥ 5 positive-`adverseR` fills. In a qualifying cell, the p90 of **positive** `adverseR` must not exceed the slip the cell can absorb, `s* = (RR − floor) / (1 + floor)` (a fill `s` R above intended gives `rrFill = (RR − s)/(1 + s)`). ⚠️ *New in r2, my derivation: r1 compared headroom in RR units with slip in R; s\* is the exact bound (vwap_pullback: 0.04/2.96 = 0.0135 R).* **INSUFFICIENT** if no cell qualifies, or the class's positive-adverse population is under 5, or qualifying cells cover under 50 % of the class's graded opens — **never PASS by absence.** Coverage stated per cell.
+   - **Both rules PASS ⇒ that class goes live.** Crypto: **INSUFFICIENT by policy** while `maker_only` holds.
+3. **If a class passes:** the fill check refuses that class's taker open live (`would_refuse` → `refused`, same line and archive row). **Test:** a sub-floor fill is refused; an at-floor fill opens.
+4. **If a class fails or is INSUFFICIENT:** shadow stays; the numbers go on `#1183` and the item re-homes to `#372` (Phase 25).
+5. **Forward-binding rider (Langston F4):** if crypto moves to `maker_preferred` (row 59b), the crypto taker path returns **with the shadow unpromoted**, and crypto's own read starts at that change. Written into System Manual §19, `#1183`, and row 59b's plan line.
+
+**Docset (architecture):** scope, pre-audit, completion report, `BATCH_CATALOG`, `PHASE_HISTORY`, **System Manual §19** (the fill check's state per class + the rider), **System Impact Map** (the fill-time checks entry at `SYSTEM_IMPACT_MAP.md:712` — the archive row gains `consumptionArm`).
+**Out of scope:** any `min_rr` value (`#372`); maker entries (row 59b).
