@@ -24,6 +24,16 @@ Check in this order:
 
 ---
 
+## Restarting Langston's bridge, and the gates for editing it (B-LANGSTON-RELIEF, 2026-10-17)
+
+- ⛔ **RESTART ONLY WITH `ssh root@204.168.141.77 '/usr/local/sbin/langston-bridge-restart'`** — never a bare `systemctl restart discord-langston-bridge.service`. The bridge holds its queue in memory; a restart without a recovery floor drops every waiting message (measured 2026-10-17 04:35Z: nine dropped, repaired by hand). The helper writes the floor first, waits for a posted reply, and reads the bridge's own recovery line. Exit codes and options: the helper's own header, and the System Impact Map's Discord Comms Fabric entry. `--dry-run` prints the plan and changes nothing (it is not proof the installed bridges group is at branch head).
+- **A deploy of the bridges group** (`deploy.sh --sha <sha> --only bridges`) installs the files and does not restart a running bridge — it prints `NOT RESTARTED` per unit. Restart with the helper afterwards.
+- ⛔ **THE HAND-RUN GATE for any edit to `run_agent`, `stop_cleanly` or `save_state` in `discord-langston-bridge.py`:** on Helsinki, from a root-only dir holding the bridge and its modules at the ref under review, `/opt/discord-bridges/venv/bin/python3 test_bridge_clean_stop.py` — expected `0 FAIL`, exit 0. It cannot join CI (the bridge loads tokens and shared config at import), so the review dispatch and the completion report that cite it state the HOST and the REF. **Run any mutation of it under `setsid`**: a mutation that drops `start_new_session=True` makes `killpg` resolve to the runner's own group and kills your shell.
+- **For any edit to `langston-bridge-restart`:** `python3 test_langston_bridge_restart.py` from `comms-infra/discord/` (offline; drives the follower against real processes). Then install, and confirm the installed copy is the reviewed one by hash.
+- **Recovery probe** (`langston_bridge_recovery_probe.py`): writes only to a scratch dir and checks that it did not touch the live bridge log.
+
+---
+
 ## COMMS DEPTH RELOCATED FROM `CLAUDE.md` §6 — 2026-08-23 (B-RULES-1c)
 
 > **#564 PLACEMENT RULE:** `CLAUDE.md` keeps the OPERATIVE statement — what to do, what not to do, the decision — and every one of those statements now points HERE by anchor name. **What moved is diagnostic depth, measured evidence and dated change history**, which is what this runbook is for. `CLAUDE.md` §6 is read on every start and every compaction by every session; this file is read when something is broken.

@@ -55,6 +55,7 @@ The order, as implemented (the lock is held from step 2 to the end):
 **Archive:**
 - `/home/langston/.memory-archive/<old sha>.md`, `O_EXCL` at `0600`. If that name already exists, its content must hash to the name, or the call stops (archive corrupt).
 - Plus `index.jsonl`, append-only: `ts, target, old_sha, new_sha, old_bytes, new_bytes, mode, declared_entry_delta, by_claimed, via_uid, reason, archived, archive_created, outcome` (and `restored_byte_identical` on a restore).
+  - ⚠️ **Later row shapes (B-LANGSTON-RELIEF, 2026-10-17), not in this list:** `mode: trim-noop` rows and `outcome: refused-growth` rows, and a `ratchet` field on every gated row. Both new rows are outside the sha chain. Current field lists: the writer's own docstring, and the System Impact Map's `langston-memory-write` entry.
 
 ## MODIFIED — `comms-infra/langston-memory/bin/langston-selfmemory-backup`: the archive is a second source
 - **Sources:** `SOURCES = [STORE, ARCHIVE]`, tarred with `arcname=basename(src)`. Member names become `memory/…` and `.memory-archive/…`.
