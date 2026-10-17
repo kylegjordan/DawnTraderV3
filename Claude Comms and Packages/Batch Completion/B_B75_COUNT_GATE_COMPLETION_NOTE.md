@@ -40,8 +40,11 @@ Earlier: Three were moot under r2 (the hold-back no longer happens). F2 (the swe
 - F2 and F4.
 
 ## Governance ledger (class `hotfix`)
-| tier | document | verdict | one line |
-|---|---|---|---|
-| T1 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-16-A |
-| T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | CC-A: the hotfix moved to closed with Langston's 02:37Z confirm |
-| T1 | COMPLETION_REPORT | ✅ | this note |
+Required vs judged, per `scripts/governance-checker/config.mjs` (`CLASS_DOCSET.hotfix` and `LEDGER_ROWS`):
+
+| tier | document | status for `hotfix` | verdict | one line |
+|---|---|---|---|---|
+| T1 | CHANGES_AND_FIXES.md | **required** (`CLASS_DOCSET.hotfix.required`) | ✅ | FIX-2026-10-16-A |
+| T1 | the four session task lists | **required** (`LEDGER_ROWS.task_lists`, every class) | ✅ mine / N/A — not mine ×3 | CC-A: the hotfix moved to closed with Langston's 02:37Z confirm |
+| T1 | COMPLETION_REPORT | judged (conditional) — applicable | ✅ | this note |
+| T2 | DELETED_COMPONENTS_LOG.md | judged (conditional) — N/A | N/A | nothing removed |
