@@ -497,6 +497,12 @@ class FeedIntegrityMonitorService {
 
     // Freshness, per class on its own thresholds (the liveness grade) — never a fixed seconds bar across classes.
     for (const c of this.lastLiveness?.classes ?? []) {
+      // A class present and not suppressed but with no DB threshold is NOT GRADED — the grader returns `healthy` for it, and it
+      // must never read like a graded healthy here either (Langston Step-4 condition 1; #546, C3).
+      if (!c.suppressed && !c.thresholdPresent) {
+        issues.push(`Warning: ${c.assetClass} freshness NOT GRADED (no feed_health threshold for the class)`);
+        continue;
+      }
       if (c.suppressed || c.grade === 'healthy') continue;
       const age = c.freshestAgeMs === null ? 'no tick yet' : `${Math.round(c.freshestAgeMs / 1000)}s old`;
       issues.push(`${c.grade === 'critical' ? 'Critical' : 'Warning'}: ${c.assetClass} freshest tick ${age}`);
@@ -594,7 +600,9 @@ class FeedIntegrityMonitorService {
   }
 
   /**
-   * Reset health counters (for testing)
+   * Reset the ring, the alert state and the last liveness reading. Production caller: the feed-health cleanup route
+   * (`routes.ts`, POST cleanup) as well as tests. `lastReconnectsCompleted` is deliberately NOT cleared: re-baselining it
+   * would silently discard reconnects that happened before the reset.
    */
   public reset(): void {
     this.healthHistory = [];

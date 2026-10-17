@@ -29,10 +29,15 @@
 - **Pinned:** `b-feed-health-grade-arm.test.ts` — the restart case (recorded `healthy`, rows waiting ⇒ acknowledged on cycle 1), drained cycle prints nothing, non-healthy never acknowledges; DST cases in EDT and EST and the Fri/Sun 20:00 ET weekend edges.
 
 ## ⚠️ DEVIATION found in implementation — please rule
-With xStock now in the liveness grade, the letter grade's fixed tick-age rungs (2 / 5 / 10 / 20 s) and the fixed "Data age" issue lines would grade xStock off crypto's clock: a healthy 15 s xStock quote read B/C and printed "Critical: Data age". **Changed:** the freshness term is the per-class liveness grade on each class's own DB thresholds — a class at warning caps the grade at C, at critical it is F; the issue line names the class (`Warning: crypto_spot freshest tick 7s old`). The `*_TICK_AGE_SEC` env thresholds are deleted. Pinned by two tests (xStock 15 s ⇒ A, no issue; crypto 7 s ⇒ warning, C, named). `stalenessSec` / `tickAgeSec` stay as telemetry (worst age across classes).
+With xStock now in the liveness grade, the letter grade's fixed tick-age rungs (2 / 5 / 10 / 20 s) and the fixed "Data age" issue lines would grade xStock off crypto's clock: a healthy 15 s xStock quote graded **D** (rungs A<2 · B<5 · C<10 · D<20 s; corrected per Langston — r1 said B/C) and printed `Critical: Data age 15s (threshold: 10s)` continuously. **Changed:** the freshness term is the per-class liveness grade on each class's own DB thresholds — a class at warning caps the grade at C, at critical it is F; the issue line names the class (`Warning: crypto_spot freshest tick 7s old`). The `*_TICK_AGE_SEC` env thresholds are deleted. Pinned by two tests (xStock 15 s ⇒ A, no issue; crypto 7 s ⇒ warning, C, named). `stalenessSec` / `tickAgeSec` stay as telemetry (worst age across classes).
 
 ## Consumers whose behaviour moves
 - **The P19-B6.9 parity gate** (`parity-gate.ts:95`) reads `getRollingWindowReadiness().uptimePercent` — it now sees real reconnects, so the Phase-21 go-live readiness becomes accurate, which can only make it stricter.
 - The `/system/feed-health` route returns the new fields; the dashboard tile is updated.
 
 **Verification:** tsc baseline 335 = 335; 70 tests across the three suites pass. Four unrelated suites (`b-staging-liveness-watch`, `b-tsc-baseline-fix`, `b63-item12`, `b63-item16`) fail locally on the unchanged code as well — CI is the authority.
+
+## Step-4 ruling (Langston, 2026-10-17 ~12:40Z): PROCEED at `bafba0029`, deviation RULED required by F-2
+- Condition 1 (in-commit): a present, non-suppressed class with no DB threshold prints `NOT GRADED` in the issue list — done, with a test.
+- Condition 2 (Step 10): System Manual `sections/PHASE7_SYSTEM_LIFECYCLE_AND_INFRASTRUCTURE.md:533-535` and `SYSTEM_MANUAL.md:7824` still document the deleted contract — swept at Step 10.
+- Record: `reset()` docstring corrected (it has a production caller); a weekend restart reads `recorder_warming` for the whole closure (uncovered, no alarm consequence, precedence kept per r4).

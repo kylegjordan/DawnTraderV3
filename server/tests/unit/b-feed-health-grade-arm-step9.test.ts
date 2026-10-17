@@ -167,6 +167,20 @@ describe('freshness is graded per class on its own thresholds (found in implemen
   });
 });
 
+describe('a class with no DB threshold reads NOT GRADED, never healthy (Langston Step-4 condition 1)', () => {
+  it('an issue line names the ungraded class', () => {
+    delete CFG['xstock_spot:warning_age_ms'];
+    try {
+      st.recorder = [{ symbol: 'AAPL/USD', ageMs: 500_000 }];
+      for (let i = 0; i < 12; i++) cycle(0);
+      const r = mon.generateReport();
+      expect(r.issues).toContain('Warning: xstock_spot freshness NOT GRADED (no feed_health threshold for the class)');
+    } finally {
+      CFG['xstock_spot:warning_age_ms'] = 60_000;
+    }
+  });
+});
+
 describe('F-2: the xStock leg from the recorder', () => {
   it('a cold recorder reads recorder_warming, never market_closed', () => {
     st.recorderWarm = false;
