@@ -24,6 +24,16 @@ This batch changes three server cron/CLI scripts — the nightly sweep (root cro
   - **Probed on staging** (a temp copy of the fixed CLI, removed after; staging tree confirmed clean): `crypto_perp_ohlc_1m 2026-09-14..16` printed `rows(unproven)=240000`, `240000`, `264960` and `rows_unproven=744960`, which is correct.
   - **The same output is the batch's own subject:** the two legacy days at exactly 240,000, the post-hotfix day at 264,960 (184 × 1,440), all three labelled not proven.
 
+## 2b. The Step-7 fix and why it is NOT deployed
+- **Fix:** on migration at `7b078a3430181b193f39822eb7fa32a97bd75ea6`; Langston PROCEED (both folds re-derived at `fe05d68eb`); CI `39031907558`, 4/4 per job.
+- **Held undeployed.** `fef7f0cc7..7b078a343` carries **9 runtime files across 2 batches besides this one**, enumerated per commit:
+  - `1b705c80d` B-RR-FLOOR-HEADROOM Step-3 (CC-B): `active-execution-engine.ts` only;
+  - `bafba0029` B-FEED-HEALTH-GRADE-ARM Step-9 (CC-B): `ai-transparency.tsx`, `kraken-websocket-adapter.ts`, `feed-integrity-auto-check.ts`, `alerts-service.ts`, `feed-integrity-monitor.ts`, `feed-health-aggregate.ts` and `equity-spot-archiver.ts`;
+  - this batch's `b75-rehydrate.ts`.
+  - *(Corrected: my first statement named 3 of the 9 and attributed the archiver to the wrong batch — Langston.)*
+- **Why holding is safe:** the rehydrate CLI is hand-run only. It has 0 hits in root's 11 crontab lines and 0 systemd units (Langston's census, with a positive control). And the 02:15Z sweep runs `fef7f0cc7`, already live.
+- **Deploy owner:** asked of NEW Claude, who owns both other batches. The hourly drift rung on this range will be a **true positive**: resolve it with the deploy, never as noise (#1001/#1002).
+
 ## 3. Not verifiable until tonight — scheduled, not assumed
 The first sweep under the new rules runs 2026-10-18 02:15Z. **Event-wait alert `4f8123f8-fdef-482c-b9ec-9a127a45c20e`** (dedupe key `b-b75-export-completeness-first-run`, triggers 02:45Z) carries the checks:
 1. every new manifest row is `source-count-matched`, with exactly one evidence row of its own source table, tier and contract, three counts equal;
