@@ -83,7 +83,13 @@ SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with t
 #    than MIN_PRIVATE_KEYS private key lines left -> INSTRUMENT (the scan cannot tell a copy from noise); the excluded
 #    count rising by >= SHARED_LINES since the last run -> INSTRUMENT (memory text may have entered the repo, which
 #    this exemption would otherwise hide by construction, or the memory took in repo text - confirm before trusting).
+#    THE STEP SIZE (Langston, approving 913305ec6): a one-run rise of S hides every candidate that shared up to
+#    SHARED_LINES + S - 1 lines, so S = SHARED_LINES means one run's step may at most DOUBLE the detection floor -
+#    chosen, not derived from SHARED_LINES. A last-run delta cannot bound a cumulative quantity (+9/run for ten runs
+#    reaches 108 and never trips it), so a LEVEL term rides beside it: excluded >= live key lines / 3 -> INSTRUMENT.
+#    The floor is a FENCE, not a live gate: 189 private vs 30 on 2026-10-17, exercised only by the fixture.
 MIN_PRIVATE_KEYS = 3 * SHARED_LINES
+PUBLIC_LEVEL_DIVISOR = 3
 PUBLIC_MIRROR = "/srv/dawntrader-backup.git"
 PUBLIC_REF = "migration/aws-supabase"
 MIN_LINE = 40
@@ -346,12 +352,19 @@ def previous_excluded(runlog):
     return None
 
 
-def exclusion_bound(private_keys, public_record, prev_excluded):
+def exclusion_bound(private_keys, public_record, prev_excluded, live_key_lines):
     """A reason the exclusion makes this scan unreliable, or ''."""
-    if private_keys < MIN_PRIVATE_KEYS:
-        return ("only %d private key line(s) remain after the public exclusion (floor %d), so the scan cannot tell a "
-                "copy from noise" % (private_keys, MIN_PRIVATE_KEYS))
     ex = public_record.get("excluded")
+    ex_n = ex if isinstance(ex, int) else 0
+    if private_keys < MIN_PRIVATE_KEYS:
+        # name BOTH numbers: the private count falls when MEMORY.md shrinks (a trim, a split) as well as when the
+        # exclusion grows (Langston correction 1: 739 -> 207 on 10-16 was the OBJ-3 split, not the exemption)
+        return ("only %d of %d live key line(s) remain private after excluding %d as public (floor %d), so the scan "
+                "cannot tell a copy from noise" % (private_keys, live_key_lines, ex_n, MIN_PRIVATE_KEYS))
+    if isinstance(ex, int) and live_key_lines and ex * PUBLIC_LEVEL_DIVISOR >= live_key_lines:
+        return ("%d of %d live key line(s) are excluded as public (at least 1/%d) - memory text may have been "
+                "accumulating in the repo, which the exemption would hide; confirm before trusting a PASS"
+                % (ex, live_key_lines, PUBLIC_LEVEL_DIVISOR))
     if isinstance(ex, int) and prev_excluded is not None and ex - prev_excluded >= SHARED_LINES:
         return ("the public exclusion rose from %d to %d line(s) since the last run - memory text may have entered the "
                 "repo (which the exemption would hide) or the memory took in repo text; confirm before trusting a PASS"
@@ -446,7 +459,8 @@ def evaluate(cfg):
     exposures = [f for f in findings if f["kind"] != "target-not-found" and not is_drift(f)]
     missing = [f for f in findings if f["kind"] == "target-not-found"]
     drift = [f for f in findings if is_drift(f)]
-    bound = exclusion_bound(keys, pop.get("public_lines", {}), previous_excluded(cfg.get("runlog") or RUNLOG))
+    bound = exclusion_bound(keys, pop.get("public_lines", {}), previous_excluded(cfg.get("runlog") or RUNLOG),
+                            pop.get("live_key_lines", keys))
     if exposures:
         verdict, reason = "EXPOSED", ""
     elif missing:
@@ -466,7 +480,11 @@ def evaluate(cfg):
                      #    (a JSON prompt body, a transcript) cannot match. The zero means exactly this:
                      "claim": "no LINE-PRESERVING copy of the live MEMORY.md readable by the reader; "
                               "escaped copies (JSON bodies, transcripts) are outside this instrument's reach; "
-                              "lines also in the review branch are public and not counted (population.public_lines)"}}
+                              "lines also in the review branch are public and not counted (population.public_lines)",
+                     # Langston correction 2: the band this cannot see, as numbers - a file is flagged only when it
+                     # shares >= SHARED_LINES PRIVATE lines, however many public lines it also shares
+                     "not_flagged_below": {"private_shared_lines": SHARED_LINES,
+                                           "public_lines_also_ignored": pop.get("public_lines", {}).get("excluded", 0)}}}
 
 
 def _alerts(argv):
@@ -760,11 +778,21 @@ def self_test():
         check("BOUND: fewer than MIN_PRIVATE_KEYS private lines -> INSTRUMENT (exposure outranks it)",
               (rp["verdict"], evaluate(dict(pubcfg, scan_roots=[mkdir("scan-empty", 0o755)]))["verdict"]),
               ("EXPOSED", "INSTRUMENT"))
-        check("  exclusion_bound: 40 private keys, steady exclusion -> no reason",
-              exclusion_bound(40, {"excluded": 18}, 18), "")
+        check("  exclusion_bound: 189 private of 207, steady exclusion of 18 -> no reason (today's numbers)",
+              exclusion_bound(189, {"excluded": 18}, 18, 207), "")
         check("  exclusion_bound: excluded jumps 18 -> 30 -> a reason naming both counts",
-              "from 18 to 30" in exclusion_bound(40, {"excluded": 30}, 18), True)
-        check("  exclusion_bound: no previous run -> no jump reason", exclusion_bound(40, {"excluded": 30}, None), "")
+              "from 18 to 30" in exclusion_bound(177, {"excluded": 30}, 18, 207), True)
+        check("  exclusion_bound: no previous run -> no jump reason", exclusion_bound(177, {"excluded": 30}, None, 207), "")
+        crept = [exclusion_bound(207 - (18 + 9 * d), {"excluded": 18 + 9 * d}, 18 + 9 * (d - 1), 207) for d in range(1, 11)]
+        check("  LEVEL (correction 3): +9/run never trips the step, but the level term catches the creep by 69 of 207",
+              (all("since the last run" not in r for r in crept), any("1/3" in r for r in crept),
+               next((i + 1 for i, r in enumerate(crept) if "1/3" in r), None)), (True, True, 6))   # absent -> FAIL, not crash
+        check("  ...and today's 18 of 207 is below the level, clean", "1/3" in exclusion_bound(189, {"excluded": 18}, 18, 207), False)
+        fl = exclusion_bound(20, {"excluded": 5}, 5, 25)
+        check("  FLOOR (correction 1): the reason names private, live and excluded counts",
+              ("only 20 of 25 live key line(s) remain private after excluding 5" in fl), True)
+        check("  CORRECTION 2: the scan publishes the band it cannot see",
+              rp["scan"]["not_flagged_below"], {"private_shared_lines": SHARED_LINES, "public_lines_also_ignored": 15})
         rlj = os.path.join(top, "prev-run.jsonl")
         with open(rlj, "w", encoding="utf-8") as fh:
             fh.write(json.dumps({"scan": {"population": {"public_lines": {"excluded": 7}}}}) + NL + "garbage" + NL)
