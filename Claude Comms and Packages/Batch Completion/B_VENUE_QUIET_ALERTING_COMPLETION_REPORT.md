@@ -5,7 +5,7 @@
 ## 0. ⚠️ OPEN AT CLOSE — stated first
 | item | owner | home / timer | closes when | fails when |
 |---|---|---|---|---|
-| **Step-10 F1 code** (`b1d2b2572`: the session hand-back finds the row's own `positionId`, not a class match) is committed and CI-green (run `39002571444`) but **NOT DEPLOYED** — unreachable while active xStock is long-only (`unique_symbol_side`) | CC-B | rides the next staging deploy (row 59f's, once its Step 4 passes); Langston reviews F1 with this report | the deployed sha contains `b1d2b2572` | a deploy without it is claimed to carry it |
+| **Step-10 F1 code** (`b1d2b2572`: the session hand-back finds the row's own `positionId`, not a class match) is committed and CI-green (run `39002571444`) but **NOT DEPLOYED** — **a live no-op in BOTH directions today**: the harm it fixes needs two concurrent same-symbol xStock positions (`unique_symbol_side` + long-only), and the gap it opens needs a same-symbol re-entry inside one 60 s sweep (0 of 305 all-history, tightest 6 min 38.8 s — Langston); that is why it is safe riding the next deploy | CC-B | rides the next staging deploy (row 59f's, once its Step 4 passes); Langston reviews F1 with this report | the deployed sha contains `b1d2b2572` | a deploy without it is claimed to carry it |
 | **The first GENUINE `firstJoin`** — pre-registered in §3d (Langston, does not gate) | CC-B | alert `5b71b7ab-5974-4d95-a0cb-5eaa5395c831`, triggers 2026-10-18T02:00Z (after the Sunday reopen) | a post-deploy joiner reads unmarked with `atMs === listedAtMs`, existing members' `firstJoin.atMs` unmoved | any of the three FAIL shapes in §3d |
 | **Criterion (4) — no duration page has ever fired** | CC-B | stays UNPROVEN, not absent (§4; a measured 0 with the parse reaching metadata) | a first duration firing is recorded with its session | — |
 | US market holidays read as `regular` | — | `#392` (Kyle parked; Langston §13 disposition 5) | — | — |
@@ -78,7 +78,7 @@ CHANGE-CLASS: architecture
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | board columns and fields unchanged |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | the daily check did not run in this batch |
 
-Plus in-batch, earlier: `ALERT_ACTORS` in `system-alerts.ts`, the release records, the change lists and the r7 design doc (F2 wording, F3 citation at `b1d2b2572`).
+Plus in-batch, earlier: `ALERT_ACTORS` in `system-alerts.ts`, the release records, the change lists and the r7 design doc (F2 wording at `b1d2b2572`; the F3 citation — first wrongly corrected to `:484` at `b1d2b2572`, bounced by Langston — is `:500`, quoted with its text, at the Step-11 r2 commit).
 
 ## 5. New findings in passing, with their homes
 - `#1203` (the checker honours an annotated `pending` confirmer) — found ruling row 52, not this batch; homed at sprint row 1j1, CC-A.

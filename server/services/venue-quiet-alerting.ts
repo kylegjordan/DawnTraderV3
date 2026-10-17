@@ -303,6 +303,12 @@ export async function sweepVenueQuiet(args: {
       // Step-10 F1 (Langston): the row names its own position — prefer it. A class find can pick a DIFFERENT same-symbol
       // position (unreachable while active xStock is long-only, `unique_symbol_side` on (symbol, side)), clear the wrong
       // latch and lose the row's own in-session page. The class find stays only for rows minted without a positionId.
+      // The `assetClass` guard also closes a collision-ticker hole: a crypto row on a symbol an xStock position shares would
+      // otherwise have its latch cleared. The narrowing opens ONE gap, stated with its bound (Langston, measured 2026-10-17):
+      // a row whose own position CLOSED while a same-symbol successor is open and unpriced is no longer handed back, and
+      // price-skip rows have no close-time cleanup, so the successor's page would be swallowed once. Unreachable at the
+      // current cadence: 305 same-symbol paper xStock re-entries all-history, 0 inside this sweep's 60 s interval, tightest
+      // gap 6 min 38.8 s (a 6.6x margin). It is the sweep interval that keeps it dead — re-check this if the interval grows.
       const rowPid = typeof row.metadata?.positionId === 'string' ? (row.metadata.positionId as string) : null;
       const xs = rowPid
         ? positions.find((p) => p.id === rowPid && p.assetClass === 'xstock_spot')
