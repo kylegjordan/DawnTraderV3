@@ -79,6 +79,11 @@ SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with t
 #    line that also appears in the review branch is public and is NOT counted. Measured that day: 18 of 207 key lines
 #    public; a real copy of MEMORY.md kept 140 private shared lines. If the branch cannot be read, NOTHING is
 #    excluded - the check fails toward flagging, and the scan record says so.
+# ⛔ AND THE EXCLUSION IS BOUNDED (Langston, approving 59c6c8b10): it can only remove reach, so it is watched. Fewer
+#    than MIN_PRIVATE_KEYS private key lines left -> INSTRUMENT (the scan cannot tell a copy from noise); the excluded
+#    count rising by >= SHARED_LINES since the last run -> INSTRUMENT (memory text may have entered the repo, which
+#    this exemption would otherwise hide by construction, or the memory took in repo text - confirm before trusting).
+MIN_PRIVATE_KEYS = 3 * SHARED_LINES
 PUBLIC_MIRROR = "/srv/dawntrader-backup.git"
 PUBLIC_REF = "migration/aws-supabase"
 MIN_LINE = 40
@@ -226,12 +231,13 @@ def copies_in(roots, live_memory, reader, public_source=None):
     Every skip is COUNTED BY REASON, so a zero is published with its population."""
     with open(live_memory, encoding="utf-8", errors="replace") as fh:
         keys = set(l.strip() for l in fh if len(l.strip()) >= MIN_LINE)
+    live_key_lines = len(keys)
     pub, pub_record = public_lines(keys, public_source)
     keys -= pub
     live_real = os.path.realpath(live_memory)
     pop = {"walked": 0, "text_scanned": 0, "skipped_binary": 0, "skipped_unreadable_by_root": 0,
            "skipped_not_regular": 0, "skipped_symlinked_dir": 0, "matched": 0,
-           "matched_not_readable_by_reader": 0, "public_lines": pub_record}
+           "matched_not_readable_by_reader": 0, "public_lines": pub_record, "live_key_lines": live_key_lines}
     found, seen = [], set()
     for root in roots:
         for dp, dirs, files in os.walk(root):
@@ -322,6 +328,37 @@ def store_findings(store_dir, owner):
     return out
 
 
+def previous_excluded(runlog):
+    """The `excluded` count of the last run that recorded one, or None. Never raises."""
+    try:
+        with open(runlog, encoding="utf-8", errors="replace") as fh:
+            lines = fh.readlines()
+    except OSError:
+        return None
+    for l in reversed(lines):
+        try:
+            r = json.loads(l)
+            v = r["scan"]["population"]["public_lines"]["excluded"]
+        except (ValueError, KeyError, TypeError):
+            continue
+        if isinstance(v, int):
+            return v
+    return None
+
+
+def exclusion_bound(private_keys, public_record, prev_excluded):
+    """A reason the exclusion makes this scan unreliable, or ''."""
+    if private_keys < MIN_PRIVATE_KEYS:
+        return ("only %d private key line(s) remain after the public exclusion (floor %d), so the scan cannot tell a "
+                "copy from noise" % (private_keys, MIN_PRIVATE_KEYS))
+    ex = public_record.get("excluded")
+    if isinstance(ex, int) and prev_excluded is not None and ex - prev_excluded >= SHARED_LINES:
+        return ("the public exclusion rose from %d to %d line(s) since the last run - memory text may have entered the "
+                "repo (which the exemption would hide) or the memory took in repo text; confirm before trusting a PASS"
+                % (prev_excluded, ex))
+    return ""
+
+
 def evaluate(cfg):
     """The whole decision, and nothing else. Returns a verdict and the findings behind it."""
     enumerable, nss_detail = nsswitch_enumerable(cfg.get("nsswitch", NSSWITCH))
@@ -409,16 +446,22 @@ def evaluate(cfg):
     exposures = [f for f in findings if f["kind"] != "target-not-found" and not is_drift(f)]
     missing = [f for f in findings if f["kind"] == "target-not-found"]
     drift = [f for f in findings if is_drift(f)]
+    bound = exclusion_bound(keys, pop.get("public_lines", {}), previous_excluded(cfg.get("runlog") or RUNLOG))
     if exposures:
         verdict, reason = "EXPOSED", ""
     elif missing:
         verdict, reason = "INSTRUMENT", "a target is missing, so its exposure cannot be measured"
+    elif bound:
+        verdict, reason = "INSTRUMENT", bound
     elif drift:
         verdict, reason = "DRIFT", "the fence changed shape, but no account other than the owner or root holds it"
     else:
         verdict, reason = "PASS", ""
     return {"verdict": verdict, "reason": reason, "controls": controls, "findings": findings,
-            "scan": {"roots": cfg["scan_roots"], "live_lines": keys, "population": pop,
+            # private_key_lines: key lines AFTER the public exclusion (named so since 2026-10-17; it was
+            # `live_lines`, which stepped down at that install with nothing saying why); population.live_key_lines
+            # is the count before it
+            "scan": {"roots": cfg["scan_roots"], "private_key_lines": keys, "population": pop,
                      # ⛔ FINDING-3 (#661 leg 1): whole stripped lines are matched, so a copy stored ESCAPED
                      #    (a JSON prompt body, a transcript) cannot match. The zero means exactly this:
                      "claim": "no LINE-PRESERVING copy of the live MEMORY.md readable by the reader; "
@@ -605,7 +648,7 @@ def self_test():
         RUNLOG, STATEFILE = os.path.join(top, "run.jsonl"), os.path.join(top, "state.json")
         live = os.path.join(top, "live-MEMORY.md")
         with open(live, "w", encoding="utf-8") as fh:
-            for i in range(12):
+            for i in range(40):     # >= MIN_PRIVATE_KEYS, so the bound does not mask the fence cases
                 fh.write("fixture ledger line %02d that is comfortably longer than forty chars\n" % i)
         os.chmod(live, 0o600)
         with open(live, encoding="utf-8") as fh:
@@ -711,6 +754,21 @@ def self_test():
         check("  ...an unreadable branch excludes NOTHING (fails toward flagging)", flagged_b,
               ["real-copy.md", "repo-checkout-copy.md"])
         check("  ...and says why in the scan record", "error" in rb["scan"]["population"]["public_lines"], True)
+        check("  ...and names both counts: 25 live key lines, 10 private", (rp["scan"]["population"]["live_key_lines"],
+              rp["scan"]["private_key_lines"]), (25, 10))
+        # BOUND (Langston, approving 59c6c8b10): 10 private keys is under the 30 floor -> INSTRUMENT, never PASS
+        check("BOUND: fewer than MIN_PRIVATE_KEYS private lines -> INSTRUMENT (exposure outranks it)",
+              (rp["verdict"], evaluate(dict(pubcfg, scan_roots=[mkdir("scan-empty", 0o755)]))["verdict"]),
+              ("EXPOSED", "INSTRUMENT"))
+        check("  exclusion_bound: 40 private keys, steady exclusion -> no reason",
+              exclusion_bound(40, {"excluded": 18}, 18), "")
+        check("  exclusion_bound: excluded jumps 18 -> 30 -> a reason naming both counts",
+              "from 18 to 30" in exclusion_bound(40, {"excluded": 30}, 18), True)
+        check("  exclusion_bound: no previous run -> no jump reason", exclusion_bound(40, {"excluded": 30}, None), "")
+        rlj = os.path.join(top, "prev-run.jsonl")
+        with open(rlj, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"scan": {"population": {"public_lines": {"excluded": 7}}}}) + NL + "garbage" + NL)
+        check("  previous_excluded reads the last run that recorded one, skipping junk", previous_excluded(rlj), 7)
 
         broken = dict(closed, control_refused=exposed["read_targets"][0])
         check("a control that cannot fail -> INSTRUMENT, never PASS", evaluate(broken)["verdict"], "INSTRUMENT")
