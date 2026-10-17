@@ -70,6 +70,26 @@ describe('B-RTB-ADMISSION-TIEBREAK-LIVE — a re-issue replaces the queued copy 
     expect('expiresAt' in set).toBe(false);         // R9.3-C residue removed
   });
 
+  it('Step-4 r1 (Langston): an ABSENT nullable field is written as NULL, never dropped — drizzle skips undefined keys', async () => {
+    // A crypto re-issue with no FX5 volume, a missing current price, no target and a cold DI/DBS: under the old SET the
+    // incumbent's values survived because drizzle drops undefined keys from the update set (utils.js filter `!== void 0`).
+    const data: Record<string, unknown> = {
+      mode: 'paper', signalId: 'sig-3', symbol: 'TIA/USD', strategy: 'volatility_edge',
+      entryPrice: '5.00', stopPrice: '4.80', status: 'active', queuedAt: new Date(),
+      confidence: '0.6', riskScore: '0.3', expectedReturn: '0.02', metadata: { netEvAtAdmit: 0.001 },
+      assetClass: 'crypto_spot', chosenEntryMode: 'taker', entryFillPolicy: 'maker_preferred', chosenNetEv: '0.001',
+      targetPrice: undefined, quantity: undefined, notional: undefined, currentPrice: undefined, volume24h: undefined,
+      takerNetEv: undefined, makerNetEvAdjusted: undefined, diAtQueue: undefined, dbsScoreAtQueue: undefined,
+    };
+    await storage.upsertRtbSignal(data as any);
+    const set = captured.set!;
+    for (const k of ['targetPrice', 'quantity', 'notional', 'currentPrice', 'volume24h', 'takerNetEv', 'makerNetEvAdjusted',
+      'diAtQueue', 'dbsScoreAtQueue']) {
+      expect(k in set, k).toBe(true);
+      expect(set[k], k).toBeNull();
+    }
+  });
+
   it('structure, both directions: insert keys ⊆ SET ∪ insert-only, and SET keys ⊆ insert ∪ SET-only', () => {
     const insert = literalKeys(code('server/core/rtb/ready_to_buy_service.ts'), 'const insertData: InsertRtbSignal = {', 6);
     const storageSrc = code('server/storage.ts');

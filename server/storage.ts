@@ -4407,9 +4407,11 @@ export class DatabaseStorage implements IStorage {
         set: {
           entryPrice: data.entryPrice,
           stopPrice: data.stopPrice,
-          targetPrice: data.targetPrice,
-          quantity: data.quantity,
-          notional: data.notional,
+          // Step-4 r1 (Langston): drizzle DROPS an undefined-valued key from the update set, so the incumbent's value
+          // would survive with the key present. Every NULLABLE column is written `?? null` — absent means absent, never kept.
+          targetPrice: data.targetPrice ?? null,
+          quantity: data.quantity ?? null,
+          notional: data.notional ?? null,
           confidence: data.confidence,
           riskScore: data.riskScore,
           expectedReturn: data.expectedReturn,
@@ -4422,7 +4424,7 @@ export class DatabaseStorage implements IStorage {
           // per §15 (no lingering legacy); see DELETED_COMPONENTS_LOG.
           status: data.status,
           queuedAt: new Date(),
-          metadata: data.metadata,
+          metadata: data.metadata ?? null,
           // B-RTB-ADMISSION-TIEBREAK-LIVE (#1190, row 59f): a re-issue REPLACES the queued copy, so the decision that
           // priced the new levels travels with them. These nine were written by the insert builder and missing here, so a
           // re-issued row held the new levels with the FIRST signal's Net Expectancy, maker/taker choice, fill policy and
@@ -4430,20 +4432,20 @@ export class DatabaseStorage implements IStorage {
           // keys the refresh state and the ranker map), blockReason (constant). `finalScore` and `expiresAt` mappings
           // REMOVED: the insert supplies neither (#558 A1; R9.3-C) — the #555 class below, left behind by #558. The
           // structural test (b-rtb-admission-newest-wins.test.ts) holds the two lists equal in both directions.
-          chosenEntryMode: data.chosenEntryMode,
-          entryFillPolicy: data.entryFillPolicy,
-          chosenNetEv: data.chosenNetEv,
-          takerNetEv: data.takerNetEv,
-          makerNetEvAdjusted: data.makerNetEvAdjusted,
-          diAtQueue: data.diAtQueue,
-          dbsScoreAtQueue: data.dbsScoreAtQueue,
-          currentPrice: data.currentPrice,
-          volume24h: data.volume24h,
+          chosenEntryMode: data.chosenEntryMode ?? null,
+          entryFillPolicy: data.entryFillPolicy ?? null,
+          chosenNetEv: data.chosenNetEv ?? null,
+          takerNetEv: data.takerNetEv ?? null,
+          makerNetEvAdjusted: data.makerNetEvAdjusted ?? null,
+          diAtQueue: data.diAtQueue ?? null,
+          dbsScoreAtQueue: data.dbsScoreAtQueue ?? null,
+          currentPrice: data.currentPrice ?? null,
+          volume24h: data.volume24h ?? null,
           // B79.0n.RTB (2026-05-27, Phase 1): dual-write asset_class column
           // alongside metadata so per-class queue reads can filter by the
           // indexed column. assetClass passed through from upstream callers
           // (signal-orchestrator queueSQESignal threading).
-          assetClass: data.assetClass,
+          assetClass: data.assetClass ?? null,
         },
       })
       .returning();
