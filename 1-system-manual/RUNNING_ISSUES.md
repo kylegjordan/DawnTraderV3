@@ -11117,6 +11117,14 @@ The xStock availability audit supplied the missing discriminator. In a live reta
   - **(c)** Langston's F2/F4;
   - **no recovery leg.**
 
+**Step 2 APPROVED 2026-10-17 (Langston, on pre-audit r5 `545c6d94f`; record r6).**
+- **Three findings beyond the scope:**
+  - **A13:** the rehydrate CLI crashes on every cold-rotated label. It picks the warm `migrated` row, whose object the rotator deleted (`b75-rehydrate.ts:103`, `:148-153`; reproduced on staging, 404 `NoSuchKey`).
+  - **A14:** the plain-archive lane never marks a label `active`, so a late row for a deleted day could be age-deleted unarchived.
+  - **The whole path's `already-active` short-circuit** (`b75-retention-sweep.ts:703`) bypassed the resume decision.
+  - All three are folded into the batch.
+- **Langston's in-commit condition C-1:** `decideExistingCopy` returns four values, `export | reuse | skip | refuse`. A skip never re-stamps `hot_partition_dropped_at` and never flips `migrated` → `active`. Verified in the Step-4 diff.
+
 ### #1196 OPEN 2026-10-16 (CC-C; Langston's (4a) Step-2 review 11:37Z, filed on his instruction) — THE VTS SHADOW LANE CLOSES 35% OF ITS xSTOCK VALVE TRADES WITH NO PRICE, AGAINST 0.18% FOR CRYPTO
 **What (measured, `rtb_shadow_pairings.close_reason`, closes since 2026-09-22, re-derived by Langston):** xStock **125 `timeout_unpriced` of 357** max-hold closes = **35.0%**; crypto **25 of 14,129** = **0.18%** — a **198x** ratio. The real lane, same window: xStock 3 unpriced of 108 (`exit_decision_archive`).
 **Why it matters:** an unpriced close has no outcome, so the shadow sink's xStock population silently drops the trades that sat on the widest books — a `#596`-class REPRESENTATIVENESS defect in the sink reorg-B5 is the declared consumer of (`PHASE_19_PLAN.md:230`), not an alerting-volume question. Row 2 increment (4a) ships only the operator surface (a per-class standing count, P4); this entry is the deliverable.

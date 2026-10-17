@@ -1,4 +1,6 @@
-# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r5, 2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r6, 2026-10-17) — ✅ STEP 2 APPROVED (Langston 08:1xZ on r5 `545c6d94f`, one in-commit condition folded here)
+
+> **r6 folds Langston's C-1:** `decideExistingCopy` returns FOUR values, `export | reuse | skip | refuse(reason)`, with `skip` carried out of `archiveOneObject` as well. It also fixes the signature declaration, which now names `rowsPresent`.
 
 > **r5 answers Langston's r4 blocker (07:4xZ):**
 > - the premise "every call has source rows present" is withdrawn for the whole path, which enumerates children by name and age (`listOldPartitions`, `:244-281`), not by rows;
@@ -202,7 +204,13 @@ Everything that starts work against the manifest or the evidence table:
    - `recordExactArchiveEvidence` conflicts on `manifest_id` and does nothing (`exact-archive-evidence.ts:68`). A re-export of a label that already has evidence would therefore keep the old proof, fail the replay compare (`:81-105`) with a bare `Error`, land in the "likely transient" arm every night, and leave row M `uploaded` with a short `row_count` under a proof that describes other bytes.
    - That is the general case after this ships, not an xStock edge: after deploy every new object has evidence.
 
-   **The rule, one row per state, decided at ONE site BEFORE any upload.** It is a pure function, `decideExistingCopy(row, evidenceExists)`, returning `export | reuse | refuse(reason)`.
+   **The rule, one row per state, decided at ONE site BEFORE any upload.** It is a pure function, `decideExistingCopy(row, evidenceExists, rowsPresent)`, returning **`export | reuse | skip | refuse(reason)`** (Langston C-1).
+   - **`skip` is first-class:** `ArchiveOutcome` (`:490-494`) gains a `skipped` channel. The whole path returns `status: 'skipped'`, `reason: 'already-active'` **before** `dropAndMarkActive` (`:716-731`). The sliced and plain lanes leave that label out of their gate sets.
+   - **The invariant:** a skip calls no `dropPartition`, no `updateManifestActive` (`:390-396`, `WHERE id = $1`, unpinned) and no `markLabelsActive`. So `hot_partition_dropped_at` is **never re-stamped**, and a `migrated` row is never flipped back to `active` — which would be A13's 404 through a second door.
+   - The dead `reused` field (no reader; a declaration and two writes) is removed under rule 18 in the same edit.
+   - **Test:** assert `hot_partition_dropped_at` is unchanged, and that neither the drop nor the update was called. Not `status === 'skipped'`, which a reuse would also satisfy.
+   - **Reachable today:** the leftover `xstock_perp_ohlc_1m/2025-01-15` is a live warm `active` row with an empty child, in `whole` mode.
+   - **The SIM states the never-re-stamped invariant** beside the column's two lane meanings.
    - **Called from:** `archiveOneObject` (`:517`), used by the whole, sliced and plain lanes; and the ctx lane's skip (`ctx:133-138`).
    - **The whole path's short-circuit at `:703-714` is deleted,** so the whole path reaches it through `archiveOneObject` (Langston r3: hoist or route; I route).
    - **Row presence is MEASURED, not assumed (Langston r4).**
