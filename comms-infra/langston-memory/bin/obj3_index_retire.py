@@ -107,6 +107,11 @@ def main():
     diff = "".join(difflib.unified_diff(old_text.splitlines(True), new_text.splitlines(True),
                                         "00-legacy.md (live)", "00-legacy.md (proposed)"))
     open(os.path.join(d, "00-legacy.diff"), "w", encoding="utf-8").write(diff)
+    # Langston, approving the diff: his review of the CONTENT does not travel - batches closed before --apply add index
+    # lines this run will also delete - so the ENUMERATED set is printed, here and at --apply, and goes on the record
+    ids = [ID_RE.match(l).group(1) for l in idx]
+    print("index ids deleted (%d): %s" % (len(ids), " ".join(ids)))
+    open(os.path.join(d, "index-ids.txt"), "w", encoding="utf-8").write(NL.join(ids) + NL)
     print("proposed part and diff: %s (root-only)" % d)
     print("part sha256 now: %s" % hashlib.sha256(old_b).hexdigest())
     if "--apply" not in sys.argv:
