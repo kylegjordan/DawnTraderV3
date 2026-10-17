@@ -8,7 +8,7 @@
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
 | **`B-RTB-ADMISSION-TIEBREAK-LIVE`** (row 59f) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)** | carried: `#1204` row 59g, `#378`; the legacy tail drains |
-| **`B-RTB-QUEUED-STATUS-SWEEP`** (row 59g, `#1204`) | **STEP 11 — completion report written; migration part 2 deployed `0dabe1a78` 14:12:52Z** | Langston's Step-11 confirm |
+| **`B-RTB-QUEUED-STATUS-SWEEP`** (row 59g, `#1204`) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~15:30Z)** | carried: `#1124` row 134a, `#1006` |
 | **`B-RR-FLOOR-HEADROOM`** (row 59a) | **STEP 10 — progress report, card Observation** | the 21-day pre-registered read of the fill check from 2026-10-17T13:03:42Z (alert `07df291f`, weekly); Step 7's first taker rows come with Monday's session |
 | **`B-SILENT-STRATEGY-CENSUS`** (row 52) | **STEP 10 — progress report, card Observation** | strong_bull_trend's xStock verdict (alert `dd588f0d`, 20 filled closes or 2026-11-06T10:47:40Z), then O3's four candidates, each with a feasibility read and its own pass/fail |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |

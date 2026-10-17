@@ -1379,7 +1379,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **A re-issued signal now replaces the queued one in full.** The rule for choosing between two copies of the same signal had never run, so the newest always won — but it kept the first signal's expected value, maker/taker choice and trend readings beside the new prices. Newest wins is now the stated rule, the dead rule is deleted, and the replacement carries the whole decision; verified on staging on a re-issued entry that kept its identity and took the new readings.
 
-### 2026-10-17 — B-RTB-QUEUED-STATUS-SWEEP (CC-B; sprint row 59g, `#1204`) — ⏳ STEP 11 (at Langston)
+### 2026-10-17 — B-RTB-QUEUED-STATUS-SWEEP (CC-B; sprint row 59g, `#1204`) — ✅ CLOSED
 
 **The RTB queue's code now matches the two statuses it actually writes.** Reads of a "queued" status nothing has written since December 2025 are gone, with two clean-ups that could never fire, a count term that was always zero, and three empty database columns — the columns dropped in a second deploy, after the build that stopped naming them. Verified on staging: columns gone, the refresh writes the whole pool, a new signal saves, no errors. Record: `Batch Completion/B_RTB_QUEUED_STATUS_SWEEP_COMPLETION_REPORT.md`.
 

@@ -1392,7 +1392,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging a re-issued entry kept its identity and took the latest readings (TIA/USD: DI 37.38 → 49.07, DBS 0.635 → 0.669); the screen shows them. **Left:** entries queued before the deploy keep their old readings until they are re-issued, promoted or expire (no backfill — that would pair new DBS with old DI); `#1204` (two more reads of the dead status) at row 59g.
 
-## B-RTB-QUEUED-STATUS-SWEEP (CC-B, sprint row 59g; `#1204`) — change-class `non_architecture` — ⏳ **STEP 11 (2026-10-17) — report written, at Langston** (deployed `162ae0537` 13:03Z + `07bf5d37b` 13:32Z, migration part 2 `0dabe1a78` 14:12:52Z; record `Claude Comms and Packages/Batch Completion/B_RTB_QUEUED_STATUS_SWEEP_COMPLETION_REPORT.md`)
+## B-RTB-QUEUED-STATUS-SWEEP (CC-B, sprint row 59g; `#1204`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~15:30Z)** (deployed `162ae0537` 13:03Z + `07bf5d37b` 13:32Z, migration part 2 `0dabe1a78` 14:12:52Z; record `Claude Comms and Packages/Batch Completion/B_RTB_QUEUED_STATUS_SWEEP_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The RTB queue writes only two statuses, "active" and "reconfirmed" — but code from an older design still asked for a third, "queued", that nothing has written since December 2025. So a clean-up meant to run when a signal was promoted never matched anything, a clean-up for expired signals always found nothing, the trade-candidate count added a term that was always zero, and three database columns had no writer.
 
