@@ -38,6 +38,13 @@
 | **3(c) — invalid quantity** | Not a market state; do not pool into `size_unknown`. | **`size_invalid`, its own verdict:** never blocks an exit; no rest fill; counted (`invalidQty`); paged on the FIRST occurrence per position (`xstock-invalid-quantity-<mode>-<id>`). The tripwire's numerator is `size_unknown` only. |
 | **§4 note — retention** | The PASS legs are log-only; `out.log` rotates 6-8×/day. | **`[XS_SIZE]` and `[XS_SIZE_TRIPWIRE]` go to `console.warn` (error.log, ~14 days); the trigger basis is read from `XS_FRAME` (`on=bid\|mark`, already error.log).** The `EXIT_TRIGGER` line (`basis=`, `size=`) and the VTS counters on `[8a-P3][VTS_TOUCH]` stay on stdout (existing lines, not moved): stated in §4 with their retention, and harvested within the day. |
 
+## 0.s4 — STEP 4 (Langston's whole-diff ruling, approved at `e01d63329` with C1-C3, folded) AND A FORWARD-BINDING CONDITION
+- **C1:** `closeCrossedWalks` counts only a walk of the crossed NEWEST row — a flatten on a crossed newest row walks the last uncrossed row (`fromLastTwoSided`) and cannot carry the defect the counter sizes.
+- **C2:** the X3 END line labels an exit decided while armed `endedBy=armed_exit`, never `mark_exit`.
+- **C3:** a broken quantity is ONE event — logged, counted and paged on its first occurrence per position per process; later ticks are silent.
+- ⛔ **FORWARD-BINDING (Langston): P1 arms on *the guard RAN*, not *the frame was JUDGED* — a seed frame (`unknown`/`no_comparator`, and the frame after every yield-clear or restart) arms too. That is safe ONLY because `spread_blown` is judged ABSOLUTELY and sits AHEAD of the comparator (`book-state.ts:248` vs `:256`), so nothing wider than `ri_abs_spread_ceiling_pct` (live 1.0%) reaches the evaluator, bounding bid-vs-mark at ~0.5% of mid even on an unjudged seed (fenced `b-xstock-feed-sanity-book-state.test.ts:549-550`). IF THAT ARM IS EVER MOVED BELOW THE COMPARATOR, OR THE CEILING WIDENED, P1 LOSES ITS ONLY PROTECTION ON SEED FRAMES — REVERT P1 WITH IT.** Carried to System Manual §3.5.1b at Step 10.
+- **Step-8 anchor (Langston):** a restart drops every comparator, so the first armed xStock ticks after each deploy are seed frames. Read the first `[XS_FRAME] … on=bid` lines after the restart and show whether any `basis=bid` decision landed on a frame that seeded in the same tick.
+
 ## 1. AUDIT
 
 ### A1 — Entry points and every site that picks an xStock decision price (repo-wide, tests excluded)

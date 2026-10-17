@@ -107,7 +107,8 @@ describe('3n.q7 inc-1 — the wiring (source, comments stripped)', () => {
   // Step-4 condition 4: the X3 run summary no longer calls a lost frame 'converged'.
   // MUTATION: revert the endedBy ternary and this fails.
   it("the X3 END line says frame_lost when the run ended because the bid disappeared", () => {
-    expect(CODE).toMatch(/endedBy=\$\{decision\.shouldExit \? 'mark_exit' : \(xsFrame\.bid === null \? 'frame_lost' : 'converged'\)\}/);
+    // row 2 increment B (Langston Step-4 C2): an exit decided while ARMED was decided on the bid — labelled `armed_exit`.
+    expect(CODE).toMatch(/endedBy=\$\{decision\.shouldExit \? \(xsBidArmed \? 'armed_exit' : 'mark_exit'\) : \(xsFrame\.bid === null \? 'frame_lost' : 'converged'\)\}/);
   });
 
   it('the counters reset each cycle, after the fence reads them', () => {

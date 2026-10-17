@@ -108,7 +108,7 @@ describe('P5 — the CROSSED close arm (Langston Step-2 BLOCKER-3): the entry re
     expect(m![1]).toBe("_closeSnap.verdict.bid !== 'ok' || _closeSnap.verdict.ask !== 'ok'");
   });
   it('r2 condition 2: a crossed newest row is walked as before — recorded and counted, never substituted or refused', () => {
-    expect(AEE).toMatch(/if \(_closeSnap\?\.verdict\?\.crossed\) \{\s*this\._xsSizeCounts\.closeCrossedWalks\+\+;/);
+    expect(AEE).toMatch(/if \(_closeSnap\?\.verdict\?\.crossed && !_closeSnap\.fromLastTwoSided\) \{\s*this\._xsSizeCounts\.closeCrossedWalks\+\+;/);
     const DS = stripComments(read('server/services/execution/depth-source.ts'));
     expect(DS).toMatch(/if \(verdict\.bid === 'ok' && verdict\.ask === 'ok'\) \{/); // the newest row, crossed or not
     expect(DS).not.toMatch(/allowLastTwoSided \|\| verdict\.crossed/);
@@ -127,8 +127,11 @@ describe('r2 condition 3 — the tripwire bar and the invalid quantity', () => {
     expect(AEE).toMatch(/if \(xsFrame\.size === 'size_unknown'\) this\._xsSizeWindow\.unknown\+\+;/);
     // gate A condition 1: size_invalid is out of the DENOMINATOR too
     expect(AEE).toMatch(/if \(xsFrame !== null && xsFrame\.size != null && xsFrame\.size !== 'size_invalid'\) \{\s*this\._xsSizeWindow\.n\+\+;/);
-    // gate A condition 3: once per position per cycle
-    expect(AEE).toMatch(/if \(this\._xsInvalidQtySeenThisCycle\.has\(id\)\) return;/);
+    // Step-4 C3: one bad row is one event — log, count and page on its first occurrence per position, then silent
+    expect(AEE).toMatch(/if \(this\._xsInvalidQtyPaged\.has\(id\)\) return;\s*this\._xsInvalidQtyPaged\.add\(id\);\s*this\._xsSizeCounts\.invalidQty\+\+;/);
+    // Step-4 C1: a flatten's uncrossed fallback walk is not a crossed walk; C2: an armed exit is not labelled a mark exit
+    expect(AEE).toMatch(/if \(_closeSnap\?\.verdict\?\.crossed && !_closeSnap\.fromLastTwoSided\) \{/);
+    expect(AEE).toMatch(/endedBy=\$\{decision\.shouldExit \? \(xsBidArmed \? 'armed_exit' : 'mark_exit'\) :/);
   });
   it('a non-positive quantity is its OWN verdict (size_invalid): counted, paged once per position, never pooled', () => {
     expect(count(AEE, /this\._noteInvalidQuantity\(position, /g)).toBe(2); // the rest gate and the trigger frame

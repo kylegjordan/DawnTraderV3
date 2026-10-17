@@ -3447,7 +3447,6 @@ export class ActiveExecutionEngine {
     if (this._exitEvalByClass.xstock.invoked > 0 || Object.values(_xz).some((v) => v > 0)) console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][XS_SIZE] cycleId=${this.lastCycleAt} xsInvoked=${this._exitEvalByClass.xstock.invoked} x1Short=${_xz.x1Short} x1Unknown=${_xz.x1Unknown} ` +
       `x2Short=${_xz.x2Short} x2Unknown=${_xz.x2Unknown} trigShort=${_xz.trigShort} trigUnknown=${_xz.trigUnknown} invalidQty=${_xz.invalidQty} closeCrossedWalks=${_xz.closeCrossedWalks}`);
     this._xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
-    this._xsInvalidQtySeenThisCycle.clear();
     void this._runXsSizeTripwire();
     this._xsFramesEmitted = 0;
     this._xsFrameClassMismatch = 0;
@@ -3531,9 +3530,6 @@ export class ActiveExecutionEngine {
   private _xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
   // r2 condition 3(c): positions already paged for a non-positive quantity (an internal invariant break, paged ONCE each).
   private _xsInvalidQtyPaged = new Set<string>();
-  // Langston gate A condition 3: `invalidQty` counts POSITIONS per cycle, not sites — the trigger frame and the X2 gate can
-  // both see the same broken row in one tick. Cleared with the counters on EVAL_EXIT.
-  private _xsInvalidQtySeenThisCycle = new Set<string>();
   // ⭐ Row 2 increment B (Langston Step-2 judgement call 3) — THE STANDING SIZE TRIPWIRE. An exit trigger ACCEPTS
   //   `size_unknown` (an exit must never wait on size), so if the venue's quantity fields went null wholesale the trigger
   //   would silently lose its size term. Every evaluated xStock tick with a judged bid is counted in an hourly window; a
@@ -3541,16 +3537,16 @@ export class ActiveExecutionEngine {
   //   measured at the Step-2 audit: 0.068% of 24 h of rows), and the next clean window resolves it.
   private _xsSizeWindow = { startMs: Date.now(), n: 0, unknown: 0 };
 
-  /** r2 condition 3(c): a non-positive `position.quantity` is an internal invariant break. Counted on `[XS_SIZE]`
-   *  (`invalidQty`), logged at error, and paged on the FIRST occurrence per position; it never blocks an exit trigger. */
+  /** r2 condition 3(c): a non-positive `position.quantity` is an internal invariant break. It never blocks an exit trigger.
+   *  ONE bad row is ONE event (Langston Step-4 C3 — the trigger site runs every ~1.5 s tick): logged at error, counted on
+   *  `[XS_SIZE]` (`invalidQty` = broken positions FIRST SEEN that cycle) and paged, all on its first occurrence per
+   *  position in this process; later ticks on the same row are silent. A restart re-reports it once, by design. */
   private _noteInvalidQuantity(position: any, site: 'x1' | 'x2' | 'trigger'): void {
     const id = String(position.id);
-    if (this._xsInvalidQtySeenThisCycle.has(id)) return; // once per position per cycle (gate A condition 3)
-    this._xsInvalidQtySeenThisCycle.add(id);
-    this._xsSizeCounts.invalidQty++;
-    console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE_INVALID] ${position.symbol} pos=${position.id} site=${site} quantity=${position.quantity} — not a positive number`);
     if (this._xsInvalidQtyPaged.has(id)) return;
     this._xsInvalidQtyPaged.add(id);
+    this._xsSizeCounts.invalidQty++;
+    console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE_INVALID] ${position.symbol} pos=${position.id} site=${site} quantity=${position.quantity} — not a positive number`);
     void (async () => {
       try {
         const { addAlert } = await import('./system-alerts.js');
@@ -3840,7 +3836,7 @@ export class ActiveExecutionEngine {
           // evaluated ticks inside the run; `durMs` is wall time START→END and includes ticks the guard refused, so it
           // overstates the interval a re-landed trigger would have been live. The RATE source is now the per-tick
           // `[3n.q7][XS_FRAME]` line; this pair is a run summary.
-          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_END] ${position.symbol} leg=${_open.leg} ticks=${_open.ticks} durMs=${Date.now() - _open.startMs} endedBy=${decision.shouldExit ? 'mark_exit' : (xsFrame.bid === null ? 'frame_lost' : 'converged')} mark=${currentPrice}${_xsTag}`);
+          console.warn(`[8a-P4b][X3_BID_DIVERGENCE_END] ${position.symbol} leg=${_open.leg} ticks=${_open.ticks} durMs=${Date.now() - _open.startMs} endedBy=${decision.shouldExit ? (xsBidArmed ? 'armed_exit' : 'mark_exit') : (xsFrame.bid === null ? 'frame_lost' : 'converged')} mark=${currentPrice}${_xsTag}`);
           this._xsBidDivergence.delete(position.id);
         }
       }
@@ -4371,7 +4367,9 @@ export class ActiveExecutionEngine {
       //   bound (the fallback query has no time predicate, and `assessWarmth` runs after the walk), and refusing would never
       //   yield (`canYield=false` below) — an unbounded hold. Recorded and counted so the learning-data defect it leaves
       //   (a crossed walk books a sell above the ask) can be sized; that defect keeps its own home.
-      if (_closeSnap?.verdict?.crossed) {
+      // Langston Step-4 C1: a FLATTEN whose newest row is crossed walks the last UNCROSSED row (`fromLastTwoSided`), so it
+      // cannot carry the crossed-walk defect this counter sizes — only a walk of the crossed newest row counts.
+      if (_closeSnap?.verdict?.crossed && !_closeSnap.fromLastTwoSided) {
         this._xsSizeCounts.closeCrossedWalks++;
         console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][CLOSE_FILL] ${position.symbol} pos=${positionId} newest row CROSSED bid=${_closeSnap.bids[0]?.price ?? 'none'} ask=${_closeSnap.asks[0]?.price ?? 'none'} flatten=${_isFlatten} — walking it as before (crossed=true recorded)`);
       }
