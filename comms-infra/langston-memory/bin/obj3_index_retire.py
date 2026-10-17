@@ -13,6 +13,10 @@ What it does to /home/langston/memory-parts/00-legacy.md, and nothing more:
      hoists into.
   3. the header's "Hard cap ~24KB" phrase is replaced by a pointer to the binding rule: the loaded-set SUM
      (PHASE_19_PLAN row 2.8b), read live from `langston-size-watch --status`.
+  4. the preamble's own statement of the trim rule ("... and leaves one index line.") is corrected to what the trim now
+     does - the other copy of the same rule (Langston, approving the diff: fix both copies in one write).
+⛔ ORDER: install the writer whose trim adds no index line BEFORE --apply, and before the next 03:50Z trim - an older
+   trim re-mints index lines under the pointer and splices hoisted keep: lines above the kept-lines heading.
 It refuses if the index section holds anything but its heading, index lines, keep: lines and blanks; and it checks
 that every other line of the part is untouched (multiset of lines, before vs after, minus exactly the changes above).
 """
@@ -32,6 +36,9 @@ OLD_CAP = "**Hard cap ~24KB — BYTES-FIRST, NO LINE TARGET (Langston-approved 2
 NEW_CAP = ("**Size: the binding limit is the loaded-set SUM, which may only go down (`PHASE_19_PLAN` row 2.8b) - read the "
            "live ceiling and total from `langston-size-watch --status`; there is NO per-file cap (the ~24KB one was "
            "struck 2026-10-17, Langston).**")
+OLD_RULE = "and leaves one index line."
+NEW_RULE = ("hoists its `keep: ` lines into `## ★ Kept lines from closed batches` and leaves NO index line (Langston, "
+            "2026-10-17).")
 ID_RE = re.compile(r"^- `([^`]+)`")
 
 
@@ -65,8 +72,12 @@ def plan(old_text, archive_text):
     cap_hits = [i for i, l in enumerate(lines) if OLD_CAP in l]
     if len(cap_hits) != 1 or cap_hits[0] >= heads[0]:
         die("expected the header cap phrase exactly once, in the preamble; found at %r" % cap_hits)
+    rule_hits = [i for i, l in enumerate(lines) if OLD_RULE in l]
+    if len(rule_hits) != 1 or rule_hits[0] >= heads[0] or rule_hits[0] == cap_hits[0]:
+        die("expected the trim-rule phrase exactly once, in the preamble, on its own line; found at %r" % rule_hits)
     new = list(lines)
     new[cap_hits[0]] = new[cap_hits[0]].replace(OLD_CAP, NEW_CAP)
+    new[rule_hits[0]] = new[rule_hits[0]].replace(OLD_RULE, NEW_RULE)
     new_section = [lines[h], "", POINTER, ""] + [KEEP_HEADING, ""] + keep_lines + [""]
     new = new[:h] + new_section + new[end:]
     while new and new[-1] == "":
@@ -74,8 +85,8 @@ def plan(old_text, archive_text):
     new_text = NL.join(new) + NL
     # every other line untouched: old - (index lines, old cap line) == new - (pointer, keep heading, new cap line)
     nb = lambda ls: Counter(l for l in ls if l.strip())
-    lhs = nb(lines) - nb(index_lines) - Counter([lines[cap_hits[0]]])
-    rhs = nb(new) - Counter([POINTER, KEEP_HEADING, new[cap_hits[0]]])
+    lhs = nb(lines) - nb(index_lines) - Counter([lines[cap_hits[0]], lines[rule_hits[0]]])
+    rhs = nb(new) - Counter([POINTER, KEEP_HEADING, new[cap_hits[0]], new[rule_hits[0]]])
     if lhs != rhs:
         die("line conservation does not close: %d lost, %d extra" % (sum((lhs - rhs).values()), sum((rhs - lhs).values())))
     return new_text, index_lines, keep_lines
@@ -89,7 +100,7 @@ def main():
     new_text, idx, keeps = plan(old_text, open(ARCHIVE, encoding="utf-8").read())
     new_b = new_text.encode("utf-8")
     print("part %s: %d B -> %d B (%+d); %d index lines deleted (all %d batches confirmed STATE: closed in the "
-          "archive), %d keep: lines moved, header cap phrase replaced"
+          "archive), %d keep: lines moved, header cap phrase and trim-rule phrase replaced"
           % (PART, len(old_b), len(new_b), len(new_b) - len(old_b), len(idx), len(idx), len(keeps)))
     d = tempfile.mkdtemp(prefix="obj3-index-retire-", dir="/root")
     open(os.path.join(d, "00-legacy.proposed.md"), "wb").write(new_b)
