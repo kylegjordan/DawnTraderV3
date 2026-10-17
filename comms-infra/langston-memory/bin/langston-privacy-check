@@ -81,15 +81,18 @@ SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with t
 #    excluded - the check fails toward flagging, and the scan record says so.
 # ⛔ AND THE EXCLUSION IS BOUNDED (Langston, approving 59c6c8b10): it can only remove reach, so it is watched. Fewer
 #    than MIN_PRIVATE_KEYS private key lines left -> INSTRUMENT (the scan cannot tell a copy from noise); the excluded
-#    count rising by >= SHARED_LINES since the last run -> INSTRUMENT (memory text may have entered the repo, which
+#    count rising by >= PUBLIC_STEP_LINES since the last run -> INSTRUMENT (memory text may have entered the repo, which
 #    this exemption would otherwise hide by construction, or the memory took in repo text - confirm before trusting).
-#    THE STEP SIZE (Langston, approving 913305ec6): a one-run rise of S hides every candidate that shared up to
-#    SHARED_LINES + S - 1 lines, so S = SHARED_LINES means one run's step may at most DOUBLE the detection floor -
-#    chosen, not derived from SHARED_LINES. A last-run delta cannot bound a cumulative quantity (+9/run for ten runs
+#    THE STEP SIZE (Langston, approving 913305ec6): a one-run rise of PUBLIC_STEP_LINES hides every candidate that
+#    shared up to SHARED_LINES + PUBLIC_STEP_LINES - 1 lines; at 10 = SHARED_LINES, one run's step may at most DOUBLE
+#    the detection floor - a choice, not a derivation. A last-run delta cannot bound a cumulative quantity (+9/run for ten runs
 #    reaches 108 and never trips it), so a LEVEL term rides beside it: excluded >= live key lines / 3 -> INSTRUMENT.
 #    The floor is a FENCE, not a live gate: 189 private vs 30 on 2026-10-17, exercised only by the fixture.
-MIN_PRIVATE_KEYS = 3 * SHARED_LINES
+#    The three are deliberately SEPARATE constants (Langston rider 2): they share today's values, but tightening the
+#    copy threshold must not silently move the step or the floor with it.
+MIN_PRIVATE_KEYS = 30
 PUBLIC_LEVEL_DIVISOR = 3
+PUBLIC_STEP_LINES = 10
 PUBLIC_MIRROR = "/srv/dawntrader-backup.git"
 PUBLIC_REF = "migration/aws-supabase"
 MIN_LINE = 40
@@ -361,11 +364,15 @@ def exclusion_bound(private_keys, public_record, prev_excluded, live_key_lines):
         # exclusion grows (Langston correction 1: 739 -> 207 on 10-16 was the OBJ-3 split, not the exemption)
         return ("only %d of %d live key line(s) remain private after excluding %d as public (floor %d), so the scan "
                 "cannot tell a copy from noise" % (private_keys, live_key_lines, ex_n, MIN_PRIVATE_KEYS))
+    # ORDER, stated (Langston record item): the level masks the step once both hold (60 -> 80 of 207 reports the
+    # level only), so an acute jump at a high level reads as accumulation. KEY_INSTRUMENT's dedupe holds one open row
+    # either way - do not read a missing step reason as a missing jump.
     if isinstance(ex, int) and live_key_lines and ex * PUBLIC_LEVEL_DIVISOR >= live_key_lines:
-        return ("%d of %d live key line(s) are excluded as public (at least 1/%d) - memory text may have been "
-                "accumulating in the repo, which the exemption would hide; confirm before trusting a PASS"
-                % (ex, live_key_lines, PUBLIC_LEVEL_DIVISOR))
-    if isinstance(ex, int) and prev_excluded is not None and ex - prev_excluded >= SHARED_LINES:
+        # name BOTH arms (rider 1): the ratio rises when repo text grows AND when MEMORY.md shrinks (the nightly trim)
+        return ("%d of %d live key line(s) are excluded as public (at least 1/%d) - either memory text has been "
+                "accumulating in the repo, which the exemption would hide, or MEMORY.md has shrunk so the same public "
+                "lines are a larger share; confirm which before trusting a PASS" % (ex, live_key_lines, PUBLIC_LEVEL_DIVISOR))
+    if isinstance(ex, int) and prev_excluded is not None and ex - prev_excluded >= PUBLIC_STEP_LINES:
         return ("the public exclusion rose from %d to %d line(s) since the last run - memory text may have entered the "
                 "repo (which the exemption would hide) or the memory took in repo text; confirm before trusting a PASS"
                 % (prev_excluded, ex))
@@ -788,6 +795,11 @@ def self_test():
               (all("since the last run" not in r for r in crept), any("1/3" in r for r in crept),
                next((i + 1 for i, r in enumerate(crept) if "1/3" in r), None)), (True, True, 6))   # absent -> FAIL, not crash
         check("  ...and today's 18 of 207 is below the level, clean", "1/3" in exclusion_bound(189, {"excluded": 18}, 18, 207), False)
+        shr = exclusion_bound(36, {"excluded": 18}, 18, 54)
+        check("  RIDER 1: a MEMORY.md shrink trips the level (18 of 54) and the reason names BOTH arms",
+              ("1/3" in shr, "accumulating in the repo" in shr, "MEMORY.md has shrunk" in shr), (True, True, True))
+        check("  RIDER 2: the step, floor and divisor are separate constants",
+              (PUBLIC_STEP_LINES, MIN_PRIVATE_KEYS, PUBLIC_LEVEL_DIVISOR), (10, 30, 3))
         fl = exclusion_bound(20, {"excluded": 5}, 5, 25)
         check("  FLOOR (correction 1): the reason names private, live and excluded counts",
               ("only 20 of 25 live key line(s) remain private after excluding 5" in fl), True)
