@@ -17,7 +17,7 @@ The nightly B75 sweep copied each old day to warm storage, then dropped the orig
 2. A read-only run of the changed exporter on staging against the 09-16 children: source = exported = file lines for all four.
 3. **Coltrane** PROCEED at exact ref `97233c2ba` (Kyle routed it to him while Langston's queue was about 116 deep). **Langston** gave a second-pass PROCEED.
 4. CI 4/4, run `38882226794`; staging blobs equal the deployed sha.
-5. **The same instrument that showed the defect — the 2026-10-17 02:15Z sweep log:** every 09-16 child dropped with `rows=` equal to its source.
+5. **The same instrument that showed the defect — the 2026-10-17 02:15Z sweep log:** every 09-16 child dropped, `failed=0`. The log's `rows=` is the EXPORTED count only, so the equality to the source rests on: the in-snapshot gate not firing; the 10-16 read-only proof (item 2); and Langston's independent derivation for the one-minute bars (184 symbols x 1,440 minutes = 264,960 on the hot neighbouring days, against 27 earlier nights at exactly 240,000).
 
 | table | before (nightly) | after |
 |---|---|---|
@@ -29,10 +29,19 @@ The nightly B75 sweep copied each old day to warm storage, then dropped the orig
 The run reported `failed=0`.
 
 ## What Langston said
-PROCEED, with four findings recorded on `#1195`. Three were moot under r2 (the hold-back no longer happens). F2 (the sweep alert's dedupe key) and F4 (the plain lane's catch wording) are in `B-B75-EXPORT-COMPLETENESS`.
+PROCEED (r1, 10-16 11:08Z) with four findings recorded on `#1195`; second-pass CONFIRMED (12:08Z); **close CONFIRMED 2026-10-17 02:37Z**, re-derived from the log and the hot neighbouring days. Three close findings: (1) this record's wording, fixed here; (2) persist the source count beside `row_count` so completeness can be re-checked later, added to `B-B75-EXPORT-COMPLETENESS` as OBJ-7; (3) the task-list row below.
+
+Earlier: Three were moot under r2 (the hold-back no longer happens). F2 (the sweep alert's dedupe key) and F4 (the plain lane's catch wording) are in `B-B75-EXPORT-COMPLETENESS`.
 
 ## Left open (owner CC-A, placed)
 `B-B75-EXPORT-COMPLETENESS` (`#1195`, `SPRINT_TO_LIVE_PLAN.md` §0a stage 3). **Kyle decided 2026-10-17 to recover nothing** (option 3). The batch now owns:
 - the per-object gap register for warm objects archived 2026-05-06 → 2026-10-16;
 - the per-table key census;
 - F2 and F4.
+
+## Governance ledger (class `hotfix`)
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-16-A |
+| T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | CC-A: the hotfix moved to closed with Langston's 02:37Z confirm |
+| T1 | COMPLETION_REPORT | ✅ | this note |
