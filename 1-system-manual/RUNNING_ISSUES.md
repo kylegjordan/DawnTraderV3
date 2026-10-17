@@ -11178,3 +11178,17 @@ That is harmless today, but row 1q adds re-issued control lines. Any bound must 
 **Rule-24 outcome: to be decided at its Step 1** — a dead fallback is outcome (3) legacy, but switching the broadcast back ON is a behaviour change whose consumers must be censused first. ⚠️ **Census the PREDICATE, not a word** (row 59f's sweep grepped `tiebreak` and missed these).
 `HOME: B-RTB-QUEUED-STATUS-SWEEP, owner CC-B, placed in SPRINT_TO_LIVE_PLAN at row 59g, after row 59f`.
 
+
+### #1205 OPEN 2026-10-17 (CC-INFRA filing; alert `2109222e`) — ⚠️ **A LANGSTON INVOKE CAN WRITE HIS MEMORY TO SHARED `/tmp`, WHERE OTHER ACCOUNTS READ IT.**
+**What:** `/tmp/.l_out.md` (146,237 B, `langston:langston` 0644) was written 2026-10-16 12:56:27Z inside a Langston invoke (bridge journal: invoking 12:51:02, responded 12:57:40) and held 158 lines of his live `MEMORY.md`, 140 of them not in the repo. The daily read-as-coltrane check caught it the next morning (2026-10-17T06:03:56Z). Re-closed by hand: moved to `/root/privacy-quarantine/20261017-2109222e/` (kept, 0700 root). Nothing stops the next one: his process can write any path, and the model chose `/tmp` literally, so a `TMPDIR` setting would not have stopped it.
+**Second finding of the same alert, NOT this issue:** a Coltrane repo checkout in `/tmp` matched 18 lines because B-LANGSTON-RELIEF's ledger split composed repo text into `MEMORY.md` - fixed in the instrument (repo lines are public) at `59c6c8b10`, in review.
+**Rule-24 outcome (1), real exposure path.** Candidate fix, to be censused first: systemd `PrivateTmp=yes` on `discord-langston-bridge.service` (and Coltrane's `coltrane-bot.service`), which makes the wrong write impossible rather than caught - after enumerating everything that hands Langston or Coltrane a file through `/tmp`.
+`HOME: B-AGENT-PRIVATE-TMP, owner CC-INFRA, placed in SPRINT_TO_LIVE_PLAN after B-AGENT-INVOKE-FAILURE-NOTICE`.
+
+### #1206 OPEN 2026-10-17 (CC-INFRA filing; Langston, Coltrane-recovery r2) — **COLTRANE'S RESTART RECOVERY HAS NO ATTEMPT CAP.**
+**What:** a post whose invoke never succeeds (`answered: false`, or no row at all after a 900 s timeout) is re-invoked at EVERY ready for 24 h, and `coltrane-bot.service` has `Restart=always`/`RestartSec=15` with no effective start-limit brake, so a crash loop multiplies full-length invokes. Installed at `0004feaa6` (2026-10-17 05:14Z). Rule-24 outcome (2), working-as-designed-unaddressed: the retry is deliberate; the missing piece is a cap and a notice.
+`HOME: B-AGENT-INVOKE-FAILURE-NOTICE (#1198), owner CC-INFRA, added as an item (§9.4 disposition 2) - the same failed-invoke path, which that batch already gives a visible failure.`
+
+### #1207 OPEN 2026-10-17 (CC-INFRA filing; Langston, delivered-only increment) — **A LANGSTON REPLY THAT FAILED TO POST IS RE-ASKED, NOT RE-POSTED.**
+**What:** since `b81720646` a reply that did not reach Discord is no longer counted answered, and its text is kept on the `post_failed` row (`52562b2d7`, C3) - but restart recovery re-INVOKES the question, so the generated work (395 s in the 2026-10-17 03:19Z case) is redone, not delivered. Re-posting the stored text - spooled, as the alert lane spools - is a separate design. Rule-24 outcome (2).
+`HOME: B-LANGSTON-REPOST-FAILED, owner CC-INFRA, placed in SPRINT_TO_LIVE_PLAN after B-AGENT-PRIVATE-TMP`.
