@@ -1391,3 +1391,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **THE FIX.** Newest wins is now the stated rule (Kyle delegated, Langston concurred). The dead rule and its leftovers are deleted, and the re-issue writes the whole decision with its prices; a test fails if a field is added to one write and not the other.
 
 **RESULT.** On staging a re-issued entry kept its identity and took the latest readings (TIA/USD: DI 37.38 → 49.07, DBS 0.635 → 0.669); the screen shows them. **Left:** entries queued before the deploy keep their old readings until they are re-issued, promoted or expire (no backfill — that would pair new DBS with old DI); `#1204` (two more reads of the dead status) at row 59g.
+
+## B-SILENT-STRATEGY-CENSUS (CC-B, sprint row 52; `#1070`) — change-class `non_architecture` — ⏳ **OPEN, IN OBSERVATION (2026-10-17)** — waiting on strong_bull_trend's xStock verdict (alert `dd588f0d`, first 20 filled closes or 2026-11-06T10:47:40Z), then the other four candidates (record `Claude Comms and Packages/Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md`)
+
+**WHAT IT IS.** Ten of nineteen strategies had been off for xStock since May with no recorded reason for five, and three wired crypto strategies were never evaluated. Kyle (2026-09-30): switch the five candidates on one or two at a time, each with a pass/fail written first, strong_bull_trend first, after a check of the nine already on.
+
+**SO FAR.** strong_bull_trend is on for xStock (2026-10-16) under a pre-registered pass/fail. The check of the nine already on found every one with enough trades losing in paper mode; Kyle kept them all on until calibration (2026-10-17). The three silent crypto strategies each have a reason and a home; the crypto ORB setting, which nothing reads, now reads off so the table tells the truth. Stale strategy-count comments corrected.
