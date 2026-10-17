@@ -30,6 +30,7 @@
 - 2a0b `B-ENGINE-HEARTBEAT-DEAD-PATHS` (`#1158`): remove the heartbeat's dead check/recovery, keep the heal + bus event, settle the `/status` contract (Langston 10-06).
 - 3a `B-FEED-HEALTH-GRADE-ARM` (`#1123`) + 3a1 `B-VENUE-QUIET-ALERTING` (`#526` + `#994`) — PAIRED, moved up to run right after 2a0b (Kyle 2026-10-06): arm the per-symbol feed-liveness grade, then use it to stop paging on a quiet market while still alerting on our own feed failing.
 - 3a2 `B-WS-RECONNECT-BACKOFF-RESET` (`#1209`, placed 2026-10-17 by Langston's 3a Step-9 ruling): the heartbeat-timeout backoff counter never resets, so after ~6 lifetime reconnects the WebSocket always waits the 60 s cap. After row 3a.
+- 3a3 `B-AI-COMMAND-CENTER-DEAD-ROUTES` (`#1210`, placed 2026-10-17): the AI Command Center is blank because four routes load a module deleted in 2025 — reconnect or remove the panel, census first. After row 3a2.
 - ✅ 2a0c `B-CLUSTER-BUS-PERSIST-DISPOSITION` (`#1159`) — CLOSED 2026-10-11 (Langston Step 11): the cluster bus is in-memory only; its table, enum and retention entry are dropped.
 - ✅ 2a0d `B-ROOT-DUPLICATE-SCANNER-RETIRE` (`#1161`) — CLOSED 2026-10-10 (Langston Step 11).
 - ✅ 59 inc 1 `B-ENTRY-DISTANCE-GUARD` (`#915`, `#1168`) — CLOSED 2026-10-12 (Langston Step 11): a taker fill at or through its stop or target is refused; reward-to-risk at the fill logged in shadow.

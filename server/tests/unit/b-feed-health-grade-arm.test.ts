@@ -194,6 +194,14 @@ describe('the recorder names every admitted pair by its venue base (Langston Ste
 const ROOT = join(__dirname, '..', '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 describe('fences', () => {
+  it('the Feed Health card renders OUTSIDE the telemetry gate (Step-7 finding: the gate 500s on a deleted module)', () => {
+    const src = read('client/src/pages/ai-transparency.tsx');
+    const gateElse = src.indexOf('No telemetry data available');
+    const card = src.indexOf('data-testid="card-feed-health"');
+    expect(gateElse).toBeGreaterThan(-1);
+    expect(card).toBeGreaterThan(gateElse); // after the ternary's else-arm, i.e. outside it
+    expect(src.indexOf('</TabsContent>', gateElse)).toBeGreaterThan(card); // still inside the AI Command Center tab
+  });
   it('feed_health is prefetched', () => {
     expect(read('server/startup/b72-warmup.ts')).toMatch(/^\s*'feed_health',/m);
   });
