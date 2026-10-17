@@ -118,7 +118,14 @@ async function queryManifest(
       ORDER BY min_ts ASC, tier ASC`,
     [args.table, args.from, args.to],
   );
-  return r.rows;
+  // row_count and bytes_compressed are BIGINT, which node-postgres returns as STRINGS, so
+  // `total += row.row_count` concatenated ("0" + "29069" = "029069") — measured at Step 7 on
+  // staging, and present in the pre-batch total_rows too. Convert at the read site, once.
+  return r.rows.map((row) => ({
+    ...row,
+    row_count: Number(row.row_count),
+    bytes_compressed: Number(row.bytes_compressed),
+  }));
 }
 
 function parseSupabaseUri(uri: string): { bucket: string; path: string } {
