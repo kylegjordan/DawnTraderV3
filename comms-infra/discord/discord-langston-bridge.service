@@ -29,6 +29,10 @@ Environment="PATH=/opt/discord-bridges/venv/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-langston-bridge.py
 Restart=always
 RestartSec=10
+# TimeoutStopSec=15 (B-LANGSTON-RELIEF 2026-10-17): the bridge now ends its agent sessions' process groups on SIGTERM
+# and exits 0 in seconds (stop_cleanly). This bounds the one case that cannot reach - a descendant that called
+# setsid() itself and so left the group - at 15 s instead of the default 90 s that made the 08:18Z restart a failure.
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target

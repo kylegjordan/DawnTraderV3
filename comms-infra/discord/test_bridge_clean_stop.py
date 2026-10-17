@@ -3,7 +3,13 @@ stop end the WHOLE group. Run on Helsinki with the bridge venv, from a dir holdi
     /opt/discord-bridges/venv/bin/python3 test_bridge_clean_stop.py
 Drives the REAL run_agent and stop_cleanly against a stand-in agent whose child IGNORES SIGTERM - the shape that made
 the 08:18:16Z planned restart time out after 90 s and page a false "crash-looped". Every expected outcome is printed
-before its result. Writes only to a scratch dir."""
+before its result. Writes only to a scratch dir.
+⛔ THE HAND-RUN GATE for any edit to run_agent, stop_cleanly or save_state: it cannot join CI (the harness execs the
+bridge, which loads tokens and shared config at import), so the report that cites it must state the host and the ref.
+⛔ RUN ANY MUTATION OF IT UNDER `setsid` (Langston): a mutation that drops start_new_session=True makes stop_cleanly's
+killpg(p.pid) resolve to the RUNNER's own process group and kill your shell. The faithful mutation used on
+2026-10-17 changed all three of: start_new_session=True -> False; stop_cleanly's group kills removed; the timeout
+arm's _kill_group -> p.kill() - and failed 6 checks (sections 1 and 2)."""
 import functools, os, signal, subprocess, sys, tempfile, textwrap, time
 print = functools.partial(print, flush=True)
 
@@ -110,6 +116,31 @@ print("3. a normal run returns like subprocess.run did")
 r = b.run_agent(["sh", "-c", "echo out; echo err >&2; exit 3"], dict(os.environ), SCRATCH, 10)
 case("returncode, stdout and stderr come back", (3, "out\n", "err\n"), (r.returncode, r.stdout, r.stderr))
 case("  ...and it deregisters", 0, len(b._AGENTS))
+
+print("4. save_state is atomic: a failure mid-save leaves the OLD file whole (Langston condition)")
+st = os.path.join(SCRATCH, "state.json")
+b.STATE_FILE = st
+b.save_state({"session_id": "first"})
+ino1 = os.stat(st).st_ino
+b.save_state({"session_id": "second"})
+import json as _json
+case("a save writes valid JSON with the new content", "second", _json.load(open(st))["session_id"])
+case("  ...by REPLACING the file (new inode), never truncating it in place", True, os.stat(st).st_ino != ino1)
+_real_replace = b.os.replace
+def _boom(*_a, **_k):
+    raise OSError("simulated death between write and rename")
+b.os.replace = _boom
+try:
+    b.save_state({"session_id": "third"})
+    got = "no error"
+except OSError:
+    got = "raised"
+finally:
+    b.os.replace = _real_replace
+case("  ...a failure before the rename raises", "raised", got)
+case("  ...and the OLD state is intact (no 0-byte file, no new session_id)", "second", _json.load(open(st))["session_id"])
+case("  ...and no temp file is left behind", [], [n for n in os.listdir(SCRATCH) if ".tmp-" in n])
+case("load_state reads it back", "second", b.load_state()["session_id"])
 
 print("clean-stop failures:", fails)
 sys.exit(1 if fails else 0)

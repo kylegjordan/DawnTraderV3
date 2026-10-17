@@ -30,6 +30,7 @@ import datetime as _dt
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -133,7 +134,25 @@ def load_state():
 
 
 def save_state(state):
-    Path(STATE_FILE).write_text(json.dumps(state, indent=2))
+    """Atomic: a temp file in the same directory, fsync, then os.replace (Langston, clean-stop condition 2026-10-17).
+    write_text truncated then wrote, so an exit in between - stop_cleanly's os._exit(0) included - left a 0-byte file,
+    load_state read it as corrupt and minted a NEW session_id, silently ending his conversation continuity. fsync is
+    chosen too, though process death needs only the atomic rename: it costs one sync per save and matches the
+    watchdog's fsync-before-exit discipline."""
+    d = os.path.dirname(STATE_FILE) or "."
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=os.path.basename(STATE_FILE) + ".tmp-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(state, indent=2))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, STATE_FILE)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # B-CREDENTIALS-PRIVATE-REPO OBJ-4a: over ssh with langston's read-only deploy key, so this
