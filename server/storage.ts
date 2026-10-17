@@ -4409,6 +4409,11 @@ export class DatabaseStorage implements IStorage {
           stopPrice: data.stopPrice,
           // Step-4 r1 (Langston): drizzle DROPS an undefined-valued key from the update set, so the incumbent's value
           // would survive with the key present. Every NULLABLE column is written `?? null` — absent means absent, never kept.
+          // Mechanism: drizzle-orm 0.39.1 `mapUpdateSet` (node_modules/drizzle-orm/utils.js:82) filters
+          // `Object.entries(values).filter(([, value]) => value !== void 0)`. Do NOT remove a `?? null` below without reading that.
+          // Columns in NEITHER this SET nor the insert, on purpose: finalScore, expiresAt (#558 / R9.3-C residue), promotedAt,
+          // expiredAt, lastRefreshedAt (written elsewhere; they survive a re-issue, and no reader of them on rtb_signals was found
+          // at row 59f), missedRefreshes, promotedTradeId, id.
           targetPrice: data.targetPrice ?? null,
           quantity: data.quantity ?? null,
           notional: data.notional ?? null,

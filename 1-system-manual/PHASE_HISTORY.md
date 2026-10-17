@@ -1374,3 +1374,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-17 — B-VENUE-QUIET-ALERTING (CC-B; sprint row 3a1, `#526` + `#994`) — ✅ CLOSED
 
 **A closed or quiet xStock market no longer pages as a breakage.** Stale-price streaks are judged against the whole class: on a closed or quiet market — and outside regular hours, where the ticking count is unreliable — the position waits on one standing info record; a page fires only when the class is trading and this symbol is not, or it stays unpriced after the class resumes. Every alert clears itself, and an off-session alert is handed back at the open. Ran seven design rounds with Langston across eight days of live reads; restarts and closes have paged nothing since.
+
+### 2026-10-17 — B-RTB-ADMISSION-TIEBREAK-LIVE (CC-B; sprint row 59f, `#1190`) — ⏳ STEP 11
+
+**A re-issued signal now replaces the queued one in full.** The rule for choosing between two copies of the same signal had never run, so the newest always won — but it kept the first signal's expected value, maker/taker choice and trend readings beside the new prices. Newest wins is now the stated rule, the dead rule is deleted, and the replacement carries the whole decision; verified on staging on a re-issued entry that kept its identity and took the new readings.

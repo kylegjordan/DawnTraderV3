@@ -1383,3 +1383,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **THE FIX.** A stale streak is judged against the whole xStock class: if the class is closed or quiet (or, outside regular hours, whatever the count says) the position joins one standing info record instead of paging; it pages when the class is updating and this symbol is not, or when it stays unpriced 30 minutes after the class resumes. Every alert clears itself when the engine prices the position again, and an off-session alert is handed back at the open so the position is judged in session.
 
 **RESULT.** Restarts and closes page nothing (10-13, 10-17: 0 pages, 549-row control); the hand-back fired once, correctly (INVH 2026-10-13 13:30:13Z); both pre-registered carriers were seen (CF 10-15, LECO 10-16). **Left:** no duration page has ever fired (criterion 4, unproven); US holidays read as regular (`#392`).
+
+## B-RTB-ADMISSION-TIEBREAK-LIVE (CC-B, sprint row 59f; `#1190`) — change-class `non_architecture` — ⏳ **STEP 11** (deployed `7600476c5` 2026-10-17T05:29:21Z; Step 8 CONFIRMED by Langston and Coltrane; record `Claude Comms and Packages/Batch Completion/B_RTB_ADMISSION_TIEBREAK_LIVE_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** The RTB queue holds one entry per coin-and-strategy. A rule meant to choose between an old and a re-issued copy had never run (its lookup searched for a status no entry carries), so the re-issue always replaced the old copy — but only half: the new entry, stop and target were written while the first signal's Net Expectancy, maker/taker choice, fill policy and trend readings (DI, DBS) stayed.
+
+**THE FIX.** Newest wins is now the stated rule (Kyle delegated, Langston concurred). The dead rule and its leftovers are deleted, and the re-issue writes the whole decision with its prices; a test fails if a field is added to one write and not the other.
+
+**RESULT.** On staging a re-issued entry kept its identity and took the latest readings (TIA/USD: DI 37.38 → 49.07, DBS 0.635 → 0.669); the screen shows them. **Left:** entries queued before the deploy keep their old readings until they are re-issued, promoted or expire (no backfill — that would pair new DBS with old DI); `#1204` (two more reads of the dead status) at row 59g.

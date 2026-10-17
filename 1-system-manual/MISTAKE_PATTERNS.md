@@ -1040,3 +1040,6 @@ I reported a null in the correct FORM — *"searched N commits, found nothing, w
 
 ### 2026-10-17 — `B-VENUE-QUIET-ALERTING`: one trailer, `incomplete-population`
 Commit `05a18e731`: I read three wind-down/ramp-up windows (10-13, 10-14, 10-16) and reported the pre-registered quiet-only carrier as "unseen"; Langston enumerated all 15 retained logs and found it on 10-15 (CF 20:19:58Z). **The absence was a property of the windows I chose, not of the system** — the `#3n.o` census fence again: a chosen subset is not the population. Below the promotion floor on its own; recorded so the weekly pass can count it.
+
+### 2026-10-17 — `B-RTB-ADMISSION-TIEBREAK-LIVE`: one trailer, `wrong-object`
+Commit `8aa3aaed1` (Step-1 r2): I argued the queued incumbent's R-multiple rises as the live price moves toward its stop — the mechanism of option (c) — but the incumbent's R is computed from its STORED levels and takes no live price (`rMultipleCore`). Langston caught it at Step 1. Same slug as this week's other instances: a mechanism attributed to the object next to the one being judged.
