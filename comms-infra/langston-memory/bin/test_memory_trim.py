@@ -139,10 +139,11 @@ def main():
     idx = os.path.join(h.top, ".memory-archive", "index.jsonl")
     rows = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
     noop = [r for r in rows if r.get("mode") == "trim-noop"]
+    last_noop = noop[-1] if noop else {}       # an absent row must report FAIL, not abort the suite (Langston r1 C-3)
     check("  ...but records ONE trim-noop row, with the census and no sha-chain fields (Langston gate A)",
-          (len(noop), noop[-1].get("outcome"), noop[-1].get("sections_open"), "old_sha" in noop[-1],
-           "part_old_sha" in noop[-1], "mem_archived" in noop[-1]), (1, "noop", 1, False, False, False))
-    check("  ...the first such row says earlier nights have no row by design", "BY DESIGN" in noop[-1].get("note", ""), True)
+          (len(noop), last_noop.get("outcome"), last_noop.get("sections_open"), "old_sha" in last_noop,
+           "part_old_sha" in last_noop, "mem_archived" in last_noop), (1, "noop", 1, False, False, False))
+    check("  ...the first such row says earlier nights have no row by design", "BY DESIGN" in last_noop.get("note", ""), True)
     rc, out = h.trim("--dry-run")
     check("  ...a no-op DRY RUN writes no row", len([l for l in open(idx, encoding="utf-8") if l.strip()]), len(rows))
     rc, out = h.trim()
@@ -157,6 +158,37 @@ def main():
     last_write = [r for r in rows2 if r.get("mode") != "trim-noop"][-1]
     check("  ...the CAS reader's last row SKIPS trim-noop rows (never a link in the sha chain)",
           wm.last_index_row(), last_write)
+    print("1b. C-1: one unparseable line does not hide the rest; an index of ONLY bad lines is UNKNOWN")
+    with open(idx, encoding="utf-8") as fh:
+        good = fh.read()
+    msg_good = wm.cas_mismatch_message("0" * 64)
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write("{not json" + NL + good)
+    check("  a broken line prepended: the last write is still found", wm.last_index_row(), last_write)
+    msg = wm.cas_mismatch_message("0" * 64)
+    check("  ...and the refusal message is UNCHANGED by it (never degraded to 'no recorded write')",
+          (msg == msg_good, "no recorded write" in msg), (True, False))
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write("{not json" + NL + "[1, 2]" + NL)
+    msg = wm.cas_mismatch_message("0" * 64)
+    check("  an index with NO readable line -> cause UNKNOWN, never 'no recorded write'",
+          ("UNKNOWN" in msg, "no recorded write" in msg), (True, False))
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write(good)
+    print("1c. C-2: a prior write whose REASON is 'trim-noop' does not suppress the first row's note")
+    h2 = Home()
+    rc, out = h2.call(["--compose", "--by", "t", "--reason", "trim-noop"])
+    idx2 = os.path.join(h2.top, ".memory-archive", "index.jsonl")
+    check("  precondition: a written row carries the string trim-noop in its reason (else this proves nothing)",
+          any('"trim-noop"' in l and '"mode": "trim-noop"' not in l for l in open(idx2, encoding="utf-8")), True)
+    rc, out = h2.trim()           # evicts the closed sections
+    rc, out = h2.trim()           # the first genuine no-op night
+    idx2 = os.path.join(h2.top, ".memory-archive", "index.jsonl")
+    n2 = [json.loads(l) for l in open(idx2, encoding="utf-8") if l.strip()]
+    n2 = [r for r in n2 if r.get("mode") == "trim-noop"]
+    check("  ...the first genuine trim-noop row still carries its note", (len(n2), "BY DESIGN" in (n2[-1] if n2 else {}).get("note", "")),
+          (1, True))
+    h2.done()
     print("2. the archive is searchable by recall")
     r = h.reader()
     recs = []

@@ -112,8 +112,9 @@ def write(s, stdin_text, corrupt=False):
 
 
 def last_index():
+    # the last WRITE row: a trim-noop row (2026-10-17) wrote nothing and is skipped, as the writer's own reader does
     with open(ARCH + "/index.jsonl", encoding="utf-8") as fh:
-        return [json.loads(l) for l in fh if l.strip()][-1]
+        return [r for r in (json.loads(l) for l in fh if l.strip()) if r.get("mode") != "trim-noop"][-1]
 
 
 def stat_of(path):

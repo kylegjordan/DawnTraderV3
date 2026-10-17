@@ -377,24 +377,52 @@ def append_index(row, st):
         os.close(fd)
 
 
+UNREADABLE_INDEX = "unreadable"
+
+
+def index_rows():
+    """Every PARSEABLE object row of the index, in order, and how many non-blank lines would not parse. One bad line
+    never hides the rest (Langston r1 C-1, 2026-10-17)."""
+    rows, bad = [], 0
+    with open(ARCHIVE_INDEX, encoding="utf-8", errors="replace") as fh:
+        for l in fh:
+            if not l.strip():
+                continue
+            try:
+                r = json.loads(l)
+            except ValueError:
+                bad += 1
+                continue
+            if isinstance(r, dict):
+                rows.append(r)
+            else:
+                bad += 1
+    return rows, bad
+
+
 def last_index_row():
-    """The last row that records a WRITE. A `trim-noop` row is a pass-through that wrote nothing (Langston, Step 8
-    gate A, 2026-10-17: it must never read as a link in the sha chain), so it is skipped."""
+    """The last row that records a WRITE; None when the index is absent or holds no such row; UNREADABLE_INDEX when
+    the index has lines but none of them parses (the cause is then unknown - never "no recorded write"). A `trim-noop`
+    row is a pass-through that wrote nothing (Langston, Step 8 gate A, 2026-10-17: never a link in the sha chain), so
+    it is skipped."""
     try:
-        with open(ARCHIVE_INDEX, encoding="utf-8") as fh:
-            rows = [json.loads(l) for l in fh.read().split(NL) if l.strip()]
-        rows = [r for r in rows if not (isinstance(r, dict) and r.get("mode") == "trim-noop")]
-        return rows[-1] if rows else None
-    except (OSError, ValueError):
+        rows, bad = index_rows()
+    except OSError:
         return None
+    writes = [r for r in rows if r.get("mode") != "trim-noop"]
+    if writes:
+        return writes[-1]
+    return UNREADABLE_INDEX if bad and not rows else None
 
 
 def noop_rows_exist():
+    """True if the index already holds a trim-noop ROW - by the row's own mode field, never a substring (a prior
+    write with --reason trim-noop must not suppress the first row's note; Langston r1 C-2)."""
     try:
-        with open(ARCHIVE_INDEX, encoding="utf-8") as fh:
-            return any('"trim-noop"' in l for l in fh)
+        rows, _bad = index_rows()
     except OSError:
         return False
+    return any(r.get("mode") == "trim-noop" for r in rows)
 
 
 def final_sha_of(row):
@@ -412,6 +440,9 @@ def cas_mismatch_message(live_sha):
     """Condition (Langston, answer 3): a hand edit must not look like a benign race."""
     last = last_index_row()
     base = "REFUSED: compare-and-swap mismatch - nothing written. current sha256 %s. " % live_sha
+    if last == UNREADABLE_INDEX:
+        return (base + "⚠️ This tool's archive index exists but NO line of it can be read, so whether the file changed "
+                "outside this tool is UNKNOWN. Do not redo blind - tell Infra Claude.")
     if last is None:
         return base + "This tool has no recorded write to compare against. Re-read the file and redo."
     prior = final_sha_of(last)
@@ -1691,7 +1722,13 @@ def do_rename(opts):
     as in do_direct_write. A crash there is recoverable by exactly one verb: the parts changed, so a second
     --rename-part refuses on parts-drift, and --compose reconciles (MEMORY.md still carries last_written_sha and the
     pending_sha is admissible). Such a crash leaves an index.jsonl row with outcome='attempted' and NO terminal row -
-    a reader of index.jsonl must read that shape as 'crashed mid-write', not 'still running'."""
+    a reader of index.jsonl must read that shape as 'crashed mid-write', not 'still running'.
+    ROW TYPE `trim-noop` (Langston, Step 8 gate A, 2026-10-17): written by --trim on a night with nothing to evict.
+    It WROTE NOTHING and is NOT a link in the sha chain - a reader that walks consecutive writes must skip it. Fields:
+    ts, target, part, mode="trim-noop", outcome="noop", part_sha, mem_sha (the bytes it read, unchanged),
+    sections_open / sections_closed / unmarked (the census of the part's MARKED batch sections - protected sections
+    are not counted, so the three are not a total section count), and on the FIRST such row only a `note` saying
+    nights before it have no row by design."""
     reader = load_reader()
     reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     old_name, new_name = opts["--rename-part"], opts["--to"]
