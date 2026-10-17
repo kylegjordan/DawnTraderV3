@@ -1382,3 +1382,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 ### 2026-10-17 — B-SILENT-STRATEGY-CENSUS (CC-B; sprint row 52, `#1070`) — ⏳ IN OBSERVATION
 
 **strong_bull_trend is trading xStock on a pre-registered test; the nine incumbents stay on.** The first candidate switched on 2026-10-16 with a written pass/fail (verdict at 20 filled closes or 2026-11-06). The per-strategy check of the nine already on showed every one with enough trades losing; Kyle kept all on until calibration. The other four candidates wait on the verdict. Record: `Claude Comms and Packages/Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md`.
+
+### 2026-10-17 — B-RR-FLOOR-HEADROOM (CC-B; sprint row 59a, `#1183`) — ⏳ IN OBSERVATION
+
+**The fill-time reward-to-risk check stays in watch-only mode while a pre-registered 21-day read decides it.** The archive now tells a market-order taker from a limit order that filled at once, so the read is judged on the fills that can actually slip. Record: `Batch Completion/B_RR_FLOOR_HEADROOM_PROGRESS_REPORT.md`.

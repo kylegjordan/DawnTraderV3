@@ -1397,3 +1397,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT IS.** Ten of nineteen strategies had been off for xStock since May with no recorded reason for five, and three wired crypto strategies were never evaluated. Kyle (2026-09-30): switch the five candidates on one or two at a time, each with a pass/fail written first, strong_bull_trend first, after a check of the nine already on.
 
 **SO FAR.** strong_bull_trend is on for xStock (2026-10-16) under a pre-registered pass/fail. The check of the nine already on found every one with enough trades losing in paper mode; Kyle kept them all on until calibration (2026-10-17). The three silent crypto strategies each have a reason and a home; the crypto ORB setting, which nothing reads, now reads off so the table tells the truth. Stale strategy-count comments corrected.
+
+## B-RR-FLOOR-HEADROOM (CC-B, sprint row 59a; `#1183`) — change-class `architecture` — ⏳ **OPEN, IN OBSERVATION (2026-10-17)** — the 21-day pre-registered read of the fill-time RR check (record `Batch Completion/B_RR_FLOOR_HEADROOM_PROGRESS_REPORT.md`)
+
+**WHAT IT IS.** The reward-to-risk floors sit just under the strategies' own reward-to-risk, so a fill that slips refuses the trade; the check that would refuse it has run in watch-only mode since 10-11. Re-measured after crypto went maker-only: 1 of 30 xStock taker fills would refuse — but most of those takers are limit orders that filled at once and cannot slip the way a market order can.
+
+**SO FAR.** Each fill now records which kind of taker it was, and a 21-day read decides, on the market-order kind, whether the check goes live per class. Floors unchanged; recalibration stays in Phase 25.
