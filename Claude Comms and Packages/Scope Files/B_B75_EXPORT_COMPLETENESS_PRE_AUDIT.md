@@ -1,4 +1,14 @@
-# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r1, 2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r2, 2026-10-17)
+
+> **r2 answers Langston's r1 CHANGES (05:0xZ):**
+> - **B-1** → P3.2: `migrated` falls through to re-export, plus the shadowing it creates (A10);
+> - **B-2** → P3.4: a fourth alert class, `isNonProven`;
+> - **B-3** → P1.3: the trigger's exact columns, and its comment;
+> - **B-4** → P4: a new transport class, measured at runtime;
+> - **C-1** → P9: the harness's `--clean` is reordered, not only commented;
+> - **C-2** → P8: the full rename census;
+> - **notes** → P1: no Drizzle schema, and the second definition site.
+> r1 was `24e6cad56`.
 
 change-class: architecture
 
@@ -127,6 +137,10 @@ Everything that starts work against the manifest or the evidence table:
 | A7 | 4 sweep alerts, none keyed; 2 for one partition | §3.7 | OBJ-5 |
 | A8 | `perpfeed-gate-test --clean` deletes manifest rows. Once a proven object has an evidence row, the FK (no `ON DELETE`) **blocks that delete** and the append-only trigger blocks removing the evidence. | §3.1, §3.2 | **folded, and no code change:** the harness's own header says `--clean` is "abort path only — after a successful positive leg there is nothing to clean". Its only row today is legacy (no evidence), so `--clean` still works for it. A comment is added at `:121` saying a proven object cannot be cleaned. |
 | A9 | The ctx lane is unscheduled | §2 | cross-reference to `#169`; no work |
+| A10 | A `migrated` label that re-exports gains a warm copy that shadows its cold copy in the rehydrate CLI (warm preferred by label, `:165-181`) | Langston B-1, followed through | P3.2, P7 |
+| A11 | The partition lane's alert has three classes (`:1156-1170`), so a fourth failure kind would land in the "likely transient" arm | Langston B-2 | P3.4 |
+| A12 | `engine` is defined as "no timer script" (`system-alerts.ts:146-149`). At runtime, the two machine timer scripts resolve as `cli`: `governance-checker` 66 rows and `deploy-drift-monitor` 30 (measured across every resolved row on staging), because they go through the CLI. The sweep would be the first timer script to resolve in-process. | Langston B-4 | P4 |
+| A13 | **The rehydrate CLI crashes on every rotated label (new, measured).** `queryManifest` admits `migrated` (`b75-rehydrate.ts:103`), and the warm-first map (`:148-153`) then picks the warm `migrated` row, whose object the rotator deleted by design (`b75-cold-rotator.ts:343`). Run on staging, read-only into a temp folder (`--table context_bridge_log --from 2026-02-05 --to 2026-02-06`): `manifest matches: warm=1 cold=1`, then `fatal: … warm download (file) failed: … 404 … NoSuchKey` at `:175`, and nothing written. The control is the matched pair and the error naming the deleted object. **Reach:** all 3 `migrated` labels today; and since warm rotates to cold after 365 days, every object eventually. **Provenance:** the reader was written at B75, when cold was dry-run; the rotator was activated at B-STORAGE-HARDEN Wave A (07-08), and the reader's tier choice never changed. No ledger entry (searched `rehydrate`). | **folded into P7 (disposition 1):** P7 already rewrites the tier choice. Recorded on `#1195` at Step 10. |
 
 ## 8. IMPLEMENTATION PLAN (each item names its finding)
 **P1 — migration `2026-10-17-b-b75-export-completeness.sql` + rollback (A1, A2, A6).** One transaction:
@@ -138,14 +152,19 @@ Everything that starts work against the manifest or the evidence table:
    - Replace `…_cursor_contract_check` with a two-value CHECK.
    - Rename the table, its 11 remaining constraints, its 2 triggers and its 2 indexes.
    - `COMMENT ON TABLE` states the two-column key intent.
-3. **The tie, as a trigger.** A `BEFORE INSERT OR UPDATE OF completeness_basis` trigger on the manifest raises when `NEW.completeness_basis = 'source-count-matched'` and no evidence row exists for `(NEW.source_table, NEW.partition_label)`.
-   - **A plain trigger, not `DEFERRABLE`,** so it fires inside the same transaction as the evidence insert (P3 orders evidence first).
+3. **The tie, as a trigger.** A `BEFORE INSERT OR UPDATE OF completeness_basis` trigger on the manifest raises when `NEW.completeness_basis = 'source-count-matched'` and
+   `NOT EXISTS (SELECT 1 FROM data_archive_exact_evidence e WHERE e.source_table = NEW.source_table AND e.partition_label = NEW.partition_label)`.
+   - **Exactly two columns, deliberately — not `manifest_id`, not tier (Langston B-3).** The evidence's key is `manifest_id` (PK and FK), plus `UNIQUE (source_table, partition_label, tier)` (`obs.sql:75`). The rotator's cold row is a different `id` with no evidence of its own (`:303-317`). So only this predicate lets P6 carry the label.
+   - **`COMMENT ON TRIGGER` says why:** a cold row inherits the warm row's proof, because moving a copy to cold does not change what it holds. It also states the ordering invariant: every writer that stamps the label must insert the evidence first, in the same transaction. There are three such writers (P3.1, P5, P6). P6 never inserts evidence, because it inherits.
+   - **Plain `BEFORE`, not `DEFERRABLE` (Langston agreed):** it fails at the offending statement, not anonymously at COMMIT.
+   - **Step order is safe either way:** the backfill (P1.1) writes only `unverified-legacy` and `gate-deployed-unrecorded`, never `source-count-matched`.
 4. **The replay guard.** The 10-15 file's evidence statements (`:59-77`, `:113-121`, `:303`) are wrapped in `DO` blocks that skip when `to_regclass('data_archive_exact_evidence') IS NOT NULL`. **This is CC-C's applied file;** CC-C agreed at 04:2xZ.
 5. **The rollback.**
    - Drop the tie trigger and the column.
    - Reverse the renames.
    - Restore the single-value contract CHECK and the two pins **only if no row violates them**; otherwise leave them off, keep every row, and `RAISE NOTICE` (Langston condition 2).
-6. **Registered in `MANIFEST.txt`.** Both files are force-added; the rollback is tracked, per the shared `MEMORY.md` correction.
+6. **No Drizzle change:** `data_archive_manifest` has zero references in `shared/`. It is raw SQL, so there is no `schema.ts` edit (Langston note). **The table has two definition sites in the migration history:** `2026-04-22-initial-schema.sql:2884` (the dump) and `2026-05-06-b75-data-lifecycle.sql:39`. The new column is added by `ALTER` only, so both stay valid. The rollback drops only what this batch adds.
+7. **Registered in `MANIFEST.txt`.** Both files are force-added; the rollback is tracked, per the shared `MEMORY.md` correction.
 
 **P2 — `exact-archive-evidence.ts` (A2, A3).**
 - `recordExactArchiveEvidence` takes `sourceTable`, `tier` and `cursorContract` as inputs, and writes and compares against them, not literals.
@@ -158,19 +177,28 @@ Everything that starts work against the manifest or the evidence table:
    - After the download verify (`:563-569`), build the evidence for every spec, not only the exact lane (`:572`), with `sourceTable: spec.parent` (fixing `:576`), the export's tier, and the spec's contract.
    - Then, in one transaction, run three writes in this order: evidence insert → `completeness_basis = 'source-count-matched'` → `verified`, replacing the bare statements at `:613` and `:615`.
 2. **The resume skip (`:516-520`), C-6 rule.**
-   - An existing row in `verified`/`active`/`migrated` is reused **only** if `source-count-matched`. Otherwise the sweep throws `NonProvenExistingCopyError`: no upload, no evidence, no overwrite.
+   - An existing row in `verified`/`active` is reused **only** if `source-count-matched`. Otherwise the sweep throws `NonProvenExistingCopyError`: no upload, no evidence, no overwrite.
+   - **`migrated` is NOT in the predicate (Langston B-1).** It means the rotator moved the copy to cold and deleted the warm object by design (`b75-cold-rotator.ts:331-336`, then `:343`). Today it falls through `:517` and re-exports, which is the correct recovery, and it keeps doing so. There are 3 live `migrated` rows: `context_bridge_log/2026-01`, `/2026-02` and `exit_decision_archive/2026-05`. None is reachable tonight, because none overlaps a live hot child (Langston's re-derivation). A test covers it.
+   - ⚠ **What a `migrated` re-export creates (A10, new):** a fresh warm object beside the existing legacy cold copy, for the same label. The rehydrate CLI prefers warm by label (`b75-rehydrate.ts:165-181`), so the new warm copy, which holds only the rows still hot, would **shadow** the cold copy, which holds the older rows. That is the same reader-misled failure this batch exists to prevent. P7 therefore lists every tier's object when a label has more than one, each with its basis.
    - The partition lane catches it as a failure of that partition (the DROP never runs); the plain lane's catch treats it as a failure of that table (the delete never runs).
    - `pending`/`uploaded` rows re-export as today.
 3. **The DROP gate (`:775-793`) and the plain gate (`:922-935`)** add `completeness_basis = 'source-count-matched'` to their state predicate. The plain gate's refusal mints an alert instead of only logging.
 4. **Alerts (OBJ-5).**
-   - Keys `b75-sweep:<parent>:<label>:<class>`, `b75-plain:<table>:<class>` and `b75-sweep:fatal`, plus `…:non-proven-existing` from item 2.
+   - **A fourth class, `isNonProven` (Langston B-2).** `ProcessResult` gains it beside `isChecksumMismatch` and `isCountMismatch`, so the C-6 refusal never lands in the `:1166` "likely transient" arm. Its body says the refusal is **permanent until a human acts**: the existing copy is not proven, a re-export could only prove the rows still hot, and the hot partition is kept, so its bytes stay on the database disk every night it refuses. It names the label's hot size. **Severity `critical`**, because the disk is the measured constraint (`e656e5d4`, 67.5% of the 200 GB cap) and a refusal grows it daily.
+   - Keys `b75-sweep:<parent>:<label>:<class>`, `b75-plain:<table>:<class>` and `b75-sweep:fatal`. The non-proven class is `…:non-proven-existing`.
    - On each success, `resolveAlertsByDedupeKey` for that parent+label's three classes (or that table's), as `b75-retention-sweep`. At the DONE line, the same for `b75-sweep:fatal`.
    - `non-proven-existing` has **no** automatic resolver; it needs a human disposition.
    - Bodies name the run start time and point at the log; no counts.
 5. **Wording (OBJ-6).** The plain catch (`:999-1005`) names a count mismatch; the `:1165` promise is rewritten to say a mismatch keeps failing safely and needs investigation.
 
-**P4 — `system-alerts.ts` (A7).**
-- Add `{ value: 'b75-retention-sweep', tag: 'machine', why: … }` to `ALERT_ACTORS` (`:212`), with transport `engine`, as the other machine resolvers use. The transport set is `cli | dispatcher | api | governance-checker | engine` (`system-alerts.ts:150`). `engine` is the closest fit for a script resolving its own row, but it is not a perfect fit — **for attack**.
+**P4 — `system-alerts.ts` (A7, A12).**
+- Add `{ value: 'b75-retention-sweep', tag: 'machine', why: … }` to `ALERT_ACTORS` (`:212`).
+- **The transport (Langston B-4): a new CLASS, `timer-script`.** It covers a scheduled process outside the server runtime that resolves in-process, without the CLI. It is added to `ResolveTransport` (`:150`) with a definition beside `engine`'s (`:146-149`).
+  - **Not `engine`:** its own definition excludes timer scripts, and every `engine` call site is a server-runtime service.
+  - **Not `cli`:** `cli` records that a resolve arrived through the CLI, and the two timer scripts that use it do go through the CLI (A12). The sweep would not, so `cli` would be a false provenance stamp.
+  - **A class, not a per-caller value:** the sweep is told apart by its actor. Any later timer script that resolves in-process uses the same class.
+  - `ResolveTransport` has one consumer file (Langston), so the change has no drift surface.
+- My r1 wording "as the other machine resolvers use" was a wrong-population claim, and it is withdrawn.
 - Check `dt-deploy`'s derived table: machine actors are excluded, per the shared MEMORY note.
 
 **P5 — `context-bridge-log-ttl.ts` (A1, A3, A6).**
@@ -178,20 +206,31 @@ Everything that starts work against the manifest or the evidence table:
 - The active skip (`:133-138`) follows the C-6 rule.
 - **Still unscheduled** (`#169`).
 
-**P6 — `b75-cold-rotator.ts` (A1).** `completeness_basis` goes into both the `INSERT` column list and the `ON CONFLICT … DO UPDATE SET` list (`:303-317`).
+**P6 — `b75-cold-rotator.ts` (A1).** `completeness_basis` goes into both the `INSERT` column list and the `ON CONFLICT … DO UPDATE SET` list (`:303-317`). **Its test is the inheritance case specifically (Langston B-3):** a warm `source-count-matched` row with evidence rotates, and the cold row is admitted by the trigger with no evidence of its own. A warm `unverified-legacy` row rotates to an `unverified-legacy` cold row.
 
 **P7 — `b75-rehydrate.ts` (A1).**
 - `queryManifest` selects `completeness_basis`.
 - Per object it prints `completeness=<basis>`, and `rows(unproven)=` for anything not `source-count-matched`.
 - The total splits into proven and unproven.
 - One warning per non-proven object names its range.
+- **A13:** a warm row in state `migrated` is never a download candidate, because its object is gone by design. The label falls to its cold row, using `--restore-cold` as today.
+- **A10:** when a label has objects in more than one tier, every tier's object is listed with its basis. A warning says which one is downloaded and that the other exists. The CLI never silently picks one.
 - Writes `<file>.completeness.json` beside each file.
 
-**P8 — the capacity gate (CC-C's file, A2).**
-- The two table references (`:125`, `:609`) take the new name.
+**P8 — every reference to the old name (A2, Langston C-2).** `git grep xstock_bar_archive_exact_evidence` over the whole repo at the ref returns **19 lines in 6 files**, plus 5 lines in this batch's own scope and pre-audit (24 in 8, Langston's count). All 19 are named here:
+  - `b-xstock-bar-availability-capacity-gate.ts:125`, `:609` → new name;
+  - `exact-archive-evidence.ts:63`, `:85` → new name;
+  - `b-xstock-bar-availability-archive.test.ts:168-169` → new name;
+  - `b-xstock-bar-availability-observation.test.ts:204`, `:212` → **left unchanged, on purpose:** they assert the text of the 10-15 file, which keeps the old name inside its replay guard. A test confirms the guarded text still contains those strings;
+  - `2026-10-15-…-observation.sql` (10 lines: `:59`, `:113-116`, `:118-121`, `:303`) → wrapped by the P1.4 replay guard, old name kept;
+  - `2026-10-15-…-observation-rollback.sql:15` (`COMMENT ON TABLE`) → **ordering matters:** run after this batch's migration, it would fail on the old name. It gets the same guard and names whichever table exists. **P1.5's rollback must run before CC-C's 10-15 rollback**, and both rollback headers say so.
+- Re-run the grep after the change and state its result in the Step-4 change list.
 - A comment at `:125` says the relation now holds every lane's evidence (C-9, CC-C's choice).
 
-**P9 — `perpfeed-gate-test.ts` (A8).** A comment only, at `:121`.
+**P9 — `perpfeed-gate-test.ts` (A8, Langston C-1).** **Reorder `--clean`, rather than only comment it.** Today it runs `DROP TABLE` (`:124`) before the manifest `DELETE` (`:126`). For a proven object the `DELETE` is blocked, so the harness would be left half-cleaned: partition gone, manifest row permanent. A later `--seed` would then pass, the resume skip would reuse the proven row, and the gate test would pass without exercising the export.
+- **Fix:** delete the manifest rows first. If that delete is refused, stop **before** the drop, with a message that names the cause.
+- **Then the comment:** after this deploy, the harness is single-use for any label it has proven, and the only recovery is P1.5's rollback.
+- A test covers the refused-delete path.
 
 **P10 — documents (A4, A5).**
 - `STORAGE_POLICY.md`: §9.A wording, §9.D annotation, and a new subsection for the window, the cause, Kyle's decision and the four values, saying what the label does not mean.
@@ -209,7 +248,8 @@ Everything that starts work against the manifest or the evidence table:
   - the evidence row carries `spec.parent` and the actual tier;
   - the transaction order;
   - the C-6 refusals at (c) and (d) write no evidence and overwrite nothing;
-  - `pending` re-exports;
+  - `pending` re-exports, **and `migrated` re-exports** (B-1);
+  - the refusal carries `isNonProven` with its own body and `critical` severity, and never the "likely transient" text (B-2);
   - gates (a) and (b);
   - OBJ-5's suppression, its positive control (a different parent/label/class mints), resolve-on-success, and re-mint after a resolve.
 - `exact-archive-evidence` tests:
