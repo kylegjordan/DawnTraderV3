@@ -205,6 +205,19 @@ describe('engine — escalation', () => {
     delete stored.members['pos-cf'];
     await e._joinVenueQuietStanding({ id: 'pos-cf', symbol: 'CF/USD' }, { classVerdict: 'quiet', T: 200, reasonFamilies: ['quiet_market'] });
     expect(stored.members['pos-cf'].firstJoin).toMatchObject({ classVerdict: 'quiet', T: 200, atMs: WEEKDAY + 600_000 });
+    expect(stored.members['pos-cf'].firstJoin.reconstructed).toBeUndefined();   // a genuine first join carries no mark
+    expect(mem.firstJoin.reconstructed).toBeUndefined();
+  });
+  it('r2 (Langston): a member listed before firstJoin existed gets a record marked reconstructed — it is a later join\'s', async () => {
+    const stored: Record<string, any> = { members: { 'pos-old': { symbol: 'INVH/USD', listedAtMs: WEEKDAY - 3_600_000, joins: 3,
+      classVerdict: 'quiet', T: 230, reasonFamilies: ['quiet_market'] } } };
+    m.addAlert.mockImplementation(async (o: any) => ({ id: 'row-' + o.dedupe_key, metadata: stored }));
+    m.mergeAlertMetadata.mockImplementation(async (_id: string, patch: any) => { Object.assign(stored, patch); return {}; });
+    const e = engine() as any;
+    await e._joinVenueQuietStanding({ id: 'pos-old', symbol: 'INVH/USD' }, { classVerdict: 'not_quiet', T: 440, reasonFamilies: ['quiet_market'] });
+    const mem = stored.members['pos-old'];
+    expect(mem.firstJoin).toEqual({ classVerdict: 'not_quiet', T: 440, reasonFamilies: ['quiet_market'], atMs: WEEKDAY, reconstructed: true });
+    expect(mem.listedAtMs).toBe(WEEKDAY - 3_600_000);                           // the carried listing time is untouched
   });
   it('r6c (Langston FINDING-A/B): a re-join keeps the EARLIEST listing time and the row counts every suppressed page', async () => {
     const stored: Record<string, any> = { members: {} };

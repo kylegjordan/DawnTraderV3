@@ -930,8 +930,11 @@ export class ActiveExecutionEngine {
       // Step-7 (Langston 2026-10-16, (c)): `...meta` below overwrites the verdict, T and families with the LATEST join's
       // values, so a member re-joined on `quiet` no longer shows that its FIRST crossing joined on `not_quiet` off-session —
       // the case the r7 session gate exists for. The first join's judged inputs are kept, never overwritten.
+      // r2 (Langston): a member listed BEFORE this field existed has a `prev` and no `firstJoin`; the record minted for it is a
+      // LATER join's, so it is marked `reconstructed` — a genuine first join is only ever minted when `prev` is absent.
       const firstJoin = prev?.firstJoin && typeof prev.firstJoin === 'object' ? prev.firstJoin
-        : { classVerdict: meta.classVerdict ?? null, T: meta.T ?? null, reasonFamilies: meta.reasonFamilies ?? null, atMs: now };
+        : { classVerdict: meta.classVerdict ?? null, T: meta.T ?? null, reasonFamilies: meta.reasonFamilies ?? null, atMs: now,
+            ...(prev ? { reconstructed: true } : {}) };
       const members = { ...prior,
         // r6c condition (Langston): the member's last venue price, carried on the row — the in-process `lastPricedAt` is lost at
         // every restart, and without this the duration page's "for at least N min" would read from the EARLIEST listing and
