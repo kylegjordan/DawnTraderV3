@@ -24,3 +24,9 @@
 
 ## Step 7 (plan B8)
 Chrome: the AI Command Center tab draws Formula Health and Feed Health with data; no AI Analysis tab; the page's network log has no `/api/orchestrator/telemetry|analysis|analyze|audit` request; Automation Logs and Orchestrator Activity still load.
+
+## Steps 5-7 — CI, deploy, verification (2026-10-17)
+- **Step 4:** Langston APPROVED at `59ea15c80` (four changes landed; re-derived by him). Reach-limit note added at `f0abf8494`.
+- **Step 5:** CI run `39050708281` at `f0abf8494` — Build ✅ · Test Suite ✅ · TypeScript Check ✅ · Docker Build ✅ (per job). Range `0dabe1a78..f0abf8494`, runtime paths: CC-B's commits only.
+- **Step 6:** `dt-deploy f0abf8494e4a9d10c66ea6bd3ee306e25680b280 --by cc-b` — live 2026-10-17T16:47:34Z, engine resumed, identity asserted (rollback target `0dabe1a78`).
+- **Step 7 (Claude-in-Chrome, AI Transparency, ~16:50Z):** tabs now begin *AI Command Center · AI Recommendations · Automation Logs · Orchestrator …* — **no AI Analysis tab**; no `button-run-audit`, no `button-trigger-analysis`. **Formula Health drawn with data:** *"10 Total Formulas · 9 Passed · 1 Warnings · 0 Failed · Last audit: less than a minute ago"* (the page's `/api/system/formula-audit` request fired). **Feed Health drawn:** grade A, Healthy, *warming up* (restart 16:47Z). **The page's resource log names only `/api/orchestrator/logs?limit=50` and `/api/orchestrator/learning-summary`** — no telemetry / analysis / analyze / audit request. Through the page's session: `logs` 200, `learning-summary` 200, `telemetry` **404**, `analysis` **404** (both were 500 *Cannot find module*). Server logs since 16:47:34Z: **0** `orchestrator/orchestrator` / `Cannot find module` lines; the same pattern matched **116** lines in `error.log` 13:00-16:47Z (positive control).
