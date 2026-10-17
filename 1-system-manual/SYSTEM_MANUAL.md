@@ -7850,7 +7850,7 @@ Freshness thresholds are DB-governed (`module_constants 'feed_health'`: `warning
 
 ### Tracking
 - Rolling 12-snapshot history (1 hour at 5-min intervals)
-- Time-based uptime percentage (minutes healthy / total minutes)
+- Connection uptime over the ring — `(1 − Σ completed reconnects / snapshots present) × 100`, `null` while fewer than 6 snapshots (row 3a, 2026-10-17; the cumulative minutes-healthy / total-minutes uptime was deleted — it locked the status at critical)
 - Alert deduplication with 5-minute cooldown
 - Report export to JSON file
 
@@ -8271,7 +8271,7 @@ Any service not directly tied to signal generation, risk management, execution, 
 | server/services/system-health.ts | ~147 | A4.R10R-4 | 🔒 LOCKED |
 | server/services/system-health-monitor.ts | ~437 | — | ACTIVE |
 | server/services/health-monitor.ts | ~1,495 | 41F-C/F/G/I | ACTIVE |
-| server/services/feed-integrity-monitor.ts | ~572 | — | ACTIVE |
+| server/services/feed-integrity-monitor.ts | ~643 | — | ACTIVE |
 | server/services/self-repair.ts | ~303 | — | ACTIVE |
 | server/utils/operation-queue.ts | ~200+ | 41F-A/B | ACTIVE |
 | server/services/task-queue.ts | ~367 | 8.8.3 | ACTIVE |
