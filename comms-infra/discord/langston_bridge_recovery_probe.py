@@ -79,6 +79,7 @@ async def scenario():
                 return gen()
         c2.get_channel = lambda _cid: Ch()
         b.gw.inbox_message_ids = lambda *_a, **_k: {started.id}
+        b.al.inbox_evidence = lambda *_a, **_k: (set(), {started.id})      # started AND answered
         await c2.on_ready()
         check("recovery asked for history after the floor, oldest first, unlimited",
               seen_after == [(FLOOR, True, None)])
@@ -88,6 +89,28 @@ async def scenario():
         check("recovery consumed the floor file", not os.path.exists(lq.RECOVER_FLOOR_FILE))
         await c2.on_ready()
         check("a reconnect does not run recovery again", q2.qsize() == 0 and len(seen_after) == 1)
+
+    # 2026-10-17 03:19:28Z, measured: a restart between "claude returned" and the post lost a COMPLETED review,
+    # because a STARTED message was treated as done. Started-but-unanswered must be re-fed.
+    with tempfile.TemporaryDirectory() as d:
+        lq.RECOVER_FLOOR_FILE = os.path.join(d, "recover-since")
+        open(lq.RECOVER_FLOOR_FILE, "w").write("2026-10-16T07:10:43Z")
+        q3, c3 = fresh_client(FLOOR)
+        answered = msg(KYLE, "Langston, started and answered")
+        lost = msg(KYLE, "Langston, started but the reply never posted")
+        class Ch4:
+            def history(self, **_k):
+                async def gen():
+                    for m in (answered, lost):
+                        yield m
+                return gen()
+        c3.get_channel = lambda _cid: Ch4()
+        b.gw.inbox_message_ids = lambda *_a, **_k: {answered.id, lost.id}
+        b.al.inbox_evidence = lambda *_a, **_k: (set(), {answered.id})
+        await c3.on_ready()
+        got = [q3.get()["content"] for _ in range(q3.qsize())]
+        check("started-but-UNANSWERED is re-fed; started-and-answered is not",
+              got == ["Langston, started but the reply never posted"])
 
 def grp_msg(gid, k, n, text, created=PRE):
     return msg(CCBOT, ("Langston, " if k == 1 else "") + text + " ⟨grp=%s %d/%d⟩" % (gid, k, n),
@@ -100,6 +123,7 @@ async def failure_scenarios():
     with tempfile.TemporaryDirectory() as d:
         lq.RECOVER_FLOOR_FILE = os.path.join(d, "recover-since")
         b.gw.inbox_message_ids = lambda *_a, **_k: set()
+        b.al.inbox_evidence = lambda *_a, **_k: (set(), set())
         b.dc.rest_send = lambda *a, **k: None                 # no post leaves the probe
 
         # (1) channel missing, then present on the next gateway ready
@@ -150,6 +174,7 @@ async def failure_scenarios():
         p1, p2, p3 = (grp_msg("abcdef12", k, 3, "piece %d" % k) for k in (1, 2, 3))
         u1, u2, u3 = (grp_msg("0011aa22", k, 3, "fresh %d" % k) for k in (1, 2, 3))
         b.gw.inbox_message_ids = lambda *_a, **_k: {p1.id}
+        b.al.inbox_evidence = lambda *_a, **_k: (set(), {p1.id})
         class Ch3:
             def history(self, **_k):
                 async def gen():

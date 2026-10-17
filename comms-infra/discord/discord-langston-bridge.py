@@ -956,6 +956,13 @@ def build_client(task_q, recover_floor=None, alert_q=None):
         recovered["running"] = True
         try:
             started = gw.inbox_message_ids(dc.INBOX_LOG, kinds={"langston_inbound"})
+            # ⛔ DONE = STARTED AND ANSWERED (measured 2026-10-17 03:19:28Z: a restart landed in the ~1 s between
+            #    "claude returned" and the post, and ANALYST Claude's completed 395 s review was lost because a
+            #    STARTED message was treated as done). A started message with no recorded reply is re-fed; its
+            #    chunk group with it. Residual, stated: a reply that was posted but whose inbox record failed would
+            #    be answered twice - duplication is the safe direction of that error.
+            _routed, replied = al.inbox_evidence(dc.INBOX_LOG, tail_bytes=1 << 30)
+            started = started & replied
             ch = client.get_channel(CFG["channel_id"])
             if ch is None:
                 ch = await client.fetch_channel(CFG["channel_id"])
@@ -993,7 +1000,7 @@ def build_client(task_q, recover_floor=None, alert_q=None):
         recovered["done"] = True
         recovered["running"] = False
         log(f"recovery: re-read channel since {recover_floor.isoformat()} - {fed} message(s) re-fed through "
-            f"the handler, {skipped} skipped as already started by the worker (whole chunk groups included; "
+            f"the handler, {skipped} skipped as already started AND answered (whole chunk groups included; "
             f"only people's messages addressed to Langston are enqueued, never alerts)")
         try:
             os.remove(lq.RECOVER_FLOOR_FILE)
