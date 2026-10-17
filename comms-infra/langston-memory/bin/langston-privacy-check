@@ -366,7 +366,9 @@ def exclusion_bound(private_keys, public_record, prev_excluded, live_key_lines):
                 "cannot tell a copy from noise" % (private_keys, live_key_lines, ex_n, MIN_PRIVATE_KEYS))
     # ORDER, stated (Langston record item): the level masks the step once both hold (60 -> 80 of 207 reports the
     # level only), so an acute jump at a high level reads as accumulation. KEY_INSTRUMENT's dedupe holds one open row
-    # either way - do not read a missing step reason as a missing jump.
+    # either way - do not read a missing step reason as a missing jump. Sharper (his r2 record): while an INSTRUMENT
+    # row is open, addAlert returns the EXISTING row on a dedupe hit (#982), so a later reason's body never lands at
+    # all and a resurface replays the mint-time text - the run log, not the alert, is where a later jump is visible.
     if isinstance(ex, int) and live_key_lines and ex * PUBLIC_LEVEL_DIVISOR >= live_key_lines:
         # name BOTH arms (rider 1): the ratio rises when repo text grows AND when MEMORY.md shrinks (the nightly trim)
         return ("%d of %d live key line(s) are excluded as public (at least 1/%d) - either memory text has been "
@@ -798,8 +800,14 @@ def self_test():
         shr = exclusion_bound(36, {"excluded": 18}, 18, 54)
         check("  RIDER 1: a MEMORY.md shrink trips the level (18 of 54) and the reason names BOTH arms",
               ("1/3" in shr, "accumulating in the repo" in shr, "MEMORY.md has shrunk" in shr), (True, True, True))
-        check("  RIDER 2: the step, floor and divisor are separate constants",
+        check("  RIDER 2: the step, floor and divisor have today's values",
               (PUBLIC_STEP_LINES, MIN_PRIVATE_KEYS, PUBLIC_LEVEL_DIVISOR), (10, 30, 3))
+        # Langston record item 1: a VALUE check passes if someone re-derives them from SHARED_LINES - fence the SOURCE
+        with open(os.path.abspath(__file__), encoding="utf-8") as fh:
+            assigns = [l for l in fh if l.split("=")[0].strip() in ("PUBLIC_STEP_LINES", "MIN_PRIVATE_KEYS",
+                                                                     "PUBLIC_LEVEL_DIVISOR") and "=" in l]
+        check("  RIDER 2: their assignments do not derive from SHARED_LINES (the separation itself)",
+              (len(assigns), any("SHARED_LINES" in l for l in assigns)), (3, False))
         fl = exclusion_bound(20, {"excluded": 5}, 5, 25)
         check("  FLOOR (correction 1): the reason names private, live and excluded counts",
               ("only 20 of 25 live key line(s) remain private after excluding 5" in fl), True)
