@@ -215,6 +215,17 @@ def main():
     check("  ...with that archive ALSO gone, it names no restore and says UNKNOWN",
           ("NOT present" in lst[4], "UNKNOWN" in lst[4], "restore that file" in lst[4]), (True, True, False))
     os.rename(ap + ".aside", ap)
+    ip = os.path.join(h.top, ".memory-archive", "index.jsonl")
+    with open(ip, encoding="utf-8") as fh:
+        good_idx = fh.read()
+    with open(ip, "w", encoding="utf-8") as fh:
+        fh.write("{cut mid-line" + NL + good_idx)
+    lst = h.reader().ledger_state()
+    check("  ...one unparseable index line does NOT hide the split row (still names the archive)",
+          ("split IS recorded" in lst[4], (".memory-archive/%s.md" % live_sha) in lst[4], "could not be read" in lst[4]),
+          (True, True, False))
+    with open(ip, "w", encoding="utf-8") as fh:
+        fh.write(good_idx)
     os.rename(h.ledger + ".aside", h.ledger)
     h.done()
 
@@ -225,7 +236,16 @@ def main():
     check("recall refuses priority-source-absent", lst[0], "ledger-priority-source-absent")
     check("  ...says NO split is recorded and names --compose, NOT 'restore LEDGER.md'",
           ("NO split is recorded" in lst[4], "--compose" in lst[4], "restore that file" in lst[4]), (True, True, False))
-    os.remove(os.path.join(h.top, ".memory-archive", "index.jsonl"))
+    ip = os.path.join(h.top, ".memory-archive", "index.jsonl")
+    with open(ip, encoding="utf-8") as fh:
+        good_idx = fh.read()
+    with open(ip, "w", encoding="utf-8") as fh:
+        fh.write("{cut mid-line" + NL + good_idx)
+    lst = h.reader().ledger_state()
+    check("  ...with an unreadable line and no split row, it does NOT assert 'no split' - the cause is UNKNOWN",
+          ("NO split is recorded in %s, so" % ip in lst[4], "UNKNOWN" in lst[4], "may BE the split" in lst[4]),
+          (False, True, True))
+    os.remove(ip)
     lst = h.reader().ledger_state()
     check("  ...with the archive index unreadable it says the cause is UNKNOWN and names both",
           ("UNKNOWN" in lst[4], "split out" in lst[4], "without a split" in lst[4]), (True, True, True))

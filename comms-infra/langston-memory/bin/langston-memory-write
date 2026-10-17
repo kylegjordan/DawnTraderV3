@@ -401,8 +401,9 @@ def index_rows():
 
 
 def last_index_row():
-    """The last row that records a WRITE; None when the index is absent or holds no such row; UNREADABLE_INDEX when
-    the index has lines but none of them parses (the cause is then unknown - never "no recorded write"). A `trim-noop`
+    """The last row that records a WRITE; None when the index is absent or holds no write row and every line parsed;
+    UNREADABLE_INDEX when no write row parsed but some line did not - that line may have been the write, so the
+    cause is unknown, never "no recorded write" (Langston r2 C-4: a noop row beside a cut line). A `trim-noop`
     row is a pass-through that wrote nothing (Langston, Step 8 gate A, 2026-10-17: never a link in the sha chain), so
     it is skipped."""
     try:
@@ -412,7 +413,7 @@ def last_index_row():
     writes = [r for r in rows if r.get("mode") != "trim-noop"]
     if writes:
         return writes[-1]
-    return UNREADABLE_INDEX if bad and not rows else None
+    return UNREADABLE_INDEX if bad else None
 
 
 def noop_rows_exist():
@@ -1727,7 +1728,9 @@ def do_rename(opts):
     It WROTE NOTHING and is NOT a link in the sha chain - a reader that walks consecutive writes must skip it. Fields:
     ts, target, part, mode="trim-noop", outcome="noop", part_sha, mem_sha (the bytes it read, unchanged),
     sections_open / sections_closed / unmarked (the census of the part's MARKED batch sections - protected sections
-    are not counted, so the three are not a total section count), and on the FIRST such row only a `note` saying
+    are not counted, so the three are not a total section count; in a noop row sections_closed and unmarked are
+    ALWAYS 0 BY CONSTRUCTION - the trim refuses on any unmarked section and a noop evicted nothing - so they are
+    structural constants, not measurements), and on the FIRST such row only a `note` saying
     nights before it have no row by design."""
     reader = load_reader()
     reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field

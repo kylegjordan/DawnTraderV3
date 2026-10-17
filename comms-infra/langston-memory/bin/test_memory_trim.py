@@ -149,13 +149,15 @@ def main():
     rc, out = h.trim()
     rows2 = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
     noop2 = [r for r in rows2 if r.get("mode") == "trim-noop"]
-    check("  ...a second no-op night adds a second row, without the first-row note", (len(noop2), "note" in noop2[-1]),
-          (2, False))
+    check("  ...a second no-op night adds a second row, without the first-row note",
+          (len(noop2), "note" in (noop2[-1] if noop2 else {"note": "absent row"})), (2, False))
     w = importlib.util.spec_from_loader("lmw_t", importlib.machinery.SourceFileLoader("lmw_t", WRITER))
     wm = importlib.util.module_from_spec(w)
     w.loader.exec_module(wm)
     wm.ARCHIVE_INDEX = idx
-    last_write = [r for r in rows2 if r.get("mode") != "trim-noop"][-1]
+    writes2 = [r for r in rows2 if r.get("mode") != "trim-noop"]
+    assert writes2, "precondition: the fixture's compose writes an index row"       # Langston r2: stated, not patched
+    last_write = writes2[-1]
     check("  ...the CAS reader's last row SKIPS trim-noop rows (never a link in the sha chain)",
           wm.last_index_row(), last_write)
     print("1b. C-1: one unparseable line does not hide the rest; an index of ONLY bad lines is UNKNOWN")
@@ -173,6 +175,17 @@ def main():
     msg = wm.cas_mismatch_message("0" * 64)
     check("  an index with NO readable line -> cause UNKNOWN, never 'no recorded write'",
           ("UNKNOWN" in msg, "no recorded write" in msg), (True, False))
+    noop_lines = NL.join(json.dumps(r) for r in rows2 if r.get("mode") == "trim-noop") + NL
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write("{cut mid-line" + NL + noop_lines)
+    msg = wm.cas_mismatch_message("0" * 64)
+    check("  C-4: noop rows beside a cut line (no write row parsed) -> UNKNOWN, never 'no recorded write'",
+          ("UNKNOWN" in msg, "no recorded write" in msg), (True, False))
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write(noop_lines)
+    msg = wm.cas_mismatch_message("0" * 64)
+    check("  ...control: noop rows only, every line parsed -> 'no recorded write' (true there)",
+          "no recorded write" in msg, True)
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write(good)
     print("1c. C-2: a prior write whose REASON is 'trim-noop' does not suppress the first row's note")
@@ -218,6 +231,7 @@ def main():
     rows = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8")
             if l.strip()]
     trim_rows = [r for r in rows if r.get("mode") == "trim" and r.get("outcome") == "written"]
+    assert trim_rows, "precondition: the pre-cutover trim writes a trim row"
     check("the trim names the pre-cutover section, and only it", (rc, "PRE-CUTOVER ERA in the heading of B-CLOSED-ONE"
           in out, "B-CLOSED-TWO -" in out.split("PRE-CUTOVER")[-1]), (0, True, False))
     check("  ...and records it on the index row", trim_rows[-1].get("pre_cutover_heading"), ["B-CLOSED-ONE"])

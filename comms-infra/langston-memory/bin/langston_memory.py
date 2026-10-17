@@ -364,12 +364,30 @@ def _split_evidence():
     with outcome `written` means the split happened and names the archived LEDGER.md sha; no such row means MEMORY.md
     lost its section some other way. Returns a sentence for the refusal; never raises."""
     idx = os.path.join(LANGSTON_HOME, ".memory-archive", "index.jsonl")
+    rows, bad = [], 0
     try:
-        rows = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
+        # per line (Langston, trim-noop r2): one unparseable line must not hide a split row two lines away
+        with open(idx, encoding="utf-8", errors="replace") as fh:
+            for l in fh:
+                if not l.strip():
+                    continue
+                try:
+                    r = json.loads(l)
+                except ValueError:
+                    bad += 1
+                    continue
+                if isinstance(r, dict):
+                    rows.append(r)
+                else:
+                    bad += 1
     except Exception as e:
         return ("the writer's archive index %s could not be read (%s), so the cause is UNKNOWN: either the ledger was "
                 "split out and LEDGER.md is gone, or MEMORY.md lost its section without a split" % (idx, type(e).__name__))
     split = [r for r in rows if r.get("mode") == "split-ledger" and r.get("outcome") == "written"]
+    if not split and bad:
+        return ("NO split is recorded in the readable rows of %s, but %d line(s) of it could not be read and one may BE "
+                "the split, so the cause is UNKNOWN: either the ledger was split out and LEDGER.md is gone, or MEMORY.md "
+                "lost its section without a split" % (idx, bad))
     if not split:
         return ("NO split is recorded in %s, so MEMORY.md lost its section WITHOUT a split - recompose it from the part "
                 "(`langston-memory-write --compose`) or restore MEMORY.md from .memory-archive/" % idx)
