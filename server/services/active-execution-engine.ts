@@ -399,8 +399,10 @@ import { xstockTransactableSides, xstockSideSize, type XstockSideSizeVerdict } f
 // 00:xx hour averages 1.09% over 7 days); the 28 thin hours (≤ 4 minutes of data, the venue closed) read 100% and are where
 // the exit evaluates nothing, so they land `too_few`. 10% is ~5× the worst live hour; a wholesale loss reads near 100%.
 // `too_few` is EXPECTED in any hour with no open xStock position, or whose positions spent the hour refused (the weekend
-// close, venue-quiet holds): looks are per evaluated position tick with a judged bid, so the bar's reach moves with how
-// many xStock positions we hold, and a `too_few` hour is UNEXERCISED, never clean (#661 leg 2).
+// close, venue-quiet holds). POPULATION (Langston gate A condition 2): a look is ANY evaluated xStock exit tick with a
+// capturable bid — the guard-ON judged bid AND the guard-OFF raw bid (`raw_unguarded`) alike, armed or not, excluding
+// `size_invalid` — so the bar's reach moves with how many xStock positions we hold, and a `too_few` hour is UNEXERCISED,
+// never clean (#661 leg 2).
 const XS_SIZE_TRIPWIRE_WINDOW_MS = 3_600_000;
 const XS_SIZE_TRIPWIRE_SHARE = 0.10;
 const XS_SIZE_TRIPWIRE_MIN_N = 200;
@@ -3445,6 +3447,7 @@ export class ActiveExecutionEngine {
     if (this._exitEvalByClass.xstock.invoked > 0 || Object.values(_xz).some((v) => v > 0)) console.warn(`[B-XSTOCK-BID-TRIGGER-RELAND][XS_SIZE] cycleId=${this.lastCycleAt} xsInvoked=${this._exitEvalByClass.xstock.invoked} x1Short=${_xz.x1Short} x1Unknown=${_xz.x1Unknown} ` +
       `x2Short=${_xz.x2Short} x2Unknown=${_xz.x2Unknown} trigShort=${_xz.trigShort} trigUnknown=${_xz.trigUnknown} invalidQty=${_xz.invalidQty} closeCrossedWalks=${_xz.closeCrossedWalks}`);
     this._xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
+    this._xsInvalidQtySeenThisCycle.clear();
     void this._runXsSizeTripwire();
     this._xsFramesEmitted = 0;
     this._xsFrameClassMismatch = 0;
@@ -3528,6 +3531,9 @@ export class ActiveExecutionEngine {
   private _xsSizeCounts = { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 };
   // r2 condition 3(c): positions already paged for a non-positive quantity (an internal invariant break, paged ONCE each).
   private _xsInvalidQtyPaged = new Set<string>();
+  // Langston gate A condition 3: `invalidQty` counts POSITIONS per cycle, not sites — the trigger frame and the X2 gate can
+  // both see the same broken row in one tick. Cleared with the counters on EVAL_EXIT.
+  private _xsInvalidQtySeenThisCycle = new Set<string>();
   // ⭐ Row 2 increment B (Langston Step-2 judgement call 3) — THE STANDING SIZE TRIPWIRE. An exit trigger ACCEPTS
   //   `size_unknown` (an exit must never wait on size), so if the venue's quantity fields went null wholesale the trigger
   //   would silently lose its size term. Every evaluated xStock tick with a judged bid is counted in an hourly window; a
@@ -3538,9 +3544,11 @@ export class ActiveExecutionEngine {
   /** r2 condition 3(c): a non-positive `position.quantity` is an internal invariant break. Counted on `[XS_SIZE]`
    *  (`invalidQty`), logged at error, and paged on the FIRST occurrence per position; it never blocks an exit trigger. */
   private _noteInvalidQuantity(position: any, site: 'x1' | 'x2' | 'trigger'): void {
+    const id = String(position.id);
+    if (this._xsInvalidQtySeenThisCycle.has(id)) return; // once per position per cycle (gate A condition 3)
+    this._xsInvalidQtySeenThisCycle.add(id);
     this._xsSizeCounts.invalidQty++;
     console.error(`[B-XSTOCK-BID-TRIGGER-RELAND][SIZE_INVALID] ${position.symbol} pos=${position.id} site=${site} quantity=${position.quantity} — not a positive number`);
-    const id = String(position.id);
     if (this._xsInvalidQtyPaged.has(id)) return;
     this._xsInvalidQtyPaged.add(id);
     void (async () => {
@@ -3804,7 +3812,9 @@ export class ActiveExecutionEngine {
       const _xsTag = xsFrame === null ? '' :
         ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}` +
         ` basis=${xsBidArmed ? 'bid' : `mark reason=${xsFrame.armOff ?? 'unset'}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size
-      if (xsFrame !== null && xsFrame.size != null) {
+      // Langston gate A condition 1: `size_invalid` is OUR broken row, not a feed look — out of the denominator too, or a
+      // wholesale quantity break would be diluted (and its page suppressed) by a different break.
+      if (xsFrame !== null && xsFrame.size != null && xsFrame.size !== 'size_invalid') {
         this._xsSizeWindow.n++;
         if (xsFrame.size === 'size_unknown') this._xsSizeWindow.unknown++;
       }

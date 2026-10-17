@@ -125,6 +125,10 @@ describe('r2 condition 3 — the tripwire bar and the invalid quantity', () => {
     expect(AEE).toMatch(/const XS_SIZE_TRIPWIRE_SHARE = 0\.10;/);
     expect(AEE).toMatch(/const XS_SIZE_TRIPWIRE_MIN_N = 200;/);
     expect(AEE).toMatch(/if \(xsFrame\.size === 'size_unknown'\) this\._xsSizeWindow\.unknown\+\+;/);
+    // gate A condition 1: size_invalid is out of the DENOMINATOR too
+    expect(AEE).toMatch(/if \(xsFrame !== null && xsFrame\.size != null && xsFrame\.size !== 'size_invalid'\) \{\s*this\._xsSizeWindow\.n\+\+;/);
+    // gate A condition 3: once per position per cycle
+    expect(AEE).toMatch(/if \(this\._xsInvalidQtySeenThisCycle\.has\(id\)\) return;/);
   });
   it('a non-positive quantity is its OWN verdict (size_invalid): counted, paged once per position, never pooled', () => {
     expect(count(AEE, /this\._noteInvalidQuantity\(position, /g)).toBe(2); // the rest gate and the trigger frame

@@ -204,7 +204,7 @@ function makeEngine(): Stub {
     _riMissSig: new Map<string, string>(),
     _riMissAcc: new Map(),
     _spreadBlownSkipAcc: new Map(), // row 2 objective 6, Step 4 (the spread_blown SKIP summary)
-    _xsSizeCounts: { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 }, _xsInvalidQtyPaged: new Set(), // row 2 increment B (P3/P7)
+    _xsSizeCounts: { x1Short: 0, x1Unknown: 0, x2Short: 0, x2Unknown: 0, trigShort: 0, trigUnknown: 0, invalidQty: 0, closeCrossedWalks: 0 }, _xsInvalidQtyPaged: new Set(), _xsInvalidQtySeenThisCycle: new Set(), // row 2 increment B (P3/P7)
     _xsSizeWindow: { startMs: Date.now(), n: 0, unknown: 0 }, // row 2 increment B (the size tripwire)
     _engineConstructedAt: 0,
     // B-XSTOCK-BID-TRIGGER-RELAND increment C fields the real constructor sets.
