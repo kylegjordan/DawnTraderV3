@@ -1,4 +1,10 @@
-# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r3, 2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (r4, 2026-10-17)
+
+> **r4 answers Langston's r3 blocker (07:1xZ):**
+> - the whole path's `already-active` short-circuit (`b75-retention-sweep.ts:703`) is now a gate in the census (§3.1, §3.4(e)). It is **deleted**, so the whole path reaches the one decision;
+> - the rule's `active` row becomes **refuse, any basis**;
+> - following the same argument found A14: the plain lane never marks a label `active` after it deletes, so its `verified` row plays the role `active` plays elsewhere. It now marks labels `active` after the delete (P3.6).
+> r3 was `68972749a`.
 
 > **r3 answers Langston's r2 CHANGES (05:4xZ):**
 > - **the blocker** → P3.2, the resume decision rewritten as a five-row table: `migrated` joins the refusal, and any existing evidence refuses a re-export;
@@ -62,7 +68,7 @@ Everything that starts work against the manifest or the evidence table:
 |---|---|
 | **creates** | sweep `upsertManifestPending` `:337`; ctx `:162`; rotator `:303` (cold row, `INSERT … SELECT` from warm) |
 | **mutates** | sweep `:368` uploaded, `:383` verified, `:392` active, `:407` `markLabelsActive`; ctx `:157` pending, `:217` tier→cold (413 fallback), `:225` verified, `:293` `markMonthsActive`; rotator `:333` warm→migrating/migrated |
-| **reads** | sweep `:304` `getManifestRow` (the resume skip), `:320`, `:778` DROP gate, `:925` plain gate; ctx `:119` (the active skip); rotator `:134`; rehydrate `:101`; capacity gate `:608`; perpfeed `:108` |
+| **reads** | sweep `:304` `getManifestRow`, called at exactly two sites: **`:703` (the whole path's `already-active` short-circuit, missed in r1-r3)** and `:517` (the resume skip); `:320`; `:778` DROP gate; `:925` plain gate; ctx `:119` (the active skip); rotator `:134`; rehydrate `:101`; capacity gate `:608`; perpfeed `:108` |
 | **deletes** | **exactly one:** `perpfeed-gate-test.ts:126`, `--clean`, for the synthetic `xstock_perp_ohlc_1m/2025-01-15` only. That is also the one `xstock_perp_ohlc_1m` manifest row. |
 | **schedules** | §2 |
 
@@ -86,6 +92,7 @@ Everything that starts work against the manifest or the evidence table:
 | (b) plain delete gate `:922-935` | every present label `verified`/`active`, else `console.error` + `continue` (no alert) | the plain-archive tables only — `closed_trades` and `vts_open_trades`, **0 manifest rows** (365-day window) |
 | (c) resume skip `:516-520` | `verified`/`active` with a checksum → reuse, no re-export | both sweep lanes |
 | (d) ctx active skip `ctx:133-138` | `active` → skip | the unscheduled ctx lane |
+| **(e) whole-path short-circuit `:703-714`** | `active` → `skipped: already-active`, **before** `archiveOneObject`, so before (c) | the WHOLE path only; the sliced path goes straight to `:758` and reaches (c) |
 
 - **Exposure, measured:** 0 of 568 pre-hotfix rows overlap a live hot child. The control: the same query enumerated all 11 partitioned parents' 276 children; Langston's own control returned 921 pairs once the key was dropped. `context_bridge_log`'s oldest row is 2026-04-01 00:00:00.151Z, which is the end of its newest archived month.
 
@@ -146,6 +153,7 @@ Everything that starts work against the manifest or the evidence table:
 | A10 | A `migrated` label that re-exported would gain a warm copy that shadows its cold copy in the rehydrate CLI (warm preferred by label, `:148-153`) | Langston B-1, followed through | **made unreachable by P3.2's refusal**; P7 still lists every tier |
 | A11 | The partition lane's alert has three classes (`:1156-1170`), so a fourth failure kind would land in the "likely transient" arm | Langston B-2 | P3.4 |
 | A12 | `engine` is defined as "no timer script" (`system-alerts.ts:146-149`). At runtime, the two machine timer scripts resolve as `cli`: `governance-checker` 67 rows (Langston's read; mine was 66, taken earlier) and `deploy-drift-monitor` 30 (measured across every resolved row on staging), because they go through the CLI. The sweep would be the first timer script to resolve in-process. | Langston B-4 | P4 |
+| A14 | **The plain-archive lane never marks a label `active`.** `markLabelsActive` and `updateManifestActive` are called only in the partition lane (`:729`, `:796`), so after the delete its labels stay `verified`, and a later row for the same day would be reused and deleted unarchived | Langston r3's argument, applied to the plain lane | P3.6 |
 | A13 | **The rehydrate CLI crashes on every rotated label (new, measured).** `queryManifest` admits `migrated` (`b75-rehydrate.ts:103`), and the warm-first map (`:148-153`) then picks the warm `migrated` row, whose object the rotator deleted by design (`b75-cold-rotator.ts:343`). Run on staging, read-only into a temp folder (`--table context_bridge_log --from 2026-02-05 --to 2026-02-06`): `manifest matches: warm=1 cold=1`, then `fatal: … warm download (file) failed: … 404 … NoSuchKey` at `:175`, and nothing written. The control is the matched pair and the error naming the deleted object. **Reach:** all 3 `migrated` labels today; and since warm rotates to cold after 365 days, every object eventually. **Provenance:** the reader was written at B75, when cold was dry-run; the rotator was activated at B-STORAGE-HARDEN Wave A (07-08), and the reader's tier choice never changed. No ledger entry (searched `rehydrate`). | **folded into P7 (disposition 1):** P7 already rewrites the tier choice. Recorded on `#1195` at Step 10. |
 
 ## 8. IMPLEMENTATION PLAN (each item names its finding)
@@ -187,19 +195,26 @@ Everything that starts work against the manifest or the evidence table:
    - `recordExactArchiveEvidence` conflicts on `manifest_id` and does nothing (`exact-archive-evidence.ts:68`). A re-export of a label that already has evidence would therefore keep the old proof, fail the replay compare (`:81-105`) with a bare `Error`, land in the "likely transient" arm every night, and leave row M `uploaded` with a short `row_count` under a proof that describes other bytes.
    - That is the general case after this ships, not an xStock edge: after deploy every new object has evidence.
 
-   **The rule, one row per state, decided BEFORE any upload:**
+   **The rule, one row per state, decided at ONE site BEFORE any upload.** It is a pure function, `decideExistingCopy(row, evidenceExists)`, returning `export | reuse | refuse(reason)`.
+   - **Called from:** `archiveOneObject` (`:517`), used by the whole, sliced and plain lanes; and the ctx lane's skip (`ctx:133-138`).
+   - **The whole path's short-circuit at `:703-714` is deleted,** so the whole path reaches it through `archiveOneObject` (Langston r3: hoist or route; I route).
+   - **Every call has source rows present for the label,** because each lane enumerates only labels with rows still in the source (§3.4). So `active` at the call means **rows found outside a copy that was already closed out.**
 
    | existing warm row for the label | decision | why |
    |---|---|---|
    | none | export | the normal path |
-   | `verified` / `active`, basis `source-count-matched` | **reuse** (skip) | proven |
-   | `verified` / `active`, any other basis | **refuse** — `NonProvenExistingCopyError` | C-6: a re-export could only prove the leftover rows |
-   | **`migrated` / `migrating`, any basis** | **refuse** — the same error | the cold copy is the copy of record. A re-export of the rows still hot would split one label into two partial copies: one warm and genuinely proven for what it exported, one cold and legacy. That still loses the old rows, and it leaves no single copy that is whole. |
-   | `pending` / `uploaded` | export **only if no evidence row exists for M**; otherwise **refuse** | an existing proof for M with a non-final state means the state was reset under a proof. Re-exporting would test the old proof against new bytes — the case above. |
+   | `verified`, basis `source-count-matched` | **reuse** (skip) | proven, and the source was not yet dropped or deleted. This is the legitimate mid-run resume (the sliced path's day loop, a crash between verify and drop). No alert. |
+   | `verified`, any other basis | **refuse** | C-6: a re-export could only prove the leftover rows |
+   | **`active`, ANY basis** (Langston r3) | **refuse** | `active` is set only after the drop or delete (P3.6 makes the plain lane true too), so rows present now are new rows outside a closed copy. Reusing would run `dropAndMarkActive` and destroy them; re-exporting would overwrite the closed copy with only the new rows. **Refusing is right even when the basis is `source-count-matched`.** |
+   | `migrated` / `migrating`, any basis | **refuse** | the cold copy is the copy of record; a re-export would split one label into two partial copies |
+   | `pending` / `uploaded` | export **only if no evidence row exists for M**; otherwise **refuse** | an existing proof for M with a non-final state means the state was reset under a proof |
 
+   - The refusal body names which row fired. The `active` row's body says *"rows found for a label already archived and dropped/deleted — they are NOT in the archived copy, and they are kept hot"*. That separates it from the `verified` reuse, which raises no alert.
    - **Every refusal** uses the `isNonProven` class (P3.4): `critical`, permanent until a human acts, and it names the retained hot size. Nothing is uploaded, no evidence is written, and no object or manifest field is overwritten. The hot rows stay.
    - **Reach today:** none. 0 of 568 pre-hotfix rows overlap a live hot child, and 0 evidence rows exist. After deploy, a refusal needs hot rows to appear for a label already archived — rows written with an old timestamp.
    - **The tests change accordingly:**
+     - **the WHOLE path specifically** (Langston r3): an `active` row with a live child now refuses with `isNonProven`, where the deleted short-circuit returned `skipped`. This is the regression case for `:703`;
+     - `active` refuses even with `source-count-matched`; `verified` + `source-count-matched` reuses, with no alert;
      - `migrated` refuses, `migrating` refuses;
      - `pending` with no evidence exports;
      - `pending` with evidence refuses before the upload;
@@ -213,6 +228,9 @@ Everything that starts work against the manifest or the evidence table:
    - `non-proven-existing` has **no** automatic resolver; it needs a human disposition.
    - Bodies name the run start time and point at the log; no counts.
 5. **Wording (OBJ-6).** The plain catch (`:999-1005`) names a count mismatch; the `:1165` promise is rewritten to say a mismatch keeps failing safely and needs investigation.
+6. **The plain lane marks its labels `active` after the delete (A14, new).** Today the plain-archive lane leaves every label `verified` forever (the only `active` writers are `:729` and `:796`, both in the partition lane). So a late row with an old timestamp would meet a `verified` + proven row, be reused at (c), and **be deleted by the age-delete without being in the archive.** After its delete loop finishes, the lane runs `markLabelsActive` (`:400`) for every present label (`labels`, `:923`). Those are exactly the days whose rows the delete just removed, so the `active` row above refuses that case.
+   - **Reach today:** none. The plain-archive tables have 0 manifest rows.
+   - **Semantic note:** `active` then means "the source rows for this label were removed", for both lanes. The SIM states it.
 
 **P4 — `system-alerts.ts` (A7, A12).**
 - Add `{ value: 'b75-retention-sweep', tag: 'machine', why: … }` to `ALERT_ACTORS` (`:212`).
