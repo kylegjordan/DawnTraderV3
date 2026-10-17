@@ -440,19 +440,33 @@ def final_sha_of(row):
 def cas_mismatch_message(live_sha):
     """Condition (Langston, answer 3): a hand edit must not look like a benign race."""
     last = last_index_row()
+    try:
+        _rows, bad = index_rows()
+    except OSError:
+        bad = 0
     base = "REFUSED: compare-and-swap mismatch - nothing written. current sha256 %s. " % live_sha
+    # Langston r3 C-7: every branch is hedged when any index line is unreadable - append_index is O_APPEND + fsync, so
+    # a torn record is most likely the LAST line, i.e. a write NEWER than the newest readable one.
+    hedge = ("" if not bad else " ⚠️ %d line(s) of this tool's archive index could not be read; one may be a LATER "
+             "write through this tool, so this verdict may be stale - tell Infra Claude." % bad)
     if last == UNREADABLE_INDEX:
-        return (base + "⚠️ This tool's archive index exists but NO line of it can be read, so whether the file changed "
-                "outside this tool is UNKNOWN. Do not redo blind - tell Infra Claude.")
+        # C-6: say what was measured - lines DID parse when only noop rows remain readable
+        return (base + "⚠️ No line recording a write through this tool can be read, and %d line(s) of its archive "
+                "index could not be read, so whether the file changed outside this tool is UNKNOWN. Do not redo "
+                "blind - tell Infra Claude." % bad)
     if last is None:
-        return base + "This tool has no recorded write to compare against. Re-read the file and redo."
+        return base + "This tool has no recorded write to compare against. Re-read the file and redo." + hedge
     prior = final_sha_of(last)
     if prior == live_sha:
         return (base + "The file matches this tool's last recorded write (%s, by %s): another session wrote THROUGH "
-                "this tool. Re-read, redo, never force." % (last.get("ts"), last.get("by_claimed")))
+                "this tool. Re-read, redo, never force." % (last.get("ts"), last.get("by_claimed")) + hedge)
     if prior is None:
         return (base + "This tool's last record (%s, outcome %s) cannot say what the file held afterwards. Re-read "
-                "and redo, and tell Infra Claude." % (last.get("ts"), last.get("outcome")))
+                "and redo, and tell Infra Claude." % (last.get("ts"), last.get("outcome")) + hedge)
+    if bad:
+        return (base + "⚠️ The file differs from this tool's last READABLE write (%s left sha %s), but %d line(s) of "
+                "its archive index could not be read and may hold a later write through this tool - so this is NOT "
+                "proof of a hand edit. Tell Infra Claude before redoing." % (last.get("ts"), str(prior)[:16], bad))
     return (base + "⚠️ THE FILE CHANGED OUTSIDE THIS TOOL since its last recorded write (%s left sha %s). Someone "
             "edited it by hand. Tell Infra Claude before redoing." % (last.get("ts"), str(prior)[:16]))
 

@@ -222,8 +222,13 @@ def main():
         fh.write("{cut mid-line" + NL + good_idx)
     lst = h.reader().ledger_state()
     check("  ...one unparseable index line does NOT hide the split row (still names the archive)",
-          ("split IS recorded" in lst[4], (".memory-archive/%s.md" % live_sha) in lst[4], "could not be read" in lst[4]),
-          (True, True, False))
+          ("split IS recorded" in lst[4], (".memory-archive/%s.md" % live_sha) in lst[4]), (True, True))
+    check("  ...and C-7: names it as possibly a generation stale, since the bad line may be a LATER ledger write",
+          ("could not be read" in lst[4], "generation stale" in lst[4]), (True, True))
+    with open(ip, "w", encoding="utf-8") as fh:
+        fh.write(good_idx)
+    lst = h.reader().ledger_state()
+    check("  ...control: with every line readable there is no stale hedge", "generation stale" in lst[4], False)
     with open(ip, "w", encoding="utf-8") as fh:
         fh.write(good_idx)
     os.rename(h.ledger + ".aside", h.ledger)

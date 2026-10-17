@@ -168,19 +168,35 @@ def main():
         fh.write("{not json" + NL + good)
     check("  a broken line prepended: the last write is still found", wm.last_index_row(), last_write)
     msg = wm.cas_mismatch_message("0" * 64)
-    check("  ...and the refusal message is UNCHANGED by it (never degraded to 'no recorded write')",
-          (msg == msg_good, "no recorded write" in msg), (True, False))
+    check("  ...the verdict is UNCHANGED by it and HEDGED (C-7): same text, plus the unreadable count",
+          (msg.startswith(msg_good), "1 line(s) of this tool's archive index could not be read" in msg,
+           "no recorded write" in msg), (True, True, False))
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write("{not json" + NL + "[1, 2]" + NL)
     msg = wm.cas_mismatch_message("0" * 64)
     check("  an index with NO readable line -> cause UNKNOWN, never 'no recorded write'",
           ("UNKNOWN" in msg, "no recorded write" in msg), (True, False))
+    check("  ...C-6: the message says what was measured (2 unreadable), not that NO line can be read",
+          ("2 line(s)" in msg, "NO line of it" in msg), (True, False))
     noop_lines = NL.join(json.dumps(r) for r in rows2 if r.get("mode") == "trim-noop") + NL
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write("{cut mid-line" + NL + noop_lines)
     msg = wm.cas_mismatch_message("0" * 64)
     check("  C-4: noop rows beside a cut line (no write row parsed) -> UNKNOWN, never 'no recorded write'",
           ("UNKNOWN" in msg, "no recorded write" in msg), (True, False))
+    check("  ...C-6: and it does not claim NO line can be read (the noop rows did parse)",
+          ("No line recording a write" in msg, "NO line of it" in msg), (True, False))
+    hand = {"ts": "2026-10-17T00:00:00Z", "mode": "whole-file", "outcome": "written", "new_sha": "a" * 64}
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(hand) + NL)
+    msg_clean = wm.cas_mismatch_message("b" * 64)
+    with open(idx, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(hand) + NL + '{"ts": "2026-10-17T01:00:00Z", "mode": "whole-fi' + NL)
+    msg_torn = wm.cas_mismatch_message("b" * 64)
+    check("  C-7 control: a readable write and no bad line -> 'Someone edited it by hand'",
+          "Someone edited it by hand" in msg_clean, True)
+    check("  C-7: the same write + a TORN LAST line -> NOT asserted as a hand edit, the later write named as possible",
+          ("Someone edited it by hand" in msg_torn, "NOT proof of a hand edit" in msg_torn), (False, True))
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write(noop_lines)
     msg = wm.cas_mismatch_message("0" * 64)
