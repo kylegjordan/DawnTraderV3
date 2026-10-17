@@ -188,6 +188,24 @@ describe('engine — escalation', () => {
     const merged = m.mergeAlertMetadata.mock.calls[0][1] as any;
     expect(merged.members['pos-xs']).toMatchObject({ symbol: 'CAG/USD', reasonFamily: 'quiet_market', T: 200, classVerdict: 'quiet' });
   });
+  it('Step-7 (Langston (c)): a re-join keeps the FIRST join\'s verdict, T and families; the top-level fields carry the latest', async () => {
+    const stored: Record<string, any> = { members: {} };
+    m.addAlert.mockImplementation(async (o: any) => ({ id: 'row-' + o.dedupe_key, metadata: stored }));
+    m.mergeAlertMetadata.mockImplementation(async (_id: string, patch: any) => { Object.assign(stored, patch); return {}; });
+    const e = engine() as any;
+    await e._joinVenueQuietStanding({ id: 'pos-cf', symbol: 'CF/USD' },
+      { classVerdict: 'not_quiet', T: 451, reasonFamilies: ['quiet_market'] });
+    vi.setSystemTime(WEEKDAY + 600_000);
+    await e._joinVenueQuietStanding({ id: 'pos-cf', symbol: 'CF/USD' },
+      { classVerdict: 'quiet', T: 238, reasonFamilies: ['quiet_market'] });
+    const mem = stored.members['pos-cf'];
+    expect(mem.firstJoin).toEqual({ classVerdict: 'not_quiet', T: 451, reasonFamilies: ['quiet_market'], atMs: WEEKDAY });
+    expect(mem).toMatchObject({ classVerdict: 'quiet', T: 238, joins: 2, lastJoinedAtMs: WEEKDAY + 600_000 });
+    // a member re-listed after leaving the record (no prior entry) starts a fresh first join
+    delete stored.members['pos-cf'];
+    await e._joinVenueQuietStanding({ id: 'pos-cf', symbol: 'CF/USD' }, { classVerdict: 'quiet', T: 200, reasonFamilies: ['quiet_market'] });
+    expect(stored.members['pos-cf'].firstJoin).toMatchObject({ classVerdict: 'quiet', T: 200, atMs: WEEKDAY + 600_000 });
+  });
   it('r6c (Langston FINDING-A/B): a re-join keeps the EARLIEST listing time and the row counts every suppressed page', async () => {
     const stored: Record<string, any> = { members: {} };
     m.addAlert.mockImplementation(async (o: any) => ({ id: 'row-' + o.dedupe_key, metadata: stored }));

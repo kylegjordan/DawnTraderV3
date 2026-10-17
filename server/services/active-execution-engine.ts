@@ -927,11 +927,16 @@ export class ActiveExecutionEngine {
       // r6c (Langston Step-8 FINDING-B): a re-join KEEPS the earliest listing time — overwriting it reset the member's
       // unpriced clock on every re-stale, so the longest staleness read shortest (objective 3's own failure, in reverse).
       const listedAtMs = typeof prev?.listedAtMs === 'number' ? prev.listedAtMs : now;
+      // Step-7 (Langston 2026-10-16, (c)): `...meta` below overwrites the verdict, T and families with the LATEST join's
+      // values, so a member re-joined on `quiet` no longer shows that its FIRST crossing joined on `not_quiet` off-session —
+      // the case the r7 session gate exists for. The first join's judged inputs are kept, never overwritten.
+      const firstJoin = prev?.firstJoin && typeof prev.firstJoin === 'object' ? prev.firstJoin
+        : { classVerdict: meta.classVerdict ?? null, T: meta.T ?? null, reasonFamilies: meta.reasonFamilies ?? null, atMs: now };
       const members = { ...prior,
         // r6c condition (Langston): the member's last venue price, carried on the row — the in-process `lastPricedAt` is lost at
         // every restart, and without this the duration page's "for at least N min" would read from the EARLIEST listing and
         // overstate. Kept from a previous join when this process has not priced the position.
-        [position.id]: { symbol: position.symbol, ...meta, listedAtMs, lastJoinedAtMs: now,
+        [position.id]: { symbol: position.symbol, ...meta, listedAtMs, firstJoin, lastJoinedAtMs: now,
           lastPricedAtMs: this._venueQuiet.lastPricedAt.get(position.id) ?? (typeof prev?.lastPricedAtMs === 'number' ? prev.lastPricedAtMs : undefined),
           joins: (typeof prev?.joins === 'number' ? prev.joins : 0) + 1 } };
       // r6c (FINDING-A): each join IS a page this record suppressed. The count lives on the row — out.log keeps about a day,
