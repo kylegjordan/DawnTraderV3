@@ -1379,6 +1379,10 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **A re-issued signal now replaces the queued one in full.** The rule for choosing between two copies of the same signal had never run, so the newest always won — but it kept the first signal's expected value, maker/taker choice and trend readings beside the new prices. Newest wins is now the stated rule, the dead rule is deleted, and the replacement carries the whole decision; verified on staging on a re-issued entry that kept its identity and took the new readings.
 
+### 2026-10-17 — B-RTB-QUEUED-STATUS-SWEEP (CC-B; sprint row 59g, `#1204`) — ⏳ STEP 10
+
+**The RTB queue's code now matches the two statuses it actually writes.** Reads of a "queued" status nothing has written since December 2025 are gone, with two clean-ups that could never fire, a count term that was always zero, and three empty database columns — the columns dropped in a second deploy, after the build that stopped naming them. Verified on staging: columns gone, the refresh writes the whole pool, no errors.
+
 ### 2026-10-17 — B-SILENT-STRATEGY-CENSUS (CC-B; sprint row 52, `#1070`) — ⏳ IN OBSERVATION
 
 **strong_bull_trend is trading xStock on a pre-registered test; the nine incumbents stay on.** The first candidate switched on 2026-10-16 with a written pass/fail (verdict at 20 filled closes or 2026-11-06). The per-strategy check of the nine already on showed every one with enough trades losing; Kyle kept all on until calibration. The other four candidates wait on the verdict. Record: `Claude Comms and Packages/Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md`.

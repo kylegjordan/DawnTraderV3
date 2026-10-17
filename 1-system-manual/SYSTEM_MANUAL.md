@@ -11044,7 +11044,7 @@ These tables serve the canonical paper/live trading flow:
 | `active_open_positions` | Open paper positions | ~25 columns, uniqueIdx on symbol | Y (paper only) |
 | `active_trade_logs` | Paper trade event log | 3 indexes, metadata (jsonb) | N |
 | `active_engine_sessions` | Paper session management | 3 indexes, metadata (jsonb) | N |
-| `rtb_signals` | Ready-to-Brief signal queue | ~25 columns, 5 indexes | Y |
+| `rtb_signals` | Ready-to-Buy signal queue | 33 columns, 7 indexes (staging, measured 2026-10-17 after `B-RTB-QUEUED-STATUS-SWEEP` dropped three; it read "Ready-to-Brief … ~25 columns, 5 indexes") | Y |
 | `execution_attempt_audit` | Execution decision log | 14 columns, 5 indexes, executionDecision/blockReason enums | Y |
 | `system_context` | Engine state / LATTI | ~25 columns, 3 indexes, extensive defaults | Y |
 | `telemetry_history` | Signal telemetry persistence | 14 columns, 4 indexes, marketRegime enum | Y |
@@ -11194,7 +11194,7 @@ Tuning, actuation, strategy drive, learning, behavioral, oversight, audit, exper
 | `tradeTypeEnum` | buy, sell | trades |
 | `signalTypeEnum` | QUANT, PATTERN, HYBRID | rtb_signals, trades |
 | `patternTypeEnum` | PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS, ABCD (declared in code since B79.0n; storable in the database only from deploy B, migration `2026-10-02-b-pattern-enum-drift-abcd.sql`, `#1063`) | trades, closed_trades, active_open_positions (corrected 2026-10-02: `rtb_signals` has no such column; the sinks write the RAW detector label) |
-| `rtbSignalStatusEnum` | queued, promoted, expired, rejected, reconfirmed, active | rtb_signals |
+| `rtbSignalStatusEnum` | queued, promoted, expired, rejected, reconfirmed, active — **written: `active` (admission) and `reconfirmed` (refresh) only; the other four are labels nothing writes, kept because Postgres cannot drop an enum value on a live table** (`B-RTB-QUEUED-STATUS-SWEEP`, 2026-10-17; `status` has no default since then) | rtb_signals |
 | `executionDecisionEnum` | OPENED, BLOCKED | execution_attempt_audit |
 | `executionBlockReasonEnum` | KILL_SWITCH, NO_STOP_LOSS, ... (13 values) | execution_attempt_audit |
 | `marketRegimeEnum` | EXTREME_NOISE, BULL_STABLE, BULL_VOLATILE, BEAR_STABLE, BEAR_VOLATILE, LOW_VOL_CHOP | telemetry_history |
