@@ -235,6 +235,13 @@ def main():
     check("  AT the ceiling, a growing write refuses (exit 7) and writes nothing - even though the watch said UNDER",
           (rc, "over its ceiling" in out, h.snap()[h.mem] == snap0[h.mem], h.snap()[h.part] == snap0[h.part]),
           (7, True, True, True))
+    g0 = importlib.util.spec_from_loader("lmw_r", importlib.machinery.SourceFileLoader("lmw_r", WRITER))
+    gm = importlib.util.module_from_spec(g0)
+    g0.loader.exec_module(gm)
+    gm.ARCHIVE_INDEX = idx
+    lw = gm.last_index_row()
+    check("  ...and the CAS reader's last WRITE row is not the refusal (it wrote nothing)",
+          (isinstance(lw, dict) and lw.get("outcome") != "refused-growth"), True)
     check("  ...and the refusal is RECORDED, with the live sum it saw (Rider A)",
           (r.get("outcome"), r["ratchet"].get("total_after", 0) > r["ratchet"].get("ceiling_bytes", 10 ** 12),
            r["ratchet"].get("delta_bytes", 0) > 0),

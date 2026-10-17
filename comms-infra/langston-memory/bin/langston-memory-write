@@ -410,7 +410,8 @@ def last_index_row():
         rows, bad = index_rows()
     except OSError:
         return None
-    writes = [r for r in rows if r.get("mode") != "trim-noop"]
+    # a refused-growth row wrote nothing either (Langston, approving 3872c50a4): not a link in the sha chain
+    writes = [r for r in rows if r.get("mode") != "trim-noop" and r.get("outcome") != "refused-growth"]
     if writes:
         return writes[-1]
     return UNREADABLE_INDEX if bad else None
