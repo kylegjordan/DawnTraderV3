@@ -85,8 +85,9 @@ describe('B79.0m.a — isStrategyEnabledForAssetClass (DB-authoritative)', () =>
     });
   });
 
-  describe('crypto_spot — no-touch fence (no rows → default-open)', () => {
-    // crypto_spot has zero strategy_gates rows; helper returns true for any strategy.
+  describe('crypto_spot — default-open branch (the MOCK seeds no crypto rows)', () => {
+    // The mock seeds no crypto_spot rows so this exercises the no-matching-row → true branch. LIVE, crypto_spot
+    // has 19 strategy_gates rows (`p19-b8-5-gate12-seed`, 2026-07-14) — this describes the helper, not live membership.
     it.each([
       'vwap_pullback',
       'strong_bull_trend',

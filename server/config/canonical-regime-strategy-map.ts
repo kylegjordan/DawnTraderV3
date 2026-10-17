@@ -1210,10 +1210,11 @@ import {
  *   - If a matching row exists with `enabled=false` → returns false.
  *   - If NO row matches the (assetClass, strategy) tuple (even via wildcard)
  *     → returns true. Default-open back-compat for asset classes pre-onboarding
- *     (crypto_spot has no rows; crypto_perp/xstock_perp pre-B80 etc. have none).
+ *     (crypto_perp / xstock_perp pre-B80 etc. have none). ⚠️ crypto_spot DOES have rows: all 19,
+ *     seeded 2026-07-14 by `p19-b8-5-gate12-seed` (B-SILENT-STRATEGY-CENSUS corrected this line).
  *
- * For xstock_spot specifically, B79.0m.a seeds all 19 strategy rows explicitly
- * (10 enabled, 9 disabled) so the allowlist is fully queryable from DB.
+ * B79.0m.a seeded all 19 xstock_spot rows explicitly (10 enabled, 9 disabled AT THE SEED). Membership
+ * is DATA and has changed since — read the rows, never a count written here.
  *
  * Throws on cold cache — b72-warmup.ts must have prefetched `strategy_gates`.
  */
