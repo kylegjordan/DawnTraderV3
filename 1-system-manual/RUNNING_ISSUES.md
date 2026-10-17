@@ -11096,6 +11096,7 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 - the per-table key census.
 ⚠️ The database is at 65.4% of its 200 GB cap (alert `545762f9`).
 **Added from Langston's second pass (2026-10-16): the sweep failure alert needs a dedupe key per parent and label (F2), and the plain-archive lane's catch must name a count mismatch rather than calling it transient (F4).** Disposition 2, folded into this batch.
+**✅ HOTFIX VERIFIED 2026-10-17:** the 2026-10-17 02:15Z sweep (`/var/log/dawntrader/b75-retention.log`) dropped each 2026-09-16 child with `rows=` equal to its source: `crypto_perp_ohlc_1m` 264960 (240000 on every prior night), `signal_eval_archive` 2284067, `crypto_perp_ticker_snap` 1475260, `xstock_spot_ticker_snap` 2912818 — exactly the read-only proof's counts — `failed=0`. The forward loss is closed. The parent `B-B75-EXPORT-COMPLETENESS` stays open, for the gap register, the key census and F2/F4.
 **⭐ KYLE DECIDED 2026-10-17 (Desktop, option 3 of three): RECOVER NOTHING; RECORD THE GAPS EVERYWHERE.**
 - **Rejected:** no re-download of the one-minute crypto bars from Kraken, and no restore from Supabase backups.
 - **Measured basis**, from `data_archive_manifest` warm objects created since 2026-05-06:
