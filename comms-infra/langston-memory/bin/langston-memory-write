@@ -86,7 +86,6 @@ PART_FRONTMATTER_RE = re.compile(r"\A<!-- part\n.*?\n-->\n", re.DOTALL)   # opti
 READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/langston_memory.py")
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
-STATED_CAP = 24576      # the byte cap Langston quotes for this file; the loaded-set ceiling is `langston-size-watch --status`
 KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth")
 VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to", "--allow-growth")
 NL = chr(10)
@@ -661,8 +660,20 @@ def resolve_target_part(parts, append, explicit_part=None):
 
 
 def size_line(n):
-    over = n - STATED_CAP
-    return "size %d B - %s the %d B cap by %d B" % (n, "OVER" if over > 0 else "under", STATED_CAP, abs(over))
+    """MEMORY.md's size and the LOADED SET against its ceiling (PHASE_19_PLAN row 2.8b). It used to print a per-file
+    "24576 B cap" - the fifth surviving copy of a cap 2.8b retired, printed on every write (found at the 2026-10-17
+    install, the same day the header copy was struck). Read the same way the growth gate reads it; never a stored total."""
+    try:
+        with open(RATCHET_STATE, encoding="utf-8") as fh:
+            ceiling = json.load(fh).get("ceiling_bytes")
+        other = sum(os.stat(f).st_size for f in watched_paths() if os.path.realpath(f) != os.path.realpath(TARGET))
+    except (OSError, ValueError, AttributeError):
+        return "size %d B; loaded-set ceiling UNKNOWN (see `langston-size-watch --status`)" % n
+    if not isinstance(ceiling, int):
+        return "size %d B; loaded-set ceiling UNKNOWN (see `langston-size-watch --status`)" % n
+    total = other + n
+    return "size %d B; loaded set %d B vs ceiling %d B (%s by %d B; row 2.8b)" % (
+        n, total, ceiling, "OVER" if total > ceiling else "under", abs(total - ceiling))
 
 
 def corrupt_switch_armed(home):
@@ -2112,7 +2123,8 @@ def self_test():
         check("control: a valid append lands -> exit", rc, 0)
         check("  ...the reader counts 3", retr(), 3)
         check("  ...the success line reports both counters", "REVIEWER LEDGER bullets 5 -> 6" in out, True)
-        check("  ...and the file size against the stated cap (rider)", "B cap by" in out, True)
+        check("  ...and the size against the LOADED-SET ceiling, never a per-file cap", ("loaded-set ceiling" in out or
+              "loaded set" in out, "B cap by" in out), (True, False))
         check("  ...the archive gained exactly one file, named by the OLD sha", archived(), [s0 + ".md"])
         check("  ...the index records the ATTEMPT first, then the outcome (FINDING-2)", index_outcomes(), ["attempted", "written"])
         check("  ...and the target is written OWNER-ONLY, from a 644 start (the 18:37Z ruling)",
