@@ -1,9 +1,9 @@
-# B-ORCHESTRATOR-ROUTES-REMOVAL — SCOPE (Step 1, r1)
+# B-ORCHESTRATOR-ROUTES-REMOVAL — SCOPE (Step 1, r2 — PROCEED with three amendments, folded)
 
 change-class: non_architecture
 
 **Issue:** `#1210` · **Plan row:** `SPRINT_TO_LIVE_PLAN` 59g1 (after 59g, before 59g2) · **Owner:** CC-B (NEW Claude)
-*Read at `origin/migration/aws-supabase` `06b1b2886`; staging probed 2026-10-17 ~15:55Z UTC.*
+*Read at `origin/migration/aws-supabase` `06b1b2886`; staging probed 2026-10-17 ~15:55Z UTC. **r2 (~16:20Z): Langston PROCEED at `bb4e82fc5`; §1a ruled (4) REMOVE; amendments C1-C3 folded below and carried into the pre-audit.***
 
 ## PREVIOUSLY STATED vs NOW
 - **PREVIOUSLY STATED (`#1210`): `POST /orchestrator/audit` is "the 'Run Audit Now' button behind the empty formula-audit card". NOW: it is the "Run System Audit" button in the tab header; the formula card's "Run Audit Now" calls `GET /api/system/formula-audit/run`, a live route. REASON:** read the page's mutations (`ai-transparency.tsx:173-177` vs `:194-196`).
@@ -43,15 +43,15 @@ Deleting the one unused import (`:18483`) would make the route answer again — 
 - **AI:** `ai.orchestrator.status: 'running'` is a hard-coded string, and its three counts are read from `server/orchestrator/summaries/telemetry.json`, deleted with the module — always 0.
 - **Thresholds are Replit-era:** database healthy below 100 MB, configuration *fails* without an OpenAI key.
 - What is left that is real (CPU load, memory, uptime, engine running flags, the error-log count) is served live elsewhere: `GET /api/system/health` (`routes.ts:537`: `cpuLoad`, `rss`, `uptime`, event-loop lag) and the engine status routes.
-⇒ **Repairing it means rewriting half of it to stop it reporting fabricated values; the rest duplicates live views. Recommend delete** (route, mutation, button, card, `auditReport` state). **Alternative (3):** keep the route minus the import, the fabricated DB and AI sections and the OpenAI check. **Rule which.**
+⇒ ✅ **RULED (4) REMOVE (Langston):** a repaired route's top-line verdict would be wrong both ways at once — `checks.database` pinned to `pass` by the `{ sizeMb: 0 }` fallback, while `checks.configuration` is `fail` without an OpenAI key and one `fail` sets `health.overall = 'critical'` (`:18564-18566`); option (3) would delete 5 of 7 sections. Delete the route, mutation, button, card and `auditReport` state.
 ⚠️ **Interlock:** `active-engine-service.ts:1302-1304` (B-ENGINE-HEARTBEAT-DEAD-PATHS, `#1158`) and `SYSTEM_IMPACT_MAP.md:142` say *"only `POST /orchestrator/audit` reads the flip"* — that reader has been returning 500 since before that batch. Either disposition rewrites both sentences (remove ⇒ "no reader"; repair ⇒ unchanged).
 
 ## 2. Objectives
 1. **Delete** the telemetry, analysis and analyze routes; their queries, mutation, invalidations, the gate and its five cards, the urgency badge, the "Trigger Analysis" button, and the AI Analysis tab + trigger; any helper or import left unused (`getUrgencyColor`, icons). **Test:** the page source names none of `/api/orchestrator/telemetry`, `/analysis`, `/analyze`; `routes.ts` registers none of the three.
 2. **The audit, per §1a's ruling.** If removed: the route, mutation, button, card and `auditReport` state; if repaired: the import, the DB and AI sections and the OpenAI check go, and a test pins that the route answers. **Test either way:** no `import('./orchestrator/orchestrator')` anywhere.
 3. **Draw the Formula Health card** at the top level of the AI Command Center tab, beside Feed Health (the gate is gone). **Fence:** the card is not nested inside any conditional on removed data (the row-3a fence shape).
-4. **The tsc baseline:** `.tsc-baseline.json:171` entry (×4) removed; `scripts/check-tsc-baseline.mjs` passes at the lower count.
-5. **Stale statements fixed in the same commit:** `active-engine-service.ts:1302-1304` and `SYSTEM_IMPACT_MAP.md:142` (§1a interlock).
+4. **The tsc baseline (amended, C1): THREE entries, ×6 — `:171` TS2307 ×4, `:143` TS2339 `getDatabaseStatus` ×1 (sole call `routes.ts:18467`), `:144` TS2339 `getStatus` on `TradingEngine` ×1 (sole call `:18474`) — 335 → 329.** `check-tsc-baseline.mjs` does not fail on a drop, so each is removed by hand.
+5. **Stale statements fixed in the same commit:** `active-engine-service.ts:1302-1304` and `SYSTEM_IMPACT_MAP.md:142` (§1a interlock) — **amended (C2): rewritten to the census, not to "no reader"** — three `/active-engine/*` routes read the field (the pre-audit's A3 sets out why none of their answers changed). **And (C3)** the row-3a comment at `ai-transparency.tsx:871-872`, which names `/api/orchestrator/telemetry` and "outside the telemetry ternary" — rewritten, so objective 1's test stays literal.
 6. **Verify (Step 7, Chrome):** AI Transparency → AI Command Center draws Feed Health and Formula Health with data; the AI Analysis tab is gone; the network log for the page shows no `/api/orchestrator/telemetry|analysis` request; Automation Logs / Orchestrator Activity (the live `/logs`, `/learning-summary`) still load.
 
 **Record (no change, for Step 2 to measure):** `GET /api/system/formula-audit` — the card's *read* — calls `formulaAuditService.runAudit()` on every request (`routes.ts:15137-15140`), and the page polls it every 5 minutes (`:141`) whether or not the card is drawn. Drawing the card does not change the call rate. Step 2 states its cost before deciding whether it needs a home.

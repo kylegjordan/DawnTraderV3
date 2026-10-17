@@ -9,6 +9,7 @@
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
 | **`B-RTB-ADMISSION-TIEBREAK-LIVE`** (row 59f) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)** | carried: `#1204` row 59g, `#378`; the legacy tail drains |
 | **`B-RTB-QUEUED-STATUS-SWEEP`** (row 59g, `#1204`) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~15:30Z)** | carried: `#1124` row 134a, `#1006` |
+| **`B-ORCHESTRATOR-ROUTES-REMOVAL`** (row 59g1, `#1210`) | **STEP 2 — audit and plan at Langston** | his Step-2 ruling, then Step 3 |
 | **`B-RR-FLOOR-HEADROOM`** (row 59a) | **STEP 10 — progress report, card Observation** | the 21-day pre-registered read of the fill check from 2026-10-17T13:03:42Z (alert `07df291f`, weekly); Step 7's first taker rows come with Monday's session |
 | **`B-SILENT-STRATEGY-CENSUS`** (row 52) | **STEP 10 — progress report, card Observation** | strong_bull_trend's xStock verdict (alert `dd588f0d`, 20 filled closes or 2026-11-06T10:47:40Z), then O3's four candidates, each with a feasibility read and its own pass/fail |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
@@ -39,6 +40,7 @@
 - 59f `B-RTB-ADMISSION-TIEBREAK-LIVE` (`#1190`) — the queue's R-multiple tiebreak never runs; restore it with a decision on which copy should win.
 - 59g1 `B-ORCHESTRATOR-ROUTES-REMOVAL` (`#1210`, placed 2026-10-17 after 59g): four orchestrator routes load a module deleted in 2025 and fail — telemetry, analysis, re-analyse, formula audit; the learning-summary and logs routes are alive and stay. Census per section of the AI Command Center first.
 - 59g2 `B-CRON-VERIFIER-QUERY-FAIL` (`#1211`, placed 2026-10-17 after 59g1, Langston): when the cron verifier's history query fails it reads every job as never-fired and pages the hourly/daily ones; fix = a loud, distinguishable skip with an escalation after N skips, the no-alert test with its minting twin, and the interlock with B-CRON-MISSED-CATCHUP leg (a) named.
+- 59g3 `B-DUP-HEALTH-ROUTE-SHADOW` (`#1212`, placed 2026-10-17 after 59g2): `GET /system/health` registered three times; only the first answers — read all three and their callers, then keep one.
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).
 - 59c `B-ENTRY-BAND-SHADOW` (`#1186`) — log the fill's distance from the plan against spread and ATR at every taker open; ATR absent on xStock ⇒ log the inputs and refuse the leg (row 59 increment 4).
