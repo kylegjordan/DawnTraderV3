@@ -41,3 +41,6 @@ The feed-health grade's per-class liveness part had been silently switched off: 
 
 ## 5. Governance files changed so far
 `BATCH_CATALOG.md` (entry, open) · `PHASE_HISTORY.md` (entry, open) · `SPRINT_TO_LIVE_PLAN.md` (row 3a: status and this report) · `RUNNING_ISSUES.md` (`#1123` annotated) · this report. The System Impact Map and the System Manual are owed at Step 10. The governance-overdue alert `8bae8664` is answered by this push.
+
+## ⛔ STEP-11 GATE ROWS — read these before the close (added 2026-10-17, Langston's Step-9 r4 carrier note)
+- **The reconnect page thresholds are environment-only** (`FEED_WARNING_RECONNECTS` / `FEED_CRITICAL_RECONNECTS`, `feed-integrity-monitor.ts` `loadThresholds`; at the ruled ref `:175` / `:181`), while the `feed_health` DB namespace carries only `warmup_grace_ms`, `warning_age_ms`, `critical_age_ms`. Since Step 9 those two numbers decide a per-hour page. **Decide at Step 11, with the read of record in hand: move them into the `feed_health` namespace per class, or record why not.** Home: `RUNNING_ISSUES #1209` (§9.4 disposition 4 — a review scheduled here).
