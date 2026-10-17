@@ -80,6 +80,8 @@ describe('the page', () => {
     }
     expect(src).not.toContain('value="ai-analysis"');
   });
+  // REACH LIMIT (Langston, Step 4): a "use" is any textual occurrence, so a name whose only other appearance is in a
+  // comment or a string literal reads as used. Measured 2026-10-17: zero such names — latent, not live.
   it('no declared name is left without a use (Langston Step 4: getSeverityColor was orphaned by the AI Analysis tab removal)', () => {
     const defined = [...src.matchAll(/^\s*(?:const|let|function) ([A-Za-z_][A-Za-z0-9_]*)\b/gm)].map((m) => m[1]);
     expect(defined.length).toBeGreaterThan(10); // the scan reached the declarations (getUrgencyColor among them)
