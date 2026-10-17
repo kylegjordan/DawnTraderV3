@@ -126,6 +126,8 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
     expect(key).toBeLessThan(shadowLine);                   // upper anchor: not displaced into a later literal
     // DISPLACEMENT guard (Langston Step 2): placed in the entry_fill gateDecision literal instead, it would reach one row.
     expect(src.split('consumptionArm: _consumptionArm').length - 1).toBe(1);
+    // ONE assignment site, in the taker branch — the whole "never a maker row" claim rests on it (Langston Step-4 condition).
+    expect(src.split('_entryShadowRec = {').length - 1).toBe(1);
     expect(src).toContain('class=${_openClass} arm=${_consumptionArm} fill=');
   });
 });
