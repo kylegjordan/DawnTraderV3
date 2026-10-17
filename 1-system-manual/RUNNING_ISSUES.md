@@ -11096,6 +11096,17 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 - the per-table key census.
 ⚠️ The database is at 65.4% of its 200 GB cap (alert `545762f9`).
 **Added from Langston's second pass (2026-10-16): the sweep failure alert needs a dedupe key per parent and label (F2), and the plain-archive lane's catch must name a count mismatch rather than calling it transient (F4).** Disposition 2, folded into this batch.
+**⭐ KYLE DECIDED 2026-10-17 (Desktop, option 3 of three): RECOVER NOTHING; RECORD THE GAPS EVERYWHERE.**
+- **Rejected:** no re-download of the one-minute crypto bars from Kraken, and no restore from Supabase backups.
+- **Measured basis**, from `data_archive_manifest` warm objects created since 2026-05-06:
+  - about 570 verified/active objects across 11 tables, holding about 800M archived rows;
+  - `crypto_perp_ohlc_1m`: 27 of 29 days archived exactly 240,000 rows against about 264,960 recorded (184 pairs × 1,440), so about 25k bars a day and about 670k in total;
+  - on the 09-16 replay: `signal_eval_archive` about 2.1% short; the ticker snapshots about 0.1-0.3% short.
+- **The gaps are rows missing from inside each day, not whole days.** `B-B75-EXPORT-COMPLETENESS` now owns:
+  - **(a)** a per-object GAP REGISTER, named for every affected warm object, so any reader of that period knows rows are missing;
+  - **(b)** the per-table key census;
+  - **(c)** Langston's F2/F4;
+  - **no recovery leg.**
 
 ### #1196 OPEN 2026-10-16 (CC-C; Langston's (4a) Step-2 review 11:37Z, filed on his instruction) — THE VTS SHADOW LANE CLOSES 35% OF ITS xSTOCK VALVE TRADES WITH NO PRICE, AGAINST 0.18% FOR CRYPTO
 **What (measured, `rtb_shadow_pairings.close_reason`, closes since 2026-09-22, re-derived by Langston):** xStock **125 `timeout_unpriced` of 357** max-hold closes = **35.0%**; crypto **25 of 14,129** = **0.18%** — a **198x** ratio. The real lane, same window: xStock 3 unpriced of 108 (`exit_decision_archive`).
