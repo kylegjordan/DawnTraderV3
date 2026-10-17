@@ -22,12 +22,12 @@ change-class: non_architecture · **Issue:** `#1210` · **Plan row:** 59g1 · **
 | client queries | the react-query cache keys `/api/orchestrator/telemetry`, `/analysis` | the two `invalidateQueries` calls inside the deleted mutation |
 ⇒ **no surviving reader of anything deleted.**
 
-**A3 — the `getActiveEngineStatus` readers after this batch (Langston C2), re-derived against the pre-`#1158` code.** Three callers survive, each guarding `if (!status.isRunning || !manager)`: `/active-engine/metrics` `:13211`, `/health` `:13278`, `POST /close-all` `:13297`. **Before `#1158`** the field was `isRunning: !!dbSession || hasManager` (`4a17ca8f4^:server/services/active-engine-service.ts:1226`); **after**, `isRunning: hasManager` (`active-engine-service.ts:1305` at the ref).
+**A3 — the `getActiveEngineStatus` readers after this batch (Langston C2), re-derived against the pre-`#1158` code.** Three callers survive, each guarding `if (!status.isRunning || !manager)`: `/active-engine/metrics` `:13211`, `/health` `:13278`, `POST /close-all` `:13297`. **Before `#1158`** the field was `isRunning: !!dbSession || hasManager` (`92a55bdaeb67a18cff3e6276487f3fd118bd87fa:server/services/active-engine-service.ts:1226`, the parent of `4a17ca8f4`); **after**, `isRunning: hasManager` (`active-engine-service.ts:1305` at the ref).
 | state | `isRunning` before → after | guard result before → after |
 |---|---|---|
-| session row, no manager | `true` → `false` | 400 → 400 — the `!manager` arm decided both times (`#1158` A2) |
+| session row, no manager | `true` → `false` | refused → refused — the `!manager` arm decided both times (`#1158` A2); *refused* is 400 for `/health` and `close-all`, and **200 with `isRunning: false`** plus the stats block for `/metrics` (`routes.ts:13216-13231`; Langston's record correction) |
 | **manager, no session row** | `true` → `true` | **proceeds → proceeds — no change** |
-| neither | `false` → `false` | 400 → 400 |
+| neither | `false` → `false` | refused → refused |
 | both | `true` → `true` | proceeds → proceeds |
 ⇒ **Langston's C2 premise — "pre-`#1158` they returned 400" for a manager without a row — does not hold at the code:** the old field was an OR, so a manager alone already read running. **`#1158` changed the guard's outcome in neither direction for these three routes; its census was complete for them.** What C2 does establish, and stands: the sentence *"only `POST /orchestrator/audit` reads the flip"* is false as a census — three other routes read the field (they are indifferent to the flip because of their `!manager` arm). ⇒ plan item 6 rewrites it to that census. **Whether `close-all` should act on an orphaned manager** is then not a change anyone made — it is today's and the old behaviour, consistent with `#1158`'s stated contract *"`isRunning = hasManager` (the engine that actually runs)"* (`B_ENGINE_HEARTBEAT_DEAD_PATHS_SCOPE.md:31`): **§9.4 disposition 5, no work.**
 

@@ -1301,7 +1301,11 @@ export async function getActiveEngineStatus(userId: string): Promise<any> {
     return {
       // B-ENGINE-HEARTBEAT-DEAD-PATHS (#1158): running = an engine actually runs (the manager). A session row
       // with no manager is a leftover or a crash-to-boot gap, not a running engine; `diagnostics.hasDbSession`
-      // still reports the row. Only POST /orchestrator/audit's answer changes (pre-audit A2).
+      // still reports the row. Readers (row 59g1, after the orchestrator audit route was removed): the three
+      // /active-engine routes (metrics, health, close-all) — each also guards on its own getGlobalActiveEngineManager
+      // ('paper'), the same object hasManager reads, so this field decides none of their answers (it can only refuse
+      // harder across the await between the two reads), and none of them reads sessionInfo or diagnostics. The
+      // awaited getRunningEngineSession therefore decides nothing for them; removing the call is a behaviour change.
       isRunning: hasManager,
       sessionInfo: dbSession ? {
         sessionId: dbSession.sessionId,

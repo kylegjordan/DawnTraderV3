@@ -30,7 +30,6 @@ export default function AITransparencyPage() {
   const { mode } = useTradingMode();
   const { toast } = useToast();
   const [approvingLogId, setApprovingLogId] = useState<number | null>(null);
-  const [auditReport, setAuditReport] = useState<any | null>(null);
   
   // Check if current user is admin
   const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -117,18 +116,6 @@ export default function AITransparencyPage() {
     refetchInterval: 60000, // Refresh every minute
   });
 
-  // Fetch latest telemetry (for AI Command Center tab)
-  const { data: telemetryData, isLoading: telemetryLoading } = useQuery<any>({
-    queryKey: ['/api/orchestrator/telemetry'],
-    refetchInterval: 30000,
-  });
-
-  // Fetch latest AI analysis (for AI Analysis tab)
-  const { data: analysisData, isLoading: analysisLoading } = useQuery<any>({
-    queryKey: ['/api/orchestrator/analysis'],
-    refetchInterval: 30000,
-  });
-
   // Fetch orchestrator recommendation logs (for AI Recommendations tab)
   const { data: recommendationLogsData, isLoading: recommendationLogsLoading } = useQuery<{ logs: any[] }>({
     queryKey: ['/api/orchestrator/logs?limit=50'],
@@ -145,49 +132,6 @@ export default function AITransparencyPage() {
   const { data: feedHealthData, isLoading: feedHealthLoading } = useQuery<{ ok: boolean; grade: string; metrics: any; issues: string[]; history: any[] }>({
     queryKey: ['/api/system/feed-health'],
     refetchInterval: 300000, // Refresh every 5 minutes
-  });
-
-  // Manual analysis trigger
-  const triggerAnalysisMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('POST', '/api/orchestrator/analyze', {});
-    },
-    onSuccess: () => {
-      toast({
-        title: "Analysis Triggered",
-        description: "GPT-4o is analyzing the system. Results will appear shortly.",
-      });
-      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/analysis'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/telemetry'] });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to trigger analysis",
-        variant: "destructive",
-      });
-    }
-  });
-
-  // System audit trigger
-  const runSystemAuditMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest('POST', '/api/orchestrator/audit', {});
-    },
-    onSuccess: (response: any) => {
-      setAuditReport(response.audit);
-      toast({
-        title: "System Audit Complete",
-        description: `Overall health: ${response.audit.health.overall.toUpperCase()}`,
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to run audit",
-        variant: "destructive",
-      });
-    }
   });
 
   // Formula audit trigger (admin-only)
@@ -354,8 +298,6 @@ export default function AITransparencyPage() {
   const paperPositions = paperPositionsData?.positions || [];
   const orchestratorLogs = orchestratorLogsData?.logs ?? [];
   const learningSummary = learningSummaryData?.summary || null;
-  const telemetry = telemetryData;
-  const analysis = analysisData;
   const recommendationLogs = recommendationLogsData?.logs || [];
 
   return (
@@ -428,10 +370,6 @@ export default function AITransparencyPage() {
             <Activity className="w-4 h-4 mr-2" />
             AI Command Center
           </TabsTrigger>
-          <TabsTrigger value="ai-analysis" data-testid="tab-ai-analysis" className="min-w-[140px] text-sm px-3 py-2">
-            <Brain className="w-4 h-4 mr-2" />
-            AI Analysis
-          </TabsTrigger>
           <TabsTrigger value="ai-recommendations" data-testid="tab-ai-recommendations" className="min-w-[140px] text-sm px-3 py-2">
             <TrendingUp className="w-4 h-4 mr-2" />
             AI Recommendations
@@ -480,396 +418,159 @@ export default function AITransparencyPage() {
 
         {/* AI Command Center Tab (formerly Overview from Command Center) */}
         <TabsContent value="ai-command-center" className="space-y-6 mt-6" data-testid="content-ai-command-center">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div className="flex items-center gap-2">
-              {analysis && (
-                <Badge 
-                  variant={getUrgencyColor(analysis.urgencyLevel)}
-                  className="text-sm px-3 py-1"
-                  data-testid={`badge-urgency-${analysis?.urgencyLevel}`}
-                >
-                  {analysis.urgencyLevel?.toUpperCase()}
-                </Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={() => runSystemAuditMutation.mutate()}
-                disabled={runSystemAuditMutation.isPending}
-                data-testid="button-run-audit"
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2"
-              >
-                {runSystemAuditMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Running Audit...
-                  </>
-                ) : (
-                  <>
-                    <Activity className="w-4 h-4" />
-                    Run System Audit
-                  </>
-                )}
-              </Button>
-              <Button
-                onClick={() => triggerAnalysisMutation.mutate()}
-                disabled={triggerAnalysisMutation.isPending}
-                data-testid="button-trigger-analysis"
-                size="sm"
-                className="flex items-center gap-2"
-              >
-                {triggerAnalysisMutation.isPending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Trigger Analysis
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-
-          {telemetryLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : telemetry ? (
-            <>
-              {/* System Metrics */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card data-testid="card-system-metrics">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Activity className="w-4 h-4" />
-                      System Health
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">CPU Load</span>
-                      <span className="text-sm font-semibold" data-testid="text-cpu">{telemetry.system?.cpu?.loadAverage?.[0]?.toFixed(2) || 'N/A'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Memory</span>
-                      <span className="text-sm font-semibold" data-testid="text-memory">{telemetry.system?.memory?.usagePercent?.toFixed(1) || 'N/A'}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Uptime</span>
-                      <span className="text-sm font-semibold" data-testid="text-uptime">
-                        {telemetry.system?.uptime ? Math.floor(telemetry.system.uptime / 3600) : 'N/A'}h
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card data-testid="card-trading-metrics">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4" />
-                      Trading Performance
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Total P/L</span>
-                      <span className={`text-sm font-semibold ${(telemetry.trading?.totalPL || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} data-testid="text-total-pl">
-                        ${telemetry.trading?.totalPL?.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Win Rate</span>
-                      <span className="text-sm font-semibold" data-testid="text-win-rate">{telemetry.trading?.winRate?.toFixed(1) || '0.0'}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">ROI</span>
-                      <span className="text-sm font-semibold" data-testid="text-roi">{telemetry.trading?.roi?.toFixed(2) || '0.00'}%</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card data-testid="card-ai-metrics">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      <Brain className="w-4 h-4" />
-                      AI Activity
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Learning Cycles</span>
-                      <span className="text-sm font-semibold" data-testid="text-learning-cycles">{telemetry.ai?.recentLearningCycles || 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Opportunities</span>
-                      <span className="text-sm font-semibold" data-testid="text-opportunities">{telemetry.ai?.opportunitiesGenerated || 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-muted-foreground">Adjustments</span>
-                      <span className="text-sm font-semibold" data-testid="text-adjustments">{telemetry.ai?.adjustmentsMade || 0}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Goals and Guardrails */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card data-testid="card-goals">
-                  <CardHeader>
-                    <CardTitle className="text-base">Active Goals</CardTitle>
-                    <CardDescription>Current user-defined trading goals</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {telemetry.goals?.length > 0 ? (
-                      <ul className="space-y-2">
-                        {telemetry.goals.slice(0, 3).map((goal: any, idx: number) => (
-                          <li key={idx} className="text-sm flex items-start gap-2" data-testid={`text-goal-${idx}`}>
-                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                            <span>{goal.description || goal.target}</span>
-                          </li>
-                        ))}
-                      </ul>
+          {/* Formula Health */}
+          <Card data-testid="card-formula-health">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <LineChart className="w-5 h-5" />
+                    Formula Health
+                  </CardTitle>
+                  <CardDescription>
+                    Verification of all formulas used in screeners, guardrails, and strategies
+                  </CardDescription>
+                </div>
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    onClick={() => runFormulaAuditMutation.mutate()}
+                    disabled={runFormulaAuditMutation.isPending}
+                    data-testid="button-run-formula-audit"
+                  >
+                    {runFormulaAuditMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Running...
+                      </>
                     ) : (
-                      <p className="text-sm text-muted-foreground" data-testid="text-no-goals">No active goals</p>
+                      <>
+                        <Activity className="w-4 h-4 mr-2" />
+                        Run Audit Now
+                      </>
                     )}
-                  </CardContent>
-                </Card>
-
-                <Card data-testid="card-guardrails">
-                  <CardHeader>
-                    <CardTitle className="text-base">Active Guardrails</CardTitle>
-                    <CardDescription>Protective rules and boundaries</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {telemetry.guardrails && Object.keys(telemetry.guardrails).length > 0 ? (
-                      <div className="space-y-2">
-                        {Object.entries(telemetry.guardrails).map(([key, value], idx) => (
-                          <div key={idx} className="text-sm flex items-start gap-2" data-testid={`text-guardrail-${idx}`}>
-                            <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
-                            <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}: {String(value)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground" data-testid="text-no-guardrails">No active guardrails</p>
-                    )}
-                  </CardContent>
-                </Card>
+                  </Button>
+                )}
               </div>
-
-              {/* System Audit Report */}
-              {auditReport && (
-                <Card data-testid="card-audit-report">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          System Audit Report
-                          <Badge 
-                            variant={
-                              auditReport.health.overall === 'healthy' ? 'default' :
-                              auditReport.health.overall === 'fair' ? 'outline' :
-                              auditReport.health.overall === 'degraded' ? 'secondary' : 'destructive'
-                            }
-                            data-testid={`badge-health-${auditReport.health.overall}`}
-                          >
-                            {auditReport.health.overall.toUpperCase()}
-                          </Badge>
-                        </CardTitle>
-                        <CardDescription>
-                          Generated {formatDistanceToNow(new Date(auditReport.timestamp))} ago
-                        </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {formulaAuditLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : formulaAuditData?.report ? (
+                <>
+                  {/* Summary Stats */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center p-3 bg-muted/30 rounded-lg">
+                      <div className="text-2xl font-bold text-foreground" data-testid="text-total-formulas">
+                        {formulaAuditData.report.totalFormulas}
                       </div>
+                      <div className="text-xs text-muted-foreground">Total Formulas</div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Health Checks */}
-                    <div>
-                      <h3 className="text-sm font-semibold mb-3">Health Checks</h3>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        {Object.entries(auditReport.health.checks).map(([check, status]: [string, any]) => (
-                          <div key={check} className="flex items-center gap-2" data-testid={`check-${check}`}>
-                            {status === 'pass' ? (
-                              <CheckCircle className="w-4 h-4 text-green-500" />
-                            ) : status === 'warning' ? (
-                              <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                            ) : (
-                              <XCircle className="w-4 h-4 text-red-500" />
-                            )}
-                            <span className="text-sm capitalize">{check}</span>
-                          </div>
-                        ))}
+                    <div className="text-center p-3 bg-green-500/10 rounded-lg">
+                      <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-passed-formulas">
+                        {formulaAuditData.report.passed}
                       </div>
+                      <div className="text-xs text-muted-foreground">Passed</div>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
+                    <div className="text-center p-3 bg-yellow-500/10 rounded-lg">
+                      <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-warning-formulas">
+                        {formulaAuditData.report.warnings}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Warnings</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-500/10 rounded-lg">
+                      <div className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-failed-formulas">
+                        {formulaAuditData.report.failed}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Failed</div>
+                    </div>
+                  </div>
 
-              {/* Formula Health */}
-              <Card data-testid="card-formula-health">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <LineChart className="w-5 h-5" />
-                        Formula Health
-                      </CardTitle>
-                      <CardDescription>
-                        Verification of all formulas used in screeners, guardrails, and strategies
-                      </CardDescription>
-                    </div>
-                    {isAdmin && (
-                      <Button
-                        size="sm"
-                        onClick={() => runFormulaAuditMutation.mutate()}
-                        disabled={runFormulaAuditMutation.isPending}
-                        data-testid="button-run-formula-audit"
-                      >
-                        {runFormulaAuditMutation.isPending ? (
+                  {/* Last Audit Info */}
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="w-4 h-4" />
+                    <span data-testid="text-last-audit">
+                      Last audit: {formatDistanceToNow(new Date(formulaAuditData.report.timestamp))} ago
+                    </span>
+                  </div>
+
+                  {/* Warning/Failure Alerts */}
+                  {(formulaAuditData.report.warnings > 0 || formulaAuditData.report.failed > 0) && (
+                    <Alert variant={formulaAuditData.report.failed > 0 ? "destructive" : "default"}>
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertDescription>
+                        {formulaAuditData.report.failed > 0 ? (
                           <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Running...
+                            <strong>{formulaAuditData.report.failed} formula(s) failed validation</strong> with deviations ≥1%.
+                            {isAdmin && " Review /tmp/audit_report.txt for details."}
                           </>
                         ) : (
                           <>
-                            <Activity className="w-4 h-4 mr-2" />
-                            Run Audit Now
+                            <strong>{formulaAuditData.report.warnings} formula(s)</strong> have minor deviations (0.1-1%).
+                            {isAdmin && " Review /tmp/audit_report.txt for details."}
                           </>
                         )}
-                      </Button>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {formulaAuditLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                    </div>
-                  ) : formulaAuditData?.report ? (
-                    <>
-                      {/* Summary Stats */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="text-center p-3 bg-muted/30 rounded-lg">
-                          <div className="text-2xl font-bold text-foreground" data-testid="text-total-formulas">
-                            {formulaAuditData.report.totalFormulas}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Total Formulas</div>
-                        </div>
-                        <div className="text-center p-3 bg-green-500/10 rounded-lg">
-                          <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-passed-formulas">
-                            {formulaAuditData.report.passed}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Passed</div>
-                        </div>
-                        <div className="text-center p-3 bg-yellow-500/10 rounded-lg">
-                          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400" data-testid="text-warning-formulas">
-                            {formulaAuditData.report.warnings}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Warnings</div>
-                        </div>
-                        <div className="text-center p-3 bg-red-500/10 rounded-lg">
-                          <div className="text-2xl font-bold text-red-600 dark:text-red-400" data-testid="text-failed-formulas">
-                            {formulaAuditData.report.failed}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Failed</div>
-                        </div>
-                      </div>
-
-                      {/* Last Audit Info */}
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="w-4 h-4" />
-                        <span data-testid="text-last-audit">
-                          Last audit: {formatDistanceToNow(new Date(formulaAuditData.report.timestamp))} ago
-                        </span>
-                      </div>
-
-                      {/* Warning/Failure Alerts */}
-                      {(formulaAuditData.report.warnings > 0 || formulaAuditData.report.failed > 0) && (
-                        <Alert variant={formulaAuditData.report.failed > 0 ? "destructive" : "default"}>
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            {formulaAuditData.report.failed > 0 ? (
-                              <>
-                                <strong>{formulaAuditData.report.failed} formula(s) failed validation</strong> with deviations ≥1%.
-                                {isAdmin && " Review /tmp/audit_report.txt for details."}
-                              </>
-                            ) : (
-                              <>
-                                <strong>{formulaAuditData.report.warnings} formula(s)</strong> have minor deviations (0.1-1%).
-                                {isAdmin && " Review /tmp/audit_report.txt for details."}
-                              </>
-                            )}
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {/* Formula Details Summary */}
-                      {formulaAuditData.report.tests && formulaAuditData.report.tests.length > 0 && (
-                        <div className="space-y-2">
-                          <h3 className="text-sm font-semibold">Formula Tests</h3>
-                          <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                            {formulaAuditData.report.tests.map((test: any, idx: number) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
-                                data-testid={`formula-test-${idx}`}
-                              >
-                                <div className="flex items-center gap-2 flex-1">
-                                  {test.status === 'PASS' ? (
-                                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
-                                  ) : test.status === 'WARNING' ? (
-                                    <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                                  ) : (
-                                    <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                                  )}
-                                  <span className="text-sm font-medium">{test.name}</span>
-                                </div>
-                                <div className="text-right">
-                                  <Badge
-                                    variant={
-                                      test.status === 'PASS' ? 'default' :
-                                      test.status === 'WARNING' ? 'outline' : 'destructive'
-                                    }
-                                    className="text-xs"
-                                  >
-                                    {test.deviationPercent.toFixed(2)}% deviation
-                                  </Badge>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Recent Auto-Resolutions */}
-                      <RecentActionsTimeline source="formula" maxItems={5} />
-                    </>
-                  ) : (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        No formula audit data available. {isAdmin && "Click 'Run Audit Now' to generate a report."}
                       </AlertDescription>
                     </Alert>
                   )}
-                </CardContent>
-              </Card>
 
-            </>
-          ) : (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>No telemetry data available</AlertDescription>
-            </Alert>
-          )}
+                  {/* Formula Details Summary */}
+                  {formulaAuditData.report.tests && formulaAuditData.report.tests.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">Formula Tests</h3>
+                      <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                        {formulaAuditData.report.tests.map((test: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between py-2 px-3 rounded-md hover:bg-muted/50 transition-colors"
+                            data-testid={`formula-test-${idx}`}
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              {test.status === 'PASS' ? (
+                                <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                              ) : test.status === 'WARNING' ? (
+                                <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                              )}
+                              <span className="text-sm font-medium">{test.name}</span>
+                            </div>
+                            <div className="text-right">
+                              <Badge
+                                variant={
+                                  test.status === 'PASS' ? 'default' :
+                                  test.status === 'WARNING' ? 'outline' : 'destructive'
+                                }
+                                className="text-xs"
+                              >
+                                {test.deviationPercent.toFixed(2)}% deviation
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Recent Auto-Resolutions */}
+                  <RecentActionsTimeline source="formula" maxItems={5} />
+                </>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No formula audit data available. {isAdmin && "Click 'Run Audit Now' to generate a report."}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Feed Health — row 3a (B-FEED-HEALTH-GRADE-ARM): OUTSIDE the telemetry ternary. It has its own query
-          (/api/system/feed-health); gated inside, it was unreachable whenever /api/orchestrator/telemetry failed. */}
+          {/* Feed Health and Formula Health each have their own query (/api/system/feed-health, /api/system/formula-audit).
+          Row 59g1 (B-ORCHESTRATOR-ROUTES-REMOVAL) removed the retired AI orchestrator's telemetry, analysis and audit pieces
+          that this tab used to gate on; nothing here depends on them now. */}
           <Card data-testid="card-feed-health">
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1036,78 +737,6 @@ export default function AITransparencyPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* AI Analysis Tab (from Command Center) */}
-        <TabsContent value="ai-analysis" className="space-y-6 mt-6" data-testid="content-ai-analysis">
-          {analysisLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : analysis ? (
-            <>
-              {/* Anomalies */}
-              <Card data-testid="card-anomalies">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5" />
-                    Detected Anomalies
-                  </CardTitle>
-                  <CardDescription>Issues requiring attention</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {analysis.anomalies && analysis.anomalies.length > 0 ? (
-                    <ul className="space-y-3">
-                      {analysis.anomalies.map((anomaly: any, idx: number) => (
-                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`anomaly-${idx}`}>
-                          <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${getSeverityColor(anomaly.severity)}`} />
-                          <div className="flex-1">
-                            <Badge variant="outline" className="mb-1">{anomaly.severity}</Badge>
-                            <p className="text-sm">{anomaly.message}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground" data-testid="text-no-anomalies">No anomalies detected</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Optimizations */}
-              <Card data-testid="card-optimizations">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <TrendingUp className="w-5 h-5" />
-                    Optimization Opportunities
-                  </CardTitle>
-                  <CardDescription>Performance improvement suggestions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {analysis.optimizations && analysis.optimizations.length > 0 ? (
-                    <ul className="space-y-3">
-                      {analysis.optimizations.map((opt: any, idx: number) => (
-                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`optimization-${idx}`}>
-                          <TrendingUp className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
-                          <div className="flex-1">
-                            <Badge variant="outline" className="mb-1">{opt.impact}</Badge>
-                            <p className="text-sm">{opt.recommendation}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-sm text-muted-foreground" data-testid="text-no-optimizations">No optimizations suggested</p>
-                  )}
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>No analysis data available. Trigger an analysis to generate insights.</AlertDescription>
-            </Alert>
-          )}
         </TabsContent>
 
         {/* AI Recommendations Tab (from Command Center) */}

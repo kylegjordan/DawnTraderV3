@@ -4,7 +4,7 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 335,
+  "total_errors": 329,
   "file_count": 43,
   "files": [
     {
@@ -140,8 +140,6 @@
           "Property 'params' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | n": 1,
           "Property 'error' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string | nu": 1,
           "Property 'startedAt' does not exist on type '{ id: string; traceId: string; taskType: string; payload: unknown; status: \"pending\" | \"in_progress\" | \"completed\" | \"failed\"; result: unknown; errorMessage: string | null; retryCount: number; retryAt: Date | null; lockedAt: Date | null; lockedBy: string ": 1,
-          "Property 'getDatabaseStatus' does not exist on type 'DatabaseStorage'.": 1,
-          "Property 'getStatus' does not exist on type 'TradingEngine'.": 1,
           "Property 'getClientCount' does not exist on type 'ContextBridge'.": 2,
           "Property 'healthScore' does not exist on type '{ metadata: unknown; id: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; name: string; version: string | null; status: \"offline\" | \"degraded\" | \"healthy\" | \"draining\"; createdAt: Date; updatedAt: Date; lastH": 1,
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; i": 1,
@@ -167,8 +165,7 @@
           "Object literal may only specify known properties, and 'event' does not exist in type 'Omit<ContextUpdate, \"timestamp\" | \"traceId\">'.": 1
         },
         "TS2307": {
-          "Cannot find module './services/conversation-summarization' or its corresponding type declarations.": 1,
-          "Cannot find module './orchestrator/orchestrator' or its corresponding type declarations.": 4
+          "Cannot find module './services/conversation-summarization' or its corresponding type declarations.": 1
         },
         "TS2554": {
           "Expected 0 arguments, but got 1.": 1,

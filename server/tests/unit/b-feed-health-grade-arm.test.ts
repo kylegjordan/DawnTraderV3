@@ -194,18 +194,18 @@ describe('the recorder names every admitted pair by its venue base (Langston Ste
 const ROOT = join(__dirname, '..', '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 describe('fences', () => {
-  it('the Feed Health card renders OUTSIDE the telemetry gate (Step-7 finding: the gate 500s on a deleted module)', () => {
+  it('the Feed Health card is drawn UNGATED in the AI Command Center tab (Step-7 finding; the gate itself was removed by row 59g1)', () => {
     const src = read('client/src/pages/ai-transparency.tsx');
-    const gateElse = src.indexOf('No telemetry data available');
+    const tab = src.indexOf('<TabsContent value="ai-command-center"');
     const card = src.indexOf('data-testid="card-feed-health"');
-    expect(gateElse).toBeGreaterThan(-1);
-    expect(card).toBeGreaterThan(gateElse); // after the ternary's else-arm, i.e. outside it
-    expect(src.indexOf('</TabsContent>', gateElse)).toBeGreaterThan(card); // still inside the AI Command Center tab
-    // UNGATED, not only positioned (Langston): nothing between the ternary's close and the card may re-gate it.
-    const ternaryClose = src.indexOf(')}', gateElse);
-    expect(card).toBeGreaterThan(ternaryClose); // AFTER the close — inside the else-arm would draw the card only when telemetry FAILS (Langston hole a)
-    const between = src.slice(ternaryClose, card);
-    expect(between).not.toMatch(/&&|\?\s*\(/); // hole b: '?(' without a space
+    expect(tab).toBeGreaterThan(-1);
+    expect(card).toBeGreaterThan(tab);
+    expect(src.indexOf('</TabsContent>', tab)).toBeGreaterThan(card); // inside the AI Command Center tab
+    // UNGATED (Langston): the card is a direct child of the tab — every `{` opened between the tab's tag and the card
+    // is closed again before it, so no conditional (`cond ? (`, `cond && (`) can be holding it open.
+    const tagEnd = src.indexOf('>', tab) + 1;
+    const span = src.slice(tagEnd, src.lastIndexOf('<', card));
+    expect(span.split('{').length - span.split('}').length).toBe(0);
   });
   it('feed_health is prefetched', () => {
     expect(read('server/startup/b72-warmup.ts')).toMatch(/^\s*'feed_health',/m);

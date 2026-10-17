@@ -1,0 +1,593 @@
+// ARCHIVE — B-ORCHESTRATOR-ROUTES-REMOVAL (row 59g1, #1210, CC-B, 2026-10-17). NOT COMPILABLE (.removed).
+// The four routes imported server/orchestrator/orchestrator, deleted 2025-11-05 in b5eba38a7; they returned 500 since.
+// git history is the authoritative archive; this copy is for browsing. Source ref: the parent of this batch's Step-3 commit.
+
+// ===== server/routes.ts — the telemetry, analysis, analyze and audit routes (203 lines) =====
+  // Get latest telemetry snapshot
+  apiRouter.get('/orchestrator/telemetry', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const telemetry = await aiOrchestrator.getLatestTelemetry();
+      
+      if (!telemetry) {
+        return res.status(404).json({ error: 'No telemetry data available' });
+      }
+      
+      res.json(telemetry);
+    } catch (error: any) {
+      console.error('[Orchestrator] Error fetching telemetry:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get latest AI analysis
+  apiRouter.get('/orchestrator/analysis', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const analysis = await aiOrchestrator.getLatestAnalysis();
+      
+      if (!analysis) {
+        return res.status(404).json({ error: 'No analysis data available' });
+      }
+      
+      res.json(analysis);
+    } catch (error: any) {
+      console.error('[Orchestrator] Error fetching analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Trigger immediate diagnostic analysis (admin only)
+  apiRouter.post('/orchestrator/analyze', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      await aiOrchestrator.triggerImmediateAnalysis();
+      
+      res.json({ success: true, message: 'Analysis triggered successfully' });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error triggering analysis:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Run comprehensive system audit (admin only)
+  apiRouter.post('/orchestrator/audit', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const os = await import('os');
+      
+      // 1. System Metrics
+      const cpus = os.cpus();
+      const loadAvg = os.loadavg();
+      const totalMem = os.totalmem();
+      const freeMem = os.freemem();
+      const uptime = process.uptime();
+      
+      const systemMetrics = {
+        cpu: {
+          cores: cpus.length,
+          model: cpus[0]?.model || 'Unknown',
+          loadAverage: {
+            '1min': loadAvg[0].toFixed(2),
+            '5min': loadAvg[1].toFixed(2),
+            '15min': loadAvg[2].toFixed(2)
+          }
+        },
+        memory: {
+          total: `${(totalMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          free: `${(freeMem / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          used: `${((totalMem - freeMem) / 1024 / 1024 / 1024).toFixed(2)} GB`,
+          usagePercent: `${(((totalMem - freeMem) / totalMem) * 100).toFixed(1)}%`
+        },
+        uptime: {
+          seconds: Math.floor(uptime),
+          formatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`
+        }
+      };
+
+      // 2. Database Status
+      const dbStatus = await storage.getDatabaseStatus?.() || { current: { sizeMb: 0, sizeGb: 0 }, history: [] };
+
+      // 3. Trading Engine Status - Phase 27.F.15.B.3: Use global engines
+      // Phase 41F-L.E2E-PURGE: Get mode from user preferences, default to paper
+      const user = await storage.getUser(userId);
+      const tradingMode = user?.tradingMode || 'paper';
+      
+      const liveEngineStatus = globalLiveEngine.getStatus?.() || { tradingStatus: 'stopped' };
+      
+      const paperStatus = await getActiveEngineStatus(userId);
+      const paperEngineStatus = { 
+        isRunning: paperStatus.isRunning,
+        status: paperStatus.isRunning ? 'running' : 'stopped'
+      };
+
+      // 4. AI Systems Status
+      const { aiOrchestrator } = await import('./orchestrator/orchestrator');
+      const telemetryPath = './server/orchestrator/summaries/telemetry.json';
+      let aiMetrics = { learningCycles: 0, opportunities: 0, adjustments: 0 };
+      
+      try {
+        const fs = await import('fs/promises');
+        const telemetryData = await fs.readFile(telemetryPath, 'utf-8');
+        const telemetry = JSON.parse(telemetryData);
+        aiMetrics = telemetry.ai || aiMetrics;
+      } catch (error) {
+        console.log('[Audit] Could not load AI metrics');
+      }
+
+      // 5. Configuration Validation
+      const hasKrakenApiKey = !!process.env.KRAKEN_API_KEY;
+      const hasKrakenApiSecret = !!process.env.KRAKEN_API_SECRET;
+      const hasOpenAIKey = !!process.env.OPENAI_API_KEY;
+
+      // 6. Recent Errors (last 24 hours)
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // B-NEW-43 chunk 13: storage.getAIErrorLogs is gone; the current method
+      // is `getErrorLogs(userId?, filters?)` per storage.ts:364. The caller
+      // intent is the same. Optional chaining preserved on the method call as
+      // a defensive belt-and-suspenders (the method exists per the interface,
+      // but the prior `?.` form was already there — preserving it keeps the
+      // diff minimal).
+      const recentErrors = await storage.getErrorLogs?.(userId) || [];
+
+      // 7. Construct comprehensive audit report
+      const auditReport = {
+        timestamp: new Date().toISOString(),
+        system: systemMetrics,
+        database: {
+          size: dbStatus.current.sizeMb,
+          sizeFormatted: `${dbStatus.current.sizeMb.toFixed(2)} MB (${dbStatus.current.sizeGb.toFixed(4)} GB)`,
+          status: dbStatus.current.sizeMb < 100 ? 'healthy' : dbStatus.current.sizeMb < 250 ? 'warning' : 'critical'
+        },
+        trading: {
+          mode: tradingMode,
+          liveEngine: {
+            status: liveEngineStatus.tradingStatus,
+            isRunning: liveEngineStatus.tradingStatus === 'running'
+          },
+          paperEngine: {
+            status: paperEngineStatus.isRunning ? 'running' : 'stopped',
+            isRunning: paperEngineStatus.isRunning
+          }
+        },
+        ai: {
+          orchestrator: {
+            status: 'running',
+            learningCycles: aiMetrics.learningCycles || 0,
+            opportunities: aiMetrics.opportunities || 0,
+            adjustments: aiMetrics.adjustments || 0
+          }
+        },
+        configuration: {
+          krakenApiKey: hasKrakenApiKey ? 'configured' : 'missing',
+          krakenApiSecret: hasKrakenApiSecret ? 'configured' : 'missing',
+          openAIKey: hasOpenAIKey ? 'configured' : 'missing',
+          allConfigured: hasKrakenApiKey && hasKrakenApiSecret && hasOpenAIKey
+        },
+        errors: {
+          last24Hours: recentErrors.length,
+          recentErrors: recentErrors.slice(0, 5).map(err => ({
+            timestamp: err.timestamp,
+            errorType: err.errorType,
+            resolved: err.resolved
+          }))
+        },
+        health: {
+          overall: 'healthy', // Will be computed based on checks
+          checks: {
+            cpu: loadAvg[0] < cpus.length ? 'pass' : 'warning',
+            memory: ((totalMem - freeMem) / totalMem) < 0.9 ? 'pass' : 'warning',
+            database: dbStatus.current.sizeMb < 100 ? 'pass' : 'warning',
+            configuration: (hasKrakenApiKey && hasKrakenApiSecret && hasOpenAIKey) ? 'pass' : 'fail',
+            errors: recentErrors.length < 10 ? 'pass' : 'warning'
+          }
+        }
+      };
+
+      // Compute overall health
+      const failedChecks = Object.values(auditReport.health.checks).filter(c => c === 'fail').length;
+      const warningChecks = Object.values(auditReport.health.checks).filter(c => c === 'warning').length;
+      
+      if (failedChecks > 0) {
+        auditReport.health.overall = 'critical';
+      } else if (warningChecks > 2) {
+        auditReport.health.overall = 'degraded';
+      } else if (warningChecks > 0) {
+        auditReport.health.overall = 'fair';
+      }
+
+      res.json({ 
+        success: true, 
+        audit: auditReport 
+      });
+    } catch (error: any) {
+      console.error('[Orchestrator] Error running system audit:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+
+// ===== client/src/pages/ai-transparency.tsx — removed regions (original line numbers) =====
+// --- :33 ---
+  const [auditReport, setAuditReport] = useState<any | null>(null);
+// --- :120-131 (queries) ---
+  // Fetch latest telemetry (for AI Command Center tab)
+  const { data: telemetryData, isLoading: telemetryLoading } = useQuery<any>({
+    queryKey: ['/api/orchestrator/telemetry'],
+    refetchInterval: 30000,
+  });
+
+  // Fetch latest AI analysis (for AI Analysis tab)
+  const { data: analysisData, isLoading: analysisLoading } = useQuery<any>({
+    queryKey: ['/api/orchestrator/analysis'],
+    refetchInterval: 30000,
+  });
+
+// --- :150-192 (mutations) ---
+  // Manual analysis trigger
+  const triggerAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/orchestrator/analyze', {});
+    },
+    onSuccess: () => {
+      toast({
+        title: "Analysis Triggered",
+        description: "GPT-4o is analyzing the system. Results will appear shortly.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/analysis'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/orchestrator/telemetry'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to trigger analysis",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // System audit trigger
+  const runSystemAuditMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('POST', '/api/orchestrator/audit', {});
+    },
+    onSuccess: (response: any) => {
+      setAuditReport(response.audit);
+      toast({
+        title: "System Audit Complete",
+        description: `Overall health: ${response.audit.health.overall.toUpperCase()}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to run audit",
+        variant: "destructive",
+      });
+    }
+  });
+
+// --- :357-358 ---
+  const telemetry = telemetryData;
+  const analysis = analysisData;
+// --- :431-434 (AI Analysis tab trigger) ---
+          <TabsTrigger value="ai-analysis" data-testid="tab-ai-analysis" className="min-w-[140px] text-sm px-3 py-2">
+            <Brain className="w-4 h-4 mr-2" />
+            AI Analysis
+          </TabsTrigger>
+// --- :483-712 (tab header, the telemetry gate and its cards, the System Audit Report card) ---
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-2">
+              {analysis && (
+                <Badge 
+                  variant={getUrgencyColor(analysis.urgencyLevel)}
+                  className="text-sm px-3 py-1"
+                  data-testid={`badge-urgency-${analysis?.urgencyLevel}`}
+                >
+                  {analysis.urgencyLevel?.toUpperCase()}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => runSystemAuditMutation.mutate()}
+                disabled={runSystemAuditMutation.isPending}
+                data-testid="button-run-audit"
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {runSystemAuditMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Running Audit...
+                  </>
+                ) : (
+                  <>
+                    <Activity className="w-4 h-4" />
+                    Run System Audit
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={() => triggerAnalysisMutation.mutate()}
+                disabled={triggerAnalysisMutation.isPending}
+                data-testid="button-trigger-analysis"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                {triggerAnalysisMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Trigger Analysis
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {telemetryLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : telemetry ? (
+            <>
+              {/* System Metrics */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card data-testid="card-system-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      System Health
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">CPU Load</span>
+                      <span className="text-sm font-semibold" data-testid="text-cpu">{telemetry.system?.cpu?.loadAverage?.[0]?.toFixed(2) || 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Memory</span>
+                      <span className="text-sm font-semibold" data-testid="text-memory">{telemetry.system?.memory?.usagePercent?.toFixed(1) || 'N/A'}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Uptime</span>
+                      <span className="text-sm font-semibold" data-testid="text-uptime">
+                        {telemetry.system?.uptime ? Math.floor(telemetry.system.uptime / 3600) : 'N/A'}h
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-trading-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Trading Performance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Total P/L</span>
+                      <span className={`text-sm font-semibold ${(telemetry.trading?.totalPL || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`} data-testid="text-total-pl">
+                        ${telemetry.trading?.totalPL?.toFixed(2) || '0.00'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Win Rate</span>
+                      <span className="text-sm font-semibold" data-testid="text-win-rate">{telemetry.trading?.winRate?.toFixed(1) || '0.0'}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">ROI</span>
+                      <span className="text-sm font-semibold" data-testid="text-roi">{telemetry.trading?.roi?.toFixed(2) || '0.00'}%</span>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-ai-metrics">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                      <Brain className="w-4 h-4" />
+                      AI Activity
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Learning Cycles</span>
+                      <span className="text-sm font-semibold" data-testid="text-learning-cycles">{telemetry.ai?.recentLearningCycles || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Opportunities</span>
+                      <span className="text-sm font-semibold" data-testid="text-opportunities">{telemetry.ai?.opportunitiesGenerated || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-muted-foreground">Adjustments</span>
+                      <span className="text-sm font-semibold" data-testid="text-adjustments">{telemetry.ai?.adjustmentsMade || 0}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Goals and Guardrails */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card data-testid="card-goals">
+                  <CardHeader>
+                    <CardTitle className="text-base">Active Goals</CardTitle>
+                    <CardDescription>Current user-defined trading goals</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {telemetry.goals?.length > 0 ? (
+                      <ul className="space-y-2">
+                        {telemetry.goals.slice(0, 3).map((goal: any, idx: number) => (
+                          <li key={idx} className="text-sm flex items-start gap-2" data-testid={`text-goal-${idx}`}>
+                            <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                            <span>{goal.description || goal.target}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-goals">No active goals</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card data-testid="card-guardrails">
+                  <CardHeader>
+                    <CardTitle className="text-base">Active Guardrails</CardTitle>
+                    <CardDescription>Protective rules and boundaries</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {telemetry.guardrails && Object.keys(telemetry.guardrails).length > 0 ? (
+                      <div className="space-y-2">
+                        {Object.entries(telemetry.guardrails).map(([key, value], idx) => (
+                          <div key={idx} className="text-sm flex items-start gap-2" data-testid={`text-guardrail-${idx}`}>
+                            <AlertTriangle className="w-4 h-4 text-yellow-500 mt-0.5 flex-shrink-0" />
+                            <span className="capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}: {String(value)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground" data-testid="text-no-guardrails">No active guardrails</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* System Audit Report */}
+              {auditReport && (
+                <Card data-testid="card-audit-report">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          System Audit Report
+                          <Badge 
+                            variant={
+                              auditReport.health.overall === 'healthy' ? 'default' :
+                              auditReport.health.overall === 'fair' ? 'outline' :
+                              auditReport.health.overall === 'degraded' ? 'secondary' : 'destructive'
+                            }
+                            data-testid={`badge-health-${auditReport.health.overall}`}
+                          >
+                            {auditReport.health.overall.toUpperCase()}
+                          </Badge>
+                        </CardTitle>
+                        <CardDescription>
+                          Generated {formatDistanceToNow(new Date(auditReport.timestamp))} ago
+                        </CardDescription>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Health Checks */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3">Health Checks</h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        {Object.entries(auditReport.health.checks).map(([check, status]: [string, any]) => (
+                          <div key={check} className="flex items-center gap-2" data-testid={`check-${check}`}>
+                            {status === 'pass' ? (
+                              <CheckCircle className="w-4 h-4 text-green-500" />
+                            ) : status === 'warning' ? (
+                              <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            )}
+                            <span className="text-sm capitalize">{check}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+// --- :862-872 (the gate's else-arm and the row-3a comment, rewritten) ---
+
+            </>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No telemetry data available</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Feed Health — row 3a (B-FEED-HEALTH-GRADE-ARM): OUTSIDE the telemetry ternary. It has its own query
+          (/api/system/feed-health); gated inside, it was unreachable whenever /api/orchestrator/telemetry failed. */}
+// --- :1041-1112 (AI Analysis tab) ---
+        {/* AI Analysis Tab (from Command Center) */}
+        <TabsContent value="ai-analysis" className="space-y-6 mt-6" data-testid="content-ai-analysis">
+          {analysisLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : analysis ? (
+            <>
+              {/* Anomalies */}
+              <Card data-testid="card-anomalies">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5" />
+                    Detected Anomalies
+                  </CardTitle>
+                  <CardDescription>Issues requiring attention</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {analysis.anomalies && analysis.anomalies.length > 0 ? (
+                    <ul className="space-y-3">
+                      {analysis.anomalies.map((anomaly: any, idx: number) => (
+                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`anomaly-${idx}`}>
+                          <AlertTriangle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${getSeverityColor(anomaly.severity)}`} />
+                          <div className="flex-1">
+                            <Badge variant="outline" className="mb-1">{anomaly.severity}</Badge>
+                            <p className="text-sm">{anomaly.message}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-anomalies">No anomalies detected</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Optimizations */}
+              <Card data-testid="card-optimizations">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Optimization Opportunities
+                  </CardTitle>
+                  <CardDescription>Performance improvement suggestions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {analysis.optimizations && analysis.optimizations.length > 0 ? (
+                    <ul className="space-y-3">
+                      {analysis.optimizations.map((opt: any, idx: number) => (
+                        <li key={idx} className="flex items-start gap-3 pb-3 border-b last:border-0" data-testid={`optimization-${idx}`}>
+                          <TrendingUp className="w-4 h-4 mt-0.5 flex-shrink-0 text-blue-500" />
+                          <div className="flex-1">
+                            <Badge variant="outline" className="mb-1">{opt.impact}</Badge>
+                            <p className="text-sm">{opt.recommendation}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-muted-foreground" data-testid="text-no-optimizations">No optimizations suggested</p>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>No analysis data available. Trigger an analysis to generate insights.</AlertDescription>
+            </Alert>
+          )}
+        </TabsContent>
+
