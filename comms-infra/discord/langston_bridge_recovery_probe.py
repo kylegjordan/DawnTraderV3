@@ -15,6 +15,7 @@ b = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(b)
 lq = b.lq
 CFG = b.CFG
+REAL_INBOX_IDS, REAL_INBOX_EVIDENCE = gw.inbox_message_ids, b.al.inbox_evidence   # the readers, before any stub
 
 fails = 0
 def check(name, cond):
@@ -173,8 +174,8 @@ async def failure_scenarios():
         q, c = fresh_client(FLOOR)
         p1, p2, p3 = (grp_msg("abcdef12", k, 3, "piece %d" % k) for k in (1, 2, 3))
         u1, u2, u3 = (grp_msg("0011aa22", k, 3, "fresh %d" % k) for k in (1, 2, 3))
-        b.gw.inbox_message_ids = lambda *_a, **_k: {p1.id}
-        b.al.inbox_evidence = lambda *_a, **_k: (set(), {p1.id})
+        b.gw.inbox_message_ids = lambda *_a, **_k: {p3.id}      # the COMPLETE path records the last piece (Langston)
+        b.al.inbox_evidence = lambda *_a, **_k: (set(), {p3.id})
         class Ch3:
             def history(self, **_k):
                 async def gen():
@@ -194,7 +195,60 @@ async def failure_scenarios():
         got = [q.get()["content"] for _ in range(q.qsize())]
         check("no INCOMPLETE duplicate flushes after the timeout", got == ["Langston, a later post"])
 
+async def delivery_scenario():
+    """Langston, bridge-recovery gate at 5018aca33: a reply that did NOT reach Discord must not mark its message
+    answered. Drives the REAL process_task (invoke_claude and rest_send stubbed, every file in a temp dir) and then
+    the REAL recovery readers over the inbox it wrote - no stub between the reply and the recovery decision."""
+    with tempfile.TemporaryDirectory() as d:
+        b.gw.inbox_message_ids, b.al.inbox_evidence = REAL_INBOX_IDS, REAL_INBOX_EVIDENCE
+        b.dc.INBOX_LOG = os.path.join(d, "inbox.jsonl")
+        b.LOG_FILE, b.QUEUE_FILE = os.path.join(d, "bridge.log"), os.path.join(d, "queue.json")
+        b.SELF_ADVANCE_ENABLED = False
+        b.invoke_claude = lambda *a, **k: "Kyle — here is the review."
+        q, c = fresh_client(FLOOR)
+        posted, failed = msg(KYLE, "Langston, this reply will post"), msg(KYLE, "Langston, this reply will fail")
+        for m, sent in ((posted, "7777"), (failed, None)):
+            await c.on_message(m, _recover=True)
+            b.dc.rest_send = lambda *a, _s=sent, **k: _s
+            b.process_task(q.get(), {}, {"bot_turns": 0})
+        import json as _j
+        rows = [_j.loads(l) for l in open(b.dc.INBOX_LOG, encoding="utf-8")]
+        outs = [r for r in rows if r.get("kind") == "langston_outbound"]
+        check("a delivered reply writes langston_outbound with its message id",
+              [(r.get("reply_to"), r.get("message_id")) for r in outs] == [(posted.id, "7777")])
+        check("a failed post writes NO langston_outbound, and a post_failed silent row instead",
+              any(r.get("kind") == "langston_silent" and r.get("reply_to") == failed.id and r.get("reason") == "post_failed"
+                  for r in rows))
+        # the two historical shapes already in the live log: an outbound row with message_id null, and one with none
+        with open(b.dc.INBOX_LOG, "a", encoding="utf-8") as fh:
+            fh.write(_j.dumps({"kind": "langston_inbound", "message_id": 5551}) + "\n")
+            fh.write(_j.dumps({"kind": "langston_outbound", "reply_to": 5551, "message_id": None}) + "\n")
+        started = b.gw.inbox_message_ids(b.dc.INBOX_LOG, kinds={"langston_inbound"})
+        _r, replied = b.al.inbox_evidence(b.dc.INBOX_LOG, tail_bytes=1 << 30)
+        done = started & replied
+        check("recovery (real readers) counts ONLY the delivered reply as answered",
+              posted.id in done and failed.id not in done and 5551 not in done)
+        # and the recovery pass itself, over that inbox, re-feeds exactly the two undelivered ones
+        lq.RECOVER_FLOOR_FILE = os.path.join(d, "recover-since")
+        open(lq.RECOVER_FLOOR_FILE, "w").write("2026-10-16T07:10:43Z")
+        q2, c2 = fresh_client(FLOOR)
+        hist = (msg(KYLE, "Langston, this reply will post"), msg(KYLE, "Langston, this reply will fail"),
+                msg(KYLE, "Langston, the historical null row"))
+        hist[0].id, hist[1].id, hist[2].id = posted.id, failed.id, 5551
+        class ChD:
+            def history(self, **_k):
+                async def gen():
+                    for m in hist:
+                        yield m
+                return gen()
+        c2.get_channel = lambda _cid: ChD()
+        await c2.on_ready()
+        got = [q2.get()["content"] for _ in range(q2.qsize())]
+        check("recovery pass re-feeds the failed post and the null-id row, not the delivered one",
+              got == ["Langston, this reply will fail", "Langston, the historical null row"])
+
 asyncio.run(scenario())
 asyncio.run(failure_scenarios())
+asyncio.run(delivery_scenario())
 print("probe failures:", fails)
 sys.exit(1 if fails else 0)

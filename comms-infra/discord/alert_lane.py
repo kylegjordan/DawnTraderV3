@@ -158,7 +158,9 @@ def inbox_evidence(inbox_path, tail_bytes=8_000_000):
                     continue
                 if e.get("lane") == "alert":
                     routed.update(a.lower() for a, _o, _x in MARKER_RE.findall(e.get("text") or ""))
-                elif e.get("reply_to") is not None:
+                elif e.get("reply_to") is not None and e.get("message_id") is not None:
+                    # a reply counts only if it reached Discord: a row with no message id is a post that failed
+                    # (the bridge stopped writing those 2026-10-17; 2 historical rows remain in the log)
                     try:
                         replied.add(int(e["reply_to"]))
                     except (TypeError, ValueError):

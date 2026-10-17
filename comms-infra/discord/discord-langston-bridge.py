@@ -574,8 +574,16 @@ def process_task(task, state, breaker, task_q=None):
             log(f"alert spool: Langston's reply to msg {msg_id} was NOT posted - kept for restore")
         if _done:
             al.spool_remove(al.SPOOL_DIR, msg_id)
-    else:
+    elif sent_id is not None:
         mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=cleaned)
+    else:
+        # B-LANGSTON-RELIEF (Langston, bridge-recovery gate at 5018aca33): restart recovery counts a message ANSWERED
+        # by its langston_outbound row, so that row is written only for a reply that reached Discord. rest_send
+        # returns None when ANY chunk failed (chunks before it may have posted), and a reply that did not post, or
+        # posted truncated, must be re-fed rather than skipped. The fact is still recorded, as a silent row - which
+        # recovery does not count as an answer. Residual, stated: a truncated post that is re-fed is answered again.
+        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="post_failed")
+        log(f"reply to msg {msg_id} did NOT post (or posted truncated) - recorded as post_failed, recovery re-feeds it")
     # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload
     # failure is announced in-channel, never silently dropped (Langston (d)).
     for _fp in _attach_files:

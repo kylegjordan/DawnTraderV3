@@ -83,12 +83,15 @@ with _tf.TemporaryDirectory() as _d:
     inbox = os.path.join(_d, "inbox.jsonl")
     with open(inbox, "w", encoding="utf-8") as fh:
         fh.write(_json.dumps({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % A}) + NL)
-        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 555, "text": "his reply"}) + NL)
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 555, "message_id": 9001, "text": "his reply"}) + NL)
+        # a reply that never reached Discord (message_id null) or carries no id at all is NOT an answer
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 556, "message_id": None, "text": "failed post"}) + NL)
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 557, "text": "no id recorded"}) + NL)
         fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": "adv-Q1", "text": "self-advance"}) + NL)
         fh.write("garbage" + NL)
     routed_ids, replied = al.inbox_evidence(inbox)
     ok("inbox evidence: lane-recorded alert ids", routed_ids == {A})
-    ok("inbox evidence: Langston's replies by message id, odd ids ignored", replied == {555})
+    ok("inbox evidence: only DELIVERED replies count (555); undelivered (556, 557) and odd ids do not", replied == {555})
 
 # ---- Langston precedent r2 (his rulings after the lane's first live burst, 2026-10-16) ----
 def _alert(aid, title, body="body text"):
