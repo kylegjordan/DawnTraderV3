@@ -15,9 +15,11 @@ made the floor part of the act. This helper does all of it, in order, or refuses
      of this helper still leaves one;
   3. waits for a `responded to msg` line - a reply posted, nothing in flight - unless --now;
   4. RE-DERIVES the floor at that moment and rewrites it immediately before the restart (Langston r1
-     BLOCKER-2: a floor written up to --wait-s earlier can age past the bridge's 24 h refusal). If the floor
-     would be older than the bridge accepts, it REFUSES and names the messages that would fall outside -
-     unless --accept-clamp, which restarts with the oldest acceptable floor and names what it gives up;
+     BLOCKER-2: a floor written up to --wait-s earlier can age past the bridge's 24 h refusal). The floor is
+     clamped to the oldest the bridge accepts; it REFUSES only when a WAITING MESSAGE falls outside that
+     (Langston r2 BLOCKER-3: a daemon up over 24 h always clamps - 23 of 74 restarts since 2026-06-19 - so a
+     refusal keyed on the clamp fires with nothing to lose and trains the operator into --accept-clamp);
+     --accept-clamp restarts anyway and names what it gives up;
   5. restarts, then reads the bridge's own SUMMARY line, three ways (Langston r1 BLOCKER-1 - the first
      `recovery:` line is an intent line that prints before any work, so it proves nothing):
         `recovery: re-read channel since …`  -> exit 0 (and the bridge must have consumed the floor file)
@@ -25,8 +27,16 @@ made the floor part of the act. This helper does all of it, in order, or refuses
         `recovery: floor file ignored …`     -> exit 7
      no summary within 180 s -> exit 8.
 
-"Delivered reply" is the bridge's own rule, imported, never re-implemented: alert_lane.inbox_evidence.
+"Delivered reply" is the bridge's own rule, imported, never re-implemented: alert_lane.inbox_evidence - and
+SELF-CHECKED before use (Langston r2 BLOCKER-4): it is fed a two-row synthetic inbox and the helper refuses
+(exit 10) unless only the row that reached Discord counts. The INSTALLED copy is what runs, and an older one
+counts a failed post as delivered, which would narrow the floor past exactly the message a restart can lose.
 --dry-run prints the plan and changes nothing.
+
+Exit codes: 0 recovered · 2 refused before acting (not root, bad start time, journal lacks the start line) ·
+3 no reply posted within --wait-s · 4 restart failed · 5 recovery FAILED · 6 recovered but the floor file
+remains · 7 floor REFUSED by the bridge · 8 no summary in 180 s · 9 waiting messages fall outside the floor ·
+10 the installed delivered-reply rule failed its self-check.
 
 Limits, stated: (a) a post Langston answered by replying to a DIFFERENT post (a superseded revision) reads as
 unanswered and is re-fed - OLD Claude's B75 r5, 2026-10-17; (b) a message dropped by an EARLIER restart that
@@ -34,7 +44,7 @@ had no floor is older than this process and is not covered - repair that by hand
 journal to still hold this process's start (it refuses otherwise - an enqueue line it cannot see is a message
 it cannot protect); (d) it trusts that systemd reports UTC (it refuses any other zone token).
 """
-import argparse, datetime as dt, os, pwd, re, subprocess, sys, tempfile, time
+import argparse, datetime as dt, importlib.util, os, pwd, re, shutil, subprocess, sys, tempfile, time
 
 UNIT = "discord-langston-bridge.service"
 BRIDGE_DIR = os.environ.get("LBR_BRIDGE_DIR", "/opt/discord-bridges")
@@ -95,6 +105,21 @@ def classify(line):
     return None
 
 
+def restart_decision(outside, accept_clamp):
+    """'restart' or 'refuse'. Only a waiting message outside the floor is a reason to stop - never the clamp."""
+    return "refuse" if outside and not accept_clamp else "restart"
+
+
+def predicate_ok(inbox_evidence, tmpdir):
+    """Feed the bridge's reply predicate a delivered and an undelivered reply; True only if it counts the first alone."""
+    p = os.path.join(tmpdir, "inbox.jsonl")
+    with open(p, "w", encoding="utf-8") as fh:
+        fh.write('{"kind": "langston_outbound", "reply_to": 101, "message_id": 9001, "text": "posted"}\n')
+        fh.write('{"kind": "langston_outbound", "reply_to": 102, "message_id": null, "text": "never posted"}\n')
+    _r, replied = inbox_evidence(p, tail_bytes=1 << 20)
+    return set(replied) == {101}
+
+
 def first_verdict(lines):
     for l in lines:
         v = classify(l)
@@ -118,10 +143,26 @@ def journal_since(start):
               "--no-pager", "-o", "cat").stdout
 
 
+def load_predicate(bridge_dir=None):
+    """The bridge's own reply predicate, loaded from the INSTALLED bridge dir (LBR_BRIDGE_DIR overrides, for tests),
+    and refused unless it passes predicate_ok."""
+    d = bridge_dir or BRIDGE_DIR
+    spec = importlib.util.spec_from_file_location("lbr_alert_lane", os.path.join(d, "alert_lane.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    t = tempfile.mkdtemp(prefix="lbr-selfcheck-")
+    try:
+        if not predicate_ok(m.inbox_evidence, t):
+            raise Refusal(10, "refusing: the installed %s/alert_lane.py counts a reply that never reached Discord as "
+                              "delivered - the floor would skip the message most likely to be lost. Install the "
+                              "bridges group (deploy.sh --only bridges) first." % d)
+    finally:
+        shutil.rmtree(t, ignore_errors=True)
+    return m.inbox_evidence
+
+
 def delivered_replies():
-    sys.path.insert(0, BRIDGE_DIR)
-    import alert_lane                                  # the bridge's own predicate, not a second copy
-    _routed, replied = alert_lane.inbox_evidence(INBOX, tail_bytes=1 << 30)
+    _routed, replied = load_predicate()(INBOX, tail_bytes=1 << 30)
     return replied
 
 
@@ -141,7 +182,8 @@ def write_floor(floor):
 
 
 def follow(pattern_fn, timeout_s, since=None):
-    """Feed live journal lines to pattern_fn until it returns a value; None on timeout."""
+    """Feed live journal lines to pattern_fn until it returns a value; None on timeout. `since` is formatted as a
+    naked UTC string with --utc: sound only because parse_systemd_ts refuses any zone but UTC - the two are coupled."""
     cmd = ["journalctl", "-u", UNIT, "-f", "--no-pager", "-o", "cat"]
     cmd += ["--since", since.strftime("%Y-%m-%d %H:%M:%S"), "--utc"] if since else ["-n0"]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
@@ -168,8 +210,8 @@ def show(start, floor, pending, outside, clamped):
     print("process start %sZ; %d enqueued message(s) without a delivered reply%s" % (
         start.strftime("%Y-%m-%dT%H:%M:%S"), len(pending), (": " + " ".join(map(str, pending))) if pending else ""))
     print("floor %s%s" % (floor.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                          ("  ⚠ CLAMPED to the oldest floor the bridge accepts; OUTSIDE it: " +
-                           " ".join(map(str, outside))) if clamped else ""))
+                          ("  (clamped to the oldest floor the bridge accepts)" if clamped else "") +
+                          ("  ⚠ OUTSIDE it: " + " ".join(map(str, outside)) if outside else "")))
 
 
 def run(a):
@@ -186,14 +228,16 @@ def run(a):
         v, line = follow(lambda l: True if re.search(r"responded to msg \d+", l) else None, a.wait_s)
         if v is None:
             print("NOT restarted: no reply posted in %d s (the floor file stays; re-run, or use --now)" % a.wait_s)
-            return 2
+            return 3
         print("seen: " + line.strip())
     start, floor, pending, outside, clamped = current_plan(dt.datetime.now(UTC))
     show(start, floor, pending, outside, clamped)
-    if clamped and not a.accept_clamp:
+    if restart_decision(outside, a.accept_clamp) == "refuse":
         print("NOT restarted: %d waiting message(s) are older than the bridge will recover; re-run with "
               "--accept-clamp to give them up, or repair by hand" % len(outside))
         return 9
+    if clamped and not outside:
+        print("floor clamped to the oldest the bridge accepts; nothing waiting falls outside it")
     write_floor(floor)
     t0 = dt.datetime.now(UTC)
     r = sh("systemctl", "restart", UNIT)
@@ -207,6 +251,11 @@ def run(a):
         return 8
     code, label = v
     print("%s: %s" % (label, line.strip()))
+    # the bridge logs the summary and THEN removes the file; give it a moment before calling it stuck
+    for _ in range(10):
+        if code != 0 or not os.path.exists(FLOOR_FILE):
+            break
+        time.sleep(0.2)
     if code == 0 and os.path.exists(FLOOR_FILE):
         print("but the floor file is still there - remove it before the next restart")
         return 6

@@ -87,5 +87,39 @@ except lbr.Refusal as e:
     got = e.code
 case("a non-UTC zone token -> refuse (exit 2), never assume", 2, got)
 
+print("4. BLOCKER-3: the refusal keys on a waiting message outside the floor, never on the clamp")
+old_start = now - dt.timedelta(hours=30)
+f3, p3, o3, c3 = lbr.plan_floor(old_start, lbr.START_LINE + "\n", set(), now)
+case("a daemon up 30 h with nothing waiting: clamped, nothing outside", (True, []), (c3, o3))
+case("  ...decision: RESTART (no flag needed)", "restart", lbr.restart_decision(o3, False))
+case("a waiting message outside the floor: REFUSE without the flag", "refuse", lbr.restart_decision([old], False))
+case("  ...and restart with --accept-clamp", "restart", lbr.restart_decision([old], True))
+
+print("5. BLOCKER-4: the installed reply predicate is self-checked before it is trusted")
+good = (lambda path, tail_bytes=0: (set(), {101}))
+bad = (lambda path, tail_bytes=0: (set(), {101, 102}))
+with tempfile.TemporaryDirectory() as d:
+    case("a predicate that counts only the delivered reply passes", True, lbr.predicate_ok(good, d))
+    case("one that also counts the never-posted reply FAILS", False, lbr.predicate_ok(bad, d))
+with tempfile.TemporaryDirectory() as d:
+    import shutil
+    shutil.copy(os.path.join(HERE, "alert_lane.py"), d)
+    try:
+        lbr.load_predicate(d)
+        got = "loaded"
+    except lbr.Refusal as e:
+        got = e.code
+    case("this branch's alert_lane.py (delivered-only rule) loads", "loaded", got)
+    s_ = open(os.path.join(d, "alert_lane.py"), encoding="utf-8").read()
+    s_ = s_.replace('elif e.get("reply_to") is not None and e.get("message_id") is not None:',
+                    'elif e.get("reply_to") is not None:')
+    open(os.path.join(d, "alert_lane.py"), "w", encoding="utf-8").write(s_)
+    try:
+        lbr.load_predicate(d)
+        got = "loaded"
+    except lbr.Refusal as e:
+        got = e.code
+    case("the OLDER rule (no message_id gate, as installed 2026-10-17) is REFUSED with exit 10", 10, got)
+
 print("helper failures:", fails)
 sys.exit(1 if fails else 0)
