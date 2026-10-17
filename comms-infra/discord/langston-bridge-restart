@@ -36,7 +36,8 @@ counts a failed post as delivered, which would narrow the floor past exactly the
 Exit codes: 0 recovered · 2 refused before acting (not root, bad start time, journal lacks the start line) ·
 3 no reply posted within --wait-s · 4 restart failed · 5 recovery FAILED · 6 recovered but the floor file
 remains · 7 floor REFUSED by the bridge · 8 no summary in 180 s · 9 waiting messages fall outside the floor ·
-10 the installed delivered-reply rule failed its self-check.
+10 the installed delivered-reply rule failed its self-check · 11 the journal stream ENDED early (journalctl
+died: check the unit and read permissions - not a timeout, so waiting longer will not help).
 
 Reach, stated (Langston r3 record): exit-10's self-check certifies ONE property of ONE function -
 inbox_evidence's delivered-only rule. A clean --dry-run is NOT proof the installed bridges group is at branch head.
@@ -186,6 +187,9 @@ def write_floor(floor):
     os.replace(tmp, FLOOR_FILE)
 
 
+ENDED = "stream-ended"
+
+
 def journal_cmd(since=None):
     """`since` is formatted as a naked UTC string with --utc: sound only because parse_systemd_ts refuses any zone
     but UTC - the two are coupled."""
@@ -195,7 +199,8 @@ def journal_cmd(since=None):
 
 def follow(pattern_fn, timeout_s, since=None, cmd=None):
     """Feed live lines of `cmd` (default: the bridge's journal) to pattern_fn until it returns a value; (None, None)
-    on timeout or when the stream ends.
+    on timeout, (None, ENDED) when the stream ends first (Langston r4 record (i): journalctl dying at once returned
+    in 0.002 s and was reported as a 180 s timeout - a different next action).
     ⛔ MEASURED 2026-10-17 07:28Z, the first live run: the r1-r3 body read a TEXT-mode pipe set non-blocking, and
     TextIOWrapper.read() raised `TypeError: can't concat NoneType to bytes` the moment no data was waiting - the
     helper crashed before restarting anything (fail-safe, but it never worked). Only the pure functions were tested.
@@ -215,7 +220,7 @@ def follow(pattern_fn, timeout_s, since=None, cmd=None):
                 continue
             chunk = os.read(fd, 65536)
             if not chunk:
-                return None, None
+                return None, ENDED
             buf += chunk
             *lines, buf = buf.split(b"\n")
             for raw in lines:
@@ -248,6 +253,9 @@ def run(a):
     if not a.now:
         print("waiting up to %d s for a posted reply ..." % a.wait_s)
         v, line = follow(lambda l: True if re.search(r"responded to msg \d+", l) else None, a.wait_s)
+        if v is None and line == ENDED:
+            print("NOT restarted: the journal stream ended before any reply was seen (the floor file stays)")
+            return 11
         if v is None:
             print("NOT restarted: no reply posted in %d s (the floor file stays; re-run, or use --now)" % a.wait_s)
             return 3
@@ -268,6 +276,9 @@ def run(a):
         return 4
     print("restarted at %sZ" % t0.strftime("%Y-%m-%dT%H:%M:%S"))
     v, line = follow(classify, 180, since=t0)
+    if v is None and line == ENDED:
+        print("the journal stream ENDED before the recovery summary - the bridge WAS restarted; read its journal")
+        return 11
     if v is None:
         print("NO recovery summary within 180 s - check the journal")
         return 8

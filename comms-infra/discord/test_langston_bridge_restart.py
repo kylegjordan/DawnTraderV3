@@ -133,7 +133,11 @@ t0 = _t.time()
 got = lbr.follow(lambda l: True if "never" in l else None, 2, cmd=["sh", "-c", "echo a; sleep 30"])
 case("no match within the timeout -> (None, None), on time", ((None, None), True), (got, _t.time() - t0 < 4))
 got = lbr.follow(lambda l: True if "never" in l else None, 10, cmd=["sh", "-c", "echo a; echo b"])
-case("the stream ending -> (None, None), not a hang", (None, None), got)
+case("the stream ending -> (None, ENDED), not a hang and not a timeout", (None, lbr.ENDED), got)
+t0 = _t.time()
+got = lbr.follow(lbr.classify, 180, cmd=["sh", "-c", "exit 1"])
+case("  ...journalctl dying at once is reported as ENDED within a second, never as a 180 s timeout",
+     ((None, lbr.ENDED), True), (got, _t.time() - t0 < 2))
 _lf = tempfile.NamedTemporaryFile("w", delete=False, suffix=".log", encoding="utf-8")
 _lf.write(INTENT + chr(10) + FAILED + chr(10))   # a file, not echo: INTENT holds an apostrophe a shell would eat
 _lf.close()
