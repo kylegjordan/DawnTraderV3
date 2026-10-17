@@ -151,19 +151,21 @@ describe('P-7 — a missing class stamp is refused, not re-derived', () => {
     expect(block).not.toContain('safeResolveAssetClass(signal.symbol');
   });
 
-  // Object-round fold: the class checks sat BELOW the tiebreak, which expires the incumbent before the throw. MUTATION:
-  // move them back below `expireSignal(existingSignal.id` and this fails.
-  it('the RTB writer checks the class BEFORE the duplicate check and the tiebreak can act', () => {
+  // Object-round fold: the class checks must run before the writer's FIRST write. That was once a tiebreak's
+  // `expireSignal`; since B-RTB-ADMISSION-TIEBREAK-LIVE (#1190) it is the upsert. MUTATION: move them below
+  // `storage.upsertRtbSignal(insertData)` and this fails.
+  it('the RTB writer checks the class BEFORE the duplicate check and before its first write', () => {
     const src = code('server/core/rtb/ready_to_buy_service.ts');
     const fn = src.indexOf('async queueSQESignal(');
     const invalid = src.indexOf('[B-SIZING-DEC-RESTORE][STAMP_INVALID]', fn);
     const missing = src.indexOf('[B79.0n.RTB][STAMP_MISSING]', fn);
     const dup = src.indexOf('storage.hasActivePair(normalizedSymbol', fn);
-    const expire = src.indexOf('this.expireSignal(existingSignal.id', fn);
-    for (const i of [invalid, missing, dup, expire]) expect(i).toBeGreaterThan(fn);
+    const write = src.indexOf('storage.upsertRtbSignal(insertData)', fn);
+    for (const i of [invalid, missing, dup, write]) expect(i).toBeGreaterThan(fn);
     expect(missing).toBeLessThan(dup);
     expect(invalid).toBeLessThan(dup);
-    expect(invalid).toBeLessThan(expire);
+    expect(invalid).toBeLessThan(write);
+    expect(missing).toBeLessThan(write);
   });
 
   it('the RTB writer rejects a present-but-invalid class at its source', () => {

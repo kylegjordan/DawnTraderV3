@@ -6,6 +6,17 @@
 
 ---
 
+## The RTB same-setup tiebreak, `getQueuedSignal` and `skipSelfCheck` — DELETED 2026-10-17 (B-RTB-ADMISSION-TIEBREAK-LIVE, `#1190`, sprint row 59f; Kyle delegated option (b) to CC-B + Langston 2026-10-16)
+
+**What:** in `server/core/rtb/ready_to_buy_service.ts` — `getQueuedSignal(mode, symbol, strategy)`; `queueSQESignal`'s incumbent branch (`[UNPRICEABLE]` / `[KEEP]` / `[REPLACE]`, the R-multiple comparison and its `expireSignal` call); `SQESignalInput.skipSelfCheck`, its log line, and its three doc/comment lines; the stale tiebreak sentences in `rMultipleCore`'s docblock and in the class-check comment. In tests: `skipSelfCheck: true` in `p19-b4a-rtb-assetclass-resolve.test.ts`; `b-sizing-inc2d-legacy-sweep.test.ts`'s order test re-anchored from the deleted `expireSignal` call to the upsert (intent kept: the class is checked before the first write).
+**Why:** it never ran. `getQueuedSignal` read `status = 'queued'`; since Directive 8.8.4-A3.R8 (2025-12-18) rows are written `active` / `reconfirmed`, and only the plural `getQueuedSignals` was widened. Measured: 0 `queued` rows (Langston 2026-10-12; again 2026-10-17, 21 `reconfirmed` + 1 `active`), 0 `RTB_TIEBREAK` lines in retained logs. The decision (option (b), newest wins) makes the observed behaviour the stated rule; Kyle's 2026-07-24 R-multiple ruling keeps deciding between DIFFERENT setups in `getRankedSignals`.
+**Blast radius:** census at `origin/migration/aws-supabase`, tests excluded: `getQueuedSignal` — 1 caller (`:2329`); `queueSQESignal` — 1 production caller (`signal-orchestrator.ts:1506`); `skipSelfCheck` — 0 production setters (1 test); `RTB_TIEBREAK` / the replace reason — 3 emit sites, 0 readers. **State-write census:** the branch's one write was `expireSignal` (a row delete) — never executed; `expireSignal` stays (its other caller `:1759`). `signalRMultiple` / `rMultipleCore` keep their ranker callers (`:1828`, `:2094`). Langston re-derived every count at Step 2 (`5425ff07d`).
+**Archive:** `1-system-manual/_archive/deleted-code/rtb-same-setup-tiebreak.20261017-B-RTB-ADMISSION-TIEBREAK-LIVE.ts.removed`.
+**Also removed in the same batch (residue, not dead code):** the `finalScore` and `expiresAt` mappings in `upsertRtbSignal`'s conflict SET (`server/storage.ts`) — the insert supplies neither (`#558` A1; R9.3-C), the `#555` class left behind by `#558`. The `final_score` column stays until `#558` Phase B drops it.
+**Left intentionally:** `expireSignal`; the plural `getQueuedSignals`; `signalId` unchanged on a re-issue (it keys the refresh state and the ranker map).
+
+---
+
 ## `system-health-check-task.ts` — the hourly System Health Check — DELETED 2026-10-02 (B-HEALTH-CHECK-REMOVAL, `#1147`; Kyle directed)
 
 **What:** `server/services/system-health-check-task.ts` (84 lines) and its import + registration in `server/index.ts`; its name in the scheduler-task lists at `server/routes.ts:15962` and `server/storage.ts:2136`; its grandfathered TS2345 in `.tsc-baseline.json` (synced, 339 → 338) and its token in `scripts/classify-baseline.mjs`.

@@ -192,7 +192,6 @@ export interface SQESignalInput {
   // Kyle scope call). The `_displayContext` genesis fields are NOT required either —
   // absent-is-absent, no fabrication. The index signature keeps the blob open for both.
   metadata?: SQESignalMetadata;
-  skipSelfCheck?: boolean; // Directive 8.8.4-A3.R2: Skip self-dedupe during refreshAndRank
   sourcePool?: string;    // Batch 37: Family-qualified source pool
   signalType?: 'QUANT' | 'PATTERN' | 'HYBRID';  // Phase 14.5: signal family
   assetClass?: string;                  // P19-B4a stamp-at-source: pipe-stamped class; queueSQESignal THROWS if absent (no default)
@@ -1502,21 +1501,6 @@ class ReadyToBuyService {
   // _archive/deleted-code/p19-b8-10-dead-ranker-pair.removed; DELETED_COMPONENTS_LOG.md.
 
   /**
-   * Get a specific queued signal by symbol+strategy
-   */
-  async getQueuedSignal(mode: TradingMode, symbol: string, strategy: string): Promise<RtbSignal | null> {
-    const signals = await storage.getRtbSignals({
-      mode,
-      status: 'queued',
-      symbol,
-      strategy: strategy as any,
-      limit: 1,
-    });
-    
-    return signals[0] || null;
-  }
-
-  /**
    * Get all queued signals for a mode
    * Directive 8.8.4-A3.R8: Include both 'active' and 'reconfirmed' statuses
    */
@@ -1883,12 +1867,10 @@ class ReadyToBuyService {
   }
 
   /**
-   * P19-B7.1 (OBJ-2) — the expected-R-multiple KERNEL, shared by the rank-time path
-   * (signalRMultiple, off an RtbSignal row) and the queue tiebreaker (off a fresh
-   * SQESignalInput). ONE formula so a duplicate-collision decision uses the exact number
-   * the ranker/open-gate use — zero divergence. Reads the kernel's own `netRewardToRisk` +
-   * `pWinFloored` (REUSE over recompute). Returns `r=-Infinity` on unpriceable geometry so it
-   * sorts to the bottom / trips the tiebreaker's explicit keep-first.
+   * P19-B7.1 (OBJ-2) — the expected-R-multiple KERNEL behind the rank-time path (signalRMultiple,
+   * off an RtbSignal row). ONE formula so the ranker and the open-gate use the same number — zero
+   * divergence. Reads the kernel's own `netRewardToRisk` + `pWinFloored` (REUSE over recompute).
+   * Returns `r=-Infinity` on unpriceable geometry so it sorts to the bottom.
    * P19-B7.2 (OBJ-3): rank on the CHOSEN-mode netEV (best-of-both snapshot), consistent with
    * the [11.8B] open-gate — the number that ranks is the number that gates. R = chosenNetEv /
    * risk_price. NULL snapshot (pre-B7.2 rows / un-snapshotted path) → the taker recompute.
@@ -2198,10 +2180,6 @@ class ReadyToBuyService {
    * - Uses pre-computed FinalScore from SQE instead of re-calculating
    * - Supports TCL warm-up tracking
    * 
-   * Directive 8.8.4-A3.R2: Supports skipSelfCheck flag for reconfirmation
-   * When skipSelfCheck=true, skips the existing RTB signal check to allow
-   * re-queuing during refresh cycles without self-rejection
-   * 
    * Directive 8.8.4-A3.R8.5: Explicit SQE validation before insert
    * Defense-in-depth: Validates NGC threshold even for pre-computed signals
    * 
@@ -2216,9 +2194,9 @@ class ReadyToBuyService {
     const normalizedSymbol = normalizePairKey(input.symbol);
 
     // ⛔ B-SIZING-DEC-RESTORE 2d (fresh-reader object round, folded): the class checks run FIRST, before the
-    // duplicate check and the tiebreak. They sat below the tiebreak, which EXPIRES the incumbent signal before the
-    // throw — so a higher-ranked signal with no (or an invalid) class knocked out a valid incumbent and only then
-    // failed. Validated here, nothing downstream in this function acts on an unclassed signal.
+    // duplicate check and before this function's first write (the upsert). They once sat below a same-setup
+    // tiebreak that expired the incumbent before the throw (that branch never ran and was deleted by
+    // B-RTB-ADMISSION-TIEBREAK-LIVE, #1190). Validated here, nothing downstream in this function acts on an unclassed signal.
     // P19-B4a stamp-at-source (Langston Q4 backstop): the orchestrator stamps assetClass
     // at the per-pipe dispatch chokepoint (sizingContext.assetClass), so a missing
     // assetClass on this single caller path is a real bug — an `as any` / JSON-boundary /
@@ -2262,7 +2240,6 @@ class ReadyToBuyService {
 
     // Directive 8.8.4-A3: Pair-level duplicate validation
     // Check if this pair already exists in active trades (duplicate_pair_active)
-    // NOTE: Always check active positions even with skipSelfCheck (trade may have opened)
     const hasActivePosition = await storage.hasActivePair(normalizedSymbol, input.mode);
     if (hasActivePosition) {
       console.log(`[8.8.4-A3][SQE][Validation] pair=${normalizedSymbol} status=duplicate_pair_active`);
@@ -2317,58 +2294,12 @@ class ReadyToBuyService {
       return null;
     }
 
-    // Directive 8.8.4-A3.R2: Skip self-dedupe check when reconfirming existing RTB signals
-    if (input.skipSelfCheck) {
-      console.log(`[A3.R2][RTB] skipSelfCheck=true for ${normalizedSymbol}/${input.strategy}`);
-    }
-
-    // Check for existing queued signal with same symbol+strategy
-    // Directive 8.8.4-A3.R2: Skip this check when reconfirming (skipSelfCheck=true)
-    const existingSignal = input.skipSelfCheck 
-      ? null 
-      : await this.getQueuedSignal(input.mode, normalizedSymbol, input.strategy);
-    
-    if (existingSignal) {
-      // ★ B-RETIRED-SCORE-REMOVAL (#558, A1) — Kyle-ruled tiebreaker (2026-07-24): a duplicate
-      // symbol+strategy collision is decided on the LIVE RANK KEY (expected R-multiple), not the
-      // retired finalScore. Both sides go through the SAME rMultipleCore the ranker + open-gate
-      // use (zero divergence). The old `parseFloat(existingSignal.finalScore || '0')` coerce is
-      // GONE — it fabricated a comparable number out of a nulling column (#574).
-      const _tbClass = asValidAssetClass(existingSignal.assetClass as unknown as string)
-        ?? asValidAssetClass(input.assetClass)
-        ?? undefined;
-      const existingR = this.signalRMultiple(existingSignal, _tbClass).r;
-      const _im = (input.metadata ?? {}) as Record<string, any>;
-      const newR = this.rMultipleCore({
-        symbol: normalizedSymbol,
-        entry: input.entryPrice,
-        stop: input.stopPrice,
-        target: input.targetPrice ?? null,
-        di: input.diAtQueue != null ? Number(input.diAtQueue) : undefined,
-        dbs: input.dbsScoreAtQueue != null ? Number(input.dbsScoreAtQueue) : undefined,
-        chosenNetEv: input.chosenNetEv,
-        VolNoise: _im.VolNoise,
-        prices: _im.prices,
-        sourcePool: input.sourcePool ?? _im.sourcePool,
-        assetClass: asValidAssetClass(input.assetClass) ?? _tbClass,
-      }).r;
-
-      // Explicit COUNTED keep-first when either side is UNPRICEABLE (-Infinity — degenerate
-      // geometry / missing price). We cannot rank honestly, so keep the incumbent — logged, never
-      // a silent coerce-to-0 (the exact fabricated-input path the old finalScore coerce created).
-      if (!Number.isFinite(existingR) || !Number.isFinite(newR)) {
-        console.log(`[8.8.4-C.5][RTB_TIEBREAK][UNPRICEABLE] ${normalizedSymbol}/${input.strategy}: keeping incumbent (existingR=${existingR}, newR=${newR}) — not scored on a fabricated tiebreak`);
-        return existingSignal;
-      }
-      if (existingR >= newR) {
-        console.log(`[8.8.4-C.5][RTB_TIEBREAK][KEEP] ${normalizedSymbol}/${input.strategy}: incumbent R=${existingR.toFixed(4)} >= new R=${newR.toFixed(4)}`);
-        return existingSignal;
-      }
-
-      // New signal ranks higher - expire the old one
-      console.log(`[8.8.4-C.5][RTB_TIEBREAK][REPLACE] ${normalizedSymbol}/${input.strategy}: new R=${newR.toFixed(4)} > incumbent R=${existingR.toFixed(4)} — replacing`);
-      await this.expireSignal(existingSignal.id, 'Replaced by higher-R-multiple SQE signal');
-    }
+    // B-RTB-ADMISSION-TIEBREAK-LIVE (#1190, row 59f; Kyle delegated, Langston concurred, 2026-10-16): NEWEST WINS.
+    // One row per (mode, symbol, strategy). A re-issue of the same setup is one intent restated, not a second
+    // competitor: the upsert below REPLACES the queued copy — its levels AND the decision that priced them (Net
+    // Expectancy, maker/taker choice, fill policy, DI, DBS) — and resets queuedAt. Ranking between DIFFERENT setups
+    // is the R-multiple ranker's (getRankedSignals), unchanged. The incumbent tiebreak that stood here never ran:
+    // its lookup read status 'queued', which no row has carried since 2025-12-18 (DELETED_COMPONENTS_LOG).
 
     // P19-B6.5b (F1b / RUNNING_ISSUES #320 — defense-in-depth): queueSQESignal is the SINGLE live RTB
     // admission chokepoint. The per-asset-class active gate is enforced upstream at the entry points

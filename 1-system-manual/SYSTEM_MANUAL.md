@@ -5807,6 +5807,10 @@ const closeReasonMap = {
 
 ## 19. RTB Promotion Pipeline
 
+### 19.0 Queue admission — one row per setup; a re-issue REPLACES it, in full (B-RTB-ADMISSION-TIEBREAK-LIVE, `#1190`, 2026-10-17)
+
+The RTB queue holds **one row per (mode, symbol, strategy)**. When a strategy issues a signal for a setup already queued, the admission writer's upsert **replaces** the queued copy: the levels (entry, stop, target), the sizing, the metadata **and the decision that priced them** — Net Expectancy (`chosen_net_ev`, `taker_net_ev`, `maker_net_ev_adjusted`), the maker/taker choice and fill policy, and the at-queue DI and DBS. `status` returns to `active` (pending its first refresh) and `queued_at` resets. **Why newest wins:** a re-issue of the same setup is one intent restated, not a second competitor; the incumbent's entry is a price the market has left (decided 2026-10-16, Kyle delegated to CC-B + Langston). **What does not change:** `signal_id` keeps naming the row (it keys the refresh state and the ranker); ranking between DIFFERENT setups is the R-multiple ranker's (`getRankedSignals`, Kyle's 2026-07-24 ruling), and that ruling never applied to same-setup copies. **Telemetry consequence:** because `queued_at` resets, a persistently re-issued setup reads as fresh in queue-age telemetry (`oldestSignalAge`). *Before 2026-10-17 the replacement was partial: the conflict update omitted the decision snapshot, so a re-issued row held new levels with the first signal's Net Expectancy, maker/taker choice and DI/DBS (DI/DBS for the row's whole life). A same-setup tiebreak that was meant to choose between copies never ran (its lookup read a status no row carries) and was deleted.*
+
 ### 19.1 Event-Driven Promotion
 
 RTB promotion is triggered by three mechanisms:

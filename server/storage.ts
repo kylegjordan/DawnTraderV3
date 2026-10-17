@@ -4413,7 +4413,6 @@ export class DatabaseStorage implements IStorage {
           confidence: data.confidence,
           riskScore: data.riskScore,
           expectedReturn: data.expectedReturn,
-          finalScore: data.finalScore,
           // ★ B-RANKING-COMPONENT-CAPTURE (#555, 2026-07-22): `regimeWeight`/`hybridScore`/
           // `decayPenalty` mappings REMOVED with their columns. They were writer-shaped code
           // pointing at nothing — the queue-insert builder never supplied them, so this
@@ -4423,8 +4422,23 @@ export class DatabaseStorage implements IStorage {
           // per §15 (no lingering legacy); see DELETED_COMPONENTS_LOG.
           status: data.status,
           queuedAt: new Date(),
-          expiresAt: data.expiresAt,
           metadata: data.metadata,
+          // B-RTB-ADMISSION-TIEBREAK-LIVE (#1190, row 59f): a re-issue REPLACES the queued copy, so the decision that
+          // priced the new levels travels with them. These nine were written by the insert builder and missing here, so a
+          // re-issued row held the new levels with the FIRST signal's Net Expectancy, maker/taker choice, fill policy and
+          // DI/DBS (DI/DBS for the row's whole life — no refresh rewrites them). Kept as written on purpose: signalId (it
+          // keys the refresh state and the ranker map), blockReason (constant). `finalScore` and `expiresAt` mappings
+          // REMOVED: the insert supplies neither (#558 A1; R9.3-C) — the #555 class below, left behind by #558. The
+          // structural test (b-rtb-admission-newest-wins.test.ts) holds the two lists equal in both directions.
+          chosenEntryMode: data.chosenEntryMode,
+          entryFillPolicy: data.entryFillPolicy,
+          chosenNetEv: data.chosenNetEv,
+          takerNetEv: data.takerNetEv,
+          makerNetEvAdjusted: data.makerNetEvAdjusted,
+          diAtQueue: data.diAtQueue,
+          dbsScoreAtQueue: data.dbsScoreAtQueue,
+          currentPrice: data.currentPrice,
+          volume24h: data.volume24h,
           // B79.0n.RTB (2026-05-27, Phase 1): dual-write asset_class column
           // alongside metadata so per-class queue reads can filter by the
           // indexed column. assetClass passed through from upstream callers

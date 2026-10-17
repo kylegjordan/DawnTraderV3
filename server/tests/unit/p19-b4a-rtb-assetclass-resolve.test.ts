@@ -74,7 +74,6 @@ function baseInput(symbol: string, assetClass: any): any {
     quantity: 1,
     notional: 100,
     currentPrice: 100,
-    skipSelfCheck: true, // skip the self-dedupe read (not under test)
     assetClass, // the pipe-stamped class (or undefined to exercise the fail-loud backstop)
   };
 }
