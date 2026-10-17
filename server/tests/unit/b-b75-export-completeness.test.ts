@@ -405,6 +405,12 @@ describe('the other lanes and readers', () => {
     expect(REHYDRATE).toContain('.completeness.json');
     expect(REHYDRATE).toContain('rows_proven=');
   });
+  it('rehydrate: BIGINT counts are numbers before any total (Step 7 find: "0" + "29069" printed 029069)', () => {
+    const q = fnBody(REHYDRATE, 'async function queryManifest(');
+    expect(q).toMatch(/row_count: Number\(row\.row_count\)/);
+    expect(q).toMatch(/bytes_compressed: Number\(row\.bytes_compressed\)/);
+    expect(q).not.toMatch(/return r\.rows;/);
+  });
   it('rehydrate: a checksum mismatch rides the sidecar and the aggregate, and fails the run (gate C, C-1)', () => {
     expect(REHYDRATE).toContain('checksum_ok: checksumOk,');
     // the mismatch branch comes FIRST, so a corrupt proven object never reaches rows_proven
