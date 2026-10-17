@@ -28,7 +28,41 @@ Non-null → NULL DI/DBS re-issues: **0** in the window (no opportunity — stat
 Deployed sha `7600476c5`: run `39003771503`, 4/4 per job (TypeScript Check, Build, Test Suite, Docker Build), re-derived by Langston at Step 8. Step-4 r1 head `00581133`: run `39002239507`, 4/4.
 
 ## 4. Governance files changed — transcribed from the Step-10 commit (not from memory)
-GOVERNANCE_LEDGER_PLACEHOLDER
+CHANGE-CLASS: non_architecture
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | entry added: what was broken, the fix, the result, the legacy tail |
+| T1 | PHASE_HISTORY.md | ✅ | 2026-10-17 entry added |
+| T1 | PHASE_19_PLAN.md | N/A | its "Phase 19 only" row: 59f is a sprint-plan row (0 hits for 59f or the batch id in PHASE_19_PLAN), which takes no new rows since 2026-09-30 |
+| T1 | shared MEMORY.md + MEMORY_CC_B.md | ✅ | own position block updated; shared file N/A — no project-consensus truth changed |
+| T1 | the batch SCOPE | ✅ | r2 + the decided banner (option b, 2026-10-16) |
+| T1 | the batch PRE_AUDIT | ✅ | audit and plan §1-§6, Step-7 record §7 |
+| T1 | COMPLETION_REPORT | ✅ | written; open at close first (legacy tail, comments riding the next deploy, open path unexercised, #1204, #378) |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B row 59f set to Step 11; CC-A, CC-C, CC-INFRA lists not mine to touch |
+| T1 | Langston's MEMORY.md | BLOCKED — Langston's own write | asked in the Step-11 dispatch |
+| T2 | SYSTEM_MANUAL.md | ✅ | §19.0 queue admission — one row per setup, a re-issue replaces it in full (written at Step 3, 737ed92b9) |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | upsertRtbSignal's SET is the re-issue contract, its readers and the structural guard (Step 3) |
+| T2 | RUNNING_ISSUES.md | ✅ | #1190 closed with the disposition; #558 annotated; #1204 filed (Step 9); #378 annotated |
+| T2 | CHANGES_AND_FIXES.md | N/A | its two "tiebreak" hits are other components (tcl_watchdog count tiebreak, a factor-replay matcher); nothing about this admission path |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level roadmap change |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no tunable added or changed |
+| T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
+| T2 | STORAGE_POLICY.md | N/A | no table or retention change; existing columns now written on conflict |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | nothing under the VTS changed |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no onboarding learning |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | the method did not change |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | the reviewer's build did not change |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md rule changed |
+| T2 | DELETED_COMPONENTS_LOG.md | ✅ | the same-setup tiebreak, getQueuedSignal and skipSelfCheck (Step 3) |
+| T2 | MISTAKE_PATTERNS.md | ✅ | the wrong-object trailer (8aa3aaed1) recorded |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception for this batch |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | no alert process touched |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | board columns and fields unchanged |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | the daily check did not run in this batch |
+
+*(Transcribed from commit `b7ab18989`.)*
 
 ## 5. New findings in passing, with their homes
 - `#1204` (dead-status reads with a live caller; schema-literal drift) — row 59g, CC-B.
