@@ -125,3 +125,14 @@ explicitly denied wrong-key control.
   first real `success`-while-`BREACH` run is the next 05:40Z timer.
 - `AGENT_CLONE_README.md` in each authoring clone is excluded via `.git/info/exclude` — local
   only, so it cannot be committed into the work repo and carried into the real one by a merge.
+
+## Coltrane's tools are readable by Coltrane — parity with Langston's (2026-10-17, B-LANGSTON-RELIEF Step 8)
+
+`/usr/local/bin/coltrane-size-watch`, `/usr/local/bin/coltrane-load-canary` and
+`/usr/local/sbin/coltrane-telegram-corpus-install` are **755 root:root**, as `langston-size-watch` and
+`langston-load-canary` already were. They were 750, so Coltrane's Step-8 verification could not run
+`--status`, read the canary or byte-compare the installer against its reviewed blob — inside his sandbox
+root-owned files appear as `nobody:nogroup`. None holds a secret (the canary names `PROBE_TOKEN` but reads
+its value at runtime from `/etc/coltrane/probe-decoy.md`, which stays unreadable to him — that is the
+canary's negative control). Measured after the change: `coltrane-size-watch --status` as coltrane, exit 0.
+⚠️ The two scheduled measurements still run as root; readability lets him CHECK them, not change them.

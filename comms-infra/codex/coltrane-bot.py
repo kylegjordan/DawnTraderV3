@@ -176,6 +176,72 @@ def log(row):
         pass
 
 
+# ---- restart recovery (B-LANGSTON-RELIEF OBJ-4, Coltrane's Step-8 finding 2026-10-17) -------------------------------
+# A named post that arrived while this process was down was never seen: on_ready only logged, and the one history read
+# lives inside an already-received on_message. Parity with Langston's OBJ-1 recovery, but keyed on what was ANSWERED,
+# not on what was seen (a seen-watermark would skip a post whose invoke was in flight when the process died): at every
+# ready, channel posts from the last RECOVER_MAX_AGE_S, and newer than the recovery FLOOR, are re-fed through
+# on_message - which applies the same gate - unless the run log records their message id as handled. The floor is
+# written once, at the first ready of this code, so posts handled by the earlier code (whose log rows carry no message
+# id) are never replayed. A post already being handled is skipped by an in-memory in-flight set.
+# Limit, stated: DMs are not recovered (no single history to read); a channel post older than the age bound is not.
+FLOOR = "/var/lib/coltrane-bot/recover-floor.json"
+RECOVER_MAX_AGE_S = 24 * 3600
+RECOVER_LIMIT = 500
+
+
+def read_floor(path=None):
+    """Epoch seconds or None - an unreadable or malformed file is None (then nothing is replayed, never a guess)."""
+    path = path or FLOOR             # resolved at CALL time, so a test (or a config) can move it
+    try:
+        return float(json.load(open(path, encoding="utf-8"))["since_epoch"])
+    except Exception:
+        return None
+
+
+def ensure_floor(now_epoch, path=None):
+    """Write the floor once if absent; return the floor in force (None if it could not be written)."""
+    path = path or FLOOR
+    cur = read_floor(path)
+    if cur is not None:
+        return cur
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".recover-floor-")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"since_epoch": now_epoch, "written": utc()}, fh)
+        os.replace(tmp, path)
+        return read_floor(path)
+    except Exception:
+        return None
+
+
+def handled_ids(path=None):
+    """Message ids the run log records as invoked (rows carry `message_id` since this change)."""
+    path = path or RUNLOG
+    out = set()
+    try:
+        for line in open(path, encoding="utf-8", errors="replace"):
+            try:
+                mid = json.loads(line).get("message_id")
+            except ValueError:
+                continue
+            if mid:
+                out.add(int(mid))
+    except OSError:
+        pass
+    return out
+
+
+def recoverable(msgs, floor, handled, now_ts, max_age_s=RECOVER_MAX_AGE_S):
+    """Pure: from [(message_id, created_epoch)] oldest first, the ids to re-feed - created after the floor, within the
+    age bound, not already handled."""
+    if floor is None:
+        return []
+    return [mid for mid, created in msgs
+            if created > floor and now_ts - created <= max_age_s and mid not in handled]
+
+
 def reviewer_role(state_path=CREW_STATE):
     """Return ((mode, generation), prompt) from the root-owned live crew state."""
     try:
@@ -291,12 +357,36 @@ def chunks(text, n=1900):
 
 
 class Coltrane(discord.Client):
+    _inflight = set()
+
     async def on_ready(self):
         log({"ts": utc(), "event": "bot online", "as": str(self.user),
              "id": self.user.id})
         print("Coltrane online as", self.user, flush=True)
+        await self.recover()
 
-    async def on_message(self, m):
+    async def recover(self):
+        """Re-feed channel posts missed while the process was down (see the restart-recovery block above)."""
+        now = time.time()
+        floor = ensure_floor(now)
+        ch_id = env(COMMS_FILE, "DISCORD_CHANNEL_ID")
+        if floor is None or not ch_id:
+            log({"ts": utc(), "event": "recovery skipped", "floor": floor, "channel": bool(ch_id)})
+            return
+        try:
+            ch = self.get_channel(int(ch_id)) or await self.fetch_channel(int(ch_id))
+            msgs = [x async for x in ch.history(limit=RECOVER_LIMIT, oldest_first=False)]
+        except Exception as e:
+            log({"ts": utc(), "event": "recovery FAILED", "error": "%s: %s" % (type(e).__name__, e)})
+            return
+        msgs.reverse()
+        by_id = {x.id: x for x in msgs}
+        ids = recoverable([(x.id, x.created_at.timestamp()) for x in msgs], floor, handled_ids(), now)
+        for mid in ids:
+            await self.on_message(by_id[mid], _recovered=True)
+        log({"ts": utc(), "event": "recovery done", "scanned": len(msgs), "replayed": len(ids)})
+
+    async def on_message(self, m, _recovered=False):
         # ⛔ BRAKE 1 — self. The only unbounded loop.
         if m.author.id == self.user.id:
             return
@@ -312,6 +402,18 @@ class Coltrane(discord.Client):
         why = engage_reason(text, m.author.id, who, is_dm)
         if why is None:
             return
+        # a post already being handled (live arrival racing the recovery pass) is never invoked twice
+        if m.id in self._inflight:
+            return
+        self._inflight.add(m.id)
+        try:
+            await self._handle(m, text, who, is_dm, why, _recovered)
+        finally:
+            self._inflight.discard(m.id)
+
+    async def _handle(self, m, text, who, is_dm, why, _recovered):
+        if _recovered:          # say so: the channel may have moved on since it was posted
+            why += " (re-fed after a restart: it was posted at %s while Coltrane was down)" % m.created_at.isoformat()[:19]
 
         history = ""
         if not is_dm:
@@ -357,7 +459,7 @@ class Coltrane(discord.Client):
         elif rc != 0:
             posted = "invoke failed rc=%d" % rc
 
-        log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc,
+        log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc, "message_id": m.id, "recovered": _recovered,
              "seconds": round(time.time() - t0, 1), "tokens_used": toks,
              "silent": silent, "posted": posted, "mirrored": mirrored, "woken_by": who,
              "measures": ("one row per wake that led to an invoke; token count is the "
