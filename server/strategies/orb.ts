@@ -43,7 +43,7 @@
  *   active_window_hours       = 2     (15:00–17:00 UTC)
  *
  * GATE: `module_constants.strategy_gates.xstock_spot.orb.enabled` — flipped TRUE in B79.0d; FALSE since 2026-05-18
- *   (`B79_q_d_gated`, see :170 and :261). Read the row, not this line.
+ *   (`B79_q_d_gated`). Read the row, not this line.
  *
  * ROLLBACK: DB-only. `UPDATE module_constants SET value=false WHERE strategy='orb' AND constant_name='enabled'`
  * neutralizes ORB on next tick (cached sync API picks up the change). No code revert needed.
