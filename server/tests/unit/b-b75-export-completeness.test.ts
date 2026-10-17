@@ -11,7 +11,10 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import zlib from 'node:zlib';
 import {
+  ArchiveReadbackMismatchError,
   AUTO_RESOLVED_CLASSES,
   chooseObjectsByLabel,
   COMPLETENESS_BASES,
@@ -26,9 +29,12 @@ import {
   sweepFailureClass,
 } from '../../services/data-archive/archive-completeness.js';
 import {
+  assertExactArchiveEquality,
+  proofCountStillMatches,
   recordExactArchiveEvidence,
   XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
 } from '../../services/data-archive/exact-archive-evidence.js';
+import { countGzipJsonlLines } from '../../services/data-archive/partition-exporter.js';
 
 const ROOT = process.cwd();
 const SRC = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
@@ -158,6 +164,58 @@ describe('the rehydrate tier choice (A10, A13)', () => {
   });
 });
 
+describe('the readback leg is typed (gate B BLOCKER-1)', () => {
+  it('assertExactArchiveEquality throws ArchiveReadbackMismatchError, classed count-mismatch', () => {
+    let caught: unknown;
+    try { assertExactArchiveEquality({ sourceRowCount: 10, exportedRowCount: 10, downloadedRowCount: 9 }); } catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(ArchiveReadbackMismatchError);
+    expect(sweepFailureClass({ isCountMismatch: (caught as ArchiveReadbackMismatchError).isCountMismatch })).toBe('count-mismatch');
+  });
+  it('an unterminated final row in the downloaded object is ArchiveReadbackMismatchError, not a plain Error', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'b75-readback-'));
+    const file = path.join(dir, 'x.jsonl.gz');
+    fs.writeFileSync(file, zlib.gzipSync(Buffer.from('{"a":1}\n{"a":2}')));
+    try {
+      await expect(countGzipJsonlLines(file)).rejects.toBeInstanceOf(ArchiveReadbackMismatchError);
+      fs.writeFileSync(file, zlib.gzipSync(Buffer.from('{"a":1}\n{"a":2}\n')));
+      await expect(countGzipJsonlLines(file)).resolves.toBe(2); // the positive control
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('the reuse recount (gate B residual, folded)', () => {
+  const fake = (proof: string | null, now: string) => {
+    const calls: Array<{ sql: string; params?: unknown[] }> = [];
+    return {
+      calls,
+      query: async (sql: string, params?: unknown[]) => {
+        calls.push({ sql, params });
+        if (sql.includes('FROM data_archive_exact_evidence')) return { rows: proof === null ? [] : [{ n: proof }] };
+        return { rows: [{ n: now }] };
+      },
+    };
+  };
+  const src = { target: '"t"', tsCol: '"ts"', rangeStart: new Date('2026-09-16T00:00:00Z'), rangeEnd: new Date('2026-09-17T00:00:00Z'), extraPredicate: 'closed = true' };
+  it('the same count as the proof → true (reuse allowed)', async () => {
+    expect(await proofCountStillMatches(fake('264960', '264960'), 'm', src)).toBe(true);
+  });
+  it('a different count → false (the reuse is refused)', async () => {
+    expect(await proofCountStillMatches(fake('264960', '264961'), 'm', src)).toBe(false);
+    expect(await proofCountStillMatches(fake('264960', '240000'), 'm', src)).toBe(false);
+  });
+  it('no stored proof → false', async () => {
+    expect(await proofCountStillMatches(fake(null, '0'), 'm', src)).toBe(false);
+  });
+  it('counts the population the exporter counted: the range and the extra predicate', async () => {
+    const c = fake('1', '1');
+    await proofCountStillMatches(c, 'm', src);
+    expect(c.calls[1].sql).toContain('WHERE "ts" >= $1 AND "ts" < $2 AND (closed = true)');
+    expect(c.calls[1].params).toEqual([src.rangeStart, src.rangeEnd]);
+  });
+});
+
 describe('the generalised evidence writer (Langston Step-1 condition 1, JC-4)', () => {
   const stored = (over: Record<string, unknown> = {}) => ({
     source_table: 'crypto_perp_ohlc_1m', partition_label: '2026-09-17', tier: 'warm',
@@ -279,10 +337,31 @@ describe('sweep wiring (structure at the source)', () => {
     expect(SWEEP).toContain('await resolveSweepAlerts([FATAL_ALERT_KEY]');
     expect(SWEEP).toContain("'timer-script'");
   });
-  it('"likely transient" is said only for the unclassified failure; the old promise is gone', () => {
-    expect(SWEEP.match(/Likely transient/g)).toHaveLength(1);
+  it('no failure is promised to be transient; the old promise is gone (gate B BLOCKER-1)', () => {
+    expect(SWEEP).not.toMatch(/Likely transient/);
+    expect(SWEEP).toContain('UNCLASSIFIED failure — not known to be transient');
     expect(SWEEP).not.toContain('until B-B75-EXPORT-COMPLETENESS lands');
     expect(SWEEP).not.toContain('(data is safe; retried next run). Reason');
+  });
+  it('both catches class a readback mismatch as count-mismatch (gate B BLOCKER-1)', () => {
+    expect(SWEEP.match(/err instanceof ExportRowCountMismatchError \|\| err instanceof ArchiveReadbackMismatchError/g)).toHaveLength(2);
+  });
+  it('the plain lane day-floors the cutoff for archive tables, so archived and deleted rows match (gate B BLOCKER-2)', () => {
+    expect(plain).toMatch(/const cutoff = spec\.archive\s*\? new Date\(Date\.UTC\(rawCutoff\.getUTCFullYear\(\), rawCutoff\.getUTCMonth\(\), rawCutoff\.getUTCDate\(\)\)\)\s*: rawCutoff;/);
+    // every later read of the window uses that one cutoff
+    expect(plain).not.toMatch(/rawCutoff\]/);
+    expect(plain).toContain('WHERE ${spec.timestampColumn} < $1${extraAnd}');
+  });
+  it('the plain lane treats a skipped present day as an invariant violation, like the sliced path', () => {
+    expect(plain).toMatch(/if \(outcome\.kind === 'skipped'\) \{\s*throw new Error\(/);
+  });
+  it('a reuse is recounted against the proof before it may authorise a drop (gate B residual, folded)', () => {
+    const reuse = archive.slice(archive.indexOf("if (decision.kind === 'reuse')"));
+    const recount = reuse.indexOf('proofCountStillMatches(');
+    const ret = reuse.indexOf("return { kind: 'reused'");
+    expect(recount).toBeGreaterThan(0);
+    expect(ret).toBeGreaterThan(recount);
+    expect(reuse.slice(recount, ret)).toContain("throw new NonProvenExistingCopyError('reuse-count-changed'");
   });
 });
 

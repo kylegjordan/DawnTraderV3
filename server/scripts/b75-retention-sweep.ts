@@ -62,11 +62,13 @@ import { addAlert, resolveAlertsByDedupeKey } from '../services/system-alerts.js
 import {
   assertExactArchiveEquality,
   evidenceExistsForManifest,
+  proofCountStillMatches,
   recordExactArchiveEvidence,
   XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
   type ExactArchiveEvidenceInput,
 } from '../services/data-archive/exact-archive-evidence.js';
 import {
+  ArchiveReadbackMismatchError,
   AUTO_RESOLVED_CLASSES,
   decideExistingCopy,
   decisionNeeds,
@@ -582,6 +584,18 @@ async function archiveOneObject(
     return { kind: 'skipped', manifestId: existing!.id, reason: decision.reason };
   }
   if (decision.kind === 'reuse') {
+    // The reuse recount (Langston Step-4 gate B residual, folded): `reuse` is the one arm
+    // that acts destructively on the CURRENT source from a proof taken EARLIER, so the
+    // source is counted again over the exporter's own population and compared with the
+    // proof's stored source_row_count. Resume-only (no `verified` rows exist today).
+    const same = await proofCountStillMatches(ctlClient, existing!.id, {
+      target: quoteIdent(partitionTableName),
+      tsCol: quoteIdent(spec.timestampColumn),
+      rangeStart,
+      rangeEnd,
+      extraPredicate,
+    });
+    if (!same) throw new NonProvenExistingCopyError('reuse-count-changed', spec.parent, label);
     return { kind: 'reused', manifestId: existing!.id, rowCount: 0, bytesCompressed: 0 };
   }
 
@@ -737,6 +751,8 @@ interface ProcessResult {
   isCountMismatch?: boolean;
   /** B-B75-EXPORT-COMPLETENESS (#1195): an existing copy was refused — permanent until a human acts. */
   isNonProven?: boolean;
+  /** The whole path dropped against an existing proven copy (resume), so rows/bytes read 0. */
+  reused?: boolean;
 }
 
 async function processPartition(
@@ -826,6 +842,7 @@ async function processPartition(
         rowCount: outcome.rowCount,
         slices: 1,
         durationMs: Date.now() - start,
+        reused: outcome.kind === 'reused',
       };
     }
 
@@ -911,7 +928,9 @@ async function processPartition(
     };
   } catch (err) {
     const isChecksumMismatch = err instanceof ChecksumMismatchError;
-    const isCountMismatch = err instanceof ExportRowCountMismatchError;
+    // The readback leg (downloaded vs source/exported, an unterminated row) is a count
+    // mismatch too, never "transient" (Langston gate B BLOCKER-1).
+    const isCountMismatch = err instanceof ExportRowCountMismatchError || err instanceof ArchiveReadbackMismatchError;
     const isNonProven = err instanceof NonProvenExistingCopyError;
     return {
       status: 'failed',
@@ -993,7 +1012,10 @@ function failureClassText(cls: SweepFailureClass, refuseReason?: string): string
         + 'same row and refuses again. The hot data is kept, so it stays on the database disk every night this refuses — '
         + 'a human must decide what to do with this label.';
     default:
-      return 'Likely transient; the next nightly run retries from the last verified slice.';
+      // An unclassified failure. It is auto-resolved by a later success (real transients
+      // exist), but it is NOT promised to be transient (Langston gate B BLOCKER-1).
+      return 'UNCLASSIFIED failure — not known to be transient; read the run in the sweep log. '
+        + 'The next nightly run retries from the last verified slice, and a success clears this row.';
   }
 }
 
@@ -1020,7 +1042,16 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
       console.error(`[B75 sweep][plain] ${spec.table}: no retention configured — skipping`);
       continue;
     }
-    const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
+    const rawCutoff = new Date(Date.now() - retentionDays * 86_400_000);
+    // B-B75-EXPORT-COMPLETENESS (Langston gate B BLOCKER-2): for an archive:true table the
+    // labels archived and the rows deleted must be the SAME rows. The day scan exports whole
+    // days [day, day+1), so the delete (and the tally) use the day-floor of the cutoff —
+    // otherwise the trailing day is archived whole, deleted in part, marked `active`, and the
+    // next run finds its leftover rows and refuses the table forever. Rows stay hot up to one
+    // extra day; the delete-only lane keeps the exact cutoff.
+    const cutoff = spec.archive
+      ? new Date(Date.UTC(rawCutoff.getUTCFullYear(), rawCutoff.getUTCMonth(), rawCutoff.getUTCDate()))
+      : rawCutoff;
     const ctl = new Client({ connectionString: process.env.DATABASE_URL });
     await ctl.connect();
     try {
@@ -1060,11 +1091,18 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
             for (const day of present) {
               const label = day.toISOString().slice(0, 10);
               const dayEnd = new Date(day.getTime() + 86_400_000);
-              await archiveOneObject(
+              const outcome = await archiveOneObject(
                 storage, exportClient, ctl, cfg,
                 { parent: spec.table, timestampColumn: spec.timestampColumn, retentionConstantName: spec.retentionConstantName },
                 label, day, dayEnd, spec.table, 0, spec.extraPredicate,
               );
+              // One posture with the sliced path: a present day cannot come back skipped
+              // (a skip means no rows); if it does, refuse the delete.
+              if (outcome.kind === 'skipped') {
+                throw new Error(
+                  `[B75 sweep][plain-archive] ${spec.table}/${label}: a present day came back skipped (${outcome.reason}) — DELETE REFUSED this run (rows safe)`,
+                );
+              }
             }
           } finally {
             await exportClient.end();
@@ -1166,7 +1204,7 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
       // refusal for what it is, instead of calling every failure "retried next run".
       const cls = sweepFailureClass({
         isChecksumMismatch: err instanceof ChecksumMismatchError,
-        isCountMismatch: err instanceof ExportRowCountMismatchError,
+        isCountMismatch: err instanceof ExportRowCountMismatchError || err instanceof ArchiveReadbackMismatchError,
         isNonProven: err instanceof NonProvenExistingCopyError,
       });
       await raiseSweepAlert(
@@ -1323,7 +1361,8 @@ async function runSweep(): Promise<boolean> {
         bytesFreedTotal += res.bytesHot;
         bytesArchivedTotal += res.bytesWarm;
         console.log(
-          `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: dropped mode=${res.mode} slices=${res.slices} ` +
+          `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: dropped mode=${res.mode} slices=${res.slices}` +
+            `${res.reused ? ' (against an existing proven copy — resume, recount matched; rows/bytes below are for this run, i.e. 0)' : ''} ` +
             `rows=${res.rowCount} bytes_hot=${res.bytesHot} bytes_warm=${res.bytesWarm} ` +
             `compression_ratio=${res.bytesHot && res.bytesWarm ? (res.bytesHot / res.bytesWarm).toFixed(2) : 'n/a'} ` +
             `duration_ms=${res.durationMs}`,

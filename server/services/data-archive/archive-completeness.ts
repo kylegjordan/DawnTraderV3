@@ -50,6 +50,7 @@ export interface ExistingCopyRow {
 
 export type RefuseReason =
   | 'verified-unproven'   // a re-export could only prove the rows still hot (C-6)
+  | 'reuse-count-changed' // a proven copy's source no longer holds the count it proved (Langston gate B residual)
   | 'active-rows-present' // rows found for a label already archived and dropped/deleted
   | 'migrated-rows-present' // rows found for a label whose copy of record is cold
   | 'stale-proof';        // a non-final row already carries evidence
@@ -116,6 +117,8 @@ export function decisionNeeds(row: ExistingCopyRow | null): { evidence: boolean;
 const REFUSE_TEXT: Record<RefuseReason, string> = {
   'verified-unproven':
     'an existing verified copy is NOT proven complete, and a re-export could only prove the rows still hot',
+  'reuse-count-changed':
+    'a proven copy would be reused, but its source no longer holds the row count the proof recorded — the copy and the rows about to be removed differ, so nothing is dropped or deleted',
   'active-rows-present':
     'rows were found for a label already archived and dropped/deleted — they are NOT in the archived copy, and they are kept hot',
   'migrated-rows-present':
@@ -133,6 +136,17 @@ export class NonProvenExistingCopyError extends Error {
 
 export function refuseText(reason: RefuseReason): string {
   return REFUSE_TEXT[reason];
+}
+
+/** The readback leg of the proof failed: the downloaded object's row count differs from
+ *  the source/export count, or the object's final row is unterminated. Corruption or a
+ *  mismatch — never a retry. Classed `count-mismatch` (Langston Step-4 gate B BLOCKER-1). */
+export class ArchiveReadbackMismatchError extends Error {
+  readonly isCountMismatch = true;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ArchiveReadbackMismatchError';
+  }
 }
 
 // ─── Sweep alert classes and keys (OBJ-5) ────────────────────────────────────

@@ -26,6 +26,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
+import { ArchiveReadbackMismatchError } from './archive-completeness.js';
 
 const TMP_BASE = process.env.B75_EXPORT_TMP_DIR ?? '/tmp/b75-export';
 /** Legacy-mode cursor column: the timestamp as database text, stripped before the row is written. */
@@ -344,7 +345,8 @@ export async function countGzipJsonlLines(filePath: string): Promise<number> {
     for (const byte of bytes) if (byte === 0x0a) lines++;
   }
   if (sawByte && lastByte !== 0x0a) {
-    throw new Error(`[B75 partition-exporter] JSONL object has an unterminated final row: ${filePath}`);
+    // B-B75-EXPORT-COMPLETENESS (Langston gate B BLOCKER-1): corruption, never a retry.
+    throw new ArchiveReadbackMismatchError(`[B75 partition-exporter] JSONL object has an unterminated final row: ${filePath}`);
   }
   return lines;
 }

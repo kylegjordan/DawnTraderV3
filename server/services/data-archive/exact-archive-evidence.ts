@@ -12,6 +12,7 @@
  * (Langston Step-1 condition 1). CC-C's lane passes exactly what it passed before.
  */
 import { readFileSync } from 'node:fs';
+import { ArchiveReadbackMismatchError } from './archive-completeness.js';
 
 export const XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT =
   'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid' as const;
@@ -41,7 +42,7 @@ export function assertExactArchiveEquality(input: Pick<
   if (input.sourceRowCount === null
       || input.sourceRowCount !== input.exportedRowCount
       || input.sourceRowCount !== input.downloadedRowCount) {
-    throw new Error(
+    throw new ArchiveReadbackMismatchError(
       `[B75 sweep] exact readback row-count mismatch: `
       + `source=${input.sourceRowCount ?? 'unknown'} exported=${input.exportedRowCount} `
       + `downloaded=${input.downloadedRowCount}`,
@@ -129,6 +130,30 @@ export async function recordExactArchiveEvidence(
       + `counts, checksum and contract match, so the stored proof stands (first-write-wins)`,
     );
   }
+}
+
+/** The reuse recount (B-B75-EXPORT-COMPLETENESS, Langston Step-4 gate B residual): before
+ *  a proven copy authorises a drop or delete of the CURRENT source, count that source again
+ *  over the population the exporter counted (target, `ts >= start AND ts < end`, the extra
+ *  predicate) and compare with the proof's stored source_row_count. No proof → false.
+ *  `target` and `tsCol` arrive already identifier-quoted by the caller. */
+export async function proofCountStillMatches(
+  client: QueryClient,
+  manifestId: string,
+  source: { target: string; tsCol: string; rangeStart: Date; rangeEnd: Date; extraPredicate?: string },
+): Promise<boolean> {
+  const proof = await client.query(
+    `SELECT source_row_count::text AS n FROM data_archive_exact_evidence WHERE manifest_id = $1`,
+    [manifestId],
+  );
+  if (proof.rows.length === 0) return false;
+  const extraAnd = source.extraPredicate ? ` AND (${source.extraPredicate})` : '';
+  const now = await client.query(
+    `SELECT count(*)::text AS n FROM ${source.target}
+      WHERE ${source.tsCol} >= $1 AND ${source.tsCol} < $2${extraAnd}`,
+    [source.rangeStart, source.rangeEnd],
+  );
+  return String(proof.rows[0].n) === String(now.rows[0]?.n);
 }
 
 /** Does an evidence row exist for this manifest row? (the resume decision's input). */
