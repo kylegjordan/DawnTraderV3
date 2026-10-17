@@ -136,6 +136,18 @@ describe('B.3 FINDING-1: an off-session row held into the regular session', () =
     await sweep(nextOpen, [XS], st, 'not_quiet', d);
     expect(d.calls).toEqual(['resolve:' + clearEvidence.pricedAfterMint('pos-invh')]);
   });
+  it('Step-10 F1: the row\'s OWN position is handed back, not the first same-symbol position the class find returns', async () => {
+    const A = { id: 'pos-a', symbol: 'INVH/USD', assetClass: 'xstock_spot' };
+    const B = { id: 'pos-b', symbol: 'INVH/USD', assetClass: 'xstock_spot' };
+    const d = deps([row(KEY, offSession, { positionId: 'pos-b' })]);
+    await sweep(nextOpen, [A, B], new VenueQuietState(), 'quiet', d);
+    expect(d.calls).toEqual(['clear:pos-b', 'resolve:' + clearEvidence.supersededBySessionChange('pos-b')]);
+  });
+  it('Step-10 F1: a row minted without a positionId still falls back to the class find', async () => {
+    const d = deps([row(KEY, offSession, {})]);
+    await sweep(nextOpen, [XS], new VenueQuietState(), 'quiet', d);
+    expect(d.clearLatch).toHaveBeenCalledWith('pos-invh');
+  });
   it('a crypto position on the same key shape is never handed back', async () => {
     const d = deps([row('price-skip-paper-BTC/USD', offSession, { positionId: 'pos-btc' })]);
     await sweep(nextOpen, [{ id: 'pos-btc', symbol: 'BTC/USD', assetClass: 'crypto_spot' }], new VenueQuietState(), 'quiet', d);

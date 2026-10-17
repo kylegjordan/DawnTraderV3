@@ -300,7 +300,13 @@ export async function sweepVenueQuiet(args: {
       // sweep (Langston's ordering, 2026-10-13). The sweep mints nothing: the streak re-crosses in session and is judged there.
       // ⛔ FAMILY-AGNOSTIC ON PURPOSE (Langston 2026-10-13 condition 4): the session gate stops quiet-only off-session mints, but
       // `thin`, `null` and an `other` minority still mint off-session and still hold their key — do not re-narrow this to book_state.
-      const xs = positions.find((p) => p.assetClass === 'xstock_spot');
+      // Step-10 F1 (Langston): the row names its own position — prefer it. A class find can pick a DIFFERENT same-symbol
+      // position (unreachable while active xStock is long-only, `unique_symbol_side` on (symbol, side)), clear the wrong
+      // latch and lose the row's own in-session page. The class find stays only for rows minted without a positionId.
+      const rowPid = typeof row.metadata?.positionId === 'string' ? (row.metadata.positionId as string) : null;
+      const xs = rowPid
+        ? positions.find((p) => p.id === rowPid && p.assetClass === 'xstock_spot')
+        : positions.find((p) => p.assetClass === 'xstock_spot');
       if (xs && getXstockSession(createdMs) !== 'regular' && getXstockSession(nowMs) === 'regular') {
         deps.clearLatch(xs.id);
         await tryResolve(key, clearEvidence.supersededBySessionChange(xs.id));
