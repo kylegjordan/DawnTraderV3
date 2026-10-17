@@ -49,6 +49,13 @@ FROM w GROUP BY 1;
 -- and the close_reason split by joining closed_trades on the archive's rtbQueueId → the trade.
 ```
 
+## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
+Written before any post-deploy taker opens exists (crypto `maker_only`, xStock shut since Friday 20:00 ET):
+- **Every** admitted xStock taker row from 2026-10-17T13:03:42Z carries `consumptionArm` — **0** taker rows without the key after the deploy (a non-zero count is a defect, not a warm-up).
+- **The mix, expected from the pre-registered sample (22 `maker_to_taker` / 3 `direct_taker` of 25 known):** `maker_to_taker` the large majority (~85-90 % of opens), `direct_taker` a handful — at today's rate **0-5 direct takers in Monday's regular session**. A Monday with **zero** `direct_taker` rows does not prove the direct branch stamps; a Monday with zero `maker_to_taker` rows would contradict the sample and is reported as such.
+- Each row's `consumptionArm` equals its own `[CONSUMPTION_PASS] arm=` line (archive → log; a log line without a row is the TCL-blocked case, not an orphan).
+- Crypto: **no** taker rows at all while `maker_only` holds.
+
 ## 5. Unproven, stated as unproven
 - That the `maker_to_taker` arm stamps correctly in a live open — not exercisable until a maker cannot rest.
 - That 21 days yields enough direct takers or adverse slips to decide anything.
