@@ -7,7 +7,7 @@
 | batch | step | waiting on |
 |---|---|---|
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
-| **`B-RTB-ADMISSION-TIEBREAK-LIVE`** (row 59f) | **STEP 11** — completion report at Langston (deployed `7600476c5`, Step 8 CONFIRMED) | the close; then `#1204` row 59g |
+| **`B-RTB-ADMISSION-TIEBREAK-LIVE`** (row 59f) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)** | carried: `#1204` row 59g, `#378`; the legacy tail drains |
 | **`B-FEED-HEALTH-GRADE-ARM`** (row 3a) | **STEP 10 — progress report, card Observation** | Langston ruled the control 2026-10-10 (four conditions): the leg-1 test before close, relabel the real cycle as leg-3 evidence, a dated scope amendment; then one weekday (Mon 10-12) and the first real recovery — one extension at most |
 | **`B-VENUE-QUIET-ALERTING`** (row 3a1) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~05:45Z)**; F1 deployed `7600476c5` | carried: the genuine-`firstJoin` read on alert `5b71b7ab` (2026-10-18 02:00Z, pre-registered); criterion 4 (duration page) unproven |
 | hotfix **`B-PATTERN-ENUM-DRIFT`** (row 51, `#1063`) | **verification half-done** — ABCD insert failures 0 since deploy B | the first `volatility_edge` open after deploy B, to read its `pattern_type` |

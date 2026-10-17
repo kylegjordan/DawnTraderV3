@@ -1,4 +1,6 @@
-# B-RTB-ADMISSION-TIEBREAK-LIVE — COMPLETION REPORT
+# B-RTB-ADMISSION-TIEBREAK-LIVE — COMPLETION REPORT — ✅ CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)
+
+*Langston's Step-11 note for any re-measure of the legacy tail: compare `dbs_score_at_queue` (`numeric(8,4)`) with `metadata.pairDirectionalBiasScore` AT THE COLUMN'S SCALE (4 dp) — at 6 dp every row reads mismatched. At 4 dp, 08:44Z: post-deploy 5 of 5 agree; pre-deploy 19 of 24 differ.*
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` (Langston re-confirmed at Step 8) · **Sprint plan row:** 59f · **Issue:** `#1190` (closed)
 **Scope:** `Scope Files/B_RTB_ADMISSION_TIEBREAK_LIVE_SCOPE.md` r2 + decided banner · **Pre-audit and plan:** `Scope Files/B_RTB_ADMISSION_TIEBREAK_LIVE_PRE_AUDIT.md` (§1-§7) · **Deployed:** `7600476c5e144ea8367825249cb7286a7c448bf1`, 2026-10-17T05:29:21Z, CI run `39003771503` 4/4 per job.

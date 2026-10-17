@@ -1384,7 +1384,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** Restarts and closes page nothing (10-13, 10-17: 0 pages, 549-row control); the hand-back fired once, correctly (INVH 2026-10-13 13:30:13Z); both pre-registered carriers were seen (CF 10-15, LECO 10-16). **Left:** no duration page has ever fired (criterion 4, unproven); US holidays read as regular (`#392`).
 
-## B-RTB-ADMISSION-TIEBREAK-LIVE (CC-B, sprint row 59f; `#1190`) — change-class `non_architecture` — ⏳ **STEP 11** (deployed `7600476c5` 2026-10-17T05:29:21Z; Step 8 CONFIRMED by Langston and Coltrane; record `Claude Comms and Packages/Batch Completion/B_RTB_ADMISSION_TIEBREAK_LIVE_COMPLETION_REPORT.md`)
+## B-RTB-ADMISSION-TIEBREAK-LIVE (CC-B, sprint row 59f; `#1190`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)** (deployed `7600476c5` 2026-10-17T05:29:21Z; Step 8 CONFIRMED by Langston and Coltrane; record `Claude Comms and Packages/Batch Completion/B_RTB_ADMISSION_TIEBREAK_LIVE_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The RTB queue holds one entry per coin-and-strategy. A rule meant to choose between an old and a re-issued copy had never run (its lookup searched for a status no entry carries), so the re-issue always replaced the old copy — but only half: the new entry, stop and target were written while the first signal's Net Expectancy, maker/taker choice, fill policy and trend readings (DI, DBS) stayed.
 
