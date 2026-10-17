@@ -274,16 +274,6 @@ export default function AITransparencyPage() {
     }
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity?.toLowerCase()) {
-      case 'critical': return 'text-red-500';
-      case 'error': return 'text-red-500';
-      case 'warning': return 'text-yellow-500';
-      case 'info': return 'text-blue-500';
-      default: return 'text-muted-foreground';
-    }
-  };
-
   const logs = transparencyData?.logs || [];
   const calibrations = calibrationsData?.calibrations || [];
   const alerts = alertsData?.errors || [];

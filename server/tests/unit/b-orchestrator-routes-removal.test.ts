@@ -20,14 +20,24 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** True when `testid`'s element is a direct child of the AI Command Center tab: every `{` opened between the tab's
- *  tag and the element is closed before it, so no `cond ? (` / `cond && (` holds it open. */
-function drawnUngated(src: string, testid: string): boolean {
+/** Where `testid`'s element sits relative to the AI Command Center tab — each failure mode its own field, so a red
+ *  test says which one broke (Langston, Step 4). `netBraces` 0 = a direct child: every `{` opened between the tab's
+ *  tag and the element is closed before it, so no `cond ? (` / `cond && (` holds it open.
+ *  REACH LIMIT (measured by Langston): a component wrapper (`<ShowIf when={x}>…`) gates with balanced braces and is
+ *  NOT caught — never cite this fence as proof against a wrapper-shaped gate. */
+function placement(src: string, testid: string) {
   const tab = src.indexOf('<TabsContent value="ai-command-center"');
   const el = src.indexOf(`data-testid="${testid}"`);
-  if (tab < 0 || el < tab || src.indexOf('</TabsContent>', tab) < el) return false;
-  const span = src.slice(src.indexOf('>', tab) + 1, src.lastIndexOf('<', el));
-  return span.split('{').length - span.split('}').length === 0;
+  const tabEnd = tab < 0 ? -1 : src.indexOf('</TabsContent>', tab);
+  const span = tab < 0 || el < 0 ? '' : src.slice(src.indexOf('>', tab) + 1, src.lastIndexOf('<', el));
+  return { tab, el, insideTab: tab >= 0 && el > tab && tabEnd > el, netBraces: span.split('{').length - span.split('}').length };
+}
+function expectUngated(src: string, testid: string) {
+  const p = placement(src, testid);
+  expect(p.tab, 'the AI Command Center tab').toBeGreaterThan(-1);
+  expect(p.el, `${testid} present`).toBeGreaterThan(-1);
+  expect(p.insideTab, `${testid} inside the tab`).toBe(true);
+  expect(p.netBraces, `${testid} not held open by a conditional`).toBe(0);
 }
 
 describe('the deleted routes', () => {
@@ -70,18 +80,25 @@ describe('the page', () => {
     }
     expect(src).not.toContain('value="ai-analysis"');
   });
+  it('no declared name is left without a use (Langston Step 4: getSeverityColor was orphaned by the AI Analysis tab removal)', () => {
+    const defined = [...src.matchAll(/^\s*(?:const|let|function) ([A-Za-z_][A-Za-z0-9_]*)\b/gm)].map((m) => m[1]);
+    expect(defined.length).toBeGreaterThan(10); // the scan reached the declarations (getUrgencyColor among them)
+    expect(defined).toContain('getUrgencyColor');
+    const orphans = defined.filter((name) => (src.match(new RegExp(`\\b${name}\\b`, 'g')) ?? []).length < 2);
+    expect(orphans).toEqual([]);
+  });
   it('positive control: the live endpoints the page still reads are named', () => {
     for (const path of ['/api/orchestrator/learning-summary', '/api/orchestrator/logs', '/api/system/formula-audit', '/api/system/feed-health']) {
       expect(src, path).toContain(path);
     }
   });
   it('Formula Health and Feed Health are both drawn ungated in the AI Command Center tab', () => {
-    expect(drawnUngated(src, 'card-formula-health')).toBe(true);
-    expect(drawnUngated(src, 'card-feed-health')).toBe(true);
+    expectUngated(src, 'card-formula-health');
+    expectUngated(src, 'card-feed-health');
   });
   it('the fence catches a gated card (its minting twin)', () => {
     const gated = src.replace('<Card data-testid="card-formula-health">', '{formulaAuditData && (<Card data-testid="card-formula-health">');
     expect(gated).not.toBe(src);
-    expect(drawnUngated(gated, 'card-formula-health')).toBe(false);
+    expect(placement(gated, 'card-formula-health').netBraces).toBe(1);
   });
 });
