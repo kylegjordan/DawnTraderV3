@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """B-LANGSTON-RELIEF OBJ-3 Q3: the trim (`langston-memory-write --trim`) and its recall shard, driven through the REAL
 writer as a subprocess against a throwaway home. Run as ROOT beside the writer and reader (see test_ledger_split.py)."""
-import hashlib, importlib.util, json, os, shutil, subprocess, sys, tempfile
+import hashlib, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, tempfile
 
 sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -136,6 +136,27 @@ def main():
     rc, out = h.trim()
     check("a second trim finds nothing to evict (exit 0) and writes nothing", (rc, "nothing to evict" in out, h.snap() == snap),
           (0, True, True))
+    idx = os.path.join(h.top, ".memory-archive", "index.jsonl")
+    rows = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
+    noop = [r for r in rows if r.get("mode") == "trim-noop"]
+    check("  ...but records ONE trim-noop row, with the census and no sha-chain fields (Langston gate A)",
+          (len(noop), noop[-1].get("outcome"), noop[-1].get("sections_open"), "old_sha" in noop[-1],
+           "part_old_sha" in noop[-1], "mem_archived" in noop[-1]), (1, "noop", 1, False, False, False))
+    check("  ...the first such row says earlier nights have no row by design", "BY DESIGN" in noop[-1].get("note", ""), True)
+    rc, out = h.trim("--dry-run")
+    check("  ...a no-op DRY RUN writes no row", len([l for l in open(idx, encoding="utf-8") if l.strip()]), len(rows))
+    rc, out = h.trim()
+    rows2 = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()]
+    noop2 = [r for r in rows2 if r.get("mode") == "trim-noop"]
+    check("  ...a second no-op night adds a second row, without the first-row note", (len(noop2), "note" in noop2[-1]),
+          (2, False))
+    w = importlib.util.spec_from_loader("lmw_t", importlib.machinery.SourceFileLoader("lmw_t", WRITER))
+    wm = importlib.util.module_from_spec(w)
+    w.loader.exec_module(wm)
+    wm.ARCHIVE_INDEX = idx
+    last_write = [r for r in rows2 if r.get("mode") != "trim-noop"][-1]
+    check("  ...the CAS reader's last row SKIPS trim-noop rows (never a link in the sha chain)",
+          wm.last_index_row(), last_write)
     print("2. the archive is searchable by recall")
     r = h.reader()
     recs = []

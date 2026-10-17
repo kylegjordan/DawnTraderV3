@@ -378,12 +378,23 @@ def append_index(row, st):
 
 
 def last_index_row():
+    """The last row that records a WRITE. A `trim-noop` row is a pass-through that wrote nothing (Langston, Step 8
+    gate A, 2026-10-17: it must never read as a link in the sha chain), so it is skipped."""
     try:
         with open(ARCHIVE_INDEX, encoding="utf-8") as fh:
-            rows = [l for l in fh.read().split(NL) if l.strip()]
-        return json.loads(rows[-1]) if rows else None
+            rows = [json.loads(l) for l in fh.read().split(NL) if l.strip()]
+        rows = [r for r in rows if not (isinstance(r, dict) and r.get("mode") == "trim-noop")]
+        return rows[-1] if rows else None
     except (OSError, ValueError):
         return None
+
+
+def noop_rows_exist():
+    try:
+        with open(ARCHIVE_INDEX, encoding="utf-8") as fh:
+            return any('"trim-noop"' in l for l in fh)
+    except OSError:
+        return False
 
 
 def final_sha_of(row):
@@ -1183,7 +1194,19 @@ def do_trim(opts):
         pst = os.stat(part_path)
         keep_text, evicted, added, open_n = trim_plan(part_old.decode("utf-8"))
         if not evicted:
-            return "TRIM: nothing to evict (%d open batch section(s), 0 unmarked); nothing written" % open_n
+            if opts.get("--dry-run"):
+                return "TRIM DRY RUN: nothing to evict (%d open batch section(s), 0 unmarked); nothing written" % open_n
+            # Langston, Step 8 gate A (2026-10-17): systemctl holds only the LAST run, so a clean no-op night is
+            # unreadable once the unit runs again. One row per no-op run gives the nightly history and the section
+            # census. It is NOT a link in the sha chain: no old/new sha, no archive - last_index_row() skips it.
+            row = {"ts": utc(), "target": TARGET, "part": name, "mode": "trim-noop", "outcome": "noop",
+                   "part_sha": part_old_sha, "mem_sha": mem_old_sha,
+                   "sections_open": open_n, "sections_closed": 0, "unmarked": 0}
+            if not noop_rows_exist():
+                row["note"] = ("first trim-noop row: nights before this row have no row BY DESIGN (the row type did "
+                               "not exist), not because the trim did not run")
+            append_index(row, st)
+            return "TRIM: nothing to evict (%d open batch section(s), 0 unmarked); no-op row recorded" % open_n
         if opts.get("--dry-run"):
             return "TRIM DRY RUN: would evict %d section(s) [%s], %d open stay; part %d -> %d B; nothing written" % (
                 len(evicted), ", ".join(b for b, _s, _x in evicted), open_n, len(part_old), len(keep_text.encode("utf-8")))
