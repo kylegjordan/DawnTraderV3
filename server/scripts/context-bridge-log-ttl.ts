@@ -21,8 +21,19 @@
 import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
-import { exportPartition } from '../services/data-archive/partition-exporter.js';
+import { countGzipJsonlLines, exportPartition } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient } from '../services/data-archive/storage-client.js';
+import {
+  evidenceExistsForManifest,
+  recordExactArchiveEvidence,
+} from '../services/data-archive/exact-archive-evidence.js';
+import {
+  decideExistingCopy,
+  decisionNeeds,
+  LEGACY_TS_TIEGROUP_CURSOR_CONTRACT,
+  NonProvenExistingCopyError,
+  PROVEN_BASIS,
+} from '../services/data-archive/archive-completeness.js';
 
 const { Client } = pg;
 
@@ -114,14 +125,27 @@ async function listMonthsToExport(
 async function getManifestState(
   client: pg.Client,
   partitionLabel: string,
-): Promise<{ id: string; state: string } | null> {
+): Promise<{ id: string; state: string; tier: string; completeness_basis: string | null } | null> {
+  // B-B75-EXPORT-COMPLETENESS: either tier. This lane's 413 fallback writes the ORIGINAL
+  // copy straight to cold (the row is re-tiered at the fallback below), so a cold row
+  // here is a copy of record, not a rotator copy — warm is preferred when both exist.
   const r = await client.query(
-    `SELECT id, state FROM data_archive_manifest
-      WHERE source_table = $1 AND partition_label = $2 AND tier = 'warm'
+    `SELECT id, state, tier, completeness_basis FROM data_archive_manifest
+      WHERE source_table = $1 AND partition_label = $2
+      ORDER BY (tier = 'warm') DESC
       LIMIT 1`,
     [SOURCE_TABLE, partitionLabel],
   );
   return r.rows[0] ?? null;
+}
+
+/** One LIMIT 1 probe: does the month still hold source rows? (the decision's input). */
+async function monthRowsPresent(client: pg.Client, month: MonthRange): Promise<boolean> {
+  const r = await client.query(
+    `SELECT 1 FROM ${SOURCE_TABLE} WHERE "${TS_COLUMN}" >= $1 AND "${TS_COLUMN}" < $2 LIMIT 1`,
+    [month.start, month.end],
+  );
+  return r.rows.length > 0;
 }
 
 async function exportAndUploadMonth(
@@ -130,11 +154,20 @@ async function exportAndUploadMonth(
   cfg: Cfg,
   month: MonthRange,
 ): Promise<{ rowCount: number; bytesCompressed: number }> {
+  // B-B75-EXPORT-COMPLETENESS (#1195): the same one decision as the B75 sweep. A month
+  // already archived and deleted (`active`) with NO rows skips, as before; WITH rows it
+  // refuses — those rows are not in the archived copy, and the delete below would remove
+  // them unarchived. A refusal throws, so main() exits before its delete step.
   const existing = await getManifestState(ctlClient, month.label);
-  if (existing && existing.state === 'active') {
-    // Already archived AND deleted-from-hot in a prior run; nothing to do here.
-    // The DELETE for this month should already have run; tail-delete will skip.
-    console.log(`[B75 ctx-bridge] ${month.label}: already active (skipped)`);
+  const needs = decisionNeeds(existing);
+  const evidenceExists = existing && needs.evidence ? await evidenceExistsForManifest(ctlClient, existing.id) : false;
+  const rowsPresent = needs.rows ? await monthRowsPresent(ctlClient, month) : false;
+  const decision = decideExistingCopy(existing, evidenceExists, rowsPresent);
+  if (decision.kind === 'refuse') {
+    throw new NonProvenExistingCopyError(decision.reason, SOURCE_TABLE, month.label);
+  }
+  if (decision.kind === 'skip' || decision.kind === 'reuse') {
+    console.log(`[B75 ctx-bridge] ${month.label}: ${decision.kind === 'skip' ? decision.reason : 'proven copy reused'} (skipped)`);
     return { rowCount: 0, bytesCompressed: 0 };
   }
 
@@ -221,25 +254,51 @@ async function exportAndUploadMonth(
     );
   }
 
-  await ctlClient.query(
-    `UPDATE data_archive_manifest
-       SET state = 'verified',
-           verified_at = NOW(),
-           row_count = $2,
-           bytes_compressed = $3,
-           min_ts = $4,
-           max_ts = $5,
-           checksum = $6
-     WHERE id = $1`,
-    [
+  // B-B75-EXPORT-COMPLETENESS (OBJ-7, R-1): the proof, the basis stamp and `verified`
+  // land in ONE transaction, evidence first (the manifest tie trigger's invariant). The
+  // downloaded count is taken from the local file, which the read-back checksum above
+  // has just shown byte-identical to the stored object. The tier is where the object
+  // actually landed — `cold` after the 413 fallback (Langston Step-1 condition 1).
+  const downloadedRowCount = await countGzipJsonlLines(exportRes.localPath);
+  await ctlClient.query('BEGIN');
+  try {
+    await recordExactArchiveEvidence(ctlClient, {
       manifestId,
-      exportRes.rowCount,
-      exportRes.bytesCompressed,
-      exportRes.minTs,
-      exportRes.maxTs,
-      exportRes.checksum,
-    ],
-  );
+      sourceTable: SOURCE_TABLE,
+      partitionLabel: month.label,
+      tier: actualTier,
+      cursorContract: LEGACY_TS_TIEGROUP_CURSOR_CONTRACT,
+      sourceRowCount: exportRes.sourceRowCount,
+      exportedRowCount: exportRes.rowCount,
+      downloadedRowCount,
+      objectChecksum: exportRes.checksum,
+    });
+    await ctlClient.query(
+      `UPDATE data_archive_manifest
+         SET state = 'verified',
+             verified_at = NOW(),
+             row_count = $2,
+             bytes_compressed = $3,
+             min_ts = $4,
+             max_ts = $5,
+             checksum = $6,
+             completeness_basis = $7
+       WHERE id = $1`,
+      [
+        manifestId,
+        exportRes.rowCount,
+        exportRes.bytesCompressed,
+        exportRes.minTs,
+        exportRes.maxTs,
+        exportRes.checksum,
+        PROVEN_BASIS,
+      ],
+    );
+    await ctlClient.query('COMMIT');
+  } catch (err) {
+    await ctlClient.query('ROLLBACK').catch(() => {});
+    throw err;
+  }
 
   // Cleanup local temp
   try {

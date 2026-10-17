@@ -115,6 +115,12 @@ export const XSTOCK_WRITER_BOOT_CHAIN_SQL = `WITH contributing AS MATERIALIZED (
        LEFT JOIN xstock_bar_writer_handoff h USING (boot_id)
        LEFT JOIN durable d USING (boot_id)`;
 
+// B-B75-EXPORT-COMPLETENESS (#1195): `data_archive_exact_evidence` (renamed from
+// `xstock_bar_archive_exact_evidence`) now holds EVERY archive lane's proof rows, not
+// only xStock's, and a relation's size cannot be filtered — so this gauge now charges
+// the xStock store for all lanes' evidence (about 13 rows a night, estimated 1-2 MB a
+// year, against the 5 GiB floor). ANALYST Claude chose to keep it in the measured set
+// rather than change the set mid-window (2026-10-17).
 export const XSTOCK_AVAILABILITY_STORE_SIZE_SQL = `WITH revision_rels AS (
          SELECT relid AS oid FROM pg_partition_tree('xstock_bar_revision_event'::regclass)
        ), other_rels AS (
@@ -122,7 +128,7 @@ export const XSTOCK_AVAILABILITY_STORE_SIZE_SQL = `WITH revision_rels AS (
          UNION SELECT 'xstock_bar_window_manifest'::regclass::oid
          UNION SELECT 'xstock_bar_projection_flush_admission'::regclass::oid
          UNION SELECT 'xstock_bar_projection_flush_completion'::regclass::oid
-         UNION SELECT 'xstock_bar_archive_exact_evidence'::regclass::oid
+         UNION SELECT 'data_archive_exact_evidence'::regclass::oid
          UNION SELECT 'xstock_bar_clock_guard'::regclass::oid
          UNION SELECT 'xstock_bar_writer_boot_start'::regclass::oid
          UNION SELECT 'xstock_bar_writer_handoff'::regclass::oid
@@ -606,7 +612,7 @@ async function main(): Promise<void> {
               x.producing_build_sha, x.object_checksum,
               x.verified_at::text AS exact_evidence_verified_at
          FROM data_archive_manifest m
-         LEFT JOIN xstock_bar_archive_exact_evidence x ON x.manifest_id = m.id
+         LEFT JOIN data_archive_exact_evidence x ON x.manifest_id = m.id
         WHERE m.source_table = 'xstock_bar_revision_event'
           AND m.tier = 'warm'
           AND m.partition_label = to_char(

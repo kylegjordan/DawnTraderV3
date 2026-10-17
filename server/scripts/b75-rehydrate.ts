@@ -27,6 +27,17 @@
  * per slice). Any consumer that globbed the single monthly filename must glob
  * `<table>_*.jsonl.gz` instead.
  *
+ * B-B75-EXPORT-COMPLETENESS (#1195): every object is printed with its
+ * `completeness_basis`, and only `source-count-matched` is proven. Copies made
+ * 2026-05-06 → 2026-10-16 may be missing rows inside each day (Kyle 2026-10-17:
+ * no recovery), so an unproven object's row count prints as `rows(unproven)=`,
+ * the total splits proven from unproven, a warning names each unproven object's
+ * range, and `<file>.completeness.json` is written beside every downloaded file.
+ * A warm row the rotator has `migrated` (or is `migrating`) is never a download
+ * candidate — its object is gone by design and fetching it crashed this CLI (A13);
+ * such a label falls to its cold row. When a label has objects in more than one
+ * tier, all of them are listed with their basis (never silently one).
+ *
  * Reference: BATCH_75_SCOPE.md §C.9 + B_NEW_47_SCOPE.md §8
  * ═════════════════════════════════════════════════════════════════════════════
  */
@@ -36,6 +47,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
 import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
+import { chooseObjectsByLabel, isProvenBasis } from '../services/data-archive/archive-completeness.js';
 
 const { Client } = pg;
 
@@ -93,11 +105,12 @@ async function queryManifest(
     min_ts: Date;
     max_ts: Date;
     checksum: string;
+    completeness_basis: string | null;
   }>
 > {
   const r = await client.query(
     `SELECT id, partition_label, tier, state, storage_uri, row_count, bytes_compressed,
-            min_ts, max_ts, checksum
+            min_ts, max_ts, checksum, completeness_basis
        FROM data_archive_manifest
       WHERE source_table = $1
         AND state IN ('verified', 'active', 'migrating', 'migrated')
@@ -145,79 +158,114 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Prefer warm-tier rows; only fall back to cold if no warm equivalent
-  const warmByLabel = new Map<string, (typeof rows)[0]>();
-  const coldByLabel = new Map<string, (typeof rows)[0]>();
-  for (const r of rows) {
-    if (r.tier === 'warm') warmByLabel.set(r.partition_label, r);
-    else coldByLabel.set(r.partition_label, r);
-  }
-
+  // A13 + A10: choose per label among DOWNLOADABLE rows (warm preferred), and list
+  // every tier's row so a mixed label is visible, never silently one copy.
+  const choices = chooseObjectsByLabel(rows);
   const storage = getStorageClient();
-  const labels = new Set([...warmByLabel.keys(), ...coldByLabel.keys()]);
   let downloaded = 0;
   let skippedCold = 0;
-  let totalRows = 0;
+  let provenRows = 0;
+  let unprovenRows = 0;
   let totalBytes = 0;
+  const unproven: string[] = [];
 
   console.log(
     `[B75 rehydrate] table=${args.table} window=${args.from.toISOString().slice(0, 10)}..${args.to.toISOString().slice(0, 10)} → ${args.out}`,
   );
-  console.log(`[B75 rehydrate] manifest matches: warm=${warmByLabel.size} cold=${coldByLabel.size}`);
+  console.log(
+    `[B75 rehydrate] manifest matches: warm=${rows.filter((r) => r.tier === 'warm').length} ` +
+      `cold=${rows.filter((r) => r.tier === 'cold').length} labels=${choices.length}`,
+  );
 
-  for (const label of [...labels].sort()) {
-    const warm = warmByLabel.get(label);
-    if (warm) {
-      const { bucket, path: objPath } = parseSupabaseUri(warm.storage_uri);
-      const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
+  for (const { label, download, all } of choices) {
+    if (all.length > 1) {
+      const listed = all.map((r) => `${r.tier}/${r.state}/${r.completeness_basis ?? 'null'}`).join(', ');
+      console.warn(
+        `[B75 rehydrate] ${label}: ${all.length} objects (${listed}); ` +
+          `downloading ${download ? `${download.tier}` : 'none'} — the other copy exists and is listed here`,
+      );
+    }
+    if (!download) {
+      console.warn(`[B75 rehydrate] ${label}: no downloadable object (every row is a rotated-away warm copy)`);
+      continue;
+    }
+    if (download.tier === 'cold' && !args.restoreCold) {
+      console.warn(`[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`);
+      skippedCold++;
+      continue;
+    }
+    const proven = isProvenBasis(download.completeness_basis);
+    const basis = download.completeness_basis ?? 'unrecorded';
+    const rowsLabel = proven ? 'rows' : 'rows(unproven)';
+    const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
+    let bytes = 0;
+    let checksumOk = false;
+
+    if (download.tier === 'warm') {
+      const { bucket, path: objPath } = parseSupabaseUri(download.storage_uri);
       // B-NEW-47: stream to file (no whole-object Buffer); checksum computed
       // from the on-disk bytes (second read-pass inside downloadWarmFile).
       const dl = await storage.downloadWarmFile(bucket, objPath, localPath);
-      const checksumOk = dl.checksum === warm.checksum;
-      console.log(
-        `[B75 rehydrate] ${label} (warm): rows=${warm.row_count} bytes=${dl.bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
-      );
-      downloaded++;
-      totalRows += warm.row_count;
-      totalBytes += dl.bytes;
-      continue;
-    }
-    const cold = coldByLabel.get(label)!;
-    if (args.restoreCold) {
+      bytes = dl.bytes;
+      checksumOk = dl.checksum === download.checksum;
+    } else {
       if (!storage.isColdConfigured()) {
         console.warn(`[B75 rehydrate] ${label} (cold): cold storage not configured; skipping`);
         skippedCold++;
         continue;
       }
       // Cold URI format: 'b2://<bucket>/<path>'
-      const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(cold.storage_uri);
+      const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(download.storage_uri);
       if (!m) {
-        console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${cold.storage_uri}`);
+        console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${download.storage_uri}`);
         skippedCold++;
         continue;
       }
       const data = await storage.downloadCold(m[1], m[2]);
-      const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
       fs.writeFileSync(localPath, data.data);
-      const localChecksum = sha256Hex(data.data);
-      const checksumOk = localChecksum === cold.checksum;
-      console.log(
-        `[B75 rehydrate] ${label} (cold): rows=${cold.row_count} bytes=${data.bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
-      );
-      downloaded++;
-      totalRows += cold.row_count;
-      totalBytes += data.bytes;
-    } else {
-      console.warn(
-        `[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`,
-      );
-      skippedCold++;
+      bytes = data.bytes;
+      checksumOk = sha256Hex(data.data) === download.checksum;
     }
+
+    console.log(
+      `[B75 rehydrate] ${label} (${download.tier}): ${rowsLabel}=${download.row_count} completeness=${basis} ` +
+        `bytes=${bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
+    );
+    fs.writeFileSync(
+      `${localPath}.completeness.json`,
+      JSON.stringify({
+        table: args.table,
+        partition_label: label,
+        tier: download.tier,
+        completeness_basis: basis,
+        proven,
+        row_count: download.row_count,
+        row_count_meaning: proven
+          ? 'source = exported = downloaded, stored as evidence (data_archive_exact_evidence)'
+          : 'the exported count only; rows may be missing inside the day (#1195)',
+        min_ts: download.min_ts,
+        max_ts: download.max_ts,
+        other_objects: all.filter((r) => r !== download).map((r) => ({
+          tier: r.tier, state: r.state, completeness_basis: r.completeness_basis,
+        })),
+      }, null, 1),
+    );
+    if (proven) {
+      provenRows += download.row_count;
+    } else {
+      unprovenRows += download.row_count;
+      unproven.push(`${label} (${new Date(download.min_ts).toISOString()} → ${new Date(download.max_ts).toISOString()}, ${basis})`);
+    }
+    downloaded++;
+    totalBytes += bytes;
   }
 
+  for (const u of unproven) {
+    console.warn(`[B75 rehydrate] WARNING: ${u} is NOT proven complete — rows may be missing inside it (#1195)`);
+  }
   console.log(
     `[B75 rehydrate] DONE downloaded=${downloaded} skipped_cold=${skippedCold} ` +
-      `total_rows=${totalRows} total_bytes=${totalBytes}`,
+      `rows_proven=${provenRows} rows_unproven=${unprovenRows} unproven_objects=${unproven.length} total_bytes=${totalBytes}`,
   );
 }
 

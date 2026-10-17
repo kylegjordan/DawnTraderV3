@@ -125,6 +125,8 @@ describe('B75 exact xStock revision export', () => {
       manifestId: revisionId(50),
       sourceTable: 'xstock_bar_revision_event',
       partitionLabel: '2026-10-15',
+      tier: 'warm',
+      cursorContract: XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
       sourceRowCount: 100,
       exportedRowCount: 100,
       downloadedRowCount: 99,
@@ -158,6 +160,8 @@ describe('B75 exact xStock revision export', () => {
       manifestId: revisionId(51),
       sourceTable: 'xstock_bar_revision_event',
       partitionLabel: '2026-10-15',
+      tier: 'warm',
+      cursorContract: XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
       sourceRowCount: 100,
       exportedRowCount: 100,
       downloadedRowCount: 100,
@@ -165,7 +169,8 @@ describe('B75 exact xStock revision export', () => {
       producingBuildSha: 'a'.repeat(40),
     });
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toContain('INSERT INTO xstock_bar_archive_exact_evidence');
-    expect(calls[1]).toContain('FROM xstock_bar_archive_exact_evidence');
+    // B-B75-EXPORT-COMPLETENESS (#1195): the table is renamed data_archive_exact_evidence.
+    expect(calls[0]).toContain('INSERT INTO data_archive_exact_evidence');
+    expect(calls[1]).toContain('FROM data_archive_exact_evidence');
   });
 });

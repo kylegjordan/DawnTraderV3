@@ -30,13 +30,18 @@
  *   15 2 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-retention-sweep.ts" >> /var/log/dawntrader/b75-retention.log 2>&1
  *
  * State machine (data_archive_manifest.state): pending → uploaded → verified → active
- * Crash recovery: verified/active slices are SKIPPED on resume (no re-export).
+ * Resume (B-B75-EXPORT-COMPLETENESS #1195): what happens to a label that already has
+ * a manifest row is decided by ONE rule, `decideExistingCopy`
+ * (server/services/data-archive/archive-completeness.ts): a proven `verified` copy is
+ * reused; an empty `active`/`migrated` label is skipped with no write; anything that
+ * would re-prove or overwrite an unproven or closed-out copy is REFUSED before upload.
  *
  * Reference: BATCH_75_SCOPE.md §C.1 + B_NEW_47_SCOPE.md §8 + B_NEW_47_PRE_AUDIT.md
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import pg from 'pg';
 import {
@@ -53,12 +58,33 @@ import {
   deriveModeFromLabels,
   isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
-import { addAlert } from '../services/system-alerts.js';
+import { addAlert, resolveAlertsByDedupeKey } from '../services/system-alerts.js';
 import {
   assertExactArchiveEquality,
+  evidenceExistsForManifest,
   recordExactArchiveEvidence,
+  XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
   type ExactArchiveEvidenceInput,
 } from '../services/data-archive/exact-archive-evidence.js';
+import {
+  AUTO_RESOLVED_CLASSES,
+  decideExistingCopy,
+  decisionNeeds,
+  FATAL_ALERT_KEY,
+  isProvenBasis,
+  LEGACY_TS_TIEGROUP_CURSOR_CONTRACT,
+  NonProvenExistingCopyError,
+  partitionAlertKey,
+  plainAlertKey,
+  PROVEN_BASIS,
+  SWEEP_ALERT_ACTOR,
+  sweepFailureClass,
+  type SweepFailureClass,
+} from '../services/data-archive/archive-completeness.js';
+
+/** One id per run, printed on the started line and cited as resolve evidence. */
+const RUN_ID = crypto.randomUUID();
+const SWEEP_LOG = '/var/log/dawntrader/b75-retention.log';
 
 const { Client } = pg;
 
@@ -291,6 +317,7 @@ interface ManifestRow {
   storage_uri: string;
   checksum: string;
   hot_partition_dropped_at: Date | null;
+  completeness_basis: string | null;
 }
 
 async function getManifestRow(
@@ -300,7 +327,7 @@ async function getManifestRow(
   tier: 'warm' | 'cold' = 'warm',
 ): Promise<ManifestRow | null> {
   const r = await client.query(
-    `SELECT id, state, storage_uri, checksum, hot_partition_dropped_at
+    `SELECT id, state, storage_uri, checksum, hot_partition_dropped_at, completeness_basis
        FROM data_archive_manifest
       WHERE source_table = $1 AND partition_label = $2 AND tier = $3
       LIMIT 1`,
@@ -450,6 +477,28 @@ async function listPresentDates(
   return present;
 }
 
+/** B-B75-EXPORT-COMPLETENESS (Langston Step-2 r4): does the label's source range hold
+ *  any row? The SAME object and population the exporter counts — `target` is the
+ *  partition child (or the plain table), `ts >= start AND ts < end` plus the spec's
+ *  extra predicate (`partition-exporter.ts:127`, `:179-181`). One LIMIT 1 probe. */
+async function labelRowsPresent(
+  client: pg.Client,
+  target: string,
+  tsCol: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+  extraPredicate?: string,
+): Promise<boolean> {
+  const extraAnd = extraPredicate ? ` AND (${extraPredicate})` : '';
+  const r = await client.query(
+    `SELECT 1 FROM ${quoteIdent(target)}
+      WHERE ${quoteIdent(tsCol)} >= $1 AND ${quoteIdent(tsCol)} < $2${extraAnd}
+      LIMIT 1`,
+    [rangeStart, rangeEnd],
+  );
+  return r.rows.length > 0;
+}
+
 async function dropPartition(client: pg.Client, partitionTable: string): Promise<void> {
   await client.query(`DROP TABLE IF EXISTS ${quoteIdent(partitionTable)}`);
 }
@@ -486,12 +535,15 @@ function quoteIdent(name: string): string {
 // Archive one object (whole month OR one day-slice) — streamed, verify-on-disk
 // ───────────────────────────────────────────────────────────────────────────
 
-interface ArchiveOutcome {
-  manifestId: string;
-  rowCount: number;
-  bytesCompressed: number;
-  reused: boolean; // true = already verified/active on entry (resume skip)
-}
+/** `exported` = a fresh, proven copy; `reused` = an existing proven `verified` copy
+ *  (mid-run resume — the source is still present, so the caller may drop/delete);
+ *  `skipped` = an empty `active`/`migrated` label — the caller must do NOTHING with
+ *  it (no drop, no manifest write), so `hot_partition_dropped_at` is never re-stamped
+ *  and a `migrated` row is never flipped back to `active` (Langston Step-2 C-1).
+ *  (The old `reused: boolean` field had no reader and is gone — rule 18.) */
+type ArchiveOutcome =
+  | { kind: 'exported' | 'reused'; manifestId: string; rowCount: number; bytesCompressed: number }
+  | { kind: 'skipped'; manifestId: string; reason: 'already-active' | 'already-migrated' };
 
 class ChecksumMismatchError extends Error {
   readonly isChecksumMismatch = true;
@@ -513,10 +565,24 @@ async function archiveOneObject(
   const objPath = `${cfg.warmPrefix}/${spec.parent}/${label}.jsonl.gz`;
   const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
 
-  // Resume skip (fold-in #2): already uploaded+verified (or fully active) → no re-export.
+  // B-B75-EXPORT-COMPLETENESS (#1195): ONE decision for an existing copy, made BEFORE
+  // any upload. Its inputs are read only when the row's state needs them; row presence
+  // is MEASURED (the whole path enumerates children by name, not by rows).
   const existing = await getManifestRow(ctlClient, spec.parent, label, 'warm');
-  if (existing && (existing.state === 'verified' || existing.state === 'active') && existing.checksum) {
-    return { manifestId: existing.id, rowCount: 0, bytesCompressed: 0, reused: true };
+  const needs = decisionNeeds(existing);
+  const evidenceExists = existing && needs.evidence ? await evidenceExistsForManifest(ctlClient, existing.id) : false;
+  const rowsPresent = needs.rows
+    ? await labelRowsPresent(ctlClient, partitionTableName, spec.timestampColumn, rangeStart, rangeEnd, extraPredicate)
+    : false;
+  const decision = decideExistingCopy(existing, evidenceExists, rowsPresent);
+  if (decision.kind === 'refuse') {
+    throw new NonProvenExistingCopyError(decision.reason, spec.parent, label);
+  }
+  if (decision.kind === 'skip') {
+    return { kind: 'skipped', manifestId: existing!.id, reason: decision.reason };
+  }
+  if (decision.kind === 'reuse') {
+    return { kind: 'reused', manifestId: existing!.id, rowCount: 0, bytesCompressed: 0 };
   }
 
   const manifestId = await upsertManifestPending(
@@ -542,7 +608,6 @@ async function archiveOneObject(
   });
 
   let verifyPath: string | null = null;
-  let exactEvidence: ExactArchiveEvidenceInput | null = null;
   try {
     const fileSize = fs.statSync(exportRes.localPath).size;
     if (fileSize > HARD_CAP_BYTES) {
@@ -569,21 +634,27 @@ async function archiveOneObject(
       );
     }
 
-    if (spec.exactCursorTieBreakerColumn) {
-      const downloadedLineCount = await countGzipJsonlLines(verifyPath);
-      exactEvidence = {
-        manifestId,
-        sourceTable: 'xstock_bar_revision_event',
-        partitionLabel: label,
-        sourceRowCount: exportRes.sourceRowCount,
-        exportedRowCount: exportRes.rowCount,
-        downloadedRowCount: downloadedLineCount,
-        objectChecksum: exportRes.checksum,
-      };
-      // Corruption blocks even the mutable uploaded transition. The immutable
-      // proof itself lands after bounds validation and before verified/drop.
-      assertExactArchiveEquality(exactEvidence);
-    }
+    // B-B75-EXPORT-COMPLETENESS (OBJ-7): EVERY export records its proof, not only the
+    // exact lane. Source table, tier and contract come from the export — never literals
+    // (Langston Step-1 condition 1). The downloaded count is read from the verified
+    // download, so the proof covers the bytes as landed.
+    const downloadedLineCount = await countGzipJsonlLines(verifyPath);
+    const evidence: ExactArchiveEvidenceInput = {
+      manifestId,
+      sourceTable: spec.parent,
+      partitionLabel: label,
+      tier: 'warm',
+      cursorContract: spec.exactCursorTieBreakerColumn
+        ? XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT
+        : LEGACY_TS_TIEGROUP_CURSOR_CONTRACT,
+      sourceRowCount: exportRes.sourceRowCount,
+      exportedRowCount: exportRes.rowCount,
+      downloadedRowCount: downloadedLineCount,
+      objectChecksum: exportRes.checksum,
+    };
+    // Corruption blocks even the mutable uploaded transition. The immutable
+    // proof itself lands after bounds validation and before verified/drop.
+    assertExactArchiveEquality(evidence);
 
     await updateManifestUploaded(
       ctlClient,
@@ -610,14 +681,27 @@ async function archiveOneObject(
       }
     }
 
-    if (exactEvidence) await recordExactArchiveEvidence(ctlClient, exactEvidence);
-
-    await updateManifestVerified(ctlClient, manifestId);
+    // R-1: the proof, the basis stamp and `verified` land together or not at all. The
+    // order is the manifest tie trigger's invariant: evidence FIRST, then the stamp
+    // (`trg_data_archive_manifest_basis_requires_evidence` refuses the stamp otherwise).
+    await ctlClient.query('BEGIN');
+    try {
+      await recordExactArchiveEvidence(ctlClient, evidence);
+      await ctlClient.query(
+        `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
+        [manifestId, PROVEN_BASIS],
+      );
+      await updateManifestVerified(ctlClient, manifestId);
+      await ctlClient.query('COMMIT');
+    } catch (err) {
+      await ctlClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
     return {
+      kind: 'exported',
       manifestId,
       rowCount: exportRes.rowCount,
       bytesCompressed: exportRes.bytesCompressed,
-      reused: false,
     };
   } finally {
     try {
@@ -651,6 +735,8 @@ interface ProcessResult {
   isChecksumMismatch?: boolean;
   /** B-B75-COUNT-GATE (#1195): the export held fewer/more rows than the source snapshot. */
   isCountMismatch?: boolean;
+  /** B-B75-EXPORT-COMPLETENESS (#1195): an existing copy was refused — permanent until a human acts. */
+  isNonProven?: boolean;
 }
 
 async function processPartition(
@@ -700,19 +786,11 @@ async function processPartition(
 
     if (mode === 'whole') {
       // ─── WHOLE PATH ───────────────────────────────────────────────────────
-      const existing = await getManifestRow(ctlClient, spec.parent, partition.partitionLabel, 'warm');
-      if (existing && existing.state === 'active') {
-        return {
-          status: 'skipped',
-          mode,
-          bytesHot: 0,
-          bytesWarm: 0,
-          rowCount: 0,
-          slices: 0,
-          durationMs: Date.now() - start,
-          reason: 'already-active',
-        };
-      }
+      // B-B75-EXPORT-COMPLETENESS (Langston Step-2 r3): the `already-active` short-
+      // circuit that lived here returned BEFORE the resume decision, so an `active`
+      // label with live rows was silently skipped. The whole path now goes through
+      // archiveOneObject's one decision; an empty `active`/`migrated` label comes
+      // back `skipped` and is returned here BEFORE any drop or manifest write.
       const outcome = await archiveOneObject(
         storage,
         exportClient,
@@ -725,6 +803,18 @@ async function processPartition(
         partition.child,
         bytesHot,
       );
+      if (outcome.kind === 'skipped') {
+        return {
+          status: 'skipped',
+          mode,
+          bytesHot: 0,
+          bytesWarm: 0,
+          rowCount: 0,
+          slices: 0,
+          durationMs: Date.now() - start,
+          reason: outcome.reason,
+        };
+      }
       await dropAndMarkActive(ctlClient, partition.child, () =>
         updateManifestActive(ctlClient, outcome.manifestId),
       );
@@ -753,6 +843,7 @@ async function processPartition(
 
     let bytesWarm = 0;
     let rowCount = 0;
+    const skippedLabels = new Set<string>();
     for (const day of presentDates) {
       const dEnd = new Date(day.getTime() + 86_400_000);
       const outcome = await archiveOneObject(
@@ -768,27 +859,40 @@ async function processPartition(
         0, // per-slice original_partition_size_bytes = 0 (Langston rev B): the
            // whole-partition bytesHot would sum to N× the real size across slices.
       );
+      if (outcome.kind === 'skipped') {
+        // Defensive: present dates are row-derived, so the probe finds rows and an
+        // active/migrated label refuses rather than skips. A skip still writes nothing.
+        skippedLabels.add(dayLabel(day));
+        continue;
+      }
       bytesWarm += outcome.bytesCompressed;
       rowCount += outcome.rowCount;
     }
+    if (skippedLabels.size > 0) {
+      throw new Error(
+        `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: ${skippedLabels.size} present day(s) came back skipped ` +
+          `(${[...skippedLabels].slice(0, 6).join(',')}) — a skip means no rows, which a present day cannot be; DROP refused`,
+      );
+    }
 
     // DROP gate (fold-in #1): every distinct present date must have a manifest
-    // row in {verified, active}. Keys off dates PRESENT, not the calendar month.
+    // row in {verified, active} AND a proven completeness basis (#1195 OBJ-8 (a)).
+    // Keys off dates PRESENT, not the calendar month.
     const stateRows = await ctlClient.query(
-      `SELECT partition_label, state FROM data_archive_manifest
+      `SELECT partition_label, state, completeness_basis FROM data_archive_manifest
         WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
       [spec.parent, presentLabels],
     );
     const verifiedSet = new Set(
       stateRows.rows
-        .filter((r) => r.state === 'verified' || r.state === 'active')
+        .filter((r) => (r.state === 'verified' || r.state === 'active') && isProvenBasis(r.completeness_basis))
         .map((r) => r.partition_label as string),
     );
     const missing = presentLabels.filter((l) => !verifiedSet.has(l));
     if (missing.length > 0) {
       throw new Error(
         `[B75 sweep] DROP gate BLOCKED ${spec.parent}/${partition.partitionLabel}: ` +
-          `${missing.length}/${presentLabels.length} slice(s) not verified: ${missing.slice(0, 6).join(',')}`,
+          `${missing.length}/${presentLabels.length} slice(s) not verified and proven: ${missing.slice(0, 6).join(',')}`,
       );
     }
 
@@ -808,6 +912,7 @@ async function processPartition(
   } catch (err) {
     const isChecksumMismatch = err instanceof ChecksumMismatchError;
     const isCountMismatch = err instanceof ExportRowCountMismatchError;
+    const isNonProven = err instanceof NonProvenExistingCopyError;
     return {
       status: 'failed',
       mode,
@@ -819,6 +924,7 @@ async function processPartition(
       reason: err instanceof Error ? err.message : String(err),
       isChecksumMismatch,
       isCountMismatch,
+      isNonProven,
     };
   } finally {
     await exportClient.end().catch(() => {});
@@ -830,11 +936,16 @@ async function processPartition(
 // Failure → system-alert (chunk E). Never let alert-writing mask the sweep error.
 // ───────────────────────────────────────────────────────────────────────────
 
+/** B-B75-EXPORT-COMPLETENESS (OBJ-5, Langston F2): every row carries a dedupe key, so a
+ *  persistent failure is ONE row, not one a night. A keyed row replays its mint-time
+ *  body, so the body names the run it was first seen in and points at the log; the
+ *  current state is the log, never a count frozen into the body. */
 async function raiseSweepAlert(
   title: string,
   body: string,
   severity: 'warning' | 'critical',
   metadata: Record<string, unknown>,
+  dedupeKey: string,
 ): Promise<void> {
   try {
     await addAlert({
@@ -842,11 +953,47 @@ async function raiseSweepAlert(
       category: 'breakage',
       severity,
       title,
-      body,
-      metadata: { batch: 'B-NEW-47', source: 'b75-retention-sweep', ...metadata },
+      body: `${body} First seen in sweep run ${RUN_ID} (${new Date().toISOString()}); ` +
+        `the current state of this partition is in ${SWEEP_LOG}.`,
+      metadata: { batch: 'B-NEW-47', source: 'b75-retention-sweep', run_id: RUN_ID, ...metadata },
+      dedupe_key: dedupeKey,
     });
   } catch (alertErr) {
     console.error('[B75 sweep] failed to raise system-alert:', alertErr);
+  }
+}
+
+/** The resolve edge: a later success for the same key clears it (the classes a run can
+ *  outgrow — never `non-proven-existing`, which needs a human). Never masks the sweep. */
+async function resolveSweepAlerts(keys: string[], what: string): Promise<void> {
+  for (const key of keys) {
+    try {
+      const ids = await resolveAlertsByDedupeKey(
+        key,
+        SWEEP_ALERT_ACTOR,
+        `b75 sweep run ${RUN_ID} succeeded for ${what}`,
+        'timer-script',
+      );
+      if (ids.length > 0) console.log(`[B75 sweep] resolved ${ids.length} alert(s) on ${key}`);
+    } catch (alertErr) {
+      console.error(`[B75 sweep] failed to resolve alerts on ${key}:`, alertErr);
+    }
+  }
+}
+
+function failureClassText(cls: SweepFailureClass, refuseReason?: string): string {
+  switch (cls) {
+    case 'checksum':
+      return 'CHECKSUM MISMATCH = possible data corruption — investigate before retry.';
+    case 'count-mismatch':
+      return 'ROW-COUNT MISMATCH = the archive copy would be incomplete, so the drop was refused (#1195). '
+        + 'Not transient: it fails the same way every night until someone finds why the export and the source differ.';
+    case 'non-proven-existing':
+      return `REFUSED (#1195): ${refuseReason ?? 'an existing copy is not proven'}. Not transient: the next run reads the `
+        + 'same row and refuses again. The hot data is kept, so it stays on the database disk every night this refuses — '
+        + 'a human must decide what to do with this label.';
+    default:
+      return 'Likely transient; the next nightly run retries from the last verified slice.';
   }
 }
 
@@ -879,6 +1026,9 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
     try {
       let tableDeleted = 0;
       const extraAnd = spec.extraPredicate ? ` AND (${spec.extraPredicate})` : '';
+      // B-B75-EXPORT-COMPLETENESS (A14): the labels archived this run, hoisted out of
+      // the archive branch so they can be marked `active` AFTER the delete below.
+      let archivedLabels: string[] = [];
 
       // B-TRADE-TIER-REGISTER (#599): ARCHIVE-BEFORE-DELETE for primary-record
       // plain tables. Every present day in the eligible range is exported to warm
@@ -919,21 +1069,27 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
           } finally {
             await exportClient.end();
           }
-          // The gate: every present label verified/active before ANY delete.
+          // The gate: every present label verified/active AND proven before ANY delete
+          // (#1195 OBJ-8 (b)). A refusal now raises an alert — it only logged before.
           const labels = present.map((d) => d.toISOString().slice(0, 10));
           const stateRows = await ctl.query(
-            `SELECT partition_label, state FROM data_archive_manifest
+            `SELECT partition_label, state, completeness_basis FROM data_archive_manifest
               WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
             [spec.table, labels],
           );
           const okSet = new Set(
-            stateRows.rows.filter((r) => r.state === 'verified' || r.state === 'active').map((r) => r.partition_label as string),
+            stateRows.rows
+              .filter((r) => (r.state === 'verified' || r.state === 'active') && isProvenBasis(r.completeness_basis))
+              .map((r) => r.partition_label as string),
           );
           const missing = labels.filter((l) => !okSet.has(l));
           if (missing.length > 0) {
-            console.error(`[B75 sweep][plain-archive] ${spec.table}: ${missing.length} present day(s) lack a verified manifest row (${missing.slice(0, 3).join(', ')}…) — DELETE SKIPPED this run`);
-            continue; // move to the next spec; rows are safe, retried next run
+            throw new Error(
+              `[B75 sweep][plain-archive] ${spec.table}: ${missing.length} present day(s) lack a verified, proven manifest row ` +
+                `(${missing.slice(0, 3).join(', ')}…) — DELETE REFUSED this run (rows safe)`,
+            );
           }
+          archivedLabels = labels;
           // Exploration-anneal tally (pre-audit 4c(1)): fold the about-to-be-deleted
           // ranges' exploration-close counts into the persisted per-class tallies
           // (the anneal reader's EXACT predicate) so closedExplorationCount stays
@@ -985,23 +1141,41 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
         tableDeleted += n;
         if (n < PLAIN_DELETE_BATCH) break;
       }
+      // A14: the archived days' source rows are now gone, so their labels become
+      // `active` — the same meaning as the partition lane's (source removed).
+      // `hot_partition_dropped_at` is stamped here as "deleted at" for this lane.
+      // `markLabelsActive` only flips `verified` rows, so an already-active label is
+      // never re-stamped. A late row for one of these days then refuses at the
+      // resume decision instead of being reused and age-deleted unarchived.
+      await markLabelsActive(ctl, spec.table, archivedLabels);
       deletedTotal += tableDeleted;
       await ctl.query(`VACUUM ${spec.table}`); // not in a txn; plain VACUUM — no exclusive lock
       console.log(
         `[B75 sweep][plain] ${spec.table}: deleted ${tableDeleted} rows older than ` +
           `${cutoff.toISOString().slice(0, 10)} (retentionDays=${retentionDays}) + VACUUM`,
       );
+      await resolveSweepAlerts(
+        AUTO_RESOLVED_CLASSES.map((cls) => plainAlertKey(spec.table, cls)),
+        `plain table ${spec.table}`,
+      );
     } catch (err) {
       failed++;
-      console.error(
-        `[B75 sweep][plain] ${spec.table}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
-      );
+      const reason = err instanceof Error ? err.message : String(err);
+      console.error(`[B75 sweep][plain] ${spec.table}: FAILED — ${reason}`);
+      // OBJ-6 (Langston F4, re-pointed): name a count mismatch, a checksum mismatch or a
+      // refusal for what it is, instead of calling every failure "retried next run".
+      const cls = sweepFailureClass({
+        isChecksumMismatch: err instanceof ChecksumMismatchError,
+        isCountMismatch: err instanceof ExportRowCountMismatchError,
+        isNonProven: err instanceof NonProvenExistingCopyError,
+      });
       await raiseSweepAlert(
         `B75 plain-table retention FAILED: ${spec.table}`,
-        `The nightly age-delete for plain table ${spec.table} failed. Old rows were NOT removed ` +
-          `(data is safe; retried next run). Reason: ${err instanceof Error ? err.message : String(err)}`,
-        'warning',
-        { table: spec.table },
+        `The nightly archive-and-age-delete for plain table ${spec.table} failed. Old rows were NOT removed ` +
+          `(data is safe). Reason: ${reason}. ${failureClassText(cls, reason)}`,
+        cls === 'checksum' || cls === 'non-proven-existing' ? 'critical' : 'warning',
+        { table: spec.table, failure_class: cls },
+        plainAlertKey(spec.table, cls),
       );
     } finally {
       await ctl.end();
@@ -1104,7 +1278,7 @@ async function runSweep(): Promise<boolean> {
   let bytesArchivedTotal = 0;
 
   console.log(
-    `[B75 sweep] started at ${startedAt.toISOString()} slice_threshold_hot_bytes=${cfg.sliceThresholdHotBytes}`,
+    `[B75 sweep] started at ${startedAt.toISOString()} run_id=${RUN_ID} slice_threshold_hot_bytes=${cfg.sliceThresholdHotBytes}`,
   );
 
   for (const spec of PARTITIONED_TABLES) {
@@ -1136,6 +1310,14 @@ async function runSweep(): Promise<boolean> {
         `[B75 sweep] ${spec.parent}: processing partition=${partition.partitionLabel} child=${partition.child}`,
       );
       const res = await processPartition(spec, partition, cfg);
+      if (res.status !== 'failed') {
+        // A drop or a no-write skip is a success for this (parent, label): clear any
+        // auto-resolvable row it minted on an earlier night.
+        await resolveSweepAlerts(
+          AUTO_RESOLVED_CLASSES.map((cls) => partitionAlertKey(spec.parent, partition.partitionLabel, cls)),
+          `${spec.parent}/${partition.partitionLabel} (${res.status})`,
+        );
+      }
       if (res.status === 'dropped') {
         partitionsDropped++;
         bytesFreedTotal += res.bytesHot;
@@ -1153,27 +1335,28 @@ async function runSweep(): Promise<boolean> {
         console.error(
           `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: FAILED — ${res.reason} (duration_ms=${res.durationMs})`,
         );
+        // B-B75-EXPORT-COMPLETENESS: four classes, so a refusal never lands in the
+        // "likely transient" arm (Langston Step-2 B-2). A refusal is critical: it keeps
+        // the hot partition, so it grows the database disk every night it repeats.
+        const cls = sweepFailureClass(res);
         await raiseSweepAlert(
           `B75 retention sweep FAILED: ${spec.parent}/${partition.partitionLabel}`,
           `The nightly storage archive sweep could not move partition ${partition.partitionLabel} of ${spec.parent} ` +
-            `to warm storage. mode=${res.mode}. The hot partition was NOT dropped (data is safe). ` +
-            `Reason: ${res.reason}. ${
-              res.isChecksumMismatch
-                ? 'CHECKSUM MISMATCH = possible data corruption — investigate before retry.'
-                : res.isCountMismatch
-                  ? 'ROW-COUNT MISMATCH = the archive copy is incomplete, so the drop was refused (#1195). '
-                    + 'Not transient: this partition keeps failing safely until B-B75-EXPORT-COMPLETENESS lands.'
-                  : 'Likely transient; the next nightly run retries from the last verified slice.'
-            }`,
-          res.isChecksumMismatch ? 'critical' : 'warning',
+            `to warm storage. mode=${res.mode}. The hot partition was NOT dropped (data is safe` +
+            `${cls === 'non-proven-existing' ? `; it holds ${res.bytesHot} bytes on the database disk` : ''}). ` +
+            `Reason: ${res.reason}. ${failureClassText(cls, res.reason)}`,
+          cls === 'checksum' || cls === 'non-proven-existing' ? 'critical' : 'warning',
           {
             parent: spec.parent,
             partition_label: partition.partitionLabel,
             child: partition.child,
             mode: res.mode,
+            failure_class: cls,
             is_checksum_mismatch: Boolean(res.isChecksumMismatch),
             is_count_mismatch: Boolean(res.isCountMismatch),
+            is_non_proven: Boolean(res.isNonProven),
           },
+          partitionAlertKey(spec.parent, partition.partitionLabel, cls),
         );
       }
     }
@@ -1190,6 +1373,8 @@ async function runSweep(): Promise<boolean> {
       `bytes_archived=${bytesArchivedTotal} plain_deleted=${plainResult.deleted} ` +
       `plain_failed=${plainResult.failed} duration_ms=${totalMs}`,
   );
+  // Reaching DONE is the fatal key's resolve edge: a run that completes has not crashed.
+  await resolveSweepAlerts([FATAL_ALERT_KEY], 'the whole sweep (reached DONE)');
 
   // Return the failure flag; main() releases the run-lock (finally) THEN exits
   // non-zero. A fatal throw propagates through main()'s finally to the catch below.
@@ -1204,6 +1389,7 @@ main().catch(async (err) => {
       `(DROP only happens after verify). Reason: ${err instanceof Error ? err.message : String(err)}`,
     'critical',
     { fatal: true },
+    FATAL_ALERT_KEY,
   );
   process.exit(1);
 });

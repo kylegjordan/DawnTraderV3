@@ -56,24 +56,35 @@ CREATE INDEX IF NOT EXISTS idx_xstock_bar_projection_flush_completion_time
 -- The generic manifest is a mutable lifecycle row. Preserve the exact xStock
 -- export proof separately so source/export/download equality remains auditable
 -- after the hot partition has been dropped.
-CREATE TABLE IF NOT EXISTS xstock_bar_archive_exact_evidence (
-  manifest_id uuid PRIMARY KEY REFERENCES data_archive_manifest(id),
-  source_table text NOT NULL CHECK (source_table = 'xstock_bar_revision_event'),
-  partition_label text NOT NULL,
-  tier text NOT NULL CHECK (tier = 'warm'),
-  source_row_count bigint NOT NULL CHECK (source_row_count >= 0),
-  exported_row_count bigint NOT NULL CHECK (exported_row_count >= 0),
-  downloaded_row_count bigint NOT NULL CHECK (downloaded_row_count >= 0),
-  cursor_contract text NOT NULL CHECK (
-    cursor_contract = 'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid'
-  ),
-  producing_build_sha text NOT NULL CHECK (producing_build_sha ~ '^[0-9a-f]{40}$'),
-  object_checksum text NOT NULL CHECK (object_checksum <> ''),
-  verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CHECK (source_row_count = exported_row_count),
-  CHECK (source_row_count = downloaded_row_count),
-  UNIQUE (source_table, partition_label, tier)
-);
+-- B-B75-EXPORT-COMPLETENESS (#1195, 2026-10-17): this table was renamed
+-- data_archive_exact_evidence by 2026-10-17-b-b75-export-completeness.sql. Each
+-- statement about it below is guarded to do nothing once the new name exists, so
+-- re-running THIS file can never re-create an empty old-name table beside the
+-- real one (two homes for one proof). A fresh database replayed in order is
+-- unchanged: this file creates the old name, the 10-17 file renames it.
+DO $guard$
+BEGIN
+  IF to_regclass('data_archive_exact_evidence') IS NULL THEN
+    CREATE TABLE IF NOT EXISTS xstock_bar_archive_exact_evidence (
+      manifest_id uuid PRIMARY KEY REFERENCES data_archive_manifest(id),
+      source_table text NOT NULL CHECK (source_table = 'xstock_bar_revision_event'),
+      partition_label text NOT NULL,
+      tier text NOT NULL CHECK (tier = 'warm'),
+      source_row_count bigint NOT NULL CHECK (source_row_count >= 0),
+      exported_row_count bigint NOT NULL CHECK (exported_row_count >= 0),
+      downloaded_row_count bigint NOT NULL CHECK (downloaded_row_count >= 0),
+      cursor_contract text NOT NULL CHECK (
+        cursor_contract = 'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid'
+      ),
+      producing_build_sha text NOT NULL CHECK (producing_build_sha ~ '^[0-9a-f]{40}$'),
+      object_checksum text NOT NULL CHECK (object_checksum <> ''),
+      verified_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+      CHECK (source_row_count = exported_row_count),
+      CHECK (source_row_count = downloaded_row_count),
+      UNIQUE (source_table, partition_label, tier)
+    );
+  END IF;
+END $guard$;
 
 -- Supports the exact B75 native (timestamptz, uuid) keyset cursor without a
 -- per-page full sort. Only returned cursor values use text transport.
@@ -110,16 +121,22 @@ CREATE TRIGGER trg_guard_xstock_bar_projection_completion_truncate
 BEFORE TRUNCATE ON xstock_bar_projection_flush_completion
 FOR EACH STATEMENT EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
 
-DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_mutation
-  ON xstock_bar_archive_exact_evidence;
-CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_mutation
-BEFORE UPDATE OR DELETE ON xstock_bar_archive_exact_evidence
-FOR EACH ROW EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
-DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_truncate
-  ON xstock_bar_archive_exact_evidence;
-CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_truncate
-BEFORE TRUNCATE ON xstock_bar_archive_exact_evidence
-FOR EACH STATEMENT EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
+-- (guarded — see the B-B75-EXPORT-COMPLETENESS note on the CREATE TABLE above)
+DO $guard$
+BEGIN
+  IF to_regclass('data_archive_exact_evidence') IS NULL THEN
+    DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_mutation
+      ON xstock_bar_archive_exact_evidence;
+    CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_mutation
+    BEFORE UPDATE OR DELETE ON xstock_bar_archive_exact_evidence
+    FOR EACH ROW EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
+    DROP TRIGGER IF EXISTS trg_guard_xstock_bar_archive_exact_evidence_truncate
+      ON xstock_bar_archive_exact_evidence;
+    CREATE TRIGGER trg_guard_xstock_bar_archive_exact_evidence_truncate
+    BEFORE TRUNCATE ON xstock_bar_archive_exact_evidence
+    FOR EACH STATEMENT EXECUTE FUNCTION guard_xstock_bar_projection_evidence_mutation();
+  END IF;
+END $guard$;
 
 -- Idempotent admission. A retry after an ambiguous admission COMMIT reuses the
 -- same flush ID and verifies that it names the same immutable population.
@@ -300,7 +317,13 @@ COMMENT ON TABLE xstock_bar_projection_flush_admission IS
   'Append-only xStock logical flush population admitted before projection.';
 COMMENT ON TABLE xstock_bar_projection_flush_completion IS
   'Append-only xStock projection completion committed atomically with immutable revision events.';
-COMMENT ON TABLE xstock_bar_archive_exact_evidence IS
-  'Append-only exact source/export/download equality evidence retained after xStock revision hot-partition deletion.';
+-- (guarded — see the B-B75-EXPORT-COMPLETENESS note on the CREATE TABLE above)
+DO $guard$
+BEGIN
+  IF to_regclass('data_archive_exact_evidence') IS NULL THEN
+    COMMENT ON TABLE xstock_bar_archive_exact_evidence IS
+      'Append-only exact source/export/download equality evidence retained after xStock revision hot-partition deletion.';
+  END IF;
+END $guard$;
 
 COMMIT;

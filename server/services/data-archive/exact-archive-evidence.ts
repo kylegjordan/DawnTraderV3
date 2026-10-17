@@ -2,6 +2,14 @@
  * B-XSTOCK-BAR-AVAILABILITY — durable exact-export proof for the immutable
  * xStock revision ledger. The generic manifest remains the lifecycle row;
  * this append-only row preserves the equality proof after hot deletion.
+ *
+ * B-B75-EXPORT-COMPLETENESS (#1195): generalised to EVERY archive lane. The table
+ * is `data_archive_exact_evidence` (renamed from `xstock_bar_archive_exact_evidence`,
+ * pins on `source_table`/`tier` dropped, `cursor_contract` widened to two values).
+ * The writer takes `sourceTable`, `tier` and `cursorContract` from the export — it
+ * never hard-codes them, because a literal here would file every lane's proof
+ * under one table and the manifest's tie trigger would then refuse every stamp
+ * (Langston Step-1 condition 1). CC-C's lane passes exactly what it passed before.
  */
 import { readFileSync } from 'node:fs';
 
@@ -10,8 +18,11 @@ export const XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT =
 
 export interface ExactArchiveEvidenceInput {
   manifestId: string;
-  sourceTable: 'xstock_bar_revision_event';
+  sourceTable: string;
   partitionLabel: string;
+  /** The tier the exported object actually landed in (the ctx 413 fallback lands cold). */
+  tier: 'warm' | 'cold';
+  cursorContract: string;
   sourceRowCount: number | null;
   exportedRowCount: number;
   downloadedRowCount: number;
@@ -47,10 +58,17 @@ export function readExactArchiveBuildSha(): string {
 }
 
 /** Insert once, then compare every field. A retry may confirm the same fact;
- * it can never rewrite evidence produced by a previous attempt. */
+ * it can never rewrite evidence produced by a previous attempt.
+ *
+ * `producing_build_sha` is FIRST-WRITE-WINS and is not part of the refusal
+ * (Langston JC-4): a replay from a later build keeps the stored value and logs
+ * both shas loudly. Refusing on it meant an object whose proof landed but whose
+ * `verified` failed could never complete after any later deploy. CC-C's capacity
+ * gate leans on the stored first producer being a reviewed ref, which this keeps. */
 export async function recordExactArchiveEvidence(
   client: QueryClient,
   input: ExactArchiveEvidenceInput,
+  log: (msg: string) => void = (msg) => console.warn(msg),
 ): Promise<void> {
   assertExactArchiveEquality(input);
   const producingBuildSha = (input.producingBuildSha ?? readExactArchiveBuildSha()).toLowerCase();
@@ -58,22 +76,24 @@ export async function recordExactArchiveEvidence(
     throw new Error('[B75 sweep] exact archive producing build SHA is invalid');
   }
   if (!input.objectChecksum) throw new Error('[B75 sweep] exact archive checksum is empty');
+  if (!input.cursorContract) throw new Error('[B75 sweep] exact archive cursor contract is empty');
 
   await client.query(
-    `INSERT INTO xstock_bar_archive_exact_evidence (
+    `INSERT INTO data_archive_exact_evidence (
        manifest_id, source_table, partition_label, tier,
        source_row_count, exported_row_count, downloaded_row_count,
        cursor_contract, producing_build_sha, object_checksum
-     ) VALUES ($1, $2, $3, 'warm', $4, $5, $6, $7, $8, $9)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT (manifest_id) DO NOTHING`,
     [
       input.manifestId,
       input.sourceTable,
       input.partitionLabel,
+      input.tier,
       input.sourceRowCount,
       input.exportedRowCount,
       input.downloadedRowCount,
-      XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT,
+      input.cursorContract,
       producingBuildSha,
       input.objectChecksum,
     ],
@@ -82,7 +102,7 @@ export async function recordExactArchiveEvidence(
     `SELECT source_table, partition_label, tier,
             source_row_count::text, exported_row_count::text, downloaded_row_count::text,
             cursor_contract, producing_build_sha, object_checksum
-       FROM xstock_bar_archive_exact_evidence
+       FROM data_archive_exact_evidence
       WHERE manifest_id = $1`,
     [input.manifestId],
   );
@@ -90,12 +110,11 @@ export async function recordExactArchiveEvidence(
   const exact = stored
     && stored.source_table === input.sourceTable
     && stored.partition_label === input.partitionLabel
-    && stored.tier === 'warm'
+    && stored.tier === input.tier
     && Number(stored.source_row_count) === input.sourceRowCount
     && Number(stored.exported_row_count) === input.exportedRowCount
     && Number(stored.downloaded_row_count) === input.downloadedRowCount
-    && stored.cursor_contract === XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT
-    && stored.producing_build_sha === producingBuildSha
+    && stored.cursor_contract === input.cursorContract
     && stored.object_checksum === input.objectChecksum;
   if (!exact) {
     throw new Error(
@@ -103,4 +122,20 @@ export async function recordExactArchiveEvidence(
       + `${input.sourceTable}/${input.partitionLabel}`,
     );
   }
+  if (stored.producing_build_sha !== producingBuildSha) {
+    log(
+      `[B75 sweep] EVIDENCE BUILD-SHA MISMATCH ${input.sourceTable}/${input.partitionLabel}: `
+      + `stored first producer=${String(stored.producing_build_sha)} this run=${producingBuildSha}; `
+      + `counts, checksum and contract match, so the stored proof stands (first-write-wins)`,
+    );
+  }
+}
+
+/** Does an evidence row exist for this manifest row? (the resume decision's input). */
+export async function evidenceExistsForManifest(client: QueryClient, manifestId: string): Promise<boolean> {
+  const r = await client.query(
+    `SELECT 1 FROM data_archive_exact_evidence WHERE manifest_id = $1 LIMIT 1`,
+    [manifestId],
+  );
+  return r.rows.length > 0;
 }

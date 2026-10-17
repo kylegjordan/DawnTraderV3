@@ -121,12 +121,34 @@ async function main(): Promise<void> {
     }
 
     if (mode === 'clean') {
+      // B-B75-EXPORT-COMPLETENESS (#1195, Langston Step-2 C-1): delete the manifest rows
+      // FIRST, and stop before the DROP if that is refused. Once a run has proven this
+      // label, its manifest row is referenced by an append-only evidence row
+      // (data_archive_exact_evidence, FK with no ON DELETE), so the DELETE fails — and
+      // dropping the partition first would leave the harness half-cleaned: partition
+      // gone, manifest row permanent, and a later --seed would pass with the sweep
+      // reusing the proven row, so the gate test would stop exercising the export.
+      // After that deploy this harness is SINGLE-USE for a label it has proven. The
+      // only recovery is the migration rollback (2026-10-17-b-b75-export-completeness-
+      // rollback.sql) AND dropping any leftover child by hand:
+      //   DROP TABLE xstock_perp_ohlc_1m_2025_01_15;
+      // (with rows, a leftover child makes the nightly sweep refuse it, critical, nightly).
+      let del;
+      try {
+        del = await client.query(
+          `DELETE FROM data_archive_manifest WHERE source_table = $1 AND partition_label = $2`,
+          [PARENT, LABEL],
+        );
+      } catch (err) {
+        console.error(
+          `[gate-test] clean REFUSED before the drop: the manifest row for ${PARENT}/${LABEL} cannot be deleted ` +
+            `(${err instanceof Error ? err.message : String(err)}) — most likely it carries a stored proof. ` +
+            `Nothing was dropped. See the comment above --clean for the recovery.`,
+        );
+        process.exit(1);
+      }
       await client.query(`DROP TABLE IF EXISTS ${CHILD}`);
-      const del = await client.query(
-        `DELETE FROM data_archive_manifest WHERE source_table = $1 AND partition_label = $2`,
-        [PARENT, LABEL],
-      );
-      console.log(`[gate-test] cleaned: partition dropped-if-present, ${del.rowCount} manifest row(s) removed`);
+      console.log(`[gate-test] cleaned: ${del.rowCount} manifest row(s) removed, then partition dropped-if-present`);
     }
   } finally {
     await client.end();

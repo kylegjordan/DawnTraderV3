@@ -147,7 +147,13 @@ export function shouldDeliverToDiscord(alert: Pick<SystemAlert, 'severity' | 'ca
 //   HTTP request, no timer script). Every server-side resolver uses it and is told apart by
 //   its ACTOR; a transport enum that gained a value per caller would be a caller list and
 //   partition nothing (Langston r2 §7).
-export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'governance-checker' | 'engine';
+//   `timer-script` — a CLASS, not a caller (B-B75-EXPORT-COMPLETENESS #1195, Langston Step-2 B-4):
+//   a scheduled process OUTSIDE the server runtime resolving IN-PROCESS, without the CLI. The
+//   timer scripts that go through the CLI (governance-checker, deploy-drift-monitor) stamp `cli`,
+//   truthfully; `engine` excludes timer scripts by definition. First member: the B75 sweep.
+//   (`governance-checker` was a value here with 0 resolved rows ever and no caller passing it —
+//   the checker resolves through the CLI as `cli` — so it was removed under rule 18.)
+export type ResolveTransport = 'cli' | 'dispatcher' | 'api' | 'engine' | 'timer-script';
 
 // Sanctioned sentinels: the ONLY non-reference strings resolution_evidence may
 // hold. `NO-EVIDENCE-GIVEN` forces an HONEST admission (better than a fake
@@ -228,6 +234,7 @@ export const ALERT_ACTORS = [
   { value: 'deploy-drift-monitor',         tag: 'machine', why: 'comms-infra/discord/dt-deploy-drift.sh (hourly cron on Helsinki): resolves its own drift rungs whenever a run concludes there is nothing to report — deployed==head, the range touches no runtime file, or the gap is under the floor with the deploy record corroborating (#1021; it was return-to-zero ONLY until 2026-09-09, which is the defect that batch fixed). The resolve evidence names which condition fired. B-DEPLOY-DRIFT-LINE #1002 — an hourly robot must not claim a session identity (#987/#1004).' },
   { value: 'vts-exit-monitor',              tag: 'machine', why: 'server/services/vts-runner.ts + server/core/trading/vts-rail.ts — resolves its own no-trigger-vts, vts-quiet and vts-quiet-resolve-stuck rows when the RE-MEASURED condition clears (the trade decided after the mint, or closed); B-XSTOCK-BID-TRIGGER-RELAND increment (4a), #1191/#638; transport `engine`' },
   { value: 'active-exit-monitor',           tag: 'machine', why: 'server/services/active-execution-engine.ts + venue-quiet-alerting.ts — resolves its own price-skip, venue-quiet and price-skip-config rows when the RE-MEASURED condition clears (B-VENUE-QUIET-ALERTING, #638/#526/#994), and its no-trigger-<mode> rows once the position decided after the mint or closed (server/services/paper-no-trigger-clear.ts, row 2 (4a) P1b), and its xstock-quote-size-unknown-<mode> row on the next clean hourly window (row 2 increment B, the size tripwire); transport `engine`' },
+  { value: 'b75-retention-sweep',          tag: 'machine', why: 'server/scripts/b75-retention-sweep.ts (root cron 02:15 UTC): mints its own failure rows keyed b75-sweep:<parent>:<label>:<class> / b75-plain:<table>:<class> / b75-sweep:fatal and resolves them when a later run succeeds for that key; transport `timer-script`. A refused non-proven copy (`…:non-proven-existing`) is left for a human (B-B75-EXPORT-COMPLETENESS #1195).' },
   { value: 'langston-privacy-check',       tag: 'machine', why: 'comms-infra/langston-memory/bin/langston-privacy-check (daily 06:00Z timer on Helsinki, root): arms and resolves its own exposure alerts - a machine, so it never claims a session name (B-LANGSTON-CONTEXT)' },
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },

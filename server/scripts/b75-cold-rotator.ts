@@ -304,15 +304,22 @@ async function main(): Promise<void> {
              source_table, partition_label, tier, state, storage_uri,
              min_ts, max_ts, date_range_start, date_range_end,
              row_count, bytes_compressed, original_partition_size_bytes,
-             checksum, format, compression, verified_at
+             checksum, format, compression, verified_at, completeness_basis
            ) SELECT source_table, partition_label, 'cold', 'active', $2,
                     min_ts, max_ts, date_range_start, date_range_end,
                     row_count, bytes_compressed, original_partition_size_bytes,
-                    checksum, format, compression, NOW()
+                    checksum, format, compression, NOW(), completeness_basis
               FROM data_archive_manifest
              WHERE id = $1
              ON CONFLICT (source_table, partition_label, tier) DO UPDATE
-               SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW()`,
+               SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
+                   completeness_basis = EXCLUDED.completeness_basis`,
+          // B-B75-EXPORT-COMPLETENESS (#1195): the cold copy is byte-identical to the warm
+          // one (checksum-verified above), so it carries the warm row's completeness_basis
+          // in BOTH the insert and the conflict update — otherwise a pre-existing cold row
+          // would keep 'unrecorded'. It writes no evidence of its own: the manifest tie
+          // trigger admits 'source-count-matched' on (source_table, partition_label), so
+          // the cold row inherits the warm export's proof (Langston Step-2 B-3).
           // B-STORAGE-HARDEN OBJ-1 fixes (both surfaced by the first real rotation —
           // cold was dry-run since B75, so the Phase-2 path had never executed):
           //  (r3) the SQL used $1/$3 with a stray unreferenced null at $2 → Postgres
