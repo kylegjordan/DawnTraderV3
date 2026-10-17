@@ -380,9 +380,15 @@ describe('the other lanes and readers', () => {
     const b = CTX.indexOf("query('BEGIN')");
     expect(CTX.indexOf('recordExactArchiveEvidence(', b)).toBeGreaterThan(b);
     expect(CTX.indexOf('completeness_basis = $7', b)).toBeGreaterThan(CTX.indexOf('recordExactArchiveEvidence(', b));
-    // gate C, C-2: the transaction is on ctlClient throughout
-    expect(CTX).toMatch(/ctlClient\.query\('BEGIN'\)[\s\S]*recordExactArchiveEvidence\(ctlClient[\s\S]*ctlClient\.query\('COMMIT'\)/);
-    expect(CTX).not.toMatch(/exportClient\.query\('BEGIN'\)/);
+    // gate C, C-2 (r2): the transaction is on ctlClient throughout — sliced to the one lane
+    // function, and the verified UPDATE is IN the chain, so moving it to exportClient fails.
+    const lane = fnBody(CTX, 'async function exportAndUploadMonth(');
+    expect(lane.match(/query\('BEGIN'\)/g)).toHaveLength(1);
+    expect(lane.match(/query\('COMMIT'\)/g)).toHaveLength(1);
+    expect(lane).toMatch(
+      /ctlClient\.query\('BEGIN'\)[\s\S]*recordExactArchiveEvidence\(ctlClient[\s\S]*ctlClient\.query\(\s*`UPDATE data_archive_manifest\s*SET state = 'verified'[\s\S]*completeness_basis = \$7[\s\S]*ctlClient\.query\('COMMIT'\)/,
+    );
+    expect(lane).not.toMatch(/exportClient\.query\(/);
     // gate C, C-3: the verified UPDATE writes the tier the object actually landed in
     expect(CTX).toMatch(/completeness_basis = \$7,\s*tier = \$8/);
     expect(CTX).toMatch(/PROVEN_BASIS,\s*actualTier,/);
@@ -409,6 +415,9 @@ describe('the other lanes and readers', () => {
     expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= download\.row_count;[\s\S]*\} else if \(proven\) \{/);
     expect(REHYDRATE).toContain('rows_checksum_mismatch=');
     expect(REHYDRATE).toContain('if (mismatched.length > 0) process.exit(2);');
+    // the rider: a mismatched file is renamed out of the <table>_*.jsonl.gz glob
+    expect(REHYDRATE).toMatch(/if \(!checksumOk\) \{\s*outPath = `\$\{localPath\}\.CORRUPT`;\s*fs\.renameSync\(localPath, outPath\);/);
+    expect(REHYDRATE).toContain('`${outPath}.completeness.json`');
   });
   it('perpfeed --clean deletes the manifest rows BEFORE dropping, and stops if refused', () => {
     const clean = PERPFEED.slice(PERPFEED.indexOf("if (mode === 'clean')"));

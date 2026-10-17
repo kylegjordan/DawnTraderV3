@@ -229,12 +229,21 @@ async function main(): Promise<void> {
       checksumOk = sha256Hex(data.data) === download.checksum;
     }
 
+    // Langston Step-4 gate C rider (C-1): a mismatched file must not sit under the good
+    // name — a consumer globbing `<table>_*.jsonl.gz` (as this header instructs) would pick
+    // it up. Keep it for diagnosis, but rename it out of the glob.
+    let outPath = localPath;
+    if (!checksumOk) {
+      outPath = `${localPath}.CORRUPT`;
+      fs.renameSync(localPath, outPath);
+    }
+
     console.log(
       `[B75 rehydrate] ${label} (${download.tier}): ${rowsLabel}=${download.row_count} completeness=${basis} ` +
-        `bytes=${bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${localPath}`,
+        `bytes=${bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${outPath}`,
     );
     fs.writeFileSync(
-      `${localPath}.completeness.json`,
+      `${outPath}.completeness.json`,
       JSON.stringify({
         table: args.table,
         partition_label: label,
