@@ -82,7 +82,7 @@ function seedGate() {
  * fail-closed FLOOR, not by this enumeration. Do not read a full pass here as full coverage.
  * ⚠️ An earlier version of this comment said "exactly 22 call sites" against an 18-element array
  * — the hoist was meant to stop two copies drifting and one of them arrived with the wrong count.
- * `orb.ts:298` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, not a literal, so
+ * `orb.ts:299` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, not a literal, so
  * they are listed by their RESOLVED value — a literal-matching assertion would skip them silently.
  */
 const CALLER_TOKENS = [
@@ -313,7 +313,7 @@ describe('alias safety — canonical===null is NOT the only harm surface', () =>
 
 describe('the full caller token table — 18 static sites, and two of them are CONSTANTS not literals', () => {
   // Every token passed to getPerClassTargetGate by a non-test caller, enumerated at the ref rather
-  // than sampled. `orb.ts:298` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, so
+  // than sampled. `orb.ts:299` and `strong-bull-trend.ts:176` pass a module constant STRATEGY_KEY, so
   // they are listed by their RESOLVED value — a literal-matching assertion would skip them silently.
 
   it('every caller token is CANONICAL — none silently takes the unknown floor', () => {
