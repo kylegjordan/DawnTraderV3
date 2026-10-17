@@ -12518,10 +12518,10 @@ The architectural commitment "differences live in DB, not code" is enforced by t
 - **Pattern IMF thresholds** — DB row at `screener_filters WHERE asset_class='xstock_spot' AND filter_path IN ('vts_pattern', 'active_pattern')` (4 rows × 2 paths × 2 modes — seeded B79.0m.b2; cloned from crypto baseline LQ=43, VN=0.98, DI=3/5).
 - **Global filter** — DB row at `screener_filters WHERE asset_class='xstock_spot' AND filter_path='active_quant'` (one row per mode — seeded B79.0m.b).
 - **Pattern-pool guardrails** — `module_constants.pattern_pool_gates.xstock_spot.{final_score_floor=0.45, max_position_pct=0.50}` (seeded B79_inherit_crypto 2026-05-07).
-- **Strategy enablement** — `module_constants.strategy_gates.xstock_spot.<strategy>.enabled` (19 rows, 10 enabled, 9 disabled — seeded B79.0m.a).
+- **Strategy enablement** — `module_constants.strategy_gates.xstock_spot.<strategy>.enabled`, 19 rows. **Membership is data: read the rows, never a count written here.** History: seeded by B79.0m.a 2026-05-11 with 10 enabled; `orb` set false 2026-05-18 (`B79_q_d_gated`, 15-minute validation, roadmap 25-14), leaving 9 from then until 2026-10-16; `strong_bull_trend` set true 2026-10-16 10:47:40Z (`b-silent-strategy-census`, sprint row 52, pre-registered pass/fail in `Scope Files/B_SILENT_STRATEGY_CENSUS_SBT_XSTOCK_SWITCH_ON.md`). Read at 2026-10-17: 10 enabled — the table below.
 - **TEC config (BE / trail / target_lock)** — `module_constants.trailing_exit.xstock_spot.*` (seeded B79.0m.b TEC migration).
 
-### Strategy lane membership (10 enabled strategies for xstock_spot, all LONG-only)
+### Strategy lane membership (xstock_spot, all LONG-only — the enabled set as read 2026-10-17; membership is the `strategy_gates` rows)
 
 | Strategy | STRATEGY_FAMILY_MAP | Eligible lanes |
 |---|---|---|
@@ -12534,7 +12534,8 @@ The architectural commitment "differences live in DB, not code" is enforced by t
 | `inside_bar_reversal` | `'pattern'` | pattern |
 | `morning_star` | `'pattern'` | pattern |
 | `pivot_shift` | `'hybrid'` + HYBRID_FAMILY_ELIGIBILITY `['trend','pattern']` | xstock-trend (the 'pattern' parent is enforced at detect-time via patternInput, not lane membership) |
-| `orb` | `'breakout'` (added B79.0m.b2) | xstock-breakout |
+| `strong_bull_trend` | `'strong_trend'` (B63) | xstock-strong_trend — enabled for xStock 2026-10-16 |
+| `orb` | `'breakout'` (added B79.0m.b2) | xstock-breakout — ⛔ **gate OFF since 2026-05-18** (`B79_q_d_gated`); listed for its routing only |
 
 The `isStrategyEligibleForLane(strategyKey, lane)` helper in `server/asset_classes/xstock_spot/lane-eligibility.ts` is the single source of truth for this routing.
 
