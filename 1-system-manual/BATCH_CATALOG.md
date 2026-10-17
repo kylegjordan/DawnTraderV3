@@ -1376,7 +1376,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **OPEN ON:** (4a)'s three-session window (2026-10-19/20/21), A and C's EST reads, objective 6's first exercised stop-hold — criteria pre-registered in the progress report. Still to build: the bid/ask trigger with the size check (2) and the shared VTS trigger module (4b).
 
-## B-VENUE-QUIET-ALERTING (CC-B, sprint row 3a1; `#526` + Kyle `#994`) — change-class `architecture` — ⏳ **STEP 10 → 11** (deployed `fe830d69c` 2026-10-10, r7 `efb78babb` 2026-10-13, Step 9 `e399a449f` 2026-10-17; Step 8 CONFIRMED by Langston 2026-10-17 and by Coltrane on the staging facts; record `Claude Comms and Packages/Batch Completion/B_VENUE_QUIET_ALERTING_COMPLETION_REPORT.md`)
+## B-VENUE-QUIET-ALERTING (CC-B, sprint row 3a1; `#526` + Kyle `#994`) — change-class `architecture` — ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~05:45Z)** (deployed `fe830d69c` 2026-10-10, r7 `efb78babb` 2026-10-13, Step 9 `e399a449f` 2026-10-17; Step 8 CONFIRMED by Langston 2026-10-17 and by Coltrane on the staging facts; record `Claude Comms and Packages/Batch Completion/B_VENUE_QUIET_ALERTING_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** Every xStock position whose price went stale paged as a breakage, including when the US market was simply closed or quiet — on 2026-10-10 a single restart paged 16 positions, and the alert lane was hours behind under the noise.
 
