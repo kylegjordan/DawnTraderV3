@@ -1,4 +1,100 @@
-# B-VENUE-QUIET-ALERTING — PROGRESS REPORT — OPEN — waiting on a fresh off-session `not_quiet` session-gate carrier
+# B-VENUE-QUIET-ALERTING — COMPLETION REPORT
+
+*(Converted 2026-10-17 from `B_VENUE_QUIET_ALERTING_PROGRESS_REPORT.md`, renamed in place — everything below §0 is the progress report as it was written, with its evidence captured while fresh.)*
+
+## 0. ⚠️ OPEN AT CLOSE — stated first
+| item | owner | home / timer | closes when | fails when |
+|---|---|---|---|---|
+| **Step-10 F1 code** (`b1d2b2572`: the session hand-back finds the row's own `positionId`, not a class match) is committed and CI-green (run `39002571444`) but **NOT DEPLOYED** — unreachable while active xStock is long-only (`unique_symbol_side`) | CC-B | rides the next staging deploy (row 59f's, once its Step 4 passes); Langston reviews F1 with this report | the deployed sha contains `b1d2b2572` | a deploy without it is claimed to carry it |
+| **The first GENUINE `firstJoin`** — pre-registered in §3d (Langston, does not gate) | CC-B | alert `5b71b7ab-5974-4d95-a0cb-5eaa5395c831`, triggers 2026-10-18T02:00Z (after the Sunday reopen) | a post-deploy joiner reads unmarked with `atMs === listedAtMs`, existing members' `firstJoin.atMs` unmoved | any of the three FAIL shapes in §3d |
+| **Criterion (4) — no duration page has ever fired** | CC-B | stays UNPROVEN, not absent (§4; a measured 0 with the parse reaching metadata) | a first duration firing is recorded with its session | — |
+| US market holidays read as `regular` | — | `#392` (Kyle parked; Langston §13 disposition 5) | — | — |
+
+## 1. (a) WHAT DATA CAME IN — against the criteria as pre-registered
+| criterion (quoted where it was written) | outcome |
+|---|---|
+| §3 (2026-10-10): *"Reopen: the standing record … resolves within the first sweeps after the venue resumes, by `active-exit-monitor`"* | **PASS** (2026-10-12, §3b-§3c) |
+| §3: *"The close: … zero `price-skip-*` rows minted for quiet-family streaks"* | **FAIL** at r6 (INVH, the transition edge, 2026-10-12 20:16:54Z) → **reopened at Step 9 as r7** (session gate, boot bound, clock reset, hand-back) |
+| r7 change list (1): *"off-session, … the positive carrier"* — re-clocked to a fresh off-session `not_quiet` crossing | **DISCHARGED** (Langston 2026-10-16 21:15Z): CF/USD 2026-10-15T20:19:58Z quiet-only, LECO/USD 2026-10-16T20:22:24Z mixed — both joined, 0 pages (§3d, verbatim lines) |
+| r7 (2): *"the deploy restart: zero xStock `price-skip` mints in the first 120 s"* | **PASS** 2026-10-13, and again 2026-10-17 03:30Z (19 joins, 0 pages) |
+| r7 (3): *"`78fe1d30` … superseded at the first regular sweep after 13:30Z, no mint by the sweep"* | **PASS** 2026-10-13 13:30:13Z, `SUPERSEDED-BY-SESSION-CHANGE`; INVH then re-paged in session as `book_state` (handed back, not silenced) |
+| r7 (4): *"a first duration firing is recorded with its session"* | **NOT YET OBSERVED** — 0 rows with `metadata.escalation` all-time |
+| UI (Step 7) | **PASS** (Kyle's Chrome, 2026-10-14) |
+
+## 1. (b) WHAT DECISION OR ACTION WAS TAKEN ON IT, AND BY WHOM
+- The r6 FAIL → **r7 designed and built by CC-B, approved by Langston** (Step 9 r7d), deployed `efb78babb` 2026-10-13.
+- The carrier question → **Langston ruled criterion (1) discharged** (2026-10-16 21:15Z) and required the instrument fix (`firstJoin`) → built by CC-B (`05a18e731`, `65383bccf`), Step-4 PROCEED, deployed `e399a449f` 2026-10-17T03:30:19Z.
+- **Step 8 CONFIRMED** by Langston (2026-10-17 ~04:14Z) and, on the staging facts, by Coltrane (03:40:35Z).
+- Criterion (4) and the genuine-`firstJoin` read are **carried open** with a timer (§0) — Langston: neither gates the close.
+
+## 2. Objectives (scope r3)
+| # | objective | verdict | evidence |
+|---|---|---|---|
+| 1 | keep the emit, cut the page for a quiet market | **YES** | restarts 2026-10-13 and 2026-10-17 page nothing; closes join the standing record (§3c-§3d) |
+| 2 | still page when it is us | **YES** | `not_quiet` and `thin` page (tests); INVH re-paged in session as `book_state` 2026-10-13 13:31:13Z |
+| 3 | escalate on duration | **PARTIAL** | built and tested (r6c lower bound, r7 clock reset); never fired live — criterion (4) open |
+| 4 | clear what it raises | **YES** | machine resolves by `active-exit-monitor` / `engine`; `c9181060` resolved itself 2026-10-13 13:46:23Z; `78fe1d30` superseded 13:30:13Z |
+| 5 | remove the hard-coded threshold fallback | **YES** | `getCachedNumberRequired`, unseeded ⇒ config alert (System Impact Map (e)) |
+| 6 | decide the entry leg explicitly | **YES** | `xstock-stale-fill-block` left out by the Step-2 decision (pre-audit) |
+| 7 | resolve by dedupe key | **YES** | `resolveAlertsByDedupeKey` in `system-alerts.ts` |
+| 8 | a canonical engine actor and transport | **YES** | `active-exit-monitor` in `ALERT_ACTORS`, transport `engine` |
+| 9 | resolve off a re-measured condition | **YES** | the restart test; the 2026-10-17 restart re-joined 19 and paged 0 |
+
+## 3. CI
+Deployed sha `e399a449f2bde5e58d2460f929077075a92b20fe`: run `38997983784`, 4/4 per job (Build, TypeScript Check, Test Suite, Docker Build) — re-derived per job by Langston at Step 8. Earlier deploys: `fe830d69c` run `38086670741`; `efb78babb` (r7). Step-10 F1 `b1d2b2572`: run `39002571444` success.
+
+## 4. Governance files changed — transcribed from the Step-10 commit `6750531ef` (not from memory)
+CHANGE-CLASS: architecture
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | entry added: what was broken, the fix, the result, what is left |
+| T1 | PHASE_HISTORY.md | ✅ | 2026-10-17 entry added |
+| T1 | PHASE_19_PLAN.md | ✅ | row 3b.f-d status set to Step 10 → 11, pointing at sprint row 3a1 |
+| T1 | shared MEMORY.md + MEMORY_CC_B.md | ✅ | own position block updated; shared file N/A — no project-consensus truth changed |
+| T1 | the batch SCOPE | ✅ | written at Step 1 (r2, 2026-10-07); unchanged at Step 10 |
+| T1 | the batch PRE_AUDIT | ✅ | written at Step 2; unchanged at Step 10 |
+| T1 | COMPLETION_REPORT | ✅ | progress report updated (Step 8 confirm, R1-R3, Sunday pre-registration, governance list); converted at Step 11 |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B row 3a1 set to Step 10 → 11; CC-A, CC-C, CC-INFRA lists not mine to touch |
+| T1 | Langston's MEMORY.md | BLOCKED — Langston's own write | asked in the Step-10 dispatch; he writes his file |
+| T2 | SYSTEM_MANUAL.md | ✅ | §3.5: the r7 session rule, its three companions, firstJoin |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | r5-r7 + Step 9-10 update: gate, boot bound, clock reset, hand-back by positionId, member fields, serialised-join assumption |
+| T2 | RUNNING_ISSUES.md | ✅ | #526 and #994 noted at Step 10; they close with the completion report |
+| T2 | CHANGES_AND_FIXES.md | N/A | no entry names this rail (0 hits for venue-quiet / #526 / #994 / price-skip) |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level roadmap change; the batch sits inside sprint row 3a1 |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no tunable added; venue_quiet module_constants were seeded at the first Step 10 (2026-10-11) and are unchanged |
+| T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
+| T2 | STORAGE_POLICY.md | N/A | no table or retention changed; the standing record is a row in system-alerts.jsonl |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | the 15-minute-bar working list is unaffected; nothing under the VTS changed |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no onboarding learning; the session-gate lesson is xStock-alerting-specific and recorded in the System Manual |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | the method did not change |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | the reviewer's build did not change |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md rule changed |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed in this batch |
+| T2 | MISTAKE_PATTERNS.md | ✅ | the incomplete-population trailer (05a18e731) recorded |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception granted for this batch |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | its ack/resolve steps are unchanged; the machine resolver sits inside the existing resolve verb and is in the SIM |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | board columns and fields unchanged |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | the daily check did not run in this batch |
+
+Plus in-batch, earlier: `ALERT_ACTORS` in `system-alerts.ts`, the release records, the change lists and the r7 design doc (F2 wording, F3 citation at `b1d2b2572`).
+
+## 5. New findings in passing, with their homes
+- `#1203` (the checker honours an annotated `pending` confirmer) — found ruling row 52, not this batch; homed at sprint row 1j1, CC-A.
+- None other owed by this batch.
+
+## 6. Honest residual
+- The duration page has never fired on staging; its correctness rests on tests.
+- The `firstJoin` keep arm has not run live (R1); the reconstructed cohort's `firstJoin` is not the crossing verdict (R2) — the §3d log lines are the record.
+- The post-deploy zero is four quiet days, not a property of the deploy (R3).
+- The member write depends on serialised joins (System Impact Map): parallelising the exit loop would break the mark silently.
+
+---
+
+*The progress report follows, unchanged except for its title line.*
+
+# (was) B-VENUE-QUIET-ALERTING — PROGRESS REPORT — OPEN — waiting on a fresh off-session `not_quiet` session-gate carrier
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `architecture` · **Sprint plan row:** 3a1 (paired with 3a) · **Issues:** `#526`, `#994` (Kyle 2026-09-03), `#638`
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_VENUE_QUIET_ALERTING_SCOPE.md` r3, `…_PRE_AUDIT.md` · **Change list:** `Change Lists/B_VENUE_QUIET_ALERTING_STEP4_CHANGE_LIST.md` (r1-r5)
