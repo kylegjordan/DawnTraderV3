@@ -1,4 +1,6 @@
-# B-B75-EXPORT-COMPLETENESS — SCOPE r1 (2026-10-17)
+# B-B75-EXPORT-COMPLETENESS — SCOPE r2 (2026-10-17)
+
+> **r2 (same day, before review):** adds OBJ-7 (persist the source count) and the per-day expected-count method, from Langston's hotfix close confirm (02:37Z, finding 2). Nothing else changed.
 
 change-class: architecture
 
@@ -23,6 +25,7 @@ What remains is to make the gap **impossible to miss for anyone who reads that p
 - `signal_eval_archive`: about 2.1% short on the 09-16 replay.
 - The ticker snapshots: about 0.1-0.3% short.
 - Other tables: unmeasured, because the sources are gone.
+- **A method for the bars (Langston, a method, not a number):** each dropped day's expected count is derivable from its own warm copy as distinct symbols x 1,440, an upper bound where a symbol started mid-day. The register records the expected count and its basis for that table; no figure is asserted before it is measured.
 
 **So for most objects the shortfall is UNKNOWABLE, not zero.** A table whose timestamps rarely tie may be complete. The register must say "unverified", never "complete", for anything it cannot prove.
 
@@ -42,6 +45,7 @@ What remains is to make the gap **impossible to miss for anyone who reads that p
 | OBJ-4 | **`STORAGE_POLICY.md`** names the window, the cause, Kyle's no-recovery decision and the field's meaning — the human-readable half of "record the gaps everywhere". | the document, at the ref |
 | OBJ-5 | **Langston's F2:** the sweep-failure alert carries a dedupe key per parent and label, so a persistent failure does not mint a row per night. | a test: two failing runs mint one alert |
 | OBJ-6 | **Langston's F4:** the plain-archive lane's catch names a count mismatch rather than calling it transient. | a test |
+| OBJ-7 | **Persist the proof (Langston, close finding 2).** The manifest stores `source_row_count` beside `row_count` for every new object, so completeness can be re-checked after the source is dropped. Today only `xstock_bar_revision_event` keeps evidence (`exactCursorTieBreakerColumn`, `partition-exporter.ts:572`); `updateManifestUploaded` stores `rowCount` alone (`:588-596`). OBJ-1's `complete-proven` then means `source_row_count = row_count`, read from the row rather than asserted. | a test; the next sweep's rows carry both counts and they match |
 
 ## 4. OUT OF SCOPE
 - **Recovery of the lost rows:** Kyle decided no, 2026-10-17.
