@@ -4,7 +4,8 @@
 -- if both are needed — it restores the table's old name, which that file comments on.
 --
 -- Evidence is deliberately RETAINED (CC-C's convention in the 2026-10-15 file): every
--- evidence row stays. Langston Step-1 condition 2: the source_table / tier / single-value
+-- evidence row stays. The forward file drops the pins with IF EXISTS, so it can be
+-- re-applied after either branch of this rollback. Langston Step-1 condition 2: the source_table / tier / single-value
 -- contract pins are restored ONLY if no row violates them. Once the sweep has written
 -- other lanes' evidence, restoring them would fail and this rollback could not run, so
 -- in that case they are left off and a NOTICE says so.
@@ -62,7 +63,7 @@ BEGIN
       CHECK (cursor_contract IN ('jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid', 'text-ts-tiegroup-v1'));
     ALTER TABLE data_archive_exact_evidence ADD CONSTRAINT xstock_bar_archive_exact_evidence_tier_check
       CHECK (tier IN ('warm', 'cold'));
-    RAISE NOTICE 'B-B75-EXPORT-COMPLETENESS rollback: % evidence row(s) belong to other lanes; they are KEPT, and the source_table / single-tier / single-contract pins are NOT restored (they would fail).', foreign_rows;
+    RAISE NOTICE 'B-B75-EXPORT-COMPLETENESS rollback: % evidence row(s) violate the restored pins (another lane, a cold tier, or the widened contract); they are KEPT, and the source_table / single-tier / single-contract pins are NOT restored (they would fail).', foreign_rows;
   END IF;
 END $$;
 

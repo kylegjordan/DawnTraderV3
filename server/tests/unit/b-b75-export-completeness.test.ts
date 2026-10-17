@@ -333,7 +333,8 @@ describe('the migrations', () => {
     expect(fn).toContain('e.source_table = NEW.source_table');
     expect(fn).toContain('e.partition_label = NEW.partition_label');
     expect(fn).not.toMatch(/manifest_id|e\.tier/);
-    expect(MIG).toContain('BEFORE INSERT OR UPDATE OF completeness_basis ON data_archive_manifest');
+    expect(MIG).toContain('BEFORE INSERT OR UPDATE ON data_archive_manifest'); // every update, not only the basis column
+    expect(MIG).not.toContain('UPDATE OF completeness_basis');
     expect(MIG).not.toMatch(/CONSTRAINT TRIGGER|DEFERRABLE INITIALLY|INITIALLY DEFERRED/i); // a plain BEFORE trigger
     expect(MIG).toContain('ORDERING INVARIANT');
   });
@@ -341,8 +342,11 @@ describe('the migrations', () => {
     expect(MIG).toContain('RENAME TO data_archive_exact_evidence;');
     expect(MIG.match(/RENAME CONSTRAINT xstock_bar_archive_exact_evid/g)).toHaveLength(10);
     expect(MIG.match(/ALTER TRIGGER trg_guard_xstock_bar_archive_exact_evidence_/g)).toHaveLength(2);
-    expect(MIG).toContain('DROP CONSTRAINT xstock_bar_archive_exact_evidence_source_table_check');
-    expect(MIG).toContain('DROP CONSTRAINT xstock_bar_archive_exact_evidence_tier_check');
+    // IF EXISTS on all three: the forward file must re-apply after the rollback's foreign-rows path (Langston gate A).
+    expect(MIG).toContain('DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_source_table_check');
+    expect(MIG).toContain('DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_tier_check');
+    expect(MIG).toContain('DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_cursor_contract_check');
+    expect(MIG).not.toMatch(/DROP CONSTRAINT xstock_bar_archive/);
   });
   it('the rollback restores the pins only when no row violates them, and keeps every row', () => {
     expect(MIG_RB).toMatch(/IF foreign_rows = 0 THEN[\s\S]*source_table_check[\s\S]*ELSE[\s\S]*RAISE NOTICE/);

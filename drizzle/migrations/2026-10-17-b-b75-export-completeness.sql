@@ -63,9 +63,11 @@ COMMENT ON COLUMN data_archive_manifest.completeness_basis IS
 ALTER TABLE xstock_bar_archive_exact_evidence RENAME TO data_archive_exact_evidence;
 
 -- The pins come off; the contract becomes a fixed set; tier keeps a domain check.
-ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT xstock_bar_archive_exact_evidence_source_table_check;
-ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT xstock_bar_archive_exact_evidence_tier_check;
-ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT xstock_bar_archive_exact_evidence_cursor_contract_check;
+-- IF EXISTS on all three (Langston Step-4 gate A): after the rollback's foreign-rows path the
+-- source_table pin is deliberately NOT restored, so a bare DROP would abort a re-apply.
+ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_source_table_check;
+ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_tier_check;
+ALTER TABLE data_archive_exact_evidence DROP CONSTRAINT IF EXISTS xstock_bar_archive_exact_evidence_cursor_contract_check;
 ALTER TABLE data_archive_exact_evidence ADD CONSTRAINT data_archive_exact_evidence_cursor_contract_check
   CHECK (cursor_contract IN (
     'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid', -- CC-C's exact lane (xstock_bar_revision_event)
@@ -113,10 +115,10 @@ END $$;
 
 DROP TRIGGER IF EXISTS trg_data_archive_manifest_basis_requires_evidence ON data_archive_manifest;
 CREATE TRIGGER trg_data_archive_manifest_basis_requires_evidence
-BEFORE INSERT OR UPDATE OF completeness_basis ON data_archive_manifest
+BEFORE INSERT OR UPDATE ON data_archive_manifest
 FOR EACH ROW EXECUTE FUNCTION data_archive_manifest_basis_requires_evidence();
 
 COMMENT ON TRIGGER trg_data_archive_manifest_basis_requires_evidence ON data_archive_manifest IS
-  'Keyed on (source_table, partition_label) ONLY, deliberately — not manifest_id, not tier: a cold rotator copy is a different manifest row with no evidence of its own, and it inherits the warm export''s proof because moving a copy to cold does not change what it holds. ORDERING INVARIANT for every writer that stamps source-count-matched (b75-retention-sweep archiveOneObject, context-bridge-log-ttl): insert the evidence row FIRST, in the same transaction. The cold rotator stamps by inheritance and inserts no evidence. A plain BEFORE trigger (not deferrable) so a violation fails at the offending statement.';
+  'Keyed on (source_table, partition_label) ONLY, deliberately — not manifest_id, not tier: a cold rotator copy is a different manifest row with no evidence of its own, and it inherits the warm export''s proof because moving a copy to cold does not change what it holds. ORDERING INVARIANT for every writer that stamps source-count-matched (b75-retention-sweep archiveOneObject, context-bridge-log-ttl): insert the evidence row FIRST, in the same transaction. The cold rotator stamps by inheritance and inserts no evidence. A plain BEFORE trigger (not deferrable) so a violation fails at the offending statement. It fires on EVERY insert and update, not only on the basis column, so a proven row can never be re-pointed at a label with no evidence by moving source_table or partition_label (Langston Step-4 gate A record item).';
 
 COMMIT;
