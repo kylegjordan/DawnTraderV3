@@ -23,10 +23,20 @@ LANE_TIMEOUT_S = 600
 BATCH_SETTLE_S = 20                         # after the first alert, wait this long for the rest of a burst
 BATCH_MAX = 15                              # alerts per invocation
 OWNERS = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "Kyle")
-# Every tool the invoking account's settings allow (/home/langston/.claude/settings.json, measured 2026-10-16), all
-# DENIED for the lane: it reads nothing and runs nothing; the bridge supplies the live rows and the precedent.
+# Every tool the ENUMERATION returned - not the account's allow list (Langston r2 condition 1, 2026-10-16: a copy of
+# settings.json's 12-item allow list left ListAgents, ReportFindings, ScheduleWakeup, ToolSearch and Workflow
+# reachable, and SendMessage EXECUTED; ToolSearch is the gate to every deferred tool and MCP family). Measured by
+# asking the lane itself, with these flags, to enumerate and try its tools (`alert_lane_tool_probe.py`); with these
+# denied it reports no built-in reachable and no schema loadable. The deferred names are denied too, belt and braces.
+# ⛔ `--permission-mode default` IS LOAD-BEARING SECURITY: it is what refuses the MCP families (browser, telegram) -
+#    r1 ran `acceptEdits`. Never loosen it for the lane.
 LANE_DENIED_TOOLS = ("Bash", "Read", "Write", "Edit", "Glob", "Grep", "WebSearch", "WebFetch", "Agent", "TodoWrite",
-                     "Skill", "NotebookEdit")
+                     "Skill", "NotebookEdit", "ToolSearch", "ListAgents", "SendMessage", "ReportFindings",
+                     "ScheduleWakeup", "Workflow", "Monitor", "CronCreate", "CronDelete", "CronList", "RemoteTrigger",
+                     "TaskStop", "PushNotification", "DesignSync", "EnterWorktree", "ExitWorktree",
+                     # whole MCP servers the r3 probe still LISTED (calls were refused by the permission mode, but a
+                     # listed tool is one setting away from callable - deny the servers outright)
+                     "mcp__browser", "mcp__plugin_telegram_telegram")
 
 UUID = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 _LABELLED_ID = re.compile(r"Alert ID:_?\s*`?(" + UUID + r")`?", re.I)
@@ -205,7 +215,10 @@ def alert_key(content):
 def langston_precedent(inbox_path, now_iso, days=PRECEDENT_DAYS, until_iso=None, conflicts=None):
     """{(template, symbol): [(ts, owner), ...] oldest first} from Langston's OWN markers in the last `days` days, joined
     to the alert each marker names (its inbound post gives the key). Lane posts (`lane: "alert"`) and every other kind
-    are ignored. `until_iso` (a replay's cut) ignores markers at or after it. An id whose posts still yield two keys
+    are ignored. It reads the WHOLE inbox on purpose (Langston r2 record 4): the inbound row that
+    keys an alert can be far older than the 7-day marker window, so the 8 MB tail `inbox_evidence` uses would lose keys
+    silently (measured: the whole-file scan takes ~0.2 s on 54 MB).
+    `until_iso` (a replay's cut) ignores markers at or after it. An id whose posts still yield two keys
     after the re-surface strip is appended to `conflicts` (when given) and keeps its FIRST key - never overwritten
     silently. An unreadable inbox returns {} - the caller then treats every alert as having no precedent."""
     cutoff = _iso_minus_days(now_iso, days)
@@ -345,6 +358,17 @@ def apply_precedent(routed, escalate, keys, prec):
                                 % (len(aids), tmpl[:80], owner, "/".join(sorted(effs)) or "interleaved owners"))
             notes.append("unanimity guard fired on %r (%d -> %s)" % (tmpl[:60], len(aids), owner))
     return routed, escalate, notes
+
+
+def enforce_live_rows(routed, escalate, rows):
+    """Langston r2 condition 2: "its live row could not be read" is ENFORCED, not left to the model - any routed id the
+    bridge could not read a row for goes to Langston with that reason. Returns (routed, escalate)."""
+    routed, escalate = dict(routed), dict(escalate)
+    for aid in list(routed):
+        if (rows or {}).get(aid) is None:
+            del routed[aid]
+            escalate[aid] = "the bridge could not read this alert's live row on staging - the lane may not route it blind"
+    return routed, escalate
 
 
 def parse_live_rows(text, ids):

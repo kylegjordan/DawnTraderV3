@@ -724,8 +724,10 @@ def read_live_rows(ids):
     the result is reported to the lane as unreadable, which its rules escalate. Never raises."""
     if not ids:
         return {}
-    cmd = "grep -F " + " ".join("-e %s" % i for i in ids if re.fullmatch(al.UUID, i)) + \
-          " /var/log/dawntrader/system-alerts.jsonl"
+    pats = ["-e %s" % i for i in ids if re.fullmatch(al.UUID, i)]
+    if not pats:                              # Langston r2 record 3: never run a grep with no pattern
+        return {}
+    cmd = "grep -F " + " ".join(pats) + " /var/log/dawntrader/system-alerts.jsonl"
     try:
         r = subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "staging", cmd],
                            env=dict(os.environ, HOME=WORK_DIR), capture_output=True, text=True, timeout=60)
@@ -851,10 +853,10 @@ def run_alert_batch(batch, task_q):
         else:
             routed, esc, problems = al.read_answer(answer, [aid for aid, _ in ided])
             routed, esc, pnotes = al.apply_precedent(routed, esc, keys, prec)
+            routed, esc = al.enforce_live_rows(routed, esc, rows)      # condition 2: no blind routing
             for p in problems + pnotes:
                 log(f"alert lane: {p}")
             by_id = dict(ided)
-            kyle_owned = any(owner == "Kyle" for owner, _ in routed.values())
             # ⛔ Coltrane send-back 1: only markers rebuilt from the VALIDATED result are published.
             text = "Alert lane — " + al.publishable(answer, routed, esc)
             # ⛔ Coltrane send-back 2: routing counts only when BOTH the post and the langston_outbound record
@@ -869,8 +871,9 @@ def run_alert_batch(batch, task_q):
                         al.spool_write(al.SPOOL_DIR, t, "posting", aid=aid)
                 except Exception as e:
                     log(f"alert spool: could not mark msg {t['message_id']} posting ({type(e).__name__}: {e})")
-            sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE,
-                                   mention_user_id=CFG["kyle_id"] if kyle_owned else None)
+            # no Kyle mention: the lane can never route to Kyle (apply_precedent escalates every such routing to
+            # Langston), so the old kyle_owned mention was dead code - removed (Langston r2 record 2)
+            sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE)
             delivered, why = sent_id is not None, "the lane's Discord post failed"
             if delivered:
                 try:

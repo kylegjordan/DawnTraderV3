@@ -193,7 +193,13 @@ ok("live row line: an unread row tells the lane to escalate", "ESCALATE" in al.l
 p = al.build_prompt([(A, "x")], {A: None}, {}, _rows)
 ok("prompt carries LIVE ROW then LANGSTON PRECEDENT", p.index("LIVE ROW") < p.index("LANGSTON PRECEDENT"))
 ok("prompt without the extras stays as before", "LIVE ROW" not in al.build_prompt([(A, "x")]))
-ok("the lane is denied every tool its account allows", set(al.LANE_DENIED_TOOLS) >= {"Bash", "Read", "Write", "Edit", "Grep", "Glob"})
+ok("the deny list includes the tools the r2 enumeration found reachable (ToolSearch is the gate)",
+   set(al.LANE_DENIED_TOOLS) >= {"ToolSearch", "ListAgents", "SendMessage", "ReportFindings", "ScheduleWakeup",
+                                 "Workflow", "Bash", "Read"})
+_r8, _e8 = al.enforce_live_rows({A: ("CC-B", "x"), B: ("CC-C", "y")}, {}, {A: {"id": A}})
+ok("enforce_live_rows: a routed id with no live row goes to Langston (condition 2)",
+   A in _r8 and B not in _r8 and "could not read" in _e8.get(B, ""))
+ok("enforce_live_rows: an unreadable batch ({}) routes nothing", not al.enforce_live_rows({A: ("CC-B", "x")}, {}, {})[0])
 _lane_md = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "alert-lane", "CLAUDE.md"), encoding="utf-8").read()
 ok("the lane's instructions say it has no tools and never routes to Kyle",
    "You have NO tools" in _lane_md and "Never route to Kyle" in _lane_md)
