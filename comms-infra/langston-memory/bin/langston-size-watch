@@ -162,6 +162,9 @@ def load_state():
 
 
 def save_state(st):
+    # the file list is persisted so langston-memory-write's growth gate can refuse when ITS list disagrees -
+    # a fourth loaded file must not drift into one program and not the other (Langston, 2026-10-17)
+    st["watched"] = [p for p, _w in WATCHED]
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     tmp = STATE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:

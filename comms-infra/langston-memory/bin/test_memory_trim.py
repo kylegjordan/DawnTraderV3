@@ -208,45 +208,87 @@ def main():
           "no recorded write" in msg, True)
     with open(idx, "w", encoding="utf-8") as fh:
         fh.write(good)
-    print("1d. THE RATCHET AT WRITE TIME: while the loaded set is in BREACH, a growing write is refused (Langston 2026-10-17)")
+    print("1d. THE RATCHET AT WRITE TIME: the LIVE sum decides, a growing write that would leave it over is refused (Langston r2)")
+    idx = os.path.join(h.top, ".memory-archive", "index.jsonl")
+    def last_row():
+        r_ = [json.loads(l) for l in open(idx, encoding="utf-8") if l.strip()][-1]
+        r_.setdefault("ratchet", {})          # absent -> the checks below FAIL, they never crash the suite (C-3 lesson)
+        return r_
+    with open(os.path.join(h.top, "CLAUDE.md"), "w", encoding="utf-8") as fh:
+        fh.write("c" * 1000)
+    am = os.path.join(h.top, ".claude", "projects", "-home-langston", "memory")
+    os.makedirs(am, exist_ok=True)
+    with open(os.path.join(am, "MEMORY.md"), "w", encoding="utf-8") as fh:
+        fh.write("i" * 500)
     rs = os.path.join(h.top, ".ratchet-state.json")
-    with open(rs, "w", encoding="utf-8") as fh:
-        json.dump({"ceiling_bytes": 100, "last_total_bytes": 999, "last_status": "BREACH", "last_run_ts": "t"}, fh)
+    def set_state(**kw):
+        with open(rs, "w", encoding="utf-8") as fh:
+            json.dump(kw, fh)
     part0 = rd(h.part).decode("utf-8")
+    at_ceiling = 1000 + 500 + len(rd(h.mem))
+    set_state(ceiling_bytes=at_ceiling, last_status="UNDER")      # AT the ceiling; a stale "UNDER" must not matter
     snap0 = h.snap()
-    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
-                      "--reason", "grow"], part0 + "- one more line" + NL)
-    check("  a growing write in BREACH refuses (exit 7) and writes nothing", (rc, "in breach" in out, h.snap() == snap0),
-          (7, True, True))
-    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
-                      "--reason", "grow", "--allow-growth", "a test override"], part0 + "- one more line" + NL)
-    rows_g = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8") if l.strip()]
-    ov = rows_g[-1].get("growth_override") or {}
-    check("  ...with --allow-growth it proceeds and the index row records who, how many bytes, and why",
-          (rc, ov.get("by"), ov.get("delta_bytes", 0) > 0, ov.get("reason"), ov.get("ratchet_status")),
-          (0, "t", True, "a test override", "BREACH"))
+    grow = lambda reason, *extra: h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta",
+                                          "0", "--by", "t", "--reason", reason] + list(extra), part0 + "- one more line" + NL)
+    rc, out = grow("grow at ceiling")
+    r = last_row()
+    check("  AT the ceiling, a growing write refuses (exit 7) and writes nothing - even though the watch said UNDER",
+          (rc, "over its ceiling" in out, h.snap()[h.mem] == snap0[h.mem], h.snap()[h.part] == snap0[h.part]),
+          (7, True, True, True))
+    check("  ...and the refusal is RECORDED, with the live sum it saw (Rider A)",
+          (r.get("outcome"), r["ratchet"].get("total_after", 0) > r["ratchet"].get("ceiling_bytes", 10 ** 12),
+           r["ratchet"].get("delta_bytes", 0) > 0),
+          ("refused-growth", True, True))
+    rc, out = grow("grow", "--allow-growth", "a test override")
+    r = last_row()
+    check("  ...with --allow-growth it proceeds, the row recording who and why beside the live sum",
+          (rc, (r.get("ratchet") or {}).get("override")), (0, {"by": "t", "reason": "a test override"}))
     rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
                       "--reason", "shrink"], part0)
-    rows_g = [json.loads(l) for l in open(os.path.join(h.top, ".memory-archive", "index.jsonl"), encoding="utf-8") if l.strip()]
-    check("  ...a SHRINKING write in BREACH proceeds with no override (non-increase gate, not a ceiling lockout)",
-          (rc, rows_g[-1].get("growth_override")), (0, None))
-    with open(rs, "w", encoding="utf-8") as fh:
-        json.dump({"ceiling_bytes": 10 ** 9, "last_total_bytes": 1, "last_status": "OK", "last_run_ts": "t"}, fh)
-    rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
-                      "--reason", "grow ok"], part0 + "- one more line" + NL)
-    check("  ...not in breach, growth proceeds with no override", rc, 0)
+    r = last_row()
+    check("  ...a SHRINKING write over the ceiling proceeds, and still carries what the gate saw (non-increase, no lockout)",
+          (rc, r["ratchet"].get("delta_bytes", 0) < 0, "override" in r["ratchet"]), (0, True, False))
+    set_state(ceiling_bytes=10 ** 9, last_status="BREACH")       # under the ceiling; a stale "BREACH" must not matter
+    rc, out = grow("grow under")
+    r = last_row()
+    check("  ...UNDER the ceiling, growth proceeds whatever the watch's stale status said; the row has the live sum",
+          (rc, r["ratchet"].get("total_after", 10 ** 12) <= r["ratchet"].get("ceiling_bytes", 0)), (0, True))
     rc, out = h.call(["--expect-sha", sha(rd(h.part)), "--ledger-delta", "0", "--retractions-delta", "0", "--by", "t",
                       "--reason", "restore"], part0)
+    # the LIVE-home branches, driven through the module (cannot run against the real home)
+    w2 = importlib.util.spec_from_loader("lmw_g", importlib.machinery.SourceFileLoader("lmw_g", WRITER))
+    g = importlib.util.module_from_spec(w2)
+    w2.loader.exec_module(g)
+    g.LANGSTON_HOME = g.LIVE_HOME = h.top
+    g.TARGET = h.mem
+    g.ARCHIVE_INDEX = idx
+    g.RATCHET_STATE = rs
+    st_ = os.stat(h.mem)
+    def live_gate(state):
+        if state is None:
+            if os.path.exists(rs):
+                os.remove(rs)
+        else:
+            set_state(**state)
+        try:
+            return ("PASSED", 0, "", g.growth_gate(b"a", b"ab", {"--by": "t", "--reason": "x"}, st_, "test"))
+        except g.Refused as e:
+            return ("REFUSED", e.code, str(e), None)
+    mine = g.watched_paths()
+    got = live_gate(None)
+    check("  LIVE: an unreadable ratchet state refuses growth", (got[0], got[1], "cannot be read" in got[2]), ("REFUSED", 7, True))
+    got = live_gate({"ceiling_bytes": 10 ** 9, "watched": mine[:2]})
+    check("  LIVE: the watch's persisted file list disagreeing with the writer's refuses growth",
+          (got[0], "does not match" in got[2]), ("REFUSED", True))
+    got = live_gate({"ceiling_bytes": "big", "watched": mine})
+    check("  LIVE: a non-integer ceiling refuses growth", (got[0], "no valid ceiling" in got[2]), ("REFUSED", True))
+    got = live_gate({"ceiling_bytes": 10 ** 9, "watched": mine, "last_status": "MISSING-FILE"})
+    check("  LIVE: lists agree, ceiling ample - growth passes (the watch's status string is not read at all)",
+          (got[0], (got[3] or {}).get("unknown")), ("PASSED", None))
+    os.remove(os.path.join(am, "MEMORY.md"))
+    got = live_gate({"ceiling_bytes": 10 ** 9, "watched": mine})
+    check("  LIVE: a watched file MISSING refuses growth (the sum is meaningless)", (got[0], "missing" in got[2]), ("REFUSED", True))
     os.remove(rs)
-    wm.LANGSTON_HOME = wm.LIVE_HOME = h.top
-    wm.RATCHET_STATE = os.path.join(h.top, "no-such-state.json")
-    try:
-        wm.growth_gate(b"a", b"ab", {"--by": "t"})
-        got = "passed"
-    except wm.Refused as e:
-        got = (e.args[0] if e.args else None, "UNREADABLE" in str(e))
-    check("  ...on the LIVE home an unreadable ratchet state refuses growth (never a silent pass)", got[1] if isinstance(got, tuple) else got, True)
-    check("  ...and a shrink still passes there", wm.growth_gate(b"ab", b"a", {"--by": "t"}), None)
     print("1c. C-2: a prior write whose REASON is 'trim-noop' does not suppress the first row's note")
     h2 = Home()
     rc, out = h2.call(["--compose", "--by", "t", "--reason", "trim-noop"])
