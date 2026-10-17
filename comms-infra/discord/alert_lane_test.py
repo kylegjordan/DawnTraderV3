@@ -87,7 +87,7 @@ with _tf.TemporaryDirectory() as _d:
         # a reply that never reached Discord (message_id null) or carries no id at all is NOT an answer
         fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 556, "message_id": None, "text": "failed post"}) + NL)
         fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": 557, "text": "no id recorded"}) + NL)
-        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": "adv-Q1", "text": "self-advance"}) + NL)
+        fh.write(_json.dumps({"kind": "langston_outbound", "reply_to": "adv-Q1", "message_id": 9002, "text": "self-advance"}) + NL)
         fh.write("garbage" + NL)
     routed_ids, replied = al.inbox_evidence(inbox)
     ok("inbox evidence: lane-recorded alert ids", routed_ids == {A})
@@ -129,15 +129,17 @@ with _tf.TemporaryDirectory() as _d2:
         # BLOCKER-2: the first fire, then its re-surface - the routing made after the first fire must stay on its key
         {"kind": "langston_alert_inbound", "ts": "2026-10-15T09:00:00", "text": _alert(Q_, "VTS exit decisions unavailable — 10 min with no decision for FE/USD")},
         {"kind": "langston_alert_inbound", "ts": "2026-10-15T11:00:00", "text": _alert(Q_, "⏰ RE-SURFACE #1 — STILL UNRESOLVED: VTS exit decisions unavailable — 12 min with no decision for FE/USD")},
-        {"kind": "langston_outbound", "ts": "2026-10-15T09:10:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % Q_},
-        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % D_},
-        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=Kyle action="a"]]' % E_},
-        {"kind": "langston_outbound", "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % F_},
-        {"kind": "langston_outbound", "ts": "2026-10-15T12:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % G_},
-        {"kind": "langston_outbound", "ts": "2026-10-15T12:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % M_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T09:10:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % Q_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % D_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=Kyle action="a"]]' % E_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T11:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % F_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T12:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % G_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-10-15T12:00:00", "text": '[[ALERT id=%s owner=CC-C action="a"]]' % M_},
         # a LANE marker must never be precedent (Blocker 2 of r1): it would make BBB look settled on CC-B
-        {"kind": "langston_outbound", "lane": "alert", "ts": "2026-10-15T13:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % E_},
-        {"kind": "langston_outbound", "ts": "2026-09-01T11:00:00", "text": '[[ALERT id=%s owner=CC-A action="a"]]' % D_},
+        {"kind": "langston_outbound", "message_id": 1, "lane": "alert", "ts": "2026-10-15T13:00:00", "text": '[[ALERT id=%s owner=CC-B action="a"]]' % E_},
+        {"kind": "langston_outbound", "message_id": 1, "ts": "2026-09-01T11:00:00", "text": '[[ALERT id=%s owner=CC-A action="a"]]' % D_},
+        # C2 (Langston, 2026-10-17): a marker in a reply that never reached Discord is NOT precedent
+        {"kind": "langston_outbound", "message_id": None, "ts": "2026-10-15T14:00:00", "text": '[[ALERT id=%s owner=CC-A action="a"]]' % E_},
     ]
     with open(inbox, "w", encoding="utf-8") as fh:
         for r_ in rows:

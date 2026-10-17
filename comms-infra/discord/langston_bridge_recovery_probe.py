@@ -229,6 +229,8 @@ async def delivery_scenario():
         check("a failed post writes NO langston_outbound, and a post_failed silent row instead",
               any(r.get("kind") == "langston_silent" and r.get("reply_to") == failed.id and r.get("reason") == "post_failed"
                   for r in rows))
+        check("  ...and that silent row keeps the generated reply text (Langston C3)",
+              any(r.get("reason") == "post_failed" and "here is the review" in (r.get("text") or "") for r in rows))
         # the two historical shapes already in the live log: an outbound row with message_id null, and one with none
         with open(b.dc.INBOX_LOG, "a", encoding="utf-8") as fh:
             fh.write(_j.dumps({"kind": "langston_inbound", "message_id": 5551}) + "\n")

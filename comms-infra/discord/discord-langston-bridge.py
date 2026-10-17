@@ -582,7 +582,9 @@ def process_task(task, state, breaker, task_q=None):
         # returns None when ANY chunk failed (chunks before it may have posted), and a reply that did not post, or
         # posted truncated, must be re-fed rather than skipped. The fact is still recorded, as a silent row - which
         # recovery does not count as an answer. Residual, stated: a truncated post that is re-fed is answered again.
-        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="post_failed")
+        # the generated text rides on the row (Langston C3): it survives for the record and his recall corpus even
+        # though recovery re-ASKS rather than re-posts. langston_silent has no live reader that decides anything.
+        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="post_failed", text=cleaned)
         log(f"reply to msg {msg_id} did NOT post (or posted truncated) - recorded as post_failed, recovery re-feeds it")
     # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload
     # failure is announced in-channel, never silently dropped (Langston (d)).

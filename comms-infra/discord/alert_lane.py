@@ -246,7 +246,9 @@ def langston_precedent(inbox_path, now_iso, days=PRECEDENT_DAYS, until_iso=None,
                                 conflicts.append((aid, keys[aid], k))
                         else:
                             keys[aid] = k
-                elif kind == "langston_outbound" and e.get("lane") != "alert":
+                elif kind == "langston_outbound" and e.get("lane") != "alert" and e.get("message_id") is not None:
+                    # same rule as inbox_evidence: a reply counts only if it reached Discord. Precedent from a reply
+                    # nobody received is not precedent (Langston C2, 2026-10-17; 2 such historical rows, 0 in-window).
                     ts = (e.get("ts") or "")[:19]
                     if ts < cutoff or (until_iso and ts >= until_iso[:19]):
                         continue
