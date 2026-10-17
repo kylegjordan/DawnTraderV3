@@ -33,7 +33,8 @@
 ## 4. The read — carried by alert, and its SQL
 - **Alert `07df291f-6351-4385-887b-bc6bc7ae3d21`:** fires 2026-10-24T13:00Z (interim: arm split, counts, cost figures), re-minted weekly until the window closes at 2026-11-07T13:03:42Z or both early-stop conditions hold.
 - **Terminal read alert `20bba77f-4070-4b57-b126-f1f4abdc0c0e`** fires at the window's end, 2026-11-07T13:03:42Z, independent of the weekly re-mints (Langston Step-10 record item).
-- *Dry run 2026-10-17 ~14:03Z:* both classes print, `rows_in_window 0` — no AEE archive row since the deploy (crypto `maker_only` produced no opens in the window; xStock shut). The query reads; the window is empty.
+- *Dry run 2026-10-17 ~14:03Z:* both classes print, `rows_in_window 0` — no AEE archive row since the deploy. xStock's zero is the weekend (46 rows on 10-16; none across the 10-10/10-11 weekend). ⚠️ **Crypto's zero is NOT attributable to `maker_only`** (Langston, Step-10 finding, folded here): the active-execution engine has written **no** `crypto_spot` archive row of any stage since 2026-10-15 ~13:04Z, so the cell can read 0 from no crypto signals at all. ⇒ **every fire prints crypto's own 14-day baseline (query below) beside its row**; a crypto zero with an empty baseline is NOT MEASURED, never booked as policy.
+- ⚠️ **Population fence:** a second `adverseR` writer exists at `ready_to_buy_service.ts:1340` under a different `source`. The read is `source = 'active-execution-engine'` only; widening it restates the population first.
 - **SQL** (the read of record runs exactly this, reading the archive only). *Corrected per Langston's Step-10 conditions before the first fire:* every numerator carries the denominator's predicates (one `graded` flag; `positive_slips` counted within graded — `rrFill` is NOT entailed by key-presence, since a non-finite target leaves it null); the window has its **upper bound**; both classes print a row even when empty, and the row count is stated, so "control failed" and "no taker opens yet" can never print alike.
 ```sql
 WITH w AS (
@@ -57,9 +58,61 @@ SELECT c.asset_class,
   count(*) FILTER (WHERE f.graded AND (f.g->>'adverseR')::float8 > 0)                             AS positive_slips
 FROM classes c LEFT JOIN f ON f.asset_class = c.asset_class
 GROUP BY c.asset_class ORDER BY c.asset_class;
--- then, over the same `graded` rows: per cell (strategy × rrFloor) and per arm the same counts, the nearest-rank p90 of
--- positive adverseR, and the close_reason split by joining closed_trades on the archive's rtbQueueId → the trade.
 ```
+
+- **Rule (a)'s deciding query** (Langston Step-10 forward condition: a criterion whose deciding query does not exist is not pre-registered). Same `graded` flag; `percentile_disc(0.9)` IS nearest-rank; the `close_reason` split joins `closed_trades.metadata->>'rtbQueueId'` = the archive's `gate_decision->>'rtbQueueId'`. **Join control, 2026-10-17:** on the pre-registered sample window (10-15 16:29:07Z → 10-16 20:57:22Z inclusive) with the key predicate dropped (those rows predate the key): 30 of 30 joined, **21 `stop_hit` / 0 `target_hit` / 9 open, 0 unjoined** — the §3 baseline exactly; vwap_pullback 17 of 30 (56.7 %). Run as `psql -v lo='2026-10-17 13:03:42Z' -v hi='2026-11-07 13:03:42Z'` (an interim fire sets `hi` to its own time).
+```sql
+WITH w AS (
+  SELECT asset_class, strategy, reject_stage, gate_decision g
+  FROM signal_eval_archive
+  WHERE source = 'active-execution-engine' AND mode = 'paper_sim'
+    AND captured_at >= :'lo' AND captured_at < :'hi'),
+f AS (
+  SELECT asset_class, strategy, g,
+    (reject_stage = 'admitted' AND g->>'entryArm' = 'taker' AND g ? 'consumptionArm' AND g->>'rrFill' IS NOT NULL) AS graded
+  FROM w),
+gr AS (
+  SELECT f.asset_class, f.strategy, (f.g->>'rrFloor')::numeric AS floor, f.g->>'consumptionArm' AS arm,
+    (f.g->>'adverseR')::float8 AS adv, f.g->>'rrWouldRefuse' = 'true' AS wr,
+    ((f.g->>'targetPrice')::numeric - (f.g->>'intendedEntryPrice')::numeric)
+      / NULLIF((f.g->>'intendedEntryPrice')::numeric - (f.g->>'stopPrice')::numeric, 0) AS rr_plan,
+    f.g->>'rtbQueueId' AS q
+  FROM f WHERE f.graded),
+cls AS (SELECT asset_class, count(*) n FROM gr GROUP BY asset_class)
+SELECT gr.asset_class, gr.strategy, gr.floor,
+  count(*)                                                       AS graded_opens,
+  round(100.0 * count(*) / max(cls.n), 1)                        AS pct_of_class_graded,
+  count(*) FILTER (WHERE gr.arm = 'direct_taker')                AS direct,
+  count(*) FILTER (WHERE gr.arm = 'maker_to_taker')              AS fallback,
+  count(*) FILTER (WHERE gr.wr)                                  AS would_refuse,
+  count(*) FILTER (WHERE gr.adv > 0)                             AS positive_slips,
+  (count(*) >= 5 AND count(*) FILTER (WHERE gr.adv > 0) >= 5)    AS qualifies,
+  percentile_disc(0.9) WITHIN GROUP (ORDER BY gr.adv) FILTER (WHERE gr.adv > 0) AS p90_positive_adverse_r,  -- percentile_disc = nearest-rank
+  min((gr.rr_plan - gr.floor) / (1 + gr.floor))                  AS s_star_min,
+  max((gr.rr_plan - gr.floor) / (1 + gr.floor))                  AS s_star_max,
+  count(*) FILTER (WHERE gr.adv > (gr.rr_plan - gr.floor) / (1 + gr.floor)) AS slips_over_own_s_star,
+  count(ct.id) FILTER (WHERE ct.close_reason = 'stop_hit')       AS stop_hit,
+  count(ct.id) FILTER (WHERE ct.close_reason = 'target_hit')     AS target_hit,
+  count(ct.id) FILTER (WHERE ct.closed_at IS NOT NULL AND ct.close_reason NOT IN ('stop_hit','target_hit')) AS other_close,
+  count(ct.id) FILTER (WHERE ct.closed_at IS NULL)               AS still_open,
+  count(*) - count(ct.id)                                        AS unjoined
+FROM gr JOIN cls USING (asset_class)
+LEFT JOIN closed_trades ct ON ct.metadata->>'rtbQueueId' = gr.q AND ct.mode = 'paper'
+GROUP BY gr.asset_class, gr.strategy, gr.floor
+ORDER BY gr.asset_class, graded_opens DESC;
+```
+- ⚠️ **OPEN FOR LANGSTON BEFORE THE 10-24 FIRE — `s*` is not a cell constant.** The control run shows the planned RR varies inside a cell: vwap_pullback `s*` runs **0.0133 → 1.33** (rows whose target sits far above the floor's RR). The scope's 0.0135 R is the cell's **minimum**. **Pre-registered default, stated now: the cell's bound is `s_star_min` (the strictest, the scope's own figure); `s_star_max` and `slips_over_own_s_star` (each slip against its own row's bound) print beside it** so the spread is visible. If Langston rules the per-row form instead, it is recorded here before the first fire.
+- **Crypto's own baseline** — printed beside crypto's row at every fire (a missing day is a zero):
+```sql
+-- crypto's own baseline, printed beside its row at every fire: AEE archive rows per day (any stage) over the 14 days before the fire
+SELECT asset_class, date_trunc('day', captured_at)::date AS day, count(*) AS aee_rows,
+  count(*) FILTER (WHERE reject_stage = 'admitted') AS admitted
+FROM signal_eval_archive
+WHERE source = 'active-execution-engine' AND mode = 'paper_sim'
+  AND captured_at >= (:'hi')::timestamptz - interval '14 days' AND captured_at < :'hi'
+GROUP BY 1, 2 ORDER BY 1, 2;
+```
+
 
 ## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
 Written before any post-deploy taker opens exists (crypto `maker_only`, xStock shut since Friday 20:00 ET):
@@ -67,6 +120,23 @@ Written before any post-deploy taker opens exists (crypto `maker_only`, xStock s
 - **The mix, expected from the pre-registered sample (22 `maker_to_taker` / 3 `direct_taker` of 25 known):** `maker_to_taker` the large majority (~85-90 % of opens), `direct_taker` a handful — at today's rate **0-5 direct takers in Monday's regular session**. A Monday with **zero** `direct_taker` rows does not prove the direct branch stamps; a Monday with zero `maker_to_taker` rows would contradict the sample and is reported as such.
 - Each row's `consumptionArm` equals its own `[CONSUMPTION_PASS] arm=` line (archive → log; a log line without a row is the TCL-blocked case, not an orphan).
 - Crypto: **no** taker rows at all while `maker_only` holds.
+- ⛔ **Every leg prints its denominator (Langston Step-8 condition 3):** "0 taker rows without the key" prints beside `admitted_takers`, and crypto's taker zero beside `admitted_makers` as the positive control. **If Monday opens no xStock takers, the key leg reads NOT MEASURED, never PASS; if crypto shows no makers either, its leg is NOT MEASURED** (and its baseline above says why). Dry run 14:30Z: both classes print, all zeros (weekend + crypto's quiet engine).
+```sql
+-- Step 7 (Monday): every leg prints its DENOMINATOR, so an empty population reads NOT MEASURED, never PASS
+WITH w AS (
+  SELECT asset_class, reject_stage, gate_decision g FROM signal_eval_archive
+  WHERE source = 'active-execution-engine' AND mode = 'paper_sim'
+    AND captured_at >= '2026-10-17 13:03:42Z' AND captured_at < :'hi'),
+classes(asset_class) AS (VALUES ('crypto_spot'), ('xstock_spot'))
+SELECT c.asset_class,
+  count(*) FILTER (WHERE w.reject_stage = 'admitted' AND w.g->>'entryArm' = 'taker')                              AS admitted_takers,        -- denominator
+  count(*) FILTER (WHERE w.reject_stage = 'admitted' AND w.g->>'entryArm' = 'taker' AND NOT w.g ? 'consumptionArm') AS takers_without_key,     -- must be 0 of admitted_takers
+  count(*) FILTER (WHERE w.reject_stage = 'admitted' AND w.g->>'consumptionArm' = 'direct_taker')                  AS direct_taker,
+  count(*) FILTER (WHERE w.reject_stage = 'admitted' AND w.g->>'consumptionArm' = 'maker_to_taker')                AS maker_to_taker,
+  count(*) FILTER (WHERE w.reject_stage = 'admitted' AND w.g->>'entryArm' = 'maker')                               AS admitted_makers         -- positive control beside crypto's taker zero
+FROM classes c LEFT JOIN w ON w.asset_class = c.asset_class
+GROUP BY c.asset_class ORDER BY c.asset_class;
+```
 
 ## 5. Unproven, stated as unproven
 - That the `maker_to_taker` arm stamps correctly in a live open — not exercisable until a maker cannot rest.
