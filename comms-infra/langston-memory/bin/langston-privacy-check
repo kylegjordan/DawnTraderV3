@@ -73,6 +73,14 @@ ENUMERABLE_SOURCES = ("files", "systemd", "compat")
 #    comms-infra/systemd/README.md's install map DESCRIBES it. A layout change edits this list, then the README.
 DRIFT_KINDS = frozenset(("directory-owned-by-root", "directory-group-drift", "root-expected-directory-owned-by-owner"))
 SHARED_LINES = 10          # >= this many distinct >=40-char lines shared with the live file = a copy
+# ⛔ REPO TEXT IS NOT PRIVATE (B-LANGSTON-RELIEF, 2026-10-17): the OBJ-3 ledger split composed repo-authored stub
+#    text into MEMORY.md, so any repo checkout the reader holds shared 18 lines with it and read as a copy (alert
+#    2109222e: a Coltrane review checkout in /tmp, 18 shared, 0 private). The reader holds the repo anyway, so a key
+#    line that also appears in the review branch is public and is NOT counted. Measured that day: 18 of 207 key lines
+#    public; a real copy of MEMORY.md kept 140 private shared lines. If the branch cannot be read, NOTHING is
+#    excluded - the check fails toward flagging, and the scan record says so.
+PUBLIC_MIRROR = "/srv/dawntrader-backup.git"
+PUBLIC_REF = "migration/aws-supabase"
 MIN_LINE = 40
 NL = chr(10)
 
@@ -134,6 +142,7 @@ def live_config():
         "live_memory": LIVE_MEMORY,
         "scan_roots": scan_roots(),
         "not_world_writable": [STALE_LOG],
+        "public_source": (PUBLIC_MIRROR, PUBLIC_REF),
     }
 
 
@@ -181,7 +190,35 @@ def reads_as(user, path):
     return r.returncode == 0
 
 
-def copies_in(roots, live_memory, reader):
+def public_lines(keys, source):
+    """(lines of `keys` that appear in the review branch, a record of how that was decided). Never raises; any
+    failure excludes NOTHING (fail toward flagging)."""
+    if not source:
+        return set(), {"source": None}
+    mirror, ref = source
+    d = tempfile.mkdtemp(prefix="privacy-public-")          # 0700, root's: the key lines are private content
+    try:
+        kf = os.path.join(d, "keys")
+        with open(kf, "w", encoding="utf-8") as fh:
+            fh.write(NL.join(sorted(keys)) + NL)
+        rv = subprocess.run(["git", "-C", mirror, "rev-parse", "--verify", ref + "^{commit}"],
+                            capture_output=True, text=True, timeout=60)
+        if rv.returncode != 0:
+            return set(), {"source": mirror, "ref": ref, "error": "ref unreadable: " + (rv.stderr or "").strip()[:160]}
+        sha = rv.stdout.strip()
+        g = subprocess.run(["git", "-C", mirror, "grep", "-h", "-F", "-f", kf, sha, "--"],
+                           capture_output=True, text=True, timeout=300)
+        if g.returncode not in (0, 1):
+            return set(), {"source": mirror, "ref": ref, "sha": sha, "error": "git grep rc %d" % g.returncode}
+        pub = set(l.strip() for l in g.stdout.splitlines()) & set(keys)
+        return pub, {"source": mirror, "ref": ref, "sha": sha, "excluded": len(pub)}
+    except Exception as e:
+        return set(), {"source": mirror, "ref": ref, "error": "%s: %s" % (type(e).__name__, e)}
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def copies_in(roots, live_memory, reader, public_source=None):
     """Files anywhere under `roots` that share >= SHARED_LINES distinct long lines with the live file,
     and that the READER can read. ⛔ Condition 1: no depth limit, no size limit, and ownership-agnostic -
     a 0600 file owned by the reader is readable by it and was invisible to a world-readable filter.
@@ -189,10 +226,12 @@ def copies_in(roots, live_memory, reader):
     Every skip is COUNTED BY REASON, so a zero is published with its population."""
     with open(live_memory, encoding="utf-8", errors="replace") as fh:
         keys = set(l.strip() for l in fh if len(l.strip()) >= MIN_LINE)
+    pub, pub_record = public_lines(keys, public_source)
+    keys -= pub
     live_real = os.path.realpath(live_memory)
     pop = {"walked": 0, "text_scanned": 0, "skipped_binary": 0, "skipped_unreadable_by_root": 0,
            "skipped_not_regular": 0, "skipped_symlinked_dir": 0, "matched": 0,
-           "matched_not_readable_by_reader": 0}
+           "matched_not_readable_by_reader": 0, "public_lines": pub_record}
     found, seen = [], set()
     for root in roots:
         for dp, dirs, files in os.walk(root):
@@ -364,7 +403,7 @@ def evaluate(cfg):
         findings.extend(store_findings(cfg["store_dir"], cfg["owner"]))
     else:
         findings.append({"kind": "target-not-found", "path": cfg["store_dir"]})
-    copies, pop, keys = copies_in(cfg["scan_roots"], cfg["live_memory"], cfg["reader"])
+    copies, pop, keys = copies_in(cfg["scan_roots"], cfg["live_memory"], cfg["reader"], cfg.get("public_source"))
     for c in copies:
         findings.append({"kind": "readable-copy-of-memory", "path": c["path"], "shared_lines": c["shared_lines"]})
     exposures = [f for f in findings if f["kind"] != "target-not-found" and not is_drift(f)]
@@ -383,7 +422,8 @@ def evaluate(cfg):
                      # ⛔ FINDING-3 (#661 leg 1): whole stripped lines are matched, so a copy stored ESCAPED
                      #    (a JSON prompt body, a transcript) cannot match. The zero means exactly this:
                      "claim": "no LINE-PRESERVING copy of the live MEMORY.md readable by the reader; "
-                              "escaped copies (JSON bodies, transcripts) are outside this instrument's reach"}}
+                              "escaped copies (JSON bodies, transcripts) are outside this instrument's reach; "
+                              "lines also in the review branch are public and not counted (population.public_lines)"}}
 
 
 def _alerts(argv):
@@ -646,6 +686,31 @@ def self_test():
         r2 = evaluate(closed)
         check("CLOSED fixture -> verdict", r2["verdict"], "PASS")
         check("  and it has no findings at all", len(r2["findings"]), 0)
+
+        # REPO TEXT IS NOT PRIVATE (B-LANGSTON-RELIEF, alert 2109222e, 2026-10-17)
+        lines_pub = ["public stub line %02d that is comfortably longer than forty chars" % i for i in range(15)]
+        lines_priv = ["private memory line %02d that is comfortably longer than forty chars" % i for i in range(10)]
+        plive = make("public-live.md", 0o600, NL.join(lines_pub + lines_priv) + NL)
+        repo = mkdir("pubrepo", 0o700)
+        with open(os.path.join(repo, "stub.md"), "w", encoding="utf-8") as fh:
+            fh.write(NL.join("  " + l for l in lines_pub) + NL)            # indented in the repo: still matched
+        gitc = ["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t"]
+        for c in (["init", "-q", "-b", PUBLIC_REF], ["add", "stub.md"], ["commit", "-q", "-m", "fixture"]):
+            subprocess.run(gitc + c, check=True, capture_output=True)
+        scan_pub = mkdir("scan-public", 0o755)
+        make("scan-public/repo-checkout-copy.md", 0o644, NL.join(lines_pub) + NL)
+        make("scan-public/real-copy.md", 0o644, NL.join(lines_pub + lines_priv) + NL)
+        pubcfg = dict(closed, live_memory=plive, scan_roots=[scan_pub], public_source=(repo, PUBLIC_REF))
+        rp = evaluate(pubcfg)
+        flagged = sorted(os.path.basename(f["path"]) for f in rp["findings"] if f["kind"] == "readable-copy-of-memory")
+        check("REPO TEXT: a checkout sharing only repo lines is NOT a copy; a real copy still is", flagged, ["real-copy.md"])
+        check("  ...the scan records how many key lines it excluded as public",
+              rp["scan"]["population"]["public_lines"].get("excluded"), 15)
+        rb = evaluate(dict(pubcfg, public_source=(os.path.join(top, "no-such-repo"), PUBLIC_REF)))
+        flagged_b = sorted(os.path.basename(f["path"]) for f in rb["findings"] if f["kind"] == "readable-copy-of-memory")
+        check("  ...an unreadable branch excludes NOTHING (fails toward flagging)", flagged_b,
+              ["real-copy.md", "repo-checkout-copy.md"])
+        check("  ...and says why in the scan record", "error" in rb["scan"]["population"]["public_lines"], True)
 
         broken = dict(closed, control_refused=exposed["read_targets"][0])
         check("a control that cannot fail -> INSTRUMENT, never PASS", evaluate(broken)["verdict"], "INSTRUMENT")
