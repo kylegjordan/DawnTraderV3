@@ -1,0 +1,60 @@
+# B-SILENT-STRATEGY-CENSUS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2)
+
+change-class: non_architecture
+
+**Row:** `SPRINT_TO_LIVE_PLAN` 52 · **Issue:** `#1070` · **Owner:** CC-B · **Scope:** `B_SILENT_STRATEGY_CENSUS_SCOPE.md` (Step 1 APPROVED, Langston 2026-10-17). Per that ruling, **O2's D.1 table and O5's census ARE this pre-audit.**
+*Code read at `origin/migration/aws-supabase` after `aa5c8b5e9`; DB read on staging 2026-10-17 ~03:00Z UTC.*
+
+## 0. PREVIOUSLY STATED vs NOW
+- **PREVIOUSLY STATED (`#1070`):** "`abcd_long`, `breakout` and `orb` … **zero EVALUATIONS, not zero passes**" (guard tracker). **NOW:** on crypto in the last 72 h, `abcd_long` was **evaluated 37,494 times** and `breakout` **146,198 times** (138,763 + 7,435); neither ever passed its own detector, which is why neither reached the guard. `orb` has 0 rows on crypto, by design. **REASON:** the guard tracker sits below each detector's early returns (Langston's hypothesis in `#1070`); the evaluation archive sees above it.
+
+## 1. THE AUDIT
+
+### A-1 — D.1, the nine incumbents on xStock (O2), under the scope's four definitions
+**Population:** `closed_trades`, `asset_class = xstock_spot`, paper, `actual_entry_price IS NOT NULL`, P&L = `net_pnl_percent` (a percent), reconstructed rows excluded — **a measured no-op: 0 of 571 xStock paper rows are reconstructed**. Session = the engine's predicate (09:30-16:00 America/New_York, weekdays) on `opened_at`. **Join key:** gate name → trade name, with `range_trade` → `range_trading`; checked BOTH ways — every traded name (6 all-time: vwap_pullback 313, sma_trend_ride 150, morning_star 58, pivot_shift 35, range_trading 14, vwap_bounce 1) maps to an enabled gate, and the four enabled gates with no trade name are listed below.
+
+**Since the 2026-10-06 15:53Z paper reset** (filled closes):
+| strategy | n | average | winners | in session: n / avg | off session: n / avg | disposition from P&L |
+|---|---|---|---|---|---|---|
+| vwap_pullback | 120 | **−1.624 %** | 16.7 % | 94 / −1.606 % | 26 / −1.691 % | losing at n = 120 |
+| morning_star | 37 | **−1.097 %** | **2.7 %** (1 of 37) | 24 / −1.061 % | 13 / −1.164 % | losing at n = 37 |
+| pivot_shift | 26 | −0.573 % | 15.4 % | 20 / −0.452 % | 6 / −0.975 % | losing at n = 26 |
+| sma_trend_ride | 23 | −1.423 % | 21.7 % | 9 / −1.720 % | 14 / −1.232 % | losing at n = 23 |
+| range_trade (`range_trading`) | 10 | −0.168 % | 20.0 % | 10 / −0.168 % | 0 | **INSUFFICIENT** (n < 20) |
+| vwap_bounce | 1 | −1.631 % | 0 % | 0 | 1 / −1.631 % | **INSUFFICIENT** |
+| breakout · inside_bar_reversal · mean_reversion · strong_bull_trend | 0 | — | — | — | — | **never filled** (strong_bull_trend on since 10-16 only) |
+**Since 2026-09-20, separately:** the same order and sign — vwap_pullback 121 @ −1.620 %, morning_star 41 @ −0.889 %, pivot_shift 28 @ −0.549 %, sma_trend_ride 25 @ −1.112 %, range_trading 10 @ −0.168 %, vwap_bounce 1. *(Matches Langston's independent preview at Step 1 to the count and the third decimal.)*
+**What the table can carry (definition (a), `#596` / `#648`):** every strategy with enough trades to read is losing on the active path; **it cannot rank them** and it switches nothing off by itself. **Session does not separate them here:** for vwap_pullback the in-session and off-session averages are within 0.1 point — the off-session damage measured in the 10-16 analysis was in how far stops overshoot, not in which session a trade opened.
+
+### A-2 — `#1070`, the three "silent" strategies on crypto (O5)
+**Population:** `signal_eval_archive`, `asset_class = crypto_spot`, the last 72 h at the read (counts moved by a few rows between two reads minutes apart — the window slides). **Controls in the same query:** sma_trend_ride and support_bounce reach `sqe`, `admitted` and `rtb_price_shadow`, so the instrument records later stages when they happen.
+| strategy | what happens | count (72 h) | where it stops |
+|---|---|---|---|
+| **orb** | **no rows at all** | 0 | **barred from crypto by design:** `ASSET_CLASS_OVERRIDES.crypto_spot.excludeStrategies` — *"orb is xStock-only microstructure (opening-range) — class-ineligible"* (`canonical-regime-strategy-map.ts:415-421`) |
+| **breakout** | refused before its detector | 138,763 | its family filter: DI 107,434 (sample: observed DI ≈ 2 against `diMin` 10), LQ 18,667, VN 12,662 |
+| | reaches its detector, declines | 7,435 | `range_not_found` 4,813 · `breakout_fail` 2,622 |
+| **abcd_long** | reaches its detector, declines every time | 37,494 | `breakout_fail` 18,678 · `price_position` 18,388 · `abcd_structure_not_found` 428 |
+- **abcd_long's detector, at the code** (`strategy-engine.ts:325-443`): it needs an A-spike, a B-pullback, a C higher-low **above VWAP** (else `price_position`), then a close **above C-high by `max(breakout_threshold_pct, ATR / C-high)`** — at least one full ATR — **and** volume ≥ 1.5 × the lookback average on the same bar (else `breakout_fail`). Live settings: 10-bar consolidation, 1.5 %, 1.5× (`[ABCD Strategy] Using settings`, 01:35Z). The retained log's 158 decline lines are **all** `breakout=false, volumeConfirmed=false` — both conditions fail together; 0 `✅ Signal generated` lines.
+- **Rule 24 outcome for each:** **orb — (no defect, by design)**; **breakout and abcd_long — (2) working as designed but unaddressed**: the code does what it says; what is missing is a decision whether these thresholds are right for crypto — a calibration question, not a fix.
+
+### A-3 — The six sources
+| # | source | read |
+|---|---|---|
+| 1 | code at the ref | `canonical-regime-strategy-map.ts` (the strategy lists, `ASSET_CLASS_OVERRIDES` `:405-445`, `STRATEGY_FAMILY_MAP`); `strategy-engine.ts:325-443` (abcd); `canonical-regime-strategy-map.ts:1220` (the gate) |
+| 2 | runtime + DB | `strategy_gates` (19 xStock rows), `closed_trades` (A-1), `signal_eval_archive` (A-2), `out.log` `[ABCD Strategy]` lines |
+| 3 | System Impact Map | the strategy gate (P19-B4a) and the evaluation archive — no change to either component is planned |
+| 4 | System Manual | xStock enablement corrected at `0dbf18213` (`:12521`); `:448` the reach-ceiling refusal that makes O3's feasibility read necessary |
+| 5 | ledger + reports | `#1070`, `#596`, `#648`, `#1052` (reach is an on/off switch for ATR-target strategies), Kyle 2026-09-30 |
+| 6 | `bridge/canonical/` | not needed — every component here postdates the governance change (B63, B79.x, P19) |
+
+## 2. THE PLAN — each item back-references its finding
+| # | item | from | verification |
+|---|---|---|---|
+| **P1** | **Put A-1 to Kyle as a decision, with the n**: four incumbents losing at n ≥ 20 (vwap_pullback, morning_star, pivot_shift, sma_trend_ride), two INSUFFICIENT, four never filled. Options per strategy: keep on through Phase-25 calibration / switch off now. **My recommendation: keep all on** — the table cannot rank, and every strategy on the lane is losing, so switching off is a verdict on the lane, not on one strategy; the exception worth Kyle's eye is **morning_star at 1 winner in 37**. | A-1 | Kyle's answer recorded on `#1070` |
+| **P2** | **O3 stays gated** on O1's verdict (alert `dd588f0d`, 2026-11-06) **and** P1's answer. Before each candidate's switch, its feasibility read (scope r3 fold): declared target multiple and reward-to-risk vs the effective `reach_atr_max` / `min_rr` rows (none of the four has an xStock row ⇒ class defaults 4.0 / 2.0). | scope r3, A-3 row 5 | the read written into that candidate's switch record before its UPDATE |
+| **P3** | **`#1070` closed by disposition:** orb → **§9.4 disposition 5, no work** (class-barred by design, `:415-421`); breakout and abcd_long → **disposition 2, added to Phase-25 calibration** as named items — breakout's family-filter DI floor (10) against crypto's observed DI, and abcd_long's one-ATR-plus-volume breakout rule — each to be calibrated or retired with evidence there. | A-2 | the ledger entry; the two items written into the Phase-25 rows |
+| **P4** | The label quirk found in passing: the IMPULSE_EXPANSION strategy entry with key `strong_bull_trend` is displayed as **"VWAP Bounce"** (`canonical-regime-strategy-map.ts`, the IE list). Read where that display string is shown before calling it a defect. | in passing | a one-line disposition at Step 3 |
+**Nothing UNAUDITED.** No code change in P1-P3; P4 may become a one-string fix under its own disposition.
+
+## 3. Plain-language summary
+Every xStock strategy with enough trades to judge is losing money in paper mode since the reset — vwap pullback, morning star, pivot shift and SMA trend ride — and two more have too few trades to say. The table cannot tell which is worst, so the next step is a decision for Kyle, and my recommendation is to keep them on until calibration rather than switch strategies off one at a time. The three crypto strategies that "never fire" are not broken: ORB is deliberately barred from crypto, breakout is almost always stopped by its trend-strength filter, and ABCD needs a breakout of a full ATR plus a volume surge on the same bar, which has not happened in three days. Those two are calibration questions and get placed there.
