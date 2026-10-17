@@ -69,14 +69,12 @@ describe('fences — the deleted names and the retired status', () => {
     expect(rtb).toMatch(/status: rtbSignalStatusEnum\("status"\)\.notNull\(\),/);
     expect(rtb).not.toMatch(/\("promoted_at"|\("expired_at"|\("promoted_trade_id"/);
   });
-  it('the migration drops the default and the three columns, and is registered; its rollback restores them', () => {
+  it('part 1 of the migration drops ONLY the default (expand/contract — the column drops ship in part 2, Langston Step 4)', () => {
     const m = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep.sql');
     expect(m).toMatch(/ALTER COLUMN status DROP DEFAULT/);
-    for (const col of ['promoted_at', 'promoted_trade_id', 'expired_at']) expect(m).toMatch(new RegExp(`DROP COLUMN IF EXISTS ${col}`));
+    expect(m).not.toMatch(/DROP COLUMN/); // a contraction must not commit while the old build still serves
     expect(m).not.toMatch(/CREATE (UNIQUE )?INDEX|DROP INDEX/i); // the #1006 index is not touched
     expect(read('drizzle/migrations/MANIFEST.txt')).toMatch(/^2026-10-17-b-rtb-queued-status-sweep\.sql$/m);
-    const rb = read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-rollback.sql');
-    expect(rb).toMatch(/SET DEFAULT 'queued'/);
-    for (const col of ['promoted_at', 'promoted_trade_id', 'expired_at']) expect(rb).toMatch(new RegExp(`ADD COLUMN IF NOT EXISTS ${col}`));
+    expect(read('drizzle/migrations/2026-10-17-b-rtb-queued-status-sweep-rollback.sql')).toMatch(/SET DEFAULT 'queued'/);
   });
 });
