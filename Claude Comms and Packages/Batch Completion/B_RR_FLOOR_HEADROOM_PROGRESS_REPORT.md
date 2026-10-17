@@ -19,34 +19,46 @@
 | 6 Deploy | `162ae0537` 2026-10-17T13:03:42Z, `dt-deploy --by cc-b`, engine resumed |
 | 7 Verify | ⏳ **not observable until Monday's US session**: crypto is `maker_only` (no taker opens) and the xStock venue is shut. The first post-deploy taker rows are reconciled archive → log (`[CONSUMPTION_PASS] arm=`), and the arms actually seen are stated — a 3-of-3 `direct_taker` read is not proof of the `maker_to_taker` branch (pre-audit record (iv)). |
 
-## 3. ⛔ THE PRE-REGISTERED CLOSE CRITERION — verbatim from the approved scope (objective 2), written before the data
+## 3. ⛔ THE PRE-REGISTERED CLOSE CRITERION — the approved scope's objective 2, plus Langston's two Step-2 conditions attributed inline (C1, C2); written before the data (scope last touched `136aa5628` 11:19:00Z, deploy 13:03:42Z)
 - **Population:** `signal_eval_archive`, `source='active-execution-engine'`, `mode='paper_sim'`, `reject_stage='admitted'`, `gate_decision.entryArm='taker'`, `rrFill` non-null, **and `gate_decision ? 'consumptionArm'`** (key-present — Step-2 C2; an absent key never reads as `direct_taker`), from **2026-10-17T13:03:42Z** for **21 days** (to **2026-11-07T13:03:42Z**), ending earlier only when BOTH: rule (a) is evaluable (qualifying cells, each with ≥ 5 positive-`adverseR` fills, together covering ≥ 50 % of graded opens) **and** the `direct_taker` arm has ≥ 20 graded opens. At 30 graded opens per class rule (b)'s cost figures are first REPORTED (interim, not the end).
 - **Denominator:** graded admitted takers. `entry_fill` rows are counted and reported beside it, never in it — **positive control (Step-2 C1): the `entry_fill` count is non-zero in the window and zero after the filter.** The pre-deploy taker rows the key test drops are counted and printed.
 - **Rule (b):** would-refuse ≤ 5 % per class, with ≥ 20 graded opens in the `direct_taker` arm; under 20 ⇒ **INSUFFICIENT, never PASS**. Both arms' rates reported; the pooled rate is the live **cost**, not evidence the floor is safe.
 - **Rule (a):** a cell (strategy × floor) qualifies with ≥ 5 graded opens and ≥ 5 positive-`adverseR` fills; in a qualifying cell the **nearest-rank** p90 of positive `adverseR` must not exceed `s* = (RR − floor)/(1 + floor)`. INSUFFICIENT if no cell qualifies, the class's positive-adverse population is under 5, or qualifying cells cover under 50 % — never PASS by absence. Coverage per cell stated. (Buy-only path: adverse = fill above intended.)
+- **What rule (a) can decide, stated (scope §0 / objective 2):** as written it is in practice a **single-cell test on `vwap_pullback`** — the only cell holding ≥ 50 % of graded opens (17 of 30 in the pre-registered sample).
+- **Baseline the outcome split is compared against (pre-deploy, 10-15 16:29:07Z → 10-16 20:57:22Z):** takers 21 `stop_hit` / 0 `target_hit` / 9 open; makers 9 / 1 / 11.
 - **Both PASS ⇒ that class goes live** (a follow-up step in this batch: `would_refuse` → `refused`, tested). **FAIL or INSUFFICIENT ⇒ shadow stays**, numbers on `#1183`, re-home to `#372`. Crypto: INSUFFICIENT by policy while `maker_only` holds; a move to `maker_preferred` (row 59b) returns the crypto taker path with the shadow unpromoted and starts crypto's own read at that change.
 - **Reported beside the slip figures:** the realised `close_reason` split of the graded takers, and the three refusal-burden figures (graded would-refuse; refused by the ask-through-stop guard; both).
 - **Prediction, stated before the data:** ~15 xStock sessions ⇒ ~300 graded opens, ~10 positive slips at today's rate; if slips accrue, rule (a) most likely FAILS (ORCL slipped 58× its cell's s*); else INSUFFICIENT; the direct-taker gate may not clear (3 graded direct takers in the pre-registered sample, all within 70 minutes).
 
 ## 4. The read — carried by alert, and its SQL
 - **Alert `07df291f-6351-4385-887b-bc6bc7ae3d21`:** fires 2026-10-24T13:00Z (interim: arm split, counts, cost figures), re-minted weekly until the window closes at 2026-11-07T13:03:42Z or both early-stop conditions hold.
-- **SQL** (the read of record runs exactly this, reading the archive only):
+- **Terminal read alert `20bba77f-4070-4b57-b126-f1f4abdc0c0e`** fires at the window's end, 2026-11-07T13:03:42Z, independent of the weekly re-mints (Langston Step-10 record item).
+- *Dry run 2026-10-17 ~14:03Z:* both classes print, `rows_in_window 0` — no AEE archive row since the deploy (crypto `maker_only` produced no opens in the window; xStock shut). The query reads; the window is empty.
+- **SQL** (the read of record runs exactly this, reading the archive only). *Corrected per Langston's Step-10 conditions before the first fire:* every numerator carries the denominator's predicates (one `graded` flag; `positive_slips` counted within graded — `rrFill` is NOT entailed by key-presence, since a non-finite target leaves it null); the window has its **upper bound**; both classes print a row even when empty, and the row count is stated, so "control failed" and "no taker opens yet" can never print alike.
 ```sql
 WITH w AS (
   SELECT asset_class, strategy, reject_stage, gate_decision g
   FROM signal_eval_archive
   WHERE source = 'active-execution-engine' AND mode = 'paper_sim'
-    AND captured_at >= '2026-10-17 13:03:42Z')
-SELECT asset_class,
-  count(*) FILTER (WHERE reject_stage = 'entry_fill')                                            AS entry_fill_rows,        -- C1 control: > 0
-  count(*) FILTER (WHERE reject_stage = 'admitted' AND g->>'entryArm' = 'taker' AND NOT g ? 'consumptionArm') AS taker_rows_without_key, -- C2: printed, dropped
-  count(*) FILTER (WHERE reject_stage = 'admitted' AND g->>'entryArm' = 'taker' AND g ? 'consumptionArm' AND g->>'rrFill' IS NOT NULL) AS graded,
-  count(*) FILTER (WHERE reject_stage = 'admitted' AND g ? 'consumptionArm' AND g->>'rrFill' IS NOT NULL AND g->>'consumptionArm' = 'direct_taker') AS graded_direct,
-  count(*) FILTER (WHERE reject_stage = 'admitted' AND g ? 'consumptionArm' AND g->>'rrFill' IS NOT NULL AND g->>'rrWouldRefuse' = 'true') AS would_refuse,
-  count(*) FILTER (WHERE reject_stage = 'admitted' AND g ? 'consumptionArm' AND (g->>'adverseR')::float8 > 0) AS positive_slips
-FROM w GROUP BY 1;
--- then per cell (strategy × rrFloor) and per arm the same counts, the nearest-rank p90 of positive adverseR,
--- and the close_reason split by joining closed_trades on the archive's rtbQueueId → the trade.
+    AND captured_at >= '2026-10-17 13:03:42Z' AND captured_at < '2026-11-07 13:03:42Z'),
+f AS (
+  SELECT asset_class, strategy, reject_stage, g,
+    (reject_stage = 'admitted' AND g->>'entryArm' = 'taker' AND g ? 'consumptionArm' AND g->>'rrFill' IS NOT NULL) AS graded
+  FROM w),
+classes(asset_class) AS (VALUES ('crypto_spot'), ('xstock_spot'))
+SELECT c.asset_class,
+  count(f.*)                                                                                     AS rows_in_window,
+  count(*) FILTER (WHERE f.reject_stage = 'entry_fill')                                           AS entry_fill_rows,        -- C1 control: > 0 once takers exist
+  count(*) FILTER (WHERE f.reject_stage = 'admitted' AND f.g->>'entryArm' = 'taker' AND NOT f.g ? 'consumptionArm') AS taker_rows_without_key, -- C2: must be 0 post-deploy
+  count(*) FILTER (WHERE f.graded)                                                                AS graded,
+  count(*) FILTER (WHERE f.graded AND f.g->>'consumptionArm' = 'direct_taker')                    AS graded_direct,
+  count(*) FILTER (WHERE f.graded AND f.g->>'consumptionArm' = 'maker_to_taker')                  AS graded_fallback,
+  count(*) FILTER (WHERE f.graded AND f.g->>'rrWouldRefuse' = 'true')                             AS would_refuse,
+  count(*) FILTER (WHERE f.graded AND (f.g->>'adverseR')::float8 > 0)                             AS positive_slips
+FROM classes c LEFT JOIN f ON f.asset_class = c.asset_class
+GROUP BY c.asset_class ORDER BY c.asset_class;
+-- then, over the same `graded` rows: per cell (strategy × rrFloor) and per arm the same counts, the nearest-rank p90 of
+-- positive adverseR, and the close_reason split by joining closed_trades on the archive's rtbQueueId → the trade.
 ```
 
 ## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
