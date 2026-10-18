@@ -1408,6 +1408,14 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging the tab shows Formula Health (10 formulas, 9 passing, 1 minor warning) and Feed Health; the page asks for none of the removed routes, and the server's "missing module" errors went from 116 that afternoon to none. **Left:** the card's "last audit" line always reads "just now" (`#1214`); the health-check address registered three times (`#1212`).
 
+## B-CRON-VERIFIER-QUERY-FAIL (CC-B, sprint row 59g2; `#1211`) — change-class `non_architecture` — ⏳ **STEP 11 (2026-10-18), completion report with Langston** (deployed `7501f4f55` 05:33:52Z; record `Claude Comms and Packages/Batch Completion/B_CRON_VERIFIER_QUERY_FAIL_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** The cron verifier checks every 15 minutes that each scheduled job ran when it should. When its look-up of past runs failed (a slow database), it treated the empty answer as "no job has ever run" and raised false warnings for the hourly and daily jobs — the same four warnings, seven times since August. Its own code comment said it would skip the check in that case; it never did.
+
+**THE FIX.** A failed look-up is now a skipped check, logged as such. If four checks in a row fail (an hour blind), it raises one warning that it cannot see — once per episode, resolved by hand, never acked — and logs a line when it can read again.
+
+**RESULT.** On staging the first regular check on the new build judged the same six jobs with the same verdicts as before, with nothing in the error log. The skip and warning paths have not run live (the database has not failed since); the tests carry them. **Left:** a database that stops answering still pages no one (`#1217`, row 59g4); the two five-minute jobs can never be judged stale (`#1218`, row 59g5); the first real skip is a forward read on `#1211`.
+
 ## B-SILENT-STRATEGY-CENSUS (CC-B, sprint row 52; `#1070`) — change-class `non_architecture` — ⏳ **OPEN, IN OBSERVATION (2026-10-17)** — waiting on strong_bull_trend's xStock verdict (alert `dd588f0d`, first 20 filled closes or 2026-11-06T10:47:40Z), then the other four candidates (record `Claude Comms and Packages/Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md`)
 
 **WHAT IT IS.** Ten of nineteen strategies had been off for xStock since May with no recorded reason for five, and three wired crypto strategies were never evaluated. Kyle (2026-09-30): switch the five candidates on one or two at a time, each with a pass/fail written first, strong_bull_trend first, after a check of the nine already on.
