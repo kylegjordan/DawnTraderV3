@@ -163,6 +163,15 @@ export async function runVerification(
     if (consecutiveSkips >= BLIND_ESCALATION_SKIPS) await emitBlindAlert(firstSkipAt);
     return { ok: true, stale: [], skipped: 'query_fail' };
   }
+  if (consecutiveSkips > 0 && firstSkipAt) {
+    // The recovery signal the blind alert's body names: same stream (stderr → error.log) and retention as the
+    // SKIPPED lines it discharges. A `healthy` line goes to stdout and may not print at all on a tick where
+    // every job is inside its latency grace (Langston, Step-4 record item).
+    console.warn(
+      `[CRON-FIRE-VERIFIER][READ_RECOVERED] after=${consecutiveSkips} consecutive skips since=${firstSkipAt.toISOString()} ` +
+      `total_since_boot=${totalSkips}`,
+    );
+  }
   consecutiveSkips = 0;
   firstSkipAt = null;
 
@@ -319,8 +328,8 @@ async function emitBlindAlert(since: Date): Promise<void> {
         `a missed fire in this window will not page. The live count is in the [CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] ` +
         `log line (consecutive= and total_since_boot=); the cause is in the [CRON-FIRE-VERIFIER][QUERY_FAIL] line ` +
         `before it.\n\n` +
-        `Resolve this row by hand once the read is back (a [CRON-FIRE-VERIFIER] healthy / STALE line after the last ` +
-        `SKIPPED line) — it does not clear itself, by design (B-CRON-VERIFIER-QUERY-FAIL, #1211). NEVER ACK it: an ` +
+        `Resolve this row by hand once the read is back (a [CRON-FIRE-VERIFIER][READ_RECOVERED] line, in the same ` +
+        `error log as the SKIPPED lines) — it does not clear itself, by design (B-CRON-VERIFIER-QUERY-FAIL, #1211). NEVER ACK it: an ` +
         `ack is not terminal and would silence this episode's key while the verifier is still blind.`,
       metadata: {
         batch: 'B-CRON-VERIFIER-QUERY-FAIL',

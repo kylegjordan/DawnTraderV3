@@ -240,6 +240,8 @@ describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of 
   });
 
   it('a successful read resets the episode — asserted POSITIVELY (healthy, no alerts) — and four more failures are a new episode', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const recovered = () => warn.mock.calls.map((c) => String(c[0])).filter((s) => s.includes('[READ_RECOVERED]'));
     await failNextReads(3);
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
@@ -248,10 +250,18 @@ describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of 
     const back = await runVerification(NOW + 3 * 900_000); // the read is back (falls through to the factory)
     expect(back).toEqual({ ok: true, stale: [] });          // a real, non-empty read judged the job healthy
     expect(alertCalls).toHaveLength(0);                       // three skips + a good read never escalate
+    // The recovery line: once, on the good read, naming the episode (stderr, beside the SKIPPED lines).
+    expect(recovered()).toEqual([
+      `[CRON-FIRE-VERIFIER][READ_RECOVERED] after=3 consecutive skips since=${new Date(NOW).toISOString()} total_since_boot=3`,
+    ]);
+    await runVerification(NOW + 3 * 900_000 + 1);             // its twin: a good read with no skips before it
+    expect(recovered()).toHaveLength(1);                      // … prints no recovery line
     const later = NOW + 4 * 900_000;
     await failNextReads(4);
     for (let i = 0; i < 4; i++) await runVerification(later + i * 900_000);
     expect(blindAlerts().map((a) => a.dedupe_key)).toEqual([`cron_verifier_blind:${new Date(later).toISOString()}`]);
     expect(staleAlerts()).toHaveLength(0);
+    expect(blindAlerts()[0].body).toMatch(/\[CRON-FIRE-VERIFIER\]\[READ_RECOVERED\] line/);
+    warn.mockRestore();
   });
 });
