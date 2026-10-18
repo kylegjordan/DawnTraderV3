@@ -34,12 +34,12 @@ The nightly archive (B75) copies each old day out of the database, then deletes 
 **What the live night did NOT exercise, stated rather than implied:** the reuse arm and its recount, the refusal arms, alert minting and resolving, the plain lane's export (first eligible 2027-05-11), and the ctx lane. These rest on the tests and the staging dry run.
 
 ## CI AND DEPLOYS
-- **CI, read per job (TypeScript Check, Test Suite, Build, Docker Build, all `success`):** `39029631884` at `fef7f0cc7` · `39031907558` at `7b078a343`.
+- **CI, read per job (TypeScript Check, Test Suite, Build, Docker Build, all `success`):** `39029631884` at `fef7f0cc7` · `39031907558` at `7b078a343` · `39093799776` at `255fe576a` (carries the Step-8 fold `f807ad20c` and this report).
 - **Deploys:** `fef7f0cc7`, `dt-deploy --by cc-a`, 2026-10-17T11:44:52Z (migration ran 11:44:39Z). The Step-7 rehydrate fix `7b078a343` rode NEW Claude's deploy `162ae0537` (2026-10-17T13:03:42Z). The first night ran on `f0abf8494`, a descendant of both.
 - **The Step-8 item-2 fold** (a log line at the plain lane that prints the full cutoff and says whether it is day-floored): see **Step-8 fold** below.
 
 ## STEP-8 FOLD
-Langston's Step-8 item 2: the plain lane's log printed the cutoff as a date only, so the day-floored archive lane and the exact-cutoff delete-only lane read the same. The fix is one log string in `server/scripts/b75-retention-sweep.ts`, no behaviour change. **Langston PROCEED 2026-10-18 ~03:25Z** on the test leg, after two mutations: the old line restored fails the positive assertion; the new line kept with the old date-only form appended fails the negative assertion. It lands on migration with this report and rides the next deploy.
+Langston's Step-8 item 2: the plain lane's log printed the cutoff as a date only, so the day-floored archive lane and the exact-cutoff delete-only lane read the same. The fix is one log string in `server/scripts/b75-retention-sweep.ts`, no behaviour change. **Langston PROCEED 2026-10-18 ~03:25Z** on the test leg, after two mutations: the old line restored fails the positive assertion; the new line kept with the old date-only form appended fails the negative assertion. It landed on migration as `f807ad20c` (CI `39093799776`, 4/4 per job) and rides the next deploy; it is a log string only, so nothing waits on it.
 **Two limits of the test, recorded at Langston's direction:**
 1. Both assertions match literal text in the source. So this exact date-only form cannot come back silently. Other spellings would pass unnoticed, such as `substring(0, 10)`, `split('T')[0]` or a local variable.
 2. The positive assertion depends on how that line is formatted. Splitting the ternary across lines would fail it. That failure is loud, so it is a maintenance cost, not a defect.
