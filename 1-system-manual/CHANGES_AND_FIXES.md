@@ -1,5 +1,33 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-10-17-A — `B-B75-EXPORT-COMPLETENESS` (`#1195`, CC-A) — archive copies could be reused, or re-proven, without proof; the rehydrate CLI crashed on rotated copies and mis-added its totals
+
+**CLASS: `architecture`.** Scope `Claude Comms and Packages/Scope Files/B_B75_EXPORT_COMPLETENESS_SCOPE.md`, plan `…_PRE_AUDIT.md`.
+
+**SYMPTOMS (each measured):**
+1. **No completeness record:** the manifest could not tell a proven copy from one made in the 2026-05-06 → 2026-10-16 window.
+2. **The rehydrate CLI crashed on every rotated label:** `fatal … 404 NoSuchKey`, staging, `context_bridge_log 2026-02`. It picked the warm `migrated` row, whose object the rotator deletes by design.
+3. **Its totals concatenated BIGINT strings:** `rows_unproven=029069`. The pre-batch `total_rows` had the same defect, the same class as `#432`.
+4. **Defects caught at review, before any live harm:**
+   - the resume path would have reused or re-proved a closed-out or unproven copy;
+   - the whole path's `already-active` short-circuit bypassed the decision;
+   - the plain lane would have archived a whole trailing day, deleted part of it, then refused the table forever.
+
+**FIX:**
+- the `completeness_basis` register, backfilled;
+- CC-C's evidence table generalised, with a trigger tying the label to it;
+- one `decideExistingCopy` rule with a measured row-presence probe and a reuse recount;
+- proof required at every drop and delete gate;
+- evidence for every export, written in one transaction with the stamp;
+- the plain lane day-floored and marking `active` after its delete;
+- keyed, self-resolving sweep alerts;
+- the rehydrate tier choice, sidecar, `.CORRUPT` rename and `Number()` counts.
+
+**REVIEW:** Langston — Step 1 r6, Step 2 r6, Step 4 gates A, B and C, and the Step-7 mini-cycle, each PROCEED after the rounds recorded in the change list.
+**DEPLOYED:** `fef7f0cc7` 2026-10-17T11:44:52Z; the Step-7 fix `7b078a343` with `162ae0537` at 13:03:42Z.
+**VERIFIED:** the 2026-10-18 02:15Z sweep, run_id `6f7ef0d4-…`. 4 of 4 new objects `source-count-matched`, one evidence row each, three counts equal; census 568 / 4 / 4 / 0; no measurable cost on the largest object (304,884 ms vs 313,486). Record `…_STEP7_VERIFICATION.md`.
+**NOT RECOVERED, by decision:** the rows missing from the 568 legacy copies.
+
 ## FIX-2026-10-16-B — `B-XSTOCK-BID-TRIGGER-RELAND` objective 6 (row 2, CC-C) — an xStock exit could be released, and sold, on a blown-out book
 
 **CLASS: `architecture`. SYMPTOM:** the `spread_blown` arm sat after the comparator and used the chain's trailing threshold; a hollow YIELD cleared the comparator, the next frame seeded ON the wide book, and a comparator-relative test then released the exit — PCAR/USD 2026-10-13, YIELD 00:19:42Z → EXIT_RELEASED 00:19:47Z, sold at the bid 7.2% under entry on a 12.3% book. Of 13 such overnight stop exits outside the venue-transition pause, the 12 with a next-open read all reopened above the stop.

@@ -67,6 +67,27 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 
 **Retired / paused (do not resurrect):** `b70-retention-sweep.ts` was **DELETED** (B-STORAGE-HARDEN Wave C, rule 18) — it was DROP-only and violated the never-drop directive; the B70 tables now tier through the B75 sweep instead.
 
+## 4.5 ★ Is an archive copy complete? (`B-B75-EXPORT-COMPLETENESS`, 2026-10-17, `#1195`)
+
+**The window:** copies made **2026-05-06 → 2026-10-16** may be missing rows *inside* each day. The B75 exporter skipped the rest of any group of rows sharing one timestamp at a page boundary, and nothing counted the source, so a short copy verified and its original was dropped.
+- **Measured:** `crypto_perp_ohlc_1m` archived exactly 240,000 of 264,960 rows on 27 nights.
+- `signal_eval_archive` was about 2.1% short on the replayed day, and the ticker snapshots 0.1-0.3%.
+- The other tables' shortfall is unknowable, because the sources are gone.
+
+**Kyle's decision, 2026-10-17 (option 3): RECOVER NOTHING; RECORD THE GAPS EVERYWHERE.**
+
+**The record — `data_archive_manifest.completeness_basis` on every copy:**
+
+| value | meaning |
+|---|---|
+| `source-count-matched` | **proven**: a stored evidence row shows source = exported = downloaded |
+| `gate-deployed-unrecorded` | exported under the count gate (from `b678ef0f6`, 2026-10-16) but before the count was stored — not proven |
+| `unverified-legacy` | exported in the window above — rows may be missing (568 copies) |
+| `unrecorded` | a writer that did not stamp — a defect; blocks every delete |
+
+**What `source-count-matched` does NOT mean:** that the table held everything it should have. It proves the copy matches the table as it stood at export time.
+**The deletion rule:** nothing is dropped or deleted unless its copy is proven. A rehydrate prints each copy's basis and writes a `.completeness.json` beside it.
+
 ## 5. Capacity + the disk ceiling
 
 - Supabase Pro disk **auto-expands** at ~90% usage (+50% per step) and **never shrinks**; the practical auto-expand ceiling is **200 GB** (`database_monitor.plan_cap_mb = 204800`). Logical data is measured against this cap; the tiering keeps hot data moving off so logical size stays well under it.
@@ -138,7 +159,7 @@ becoming an unowned monotonic store, which is the F.2 failure class this policy 
 ### ★★ THE RULE THIS CATALOGUE EXISTS TO MAKE UNMISSABLE
 **A RETENTION KEY IS NOT TIERING. THEY ARE TWO SEPARATE ACTS.** A table can hold a perfectly good `hot_retention_days` (or equivalent) **and still be registered in NO sweep** — in which case the key describes an intention nobody executes, or worse, a DELETE that no archive precedes. **⇒ To answer "is X safe?", check BOTH: (a) does it have a window, and (b) is its name in one of the three registries below.** Answering only (a) is the trap that produced the trade-record finding.
 
-### A. ARCHIVED **then** dropped — safe (12 tables)
+### A. ARCHIVED **then** dropped (12 tables) — ⚠️ copies made 2026-05-06 → 2026-10-16 are NOT proven complete (§4.5); since `B-B75-EXPORT-COMPLETENESS` every new copy is proven before its original is dropped
 **Market data (`B74_TABLES`)** — partitioned, exported to warm, verified, then dropped:
 `xstock_spot_ticker_snap` (30 d) · `xstock_perp_ticker_snap` (30 d) · `crypto_spot_ticker_snap` (30 d) · `xstock_spot_ohlc_1m` (365 d live; RULED 30, flips post-#685-deploy) · `xstock_perp_ohlc_1m` (365 d live; RULED 30, same) · `crypto_spot_ohlc_1m` (365 d live; RULED 30, same) · `crypto_perp_ohlc_1m` + `crypto_perp_ticker_snap` (30 d from birth — land with the P19-B-PERPFEED migration)
 **Analytics (`B70_TABLES`)** — same export→warm→verify→drop path (moved off DROP-only at Wave C, #430):
@@ -158,7 +179,7 @@ becoming an unowned monotonic store, which is the F.2 failure class this policy 
 - **Langston's scoping steer (adopt it — it makes the fix small):** protect the fields with a **NAMED CONSUMER**, not everything that disappears. Named: `chosen_entry_mode` + `entry_fee_rate` (**★ THE maker-vs-taker entry-policy record — these two are the genuinely unrecoverable pair; nothing else preserves them for the VTS corpus**) and the `pool` tag. ⚠️ **CORRECTED 2026-07-30 (Langston Step-4): an earlier version of this sentence credited `maker_limit_price` with that work. IT DOES NOT DO IT — `maker_limit_price` is a COPY of `entry_price` (both writers set `makerLimitPrice: entryPrice`; a maker fills AT its limit and `entry_price` is never rewritten), and `entry_price` is already archived, so it is RECOVERABLE. It is retained only to keep the archived row self-contained and as a coherence check if a future writer ever diverges limit from entry. `maker_deadline` IS unrecoverable — it is `openedAt + resolveMakerMaxPendingMs()` and that knob is tunable, so once it moves the patience budget an order worked under is gone.** Sizing ranks lower: `netPnl`/`r_multiple`/`dollarValue` survive, so outcomes reconstruct without `position_size`.
 
 ### D. Its own TTL, outside the sweep
-`context_bridge_log` (14 d) — `context-bridge-log-ttl.ts`. **Is** tiered (present in the manifest, warm **and** cold).
+`context_bridge_log` (14 d) — `context-bridge-log-ttl.ts`. **Is** tiered (present in the manifest, warm **and** cold) — ⚠️ **but the script has never been scheduled** (its 6 manifest rows came from manual runs; `#169`, Infra Claude), so the table is not currently being aged out.
 
 ### E. ⚠️ REGISTERED ≠ EXERCISED — read the manifest before believing coverage
 The `data_archive_manifest` holds **72 objects across only 5 distinct source tables**: `context_bridge_log`, `crypto_spot_ticker_snap`, `exit_decision_archive`, `xstock_perp_ticker_snap`, `xstock_spot_ticker_snap`. **⇒ 8 of the 12 registered tables have never produced an archive object.** **NOT asserted as a defect** — the benign explanation fits (a table only produces an object once a partition ages past its window; the `_ohlc_1m` set is on 365 d and the analytics set on 90 d, and several are younger than that). **But it is the difference between "configured" and "proven", and only the manifest can tell you which you have.** ★ **Anyone claiming a table is safely tiered should cite a manifest row, not a config key.**

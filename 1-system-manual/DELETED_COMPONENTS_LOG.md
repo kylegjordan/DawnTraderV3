@@ -6,6 +6,18 @@
 
 ---
 
+## Three alert-transport values, the sweep's `reused` field and its whole-path `already-active` short-circuit — DELETED 2026-10-17 (B-B75-EXPORT-COMPLETENESS, `#1195`, CC-A)
+
+| removed | file | why, and the blast-radius proof |
+|---|---|---|
+| `'governance-checker'`, `'dispatcher'` and `'api'` in `ResolveTransport` | `server/services/system-alerts.ts` | **No caller passes any of them, and no stored row carries them:** every resolve call site hands `cli`, `engine` or `timer-script`, and `resolved_by_transport` over all 2,104 queue rows is cli 1726 / engine 109 / null 269 (Langston's read). A value with no writer and no stored instance is a dead enum branch. ⚠️ **`B_GOV_INTEGRITY_1_COMPLETION_REPORT.md:30` records `governance-checker` as deliberately kept** — that record is now superseded by this entry and is not rewritten. The *actor* `governance-checker` in `ALERT_ACTORS` is unaffected. |
+| `reused: boolean` on `ArchiveOutcome` | `server/scripts/b75-retention-sweep.ts` | it had no reader: a declaration and two writes (Langston, Step 2). It was replaced by the `kind: 'exported' / 'reused' / 'skipped'` union. |
+| the whole path's `if (existing.state === 'active') return skipped` | `server/scripts/b75-retention-sweep.ts` (was `:703-714`) | it returned BEFORE the resume decision, so an `active` label with live rows was silently skipped. The whole path now reaches `decideExistingCopy` through `archiveOneObject`, which skips only an EMPTY label (measured by a LIMIT 1 probe) and refuses otherwise. `getManifestRow` had exactly two callers, `:703` and `:517` (Langston's census). |
+
+Archive copies: git history is authoritative (`fef7f0cc7` and its parents). The removed lines are small and are quoted in the change list (`Claude Comms and Packages/Change Lists/B_B75_EXPORT_COMPLETENESS_CHANGE_LIST.md`), so no `.removed` file was kept.
+
+---
+
 ## The four AI-orchestrator routes and the AI Transparency page pieces that depended on them — DELETED 2026-10-17 (B-ORCHESTRATOR-ROUTES-REMOVAL, `#1210`, sprint row 59g1)
 
 **What:** `server/routes.ts` — `GET /orchestrator/telemetry`, `GET /orchestrator/analysis`, `POST /orchestrator/analyze`, `POST /orchestrator/audit` (203 lines). `client/src/pages/ai-transparency.tsx` — the telemetry and analysis queries, the analyze and audit mutations, the tab header (urgency badge, "Trigger Analysis", "Run System Audit"), the telemetry gate and its five cards (System, Trading, AI, Active Goals, Active Guardrails), the System Audit Report card and its `auditReport` state, the AI Analysis tab (trigger + content), and `getSeverityColor` (its one caller was in that tab — found orphaned by Langston at Step 4). `.tsc-baseline.json` — three messages ×6 that lived in the audit route (335 → 329).

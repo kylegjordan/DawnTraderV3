@@ -12222,6 +12222,25 @@ Single source of truth: `data_archive_manifest`. State machine `pending → uplo
 
 Future ML/analytics schedulers query the manifest once instead of needing to know storage layout. Rehydrate via `b75-rehydrate.ts --table X --from D1 --to D2 --out PATH [--restore-cold]`.
 
+### Completeness of an archive copy (B-B75-EXPORT-COMPLETENESS, 2026-10-17, `#1195`)
+
+**A copy's `row_count` alone proves nothing:** it is the exported count, and from 2026-05-06 to 2026-10-16 the exporter could drop rows inside each day while that count still agreed with itself. So every manifest row carries `completeness_basis`, and **only `source-count-matched` means proven.**
+- **What proven means:** an append-only `data_archive_exact_evidence` row stores source = exported = downloaded for that object. A database trigger refuses the label without that row.
+- **What it does NOT prove:** that the table held everything it should have. It proves the copy matches the table as it stood at export time.
+- `unverified-legacy` marks the 568 copies of that window, `gate-deployed-unrecorded` the copies made under the count gate before the proof was stored, and `unrecorded` a writer that failed to stamp.
+- **Kyle decided 2026-10-17 not to recover the missing rows.**
+
+**The deletion rule:** a hot source is dropped or deleted, and an existing copy reused, only against a `verified` and proven row whose source still holds the proven count.
+- An existing unproven or closed-out (`active`/`migrated`) copy with rows still present is refused, never re-exported. Re-proving it would prove only the leftover rows.
+- The same rule governs all four archive paths: the sweep's whole and sliced partition lanes, its plain-archive lane, and the context-bridge lane.
+
+**`hot_partition_dropped_at` has two lane meanings:**
+- the partition lane: when the hot partition was dropped;
+- the plain-archive lane: when the source rows were deleted.
+- **Neither is ever re-stamped.**
+
+**The rehydrate CLI** prints each object's basis, keeps proven and unproven row totals apart, and writes a completeness sidecar beside each file. **A consumer must read the sidecar, not assume a downloaded day is whole.**
+
 ## Sweep schedule
 
 | Cron | Script | Action |
