@@ -4,11 +4,22 @@ import { AlertsService } from '../services/alerts-service';
 import { storage } from '../storage';
 import * as fs from 'fs';
 import * as path from 'path';
+import { countedMetaFromReport, type AuditResultView } from '../services/formula-audit-view';
 
 const SCHEDULE = process.env.FORMULA_AUDIT_SCHEDULE || '0 3 * * *'; // Default: UTC 03:00
 const ENABLED = process.env.FORMULA_AUDIT_ENABLED !== 'false'; // Enabled by default
 
 const formulaAuditService = new FormulaAuditService();
+
+/**
+ * B-FORMULA-HEALTH-AUDIT-FRESHNESS (row 59g1a): the last admin manual run, held since this process started.
+ * Losing it on a restart is correct — it is not the scheduled record (that lives in the fire row's `meta`).
+ * Read by GET /api/system/formula-audit through `resolveFormulaAuditView`.
+ */
+let lastManualAudit: AuditResultView | null = null;
+export function getLastManualFormulaAudit(): AuditResultView | null {
+  return lastManualAudit;
+}
 
 /**
  * Clean up old audit reports (older than 7 days)
@@ -134,21 +145,27 @@ export async function runFormulaAudit(runType: 'scheduled' | 'manual' = 'schedul
     
     // Generate dated filename
     const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    const reportPath = `/tmp/audit_report_${dateStr}.txt`;
-    
+    let reportPath: string | null = `/tmp/audit_report_${dateStr}.txt`;
+    let reportWriteError: string | undefined;
+
     // Also create/update a "latest" symlink-style file
     const latestPath = '/tmp/audit_report_latest.txt';
-    
-    // Generate text report from summary
-    const textReport = report.summary.join('\n');
-    
-    // Save reports
-    fs.writeFileSync(reportPath, textReport);
-    fs.writeFileSync(latestPath, textReport);
-    
-    // Validate report integrity
-    validateReportFile(reportPath);
-    
+
+    // B-FORMULA-HEALTH-AUDIT-FRESHNESS (row 59g1a): the text-file writes are an operator convenience. A failure here
+    // is logged and the audit's result is still returned — before this, a write failure booked a completed audit as
+    // an error and discarded it. The span covers the summary join, both writes and the validation, so nothing between
+    // the audit and the return can throw.
+    try {
+      const textReport = report.summary.join('\n');
+      fs.writeFileSync(reportPath, textReport);
+      fs.writeFileSync(latestPath, textReport);
+      validateReportFile(reportPath);
+    } catch (writeErr: any) {
+      reportWriteError = writeErr?.message ?? String(writeErr);
+      console.error('[FORMULA-AUDIT] ⚠️ Report file write failed (the audit result is kept):', reportWriteError);
+      reportPath = null;
+    }
+
     // Log completion
     const duration = Date.now() - startTime;
     console.log(`[FORMULA-AUDIT] completed in ${duration}ms PASS=${report.passed} WARNING=${report.warnings} FAIL=${report.failed}`);
@@ -167,11 +184,23 @@ export async function runFormulaAudit(runType: 'scheduled' | 'manual' = 'schedul
     // Cleanup old reports
     cleanupOldReports();
     
+    if (runType === 'manual') {
+      lastManualAudit = {
+        timestamp: report.timestamp,
+        totalFormulas: report.totalFormulas,
+        passed: report.passed,
+        warnings: report.warnings,
+        failed: report.failed,
+        tests: report.tests.map((t) => ({ name: t.name, status: t.status, deviationPercent: t.deviationPercent })),
+      };
+    }
+
     return {
       ...report,
       runType,
       timestamp,
       reportPath,
+      ...(reportWriteError ? { reportWriteError } : {}),
       duration
     };
   } catch (error: any) {
@@ -201,8 +230,11 @@ export function registerFormulaAuditJob() {
     const startMs = firedAt.getTime();
     let status: 'success' | 'error' = 'success';
     let errorMessage: string | undefined;
+    // B-FORMULA-HEALTH-AUDIT-FRESHNESS (row 59g1a): keep the result so the fire row carries it (the card reads it).
+    let resultMeta: Record<string, unknown> = {};
     try {
-      await runFormulaAudit('scheduled');
+      const result = await runFormulaAudit('scheduled');
+      resultMeta = { ...countedMetaFromReport(result) };
     } catch (error: any) {
       status = 'error';
       errorMessage = error?.message ?? String(error);
@@ -218,7 +250,7 @@ export function registerFormulaAuditJob() {
           firedAt,
           status,
           errorMessage,
-          meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs },
+          meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs, ...resultMeta },
         });
       } catch (auditErr) {
         console.error(

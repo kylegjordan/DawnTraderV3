@@ -877,10 +877,15 @@ export class FormulaAuditService {
     textReport.push(...report.summary);
     
     // Write to /tmp/audit_report.txt
+    // B-FORMULA-HEALTH-AUDIT-FRESHNESS (row 59g1a): a failed write is logged, never thrown — it used to escape
+    // runAudit() and discard a completed audit.
     const filePath = '/tmp/audit_report.txt';
-    fs.writeFileSync(filePath, textReport.join('\n'), 'utf-8');
-    
-    console.log(`\n📝 Full audit report saved to: ${filePath}\n`);
+    try {
+      fs.writeFileSync(filePath, textReport.join('\n'), 'utf-8');
+      console.log(`\n📝 Full audit report saved to: ${filePath}\n`);
+    } catch (writeErr: any) {
+      console.error(`[AUDIT] ⚠️ Could not write ${filePath} (the audit result is kept):`, writeErr?.message ?? writeErr);
+    }
   }
 }
 

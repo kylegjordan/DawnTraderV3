@@ -11,6 +11,7 @@ import { useTradingMode } from "@/contexts/trading-mode-context";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { RecentActionsTimeline } from "@/components/dashboard/recent-actions-timeline";
+import { formulaAuditSourceLabel, FORMULA_AUDIT_REPORT_FILE_NOTE } from "@shared/formula-audit-labels";
 
 // Helper function to format category labels
 const getCategoryLabel = (category: string): string => {
@@ -123,7 +124,7 @@ export default function AITransparencyPage() {
   });
 
   // Fetch formula audit data (for Formula Health in AI Command Center)
-  const { data: formulaAuditData, isLoading: formulaAuditLoading } = useQuery<{ ok: boolean; report: any }>({
+  const { data: formulaAuditData, isLoading: formulaAuditLoading } = useQuery<{ ok: boolean; runType?: string; note?: string | null; report: any }>({
     queryKey: ['/api/system/formula-audit'],
     refetchInterval: 300000, // Refresh every 5 minutes
   });
@@ -482,9 +483,14 @@ export default function AITransparencyPage() {
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Clock className="w-4 h-4" />
                     <span data-testid="text-last-audit">
-                      Last audit: {formatDistanceToNow(new Date(formulaAuditData.report.timestamp))} ago
+                      Last audit: {formatDistanceToNow(new Date(formulaAuditData.report.timestamp))} ago ({formulaAuditSourceLabel(formulaAuditData.runType)})
                     </span>
                   </div>
+                  {formulaAuditData.note && (
+                    <div className="text-sm text-yellow-600 dark:text-yellow-400" data-testid="text-audit-note">
+                      {formulaAuditData.note}
+                    </div>
+                  )}
 
                   {/* Warning/Failure Alerts */}
                   {(formulaAuditData.report.warnings > 0 || formulaAuditData.report.failed > 0) && (
@@ -494,12 +500,12 @@ export default function AITransparencyPage() {
                         {formulaAuditData.report.failed > 0 ? (
                           <>
                             <strong>{formulaAuditData.report.failed} formula(s) failed validation</strong> with deviations ≥1%.
-                            {isAdmin && " Review /tmp/audit_report.txt for details."}
+                            {isAdmin && FORMULA_AUDIT_REPORT_FILE_NOTE}
                           </>
                         ) : (
                           <>
                             <strong>{formulaAuditData.report.warnings} formula(s)</strong> have minor deviations (0.1-1%).
-                            {isAdmin && " Review /tmp/audit_report.txt for details."}
+                            {isAdmin && FORMULA_AUDIT_REPORT_FILE_NOTE}
                           </>
                         )}
                       </AlertDescription>

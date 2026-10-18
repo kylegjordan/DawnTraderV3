@@ -15133,15 +15133,56 @@ Provide specific, actionable recommendations.`,
     }
   });
 
-  // Formula Audit - Verify all formulas used in screeners, guardrails, and strategies
+  // Formula Audit - the Formula Health card's read.
+  // B-FORMULA-HEALTH-AUDIT-FRESHNESS (row 59g1a, #1214): this read no longer RUNS the audit (it made the card's "Last
+  // audit" always read "just now"). It shows the newest real result — the admin's last manual run (in memory since the
+  // process started) or the daily run's result from its `formula_audit_cron` fire row — and runs one only when
+  // neither exists (never held, so its label stays true). A note says when the latest scheduled row failed or
+  // recorded no result. The decision is `resolveFormulaAuditView`; this route only reads and, if told to, runs.
   apiRouter.get('/system/formula-audit', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      console.log('[AUDIT] Starting formula audit...');
-      const report = await formulaAuditService.runAudit();
-      console.log(`[AUDIT] Completed: ${report.passed} passed, ${report.warnings} warnings, ${report.failed} failed`);
-      
-      res.json({ 
-        ok: true, 
+      const { getLastManualFormulaAudit } = await import('./jobs/formula-auto-audit');
+      const { resolveFormulaAuditView, rowCarriesCounts } = await import('./services/formula-audit-view');
+      type FireRowRead = { fired_at: string | Date; status: string; meta: unknown };
+      const toRow = (r: FireRowRead) => ({
+        firedAt: new Date(r.fired_at).toISOString(), status: r.status, meta: r.meta,
+      });
+      const rowsOf = (result: unknown): FireRowRead[] => {
+        const list = (result as { rows?: unknown[] })?.rows ?? (Array.isArray(result) ? result : []);
+        return list as FireRowRead[];
+      };
+      const latest = rowsOf(await db.execute(sql`
+        SELECT fired_at, status, meta FROM scheduled_tasks_audit
+        WHERE task_name = 'formula_audit_cron' ORDER BY fired_at DESC LIMIT 1`));
+      // Candidates for the latest COUNTED row: rows whose meta names the counts; each is validated in code.
+      const counted = rowsOf(await db.execute(sql`
+        SELECT fired_at, status, meta FROM scheduled_tasks_audit
+        WHERE task_name = 'formula_audit_cron' AND status = 'success' AND meta ? 'passed'
+        ORDER BY fired_at DESC LIMIT 10`)).map(toRow);
+      const latestCounted = counted.find((r) => rowCarriesCounts(r.meta));
+      const decision = resolveFormulaAuditView({
+        manual: getLastManualFormulaAudit(),
+        latestRow: latest[0] ? toRow(latest[0]) : null,
+        latestCountedRow: latestCounted && rowCarriesCounts(latestCounted.meta)
+          ? { ...latestCounted, meta: latestCounted.meta } : null,
+      });
+
+      let runType: 'manual' | 'scheduled' | 'on-read';
+      let report: { timestamp: string; totalFormulas: number; passed: number; warnings: number; failed: number;
+        tests: Array<{ name: string; status: string; deviationPercent: number }> };
+      if (decision.shown) {
+        runType = decision.shown.runType;
+        report = decision.shown.result;
+      } else {
+        console.log('[AUDIT] No scheduled or manual result to show — running the formula audit for this read');
+        const run = await formulaAuditService.runAudit();
+        runType = 'on-read';
+        report = run;
+      }
+      res.json({
+        ok: true,
+        runType,
+        note: decision.note,
         report: {
           timestamp: report.timestamp,
           totalFormulas: report.totalFormulas,
@@ -15149,11 +15190,10 @@ Provide specific, actionable recommendations.`,
           warnings: report.warnings,
           failed: report.failed,
           tests: report.tests,
-          summary: report.summary
-        }
+        },
       });
     } catch (error: any) {
-      console.error('[AUDIT] Formula audit error:', error);
+      console.error('[AUDIT] Formula audit read error:', error);
       res.status(500).json({ error: error.message });
     }
   });
