@@ -60,6 +60,7 @@ The first sweep under the new rules runs 2026-10-18 02:15Z. **Event-wait alert `
 | `signal_eval_archive/2026-09-17` | 2,200,627 | 221,532 | 230,586 |
 
 **Langston gate B attack 3, answered with a measurement:**
+- **The equal-n control comes first** (Langston, Step 8 record item 1): `crypto_perp_ohlc_1m` held **264,960 rows on both nights** and ran **27,360 → 25,203 ms**, 7.9% faster *with* the new full gunzip read-pass. The other three tables changed row count between nights as well as code, so they conflate two variables.
 - The largest object actually exported is `xstock_spot_ticker_snap`: 2.9M rows, 190 MB compressed.
 - Its wall-clock, including the new second gunzip pass that counts the downloaded rows, is 304,884 ms, against 313,486 ms the night before without that pass.
 - So the added cost is within the night-to-night spread on all four tables. It is not separable at n = 1 per table; the claim is "no measurable cost", not "zero cost".
