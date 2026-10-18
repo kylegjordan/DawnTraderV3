@@ -1408,7 +1408,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging the tab shows Formula Health (10 formulas, 9 passing, 1 minor warning) and Feed Health; the page asks for none of the removed routes, and the server's "missing module" errors went from 116 that afternoon to none. **Left:** the card's "last audit" line always reads "just now" (`#1214`); the health-check address registered three times (`#1212`).
 
-## B-CRON-VERIFIER-QUERY-FAIL (CC-B, sprint row 59g2; `#1211`) — change-class `non_architecture` — ⏳ **STEP 11 (2026-10-18), completion report with Langston** (deployed `7501f4f55` 05:33:52Z; record `Claude Comms and Packages/Batch Completion/B_CRON_VERIFIER_QUERY_FAIL_COMPLETION_REPORT.md`)
+## B-CRON-VERIFIER-QUERY-FAIL (CC-B, sprint row 59g2; `#1211`) — change-class `non_architecture` — ✅ **CLOSED 2026-10-18 (Langston confirmed Step 11, ~06:05Z)** (deployed `7501f4f55` 05:33:52Z; record `Claude Comms and Packages/Batch Completion/B_CRON_VERIFIER_QUERY_FAIL_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The cron verifier checks every 15 minutes that each scheduled job ran when it should. When its look-up of past runs failed (a slow database), it treated the empty answer as "no job has ever run" and raised false warnings for the hourly and daily jobs — the same four warnings, seven times since August. Its own code comment said it would skip the check in that case; it never did.
 

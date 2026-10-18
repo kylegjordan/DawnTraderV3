@@ -1387,7 +1387,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **The AI Command Center tab shows its working cards again.** Four routes that loaded an AI module deleted in November 2025 — and failed every time — are removed with the page pieces that relied on them (including the AI Analysis tab and the System Audit, removed rather than repaired). The Formula Health card, hidden inside the broken section, is drawn. Verified in Chrome and by Langston.
 
-### 2026-10-18 — B-CRON-VERIFIER-QUERY-FAIL (CC-B; sprint row 59g2, `#1211`) — ⏳ STEP 11
+### 2026-10-18 — B-CRON-VERIFIER-QUERY-FAIL (CC-B; sprint row 59g2, `#1211`) — ✅ CLOSED
 
 **The cron verifier no longer raises false "never ran" warnings when its database look-up fails.** It skips the check and says so, warns once if it stays blind for an hour, and logs when it can read again. Deployed `7501f4f55`; the regular check is unchanged on staging (Langston confirmed). Found on the way and placed: nothing pages on a database outage (row 59g4) and the five-minute jobs are never judged (row 59g5).
 

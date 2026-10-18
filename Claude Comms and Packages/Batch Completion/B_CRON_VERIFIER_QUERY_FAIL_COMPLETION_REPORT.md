@@ -1,4 +1,4 @@
-# B-CRON-VERIFIER-QUERY-FAIL — COMPLETION REPORT · ⏳ STEP 11 (2026-10-18), with Langston
+# B-CRON-VERIFIER-QUERY-FAIL — COMPLETION REPORT · ✅ CLOSED 2026-10-18 (Langston confirmed Step 11 at `97c4eb934`)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` · **Sprint plan row:** 59g2 · **Issue:** `#1211`
 **Scope / audit / change list:** `Scope Files/B_CRON_VERIFIER_QUERY_FAIL_SCOPE.md` (r2), `…_PRE_AUDIT.md`, `Change Lists/B_CRON_VERIFIER_QUERY_FAIL_STEP4_CHANGE_LIST.md` (with the Steps 5-7 record)
@@ -47,10 +47,10 @@ CHANGE-CLASS: `non_architecture`
 | T1 | the batch PRE_AUDIT | ✅ | audit A1-A4 and plan B1-B5 |
 | T1 | COMPLETION_REPORT | ✅ | this report |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: row 59g2 in the open table, 59g4 and 59g5 queued (and 59g1a added to the open table); CC-A, CC-C, CC-INFRA not mine |
-| T1 | Langston's MEMORY.md | ✅ (his write) | recorded at his Step-11 confirm |
+| T1 | Langston's MEMORY.md | OWED — blocked on the loaded-set breach (#1215) | his section is staged (`/home/langston/.59g2-part.md`); `langston-memory-write` refuses every write while the loaded set is over its ceiling (152,107 B vs 143,856 B, 05:40:31Z) — recorded on `#1215` |
 | T2 | SYSTEM_MANUAL.md | N/A | the monitoring layer, not the trading system's architecture or math |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | §9.10.c entry: the skip state, the module counters, the `cron_verifier_blind` key, the recovery line, each stamped with the sha that ships it |
-| T2 | RUNNING_ISSUES.md | ✅ | `#1211` closed with the forward read; `#1217` and `#1218` filed and placed |
+| T2 | RUNNING_ISSUES.md | ✅ | `#1211` closed with the forward read; `#1217` and `#1218` filed and placed; `#1215` amended (the breach makes the Langston-MEMORY ledger row unsatisfiable) |
 | T2 | CHANGES_AND_FIXES.md | N/A | a monitoring defect fixed in its own batch; no registry item |
 | T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level change |
 | T2 | ADJUSTMENT_FRAMEWORK.md | N/A | `BLIND_ESCALATION_SKIPS` is a verifier liveness constant, not a tunable |
