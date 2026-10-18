@@ -359,6 +359,10 @@ describe('sweep wiring (structure at the source)', () => {
     expect(plain).not.toMatch(/rawCutoff\]/);
     expect(plain).toContain('WHERE ${spec.timestampColumn} < $1${extraAnd}');
   });
+  it('the plain-lane log prints the full cutoff and names its policy (Step 8 record item 2)', () => {
+    expect(plain).toContain("${cutoff.toISOString()} (retentionDays=${retentionDays}${spec.archive ? ', day-floored archive lane' : ', exact cutoff'})");
+    expect(plain).not.toContain('cutoff.toISOString().slice(0, 10)');
+  });
   it('the plain lane treats a skipped present day as an invariant violation, like the sliced path', () => {
     expect(plain).toMatch(/if \(outcome\.kind === 'skipped'\) \{\s*throw new Error\(/);
   });

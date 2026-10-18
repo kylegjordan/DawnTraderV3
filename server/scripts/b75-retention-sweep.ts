@@ -1192,7 +1192,7 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
       await ctl.query(`VACUUM ${spec.table}`); // not in a txn; plain VACUUM — no exclusive lock
       console.log(
         `[B75 sweep][plain] ${spec.table}: deleted ${tableDeleted} rows older than ` +
-          `${cutoff.toISOString().slice(0, 10)} (retentionDays=${retentionDays}) + VACUUM`,
+          `${cutoff.toISOString()} (retentionDays=${retentionDays}${spec.archive ? ', day-floored archive lane' : ', exact cutoff'}) + VACUUM`,
       );
       await resolveSweepAlerts(
         AUTO_RESOLVED_CLASSES.map((cls) => plainAlertKey(spec.table, cls)),
