@@ -1395,6 +1395,6 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **The fill-time reward-to-risk check stays in watch-only mode while a pre-registered 21-day read decides it.** The archive now tells a market-order taker from a limit order that filled at once, so the read is judged on the fills that can actually slip. Record: `Batch Completion/B_RR_FLOOR_HEADROOM_PROGRESS_REPORT.md`.
 
-### 2026-10-18 — B-B75-EXPORT-COMPLETENESS (CC-A; sprint §0a stage 3, `#1195`) — ⏳ STEP 11 PENDING
+### 2026-10-18 — B-B75-EXPORT-COMPLETENESS (CC-A; sprint §0a stage 3, `#1195`) — ✅ CLOSED
 
 **Every archive copy now says whether it is proven complete.** The 568 copies made before the count gate are marked unverified and the 4 made under it are marked unrecorded; nothing is recovered, by Kyle's decision. From 2026-10-18 each new copy carries a proof that the source, exported and downloaded counts are equal, the database refuses a "proven" stamp without one, and deletes and reuse require it. The first night proved all 4 of its copies, and the one table with the same row count on both nights ran no slower. Record: `Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`.

@@ -1420,7 +1420,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **SO FAR.** Each fill now records which kind of taker it was, and a 21-day read decides, on the market-order kind, whether the check goes live per class. Floors unchanged; recalibration stays in Phase 25.
 
-## B-B75-EXPORT-COMPLETENESS (CC-A, sprint §0a stage 3; `#1195`) — change-class `architecture` — ⏳ **STEP 11, Langston's confirm pending (2026-10-18)** (deployed `fef7f0cc7` 2026-10-17T11:44:52Z; the rehydrate fix `7b078a343` rode `162ae0537` 13:03:42Z; Step 8 CONFIRMED by Langston 2026-10-18; record `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`)
+## B-B75-EXPORT-COMPLETENESS (CC-A, sprint §0a stage 3; `#1195`) — change-class `architecture` — ✅ **CLOSED 2026-10-18 (Langston Step-11 CONFIRMED at `4cf4439de`)** (deployed `fef7f0cc7` 2026-10-17T11:44:52Z; the rehydrate fix `7b078a343` rode `162ae0537` 13:03:42Z; Step 8 CONFIRMED by Langston 2026-10-18; record `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** The nightly archive could not say whether any copy it held was complete. From 2026-05-06 to the count-gate hotfix on 2026-10-16 the copy skipped rows at page boundaries, and nothing recorded which copies were checked — so a short copy and a whole one looked the same, could be deleted from the database the same way, and could be reused as though proven.
 

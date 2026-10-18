@@ -110,7 +110,7 @@
 ### ✅ CLOSED SINCE THIS FILE WAS LAST WRITTEN
 - **`B-WAKE-HEARTBEAT-CONTROL-DATE`** (`#1162`, sprint row 1q) — CLOSED 2026-10-16. The heartbeat's daily check-in is decided from files and pages only for a real miss; proven live over three runs. Spawned `#1202` (row 1qa, the wake log's bound) and three filter items on row 1z.
 - **`B-B75-COUNT-GATE`** (hotfix, `#1195`) — CLOSED 2026-10-17. Verified by the 02:15Z sweep (the one-minute bars at their true 264,960 after 27 nights at 240,000); Langston confirmed 02:37Z. The parent `B-B75-EXPORT-COMPLETENESS` follows.
-- **`B-B75-EXPORT-COMPLETENESS`** (architecture, `#1195`) — at Step 11 2026-10-18, closing on Langston's confirm. Forward-only by Kyle's decision: every new archive copy carries its proof (4 of 576 proven on 10-18). Report: `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`. Follow-up `B-B75-SCRIPT-TEST-HARNESS` (`#1208`) is CC-B's.
+- **`B-B75-EXPORT-COMPLETENESS`** (architecture, `#1195`) — ✅ CLOSED 2026-10-18 (Langston Step-11 CONFIRMED at `4cf4439de`). Forward-only by Kyle's decision: every new archive copy carries its proof (4 of 576 proven on 10-18). Report: `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`. Follow-up `B-B75-SCRIPT-TEST-HARNESS` (`#1208`) is CC-B's.
 - **`B-TASK-LIST-SLOT`** (`#1009`, row 4.57) — CLOSED 2026-09-18. P5 passed 3 of 3 at close (1 caught by the check, 2 unprompted); Langston confirmed. Slot-time half is row 4.8.
 - **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) — CLOSED 2026-09-09. All four criteria met; `#1021` folded in.
 - **`B-CANONICAL-BRIDGE-CHURN`** (`#402`, row 4.56a) — CLOSED 2026-09-11. Langston ruled U-1 met. Five residuals at `P19-B12`; spawned `#1039`.

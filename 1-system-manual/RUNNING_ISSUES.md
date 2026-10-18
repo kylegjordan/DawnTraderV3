@@ -11108,7 +11108,7 @@ Read: the loop BREAKS (so the background task ends and the session is notified) 
 
 `HOME: B-XSTOCK-SNAPSHOT-RETENTION, owner CC-C, placed in SPRINT_TO_LIVE_PLAN.md pre-sprint Stage 3 immediately after B-XSTOCK-BAR-AVAILABILITY and before B-CRON-MISSED-CATCHUP` — §9.4 disposition 3. OPEN. NOT RE-READ by a second reader; the object and plan are in `B_XSTOCK_BAR_AVAILABILITY_PRE_AUDIT.md` A8.
 
-### #1195 OPEN 2026-10-15 (CC-C / ANALYST Codex; `B-XSTOCK-BAR-AVAILABILITY` Step-9 finding) — THE GENERIC B75 EXPORTER CAN SKIP TIMESTAMP-TIED ROWS AND STILL DELETE THE SOURCE PARTITION
+### #1195 ✅ CLOSED 2026-10-18 by `B-B75-EXPORT-COMPLETENESS` (Langston Step-11 CONFIRMED at `4cf4439de`) — was: OPEN 2026-10-15 (CC-C / ANALYST Codex; `B-XSTOCK-BAR-AVAILABILITY` Step-9 finding) — THE GENERIC B75 EXPORTER CAN SKIP TIMESTAMP-TIED ROWS AND STILL DELETE THE SOURCE PARTITION
 
 Commit `565b605f058bae2b1ec8c90dc13945ee95c9fc3b` deliberately replaced B75's composite cursor with `timestamp > last_timestamp` after the earlier OR-shaped query repeatedly timed out. Its stated safety claim was that timestamp ties were rare and the manifest's row-count/min/max verification would catch an anomaly. The current exporter does not count the source population: `row_count` is the number it exported, and the min/max values are derived from that same output, so both checks remain self-consistent after a skipped tie group.
 
@@ -11147,6 +11147,8 @@ The xStock availability audit supplied the missing discriminator. In a live reta
 - **Langston's in-commit condition C-1:** `decideExistingCopy` returns four values, `export | reuse | skip | refuse`. A skip never re-stamps `hot_partition_dropped_at` and never flips `migrated` → `active`. Verified in the Step-4 diff.
 
 **2026-10-18 — `B-B75-EXPORT-COMPLETENESS` deployed and verified on its first live run** (`fef7f0cc7` 2026-10-17T11:44:52Z; Step-7 fix `7b078a343`). The 2026-10-18 02:15Z sweep (run_id `6f7ef0d4-990e-4766-b1f5-9ae9f346c81a`) wrote 4 of 4 new objects `source-count-matched`, each with one evidence row, source = exported = downloaded. The register reads 568 `unverified-legacy` / 4 `gate-deployed-unrecorded` / 4 `source-count-matched` / 0 `unrecorded`. This issue closes with the batch's completion report, after Langston's Step-8 confirm.
+
+**✅ CLOSED 2026-10-18 by `B-B75-EXPORT-COMPLETENESS` (Langston Step-11 CONFIRMED at `4cf4439de`).** Forward-only, nothing recovered (Kyle's option 3). Every archive record carries `completeness_basis`; on 2026-10-18 the census read 568 `unverified-legacy` · 4 `gate-deployed-unrecorded` · 4 `source-count-matched` · 0 `unrecorded`. Every new copy writes its evidence row in the same transaction as the stamp, and deletes and reuse require it. Report: `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`. Follow-up `B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B).
 
 ### #1196 OPEN 2026-10-16 (CC-C; Langston's (4a) Step-2 review 11:37Z, filed on his instruction) — THE VTS SHADOW LANE CLOSES 35% OF ITS xSTOCK VALVE TRADES WITH NO PRICE, AGAINST 0.18% FOR CRYPTO
 **What (measured, `rtb_shadow_pairings.close_reason`, closes since 2026-09-22, re-derived by Langston):** xStock **125 `timeout_unpriced` of 357** max-hold closes = **35.0%**; crypto **25 of 14,129** = **0.18%** — a **198x** ratio. The real lane, same window: xStock 3 unpriced of 108 (`exit_decision_archive`).
