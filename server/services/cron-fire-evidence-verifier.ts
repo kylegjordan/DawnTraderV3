@@ -154,7 +154,7 @@ export async function runVerification(
     totalSkips += 1;
     if (!firstSkipAt) firstSkipAt = new Date(now);
     console.warn(
-      `[CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] consecutive=${consecutiveSkips} total=${totalSkips} ` +
+      `[CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] consecutive=${consecutiveSkips} total_since_boot=${totalSkips} ` +
       `since=${firstSkipAt.toISOString()}`,
     );
     // `>=`, not `===` (Langston C-8): the alert write can fail (addAlert rejects an off-SSOT category) and is
@@ -295,27 +295,33 @@ async function emitStaleAlert(
 /**
  * B-CRON-VERIFIER-QUERY-FAIL (#1211): the verifier could not read job history for BLIND_ESCALATION_SKIPS
  * consecutive runs. One alert per blind episode (the key carries the first skip's time). It states a FLOOR — the
- * row is minted once, so the live count is the SKIPPED_QUERY_FAIL log line. Nothing resolves it in code: it is
- * resolved by hand with the evidence of the read coming back (a monitor that clears its own "I was blind" alert
- * erases the only record that it was).
+ * row is minted once, so the live count is the SKIPPED_QUERY_FAIL log line. Nothing resolves it in code — a CHOICE,
+ * not a limit (`resolveAlertsByDedupeKey` exists and B-VENUE-QUIET-ALERTING uses it, and a resolve erases nothing:
+ * the row persists with its resolution stamps): a human confirming the read really came back is the recovery
+ * check this alert wants. Never ack it — an ack is non-terminal and would silence this episode's key while the
+ * verifier stays blind (#982).
  */
 async function emitBlindAlert(since: Date): Promise<void> {
   try {
     await addAlert({
       triggers_at: new Date(),
-      // `breakage`, as the sibling cron_stale page: the category that is never silent (`ALWAYS_DELIVER_CATEGORIES`, system-alerts.ts
-      // set) — a blind verifier means missed fires go unreported, so it must reach someone (Langston C-9).
+      // `breakage`, as the sibling cron_stale page (Langston C-9). Delivery is already carried by severity `warning`
+      // (`shouldDeliverToDiscord`); `breakage` is also in `ALWAYS_DELIVER_CATEGORIES`, the belt beside it — a blind
+      // verifier means missed fires go unreported, so it must reach someone either way.
       category: 'breakage',
       severity: 'warning',
       dedupe_key: `cron_verifier_blind:${since.toISOString()}`,
       title: `Cron fire-evidence verifier is blind: it could not read job history for at least ${BLIND_ESCALATION_SKIPS} consecutive checks`,
       body:
         `The cron-fire-evidence verifier could not read scheduled_tasks_audit for at least ${BLIND_ESCALATION_SKIPS} ` +
-        `consecutive checks since ${since.toISOString()} (every 15 minutes). Until it can, every schedule is unchecked: ` +
+        `consecutive checks since ${since.toISOString()} (one check every ${VERIFIER_INTERVAL_MS / 60000} minutes). ` +
+        `Until it can, every schedule is unchecked: ` +
         `a missed fire in this window will not page. The live count is in the [CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] ` +
-        `log line (consecutive= and total=); the cause is in the [CRON-FIRE-VERIFIER][QUERY_FAIL] line before it.\n\n` +
+        `log line (consecutive= and total_since_boot=); the cause is in the [CRON-FIRE-VERIFIER][QUERY_FAIL] line ` +
+        `before it.\n\n` +
         `Resolve this row by hand once the read is back (a [CRON-FIRE-VERIFIER] healthy / STALE line after the last ` +
-        `SKIPPED line) — it does not clear itself, by design (B-CRON-VERIFIER-QUERY-FAIL, #1211).`,
+        `SKIPPED line) — it does not clear itself, by design (B-CRON-VERIFIER-QUERY-FAIL, #1211). NEVER ACK it: an ` +
+        `ack is not terminal and would silence this episode's key while the verifier is still blind.`,
       metadata: {
         batch: 'B-CRON-VERIFIER-QUERY-FAIL',
         kind: 'fire_evidence_verifier_blind',

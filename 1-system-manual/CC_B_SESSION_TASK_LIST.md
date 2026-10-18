@@ -42,6 +42,7 @@
 - 59g1a `B-FORMULA-HEALTH-AUDIT-FRESHNESS` (`#1214`, placed 2026-10-17 after 59g1, Langston): the Formula Health card's "last audit" always reads "just now" because the page load runs the audit — decide whether it reads the last scheduled result.
 - 59g2 `B-CRON-VERIFIER-QUERY-FAIL` (`#1211`, placed 2026-10-17 after 59g1, Langston): when the cron verifier's history query fails it reads every job as never-fired and pages the hourly/daily ones; fix = a loud, distinguishable skip with an escalation after N skips, the no-alert test with its minting twin, and the interlock with B-CRON-MISSED-CATCHUP leg (a) named.
 - 59g3 `B-DUP-HEALTH-ROUTE-SHADOW` (`#1212`, placed 2026-10-17 after 59g2): `GET /system/health` registered three times; only the first answers — read all three and their callers, then keep one.
+- 59g4 `B-DB-REACHABILITY-ALERT` (`#1217`, placed 2026-10-18 after 59g3, Langston): nothing pages when the database stops answering — the health monitor's `SELECT 1` raises no alert.
 - 59a `B-RR-FLOOR-HEADROOM` (`#1183`) — the reward-to-risk floors sit inside float-noise of the strategies' own RR; recalibrate with margin (row 59 increment 2).
 - 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — a resting entry that fills after the market crossed its stop (row 59 increment 3).
 - 59c `B-ENTRY-BAND-SHADOW` (`#1186`) — log the fill's distance from the plan against spread and ATR at every taker open; ATR absent on xStock ⇒ log the inputs and refuse the leg (row 59 increment 4).

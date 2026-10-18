@@ -230,6 +230,8 @@ describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of 
     expect(blind.category).toBe('breakage');
     expect(blind.title).toMatch(/at least 4 consecutive/);
     expect(blind.body).toMatch(/live count is in the \[CRON-FIRE-VERIFIER\]\[SKIPPED_QUERY_FAIL\]/);
+    expect(blind.body).toContain('one check every 15 minutes'); // interpolated from VERIFIER_INTERVAL_MS, not a literal
+    expect(blind.body).toMatch(/NEVER ACK/);
     // C-8: the fifth skip calls addAlert again with the SAME key (the dedupe keeps one row) — never a second episode.
     await runVerification(NOW + 4 * 900_000);
     expect(blindAlerts()).toHaveLength(2);                                   // `>=`: re-offered at skip 5 …
