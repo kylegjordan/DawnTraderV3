@@ -178,5 +178,78 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('test', '0 0 * * 6', 604800));
     await expect(runVerification(NOW)).resolves.toBeDefined();
+    // B-CRON-VERIFIER-QUERY-FAIL (#1211): the assertion this test never made — a failed read pages nothing.
+    expect(alertCalls).toHaveLength(0);
+  });
+});
+
+// B-CRON-VERIFIER-QUERY-FAIL (row 59g2, #1211): a failed history read is a skipped run, not "every job never fired".
+// Each no-alert test has its minting twin — the never-fired fixture above, verbatim — so a pass cannot come from an
+// empty registry or a job inside the latency grace.
+describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of them says the verifier is blind', () => {
+  // Queue n one-shot throws; later calls fall through to the factory's own read (Langston C-10: no restore, so a
+  // "restored" mock can never quietly become a successful-but-EMPTY read — the very conflation this batch removes).
+  const failNextReads = async (n: number) => {
+    const dbModule = await import('../../db.js');
+    for (let i = 0; i < n; i++) {
+      (dbModule.db.execute as any).mockImplementationOnce(async () => { throw new Error('Query read timeout'); });
+    }
+  };
+  const staleAlerts = () => alertCalls.filter((a) => String(a.dedupe_key).startsWith('cron_stale:'));
+  const blindAlerts = () => alertCalls.filter((a) => String(a.dedupe_key).startsWith('cron_verifier_blind:'));
+  const HEALTHY_FIRE = new Date('2026-05-30T00:05:00Z'); // the weekly_sat fixture's healthy fire (above)
+
+  it('one failed read: no cron_stale page, and the run reports skipped', async () => {
+    await failNextReads(1);
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+    const report = await runVerification(NOW);
+    expect(report).toEqual({ ok: true, stale: [], skipped: 'query_fail' });
+    expect(alertCalls).toHaveLength(0);
+  });
+
+  it('its minting twin: the same fixture with the read working DOES page no_fires_ever', async () => {
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+    const report = await runVerification(NOW);
+    expect(report.ok).toBe(false);
+    expect(staleAlerts()).toHaveLength(1);
+    expect(staleAlerts()[0].metadata.reason).toBe('no_fires_ever');
+  });
+
+  it('four consecutive failed reads mint one blind alert (category breakage, a floor not a count); a fifth adds no new key', async () => {
+    await failNextReads(5);
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+    for (let i = 0; i < 3; i++) await runVerification(NOW + i * 900_000);
+    expect(blindAlerts()).toHaveLength(0);
+    await runVerification(NOW + 3 * 900_000);
+    expect(blindAlerts()).toHaveLength(1);
+    const blind = blindAlerts()[0];
+    expect(blind.dedupe_key).toBe(`cron_verifier_blind:${new Date(NOW).toISOString()}`);
+    expect(blind.category).toBe('breakage');
+    expect(blind.title).toMatch(/at least 4 consecutive/);
+    expect(blind.body).toMatch(/live count is in the \[CRON-FIRE-VERIFIER\]\[SKIPPED_QUERY_FAIL\]/);
+    // C-8: the fifth skip calls addAlert again with the SAME key (the dedupe keeps one row) — never a second episode.
+    await runVerification(NOW + 4 * 900_000);
+    expect(blindAlerts()).toHaveLength(2);                                   // `>=`: re-offered at skip 5 …
+    expect(new Set(blindAlerts().map((a) => a.dedupe_key)).size).toBe(1);   // … under the same key (one row by dedupe)
+    expect(staleAlerts()).toHaveLength(0);
+  });
+
+  it('a successful read resets the episode — asserted POSITIVELY (healthy, no alerts) — and four more failures are a new episode', async () => {
+    await failNextReads(3);
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+    mockedLastFires.set('weekly_sat', HEALTHY_FIRE);
+    for (let i = 0; i < 3; i++) await runVerification(NOW + i * 900_000);
+    const back = await runVerification(NOW + 3 * 900_000); // the read is back (falls through to the factory)
+    expect(back).toEqual({ ok: true, stale: [] });          // a real, non-empty read judged the job healthy
+    expect(alertCalls).toHaveLength(0);                       // three skips + a good read never escalate
+    const later = NOW + 4 * 900_000;
+    await failNextReads(4);
+    for (let i = 0; i < 4; i++) await runVerification(later + i * 900_000);
+    expect(blindAlerts().map((a) => a.dedupe_key)).toEqual([`cron_verifier_blind:${new Date(later).toISOString()}`]);
+    expect(staleAlerts()).toHaveLength(0);
   });
 });

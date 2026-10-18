@@ -46,6 +46,16 @@ const FIRE_LATENCY_GRACE_MS = 10 * 60 * 1000;  // 10 minutes
 // boot grace (which was meaningless for calendar schedules).
 const BOOT_GRACE_MS = 5 * 60 * 1000;  // 5 minutes
 
+// B-CRON-VERIFIER-QUERY-FAIL (row 59g2, #1211): a failed history read is a SKIPPED run, not "every job never fired".
+// The staleness check is level-triggered on each job's most recent occurrence, so one skipped run costs no
+// detection — it delays it by one interval. At 4 consecutive skips (an hour at the 15-minute cadence) an hourly
+// job's occurrence passes unexamined, so the verifier says it is blind — once per episode, never per run.
+// A verifier liveness constant, not a trading setting.
+const BLIND_ESCALATION_SKIPS = 4;
+let consecutiveSkips = 0;
+let totalSkips = 0;
+let firstSkipAt: Date | null = null;
+
 // Track when the process started so we apply boot-grace correctly. Set at
 // module-init time (= server boot). intervalSeconds × FIRE_GRACE_MULTIPLIER
 // grace from process start.
@@ -69,7 +79,7 @@ export function _setProcessStartForTest(ms: number): void {
  * filter against the registered job set. Table has ~10-20 distinct task_name
  * values (B-NEW-36 + B-NEW-49 + boot_state_reconciliation), perf negligible.
  */
-async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | null>> {
+async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | null> | null> {
   const result = new Map<string, Date | null>();
   // Default all to null so jobs with zero rows get a returned entry.
   for (const name of jobNames) result.set(name, null);
@@ -101,8 +111,9 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
       `[CRON-FIRE-VERIFIER][QUERY_FAIL] ` +
       (err instanceof Error ? err.message : err),
     );
-    // Return defaults; verifier silently skips this run rather than alerting
-    // spuriously on a DB hiccup.
+    // B-CRON-VERIFIER-QUERY-FAIL (#1211): report the failure so the caller SKIPS the run. Returning the pre-filled
+    // nulls (as this did until 2026-10-18) read every job as "never fired" and paged the hourly-to-daily ones.
+    return null;
   }
   return result;
 }
@@ -113,7 +124,9 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
  *
  * Never throws — verifier-failure is observability, not correctness.
  */
-export async function runVerification(nowMs: number = Date.now()): Promise<{ ok: boolean; stale: string[] }> {
+export async function runVerification(
+  nowMs: number = Date.now(),
+): Promise<{ ok: boolean; stale: string[]; skipped?: 'query_fail' }> {
   const jobs = cronRegistry.getAll().filter((j) => j.enabled);
   const now = nowMs;
   const stale: string[] = [];
@@ -135,6 +148,23 @@ export async function runVerification(nowMs: number = Date.now()): Promise<{ ok:
   }
 
   const lastFires = await queryLastFires(jobs.map((j) => j.name));
+  if (lastFires === null) {
+    // The history could not be read: judge nothing (no evidence is not evidence of a missed fire).
+    consecutiveSkips += 1;
+    totalSkips += 1;
+    if (!firstSkipAt) firstSkipAt = new Date(now);
+    console.warn(
+      `[CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] consecutive=${consecutiveSkips} total=${totalSkips} ` +
+      `since=${firstSkipAt.toISOString()}`,
+    );
+    // `>=`, not `===` (Langston C-8): the alert write can fail (addAlert rejects an off-SSOT category) and is
+    // swallowed, so a one-shot at exactly 4 could leave an episode never paged. The dedupe key makes `>=` still
+    // one row per episode; after a hand-resolve while still blind, the next skip re-pages — the honest behaviour.
+    if (consecutiveSkips >= BLIND_ESCALATION_SKIPS) await emitBlindAlert(firstSkipAt);
+    return { ok: true, stale: [], skipped: 'query_fail' };
+  }
+  consecutiveSkips = 0;
+  firstSkipAt = null;
 
   for (const job of jobs) {
     const lastFire = lastFires.get(job.name) ?? null;
@@ -258,6 +288,44 @@ async function emitStaleAlert(
     console.error(
       `[CRON-FIRE-VERIFIER][ALERT_WRITE_FAIL] job=${jobName}: ` +
       (err instanceof Error ? err.message : err),
+    );
+  }
+}
+
+/**
+ * B-CRON-VERIFIER-QUERY-FAIL (#1211): the verifier could not read job history for BLIND_ESCALATION_SKIPS
+ * consecutive runs. One alert per blind episode (the key carries the first skip's time). It states a FLOOR — the
+ * row is minted once, so the live count is the SKIPPED_QUERY_FAIL log line. Nothing resolves it in code: it is
+ * resolved by hand with the evidence of the read coming back (a monitor that clears its own "I was blind" alert
+ * erases the only record that it was).
+ */
+async function emitBlindAlert(since: Date): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      // `breakage`, as the sibling cron_stale page: the category that is never silent (`ALWAYS_DELIVER_CATEGORIES`, system-alerts.ts
+      // set) — a blind verifier means missed fires go unreported, so it must reach someone (Langston C-9).
+      category: 'breakage',
+      severity: 'warning',
+      dedupe_key: `cron_verifier_blind:${since.toISOString()}`,
+      title: `Cron fire-evidence verifier is blind: it could not read job history for at least ${BLIND_ESCALATION_SKIPS} consecutive checks`,
+      body:
+        `The cron-fire-evidence verifier could not read scheduled_tasks_audit for at least ${BLIND_ESCALATION_SKIPS} ` +
+        `consecutive checks since ${since.toISOString()} (every 15 minutes). Until it can, every schedule is unchecked: ` +
+        `a missed fire in this window will not page. The live count is in the [CRON-FIRE-VERIFIER][SKIPPED_QUERY_FAIL] ` +
+        `log line (consecutive= and total=); the cause is in the [CRON-FIRE-VERIFIER][QUERY_FAIL] line before it.\n\n` +
+        `Resolve this row by hand once the read is back (a [CRON-FIRE-VERIFIER] healthy / STALE line after the last ` +
+        `SKIPPED line) — it does not clear itself, by design (B-CRON-VERIFIER-QUERY-FAIL, #1211).`,
+      metadata: {
+        batch: 'B-CRON-VERIFIER-QUERY-FAIL',
+        kind: 'fire_evidence_verifier_blind',
+        since_iso: since.toISOString(),
+        escalation_skips: BLIND_ESCALATION_SKIPS,
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[CRON-FIRE-VERIFIER][ALERT_WRITE_FAIL] blind: ` + (err instanceof Error ? err.message : err),
     );
   }
 }
