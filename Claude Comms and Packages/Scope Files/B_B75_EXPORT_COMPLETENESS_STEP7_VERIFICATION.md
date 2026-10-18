@@ -42,3 +42,51 @@ The first sweep under the new rules runs 2026-10-18 02:15Z. **Event-wait alert `
 4. any minted sweep alert carries a key.
 
 **Langston's bound, stated up front: 0 `verified` rows exist, so the reuse arm and its recount have no live population on run 1.** A quiet reuse path will not be reported as exercised.
+
+---
+
+# Part 2 — the first live sweep under the new rules (2026-10-18)
+
+**The code it ran:** staging `dist/BUILD_SHA` = `f0abf8494e4a9d10c66ea6bd3ee306e25680b280`. It is a descendant of this batch's `fef7f0cc7` and of the Step-7 fix `7b078a343` (deployed in NEW Claude's `162ae0537` at 2026-10-17T13:03:42Z, then later deploys).
+
+## 4. The run — `/var/log/dawntrader/b75-retention.log`, run_id `6f7ef0d4-990e-4766-b1f5-9ae9f346c81a`, started 2026-10-18T02:15:02.745Z
+`DONE — examined=4 dropped=4 failed=0 bytes_freed=3000582144 bytes_archived=338495252 plain_deleted=137664 plain_failed=0 duration_ms=711617`. No `REFUSED`, no `UNCLASSIFIED`.
+
+| partition (whole) | rows | duration_ms tonight | the same table's 2026-09-16 object the night before |
+|---|---|---|---|
+| `xstock_spot_ticker_snap/2026-09-17` | 2,905,247 | **304,884** | 313,486 |
+| `crypto_perp_ticker_snap/2026-09-17` | 1,470,047 | 153,632 | 155,137 |
+| `crypto_perp_ohlc_1m/2026-09-17` | 264,960 (= 184 × 1,440) | 25,203 | 27,360 |
+| `signal_eval_archive/2026-09-17` | 2,200,627 | 221,532 | 230,586 |
+
+**Langston gate B attack 3, answered with a measurement:**
+- The largest object actually exported is `xstock_spot_ticker_snap`: 2.9M rows, 190 MB compressed.
+- Its wall-clock, including the new second gunzip pass that counts the downloaded rows, is 304,884 ms, against 313,486 ms the night before without that pass.
+- So the added cost is within the night-to-night spread on all four tables. It is not separable at n = 1 per table; the claim is "no measurable cost", not "zero cost".
+
+**The plain lane:**
+- `vts_open_trades` and `closed_trades` show `no age-eligible rows` and a cutoff printed as `2025-10-18`. That is the day-floored cutoff (gate B BLOCKER-2) in effect.
+- `xstock_qd_probe_history` (delete-only) keeps its exact cutoff.
+
+## 5. The register and the proofs (staging psql, after the run)
+Each of the 4 manifest rows created after 2026-10-18T02:15Z reads `warm`, `active` and **`source-count-matched`**, with **exactly one** evidence row (`ev_rows = 1`) whose `source_table` is its own, tier `warm`, contract `text-ts-tiegroup-v1`, `producing_build_sha` `f0abf8494…`, and **source = exported = downloaded**:
+
+| table | source | exported | downloaded |
+|---|---|---|---|
+| `xstock_spot_ticker_snap` | 2,905,247 | 2,905,247 | 2,905,247 |
+| `crypto_perp_ticker_snap` | 1,470,047 | 1,470,047 | 1,470,047 |
+| `crypto_perp_ohlc_1m` | 264,960 | 264,960 | 264,960 |
+| `signal_eval_archive` | 2,200,627 | 2,200,627 | 2,200,627 |
+
+**Census:** `unverified-legacy` **568** · `gate-deployed-unrecorded` **4** · `source-count-matched` **4** · `unrecorded` **0** — 576 rows. Evidence rows: 4.
+**The tie trigger admitted every stamp:** a stamp without evidence would have thrown inside the transaction and failed the partition. `failed=0`, and the trigger's refusal of a no-evidence stamp was proven in the Step-6 dry run (P5).
+
+## 6. What run 1 did NOT exercise — stated, not implied
+- **The reuse arm and its recount:** 0 `verified` rows existed, so there was no population (Langston's bound).
+- **The refusal arms** (`active`/`migrated` with rows, `stale-proof`): no label had an existing row with live rows.
+- **The alert keys and resolve edges:** no failure occurred, so nothing was minted and nothing resolved. The log has no `resolved N alert(s)` line, because no keyed row existed to resolve.
+- **The plain archive lane's export:** no rows are old enough (365-day windows; first eligible 2027-05-11).
+- **The ctx lane:** still unscheduled (`#169`).
+- These paths are proven by the tests (behavioural for the decision and the writer; structural for the wiring, `#1208`) and by the staging dry run, **not by this run**.
+
+**Alert `4f8123f8-fdef-482c-b9ec-9a127a45c20e`** is resolved by cc-a with the run_id and census above.
