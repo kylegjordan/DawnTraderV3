@@ -1419,3 +1419,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT IT IS.** The reward-to-risk floors sit just under the strategies' own reward-to-risk, so a fill that slips refuses the trade; the check that would refuse it has run in watch-only mode since 10-11. Re-measured after crypto went maker-only: 1 of 30 xStock taker fills would refuse — but most of those takers are limit orders that filled at once and cannot slip the way a market order can.
 
 **SO FAR.** Each fill now records which kind of taker it was, and a 21-day read decides, on the market-order kind, whether the check goes live per class. Floors unchanged; recalibration stays in Phase 25.
+
+## B-B75-EXPORT-COMPLETENESS (CC-A, sprint §0a stage 3; `#1195`) — change-class `architecture` — ⏳ **STEP 11, Langston's confirm pending (2026-10-18)** (deployed `fef7f0cc7` 2026-10-17T11:44:52Z; the rehydrate fix `7b078a343` rode `162ae0537` 13:03:42Z; Step 8 CONFIRMED by Langston 2026-10-18; record `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** The nightly archive could not say whether any copy it held was complete. From 2026-05-06 to the count-gate hotfix on 2026-10-16 the copy skipped rows at page boundaries, and nothing recorded which copies were checked — so a short copy and a whole one looked the same, could be deleted from the database the same way, and could be reused as though proven.
+
+**THE FIX.** Kyle chose to recover nothing and record the gaps everywhere (option 3, 2026-10-17). Every archive record now says how its completeness is known: 568 legacy copies are marked unverified, the 4 made under the hotfix are marked as made under the gate but not recorded, and every copy made from 2026-10-18 carries a proof row — source, exported and downloaded counts equal — written in the same transaction as the stamp, which the database refuses without the proof. Deletes and reuse now require that proof; the restore tool prints the completeness of every copy it brings back.
+
+**LEFT.** Nothing is recovered, by Kyle's decision. Only 4 of 576 copies are proven. The reuse and refusal paths are proven by tests and the staging dry run, not yet by a live night; the script wiring is tested by source structure until `B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B).
