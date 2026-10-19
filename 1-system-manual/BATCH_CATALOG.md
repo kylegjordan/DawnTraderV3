@@ -1354,7 +1354,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **LEFT.** Days already archived short since 2026-05-06 — what can be recovered, and from where — are `B-B75-EXPORT-COMPLETENESS` (CC-A).
 
-## B-LANGSTON-RELIEF (Infra Claude, Kyle-directed 2026-10-16, moved ahead of B-CREW-ACCESS-HARDEN P3a; SPRINT §0) — change-class `architecture` — ⏳ **LIVE, STEP 8 PENDING** (reviews: Coltrane OBJ-1/2/4, Langston OBJ-3 and the lane's precedent rules; scope `Scope Files/B_LANGSTON_RELIEF_SCOPE.md`; change list `Change Lists/B_LANGSTON_RELIEF_OBJ3_INC1_CHANGE_LIST.md`)
+## B-LANGSTON-RELIEF (Infra Claude, Kyle-directed 2026-10-16, moved ahead of B-CREW-ACCESS-HARDEN P3a; SPRINT §0) — change-class `architecture` — ⏳ **OPEN — OBSERVATION (2026-10-19): OBJ-1 and OBJ-4 met; OBJ-2's 7-day window ends 2026-10-23T13:47Z; OBJ-3's ceiling still over by 8,251 B (152,107 vs 143,856), Kyle deciding where that last piece lives. Progress report `Batch Completion/B_LANGSTON_RELIEF_PROGRESS_REPORT.md`.** (reviews: Coltrane OBJ-1/2/4, Langston OBJ-3 and the lane's precedent rules; scope `Scope Files/B_LANGSTON_RELIEF_SCOPE.md`; change list `Change Lists/B_LANGSTON_RELIEF_OBJ3_INC1_CHANGE_LIST.md`)
 
 **WHAT WAS BROKEN.** Langston answered people slowly or not at all. Three causes, measured: every system alert invoked him (254 of 407 invocations in 48 h; ~5 min each, serial) and they queued ahead of people — one burst put ~117 tasks ahead of Kyle's own messages; a restart dropped whatever was queued; and his auto-loaded memory had grown to 825,371 B (his retractions 84 % of it) with no delete rule, so every invocation read a loaded set 6.4× its ceiling and his job times roughly doubled.
 
