@@ -402,19 +402,30 @@ def _split_evidence():
     stale_unnamed = ("" if not bad else " - and %d line(s) of the index could not be read; a LATER ledger write may be "
                      "among them, so an archive this refusal cannot name may exist: have Infra Claude read the index "
                      "before concluding anything is lost" % bad)
+    # Langston r5 record item: the pre-split MEMORY.md archives hold the retractions AS OF THE SPLIT - every
+    # --ledger-append after it is in LEDGER.md generations only - so the unnamed branches may not claim "every
+    # retraction". They name the newest ledger archive that is actually PRESENT (seen, never assumed) and how many
+    # ledger writes after it are missing, as a fact - not a restore instruction (r4 C-8).
+    def present_note():
+        for back, s_ in enumerate(reversed(last)):
+            if s_ and os.path.isfile(os.path.join(LANGSTON_HOME, ".memory-archive", "%s.md" % s_)):
+                return ("; the newest ledger archive actually present is .memory-archive/%s.md, and %d readable ledger "
+                        "write(s) after it have no archive here" % (s_, back))
+        return "; no ledger archive named by a readable index row is present"
+    pre_split = (" - the pre-split MEMORY.md archives hold the retractions as of the split (%s), not any appended "
+                 "after it" % split[0].get("ts"))
     # A FENCE, not a live shape: both writers record a sha on every written ledger row (`ledger_sha` on split-ledger,
     # `ledger_new_sha` on ledger-file-append, langston-memory-write) - only a legacy or hand-edited row can lack one.
     if not last[-1]:
         return ("the split IS recorded (%s) but its newest ledger row records no ledger sha, so no archive can be named "
-                "and the recovery is UNKNOWN - the pre-split MEMORY.md archives still hold every retraction%s"
-                % (split[-1].get("ts"), stale_unnamed))
+                "and the recovery is UNKNOWN%s%s%s" % (split[-1].get("ts"), pre_split, present_note(), stale_unnamed))
     arch = os.path.join(LANGSTON_HOME, ".memory-archive", "%s.md" % last[-1])
     # name the archive only after SEEING it (Langston record item, 2026-10-16): a named file that is not there is the
     # same invented-recovery shape one layer down
     if not os.path.isfile(arch):
         return ("the split IS recorded (%s) but the archive of its newest LEDGER.md (%s) is NOT present, so the "
-                "cause of the loss and the recovery are UNKNOWN - the pre-split MEMORY.md archives still hold every "
-                "retraction%s" % (split[-1].get("ts"), arch, stale_unnamed))
+                "cause of the loss and the recovery are UNKNOWN%s%s%s"
+                % (split[-1].get("ts"), arch, pre_split, present_note(), stale_unnamed))
     return ("the split IS recorded (%s), so LEDGER.md was removed after it - its newest written version is "
             ".memory-archive/%s.md; restore that file to %s%s" % (split[-1].get("ts"), last[-1], LEDGER_SOURCES[0],
                                                                     stale_named))

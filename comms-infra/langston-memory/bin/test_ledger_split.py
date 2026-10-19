@@ -7,7 +7,7 @@ this directory and the reader beside it must be root-owned): mkdir -m 700 /root/
 langston-memory-write, langston_memory.py and this file into it, then `python3 test_ledger_split.py`.
 Every refusal asserts the files BYTE-IDENTICAL afterwards; the expected counts are hand-counted, not computed by the
 code under test."""
-import hashlib, importlib.util, json, os, shutil, subprocess, sys, tempfile
+import hashlib, importlib.util, json, os, re, shutil, subprocess, sys, tempfile
 
 sys.dont_write_bytecode = True   # no __pycache__ beside a reader a root run will trust-check
 
@@ -214,6 +214,16 @@ def main():
     lst = h.reader().ledger_state()
     check("  ...with that archive ALSO gone, it names no restore and says UNKNOWN",
           ("NOT present" in lst[4], "UNKNOWN" in lst[4], "restore that file" in lst[4]), (True, True, False))
+    # Langston r5 record item: the pre-split archives hold retractions AS OF THE SPLIT, never "every retraction";
+    # and the newest ledger archive that IS present is named, with how many later writes it lacks
+    check("  ...r5: it says 'as of the split' and never claims 'every retraction'",
+          ("as of the split" in lst[4], "every retraction" in lst[4]), (True, False))
+    m_ = re.search(r"actually present is \.memory-archive/([0-9a-f]{64})\.md, and (\d+) readable", lst[4])
+    named_ = m_.group(1) if m_ else None
+    check("  ...r5: names an OLDER ledger archive that really exists, never the absent newest one, with >=1 later write",
+          (named_ is not None, named_ != live_sha,
+           bool(named_) and os.path.isfile(os.path.join(h.top, ".memory-archive", named_ + ".md")),
+           bool(m_) and int(m_.group(2)) >= 1), (True, True, True, True))
     ip0 = os.path.join(h.top, ".memory-archive", "index.jsonl")
     with open(ip0, encoding="utf-8") as fh:
         idx0 = fh.read()
