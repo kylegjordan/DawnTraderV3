@@ -136,15 +136,16 @@ def decoy_token():
 WRITER = "/usr/local/bin/langston-memory-write"
 
 
-def _writer_state_re():
-    """The writer's STATE_RE, loaded from the installed writer so the canary and the trim agree by construction."""
+def _writer_module():
+    """The installed writer, loaded for its STATE_RE and its pure trim_plan, so the canary and the trim agree by
+    construction (side-effect-free at import: constants only; main() is behind __name__)."""
     import importlib.machinery, importlib.util
     ld = importlib.machinery.SourceFileLoader("lmw_for_canary", WRITER)
     spec = importlib.util.spec_from_loader("lmw_for_canary", ld)
     mod = importlib.util.module_from_spec(spec)
     sys.dont_write_bytecode = True
     ld.exec_module(mod)
-    return mod.STATE_RE
+    return mod
 
 
 def build_probes():
@@ -171,9 +172,15 @@ def build_probes():
     #    FAILs). The FINDING-6 comment had named that exact trigger. It now counts the batch sections that end with a
     #    declared `STATE: open` line, matched with the WRITER'S OWN STATE_RE (imported, never re-implemented): the
     #    trim REFUSES to run while any batch section lacks one, so a restructure cannot move these lines silently.
+    # Langston's in-commit condition (1303bf48d): the regex alone also matches a STATE line in the header block
+    #    before the first heading, which the trim never walks - an over-count that would score a perfect load PARTIAL.
+    #    So the WRITER'S SECTION WALK is authoritative too: `trim_plan` (pure) must report the same open count, or the
+    #    probe derives [] -> MALFORMED. Its Refused on an unmarked section lands in the same except.
     try:
-        st_re = _writer_state_re()
-        opens = [mm.group(2) for mm in (st_re.match(l) for l in mem.split(NL)) if mm and mm.group(1) == "open"]
+        wmod = _writer_module()
+        opens = [mm.group(2) for mm in (wmod.STATE_RE.match(l) for l in mem.split(NL)) if mm and mm.group(1) == "open"]
+        if len(opens) != wmod.trim_plan(mem)[3]:
+            opens = []
     except Exception:
         opens = []
     probes.append({
