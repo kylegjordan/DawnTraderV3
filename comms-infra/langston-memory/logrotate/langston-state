@@ -1,0 +1,17 @@
+# B-LANGSTON-RELIEF (2026-10-19): rotation for the logs the ROOT-run Langston tools write.
+# They live in /opt/langston-memory/state (root:root 0755), readable by langston and writable only by root, so
+# logrotate runs as root here and needs no `su` (contrast logrotate/langston-recall-usage, whose directory langston
+# owns). Same policy as before the move: weekly, 8 kept, compressed. copytruncate keeps each file's inode and its
+# root:root 0644 mode. The privacy-check log is included: it was root-written and had no rotation at all.
+/opt/langston-memory/state/load-canary.jsonl
+/opt/langston-memory/state/size-watch.jsonl
+/opt/langston-memory/state/selfmemory-backup.jsonl
+/opt/langston-memory/state/privacy-check.jsonl
+/opt/langston-memory/state/pattern-promotion.jsonl {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

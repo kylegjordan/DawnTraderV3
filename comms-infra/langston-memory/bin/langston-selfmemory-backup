@@ -47,8 +47,13 @@ STORE = os.environ.get("SELFMEM_STORE", "/home/langston/.claude/projects/-home-l
 ARCHIVE = os.environ.get("SELFMEM_ARCHIVE", "/home/langston/.memory-archive")
 SOURCES = [STORE, ARCHIVE]
 DEST = os.environ.get("SELFMEM_DEST", "/root/backups/langston-selfmemory")
-MANIFEST = os.environ.get("SELFMEM_MANIFEST", "/opt/langston-memory/usage/selfmemory-backup-manifest.md")
-RUNLOG = os.environ.get("SELFMEM_RUNLOG", "/opt/langston-memory/usage/selfmemory-backup.jsonl")
+# ⛔ STATE DIR (B-LANGSTON-RELIEF, Kyle-approved 2026-10-19): this tool runs as ROOT, so its state and logs live in
+#    /opt/langston-memory/state (root:root 0755, files 0644) - readable by langston, writable only by root. They used
+#    to live in usage/, which langston owns and can write, and were handed to langston after each write; a root
+#    process should not write into a directory a less-trusted account controls. The parent is root:langston 0750,
+#    so only root can create or replace state/. Coltrane's tools were already laid out this way (/opt/coltrane-memory).
+MANIFEST = os.environ.get("SELFMEM_MANIFEST", "/opt/langston-memory/state/selfmemory-backup-manifest.md")
+RUNLOG = os.environ.get("SELFMEM_RUNLOG", "/opt/langston-memory/state/selfmemory-backup.jsonl")
 KEEP = 14
 NL = chr(10)
 
@@ -63,19 +68,6 @@ def sha(path):
         for chunk in iter(lambda: fh.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
-
-
-def _own(path):
-    """Same ownership reasoning as the other tools in this directory — see
-    langston-size-watch._own. Root-created files here break logrotate."""
-    try:
-        if os.geteuid() != 0:
-            return
-        import pwd, grp
-        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
-        os.chmod(path, 0o664)
-    except Exception:
-        pass
 
 
 def live_files(sources=None):
@@ -217,7 +209,6 @@ def write_manifest(archive, expected, verified, detail, snapshots):
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write(NL.join(lines) + NL)
     os.replace(tmp, MANIFEST)
-    _own(MANIFEST)
 
 
 # ⛔⛔ ARGPARSE, NOT `in sys.argv`. The old form silently ignored every flag it did not
@@ -311,7 +302,6 @@ def main():
             os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
             with open(RUNLOG, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(row, ensure_ascii=False) + NL)
-            _own(RUNLOG)
         except Exception:
             pass
         print(json.dumps(row, indent=2, ensure_ascii=False))
@@ -368,7 +358,6 @@ def main():
         os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
         with open(RUNLOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
-        _own(RUNLOG)
     except Exception:
         pass
 

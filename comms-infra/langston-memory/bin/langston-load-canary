@@ -81,7 +81,12 @@ CLAUDE_MD = os.path.join(HOME, "CLAUDE.md")
 MEMORY_MD = os.path.join(HOME, "MEMORY.md")
 SELF_INDEX = os.path.join(HOME, ".claude/projects/-home-langston/memory/MEMORY.md")
 DECOY = os.path.join(HOME, "PROBE-DECOY-NOT-AUTOLOADED.md")
-LOG = "/opt/langston-memory/usage/load-canary.jsonl"
+# ⛔ STATE DIR (B-LANGSTON-RELIEF, Kyle-approved 2026-10-19): this tool runs as ROOT, so its state and logs live in
+#    /opt/langston-memory/state (root:root 0755, files 0644) - readable by langston, writable only by root. They used
+#    to live in usage/, which langston owns and can write, and were handed to langston after each write; a root
+#    process should not write into a directory a less-trusted account controls. The parent is root:langston 0750,
+#    so only root can create or replace state/. Coltrane's tools were already laid out this way (/opt/coltrane-memory).
+LOG = "/opt/langston-memory/state/load-canary.jsonl"
 # ⛔ READ THE MODEL FROM THE BRIDGE, NEVER HARDCODE IT (Langston, r2 minor). His own
 #    MEMORY names TWO live sites and warns that a single-site switch leaves him
 #    running split; hardcoding here and in the promotion tool would have made FOUR.
@@ -119,20 +124,6 @@ def utc():
 def read(path):
     with open(path, encoding="utf-8", errors="replace") as fh:
         return fh.read()
-
-
-def _own(path):
-    """⛔ ROOT-CREATED LOGS IN A LANGSTON-OWNED DIRECTORY BREAK ROTATION, MEASURED
-    2026-09-05: logrotate must run as langston here, and could not truncate root-owned
-    files. Caught only by FORCING a rotation; the dry run reported zero errors."""
-    try:
-        if os.geteuid() != 0:
-            return
-        import pwd, grp
-        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
-        os.chmod(path, 0o664)
-    except Exception:
-        pass
 
 
 def decoy_token():
@@ -626,7 +617,6 @@ def main():
         os.makedirs(os.path.dirname(LOG), exist_ok=True)
         with open(LOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
-        _own(LOG)
     except Exception:
         pass
 

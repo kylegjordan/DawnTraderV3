@@ -37,8 +37,8 @@ TARGET = TOP + "/MEMORY.md"
 ARCH = TOP + "/.memory-archive"
 ANCHOR = "### Rulings of mine that GENERALISE"
 PYC = "/opt/langston-memory/bin/__pycache__"
-RUNLOG = "/opt/langston-memory/usage/selfmemory-backup.jsonl"
-MANIFEST = "/opt/langston-memory/usage/selfmemory-backup-manifest.md"
+RUNLOG = "/opt/langston-memory/state/selfmemory-backup.jsonl"
+MANIFEST = "/opt/langston-memory/state/selfmemory-backup-manifest.md"
 DEST = "/root/backups/langston-selfmemory"
 
 # the writer self-test's own fixture, rebuilt byte-for-byte: 2 retractions; 2 + 2 + 1 = 5 ledger bullets

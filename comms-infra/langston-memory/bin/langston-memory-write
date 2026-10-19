@@ -492,7 +492,8 @@ def owner_only(mode):
 #    construction (compose_body concatenates part BODIES, names enter only as fixed-length digests, the stamp's
 #    timestamp is fixed width); a ROLLBACK is never gated - it restores a prior state, and gating it would refuse the
 #    restore of a failed shrink.
-RATCHET_STATE = os.environ.get("LMW_RATCHET_STATE") or "/opt/langston-memory/usage/ratchet-state.json"
+# the size watch writes this as root into the root-only state/ dir (B-LANGSTON-RELIEF, 2026-10-19); read-only here
+RATCHET_STATE = os.environ.get("LMW_RATCHET_STATE") or "/opt/langston-memory/state/ratchet-state.json"
 AUTO_MEMORY_INDEX = os.path.join(".claude", "projects", "-home-langston", "memory", "MEMORY.md")
 
 

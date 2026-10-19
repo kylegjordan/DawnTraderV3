@@ -40,8 +40,13 @@ MEMDIR = "/opt/langston-memory"
 INDEX = MEMDIR + "/index/records.jsonl"
 LIVE_MEMORY = LANGSTON_HOME + "/MEMORY.md"
 STALE_LOG = "/var/log/langston-queue-forensics.log"
-RUNLOG = MEMDIR + "/usage/privacy-check.jsonl"
-STATEFILE = MEMDIR + "/usage/privacy-check-state.json"
+# ⛔ STATE DIR (B-LANGSTON-RELIEF, Kyle-approved 2026-10-19): this tool runs as ROOT, so its state and logs live in
+#    /opt/langston-memory/state (root:root 0755, files 0644) - readable by langston, writable only by root. They used
+#    to live in usage/, which langston owns and can write, and were handed to langston after each write; a root
+#    process should not write into a directory a less-trusted account controls. The parent is root:langston 0750,
+#    so only root can create or replace state/. Coltrane's tools were already laid out this way (/opt/coltrane-memory).
+RUNLOG = MEMDIR + "/state/privacy-check.jsonl"
+STATEFILE = MEMDIR + "/state/privacy-check-state.json"
 STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
 ACTOR = "langston-privacy-check"      # a MACHINE actor (condition 3): a root timer must not claim a session
 KEY_EXPOSED = "langston-privacy-exposed"

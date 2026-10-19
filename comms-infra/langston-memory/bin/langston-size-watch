@@ -67,8 +67,13 @@ WATCHED = [
 ARCHIVE_DIR = os.path.join(HOME, ".memory-archive")
 ARCHIVE_THRESHOLD_BYTES = 500 * 1024 * 1024
 ARCHIVE_OWNER = "CC-INFRA"
-STATE = "/opt/langston-memory/usage/ratchet-state.json"
-RUNLOG = "/opt/langston-memory/usage/size-watch.jsonl"
+# ⛔ STATE DIR (B-LANGSTON-RELIEF, Kyle-approved 2026-10-19): this tool runs as ROOT, so its state and logs live in
+#    /opt/langston-memory/state (root:root 0755, files 0644) - readable by langston, writable only by root. They used
+#    to live in usage/, which langston owns and can write, and were handed to langston after each write; a root
+#    process should not write into a directory a less-trusted account controls. The parent is root:langston 0750,
+#    so only root can create or replace state/. Coltrane's tools were already laid out this way (/opt/coltrane-memory).
+STATE = "/opt/langston-memory/state/ratchet-state.json"
+RUNLOG = "/opt/langston-memory/state/size-watch.jsonl"
 SENDER = "Infra Claude"
 NL = chr(10)
 STALE_HOURS = 48
@@ -135,24 +140,6 @@ def measure_archive():
     return {"path": ARCHIVE_DIR, "present": True, "bytes": total, "files": count, "unreadable": unreadable}
 
 
-def _own(path):
-    """⛔ ROOT-CREATED LOGS IN A LANGSTON-OWNED DIRECTORY BREAK ROTATION, MEASURED
-    2026-09-05. logrotate must run as langston here (the directory is group-writable, so
-    it refuses to act as root), but these tools run as root and created root:root 644
-    files — which langston can read and cannot truncate. Forced rotation failed with
-    "Permission denied" on exactly the two root-owned logs while the langston-owned one
-    rotated fine. ★ Caught only by FORCING a rotation; the dry run reported zero errors.
-    ⇒ hand ownership to langston so the whole directory is uniform and one `su` covers it."""
-    try:
-        if os.geteuid() != 0:
-            return
-        import pwd, grp
-        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
-        os.chmod(path, 0o664)
-    except Exception:
-        pass
-
-
 def load_state():
     try:
         with open(STATE, encoding="utf-8") as fh:
@@ -170,7 +157,6 @@ def save_state(st):
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(st, fh, indent=2)
     os.replace(tmp, STATE)
-    _own(STATE)
 
 
 def post(msg, quiet):
@@ -421,7 +407,6 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
         os.makedirs(os.path.dirname(RUNLOG), exist_ok=True)
         with open(RUNLOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
-        _own(RUNLOG)
     except Exception:
         pass
 

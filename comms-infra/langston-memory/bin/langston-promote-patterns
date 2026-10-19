@@ -79,7 +79,12 @@ def model():
 
 HOME = "/home/langston"
 STORE = os.path.join(HOME, ".claude/projects/-home-langston/memory")
-OUTDIR = "/opt/langston-memory/usage"
+# ⛔ STATE DIR (B-LANGSTON-RELIEF, Kyle-approved 2026-10-19): this tool runs as ROOT, so its state and logs live in
+#    /opt/langston-memory/state (root:root 0755, files 0644) - readable by langston, writable only by root. They used
+#    to live in usage/, which langston owns and can write, and were handed to langston after each write; a root
+#    process should not write into a directory a less-trusted account controls. The parent is root:langston 0750,
+#    so only root can create or replace state/. Coltrane's tools were already laid out this way (/opt/coltrane-memory).
+OUTDIR = "/opt/langston-memory/state"
 RUNLOG = os.path.join(OUTDIR, "pattern-promotion.jsonl")
 # ⛔ READ THE MODEL FROM THE BRIDGE, NEVER HARDCODE IT (Langston, r2 minor). His own
 #    MEMORY names TWO live sites and warns a single-site switch leaves him split;
@@ -159,18 +164,6 @@ PROMPT = (
 
 def utc():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _own(path):
-    """Same reasoning as langston-size-watch._own — root-created files here break rotation."""
-    try:
-        if os.geteuid() != 0:
-            return
-        import pwd, grp
-        os.chown(path, pwd.getpwnam("langston").pw_uid, grp.getgrnam("langston").gr_gid)
-        os.chmod(path, 0o664)
-    except Exception:
-        pass
 
 
 def _split_status(text):
@@ -390,7 +383,6 @@ def main():
         body.append("")
         with open(out, "w", encoding="utf-8") as fh:
             fh.write(NL.join(body) + NL)
-        _own(out)
 
     row = {"ts": utc(), "rc": rc, "model": mdl, "model_source": mdl_src,
            "screen_clean": clean, "screen_hits": hits[:10],
@@ -404,7 +396,6 @@ def main():
         os.makedirs(OUTDIR, exist_ok=True)
         with open(RUNLOG, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + NL)
-        _own(RUNLOG)
     except Exception:
         pass
 
