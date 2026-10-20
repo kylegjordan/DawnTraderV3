@@ -1,4 +1,4 @@
-# B-LANGSTON-RELIEF — PROGRESS REPORT — OPEN — waiting on a week of alert-lane data (OBJ-2) and on the ceiling (OBJ-3)
+# B-LANGSTON-RELIEF — PROGRESS REPORT — OPEN — waiting on a week of alert-lane data (OBJ-2); OBJ-3's ceiling carried to B-LANGSTON-CLAUDEMD-RESIDUAL (Kyle 2026-10-20)
 
 change-class: architecture · owner: Infra Claude (CC-INFRA) · directed by Kyle 2026-10-16 · scope `Scope Files/B_LANGSTON_RELIEF_SCOPE.md` · Step 2 `Scope Files/B_LANGSTON_RELIEF_PRE_AUDIT.md`
 
@@ -26,7 +26,7 @@ Also shipped inside the batch: the privacy check's repo-text exclusion and bound
 - **FAIL:** any alert post in the window with neither; or any Langston invocation for an alert that was not an escalation.
 - ⚠️ The instrument for (b) — telling an escalated alert task from any other in the bridge journal — must be named and proved on a known case before 2026-10-23. Until then (b) is unmeasured, not passing.
 
-**OBJ-3:** PASS = `langston-size-watch --status` shows the loaded set ≤ `ceiling_bytes` (143,856). FAIL = over. Today: FAIL by 8,251 B. **Kyle decides where the last 8 KB lives** (asked 2026-10-19): in this batch, or carried into the planned rules-file residual item (`B-LANGSTON-CLAUDEMD-RESIDUAL`).
+**OBJ-3:** PASS = `langston-size-watch --status` shows the loaded set ≤ `ceiling_bytes` (143,856). FAIL = over. Today: FAIL by 8,251 B. **DECIDED — Kyle, 2026-10-20: option A.** The last 8,251 B is carried into `B-LANGSTON-CLAUDEMD-RESIDUAL`, which now owns meeting the ceiling (the overage is mostly his rules file, which the trim cannot reach). This batch closes on OBJ-2's window, recording OBJ-3 as met except the carried ceiling.
 
 ## 4. What is unproven, stated as unproven
 
