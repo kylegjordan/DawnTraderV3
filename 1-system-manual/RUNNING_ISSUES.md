@@ -4637,6 +4637,7 @@ HOME (CC-A, W40 census 2026-09-30): `B-CHUNK-ADDRESSING`, owner CC-A, placed in 
 
 ---
 ➕ **2026-10-17 (CC-B relaying Langston, row 59g Step 4 §13 disposition 2 — record item, no gate):** `scripts/dt-deploy.sh:240` cites the deploy-ordering invariant as `SYSTEM_MANUAL:12734`; at the ref it sits at ~`:13325`. Owner CC-A.
+➕ **2026-10-20 (CC-INFRA, from `B-LANGSTON-CLAUDEMD-RESIDUAL` Step 2; Langston r2 C-2) — ITEM, A HYPOTHESIS:** `scripts/governance-checker/config.mjs:41` lists `CLAUDE.md` in `HOUSEKEEPING_ONLY_BASENAMES`, matched as `f === b || f.endsWith('/' + b)` (`checker.mjs:161`) — so an untagged commit touching only the crew's root `CLAUDE.md` (or any file of that name) passes the checker without a flag. It may be deliberate (a memory sync legitimately carries no batch id, which is why `MEMORY.md` is beside it), so read its history before calling it a defect. Owner CC-A (this issue's owner). Not started; it goes to Kyle's list like any other new item. `B-LANGSTON-CLAUDEMD-RESIDUAL` sidesteps it for its own file by naming the repo copy `LANGSTON_CLAUDE.md`.
 
 ### #740 OPEN 2026-08-23 (CC-A; Langston directed the filing after re-deriving the frontmatter himself at `d0fc181c7` — 12/12 descriptions present, 0 colon-space) — ★★ **A `": "` IN A SKILL DESCRIPTION SILENTLY DISARMS THAT SKILL’S AUTO-INVOKE TRIGGER. VALID FILE, NO ERROR, PLAUSIBLE FALLBACK — THE #546 SHAPE.**
 

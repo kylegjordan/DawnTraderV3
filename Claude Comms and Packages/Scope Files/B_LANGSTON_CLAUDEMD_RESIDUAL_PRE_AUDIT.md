@@ -1,5 +1,7 @@
 # B-LANGSTON-CLAUDEMD-RESIDUAL — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
 
+> **r1 → r2 (Langston, 2026-10-20 22:46Z: CHANGES, three small, PROCEED on landing):** C-1 `.gitignore:72` is KEPT (it ignores a credentials reference doc); C-2 the checker's CLAUDE.md exemption also covers CC's root rules file — recorded on `#744` as a hypothesis for its owner, not built here; C-3 P6 names its read-site, not a carried byte figure. He ruled root:root 0644 for the live file YES, with a no-input installer (P1). He withdrew his r1 CHANGES-3 to his own ledger: A6 stands.
+
 change-class: architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SCOPE.md` (r3, `80ba70062`, Langston PROCEED on landing C-1/C-2/C-3) · measured 2026-10-20/21 on Helsinki as root unless stated
 
 ## 0. PREVIOUSLY STATED → NOW
@@ -31,7 +33,7 @@ change-class: architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SC
 
 **A3 — section numbers are cited across the repo.** At least 20 citations in 11 files name his sections by number (`§14` ×10, `§5.3` ×4, `§11` ×2, `§6`, `§19`, `§13`, `§10`). **A floor:** the search matched one phrasing ("Langston's / his CLAUDE.md §N"). ⇒ retiring or merging a section must not renumber anything.
 
-**A4 — the load canary depends on the numbered headings.** Probe 1 asks for the count and the highest of the `## §N` headings (today: 9 and 19). Removing a numbered heading changes the expected answer; keeping the headings keeps it stable.
+**A4 — the load canary reads the numbered headings.** Probe 1 asks for the count and the highest of the `## §N` headings (today: 9 and 19). **Corrected (Langston r2):** it derives that answer at run time, so a renumbering re-baselines itself; only removing every `## §N` heading would break it (`expect: []` ⇒ MALFORMED). The reason not to renumber is A3's citations, which stands alone.
 
 **A5 — the 20 paths in `Claude Comms and Packages/Langston/` (168,456 B in git).**
 - Classes: persona/rules (`SOUL.md` 18,571, `BOOTSTRAP.md` 22,512, `IDENTITY.md` 5,095, `AGENTS.md` 4,724, `MEMORY.md` 10,425, `USER.md` 3,377, `CCPI_LANGSTON_SECTION.md` 7,385, `HONESTY_RULE_ADDENDUM_DRAFT.md` 6,198, `staged-updates-2026-04-14/` 2 files 22,335); procedures (`OPUS_4_6_SWAP_PROCEDURE.md` 4,169, `LANGSTON_TELEGRAM_FORUM_SETUP.docx` 13,176); 7 `skills/*/SKILL.md` (46,297 — none installed anywhere under his `.claude`, Langston measured); `langston-call.sh` 4,192.
@@ -40,7 +42,11 @@ change-class: architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SC
 
 **A6 — the privacy check's prediction:** see §0 — `excluded` +0 from the OBJ-1 commit; private key lines stay ~166, far above the floor of 30 (`MIN_PRIVATE_KEYS`, `:98`).
 
-**A7 — the headroom's consumer, baseline:** `## ★ Kept lines from closed batches` in his MEMORY.md is 11,003 B; 26 `keep:` lines file-wide. Rate unknown (n=1 batch close under the new trim).
+**A7 — the headroom's consumer, baseline:** `## ★ Kept lines from closed batches` in his MEMORY.md is 11,003 B; 26 `keep:` lines file-wide. Rate unknown (n=1 batch close under the new trim). The headroom itself moves daily with his memory — read it from `langston-size-watch --status` at the time, never from a figure here (Langston measured 4,743 B at ≤55,000 on 2026-10-20 ~22:30Z; the scope's 4,645 came off a stale total).
+
+**A2a — the same exemption covers CC's own root `CLAUDE.md` (Langston r2 C-2).** An untagged edit to the crew's always-loaded rules file passes the checker silently today. **A HYPOTHESIS until its history is read:** `MEMORY.md` is in that list because a memory sync legitimately carries no batch id, so this may be working-as-designed-but-unaddressed rather than a defect. Recorded on `#744` (B-GATE-GUARD, owner CC-A) as an item; not built here, not started without Kyle.
+
+**A9 — reach of the citations above:** the backup and privacy-check lines were read at the REPO copies; Langston cannot read the installed copies from his account, so repo-vs-installed identity is unverified from his side. P1's install-by-hash discipline is the fix for that class going forward.
 
 **A8 — Coltrane:** `comms-infra/codex/AGENTS.md` blob sha256 = `/home/coltrane/.codex/AGENTS.md` sha256 = `591d9bc3…` (root, 2026-10-20). Other files in `comms-infra/codex/` (`CODEX_DISCORD_RULES.md`, `BROWSER_GUIDE.md`, the READMEs) are not yet censused for being superseded persona copies — P8.
 
@@ -48,12 +54,12 @@ change-class: architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SC
 
 | # | item | from | done when |
 |---|---|---|---|
-| P1 | Commit the live file byte-identical as **`comms-infra/langston/LANGSTON_CLAUDE.md`** (NOT `CLAUDE.md` — A2), with a README naming its install path `/home/langston/CLAUDE.md`. Install from then on by hash (a small installer like the tools'); propose the live file become **root:root 0644** so it changes only by an installed commit — **Langston to rule** (Q4 applied to the core). | A1, A2 | repo blob sha256 = live sha256 |
+| P1 | Commit the live file byte-identical as **`comms-infra/langston/LANGSTON_CLAUDE.md`** (NOT `CLAUDE.md` — A2), with a README naming its install path `/home/langston/CLAUDE.md`, that its history starts at this commit (the past is not recoverable), and that `scripts/check-reviewer-siblings.mjs` `isInstruction` would need this path if his rules ever carry the reviewer mechanism. **Installer (Langston r2 condition):** root-only, takes NO path, ref or content argument — it reads the pinned commit from the root-owned backup mirror and replaces the live file only when the blob's sha matches; no NOPASSWD entry, no langston→root path. The live file becomes **root:root 0644 in the same step as the installer's first run.** **When a rule must land now:** Langston asks Infra Claude (or any CC session) in the channel; the session commits and installs it, by the hotfix path if urgent. It is never parked in his `MEMORY.md`. | A1, A2 | repo blob sha256 = live sha256; live file root:root 0644; a langston write to it refused |
 | P2 | Privacy check around P1: record `excluded` and `live_key_lines` from the last run before the commit, predict them unchanged (A6), run `--dry-run` after the mirror holds the commit. | A6 | readable verdict (PASS or a named EXPOSED), `excluded` as predicted |
-| P3 | The 20 paths (A5): the 19 persona/procedure/skill files deleted with one `DELETED_COMPONENTS_LOG.md` row each and a copy under `_archive/deleted-code/`; the `.gitignore:72` line removed with them. **`langston-call.sh` NOT deleted**: a one-line comment added at its top — "NOT the live script (/usr/local/bin/langston-call); a stale copy; making the live one repo-canonical is #1004" — and the same line on the second fork. | A5 | 19 rows logged; the two forks carry the warning |
+| P3 | The 20 paths (A5): the 19 persona/procedure/skill files deleted with one `DELETED_COMPONENTS_LOG.md` row each and a copy under `_archive/deleted-code/`. **`.gitignore:72` STAYS** (Langston r2 C-1): it ignores `LANGSTON_SETUP_REFERENCE.md`, which the archived CCPI names as the Langston infrastructure and credentials doc, and no working tree can be proved never to hold it. **`langston-call.sh` NOT deleted**: a one-line comment added at its top — "NOT the live script (/usr/local/bin/langston-call); a stale copy; making the live one repo-canonical is #1004" — and the same line on the second fork. | A5 | 19 rows logged; the two forks carry the warning |
 | P4 | The per-section census (scope OBJ-3) committed as a table beside the repo copy, on the scope's byte convention; Langston rules each row. | A1, A3, A4 | rows sum to 67,896; every row placed |
 | P5 | Retire/compress (i)-(x) on the repo copy, one reviewed commit per ruling group, each with its byte delta. **Never renumber**; a retired numbered section keeps its heading with a one-line pointer (to `§9` for §18's surviving instruction, to the dispatch header for the `dt-review` mechanics). Then install by hash. | A3, A4 | CLAUDE.md ≤ 55,000 B; canary probe 1 still answers 9 / 19 |
-| P6 | Record the kept-lines size at start (11,003 B) and at close; propose a successor to Kyle only if growth would use the 4,645 B headroom within the batch's span. | A7 | both figures recorded |
+| P6 | Record the kept-lines size at start (11,003 B) and at close; propose a successor to Kyle only if its growth over the batch's span, carried forward, would use the headroom `langston-size-watch --status` shows at close. | A7 | both figures recorded, with the read-site |
 | P7 | Canary `--self-test` + one live run after each install; size watch two consecutive daily runs ≤ ceiling. | A4 | LOADED; two UNDER runs |
 | P8 | Coltrane: census `comms-infra/codex/*.md` for superseded persona copies (A8); record the per-objective applies/does-not-apply. | A8 | written |
 | P9 | SIM entry for his rules file: location, install path, readers (A1 list), the checker exemption avoided (A2). | A1 | landed at Step 10 |
