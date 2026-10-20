@@ -1,7 +1,7 @@
 # B-BOOK-CHECKSUM-CIRCUIT-BREAKER — COMPLETION REPORT (`#1220`)
 
 **Owner:** CC-B (NEW Claude) · **CC-B pre-sprint item 1** (Kyle-assigned 2026-10-20, list locked `e400fed12`) · **change-class:** `architecture`
-**Status:** ✅ Steps 1-10 complete; Step 8 CONFIRMED by Langston (2026-10-20 ~22:20Z); at Step 11 for his confirm.
+**Status:** ✅ **CLOSED 2026-10-20** — Step 8 CONFIRMED and Step 11 CONFIRMED by Langston (two documentary changes folded, no further round).
 **Deployed:** `725a7f3f53bbc1758dfbf73090d2e6681147c015`, `dt-deploy --by cc-b`, 2026-10-20T21:50:37Z. Rollback target `7501f4f55`.
 **CI:** run `39503085325` on `725a7f3f5` — TypeScript Check (baseline gate) ✅ · Test Suite ✅ · Build ✅ · Docker Build ✅ (per job).
 **Review:** Step 2 APPROVED at `11ac8817` (conditions applied `a70f8fb1e`); Step 4 APPROVED r3 at `5c5abef81` (r1 `cdf74ab5d` → BLOCKER-1 → r2 `2182b10fa` → condition → r3).
@@ -10,18 +10,18 @@
 - **The acting half has never fired live.** Before the deploy: 19,507,455 checksum checks, 0 mismatches, 71 symbols (Langston's read). Suspect → resync → untrusted and the re-check are **fence-verified only** (39 tests). No silence on staging is evidence for them (Step-4 FINDING-2, recorded on `#1220`). A live arm needs a deliberate, pre-registered forced desync on one symbol.
 - **The fleet guard** (one aggregate alert, a cap on concurrent untrust episodes, a bulk re-check, and the snapshot-vs-call-time map residual) — `#1226` `B-BOOK-TRUST-FLEET-GUARD`, owner CC-B, CC-B pre-sprint item 5 (slotted on Kyle's delegation, `87c567ee9`).
 - **The reconnect re-subscribes open positions only, not RTB-queued symbols** — `#1222` `B-PRICE-FEED-COVERAGE`, pre-sprint item 3.
-- **Langston's `MEMORY.md` row is OWED**, blocked by the loaded-set breach (`#1215`): `langston-size-watch` last status BREACH, 152,107 B vs the 143,856 B ceiling (2026-10-20T05:40Z).
+- **Ref vs deploy:** the review branch is ahead of the deployed `725a7f3f5`; the only runtime file touched since is `kraken-websocket-adapter.ts` +2/−2 inside a docblock (the 68/71 comment). No undeployed behaviour.
 
 ## Objectives (scope §2)
 
 | # | objective | verdict | evidence |
 |---|---|---|---|
 | 1 | Confirm before acting, then stop at once | **YES** | one book-only resync per episode stage, de-duped by an in-flight entry; confirmation on the fresh snapshot after one precision re-read; on untrusted the book channel is cancelled, no further book request, ticker untouched, cache emit stopped, ticker rung refuses `ws_book` sides. Tests 1-9, 18-19, p7b 3/4/8 |
-| 2 | Untrusted in every lane that reads it | **YES, with one change of form** | the four hardcodes pass the required `bookTrusted`; a non-trusted book refuses as `book_untrusted` — **a new value, not `book_not_eligible`** (Langston Step-2 C-5: the contract separates "did not use" from "was bad"); `depth-source` blocks the open through `getBookForFill` → null. ⚠️ The exit book-age stamp records **null**, not the word "untrusted" (it reads `getBookForFill`) — the provenance shows the book rung refused via the touch funnel's `book_untrusted` cell instead |
+| 2 | Untrusted in every lane that reads it | **YES, with one change of form** | the four hardcodes pass the required `bookTrusted`; a non-trusted book refuses as `book_untrusted` — **a new value, not `book_not_eligible`** (Langston Step-2 C-5: the contract separates "did not use" from "was bad"); `depth-source` blocks the open through `getBookForFill` → null. **Change of form (Langston Step 11, disposition 5):** the exit book-age stamp records null rather than the word "untrusted" — `bookAgeMs` is a price-AGE field and "untrusted" is not an age, and the same payload records the trust 90 lines down (`bookTrusted: krakenWebSocketAdapter.isBookTrusted(_lsSym)`, `active-execution-engine.ts:2985`) |
 | 3 | One alert per episode | **YES** | `book_untrusted:<symbol>:<episode ISO>`, breakage/warning, metadata with both CRCs, precision, counts, state; resolved by the re-check route on a restore, never acked. Test 5 asserts the key shape; test 15 the resolve |
 | 4 | Terminal state; precision re-learned | **YES** | untrusted is left only by `POST /api/active-engine/book-recheck/:symbol` (AssetPairs re-read, one subscribe, restore on match); trust survives `stop`, `softResubscribeAll` and reconnect (test 17); a reconnect gives an untrusted symbol its ticker and not its book (test 10). The dormant cluster deleted (watchdog, `sentinelResets`, `softResubscribe`, `triggerSoftResubscribe`). **Changed in review:** the precision re-read is ONE shared all-pairs request with transport retries (Langston BLOCKER-1), not one call per pair |
 | 5 | The 10-13 cause | **YES — superseded by a better-supported cause** | pre-audit: the cause reads as the self-sustaining wipe loop (volume and storm) carried by an orphaned socket; Arm A refuted for S/USD only (52,225/52,225), OOB/CAP undecidable; Arm B's predictions undecidable (stdout rotated); both orphaning accounts repaired identically by plan 1. Precision bound rider: shipped (test 13) |
-| 6 | Counters and text | **YES** | the per-symbol counters and totals on `/api/active-engine/book-integrity`; every listed false statement corrected (routes docblock, `price-cache.ts` sidesWriter, the adapter docblock and `note`, `level-basis.ts:400-401`, both "eligible by construction" comments); the skip count in the `syms` union. ⚠️ The drift probe **skips** a non-trusted book rather than reporting it as its own outcome (it is record-only and alerts nothing) |
+| 6 | Counters and text | **YES** | the per-symbol counters and totals on `/api/active-engine/book-integrity`; every listed false statement corrected (routes docblock, `price-cache.ts` sidesWriter, the adapter docblock and `note`, `level-basis.ts:400-401`, both "eligible by construction" comments); the skip count in the `syms` union. ⚠️ The drift probe **skips** a non-trusted book (its guard, `kraken-websocket-adapter.ts:1122`), so "0 fires" and "excluded from the sample" print the same — record-only, no live harm, but the absent-as-valid class (`#546`). **HOME: a third item on `#1226` `B-BOOK-TRUST-FLEET-GUARD`, owner CC-B, CC-B pre-sprint item 5** — the probe records the skip as its own outcome |
 | 7 | Tests, each negative with its twin | **YES** | `b-book-checksum-circuit-breaker.test.ts` 39 tests; the re-pointed p7b tests; b507; the fixtures declaring trust. Locally: all 30 affected files, 461 tests |
 | 8 | Step 7 | **YES** | `updatesApplied` 1,080 = attempts 1,080 = matches 1,080 per symbol; `skippedNoPrecision` 0 reported; 0 confirmed, 0 untrusted, 0 resyncs. Record `Claude Comms and Packages/Change Lists/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_STEP7_2026-10-20.md` |
 | — | Step 8 (Langston) | **CONFIRMED** | on the pre-registration (FINDING-2): re-derived at 7 symbols / 1,531 s — 57,867 attempts = 57,867 matches enumerated per symbol, 0 mismatches, 0 crossed, trust all `trusted`, every new counter 0; book and ticker subscribe SETS identical; plan 1 unexercised (no reconnect since the deploy), as pre-registered |
@@ -48,7 +48,7 @@ CHANGE-CLASS: architecture
 | T1 | the batch PRE_AUDIT | ✅ | r6 at `a70f8fb1e`, approved |
 | T1 | COMPLETION_REPORT | ✅ | this report |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B: the locked list, item 5, status board moved to OLD Claude; CC-A, CC-C, CC-INFRA not mine |
-| T1 | Langston's MEMORY.md | OWED — blocked on the loaded-set breach (`#1215`) | writes refused while the set is over its ceiling (152,107 B vs 143,856 B) |
+| T1 | Langston's MEMORY.md | ✅ | written by Langston at Step 11: `937e6f96bba0 → 1df5d7de4eaf`, 75,061 → 75,059 B (net −2 B, paid for by three closed-batch collapses). ⚠️ My earlier "blocked by the breach" was wrong: the write gate is a NON-INCREASE gate (`langston-memory-write:552-561`, `if delta <= 0`), not an absolute ceiling — a write that does not grow the file always passes |
 | T2 | SYSTEM_MANUAL.md | ✅ | §8 items 3-4 (book integrity as built; one socket); §18.0.1 note (every job refuses a non-trusted crypto book) |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | §2.1 breaker entry (entry points, state, refusing readers, `getLatestPriceData` reports rather than refuses); registry row S29; the monitor's `triggerSoftResubscribe` line |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1220` deploy note, FINDING-2 and the Step-11 line; `#1221`-`#1224` re-homed; `#1226` filed and slotted (with Langston's r3 residual); `#1229` and `#1230` SURFACED for Kyle |
@@ -77,4 +77,4 @@ CHANGE-CLASS: architecture
 ## Honest residual
 - The confirm path, the re-check and the one-socket guard are proven by tests and code review, not by a live event.
 - The 30 s resync timeout, the 60 s re-desync window and the 2/8 s retry delays are judgements with no measured distribution behind them (n = 1 episode).
-- The scope asked the exit book-age stamp to record "untrusted" and the drift probe to report it as its own outcome; both instead read null / skip.
+- The drift probe skips a held book silently until `#1226`'s third item lands (above).
