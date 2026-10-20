@@ -604,6 +604,7 @@ describe('#1220 Step-4 BLOCKER-1 — "we could not ask" is not "the venue answer
     vi.spyOn(krakenAssetPairsService, 'getAllMappings').mockReturnValue([
       { internalSymbol: 'SOL/USD', krakenPairKey: 'SOLUSD' },
       { internalSymbol: 'ETH/USD', krakenPairKey: 'XETHZUSD' },
+      { internalSymbol: 'ADA/USD', krakenPairKey: 'ADAUSD' }, // mapped by us, absent from the venue's answer
     ] as any);
     const get = vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: {
       SOLUSD: { pair_decimals: 2, lot_decimals: 8 }, XETHZUSD: { pair_decimals: 2, lot_decimals: 19 },
@@ -613,14 +614,37 @@ describe('#1220 Step-4 BLOCKER-1 — "we could not ask" is not "the venue answer
     expect(get).toHaveBeenCalledTimes(1);
     expect(sol).toEqual({ price: 2, qty: 8 });
     expect(eth).toBeNull(); // the venue answered, and 19 is outside 0-18
-    expect(await adapter.precisionReader('DOGE/USD')).toBeNull(); // answered, pair not stated
+    expect(await adapter.precisionReader('ADA/USD')).toBeNull(); // the venue answered and did not state the pair
     expect(get).toHaveBeenCalledTimes(1); // the answer is reused, not re-asked
+    // ⛔ Langston Step-4 r2 condition: a pair OUR map cannot name was never asked about — a transport-class throw, not a null.
+    await expect(adapter.precisionReader('DOGE/USD')).rejects.toThrow(/not in our pair map/);
 
     __resetAssetPairsPrecisionCacheForTest();
     get.mockResolvedValueOnce({ data: { error: ['EGeneral:Too many requests'], result: {} } } as any);
     await expect(adapter.precisionReader('SOL/USD')).rejects.toThrow(/Too many requests/);
     get.mockRejectedValueOnce(new Error('Request failed with status code 503'));
     await expect(adapter.precisionReader('SOL/USD')).rejects.toThrow(/503/);
+    __resetAssetPairsPrecisionCacheForTest();
+  });
+
+  it('28b. our pair map not yet loaded, or the symbol absent from it, is never confirmed as the venue\'s answer', async () => {
+    vi.useFakeTimers();
+    __resetAssetPairsPrecisionCacheForTest();
+    const maps = vi.spyOn(krakenAssetPairsService, 'getAllMappings').mockReturnValue([] as any);
+    const get = vi.spyOn(axios, 'get');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { adapter } = makeAdapter();
+    adapter.precisionReader = (KrakenWebSocketAdapter as any).prototype.precisionReader ?? new (KrakenWebSocketAdapter as any)().precisionReader;
+    await toReread(adapter);
+    await flush();
+    expect(adapter.getBookTrustState(SYM)).toBe('suspect'); // not judged on our own gap
+    maps.mockReturnValue([{ internalSymbol: 'ETH/USD', krakenPairKey: 'XETHZUSD' }] as any); // loaded, but without this symbol
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flush();
+    expect(get).not.toHaveBeenCalled(); // the venue was never asked
+    expect(adapter.getBookTrustState(SYM)).toBe('untrusted');
+    expect(adapter.bookTrust.get(SYM).reason).toBe('precision_reread_transport_failed');
+    expect(adapter.bookTrust.get(SYM).reason).not.toBe('snapshot_mismatch_no_venue_precision');
     __resetAssetPairsPrecisionCacheForTest();
   });
 

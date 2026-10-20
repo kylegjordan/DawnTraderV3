@@ -307,12 +307,18 @@ async function fetchAssetPairsPrecisionSnapshot(): Promise<Map<string, { price: 
 }
 
 /**
- * The breaker's precision read. Resolves `{price, qty}`, or `null` when the venue ANSWERED but states no usable precision
- * for this pair. THROWS when the venue could not be asked (timeout, non-2xx, rate limit) — the two are judged differently.
+ * The breaker's precision read. Resolves `{price, qty}`, or `null` ONLY when the venue ANSWERED for this pair without a
+ * usable precision: its row is absent from the `AssetPairs` result, or states a precision outside 0-18. THROWS when the
+ * venue could not be asked (timeout, non-2xx, rate limit) — AND when OUR pair map cannot name the pair (the map not yet
+ * loaded, or the symbol absent from it), because then the venue was never asked about it (Langston Step-4 r2 condition).
+ * A throw goes through the retry and, if it persists, confirms as `precision_reread_transport_failed`; it never blames the venue.
  */
 async function readAssetPairsPrecision(internalSymbol: string): Promise<{ price: number; qty: number } | null> {
+  const mappings = krakenAssetPairsService.getAllMappings();
+  if (mappings.length === 0) throw new Error('pair map not loaded — the venue was not asked');
+  if (!mappings.some((e) => e.internalSymbol === internalSymbol)) throw new Error(`${internalSymbol} is not in our pair map — the venue was not asked`);
   const byInternal = await fetchAssetPairsPrecisionSnapshot();
-  return byInternal.get(internalSymbol) ?? null;
+  return byInternal.has(internalSymbol) ? byInternal.get(internalSymbol)! : null;
 }
 
 /** Test-only: forget the shared AssetPairs answer. Never called from the running system. */
