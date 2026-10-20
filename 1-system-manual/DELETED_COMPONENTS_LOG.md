@@ -1331,3 +1331,35 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS / STATE-WRITE CENSUS (§9.5(a-ii)):** the watchdog cluster wrote only its own timer map (reader: the removed `channelWatchdogs` metric) and `sentinelResets` (readers: the health-log line and `getHealthMetrics`, both removed with it; `GET /api/diagnostics/8.8.5/health` returns the metrics object, and the client has zero reads of `sentinelResets` or `channelWatchdogs`, `git grep` at `e400fed12` over `client`, `shared` and `scripts`). `softResubscribe` only DELETED state, so no surviving reader depended on a write of its; its callers were the checksum arm (replaced), the monitor wrapper (deleted) and tests (re-pointed: `b-price-side-p7b-book-unsubscribe` tests 3, 4 and 8 now drive the breaker's resync; `b507` stubbed it and now asserts the breaker state). `tsc` baseline 329 = 329; every test file that imports the adapter, the touch-price modules or the monitor passes.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/kraken-websocket-adapter.channel-watchdog-cluster.20261020-B-BOOK-CHECKSUM-CIRCUIT-BREAKER.ts.removed` · `kraken-websocket-adapter.softResubscribe.20261020-B-BOOK-CHECKSUM-CIRCUIT-BREAKER.ts.removed` · `mini-book-integrity-monitor.triggerSoftResubscribe.20261020-B-BOOK-CHECKSUM-CIRCUIT-BREAKER.ts.removed` (all verbatim from `e400fed12`).
 **COMMIT:** the batch's Step-3 commit (sha recorded here at Step 10). Record: `Scope Files/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_PRE_AUDIT.md` plan item 8.
+
+---
+
+## 2026-10-21 — 19 superseded Langston persona, procedure and skill files — B-LANGSTON-CLAUDEMD-RESIDUAL (P3, scope OBJ-2), CC-INFRA
+
+**WHAT:** every tracked file in `Claude Comms and Packages/Langston/` except `langston-call.sh` — 19 files, 164,264 B.
+| path under `Claude Comms and Packages/Langston/` | bytes | archive copy |
+|---|---|---|
+| `AGENTS.md` | 4724 | `_archive/deleted-code/langston-persona.AGENTS.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `BOOTSTRAP.md` | 22512 | `_archive/deleted-code/langston-persona.BOOTSTRAP.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `CCPI_LANGSTON_SECTION.md` | 7385 | `_archive/deleted-code/langston-persona.CCPI_LANGSTON_SECTION.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `HONESTY_RULE_ADDENDUM_DRAFT.md` | 6198 | `_archive/deleted-code/langston-persona.HONESTY_RULE_ADDENDUM_DRAFT.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `IDENTITY.md` | 5095 | `_archive/deleted-code/langston-persona.IDENTITY.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `LANGSTON_TELEGRAM_FORUM_SETUP.docx` | 13176 | `_archive/deleted-code/langston-persona.LANGSTON_TELEGRAM_FORUM_SETUP.docx.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `MEMORY.md` | 10425 | `_archive/deleted-code/langston-persona.MEMORY.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `OPUS_4_6_SWAP_PROCEDURE.md` | 4169 | `_archive/deleted-code/langston-persona.OPUS_4_6_SWAP_PROCEDURE.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `SOUL.md` | 18571 | `_archive/deleted-code/langston-persona.SOUL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `USER.md` | 3377 | `_archive/deleted-code/langston-persona.USER.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-claude-code-ops/SKILL.md` | 9305 | `_archive/deleted-code/langston-persona.skills.dt-claude-code-ops.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-governance/SKILL.md` | 3799 | `_archive/deleted-code/langston-persona.skills.dt-governance.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-kyle-reports/SKILL.md` | 5593 | `_archive/deleted-code/langston-persona.skills.dt-kyle-reports.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-master-workflow/SKILL.md` | 8485 | `_archive/deleted-code/langston-persona.skills.dt-master-workflow.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-planning/SKILL.md` | 6717 | `_archive/deleted-code/langston-persona.skills.dt-planning.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-replit-ops/SKILL.md` | 6283 | `_archive/deleted-code/langston-persona.skills.dt-replit-ops.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `skills/dt-verification/SKILL.md` | 6115 | `_archive/deleted-code/langston-persona.skills.dt-verification.SKILL.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `staged-updates-2026-04-14/BOOTSTRAP_ADDITIONS.md` | 14033 | `_archive/deleted-code/langston-persona.staged-updates-2026-04-14.BOOTSTRAP_ADDITIONS.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+| `staged-updates-2026-04-14/MEMORY_NEW.md` | 8302 | `_archive/deleted-code/langston-persona.staged-updates-2026-04-14.MEMORY_NEW.md.20261021-B-LANGSTON-CLAUDEMD-RESIDUAL.removed` |
+
+**WHY:** rule 18 / Langston's §15, disposition (5). They are the April-era persona set from before his 2026-05-06 move to Claude Code — they call him "Autonomous Build Orchestrator", name Telegram and a Windows `G:` path — and this batch commits his LIVE rules file as `comms-infra/langston/LANGSTON_CLAUDE.md`, so the repo must hold ONE copy anyone is told is authoritative (Langston r1 CHANGES-2: *"staging a copy of the RULEBOOK, or of your PERSONA, is the bug"*).
+**CENSUS BEFORE THE CUT:** no live tool reads any of them (box-wide grep of `/usr/local/bin /usr/local/sbin /opt/discord-bridges /etc/systemd/system /etc/cron.d`: no hit for the folder; his CLAUDE.md's one hit is a DIFFERENT folder, `Langston Design Asks/`); none of the 7 skills is installed under his `.claude` (Langston measured, 0 of 7 against 37 `SKILL.md` present). In the repo they are named only by frozen history (completion reports, scope files, the archived CCPI) — records, not readers.
+**LEFT, NAMED, so a later grep is not read as a missed sweep:** `Claude Comms and Packages/Langston/langston-call.sh` (and its sibling fork `Claude Comms and Packages/comms-infra/langston-call.sh`) — stale copies of the LIVE `/usr/local/bin/langston-call`, kept with a one-line warning; making the live script repo-canonical is `#1004` (P19-B12, `#652`). `.gitignore:72` (ignores `LANGSTON_SETUP_REFERENCE.md`, the credentials reference the archived CCPI names) — KEPT, Langston r2 C-1.
+**ARCHIVE:** each file moved by `git mv` to the path in the table (history follows the rename; git is authoritative). **COMMIT:** this batch's Step-3 part-1 commit.

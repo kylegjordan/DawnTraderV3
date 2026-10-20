@@ -1,4 +1,5 @@
 #!/bin/bash
+# WARNING (B-LANGSTON-CLAUDEMD-RESIDUAL, 2026-10-21): NOT the live script. /usr/local/bin/langston-call on Helsinki is newer and differs; this is a stale copy. Making the live one repo-canonical is #1004 (P19-B12, with #652). Never install or restore from this file.
 # /usr/local/bin/langston-call
 # Watchdog wrapper for langston's `claude -p` invocations.
 # Auto-detects hangs (no stdout progress) and retries with fresh UUID.

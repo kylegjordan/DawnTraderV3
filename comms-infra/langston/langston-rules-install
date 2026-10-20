@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""langston-rules-install - install Langston's rules file from a REVIEWED commit. Root only, on Helsinki.
+
+    langston-rules-install <full-40-char-sha> [--dry-run]
+
+B-LANGSTON-CLAUDEMD-RESIDUAL (Langston's ruling, 2026-10-20): his auto-loaded rules file /home/langston/CLAUDE.md
+changes ONLY by installing a reviewed commit. The repo copy is comms-infra/langston/LANGSTON_CLAUDE.md (not named
+CLAUDE.md: the governance checker treats every file of that name as housekeeping, so an untagged edit would pass).
+
+What it does, in order, or refuses:
+  1. the sha is 40 hex characters and is on migration/aws-supabase in the ROOT-OWNED backup mirror;
+  2. it reads the blob at <sha>:comms-infra/langston/LANGSTON_CLAUDE.md from the mirror and re-hashes it against the
+     tree's own object id (a blob that does not hash to its id is refused);
+  3. it copies the current live file to /root/langston-rules-backup/<sha256-of-old>.md (root 0700, exclusive create);
+  4. it writes the new bytes to a random temp file beside the target, sets root:root 0644 ON THE OPEN FILE (never by
+     path), fsyncs, and renames it over the target - a rename replaces whatever name is there and follows nothing.
+
+⛔ NO INPUT FROM LANGSTON'S SIDE (his condition): no path, ref or content argument beyond the sha the ROOT operator
+   passes; no sudo entry for him. A rule that must land now: he asks a CC session in the channel, which commits and
+   installs it (the hotfix path if urgent) - never parked in his MEMORY.md.
+Exit codes: 0 installed (or dry run clean) · 2 bad input · 3 not root · 4 sha not on the branch / unreadable · 5 blob
+hash mismatch · 6 write failed (the live file is untouched unless the final rename ran).
+"""
+import hashlib, os, re, subprocess, sys, tempfile
+
+MIRROR = os.environ.get("LRI_MIRROR", "/srv/dawntrader-backup.git")
+BRANCH = "migration/aws-supabase"
+REPO_PATH = "comms-infra/langston/LANGSTON_CLAUDE.md"
+TARGET = os.environ.get("LRI_TARGET", "/home/langston/CLAUDE.md")
+BACKUP_DIR = os.environ.get("LRI_BACKUP", "/root/langston-rules-backup")
+
+
+def git(*args, binary=False):
+    r = subprocess.run(["git", "-C", MIRROR] + list(args), capture_output=True, timeout=120)
+    return r.returncode, (r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()), \
+        r.stderr.decode("utf-8", "replace").strip()
+
+
+def die(code, msg):
+    print("REFUSED: " + msg)
+    sys.exit(code)
+
+
+def main(argv):
+    args = [a for a in argv if a != "--dry-run"]
+    dry = "--dry-run" in argv
+    if os.geteuid() != 0:
+        die(3, "run as root")
+    if len(args) != 1 or not re.fullmatch(r"[0-9a-f]{40}", args[0]):
+        die(2, "usage: langston-rules-install <full-40-char-sha> [--dry-run]")
+    sha = args[0]
+    rc, _o, err = git("merge-base", "--is-ancestor", sha, BRANCH)
+    if rc != 0:
+        die(4, "%s is not on %s in %s (%s)" % (sha, BRANCH, MIRROR, err or "not an ancestor"))
+    rc, want_id, err = git("rev-parse", "%s:%s" % (sha, REPO_PATH))
+    if rc != 0:
+        die(4, "%s has no %s (%s)" % (sha, REPO_PATH, err))
+    rc, data, err = git("cat-file", "blob", want_id, binary=True)
+    if rc != 0:
+        die(4, "cannot read blob %s (%s)" % (want_id, err))
+    got_id = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+    if got_id != want_id:
+        die(5, "blob %s re-hashes to %s" % (want_id, got_id))
+    try:
+        with open(TARGET, "rb") as fh:
+            old = fh.read()
+    except FileNotFoundError:
+        old = None
+    old_sha = hashlib.sha256(old).hexdigest() if old is not None else None
+    new_sha = hashlib.sha256(data).hexdigest()
+    print("%s: %s -> %s (%d -> %d B) from %s" % (TARGET, (old_sha or "absent")[:12], new_sha[:12],
+                                                len(old or b""), len(data), sha[:12]))
+    if old == data:
+        print("already installed - nothing to do")
+        return 0
+    if dry:
+        print("DRY RUN - nothing written")
+        return 0
+    try:
+        if old is not None:
+            os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
+            os.chmod(BACKUP_DIR, 0o700)
+            bpath = os.path.join(BACKUP_DIR, old_sha + ".md")
+            if not os.path.exists(bpath):
+                fd = os.open(bpath, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(old)
+                    fh.flush()
+                    os.fsync(fh.fileno())
+            print("previous version kept at %s" % bpath)
+        fd, tmp = tempfile.mkstemp(prefix=".CLAUDE.md.install-", dir=os.path.dirname(TARGET))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fchown(fh.fileno(), 0, 0)
+                os.fchmod(fh.fileno(), 0o644)
+                os.fsync(fh.fileno())
+            os.replace(tmp, TARGET)
+        except BaseException:
+            if os.path.lexists(tmp):
+                os.unlink(tmp)
+            raise
+    except OSError as e:
+        die(6, "write failed (%s: %s)" % (type(e).__name__, e))
+    st = os.lstat(TARGET)
+    with open(TARGET, "rb") as fh:
+        back = hashlib.sha256(fh.read()).hexdigest()
+    print("INSTALLED: %s sha256 %s, owner %d:%d mode %o" % (TARGET, back, st.st_uid, st.st_gid, st.st_mode & 0o7777))
+    return 0 if back == new_sha else 6
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
