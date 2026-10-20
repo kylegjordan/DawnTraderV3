@@ -92,15 +92,17 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 - **B1 — the orphan's birth site, by presence, with a positive control.** `[8.8.5][RECONNECT]` is `console.warn`, so it goes to stderr and is retained. In `error__2026-10-14_00-00-00.log` it appears twice:
   - **14:31:33, "Reconnecting in 1000ms (attempt 1)"**, after `[8.8.5][HEARTBEAT] No messages in 45674ms`.
   - **17:15:30, "attempt 2"**, after a 45,837 ms silence. This is the orphan's own death showing up as silence; "attempt 2" also confirms that `reconnectRetries` is never reset.
-  - There is none in between, so the orphan was born at **`reconnectWithBackoff`, 14:31:33**:
-    1. `close(4001)` was requested.
-    2. The close hung on a half-dead connection.
-    3. `connect()` built a new socket 1 s later, while the old one was still delivering.
-  - Positive control: the same literal appears four times across the retained stderr, including 2026-10-06 15:46:30 and 2026-10-08 18:08:51.
-  - The carrier is now MEASURED at its birth, not INFERRED.
+  - There is none in between. **MEASURED:** `reconnectWithBackoff` ran exactly twice all day. So the `connect()` calls from 14:37:36, the ten 429 handshakes, came from `scheduleReconnect` via `handleClose`.
+    - Langston's controlled zeros rule out the other reassignment paths in that file: `No pong received` 0, `[9.0][HEARTBEAT] Missed heartbeat` 0, `[9.0] Triggering Safe Resubscribe` 0, each against a positive control elsewhere. This removes `softResubscribeAll` and the `:1493` close(4000).
+    - Positive control for `[8.8.5][RECONNECT]`: **n = 2 outside the subject** (2026-10-06 15:46:30, 2026-10-08 18:08:51, both "attempt 1").
+  - **Two accounts of the orphaning fit, and plan 1 repairs both identically, so neither gates code (Langston CONDITION-A):**
+    - (i) The 14:31:33 `close(4001)` hung, and the old socket survived its reassignment.
+    - (ii) The socket created at 14:31:34 opened and subscribed through P1. The **first 429 handshake at 14:37:36** then reassigned `this.ws` away from it while it was OPEN. `connect()` closes nothing, so no close hung: the orphan simply died at 17:14:44.
+    - **(ii) is the better-supported one.** A socket silent for 45.7 s was not "still delivering" at 14:31:33, so the earlier sub-claim is withdrawn. 14:37:36 is exactly the P1/P2 boundary.
+    - Both remain INFERRED. What is MEASURED is the creation at 14:31:33 and the reconnect-path census above.
 - **B2 — A2 corrected.**
-  - PREVIOUSLY STATED: "nothing closes the previous socket". NOW: both reassign sites close it gracefully first (`:3350` `close(4001)`, `:3831` `close(4090)`). What is true is that **nothing detaches it and nothing forces it.** REASON: Langston.
-  - The defect is a graceful close that hung. T3 bounds it: the hung close completed at 17:14:44, an orphan window of about 2h43m.
+  - PREVIOUSLY STATED: "nothing closes the previous socket". NOW: both reassign sites close it gracefully first (`:3352` `close(4001)`, `:3831` `close(4090)`). What is true is that **nothing detaches it and nothing forces it.** REASON: Langston.
+  - Under account (i) the defect is a graceful close that hung, and T3 bounds the orphan window at about 2h43m (completing 17:14:44). That is **a candidate, not a finding** (CONDITION-A). Under account (ii) no close was involved.
   - **Plan 10 test added:** a stale socket whose close was requested but never completed is still ignored, and its eventual `close` schedules nothing.
 - **B3 — why the readyState predicate (r3, A7) closes the window those sites open.**
   - `:3358-3359` and `:3848-3849` clear `isConnecting` before their delayed `connect()`, so today's guard is open across that delay and `scheduleReconnect`'s timer can land inside it.
@@ -123,10 +125,10 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
   - Every decision reader applies some ceiling. **A trusted book that goes quiet is served up to 90 s by the VTS exit lane.** This is recorded for item 2 (`#1222`), which owns the shared freshness definition, and is not changed here.
   - The held book's `ageMs` keeps growing because the mismatch `continue` sits above the stamp (`:1193`), and that is what makes holding workable.
 - **B5 — `softResubscribeAll` drops every subscription on a slow handshake.**
-  1. It clears `subscribedSymbols` and `pendingSubscriptions` (`:3853-3854`).
-  2. After `await connect()` it sleeps 1,000 ms and resubscribes only `if (this.isConnected)` (`:3862`).
-  3. If the handshake is slow, the whole set is dropped with no retry, and the line that says so is `console.log`.
-  4. `handleOpen`'s reconnect branch then restores open positions only (`:633`), so RTB-queued books (`rtb:2384`, `#506`) are lost.
+  1. It captures the set into a local at `:3853`, then clears `subscribedSymbols` (`:3854`) and `pendingSubscriptions` (`:3855`).
+  2. After `await connect()` it sleeps 1,000 ms (`:3862`) and resubscribes only `if (this.isConnected …)` (`:3864`).
+  3. If the handshake is slow, the whole set is dropped with no retry, and **the failure path emits nothing at all**: its only log line, `:3866`, sits inside the `if`.
+  4. Neither `handleOpen` branch can rescue it. `pendingSubscriptions` is empty (`:617`), and `subscribedSymbols` was cleared at `:3854` and is cleared again at `:629`. The reconnect branch restores open positions only (`:626-630`), so RTB-queued books (`rtb:2384`, `#506`) are lost.
   - **Disposition 2 — added to item 2, `B-PRICE-FEED-COVERAGE` (`#1222`)**, which already owns "the reconnect must re-subscribe RTB-queued symbols". It is the same defect class on the same path, in a batch Kyle has already agreed.
 - **Smaller items:**
   - **Alert key:** episode-scoped since r3 (`book_untrusted:<symbol>:<episode ISO>`). The re-check route's trust restore resolves it, with evidence.
@@ -249,7 +251,7 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 2. **(A6, A4, r2 wipe loop) The breaker, which closes the loop at its source.**
    - **Never clear the mirror unless a resubscribe can actually be sent.**
      - If the socket is not connected, or a resync for that symbol is already in flight, the mismatching book is held as `suspect` and nothing is cleared.
-     - A wipe with no path to a snapshot is strictly worse than holding a stale book that every reader already refuses.
+     - A wipe with no path to a snapshot is strictly worse than holding the book. **Holding is safe only because plan 3 makes `getBookForFill` return null for a non-trusted book in the same commit.** Today it serves any non-empty book with no age or trust test (B4, #546), so that is a stated dependency, not an existing property.
      - The per-symbol in-flight entry also de-dupes, so a mismatch at frame rate cannot become a resync at frame rate.
    - **States per symbol:** a trust record `trusted → suspect → untrusted`, held in its own map that no reset path clears.
    - **First mismatch:**
