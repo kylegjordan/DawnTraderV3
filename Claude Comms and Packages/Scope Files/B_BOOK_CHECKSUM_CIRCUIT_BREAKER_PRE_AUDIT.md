@@ -64,7 +64,7 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 - PREVIOUSLY STATED: routes `:10616` / `:10716` read it. NOW: those are bare `getHealthMetrics()` calls; the field reaches them transitively.
 - The removal is four adapter sites: `:3479` (health-report template), `:3542` (return type), `:3557` (object literal), `:3571` (`resetHealthMetrics`).
 - **`server/services/verification-test-protocol.ts` has an independent counter of the same name** (pass/fail at `:351`), and it is **not touched**.
-- REASON: Langston's controlled zero — 0 matches in `client`, `scripts` and `routes.ts`, against 22 in `server` + `shared`.
+- REASON: Langston's controlled zero — 0 matches in `client`, `scripts`, `routes.ts` and `shared`, against 16 in `server` (6 in the adapter, 10 in `verification-test-protocol.ts`). Record item (c): r3 had "22 in server + shared", which was the all-paths total.
 - `MISTAKE: wrong-object` (the second census error on this batch).
 
 **BLOCKER-3 — a mismatch on the fresh snapshot proves that our computation disagrees with the venue, not that the venue's book is bad.**
@@ -222,14 +222,19 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 - **None of them was designed for repeated, automatic use per message.** The socket handling predates any book that needed integrity. **Disposition (2), relevant but needs updating**, for the resync, the reconnect and the socket lifecycle alike.
 
 **A6 — confirmation thresholds, derived and not guessed.**
-- Since 10-18 there have been 17,787,704 checks and 0 mismatches. A genuine transient desync is rare enough that one resync is the right first response.
-- The fresh snapshot carries its own checksum and is verified in the same block (`:685`, `:1111`). **A mismatch on the snapshot is conclusive by itself.**
-- **A second desync within 60 s of a resync that did match is also confirmation**, because a feed that desyncs twice in a minute is not transient. Sixty seconds is about 1-3k book frames per minute per pair on these symbols.
+- **One resync is the least that can recover a dropped frame.** That is the whole argument for it. The 17.8M healthy checks are the wrong population for any claim about a desync: the one episode we have was not transient (r3 BLOCKER-3).
+- The fresh snapshot carries its own checksum and is verified in the same block (`:685`, `:1111`). A mismatch there proves **our computation disagrees with the venue**, not that the venue's book is bad. So it confirms only after the automatic once-per-episode `AssetPairs` precision re-read, if the next snapshot still mismatches at the re-read precision.
+- **A second desync within 60 s of a restore** also confirms. **This is a judgement**, with no measured inter-arrival distribution behind it (n = 1 episode, frames gone).
 
 ## B. PLAN (each item cites the audit finding it falls out of)
 1. **(A2 sockets, r2) One socket at a time — the carrier.**
    - `connect()` detaches, then terminates, the previous socket, **in that order** (`removeAllListeners()` before `terminate()`). Otherwise `terminate()` fires `close` (1006), which runs `handleClose`, which runs `cleanup()` and `scheduleReconnect` against the new socket: a competing reconnect, plus a cleared heartbeat timer.
-   - **The identity guard lives in the closure** (`const sock = new WebSocket(...); sock.on('message', d => { if (this.ws !== sock) return; … })`), because today's handlers carry no sender identity (`:579-583`).
+   - **The identity guard lives in the closure** (`const sock = new WebSocket(...); sock.on('message', d => { if (this.ws !== sock) return; … })`), because today's handlers carry no sender identity (`:580-584`).
+   - **The guard is the first statement in every handler, above any state write (C-3).** `handleMessage`'s own first two statements are the load-bearing ones:
+     - `:650` writes `lastMessageTime`, which the global monitor's 45 s check reads (`:3285` / `:3291`).
+     - `:653` writes `lastHeartbeat`, which the 90-monitor's 60 s check reads (`:3788` / `:3793`).
+   - Why that matters: `reconnectWithBackoff`'s only caller (`:3293`) sits inside the monitor it then stops (`:3347`). That leaves the 90-monitor as the only surviving reconnect path, and on 10-13 the orphan's frames kept its clock fed. **That is why nothing recovered.**
+   - So guarding above `:650` **re-arms recovery**, not only drops stale data. **Test twin:** an orphan's message moves neither clock.
    - **It guards all five handlers:**
      - `open`;
      - `message`;
@@ -237,6 +242,10 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
      - `error`;
      - `pong` — an orphan's pong at `:1481` would refresh `lastPongTime` and hide a dead current socket from the `:1489` timeout.
    - **`connect()` refuses while `this.ws?.readyState` is CONNECTING or OPEN (A7)**, not on `isConnecting`, so two schedulers firing for one drop open one socket.
+   - CLOSING (2) is deliberately outside the refusal set, so the graceful-close sites `:3352` / `:3831` still proceed. **Do not "simplify" the predicate to `!== CLOSED`.**
+   - **CONNECTING is now a refusal state, so it is bounded** (record item (a)). `new WebSocket(url, { handshakeTimeout })`: a hung handshake errors and closes, which runs the guarded `handleClose`, which runs `scheduleReconnect`.
+     - Today a hung first handshake has no monitor and no retry, because the 90-monitor starts only at `handleOpen:615`.
+   - **`reconnectRetries` resets in `handleOpen` beside `:605`** (record item (e)). Today the backoff is pinned at 60 s from the 6th episode for the life of the process.
 2. **(A6, A4, r2 wipe loop) The breaker, which closes the loop at its source.**
    - **Never clear the mirror unless a resubscribe can actually be sent.**
      - If the socket is not connected, or a resync for that symbol is already in flight, the mismatching book is held as `suspect` and nothing is cleared.
@@ -249,21 +258,26 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
      - **One** resync goes out: book channel only, through `sendBookUnsubscribe` and then a book-only subscribe, never through `unsubscribeFromSymbols`.
      - It is guarded by an in-flight entry, so a burst of mismatches sends exactly one.
    - **Before confirming (BLOCKER-3):** one automatic `AssetPairs` precision re-read per episode, then verify against the next snapshot.
-   - **Confirmation** → `untrusted` when either holds:
+   - **Confirmation (the breaker's definition)** → `untrusted` when either holds:
      - the snapshot still mismatches at the re-read precision;
-     - a second desync arrives within 60 s (a judgement, stated as one).
-     - Book channel cancelled.
-     - No further book or resync request.
-     - Ticker untouched.
-     - The emit to the price cache stops.
+     - a second desync arrives within 60 s of a restore (a judgement, stated as one).
+   - **Consequences of `untrusted`** (record item (f): these are not confirmation conditions):
+     - the book channel is cancelled;
+     - no further book or resync request is sent;
+     - the ticker is untouched;
+     - the emit to the price cache stops.
    - **Snapshot match → `trusted`.**
 3. **(A2, A3) The filter and the doors.**
    - `subscribeToSymbols` sends the book only for trusted symbols. The breaker's own resync and the operator re-check pass through explicitly.
    - The raw book subscribe in `switchToBookChannel` is gated the same way.
-   - `getBookForFill` returns null for a non-trusted book. All four hardcoded `bookEligible:true` are replaced with the trust state and its reason. The ticker rung refuses `producer === 'ws_book'` on non-trusted symbols.
+   - `getBookForFill` returns null for a non-trusted book, the same commit as plan 2 (B4 dependency).
+   - **The four `bookEligible:true` hardcodes become trust-aware.** They are all crypto-gated (`so:2641`, `vts:1781`), so the change cannot reach xStock.
+     - **A non-trusted book gets its own refusal value, `book_untrusted`, and a fourth `TickerAcceptBookVerdict` member (C-5).** It is never `book_not_eligible`: the contract at `touch-price.ts:23-25` and `level-basis.ts:400-401` separates "we did not use the book" from "the book was bad".
+     - `level-basis.ts:400-401` then describes the new value.
+   - The ticker rung refuses `producer === 'ws_book'` on non-trusted symbols.
    - `getLatestPriceData` reports trust.
 4. **(scope obj 3/4) Alert and recovery.**
-   - **Alert:** one per symbol per episode, `breakage`, `warning`. It carries both CRCs, the precision, the count, the venue replies and the state. Resolved by hand.
+   - **Alert:** one per symbol per episode, `breakage`, `warning`. It carries both CRCs, the precision, the count, the venue replies and the state. Key: `book_untrusted:<symbol>:<episode ISO>`. **The recovery route resolves it on restore, with the snapshot match as evidence** (`#982`; the resolve path requires evidence). Never acked.
    - **Recovery route:** `POST /api/active-engine/book-recheck/:symbol`, authenticated. It re-reads `AssetPairs` precision for the pair, then sends one book subscribe. A snapshot match restores trust. One request per call.
 5. **(A3 carry 1) The crossed-book detector moves above the checksum block.** This is byte-identical for a matching book, and the crossed rate on a suspect or untrusted book becomes readable.
 6. **(scope obj 5 rider) Bound the precision** in `handleInstrumentMessage` to 0-18 for both price and qty. Out of range: refuse and count it.
@@ -282,7 +296,7 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
      - p7b test `:6`.
 8. **(A3 removals) Rule 18.**
    - The watchdog cluster (five symbols, the field, the metric and the import) and `triggerSoftResubscribe` are deleted. Each gets a caller-and-reader census in `DELETED_COMPONENTS_LOG` and an archive copy.
-   - `sentinelResets` is removed at its four adapter sites (`:3479`, `:3542`, `:3557`, `:3571`). The same-named counter in `verification-test-protocol.ts` is untouched.
+   - `sentinelResets` is removed at **six** adapter sites (C-4): the declaration `:402`, the increment `:3416` (inside `handleChannelTimeout`), `:3479`, `:3542`, `:3557` and `:3571`. The same-named counter in `verification-test-protocol.ts` is untouched.
    - p7b test 3's invariant is re-pointed onto the breaker's resync.
 9. **(A2) The `instrument` subscribe** leaves the per-symbol path (`:1618`). It is sent once per socket open.
 10. **Tests.** Every negative ships with its twin; the existing tests named in the readers' census (b507, p7b, p7a, p7d, obj8c, 8a-p3, rtb-retirement-ask, p7i, the 8a-p1 fences, p19-b4b1) are re-run or re-pointed.
