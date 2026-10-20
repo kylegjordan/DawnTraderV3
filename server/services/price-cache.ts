@@ -113,8 +113,9 @@ export interface CachedPrice {
    * like `sidesCapturedAtMs`: a writer that did not observe a side carries the previous value forward. `null` = no writer
    * has ever stated sides for this key (the cold `bid === ask === price` row).
    * ⚠️ NO LONGER RECORD-ONLY (#1220): it reaches `selectTouchPrice` as the ticker leg's `producer`, and the ticker rung
-   * REFUSES `ws_book` sides on a symbol whose book the checksum circuit breaker has refused — the cache keeps the last
-   * sides the book stated, so the bad top would otherwise come back one rung down.
+   * REFUSES `ws_book` sides on a symbol whose book the checksum circuit breaker has refused. Those sides came from the
+   * last frame that PASSED the checksum, so they are stale-good rather than bad; they are refused because the book has
+   * stopped stating sides and they only grow older (Langston Step-4).
    */
   sidesWriter: SidesWriter | null;
 }

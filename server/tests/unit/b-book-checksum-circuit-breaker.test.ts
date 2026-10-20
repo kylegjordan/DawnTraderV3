@@ -44,7 +44,9 @@ vi.mock('../../services/system-alerts.js', async (orig) => {
   return { ...real, addAlert: h.addAlert, resolveAlertsByDedupeKey: h.resolveByKey };
 });
 
-import { KrakenWebSocketAdapter } from '../../exchanges/kraken/kraken-websocket-adapter.js';
+import axios from 'axios';
+import { KrakenWebSocketAdapter, __resetAssetPairsPrecisionCacheForTest } from '../../exchanges/kraken/kraken-websocket-adapter.js';
+import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
 import { selectTouchPrice, type TouchLegInput } from '../../core/calculations/touch-price.js';
 
 const SYM = 'SOL/USD'; // a pair whose Kraken v2 name is its internal name (BTC is XBT/USD on the wire)
@@ -524,5 +526,134 @@ describe('#1220 — one socket at a time (pre-audit plan 1)', () => {
     expect(adapter.reconnectAttempts).toBe(0);
     expect(s1.sent.some((m: any) => m.params?.channel === 'instrument')).toBe(true); // plan 9: once per open
     adapter.stop();
+  });
+});
+
+describe('#1220 Step-4 BLOCKER-1 — "we could not ask" is not "the venue answered and we still disagree"', () => {
+  async function toReread(adapter: any) {
+    snapshot(adapter);
+    badDelta(adapter);
+    vi.advanceTimersByTime(600);
+    snapshot(adapter, BIDS, ASKS, 7); // the resync's snapshot, still disagreeing
+  }
+
+  it('25. a TRANSPORT failure retries with backoff while the book stays held; only after three failures is it confirmed, naming the transport', async () => {
+    vi.useFakeTimers();
+    const { adapter } = makeAdapter();
+    adapter.precisionReader = vi.fn(async () => { throw new Error('Request failed with status code 429'); });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await toReread(adapter);
+    await flush();
+    expect(adapter.precisionReader).toHaveBeenCalledTimes(1);
+    expect(adapter.getBookTrustState(SYM)).toBe('suspect'); // held, not judged
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(adapter.precisionReader).toHaveBeenCalledTimes(2);
+    expect(adapter.getBookTrustState(SYM)).toBe('suspect');
+    await vi.advanceTimersByTimeAsync(8_000);
+    await flush();
+    expect(adapter.precisionReader).toHaveBeenCalledTimes(3);
+    expect(adapter.getBookTrustState(SYM)).toBe('untrusted');
+    expect(adapter.bookTrust.get(SYM).reason).toBe('precision_reread_transport_failed');
+    expect(adapter.bookPrecisionTransportFailures.get(SYM)).toBe(3);
+  });
+
+  it('25-twin. one transport failure then an ANSWER is judged on the answer, not on the failure', async () => {
+    vi.useFakeTimers();
+    const { adapter } = makeAdapter();
+    let n = 0;
+    adapter.precisionReader = vi.fn(async () => { if (n++ === 0) throw new Error('timeout of 10000ms exceeded'); return PREC; });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await toReread(adapter);
+    await flush();
+    await vi.advanceTimersByTimeAsync(2_000);
+    await flush();
+    expect(adapter.getBookTrustState(SYM)).toBe('untrusted');
+    expect(adapter.bookTrust.get(SYM).reason).toBe('snapshot_mismatch_at_reread_precision');
+    expect(adapter.bookPrecisionTransportFailures.get(SYM)).toBe(1);
+  });
+
+  it('26. the venue ANSWERS with no usable precision for the pair => judged at the only precision held, which the snapshot failed', async () => {
+    vi.useFakeTimers();
+    const { adapter } = makeAdapter();
+    adapter.precisionReader = vi.fn(async () => null);
+    await toReread(adapter);
+    await flush();
+    expect(adapter.precisionReader).toHaveBeenCalledTimes(1);
+    expect(adapter.getBookTrustState(SYM)).toBe('untrusted');
+    expect(adapter.bookTrust.get(SYM).reason).toBe('snapshot_mismatch_no_venue_precision');
+    expect(adapter.bookPrecisionTransportFailures.get(SYM) ?? 0).toBe(0);
+  });
+
+  it('27. a matching snapshot during the retry wait restores the book, and the pending retry then judges nothing', async () => {
+    vi.useFakeTimers();
+    const { adapter } = makeAdapter();
+    adapter.precisionReader = vi.fn(async () => { throw new Error('socket hang up'); });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await toReread(adapter);
+    await flush();
+    snapshot(adapter); // e.g. a reconnect's snapshot, and we agree
+    expect(adapter.getBookTrustState(SYM)).toBe('trusted');
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flush();
+    expect(adapter.getBookTrustState(SYM)).toBe('trusted');
+    expect(adapter.precisionReader).toHaveBeenCalledTimes(1);
+  });
+
+  it('28. the production reader asks Kraken ONCE for every pair, shared by concurrent callers; a Kraken error array is a transport failure', async () => {
+    __resetAssetPairsPrecisionCacheForTest();
+    vi.spyOn(krakenAssetPairsService, 'getAllMappings').mockReturnValue([
+      { internalSymbol: 'SOL/USD', krakenPairKey: 'SOLUSD' },
+      { internalSymbol: 'ETH/USD', krakenPairKey: 'XETHZUSD' },
+    ] as any);
+    const get = vi.spyOn(axios, 'get').mockResolvedValue({ data: { error: [], result: {
+      SOLUSD: { pair_decimals: 2, lot_decimals: 8 }, XETHZUSD: { pair_decimals: 2, lot_decimals: 19 },
+    } } } as any);
+    const adapter: any = new (KrakenWebSocketAdapter as any)();
+    const [sol, eth] = await Promise.all([adapter.precisionReader('SOL/USD'), adapter.precisionReader('ETH/USD')]);
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(sol).toEqual({ price: 2, qty: 8 });
+    expect(eth).toBeNull(); // the venue answered, and 19 is outside 0-18
+    expect(await adapter.precisionReader('DOGE/USD')).toBeNull(); // answered, pair not stated
+    expect(get).toHaveBeenCalledTimes(1); // the answer is reused, not re-asked
+
+    __resetAssetPairsPrecisionCacheForTest();
+    get.mockResolvedValueOnce({ data: { error: ['EGeneral:Too many requests'], result: {} } } as any);
+    await expect(adapter.precisionReader('SOL/USD')).rejects.toThrow(/Too many requests/);
+    get.mockRejectedValueOnce(new Error('Request failed with status code 503'));
+    await expect(adapter.precisionReader('SOL/USD')).rejects.toThrow(/503/);
+    __resetAssetPairsPrecisionCacheForTest();
+  });
+
+  it('29. the re-check reports the precision it will verify at, and where it came from', async () => {
+    const { adapter } = makeAdapter();
+    adapter.bookTrust.set(SYM, { state: 'untrusted', episodeStartIso: 'e', lastRestoreMs: null, precisionRereadDone: true,
+      lastOurs: 1, lastTheirs: 2, reason: 't', recheck: null });
+    adapter.precisionReader = vi.fn(async () => ({ price: 3, qty: 8 }));
+    expect(await adapter.requestBookRecheck(SYM, 'cc-b')).toMatchObject({ accepted: true, precision: { price: 3, qty: 8 }, precisionSource: 'asset_pairs', precisionReadError: null });
+
+    const b = makeAdapter().adapter; // twin: the read fails => the held precision is kept, and the response says so
+    b.bookTrust.set(SYM, { state: 'untrusted', episodeStartIso: 'e', lastRestoreMs: null, precisionRereadDone: true,
+      lastOurs: 1, lastTheirs: 2, reason: 't', recheck: null });
+    b.precisionReader = vi.fn(async () => { throw new Error('timeout'); });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await b.requestBookRecheck(SYM, 'cc-b')).toMatchObject({ accepted: true, precision: PREC, precisionSource: 'held_unchanged', precisionReadError: 'timeout' });
+  });
+});
+
+describe('#1220 Step-4 judgement 6 — the two internal-symbol spellings are checked, not assumed', () => {
+  it('30. a pair whose handler key and reader key differ is counted and named; twin: an unloaded map runs nothing', () => {
+    const { adapter } = makeAdapter();
+    vi.spyOn(krakenAssetPairsService, 'getAllMappings').mockReturnValueOnce([] as any);
+    adapter.checkSymbolKeyAgreement();
+    expect(adapter.symbolKeyDisagreements).toBeNull();
+    vi.spyOn(krakenAssetPairsService, 'getAllMappings').mockReturnValue([
+      { krakenWsPair: 'SOL/USD', internalSymbol: 'SOL/USD' },
+      { krakenWsPair: 'XBT/USD', internalSymbol: 'BTC/USD' }, // the test adapter's handler map is the identity
+    ] as any);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    adapter.checkSymbolKeyAgreement();
+    expect(adapter.symbolKeyDisagreements).toMatchObject({ pairs: 2, disagree: 1 });
+    expect(adapter.symbolKeyDisagreements.examples[0]).toContain('XBT/USD');
+    expect(adapter.getBookIntegrityCounters().symbolKeyAgreement).toMatchObject({ disagree: 1 });
   });
 });

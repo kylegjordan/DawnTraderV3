@@ -271,20 +271,54 @@ interface BookTrustRecord {
 }
 
 /**
- * #1220 BLOCKER-3: a pair's price/qty precision read from Kraken REST `AssetPairs` (`pair_decimals` / `lot_decimals`),
- * which the v2 `instrument` channel states as `price_precision` / `qty_precision`. One public call for ONE pair, made at
- * most once per episode, so it cannot rebuild the 2026-10-13 request storm. `null` = not readable; never a guess.
+ * #1220 BLOCKER-3: every pair's price/qty precision from Kraken REST `AssetPairs` (`pair_decimals` / `lot_decimals`), which
+ * the v2 `instrument` channel states as `price_precision` / `qty_precision`.
+ * ⛔ ONE REQUEST FOR ALL PAIRS, SHARED BY EVERY CALLER (Langston Step-4 BLOCKER-1): a correlated desync — the venue-side
+ * format change this breaker exists to catch — would otherwise put one call per symbol on the wire at once (68 symbols on
+ * staging at 2026-10-20), Kraken would throttle, and a throttled read must never become a confirmed-bad book. Concurrent
+ * callers join the one in-flight promise; an answer is reused for 30 s; a failure clears the in-flight slot so a retry
+ * fetches again. A Kraken `error` array (e.g. a rate limit) THROWS — it is a transport failure, not an answer.
+ */
+const ASSET_PAIRS_SNAPSHOT_TTL_MS = 30_000;
+let assetPairsInFlight: Promise<Map<string, { price: number; qty: number } | null>> | null = null;
+let assetPairsSnapshot: { atMs: number; byInternal: Map<string, { price: number; qty: number } | null> } | null = null;
+
+async function fetchAssetPairsPrecisionSnapshot(): Promise<Map<string, { price: number; qty: number } | null>> {
+  if (assetPairsSnapshot && Date.now() - assetPairsSnapshot.atMs < ASSET_PAIRS_SNAPSHOT_TTL_MS) return assetPairsSnapshot.byInternal;
+  if (!assetPairsInFlight) {
+    assetPairsInFlight = (async () => {
+      const r = await axios.get<{ error: string[]; result: Record<string, { pair_decimals?: number; lot_decimals?: number }> }>(
+        'https://api.kraken.com/0/public/AssetPairs', { timeout: 10_000 },
+      );
+      if (r.data.error && r.data.error.length > 0) throw new Error(`AssetPairs error: ${r.data.error.join(', ')}`);
+      const result = r.data.result ?? {};
+      const byInternal = new Map<string, { price: number; qty: number } | null>();
+      for (const e of krakenAssetPairsService.getAllMappings()) {
+        const row = result[e.krakenPairKey];
+        if (!row) continue;
+        const price = Number(row.pair_decimals), qty = Number(row.lot_decimals);
+        byInternal.set(e.internalSymbol, isBoundedPrecision(price) && isBoundedPrecision(qty) ? { price, qty } : null);
+      }
+      assetPairsSnapshot = { atMs: Date.now(), byInternal };
+      return byInternal;
+    })().finally(() => { assetPairsInFlight = null; });
+  }
+  return assetPairsInFlight;
+}
+
+/**
+ * The breaker's precision read. Resolves `{price, qty}`, or `null` when the venue ANSWERED but states no usable precision
+ * for this pair. THROWS when the venue could not be asked (timeout, non-2xx, rate limit) — the two are judged differently.
  */
 async function readAssetPairsPrecision(internalSymbol: string): Promise<{ price: number; qty: number } | null> {
-  const entry = krakenAssetPairsService.getAllMappings().find((e) => e.internalSymbol === internalSymbol);
-  if (!entry?.krakenRestPair) return null;
-  const r = await axios.get<{ error: string[]; result: Record<string, { pair_decimals?: number; lot_decimals?: number }> }>(
-    'https://api.kraken.com/0/public/AssetPairs', { params: { pair: entry.krakenRestPair }, timeout: 10_000 },
-  );
-  if (r.data.error && r.data.error.length > 0) return null;
-  const row = Object.values(r.data.result ?? {})[0];
-  const price = Number(row?.pair_decimals), qty = Number(row?.lot_decimals);
-  return isBoundedPrecision(price) && isBoundedPrecision(qty) ? { price, qty } : null;
+  const byInternal = await fetchAssetPairsPrecisionSnapshot();
+  return byInternal.get(internalSymbol) ?? null;
+}
+
+/** Test-only: forget the shared AssetPairs answer. Never called from the running system. */
+export function __resetAssetPairsPrecisionCacheForTest(): void {
+  assetPairsInFlight = null;
+  assetPairsSnapshot = null;
 }
 
 /** #1220 plan 6: a precision outside 0-18 cannot format a checksum input, so it is refused rather than used. */
@@ -399,6 +433,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private bookSubscribeRejected = new Map<string, number>();
   private bookUnsubRejected = new Map<string, number>();
   private bookPrecisionRefused = new Map<string, number>();
+  /** Failed attempts to ASK Kraken for a pair's precision (transport, not an answer) — Langston Step-4 BLOCKER-1's instrument. */
+  private bookPrecisionTransportFailures = new Map<string, number>();
+  /** The judgement-6 check: pairs whose two internal-symbol spellings disagree. `null` until it has run. */
+  private symbolKeyDisagreements: { checkedAtIso: string; pairs: number; disagree: number; examples: string[] } | null = null;
   /** Book subscribes in flight by `req_id`, so a rejection is attributed to the symbols WE named (plan 7). */
   private pendingBookSubscribes = new Map<number, { symbols: string[]; sentAtMs: number }>();
   /** The one REST read the breaker makes. A field so a test can drive it; production never reassigns it. */
@@ -409,6 +447,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   private readonly BOOK_RESYNC_TIMEOUT_MS = 30_000;
   /** ⚠️ A JUDGEMENT, not a measurement: n = 1 episode, no inter-arrival distribution exists (pre-audit r3 BLOCKER-3). */
   private readonly BOOK_REDESYNC_WINDOW_MS = 60_000;
+  /** Waits before the 2nd and 3rd attempt to ASK for precision after a transport failure. Only after all three fail is the
+   *  book confirmed, with a reason naming the transport (Langston Step-4 BLOCKER-1). */
+  private readonly PRECISION_REREAD_RETRY_DELAYS_MS = [2_000, 8_000];
   /** Bounds the CONNECTING state, which `connect()` now refuses on (pre-audit plan 1, record item (a)). */
   private readonly HANDSHAKE_TIMEOUT_MS = 15_000;
 
@@ -734,6 +775,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.subscribedSymbols.clear();
       this.subscribeToSymbols(symbols);
     }
+
+    if (!this.symbolKeyDisagreements) this.checkSymbolKeyAgreement();
 
     // #1220 plan 2: a SUSPECT book's resync waits for an open socket — the mismatch path never wipes and never sends while
     // the socket is down. A fresh socket holds no book subscription, so this is a subscribe only.
@@ -3734,13 +3777,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     totals: {
       updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; crossedDetections: number;
       skippedNoPrecision: number; resyncsSent: number; confirmedUntrusted: number; framesIgnoredUntrusted: number;
-      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number;
+      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number; precisionTransportFailures: number;
       trust: Record<BookTrustState, number>;
     };
+    symbolKeyAgreement: { checkedAtIso: string; pairs: number; disagree: number; examples: string[] } | null;
     bySymbol: Array<{
       symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; crossedDetections: number;
       skippedNoPrecision: number; resyncsSent: number; confirmedUntrusted: number; framesIgnoredUntrusted: number;
-      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number;
+      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number; precisionTransportFailures: number;
       trust: BookTrustState; trustReason: string | null; episodeStart: string | null;
     }>;
     note: string;
@@ -3751,6 +3795,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       ...this.bookCrossedDetections.keys(), ...this.bookChecksumSkippedNoPrecision.keys(),
       ...this.bookResyncsSent.keys(), ...this.bookTrustConfirmed.keys(), ...this.bookFramesIgnoredUntrusted.keys(),
       ...this.bookSubscribeRejected.keys(), ...this.bookUnsubRejected.keys(), ...this.bookPrecisionRefused.keys(),
+      ...this.bookPrecisionTransportFailures.keys(),
       ...this.bookTrust.keys(),
     ]);
     const g = (m: Map<string, number>, k: string) => m.get(k) ?? 0;
@@ -3768,6 +3813,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       subscribeRejected: g(this.bookSubscribeRejected, symbol),
       bookUnsubRejected: g(this.bookUnsubRejected, symbol),
       precisionRefused: g(this.bookPrecisionRefused, symbol),
+      precisionTransportFailures: g(this.bookPrecisionTransportFailures, symbol),
       trust: this.getBookTrustState(symbol),
       trustReason: this.bookTrust.get(symbol)?.reason ?? null,
       episodeStart: this.bookTrust.get(symbol)?.episodeStartIso ?? null,
@@ -3786,8 +3832,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         confirmedUntrusted: sum(r => r.confirmedUntrusted), framesIgnoredUntrusted: sum(r => r.framesIgnoredUntrusted),
         subscribeRejected: sum(r => r.subscribeRejected), bookUnsubRejected: sum(r => r.bookUnsubRejected),
         precisionRefused: sum(r => r.precisionRefused),
+        precisionTransportFailures: sum(r => r.precisionTransportFailures),
         trust,
       },
+      symbolKeyAgreement: this.symbolKeyDisagreements,
       bySymbol,
       note: 'crossedDetections must be 0 (the #507 truncation property; pre-fix comparator measured 32.03% crossed). A checksum mismatch is a genuine desync now that per-symbol precision has landed, and since #1220 it drives the circuit breaker: the book is HELD and refused (suspect), one book-only resync and one REST precision re-read follow, and a confirmed symbol is untrusted - its book channel cancelled until POST /api/active-engine/book-recheck/:symbol. trust counts symbols seen by any counter; a symbol absent here is trusted. crossedDetections is counted ABOVE the checksum since #1220, so it is not comparable with readings taken before that change.',
     };
@@ -3917,14 +3965,32 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * adopt the venue's and take ONE fresh snapshot, because the deltas dropped while suspect leave the held book behind.
    */
   private async rereadPrecisionAndJudge(symbol: string, theirs: number): Promise<void> {
+    // ⛔ Langston Step-4 BLOCKER-1: "WE COULD NOT ASK" IS NOT "THE VENUE ANSWERED AND WE STILL DISAGREE". A transport failure
+    // retries with backoff while the book stays held (suspect, refused by every reader); only when every attempt has failed
+    // is it confirmed, and the reason names the transport. A venue ANSWER that states no usable precision is judged at the
+    // only precision we have, which the snapshot already failed.
     let fresh: { price: number; qty: number } | null = null;
-    try {
-      fresh = await this.precisionReader(symbol);
-    } catch (e) {
-      console.error(`[#1220][PRECISION_REREAD_FAILED] ${symbol}:`, e instanceof Error ? e.message : e);
+    let answered = false;
+    const attempts = this.PRECISION_REREAD_RETRY_DELAYS_MS.length + 1;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, this.PRECISION_REREAD_RETRY_DELAYS_MS[attempt - 1]));
+      const live = this.bookTrust.get(symbol);
+      if (!live || live.state !== 'suspect') return; // a snapshot settled it while we waited
+      try {
+        fresh = await this.precisionReader(symbol);
+        answered = true;
+        break;
+      } catch (e) {
+        this.bumpMap(this.bookPrecisionTransportFailures, symbol);
+        console.warn(`[#1220][PRECISION_REREAD_TRANSPORT] ${symbol} attempt ${attempt + 1}/${attempts}: ${e instanceof Error ? e.message : String(e)} — book held, not judged`);
+      }
     }
     const rec = this.bookTrust.get(symbol);
     if (!rec || rec.state !== 'suspect') return; // a snapshot settled it while the read was out
+    if (!answered) {
+      this.confirmBookUntrusted(symbol, rec, 'precision_reread_transport_failed');
+      return;
+    }
     const raw = this.bookRaw.get(symbol);
     const current = this.symbolPrecision.get(symbol);
     if (fresh && raw && (fresh.price !== current?.price || fresh.qty !== current?.qty)
@@ -3934,7 +4000,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.requestBookResync(symbol, 'unsub_then_sub');
       return;
     }
-    this.confirmBookUntrusted(symbol, rec, fresh ? 'snapshot_mismatch_at_reread_precision' : 'precision_reread_unavailable');
+    this.confirmBookUntrusted(symbol, rec, fresh ? 'snapshot_mismatch_at_reread_precision' : 'snapshot_mismatch_no_venue_precision');
   }
 
   /**
@@ -4018,7 +4084,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         triggers_at: new Date(), category: 'breakage', severity: 'warning',
         title: `Crypto order book for ${symbol} no longer matches Kraken — its book is switched off`,
         body: `The order book we keep for ${symbol} stopped matching Kraken's own checksum and did not recover (${reason}). `
-          + `Its book feed is cancelled and every reader now refuses it; prices for ${symbol} come from the ticker until a re-check passes. `
+          + `Its book feed is cancelled and every reader now refuses it. Prices for ${symbol} come from the ticker feed and the regular price poll until a re-check passes; for the moment between the switch-off and the next ticker update, its last book-written price is refused too. `
           + `To re-check: POST /api/active-engine/book-recheck/${encodeURIComponent(symbol)} with {"by": "<actor>"}. A matching snapshot restores the book and resolves this alert. Never ack it (#982).`,
         metadata,
         dedupe_key: `book_untrusted:${symbol}:${rec.episodeStartIso}`,
@@ -4052,27 +4118,65 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * book subscribe; a matching snapshot restores trust and resolves the episode's alert as `by`. One request per call; a
    * call while one is out, or for a book that is not untrusted, is refused with the reason.
    */
-  async requestBookRecheck(symbol: string, by: string): Promise<{ accepted: boolean; reason: string; state: BookTrustState }> {
+  async requestBookRecheck(symbol: string, by: string): Promise<{
+    accepted: boolean; reason: string; state: BookTrustState;
+    /** The precision this re-check will verify at — what it wrote, or what was already held — so a second attempt is not blind. */
+    precision: { price: number; qty: number } | null;
+    precisionSource: 'asset_pairs' | 'held_unchanged' | 'none';
+    precisionReadError: string | null;
+  }> {
     const rec = this.bookTrust.get(symbol);
     const state = this.getBookTrustState(symbol);
-    if (!rec || rec.state !== 'untrusted') return { accepted: false, reason: 'book_not_untrusted', state };
-    if (rec.recheck || this.bookResyncInFlight.has(symbol)) return { accepted: false, reason: 'recheck_in_flight', state };
-    if (!this.ws || !this.isConnected || this.ws.readyState !== WebSocket.OPEN) return { accepted: false, reason: 'socket_not_open', state };
+    const held = () => this.symbolPrecision.get(symbol) ?? null;
+    const refuse = (reason: string) => ({ accepted: false, reason, state, precision: held(), precisionSource: (held() ? 'held_unchanged' : 'none') as 'held_unchanged' | 'none', precisionReadError: null });
+    if (!rec || rec.state !== 'untrusted') return refuse('book_not_untrusted');
+    if (rec.recheck || this.bookResyncInFlight.has(symbol)) return refuse('recheck_in_flight');
+    if (!this.ws || !this.isConnected || this.ws.readyState !== WebSocket.OPEN) return refuse('socket_not_open');
+    let precisionSource: 'asset_pairs' | 'held_unchanged' | 'none' = held() ? 'held_unchanged' : 'none';
+    let precisionReadError: string | null = null;
     try {
       const fresh = await this.precisionReader(symbol);
-      if (fresh) this.symbolPrecision.set(symbol, fresh);
+      // Written unconditionally (Langston Step-4 judgement 3): restoring a value already known not to verify would start
+      // the next re-check from the known-bad input.
+      if (fresh) { this.symbolPrecision.set(symbol, fresh); precisionSource = 'asset_pairs'; }
     } catch (e) {
-      console.error(`[#1220][RECHECK_PRECISION_FAILED] ${symbol}:`, e instanceof Error ? e.message : e);
+      precisionReadError = e instanceof Error ? e.message : String(e);
+      this.bumpMap(this.bookPrecisionTransportFailures, symbol);
+      console.error(`[#1220][RECHECK_PRECISION_FAILED] ${symbol}: ${precisionReadError}`);
     }
     rec.recheck = { by, requestedAtMs: Date.now() };
     this.requestBookResync(symbol, 'sub_only');
     if (!this.bookResyncInFlight.has(symbol)) {
       // The socket dropped while the precision read was out; nothing was sent.
       rec.recheck = null;
-      return { accepted: false, reason: 'socket_not_open', state: rec.state };
+      return { accepted: false, reason: 'socket_not_open', state: rec.state, precision: held(), precisionSource, precisionReadError };
     }
-    console.warn(`[#1220][BOOK_RECHECK_SENT] ${symbol} by=${by}`);
-    return { accepted: true, reason: 'book_subscribe_sent', state: rec.state };
+    console.warn(`[#1220][BOOK_RECHECK_SENT] ${symbol} by=${by} precision=${held() ? `${held()!.price}/${held()!.qty}` : '-'} (${precisionSource})`);
+    return { accepted: true, reason: 'book_subscribe_sent', state: rec.state, precision: held(), precisionSource, precisionReadError };
+  }
+
+  /**
+   * Langston Step-4 judgement 6: trust (like the book itself) is keyed by `mapKrakenPairToInternalSymbol` in the handler,
+   * while readers and the subscribe filter key by `normalizeToInternalSymbol`. A pair where the two disagree has never had a
+   * servable book, so this adds no exposure — but it was UNPROVEN, so it is now checked once per process over every mapped
+   * pair, logged, and served on the book-integrity counters. A check, not a guard: it never blocks a start.
+   */
+  checkSymbolKeyAgreement(): void {
+    const mappings = krakenAssetPairsService.getAllMappings();
+    if (mappings.length === 0) return; // the map has not loaded; the next open runs it
+    const examples: string[] = [];
+    let disagree = 0;
+    for (const e of mappings) {
+      const handlerKey = this.mapKrakenPairToInternalSymbol(e.krakenWsPair);
+      const readerKey = normalizeToInternalSymbol(e.internalSymbol);
+      if (handlerKey !== readerKey) {
+        disagree++;
+        if (examples.length < 10) examples.push(`${e.krakenWsPair}: handler=${handlerKey ?? 'null'} reader=${readerKey}`);
+      }
+    }
+    this.symbolKeyDisagreements = { checkedAtIso: new Date().toISOString(), pairs: mappings.length, disagree, examples };
+    const line = `[#1220][SYMBOL_KEY_AGREEMENT] pairs=${mappings.length} disagree=${disagree}${examples.length ? ` examples=${JSON.stringify(examples)}` : ''}`;
+    if (disagree > 0) console.warn(line); else console.log(line);
   }
 
   // ==========================================
