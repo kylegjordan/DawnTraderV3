@@ -29,10 +29,10 @@
 ## ★ MY PRE-SPRINT LIST — Kyle-assigned 2026-10-20 (Desktop). Nothing else starts until these are done; anything new is asked first.
 1. `B-BOOK-CHECKSUM-CIRCUIT-BREAKER` (`#1220`) — reliable detection of an order book that no longer matches Kraken's check; stop that symbol's requests straight away (the 2026-10-13 storm).
 2. `B-PRICE-FEED-COVERAGE` (`#1222`) — feed coverage and one definition of a fresh price — every crypto symbol that can reach the SQE on the live feed (staged, watching Kraken's message rate); xStock checks read the in-memory tick with the reviewed ladder; "fresh" includes a trust flag, so a quiet market and a broken book read differently.
-3. `B-PLAN-PRICE-BASIS` (`#1223`) — re-evaluate how, what and when each strategy prices its plan (bars for detection; the single "now" price and its side for the levels; the held ask-side switch-on) — Kyle decides the plan basis.
+3. `B-PLAN-PRICE-BASIS` (`#1223`) — re-evaluate how, what and when each strategy prices its plan, **including switching on the remaining xStock strategies (Kyle 2026-10-20)** (bars for detection; the single "now" price and its side for the levels; the held ask-side switch-on) — Kyle decides the plan basis.
 4. `B-ENTRY-GATE` (`#1224`) — 25 % window both sides; at the SQE (birth + every refresh) and at promotion/fill incl. resting orders; the economic test (floor being settled by Langston and Coltrane); a valid target as a hard SQE rule and the three 2 % fallbacks deleted; the refresh re-prices the fixed plan and never retires on a missing price; reward-to-risk ahead of the queue write (`#1051`); the refresh's dead SQE log fixed. Filter Diagnostics later in the sprint.
 5. `B-STRATEGY-INPUT-FIXES` (`#1221`) — defensive_hedge's missing BTC bars, DHMA's math, xStock's 6-hour "24-hour" range, the volume check, the stale docs.
-Also mine at the reset: 2a0's engine stop exercised; row 100 the learning-record restart. Waiting on Kyle: the remaining xStock strategies on, the $820 balance fix (owner CC-C), the status board.
+Also mine at the reset: 2a0's engine stop exercised; row 100 the learning-record restart. Kyle 2026-10-20: the remaining xStock strategies go into item 3; **the $820 balance fix (`B-BALANCE-SESSION-PAIRING`, owner CC-C) waits behind all of these price-feed items**. Still with Kyle: the status board.
 
 ## THE QUEUE, in working order — my rows in `SPRINT_TO_LIVE_PLAN.md` (66)
 
