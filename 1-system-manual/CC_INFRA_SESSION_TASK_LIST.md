@@ -1,4 +1,4 @@
-# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-10-13
+# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-10-20
 
 > 📁 **Lives in `1-system-manual/`** beside the other session lists (`workflow-10-governance` Tier-1 task-list row).
 > ⚠️ **CREATED 2026-09-11 AT `B-WAKE-LEAD-NAME` STEP 10 — IT DID NOT EXIST BEFORE.** Only `CC_A_SESSION_TASK_LIST.md` was in this folder (control: the same listing showed that file), so every earlier close by this session had no list to update.
@@ -11,10 +11,13 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
+| ⏳ **`B-LANGSTON-RELIEF`** (sprint §0 row, Kyle 2026-10-16) | **Observation** after Step 10 | the alert lane's 7-day window, ends 2026-10-23T13:47Z; then the completion report and Langston's Step-11 confirm | OBJ-1 and OBJ-4 met; OBJ-3's ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle 2026-10-20). Progress report `Batch Completion/B_LANGSTON_RELIEF_PROGRESS_REPORT.md` |
+| ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (sprint §0 row right after `B-LANGSTON-RELIEF`, Kyle-slotted 2026-10-20; folds in `#974` `B-RULES-1E-LANGSTON-SLIM`, unparked) | **Step 1** — scope r1 `ccd5055b3` | Langston's scope review | version his rules file, a per-section census, lean core + verbatim modules, meet the carried ceiling |
+| ⏸ **`B-CREW-ACCESS-HARDEN`** (`#1092`, `#924`) | **Step 9**, paused for `B-LANGSTON-RELIEF` (Kyle 2026-10-16) | me | P3a fixes at `ddf7eafac` unreviewed; disposable keys stay |
 | ⏳ **`B-LANGSTON-CONTEXT`** increment 2 (rows 2.8b / pre-audit §20-§21) | **chunk 1: Step 7** (Step 6 approved 16:53Z) · **chunk 2 part 1** (P-6a.1, P-6a.2) at Step 3, pushed `624cd1733` | tonight's SCHEDULED runs (04:10Z index, 05:40/05:51Z size watches, 06:00Z privacy) — Langston's condition 3 | then chunk 2's writer (P-6b), P-2, Langston's retrofit, P-1b |
 | ⏳ **`B-WAKE-LEAD-NAME`** (row 4.51, `#1040`) | **Step 10** — Step 8 confirmed; FINDING-A approved; the FINDING-D hunk is with Langston | Langston's okay on `0df01c687` | then install the folded filter and write the completion report |
 | ⏸ **`B-TOKEN-WATCH`** | **Step 7**, paused | me — Langston round 11 is owed; the Helius feed is not yet pointed at the endpoint | ⛔ the Alchemy switch is NOT cleared (pre-registration amendment 15) |
-| ⏸ **`#974` `B-RULES-1E-LANGSTON-SLIM`** | not started | **Kyle** — no go given | transferred from CC-A. ⚠️ Filed here as `#651` until 2026-09-23, but `#651` is a CLOSED-AS-BUILT entry; `#974` is the open home. `#974` says the batch is placed in the plan, but it has **no `PHASE_19_PLAN` row** at `cafedeb85` |
+| ✅ ~~`#974` `B-RULES-1E-LANGSTON-SLIM`~~ | folded 2026-10-20 | — | unparked into `B-LANGSTON-CLAUDEMD-RESIDUAL` (above) |
 | ⏸ **`#670`** crew-status cold hand-off | open | me | warm tier grows unbounded; a policy item, not a capacity one |
 | ⏸ **`B-CREW-STATUS-2`** remainder | parked | **Kyle** (parked 2026-08-26) | ⛔ the costly unbuilt piece: persist derived facts at observation time |
 
@@ -80,6 +83,7 @@
 | 175 | B-DASHBOARD-AUTH-RACE | the portfolio card never recovers from a 401 |
 | 178 | Resize the staging server one step up before live | before the split (Infra condition): one server size up, a second program needs the memory |
 | 193 | Provision the live Kraken API key | the live key: trade-only, no withdrawals, locked to the server ⭐ Kyle creates the key on Kraken; Infra sets it |
+| 197a | B-TOKEN-WATCH-AUTH (`#1228`) | Kyle-slotted 2026-10-20, near the sprint's end just before the go-live switch: the token-watch summary on staging answers without a login; put the login check on that one route, with a no-login control |
 
 ---
 
