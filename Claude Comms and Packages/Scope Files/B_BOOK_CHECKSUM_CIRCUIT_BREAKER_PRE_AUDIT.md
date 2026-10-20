@@ -19,6 +19,34 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 - **PREVIOUSLY STATED (scope G-2):** `:3082` fires "on trade creation". **NOW:** it has two external callers: every paper open (`active-execution-engine.ts:6618`, `'new_trade'`) and every crypto RTB queue insert not already subscribed (`ready_to_buy_service.ts:2384`, `'rtb_queued'`). The queue door is the wider one (`#506`).
   - `MISTAKE: wrong-object` — the second published-false caller census on this identifier (`MISTAKE_PATTERNS.md:166`).
 
+## r2 — Langston's attack on the cause, and the three tests
+- **The orphan stands, on a structural argument rather than a race.**
+  - `connect()` (`:572-584`) reassigns `this.ws` unconditionally. Nothing in the file calls `removeAllListeners` or `terminate`.
+  - The ten 429 handshakes each reassigned `this.ws`, so from 14:40:37 `this.ws` was a never-opened object.
+  - Frames handled after that point therefore came from a live socket that was not `this.ws`. Any socket that outlives its reassignment is an orphan, deterministically.
+  - **No new socket of ours opened between 14:40:37 and 17:14:48, provable from code.**
+    - `reconnectWithBackoff` stops the heartbeat monitor and health logger (`:3345-3346`), and they restart only in `handleOpen` (`:609-611`).
+    - `scheduleReconnect` returns at the cap (`:1505-1508`).
+    - `reconnectAttempts` resets only in `handleOpen:604` and `stop:548`.
+  - **Withdrawn as evidence:**
+    - The 291 "theirs = an earlier ours" lines. A mirror running behind truth gives the same signature.
+    - "Zero subscribe responses". In P2/P3, `subscribeToSymbols` bailed at `:1563-1568` on `!isConnected` and sent nothing.
+- **The primary mechanism is a self-sustaining wipe loop in the mismatch arm. It needs no second socket.**
+  - The loop:
+    1. A mismatch (`:1175`) calls `softResubscribe`.
+    2. `softResubscribe` deletes `orderBooks` and `bookRaw` (`:3745-3746`), then unsubscribes and resubscribes. The resubscribe is swallowed or refused.
+    3. The next delta hits `!this.orderBooks.has()` (`:1112`) and gets a fresh empty book.
+    4. That book receives a partial apply, mismatches, and is wiped again.
+  - This repeats once per frame: 684,110 in 2h37m.
+  - In P1 the same loop sent 2 control messages per mismatch, about 5,800 per minute. That produced Kraken's rate limit, which produced the ten 429 handshakes, which killed the reconnect path.
+  - **The orphan explains the carrier. The loop explains the volume and the storm.**
+- **The three tests (CC-B, `error__2026-10-14_00-00-00.log`):**
+  - **T1 (`WebSocket connected`) and T2 (`WebSocket closed: code=`) are undecidable.** Both lines are `console.log` (`:594`, `:1458`), so they went to stdout, which has rotated away for 10-13.
+    - Positive control: the same `[KrakenWS] WebSocket connected` format appears in the retained stdout (2026-10-19 09:29:47, 13:59:34).
+    - The swallowed-subscribe prediction (`:1564`, `:1566`) is undecidable for the same reason.
+  - **T3 is confirmed.** There is a second `Max reconnect attempts reached` at 17:14:48 (`console.error`, `:1507`). That fits the hung original close completing late, running `handleClose`, then `scheduleReconnect`, then hitting the cap.
+- **Arm A** is refuted for S/USD only (52,225 / 52,225). OOB/CAP remain undecidable and are not generalised from n = 1.
+
 ## A. AUDIT
 
 **A1 — the six sources.**
@@ -111,11 +139,21 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
 - **A second desync within 60 s of a resync that did match is also confirmation**, because a feed that desyncs twice in a minute is not transient. Sixty seconds is about 1-3k book frames per minute per pair on these symbols.
 
 ## B. PLAN (each item cites the audit finding it falls out of)
-1. **(A2 sockets, PREVIOUSLY/NOW 1) One socket at a time — the root cause.**
-   - `connect()` terminates and detaches the previous socket (`removeAllListeners` then `terminate()`) before building a new one.
-   - Each handler binds to the socket it was built with and returns early unless that socket is the current `this.ws`. A late `close` from an old socket schedules nothing.
+1. **(A2 sockets, r2) One socket at a time — the carrier.**
+   - `connect()` detaches, then terminates, the previous socket, **in that order** (`removeAllListeners()` before `terminate()`). Otherwise `terminate()` fires `close` (1006), which runs `handleClose`, which runs `cleanup()` and `scheduleReconnect` against the new socket: a competing reconnect, plus a cleared heartbeat timer.
+   - **The identity guard lives in the closure** (`const sock = new WebSocket(...); sock.on('message', d => { if (this.ws !== sock) return; … })`), because today's handlers carry no sender identity (`:579-583`).
+   - **It guards all five handlers:**
+     - `open`;
+     - `message`;
+     - `close` — an orphan's close would flip `isConnected` false and schedule a reconnect against the live socket;
+     - `error`;
+     - `pong` — an orphan's pong at `:1481` would refresh `lastPongTime` and hide a dead current socket from the `:1489` timeout.
    - `connect()` refuses a second concurrent attempt even when two schedulers fire.
-2. **(A6, A4) The breaker.**
+2. **(A6, A4, r2 wipe loop) The breaker, which closes the loop at its source.**
+   - **Never clear the mirror unless a resubscribe can actually be sent.**
+     - If the socket is not connected, or a resync for that symbol is already in flight, the mismatching book is held as `suspect` and nothing is cleared.
+     - A wipe with no path to a snapshot is strictly worse than holding a stale book that every reader already refuses.
+     - The per-symbol in-flight entry also de-dupes, so a mismatch at frame rate cannot become a resync at frame rate.
    - **States per symbol:** a trust record `trusted → suspect → untrusted`, held in its own map that no reset path clears.
    - **First mismatch:**
      - The symbol moves to `suspect`.
@@ -157,8 +195,13 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
    - p7b test 3's invariant is re-pointed onto the breaker's resync.
 9. **(A2) The `instrument` subscribe** leaves the per-symbol path (`:1618`). It is sent once per socket open.
 10. **Tests.** Every negative ships with its twin; the existing tests named in the readers' census (b507, p7b, p7a, p7d, obj8c, 8a-p3, rtb-retirement-ask, p7i, the 8a-p1 fences, p19-b4b1) are re-run or re-pointed.
+    - **The wipe loop:**
+      - a mismatching stream with the socket disconnected clears nothing and sends nothing;
+      - N mismatching frames with a resync in flight send no second resync and no second wipe.
     - **One socket:**
-      - a second `connect()` closes and detaches the first;
+      - a second `connect()` detaches, then terminates, the first;
+      - terminating the old socket schedules no reconnect;
+      - an old socket's `pong` does not refresh `lastPongTime`;
       - a message from a stale socket is ignored;
       - a late `close` from a stale socket schedules nothing.
     - **The breaker:** the burst/one-resync case, the snapshot confirm/restore pair, the 60 s second-desync case, the filter at each door including `switchToBookChannel`.
