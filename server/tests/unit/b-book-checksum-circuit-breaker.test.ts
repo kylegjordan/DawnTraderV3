@@ -634,7 +634,7 @@ describe('#1220 Step-4 BLOCKER-1 — "we could not ask" is not "the venue answer
     const get = vi.spyOn(axios, 'get');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { adapter } = makeAdapter();
-    adapter.precisionReader = (KrakenWebSocketAdapter as any).prototype.precisionReader ?? new (KrakenWebSocketAdapter as any)().precisionReader;
+    adapter.precisionReader = new (KrakenWebSocketAdapter as any)().precisionReader; // the production default reader (an instance field, so it is read off a fresh instance)
     await toReread(adapter);
     await flush();
     expect(adapter.getBookTrustState(SYM)).toBe('suspect'); // not judged on our own gap

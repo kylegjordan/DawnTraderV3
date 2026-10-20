@@ -1396,6 +1396,10 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **The AI Command Center tab shows its working cards again.** Four routes that loaded an AI module deleted in November 2025 — and failed every time — are removed with the page pieces that relied on them (including the AI Analysis tab and the System Audit, removed rather than repaired). The Formula Health card, hidden inside the broken section, is drawn. Verified in Chrome and by Langston.
 
+### 2026-10-20 — B-BOOK-CHECKSUM-CIRCUIT-BREAKER (CC-B; pre-sprint item 1, `#1220`) — ⏳ DEPLOYED, AT STEP 8
+
+**A crypto order book that stops matching Kraken is now held and refused, re-checked once, and switched off for that coin if it still fails — instead of being wiped and resubscribed in a loop; and only one connection to Kraken can run at a time.** Deployed `725a7f3f5`; on staging every check matched and nothing was withheld. The switch-off path has never fired live and is proven by tests. Placed: the fleet guard (`#1226`, item 5). Record: `Claude Comms and Packages/Change Lists/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_STEP7_2026-10-20.md`.
+
 ### 2026-10-18 — B-CRON-VERIFIER-QUERY-FAIL (CC-B; sprint row 59g2, `#1211`) — ✅ CLOSED
 
 **The cron verifier no longer raises false "never ran" warnings when its database look-up fails.** It skips the check and says so, warns once if it stays blind for an hour, and logs when it can read again. Deployed `7501f4f55`; the regular check is unchanged on staging (Langston confirmed). Found on the way and placed: nothing pages on a database outage (row 59g4) and the five-minute jobs are never judged (row 59g5).

@@ -274,8 +274,8 @@ interface BookTrustRecord {
  * #1220 BLOCKER-3: every pair's price/qty precision from Kraken REST `AssetPairs` (`pair_decimals` / `lot_decimals`), which
  * the v2 `instrument` channel states as `price_precision` / `qty_precision`.
  * ⛔ ONE REQUEST FOR ALL PAIRS, SHARED BY EVERY CALLER (Langston Step-4 BLOCKER-1): a correlated desync — the venue-side
- * format change this breaker exists to catch — would otherwise put one call per symbol on the wire at once (68 symbols on
- * staging at 2026-10-20), Kraken would throttle, and a throttled read must never become a confirmed-bad book. Concurrent
+ * format change this breaker exists to catch — would otherwise put one call per symbol on the wire at once (68 book-subscribed
+ * symbols at Langston's first Step-4 read on staging, 71 at his second, 2026-10-20), Kraken would throttle, and a throttled read must never become a confirmed-bad book. Concurrent
  * callers join the one in-flight promise; an answer is reused for 30 s; a failure clears the in-flight slot so a retry
  * fetches again. A Kraken `error` array (e.g. a rate limit) THROWS — it is a transport failure, not an answer.
  */
