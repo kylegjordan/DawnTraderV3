@@ -288,7 +288,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 
 - B-ALERT-DEDUPE-REASON-DRIFT — parked by Kyle, deliberately undated
 - B-GOV-INTEGRITY-2 — parked by Kyle, deliberately undated · carries `#481` (the general governed-read helper and lint; the dangerous shape is already blocked by a hook) · `#480` · `#485` (CC-B's leg) — added 2026-09-30 when their dated homes were placed here · **re-homed when Kyle unparks it, or on the first leg that blocks sprint work** (Langston 2026-09-30; the owner cell stays empty while parked)
-- B-RULES-1E-LANGSTON-SLIM — parked by Kyle, deliberately undated
+- ~~B-RULES-1E-LANGSTON-SLIM — parked by Kyle, deliberately undated~~ — UNPARKED 2026-10-20: folded into `B-LANGSTON-CLAUDEMD-RESIDUAL`, which Kyle slotted in `SPRINT_TO_LIVE_PLAN.md` right after `B-LANGSTON-RELIEF` (`#974`)
 - #392 — parked by Kyle, deliberately undated
 - #668 — the governance-standardisation arc — a DIFFERENT thing from B-SIZING-DEC-RESTORE, which only cites it
 - #693 — parked by Kyle, deliberately undated

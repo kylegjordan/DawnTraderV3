@@ -1142,6 +1142,7 @@ MSYS2_ARG_CONV_EXCL='*' git show "…:.claude/memory/MEMORY.md"               ->
 ⇒ **HOME: `B-RULES-1E-LANGSTON-SLIM`, owner **Infra Claude**, placed in the `PHASE_19_PLAN.md` Phase-19 governance queue.** *(Langston’s disposition and his owner assignment, not mine.)*
 
 ★ **Found by the census that FAILED its own gate — one of only 2 substantive results in 9.**
+➕ **2026-10-20 (CC-INFRA): UNPARKED AND FOLDED.** Kyle slotted `B-LANGSTON-CLAUDEMD-RESIDUAL` as Infra Claude's next batch; that batch is this item's remaining work (lean core + on-demand modules — the ledger split already shipped in `B-LANGSTON-RELIEF` OBJ-3), so it carries it. Scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SCOPE.md`. Kyle was told in chat, with the option to keep it parked.
 
 ### #975 OPEN 2026-08-31 (CC-A; Kyle-directed ledger pass) — ⛔⛔ ONE MISTAKE PATTERN IS **48%** OF EVERY MISTAKE WE HAVE RECORDED — AND IT IS THE MOST HEAVILY RULED ONE WE OWN
 
