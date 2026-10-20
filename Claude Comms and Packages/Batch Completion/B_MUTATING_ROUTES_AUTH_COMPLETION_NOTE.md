@@ -10,4 +10,14 @@
 
 **What Langston said.** PROCEED on `da317a433` after reviewing the actual diff (`dt-review show` of the sha), re-deriving the nine and the four, the five exclusions and the single mounts. One addition, made: the cross-file mount-order test, proved by swapping `index.ts:478` and `:484`. The rebased commit `965ada38e` has the same patch-id as the reviewed one.
 
+**Governance ledger (hotfix doc set):**
+
+| tier | document | verdict | line |
+|---|---|---|---|
+| T1 | `CHANGES_AND_FIXES.md` | ✅ | FIX-2026-10-21-A |
+| T1 | `BATCH_CATALOG.md` | ✅ | one row |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` | ✅ | §0a CC-A item 1 reads VERIFIED with this note linked |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | `CC_A_SESSION_TASK_LIST.md` records the hotfix as done; the other three are not touched by it |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1228` annotated; open for the read-only remainder at row 197a |
+
 **Records.** `CHANGES_AND_FIXES.md` FIX-2026-10-21-A; `BATCH_CATALOG.md`; `RUNNING_ISSUES.md` `#1228` (open for the read-only remainder, row 197a); `SPRINT_TO_LIVE_PLAN.md` §0a CC-A item 1. CI `39513246450`, four of four per job.
