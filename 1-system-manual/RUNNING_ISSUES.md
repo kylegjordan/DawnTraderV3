@@ -11344,6 +11344,7 @@ The old laptop crew-status page (`B-CREW-STATUS`, 2026-08-07) guessed each sessi
 **Kyle 2026-10-20:** keep the GitHub delivery board as it is; build the phone board beside it; decide the GitHub board's future after the pre-sprint and the sprint.
 `HOME: B-STATUS-BOARD, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md §0a at CC-A pre-sprint item 1 (Kyle 2026-10-20), after CC-B's pre-sprint list line`
 
-### #1228 SURFACED — awaiting Kyle's slot (2026-10-20, CC-A; found while scoping `B-STATUS-BOARD`) — **THE TOKEN-WATCH SUMMARY ON STAGING ANSWERS WITHOUT A LOGIN, THOUGH ITS CODE SAYS IT IS BEHIND ONE.**
+### #1228 OPEN 2026-10-20 (CC-A; found while scoping `B-STATUS-BOARD`; slotted by Kyle the same day) — **THE TOKEN-WATCH SUMMARY ON STAGING ANSWERS WITHOUT A LOGIN, THOUGH ITS CODE SAYS IT IS BEHIND ONE.**
 `GET /api/token-watch/summary` (`server/routes/token-watch.ts:41`, mounted at `server/routes.ts:21324-21325`) has no `authenticateToken`, while the file's header (`:12-16`) says it stays behind the same login. Measured 2026-10-20 from the public internet: `200 application/json` with the token counts; control `GET /api/system/canonical-map` returns `401`. What it exposes is aggregate counts of tracked Solana launches, not credentials or trading state. Owner of `B-TOKEN-WATCH`: Infra Claude.
-DISPOSITION: decision required — no work until Kyle slots it (Kyle's 2026-10-19 rule).
+**Kyle 2026-10-20 (Desktop): "Yes, slot it with Infra at the end of the sprint."**
+`HOME: B-TOKEN-WATCH-AUTH, owner Infra Claude, placed in SPRINT_TO_LIVE_PLAN.md §4 at row 197a, after row 197`
