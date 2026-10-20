@@ -1,7 +1,7 @@
-# B-PRICE-STALENESS-BOUND — PROGRESS REPORT — OPEN — the watchdog read at the 2026-10-18/19 Sunday reopen
+# B-PRICE-STALENESS-BOUND — COMPLETION REPORT — CLOSED on the pre-registered watchdog read (2026-10-19 Sunday reopen: PASS)
 
 **Batch:** `B-PRICE-STALENESS-BOUND` · CC-C · sprint row 33 (row 32 folded in) · `#743`, `#913`; `B-PRICE-SIDE-BY-JOB` rows 8g/8g-bis moved in · change-class `architecture`.
-**State:** deployed, Step 8 confirmed, Step 10 written here; held open on one pre-registered observation (§3). Card: `Observation`.
+**State:** CLOSED at Step 11 (converted from the progress report 2026-10-20, per `workflow-11-completion`; §3b holds the data and the decision). Was: deployed, Step 8 confirmed, Step 10 written; held open on one pre-registered observation (§3).
 
 ## 1. What the batch is for, and what shipped
 No trading decision — paper or VTS, entry or exit, crypto or xStock — acts on a price whose DATA is older than its bound, however recently we received or re-stamped it. Two routes let an old price read as fresh (`#743`): the re-serve legs re-stamping receipt time (route A), and the xStock feed's reconnect `snapshot` stamping the mark fresh (route B, the live case: PLTR's 20.8-hour frozen book on 2026-10-10).
@@ -33,6 +33,16 @@ No trading decision — paper or VTS, entry or exit, crypto or xStock — acts o
 - ✅ **DISCHARGED 2026-10-12:** the arm-(d) narrowing (`1e48298ab`) went live in CC-B's `e8f575d3c` deploy (2026-10-12T08:58:11Z, carried with CC-C's clearance); the run line now prints `operatorRows=0 operatorMaxAgeMs=none` (08:58:06Z `lookback=restart_24h`, 09:08:07Z `lookback=watermark`).
 **Close = that data AND a decision on it** (close the batch on PASS; reopen Step 3 on FAIL).
 
+## 3b. THE DATA THAT CAME IN, AGAINST §3 AS WRITTEN — AND THE DECISION (read 2026-10-20 by CC-C)
+**The criterion, quoted:** *"PASS (P2): ZERO `[B74][equity-spot][STALL]` lines in `error.log` between 2026-10-19 00:00:00Z and 00:35:00Z, AND ZERO `xstock-equity-feed-stall` rows minted in that span."*
+- **The build:** `7501f4f55` (CC-B's deploy 2026-10-18T05:33:52Z — the last deploy before the window; no deploy between it and 00:47Z per the crew channel's deploy posts), which contains `78f62ed01` (`git merge-base --is-ancestor 78f62ed01 7501f4f55` ⇒ true) ⇒ a P2 build, as §3 requires.
+- **Population read:** every `error.log` line stamped 2026-10-19 00:00:00-00:47:59Z across `error.log` and its dated rotations — **27,383 lines** (so the window is covered, not empty).
+- **`[B74][equity-spot][STALL]` lines in the window: 0.** Positive control on the same instrument over the retained files: **3** such lines exist (2026-10-12 00:00:13Z and 00:13:13Z — the old-code reopen, exactly §3's control — and the real 2026-10-13 14:34:04Z silence in §3a), so the search can find the line.
+- **`xstock-equity-feed-stall` rows minted 00:00-00:35Z: 0.** Control: of the 16 such rows ever minted, the two previous Sunday reopens each minted one within seconds (2026-10-05 00:00:28Z, 2026-10-12 00:00:13Z).
+- **The feed was live in the window** (so the zero is not a dead feed): `xstock_spot_ticker_snap` holds **37,039 rows across all 467 symbols** from 00:15:00Z (the venue's reopen) to 00:46:59Z.
+- **Outcome: PASS.**
+**THE DECISION (CC-C, per §3's rule "close the batch on PASS"):** the batch CLOSES. No code change follows. The four items in §4 stay stated as unproven standing mechanisms; none blocks the close. `#743` closes with it (both routes fixed, deployed, and the reopen read passed). Step 11 confirmation: Langston.
+
 ## 3a. A live stall during the session, on the P2 build — the watchdog still fires on a real silence (2026-10-16, CC-C)
 Not the pre-registered read (§3 is the Sunday reopen and is unchanged); recorded because it is the positive control §3's zero needs — P2 must not have blinded the watchdog to a genuine silence.
 - **The silence was real and upstream:** `xstock_spot_ticker_snap` holds no rows from 2026-10-13 14:32:45Z to 14:34:05Z (79 s) while the socket read OPEN; the process logged ~3,800 `error.log` lines per 10 s through it and the `equity-perp` / `crypto-perp` feeds kept running, so our event loop was not blocked.
@@ -58,8 +68,8 @@ CHANGE-CLASS: architecture
 | T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | own file's position line to Step 10 / observation; the shared file has no line for this batch to change |
 | T1 | the batch `SCOPE` | ✅ | r2, Step 1 (earlier commits) |
 | T1 | the batch `PRE_AUDIT` | ✅ | r3, Step 2 (earlier commits) |
-| T1 | the `COMPLETION_REPORT` | N/A — not yet | this progress report converts to it at the 10-19 read |
-| T1 | the `Observation` column | ✅ | card to Observation; window = the 2026-10-19 00:00Z reopen read (§3) |
+| T1 | the `COMPLETION_REPORT` | ✅ (Step 11) | this file — converted from the progress report at the 10-19 read (§3b) |
+| T1 | the `Observation` column | ✅ | card to Observation; window = the 2026-10-19 00:00Z reopen read (§3); to `Complete` at Langston's Step-11 confirm |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-C's row 33 to OBSERVATION; CC-A, CC-B, CC-INFRA not mine |
 | T1 | Langston's `MEMORY.md` | ✅ | one line for this batch, replacing a 1,530-byte duplicate F-G-2 block (outside the ledger); load 357,475 → 356,396 B |
 | T2 | `SYSTEM_MANUAL.md` | ✅ | §18.0.2 — observation vs receipt age, the crypto and xStock rules, the cold state, the stored-row check |

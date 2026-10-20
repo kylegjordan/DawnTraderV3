@@ -1308,7 +1308,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** Table and type gone on staging; the 2026-10-11 nightly sweep no longer touches the table and failed nothing. **Closed:** `#1159`. The wider Phase 17-22 cluster layer stays `#1163` (row 2a0e).
 
-## B-PRICE-STALENESS-BOUND (CC-C, sprint plan row 33 — row 32 folded in; `#743`, `#913`; `B-PRICE-SIDE-BY-JOB` rows 8g/8g-bis moved in) — change-class `architecture` — ⏳ **OPEN — OBSERVATION** (Step 4 APPROVED in three gates; deployed `78f62ed01` 2026-10-12T00:42:13Z; Step 8 CONFIRMED by Langston 2026-10-12; the age-arm narrowing approved, rides the next deploy; progress report `Claude Comms and Packages/Batch Completion/B_PRICE_STALENESS_BOUND_PROGRESS_REPORT.md`)
+## B-PRICE-STALENESS-BOUND (CC-C, sprint plan row 33 — row 32 folded in; `#743`, `#913`; `B-PRICE-SIDE-BY-JOB` rows 8g/8g-bis moved in) — change-class `architecture` — ⏳ **OPEN — OBSERVATION** (Step 4 APPROVED in three gates; deployed `78f62ed01` 2026-10-12T00:42:13Z; Step 8 CONFIRMED by Langston 2026-10-12; the age-arm narrowing approved, rides the next deploy; progress report `Claude Comms and Packages/Batch Completion/B_PRICE_STALENESS_BOUND_COMPLETION_REPORT.md`)
+
+✅ **CLOSED 2026-10-20** — the pre-registered Sunday-reopen watchdog read PASSED (0 STALL lines, 0 stall alerts in 2026-10-19 00:00-00:35Z; the two previous reopens each raised one). Report: `Batch Completion/B_PRICE_STALENESS_BOUND_COMPLETION_REPORT.md` (converted from the progress report).
 
 **WHAT IT DOES.** No decision acts on a price whose data is older than its bound. xStock: a replayed book never refreshes the mark's age, and a mark that exists only by replay is cold (waits up to 15 s, then stale). Crypto: an exit's re-served price is judged on its retained observation time (2 s). The stall watchdog no longer counts the weekend or the Sunday reopen pause as silence. Re-served prices show their true age; a stored-row tripwire watches the re-serve's records. `#913`'s label and a dead constant fixed.
 
