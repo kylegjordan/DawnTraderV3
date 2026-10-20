@@ -28,7 +28,7 @@
 **VERIFIED:** the 2026-10-18 02:15Z sweep, run_id `6f7ef0d4-…`. 4 of 4 new objects `source-count-matched`, one evidence row each, three counts equal; census 568 / 4 / 4 / 0; no measurable cost on the largest object (304,884 ms vs 313,486). Record `…_STEP7_VERIFICATION.md`.
 **NOT RECOVERED, by decision:** the rows missing from the 568 legacy copies.
 
-## FIX-2026-10-17-A — `B-XSTOCK-BID-TRIGGER-RELAND` increment B (row 2, objectives 5 + 8's size test, CC-C) — paper xStock exits fired on the midpoint, and fills never asked whether the book could hold our size
+## FIX-2026-10-17-B — `B-XSTOCK-BID-TRIGGER-RELAND` increment B (row 2, objectives 5 + 8's size test, CC-C) — paper xStock exits fired on the midpoint, and fills never asked whether the book could hold our size
 
 **CLASS: `architecture`. SYMPTOM:** since `8a-P4b` Step 9 C1 (2026-09-19) the paper xStock stop/target trigger read the MARK — a price nobody can sell at — because the bid version had fired a false stop on a blown-out book (MDB/USD, `#1065`); and no xStock resting fill or taker entry checked the quoted size on its side.
 

@@ -30,7 +30,7 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 | obj 6 | 8 | Langston CONFIRMED 2026-10-17 01:25Z, all five legs re-derived by him; 15 legacy `book-state-hollow-paper-*` rows resolved citing the change list's line 72 |
 | B | 2 | plan r2 (P1-P9), Langston PROCEED with forward-binding conditions (the seed-frame coupling, the `invalidQty` reading convention) |
 | B | 4 | three gates, each Langston-approved; C1-C3 instrument folds rode CC-B's `162ae0537` |
-| B | 5-6 | CI `39015290902` 4/4 per job; deployed `93dce9cb9` 2026-10-17 07:56:13Z; epoch read back 7 (`updated_at` 07:55:59Z); protected file unchanged |
+| B | 5-6 | CI `39015290902` 4/4 per job; deployed `93dce9cb9` 2026-10-17 07:56:13Z; protected file unchanged. **Epoch, re-read 2026-10-20 22:00Z** (instrument: `module_constants`, `module_name='calibration_epoch'`, `asset_class='xstock_spot'`, read as deploy on staging — `ssh deploy@188.245.193.8 'cd dawntrader && set -a && . ./.env && psql "$DATABASE_URL" -Atc "select asset_class, constant_name, value, updated_at, updated_by from module_constants where module_name='\''calibration_epoch'\'' and asset_class='\''xstock_spot'\'' order by 2"'`): `paper_sim` **7** `2026-10-17 07:55:59.672005+00` `b-xstock-bid-trigger-reland-incb` · `vts` 9 `2026-10-06 15:44:53` `b-price-side-8a-p4c-inc3` (unmoved by B) · `live` 3 `2026-09-11` (unmoved). The boot `[ITEM4][warmup]` line reads the WILDCARD rows — an adjacent object, not this one. |
 | B | 7 | first-pass read PASS on all six pre-registered legs (§3c), `9b6c0ce4f` |
 | B | 8 | Langston CONFIRMED 2026-10-20 21:17Z, both instruments re-run by him; F1-F8 folded into §3c at `2f2210a50` |
 | B | 10 | 2026-10-20, ledger §6b |
@@ -104,7 +104,7 @@ CHANGE-CLASS: architecture
 | T2 | SYSTEM_MANUAL.md | ✅ | §3.5.1b rewritten: the gated bid trigger, the seed-frame coupling with the 1% ceiling (forward-binding), size and crossed rules, how to read the counters; §18.0.1 table cell, epoch boundaries, the crypto-ceiling note |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | NEW `transactable-sides.ts` entry (both functions, every production caller, upstream quantities, instruments, blast radius — a gap since `8a-P4c`); the `8a-P3/P4` summary line updated |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1191` update: the window's stdout carrier rotates faster than the window; harvest location |
-| T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-17-A (increment B) |
+| T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-17-B (increment B; first written as `-A`, which is CC-A's `B-B75-EXPORT-COMPLETENESS` — renamed on Langston's Step-10 condition 1) |
 | T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level change |
 | T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | epoch register: third precedent (`xstock_spot/paper_sim` 6 → 7) and the unmarked objective-6 boundary inside epoch 6 |
 | T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
@@ -118,7 +118,7 @@ CHANGE-CLASS: architecture
 | T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md change |
 | T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed; C1's log-only divergence lines were re-pointed, not deleted (X3 START on the mark arm only) |
 | T2 | MISTAKE_PATTERNS.md | N/A | the Step-7 slips (`wrong-object`) are in commit bodies for the weekly pass |
-| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception granted |
+| T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | row 2 re-justified 2026-10-20 (alert `e473d7da`, Langston's Step-10 condition 2): B confirmed, open on (4a), A/C and (4b) |
 | T2 | ALERT_HANDLING_PROTOCOL.md | N/A | one new alert key (`xstock-invalid-quantity-<mode>-<id>`) follows the existing pattern |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | not this batch's |
