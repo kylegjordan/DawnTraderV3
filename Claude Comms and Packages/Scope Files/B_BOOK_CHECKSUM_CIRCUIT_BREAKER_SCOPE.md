@@ -1,4 +1,4 @@
-# B-BOOK-CHECKSUM-CIRCUIT-BREAKER — SCOPE (Step 1, r4 — Langston's E-1, E-2 and folds 1-6 applied)
+# B-BOOK-CHECKSUM-CIRCUIT-BREAKER — SCOPE (Step 1, r5 — Langston's F-1…F-5 applied)
 
 change-class: architecture
 
@@ -41,21 +41,22 @@ change-class: architecture
 | `vts-runner.ts:1787` | record-only (`:1818`), hardcoded `bookEligible:true` `:1804` | same |
 
   The comment *"eligible by construction … never fires on this leg"* sits at **`active-execution-engine.ts:2982`, the live exit trigger**, and at `signal-orchestrator.ts:2710`; `vts-runner.ts:1804` carries none (r3 misattributed them — fold 1). This batch falsifies the comment. The signal-birth funnel is item 3's measurement surface.
-- **The exit trigger's ticker fallback reads `priceCache.getCachedPrice(symbol)`** (`active-execution-engine.ts:2955`, via `tickerLegFromCachedQuote`, `touch-price.ts:179`). That cache is fed by the WS ticker (`bbo`), by the 2 s open-trade REST lane, **and by the WS book itself**, which writes its own top into the cache's `bid`/`ask` as `kraken_ws_book_mid` (`kraken-websocket-adapter.ts:1151-1153`).
+- **The exit trigger's ticker fallback reads `priceCache.getCachedPrice(symbol)`** (`active-execution-engine.ts:2954`, via `tickerLegFromCachedQuote`, `touch-price.ts:179`). That cache is fed by the WS ticker (`bbo`), by the 2 s open-trade REST lane, **and by the WS book itself**, which writes its own top into the cache's `bid`/`ask` as `kraken_ws_book_mid` in `emitPriceTick` (`kraken-websocket-adapter.ts:1235-1243`, producer tag `:1236`). The leg carries that tag as `producer: q.sidesWriter` (`touch-price.ts:200`), but `sidesWriter` is read only by the record-only agreement probe (`level-basis.ts:1178-1190`); nothing in `assess`/`selectTouchPrice` refuses a book-written leg today.
 - **`unsubscribeFromSymbols` cancels ticker AND book** (`:1657-1676`, comment `:1670-1673`). It is the only per-symbol cancel.
 - **Two more resync paths exist besides `softResubscribe`:**
   - `softResubscribeAll` (`:3824`), armed by `start90HeartbeatMonitor` (`:615`). Every 15 s it checks for a 60 s heartbeat gap; on one it force-closes the socket, `orderBooks.clear()`s the fleet and reconnects, which delivers a fresh snapshot for every symbol.
-  - The reconnect path's `i8cResubscribeAllOpenPositions` (`:627`).
+  - The reconnect path's `i8cResubscribeAllOpenPositions` (called at `:630`).
   - Both ran during 10-13 (`Max reconnect attempts reached` twice).
 - **The built funnel field (fold 3).** `bookEligible:false` flows through `touch-price.ts:113-114` to the book row's `byReason.book_not_eligible` and the ladder row's `tickerAcceptedByBookVerdict.book_not_eligible` (`touch-price.ts:248`). Both read zero everywhere and sit on `B_PRICE_SIDE_BY_JOB_8C_AUDIT_AND_PLAN.md:302`'s uncontrolled list, and this batch is their first positive control.
-  - **A fence, not a defect, so do not "fix" it:** `LADDER_REASON_NAME` maps `book_not_eligible → 'no_ticker'` (`level-basis.ts:567`). That mapping is unreachable, because the ladder row records `sel.tickerRefusal` only (`:254`).
+  - **A fence, not a defect, so do not "fix" it:** `LADDER_REASON_NAME` maps `book_not_eligible → 'no_ticker'` (`level-basis.ts:567`). That mapping is unreachable, because the ladder row records `sel.tickerRefusal` only (`:254`). The fence holds at the type level: `tickerRefusal` is typed `LevelBasisRefusal` (`touch-price.ts:83`), and that type excludes `book_not_eligible` (`level-basis.ts:370`). So it still holds once this batch makes the field non-zero.
 - **A dormant resync cluster (fold 4).**
   - `mini-book-integrity-monitor.ts:256-272` is kept, per its comment, because "#507 assigns resubscribe-on-mismatch to CC-B … That batch wants this method". This is that batch.
   - Langston measured at the ref:
     - `resetChannelWatchdog` (`:3404`) has no caller in `server/` or `client/`.
     - `startChannelWatchdog`'s only callers are `refreshChannel` (`:3435`) and `:3407`.
     - So `refreshChannel`, `handleChannelTimeout` and the channel watchdog are all unreachable.
-  - Armed, they would be dangerous: the breaker silences an untrusted symbol's price ticks (the `continue` at `:1177` sits above `emitPriceTick` at `:1233`), and that silence is exactly what a channel watchdog detects. Arming them would let the breaker drive its own resubscribe loop.
+  - The cycle is closed: `resetChannelWatchdog:3404 → :3407 → startChannelWatchdog:3372 → :3384 → handleChannelTimeout:3414 → :3419 → refreshChannel:3425 → :3435`, with zero production entry points (Langston, re-derived).
+  - Armed, they would be dangerous: the breaker silences an untrusted symbol's price ticks (the `continue` at `:1177` sits above `emitPriceTick` at `:1235`), and that silence is exactly what a channel watchdog detects. Arming them would let the breaker drive its own resubscribe loop.
   - They cannot fire today.
 - **A refuted candidate (fold 5), recorded so nobody "fixes" it:** `softResubscribeAll` (`:3838-3844`) clears `orderBooks` but not `bookRaw`. That is not a stale-raw defect, because the `!orderBooks.has()` arm at `:1112` resets both.
 - **2026-10-13** (Langston's venue-reply census, `error__2026-10-14_00-00-00.log`):
@@ -92,9 +93,10 @@ Kyle, 2026-10-20: *"a better detection system … when we can properly and relia
    - The first mismatch triggers **one** resync, guarded by a new per-symbol in-flight record that `softResubscribe` does not clear. A burst of mismatching deltas therefore starts exactly one resync.
    - A resync no longer re-requests the all-pairs instrument snapshot (`:1618` is moved out of the per-symbol path).
    - **Confirmed** means the mismatch persists on the fresh snapshot (whose own checksum is verified: the block sits inside the loop that handles `type === 'snapshot'`, `:685`, `:1111`) or on its first deltas.
-   - **What stops on confirmation (E-1):** resync requests and book-snapshot requests for that symbol stop immediately, and its book channel is cancelled on its own.
+   - **What stops on confirmation (E-1):** resync requests and book-snapshot requests for that symbol stop immediately, and its book channel is cancelled on its own through the existing book-only cancel, `sendBookUnsubscribe` (`:1701-1712`). It is private and today called only from `unsubscribeFromSymbols:1681`, and is exposed for this one use.
+   - **When our book unsubscribe is rejected (F-2):** Arm B's census shows the venue can refuse it (34,649 `WS_UNSUB_REJECTED` on 10-13, logged per request at `:831` via `trackUnsubscribe`). A rejected cancel is counted (`bookUnsubRejected`, per symbol) and is never retried in a loop. The book stays untrusted, so any deltas still arriving are ignored for every reader. The symbol is then trust-gated, not channel-gated.
    - **What stays live:** the ticker subscription. The per-symbol cancel that takes the ticker with the book (`unsubscribeFromSymbols`) is not used for this.
-   - **No leak into the price cache:** an untrusted book also stops writing its top into the cache (`kraken_ws_book_mid`, `:1151-1153`).
+   - **No leak into the price cache:** an untrusted book stops writing its top into the cache (`emitPriceTick`, `:1235-1243`). **And (F-1)** on an untrusted symbol the ticker rung refuses any leg whose `sidesWriter` is `kraken_ws_book_mid`, so the last book-written pair left in the cache cannot be selected while its age ceiling runs out. No new plumbing: the tag is already on the leg (`touch-price.ts:200`).
    - Thresholds and their reasoning go in the pre-audit.
 2. **A confirmed book is UNTRUSTED, in every lane that reads it (D-1, D-2).**
    - The untrusted state replaces all four hardcoded `bookEligible:true`: `crypto-touch.ts:242`, the inline exit trigger `active-execution-engine.ts:2984`, `signal-orchestrator.ts:2712` and `vts-runner.ts:1804`. Each lane records *why* it left the book rung.
@@ -116,10 +118,12 @@ Kyle, 2026-10-20: *"a better detection system … when we can properly and relia
    - **Untrusted survives every other resync path (E-2).** The trust state lives in its own per-symbol record. `orderBooks.clear()`, `softResubscribeAll` and the reconnect's `i8cResubscribeAllOpenPositions` do not clear it.
      - On a reconnect, an untrusted symbol gets its ticker back and **not** its book.
      - A reconnect is therefore not a re-converge for an untrusted symbol. Only the operator re-check is.
+     - **Blast radius (F-3), stated rather than implied:** `bookSubscribe` is built from the same `krakenSymbols` list as `tickerSubscribe` (`:1602` vs `:1585`), so the split becomes a trust-aware filter inside `subscribeToSymbols`. Its production callers are `:619, :636, :2442, :2824, :2885, :3067, :3105, :3191, :3767, :3865`; the pre-audit traces each.
      - **Why:** Kyle's "stop the requests for that symbol straight away" would otherwise be undone by the next heartbeat gap, which is how a time-based retry would enter by another door.
    - **Fold 4 — dispositions for the dormant cluster:**
-     - `mini-book-integrity-monitor.ts`'s resubscribe method, kept for this batch: **(4) removed**, because the breaker owns the only resync path.
-     - `resetChannelWatchdog`, `refreshChannel`, `handleChannelTimeout` and the channel watchdog, all unreachable: **(5) deleted** under rule 18, each with its caller census in `DELETED_COMPONENTS_LOG`.
+     - `triggerSoftResubscribe` (`mini-book-integrity-monitor.ts:254-277`, private, its docblock "DELIBERATELY UNCALLED"): **(5) deleted**, because it is disconnected and the breaker owns the only resync path.
+     - `resetChannelWatchdog`, `startChannelWatchdog`, `handleChannelTimeout` and `refreshChannel`, all unreachable: **(5) deleted** under rule 18, with a caller census for each of the four symbols in `DELETED_COMPONENTS_LOG`.
+     - **The invariant survives its vehicle (F-4):** test 3 of `server/tests/unit/b-price-side-p7b-book-unsubscribe.test.ts:75-83` ("refreshChannel never stacks book subscriptions") is re-pointed onto the breaker's resync path. "A resync never stacks a book subscription" is the invariant obj 1 depends on.
      - Leaving any of them would leave three dormant doors into the path this batch gates.
 5. **The 10-13 cause — two arms, because one test cannot tell them apart (D-4, D-5).**
    - **Arm A, the formatter.** Feed the static `computeBookChecksumFromRaw` the venue's strings for OOB/USD, S/USD and CAP/USD. Use today's `instrument` / `AssetPairs` precision and any 10-13 book frames recovered from `[I7-WS-RAW]` where retained.
@@ -137,11 +141,11 @@ Kyle, 2026-10-20: *"a better detection system … when we can properly and relia
    - Fix what either arm establishes. Otherwise state what each ruled out.
    - **Rider:** bound `handleInstrumentMessage`'s precision to a valid range. Today it checks `Number.isInteger` only, so an out-of-range value throws inside the book handler.
 6. **Counters and text (D-6, D-7, D-8).**
-   - `getBookIntegrityCounters` gains, per symbol: `resyncsSent`, `confirmed`, `untrusted`, `subscribeRejected`, and the existing `bookChecksumSkippedNoPrecision`.
+   - `getBookIntegrityCounters` gains, per symbol: `resyncsSent`, `confirmed`, `untrusted`, `subscribeRejected`, `bookUnsubRejected`, and the existing `bookChecksumSkippedNoPrecision`.
    - Correct every false statement this batch falsifies:
      - all three false clauses at `routes.ts:13258-13261`;
-     - the adapter docblock at `:3644-3649`;
-     - the `note:` string `getBookIntegrityCounters` serves over HTTP (`:3689`, "the mismatch arm resubscribes");
+     - the adapter docblock at `:3641-3649`, including `:3642` "MISMATCH IS THE EXPECTED RESULT TODAY", which is the claim the `:3685` note itself records as retracted on 2026-08-24;
+     - the `note:` string `getBookIntegrityCounters` serves over HTTP (`:3685`, "the mismatch arm resubscribes");
      - `level-basis.ts:400-401` ("every one passes `bookEligible: true`");
      - both "eligible by construction" comments (`active-execution-engine.ts:2982`, `signal-orchestrator.ts:2710`).
    - Add `bookChecksumSkippedNoPrecision.keys()` to the `syms` union at `:3661-3665`, so a skip-only symbol is listed for its own reason.
@@ -150,6 +154,9 @@ Kyle, 2026-10-20: *"a better detection system … when we can properly and relia
    - A burst of N mismatching deltas sends exactly one resync, and no instrument resubscribe. A single clean delta sends none.
    - A mismatch on the fresh snapshot confirms and sends zero further book or resync requests. The ticker stays subscribed, and the untrusted book writes nothing to the price cache. A match restores and sends none.
    - Untrusted survives `orderBooks.clear()`, `softResubscribeAll` and a reconnect: the reconnect re-subscribes the ticker and not the book. A trusted symbol gets both.
+   - On an untrusted symbol, a cached leg written by `kraken_ws_book_mid` is refused by the ticker rung. A `bbo`-ticker leg is accepted.
+   - A rejected book unsubscribe is counted and not retried. Deltas that keep arriving are ignored for every reader.
+   - A resync never stacks a book subscription: test 3 of `b-price-side-p7b-book-unsubscribe.test.ts`, re-pointed.
    - Untrusted reaches each of the four former hardcodes as not-eligible, with its reason. A trusted book still selects the book rung.
    - `depth-source` blocks an open on an untrusted book.
    - The operator re-check reads `AssetPairs` precision before the snapshot, and restores only on a match.
