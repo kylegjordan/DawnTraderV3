@@ -1445,3 +1445,9 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **THE FIX.** Kyle chose to recover nothing and record the gaps everywhere (option 3, 2026-10-17). Every archive record now says how its completeness is known: 568 legacy copies are marked unverified, the 4 made under the hotfix are marked as made under the gate but not recorded, and every copy made from 2026-10-18 carries a proof row — source, exported and downloaded counts equal — written in the same transaction as the stamp, which the database refuses without the proof. Deletes and reuse now require that proof; the restore tool prints the completeness of every copy it brings back.
 
 **LEFT.** Nothing is recovered, by Kyle's decision. Only 4 of 576 copies are proven. The reuse and refusal paths are proven by tests and the staging dry run, not yet by a live night; the script wiring is tested by source structure until `B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B).
+
+## B-MUTATING-ROUTES-AUTH (CC-A, hotfix, Kyle-directed 2026-10-21; `#1228`) — change-class `hotfix` — ✅ **VERIFIED 2026-10-21** (Langston PROCEED; deployed `d307debe5` 2026-10-20T23:13:17Z; CI `39513246450`; note `Claude Comms and Packages/Batch Completion/B_MUTATING_ROUTES_AUTH_COMPLETION_NOTE.md`)
+
+**WHAT WAS BROKEN.** Thirteen staging server addresses that change something answered with no login: anyone could stop the order-book integrity monitor, start or stop a test routine, set the simulation-session flag, rename AI conversations, run Kraken lookups or audits, or push back an automatic recovery. None could open, move or close a trade or touch a balance.
+
+**THE FIX.** All thirteen now require a login; the read-only addresses stay with Infra Claude at the end of the sprint (row 197a).
