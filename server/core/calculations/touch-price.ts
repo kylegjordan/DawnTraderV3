@@ -76,11 +76,22 @@ export interface TouchQuote {
   producer: string;
 }
 
-export type BookRefusal = LevelBasisRefusal | 'book_not_eligible';
+/**
+ * `book_untrusted` (#1220): the book's own integrity check — Kraken's checksum, judged by the adapter's circuit breaker —
+ * has refused it. Kept apart from `book_not_eligible` because the contract above separates "we did not use the book" from
+ * "the book was bad", and this one is the second.
+ */
+export type BookRefusal = LevelBasisRefusal | 'book_not_eligible' | 'book_untrusted';
+
+/**
+ * On the TICKER rung, `book_untrusted` means the ticker's sides were themselves written by the refused book (`ws_book`):
+ * the cache keeps the last sides the book stated, so the same bad top would otherwise come back one rung down.
+ */
+export type TickerRefusal = LevelBasisRefusal | 'book_untrusted';
 
 export type TouchSelection =
   | { ok: true; quote: TouchQuote; bookRefusal: BookRefusal | null }
-  | { ok: false; bookRefusal: BookRefusal; tickerRefusal: LevelBasisRefusal };
+  | { ok: false; bookRefusal: BookRefusal; tickerRefusal: TickerRefusal };
 
 function assess(leg: TouchLegInput | null, nowMs: number, policy: TouchPolicy) {
   if (leg === null) return { ok: false as const, reason: 'no_book' as LevelBasisRefusal };
@@ -103,6 +114,11 @@ export function selectTouchPrice(
   input: {
     book: TouchLegInput | null;
     bookEligible: boolean;
+    /**
+     * #1220: `false` only when the book's integrity breaker has refused it (suspect or untrusted). A DECLARATION, like
+     * `bookEligible` — required so no caller inherits a default. A caller whose book is not checksum-tracked passes `true`.
+     */
+    bookTrusted: boolean;
     ticker: TouchLegInput | null;
     tickerBasis: 'ticker_bbo' | 'ticker_default';
   },
@@ -112,6 +128,8 @@ export function selectTouchPrice(
   let bookRefusal: BookRefusal | null = null;
   if (!input.bookEligible) {
     bookRefusal = 'book_not_eligible';
+  } else if (!input.bookTrusted) {
+    bookRefusal = 'book_untrusted';
   } else {
     const b = assess(input.book, nowMs, policy);
     if (b.ok && input.book) {
@@ -128,6 +146,10 @@ export function selectTouchPrice(
     bookRefusal = b.ok ? 'no_book' : b.reason;
   }
 
+  // #1220: the ticker leg's sides were written by the refused book itself — the same top, one rung down.
+  if (!input.bookTrusted && input.ticker?.producer === 'ws_book') {
+    return { ok: false, bookRefusal: bookRefusal ?? 'book_untrusted', tickerRefusal: 'book_untrusted' };
+  }
   const t = assess(input.ticker, nowMs, policy);
   if (t.ok && input.ticker) {
     return {
@@ -245,7 +267,10 @@ export function recordTouchSelection(
   // `3n.l` increment 2, P12 (OBJ-7): when the TICKER carried the walk, record what the BOOK said first, so the ticker
   // rung's acceptances split into book-absent / book-not-eligible / book-refused per lane.
   const _bookVerdict: TickerAcceptBookVerdict | undefined = sel.ok && sel.bookRefusal !== null
-    ? (sel.bookRefusal === 'no_book' ? 'book_absent' : sel.bookRefusal === 'book_not_eligible' ? 'book_not_eligible' : 'book_refused')
+    ? (sel.bookRefusal === 'no_book' ? 'book_absent'
+      : sel.bookRefusal === 'book_not_eligible' ? 'book_not_eligible'
+      : sel.bookRefusal === 'book_untrusted' ? 'book_untrusted'
+      : 'book_refused')
     : undefined;
   recordLevelBasisOutcome(
     { ...base, rung: 'ladder' },

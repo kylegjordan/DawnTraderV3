@@ -13,6 +13,7 @@ vi.mock('../../services/execution/crypto-touch-readers.js', () => ({
   CRYPTO_TOUCH_READERS: {
     normalize: (s: string) => s,
     getBook: () => state.book,
+    isBookTrusted: () => state.bookTrusted !== false,
     getCached: () => state.cached,
   },
 }));

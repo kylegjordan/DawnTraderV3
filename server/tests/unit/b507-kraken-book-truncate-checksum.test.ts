@@ -89,8 +89,8 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
     adapter.mapKrakenPairToInternalSymbol = (p: string) => p;
     adapter.bookDepth.set('ONDO/USD', opts.depth ?? 3);
     if (!opts.truncate) adapter.truncateBook = () => {};
-    adapter.resubscribed = [] as string[];
-    adapter.softResubscribe = async (sym: string) => { adapter.resubscribed.push(sym); };
+    // #1220: the mismatch arm no longer resubscribes directly — it hands the symbol to the circuit breaker. The adapter here
+    // has no socket, so any resync the breaker wants is DEFERRED and counted in `bookResyncsSent` only once it is sent.
     return adapter;
   }
 
@@ -190,20 +190,23 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
       bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)],
       checksum: 1 }] });                                   // a checksum that cannot match
-    expect(adapter.resubscribed).toEqual([]);              // no storm
+    expect(adapter.getBookTrustState('ONDO/USD')).toBe('trusted'); // no storm: the breaker never saw it
     expect(adapter.bookChecksumSkippedNoPrecision.get('ONDO/USD')).toBe(1); // counted, not silent
     expect(adapter.bookChecksumAttempts.get('ONDO/USD') ?? 0).toBe(0);      // not even attempted
   });
 
-  it('ARMED: with precision KNOWN, a desynced book fails verification and triggers a resubscribe', () => {
+  it('ARMED: with precision KNOWN, a desynced book fails verification and goes to the circuit breaker (#1220)', () => {
     const adapter = makeAdapter({ truncate: true });
     adapter.handleInstrumentMessage({ type: 'snapshot', data: { pairs: [
       { symbol: 'ONDO/USD', price_precision: 5, qty_precision: 5 } ] } });
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
       bids: [lvl(0.40), lvl(0.39), lvl(0.38)], asks: [lvl(0.41), lvl(0.42), lvl(0.43)],
       checksum: 1 }] });                                   // wrong on purpose
-    expect(adapter.resubscribed).toEqual(['ONDO/USD']);    // desync DETECTED, recovery fired
+    expect(adapter.getBookTrustState('ONDO/USD')).toBe('suspect'); // desync DETECTED
     expect(adapter.bookChecksumMismatches.get('ONDO/USD')).toBe(1);
+    // ⛔ and the book is HELD, not wiped — the wipe was the 2026-10-13 loop — while every reader refuses it.
+    expect(adapter.orderBooks.get('ONDO/USD').bids.size).toBe(3);
+    expect(adapter.getBookForFill('ONDO/USD')).toBeNull();
   });
 
   it('the instrument channel supplies precision, and a CLEAN book then passes', () => {
@@ -217,7 +220,7 @@ describe('#507 Kraken v2 book truncation — the phantom-bid defect', () => {
     const theirs = KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, { price: 5, qty: 5 });
     adapter.handleV2BookUpdate({ type: 'snapshot', data: [{ symbol: 'ONDO/USD',
       bids: [lvl(0.40)], asks: [lvl(0.41)], checksum: theirs }] });
-    expect(adapter.resubscribed).toEqual([]);              // healthy book, no action
+    expect(adapter.getBookTrustState('ONDO/USD')).toBe('trusted'); // healthy book, no action
     expect(adapter.bookChecksumMatches.get('ONDO/USD')).toBe(1);
   });
 

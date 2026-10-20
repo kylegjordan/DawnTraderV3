@@ -2707,9 +2707,11 @@ export class SignalOrchestrator {
                   producer: 'kraken_ws_book',
                 }
               : null,
-            // Crypto's book is eligible by construction — `book_not_eligible` is the xStock
-            // maintained-book gate (`touch-price.ts:24`) and never fires on this leg.
+            // Crypto's book is eligible by construction — `book_not_eligible` is the xStock maintained-book gate
+            // (`touch-price.ts`) and never fires on this leg. Whether it is TRUSTED is the checksum circuit breaker's
+            // call (#1220); a refused book records `book_untrusted`.
             bookEligible: true,
+            bookTrusted: krakenWebSocketAdapter.isBookTrusted(symbol),
             ticker: _lbTicker,
             // ⚠️ `ticker_bbo` NAMES THE QUANTITY, AND `producer` CARRIES THE TRANSPORT. Kraken's
             // REST ticker `a`/`b` ARE best ask and best bid, exactly as the WS bbo ticker is, so

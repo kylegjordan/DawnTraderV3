@@ -3,9 +3,12 @@
 // never stack.
 //
 // Three paths shared the defect (Langston Step-1 r5 condition 2): unsubscribeFromSymbols (ticker only),
-// clearAllSubscriptions (cleared local state after a ticker-only unsubscribe) and refreshChannel (a
-// ticker-only unsubscribe, then subscribing ticker AND book). softResubscribe carried its own raw book
-// unsubscribe; after the hoist it must send exactly ONE book unsubscribe per symbol, not two.
+// clearAllSubscriptions (cleared local state after a ticker-only unsubscribe) and the 8.8.5 channel refresh (a
+// ticker-only unsubscribe, then subscribing ticker AND book). The 8.9.5 soft resubscribe carried its own raw book
+// unsubscribe; after the hoist it had to send exactly ONE book unsubscribe per symbol, not two.
+// ⛔ #1220 (B-BOOK-CHECKSUM-CIRCUIT-BREAKER) DELETED the channel refresh and the soft resubscribe. Tests 3, 4 and 8 kept
+// their INVARIANTS and were re-pointed onto the one path that now resubscribes a book: the breaker's book-only resync,
+// driven by a real mismatching frame. Tests 1, 2, 5, 6, 7, 9 and 10 are unchanged.
 //
 // POSITIVE CONTROL, run 2026-09-11 against the unfixed adapter at 5526c6ee8:
 //   1 FAIL (expected 2 book unsubscribes, got 0) · 2 FAIL (expected 3, got 0) · 3 FAIL (live book subs 3, expected 1)
@@ -26,8 +29,14 @@ function makeConnectedAdapter() {
   const adapter: any = new (KrakenWebSocketAdapter as any)();
   adapter.isConnected = true;
   adapter.ws = { readyState: 1, send: (m: string) => sent.push(JSON.parse(m)) };
-  adapter.startChannelWatchdog = () => {}; // refreshChannel arms it; not under test here
+  adapter.mapKrakenPairToInternalSymbol = (p: string) => p;
   return { adapter, sent };
+}
+
+// #1220: put BTC/USD's book into the breaker's resync by feeding one frame whose checksum cannot match.
+function desync(adapter: any) {
+  adapter.symbolPrecision.set('BTC/USD', { price: 1, qty: 8 });
+  adapter.handleV2BookUpdate({ type: 'update', data: [{ symbol: 'BTC/USD', bids: [{ price: 100, qty: 1 }], asks: [{ price: 101, qty: 1 }], checksum: 1 }] });
 }
 
 // Counts symbols, not messages: one message can carry several symbols.
@@ -72,33 +81,36 @@ describe('P-7b — stopping a symbol cancels its book subscription, on every pat
     expect(adapter.subscribedSymbols.size).toBe(0);
   });
 
-  it('3. refreshChannel never stacks book subscriptions', () => {
+  it('3. a breaker resync never stacks book subscriptions (re-pointed from the deleted channel refresh, #1220)', () => {
     vi.useFakeTimers();
     const { adapter, sent } = makeConnectedAdapter();
     adapter.subscribeToSymbols(['BTC/USD']);
 
-    // refreshChannel re-subscribes after a 500 ms timeout; advance past that one timeout only.
-    adapter.refreshChannel('BTC/USD');
+    // The resync re-subscribes after a 500 ms pause; advance past that one timeout only. A second mismatching frame
+    // while it is out must send nothing at all — the in-flight entry is the de-dupe.
+    desync(adapter);
+    desync(adapter);
     vi.advanceTimersByTime(600);
-    adapter.refreshChannel('BTC/USD');
-    vi.advanceTimersByTime(600);
+    expect(count(sent, 'unsubscribe', 'book')).toBe(1); // control: the resync really cancelled the book first
 
     // live book subscriptions = sent subscribes - sent unsubscribes; it must stay exactly one
     const live = count(sent, 'subscribe', 'book') - count(sent, 'unsubscribe', 'book');
     expect(live).toBe(1);
   });
 
-  it('4. softResubscribe sends exactly ONE book unsubscribe per symbol after the hoist', async () => {
+  it('4. a breaker resync sends exactly ONE book unsubscribe per symbol, and never touches the ticker (#1220)', () => {
     vi.useFakeTimers();
     const { adapter, sent } = makeConnectedAdapter();
     adapter.subscribeToSymbols(['BTC/USD']);
     const before = count(sent, 'unsubscribe', 'book');
+    const tickerSubsBefore = count(sent, 'subscribe', 'ticker');
 
-    // softResubscribe awaits a 500 ms pause before re-subscribing; advance past it only.
-    const p = adapter.softResubscribe('BTC/USD');
-    await vi.advanceTimersByTimeAsync(600);
-    await p;
+    desync(adapter);
+    vi.advanceTimersByTime(600);
     expect(count(sent, 'unsubscribe', 'book') - before).toBe(1);
+    // The deleted soft resubscribe went through unsubscribeFromSymbols and so cancelled the TICKER as well.
+    expect(count(sent, 'unsubscribe', 'ticker')).toBe(0);
+    expect(count(sent, 'subscribe', 'ticker')).toBe(tickerSubsBefore);
   });
 
   it('5. while disconnected, unsubscribe sends nothing and only cleans local state (behaviour kept)', () => {
@@ -139,15 +151,14 @@ describe('P-7b — STEP 4 r2: Langston chunk-1 conditions', () => {
     expect(byDepth.get(25)).toEqual([adapter.normalToKrakenSymbol('ETH/USD')]);
   });
 
-  it('8. softResubscribe still sends the GRANTED depth: bookDepth is not cleared before its unsubscribe', async () => {
+  it('8. a breaker resync sends the GRANTED depth: bookDepth is never cleared before its unsubscribe (#1220)', () => {
     vi.useFakeTimers();
     const { adapter, sent } = makeConnectedAdapter();
     adapter.subscribeToSymbols(['BTC/USD']);
     adapter.bookDepth.set('BTC/USD', 25);
 
-    const p = adapter.softResubscribe('BTC/USD');
-    await vi.advanceTimersByTimeAsync(600);
-    await p;
+    desync(adapter);
+    vi.advanceTimersByTime(600);
     const unsubs = bookUnsubscribes(sent);
     expect(unsubs.length).toBeGreaterThan(0);
     expect(unsubs[unsubs.length - 1].params?.depth).toBe(25);

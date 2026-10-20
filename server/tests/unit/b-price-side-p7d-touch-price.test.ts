@@ -21,7 +21,7 @@ const ticker = (o: Partial<TouchLegInput> = {}): TouchLegInput => ({
 
 describe('P-7d — the touch price, by D3 order', () => {
   it('1. a valid fresh book wins, even when the ticker is valid too', () => {
-    const r = selectTouchPrice({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
+    const r = selectTouchPrice({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.quote).toEqual({ bid: 100, ask: 100.2, basis: 'book_top', ageMs: 1_000, quoteArrivedAtMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book' });
@@ -30,7 +30,7 @@ describe('P-7d — the touch price, by D3 order', () => {
 
   it('2. a STALE book falls to the ticker, and says why', () => {
     const r = selectTouchPrice(
-      { book: book({ stampMs: NOW - 20_000 }), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
+      { book: book({ stampMs: NOW - 20_000 }), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
     );
     expect(r.ok && r.quote.basis).toBe('ticker_bbo');
     expect(r.ok && r.bookRefusal).toBe('stale_book');
@@ -38,7 +38,7 @@ describe('P-7d — the touch price, by D3 order', () => {
 
   it('3. a CROSSED book falls to the ticker', () => {
     const r = selectTouchPrice(
-      { book: book({ bid: 100.5, ask: 100.2 }), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
+      { book: book({ bid: 100.5, ask: 100.2 }), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
     );
     expect(r.ok && r.quote.basis).toBe('ticker_bbo');
     expect(r.ok && r.bookRefusal).toBe('crossed_book');
@@ -46,7 +46,7 @@ describe('P-7d — the touch price, by D3 order', () => {
 
   it('4. an INELIGIBLE book (xStock, pre-audit A-9.7) is never used, however good it looks', () => {
     const r = selectTouchPrice(
-      { book: book(), bookEligible: false, ticker: ticker({ clockBasis: 'receipt', producer: 'kraken_equities_ws_mid' }), tickerBasis: 'ticker_default' },
+      { book: book(), bookEligible: false, bookTrusted: true, ticker: ticker({ clockBasis: 'receipt', producer: 'kraken_equities_ws_mid' }), tickerBasis: 'ticker_default' },
       NOW, POLICY,
     );
     expect(r.ok && r.quote.basis).toBe('ticker_default');
@@ -55,19 +55,19 @@ describe('P-7d — the touch price, by D3 order', () => {
 
   it('5. ★ NEITHER QUALIFIES: refuse, carrying both reasons — never a midpoint, never a fallback', () => {
     const r = selectTouchPrice(
-      { book: book({ ask: null }), bookEligible: true, ticker: ticker({ stampMs: NOW - 60_000 }), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
+      { book: book({ ask: null }), bookEligible: true, bookTrusted: true, ticker: ticker({ stampMs: NOW - 60_000 }), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
     );
     expect(r).toEqual({ ok: false, bookRefusal: 'one_sided_book', tickerRefusal: 'stale_book' });
   });
 
   it('6. nothing at all: both legs report no_book', () => {
-    expect(selectTouchPrice({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY))
+    expect(selectTouchPrice({ book: null, bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY))
       .toEqual({ ok: false, bookRefusal: 'no_book', tickerRefusal: 'no_book' });
   });
 
   it('7. an implausibly WIDE ticker refuses rather than anchoring on it', () => {
     const r = selectTouchPrice(
-      { book: null, bookEligible: true, ticker: ticker({ bid: 80, ask: 105 }), tickerBasis: 'ticker_default' }, NOW, { maxAgeMs: 15_000, maxSpreadFraction: 0.1 },
+      { book: null, bookEligible: true, bookTrusted: true, ticker: ticker({ bid: 80, ask: 105 }), tickerBasis: 'ticker_default' }, NOW, { maxAgeMs: 15_000, maxSpreadFraction: 0.1 },
     );
     expect(r).toEqual({ ok: false, bookRefusal: 'no_book', tickerRefusal: 'implausible_spread' });
   });
@@ -75,8 +75,8 @@ describe('P-7d — the touch price, by D3 order', () => {
 
 describe('P-7f — the clock basis is a field, carried and never inferred', () => {
   it('8. the same stamp on a VENUE clock and on a RECEIPT clock yields the same age under different labels', () => {
-    const venue = selectTouchPrice({ book: null, bookEligible: false, ticker: ticker({ clockBasis: 'venue' }), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
-    const receipt = selectTouchPrice({ book: null, bookEligible: false, ticker: ticker({ clockBasis: 'receipt' }), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
+    const venue = selectTouchPrice({ book: null, bookEligible: false, bookTrusted: true, ticker: ticker({ clockBasis: 'venue' }), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
+    const receipt = selectTouchPrice({ book: null, bookEligible: false, bookTrusted: true, ticker: ticker({ clockBasis: 'receipt' }), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(venue.ok && receipt.ok).toBe(true);
     if (!venue.ok || !receipt.ok) return;
     expect(venue.quote.ageMs).toBe(receipt.quote.ageMs);
@@ -86,13 +86,13 @@ describe('P-7f — the clock basis is a field, carried and never inferred', () =
 
   it('9. a venue stamp AHEAD of our clock refuses as age_unknown — no skew tolerance is invented', () => {
     const r = selectTouchPrice(
-      { book: null, bookEligible: false, ticker: ticker({ stampMs: NOW + 50 }), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
+      { book: null, bookEligible: false, bookTrusted: true, ticker: ticker({ stampMs: NOW + 50 }), tickerBasis: 'ticker_bbo' }, NOW, POLICY,
     );
     expect(r).toEqual({ ok: false, bookRefusal: 'book_not_eligible', tickerRefusal: 'age_unknown' });
   });
 
   it('10. a quote never carries a midpoint', () => {
-    const r = selectTouchPrice({ book: book(), bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY);
+    const r = selectTouchPrice({ book: book(), bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(Object.keys(r.quote).sort()).toEqual(['ageMs', 'ask', 'basis', 'bid', 'clockBasis', 'producer', 'quoteArrivedAtMs']);

@@ -2979,9 +2979,11 @@ export class ActiveExecutionEngine {
                       producer: 'kraken_ws_book',
                     }
                   : null,
-                // Crypto's book is eligible by construction — `book_not_eligible` is the xStock
-                // maintained-book gate and never fires on this leg.
+                // Crypto's book is eligible by construction — `book_not_eligible` is the xStock maintained-book gate and
+                // never fires on this leg. Whether it is TRUSTED is the checksum circuit breaker's call (#1220), and a
+                // refused book records `book_untrusted`, never `book_not_eligible`.
                 bookEligible: true,
+                bookTrusted: krakenWebSocketAdapter.isBookTrusted(_lsSym),
                 // ⛔ THROUGH THE HELPER, NOT INLINE (Langston's ruling on the leg source). A fourth
                 //    verbatim leg construction is the defect that helper exists to prevent.
                 ticker: tickerLegFromCachedQuote(_lsCache),

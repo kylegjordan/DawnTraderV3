@@ -155,6 +155,12 @@ class MiniBookIntegrityMonitor {
         if (!wsData || wsData.bid === undefined || wsData.ask === undefined) {
           continue;
         }
+        // #1220: a suspect or untrusted book is HELD by the circuit breaker and refused by every reader, so its top is
+        // deliberately stale — comparing it with REST would report the breaker's own hold as drift.
+        if (wsData.trust !== 'trusted') {
+          console.log(`[8.9.5][MBIM] ${symbol} skipped — book is ${wsData.trust} (circuit breaker, #1220)`);
+          continue;
+        }
 
         const wsMid = (wsData.bid + wsData.ask) / 2;
         if (wsMid <= 0) continue;
@@ -202,22 +208,15 @@ class MiniBookIntegrityMonitor {
 
         if (driftPct > this.MAX_DRIFT_PCT) {
           driftedSymbols.push(symbol);
-          // ⛔ B-MBIM-SWITCH-ON BLOCKER-3 (Langston): THIS BATCH IS LOG-ONLY. The remediation call
-          // that used to sit here — `triggerSoftResubscribe` → adapter `softResubscribe:3343` —
-          // does `this.orderBooks.delete(symbol)` + `bookRaw.delete` + unsubscribe both channels +
-          // 500ms + resubscribe. And `getBookForFill:3221-3223` returns NULL on an empty book, read
-          // by `depth-source.ts:43` behind the FAIL-CLOSED #295 open-depth gate.
-          // ⇒ THE REMEDIATION TEARS DOWN THE EXACT BOOK A FAIL-CLOSED GATE READS, and a promotion
-          //   landing in that window is a silent `no_book` skip.
-          // Two reasons it is not merely a risk to accept: this limb is 2025-12-30 code written
-          // BEFORE the depth gate existed (the gate went live at the B8.5 switch-on), so whether it
-          // still fits today's architecture is an open question this batch's scope never asked; and
-          // #507 already homes resubscribe-on-mismatch to CC-B at the Phase-20 WS-lifecycle item, so
-          // switching it on here would land a SECOND, uncoordinated resubscribe trigger ahead of it.
-          // ⇒ detect and record; remediation stays with #506/#507 where it has an owner.
+          // ⛔ LOG-ONLY, AND IT STAYS SO (B-MBIM-SWITCH-ON BLOCKER-3, Langston). The remediation that used to sit here
+          // (`triggerSoftResubscribe` → the adapter's `softResubscribe`) deleted the book and resubscribed both channels —
+          // it tore down the very book the fail-closed #295 open-depth gate reads. #1220 (B-BOOK-CHECKSUM-CIRCUIT-BREAKER)
+          // was the homed WS-lifecycle batch for that remediation: it deleted both methods and put book integrity on the
+          // venue's own checksum, per symbol, inside the adapter. A REST-vs-WS drift is a weaker signal than that checksum,
+          // so this monitor detects and records only — a second resubscribe trigger here would race the breaker.
           console.warn(
             `[8.9.5][MBIM][DRIFT] ${symbol} Δ=${driftPct.toFixed(3)}% exceeds ${this.MAX_DRIFT_PCT}% ` +
-            `— LOG ONLY, no resubscribe (see #506/#507 Phase-20 WS-lifecycle for remediation)`,
+            `— LOG ONLY; book integrity is the checksum circuit breaker's (#1220)`,
           );
         }
 
@@ -249,31 +248,6 @@ class MiniBookIntegrityMonitor {
     console.log(`[8.9.5][MBIM] Audit complete: ${results.length} symbols checked, ${driftedSymbols.length} drifted`);
 
     return results;
-  }
-
-  /**
-   * ⚠️ INTENTIONALLY RETAINED AND DELIBERATELY UNCALLED — this is NOT a missed call site.
-   *
-   * B-MBIM-SWITCH-ON made this monitor LOG-ONLY (BLOCKER-3): `softResubscribe` deletes the
-   * per-symbol order book, and `getBookForFill` returns null on an empty book behind the
-   * FAIL-CLOSED #295 open-depth gate — so remediating drift here can silently block a promotion.
-   *
-   * It is kept rather than deleted because the remediation is already HOMED: `#507` assigns
-   * resubscribe-on-mismatch to CC-B at the Phase-20 WS-lifecycle item, alongside `#506`. That batch
-   * wants this method; deleting it now would mean rewriting it there.
-   *
-   * Rule 18 requires a 'left intentionally' item be stated so a later grep does not read it as an
-   * incomplete sweep. This docblock is that statement.
-   */
-  private async triggerSoftResubscribe(symbol: string, driftPct: number): Promise<void> {
-    console.warn(`[8.9.5][SENTINEL] Soft resubscribe triggered for ${symbol} (drift: ${driftPct.toFixed(3)}%)`);
-    
-    try {
-      await krakenWebSocketAdapter.softResubscribe(symbol);
-      console.log(`[8.9.5][SENTINEL] Resubscribe complete for ${symbol}`);
-    } catch (err: any) {
-      console.error(`[8.9.5][SENTINEL] Resubscribe failed for ${symbol}:`, err?.message || err);
-    }
   }
 
   private async logResults(results: IntegrityResult[]): Promise<void> {

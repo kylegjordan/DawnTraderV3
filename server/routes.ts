@@ -13255,12 +13255,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
    *    guarantees. Pre-fix comparator, measured on the live venue by replicating the old
    *    handler: 8,358 of 26,093 book states crossed = 32.03%, across 6 of 8 pairs incl BTC/USD.
    *    With truncation + snapshot-replace: 0 of 31,059.
-   *  - `mismatches` HIGH IS EXPECTED and is NOT the fix failing. Kraken sends price/qty as JSON
-   *    numbers, so String() cannot reconstruct the CRC input until the v2 instrument precision
-   *    feed is subscribed (#507 remainder; measured: zero instrument messages in a 3,000-line
-   *    window today). Verification is OBSERVE-ONLY and never resubscribes.
+   *  - `mismatches` is a GENUINE desync count. ⚠️ This line said "HIGH IS EXPECTED … OBSERVE-ONLY and never resubscribes";
+   *    that stopped being true when the v2 instrument precision feed landed (#507 remainder), and since #1220 a mismatch
+   *    drives the per-symbol circuit breaker: the book is held and refused (`trust: suspect`), one book-only resync and one
+   *    REST precision re-read follow, and a confirmed symbol goes `untrusted` with its book channel cancelled.
    *  - `matches` is the positive control for `mismatches`, and `attempts` proves the branch ran
    *    at all -- a zero mismatch count is unreadable without them.
+   *  - #1220 adds per symbol: `trust`, `resyncsSent`, `confirmedUntrusted`, `framesIgnoredUntrusted`, `subscribeRejected`,
+   *    `bookUnsubRejected`, `precisionRefused`, and the now-published `skippedNoPrecision`.
    */
   apiRouter.get('/active-engine/book-integrity', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
@@ -13269,6 +13271,31 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     } catch (error) {
       console.error('[#507] book-integrity counters failed:', error);
       res.status(500).json({ error: 'Failed to read book integrity counters' });
+    }
+  });
+
+  /**
+   * #1220 B-BOOK-CHECKSUM-CIRCUIT-BREAKER plan 4 — the operator re-check for a crypto book the breaker confirmed bad.
+   * Re-reads the pair's precision from Kraken AssetPairs, then sends ONE book subscribe; a snapshot that matches Kraken's
+   * checksum restores trust and resolves that episode's `book_untrusted:<symbol>:<episode>` alert as `by`. One request per
+   * call; refused (with the reason) for a book that is not untrusted, a re-check already out, or a closed socket.
+   * Body: `{ "by": "<canonical actor>" }` — the same actor table as alert ack/resolve (`ALERT_ACTORS`).
+   */
+  apiRouter.post('/active-engine/book-recheck/:symbol', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { normaliseAlertActor } = await import('./services/system-alerts.js');
+      const by = normaliseAlertActor(req.body?.by);
+      if (!by) {
+        return res.status(400).json({ error: 'body.by must be a canonical alert actor (ALERT_ACTORS)' });
+      }
+      const { krakenWebSocketAdapter } = await import('./exchanges/kraken/kraken-websocket-adapter.js');
+      const { normalizeToInternalSymbol } = await import('./markets/kraken-symbol-resolver.js');
+      const symbol = normalizeToInternalSymbol(decodeURIComponent(req.params.symbol));
+      const result = await krakenWebSocketAdapter.requestBookRecheck(symbol, by);
+      res.status(result.accepted ? 202 : 409).json({ symbol, ...result });
+    } catch (error) {
+      console.error('[#1220] book re-check failed:', error);
+      res.status(500).json({ error: 'Failed to request a book re-check' });
     }
   });
 

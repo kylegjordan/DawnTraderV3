@@ -112,7 +112,9 @@ export interface CachedPrice {
    * read off the cache instead of inferred by elimination (alert `5bfb2af5`). Moves ONLY with the sides it names, exactly
    * like `sidesCapturedAtMs`: a writer that did not observe a side carries the previous value forward. `null` = no writer
    * has ever stated sides for this key (the cold `bid === ask === price` row).
-   * ⛔ RECORD-ONLY: no decision reads it.
+   * ⚠️ NO LONGER RECORD-ONLY (#1220): it reaches `selectTouchPrice` as the ticker leg's `producer`, and the ticker rung
+   * REFUSES `ws_book` sides on a symbol whose book the checksum circuit breaker has refused — the cache keeps the last
+   * sides the book stated, so the bad top would otherwise come back one rung down.
    */
   sidesWriter: SidesWriter | null;
 }

@@ -1802,6 +1802,8 @@ async function generatePhase10Signal(
             }
           : null,
         bookEligible: true,
+        // #1220: a book the checksum circuit breaker refused records `book_untrusted`, never `book_not_eligible`.
+        bookTrusted: krakenWebSocketAdapter.isBookTrusted(symbol),
         // ⛔ ONE HOME, shared with the orchestrator (Langston BLOCKER-1) — the stamp choice is
         // fixtured in `touch-price.ts` rather than repeated as a comment in two files.
         ticker: tickerLegFromCachedQuote(_lbCache),

@@ -279,16 +279,19 @@ describe('P12 — the ticker rung\'s acceptances split by the book\'s verdict (O
   const walk = (i: Parameters<typeof selectTouchPrice>[0]) => recordTouchSelection(LANE, selectTouchPrice(i, NOW, POLICY));
   beforeEach(() => __resetLevelBasisFunnelForTest());
 
-  it('15. no book / ineligible book / stale book each land in their own cell; a book-carried walk lands in none', () => {
-    walk({ book: null, bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    walk({ book: book(), bookEligible: false, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    walk({ book: book({ stampMs: NOW - 60_000 }), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+  it('15. no book / ineligible book / untrusted book / stale book each land in their own cell; a book-carried walk lands in none', () => {
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: false, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book({ stampMs: NOW - 60_000 }), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    // #1220: a book the circuit breaker refused lands in ITS OWN cell, never in `book_not_eligible` or `book_refused`.
+    walk({ book: book(), bookEligible: true, bookTrusted: false, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     const ladder: any = getLevelBasisFunnelRow({ ...LANE, rung: 'ladder' });
-    expect(ladder.accepted).toBe(4); // control: every walk was accepted
-    expect(ladder.tickerAcceptedByBookVerdict).toEqual({ book_absent: 1, book_not_eligible: 1, book_refused: 1 });
-    expect(ladder.byAcceptedSource['ticker_bbo:rest_adapter']).toBe(3); // the increment's own effect, by name
+    expect(ladder.accepted).toBe(5); // control: every walk was accepted
+    expect(ladder.tickerAcceptedByBookVerdict).toEqual({ book_absent: 1, book_not_eligible: 1, book_untrusted: 1, book_refused: 1 });
+    expect(ladder.byAcceptedSource['ticker_bbo:rest_adapter']).toBe(4); // the increment's own effect, by name
     const bookRow: any = getLevelBasisFunnelRow({ ...LANE, rung: 'book' });
-    expect(bookRow.tickerAcceptedByBookVerdict).toEqual({ book_absent: 0, book_not_eligible: 0, book_refused: 0 });
+    expect(bookRow.byReason.book_untrusted).toBe(1);
+    expect(bookRow.tickerAcceptedByBookVerdict).toEqual({ book_absent: 0, book_not_eligible: 0, book_untrusted: 0, book_refused: 0 });
   });
 });

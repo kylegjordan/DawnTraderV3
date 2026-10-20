@@ -16,5 +16,6 @@ import { priceCache } from '../price-cache.js';
 export const CRYPTO_TOUCH_READERS: CryptoTouchReaders = {
   normalize: normalizeToInternalSymbol,
   getBook: (s) => krakenWebSocketAdapter.getBookForFill(s),
+  isBookTrusted: (s) => krakenWebSocketAdapter.isBookTrusted(s),
   getCached: (s) => priceCache.getCachedPrice(s),
 };

@@ -109,7 +109,7 @@ describe('B-CLASS-LEG-FILL-MODE — strict later-quote interval', () => {
     const now = 10_000;
     const r = selectTouchPrice({
       book: null,
-      bookEligible: false,
+      bookEligible: false, bookTrusted: true,
       ticker: {
         bid: 99,
         ask: 101,

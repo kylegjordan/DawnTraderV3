@@ -1,0 +1,37 @@
+// ARCHIVED by B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220), CC-B, 2026-10-20. NOT COMPILED. Verbatim from
+// server/exchanges/kraken/kraken-websocket-adapter.ts at e400fed12 (pre-removal). See DELETED_COMPONENTS_LOG.
+
+  async softResubscribe(symbol: string): Promise<void> {
+    console.log(`[8.9.5][SOFT_RESUB] Starting soft resubscribe for ${symbol}`);
+    
+    // B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4): `bookDepth` is DELIBERATELY NOT cleared below. The unsubscribe this
+    // method sends reads the GRANTED depth from it, and the unsubscribe must name the depth the subscription holds —
+    // clearing it first would send the default 10 to a 25-deep stream. The ordering is load-bearing; test 8 in
+    // b-price-side-p7b-book-unsubscribe.test.ts pins it.
+    // Clear ALL per-symbol state to ensure clean resync
+    this.orderBooks.delete(symbol);
+    this.bookRaw.delete(symbol); // #507: the raw mirror must go with it
+    this.symbolStats.delete(symbol);
+    this.pendingSubscriptions.delete(symbol);
+    this.subscriptionAcks.delete(symbol);
+    this.firstTickReceived.delete(symbol);
+    this.firstTickReceived.delete(symbol + '_book');
+    this.tickFrequencyData.delete(symbol);
+    this.lastBroadcastTime.delete(symbol);
+    
+    console.log(`[8.9.5][SOFT_RESUB] Cleared all state for ${symbol}`);
+    
+    // Use the existing unsubscribe helper for proper handling
+    this.unsubscribeFromSymbols([symbol]);
+    
+    // B-PRICE-SIDE-BY-JOB r5 P-7b: unsubscribeFromSymbols now cancels the book channel as well, so the raw
+    // book unsubscribe this block used to send here is gone — one home, and no duplicate cancel.
+    
+    // Wait before resubscribing to allow cleanup
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Resubscribe using the existing helper (subscribes to both ticker+book)
+    this.subscribeToSymbols([symbol]);
+    console.log(`[8.9.5][SOFT_RESUB] Resubscribed ${symbol}`);
+  }
+

@@ -1,0 +1,28 @@
+// ARCHIVED by B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220), CC-B, 2026-10-20. NOT COMPILED. Verbatim from
+// server/services/monitoring/mini-book-integrity-monitor.ts at e400fed12 (pre-removal). See DELETED_COMPONENTS_LOG.
+
+  /**
+   * ⚠️ INTENTIONALLY RETAINED AND DELIBERATELY UNCALLED — this is NOT a missed call site.
+   *
+   * B-MBIM-SWITCH-ON made this monitor LOG-ONLY (BLOCKER-3): `softResubscribe` deletes the
+   * per-symbol order book, and `getBookForFill` returns null on an empty book behind the
+   * FAIL-CLOSED #295 open-depth gate — so remediating drift here can silently block a promotion.
+   *
+   * It is kept rather than deleted because the remediation is already HOMED: `#507` assigns
+   * resubscribe-on-mismatch to CC-B at the Phase-20 WS-lifecycle item, alongside `#506`. That batch
+   * wants this method; deleting it now would mean rewriting it there.
+   *
+   * Rule 18 requires a 'left intentionally' item be stated so a later grep does not read it as an
+   * incomplete sweep. This docblock is that statement.
+   */
+  private async triggerSoftResubscribe(symbol: string, driftPct: number): Promise<void> {
+    console.warn(`[8.9.5][SENTINEL] Soft resubscribe triggered for ${symbol} (drift: ${driftPct.toFixed(3)}%)`);
+    
+    try {
+      await krakenWebSocketAdapter.softResubscribe(symbol);
+      console.log(`[8.9.5][SENTINEL] Resubscribe complete for ${symbol}`);
+    } catch (err: any) {
+      console.error(`[8.9.5][SENTINEL] Resubscribe failed for ${symbol}:`, err?.message || err);
+    }
+  }
+

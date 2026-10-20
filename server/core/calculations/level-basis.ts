@@ -367,7 +367,7 @@ export interface LevelBasisRungKey extends LevelBasisFunnelKey {
  * never judges eligibility — the caller does, and `touch-price.ts` owns that policy. Widening
  * `LevelBasisRefusal` would let a pure basis assessment return a verdict it has no standing to make.
  */
-export type FunnelRefusal = LevelBasisRefusal | 'book_not_eligible';
+export type FunnelRefusal = LevelBasisRefusal | 'book_not_eligible' | 'book_untrusted';
 
 /** Structural, so a `LevelBasisResult` satisfies it without the recorder depending on that shape. */
 export interface FunnelOutcome {
@@ -397,10 +397,11 @@ export interface FunnelOutcome {
 
 /**
  * `3n.l` increment 2, P12 (OBJ-7): the book rung's verdict on a walk the TICKER rung then accepted.
- * `book_absent` = the book rung refused `no_book`; `book_not_eligible` = the caller ruled the book out (no caller does
- * today: every one passes `bookEligible: true`); `book_refused` = a book existed and failed a quality check.
+ * `book_absent` = the book rung refused `no_book`; `book_not_eligible` = the caller ruled the book out (no crypto caller
+ * does: each passes `bookEligible: true`); `book_untrusted` = the book's own checksum circuit breaker refused it (#1220);
+ * `book_refused` = a book existed and failed a quality check.
  */
-export type TickerAcceptBookVerdict = 'book_absent' | 'book_not_eligible' | 'book_refused';
+export type TickerAcceptBookVerdict = 'book_absent' | 'book_not_eligible' | 'book_untrusted' | 'book_refused';
 
 interface FunnelCell {
   /**
@@ -462,7 +463,7 @@ function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
     acceptedAge: { book: newBuckets(), ticker: newBuckets() },
     acceptedAgeMaxMs: { book: 0, ticker: 0 },
     acceptedAgeN: { book: 0, ticker: 0 },
-    tickerAcceptedByBookVerdict: { book_absent: 0, book_not_eligible: 0, book_refused: 0 },
+    tickerAcceptedByBookVerdict: { book_absent: 0, book_not_eligible: 0, book_untrusted: 0, book_refused: 0 },
     byReason: {
       no_book: 0,
       one_sided_book: 0,
@@ -473,6 +474,7 @@ function emptyCell(rung: LevelBasisRung, stage: LevelBasisStage): FunnelCell {
       stale_book: 0,
       implausible_spread: 0,
       book_not_eligible: 0,
+      book_untrusted: 0,
     },
   };
 }
@@ -551,7 +553,9 @@ export type LadderRefusal =
   | 'non_finite_ticker_side'
   | 'ticker_age_unknown'
   | 'stale_ticker'
-  | 'implausible_ticker_spread';
+  | 'implausible_ticker_spread'
+  /** #1220: the ticker's sides were written by a book the circuit breaker refused (`ws_book` producer). */
+  | 'ticker_from_untrusted_book';
 
 const LADDER_REASON_NAME: Record<FunnelRefusal, LadderRefusal> = {
   no_book: 'no_ticker',
@@ -565,6 +569,7 @@ const LADDER_REASON_NAME: Record<FunnelRefusal, LadderRefusal> = {
   // Unreachable on the ladder rung — eligibility is judged on the book only — but the map is
   // TOTAL so that adding a funnel reason later cannot silently drop it from the ladder's view.
   book_not_eligible: 'no_ticker',
+  book_untrusted: 'ticker_from_untrusted_book',
 };
 
 export interface LevelBasisFunnelRow {

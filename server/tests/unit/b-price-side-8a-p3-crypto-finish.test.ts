@@ -30,9 +30,11 @@ const readers = (o: {
   books?: Record<string, CryptoBookTop>;
   cached?: Record<string, ReturnType<typeof sides>>;
   normalize?: (s: string) => string;
+  untrusted?: string[];
 }): CryptoTouchReaders => ({
   normalize: o.normalize ?? ((s) => s),
   getBook: (s) => o.books?.[s] ?? null,
+  isBookTrusted: (s) => !(o.untrusted ?? []).includes(s),
   getCached: (s) => o.cached?.[s] ?? null,
 });
 const EXIT_VTS = { maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION };

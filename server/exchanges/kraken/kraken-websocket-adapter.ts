@@ -21,7 +21,7 @@ import {
 import { priceTraceService } from '../../services/price-trace-service.js';
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
 import { priceCache } from '../../services/price-cache.js';
-import { volumeClassifier, VolumeTier, TIER_THRESHOLDS } from '../../services/market-data/volume-classifier.js';
+import axios from 'axios';
 import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from '../../services/market-data/kraken-v2-translator.js';
 import { observeBookTickerPair, buildBookTickerAlertCopy, BOOK_TICKER_ALERT_ARMED, BOOK_TICKER_FIRE_CONSECUTIVE } from '../../services/market-data/book-ticker-disagreement.js'; // B-PRICE-SIDE-BY-JOB r5 P-7e
 import { resolveVenueGrid } from '../../markets/venue-grid-resolver.js'; // P-7e: the published price tick
@@ -248,6 +248,50 @@ export function __resetVenueTimestampPresenceForTest(): void {
   for (const k of Object.keys(_venueTsSeen)) delete _venueTsSeen[k];
 }
 
+/**
+ * B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220) - per-symbol trust in the WS order book.
+ * `trusted`: no checksum has disagreed, or the last disagreement was cleared by a matching snapshot.
+ * `suspect`: a checksum disagreed; the book is HELD (never wiped) and refused by every reader until a snapshot is verified.
+ * `untrusted`: confirmed bad; the book channel is cancelled and no further book request is sent until an operator re-check.
+ */
+export type BookTrustState = 'trusted' | 'suspect' | 'untrusted';
+
+interface BookTrustRecord {
+  state: BookTrustState;
+  /** First mismatch of the episode; the alert key's episode stamp. Kept across a restore so a re-desync inside the window confirms the SAME episode. */
+  episodeStartIso: string | null;
+  lastRestoreMs: number | null;
+  /** One automatic REST `AssetPairs` precision re-read per episode (pre-audit r3 BLOCKER-3). */
+  precisionRereadDone: boolean;
+  lastOurs: number | null;
+  lastTheirs: number | null;
+  reason: string | null;
+  /** Set only by the operator re-check route, carrying the canonical actor that resolves the alert on a restore. */
+  recheck: { by: string; requestedAtMs: number } | null;
+}
+
+/**
+ * #1220 BLOCKER-3: a pair's price/qty precision read from Kraken REST `AssetPairs` (`pair_decimals` / `lot_decimals`),
+ * which the v2 `instrument` channel states as `price_precision` / `qty_precision`. One public call for ONE pair, made at
+ * most once per episode, so it cannot rebuild the 2026-10-13 request storm. `null` = not readable; never a guess.
+ */
+async function readAssetPairsPrecision(internalSymbol: string): Promise<{ price: number; qty: number } | null> {
+  const entry = krakenAssetPairsService.getAllMappings().find((e) => e.internalSymbol === internalSymbol);
+  if (!entry?.krakenRestPair) return null;
+  const r = await axios.get<{ error: string[]; result: Record<string, { pair_decimals?: number; lot_decimals?: number }> }>(
+    'https://api.kraken.com/0/public/AssetPairs', { params: { pair: entry.krakenRestPair }, timeout: 10_000 },
+  );
+  if (r.data.error && r.data.error.length > 0) return null;
+  const row = Object.values(r.data.result ?? {})[0];
+  const price = Number(row?.pair_decimals), qty = Number(row?.lot_decimals);
+  return isBoundedPrecision(price) && isBoundedPrecision(qty) ? { price, qty } : null;
+}
+
+/** #1220 plan 6: a precision outside 0-18 cannot format a checksum input, so it is refused rather than used. */
+function isBoundedPrecision(n: number): boolean {
+  return Number.isInteger(n) && n >= 0 && n <= 18;
+}
+
 export class KrakenWebSocketAdapter extends EventEmitter {
   /**
    * ⛔⛔ THE TYPED EMIT — B-PRICE-SIDE-BY-JOB, 2026-09-05. **ADDED BECAUSE THE GUARANTEE
@@ -342,7 +386,32 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // for the depth-walked fill warmth gate (distinct from symbolStats.lastUpdate which
   // can conflate ticker + book channels).
   private bookUpdatedAt = new Map<string, number>();
-  
+  // ⛔⛔ B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220; Kyle 2026-10-20: "when we can properly and reliably check and confirm that,
+  // then we can stop the requests for that symbol straight away"). Per-symbol book TRUST, in its OWN map that NO reset path
+  // clears (`stop`, `softResubscribeAll`, a reconnect): a reset that forgot a confirmed-bad book would re-subscribe it and
+  // rebuild the 2026-10-13 loop. Absent = trusted. Read through `isBookTrusted`; pre-audit plan 2.
+  private bookTrust = new Map<string, BookTrustRecord>();
+  /** One per symbol while a book-only resync is out, so a burst of mismatches sends exactly ONE request. Holds its timeout. */
+  private bookResyncInFlight = new Map<string, NodeJS.Timeout>();
+  private bookResyncsSent = new Map<string, number>();
+  private bookTrustConfirmed = new Map<string, number>();
+  private bookFramesIgnoredUntrusted = new Map<string, number>();
+  private bookSubscribeRejected = new Map<string, number>();
+  private bookUnsubRejected = new Map<string, number>();
+  private bookPrecisionRefused = new Map<string, number>();
+  /** Book subscribes in flight by `req_id`, so a rejection is attributed to the symbols WE named (plan 7). */
+  private pendingBookSubscribes = new Map<number, { symbols: string[]; sentAtMs: number }>();
+  /** The one REST read the breaker makes. A field so a test can drive it; production never reassigns it. */
+  private precisionReader: (internalSymbol: string) => Promise<{ price: number; qty: number } | null> = readAssetPairsPrecision;
+  /** Every book subscribe asks this depth, and the handler's no-ACK default is the same constant (record item: `?? 10`). */
+  private readonly BOOK_SUBSCRIBE_DEPTH = 10;
+  private readonly BOOK_RESYNC_DELAY_MS = 500;
+  private readonly BOOK_RESYNC_TIMEOUT_MS = 30_000;
+  /** ⚠️ A JUDGEMENT, not a measurement: n = 1 episode, no inter-arrival distribution exists (pre-audit r3 BLOCKER-3). */
+  private readonly BOOK_REDESYNC_WINDOW_MS = 60_000;
+  /** Bounds the CONNECTING state, which `connect()` now refuses on (pre-audit plan 1, record item (a)). */
+  private readonly HANDSHAKE_TIMEOUT_MS = 15_000;
+
   // Phase 8.8.3-I8C: Subscription reliability - open positions provider and audit interval
   private i8cAuditInterval: NodeJS.Timeout | null = null;
   private i8cOpenPositionsProvider: (() => Promise<string[]>) | null = null;
@@ -394,12 +463,10 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   // feed-integrity monitor differences per interval. Counted at the OPEN, so a drop that takes three attempts counts once.
   private reconnectsCompleted: number = 0;
   private globalHeartbeatMonitorInterval: NodeJS.Timeout | null = null;
-  private channelWatchdogTimers: Map<string, NodeJS.Timeout> = new Map();
   private healthMetricsLoggerInterval: NodeJS.Timeout | null = null;
   private startTime: number = Date.now();
   
   // Phase 8.8.5: Health metrics tracking
-  private sentinelResets: number = 0;
   private heartbeatLatencies: number[] = [];
   private restFallbacksBlocked: number = 0;
   private restFallbacksAllowed: number = 0;
@@ -569,20 +636,41 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   }
 
   private async connect(): Promise<void> {
-    if (this.isConnecting) return;
-    
+    // ⛔⛔ B-BOOK-CHECKSUM-CIRCUIT-BREAKER plan 1 (#1220) — ONE SOCKET AT A TIME. On 2026-10-13 a socket kept delivering into
+    // the shared book after `this.ws` had been reassigned away from it, and its frames kept the 90-monitor's clock fed, so
+    // nothing recovered. The refusal predicate is the SOCKET ITSELF, not `isConnecting`: three writers zero that flag so
+    // their own `connect()` is not refused, so it was open across every delayed reconnect (pre-audit r3 A7, r4 B3).
+    // ⛔ CLOSING is deliberately NOT refused, so the graceful-close sites (`reconnectWithBackoff`, `softResubscribeAll`)
+    //   still proceed. Do NOT "simplify" this to `!== WebSocket.CLOSED`.
+    const prev = this.ws;
+    if (prev && (prev.readyState === WebSocket.CONNECTING || prev.readyState === WebSocket.OPEN)) {
+      console.log(`[#1220][CONNECT_REFUSED] a socket is already ${prev.readyState === WebSocket.OPEN ? 'OPEN' : 'CONNECTING'} — not opening a second`);
+      return;
+    }
+    if (prev) {
+      // DETACH, THEN TERMINATE, in that order: `terminate()` emits `close`, and a still-attached listener would run
+      // `handleClose` (cleanup + `scheduleReconnect`) against the NEW socket. The no-op `error` listener keeps a detached
+      // socket's late error from becoming an unhandled 'error' event.
+      prev.removeAllListeners();
+      prev.on('error', () => {});
+      try { prev.terminate(); } catch { /* already closed */ }
+    }
+
     this.isConnecting = true;
     this.cleanup();
-    
+
     try {
-      this.ws = new WebSocket(this.WS_URL);
-      
-      this.ws.on('open', () => this.handleOpen());
-      this.ws.on('message', (data: WebSocket.Data) => this.handleMessage(data));
-      this.ws.on('close', (code: number, reason: Buffer) => this.handleClose(code, reason.toString()));
-      this.ws.on('error', (error: Error) => this.handleError(error));
-      this.ws.on('pong', () => this.handlePong());
-      
+      const sock = new WebSocket(this.WS_URL, { handshakeTimeout: this.HANDSHAKE_TIMEOUT_MS });
+      this.ws = sock;
+      // ⛔ THE IDENTITY GUARD IS THE FIRST STATEMENT OF EVERY HANDLER, above any state write (pre-audit r3 CONDITION-1,
+      // r5 C-3): `handleMessage`'s first lines write the two liveness clocks, and an orphan feeding them is what kept the
+      // 10-13 episode from recovering. A frame, pong, close or error from a socket that is no longer `this.ws` does nothing.
+      sock.on('open', () => { if (this.ws !== sock) return; this.handleOpen(); });
+      sock.on('message', (data: WebSocket.Data) => { if (this.ws !== sock) return; this.handleMessage(data); });
+      sock.on('close', (code: number, reason: Buffer) => { if (this.ws !== sock) return; this.handleClose(code, reason.toString()); });
+      sock.on('error', (error: Error) => { if (this.ws !== sock) return; this.handleError(error); });
+      sock.on('pong', () => { if (this.ws !== sock) return; this.handlePong(); });
+
     } catch (error) {
       console.error(`[${this.MODULE_NAME}] Connection error:`, error);
       this.isConnecting = false;
@@ -603,6 +691,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     this.isConnected = true;
     this.isConnecting = false;
     this.reconnectAttempts = 0;
+    // #1220 record item (e): `reconnectWithBackoff`'s counter was never reset, so its delay sat at the cap for the life of
+    // the process after the sixth episode ("attempt 2" on 2026-10-13 17:15:30 confirmed it).
+    this.reconnectRetries = 0;
     this.lastPongTime = Date.now();
     
     this.startHeartbeat();
@@ -613,7 +704,15 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     
     // Directive 9.0.A: Start 9.0 safe heartbeat monitor
     this.start90HeartbeatMonitor();
-    
+
+    // #1220 plan 9: the `instrument` subscription covers every pair and carries no symbol list, so it goes out ONCE per
+    // socket open rather than once per subscribe batch. Unknown precision fails open, so a late subscriber is not starved.
+    try {
+      this.ws?.send(JSON.stringify({ method: 'subscribe', params: { channel: 'instrument', snapshot: true } }));
+    } catch (error) {
+      console.error(`[#1220][INSTRUMENT_SUB_ERROR]`, error);
+    }
+
     if (this.pendingSubscriptions.size > 0) {
       console.log(`[${this.MODULE_NAME}] Subscribing to ${this.pendingSubscriptions.size} pending symbols`);
       this.subscribeToSymbols(Array.from(this.pendingSubscriptions));
@@ -635,7 +734,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.subscribedSymbols.clear();
       this.subscribeToSymbols(symbols);
     }
-    
+
+    // #1220 plan 2: a SUSPECT book's resync waits for an open socket — the mismatch path never wipes and never sends while
+    // the socket is down. A fresh socket holds no book subscription, so this is a subscribe only.
+    for (const [sym, rec] of this.bookTrust) {
+      if (rec.state === 'suspect') this.requestBookResync(sym, 'sub_only');
+    }
+
     contextBridge.broadcast({
       type: 'ws_price_engine',
       payload: {
@@ -811,11 +916,22 @@ export class KrakenWebSocketAdapter extends EventEmitter {
           this.pendingSubscriptions.delete(internalSymbol);
           this.subscriptionRequests.delete(internalSymbol);
           this.subscriptionAcks.set(internalSymbol, { acked: true, timestamp: Date.now() });
+          if (result.channel === 'book') this.settleBookSubscribe(message.req_id, internalSymbol);
         } else {
           console.warn(`[8.9.0-B][WS] Sub OK but unmapped: ${symbol}`);
         }
       } else if (!success) {
         console.error(`[8.9.0-B][WS] Sub Error: ${error}`);
+        // #1220 plan 7: a rejected BOOK subscribe is attributed to the symbols that request named, via its `req_id`.
+        const asked = typeof message.req_id === 'number' ? this.pendingBookSubscribes.get(message.req_id) : undefined;
+        if (asked) {
+          const echoed = typeof message.symbol === 'string' ? this.mapKrakenPairToInternalSymbol(message.symbol) : null;
+          const blamed = echoed && asked.symbols.includes(echoed) ? [echoed] : asked.symbols;
+          for (const sym of blamed) this.bumpMap(this.bookSubscribeRejected, sym);
+          asked.symbols = asked.symbols.filter((x) => !blamed.includes(x));
+          if (asked.symbols.length === 0) this.pendingBookSubscribes.delete(message.req_id);
+          console.error(`[#1220][BOOK_SUB_REJECTED] req_id=${message.req_id} symbols=${JSON.stringify(blamed)} error=${error ?? 'none'}`);
+        }
       }
     } else if (method === 'unsubscribe') {
       // B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4 BLOCKER-1): find the REQUEST this reply answers, so what we asked
@@ -829,6 +945,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         // A REJECTED unsubscribe used to be discarded here with no trace, so a wrong book depth left exactly the same
         // log as a correct one. Logged loudly, with what we asked and what Kraken said, so Step 8 has an instrument.
         console.error(`[P-7b][WS_UNSUB_REJECTED] req_id=${reqId ?? '-'} channel=${asked?.channel ?? result?.channel ?? '?'} symbols=${JSON.stringify(asked?.symbols ?? message.symbol ?? result?.symbol ?? null)} depth=${asked?.depth ?? result?.depth ?? '-'} error=${error ?? 'none'}`);
+        // #1220 plan 2: a rejected BOOK unsubscribe is COUNTED, never retried — a retry loop is the failure this batch removes.
+        if (asked?.channel === 'book') {
+          for (const k of asked.symbols) {
+            const sym = this.mapKrakenPairToInternalSymbol(k);
+            if (sym) this.bumpMap(this.bookUnsubRejected, sym);
+          }
+        }
       }
     } else if (method === 'pong') {
       this.lastPongTime = Date.now();
@@ -947,7 +1070,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       {
         const _bk = this.orderBooks.get(internalSymbol);
         const _bkAt = this.bookUpdatedAt.get(internalSymbol);
-        if (_bk && _bkAt !== undefined && _bk.bids.size > 0 && _bk.asks.size > 0 && bid > 0 && ask > 0) {
+        if (_bk && _bkAt !== undefined && this.isBookTrusted(internalSymbol) && _bk.bids.size > 0 && _bk.asks.size > 0 && bid > 0 && ask > 0) {
           const _o = observeBookTickerPair({
             symbol: internalSymbol,
             tickerBid: bid,
@@ -1033,7 +1156,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       const sym = this.mapKrakenPairToInternalSymbol(pr?.symbol);
       const price = Number(pr?.price_precision);
       const qty = Number(pr?.qty_precision);
-      if (!sym || !Number.isInteger(price) || !Number.isInteger(qty)) continue;
+      if (!sym) continue;
+      // #1220 plan 6: bounded to 0-18 on BOTH fields. An out-of-range value cannot format a checksum input, and using it
+      // would mismatch every frame for that pair — the breaker would then confirm a good book bad. Refused and counted.
+      if (!isBoundedPrecision(price) || !isBoundedPrecision(qty)) {
+        this.bumpMap(this.bookPrecisionRefused, sym);
+        continue;
+      }
       this.symbolPrecision.set(sym, { price, qty });
       learned++;
     }
@@ -1109,6 +1238,15 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // a bogus sequence check and named real validation as unbuilt. Truncation is the half of
       // the contract nobody had read.
       const isSnapshot = message.type === 'snapshot';
+      const bump = (m: Map<string, number>) => m.set(internalSymbol, (m.get(internalSymbol) ?? 0) + 1);
+      // ⛔ #1220 plan 2: a NON-TRUSTED book takes nothing but a snapshot — and an untrusted one only the snapshot its
+      // operator re-check asked for. A delta applied to a book already known to disagree can only compound the error, so
+      // it is dropped and counted; the held book stays exactly as it was, and its age keeps growing.
+      const _trust = this.bookTrust.get(internalSymbol);
+      if (_trust && _trust.state !== 'trusted' && (!isSnapshot || (_trust.state === 'untrusted' && !_trust.recheck))) {
+        bump(this.bookFramesIgnoredUntrusted);
+        continue;
+      }
       if (isSnapshot || !this.orderBooks.has(internalSymbol)) {
         // A snapshot is the AUTHORITATIVE state: replace, never merge.
         this.orderBooks.set(internalSymbol, { bids: new Map(), asks: new Map() });
@@ -1116,7 +1254,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
       const book = this.orderBooks.get(internalSymbol)!;
       const raw = this.bookRaw.get(internalSymbol)!;
-      const depth = this.bookDepth.get(internalSymbol) ?? 10;
+      const depth = this.bookDepth.get(internalSymbol) ?? this.BOOK_SUBSCRIBE_DEPTH;
 
       // Apply levels. qty=0 deletes; otherwise set. Raw strings kept for the checksum.
       for (const side of ['bids', 'asks'] as const) {
@@ -1133,33 +1271,26 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       // TRUNCATE to the subscribed depth -- the documented, mandatory step this handler lacked.
       this.truncateBook(book, raw, depth);
 
-      // CHECKSUM -- ARMED AND ACTING WHERE PRECISION IS KNOWN. ⚠️ THIS HEADER SAID "OBSERVE ONLY,
-      // NEVER ACT" AND "this branch only counts" LONG AFTER THAT STOPPED BEING TRUE -- the mismatch
-      // arm below resubscribes and `continue`s. Corrected 2026-08-24 (Langston, at the
-      // B-MBIM-SWITCH-ON deploy gate): a comment describing code that is not there, on the trading
-      // path, is worse than no comment. The history below is why the observe-only era existed.
-      // The first version of this hotfix verified the checksum and resubscribed on mismatch. It
-      // could never match: Kraken sends price/qty as JSON NUMBERS, JSON.parse drops the trailing
-      // zeros, so String(qty) gives "2993" where Kraken's CRC input is "299300000". Measured
-      // against wss://ws.kraken.com/v2 by Langston: 40/40 messages carried a checksum, 0/40
-      // matched as written; 40/40 matched once formatted at the instrument's precision. Deployed,
-      // that would have resubscribed on EVERY update for EVERY pair -- a book outage and a
-      // subscribe storm in place of phantom fills. The unit suite could not see it because it
-      // fed strings with the exact formatting the wire does not send.
-      // Correct verification needs per-symbol price_precision/qty_precision from the v2
-      // `instrument` channel (not yet subscribed) and must FAIL OPEN on unknown precision. That
-      // was the follow-up (#507 remainder) and IT HAS SINCE LANDED: `symbolPrecision` is populated
-      // from the v2 `instrument` channel, so verification is now ARMED -- it FAILS OPEN on an
-      // unmapped symbol (skip, never resubscribe) and ACTS on a genuine mismatch.
-      // ⛔ CONSEQUENCE THAT MUST NOT BE LOST: the `continue` in the mismatch arm sits ABOVE the
-      // crossed-book detector, so a resubscribing update never reaches that counter. Once this is
-      // deployed, `crossedDetections` is NOT the same measurement it was before -- do not read a
-      // zero across that boundary as continuity (Langston, 2026-08-24).
-      const bump = (m: Map<string, number>) => m.set(internalSymbol, (m.get(internalSymbol) ?? 0) + 1);
       bump(this.bookUpdatesApplied);
-      // #507 remainder: verification is ARMED, but ONLY where precision is known. Langston's
-      // condition, and it is the difference between a fix and a subscribe storm: an unmapped
-      // symbol must SKIP verification, never resubscribe. Fail OPEN.
+      // CROSSED-BOOK DETECTOR -- the property the #507 truncation fix exists to guarantee, counted rather than grepped for.
+      // MEASURED pre-fix on the live venue by replicating the old handler: 8,358 of 26,093 book states crossed (32.03%)
+      // across 6 of 8 pairs including BTC/USD. With truncation + snapshot-replace: 0 of 31,059.
+      // ★ #1220 plan 5: it now runs ABOVE the checksum, so a book the checksum then refuses is still counted here — the
+      // crossed rate on a suspect book is readable. Byte-identical for a matching book.
+      if (book.bids.size > 0 && book.asks.size > 0
+          && Math.max(...book.bids.keys()) >= Math.min(...book.asks.keys())) {
+        bump(this.bookCrossedDetections);
+      }
+
+      // CHECKSUM -- ARMED WHERE PRECISION IS KNOWN, and since #1220 it drives the per-symbol circuit breaker.
+      // History: the first #507 version could never match (Kraken sends price/qty as JSON numbers, so `String(qty)` drops
+      // the trailing zeros its CRC input carries; 0/40 live, 40/40 once formatted at the instrument's precision). The
+      // precision feed landed, so verification is armed, and it FAILS OPEN on a symbol with no precision (skip, never act).
+      // ⛔⛔ THE MISMATCH ARM USED TO CALL `softResubscribe`, WHICH DELETED THE BOOK AND RESUBSCRIBED BOTH CHANNELS — AND
+      // THAT WAS THE 2026-10-13 LOOP: the next delta built a partial book on the empty map, mismatched, and was wiped again,
+      // at frame rate, until Kraken rate-limited the connection. It now HOLDS the book and hands the symbol to the breaker
+      // (`onBookChecksumMismatch`): one book-only resync, an automatic precision re-read, then trusted or untrusted.
+      let _verified = false;
       if (typeof update.checksum === 'number') {
         const prec = this.symbolPrecision.get(internalSymbol);
         if (!prec) {
@@ -1169,24 +1300,17 @@ export class KrakenWebSocketAdapter extends EventEmitter {
           const ours = this.computeBookChecksum(raw, prec);
           if (ours === update.checksum) {
             bump(this.bookChecksumMatches);
+            _verified = true;
+            if (_trust && _trust.state !== 'trusted') this.restoreBookTrust(internalSymbol, ours);
           } else {
             bump(this.bookChecksumMismatches);
-            const n = this.bookChecksumMismatches.get(internalSymbol) ?? 0;
-            console.warn(`[#507][BOOK_CHECKSUM_MISMATCH] ${internalSymbol} ours=${ours} theirs=${update.checksum} depth=${depth} count=${n} — book desynced, resubscribing for a fresh snapshot`);
-            void this.softResubscribe(internalSymbol);
+            this.onBookChecksumMismatch(internalSymbol, ours, update.checksum, depth);
             continue;
           }
         }
       }
-      // CROSSED-BOOK DETECTOR -- the property the fix exists to guarantee, counted rather than
-      // grepped for. Langston at the gate: an absence needs an instrument and a denominator.
-      // MEASURED pre-fix on the live venue by replicating the old handler: 8,358 of 26,093
-      // book states crossed (32.03%) across 6 of 8 pairs including BTC/USD. With truncation +
-      // snapshot-replace: 0 of 31,059. Post-deploy this counter must stay at 0.
-      if (book.bids.size > 0 && book.asks.size > 0
-          && Math.max(...book.bids.keys()) >= Math.min(...book.asks.keys())) {
-        bump(this.bookCrossedDetections);
-      }
+      // A non-trusted book is restored ONLY by a verified match; an unverifiable snapshot leaves it refused.
+      if (_trust && _trust.state !== 'trusted' && !_verified) continue;
 
       // P19-B4b.1: stamp book-specific freshness on every applied delta (before the
       // BBO-validity continue below, so a transiently one-sided book still records its age).
@@ -1459,6 +1583,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     this.isConnected = false;
     this.isConnecting = false;
     this.cleanup();
+    // #1220: a resync in flight on this socket can no longer be answered. Its timeout would otherwise fire after the next
+    // open and confirm a book bad for a snapshot that was never coming; `handleOpen` re-requests every suspect instead.
+    for (const t of this.bookResyncInFlight.values()) clearTimeout(t);
+    this.bookResyncInFlight.clear();
+    // An operator re-check sent on this socket is abandoned with it; the operator re-issues it (the route says why).
+    for (const rec of this.bookTrust.values()) rec.recheck = null;
     
     if (code !== 1000) {
       this.scheduleReconnect();
@@ -1588,34 +1718,20 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       }
     };
     
-    // #507 remainder: one subscription, no symbol list, covers every pair. Sent alongside the
-    // existing ticker/book subscribes on the SAME socket.
-    const instrumentSubscribe = {
-      method: 'subscribe',
-      params: { channel: 'instrument', snapshot: true }
-    };
+    // ⛔ #1220 plan 3: the BOOK goes out only for TRUSTED symbols. A suspect book is re-requested by the breaker's own
+    // resync and an untrusted one only by the operator re-check, so no other subscribe path can re-arm a book the breaker
+    // has stopped. The ticker is untouched. (#507 plan 9: the `instrument` subscribe moved to `handleOpen`, once per socket.)
+    const bookInternals = symbols.filter((s) => this.isBookTrusted(normalizeToInternalSymbol(s)));
+    const withheld = symbols.length - bookInternals.length;
+    if (withheld > 0) console.warn(`[#1220][BOOK_SUB_WITHHELD] ${withheld} non-trusted symbol(s) get the ticker only`);
 
-    const bookSubscribe = {
-      method: 'subscribe',
-      params: {
-        channel: 'book',
-        symbol: krakenSymbols,
-        depth: 10,  // Top 10 levels for redundancy
-        snapshot: true
-      }
-    };
-    // #507: subscribed depth is recorded from the subscribe ACK (granted depth), not here.
-    
     // I7-WS-SUBSCRIBE: Log exact payloads being sent
     console.log("[I7-WS-SEND][ticker]", JSON.stringify(tickerSubscribe));
-    console.log("[I7-WS-SEND][book]", JSON.stringify(bookSubscribe));
-    
+
     try {
       // 8.9.4: Send both ticker and book subscriptions
       this.ws?.send(JSON.stringify(tickerSubscribe));
-      this.ws?.send(JSON.stringify(bookSubscribe));
-      // #507 remainder: precision feed, same socket. One snapshot then silence.
-      this.ws?.send(JSON.stringify(instrumentSubscribe));
+      this.sendBookSubscribe(bookInternals);
       console.log(`[${this.MODULE_NAME}] Subscribing to ${krakenSymbols.length} symbols (ticker+book): ${krakenSymbols.slice(0, 5).join(', ')}${krakenSymbols.length > 5 ? '...' : ''}`);
       
       // Phase 8.8.3-I6-FIX: Enhanced diagnostic log after subscription update
@@ -1668,9 +1784,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       this.ws?.send(JSON.stringify(unsubscribeMessage));
       // B-PRICE-SIDE-BY-JOB r5 P-7b (pre-audit A-9.3): cancel the BOOK subscription too.
       // subscribeToSymbols subscribes ticker AND book, but this path cancelled the ticker only — so
-      // clearAllSubscriptions and refreshChannel (both route through here) left book streams live at
-      // Kraken, and refreshChannel stacked a new book subscription on top of the old one. The raw book
-      // unsubscribe softResubscribe carried (8.9.5) now lives here, once, for every caller.
+      // clearAllSubscriptions (which routes through here) left book streams live at Kraken, and the 8.8.5
+      // channel-refresh path stacked a new book subscription on top of the old one. That path and the 8.9.5
+      // soft-resubscribe were both deleted by #1220; the book cancel lives here, once, for every caller.
       symbols.forEach(s => {
         this.subscribedSymbols.delete(s);
         this.pendingSubscriptions.delete(s);
@@ -1703,7 +1819,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     for (const internal of internalSymbols) {
       const kraken = this.normalToKrakenSymbol(internal);
       if (!kraken) continue;
-      const depth = this.bookDepth.get(internal) ?? 10;
+      const depth = this.bookDepth.get(internal) ?? this.BOOK_SUBSCRIBE_DEPTH;
       const group = byDepth.get(depth) ?? [];
       group.push(kraken);
       byDepth.set(depth, group);
@@ -1711,6 +1827,45 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     for (const [depth, symbol] of byDepth) {
       this.ws?.send(JSON.stringify({ method: 'unsubscribe', params: { channel: 'book', symbol, depth }, req_id: this.trackUnsubscribe('book', symbol, depth) }));
     }
+  }
+
+  /**
+   * #1220: the ONE book subscribe. Depth is `BOOK_SUBSCRIBE_DEPTH` — the same constant the handler defaults to before an ACK
+   * — and the request carries a `req_id` so a rejection is attributable (plan 7). Callers decide WHICH symbols; this
+   * method does not re-check trust, because the breaker's resync and the operator re-check send for non-trusted ones.
+   */
+  private sendBookSubscribe(internalSymbols: string[]): void {
+    const pairs: string[] = [];
+    const named: string[] = [];
+    for (const internal of internalSymbols) {
+      const kraken = this.normalToKrakenSymbol(internal);
+      if (!kraken) continue;
+      pairs.push(kraken);
+      named.push(normalizeToInternalSymbol(internal));
+    }
+    if (pairs.length === 0) return;
+    const now = Date.now();
+    for (const [id, p] of this.pendingBookSubscribes) {
+      if (now - p.sentAtMs > 60_000) this.pendingBookSubscribes.delete(id);
+    }
+    const reqId = this.nextUnsubscribeReqId++; // one req_id sequence for every tracked request; ids only need to be unique
+    this.pendingBookSubscribes.set(reqId, { symbols: named, sentAtMs: now });
+    const msg = { method: 'subscribe', params: { channel: 'book', symbol: pairs, depth: this.BOOK_SUBSCRIBE_DEPTH, snapshot: true }, req_id: reqId };
+    console.log("[I7-WS-SEND][book]", JSON.stringify(msg));
+    this.ws?.send(JSON.stringify(msg));
+  }
+
+  /** #1220 plan 7: a book subscribe ACK settles that symbol's share of its request. */
+  private settleBookSubscribe(reqId: unknown, internalSymbol: string): void {
+    if (typeof reqId !== 'number') return;
+    const p = this.pendingBookSubscribes.get(reqId);
+    if (!p) return;
+    p.symbols = p.symbols.filter((x) => x !== internalSymbol);
+    if (p.symbols.length === 0) this.pendingBookSubscribes.delete(reqId);
+  }
+
+  private bumpMap(m: Map<string, number>, k: string): void {
+    m.set(k, (m.get(k) ?? 0) + 1);
   }
 
   /** B-PRICE-SIDE-BY-JOB r5 P-7b: register an outgoing unsubscribe and return its req_id; stale entries are swept first. */
@@ -2839,6 +2994,12 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // and the close walk for exactly the illiquid pairs this path targets. Depth is recorded from
     // the subscribe ACK (result.depth) in handleSubscribeAck -- the depth Kraken GRANTED.
     
+    // ⛔ #1220 plan 3: the raw book subscribe below bypasses `subscribeToSymbols`, so it is gated here too.
+    if (!this.isBookTrusted(normalizeToInternalSymbol(symbol))) {
+      console.warn(`[#1220][CHANNEL_SWITCH_REFUSED] ${symbol} book is not trusted — no book subscribe`);
+      return;
+    }
+
     // Get Kraken pair
     const krakenPair = this.normalToKrakenSymbol(symbol);
     if (!krakenPair || !this.isConnected || !this.ws) return;
@@ -3356,84 +3517,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     }
     
     this.isConnected = false;
-    this.isConnecting = false;
+    // #1220 (r4 B3): `isConnecting` is no longer zeroed here. `connect()` refuses on the socket's own state, so this flag
+    // never gated the reconnect it was cleared for, and clearing it opened the window a second scheduler landed in.
     this.i8cIsReconnecting = true;
     this.reconnectRetries++;
     
     setTimeout(() => {
       this.connect();
     }, delay);
-  }
-
-  /**
-   * Phase 8.8.5: Start tier-aware channel watchdog for a symbol
-   * Uses VolumeClassifier to determine appropriate timeouts
-   */
-  startChannelWatchdog(symbol: string): void {
-    const normalizedSymbol = normalizeToInternalSymbol(symbol);
-    
-    // Clear existing watchdog for this symbol
-    this.stopChannelWatchdog(normalizedSymbol);
-    
-    const tier = volumeClassifier.getTier(normalizedSymbol);
-    const thresholds = TIER_THRESHOLDS[tier];
-    
-    console.log(`[8.8.5][WATCHDOG] Starting watchdog for ${normalizedSymbol} (tier=${tier}, reset=${thresholds.resetTimeoutMs}ms)`);
-    
-    const timer = setTimeout(() => {
-      this.handleChannelTimeout(normalizedSymbol, tier);
-    }, thresholds.resetTimeoutMs);
-    
-    this.channelWatchdogTimers.set(normalizedSymbol, timer);
-  }
-
-  /**
-   * Phase 8.8.5: Stop channel watchdog for a symbol
-   */
-  stopChannelWatchdog(symbol: string): void {
-    const timer = this.channelWatchdogTimers.get(symbol);
-    if (timer) {
-      clearTimeout(timer);
-      this.channelWatchdogTimers.delete(symbol);
-    }
-  }
-
-  /**
-   * Phase 8.8.5: Reset channel watchdog when tick is received
-   */
-  resetChannelWatchdog(symbol: string): void {
-    const normalizedSymbol = normalizeToInternalSymbol(symbol);
-    if (this.channelWatchdogTimers.has(normalizedSymbol)) {
-      this.startChannelWatchdog(normalizedSymbol);
-    }
-  }
-
-  /**
-   * Phase 8.8.5: Handle channel timeout - refresh single channel without full reconnect
-   */
-  private handleChannelTimeout(symbol: string, tier: VolumeTier): void {
-    console.log(`[8.8.5][WATCHDOG] Channel timeout for ${symbol} (tier=${tier}), refreshing subscription`);
-    this.sentinelResets++;
-    
-    // Refresh single channel
-    this.refreshChannel(symbol);
-  }
-
-  /**
-   * Phase 8.8.5: Refresh a single channel subscription without full reconnect
-   */
-  refreshChannel(symbol: string): void {
-    const normalizedSymbol = normalizeToInternalSymbol(symbol);
-    
-    console.log(`[8.8.5][REFRESH] Refreshing channel for ${normalizedSymbol}`);
-    
-    // Unsubscribe and resubscribe to refresh the channel
-    this.unsubscribeFromSymbols([normalizedSymbol]);
-    
-    setTimeout(() => {
-      this.subscribeToSymbols([normalizedSymbol]);
-      this.startChannelWatchdog(normalizedSymbol);
-    }, 500); // Small delay between unsub/sub
   }
 
   /**
@@ -3476,7 +3567,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
 
     const healthLog = `[Health Audit]
 - Uptime: ${uptimeMinutes} minutes
-- Sentinel Resets: ${this.sentinelResets}
 - Heartbeat Latency: ${avgLatency}ms
 - REST Fallbacks Blocked: ${this.restFallbacksBlocked}
 - REST Fallbacks Allowed: ${this.restFallbacksAllowed}
@@ -3539,13 +3629,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    */
   getHealthMetrics(): {
     uptimeMinutes: number;
-    sentinelResets: number;
     avgHeartbeatLatency: number;
     restFallbacksBlocked: number;
     restFallbacksAllowed: number;
     subscribedSymbols: number;
     isConnected: boolean;
-    channelWatchdogs: number;
   } {
     const uptimeMs = Date.now() - this.startTime;
     const avgLatency = this.heartbeatLatencies.length > 0
@@ -3554,13 +3642,11 @@ export class KrakenWebSocketAdapter extends EventEmitter {
 
     return {
       uptimeMinutes: Math.floor(uptimeMs / 60000),
-      sentinelResets: this.sentinelResets,
       avgHeartbeatLatency: avgLatency,
       restFallbacksBlocked: this.restFallbacksBlocked,
       restFallbacksAllowed: this.restFallbacksAllowed,
       subscribedSymbols: this.subscribedSymbols.size,
-      isConnected: this.isConnected,
-      channelWatchdogs: this.channelWatchdogTimers.size
+      isConnected: this.isConnected
     };
   }
 
@@ -3568,7 +3654,6 @@ export class KrakenWebSocketAdapter extends EventEmitter {
    * Phase 8.8.5: Reset health metrics (for testing)
    */
   resetHealthMetrics(): void {
-    this.sentinelResets = 0;
     this.heartbeatLatencies = [];
     this.restFallbacksBlocked = 0;
     this.restFallbacksAllowed = 0;
@@ -3579,7 +3664,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   /**
    * Directive 8.9.5: Get latest bid/ask/mid from mini-book for integrity monitoring
    */
-  getLatestPriceData(symbol: string): { bid: number; ask: number; mid: number } | null {
+  getLatestPriceData(symbol: string): { bid: number; ask: number; mid: number; trust: BookTrustState } | null {
     const book = this.orderBooks.get(symbol);
     if (!book || book.bids.size === 0 || book.asks.size === 0) {
       return null;
@@ -3595,7 +3680,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     return {
       bid: bestBid,
       ask: bestAsk,
-      mid: (bestBid + bestAsk) / 2
+      mid: (bestBid + bestAsk) / 2,
+      // #1220 plan 3: a held (suspect/untrusted) book still has a top, so the reader is told which it is reading.
+      trust: this.getBookTrustState(symbol),
     };
   }
 
@@ -3612,6 +3699,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     ageMs: number;
     updatedAtMs: number;
   } | null {
+    // ⛔ #1220 plan 3 — and the dependency that makes HOLDING a mismatching book safe (pre-audit r4 B4): this accessor
+    // applied no trust test and no age test, so a held book would have been served. A non-trusted book is never served.
+    if (!this.isBookTrusted(symbol)) return null;
     const book = this.orderBooks.get(symbol);
     const updatedAt = this.bookUpdatedAt.get(symbol);
     if (!book || updatedAt === undefined || book.asks.size === 0 || book.bids.size === 0) {
@@ -3630,38 +3720,38 @@ export class KrakenWebSocketAdapter extends EventEmitter {
   }
 
   /**
-   * Directive 8.9.5: Soft resubscribe for integrity monitor
-   * Clears all per-symbol state and resubscribes without disconnecting WebSocket
-   */
-  /**
-   * #507 (Langston, hotfix gate): the observe-only checksum and crossed-book counters, readable
-   * on demand rather than inferred from a rotated log. Cumulative since process start, with the
-   * start stamp and uptime attached SO THE DENOMINATOR TRAVELS WITH THE NUMBER.
-   *
-   * ⚠️ PRE-REGISTERED READING, so a high mismatch rate is not misread as the fix failing:
-   * MISMATCH IS THE EXPECTED RESULT TODAY. Kraken sends price/qty as JSON numbers, so
-   * `String(qty)` cannot reconstruct the CRC input (measured: 0/40 match live, 40/40 once
-   * formatted at instrument precision). The v2 `instrument` channel is NOT subscribed -- see the
-   * subscribe payloads in this file: `ticker` and `book` only. (An earlier version cited 'zero
-   * instrument messages in a 3,000-line log window'. Langston: a tautology in a measurement's
-   * clothes -- a log window cannot separate NOT SUBSCRIBED from SUBSCRIBED-BUT-SILENT, so that
-   * zero was structurally guaranteed. A presence-check on the subscribe payload reads one way.)
-   * ⇒ this counter GAUGES THE PRECISION GAP, NOT BOOK INTEGRITY.
-   * ★ The INTEGRITY signal is `crossedDetections`, which must be 0. Pre-fix comparator,
-   *   measured live by replicating the old handler: 32.03% of book states crossed.
-   * ★ `matches` is the POSITIVE CONTROL for `mismatches`: a zero mismatch count is unreadable
-   *   without evidence the branch executed at all. `attempts` proves invocation either way.
+   * #507 / #1220: the checksum, crossed-book and circuit-breaker counters, readable on demand rather than inferred from a
+   * rotated log. Cumulative since process start, with the start stamp and uptime attached SO THE DENOMINATOR TRAVELS WITH
+   * THE NUMBER. Served by `GET /api/active-engine/book-integrity`.
+   * ★ `matches` is the POSITIVE CONTROL for `mismatches`; `attempts` proves the branch executed at all.
+   * ★ `crossedDetections` must be 0. Since #1220 it is counted ABOVE the checksum, so it includes books the checksum then
+   *   refused — not comparable with readings taken before that change.
+   * ★ `skippedNoPrecision` is published since #1220: precision is now populated, so the counter has a writer and a zero
+   *   is readable.
    */
   getBookIntegrityCounters(): {
     since: string; uptimeMs: number;
-    totals: { updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; crossedDetections: number };
-    bySymbol: Array<{ symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; crossedDetections: number }>;
+    totals: {
+      updatesApplied: number; checksumAttempts: number; matches: number; mismatches: number; crossedDetections: number;
+      skippedNoPrecision: number; resyncsSent: number; confirmedUntrusted: number; framesIgnoredUntrusted: number;
+      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number;
+      trust: Record<BookTrustState, number>;
+    };
+    bySymbol: Array<{
+      symbol: string; updatesApplied: number; attempts: number; matches: number; mismatches: number; crossedDetections: number;
+      skippedNoPrecision: number; resyncsSent: number; confirmedUntrusted: number; framesIgnoredUntrusted: number;
+      subscribeRejected: number; bookUnsubRejected: number; precisionRefused: number;
+      trust: BookTrustState; trustReason: string | null; episodeStart: string | null;
+    }>;
     note: string;
   } {
     const syms = new Set<string>([
       ...this.bookUpdatesApplied.keys(), ...this.bookChecksumAttempts.keys(),
       ...this.bookChecksumMatches.keys(), ...this.bookChecksumMismatches.keys(),
-      ...this.bookCrossedDetections.keys(),
+      ...this.bookCrossedDetections.keys(), ...this.bookChecksumSkippedNoPrecision.keys(),
+      ...this.bookResyncsSent.keys(), ...this.bookTrustConfirmed.keys(), ...this.bookFramesIgnoredUntrusted.keys(),
+      ...this.bookSubscribeRejected.keys(), ...this.bookUnsubRejected.keys(), ...this.bookPrecisionRefused.keys(),
+      ...this.bookTrust.keys(),
     ]);
     const g = (m: Map<string, number>, k: string) => m.get(k) ?? 0;
     const bySymbol = [...syms].sort().map((symbol) => ({
@@ -3671,7 +3761,19 @@ export class KrakenWebSocketAdapter extends EventEmitter {
       matches: g(this.bookChecksumMatches, symbol),
       mismatches: g(this.bookChecksumMismatches, symbol),
       crossedDetections: g(this.bookCrossedDetections, symbol),
+      skippedNoPrecision: g(this.bookChecksumSkippedNoPrecision, symbol),
+      resyncsSent: g(this.bookResyncsSent, symbol),
+      confirmedUntrusted: g(this.bookTrustConfirmed, symbol),
+      framesIgnoredUntrusted: g(this.bookFramesIgnoredUntrusted, symbol),
+      subscribeRejected: g(this.bookSubscribeRejected, symbol),
+      bookUnsubRejected: g(this.bookUnsubRejected, symbol),
+      precisionRefused: g(this.bookPrecisionRefused, symbol),
+      trust: this.getBookTrustState(symbol),
+      trustReason: this.bookTrust.get(symbol)?.reason ?? null,
+      episodeStart: this.bookTrust.get(symbol)?.episodeStartIso ?? null,
     }));
+    const trust: Record<BookTrustState, number> = { trusted: 0, suspect: 0, untrusted: 0 };
+    for (const r of bySymbol) trust[r.trust]++;
     const sum = (f: (r: typeof bySymbol[number]) => number) => bySymbol.reduce((a, r) => a + f(r), 0);
     return {
       since: new Date(this.bookCountersSince).toISOString(),
@@ -3680,9 +3782,14 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         updatesApplied: sum(r => r.updatesApplied), checksumAttempts: sum(r => r.attempts),
         matches: sum(r => r.matches), mismatches: sum(r => r.mismatches),
         crossedDetections: sum(r => r.crossedDetections),
+        skippedNoPrecision: sum(r => r.skippedNoPrecision), resyncsSent: sum(r => r.resyncsSent),
+        confirmedUntrusted: sum(r => r.confirmedUntrusted), framesIgnoredUntrusted: sum(r => r.framesIgnoredUntrusted),
+        subscribeRejected: sum(r => r.subscribeRejected), bookUnsubRejected: sum(r => r.bookUnsubRejected),
+        precisionRefused: sum(r => r.precisionRefused),
+        trust,
       },
       bySymbol,
-      note: 'crossedDetections must be 0 - that is the property the #507 truncation fix guarantees (pre-fix comparator, measured live: 32.03% of book states crossed). checksum matches/attempts is now a REAL signal: the v2 instrument precision feed HAS landed, so a mismatch means a genuine desync and the mismatch arm resubscribes. An earlier version of this note said MISMATCH IS EXPECTED - that was true only while the checksum was computed without per-symbol precision, and it survived past the landing of the feed it was waiting for. Corrected 2026-08-24 at the B-MBIM-SWITCH-ON Step-7 read, where it was contradicting the 100%-match figure printed beside it. NOTE the mismatch arm continues ABOVE the crossed-book detector, so a resubscribing update never reaches crossedDetections - a zero here is not comparable across that boundary.',
+      note: 'crossedDetections must be 0 (the #507 truncation property; pre-fix comparator measured 32.03% crossed). A checksum mismatch is a genuine desync now that per-symbol precision has landed, and since #1220 it drives the circuit breaker: the book is HELD and refused (suspect), one book-only resync and one REST precision re-read follow, and a confirmed symbol is untrusted - its book channel cancelled until POST /api/active-engine/book-recheck/:symbol. trust counts symbols seen by any counter; a symbol absent here is trusted. crossedDetections is counted ABOVE the checksum since #1220, so it is not comparable with readings taken before that change.',
     };
   }
 
@@ -3734,38 +3841,238 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     return KrakenWebSocketAdapter.computeBookChecksumFromRaw(raw, prec);
   }
 
-  async softResubscribe(symbol: string): Promise<void> {
-    console.log(`[8.9.5][SOFT_RESUB] Starting soft resubscribe for ${symbol}`);
-    
-    // B-PRICE-SIDE-BY-JOB r5 P-7b (Langston Step-4): `bookDepth` is DELIBERATELY NOT cleared below. The unsubscribe this
-    // method sends reads the GRANTED depth from it, and the unsubscribe must name the depth the subscription holds —
-    // clearing it first would send the default 10 to a 25-deep stream. The ordering is load-bearing; test 8 in
-    // b-price-side-p7b-book-unsubscribe.test.ts pins it.
-    // Clear ALL per-symbol state to ensure clean resync
-    this.orderBooks.delete(symbol);
-    this.bookRaw.delete(symbol); // #507: the raw mirror must go with it
-    this.symbolStats.delete(symbol);
-    this.pendingSubscriptions.delete(symbol);
-    this.subscriptionAcks.delete(symbol);
-    this.firstTickReceived.delete(symbol);
-    this.firstTickReceived.delete(symbol + '_book');
-    this.tickFrequencyData.delete(symbol);
-    this.lastBroadcastTime.delete(symbol);
-    
-    console.log(`[8.9.5][SOFT_RESUB] Cleared all state for ${symbol}`);
-    
-    // Use the existing unsubscribe helper for proper handling
-    this.unsubscribeFromSymbols([symbol]);
-    
-    // B-PRICE-SIDE-BY-JOB r5 P-7b: unsubscribeFromSymbols now cancels the book channel as well, so the raw
-    // book unsubscribe this block used to send here is gone — one home, and no duplicate cancel.
-    
-    // Wait before resubscribing to allow cleanup
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Resubscribe using the existing helper (subscribes to both ticker+book)
-    this.subscribeToSymbols([symbol]);
-    console.log(`[8.9.5][SOFT_RESUB] Resubscribed ${symbol}`);
+  // ==========================================
+  // B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220): the per-symbol book trust machine. Replaces `softResubscribe`, whose
+  // delete-and-resubscribe on every mismatch was the 2026-10-13 loop (archived; DELETED_COMPONENTS_LOG).
+  // ==========================================
+
+  /** #1220: a book is usable only while TRUSTED. Absent = trusted — no checksum has ever disagreed. */
+  isBookTrusted(symbol: string): boolean {
+    return this.getBookTrustState(symbol) === 'trusted';
+  }
+
+  getBookTrustState(symbol: string): BookTrustState {
+    return this.bookTrust.get(symbol)?.state ?? 'trusted';
+  }
+
+  /**
+   * One disagreeing checksum. A TRUSTED symbol becomes suspect and gets ONE book-only resync — unless it re-desynced within
+   * the window of its last restore, which confirms it. A SUSPECT symbol only reaches here on a SNAPSHOT (its deltas are
+   * dropped), and a mismatching snapshot triggers the episode's one precision re-read, then confirms. An UNTRUSTED symbol
+   * only reaches here on its operator re-check snapshot, and the re-check fails.
+   * ⛔ Nothing here clears the book. ⛔ Nothing here sends more than one request per episode stage.
+   */
+  private onBookChecksumMismatch(symbol: string, ours: number, theirs: number, depth: number): void {
+    const now = Date.now();
+    const rec: BookTrustRecord = this.bookTrust.get(symbol) ?? {
+      state: 'trusted', episodeStartIso: null, lastRestoreMs: null, precisionRereadDone: false,
+      lastOurs: null, lastTheirs: null, reason: null, recheck: null,
+    };
+    rec.lastOurs = ours;
+    rec.lastTheirs = theirs;
+    const prec = this.symbolPrecision.get(symbol);
+    const tag = `${symbol} ours=${ours} theirs=${theirs} depth=${depth} precision=${prec ? `${prec.price}/${prec.qty}` : '-'} mismatches=${this.bookChecksumMismatches.get(symbol) ?? 0}`;
+
+    if (rec.state === 'untrusted') {
+      rec.recheck = null;
+      this.clearBookResync(symbol);
+      this.bookTrust.set(symbol, rec);
+      console.error(`[#1220][BOOK_RECHECK_FAILED] ${tag} — the re-check snapshot still disagrees; book stays untrusted`);
+      this.cancelBookChannel(symbol);
+      return;
+    }
+
+    if (rec.state === 'trusted') {
+      if (rec.lastRestoreMs !== null && now - rec.lastRestoreMs <= this.BOOK_REDESYNC_WINDOW_MS) {
+        this.bookTrust.set(symbol, rec);
+        this.confirmBookUntrusted(symbol, rec, 'second_desync_within_60s_of_restore');
+        return;
+      }
+      rec.state = 'suspect';
+      rec.episodeStartIso = new Date(now).toISOString();
+      rec.precisionRereadDone = false;
+      rec.reason = 'checksum_mismatch';
+      this.bookTrust.set(symbol, rec);
+      console.warn(`[#1220][BOOK_SUSPECT] ${tag} — book HELD and refused to readers; one book-only resync`);
+      this.requestBookResync(symbol, 'unsub_then_sub');
+      return;
+    }
+
+    // suspect: this is the resync's snapshot, so the resync is answered.
+    this.clearBookResync(symbol);
+    this.bookTrust.set(symbol, rec);
+    if (!rec.precisionRereadDone) {
+      rec.precisionRereadDone = true;
+      console.warn(`[#1220][BOOK_SNAPSHOT_MISMATCH] ${tag} — re-reading the pair's precision from AssetPairs before confirming`);
+      void this.rereadPrecisionAndJudge(symbol, theirs);
+      return;
+    }
+    this.confirmBookUntrusted(symbol, rec, 'snapshot_mismatch_after_precision_reread');
+  }
+
+  /**
+   * Pre-audit r3 BLOCKER-3: a mismatching SNAPSHOT proves our computation disagrees with the venue, not that the venue's book
+   * is bad — the checksum input has a variable precision. So the held snapshot (deltas are dropped while suspect) is
+   * re-verified at the precision Kraken REST states. Still disagreeing => confirmed. Agreeing => our precision was stale:
+   * adopt the venue's and take ONE fresh snapshot, because the deltas dropped while suspect leave the held book behind.
+   */
+  private async rereadPrecisionAndJudge(symbol: string, theirs: number): Promise<void> {
+    let fresh: { price: number; qty: number } | null = null;
+    try {
+      fresh = await this.precisionReader(symbol);
+    } catch (e) {
+      console.error(`[#1220][PRECISION_REREAD_FAILED] ${symbol}:`, e instanceof Error ? e.message : e);
+    }
+    const rec = this.bookTrust.get(symbol);
+    if (!rec || rec.state !== 'suspect') return; // a snapshot settled it while the read was out
+    const raw = this.bookRaw.get(symbol);
+    const current = this.symbolPrecision.get(symbol);
+    if (fresh && raw && (fresh.price !== current?.price || fresh.qty !== current?.qty)
+        && this.computeBookChecksum(raw, fresh) === theirs) {
+      console.warn(`[#1220][PRECISION_CORRECTED] ${symbol} ${current ? `${current.price}/${current.qty}` : '-'} -> ${fresh.price}/${fresh.qty} — the snapshot matches at the venue's precision; one fresh snapshot to confirm`);
+      this.symbolPrecision.set(symbol, fresh);
+      this.requestBookResync(symbol, 'unsub_then_sub');
+      return;
+    }
+    this.confirmBookUntrusted(symbol, rec, fresh ? 'snapshot_mismatch_at_reread_precision' : 'precision_reread_unavailable');
+  }
+
+  /**
+   * ONE book-only resync per symbol at a time: never through `unsubscribeFromSymbols` (that cancels the ticker too). With the
+   * socket down nothing is sent and nothing is cleared — the book is held as suspect and `handleOpen` re-requests it.
+   */
+  private requestBookResync(symbol: string, mode: 'unsub_then_sub' | 'sub_only'): void {
+    if (this.bookResyncInFlight.has(symbol)) return;
+    const sock = this.ws;
+    if (!sock || !this.isConnected || sock.readyState !== WebSocket.OPEN) {
+      console.warn(`[#1220][BOOK_RESYNC_DEFERRED] ${symbol} socket not open — held, nothing cleared; the resync goes out at the next open`);
+      return;
+    }
+    this.bumpMap(this.bookResyncsSent, symbol);
+    this.bookResyncInFlight.set(symbol, setTimeout(() => this.onBookResyncTimeout(symbol), this.BOOK_RESYNC_TIMEOUT_MS));
+    if (mode === 'sub_only') {
+      this.sendBookSubscribe([symbol]);
+      return;
+    }
+    this.sendBookUnsubscribe([symbol]);
+    setTimeout(() => {
+      // A socket that changed under the delay holds no subscription for this symbol; `handleClose` cleared the in-flight
+      // entry and `handleOpen` re-requests, so nothing is sent on the wrong socket.
+      if (this.ws !== sock || sock.readyState !== WebSocket.OPEN) return;
+      this.sendBookSubscribe([symbol]);
+    }, this.BOOK_RESYNC_DELAY_MS);
+  }
+
+  private clearBookResync(symbol: string): void {
+    const t = this.bookResyncInFlight.get(symbol);
+    if (t) clearTimeout(t);
+    this.bookResyncInFlight.delete(symbol);
+  }
+
+  /** No snapshot answered the resync on a live socket. A suspect book is confirmed; a re-check is simply abandoned. */
+  private onBookResyncTimeout(symbol: string): void {
+    this.bookResyncInFlight.delete(symbol);
+    const rec = this.bookTrust.get(symbol);
+    if (!rec) return;
+    if (!this.isConnected) return; // `handleOpen` re-requests a suspect; nothing to judge on a dead socket
+    if (rec.state === 'suspect') {
+      this.confirmBookUntrusted(symbol, rec, 'resync_no_snapshot_within_30s');
+    } else if (rec.state === 'untrusted' && rec.recheck) {
+      rec.recheck = null;
+      console.error(`[#1220][BOOK_RECHECK_NO_SNAPSHOT] ${symbol} — no snapshot within ${this.BOOK_RESYNC_TIMEOUT_MS / 1000}s; book stays untrusted`);
+    }
+  }
+
+  /** Cancel the BOOK channel only; the ticker is untouched. A rejected cancel is counted, never retried. */
+  private cancelBookChannel(symbol: string): void {
+    if (!this.ws || !this.isConnected || this.ws.readyState !== WebSocket.OPEN) return;
+    try {
+      this.sendBookUnsubscribe([symbol]);
+    } catch (e) {
+      console.error(`[#1220][BOOK_CANCEL_ERROR] ${symbol}:`, e instanceof Error ? e.message : e);
+    }
+  }
+
+  private confirmBookUntrusted(symbol: string, rec: BookTrustRecord, reason: string): void {
+    this.clearBookResync(symbol);
+    rec.state = 'untrusted';
+    rec.reason = reason;
+    rec.recheck = null;
+    rec.episodeStartIso = rec.episodeStartIso ?? new Date().toISOString();
+    this.bookTrust.set(symbol, rec);
+    this.bumpMap(this.bookTrustConfirmed, symbol);
+    const prec = this.symbolPrecision.get(symbol);
+    console.error(`[#1220][BOOK_UNTRUSTED] ${symbol} reason=${reason} ours=${rec.lastOurs ?? '-'} theirs=${rec.lastTheirs ?? '-'} precision=${prec ? `${prec.price}/${prec.qty}` : '-'} mismatches=${this.bookChecksumMismatches.get(symbol) ?? 0} — book channel cancelled, no further book requests, ticker untouched`);
+    this.cancelBookChannel(symbol);
+    const metadata = {
+      symbol, reason, episode_start: rec.episodeStartIso,
+      ours: rec.lastOurs, theirs: rec.lastTheirs, precision: prec ?? null,
+      mismatches: this.bookChecksumMismatches.get(symbol) ?? 0,
+      resyncs_sent: this.bookResyncsSent.get(symbol) ?? 0,
+      subscribe_rejected: this.bookSubscribeRejected.get(symbol) ?? 0,
+      book_unsub_rejected: this.bookUnsubRejected.get(symbol) ?? 0,
+      state: rec.state,
+    };
+    void import('../../services/system-alerts.js')
+      .then(({ addAlert }) => addAlert({
+        triggers_at: new Date(), category: 'breakage', severity: 'warning',
+        title: `Crypto order book for ${symbol} no longer matches Kraken — its book is switched off`,
+        body: `The order book we keep for ${symbol} stopped matching Kraken's own checksum and did not recover (${reason}). `
+          + `Its book feed is cancelled and every reader now refuses it; prices for ${symbol} come from the ticker until a re-check passes. `
+          + `To re-check: POST /api/active-engine/book-recheck/${encodeURIComponent(symbol)} with {"by": "<actor>"}. A matching snapshot restores the book and resolves this alert. Never ack it (#982).`,
+        metadata,
+        dedupe_key: `book_untrusted:${symbol}:${rec.episodeStartIso}`,
+      }))
+      .catch((e) => console.error('[#1220][BOOK_UNTRUSTED] alert raise failed:', e instanceof Error ? e.message : e));
+  }
+
+  /** A verified match on a non-trusted book. A restore from UNTRUSTED came from an operator re-check and resolves its alert. */
+  private restoreBookTrust(symbol: string, ours: number): void {
+    const rec = this.bookTrust.get(symbol);
+    if (!rec) return;
+    const wasUntrusted = rec.state === 'untrusted';
+    const recheck = rec.recheck;
+    this.clearBookResync(symbol);
+    rec.state = 'trusted';
+    rec.lastRestoreMs = Date.now();
+    rec.reason = null;
+    rec.recheck = null;
+    console.warn(`[#1220][BOOK_TRUST_RESTORED] ${symbol} crc=${ours} from=${wasUntrusted ? 'untrusted (re-check)' : 'suspect (resync)'} episode=${rec.episodeStartIso ?? '-'}`);
+    if (wasUntrusted && recheck && rec.episodeStartIso) {
+      const key = `book_untrusted:${symbol}:${rec.episodeStartIso}`;
+      void import('../../services/system-alerts.js')
+        .then(({ resolveAlertsByDedupeKey }) => resolveAlertsByDedupeKey(
+          key, recheck.by, `#1220 book-recheck snapshot match ${symbol} crc=${ours}`, 'engine'))
+        .catch((e) => console.error('[#1220][BOOK_TRUST_RESTORED] alert resolve failed:', e instanceof Error ? e.message : e));
+    }
+  }
+
+  /**
+   * #1220 plan 4: the operator re-check for an UNTRUSTED book. Re-reads the pair's precision from AssetPairs, then sends ONE
+   * book subscribe; a matching snapshot restores trust and resolves the episode's alert as `by`. One request per call; a
+   * call while one is out, or for a book that is not untrusted, is refused with the reason.
+   */
+  async requestBookRecheck(symbol: string, by: string): Promise<{ accepted: boolean; reason: string; state: BookTrustState }> {
+    const rec = this.bookTrust.get(symbol);
+    const state = this.getBookTrustState(symbol);
+    if (!rec || rec.state !== 'untrusted') return { accepted: false, reason: 'book_not_untrusted', state };
+    if (rec.recheck || this.bookResyncInFlight.has(symbol)) return { accepted: false, reason: 'recheck_in_flight', state };
+    if (!this.ws || !this.isConnected || this.ws.readyState !== WebSocket.OPEN) return { accepted: false, reason: 'socket_not_open', state };
+    try {
+      const fresh = await this.precisionReader(symbol);
+      if (fresh) this.symbolPrecision.set(symbol, fresh);
+    } catch (e) {
+      console.error(`[#1220][RECHECK_PRECISION_FAILED] ${symbol}:`, e instanceof Error ? e.message : e);
+    }
+    rec.recheck = { by, requestedAtMs: Date.now() };
+    this.requestBookResync(symbol, 'sub_only');
+    if (!this.bookResyncInFlight.has(symbol)) {
+      // The socket dropped while the precision read was out; nothing was sent.
+      rec.recheck = null;
+      return { accepted: false, reason: 'socket_not_open', state: rec.state };
+    }
+    console.warn(`[#1220][BOOK_RECHECK_SENT] ${symbol} by=${by}`);
+    return { accepted: true, reason: 'book_subscribe_sent', state: rec.state };
   }
 
   // ==========================================
@@ -3845,8 +4152,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     console.log('[9.0][HEALTH] Cleared all volatile state for safe resubscribe');
 
     // 3. Mark as reconnecting
+    // (#1220 r4 B3: `isConnecting` is no longer zeroed — `connect()` refuses on the socket's own state.)
     this.isConnected = false;
-    this.isConnecting = false;
     this.i8cIsReconnecting = true;
 
     // 4. Reconnect after short delay (3s per directive)

@@ -33,6 +33,9 @@ export interface CryptoBookTop {
 export interface CryptoTouchReaders {
   normalize: (rawSymbol: string) => string;
   getBook: (internalSymbol: string) => CryptoBookTop | null;
+  /** #1220: whether the book's checksum circuit breaker still trusts it. `getBook` already returns null when it does not;
+   *  this says WHY, so the refusal is `book_untrusted` rather than an indistinguishable `no_book`. */
+  isBookTrusted: (internalSymbol: string) => boolean;
   getCached: (internalSymbol: string) => CachedQuoteSides | null;
 }
 
@@ -240,6 +243,7 @@ export function selectCryptoTouch(
           }
         : null,
       bookEligible: true,
+      bookTrusted: readers.isBookTrusted(internalSymbol),
       ticker: tickerLegFromCachedQuote(readers.getCached(internalSymbol)),
       tickerBasis: 'ticker_bbo',
     },

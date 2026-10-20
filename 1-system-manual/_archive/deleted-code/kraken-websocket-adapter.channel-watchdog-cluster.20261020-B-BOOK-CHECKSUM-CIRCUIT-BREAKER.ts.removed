@@ -1,0 +1,74 @@
+// ARCHIVED by B-BOOK-CHECKSUM-CIRCUIT-BREAKER (#1220), CC-B, 2026-10-20. NOT COMPILED. Verbatim from
+// server/exchanges/kraken/kraken-websocket-adapter.ts at e400fed12 (pre-removal). See DELETED_COMPONENTS_LOG.
+
+  /**
+   * Phase 8.8.5: Start tier-aware channel watchdog for a symbol
+   * Uses VolumeClassifier to determine appropriate timeouts
+   */
+  startChannelWatchdog(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    
+    // Clear existing watchdog for this symbol
+    this.stopChannelWatchdog(normalizedSymbol);
+    
+    const tier = volumeClassifier.getTier(normalizedSymbol);
+    const thresholds = TIER_THRESHOLDS[tier];
+    
+    console.log(`[8.8.5][WATCHDOG] Starting watchdog for ${normalizedSymbol} (tier=${tier}, reset=${thresholds.resetTimeoutMs}ms)`);
+    
+    const timer = setTimeout(() => {
+      this.handleChannelTimeout(normalizedSymbol, tier);
+    }, thresholds.resetTimeoutMs);
+    
+    this.channelWatchdogTimers.set(normalizedSymbol, timer);
+  }
+
+  /**
+   * Phase 8.8.5: Stop channel watchdog for a symbol
+   */
+  stopChannelWatchdog(symbol: string): void {
+    const timer = this.channelWatchdogTimers.get(symbol);
+    if (timer) {
+      clearTimeout(timer);
+      this.channelWatchdogTimers.delete(symbol);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Reset channel watchdog when tick is received
+   */
+  resetChannelWatchdog(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    if (this.channelWatchdogTimers.has(normalizedSymbol)) {
+      this.startChannelWatchdog(normalizedSymbol);
+    }
+  }
+
+  /**
+   * Phase 8.8.5: Handle channel timeout - refresh single channel without full reconnect
+   */
+  private handleChannelTimeout(symbol: string, tier: VolumeTier): void {
+    console.log(`[8.8.5][WATCHDOG] Channel timeout for ${symbol} (tier=${tier}), refreshing subscription`);
+    this.sentinelResets++;
+    
+    // Refresh single channel
+    this.refreshChannel(symbol);
+  }
+
+  /**
+   * Phase 8.8.5: Refresh a single channel subscription without full reconnect
+   */
+  refreshChannel(symbol: string): void {
+    const normalizedSymbol = normalizeToInternalSymbol(symbol);
+    
+    console.log(`[8.8.5][REFRESH] Refreshing channel for ${normalizedSymbol}`);
+    
+    // Unsubscribe and resubscribe to refresh the channel
+    this.unsubscribeFromSymbols([normalizedSymbol]);
+    
+    setTimeout(() => {
+      this.subscribeToSymbols([normalizedSymbol]);
+      this.startChannelWatchdog(normalizedSymbol);
+    }, 500); // Small delay between unsub/sub
+  }
+

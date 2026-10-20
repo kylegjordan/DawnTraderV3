@@ -82,7 +82,7 @@ describe('row 8c P1 — the ladder funnel', () => {
   beforeEach(() => __resetLevelBasisFunnelForTest());
 
   it('1. a book-carried walk accepts on BOTH cells', () => {
-    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     expect(getLevelBasisFunnelRow(BOOK_CELL)).toMatchObject({ attempted: 1, accepted: 1, refused: 0 });
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ attempted: 1, accepted: 1, refused: 0 });
   });
@@ -90,7 +90,7 @@ describe('row 8c P1 — the ladder funnel', () => {
   it('2. ⭐ THE WHOLE POINT OF 8c — no book, good ticker: the book cell REFUSES and the ladder ACCEPTS', () => {
     // This is the live case. 526 of 546 refusals were `no_book`, and every one of them had a
     // REST-priced ticker carrying real, dated sides sitting right beside it.
-    walk({ book: null, bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
     expect(b).toMatchObject({ attempted: 1, accepted: 0, refused: 1 });
@@ -110,7 +110,7 @@ describe('row 8c P1 — the ladder funnel', () => {
     // fixture whose two arms are identical cannot discriminate between them. So: the book is
     // STALE (`stale_book`) and the ticker is ABSENT (`no_book`), two distinct reasons, and the
     // assertion names which cell must hold which.
-    walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' });
+    walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' });
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
     expect(bookReasons(b).stale_book).toBe(1);
@@ -129,7 +129,7 @@ describe('row 8c P1 — the ladder funnel', () => {
   it('4. an INELIGIBLE book records `book_not_eligible`, which is a funnel reason and not a basis refusal', () => {
     // `touch-price.ts` owns eligibility; `level-basis.ts` never judges it. The reason exists in
     // the funnel's vocabulary and deliberately not in `LevelBasisRefusal`.
-    walk({ book: book(), bookEligible: false, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: false, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
 
     const b = getLevelBasisFunnelRow(BOOK_CELL)!;
     expect(bookReasons(b).book_not_eligible).toBe(1);
@@ -138,7 +138,7 @@ describe('row 8c P1 — the ladder funnel', () => {
   });
 
   it('5. a STALE book with a fresh ticker: book refuses `stale_book`, ladder still accepts', () => {
-    walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book({ stampMs: NOW - 20_000 }), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     expect(bookReasons(getLevelBasisFunnelRow(BOOK_CELL)!).stale_book).toBe(1);
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1, refused: 0 });
   });
@@ -147,9 +147,9 @@ describe('row 8c P1 — the ladder funnel', () => {
     // Separate rows: this is Langston's condition 1 made structural. Equal denominators: every
     // walk increments both exactly once, so a reader who finds them unequal has found a bug in
     // the recorder, not a property of the feed.
-    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    walk({ book: null, bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
-    walk({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' });
 
     const rows = getLevelBasisFunnel();
     expect(rows).toHaveLength(2);
@@ -168,10 +168,10 @@ describe('row 8c P1 — the ladder funnel', () => {
   });
 
   it('7. the VTS lane does not pool with the active lane, rung for rung', () => {
-    walk({ book: null, bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     recordTouchSelection(
       { lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_signal_birth' },
-      selectTouchPrice({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY),
+      selectTouchPrice({ book: null, bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY),
     );
 
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ accepted: 1, refused: 0 });
@@ -200,7 +200,7 @@ describe('row 8c P1 — the ladder funnel', () => {
     });
     expect(leg!.stampMs).toBe(NOW - 20_000);
 
-    walk({ book: null, bookEligible: true, ticker: leg, tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: leg, tickerBasis: 'ticker_bbo' });
     const l = getLevelBasisFunnelRow(LADDER_CELL)!;
     expect(l).toMatchObject({ accepted: 0, refused: 1 });
     expect(ladderReasons(l).stale_ticker).toBe(1);
@@ -227,10 +227,10 @@ describe('row 8c P1 — the ladder funnel', () => {
     // that naming is only safe because the producer survives: REST sides carry a poll cadence and
     // pushed sides do not, and that distinction IS the switch-on argument. The recorder used to
     // throw the producer away, so the accepted count could not be split at all.
-    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
-    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
-    walk({ book: null, bookEligible: true, ticker: ticker({ producer: 'kraken_ws_ticker' }), tickerBasis: 'ticker_bbo' });
-    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker({ producer: 'kraken_rest' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: ticker({ producer: 'kraken_ws_ticker' }), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
 
     const l = getLevelBasisFunnelRow(LADDER_CELL)!;
     expect(l.byAcceptedSource).toEqual({
@@ -248,7 +248,7 @@ describe('row 8c P1 — the ladder funnel', () => {
   it('12. the row carries its rung and what its reasons are ABOUT, without parsing the key', () => {
     // A consumer splitting the key string on ':' breaks the moment a lane or class contains one,
     // and reads as working until it does.
-    walk({ book: null, bookEligible: true, ticker: null, tickerBasis: 'ticker_bbo' });
+    walk({ book: null, bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' });
     expect(getLevelBasisFunnelRow(BOOK_CELL)).toMatchObject({ rung: 'book', reasonsAbout: 'book_top' });
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toMatchObject({ rung: 'ladder', reasonsAbout: 'ticker_sides' });
   });
@@ -258,7 +258,7 @@ describe('row 8c P1 — the ladder funnel', () => {
     // a future zero in the ladder cell would be indistinguishable from a recorder that never ran
     // — which is the exact shape this batch has now hit three times.
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toBeUndefined();
-    walk({ book: book(), bookEligible: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
+    walk({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' });
     expect(getLevelBasisFunnelRow(LADDER_CELL)).toBeDefined();
   });
 });
