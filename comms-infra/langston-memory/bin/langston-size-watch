@@ -49,7 +49,7 @@ USAGE:
                                         touch the heartbeat.
 """
 
-import json, os, shlex, subprocess, sys, datetime
+import hashlib, json, os, shlex, stat, subprocess, sys, datetime
 
 HOME = "/home/langston"
 WATCHED = [
@@ -280,6 +280,84 @@ def heartbeat(st, status):
     return "; ".join(notes)
 
 
+# ⭐ HIS RULES FILE'S INSTALL CHECK (B-LANGSTON-CLAUDEMD-RESIDUAL; Langston r1 on 9384b919a). The file is installed only
+#    by langston-rules-install, root:root 0644 and immutable. Prevention cannot see a crash between clearing and
+#    re-setting the flag, a flag that silently did not take, or a reviewed commit that was never installed - so this
+#    compares the live file against the ROOT-ONLY install record every day. THREE ASSERTIONS, REPORTED SEPARATELY:
+#    (1) the live bytes match the record; (2) it is a regular root:root 0644 file with the immutable flag - (1) and
+#    (2) are TAMPER and page; (3) the record matches the rules file at GitHub's branch head - PENDING, which is benign
+#    and frequent (a reviewed edit not yet installed) and is reported in the row only, never paged: folding it into
+#    the tamper page would train the reader to ignore the page.
+RULES_TARGET = os.path.join(HOME, "CLAUDE.md")
+RULES_RECORD = "/root/langston-rules-backup/INSTALLED"
+RULES_REPO_PATH = "comms-infra/langston/LANGSTON_CLAUDE.md"
+RULES_MIRROR = "/srv/dawntrader-backup.git"
+RULES_UPSTREAM = "https://github.com/kylegjordan/DawnTraderV3.git"
+
+
+def rules_check(target=None, record=None, mirror=None, upstream=None):
+    target, record = target or RULES_TARGET, record or RULES_RECORD
+    mirror, upstream = mirror or RULES_MIRROR, upstream or RULES_UPSTREAM
+    out = {"target": target, "record": None, "tamper": [], "pending": None, "unknown": []}
+    try:
+        with open(record, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except FileNotFoundError:
+        out["unknown"].append("no install record (%s): the rules file has not been installed by langston-rules-install"
+                              % record)
+        return out
+    except Exception as e:
+        out["unknown"].append("the install record %s is unreadable (%s)" % (record, type(e).__name__))
+        return out
+    out["record"] = {k: rec.get(k) for k in ("commit", "blob", "sha256", "installed_at")}
+    try:
+        fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as e:
+        out["tamper"].append("%s cannot be opened without following a link (%s)" % (target, type(e).__name__))
+    else:
+        try:
+            st = os.fstat(fd)
+            chunks = []
+            while True:
+                c = os.read(fd, 1 << 20)
+                if not c:
+                    break
+                chunks.append(c)
+        finally:
+            os.close(fd)
+        if not stat.S_ISREG(st.st_mode):
+            out["tamper"].append("%s is not a regular file" % target)
+        if hashlib.sha256(b"".join(chunks)).hexdigest() != rec.get("sha256"):
+            out["tamper"].append("its content differs from the installed commit %s" % str(rec.get("commit"))[:12])
+        if (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode)) != (0, 0, 0o644):
+            out["tamper"].append("it is %d:%d mode %o, not root:root 0644" % (st.st_uid, st.st_gid,
+                                                                              stat.S_IMODE(st.st_mode)))
+        r = subprocess.run(["lsattr", "-d", target], capture_output=True, text=True)
+        flags = r.stdout.split()[0] if r.returncode == 0 and r.stdout.split() else None
+        if flags is None:
+            out["unknown"].append("lsattr could not read its flags (%s)" % (r.stderr.strip()[:80] or r.returncode))
+        elif "i" not in flags:
+            out["tamper"].append("its immutable flag is NOT set (lsattr %s)" % flags)
+    try:
+        ls = subprocess.run(["git", "ls-remote", upstream, "refs/heads/migration/aws-supabase"],
+                            capture_output=True, text=True, timeout=60)
+        head = ls.stdout.split()[0] if ls.returncode == 0 and ls.stdout.split() else ""
+        if not head:
+            out["unknown"].append("GitHub's head could not be read (%s)" % (ls.stderr.strip()[:80] or ls.returncode))
+        else:
+            b = subprocess.run(["git", "-C", mirror, "rev-parse", "%s:%s" % (head, RULES_REPO_PATH)],
+                               capture_output=True, text=True, timeout=60)
+            if b.returncode != 0:
+                out["unknown"].append("the mirror cannot resolve %s at GitHub's head %s yet" % (RULES_REPO_PATH,
+                                                                                               head[:12]))
+            elif b.stdout.strip() != rec.get("blob"):
+                out["pending"] = ("a newer reviewed rules file (blob %s at GitHub head %s) is not installed; installed "
+                                  "is %s" % (b.stdout.strip()[:12], head[:12], str(rec.get("commit"))[:12]))
+    except Exception as e:
+        out["unknown"].append("the branch-head comparison failed (%s)" % type(e).__name__)
+    return out
+
+
 def run(quiet=False, injected_total=None, injected_archive_bytes=None):
     files, total, missing = measure()
     if injected_total is not None:      # --self-test only; never reachable in a real run
@@ -386,6 +464,14 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
     #    while the liveness alert had silently failed to arm.
     # ⛔ A DRILL MUST NOT TOUCH IT: resolving a real pending alert on the strength of a
     #    synthetic total would re-arm liveness from a run that never measured anything.
+    rules = rules_check()
+    rules_delivery = "no alarm"
+    if rules["tamper"]:
+        rules_delivery = post(prefix + "⛔ LANGSTON'S RULES FILE (" + rules["target"] + ") DOES NOT MATCH ITS INSTALL: " +
+                              "; ".join(rules["tamper"]) + ". It is installed only by langston-rules-install from a "
+                              "reviewed commit, so this is a change nobody reviewed, or an install that died before it "
+                              "re-protected the file. Owner " + ARCHIVE_OWNER + ": compare it with "
+                              "/root/langston-rules-backup/ and re-install the recorded commit.", quiet)
     hb = heartbeat(st, status) if injected_total is None else "skipped (drill)"
     # ⚠️ A HEARTBEAT THAT STOPS WORKING IS ITSELF A SILENT ABSENCE, so it is loud.
     if "FAILED" in hb and not quiet:
@@ -401,6 +487,7 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
                         "alarms; it NEVER lowers the ceiling itself — that is a deliberate act "
                         "in the batch that lands the trim (#1007)."),
            "heartbeat": hb, "archive": archive, "archive_delivery": archive_delivery,
+           "rules": rules, "rules_delivery": rules_delivery,
            "population": "the three files in WATCHED, all of them, every run; plus the writer's archive, "
                          "measured separately and never added to the sum"}
     try:
@@ -418,8 +505,9 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
 
     print(json.dumps({k: row[k] for k in ("ts", "drill", "status", "total_bytes", "ceiling_bytes",
                                           "over_by", "hours_since_previous_run", "alarm", "heartbeat",
-                                          "delivery", "archive")}, indent=2, ensure_ascii=False))
-    return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]) else 0
+                                          "delivery", "archive", "rules")}, indent=2, ensure_ascii=False))
+    return 1 if (status in ("BREACH", "MISSING-FILE") or archive["over"] or archive["unreadable"]
+                 or rules["tamper"]) else 0
 
 
 # ⛔ THE ACTOR IS AN ALLOWLIST, NOT FREE TEXT. The old `SUDO_USER or "unknown"` was the

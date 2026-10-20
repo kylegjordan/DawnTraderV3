@@ -8,37 +8,112 @@ changes ONLY by installing a reviewed commit. The repo copy is comms-infra/langs
 CLAUDE.md: the governance checker treats every file of that name as housekeeping, so an untagged edit would pass).
 
 What it does, in order, or refuses:
-  1. the sha is 40 hex characters and is on migration/aws-supabase in the ROOT-OWNED backup mirror;
+  1. the sha is 40 hex characters and is an ancestor of migration/aws-supabase AS GITHUB REPORTS IT (`git ls-remote`,
+     run as root). ⛔ Langston r1 B-1: the backup mirror is langston-writable (objects, refs and config), so a ref
+     read from it could be moved by his own account. The mirror is used ONLY as an object store: commit ids are
+     content hashes, so the ancestry from GitHub's head down to <sha> cannot be forged there - only made missing,
+     which refuses. Once the repository is private this read needs a root-held credential, or it refuses.
   2. it reads the blob at <sha>:comms-infra/langston/LANGSTON_CLAUDE.md from the mirror and re-hashes it against the
-     tree's own object id (a blob that does not hash to its id is refused);
-  3. it copies the current live file to /root/langston-rules-backup/<sha256-of-old>.md (root 0700, exclusive create);
-  4. it writes the new bytes to a random temp file beside the target, sets root:root 0644 ON THE OPEN FILE (never by
-     path), fsyncs, and renames it over the target - a rename replaces whatever name is there and follows nothing.
+     tree's own object id (kept as a check; git's own read fails first on a corrupt object, so it is not a tested arm);
+  3. it reads the live file WITHOUT following a link (O_NOFOLLOW) and reports what it found: absent, a link, not a
+     regular file, or a regular file with its owner, mode and immutable flag;
+  4. if the content, root:root 0644 AND the immutable flag already hold, nothing is done (Langston r1 B-2: matching
+     content alone is not "installed" - the property is content and owner and protection);
+  5. otherwise: the previous version (if a regular file) is copied to /root/langston-rules-backup/<sha256>.md (root
+     0700, exclusive create); the new bytes are staged in that root-only directory, set root:root 0644 on the open
+     file, fsynced, the target's immutable flag cleared, the staged file renamed over the target (same filesystem;
+     a rename replaces whatever name is there and follows nothing), and the immutable flag set again IN A FINALLY;
+  6. it records what it installed in /root/langston-rules-backup/INSTALLED and a root:root 0644 copy at
+     /etc/langston/rules-installed (Langston can read it, not write it) - the size watch compares the live file to it.
 
-⛔ NO INPUT FROM LANGSTON'S SIDE (his condition): no path, ref or content argument beyond the sha the ROOT operator
-   passes; no sudo entry for him. A rule that must land now: he asks a CC session in the channel, which commits and
-   installs it (the hotfix path if urgent) - never parked in his MEMORY.md.
-Exit codes: 0 installed (or dry run clean) · 2 bad input · 3 not root · 4 sha not on the branch / unreadable · 5 blob
-hash mismatch · 6 write failed (the live file is untouched unless the final rename ran).
+⛔ NO INPUT FROM LANGSTON'S SIDE: no path, ref or content argument beyond the sha the ROOT operator passes; no sudo
+   entry for him. A rule that must land now: he asks a CC session in the channel, which commits and installs it (the
+   hotfix path if urgent) - never parked in his MEMORY.md.
+Exit codes: 0 installed (or already installed / dry run) · 2 bad input · 3 not root · 4 sha not on GitHub's branch,
+GitHub unreadable, or an object missing in the mirror · 5 blob hash mismatch · 6 write or protect failed.
 """
-import hashlib, os, re, subprocess, sys, tempfile
+import hashlib, json, os, re, stat, subprocess, sys, tempfile, time
 
 MIRROR = os.environ.get("LRI_MIRROR", "/srv/dawntrader-backup.git")
+UPSTREAM = os.environ.get("LRI_UPSTREAM", "https://github.com/kylegjordan/DawnTraderV3.git")
 BRANCH = "migration/aws-supabase"
 REPO_PATH = "comms-infra/langston/LANGSTON_CLAUDE.md"
 TARGET = os.environ.get("LRI_TARGET", "/home/langston/CLAUDE.md")
 BACKUP_DIR = os.environ.get("LRI_BACKUP", "/root/langston-rules-backup")
+PUBLIC_RECORD = os.environ.get("LRI_PUBLIC_RECORD", "/etc/langston/rules-installed")
+USE_IMMUTABLE = os.environ.get("LRI_NO_IMMUTABLE") != "1"     # tests on a filesystem without chattr may turn it off
+
+
+def run(cmd, binary=False, timeout=120):
+    r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    out = r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()
+    return r.returncode, out, r.stderr.decode("utf-8", "replace").strip()
 
 
 def git(*args, binary=False):
-    r = subprocess.run(["git", "-C", MIRROR] + list(args), capture_output=True, timeout=120)
-    return r.returncode, (r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()), \
-        r.stderr.decode("utf-8", "replace").strip()
+    return run(["git", "-C", MIRROR] + list(args), binary=binary)
 
 
 def die(code, msg):
     print("REFUSED: " + msg)
     sys.exit(code)
+
+
+def immutable(path):
+    """True / False from lsattr, or None if it cannot be read."""
+    rc, out, _e = run(["lsattr", "-d", path])
+    if rc != 0 or not out:
+        return None
+    return "i" in out.split()[0]
+
+
+def set_immutable(path, on):
+    rc, _o, err = run(["chattr", "+i" if on else "-i", path])
+    if rc != 0:
+        raise OSError("chattr %s %s failed: %s" % ("+i" if on else "-i", path, err))
+
+
+def live_state():
+    """(bytes or None, description, is_regular_root_0644, immutable)"""
+    try:
+        fd = os.open(TARGET, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return None, "absent", False, None
+    except OSError as e:
+        if os.path.islink(TARGET):
+            return None, "a symbolic link (not followed, not backed up)", False, None
+        die(6, "cannot open %s (%s)" % (TARGET, e))
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return None, "not a regular file (mode %o)" % st.st_mode, False, None
+        data = b""
+        while True:
+            chunk = os.read(fd, 1 << 20)
+            if not chunk:
+                break
+            data += chunk
+    finally:
+        os.close(fd)
+    ok = st.st_uid == 0 and st.st_gid == 0 and stat.S_IMODE(st.st_mode) == 0o644
+    imm = immutable(TARGET)
+    return data, "a regular file, owner %d:%d mode %o, immutable %s" % (
+        st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode), imm), ok, imm
+
+
+def write_record(sha, new_sha, blob_id):
+    rec = json.dumps({"installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "commit": sha,
+                      "path": REPO_PATH, "blob": blob_id, "sha256": new_sha, "target": TARGET}) + "\n"
+    for path, mode in ((os.path.join(BACKUP_DIR, "INSTALLED"), 0o600), (PUBLIC_RECORD, 0o644)):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".rules-installed-", dir=os.path.dirname(path))
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(rec)
+            fh.flush()
+            os.fchown(fh.fileno(), 0, 0)
+            os.fchmod(fh.fileno(), mode)
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
 
 
 def main(argv):
@@ -49,9 +124,16 @@ def main(argv):
     if len(args) != 1 or not re.fullmatch(r"[0-9a-f]{40}", args[0]):
         die(2, "usage: langston-rules-install <full-40-char-sha> [--dry-run]")
     sha = args[0]
-    rc, _o, err = git("merge-base", "--is-ancestor", sha, BRANCH)
+    rc, out, err = run(["git", "ls-remote", UPSTREAM, "refs/heads/" + BRANCH], timeout=60)
+    head = out.split()[0] if rc == 0 and out else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", head):
+        die(4, "cannot read %s's head from %s (%s)" % (BRANCH, UPSTREAM, err or out or "empty"))
+    rc, _o, err = git("cat-file", "-e", head + "^{commit}")
     if rc != 0:
-        die(4, "%s is not on %s in %s (%s)" % (sha, BRANCH, MIRROR, err or "not an ancestor"))
+        die(4, "the mirror does not yet hold GitHub's head %s - wait for its sync and re-run" % head[:12])
+    rc, _o, err = git("merge-base", "--is-ancestor", sha, head)
+    if rc != 0:
+        die(4, "%s is not an ancestor of GitHub's %s head %s (%s)" % (sha, BRANCH, head[:12], err or "not an ancestor"))
     rc, want_id, err = git("rev-parse", "%s:%s" % (sha, REPO_PATH))
     if rc != 0:
         die(4, "%s has no %s (%s)" % (sha, REPO_PATH, err))
@@ -61,25 +143,23 @@ def main(argv):
     got_id = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
     if got_id != want_id:
         die(5, "blob %s re-hashes to %s" % (want_id, got_id))
-    try:
-        with open(TARGET, "rb") as fh:
-            old = fh.read()
-    except FileNotFoundError:
-        old = None
-    old_sha = hashlib.sha256(old).hexdigest() if old is not None else None
+    old, desc, ok, imm = live_state()
     new_sha = hashlib.sha256(data).hexdigest()
-    print("%s: %s -> %s (%d -> %d B) from %s" % (TARGET, (old_sha or "absent")[:12], new_sha[:12],
-                                                len(old or b""), len(data), sha[:12]))
-    if old == data:
-        print("already installed - nothing to do")
+    old_sha = hashlib.sha256(old).hexdigest() if old is not None else None
+    print("live %s: %s" % (TARGET, desc))
+    print("install %s (%d B) from %s, GitHub head %s" % (new_sha[:12], len(data), sha[:12], head[:12]))
+    if old == data and ok and (imm or not USE_IMMUTABLE):
+        print("already installed - content, root:root 0644 and protection all hold")
         return 0
+    if old == data:
+        print("content matches but owner/mode/protection do not - re-installing to fix them")
     if dry:
         print("DRY RUN - nothing written")
         return 0
     try:
+        os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
+        os.chmod(BACKUP_DIR, 0o700)
         if old is not None:
-            os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
-            os.chmod(BACKUP_DIR, 0o700)
             bpath = os.path.join(BACKUP_DIR, old_sha + ".md")
             if not os.path.exists(bpath):
                 fd = os.open(bpath, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -88,7 +168,7 @@ def main(argv):
                     fh.flush()
                     os.fsync(fh.fileno())
             print("previous version kept at %s" % bpath)
-        fd, tmp = tempfile.mkstemp(prefix=".CLAUDE.md.install-", dir=os.path.dirname(TARGET))
+        fd, tmp = tempfile.mkstemp(prefix="stage-", dir=BACKUP_DIR)     # root-only staging (Langston r1 record)
         try:
             with os.fdopen(fd, "wb") as fh:
                 fh.write(data)
@@ -96,18 +176,23 @@ def main(argv):
                 os.fchown(fh.fileno(), 0, 0)
                 os.fchmod(fh.fileno(), 0o644)
                 os.fsync(fh.fileno())
-            os.replace(tmp, TARGET)
-        except BaseException:
+            try:
+                if USE_IMMUTABLE and os.path.lexists(TARGET) and not os.path.islink(TARGET) and immutable(TARGET):
+                    set_immutable(TARGET, False)
+                os.replace(tmp, TARGET)
+            finally:
+                if USE_IMMUTABLE and os.path.exists(TARGET) and not os.path.islink(TARGET):
+                    set_immutable(TARGET, True)
+        finally:
             if os.path.lexists(tmp):
                 os.unlink(tmp)
-            raise
+        write_record(sha, new_sha, want_id)
     except OSError as e:
-        die(6, "write failed (%s: %s)" % (type(e).__name__, e))
-    st = os.lstat(TARGET)
-    with open(TARGET, "rb") as fh:
-        back = hashlib.sha256(fh.read()).hexdigest()
-    print("INSTALLED: %s sha256 %s, owner %d:%d mode %o" % (TARGET, back, st.st_uid, st.st_gid, st.st_mode & 0o7777))
-    return 0 if back == new_sha else 6
+        die(6, "write or protect failed (%s: %s)" % (type(e).__name__, e))
+    back, desc, ok, imm = live_state()
+    good = back == data and ok and (imm or not USE_IMMUTABLE)
+    print("INSTALLED: %s now %s, sha256 %s" % (TARGET, desc, hashlib.sha256(back or b"").hexdigest()[:12]))
+    return 0 if good else 6
 
 
 if __name__ == "__main__":
