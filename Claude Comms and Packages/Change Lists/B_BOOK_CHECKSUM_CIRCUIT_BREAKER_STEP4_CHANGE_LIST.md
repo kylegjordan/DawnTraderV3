@@ -89,7 +89,7 @@ if (_trust && _trust.state !== 'trusted' && !_verified) continue;   // only a ve
 
 ## 4. Plans 4-9 (brief)
 - **Route** `routes.ts` (after the book-integrity route; handler at `:13284`): `POST /api/active-engine/book-recheck/:symbol`, body `{by}` normalised through `normaliseAlertActor` (400 otherwise), `202` accepted / `409` refused with the reason.
-- **Precision bound** `:1162` (0-18 on both fields, refused + counted); `readAssetPairsPrecision` `:277-288` uses the same bound on the REST answer.
+- **Precision bound** `:1162` (0-18 on both fields, refused + counted); `readAssetPairsPrecision` `:277-288` uses the same bound on the REST answer. *(Record item, Langston r3: those lines are at `cdf74ab5d`; at the approved `5c5abef81` the reader is `:316-322` — `async function readAssetPairsPrecision(internalSymbol: string)` — and the bound is applied at `:300` inside `fetchAssetPairsPrecisionSnapshot`.)*
 - **Counters** `getBookIntegrityCounters` — per-symbol and totals for the six new counters, `skippedNoPrecision` now published, `trust` per symbol and a trust tally; the docblock and the `note` corrected.
 - **Rule 18** — DELETED_COMPONENTS_LOG entry 2026-10-20 + three verbatim archives in `1-system-manual/_archive/deleted-code/`.
 - **Instrument subscribe** `:711`, once per open; gone from `subscribeToSymbols`.
