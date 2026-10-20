@@ -2,7 +2,7 @@
 
 > **r1 → r2 (Langston, 2026-10-20 22:46Z: CHANGES, three small, PROCEED on landing):** C-1 `.gitignore:72` is KEPT (it ignores a credentials reference doc); C-2 the checker's CLAUDE.md exemption also covers CC's root rules file — recorded on `#744` as a hypothesis for its owner, not built here; C-3 P6 names its read-site, not a carried byte figure. He ruled root:root 0644 for the live file YES, with a no-input installer (P1). He withdrew his r1 CHANGES-3 to his own ledger: A6 stands.
 
-change-class: architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SCOPE.md` (r3, `80ba70062`, Langston PROCEED on landing C-1/C-2/C-3) · measured 2026-10-20/21 on Helsinki as root unless stated
+change-class: non_architecture · scope `Scope Files/B_LANGSTON_CLAUDEMD_RESIDUAL_SCOPE.md` (r3, `80ba70062`, Langston PROCEED on landing C-1/C-2/C-3) · measured 2026-10-20/21 on Helsinki as root unless stated
 
 ## 0. PREVIOUSLY STATED → NOW
 
