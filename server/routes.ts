@@ -795,7 +795,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Directive 8.9.4-VTP: Verification Test Protocol Routes
-  apiRouter.post('/vtp/start', async (_req, res) => {
+  apiRouter.post('/vtp/start', authenticateToken, async (_req, res) => {
     try {
       const result = await verificationTestProtocol.startSession();
       res.json(result);
@@ -805,7 +805,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/vtp/stop', async (_req, res) => {
+  apiRouter.post('/vtp/stop', authenticateToken, async (_req, res) => {
     try {
       const result = await verificationTestProtocol.stopSession();
       res.json(result);
@@ -826,7 +826,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Directive 8.9.5: Mini-Book Integrity Monitor Routes
-  apiRouter.post('/mbim/start', async (_req, res) => {
+  apiRouter.post('/mbim/start', authenticateToken, async (_req, res) => {
     try {
       miniBookIntegrityMonitor.start();
       res.json({ ok: true, message: 'MBIM started (5-min interval)' });
@@ -836,7 +836,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/mbim/stop', async (_req, res) => {
+  apiRouter.post('/mbim/stop', authenticateToken, async (_req, res) => {
     try {
       miniBookIntegrityMonitor.stop();
       res.json({ ok: true, message: 'MBIM stopped' });
@@ -859,7 +859,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.post('/mbim/audit', async (_req, res) => {
+  apiRouter.post('/mbim/audit', authenticateToken, async (_req, res) => {
     try {
       const results = await miniBookIntegrityMonitor.runAudit();
       res.json({ ok: true, results, count: results.length });
@@ -5721,8 +5721,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     return globalSimulationSession;
   };
 
-  // Internal endpoint for 48hr simulation script to register session (no auth required - internal use only)
-  apiRouter.post('/internal/active-engine/register-session', async (req, res) => {
+  // Internal endpoint for 48hr simulation script to register session (B-MUTATING-ROUTES-AUTH #1228: login required; no HTTP caller remains, the engine calls the in-process function)
+  apiRouter.post('/internal/active-engine/register-session', authenticateToken, async (req, res) => {
     try {
       const { sessionId, startedBy, startTime, type } = req.body;
       
@@ -5746,8 +5746,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Internal endpoint for 48hr simulation script to deregister session (no auth required - internal use only)
-  apiRouter.post('/internal/active-engine/deregister-session', async (req, res) => {
+  // Internal endpoint for 48hr simulation script to deregister session (B-MUTATING-ROUTES-AUTH #1228: login required; no HTTP caller remains, the engine calls the in-process function)
+  apiRouter.post('/internal/active-engine/deregister-session', authenticateToken, async (req, res) => {
     try {
       if (globalSimulationSession) {
         console.log(`[SimRegistry] Deregistered GLOBAL session ${globalSimulationSession.sessionId} via API`);
@@ -13987,7 +13987,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  apiRouter.patch('/conversations/:id', async (req: AuthenticatedRequest, res) => {
+  apiRouter.patch('/conversations/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const { id } = req.params;
       const { title, maxContextMessages } = req.body;
@@ -14802,7 +14802,7 @@ Provide specific, actionable recommendations.`,
   });
 
   // Screener test endpoint for demonstrating different filter configurations
-  apiRouter.post('/screener/test', async (req: AuthenticatedRequest, res) => {
+  apiRouter.post('/screener/test', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user?.id;
       const mode = (req.body.mode || req.query.mode || 'paper') as 'live' | 'paper';
@@ -21318,6 +21318,16 @@ Please:
   const { statusRouter } = await import('./routes/status.js');
   apiRouter.use('/status', statusRouter);
   console.log('[Phase 1] Status routes mounted at /api/status');
+
+  // B-MUTATING-ROUTES-AUTH (#1228, Kyle 2026-10-21): these four sub-router routes change state or
+  // run work, and their routers carry no auth. Each guard is registered BEFORE its router is mounted
+  // below: a refused request stops here with 401; an accepted one calls next() and reaches the
+  // router's own handler unchanged. Keep each guard above its mount (pinned by
+  // server/tests/unit/b-mutating-routes-auth.test.ts).
+  apiRouter.post('/health/recovery/test', authenticateToken);
+  apiRouter.post('/back-audit/run', authenticateToken);
+  apiRouter.get('/audit/run', authenticateToken);
+  apiRouter.get('/signal-audit/run', authenticateToken);
 
   // B-TOKEN-WATCH: the observation study's tracking page reads ONE published
   // summary file. This is the study's entire server-side footprint.
