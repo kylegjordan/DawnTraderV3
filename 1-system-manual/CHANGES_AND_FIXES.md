@@ -28,6 +28,14 @@
 **VERIFIED:** the 2026-10-18 02:15Z sweep, run_id `6f7ef0d4-…`. 4 of 4 new objects `source-count-matched`, one evidence row each, three counts equal; census 568 / 4 / 4 / 0; no measurable cost on the largest object (304,884 ms vs 313,486). Record `…_STEP7_VERIFICATION.md`.
 **NOT RECOVERED, by decision:** the rows missing from the 568 legacy copies.
 
+## FIX-2026-10-17-A — `B-XSTOCK-BID-TRIGGER-RELAND` increment B (row 2, objectives 5 + 8's size test, CC-C) — paper xStock exits fired on the midpoint, and fills never asked whether the book could hold our size
+
+**CLASS: `architecture`. SYMPTOM:** since `8a-P4b` Step 9 C1 (2026-09-19) the paper xStock stop/target trigger read the MARK — a price nobody can sell at — because the bid version had fired a false stop on a blown-out book (MDB/USD, `#1065`); and no xStock resting fill or taker entry checked the quoted size on its side.
+
+**FIX:** the trigger is the guard-judged BID while the book-state guard ran AND `spread_blown` is on (otherwise the mark, with the reason printed); armed with no bid ⇒ no decision. `xstockSideSize` in `transactable-sides.ts`: rests and the taker entry refuse a short/unknown side, exits are only counted; a broken own-row quantity pages once per position; a crossed book refuses entry. Instruments `[XS_SIZE]`, `[XS_SIZE_TRIPWIRE]`, ` on=bid|mark`. Epoch `xstock_spot` `paper_sim` 6 → 7.
+
+**Verified:** deployed `93dce9cb9` 2026-10-17 07:56:13Z; 2026-10-19 13:30Z → 10-20 20:00Z — 31 decisions on the bid, trigger ≠ bid 0, no frame over 1%, size counters 0 over 68,991 lines; Langston CONFIRMED Step 8 (2026-10-20). **NOT IN THIS FIX:** the one shared paper/VTS trigger module (objective 8, increment (4b)); the mark fallback is fence-verified only. Record `Claude Comms and Packages/Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md` §3c.
+
 ## FIX-2026-10-16-B — `B-XSTOCK-BID-TRIGGER-RELAND` objective 6 (row 2, CC-C) — an xStock exit could be released, and sold, on a blown-out book
 
 **CLASS: `architecture`. SYMPTOM:** the `spread_blown` arm sat after the comparator and used the chain's trailing threshold; a hollow YIELD cleared the comparator, the next frame seeded ON the wide book, and a comparator-relative test then released the exit — PCAR/USD 2026-10-13, YIELD 00:19:42Z → EXIT_RELEASED 00:19:47Z, sold at the bid 7.2% under entry on a 12.3% book. Of 13 such overnight stop exits outside the venue-transition pause, the 12 with a next-open read all reopened above the stop.

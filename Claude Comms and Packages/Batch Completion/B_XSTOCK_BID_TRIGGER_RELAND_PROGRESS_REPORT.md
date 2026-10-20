@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — PROGRESS REPORT
 
-## OPEN — waiting on: increment (4a)'s three-session window · increments A and C's EST reads (2026-11-01/02/03) · increment B's Step 10 (Step 8 CONFIRMED 2026-10-20) · objective 6's S6 EXERCISED 2026-10-19 (§3c)
+## OPEN — waiting on: increment (4a)'s three-session window · increments A and C's EST reads (2026-11-01/02/03) · increment (4b), objective 8's shared paper/VTS trigger module (not yet built) · increment B Step 10 done 2026-10-20 (§6b) · objective 6's S6 EXERCISED 2026-10-19 (§3c)
 
 change-class: `architecture` (scope header) · owner CC-C (Analyst Claude) · sprint plan row 2 · `#1191` (increment 4a), `#1199` (placed follow-up)
 
@@ -14,6 +14,8 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 
 **Increment (4a) — the VTS and paper no-decision rails clear themselves.** Per-trade VTS keys; expected wide/quiet books join one info record and page only after 30 min of session time; durable decision marks so rows clear across a restart; per-position paper keys; unpriced closes recorded with hold and last refusal. Plan: `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4A_PRE_AUDIT.md` r1-r5f. Change list: `Change Lists/B_XSTOCK_BID_TRIGGER_RELAND_INC4A_STEP4_CHANGE_LIST.md`.
 
+**Increment B — objectives 5 + 8's size test (deployed `93dce9cb9`, 2026-10-17 07:56:13Z; `dt-deploy --by cc-c`).** The paper xStock stop/target trigger reads the guard-judged BID while the book-state guard ran and `spread_blown` is on — otherwise the mark, with the reason printed; armed with no bid ⇒ no decision. `xstockSideSize` (`transactable-sides.ts`): resting fills and the taker entry refuse a side that cannot show our size, exits are only counted; a broken own-row quantity pages once per position; a crossed book refuses entry. Epoch `xstock_spot` `paper_sim` 6 → 7. Plan: `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INCB_PRE_AUDIT.md` (r2, P1-P9); change list `Change Lists/B_XSTOCK_BID_TRIGGER_RELAND_INCB_STEP4_CHANGE_LIST.md`. ⚠️ **Objective 8 is PARTIAL:** B shipped its size test; the ONE shared trigger module for the engine and the VTS, with its call-site-count fence, is increment (4b) and is not built (the VTS trigger is still its own implementation, `vts-runner.ts` `_vtsTriggerPrice`).
+
 ## 3. Steps completed, with evidence
 | piece | step | evidence |
 |---|---|---|
@@ -26,6 +28,12 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 | (4a) | 7 (first read) | two-sided legacy-row read PASS: of 60 open rows (pre-deploy snapshot 15:09:56Z: 28 closed / 32 open trades) 28/28 `TRADE-CLOSED`, 32/32 `DECIDED-AFTER-MINT`, 0 open-trade rows `TRADE-CLOSED` (pre-audit "STEP 6 + FIRST STEP-7 READ") |
 | obj 6 | 7 | first overnight 20:00Z→01:00Z: 16 held, 0 closes (control 31), 53 releases all above the stop (min +0.083%), 0 pages (change list "STEP 7 — FIRST OVERNIGHT READ") |
 | obj 6 | 8 | Langston CONFIRMED 2026-10-17 01:25Z, all five legs re-derived by him; 15 legacy `book-state-hollow-paper-*` rows resolved citing the change list's line 72 |
+| B | 2 | plan r2 (P1-P9), Langston PROCEED with forward-binding conditions (the seed-frame coupling, the `invalidQty` reading convention) |
+| B | 4 | three gates, each Langston-approved; C1-C3 instrument folds rode CC-B's `162ae0537` |
+| B | 5-6 | CI `39015290902` 4/4 per job; deployed `93dce9cb9` 2026-10-17 07:56:13Z; epoch read back 7 (`updated_at` 07:55:59Z); protected file unchanged |
+| B | 7 | first-pass read PASS on all six pre-registered legs (§3c), `9b6c0ce4f` |
+| B | 8 | Langston CONFIRMED 2026-10-20 21:17Z, both instruments re-run by him; F1-F8 folded into §3c at `2f2210a50` |
+| B | 10 | 2026-10-20, ledger §6b |
 
 ## 3c. Increment B (objectives 5 + 8) — Step 7 first-pass read, Step 8 confirmed, and objective 6's S6 first exercise (read 2026-10-20 by CC-C; Step 8 by Langston 2026-10-20 21:17Z)
 **Build:** `93dce9cb9` deployed 2026-10-17 07:56:13Z; the Step-4 C1-C3 instrument folds rode CC-B's `162ae0537` (13:03:42Z); the window ran on `7501f4f55` (CC-B, restart 2026-10-18 05:33:29Z — no deploy between it and 10-20 20:00Z; Langston re-derived all three ancestries and the deploy reflog). Plan and pre-registration: `Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INCB_PRE_AUDIT.md` §4, §0.r2c, §0.s4.
@@ -73,6 +81,47 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 - The release after a `spread_blown` hold is a fresh seed on two sub-ceiling frames with no movement test — `#1199`, placed after this objective's observation read (53 releases on 17 symbols in the first five hours show how often books oscillate around the ceiling).
 - The paper rail clears on a `position_closed` row; 9 of 259 paper closes over 14 days wrote none (joined `active_trade_logs.trade_id = closed_trades.id`) — those rows stay for a human, blocking nothing.
 - `serialPerKey` assumes one process writes the alert rows (PM2 one fork; Docker one process) — false the day a second writer lands.
+- **Increment B:** the mark fallback (`basis=mark`) never ran live — it is fence-verified only (the inc2-chain arm-OFF control covers `reason=spread_blown_off`; `reason=guard_off` has NO fence ⇒ folded into (4b)'s fences, §9.4 disposition 2). The entry `crossed` refusal is unexercised (no crossed book met an entry attempt). Size refusals have never fired (0 over 68,991 lines in the window). The trigger's safety on seed frames rests on the coupling with the 1% `spread_blown` ceiling (System Manual §3.5.1b, forward-binding).
+- **Retention:** `out.log` rotates by size 6-8 times a day, so stdout older than ~12-16 h is gone; the window reads depend on a daily harvest (§3c).
+
+## 6b. Governance files changed — increment B (Step 10, 2026-10-20)
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | row 2 entry: B shipped (trigger on the gated bid, size test, crossed refusal); open on (4a), A/C, and (4b) still to build |
+| T1 | PHASE_HISTORY.md | ✅ | 2026-10-17 entry for increment B, batch OPEN |
+| T1 | SPRINT_TO_LIVE_PLAN.md (row 2) | ✅ | status: B deployed, Step 8 confirmed, Step 10; S6 exercised; A/C read dates |
+| T1 | PHASE_19_PLAN.md | N/A — no row there | `3n.q7` has no row of its own there |
+| T1 | shared MEMORY.md + MEMORY_CC_C.md | ✅ mine / N/A shared | own: row 2 position (B at Step 10, (4a) harvest, (4b) next); shared: the "xStock holds on a book wider than 1%" truth still holds, no new shared truth |
+| T1 | the batch SCOPE | N/A | no scope change; objective 8's split between B (size) and (4b) (shared module) is recorded here and in the catalog |
+| T1 | the batch PRE_AUDIT | ✅ | INCB_PRE_AUDIT r2 (landed at Step 2) — its §4 pre-registration is what §3c reads against |
+| T1 | COMPLETION_REPORT | ✅ | this PROGRESS report — §2 increment B, §3 steps, §3c read with Step 8's corrections, §5 unproven |
+| T1 | the Observation column | ✅ | card stays in Observation (blocked on the (4a) window, A/C reads, (4b)) |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC_C row 2: B deployed and confirmed, next the (4a) read then (4b) |
+| T1 | Langston's MEMORY.md | ✅ | row 2 line updated (inc B confirmed, (4b) unbuilt); 421 → 362 B, the sum goes down |
+| T2 | SYSTEM_MANUAL.md | ✅ | §3.5.1b rewritten: the gated bid trigger, the seed-frame coupling with the 1% ceiling (forward-binding), size and crossed rules, how to read the counters; §18.0.1 table cell, epoch boundaries, the crypto-ceiling note |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | NEW `transactable-sides.ts` entry (both functions, every production caller, upstream quantities, instruments, blast radius — a gap since `8a-P4c`); the `8a-P3/P4` summary line updated |
+| T2 | RUNNING_ISSUES.md | ✅ | `#1191` update: the window's stdout carrier rotates faster than the window; harvest location |
+| T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-10-17-A (increment B) |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level change |
+| T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | epoch register: third precedent (`xstock_spot/paper_sim` 6 → 7) and the unmarked objective-6 boundary inside epoch 6 |
+| T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
+| T2 | STORAGE_POLICY.md | N/A | no table or retention policy change; the log harvest is a read-time copy, not a policy |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | ✅ | working-list review: no item A–F change; the second paper xStock boundary, machine-visible this time |
+| T2 | ACTIVE_PATH_FLOW.md | ✅ | the "still on the midpoint" line and the open-questions row: paper xStock re-landed on the bid |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no onboarding learning surfaced |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | no role, gate or method changed |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | his build unchanged |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md change |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed; C1's log-only divergence lines were re-pointed, not deleted (X3 START on the mark arm only) |
+| T2 | MISTAKE_PATTERNS.md | N/A | the Step-7 slips (`wrong-object`) are in commit bodies for the weekly pass |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no exception granted |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | one new alert key (`xstock-invalid-quantity-<mode>-<id>`) follows the existing pattern |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | not this batch's |
 
 ## 6. Governance files changed so far (Step 10, 2026-10-17)
 The Step-10 ledger, transcribed from the governance commit message:
