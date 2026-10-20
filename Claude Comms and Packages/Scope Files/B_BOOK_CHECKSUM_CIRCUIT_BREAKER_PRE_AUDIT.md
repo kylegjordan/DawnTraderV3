@@ -88,6 +88,53 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
   - An ack would silence nothing future, because the key is per episode. The rule stays resolve-only (`#982`).
 - **Refuted, not carried** (Langston): plan 9 is safe. The instrument subscribe covers every pair, and unknown precision fails open, so once-per-open cannot starve a late subscriber.
 
+## r4 — Langston's review of r2: audit APPROVED; plan B1-B5 and the smaller items
+- **B1 — the orphan's birth site, by presence, with a positive control.** `[8.8.5][RECONNECT]` is `console.warn`, so it goes to stderr and is retained. In `error__2026-10-14_00-00-00.log` it appears twice:
+  - **14:31:33, "Reconnecting in 1000ms (attempt 1)"**, after `[8.8.5][HEARTBEAT] No messages in 45674ms`.
+  - **17:15:30, "attempt 2"**, after a 45,837 ms silence. This is the orphan's own death showing up as silence; "attempt 2" also confirms that `reconnectRetries` is never reset.
+  - There is none in between, so the orphan was born at **`reconnectWithBackoff`, 14:31:33**:
+    1. `close(4001)` was requested.
+    2. The close hung on a half-dead connection.
+    3. `connect()` built a new socket 1 s later, while the old one was still delivering.
+  - Positive control: the same literal appears four times across the retained stderr, including 2026-10-06 15:46:30 and 2026-10-08 18:08:51.
+  - The carrier is now MEASURED at its birth, not INFERRED.
+- **B2 — A2 corrected.**
+  - PREVIOUSLY STATED: "nothing closes the previous socket". NOW: both reassign sites close it gracefully first (`:3350` `close(4001)`, `:3831` `close(4090)`). What is true is that **nothing detaches it and nothing forces it.** REASON: Langston.
+  - The defect is a graceful close that hung. T3 bounds it: the hung close completed at 17:14:44, an orphan window of about 2h43m.
+  - **Plan 10 test added:** a stale socket whose close was requested but never completed is still ignored, and its eventual `close` schedules nothing.
+- **B3 — why the readyState predicate (r3, A7) closes the window those sites open.**
+  - `:3358-3359` and `:3848-3849` clear `isConnecting` before their delayed `connect()`, so today's guard is open across that delay and `scheduleReconnect`'s timer can land inside it.
+  - Under r3 the predicate is `this.ws?.readyState ∈ {CONNECTING, OPEN}`:
+    - The first delayed `connect()` sees the old socket at CLOSING, detaches it, terminates it, and builds a new one (CONNECTING).
+    - Any second `connect()` from the other scheduler is then refused, because the new socket is CONNECTING.
+  - The two sites' `isConnecting = false` writes become irrelevant to the guard and are removed.
+- **B4 — "every reader already refuses a stale book" is false at today's code.**
+  - `getBookForFill` (`:3609-3630`) applies no age ceiling and no trust test. Holding a suspect book instead of wiping it is safe **only because plan 3 lands in the same commit** (`getBookForFill` returns null for a non-trusted book). This is a stated dependency, not an existing property (#546).
+  - **Age ceiling per caller, at the ref:**
+
+| caller | ceiling on a trusted book |
+|---|---|
+| `depth-source.ts:78` (open depth gate) | `warmth_max_age_ms`, crypto 5,000 ms (`module_constants` `fill_depth_gate`) |
+| `aee:2882` → inline exit `selectTouchPrice` | `EXIT_TRIGGER_MAX_AGE_MS` 2,000 ms (`crypto-touch.ts:147`); the book-age *stamp* use has none (record only) |
+| `crypto-touch-readers.ts:18` → `selectCryptoTouch` | per caller: entry fill `ENTRY_FILL_TOUCH_MAX_AGE_MS` 8,000 (`:66`); RTB retirement 2,000 (`rtb-retirement-ask.ts:49`); VTS `VTS_EXIT_TOUCH_MAX_AGE_MS` **90,000** (`:88`). The four VTS sites' arguments are read one by one at Step 3 (INFERRED from the constant until then) |
+| `signal-orchestrator.ts:2642` | record-only (level-basis observation ceiling); decides nothing |
+| `vts-runner.ts:1787` | record-only |
+
+  - Every decision reader applies some ceiling. **A trusted book that goes quiet is served up to 90 s by the VTS exit lane.** This is recorded for item 2 (`#1222`), which owns the shared freshness definition, and is not changed here.
+  - The held book's `ageMs` keeps growing because the mismatch `continue` sits above the stamp (`:1193`), and that is what makes holding workable.
+- **B5 — `softResubscribeAll` drops every subscription on a slow handshake.**
+  1. It clears `subscribedSymbols` and `pendingSubscriptions` (`:3853-3854`).
+  2. After `await connect()` it sleeps 1,000 ms and resubscribes only `if (this.isConnected)` (`:3862`).
+  3. If the handshake is slow, the whole set is dropped with no retry, and the line that says so is `console.log`.
+  4. `handleOpen`'s reconnect branch then restores open positions only (`:633`), so RTB-queued books (`rtb:2384`, `#506`) are lost.
+  - **Disposition 2 — added to item 2, `B-PRICE-FEED-COVERAGE` (`#1222`)**, which already owns "the reconnect must re-subscribe RTB-queued symbols". It is the same defect class on the same path, in a batch Kyle has already agreed.
+- **Smaller items:**
+  - **Alert key:** episode-scoped since r3 (`book_untrusted:<symbol>:<episode ISO>`). The re-check route's trust restore resolves it, with evidence.
+  - **Counter reader:** all five new counters and the skip count are served by `getBookIntegrityCounters` → `GET /api/active-engine/book-integrity` (`routes.ts:13268`). That route, and the Step-7 read of it, are their reader.
+  - **`sentinelResets` client reader:** none. That is Langston's controlled zero in `client`, `scripts` and `routes.ts`, reached only through `getHealthMetrics()`.
+  - **Citations:** `reconnectAttempts = 0` sits at `:551` / `:605` (A7).
+- **Log retention:** surfaced to Kyle, **SURFACED — awaiting Kyle's slot** (`RUNNING_ISSUES`, Langston's sixth state under Kyle's 2026-10-19 rule). Not placed by us.
+
 ## A. AUDIT
 
 **A1 — the six sources.**
@@ -244,6 +291,8 @@ change-class: architecture · **Issue:** `#1220` · **Scope:** r6 `14bce26b5`, A
       - N mismatching frames with a resync in flight send no second resync and no second wipe.
     - **One socket:**
       - a second `connect()` detaches, then terminates, the first;
+      - a stale socket whose close was requested but never completed is ignored, and its eventual `close` schedules nothing (B2);
+      - two schedulers firing for one drop open exactly one socket (B3);
       - terminating the old socket schedules no reconnect;
       - an old socket's `pong` does not refresh `lastPongTime`;
       - a message from a stale socket is ignored;
