@@ -63,6 +63,20 @@ describe('B-MUTATING-ROUTES-AUTH: the four sub-router routes are guarded above t
   }
 });
 
+describe('B-MUTATING-ROUTES-AUTH: the guarded apiRouter copy of healthRouter answers first', () => {
+  // healthRouter is mounted twice: on apiRouter (routes.ts, guarded above) and again directly at
+  // app.use('/api/health') in index.ts. Express matches layers in registration order, so the
+  // guard holds only while apiRouter is mounted BEFORE the second copy (Langston, hotfix gate).
+  const INDEX = fs.readFileSync(path.resolve(__dirname, '../../index.ts'), 'utf8');
+  it("app.use('/api', apiRouter) is registered before app.use('/api/health', healthRouter)", () => {
+    const api = INDEX.indexOf("app.use('/api', apiRouter)");
+    const health = INDEX.indexOf("app.use('/api/health', healthRouter)");
+    expect(api).toBeGreaterThan(-1);
+    expect(health).toBeGreaterThan(-1);
+    expect(api).toBeLessThan(health);
+  });
+});
+
 describe('B-MUTATING-ROUTES-AUTH: what was left out on purpose stays as it was', () => {
   it('POST /market-context/analyze is unchanged (adding a login would switch on an AI call from an off-limits page)', () => {
     const regs = registrations('post', '/market-context/analyze');
