@@ -40,7 +40,7 @@
 | 0 — clear the plates | 5 | B-REST-SIDES-TO-CACHE | 14 | | row (row 14 reads `BUILT — deploy after 2026-09-30` — deployed since?) | | §0 |
 | 0 — clear the plates | 6 | B-BOOK-STATE-RESTART-DURABLE | 15 | | row (row 15 reads `BUILT — deploy after 2026-09-30`) | | §0 |
 | 0 — clear the plates | 7 | B-SIZING-DEC-RESTORE | 9 | | row | | §0 |
-| 0 — clear the plates | 8 | B-XSTOCK-SESSION-FRESHNESS | 40 | | row (row 40, closed 2026-10-15) | | §0 |
+| 0 — clear the plates | 8 | ~~B-XSTOCK-SESSION-FRESHNESS~~ | 40 | | **NOT CARRIED — dropped at Step 4 (Langston gate B); see the drop list below for where its open halves live. No need to confirm.** | | §0 |
 
 ## NEW Claude (CC-B) — please check
 | stage | order | item | plan row | issue | proposed status | proposed waiting on | from |
