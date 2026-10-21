@@ -2,6 +2,7 @@
 
 > Read by the governance checker every 30 minutes and shown on Kyle's phone status board under each item (`B-STATUS-BOARD`, `#1227`). **One `### <batch id>` heading per item, the description in the lines below it, until the next heading.** An item with no batch id is keyed `### row <N>` (its sprint-plan row). Write for Kyle: what the item is for and what changes when it is done, in two or three sentences, real component names, no file paths or code. A description longer than 700 characters is still shown, and marked as too long.
 > **The owning session keeps its own items current.** The starting set below was drafted by CC-A from each item's own plan row and issue entry on 2026-10-21; an owner who finds one wrong corrects it here. **Status and who an item is waiting on do NOT go here** — they live in the plan's pre-sprint table and its sprint rows, so there is one copy.
+> **Boundary (Langston, gate B):** the board counts a description as owed only for the pre-sprint table's items. Sprint rows outside it show a description when one is written here, and no owed mark when none is.
 
 ---
 
@@ -160,6 +161,12 @@ After a restart the xStock book-state guard started out treating every book as g
 
 ### B-SIZING-DEC-RESTORE
 Restored paper position sizing to Kyle's decisions: one shared pot, about 5% per trade, around 20 open at full exposure, and the old open-slots limit retired.
+
+### CORZ investigation
+The investigation of why CORZ's xStock price bars looked late. It found that xStock bars become available about 15 minutes after the time they are labelled with, which became B-XSTOCK-BAR-AVAILABILITY.
+
+### the main Dashboard 0-trades read
+A check of why the main Dashboard showed zero trades. Withdrawn by Kyle on 2026-10-19: the main Dashboard is off-limits unless it breaks paper-mode trading or the VTS.
 
 ### B-XSTOCK-LIVE-FEED
 Makes the xStock price recorder reload its list of stocks every day. Moved out of the pre-sprint into the sprint by Kyle.
