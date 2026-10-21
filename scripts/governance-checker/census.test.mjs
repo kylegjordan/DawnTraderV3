@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // Run: node scripts/governance-checker/census.test.mjs
 import {
   statusWord, parseLedger, datedHomes, parsePlan, parseAfterLive, parseRoadmap, placement, cellClosed, listD, listE,
-  listF, listA, planLines, recountS6, s6AlertDecision, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
+  listF, listA, planLines, recountS6, s6AlertDecision, s6UnknownLabel, runCensus, censusCounts, censusLists, censusMetadata, censusAlert,
   tallyMistakes, mistakePassAlert, ownerOfIssue, idsIn, hasId, headStatement, DATED_EXCLUSIONS, TITLE_MAX, gitReaders,
   historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord, recountAfterLive,
 } from './census.mjs';
@@ -712,6 +712,7 @@ function frameResurface(alert, d, nowMs) {
   ok('PS19 a struck after-live line places nothing; a live one does (the same rule as the count, #1180)', al.afterLive.length === 1 && al.afterLive[0].includes('B-LIVE'), JSON.stringify(al.afterLive));
   const gl = censusLists({ a: [], b: { unplaced: [], handover: null, selfContradicting: [], reused: [], placedOwnerless: [] }, afterLive: { al: 0 }, c: { issues: [], excluded: [] }, d: { rows: [], excluded: [] }, e: { unmatched: [], rowUnmatched: [] }, f: { all: [], new: [] }, g: { agree: false, diffs: [], commit: null, sameCommit: null, alert: true, unknownAt: 'abcdef1234' } });
   ok('PS20 the undecidable section-6 result carries its sha into the lists', gl.g?.unknownAt === 'abcdef1234', JSON.stringify(gl.g));
+  ok('PS20b the undecidable label: a sha gives its first 7, a null gives the window edge', s6UnknownLabel('abcdef1234') === 'abcdef1' && s6UnknownLabel(null) === 'the window edge', s6UnknownLabel(null));
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);

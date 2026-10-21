@@ -569,6 +569,9 @@ export function recountS6(plan) {
 // change that moved the tally (row 1's rule, not a new tolerance). `history` is [{sha, text}] of the plan at the
 // commits that touched it, newest first, the oldest's PARENT text appended as the last element (sha null).
 // A tally change not found in the window reads as "not the same commit" — it cannot be shown, so it alerts.
+// The undecidable path's label: the first 7 of the sha, or the window edge when there is none (Langston gate A r3: the
+// slice belongs INSIDE the fallback, or a null sha printed `the win`).
+export function s6UnknownLabel(unknownAt) { return unknownAt ? String(unknownAt).slice(0, 7) : 'the window edge'; }
 export function s6AlertDecision(rec, history) {
   if (rec.agree) return { alert: false, commit: null, sameCommit: null };
   const tally = (t) => { try { return JSON.stringify(recountS6(parsePlan(t)).recount); } catch { return null; } };
@@ -794,7 +797,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       // and the recount clause's suffix was shortened to pay for it.
       '(g) ' + (!r.g.totalAgree ? `Total ${r.g.statedTotal ?? '—'}≠${r.g.cellSum}; ` : '') +
       (r.g.agree ? `§6 recount agrees with the table` :
-        `§6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.unknownAt !== undefined ? `; undecidable: plan text at ${String(r.g.unknownAt ?? 'the window edge').slice(0, 7)} does not parse` : r.g.alert ? '; not recounted with §4' : '; recounted with §4, no alert'}`),
+        `§6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.unknownAt !== undefined ? `; undecidable: plan text at ${s6UnknownLabel(r.g.unknownAt)} does not parse` : r.g.alert ? '; not recounted with §4' : '; recounted with §4, no alert'}`),
       `Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file ${boxPath}.`,
     ].map(item).join('\n');
   };
@@ -947,7 +950,7 @@ function dryRun(argv) {
   out(`    unmatched: ${r.e.unmatched.map((x) => `${x.row}:${x.target}`).join(' ')}`);
   out(`(f) ${r.f.all.length} lines / ${r.f.ids.length} ids: ${r.f.all.join(' ')}`);
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
-  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, ${r.g.unknownAt !== undefined ? `undecidable at ${String(r.g.unknownAt ?? 'the window edge').slice(0, 7)} (plan text does not parse)` : `commit ${r.g.commit}`}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
+  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, ${r.g.unknownAt !== undefined ? `undecidable at ${s6UnknownLabel(r.g.unknownAt)} (plan text does not parse)` : `commit ${r.g.commit}`}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
   { const x = r.afterLive;
     out(`(g′) after-live recount: headline stated ${x.headline.stated} vs rule ${x.headline.recount} · al ${x.al}` +
       (x.al ? ` · disagree: ${x.disagree.map((d) => `L${d.line} ${d.heading} stated ${d.stated} rule ${d.recount}`).join('; ') || 'none'}` +
