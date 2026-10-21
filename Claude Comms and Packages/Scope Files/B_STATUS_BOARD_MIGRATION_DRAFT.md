@@ -101,3 +101,4 @@
 - `F-G-1` — an alias: reopened as `B-OHLC-WRITE-ORDER` (`#1031`), row 16, which is carried. `F-G-2` — closed as absorbed 2026-09-28.
 - `B-SQE-FEED-FANOUT` — absorbed into `B-PRICE-FEED-COVERAGE` (`#1222`). `B-STRATEGY-INPUT-FIXES` (`#1221`) — absorbed into `B-PLAN-PRICE-BASIS` by Kyle.
 - Row 173 — `MOVED` to 2a0, an alias of it. Rows 53 and 37 — "Out" in §0a's own text.
+- `B-XSTOCK-SESSION-FRESHNESS` (row 40's umbrella; §0 CC-C item 9) — dropped at Step 4 (Langston gate B, 2026-10-21): carried as `row` it would have shown row 40's `✅ CLOSED`, which is false for the umbrella. Its closed half is the entry line `B-ENTRY-CONSUMPTION-FRESHNESS` (row 40, carried); its OPEN halves live elsewhere — the exit-freshness alert rows and the notify cut at §4 row 3a1 `B-VENUE-QUIET-ALERTING` (CC-B; row 165 records the move), and the holiday calendar `#392`, parked by Kyle.
