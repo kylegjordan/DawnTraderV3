@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildBoard, parseDescriptions, lastStepFor, runStatusBoard, BOARD_FAILED_KEY } from './status-board.mjs';
-import { parseExceptionsLegacy, runStatusBoardSafely, DRIFT_LOADED_FILES } from './poller.mjs';
+import { parseExceptionsLegacy, parseExceptions, runStatusBoardSafely, DRIFT_LOADED_FILES, driftAlertAction } from './poller.mjs';
 import { presprintRows, planRowsByBatch, mapStatus, mapWaiting, idsInCell } from './checker.mjs';
 import { PLAN_LINE, BOARD_DESCRIPTIONS_PATH } from './config.mjs';
 
@@ -103,6 +103,16 @@ ok('SB20 openReason: last row wins and a `|` inside the reason is kept', ex.open
 ok('SB21 openReason: a row with no trailing pipe keeps its whole reason', ex.openReason.get('B-TWO') === 'no trailing pipe');
 ok('SB22 openReason: an unconfirmed row gives no reason, and the existing outputs are unchanged',
   !ex.openReason.has('B-THREE') && ex.open.has('B-ONE') && ex.open.has('B-TWO') && !ex.open.has('B-THREE') && ex.openSince.get('B-ONE') === Date.parse('2026-10-18T11:44:52Z'));
+
+// C2 (Langston gate A): the V2 ledger parser gives the SAME open reasons as the legacy one, so a flag flip keeps them.
+{
+  const v2 = parseExceptions(EXC).openReason, v1 = parseExceptionsLegacy(EXC).openReason;
+  ok('SB29 parseExceptions (V2) and the legacy parser give identical open reasons', v2 instanceof Map && v2.size === v1.size && v1.size > 0
+    && [...v1].every(([k, v]) => v2.get(k) === v), JSON.stringify({ v1: [...v1], v2: v2 && [...v2] }));
+}
+// record item 2: a drift-check ERROR never resolves an open drift alert; only a clean compare does.
+ok('SB30 drift: error never resolves; clean resolves; drifted opens once', driftAlertAction({ drifted: false, error: 'x' }, true) === 'none'
+  && driftAlertAction({ drifted: false }, true) === 'resolve' && driftAlertAction({ drifted: true }, false) === 'open' && driftAlertAction({ drifted: true }, true) === 'none');
 
 // the failure fence: a failure writes nothing, opens one alert, never throws; the next good write resolves it
 {

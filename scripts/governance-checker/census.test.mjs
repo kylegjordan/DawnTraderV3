@@ -692,5 +692,23 @@ function frameResurface(alert, d, nowMs) {
   console.log(`  FENCE: ${LIVE_SITES} real results, ${LIVE_COUNT_KEYS.size} counts keys, ${LIVE_LIST_KEYS.size} lists keys`);
 }
 
+{
+  // B-STATUS-BOARD Step-4 (Langston gate A). C1: an UNPARSEABLE history text (a pre-table plan after the table landed) is
+  // an unknown tally, never a move: the alert must not be suppressed at the boundary.
+  const HDR = '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |';
+  const addRow = (t) => t.replace('| 170 | later |', '| 169 | new | B-NEW | CC-B (New Claude) | QUEUED | — | — |\n| 170 | later |');
+  const untouched = addRow(PLAN), preTable = PLAN.replace(HDR, '| stage | rows (owner) |');
+  ok('PS16 control: the pre-table text is unparseable', throws(() => parsePlan(preTable), /pre-sprint/));
+  const d16 = s6AlertDecision(recountS6(parsePlan(untouched)), [{ sha: 'c2', text: untouched }, { sha: 'c1', text: preTable }, { sha: null, text: preTable }]);
+  ok('PS16 an unparseable history text stops the walk FAIL-CLOSED (alert, not suppressed)', d16.alert === true && d16.unknownAt === 'c2', JSON.stringify(d16));
+  // C3: a MOVED pre-sprint line is terminal (it reads closed), so a report under its name never lands on list (f).
+  const moved = parsePlan(PLAN.replace('| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN FLIGHT — Step 7 |', '| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | MOVED into row 2 |'));
+  ok('PS17 a MOVED line reads closed and leaves list (f)', planLines(moved).find((l) => l.key === '§0:B-OPEN-THING')?.closed === true
+    && !listF(moved, ['B_OPEN_THING_COMPLETION_REPORT.md'], null).all.includes('§0:B-OPEN-THING'));
+  // record item 4: a STRUCK parked line is history, not parked.
+  const pk = parseAfterLive(['## After live — 0', '## Parked by Kyle — 2', '- ~~B-OLD — parked by Kyle~~ — UNPARKED 2026-10-20 (#974)', '- #304 — parked by Kyle'].join('\n'));
+  ok('PS18 a struck parked line is not parked; a live one is', pk.parked.length === 1 && pk.parked[0].includes('#304'), JSON.stringify(pk.parked));
+}
+
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

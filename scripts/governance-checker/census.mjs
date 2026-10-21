@@ -28,7 +28,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BATCH_ID_PATTERNS, extractLeadingBatchId, batchIdToFileRegex, DOCS, CENSUS_BODY_MAX, isoWeek } from './config.mjs';
-import { findGlobDoc, showFileAt, lsTreeNamesAt, presprintRows } from './checker.mjs';
+import { findGlobDoc, showFileAt, lsTreeNamesAt, presprintRows, mapStatus } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -398,7 +398,9 @@ export function cellClosed(cell) {
   const dash = d.indexOf('—', id.length);
   return dash !== -1 && MARK.test(d.slice(dash + 1).trimStart());
 }
-const s0Closed = (r) => cellClosed(r.inFlight) || cellClosed(r.disposition);
+// B-STATUS-BOARD Step-4 C3 (Langston): a MOVED / SUBSUMED / FOLDED / WITHDRAWN pre-sprint line is terminal for that LINE —
+// its work lives on elsewhere — so it reads closed. The rule is STATUS_PREFIXES' (one copy), not a second definition here.
+const s0Closed = (r) => cellClosed(r.inFlight) || cellClosed(r.disposition) || mapStatus(r.disposition).state === 'moved';
 
 export function parseAfterLive(text) {
   if (typeof text !== 'string' || text.trim() === '') throw new Error(`census: ${CENSUS_SOURCES.afterLive} read is empty or absent — refusing`);
@@ -406,6 +408,9 @@ export function parseAfterLive(text) {
   let where = null;
   for (const line of lines(text)) {
     if (/^## /.test(line)) { where = line.startsWith('## After live') ? afterLive : line.startsWith('## Parked by Kyle') ? parked : null; continue; }
+    // B-STATUS-BOARD Step-4 record item 4 (Langston): a STRUCK parked line (`- ~~`) is history, not a parked item — the
+    // file's own rule (#1180) — so an UNPARKED line no longer places its issue as parked. Parked list only (the measured case).
+    if (where === parked && line.startsWith('- ~~')) continue;
     if (where && line.startsWith('- ')) where.push(line);
   }
   return { afterLive, parked };
@@ -569,6 +574,10 @@ export function s6AlertDecision(rec, history) {
   const six = (t) => { try { return parsePlan(t).s6Text; } catch { return null; } };
   for (let k = 0; k + 1 < history.length; k++) {
     const cur = history[k], prev = history[k + 1];
+    // B-STATUS-BOARD Step-4 C1 (Langston): a text the parser refuses (a pre-table plan after the pre-sprint table landed) has
+    // an UNKNOWN tally, never a moved one; reading null-vs-string as a move placed it at the boundary and SUPPRESSED the alert.
+    // Unknown stops the walk FAIL-CLOSED: the newest move cannot be shown, so it alerts (this function's own rule).
+    if (tally(cur.text) === null || tally(prev.text) === null) return { alert: true, commit: null, sameCommit: null, unknownAt: cur.sha };
     if (tally(cur.text) !== tally(prev.text)) {
       const same = six(cur.text) !== six(prev.text);
       return { alert: !same, commit: cur.sha, sameCommit: same };

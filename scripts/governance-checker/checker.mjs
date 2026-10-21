@@ -410,7 +410,8 @@ export function presprintRows(planText) {
     items.push(row);
   });
   if (headers.length !== 1) {
-    throw new Error(`the pre-sprint header (${PLAN_LINE.s0aHeader}) appears ${headers.length} times${headers.length ? ` (lines ${headers.join(', ')})` : ''} in ## 0a.; exactly one is required`);
+    if (headers.length === 0) throw new Error(`no pre-sprint table at this ref: the pre-sprint header (${PLAN_LINE.s0aHeader}) does not appear in ## 0a. (absent, or edited)`);
+    throw new Error(`the pre-sprint header (${PLAN_LINE.s0aHeader}) appears ${headers.length} times (lines ${headers.join(', ')}) in ## 0a.; exactly one is required`);
   }
   return { items, malformed, conflicts, headerLine: headers[0] };
 }

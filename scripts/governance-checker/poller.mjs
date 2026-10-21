@@ -705,6 +705,12 @@ function loadExceptions(ref) {
 // TODAY'S RULE, unchanged — the loop body of the pre-batch loadExceptions, with only its read lifted
 // into the `raw` argument. Selected while EXCEPTIONS_V2_ENABLED is false; DELETED with the flag in the
 // batch's Step-10 commit. Exported so poller.test.mjs pins the flag-off behaviour.
+// The reason a batch is held open: cell 6 ONWARD rejoined (a reason may carry `|`; Langston condition 5), without assuming a
+// trailing pipe (one live row has none). ONE copy, used by both parsers.
+export function exceptionReason(cells, line) {
+  const tail = cells.slice(6); if (line.trimEnd().endsWith('|')) tail.pop();
+  return tail.join(' | ').trim();
+}
 export function parseExceptionsLegacy(raw) {
   const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map(), openReason = new Map();
   // ONE confirmed-semantics predicate, reused by every row type (Langston B-GOV-ORPHAN-CLASS Step-1):
@@ -719,8 +725,7 @@ export function parseExceptionsLegacy(raw) {
       open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0]));
       // B-STATUS-BOARD (#1227) P5: the reason, cell 6 ONWARD rejoined (a reason may carry `|`; Langston condition 5),
       // without assuming a trailing pipe (one live row has none). Last row per batch wins, like openSince. Additive.
-      const tail = cells.slice(6); if (line.trimEnd().endsWith('|')) tail.pop();
-      openReason.set(bid, tail.join(' | ').trim());
+      openReason.set(bid, exceptionReason(cells, line));
     }
     if (type === 'na-skip' && isConfirmed(confirmedBy)) naConfirmed.add(`${bid}:${value}`);
     // OBJ-1 (B-GOV-ORPHAN-CLASS): a CONFIRMED class-override row DECLARES the batch's class, so a
@@ -741,7 +746,7 @@ export function parseExceptionsLegacy(raw) {
 // (P25 turns them into alerts). FAIL-CLOSED: a malformed row is IGNORED — the batch is graded as if the
 // row were absent, never honoured by a first match. The grammar lives in config.mjs (EXCEPTION_*).
 export function parseExceptions(raw) {
-  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map();
+  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map(), openReason = new Map();
   const malformed = [];
   const lines = raw.split('\n');
   let commentFrom = 0; // line number of an open `<!--` block; 0 = outside a comment
@@ -781,7 +786,12 @@ export function parseExceptions(raw) {
     const verdict = confirmerVerdict(confirmedBy, type);
     if (verdict === 'pending') continue;
     if (verdict !== 'ok') { flag(verdict); continue; }
-    if (type === 'open') { open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0])); }
+    if (type === 'open') {
+      open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0]));
+      // B-STATUS-BOARD Step-4 C2 (Langston): the same reason as the legacy parser (exceptionReason), so the board keeps its
+      // reasons when EXCEPTIONS_V2_ENABLED flips; both parsers' maps are pinned equal by a test.
+      openReason.set(bid, exceptionReason(cells, line));
+    }
     else if (type === 'na-skip') naConfirmed.add(`${bid}:${value}`);
     else {
       // P24: the WHOLE value must match — never a first match inside a longer value.
@@ -799,7 +809,7 @@ export function parseExceptions(raw) {
       reason: `unterminated \`<!--\` comment at line ${commentFrom}: every later line was skipped as prose, `
         + `including ${swallowed} table row(s) (lines with 7 or more cells) — each may be an exception that is no longer honoured` });
   }
-  return { open, openSince, naConfirmed, classOverride, malformed };
+  return { open, openSince, naConfirmed, classOverride, malformed, openReason };
 }
 
 // P22: 'ok' | 'pending' | a reason. The LEADING whitespace-delimited token, lowercased, split on '+';
@@ -911,6 +921,13 @@ export function checkerCodeDrift(blobAt = gitBlobAt, files = DRIFT_LOADED_FILES,
   } catch (e) {
     return { drifted: false, error: String(e.message || e), absentBoth };
   }
+}
+// B-STATUS-BOARD Step-4 record item 2: 'open' (drifted, none open) | 'resolve' (a CLEAN compare, one open) | 'none'.
+// An ERROR is never a clean compare, so it never resolves (it is logged by the tick).
+export function driftAlertAction(drift, hasOpen) {
+  if (drift.drifted) return hasOpen ? 'none' : 'open';
+  if (drift.error) return 'none';
+  return hasOpen ? 'resolve' : 'none';
 }
 // The drift alert body names the files it compared — derived, never hard-coded (CE-A12(a)).
 export function driftAlertBody(drift) {
@@ -1100,14 +1117,16 @@ export function tick(nowMs = Date.now()) {
     console.warn(`[gov-checker] drift check: ${drift.absentBoth.length} listed file(s) absent at BOTH HEAD and ${gradedRefSha}, ` +
       `skipped as a no-op (R1-Q15): ${drift.absentBoth.join(', ')}`);
   }
-  if (drift.drifted) {
-    if (!state.openAlerts[DRIFT_KEY]) {
-      const id = alertSink.add({ dedupeKey: DRIFT_KEY, severity: 'warning',
-        title: 'governance-checker code is STALE vs origin — redeploy the checker box',
-        body: driftAlertBody(drift) }, nowMs);
-      if (id) state.openAlerts[DRIFT_KEY] = id;
-    }
-  } else if (state.openAlerts[DRIFT_KEY]) {
+  // B-STATUS-BOARD Step-4 record item 2 (Langston): an error is NOT a clean result. It was silent, and it resolved an open
+  // drift alert — exactly when a failed fast-forward leaves a NEWLY listed file absent at HEAD only. Say it; resolve nothing.
+  if (drift.error) console.error(`[gov-checker] drift check could not compare HEAD with ${gradedRefSha}: ${drift.error}`);
+  const act = driftAlertAction(drift, Boolean(state.openAlerts[DRIFT_KEY]));
+  if (act === 'open') {
+    const id = alertSink.add({ dedupeKey: DRIFT_KEY, severity: 'warning',
+      title: 'governance-checker code is STALE vs origin — redeploy the checker box',
+      body: driftAlertBody(drift) }, nowMs);
+    if (id) state.openAlerts[DRIFT_KEY] = id;
+  } else if (act === 'resolve') {
     alertSink.resolve(state.openAlerts[DRIFT_KEY]); delete state.openAlerts[DRIFT_KEY];
   }
   const { batches, untaggedCode } = computeBatchStates(commits);
