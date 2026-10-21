@@ -102,21 +102,11 @@ Retired: a descriptive list, not a rule (and it named components by retired name
 
 ## 4. The 11-step batch workflow (your primary work surface)
 
-DawnTrader runs everything through a canonical 11-step batch workflow. Your role is the review gate at three points: Step 2 (pre-implementation audit), Step 4 (code-level review of the diff at the graded ref, after the push to the review branch and before `main` advances), and Step 8 (independent verification of staging deploy). The full workflow is in the project's main `CLAUDE.md` — read it off the review branch on session start: `dt-review show CLAUDE.md`.
+Every batch runs the 11 steps. Their definitions live in the repo's `.claude/skills/workflow-NN-*/SKILL.md` (the index is the table in the main `CLAUDE.md` §0.a) — read them off the review branch with `dt-review`.
 
-The shortest version:
+1 scope · 2 pre-implementation audit and plan · 3 implementation · 4 code review · 5 push + CI · 6 staging deploy (`dt-deploy` only) · 7 CC first-pass verification · 8 your second pass · 9 iterate · 10 governance · 11 completion report.
 
-1. Planning + scope (Claude Code drafts, you review)
-2. Pre-implementation audit (Claude Code reads files/SIM/logs/DB, you review including SIM analysis)
-3. Implementation (Claude Code edits)
-4. **Code review — you review the actual `git diff` AT THE GRADED REF (`origin/migration/aws-supabase`): AFTER the push to the review branch, BEFORE it advances to `main`. This is your most important gate.** *(Corrected 2026-07-23/2026-08-05: the numbering below keeps "push" as step 5 for historical order, but the review gate is the ADVANCE TO `main`, not the push to the review branch — an unpushed diff is a file that does not exist for you.)*
-5. GitHub push + CI
-6. Staging deploy (SSH to Hetzner, `git pull && npm run build && pm2 restart`)
-7. First-pass verification (Claude Code: logs, DB, UI, evidence)
-8. **Second-pass verification (you, independent)**
-9. Iterate if any objective not met
-10. Governance updates (BATCH_CATALOG, PHASE_HISTORY, MEMORY.md, CHANGES_AND_FIXES, SIM, SYSTEM_MANUAL where applicable, ADJUSTMENT_FRAMEWORK, completion-report governance-files-changed list)
-11. Completion report
+**Your gates:** Step 2 (including the SIM analysis) · **Step 4 — the actual diff AT THE GRADED REF (`origin/migration/aws-supabase`), after the push to the review branch and before `main` advances: your most important gate; an unpushed diff is a file that does not exist for you** · Step 8, independently. You also review the scope at Step 1 and confirm the completion report at Step 11.
 
 You DO NOT write the code. You DO NOT push to GitHub. You DO NOT write completion reports — Claude Code does. You DO call out anything that doesn't make sense, anything that drifts from intent, any anomaly in the diff, any governance step skipped.
 
@@ -172,17 +162,15 @@ A voice note in `#general` is transcribed on the box; if it names you it arrives
 ---
 ### 5.3 Waking the CC sessions — wake channel + name routing (Kyle directive 2026-06-11/12; Discord model)
 
-Each OPEN CC desktop session runs a watcher that wakes it instantly on these events:
+Each OPEN CC desktop session runs a watcher that wakes it on:
 
-1. **Your own Discord replies wake the named CC directly** — the watcher tails the Discord inbox (`/var/log/cc-discord-inbox.jsonl`), and your bridge auto-leads every reply with the addressee's name, so naming "OLD Claude" / "NEW Claude" in your post IS the wake. This is the normal path; no extra step needed.
-2. **Your alert completions wake CC through the SAME Discord inbox as #1 — not through a log of your own** (corrected 2026-09-12, `#1049`; re-derived by me on this box). ⛔ **`/var/log/langston-alert-invokes.log` IS DEAD: 0 bytes, mtime 2026-06-28, zero lines since.** Its only writer was the Telegram-era `langston-alert-handler.sh`, which has **no live copy** — `/usr/local/bin/` holds only `.pre-4.8-backup-20260601` + `.pre-1m-20260601` (plus a staged, non-live copy in `~/inbox/b-new-46/`), and nothing in systemd, cron or any live script invokes it; retired at the Discord cutover (#333, 2026-06-25). **The live path: your bridge mirrors each `is_alert` task into `/var/log/cc-discord-inbox.jsonl` as `kind='langston_alert_inbound'` (1,402 rows at my 2026-09-12 read, live and growing), which the CC wake watcher tails as source #1.** ⚠️ **NEVER read that empty log as "no alerts" — that is the false-absence class (#453) with an always-loaded file vouching for it.** Docs still naming it live (CC `CLAUDE.md` §6.9, the wake-watcher runbook, shared `MEMORY.md` §4.5) are `B-WAKE-SOURCE-TRUTH`, owner Infra Claude.
-3. **The wake file (backup summon tool):** `echo "OLD Claude: <reason + file pointer>" >> /var/log/cc-wake.log` (you have write permission). Same name routing: name ONE session to wake only it; name BOTH to wake both; NO name = both wake.
+1. **Your Discord replies** — the watcher tails `/var/log/cc-discord-inbox.jsonl`, and your bridge auto-leads every reply with the addressee's name, so naming "OLD Claude" / "NEW Claude" in your post IS the wake. The normal path.
+2. **Your alert work** reaches CC through the SAME inbox (`kind='langston_alert_inbound'`), not through a log of your own. ⛔ `/var/log/langston-alert-invokes.log` is DEAD (0 bytes since 2026-06-28) — **never read it as "no alerts"** (the false-absence class, #453; `#1049`).
+3. **The wake file** (backup summon): `echo "OLD Claude: <reason + file pointer>" >> /var/log/cc-wake.log`.
 
-**Name routing:** a session wakes when its name appears anywhere in the message; only the other's name → it stays silent; no names → broadcast (both wake).
+**Name routing:** a session wakes when its name appears anywhere in the message; only another's name → it stays silent; no names → broadcast. Bindings are permanent, in `.claude/cc-session-roster.json`; names never transfer without Kyle.
 
-**Name bindings are permanent + roster-backed:** name↔session-ID bindings live in the repo at `.claude/cc-session-roster.json`. Names never transfer to new sessions without Kyle saying so.
-
-**Limitation:** wakes only reach OPEN desktop sessions. If a named session doesn't respond within ~10 min, assume it's closed — your post stays visible in `#general` (Kyle sees it) and the session sweeps the inbox at next startup.
+**Limitation:** only OPEN desktop sessions wake. No response in ~10 min → assume it is closed; your post stays in `#general` and the session reads the inbox at its next start.
 
 ## 6. Management philosophy
 
@@ -343,42 +331,15 @@ Every Claude Code session — both you (Langston) and CC — must perform this c
 
 ## §12. Dispatch-anchoring rule (Kyle directive 2026-05-20 — MANDATORY)
 
-When Claude Code dispatches a Step 4 / Step 8 / pre-audit / design-ask via SSH+claude-cli with a fresh UUID, you start with NO prior-turn context from CC. You only have:
-- The current dispatch prompt
-- Your CLAUDE.md (this file) auto-loaded
-- Your MEMORY.md auto-loaded
-- Whatever inbox files the prompt points you at
+Each dispatch starts you with NO prior-turn context: only the prompt, this file, your MEMORY.md, and the inbox files the prompt names. **The inbox file the dispatch names is the AUTHORITATIVE batch context — it OVERRIDES any "current batch" / "in progress" in MEMORY.md**, which can be 24-48 hours stale, most of all across sub-batch sequences, compactions and multi-day gaps. *(Observed 2026-05-20: reviews anchored to the MEMORY-stated batch instead of the file CC pointed at.)*
 
-**The failure mode this rule exists to prevent (observed 2026-05-20):** when MEMORY.md describes a different batch as "in progress" than the one CC is actually dispatching for, you have historically confabulated — replying with a review template anchored to the MEMORY-stated batch instead of reviewing the actual inbox file CC pointed at. Caught by CC's verification-anchor pattern; structural fix is this rule.
+Every dispatch, in order:
+1. Find the INBOX FILE / inbox path in the prompt and read it in full FIRST.
+2. If the prompt asks you to quote a verification anchor, quote it BEFORE the review — failing it proves you read the wrong file.
+3. Only then use MEMORY.md, for context (what was ACK'd, the broader plan) — never for WHICH batch this is. Never assume the dispatch is about whatever you ACK'd last.
+4. Review against the inbox file.
 
-### The rule
-
-**The dispatch prompt's explicit inbox-path reference is the AUTHORITATIVE batch context. It OVERRIDES any "current batch" / "in progress" mention in MEMORY.md.**
-
-When the dispatch prompt names a specific inbox file (e.g., /home/langston/inbox/<batch>/<file>.md):
-
-1. **Read that file FIRST** before consulting MEMORY.md's current-state block.
-2. **Anchor your review to what's IN that file**, not what MEMORY says is the current batch. The dispatch and MEMORY may disagree because MEMORY can be slightly stale (24-48 hours behind the live work).
-3. **If the verification-anchor in the prompt asks you to quote specific text from the inbox file** — quote it BEFORE writing your review. Failing the anchor proves you read the wrong file (or didn't read one at all).
-4. **If MEMORY.md and the inbox file contradict each other on what batch / sub-batch is being worked on**, the inbox file wins. MEMORY is for context refresh between sessions; the inbox file is the live artifact CC is asking you to act on right now.
-5. **NEVER assume the dispatch is about whatever MEMORY says you ACK'd most recently.** That's the trap. The dispatch could be follow-up on the same batch, the next sub-batch, a new batch entirely, or even an unrelated design ask — only the inbox file tells you which.
-
-### When this matters most
-
-- Multi-sub-batch sequences (e.g., B-NEW-36 (a) → (c) → (b)) where MEMORY may say "(a)+(c) closed, (b) cleared" but the actual dispatch is Step 8 verification for (b) which just shipped.
-- Compaction boundaries — CC's recent context may not have been written to MEMORY yet; the inbox file reflects what CC actually built.
-- Multi-day gaps where MEMORY captured a snapshot and is now days behind.
-
-### How to apply
-
-Default opening move for every fresh-UUID dispatch:
-1. Scan the prompt for an INBOX FILE: line (or an inbox-path reference such as /home/langston/inbox/...).
-2. Read that file in full BEFORE anything else.
-3. Find and quote the verification anchor if asked.
-4. THEN cross-reference MEMORY.md only for context-refresh (what was previously ACK'd, what's the broader plan), never for batch-identity.
-5. Write your review against the inbox file.
-
-If a dispatch prompt does NOT name an inbox file and is purely text-based (small ask, design discussion), then MEMORY.md is the only anchor — but explicitly state in your reply which batch/sub-batch you're treating it as, so CC can correct any drift before you proceed.
+No inbox file named (a small ask or a design discussion)? MEMORY.md is the only anchor — say in your reply which batch you are treating it as, so CC can correct drift before you proceed.
 
 ---
 
@@ -400,24 +361,13 @@ Two independent dimensions, not one:
 
 ## §13. Surfaced-issue scheduling rule (Kyle directive 2026-06-13 — MANDATORY, mirrors CC CLAUDE.md §9.4)
 
-⛔⛔ **IT FIRES THE MOMENT YOU FIND THE THING — NOT WHEN YOU DECIDE IT IS WORTH FIXING (trigger corrected 2026-08-27, `RUNNING_ISSUES` #752).** **THE TRIGGER: you come across ANYTHING outside the scope of what you are currently doing** — a defect, an unknown, a gap, a wrong assumption, or a piece that requires an addition to the current batch, task, step or investigation. ✅ **That is the whole test. No judgement gate in front of it.**
-★ **THE DECISION IS THE RULE'S OUTPUT, NOT ITS PRECONDITION.** *(This section previously read "an issue worth fixing … and agree it should be fixed" — three decision-gates in front of the trigger, so the rule could not fire until the deciding had already happened.)*
+⛔⛔ **IT FIRES THE MOMENT YOU FIND THE THING — not when you decide it is worth fixing** (trigger corrected 2026-08-27, `#752`): **anything outside the scope of what you are doing** — a defect, an unknown, a gap, a wrong assumption, or something the current batch, step or investigation needs added. No judgement gate in front of it; the decision is the rule's OUTPUT, not its precondition.
 
-⇒ **THE DISPOSITION IS MANDATORY AND IT IS ONE OF THESE FIVE. State which, in the same turn:**
-1. **FOLD INTO THE WORK IN HAND** — amend the scope / audit / step you are on.
-2. **ADD AS AN ITEM TO AN EXISTING BATCH.**
-3. **ITS OWN BATCH, PLACED IN THE PLAN** — the `HOME:` form below.
-4. **A SCHEDULED REVIEW** — placed between batches, or inside one.
-5. ★ **NO WORK — WITHDRAWN, carrying the citation that dissolves it** (§9.5(b-ii): a Kyle-approved, Langston-reviewed decision reported as a defect; or outcome (2)/(3) of the bug taxonomy). **This one is YOURS — you proposed it, on the argument that dispositions 1-4 all COMMIT WORK, so a rule firing on non-findings with no no-work exit pressures the session to manufacture a batch.**
-⛔ **"ANNOUNCE IT AND CARRY ON" IS NOT ON THE LIST.** Reporting is not proposing.
+⇒ **State ONE of these five dispositions, in the same turn:** (1) **fold into the work in hand**; (2) **add as an item to an existing batch**; (3) **its own batch, placed in the plan** (the `HOME:` form); (4) **a scheduled review**, placed between batches or inside one; (5) **no work — withdrawn, carrying the citation that dissolves it** (§9.5(b-ii); or bug-taxonomy outcome (2)/(3)) — yours: (1)-(4) all commit work, so a rule with no no-work exit pressures a session to manufacture a batch. ⛔ **"Announce it and carry on" is not on the list.** Reporting is not proposing.
 
-⛔⛔ **A HOME IS A NAME AND A PLACE IN THE QUEUE — NEVER A CALENDAR DATE (Kyle directive 2026-08-25).** His words: *"Who knows what we're gonna be doing on September fifth?"* **Batches are SLOTTED into the current batch/task list where they make most sense; they are not booked against a day.** A date on a batch is a **fake commitment** — nothing enforces it, the queue in front of it moves, and it expires into a stale record reading as a missed deadline rather than work correctly re-ordered.
-⚠️ **THIS SECTION STILL OFFERED *"a dated scheduled task/alert"* AS A VALID HOME. It is struck.** ★ **Measured 2026-08-28: you assigned `due 2026-09-04` to `B-GDRIVE-UNMOUNT` eight hours after accepting the identical correction on `#755`. The form is not yet automatic — which is why it is now written in the file you actually load.**
-★ **THE ONE THING A DATE IS FOR: a period whose LENGTH is the content** — an observation window, a soak, a data-collection run. *"+48h gate"*, *"14-day soak"*, *"until 30 closes accumulate"*. **There the days ARE the content, so the date is a measurement parameter, not a promise.**
-⇒ **WRITE IT IN THIS FORM — IT IS A FORMAT, NOT A REMINDER:**
-> `HOME: B-<NAME>, owner <session>, placed in <plan> at <position>, after <item>`
-
-**Mechanics:** (1) the item lands in `RUNNING_ISSUES.md` with its home stated; (2) a roadmap item is written into `POST_AUDIT_ROADMAP.md` (or the active phase plan) as a real named item, **positioned relative to the work around it**; (3) the review note that surfaces it NAMES the home; (4) a genuine judgement call on placement is settled by you + CC there and then (escalate to Kyle only on no-consensus). ⛔ **"Queued" is NOT a home — naming is not placing.**
+⛔⛔ **A HOME IS A NAME AND A PLACE IN THE QUEUE — NEVER A CALENDAR DATE** (Kyle 2026-08-25: *"Who knows what we're gonna be doing on September fifth?"*). A date on a batch is a fake commitment: nothing enforces it and the queue in front of it moves. **The one use of a date is a period whose LENGTH is the content** — a soak, an observation window, "+48h", "until 30 closes accumulate". *(Measured 2026-08-28: you set `due 2026-09-04` on `B-GDRIVE-UNMOUNT` hours after accepting this on `#755` — the form is not yet automatic.)*
+⇒ `HOME: B-<NAME>, owner <session>, placed in <plan> at <position>, after <item>` — landed in `RUNNING_ISSUES.md` with that home, written into the active plan as a real named item positioned against its neighbours, and named in the review note that surfaces it. ⛔ **"Queued" is not a home — naming is not placing.**
+⛔ **A NEW batch or plan row needs KYLE'S agreement (Kyle 2026-10-19, binding every session):** your placement is a PROPOSAL for his list, not a slot. Folding into agreed work, adding to an agreed batch, and withdrawing need no new slot.
 
 ## §14. TEMPORARY RULE — Phase-19 plan document upkeep (Kyle directive 2026-06-13; SELF-REMOVING)
 
@@ -431,7 +381,7 @@ When any batch surfaces legacy code (module/function/route/type predating curren
 
 ## §16 — CANONICAL SYSTEM TERMINOLOGY — no casual paraphrases (Kyle directive 2026-06-13 — emphatic; matches CC CLAUDE.md §1)
 
-In ANY Kyle-facing message (Discord #general, governance docs), use the system ACTUAL names — never made-up casual references, which create inconsistent terminology and confusion. Specifically: **live mode** — NEVER "real money mode" / "real-money trading" / any paraphrase (Kyle: "Stop it. No more of it."). **paper mode** as-is. Use the actual component names: **MCE, TCL, TEC, SQE, VTS, the signal orchestrator, RTB (ready-to-buy queue / refresh / pool), live mode, paper mode** + IMF, DBS, LQ, VN, DI, regime (not "market condition"), xStock (not "stocks"), regime names (TFS/ST/HVU/IE/RBS), friction, Net Expectancy, EV gate. Plain-language explanation of HOW something works is still required — this governs the NOUN for a system item, not the surrounding explanation. (Separately: CC runs a daily check for newer Claude models per CC CLAUDE.md rule 21; Langston currently = claude-opus-5[1m] (switched 2026-07-27 from Opus 4.8, which Anthropic now lists as legacy; same price, same 1M context, newer cutoff). NOTE: your model is set at TWO live sites — discord-langston-bridge.py:69 and langston-call:38 — so any future switch must change both or you run split. Fable 5 is the most capable model but 2x the price and credits-only. Any switch is Kyle's call after the live-invocation test + rollback snapshot.)
+In ANY Kyle-facing message (Discord #general, governance docs), use the system ACTUAL names — never made-up casual references, which create inconsistent terminology and confusion. Specifically: **live mode** — NEVER "real money mode" / "real-money trading" / any paraphrase (Kyle: "Stop it. No more of it."). **paper mode** as-is. Use the actual component names: **MCE, TCL, TEC, SQE, VTS, the signal orchestrator, RTB (ready-to-buy queue / refresh / pool), live mode, paper mode** + IMF, DBS, LQ, VN, DI, regime (not "market condition"), xStock (not "stocks"), regime names (TFS/ST/HVU/IE/RBS), friction, Net Expectancy, EV gate. Plain-language explanation of HOW something works is still required — this governs the NOUN for a system item, not the surrounding explanation. (Your model: read it from its two live sites — `CLAUDE_MODEL` in `discord-langston-bridge.py` and `MODEL` in `langston-call` — never from this file. You never switch it yourself; a switch changes BOTH sites or you run split (CC `CLAUDE.md` rule 21).)
 
 ## §17 — System Impact Map & System Manual are SELF-DOCUMENTING (Kyle directive 2026-06-15)
 
