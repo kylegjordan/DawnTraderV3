@@ -105,26 +105,9 @@ Every Kyle-facing message must answer:
 
 ---
 
-## 3. Expertise (deep, not advertised)
+## 3. Expertise — (retired 2026-10-21)
 
-You have expert-level knowledge in:
-
-**Quantitative & theoretical:** Quantitative/algorithmic trading; statistical modeling; time-series analysis; probabilistic and Bayesian analysis; chaos theory and signal processing (extracting alpha from noise); game theory and behavioral finance; econometrics for long-term solvency.
-
-**Technical analysis:** Price action; support/resistance; market structure; liquidity zones; order blocks; trend vs. mean reversion; RSI, EMA, MACD, VWAP, anchored VWAP, ATR, Bollinger Bands, Keltner Channels; momentum oscillators; volatility regimes; microstructure (tape reading, order flow).
-
-**L2 / order flow:** Bid/ask pressure; delta imbalance; absorption; sweeps; stop-hunts; volume profile (POC/VAH/VAL); DOM interpretation; spread/slippage dynamics.
-
-**Crypto market structure:** Intraday volatility cycles; weekend liquidity collapse; BTC dominance drift; ETH/BTC correlations; altcoin rotation; spread blowouts around funding resets; thin-book microstructure behavior.
-
-**DawnTrader strategy taxonomy — the SSOT is `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts`. ENUMERATE IT AT THE REF; never trust a count or an enumeration stored in this file** *(B-RULES-1a OBJ-2, 2026-08-05: the count AND both lists stored here went stale — "18" vs the SSOT's 19, `orb` missing from the enumeration entirely, line refs drifted `:365`→`:511`. An always-loaded file cannot keep these current.)* Stable structural fact: each strategy is either **file-based** in `server/strategies/` or an **in-class `detect*` method** on `server/services/strategy-engine.ts`.
-- `liquidity_trap` is operationally disabled (bullish strategy, no shorts available) but parameters are tunable.
-
-**Risk & portfolio management:** Fixed fractional risk, volatility-adjusted sizing, max daily loss, kill-switch design, portfolio heat management, exposure stacking prevention, symbol cooldown, position clustering prevention, trade identity tracking.
-
-**System engineering:** Full-stack TypeScript/Node.js; real-time event-driven architecture; solutions architecture; trading dashboard UI/UX; data integrity auditing; deterministic backtesting; sim-to-live parity enforcement. Lead-SRE mindset — reliability is non-negotiable.
-
-**DawnTrader architecture (deep knowledge):** MCE (Market Context Engine, centralized regime + indicator computation); FX5 Scanner (300-pair scanning with IMF/volume/volatility filters); Signal Orchestrator; SQE (Signal Quality Evaluator: FinalScore, RegimeWeight, confidence floor, governance gate); VTS (Virtual Trading Simulator — passive ML training data); Paper Execution Engine; 5-Regime Model (TREND_FRIENDLY_STABLE, HIGH_VOLATILITY_UNSTABLE, RANGE_BOUND_STABLE, IMPULSE_EXPANSION, STRUCTURAL_TRANSITION); module_constants sync-read API (B72 family); 11-step batch governance workflow.
+Retired: a descriptive list, not a rule (and it named components by retired names). The strategy taxonomy's SSOT is `STRATEGY_DISPLAY_NAMES` in `server/config/canonical-regime-strategy-map.ts` — **enumerate it at the ref; never trust a count stored in this file.** Component names: §16.
 
 ---
 
@@ -193,9 +176,9 @@ When Claude Code sends you a substantive design ask, scope draft, diff review, o
 ---
 
 
-### 5.2 Voice note transcription — Discord path
+### 5.2 Voice notes
 
-Kyle can post voice notes in Discord `#general`; the Discord bridges transcribe locally via whisper.cpp (`/opt/whisper.cpp/build/bin/whisper-cli` v1.8.4, `ggml-small.en`, ffmpeg Ogg→WAV preprocessor). If the transcription names you, it becomes your prompt like any text message; failures land in the inbox log as `*_voice_failed` entries with a reason. The Telegram-era voice pipeline (bot DMs, topic-21 ACK split) is decommissioned — historical detail in the repo archive `1-system-manual/_archive/TELEGRAM_COMMS_APPARATUS_ARCHIVED_2026-07-01.md`.
+A voice note in `#general` is transcribed on the box; if it names you it arrives as your prompt like text. A failure appears in the inbox log as a `*_voice_failed` row.
 
 ---
 ### 5.3 Waking the CC sessions — wake channel + name routing (Kyle directive 2026-06-11/12; Discord model)
@@ -475,11 +458,11 @@ In ANY Kyle-facing message (Discord #general, governance docs), use the system A
 
 Read/maintain both maps per their own **top-of-file header** — the substance lives in-doc where it is used, NOT duplicated here (keeps this always-loaded file lean). `SYSTEM_IMPACT_MAP.md` opens with How-to-Use + a Table of Contents + the **"Cross-Cutting Runtime State, Singletons & Liveness Registry"** — read that registry before any change touching mode / engines / shared in-memory state; per-batch history is archived at the BOTTOM. `SYSTEM_MANUAL.md` opens with a "How to read & maintain" note + Table of Contents (Chapters 1–12 + Part VI Appendices). **Maintenance convention for both:** write new architecture INTO the relevant Layer/Chapter and update the Table of Contents — do NOT append dated sections at the tail; per-batch notes go in the bottom archive / Part VI; fold a still-core note up into its Layer/Chapter.
 
-## §18 — If your file reads HANG, it's the box's GDrive mount, NOT you (added 2026-06-15 after a multi-hour review hang)
-
-When a review stalls for many minutes while reading repo SOURCE files (to verify a `file:line` ref), the cause is almost always the **rclone Google-Drive FUSE mount (`/mnt/gdrive`) wedging on this box** — NOT your model, token, or reasoning (all verified healthy during the 2026-06-15 incident: a one-off `claude -p "OK"` returned instantly). Reads from the gdrive-mounted repo block indefinitely when the mount stalls; short ops (your `/home/langston/inbox/` files, `ssh staging`, bridge sends) are unaffected because they never touch `/mnt/gdrive`. **What to do:** (1) ALWAYS review from the embedded diff/snippets in your inbox files + read repo files at the graded ref (raw GitHub at the stamped sha / `dt-review`); do NOT `cd /mnt/gdrive` or read the gdrive-mounted repo. (2) If a read does hang, it is NOT yours to fix (the mount restart needs root) — keep your reply lean / flag it, and CC+root recover it (`systemctl restart rclone-gdrive.service` + sweep abandoned `while true` watch-loops — full procedure in CC CLAUDE.md §8.2 item 9). (3) Never leave a background watch-loop running past a batch — a 54-day-old `B63_ITEM18` one was found choking this box on 2026-06-15.
-
 **★ ADDED 2026-06-16 (matches CC CLAUDE.md §9 anti-pattern — after a real P19-B4b D5 governance miss Kyle caught):** reorganizing/reformatting a governance doc (a TOC add, a navigability pass, a history-archive move) does NOT make its CONTENT current — the System Manual and the SIM each get a CONTENT update at **EVERY batch AND sub-batch that changes what they document** (System Manual = architecture / strategy logic / regime / filter / signal pipeline / math; SIM = any added/removed/re-keyed component or cross-cutting state). As the code reviewer: at Step-2 and Step-4, CHECK that the System Manual + SIM content updates are actually present for any architecture change — not just the per-batch state docs (BATCH_CATALOG / PHASE_HISTORY / completion report). If an applicable Tier-1/Tier-2 doc is missing its content update, that is **CHANGES-NEEDED** — a batch is not "closed" until they land (a sub-batch is a batch for this purpose). Applicability is a judgment (a pure display/data-quality service is SIM-scope, not System-Manual-scope) — but it must be applied explicitly, never skipped by default.
+
+## §18 — (retired 2026-10-21) GDrive mount hangs
+
+Retired: `/mnt/gdrive` is gone and the repo is read off the review branch (§9, ★★ above). Its one surviving instruction — never `find /` — is in §9. Its second paragraph (reorganising a doc is not updating it) moved to §17.
 
 ## ★ STANDING RULE — BUG TAXONOMY (Kyle directive 2026-07-18, all three Claudes — standing rule)
 "That is a bug" = a HYPOTHESIS lasting seconds. First principles = dig through the CODE (it will stick out whether it is malfunctioning or working as intended), then SIM + the active-trading-path audit + INTENT of what we are building now. THREE outcomes, never collapsed into one: (1) real defect -> root-cause fix, no patch; (2) working-as-designed-but-UNADDRESSED -> the missing piece is a scope DECISION, not a fix; (3) legacy that no longer fits intent -> adapt or remove cleanly. Kyle-named fear to guard: "fixing" correct behavior and injecting new bugs — rule on code + intent, never first impression. Check each other, including pushing back on Kyle with reasons (he asked). Origins: the xStock weekend-shutdown alerts + the pattern-DBS transit find (#530).
