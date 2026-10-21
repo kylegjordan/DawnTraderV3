@@ -11,7 +11,7 @@
 This page. One place on Kyle's phone that shows the agreed pre-sprint and sprint plan, who holds each item, where it has got to and what it is waiting on, so he does not have to ask each session. The governance checker rebuilds it from the plan every 30 minutes.
 
 ### B-MUTATING-ROUTES-AUTH
-A hotfix: thirteen staging server addresses that change something (the order-book monitor's start and stop, the test routine, the simulation flag, a rename, a screener test, the recovery test and three audit runs) answered without a login. They now require one. Read-only addresses wait for the sprint row that covers them.
+A hotfix: staging server addresses that change something or run work answered without a login — among them the order-book monitor's start, stop and audit, the test routine's start and stop, the simulation-session flag, a conversation rename, a screener test, the recovery test and three audit runs. They now require one. Read-only addresses wait for the sprint row that covers them.
 
 ### B-B75-EXPORT-COMPLETENESS
 Makes the B75 trade-record export prove it is complete before anything is archived or deleted from it, so a short export can never be mistaken for a full one.
@@ -20,7 +20,7 @@ Makes the B75 trade-record export prove it is complete before anything is archiv
 Crew tooling: the last part of the rules programme, including the order the rules load in and Langston's 15-minute review ceiling. Parked until after live.
 
 ### B-MEASURE-GATE
-The checks that warn a session when a measurement is the wrong shape before it is reported. Leg 2 (the warnings that run on every command) is live; the remaining legs wait until after live.
+The checks that warn a session when a measurement is the wrong shape before it is reported. Leg 2 (the warnings that run on every command) is built and live. Its pre-registered observation window is open: it needs at least 50 real warnings, at least 20% of them right, and one caught published claim, judged by a session that did not write it. Below 20% it is re-scoped or deleted; under 50 after one extension it is deleted.
 
 ### B-PLAN-CURRENCY-CHECK
 Keeps the sprint plan current: the governance checker grades each finished batch's plan row and runs a weekly census of the plan, so the plan never silently falls behind the work.
@@ -92,7 +92,7 @@ Stops an old last-known price being served as if it were current, with no age li
 ### B-KRAKEN-PRIMARY-KEY-RESOLUTION
 Makes every price-cache entry use Kraken's own name for the coin, closing the last two gaps where one coin could be stored under two names.
 
-### row 17
+### WS parse-error drops
 The Kraken live feed drops about eleven messages a day on a parse error. Handled inside B-PRICE-SIDE-BY-JOB.
 
 ### B-PRICE-SIDE-BY-JOB
@@ -100,9 +100,6 @@ Each job in the pipeline reads the side of the market a real trade would get (bu
 
 ### B-ENTRY-CONSUMPTION-FRESHNESS
 Checks a price's age at the moment it is used for an entry, not only when it arrived, for both crypto and xStock.
-
-### B-XSTOCK-SESSION-FRESHNESS
-The umbrella for xStock price freshness across the trading session; its entry half shipped as B-ENTRY-CONSUMPTION-FRESHNESS.
 
 ### B-CLASS-LEG-FILL-MODE
 Sets, per asset class and per leg, how a paper trade fills (resting or immediate), with a safeguard against a later quote, so paper fills match how the class would really trade.

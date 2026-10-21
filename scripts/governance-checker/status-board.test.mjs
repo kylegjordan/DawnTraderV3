@@ -11,6 +11,7 @@ import { PLAN_LINE, BOARD_DESCRIPTIONS_PATH } from './config.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
+const deMarkCell = (c) => String(c).replace(/[*`]/g, '').trim();
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const PLAN = [
@@ -114,6 +115,14 @@ ok('SB22 openReason: an unconfirmed row gives no reason, and the existing output
 ok('SB30 drift: error never resolves; clean resolves; drifted opens once', driftAlertAction({ drifted: false, error: 'x' }, true) === 'none'
   && driftAlertAction({ drifted: false }, true) === 'resolve' && driftAlertAction({ drifted: true }, false) === 'open' && driftAlertAction({ drifted: true }, true) === 'none');
 
+// Langston gate B: a digit-letter-digit row id (the live plan's `2a0`) resolves; the parser once read digits plus ONE letter.
+{
+  const t = PLAN.replace('| B-CONFLICT | CC-A (Old Claude) | 9 | | Kyle 2026-09-28 | QUEUED |', '| B-CONFLICT | CC-A (Old Claude) | 2a0 | | Kyle 2026-09-28 | row |')
+    .replace('| 9 | sizing |', '| 2a0 | sizing |');
+  const b3 = buildBoard({ planText: t, descText: DESC, subjects: SUBJECTS, openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW });
+  const it = b3.items.find((i) => i.key === 'B-CONFLICT');
+  ok('SB31 a `2a0` row id resolves to its §4 row (done, from that row), with no conflict', it?.state === 'done' && it.statusSource === '§4 row 2a0' && !it.conflict, JSON.stringify(it && [it.state, it.statusSource, it.conflict]));
+}
 // the failure fence: a failure writes nothing, opens one alert, never throws; the next good write resolves it
 {
   const calls = []; const sink = { add: (p) => { calls.push(['add', p.dedupeKey]); return 'id1'; }, resolve: (id) => calls.push(['resolve', id]) };
@@ -157,6 +166,13 @@ ok('SB27 status-board.mjs is in DRIFT_LOADED_FILES (poller imports it)', DRIFT_L
   const keys = new Set([...lb.items, ...lb.rest].flatMap((x) => [x.key, ...x.ids, ...(x.planRow ? [`row ${x.planRow}`] : [])]));
   const orphans = [...parseDescriptions(descText).keys()].filter((k) => !keys.has(k));
   ok('LIVE5 every description heading names an item on the board', orphans.length === 0, JSON.stringify(orphans));
+  // Langston gate B: every `row` pointer resolves on the board (a pointer that resolves nowhere shows `unrecognised`), and
+  // (stage, order) is unique, since `order` is what Kyle reads as position.
+  const unresolved = lb.items.filter((i) => i.planRow && /not found/.test(i.statusText)).map((i) => `${i.key}: ${i.planRow}`);
+  ok('LIVE6 every pre-sprint plan-row pointer resolves to a §4 row', unresolved.length === 0, JSON.stringify(unresolved));
+  const so = new Map(); for (const i of pre.items) { const k = `${deMarkCell(i.stage)}|${deMarkCell(i.order)}`; so.set(k, (so.get(k) || 0) + 1); }
+  const dupes = [...so].filter(([, n]) => n > 1).map(([k]) => k);
+  ok('LIVE7 stage + order is unique in the pre-sprint table', dupes.length === 0, JSON.stringify(dupes));
   }
 }
 
