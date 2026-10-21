@@ -198,8 +198,8 @@ export default function StatusBoardPage() {
       </Section>
 
       <Section title={`The rest of the plan (${b.rest.length})`} hint="Sprint rows not yet in the pre-sprint list, by wave. A row not started shows no status." defaultOpen={false}>
-        {waves.map((w) => (
-          <Section key={w.wave} title={`${w.wave} (${w.rows.length})`} defaultOpen={false}>
+        {waves.map((w, wi) => (
+          <Section key={`${w.wave}-${wi}`} title={`${w.wave} (${w.rows.length})`} defaultOpen={false}>
             <ul className="space-y-1">
               {w.rows.map((r, i) => (
                 <li key={`${r.planRow}-${i}`} className="rounded border bg-card px-2 py-1.5 text-sm">
