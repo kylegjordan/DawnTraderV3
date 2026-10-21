@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { buildBoard, parseDescriptions, lastStepFor, runStatusBoard, BOARD_FAILED_KEY } from './status-board.mjs';
 import { parseExceptionsLegacy, runStatusBoardSafely, DRIFT_LOADED_FILES } from './poller.mjs';
 import { presprintRows, planRowsByBatch, mapStatus, mapWaiting } from './checker.mjs';
-import { PLAN_LINE } from './config.mjs';
+import { PLAN_LINE, BOARD_DESCRIPTIONS_PATH } from './config.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -70,6 +70,11 @@ ok('SB9 an item with no Step commit has a null step (the page shows `no recorded
 ok('SB10 a description keyed by batch id is found; a missing one is null (the page shows `description owed`)', by('B-ENTRY-GATE').description.startsWith('Refuse') && by('B-TOKEN-WATCH').description === null);
 ok('SB11 an over-long description is marked, not dropped', by('B-PRICE-FEED-COVERAGE').descriptionTooLong === true && by('B-PRICE-FEED-COVERAGE').description.length === 800);
 ok('SB12 `row N` is the key for an item with no batch id', board.rest.find((r) => r.planRow === '198')?.description === 'The final switch to live mode.');
+{
+  const b2 = buildBoard({ planText: PLAN.replace('| B-ODD |', '| P-8e split |'), descText: `${DESC}\n### P-8e split\nThe split.`, subjects: SUBJECTS,
+    openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW });
+  ok('SB12b an item with no batch id and no plan row is keyed by its item text', b2.items.find((i) => i.key === 'P-8e split')?.description === 'The split.');
+}
 ok('SB13 parseDescriptions stops a section at the next heading', parseDescriptions(DESC).get('B-ENTRY-GATE') === 'Refuse an entry whose price has moved too far from the plan.');
 // the rest of the plan, exact membership
 ok('SB14 the rest of the plan is the §4 rows not in the table (row 9 is named by a table item, row 2 is row-backed), in plan order, with their wave',
@@ -133,6 +138,12 @@ ok('SB27 status-board.mjs is in DRIFT_LOADED_FILES (poller imports it)', DRIFT_L
   ok('LIVE3 every pre-sprint `waiting on` is a declared word or a data window', badWaiting.length === 0, JSON.stringify(badWaiting));
   ok('LIVE4 the live pre-sprint table has no one-copy conflict and no unreadable row', pre.conflicts.length === 0 && pre.malformed.length === 0,
     JSON.stringify({ conflicts: pre.conflicts, malformed: pre.malformed }));
+  // Every description heading names something on the board, so a typo in a heading cannot sit unseen as an owed one.
+  const descText = readFileSync(resolve(REPO, BOARD_DESCRIPTIONS_PATH), 'utf8');
+  const lb = buildBoard({ planText: live, descText, subjects: [], openReason: null, rulebookReadable: false, ref: 'f'.repeat(40), nowMs: NOW });
+  const keys = new Set([...lb.items, ...lb.rest].flatMap((x) => [x.key, ...x.ids, ...(x.planRow ? [`row ${x.planRow}`] : [])]));
+  const orphans = [...parseDescriptions(descText).keys()].filter((k) => !keys.has(k));
+  ok('LIVE5 every description heading names an item on the board', orphans.length === 0, JSON.stringify(orphans));
   }
 }
 

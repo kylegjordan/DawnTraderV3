@@ -93,7 +93,8 @@ export function buildBoard({ planText, descText, subjects, openReason, rulebookR
     const statusCell = it.planRow ? (row ? row.status : '') : it.status;
     const st = it.planRow && !row ? { state: 'unrecognised', text: `plan row ${it.planRow} not found` } : mapStatus(statusCell);
     const step = ids.length ? lastStepFor(ids[0], subjects) : null;
-    const description = descFor(ids, it.planRow);
+    // An item with neither a batch id nor a plan row is keyed by its item text (its board key).
+    const description = descFor(ids, it.planRow) ?? (!ids.length && !it.planRow ? desc.get(deMark(it.item)) ?? null : null);
     const reasonFull = rulebookReadable && ids.length ? (openReason?.get(ids[0]) ?? null) : null;
     const conflict = pre.conflicts.find((c) => c.lineNo === it.lineNo)?.why ?? null;
     return {
