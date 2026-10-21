@@ -3171,7 +3171,7 @@ export class ActiveExecutionEngine {
             bid: _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' ? xsBid : null),
             bidRefusal: (_lsSel !== null
               ? (_lsSel.ok ? (_lsSel.quote.bid === null ? 'no_bid_side' : null) : _lsSel.tickerRefusal)
-              : (_posClass === 'xstock_spot' && xsBid === null ? (xsFrameReason ?? 'no_bid_side') : null)) as ExitTriggerRefusal | null,
+              : (_posClass === 'xstock_spot' && xsBid === null ? (xsFrameReason ?? 'no_bid_side') : null)),
             // `xsBidTriggerOff` is always set when unarmed (pre-audit A10's census); a null here makes the rule throw — a hold.
             xsArm: _posClass === 'xstock_spot'
               ? (xsBidTriggerArmed ? { armed: true as const } : { armed: false as const, armOff: xsBidTriggerOff as XsArmOff })

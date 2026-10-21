@@ -17,7 +17,8 @@
   bid: _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' ? xsBid : null),
   bidRefusal: (_lsSel !== null
     ? (_lsSel.ok ? (_lsSel.quote.bid === null ? 'no_bid_side' : null) : _lsSel.tickerRefusal)
-    : (_posClass === 'xstock_spot' && xsBid === null ? ((xsFrameReason as XsFrameRefusal | null) ?? 'no_bid_side') : null)) as ExitTriggerRefusal | null,
+    : (_posClass === 'xstock_spot' && xsBid === null ? (xsFrameReason ?? 'no_bid_side') : null)),
+  // (Step-4 condition, `xsFrameReason` is declared `XsFrameRefusal | null` at its source, so the inner cast was removed at `b93be7f76` and the redundant outer `as ExitTriggerRefusal | null` at the next code commit (Langston's record item 1) — tsc unchanged both times.)
   xsArm: _posClass === 'xstock_spot'
     ? (xsBidTriggerArmed ? { armed: true as const } : { armed: false as const, armOff: xsBidTriggerOff as XsArmOff })
     : null,
