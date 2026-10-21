@@ -415,9 +415,9 @@ export function presprintRows(planText) {
   return { items, malformed, conflicts, headerLine: headers[0] };
 }
 // Exact ids in a cell, as a SET — never substring (Langston's pre-audit r3 condition: `B-TOKEN-WATCH` must not
-// match row 197a's `B-TOKEN-WATCH-AUTH`). The config grammar plus the F-G-* form it lacks (config.mjs:30-31) and
+// match row 197a's `B-TOKEN-WATCH-AUTH`). EVERY config grammar form (the B79.0n form included, Langston Step-2 r5 fold) plus the F-G-* form it lacks (config.mjs:30-31) and
 // the PAPER-RESET-* procedure name.
-const CELL_ID = /(?<![A-Za-z0-9-])(?:P\d{1,3}-B\d+(?:\.\d+)?[a-z]?|B-NEW-\d+[a-z]?|B-[A-Z][A-Z0-9]+(?:-(?:[A-Z0-9]*\d[a-z]|[A-Z0-9]+))*(?:\.\d+)?|T-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*|F-G-\d+[a-z]?|PAPER-RESET-\d+)(?![A-Za-z0-9_])(?!-[A-Za-z0-9])/g;
+const CELL_ID = /(?<![A-Za-z0-9-])(?:P\d{1,3}-B\d+(?:\.\d+)?[a-z]?|B-NEW-\d+[a-z]?|B\d{2,}\.\d+[a-z]?(?:-[A-Z])?|B-[A-Z][A-Z0-9]+(?:-(?:[A-Z0-9]*\d[a-z]|[A-Z0-9]+))*(?:\.\d+)?|T-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*|F-G-\d+[a-z]?|PAPER-RESET-\d+)(?![A-Za-z0-9_])(?!-[A-Za-z0-9])/g;
 export function idsInCell(cell) { return [...new Set(deMark(cell).match(CELL_ID) || [])]; }
 // The seven plain states (config.mjs STATUS_PREFIXES): strip leading non-alphanumerics, longest prefix wins.
 const PREFIXES_LONGEST_FIRST = [...STATUS_PREFIXES].sort((a, b) => b[0].length - a[0].length);

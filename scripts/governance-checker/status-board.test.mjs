@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildBoard, parseDescriptions, lastStepFor, runStatusBoard, BOARD_FAILED_KEY } from './status-board.mjs';
 import { parseExceptionsLegacy, runStatusBoardSafely, DRIFT_LOADED_FILES } from './poller.mjs';
-import { presprintRows, planRowsByBatch, mapStatus, mapWaiting } from './checker.mjs';
+import { presprintRows, planRowsByBatch, mapStatus, mapWaiting, idsInCell } from './checker.mjs';
 import { PLAN_LINE, BOARD_DESCRIPTIONS_PATH } from './config.mjs';
 
 let pass = 0, fail = 0;
@@ -121,6 +121,9 @@ ok('SB22 openReason: an unconfirmed row gives no reason, and the existing output
   let escaped = false; try { runStatusBoardSafely(s2, NOW, null, { show: () => null, subjects: () => [], write: () => {}, sink: threwSink }); } catch { escaped = true; }
   ok('SB26 even a failing failure-alert add does not escape the tick', escaped === false);
 }
+// Every config.mjs id form is read in a table cell (Langston, Step-2 r5 fold: the B79.0n form was missing).
+ok('SB28 idsInCell reads every config id form, plus F-G-* and PAPER-RESET-*', ['P19-B6.5a', 'B-NEW-53a', 'B79.0n', 'B-RULES-1e', 'B-TEC-SELFHEAL', 'T-W20C-SCALAR-LEG', 'F-G-1', 'PAPER-RESET-3000']
+  .every((id) => idsInCell(`see ${id} here`).join() === id), JSON.stringify(['B79.0n', 'P19-B6.5a'].map((id) => idsInCell(`see ${id} here`))));
 ok('SB27 status-board.mjs is in DRIFT_LOADED_FILES (poller imports it)', DRIFT_LOADED_FILES.includes('status-board.mjs'));
 
 // THE LIVE PLAN (scope OBJ-3 verified-by; Langston's PROCEED fold 1): every status cell in §4 AND in the pre-sprint
