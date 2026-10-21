@@ -708,6 +708,10 @@ function frameResurface(alert, d, nowMs) {
   // record item 4: a STRUCK parked line is history, not parked.
   const pk = parseAfterLive(['## After live — 0', '## Parked by Kyle — 2', '- ~~B-OLD — parked by Kyle~~ — UNPARKED 2026-10-20 (#974)', '- #304 — parked by Kyle'].join('\n'));
   ok('PS18 a struck parked line is not parked; a live one is', pk.parked.length === 1 && pk.parked[0].includes('#304'), JSON.stringify(pk.parked));
+  const al = parseAfterLive(['## After live — 2', '### theme', '- ~~B-GONE — x~~ — WITHDRAWN: #1117 is added to B-OTHER', '- B-LIVE (CC-B) — y'].join('\n'));
+  ok('PS19 a struck after-live line places nothing; a live one does (the same rule as the count, #1180)', al.afterLive.length === 1 && al.afterLive[0].includes('B-LIVE'), JSON.stringify(al.afterLive));
+  const gl = censusLists({ a: [], b: { unplaced: [], handover: null, selfContradicting: [], reused: [], placedOwnerless: [] }, afterLive: { al: 0 }, c: { issues: [], excluded: [] }, d: { rows: [], excluded: [] }, e: { unmatched: [], rowUnmatched: [] }, f: { all: [], new: [] }, g: { agree: false, diffs: [], commit: null, sameCommit: null, alert: true, unknownAt: 'abcdef1234' } });
+  ok('PS20 the undecidable section-6 result carries its sha into the lists', gl.g?.unknownAt === 'abcdef1234', JSON.stringify(gl.g));
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);

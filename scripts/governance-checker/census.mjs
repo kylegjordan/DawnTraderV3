@@ -408,9 +408,10 @@ export function parseAfterLive(text) {
   let where = null;
   for (const line of lines(text)) {
     if (/^## /.test(line)) { where = line.startsWith('## After live') ? afterLive : line.startsWith('## Parked by Kyle') ? parked : null; continue; }
-    // B-STATUS-BOARD Step-4 record item 4 (Langston): a STRUCK parked line (`- ~~`) is history, not a parked item — the
-    // file's own rule (#1180) — so an UNPARKED line no longer places its issue as parked. Parked list only (the measured case).
-    if (where === parked && line.startsWith('- ~~')) continue;
+    // B-STATUS-BOARD Step-4 (Langston gate A, record item 4 then round-2 condition 2): a STRUCK line (`- ~~`) is history,
+    // not a live item, in BOTH lists — the file's own rule (#1180), which recountAfterLive already applies to the count.
+    // Before this, a struck WITHDRAWN after-live line still PLACED its issue, and an UNPARKED line still read parked.
+    if (where && line.startsWith('- ~~')) continue;
     if (where && line.startsWith('- ')) where.push(line);
   }
   return { afterLive, parked };
@@ -744,7 +745,7 @@ export function censusLists(r) {
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
     e: [...r.e.unmatched, ...r.e.rowUnmatched].map((x) => [x.row, x.target]),
     f: { new: r.f.new.map((x) => x.key), all: r.f.all },
-    g: r.g.agree ? null : { diffs: r.g.diffs, commit: r.g.commit, sameCommit: r.g.sameCommit },
+    g: r.g.agree ? null : { diffs: r.g.diffs, commit: r.g.commit, sameCommit: r.g.sameCommit, ...(r.g.unknownAt !== undefined ? { unknownAt: r.g.unknownAt } : {}) },
   };
 }
 
@@ -793,7 +794,7 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
       // and the recount clause's suffix was shortened to pay for it.
       '(g) ' + (!r.g.totalAgree ? `Total ${r.g.statedTotal ?? '—'}≠${r.g.cellSum}; ` : '') +
       (r.g.agree ? `§6 recount agrees with the table` :
-        `§6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.alert ? '; not recounted with §4' : '; recounted with §4, no alert'}`),
+        `§6 recount vs table: ${r.g.diffs.map((x) => `${x.session} ${x.recount}/${x.table}`).join(', ')}${r.g.unknownAt !== undefined ? `; undecidable: plan text at ${String(r.g.unknownAt ?? 'the window edge').slice(0, 7)} does not parse` : r.g.alert ? '; not recounted with §4' : '; recounted with §4, no alert'}`),
       `Full lists: metadata.lists of this row (read by id in /var/log/dawntrader/system-alerts.jsonl); box file ${boxPath}.`,
     ].map(item).join('\n');
   };
@@ -946,7 +947,7 @@ function dryRun(argv) {
   out(`    unmatched: ${r.e.unmatched.map((x) => `${x.row}:${x.target}`).join(' ')}`);
   out(`(f) ${r.f.all.length} lines / ${r.f.ids.length} ids: ${r.f.all.join(' ')}`);
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
-  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, commit ${r.g.commit}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
+  out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, ${r.g.unknownAt !== undefined ? `undecidable at ${String(r.g.unknownAt ?? 'the window edge').slice(0, 7)} (plan text does not parse)` : `commit ${r.g.commit}`}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
   { const x = r.afterLive;
     out(`(g′) after-live recount: headline stated ${x.headline.stated} vs rule ${x.headline.recount} · al ${x.al}` +
       (x.al ? ` · disagree: ${x.disagree.map((d) => `L${d.line} ${d.heading} stated ${d.stated} rule ${d.recount}`).join('; ') || 'none'}` +
