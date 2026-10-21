@@ -165,6 +165,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/governance-checker/census.test.mjs
 
+      # B-STATUS-BOARD (#1227): the board's rules on fixture text, its failure fence, and the LIVE plan — every
+      # status cell in section 4 and the pre-sprint table maps to a state, so a new word fails here, not on the page.
+      - name: Governance checker tests (status board)
+        if: ${{ !cancelled() }}
+        run: node scripts/governance-checker/status-board.test.mjs
+
       # B-WAKE-OWNER-LOSS-VISIBLE (#1142, Langston Step-2 B1): the wake filter's forced-failure legs and the alert hook's
       # pure split logic, so the lost-routing record's write AND read paths are evaluated on every push, not only on the
       # laptop. Same P30/Q33 form: a step inside Test Suite, its own `if`, no npm ci or Postgres needed. The filter

@@ -38,6 +38,7 @@ import {
   docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
   resolveGovRefSha, showFileAt, lsTreeNamesAt, findGlobDoc, planRowsByBatch, checkPlanState,
 } from './checker.mjs';
+import { runStatusBoard } from './status-board.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -705,7 +706,7 @@ function loadExceptions(ref) {
 // into the `raw` argument. Selected while EXCEPTIONS_V2_ENABLED is false; DELETED with the flag in the
 // batch's Step-10 commit. Exported so poller.test.mjs pins the flag-off behaviour.
 export function parseExceptionsLegacy(raw) {
-  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map();
+  const open = new Set(), openSince = new Map(), naConfirmed = new Set(), classOverride = new Map(), openReason = new Map();
   // ONE confirmed-semantics predicate, reused by every row type (Langston B-GOV-ORPHAN-CLASS Step-1):
   // a disposition counts only when a real confirmer signed it (not the literal 'pending' placeholder).
   const isConfirmed = (by) => Boolean(by) && by !== 'pending';
@@ -714,7 +715,13 @@ export function parseExceptionsLegacy(raw) {
     if (cells.length < 7) continue;
     const [, ts, bid, type, value, confirmedBy] = cells;
     if (!bid || bid.startsWith('_')) continue;
-    if (type === 'open' && isConfirmed(confirmedBy)) { open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0])); }
+    if (type === 'open' && isConfirmed(confirmedBy)) {
+      open.add(bid); const m = value.match(/\d{4}-\d{2}-\d{2}T[\d:]+Z/); if (m) openSince.set(bid, Date.parse(m[0]));
+      // B-STATUS-BOARD (#1227) P5: the reason, cell 6 ONWARD rejoined (a reason may carry `|`; Langston condition 5),
+      // without assuming a trailing pipe (one live row has none). Last row per batch wins, like openSince. Additive.
+      const tail = cells.slice(6); if (line.trimEnd().endsWith('|')) tail.pop();
+      openReason.set(bid, tail.join(' | ').trim());
+    }
     if (type === 'na-skip' && isConfirmed(confirmedBy)) naConfirmed.add(`${bid}:${value}`);
     // OBJ-1 (B-GOV-ORPHAN-CLASS): a CONFIRMED class-override row DECLARES the batch's class, so a
     // parent-ride sub-batch with no scope-header (B8.2b/c, B8.4b) stops re-minting gov-classundeclared.
@@ -725,7 +732,7 @@ export function parseExceptionsLegacy(raw) {
       if (m && VALID_CLASSES.includes(m[1].toLowerCase())) classOverride.set(bid, m[1].toLowerCase());
     }
   }
-  return { open, openSince, naConfirmed, classOverride };
+  return { open, openSince, naConfirmed, classOverride, openReason };
 }
 
 // B-PLAN-CURRENCY-CHECK OBJ-10 (P21-P24) — the ledger rule behind EXCEPTIONS_V2_ENABLED. PURE: text in,
@@ -876,7 +883,7 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // such path no longer blinds the check for every other file. Absent at ONE ref only is still a read
 // failure and still fails open (P29's named residual: a listed file deleted on the branch while the box
 // is behind; this batch deletes no listed file).
-export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs'];
+export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs', 'status-board.mjs'];
 // The blob id of one checker file at a ref, or null when the path is absent there. Throws on any other
 // failure (a bad ref, a non-blob at the path, unexpected output) — the caller fails open on a throw.
 function gitBlobAt(ref, file) {
@@ -1025,6 +1032,13 @@ export function maybeRunWeekly(state, nowMs, liveIds, deps = {}) {
   return out;
 }
 
+// B-STATUS-BOARD: runStatusBoard has its own catch and failure alert; this second catch keeps even a failing
+// failure-alert add from ending the tick (the maybeRunWeekly pattern). Never called on the fetch-fail return.
+export function runStatusBoardSafely(state, nowMs, openReason, deps = {}) {
+  try { return runStatusBoard(state, nowMs, gradedRefSha, openReason, { sink: alertSink, ...deps }); }
+  catch (e) { console.error(`[gov-checker] status board: could not raise its failure alert: ${String(e.message || e).slice(0, 300)}`); return { ok: false }; }
+}
+
 export function tick(nowMs = Date.now()) {
   const state = loadState();
   // OBJ-0 (auto-redeploy auditability, Langston Step-4 add #1): emit a POSITIVE per-tick record of
@@ -1137,6 +1151,8 @@ export function tick(nowMs = Date.now()) {
     }
     // P40: the weekly legs still run with an unreadable rulebook — they read other files at the same sha.
     maybeRunWeekly(state, nowMs, liveIds);
+    // B-STATUS-BOARD: so does the board — written without the open reasons, and it says so (Langston pre-audit B1).
+    runStatusBoardSafely(state, nowMs, null);
     state.gradedRefSha = gradedRefSha; // #637: fetch succeeded, so the sha is real
     state.lastTick = nowMs; saveState(state);
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: true, rulebookUnreadable: true };
@@ -1251,6 +1267,8 @@ export function tick(nowMs = Date.now()) {
   // P40: the weekly census and mistake pass (gated by their config.mjs flags — read the values there), after every enforcement
   // decision of this tick, so a weekly fault can never change what the tick graded.
   maybeRunWeekly(state, nowMs, liveIds);
+  // B-STATUS-BOARD (#1227): the board, last, after every decision of the tick (it grades nothing).
+  runStatusBoardSafely(state, nowMs, exceptions.openReason ?? new Map());
   // #637: publish the graded sha so the SEPARATE heartbeat process can cite it.
   state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;
