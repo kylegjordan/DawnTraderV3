@@ -381,8 +381,11 @@ export function parsePlan(text) {
   // this census run, visibly). A row-backed item (`status` = `row`) keeps its id here for placement and the
   // `after §0` references, but its closure is its §4 row's, so planLines skips it.
   for (const it of presprintRows(text).items) {
+    // `exit`: a `data — …` waiting-on names what ENDS an open window (Langston gate B ruling A: a list-(f) line for an
+    // observation window carries its close test, so it reads as a line with an exit, not a stale one).
+    const w = deMark(it.waitingOn);
     s0.push({ lineNo: it.lineNo, session: it.owner, inFlight: [it.item, it.issue].join(' '), disposition: it.status,
-      rowBacked: deMark(it.status).toLowerCase() === 'row' });
+      rowBacked: deMark(it.status).toLowerCase() === 'row', exit: /^data\s*[—-]/i.test(w) ? w.replace(/^data\s*[—-]\s*/i, '') : null });
   }
   return { s0, s4, s5, s6, s6Text: sec[6].join('\n') };
 }
@@ -518,7 +521,7 @@ export function listE(plan) {
 export function planLines(plan) {
   const out = [];
   for (const r of plan.s4) for (const id of idsIn(r.batch)) out.push({ key: `§4:${r.rowNo}:${id}`, id, closed: cellClosed(r.status), owner: firstSession(r.owner), where: `§4 row ${r.rowNo}` });
-  for (const r of plan.s0) if (!r.rowBacked) for (const id of idsIn(r.inFlight)) out.push({ key: `§0:${id}`, id, closed: s0Closed(r), owner: firstSession(r.session), where: '§0' });
+  for (const r of plan.s0) if (!r.rowBacked) for (const id of idsIn(r.inFlight)) out.push({ key: `§0:${id}`, id, closed: s0Closed(r), owner: firstSession(r.session), where: '§0', ...(r.exit ? { exit: r.exit } : {}) });
   for (const r of plan.s5) for (const id of idsIn(r.item)) out.push({ key: `§5:${id}`, id, closed: cellClosed(r.closes), owner: firstSession(r.owner), where: '§5' });
   return out;
 }
@@ -527,7 +530,8 @@ export function listF(plan, reportNames, prevF) {
   const all = planLines(plan).filter((p) => !p.closed && findGlobDoc(p.id, 'completion_report', reportNames).length > 0);
   const prev = new Set(prevF || []);
   const keys = [...new Set(all.map((p) => p.key))];
-  return { all: keys, ids: [...new Set(all.map((p) => p.id))], new: all.filter((p) => !prev.has(p.key)) };
+  const exits = Object.fromEntries(all.filter((p) => p.exit).map((p) => [p.key, p.exit]));
+  return { all: keys, ids: [...new Set(all.map((p) => p.id))], new: all.filter((p) => !prev.has(p.key)), exits };
 }
 // (a): completion-named files first added between the previous census's ref and this ref. Each is matched against
 // the plan lines' ids; none → in-no-plan-line; some, none closed → not-closed-in-plan; one closed → not listed.
@@ -747,7 +751,7 @@ export function censusLists(r) {
     c: r.c.issues.map((x) => x.n), cx: r.c.excluded.map((x) => x.issue),
     d: r.d.rows.map((x) => x.row), dx: r.d.excluded.map((x) => x.row),
     e: [...r.e.unmatched, ...r.e.rowUnmatched].map((x) => [x.row, x.target]),
-    f: { new: r.f.new.map((x) => x.key), all: r.f.all },
+    f: { new: r.f.new.map((x) => x.key), all: r.f.all, ...(r.f.exits && Object.keys(r.f.exits).length ? { exits: r.f.exits } : {}) },
     g: r.g.agree ? null : { diffs: r.g.diffs, commit: r.g.commit, sameCommit: r.g.sameCommit, ...(r.g.unknownAt !== undefined ? { unknownAt: r.g.unknownAt } : {}) },
   };
 }
@@ -791,8 +795,8 @@ export function censusAlert(r, { week, severity, storeUnreadable = false, boxPat
         top(r.d.rows, (x) => `row ${x.row} ${x.why} (${planOwner(x.owner)})`),
       `(e) after-references: ${r.e.refs.length + r.e.rowRefs}, ${eAll.length} name no earlier row [owner ? ${qCount(eAll, (x) => x.owner)}]` +
         top(eAll, (x) => `row ${x.row} after ${x.target} (${planOwner(x.owner)})`),
-      `(f) not-closed plan lines with a report: ${r.f.new.length} NEW of ${r.f.all.length} [owner ? ${qCount(r.f.new, (x) => x.owner)}]` +
-        top(r.f.new, (x) => `${x.where} ${x.id} (${planOwner(x.owner)})`),
+      `(f) not-closed plan lines with a report: ${r.f.new.length} NEW of ${r.f.all.length}${Object.keys(r.f.exits || {}).length ? `, ${Object.keys(r.f.exits).length} an open window with its end in metadata.lists.f.exits` : ''} [owner ? ${qCount(r.f.new, (x) => x.owner)}]` +
+        top(r.f.new, (x) => `${x.where} ${x.id} (${planOwner(x.owner)})${x.exit ? `, open window, ends: ${x.exit.length > 90 ? x.exit.slice(0, 89) + '…' : x.exit}` : ''}`),
       // C1 kept inside the 1,000-char body at maximum sizes (the worst case was 991 before it): the Total clause is terse
       // and the recount clause's suffix was shortened to pay for it.
       '(g) ' + (!r.g.totalAgree ? `Total ${r.g.statedTotal ?? '—'}≠${r.g.cellSum}; ` : '') +
@@ -949,6 +953,7 @@ function dryRun(argv) {
   out(`(e) type (i)+§0 refs ${r.e.refs.length} · unmatched ${r.e.unmatched.length} · resolved via §0 ${r.e.viaS0.length} (${r.e.viaS0.map((x) => `${x.row}→${x.target}`).join(', ')}) · "after row N" ${r.e.rowRefs}, unmatched ${r.e.rowUnmatched.length}`);
   out(`    unmatched: ${r.e.unmatched.map((x) => `${x.row}:${x.target}`).join(' ')}`);
   out(`(f) ${r.f.all.length} lines / ${r.f.ids.length} ids: ${r.f.all.join(' ')}`);
+  for (const [k, v] of Object.entries(r.f.exits || {})) out(`    ${k} is an open window; it ends: ${v}`);
   out(`(a) ${r.a.length}: ${r.a.map((x) => `${x.file} (${x.verdict})`).join('; ')}`);
   out(`(g) §6: recount ${JSON.stringify(r.g.recount)} · table ${JSON.stringify(r.g.table)} · ${r.g.agree ? 'agree' : `DISAGREE, alert=${r.g.alert}, ${r.g.unknownAt !== undefined ? `undecidable at ${s6UnknownLabel(r.g.unknownAt)} (plan text does not parse)` : `commit ${r.g.commit}`}`} · stated Total ${r.g.statedTotal ?? 'NOT FOUND'} vs cells ${r.g.cellSum} (${r.g.totalAgree ? 'agree' : 'DISAGREE'})`);
   { const x = r.afterLive;
