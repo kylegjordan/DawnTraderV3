@@ -183,4 +183,16 @@ The audit read everything the board will touch. The checker that will keep the b
 - **(c) dated homes, (d) rows, (g) the §6 tally, the ledger self-check:** **unchanged** (none reads §0).
 
 ### F.3 — the run
-*(appended after the run, in the next commit)*
+**Run at:** before `e8eb7143e`, after `fa9d2999f` (the review branch: `e8eb7143e` + the four Step-3 commits), `prevRef` `efdb165f1`, `prevF` null, each side with its own `census.mjs`. The ledger self-check is identical on both sides (897 heads, 785 numbers, 527 open).
+
+| list | predicted (F.2) | measured | held? |
+|---|---|---|---|
+| (f) all | −2: the two §0 keys go, every §4 and §5 key unchanged | 4 → 2: `§0:B-XSTOCK-FEE-CONTRACT` and `§0:B-SIZING-DEC-RESTORE` gone, nothing added | ✅ |
+| (f) new | "new 0" | 4 → 2, the same two | ✗ **in form only:** with `prevF` null, `new` equals `all`, so it moves with it |
+| (a) | the four files leave, none added | 5 → 1: exactly those four left (the completion pattern does take a NOTE); none added | ✅ |
+| (b) unplaced | the arriving numbers that were unplaced become placed; none goes placed → unplaced | 21 → 10: `#1199 #1206 #1207 #1208 #1216 #1221 #1222 #1223 #1224 #1226 #1227` placed; **none** went placed → unplaced | ✅ |
+| (b) categories | "nothing else in (b) moves" | **14 already-placed issues changed category:** 13 to `number` (`#707 #924 #960 #974 #979 #1023 #1057 #1101 #1175 #1194 #1198 #1201 #1215`) and `#1197` parked → HOME batch; by number 304 → 328, by HOME batch 187 → 179, parked 6 → 1, roadmap 9 → 9 | ✗ **my F.2 text was wrong** — see below |
+| (c) (d) (g), self-check | unchanged | unchanged | ✅ |
+| (e) | `unmatched` grows by none; `viaS0` may gain | `unmatched` 4 → 4, `viaS0` 1 → 1, `rowUnmatched` 3 → 3 | ✅ |
+
+**The (b) miss, stated plainly:** F.2 wrote the §0 issue numbers as "going from the old cells to the new", as if the old census already placed issues by §0. **It did not:** `placement()` at `e8eb7143e` reads §4, the after-live list, the parked list and the roadmap, and never §0. Reading the pre-sprint table as a placement list **is** the `#1200` fix, landed in `d251ef3b2`. So every issue number in the new table now places by number, which re-labels 14 issues that were already placed some other way and places 11 that were not. No issue lost its placement. The code did what `#1200` asks; my prediction under-described it.

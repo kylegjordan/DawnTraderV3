@@ -2,7 +2,7 @@
 
 **Owner:** CC-A. **Class:** hotfix (Kyle 2026-10-21, option 2). **Scope:** `Scope Files/B_MUTATING_ROUTES_AUTH_SCOPE.md`.
 
-**What broke.** Thirteen staging server addresses that change state or run work answered with no login: the order-book integrity monitor's start, stop and audit; the verification test protocol's start and stop; the simulation-session register and deregister; the AI conversation rename; the screener's Kraken test; the recovery test; and three audit runs. Found by the route census for `B-STATUS-BOARD` (89 of 671 `/api` routes have no auth).
+**What broke.** Thirteen staging server addresses that change state or run work answered with no login: the order-book integrity monitor's start, stop and audit; the verification test protocol's start and stop; the simulation-session register and deregister; the AI conversation rename; the screener's Kraken test; the recovery test; and three audit runs. Found by the route census for `B-STATUS-BOARD` (89 of 671 `/api` routes have no auth). *(Record, Langston's Step-4 read: fourteen state-changing routes now carry the login; this hotfix added it to the thirteen named here. The fourteenth, deleting an AI conversation (`routes.ts:14007`), already required it before the hotfix; its diff touches only the rename.)*
 
 **What was done.** The nine in `server/routes.ts` name `authenticateToken`; the four in sub-routers are guarded on `apiRouter` above their mounts. A structural test pins each check, each guard's position, and the order of the two `healthRouter` mounts across `routes.ts` and `index.ts` (Langston's addition).
 
