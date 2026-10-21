@@ -94,7 +94,7 @@ Stops an old last-known price being served as if it were current, with no age li
 Makes every price-cache entry use Kraken's own name for the coin, closing the last two gaps where one coin could be stored under two names.
 
 ### WS parse-error drops
-The Kraken live feed drops about eleven messages a day on a parse error. Handled inside B-PRICE-SIDE-BY-JOB.
+The Kraken live feed dropped about eight to eleven messages a day on a parse error. Fixed by B-PRICE-FEED-TRUTH (its third piece): none since October 11.
 
 ### B-PRICE-SIDE-BY-JOB
 Each job in the pipeline reads the side of the market a real trade would get (buy on the ask, sell on the bid) instead of the midpoint, so no trigger, fill or booking rests on the midpoint.

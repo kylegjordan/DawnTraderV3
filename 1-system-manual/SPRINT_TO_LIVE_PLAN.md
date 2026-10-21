@@ -18,7 +18,7 @@
 | 0 — reset safety | 2 | B-ENGINE-STOP-DURATION-COLUMN (row 173 is an alias) | CC-B (New Claude) | 2a0 | #1067 | Kyle 2026-10-07 | row | nothing |
 | 1 — feed truth under the exits | 1 | B-PRICE-STALENESS-BOUND (the old cell read "32/33"; there is no row 32) | CC-C (Analyst Claude) | 33 |  | Kyle 2026-10-07 | row | nothing |
 | 1 — feed truth under the exits | 2 | B-KRAKEN-PRIMARY-KEY-RESOLUTION | CC-C (Analyst Claude) | 14a | #1076 | Kyle 2026-10-07 | row | nothing |
-| 1 — feed truth under the exits | 3 | WS parse-error drops | CC-C (Analyst Claude) | none | #1047 | Kyle 2026-10-07 | QUEUED (unconfirmed; its fix is homed on row 17, B-PRICE-SIDE-BY-JOB) | nothing |
+| 1 — feed truth under the exits | 3 | WS parse-error drops | CC-C (Analyst Claude) | none | #1047 | Kyle 2026-10-07 | BUILT (fixed by B-PRICE-FEED-TRUTH increment I3, live check PASS 2026-10-15; 0 parse errors in the ten daily error files since 10-11 against 6-14 a day before; closes with that batch) | CC-C |
 | P1a — entry | 1 | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | none | #1168 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 59 keeps its sprint place) | nothing |
 | P1a — entry | 2 | B-CRYPTO-BIRTH-FEED | CC-B (New Claude) | none | #1060 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 39a keeps its sprint place) | nothing |
 | CC-B list | 1 | B-BOOK-CHECKSUM-CIRCUIT-BREAKER | CC-B (New Claude) | none | #1220 | Kyle 2026-10-20 (locked) | ✅ CLOSED 2026-10-20 (Langston Step 8 and Step 11; deployed 725a7f3f5) | nothing |
