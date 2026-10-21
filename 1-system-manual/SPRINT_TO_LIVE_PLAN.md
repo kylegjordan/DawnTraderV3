@@ -4,6 +4,97 @@
 
 ## 0. Clear the plates first (Kyle, 2026-09-28)
 
+**MOVED 2026-10-21 into the ONE pre-sprint table in §0a** (`B-STATUS-BOARD`, `#1227`; Kyle's phone status board reads it). The table that stood here is kept, verbatim, under §0a's `history` heading. Its rule stands: before any session starts its sprint rows, everything it has in flight is finished or paused cleanly.
+
+## 0a. Pre-sprint simulation-truth fixes (Kyle, 2026-10-07)
+
+**Kyle:** every system error behind the paper stop-outs after the 2026-10-06 $820 reset (33/33 `stop_hit`, −$31.92 at 11:12Z) is fixed **before the sprint starts**, grouped by the part of the system, then paper is reset to $820 again with the dashboard cleared — so the sprint starts on what we all agree is an accurate simulation. Calibration stays in the sprint. **The plan, its evidence and every rider: `Claude Comms and Packages/Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md` (r4, Langston ruled 11:12Z and 11:31Z; Coltrane reviewed 11:18Z). The rows below keep their numbers and owners; this section is their order.**
+
+**THE PRE-SPRINT TABLE — one line per item, read by the governance checker and the status board (`B-STATUS-BOARD`, 2026-10-21).** It holds every live item of the former §0 and §0a. An item that owns a §4 row reads `row` here and takes its status from that row (one copy). `waiting on` is `nothing`, `Kyle`, `Langston`, `Coltrane`, a session, or `data — <what and until when>`. Edit this table in place; its header must stay exactly as written (`PLAN_LINE.s0aHeader`).
+
+| stage | order | item | owner | plan row | issue | agreed | status | waiting on |
+|---|---|---|---|---|---|---|---|---|
+| 0 — reset safety | 1 | B-LOSS-WINDOW-OPERATOR-CLOSES | CC-C (Analyst Claude) | 183b | #1154 | Kyle 2026-10-07 | row | nothing |
+| 0 — reset safety | 2 | B-ENGINE-STOP-DURATION-COLUMN (row 173 is an alias) | CC-B (New Claude) | 2a0 | #1067 | Kyle 2026-10-07 | row | nothing |
+| 1 — feed truth under the exits | 1 | B-PRICE-STALENESS-BOUND (the old cell read "32/33"; there is no row 32) | CC-C (Analyst Claude) | 33 |  | Kyle 2026-10-07 | row | nothing |
+| 1 — feed truth under the exits | 2 | B-KRAKEN-PRIMARY-KEY-RESOLUTION | CC-C (Analyst Claude) | 14a | #1076 | Kyle 2026-10-07 | row | nothing |
+| 1 — feed truth under the exits | 3 | WS parse-error drops (homed on plan row 17) | CC-C (Analyst Claude) | 17 | #1047 | Kyle 2026-10-07 | row | nothing |
+| P1a — entry | 1 | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | none | #1168 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 59 keeps its sprint place) | nothing |
+| P1a — entry | 2 | B-CRYPTO-BIRTH-FEED | CC-B (New Claude) | none | #1060 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 39a keeps its sprint place) | nothing |
+| CC-B list | 1 | B-BOOK-CHECKSUM-CIRCUIT-BREAKER | CC-B (New Claude) | none | #1220 | Kyle 2026-10-20 (locked) | ✅ CLOSED 2026-10-20 (Langston Step 8 and Step 11; deployed 725a7f3f5) | nothing |
+| CC-B list | 2 | B-ENTRY-GATE | CC-B (New Claude) | none | #1224 | Kyle 2026-10-20 (locked) | IN FLIGHT — Step 1 (scope r1 sent back 2026-10-21) | Kyle (both-sided or adverse-only 25% window); Langston and Coltrane (the economic test) |
+| CC-B list | 3 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-SQE-FEED-FANOUT) | nothing |
+| CC-B list | 4 | B-PLAN-PRICE-BASIS | CC-B (New Claude) | none | #1223, #1221 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-STRATEGY-INPUT-FIXES) | nothing |
+| CC-B list | 5 | B-BOOK-TRUST-FLEET-GUARD | CC-B (New Claude) | none | #1226 | Kyle 2026-10-20 (delegated slot) | QUEUED | nothing |
+| after the CC-B list | 1 | B-BALANCE-SESSION-PAIRING | CC-C (Analyst Claude) | none |  | Kyle 2026-10-20 | QUEUED | CC-B (waits behind CC-B's list, Kyle 2026-10-20) |
+| CC-A list | 1 | B-MUTATING-ROUTES-AUTH | CC-A (Old Claude) | none | #1228 | Kyle 2026-10-21 (option 2) | ✅ DONE 2026-10-21 (verified on staging, d307debe5) | nothing |
+| CC-A list | 2 | B-STATUS-BOARD | CC-A (Old Claude) | none | #1227 | Kyle 2026-10-20/21 | IN FLIGHT — Step 3 | nothing |
+| P1b — entry | 1 | B-ENTRY-CONSUMPTION-FRESHNESS | CC-C (Analyst Claude) | 40 |  | Kyle 2026-10-07 | row | nothing |
+| P1c — fill mode | 1 | B-CLASS-LEG-FILL-MODE | CC-C (Analyst Claude) | none | #1170 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-15 (Coltrane Step 11) | nothing |
+| 2 — exit, in order | 1 | P-8e split (the extrapolated-fill field) | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | QUEUED (lands with or before row 2's verification; carrier: the B-PRICE-SIDE-BY-JOB pre-audit) | nothing |
+| 2 — exit, in order | 2 | B-XSTOCK-BID-TRIGGER-RELAND | CC-C (Analyst Claude) | 2 |  | Kyle 2026-10-07 | row | data — the (4a) read after 2026-10-21T20:00Z and the A/C EST reads 2026-11-01..03; plus Langston (4b Step 2) |
+| 2 — exit, in order | 3 | B-SPREAD-BLOWN-RELEASE-MOVEMENT | CC-C (Analyst Claude) | none | #1199 | Kyle 2026-10-07 | QUEUED | data — objective 6's observation read (the stop-hold was first exercised 2026-10-19) |
+| 2 — exit, in order | 4 | B-CRYPTO-MARK-AGE-GATE | CC-C (Analyst Claude) | 38 |  | Kyle 2026-10-10 | row | nothing |
+| 2 — exit, in order | 5 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | CC-C (Analyst Claude) | 65 |  | Kyle 2026-10-07 | row | nothing |
+| 2 — exit, in order | 6 | B-STALE-BOOK-DEPTH-REFUSAL | CC-C (Analyst Claude) | 8b | #1085 | Kyle 2026-10-07 | row | nothing |
+| 2 — exit, in order | 7 | B-EXIT-DECISION-RUNG-STAMP | CC-C (Analyst Claude) | 113 |  | Kyle 2026-10-07 | row | nothing |
+| 2 — exit, in order | 8 | B-DISPLAY-TRIGGER-PRICE | CC-B (New Claude) | 3c | #1152 | Kyle 2026-10-07 | row | nothing |
+| 2 — exit, in order | 9 | [C3] with row 62 | CC-C (Analyst Claude) | 62 |  | Kyle 2026-10-07 | row | nothing |
+| 3 — feed | 1 | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | none | #960, #1175 | Kyle 2026-10-07 | MOVED out of the pre-sprint into the sprint (Kyle 2026-10-07; row 31 keeps its place) | nothing |
+| 3 — feed | 2 | CORZ investigation | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | ✅ DONE | nothing |
+| 3 — feed | 3 | B-XSTOCK-BAR-AVAILABILITY | CC-C (Analyst Claude) | none | #707 | Kyle 2026-10-07 | IN FLIGHT — Step 9 | data — window to 2026-10-25 |
+| 3 — feed | 4 | B-B75-EXPORT-COMPLETENESS | CC-A (Old Claude) | none | #1195 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-18 (report B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md) | nothing |
+| 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | QUEUED | CC-B (its locked list first) |
+| 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | QUEUED | nothing |
+| 3 — feed | 7 | B-CRON-MISSED-CATCHUP | CC-C (Analyst Claude) | none | #691 | Kyle 2026-10-07 | QUEUED | nothing |
+| 4 — paper truth | 1 | B-OPEN-REFUSAL-DURABLE-ROW | CC-C (Analyst Claude) | 8a | #1083 | Kyle 2026-10-07 | row | nothing |
+| 4 — paper truth | 2 | the main Dashboard 0-trades read | CC-B (New Claude) | none | #903 | Kyle 2026-10-07 | WITHDRAWN (Kyle 2026-10-19: the main Dashboard is off-limits) | nothing |
+| 5 — the reset, both halves | 1 | PAPER-RESET-3000 at $820 and a new dashboard epoch | CC-B (New Claude) | none |  | Kyle 2026-10-07 | QUEUED | Kyle (it runs only by his deliberate decision) |
+| 5 — the reset, both halves | 2 | the learning-record restart (plan row 9 in the pre-sprint plan) | CC-B (New Claude) | 100 |  | Kyle 2026-10-07 | row | nothing |
+| 0 — clear the plates | 1 | B-RULES-1e | CC-A (Old Claude) | none |  | Kyle 2026-09-28 | PARKED (crew tooling, after live) | nothing |
+| 0 — clear the plates | 2 | B-MEASURE-GATE | CC-A (Old Claude) | none |  | Kyle 2026-09-28 | ✅ CLOSED 2026-09-02 (leg 2, report B_MEASURE_GATE_LEG2_COMPLETION_REPORT.md; the later legs wait after live on the PRE_LIVE_SPRINT.md B-MEASURE-GATE line) | nothing |
+| 0 — clear the plates | 3 | B-PLAN-CURRENCY-CHECK | CC-A (Old Claude) | 1 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 4 | B-TOKEN-BURN-CUT | CC-A (Old Claude) | 1h |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 1 | B-REACH-BASELINE-ADJUST | CC-B (New Claude) | none |  | Kyle 2026-09-28 | ✅ CLOSED 2026-09-29 (the crowding arm fired; Kyle kept the rows) | nothing |
+| 0 — clear the plates | 2 | B-FEED-MISMATCH-FIX | CC-B (New Claude) | none |  | Kyle 2026-09-28 | PARKED by Kyle 2026-09-30 (its window ended ~2026-10-10; the progress report converts at close) | CC-B |
+| 0 — clear the plates | 3 | B-XSTOCK-FEE-CONTRACT | CC-B (New Claude) | none | #1010 | Kyle 2026-09-28 | ✅ CLOSED 2026-10-02 (report B_XSTOCK_FEE_CONTRACT_COMPLETION_REPORT.md) | nothing |
+| 0 — clear the plates | 4 | B-ARCHIVE-RETENTION-SIZING | CC-B (New Claude) | none |  | Kyle 2026-09-28 | ✅ CLOSED 2026-09-29 (a decision item) | nothing |
+| 0 — clear the plates | 5 | T-W20C-SCALAR-LEG | CC-B (New Claude) | 107 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 1 | B-OHLC-FRAME-GUARD | CC-C (Analyst Claude) | 13 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 2 | B-OHLC-WRITE-ORDER | CC-C (Analyst Claude) | 16 | #1031 | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 3 | B-PRICE-SIDE-BY-JOB | CC-C (Analyst Claude) | 17 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 4 | B-VTS-NO-DECISION-VALVE | CC-C (Analyst Claude) | 4 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 5 | B-VTS-NO-DECISION-VALVE increment 2 | CC-C (Analyst Claude) | 4b | #1073 | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 6 | B-REST-SIDES-TO-CACHE | CC-C (Analyst Claude) | 14 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 7 | B-BOOK-STATE-RESTART-DURABLE | CC-C (Analyst Claude) | 15 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 8 | B-SIZING-DEC-RESTORE | CC-C (Analyst Claude) | 9 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 9 | B-XSTOCK-SESSION-FRESHNESS | CC-C (Analyst Claude) | 40 |  | Kyle 2026-09-28 | row | nothing |
+| 0 — clear the plates | 1 | B-LANGSTON-RELIEF | Infra Claude | none |  | Kyle 2026-10-16 | IN OBSERVATION | data — the alert lane's 7-day window to 2026-10-23T13:47Z, then the completion report |
+| 0 — clear the plates | 2 | B-LANGSTON-CLAUDEMD-RESIDUAL | Infra Claude | none | #974 | Kyle 2026-10-20 | IN FLIGHT — Step 4 (part 1, r2) | Langston |
+| 0 — clear the plates | 3 | B-CREDENTIALS-PRIVATE-REPO | Infra Claude | none | #1023 | Kyle 2026-09-28 | IN FLIGHT — OBJ-1 closed 2026-10-13; the GB-8 bridges increment next | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
+| 0 — clear the plates | 4 | B-CREW-ACCESS-HARDEN | Infra Claude | none | #1092, #924 | Kyle 2026-09-28 | PARKED — Step 9, paused by Kyle 2026-10-16 for B-LANGSTON-RELIEF | Infra Claude (after the current batches) |
+| 0 — clear the plates | 5 | B-LANGSTON-CONTEXT (increment 2) | Infra Claude | none |  | Kyle 2026-10-08 | PARKED (chunk 1 closed; the rest partly overtaken by B-LANGSTON-RELIEF) | Infra Claude (re-scope against B-LANGSTON-RELIEF), then Kyle |
+| 0 — clear the plates | 6 | B-LANGSTON-AUTOMEMORY-TRIM | Infra Claude | none |  | Kyle 2026-10-16 | ✅ DONE 2026-10-17 (inside B-LANGSTON-RELIEF) | nothing |
+| 0 — clear the plates | 7 | B-SIZE-WATCH-BREACH-ALARM | Infra Claude | none | #1215 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
+| 0 — clear the plates | 8 | B-LANGSTON-MEMORY-NOTICES | Infra Claude | none | #1216 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
+| 0 — clear the plates | 9 | B-AGENT-INVOKE-FAILURE-NOTICE | Infra Claude | none | #1198, #1206 | Langston 2026-10-16 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
+| 0 — clear the plates | 10 | B-AGENT-PRIVATE-TMP | Infra Claude | none | #979, #1205 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
+| 0 — clear the plates | 11 | B-LANGSTON-REPOST-FAILED | Infra Claude | none | #1207 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle (and after B-AGENT-PRIVATE-TMP) |
+| 0 — clear the plates | 12 | B-ALERT-LANE-LEDGER-OWNER | Infra Claude | none | #1201 | Langston 2026-10-16 (home) | QUEUED (owner confirmed by NEW Claude; status not yet confirmed by Infra Claude) | Kyle |
+| 0 — clear the plates | 13 | B-LANGSTON-RECONCILE-VERB | Infra Claude | none | #1057 | Kyle 2026-09-28 | QUEUED | Kyle |
+| 0 — clear the plates | 14 | B-CHAPLET-DELETE | Infra Claude | none | #1101 | Kyle 2026-09-28 | QUEUED | Kyle |
+| 0 — clear the plates | 15 | B-TRANSCRIPT-ARCHIVE | Infra Claude | none |  | Kyle 2026-09-29 | QUEUED | Kyle |
+| 0 — clear the plates | 16 | B-TOKEN-WATCH | Infra Claude | none |  | Kyle 2026-09-28 | PARKED (research, after live; it owns no sprint row, and row 197a is a different batch) | Kyle |
+| 0 — clear the plates | 17 | B-CREW-STATUS-2 | Infra Claude | none | #670 | Kyle 2026-09-28 | PARKED (after live; it and #670 dissolve when the status board retires the crew status page) | nothing |
+
+
+Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. **Kyle approved 2026-10-07:** entries refuse on distance and never move the stop or target (the distance, 25% of the stop distance either side, goes to Langston); the RTB refresh checks the live price (P1a); the fill-mode switch (`#1170`, P1c); row 31 is a small fix, not a decision.
+
+### history
+
+*Kept verbatim, not read by any checker: the §0 table as it stood until 2026-10-21, then the §0a stage table. Moved by `B-STATUS-BOARD`; every live item is in the table above, and those not carried are listed in `Claude Comms and Packages/Scope Files/B_STATUS_BOARD_MIGRATION_DRAFT.md` (the drop list).*
+
+
 Before any session starts its sprint rows, everything it has in flight is **finished** (if it is in the sprint, or nearly done, or leads to something that must be finished) or **paused cleanly** at a batch boundary and moved to the after-live list. Each session confirms its own lines; this table is CC-B's read of the four task lists at 2026-09-28.
 
 | session | in flight now | disposition |
@@ -47,9 +138,6 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | Infra Claude | B-TOKEN-WATCH — Step 7, paused | stays PAUSED: research, after live |
 | Infra Claude | #670, B-CREW-STATUS-2, #974 | stay parked / after live |
 
-## 0a. Pre-sprint simulation-truth fixes (Kyle, 2026-10-07)
-
-**Kyle:** every system error behind the paper stop-outs after the 2026-10-06 $820 reset (33/33 `stop_hit`, −$31.92 at 11:12Z) is fixed **before the sprint starts**, grouped by the part of the system, then paper is reset to $820 again with the dashboard cleared — so the sprint starts on what we all agree is an accurate simulation. Calibration stays in the sprint. **The plan, its evidence and every rider: `Claude Comms and Packages/Scope Files/PRE_SPRINT_SIMULATION_TRUTH_PLAN.md` (r4, Langston ruled 11:12Z and 11:31Z; Coltrane reviewed 11:18Z). The rows below keep their numbers and owners; this section is their order.**
 
 | stage | rows (owner) |
 |---|---|
@@ -64,8 +152,6 @@ Before any session starts its sprint rows, everything it has in flight is **fini
 | 3 — feed | ~~31 `B-XSTOCK-LIVE-FEED` (the xStock recorder reloads its stock list daily)~~ **MOVED OUT of the pre-sprint into the sprint (Kyle 2026-10-07: no urgency — measured 0 list changes since the last restart, 9 additions since 05-21; row 31 keeps its place and its items `#960`, `#1175`)** · CORZ investigation DONE → **`B-XSTOCK-BAR-AVAILABILITY` (`#707`, CC-C), FIRST: settle xStock OHLC interval/publication/arrival semantics and make live, replay, calibration and the passive-archive dashboard availability-explicit; guard dormant readers from activation on the old contract; no blind +15m shift** → **IN PARALLEL during its observation window: `B-B75-EXPORT-COMPLETENESS` (`#1195`, CC-A) — ✅ CLOSED 2026-10-18 (Langston Step-11 CONFIRMED at `4cf4439de`; report `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`): an urgent storage-safety interrupt before the next source-partition deletion: replace the generic timestamp-only archive cursor, compare the same-snapshot source population with the exported and downloaded populations, audit already-dropped objects, and resume deletion only after an exact readback proof** → THEN **`B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B; placed by Langston at B-B75-EXPORT-COMPLETENESS Step-4 gate C, 2026-10-17): a test harness that EXECUTES the four B75 archive scripts' gate wiring (sweep, ctx lane, rotator, rehydrate) against fake clients — today they run `main()` at import, so their wiring is tested by source structure only** → THEN **`B-XSTOCK-SNAPSHOT-RETENTION` (`#1194`, CC-C): the 15m/60m snapshot reads are bounded but the stored tables are not; decide retention, archive/rebuild guarantees and safe cleanup separately from the availability cutover** → THEN `B-CRON-MISSED-CATCHUP` (`#691` reopened 2026-10-10: a ~2 s wall-clock step makes node-cron drop the next run of every pending schedule; the registry runs a missed occurrence once instead) (CC-C) |
 | 4 — paper truth | 8a `#1083` (CC-C) · the main Dashboard 0-trades read, CC-B first against `#903` |
 | 5 — the reset, both halves | `PAPER-RESET-3000` at $820 + a new dashboard epoch · row 100 (plan row 9) the learning-record restart, a declared partial restart (CC-B) |
-
-Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. **Kyle approved 2026-10-07:** entries refuse on distance and never move the stop or target (the distance, 25% of the stop distance either side, goes to Langston); the RTB refresh checks the live price (P1a); the fill-mode switch (`#1170`, P1c); row 31 is a small fix, not a decision.
 
 ## 1. The rule — what is in the sprint
 
