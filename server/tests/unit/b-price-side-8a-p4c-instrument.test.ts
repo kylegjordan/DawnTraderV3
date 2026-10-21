@@ -199,13 +199,17 @@ describe('8a-P4c — the xStock VTS exits read the guarded bid (increment 3); th
   it('real lane: the xStock trigger and booking take the guard\'s bid; the pending fill still reads `last` (3b moves it)', () => {
     expect(count(VTS, /let _pFillPrice: number \| null = currentPrice;/g)).toBe(1);
     expect(count(VTS, /const _xsExit = selectVtsXstockExitBid\(trade\.symbol, _xsRow, trade\.stopLoss \?\? null, Date\.now\(\)\);/g)).toBe(1);
-    expect(count(VTS, /_vtsExitBid = _xsExit\.bid;\s*_vtsTriggerPrice = _vtsExitBid;/g)).toBe(1);
+    // row 2 (4b) P9 — re-pointed: the guarded bid feeds the one rule as the xStock bid (armed: the VTS guard is upstream).
+    expect(count(VTS, /_vtsExitBid = _xsExit\.bid;/g)).toBe(1);
+    expect(count(VTS, /\{ cls: 'xstock_spot', arm: \{ armed: true \}, bid: _vtsExitBid,/g)).toBe(1);
     expect(count(VTS, /resolveVtsBookedExitPrice\(_vtsExitBid, currentPrice\)/g)).toBe(1); // `3n.q3` P1: the clamp price arg is gone
   });
 
   it('shadow lane: xStock triggers on the same guard', () => {
     expect(count(VTS, /const _sx = selectVtsXstockExitBid\(trade\.symbol, _sxRow, trade\.stopLoss \?\? null, Date\.now\(\)\);/g)).toBe(1);
-    expect(count(VTS, /triggerPrice: _sExitBid,/g)).toBe(1);
+    // row 2 (4b) P9 — re-pointed: the shadow's own guarded bid feeds the one rule; the trigger is its price.
+    expect(count(VTS, /\{ cls: 'xstock_spot', arm: \{ armed: true \}, bid: _sExitBid,/g)).toBe(1);
+    expect(count(VTS, /triggerPrice: _sTrigger\.price,/g)).toBe(1);
   });
 
   it('the instrument is only WRITTEN from the runner — no reader of its state; rawQuote feeds the instrument and the exit guard', () => {

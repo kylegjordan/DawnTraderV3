@@ -97,7 +97,11 @@ describe('3n.q7 inc-1 — the wiring (source, comments stripped)', () => {
   // MUTATION: drop the reason from the caller's frame object and this fails.
   it('the caller carries the basis and the reason into the frame, and sets the reason on all four hollow arms', () => {
     // row 2 increment B (P7): the frame also carries WHICH switch left the trigger on the mark, and the bid's size verdict.
-    expect(CODE).toMatch(/\{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null,\s*armOff: xsBidTriggerOff,\s*size: xsBid === null \? null :/);
+    // row 2 (4b) P10: the frame no longer carries `armOff` — WHICH switch left the trigger on the mark is the one rule's
+    // reason (`exitTrigger.reason`), printed on the frame line with no default label.
+    expect(CODE).toMatch(/\{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null,\s*size: xsBid === null \? null :/);
+    expect(CODE).toMatch(/basis=\$\{xsBidArmed \? 'bid' : `mark reason=\$\{exitTrigger\.reason\}`\}/);
+    expect(CODE).not.toMatch(/\?\? 'unset'/);
     expect(CODE).toMatch(/xsThr = _r\.inputs\.departureThresholdFrac \?\? null;\s*const _tb = readThresholdBasis\(position\.symbol\);/);
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_crossed';/);
     expect(CODE).toMatch(/xsFrameReason = 'unguarded_not_two_sided';/);

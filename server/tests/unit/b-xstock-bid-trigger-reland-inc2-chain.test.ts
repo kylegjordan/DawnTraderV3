@@ -53,6 +53,7 @@ type Frame = { bid: number; ask: number; last: number | null };
 const h = vi.hoisted(() => ({
   frame: null as null | { bid: number; ask: number; last: number | null },
   spreadBlownEnabled: true,
+  guardEnabled: true, // row 2 (4b) P4 (c): the book-state guard's own switch, for the `guard_off` arm
   addAlert: vi.fn(async (_a: unknown) => undefined),
   getActiveOpenPositions: vi.fn(async (_mode: string) => [] as unknown[]),
   updateActiveOpenPosition: vi.fn(async () => undefined),
@@ -89,7 +90,7 @@ vi.mock('../../services/passive-archive/equity-spot-archiver.js', async (orig) =
 vi.mock('../../asset_classes/xstock_spot/book-state-config.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   resolveBookStateConfigSync: () => ({
-    enabled: true,
+    enabled: h.guardEnabled,
     kRel: 3,
     floorPct: 1.0,
     otherSideHoldPct: 0.5,
@@ -394,6 +395,7 @@ beforeEach(() => {
   h.markTsMs = null;
   h.markObserved = undefined;
   h.spreadBlownEnabled = true;
+  h.guardEnabled = true;
   h.getActiveOpenPositions.mockImplementation(async () => [makePosition()]);
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -481,6 +483,28 @@ describe('3n.q7 inc-2 OBJ-3 — the chain, driven through the real exit loop', (
     expect(exitCondition.type).toBe('stop_hit');
     expect(requestedPrice).toBe(mid(BLOWN));
     expect(opts.exitProvenance).toMatchObject({ decisionPrice: mid(BLOWN), bookStateAtDecision: 'two_sided' });
+  });
+});
+
+describe('row 2 (4b) P4 (c) — the GUARD-OFF arm of the mark fallback, through the real exit loop (the fence increment B left)', () => {
+  // Increment B fenced only `reason=spread_blown_off` (the CONTROL above). With the book-state guard switched OFF the
+  // guard does not judge the book (`assessBookStateNow` → `disabled`), the trigger is NOT armed, and the one exit-trigger
+  // rule must take the MARK and say why: `reason=guard_off`. MUTATION: give an unarmed xStock the bid, or drop the
+  // reason, and this goes red.
+  it('guard OFF ⇒ the blown frame is not judged, the stop fires on the MARK, and the line names guard_off', async () => {
+    h.guardEnabled = false;
+    const eng = makeEngine();
+    const t = await tick(eng, BLOWN);
+    for (const re of [SKIP, YIELD, REFUSE]) expect(has(t.warns, re)).toBe(false); // no verdict: the guard did not run
+    expect(count(t.warns, XS_FRAME)).toBe(1);
+    expect(t.warns.find((l) => XS_FRAME.test(l))).toContain('markExit=y');
+    expect(t.warns.find((l) => XS_FRAME.test(l))).toContain(' on=mark');
+    expect(has(t.logs, /\[EXIT_TRIGGER\] symbol=MDB\/USD type=stop_hit .* basis=mark reason=guard_off /)).toBe(true);
+    expect(has(t.logs, /reason=unset/)).toBe(false); // P10: the dead default label is gone
+    expect(t.closes).toHaveLength(1);
+    const [, requestedPrice, exitCondition] = t.closes[0] as [string, number, any];
+    expect(exitCondition.type).toBe('stop_hit');
+    expect(requestedPrice).toBe(mid(BLOWN)); // the mark, not the 320 stub bid
   });
 });
 

@@ -98,6 +98,7 @@ import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-n
 import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
+import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
 import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
@@ -3936,10 +3937,6 @@ async function resolveOpenVirtualTrades(): Promise<{
     // `VTS_EXIT_TOUCH_MAX_AGE_MS` / `_SPREAD_FRACTION`). `null` ⇒ the evaluator makes NO DECISION this cycle
     // (`no_transactable_side`), never a midpoint fallback. xStock: its guarded bid (`8a-P4c` 3a-i, below).
     let _vtsExitBid: number | null = null;
-    // ⛔ `3n.q3` (Langston Step-4 condition 2): starts NULL, never the mark — each traded class assigns its own bid below, so
-    // a class with no branch makes NO level decision (no_transactable_side) instead of deciding on the mark and then
-    // reaching a clamp arm. Byte-identical for crypto and xStock; the shadow lane already passes its bid straight through.
-    let _vtsTriggerPrice: number | null = null;
     // `3n.q3` P8 (OBJ-4): the selector's OWN refusal, carried into the no-decision streak and the alert body — the two
     // ceilings cannot explain a crossed book.
     let _vtsExitRefusal: string | null = null;
@@ -3952,7 +3949,6 @@ async function resolveOpenVirtualTrades(): Promise<{
       const _xsExit = selectVtsXstockExitBid(trade.symbol, _xsRow, trade.stopLoss ?? null, Date.now());
       _xsVtsInstrument.recordLook(trade.symbol, _xsRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _xsExit);
       _vtsExitBid = _xsExit.bid;
-      _vtsTriggerPrice = _vtsExitBid;
       _vtsExitRefusal = _xsExit.bid === null ? _xsExit.reason : null;
       _vtsExitByClass.xstock_spot.exitLooks++;
     }
@@ -3961,11 +3957,23 @@ async function resolveOpenVirtualTrades(): Promise<{
         maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
       });
       _vtsExitBid = transactableSide(_et.selection, 'sell');
-      _vtsTriggerPrice = _vtsExitBid;
       _vtsExitRefusal = _et.selection.ok ? (_vtsExitBid === null ? 'no_bid_side' : null) : _et.selection.tickerRefusal;
       _vtsExitByClass.crypto_spot.exitLooks++;
       try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection); } catch { /* a recorder never breaks the resolve loop */ }
     }
+    // ⭐⭐ Row 2 increment (4b) — THE ONE EXIT-TRIGGER RULE (`core/trading/exit-trigger.ts`), shared with paper and the
+    // shadow lane. The VTS xStock arm is always true (its guard is the stateless selector above, by design). ⛔ The
+    // VTS other-class policy is NONE: `3n.q3` (Langston Step-4 condition 2) — a class with no branch makes NO level
+    // decision instead of deciding on the mark and then reaching a clamp arm. The refusal it reports is the rule's own.
+    const _vtsTrigCls = exitTriggerClass(trade.assetClass);
+    const _vtsTrigger = selectExitTrigger(
+      _vtsTrigCls === 'crypto_spot'
+        ? { cls: 'crypto_spot', bid: _vtsExitBid, bidRefusal: _vtsExitRefusal as ExitTriggerRefusal | null }
+        : _vtsTrigCls === 'xstock_spot'
+          ? { cls: 'xstock_spot', arm: { armed: true }, bid: _vtsExitBid, bidRefusal: _vtsExitRefusal as ExitTriggerRefusal | null, mark: currentPrice }
+          : { cls: 'other', otherClass: 'none', mark: currentPrice },
+    );
+    _vtsExitRefusal = _vtsTrigger.price === null ? _vtsTrigger.reason : null;
     let decision: Awaited<ReturnType<typeof evaluateTECExit>>;
     try {
       decision = await evaluateTECExit({
@@ -3977,9 +3985,9 @@ async function resolveOpenVirtualTrades(): Promise<{
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
-        // ⛔⛔ `8a-P3` + `8a-P4c` increment 3 — the VTS trigger is the BID on BOTH classes (`_vtsTriggerPrice`, set above):
-        // crypto through `selectCryptoTouch`, xStock through `selectVtsXstockExitBid`. The VTS epochs moved with each.
-        triggerPrice: _vtsTriggerPrice,
+        // ⛔⛔ `8a-P3` + `8a-P4c` increment 3 — the VTS trigger is the BID on BOTH classes (crypto through
+        // `selectCryptoTouch`, xStock through `selectVtsXstockExitBid`), now stated by the one rule (row 2 (4b)).
+        triggerPrice: _vtsTrigger.price,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity disables the valve
@@ -4726,13 +4734,15 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     // `8a-P3`: the shadow lane reads the same touch as the real lane — without counters or funnel records, so the
     // shadow never pools into the real lane's cells.
     let _sExitBid: number | null = null;
+    // Row 2 increment (4b) P2: the shadow lane's own refusal — it carried none before; now it reaches the unpriced-close
+    // record's `lastRefusal` the way the real lane's reaches its streak (log only).
+    let _sExitRefusal: ExitTriggerRefusal | null = null;
     if (trade.assetClass === 'crypto_spot') {
-      _sExitBid = transactableSide(
-        selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
-          maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
-        }).selection,
-        'sell',
-      );
+      const _sSel = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
+        maxAgeMs: VTS_EXIT_TOUCH_MAX_AGE_MS, maxSpreadFraction: VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION,
+      }).selection;
+      _sExitBid = transactableSide(_sSel, 'sell');
+      _sExitRefusal = _sSel.ok ? (_sExitBid === null ? 'no_bid_side' : null) : _sSel.tickerRefusal;
       _vtsShadowByClass.crypto_spot.exitLooks++;
     } else if (trade.assetClass === 'xstock_spot') {
       // `8a-P4c` increment 3 (P8a): the shadow lane judges xStock with the SAME guard as the real lane.
@@ -4740,8 +4750,18 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       const _sx = selectVtsXstockExitBid(trade.symbol, _sxRow, trade.stopLoss ?? null, Date.now());
       _xsShadowInstrument.recordLook(trade.symbol, _sxRow, Date.now(), trade.stopLoss ?? null, trade.takeProfit ?? null, _sx);
       _sExitBid = _sx.bid;
+      _sExitRefusal = _sx.bid === null ? _sx.reason : null;
       _vtsShadowByClass.xstock_spot.exitLooks++;
     }
+    // ⭐⭐ Row 2 increment (4b) — THE ONE EXIT-TRIGGER RULE, with the VTS other-class policy NONE (`3n.q3` condition 2).
+    const _sTrigCls = exitTriggerClass(trade.assetClass);
+    const _sTrigger = selectExitTrigger(
+      _sTrigCls === 'crypto_spot'
+        ? { cls: 'crypto_spot', bid: _sExitBid, bidRefusal: _sExitRefusal }
+        : _sTrigCls === 'xstock_spot'
+          ? { cls: 'xstock_spot', arm: { armed: true }, bid: _sExitBid, bidRefusal: _sExitRefusal, mark: currentPrice }
+          : { cls: 'other', otherClass: 'none', mark: currentPrice },
+    );
     const existingTecState = getTrailingState(tradeId);
     const tecSeed = existingTecState ? undefined : {
       tradeMode: 'TARGET' as const,
@@ -4758,8 +4778,9 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
         stopPrice: trade.stopLoss,
         targetPrice: trade.takeProfit,
         currentPrice,
-        // `8a-P3` + `8a-P4c` increment 3: the shadow lane decides on the same side as the real lane — the bid, both classes.
-        triggerPrice: _sExitBid,
+        // `8a-P3` + `8a-P4c` increment 3: the shadow lane decides on the same side as the real lane — the bid, both classes,
+        // now stated by the one rule (row 2 (4b)).
+        triggerPrice: _sTrigger.price,
         atr: trade.atrAtOpen ?? 0,
         holdDurationMs,
         maxHoldMs: isVtsMaxHoldEnabled() ? SHADOW_MAX_HOLD_MS : Infinity, // P19-B8.5j: OFF → Infinity (still the only exit-math param differing from the real pass)
@@ -4788,7 +4809,10 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
       const _c = countersFor(_vtsShadowByClass, trade.assetClass);
       if (_c) _c.exitNoTransactableSide++;
     }
-    if (decision.noDecisionReason !== undefined) _vtsShadowLastRefusal.set(tradeId, decision.noDecisionReason);
+    if (decision.noDecisionReason !== undefined) {
+      _vtsShadowLastRefusal.set(tradeId, decision.noDecisionReason === 'no_transactable_side' && _sTrigger.price === null
+        ? `no_transactable_side (${_sTrigger.reason})` : decision.noDecisionReason);
+    }
     if (!decision.shouldExit) continue;
     // F-G-2 OBJ-5a: same resolver as the real lane — the shadow lane books the same way.
     // ⛔ `3n.q3` P1/P3: a clamp arm books NO price ⇒ `timeout_unpriced`. That includes every `stale_timeout` (no mark), so

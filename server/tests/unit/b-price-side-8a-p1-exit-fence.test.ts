@@ -18,15 +18,30 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { selectExitTrigger } from '../../core/trading/exit-trigger.js';
 
 const AEE = readFileSync(join(process.cwd(), 'server/services/active-execution-engine.ts'), 'utf-8');
 
 /** Strip line comments so a prohibition cannot be "satisfied" by prose that merely mentions it. */
 const code = (s: string) => s.replace(/^\s*\/\/.*$/gm, '');
 
-/** Row 2 increment B (P8a): the xStock trigger arm is the GATED three-way — the judged bid while armed, else the mark. */
+/** Row 2 increment B (P8a), re-pointed by row 2 (4b) P9: the xStock ARM the paper loop hands the one exit-trigger rule
+ *  is GATED — armed iff the book-state guard ran AND `spread_blown` is on (`xsBidTriggerArmed`), else the switch that
+ *  left it on the mark. The rule then reads the judged bid while armed and the mark otherwise (`exit-trigger.ts`). */
 function xstockArmIsGated(expr: string): boolean {
-  return /'xstock_spot'\s*\?\s*\(\s*xsBidArmed\s*\?\s*triggerBid\s*:\s*currentPrice\s*\)/.test(expr);
+  return /xsArm:\s*_posClass === 'xstock_spot'\s*\?\s*\(\s*xsBidTriggerArmed\s*\?\s*\{\s*armed:\s*true as const\s*\}\s*:\s*\{\s*armed:\s*false as const,\s*armOff:\s*xsBidTriggerOff as XsArmOff\s*\}\s*\)/.test(expr);
+}
+
+/** Row 2 (4b): the paper `selectExitTrigger(…)` call inside `checkExitConditions`, extracted by paren balance. */
+function paperExitTriggerCall(src: string): string {
+  const start = src.indexOf('const exitTrigger = selectExitTrigger(');
+  if (start === -1) throw new Error('paper selectExitTrigger call not found');
+  let depth = 0;
+  for (let i = src.indexOf('(', start); i < src.length; i++) {
+    if (src[i] === '(') depth++;
+    else if (src[i] === ')') { depth--; if (depth === 0) return src.slice(start, i + 1); }
+  }
+  throw new Error('unterminated selectExitTrigger call');
 }
 
 function extractFunctionBody(src: string, signaturePrefix: string): string {
@@ -104,50 +119,43 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     // The single highest-value assertion in this row. A refusal must make NO DECISION; degrading
     // to `currentPrice` re-introduces the full-spread error the row removes, and it would look
     // entirely reasonable to a future reader trying to 'fix' skipped exit checks.
+    // ⛔ RE-POINTED by row 2 (4b) P9 — SUBJECT KEPT: the trigger is now the one rule's price (`exitTrigger.price`), so
+    //   the fence pins (i) the call site passes it UNCOALESCED and (ii) the rule itself returns `null`, never the mark,
+    //   for a crypto or armed xStock input with no bid. Coalescing at either layer goes red here.
     const trigger = /triggerPrice\s*:\s*([^,}]+)/.exec(args[0]);
     expect(trigger).not.toBeNull();
     // ⭐ STRUCTURAL PRECONDITION ASSERTED BEFORE THE RESULT IS READ — a mutation that did not
-    //   apply once reported as a SURVIVOR on this very batch. A false PASS hides a gap; a PHANTOM
-    //   SURVIVOR invents one.
+    //   apply once reported as a SURVIVOR on this very batch.
     const expr = trigger![1];
     expect(expr.length).toBeGreaterThan(0);
-    // The crypto branch must resolve to the bid or to null — never to the mark.
-    expect(expr).toMatch(/triggerBid/);
-    // ⛔⛔ ASSERT THE *DEGRADATION*, NOT A BRANCH POSITION. The first version tested
-    // `/\?\s*currentPrice/` — which passed only because the live ternary happens to read
-    // `: currentPrice`. Flip it to `=== 'xstock_spot' ? currentPrice : triggerBid` and CORRECT
-    // code goes red: a fence one character from a FALSE RED is as broken as one that cannot fail.
-    // (Langston Step-4.) What actually matters is that the bid is never COALESCED into the mark,
-    // in either branch order — so match the coalescing operators themselves.
-    expect(expr).not.toMatch(/triggerBid\s*(\?\?|\|\|)/);
-    expect(expr).not.toMatch(/(\?\?|\|\|)\s*currentPrice/);
+    expect(expr.trim()).toBe('exitTrigger.price');
+    // ⛔⛔ ASSERT THE *DEGRADATION*, NOT A BRANCH POSITION (Langston Step-4): no coalescing operator in the slot.
+    expect(expr).not.toMatch(/(\?\?|\|\|)/);
+    // …and the rule never degrades a missing bid to the mark (crypto, and xStock while armed).
+    expect(selectExitTrigger({ cls: 'crypto_spot', bid: null, bidRefusal: 'book_untrusted' }).price).toBeNull();
+    expect(selectExitTrigger({ cls: 'xstock_spot', arm: { armed: true }, bid: null, bidRefusal: null, mark: 100 }).price).toBeNull();
   });
 
   it('2d. ⛔⛔ ONLY `crypto_spot` REACHES THE TRANSACTABLE TRIGGER; `xstock_spot` IS NAMED AND TAKES THE MARK (`8a-P4b` Step 9 C1)', () => {
-    // ⛔ AMENDED TWICE, BOTH DELIBERATELY. (1) `8a-P4b` X3 (2026-09-18) put xStock on the bid and the question was
-    //   re-opened as J5. (2) Step 9 C1 (Langston, 2026-09-19) took it back to the mark after a symmetric-blowout stub bid
-    //   fired a false stop (MDB/USD): the book-state arms cannot see a symmetric widening. The xStock arm stays EXPLICIT so
-    //   the re-land (`PHASE_19_PLAN` row `3n.q7`, `B-XSTOCK-BID-TRIGGER-RELAND`) is a one-token change this test will see.
-    //   J5's invariant holds either way: the sentinel is fed the series the stop compares (the mark, again).
-    // ⛔ HISTORY, KEPT BECAUSE IT IS THE REASON THIS TEST EXISTS. This read "ONLY `crypto_spot` REACHES THE TRIGGER": the
-    // xStock-only discontinuity sentinel (`price-discontinuity-detector.ts:248-250`) reads the SAME `triggerPrice`
-    // (`tec-evaluator.ts:381`), and while divergence was crypto-only it could only ever see the mark. The test was written
-    // to go RED the day a second class reached the transactable trigger, with the instruction "re-open the sentinel
-    // question — do NOT relax this test". `8a-P4b` X3 was that day (2026-09-18): it went red, the question was re-opened
-    // as J5 (`Scope Files/B_PRICE_SIDE_BY_JOB_8A_P4B_AUDIT_AND_PLAN.md`), and the ruling is that the sentinel judges the
-    // BID — the series the stop fires on. This is the deliberate, visible amendment; the tripwire survives one class up.
-    const expr = /triggerPrice\s*:\s*([^,}]+)/.exec(args[0])![1];
-    const classes = (expr.match(/'(crypto_spot|xstock_spot|crypto_perp|xstock_perp)'/g) ?? []).sort();
-    expect(classes).toEqual(["'crypto_spot'", "'xstock_spot'"]);
-    // each named class takes the transactable slot, and every OTHER class falls to the mark (the named default arm)
-    expect(expr).toMatch(/'crypto_spot'\s*\?\s*triggerBid/);
-    // ⛔ AMENDED A THIRD TIME, DELIBERATELY — row 2 increment B (P1, P8a): xStock takes the BID ONLY WHILE ARMED (the
-    //   book-state guard ran AND `spread_blown` is on), else the MARK exactly as since C1. The gate is the point: an
-    //   ungated bid re-opens `#1065`, and a mark-only arm is the pre-B state. Both go red (2g).
-    expect(xstockArmIsGated(expr)).toBe(true);
-    expect(expr.trim()).toMatch(/:\s*currentPrice$/);
-    // ⛔ IF THIS GOES RED AGAIN: a THIRD class reaches the transactable trigger. Every class that does changes what the
-    //    stateful sentinel sees (it is xStock-only today, but a perp class may join it). Re-open the question for THAT
+    // ⛔ AMENDED THREE TIMES, ALL DELIBERATELY. (1) `8a-P4b` X3 put xStock on the bid (J5 re-opened). (2) Step 9 C1 took it
+    //   back to the mark after the MDB/USD stub-bid false stop. (3) Row 2 increment B re-landed it GATED. (4) Row 2 (4b)
+    //   P9 RE-POINTED the fence at the one exit-trigger rule — SUBJECT KEPT: exactly the two `3n` classes reach the bid;
+    //   xStock only while armed; every OTHER class takes the mark on paper (the named default arm, `8a-P4b` r1 BLOCKER-1).
+    // ⛔ HISTORY, KEPT BECAUSE IT IS THE REASON THIS TEST EXISTS: the xStock-only discontinuity sentinel reads the SAME
+    //   `triggerPrice`; the test was written to go RED the day a second class reached the transactable trigger.
+    const call = paperExitTriggerCall(code(AEE));
+    const classes = (call.match(/cls: '(crypto_spot|xstock_spot|crypto_perp|xstock_perp|other)'/g) ?? []).sort();
+    expect(classes).toEqual(["cls: 'crypto_spot'", "cls: 'other'", "cls: 'xstock_spot'"]);
+    // the paper lane's other-class POLICY is the mark (VTS's is none — see the inc4b fence)
+    expect(call).toMatch(/cls: 'other', otherClass: 'mark'/);
+    // the xStock arm the rule receives is the GATED one (2g proves this matcher can fail)
+    expect(xstockArmIsGated(code(AEE))).toBe(true);
+    // …and what the rule DOES with each, run, not read: crypto → bid; xStock armed → bid; unarmed → mark; other → mark.
+    expect(selectExitTrigger({ cls: 'crypto_spot', bid: 99, bidRefusal: null }).price).toBe(99);
+    expect(selectExitTrigger({ cls: 'xstock_spot', arm: { armed: true }, bid: 99, bidRefusal: null, mark: 100 }).price).toBe(99);
+    expect(selectExitTrigger({ cls: 'xstock_spot', arm: { armed: false, armOff: 'spread_blown_off' }, bid: 99, bidRefusal: null, mark: 100 }).price).toBe(100);
+    expect(selectExitTrigger({ cls: 'other', otherClass: 'mark', mark: 100 }).price).toBe(100);
+    // ⛔ IF THIS GOES RED AGAIN: a THIRD class reaches the transactable trigger. Re-open the sentinel question for THAT
     //    class — do NOT relax this test.
   });
 
@@ -162,20 +170,22 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
     const shadow = vts.filter((a) => /sentinelLane:\s*'vts_shadow',/.test(a));
     expect(real).toHaveLength(1);
     expect(shadow).toHaveLength(1);
-    // VTS real: its own trigger variable — the BID on both classes since `8a-P4c` increment 3
-    expect(real[0]).toMatch(/triggerPrice:\s*_vtsTriggerPrice,/);
-    // VTS shadow: the guarded bid on both classes (`8a-P4c` increment 3)
-    expect(shadow[0]).toMatch(/triggerPrice:\s*_sExitBid,/);
+    // VTS real: the one rule's price — the BID on both classes since `8a-P4c` increment 3 (row 2 (4b) P9: re-pointed)
+    expect(real[0]).toMatch(/triggerPrice:\s*_vtsTrigger\.price,/);
+    // VTS shadow: the one rule's price over the shadow's own guarded bid (`8a-P4c` increment 3; row 2 (4b) P9)
+    expect(shadow[0]).toMatch(/triggerPrice:\s*_sTrigger\.price,/);
     // paper / live: the engine's own mode names the machine, and the trigger is the class three-way (2d)
     expect(args[0]).toMatch(/sentinelLane:\s*this\.mode,/);
   });
 
 
   it('2g. ⭐ MUTATIONS — row 2 increment B: the UNGATED bid and the MARK-ONLY arm both go red; the gated arm passes', () => {
-    const gated = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? triggerBid : currentPrice) : currentPrice";
-    const ungated = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? triggerBid : currentPrice";
-    const markOnly = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? currentPrice : currentPrice";
-    const inverted = "positionAssetClass === 'crypto_spot' ? triggerBid : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? currentPrice : triggerBid) : currentPrice";
+    // Re-pointed by row 2 (4b) P9 to the arm the paper loop now hands the rule (the rule's own mutations are RUN in
+    // `b-xstock-bid-trigger-reland-inc4b.test.ts`).
+    const gated = "xsArm: _posClass === 'xstock_spot' ? (xsBidTriggerArmed ? { armed: true as const } : { armed: false as const, armOff: xsBidTriggerOff as XsArmOff }) : null";
+    const ungated = "xsArm: _posClass === 'xstock_spot' ? ({ armed: true as const }) : null";
+    const markOnly = "xsArm: _posClass === 'xstock_spot' ? ({ armed: false as const, armOff: xsBidTriggerOff as XsArmOff }) : null";
+    const inverted = "xsArm: _posClass === 'xstock_spot' ? (xsBidTriggerArmed ? { armed: false as const, armOff: xsBidTriggerOff as XsArmOff } : { armed: true as const }) : null";
     expect(xstockArmIsGated(gated)).toBe(true);
     expect(xstockArmIsGated(ungated)).toBe(false);
     expect(xstockArmIsGated(markOnly)).toBe(false);

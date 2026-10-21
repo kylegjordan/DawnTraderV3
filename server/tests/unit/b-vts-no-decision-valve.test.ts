@@ -24,6 +24,7 @@ vi.mock('../../services/vts-trade-persistence.js', async (orig) => ({
 }));
 
 import { resolveVtsBookedExitPrice } from '../../core/trading/vts-exit-booking.js';
+import { selectExitTrigger } from '../../core/trading/exit-trigger.js';
 import {
   countersFor, countUnpricedArm, formatVtsExitCounters, newVtsExitCounters, resetVtsExitCounters, anyVtsExitCount,
 } from '../../core/trading/vts-exit-counters.js';
@@ -61,8 +62,11 @@ describe('P1 — a clamp arm books NO price', () => {
   });
 
   it('the real-lane trigger starts NULL, never the mark (Langston Step-4 condition 2)', () => {
-    expect(VTS).toMatch(/let _vtsTriggerPrice: number \| null = null;/);
-    expect(VTS).not.toMatch(/let _vtsTriggerPrice: number \| null = currentPrice;/);
+    // row 2 (4b) P9 — RE-POINTED, subject kept: the "starts NULL" variable is gone; the one rule now carries the VTS
+    // policy. Both VTS lanes pass `otherClass: 'none'` (a class with no branch makes NO decision), never 'mark'.
+    expect(VTS.match(/\{ cls: 'other', otherClass: 'none', mark: currentPrice \}/g) ?? []).toHaveLength(2);
+    expect(VTS).not.toMatch(/otherClass: 'mark'/);
+    expect(selectExitTrigger({ cls: 'other', otherClass: 'none', mark: 100 }).price).toBeNull();
   });
 
   it('a class VTS does not trade fails closed at evaluation (never reaches a clamp arm)', () => {

@@ -391,6 +391,7 @@ import { isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/marke
 import { newExitRefusalTally, noteRefusal, noteRelease, snapshotExitRefusal, type ExitRefusalKind, type ExitRefusalTally } from './exit-refusal-tally.js';
 import { hollowCauseIsReferenceRelative, type BookState } from '../asset_classes/xstock_spot/book-state.js';
 import { getCachedSigma, ensureSigmaFresh, type SigmaCacheConfig } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
+import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal, type XsArmOff, type XsFrameRefusal } from '../core/trading/exit-trigger.js';
 import { xstockTransactableSides, xstockSideSize, type XstockSideSizeVerdict } from '../asset_classes/xstock_spot/transactable-sides.js';
 // Row 2 increment B (Langston Step-2 call 3, r2 condition 3) — the size tripwire's window and bar. An ALARM threshold, not a
 // trading knob: it changes no decision. DERIVED FROM THE PER-HOUR DISTRIBUTION, not a daily mean: missing quantities arrive
@@ -3151,32 +3152,35 @@ export class ActiveExecutionEngine {
           stopLoss,
           takeProfit,
           engineTraceId,
-          // ⭐⭐ `8a-P2` — THE TRANSACTABLE TRIGGER SIDE. This argument slot USED to carry
-          // `fg2BookBid`, a book-only bid fed to the F-G-2 SHADOW arm while the live decision ran
-          // on the midpoint. `P2-7` removed that arm and `P2-4` put the real thing in its place:
-          // the LADDER's bid — book top when we have one, ticker bid otherwise — under the
-          // exit lane's own 2,000 ms ceiling.
-          // ⛔ `null` on crypto means NO FRESH TRANSACTABLE SIDE ⇒ the evaluator makes NO DECISION
-          //   this cycle. It must never degrade to the midpoint.
-          // ⛔⛔ `8a-P4b` Step 9 C1 (Langston, 2026-09-19) — THE xSTOCK TRIGGER IS THE MARK AGAIN. X3 passed `xsBid` here
-          //   from 00:02:33Z to the C1 deploy; on 00:15:00Z MDB/USD stopped out on a 335.12 STUB bid while the mark sat
-          //   11.3% clear of its stop, because a SYMMETRIC outward widening passes every book-state arm (`book-state.ts`
-          //   (i) needs the other side to HOLD; (iii) keeps the mid near fair). `_lsSel` is `null` on xStock by
-          //   construction, so this slot is `null` for xStock and the evaluator's xStock arm takes the mark.
-          //   The bid trigger re-lands under row `3n.q7` (`B-XSTOCK-BID-TRIGGER-RELAND`), on Langston's three conditions.
-          // ⭐ Row 2 increment B (P1): xStock passes the judged `xsBid` while ARMED; the evaluator's xStock arm reads it
-          //   only then, and the mark otherwise. `_lsSel` stays `null` on xStock by construction.
-          _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' && xsBidTriggerArmed ? xsBid : null),
+          // ⭐⭐ Row 2 increment (4b) — THE EXIT-TRIGGER INGREDIENTS, NOT THE TRIGGER. The trigger is chosen ONCE, by
+          // `selectExitTrigger` (`core/trading/exit-trigger.ts`), next to the evaluator call inside `checkExitConditions`, on
+          // the position's own `assetClass` there. This slot carries what that rule needs:
+          //   bid        — crypto: the LADDER's bid (`8a-P2`, under the exit lane's 2,000 ms ceiling); xStock: the guard's
+          //                judged `xsBid` (row 2 increment B). `null` ⇒ no fresh transactable side ⇒ NO DECISION, never the mid.
+          //   bidRefusal — why there is no bid: the ladder's own refusal, or the judged frame's (`xsFrameReason`).
+          //   xsArm      — xStock ONLY: armed iff the book-state guard ran AND `spread_blown` is on; otherwise the switch
+          //                that left the trigger on the mark. ⛔ A crypto position carries NO arm (Langston (4b) BLOCKER-4:
+          //                the old arm expression was false on every crypto position).
+          // History: `8a-P4b` X3 put the xStock bid here 2026-09-19, C1 took it out after the MDB/USD stub-bid false stop
+          // (`#1065`), and row 2 increment B re-landed it behind objective 6's absolute `spread_blown` hold.
+          {
+            bid: _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' ? xsBid : null),
+            bidRefusal: (_lsSel !== null
+              ? (_lsSel.ok ? (_lsSel.quote.bid === null ? 'no_bid_side' : null) : _lsSel.tickerRefusal)
+              : (_posClass === 'xstock_spot' && xsBid === null ? ((xsFrameReason as XsFrameRefusal | null) ?? 'no_bid_side') : null)) as ExitTriggerRefusal | null,
+            // `xsBidTriggerOff` is always set when unarmed (pre-audit A10's census); a null here makes the rule throw — a hold.
+            xsArm: _posClass === 'xstock_spot'
+              ? (xsBidTriggerArmed ? { armed: true as const } : { armed: false as const, armOff: xsBidTriggerOff as XsArmOff })
+              : null,
+          },
           // Log only: the frame X3 WOULD have read, so the containment interval is the re-land's measurement window.
           _posClass === 'xstock_spot' ? { bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis?.trail ?? null, ret: xsThrBasis?.ret ?? null, tb: xsThrBasis?.tb ?? null,
             // Row 2 increment B (P3/P7): can the judged bid hold our size? LOG + COUNT ONLY — an exit is never blocked on it.
-            armOff: xsBidTriggerOff,
             size: xsBid === null ? null : (() => {
               const _q = parseFloat(position.quantity);
               if (!(Number.isFinite(_q) && _q > 0)) { this._noteInvalidQuantity(position, 'trigger'); return 'size_invalid' as const; }
               return xstockSideSize('bid', { bid: xsBid, ask: xsAsk, bidQty: xsBidQty, askQty: xsAskQty }, _q * xsBid);
             })() } : null,
-          _posClass === 'xstock_spot' && xsBidTriggerArmed, // Row 2 increment B (P1): the xStock arm's gate
         );
 
         // I7-ROOT-FIX: Track exit evaluation for diagnostics
@@ -3646,19 +3650,15 @@ export class ActiveExecutionEngine {
     stopLoss: number | null,
     takeProfit: number | null,
     traceId?: string,
-    // ⭐⭐ `8a-P2` — THE DECISION-TIME TRANSACTABLE BID, AND IT IS NOW LOAD-BEARING.
-    // ⚠️ THIS PARAMETER CHANGED MEANING ON 2026-09-14 AND THE OLD NAME WOULD HAVE HIDDEN IT. It
-    // was `fg2BookBid`: a book-only bid fed to the F-G-2 SHADOW arm, explicitly *"never used by
-    // the LIVE decision."* It is now the LADDER's bid and it IS the live decision's trigger.
-    // ⛔ `null` = no fresh transactable side ⇒ NO DECISION this cycle, on crypto AND (since `8a-P4b`) on xStock,
-    //    whose caller passes the guard-validated `xsBid` here. Any other class ignores this slot and triggers
-    //    on the mark, unchanged (the explicit third arm at the evaluator call).
-    triggerBid: number | null = null,
+    // ⭐⭐ Row 2 increment (4b) — THE EXIT-TRIGGER INGREDIENTS (see the caller). The trigger itself is chosen below by
+    // `selectExitTrigger`, the one rule shared with both VTS lanes. `null` bid ⇒ NO DECISION this cycle, never the mid.
+    exitTriggerParts: {
+      bid: number | null;
+      bidRefusal: ExitTriggerRefusal | null;
+      xsArm: { armed: true } | { armed: false; armOff: XsArmOff } | null;
+    } = { bid: null, bidRefusal: null, xsArm: null },
     // `8a-P4b` Step 9 C1 — LOG ONLY, never a decision input: the xStock frame the bid trigger would have read.
-    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null; trail?: number | null; ret?: number | null; tb?: 'j' | 'v' | null; size?: XstockSideSizeVerdict | 'size_invalid' | null; armOff?: 'guard_off' | 'spread_blown_off' | null } | null = null,
-    // ⭐ Row 2 increment B (P1) — xStock ONLY: true ⇒ the trigger is `triggerBid` (the judged bid; `null` ⇒ no decision),
-    //   false ⇒ the MARK. The caller sets it only when the book-state guard ran AND `spread_blown_enabled` is on.
-    xsBidArmed: boolean = false,
+    xsFrame: { bid: number | null; ask: number | null; spread: number | null; thr: number | null; basis?: string | null; reason?: string | null; trail?: number | null; ret?: number | null; tb?: 'j' | 'v' | null; size?: XstockSideSizeVerdict | 'size_invalid' | null } | null = null,
   ): Promise<ExitCondition | null> {
     // Phase 8.8.3-I6 B2: Calculate distance to SL/TP using live price
     const distanceToTP = takeProfit ? ((takeProfit - currentPrice) / currentPrice) * 100 : null;
@@ -3723,6 +3723,21 @@ export class ActiveExecutionEngine {
               (position as any).originalStopPrice ?? (stopLoss ?? undefined),
           };
 
+      // ⭐⭐ Row 2 increment (4b) — THE ONE EXIT-TRIGGER RULE (`core/trading/exit-trigger.ts`), on this position's own
+      // `assetClass`. Paper's other-class policy is the MARK (`8a-P4b` r1 BLOCKER-1: this loop is class-total over the
+      // four-class registry). `exitTriggerParts.xsArm` is non-null whenever the class is xStock (the caller's `_posClass`
+      // is the validated form of the same field).
+      const _trigCls = exitTriggerClass(positionAssetClass);
+      const exitTrigger = selectExitTrigger(
+        _trigCls === 'crypto_spot'
+          ? { cls: 'crypto_spot', bid: exitTriggerParts.bid, bidRefusal: exitTriggerParts.bidRefusal }
+          : _trigCls === 'xstock_spot'
+            ? { cls: 'xstock_spot', arm: exitTriggerParts.xsArm!, bid: exitTriggerParts.bid, bidRefusal: exitTriggerParts.bidRefusal, mark: currentPrice }
+            : { cls: 'other', otherClass: 'mark', mark: currentPrice },
+      );
+      // xStock: the trigger is the judged bid (or no decision) — the frame line's `on=` and the divergence log read this.
+      const xsBidArmed = _trigCls === 'xstock_spot' && exitTrigger.basis !== 'mark';
+
       const decision = await evaluateTECExit({
         // B80 (2026-05-13): per-trade keying. paper/live positions key by
         // the DB row id (active_open_positions.id).
@@ -3733,26 +3748,12 @@ export class ActiveExecutionEngine {
         stopPrice: stopLoss ?? -Infinity,
         targetPrice: takeProfit ?? Infinity,
         currentPrice,
-        // ⭐⭐ `8a-P2` — THE TRIGGER, AND THIS LINE IS THE WHOLE ROW.
-        // CRYPTO: the ladder's BID, refused into `null` when no side is fresh enough. An exit is a
-        //   SELL, so the BID is the only price a seller can actually get; the midpoint is a price
-        //   nobody can transact at, and using it on BOTH legs made the error a FULL SPREAD.
-        // ⛔ `null` ⇒ NO DECISION THIS CYCLE (evaluator branch 2b). It must NEVER fall back to
-        //   `currentPrice` — that re-introduces the exact defect this row removes, and it is pinned
-        //   as a mutation that must go RED in `b-price-side-8a-p1-exit-fence.test.ts` (tests 2b, 8).
-        // ⚠️ THAT FILENAME WAS WRONG UNTIL 2026-09-14 — it cited a file that 404s at the ref.
-        //   Citation drift, the same class this row has now filed five times, in the comment
-        //   telling the next reader where the guard is.
-        // xSTOCK: THE MARK — `8a-P4b` X3 put the bid here (2026-09-19 00:02:33Z) and Step 9 C1 took it back out the same
-        //   day: a symmetric blowout's stub bid fired a false stop (MDB/USD). The explicit arm stays so the re-land
-        //   (row `3n.q7`) is a one-token change that fence 2d will see.
-        // ⛔ ANY OTHER CLASS (`crypto_perp`, `xstock_perp` — both `active: true` in `ASSET_CLASS_REGISTRY`, and the exit
-        //   loop is class-total): the mark, EXACTLY as before. They are outside `3n`; a new class must be added HERE
-        //   deliberately. An else-arm of `xsBid` would hand such a row `null` forever (Langston, 8a-P4b r1 BLOCKER-1).
-        triggerPrice: positionAssetClass === 'crypto_spot' ? triggerBid
-          // ⭐ Row 2 increment B (P1): the BID while armed (guard ran + `spread_blown` on), else the MARK as since C1.
-          : positionAssetClass === 'xstock_spot' ? (xsBidArmed ? triggerBid : currentPrice)
-          : currentPrice,
+        // ⭐⭐ `8a-P2` / row 2 increment (4b) — THE TRIGGER: the one rule's price (built above). Crypto and an ARMED
+        //   xStock trigger on the BID — an exit is a SELL, and the bid is the only price a seller can get; `null` ⇒ NO
+        //   DECISION THIS CYCLE (evaluator branch 2b), never `currentPrice`. An unarmed xStock and any other class read
+        //   the mark, by the rule's stated arms. Fenced: `b-xstock-bid-trigger-reland-inc4b.test.ts` (the decision-site
+        //   count and the frozen fixture) and the re-pointed `8a-P1`/`8a-P4b` fences.
+        triggerPrice: exitTrigger.price,
         atr: atrAtOpen,
         holdDurationMs: 0,   // paper handles metadata.maxHoldingMs inline below (W2.1)
         maxHoldMs: Infinity, // disable global timeout branch here
@@ -3799,7 +3800,7 @@ export class ActiveExecutionEngine {
       const _xs5 = (v: number | null) => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
       const _xsTag = xsFrame === null ? '' :
         ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}` +
-        ` basis=${xsBidArmed ? 'bid' : `mark reason=${xsFrame.armOff ?? 'unset'}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size
+        ` basis=${xsBidArmed ? 'bid' : `mark reason=${exitTrigger.reason}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size; (4b) P10: the rule's reason, no default label
       // Langston gate A condition 1: `size_invalid` is OUR broken row, not a feed look — out of the denominator too, or a
       // wholesale quantity break would be diluted (and its page suppressed) by a different break.
       if (xsFrame !== null && xsFrame.size != null && xsFrame.size !== 'size_invalid') {
@@ -4031,18 +4032,18 @@ export class ActiveExecutionEngine {
         this._exitEvalHit++;
         switch (decision.exitReason) {
           case 'target_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=target_hit trigger=${exitTrigger.price ?? currentPrice} mark=${currentPrice}${_xsTag}`);
             return {
               type: 'target_hit',
               price: currentPrice,
-              reason: `Price ${(triggerBid ?? currentPrice).toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
+              reason: `Price ${(exitTrigger.price ?? currentPrice).toFixed(2)} reached target ${(takeProfit ?? 0).toFixed(2)}`,
             };
           case 'stop_hit':
-            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag}`);
+            console.log(`[8.8.3-I6][EXIT_TRIGGER] symbol=${position.symbol} type=stop_hit trigger=${exitTrigger.price ?? currentPrice} mark=${currentPrice}${_xsTag}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
-              reason: `Price ${(triggerBid ?? currentPrice).toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
+              reason: `Price ${(exitTrigger.price ?? currentPrice).toFixed(2)} hit stop ${(stopLoss ?? 0).toFixed(2)}`,
             };
           case 'break_even_stop':
             // B65.2-HF3: BE-lock-ratcheted stop was hit before trade reached
@@ -4057,14 +4058,14 @@ export class ActiveExecutionEngine {
             // close_reason, and trips the #509 post-stop re-entry cooldown too —
             // conservative-safe, accepted; distinguishing them = a closeReason
             // taxonomy question for the Phase-25 learning reads.
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=break_even_stop trigger=${exitTrigger.price ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'stop_hit',
               price: currentPrice,
               reason: `Break-even protection: ratcheted stop at ${decision.newStopPrice?.toFixed(2)} hit before target`,
             };
           case 'trailing_stop_hit':
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit trigger=${triggerBid ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=trailing_stop_hit trigger=${exitTrigger.price ?? currentPrice} mark=${currentPrice}${_xsTag} ratcheted_stop=${decision.newStopPrice?.toFixed(4)}`);
             return {
               type: 'trailing_stop_hit',
               price: currentPrice,

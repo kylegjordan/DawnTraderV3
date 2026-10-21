@@ -154,9 +154,12 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
 
   it('VTS C3/C5/C6: ask for the fill, bid for the trigger and the booking — no midpoint fallback', () => {
     expect(VTS).toMatch(/transactablePrice:\s*_pFillPrice/);
-    expect(VTS).toMatch(/triggerPrice:\s*_vtsTriggerPrice/);
+    // row 2 (4b) P9 — RE-POINTED, subject kept: the VTS trigger is the one rule's price over the BID (`_vtsExitBid`),
+    // passed in uncoalesced; never `currentPrice`.
+    expect(VTS).toMatch(/triggerPrice:\s*_vtsTrigger\.price/);
+    expect(VTS).toMatch(/\{ cls: 'crypto_spot', bid: _vtsExitBid, bidRefusal: _vtsExitRefusal as ExitTriggerRefusal \| null \}/);
     expect(VTS).toMatch(/resolveVtsBookedExitPrice\(_vtsExitBid,\s*currentPrice/); // `8a-P4c` inc 3: the unread class arg is gone
-    expect(VTS).not.toMatch(/_vtsTriggerPrice\s*=\s*_vtsExitBid\s*\?\?/);
+    expect(VTS).not.toMatch(/bid:\s*_vtsExitBid\s*\?\?/);
     expect(VTS).not.toMatch(/triggerPrice:\s*currentPrice,/);
   });
 

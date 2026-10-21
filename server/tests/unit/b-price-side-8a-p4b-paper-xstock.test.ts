@@ -96,15 +96,21 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
     // ⛔ AMENDED DELIBERATELY — row 2 increment B (P1): the slot now carries xStock's JUDGED bid while ARMED (guard ran +
     //   `spread_blown` on), else null; the log argument gained the off-switch reason and the size verdict, and the call
     //   gained the arm flag. The bid enters the decision ONLY through this slot.
-    expect(AEE).toMatch(/_lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : \(_posClass === 'xstock_spot' && xsBidTriggerArmed \? xsBid : null\),/);
+    // ⛔ RE-POINTED by row 2 (4b) P9 — subject kept: the bid enters the decision ONLY through the trigger slot, and the
+    //   xStock bid decides ONLY while armed. The slot now carries the one rule's INGREDIENTS (the judged `xsBid` for
+    //   xStock, whatever the arm) plus the GATED arm; the rule (`exit-trigger.ts`) reads the bid only when armed.
+    expect(AEE).toMatch(/bid: _lsSel !== null && _lsSel\.ok \? _lsSel\.quote\.bid : \(_posClass === 'xstock_spot' \? xsBid : null\),/);
+    expect(AEE).toMatch(/xsArm: _posClass === 'xstock_spot'\s*\?\s*\(xsBidTriggerArmed \? \{ armed: true as const \} : \{ armed: false as const, armOff: xsBidTriggerOff as XsArmOff \}\)\s*:\s*null,/);
     expect(AEE).toMatch(/_posClass === 'xstock_spot' \? \{ bid: xsBid, ask: xsAsk, spread: xsSpread, thr: xsThr, basis: xsSideBasis, reason: xsFrameReason, trail: xsThrBasis\?\.trail \?\? null, ret: xsThrBasis\?\.ret \?\? null, tb: xsThrBasis\?\.tb \?\? null,/);
-    expect(AEE).toMatch(/_posClass === 'xstock_spot' && xsBidTriggerArmed, \/\/ Row 2 increment B \(P1\): the xStock arm's gate\s*\n\s*\);/);
     // `3n.q7` increment 1 (2026-09-29) extended the LOG argument with the side basis and the no-sides reason; it is still
     // the log argument only — the trigger slot above is unchanged.
   });
 
   it('X3 (row 2 increment B, P1): the evaluator trigger is three-way — crypto the ladder bid, xStock the bid WHILE ARMED else the mark, any other class the mark', () => {
-    expect(AEE).toMatch(/triggerPrice: positionAssetClass === 'crypto_spot' \? triggerBid\s*\n(\s*\/\/[^\n]*\n)*\s*: positionAssetClass === 'xstock_spot' \? \(xsBidArmed \? triggerBid : currentPrice\)\s*\n\s*: currentPrice,/);
+    // row 2 (4b) P9 — RE-POINTED, subject kept: the three-way is now the one rule's input, built on the position's class;
+    // the evaluator receives its price.
+    expect(AEE).toMatch(/_trigCls === 'crypto_spot'\s*\?\s*\{ cls: 'crypto_spot', bid: exitTriggerParts\.bid, bidRefusal: exitTriggerParts\.bidRefusal \}\s*:\s*_trigCls === 'xstock_spot'\s*\?\s*\{ cls: 'xstock_spot', arm: exitTriggerParts\.xsArm!, bid: exitTriggerParts\.bid, bidRefusal: exitTriggerParts\.bidRefusal, mark: currentPrice \}\s*:\s*\{ cls: 'other', otherClass: 'mark', mark: currentPrice \},/);
+    expect(AEE).toMatch(/triggerPrice: exitTrigger\.price,/);
   });
 
   it('X3 (Step 9 C1): the xStock frame is LOG ONLY — it never enters the evaluator input', () => {
@@ -116,11 +122,11 @@ describe('8a-P4b — every cell is a three-way with a named default arm (Langsto
     // ⛔ AMENDED DELIBERATELY — row 2 increment B: the arm FLAG (`xsBidArmed`) now enters the input, and the judged bid
     //   arrives only through the `triggerBid` slot. The LOG frame and the raw capture variables still may not.
     expect(codeOnly).not.toMatch(/xsFrame|\bxsBid\b|xsAsk|xsSpread|xsThr/);
-    expect(codeOnly).toMatch(/xsBidArmed \? triggerBid : currentPrice/);
+    expect(codeOnly).toMatch(/triggerPrice: exitTrigger\.price,/); // row 2 (4b) P9: the one rule's price, nothing else
   });
 
   it('X3 (Step 9 C1, Langston condition 4): every EXIT_TRIGGER line carries the frame tag, and bid/mark divergence runs are logged', () => {
-    expect(count(/EXIT_TRIGGER\] symbol=\$\{position\.symbol\} type=\w+ trigger=\$\{triggerBid \?\? currentPrice\} mark=\$\{currentPrice\}\$\{_xsTag\}/g)).toBe(4);
+    expect(count(/EXIT_TRIGGER\] symbol=\$\{position\.symbol\} type=\w+ trigger=\$\{exitTrigger\.price \?\? currentPrice\} mark=\$\{currentPrice\}\$\{_xsTag\}/g)).toBe(4);
     expect(AEE).toMatch(/bidWouldFire=\$\{_xsBidStop \? 'stop' : _xsBidTarget \? 'target' : 'no'\}/);
     expect(AEE).toMatch(/\[8a-P4b\]\[X3_BID_DIVERGENCE_START\]/);
     expect(AEE).toMatch(/\[8a-P4b\]\[X3_BID_DIVERGENCE_END\]/);
