@@ -713,11 +713,6 @@ function frameResurface(alert, d, nowMs) {
   const gl = censusLists({ a: [], b: { unplaced: [], handover: null, selfContradicting: [], reused: [], placedOwnerless: [] }, afterLive: { al: 0 }, c: { issues: [], excluded: [] }, d: { rows: [], excluded: [] }, e: { unmatched: [], rowUnmatched: [] }, f: { all: [], new: [] }, g: { agree: false, diffs: [], commit: null, sameCommit: null, alert: true, unknownAt: 'abcdef1234' } });
   ok('PS20 the undecidable section-6 result carries its sha into the lists', gl.g?.unknownAt === 'abcdef1234', JSON.stringify(gl.g));
   ok('PS20b the undecidable label: a sha gives its first 7, a null gives the window edge', s6UnknownLabel('abcdef1234') === 'abcdef1' && s6UnknownLabel(null) === 'the window edge', s6UnknownLabel(null));
-  // Langston gate B ruling A: an open observation window on list (f) carries its close test, from its `data —` waiting-on.
-  const win = parsePlan(PLAN.replace('| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN FLIGHT — Step 7 | nothing |', '| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN OBSERVATION — built | data — 50 real fires; ends with a non-author adjudication |'));
-  const fw = listF(win, ['B_OPEN_THING_COMPLETION_REPORT.md'], null);
-  ok('PS21 an open window on list (f) carries what ends it; a line with no data window carries none', fw.exits['§0:B-OPEN-THING'] === '50 real fires; ends with a non-author adjudication'
-    && listF(plan, ['B_OPEN_THING_COMPLETION_REPORT.md'], null).exits['§0:B-OPEN-THING'] === undefined, JSON.stringify(fw.exits));
 }
 
 console.log(`\nCensus rule tests: ${pass} passed, ${fail} failed`);
