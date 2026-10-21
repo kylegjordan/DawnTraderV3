@@ -2146,7 +2146,7 @@ export class ActiveExecutionEngine {
         let xsThrBasis: { trail: number | null; ret: number | null; tb: 'j' | 'v' | null } | null = null;
         // `3n.q7` increment 1 (Langston condition 2) — WHY an evaluated xStock tick has no transactable sides. Set on the
         // four arms that reach the evaluator with `xsBid` null; every other failure `continue`s before the evaluator.
-        let xsFrameReason: string | null = null;
+        let xsFrameReason: XsFrameRefusal | null = null; // row 2 (4b) Step-4 condition: the ONE vocabulary, typed at the source
         // ⭐ Row 2 increment B (P1) — THE xSTOCK TRIGGER IS THE BID ONLY WHILE ARMED: the book-state guard RAN this tick
         //   (not the guard-off arm) AND `spread_blown_enabled` is on in the same resolved config. Objective 6 is what makes
         //   the bid safe — a blown book is held before any trigger runs, which is the MDB/USD shape (`#1065`) Step 9 C1
@@ -3167,7 +3167,7 @@ export class ActiveExecutionEngine {
             bid: _lsSel !== null && _lsSel.ok ? _lsSel.quote.bid : (_posClass === 'xstock_spot' ? xsBid : null),
             bidRefusal: (_lsSel !== null
               ? (_lsSel.ok ? (_lsSel.quote.bid === null ? 'no_bid_side' : null) : _lsSel.tickerRefusal)
-              : (_posClass === 'xstock_spot' && xsBid === null ? ((xsFrameReason as XsFrameRefusal | null) ?? 'no_bid_side') : null)) as ExitTriggerRefusal | null,
+              : (_posClass === 'xstock_spot' && xsBid === null ? (xsFrameReason ?? 'no_bid_side') : null)) as ExitTriggerRefusal | null,
             // `xsBidTriggerOff` is always set when unarmed (pre-audit A10's census); a null here makes the rule throw — a hold.
             xsArm: _posClass === 'xstock_spot'
               ? (xsBidTriggerArmed ? { armed: true as const } : { armed: false as const, armOff: xsBidTriggerOff as XsArmOff })
@@ -3800,7 +3800,7 @@ export class ActiveExecutionEngine {
       const _xs5 = (v: number | null) => (v === null || !Number.isFinite(v) ? 'none' : v.toFixed(5));
       const _xsTag = xsFrame === null ? '' :
         ` bid=${xsFrame.bid ?? 'none'} ask=${xsFrame.ask ?? 'none'} spread=${_xs5(xsFrame.spread)} thr=${_xs5(xsFrame.thr)} bidWouldFire=${_xsBidStop ? 'stop' : _xsBidTarget ? 'target' : 'no'}` +
-        ` basis=${xsBidArmed ? 'bid' : `mark reason=${exitTrigger.reason}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size; (4b) P10: the rule's reason, no default label
+        ` basis=${exitTrigger.basis === 'bid' ? 'bid' : `${exitTrigger.basis} reason=${exitTrigger.reason}`} size=${xsFrame.size ?? 'none'}`; // Row 2 increment B (P7): what DECIDED + size; (4b) P10 + Step-4 R3: the rule's three-valued basis and its reason, no default label
       // Langston gate A condition 1: `size_invalid` is OUR broken row, not a feed look — out of the denominator too, or a
       // wholesale quantity break would be diluted (and its page suppressed) by a different break.
       if (xsFrame !== null && xsFrame.size != null && xsFrame.size !== 'size_invalid') {

@@ -12,7 +12,10 @@
  * (d) THE FROZEN EXPECTED-VALUE FIXTURE — written from the three sites' behaviour BEFORE this diff (`8a-P4b` r1, `3n.q3`
  *     condition 2, `8a-P4c` increment 3, row 2 increment B), so equality is a standing fence, not a one-shot comparison.
  *     It carries a CRYPTO row deliberately given an `armed: false` arm (Langston BLOCKER-4): the class is tested first.
- * (e) THE A10 CENSUS AS A FENCE — every unarmed xStock path sets an off-reason, so the old `?? 'unset'` label stays dead.
+ * (e) THE A10 CENSUS AS A FENCE — the ASSIGNMENT SITES: the arm at one, the off-reason at exactly two, and no `?? 'unset'`.
+ *     ⚠️ ITS REACH, STATED (Langston Step-4 R2): it does NOT prove the PATH property that makes the rule's throw unreachable —
+ *     that every xStock position reaching the evaluator passed through one of those sites. A new arm inside the xStock
+ *     block, above the book-state block, that does not `continue` would pass this fence and reach the throw (a hold).
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';

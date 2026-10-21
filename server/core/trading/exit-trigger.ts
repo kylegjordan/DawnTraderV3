@@ -55,7 +55,10 @@ export type ExitTriggerInput =
 export interface ExitTriggerSelection {
   /** The price handed to the evaluator as `triggerPrice`. `null` ⇒ no decision this cycle. */
   price: number | null;
-  /** What the price is: the transactable bid, the mark, or nothing. */
+  /** The INTENDED source of the price — the transactable bid, the mark, or nothing (Langston Step-4 R1). It is not a
+   *  claim that a price was chosen: an unarmed xStock or a `mark`-policy class with a `null` mark returns `basis: 'mark'`
+   *  with `price: null` (no decision). Unreachable at every caller today (paper's mark is always a number; the VTS lane
+   *  whose mark can be null always arms xStock and uses the `none` policy) — read `price`, not `basis`, for "decided". */
   basis: 'bid' | 'mark' | 'none';
   reason: ExitTriggerReason;
 }
