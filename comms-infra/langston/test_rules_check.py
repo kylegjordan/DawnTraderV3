@@ -1,7 +1,7 @@
 """Tests for the size watch's rules_check (B-LANGSTON-CLAUDEMD-RESIDUAL). Run as ROOT on Helsinki from a root-only
 dir holding this file and a copy of langston-size-watch: python3 test_rules_check.py
 Builds a throwaway "GitHub", mirror, target and install record; never touches the live ones. Expectation first."""
-import hashlib, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, tempfile
+import hashlib, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, tempfile, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ld = importlib.machinery.SourceFileLoader("sw", os.path.join(HERE, "langston-size-watch"))
@@ -43,7 +43,9 @@ def main():
         g(up, "commit", "-q", "-m", "v1")
         c1 = g(up, "rev-parse", "HEAD")
         b1 = g(up, "rev-parse", "HEAD:" + PATH)
-        subprocess.run(["git", "clone", "-q", "--bare", "--no-local", up, mirror], check=True)
+        subprocess.run(["git", "init", "-q", "--bare", mirror], check=True)     # small fetch -> LOOSE objects
+        subprocess.run(["git", "-C", mirror, "fetch", "-q", up, "migration/aws-supabase:migration/aws-supabase"],
+                       check=True)
         record = os.path.join(top, "INSTALLED")
         json.dump({"commit": c1, "blob": b1, "sha256": hashlib.sha256(v1).hexdigest(), "installed_at": "t"},
                   open(record, "w"))
@@ -59,7 +61,8 @@ def main():
                 subprocess.run(["chattr", "+i", target], check=True)
 
         def rc():
-            return sw.rules_check(target=target, record=record, mirror=mirror, upstream="file://" + up)
+            return sw.rules_check(target=target, record=record, mirror=mirror, upstream="file://" + up,
+                                  installer=os.path.join(HERE, "langston-rules-install"))
 
         install()
         r = rc()
@@ -84,6 +87,23 @@ def main():
                        check=True)
         r = rc()
         check("C6 a newer reviewed version is PENDING, never TAMPER", (r["tamper"], r["pending"] is not None), ([], True))
+        # C8 - Langston r2 B-3 on the DETECTOR: forge the loose leaf tree at the head so plain git resolves the path to
+        # the blob that IS installed. The verified walk must refuse it (UNKNOWN), never report a clean or false PENDING.
+        head = g(up, "rev-parse", "HEAD")
+        leaf = g(mirror, "rev-parse", head + ":comms-infra/langston")
+        real = subprocess.run(["git", "-C", mirror, "cat-file", "tree", leaf], capture_output=True, check=True).stdout
+        key = b" LANGSTON_CLAUDE.md" + bytes([0])
+        i = real.index(key) + len(key)
+        forged = real[:i] + bytes.fromhex(b1) + real[i + 20:]
+        obj = os.path.join(mirror, "objects", leaf[:2], leaf[2:])
+        check("C8 precondition: the leaf tree is LOOSE", os.path.isfile(obj), True)
+        os.chmod(obj, 0o644)
+        open(obj, "wb").write(zlib.compress(b"tree %d" % len(forged) + bytes([0]) + forged))
+        check("C8 control: plain git now resolves the head's file to the INSTALLED blob (a forged 'clean')",
+              g(mirror, "rev-parse", head + ":" + PATH), b1)
+        r = rc()
+        check("C8 the verified walk refuses it: UNKNOWN naming the mismatch, no PENDING, no clean",
+              (r["pending"], any("re-hashes" in u for u in r["unknown"])), (None, True))
         os.remove(record)
         r = rc()
         check("C7 no install record is UNKNOWN only - no tamper page before the first install",

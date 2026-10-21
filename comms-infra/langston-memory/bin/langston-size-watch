@@ -293,9 +293,22 @@ RULES_RECORD = "/root/langston-rules-backup/INSTALLED"
 RULES_REPO_PATH = "comms-infra/langston/LANGSTON_CLAUDE.md"
 RULES_MIRROR = "/srv/dawntrader-backup.git"
 RULES_UPSTREAM = "https://github.com/kylegjordan/DawnTraderV3.git"
+# ⛔ The mirror is langston-writable, so the branch-head comparison reads through the INSTALLER'S verified walk (every
+#    object on commit -> trees -> blob re-hashed; Langston r2 B-3) - one function, imported, never a second copy.
+RULES_INSTALLER = "/usr/local/sbin/langston-rules-install"
 
 
-def rules_check(target=None, record=None, mirror=None, upstream=None):
+def _installer(path=None):
+    import importlib.machinery, importlib.util
+    ld = importlib.machinery.SourceFileLoader("langston_rules_install", path or RULES_INSTALLER)
+    spec = importlib.util.spec_from_loader("langston_rules_install", ld)
+    mod = importlib.util.module_from_spec(spec)
+    sys.dont_write_bytecode = True
+    ld.exec_module(mod)
+    return mod
+
+
+def rules_check(target=None, record=None, mirror=None, upstream=None, installer=None):
     target, record = target or RULES_TARGET, record or RULES_RECORD
     mirror, upstream = mirror or RULES_MIRROR, upstream or RULES_UPSTREAM
     out = {"target": target, "record": None, "tamper": [], "pending": None, "unknown": []}
@@ -339,22 +352,14 @@ def rules_check(target=None, record=None, mirror=None, upstream=None):
         elif "i" not in flags:
             out["tamper"].append("its immutable flag is NOT set (lsattr %s)" % flags)
     try:
-        ls = subprocess.run(["git", "ls-remote", upstream, "refs/heads/migration/aws-supabase"],
-                            capture_output=True, text=True, timeout=60)
-        head = ls.stdout.split()[0] if ls.returncode == 0 and ls.stdout.split() else ""
-        if not head:
-            out["unknown"].append("GitHub's head could not be read (%s)" % (ls.stderr.strip()[:80] or ls.returncode))
-        else:
-            b = subprocess.run(["git", "-C", mirror, "rev-parse", "%s:%s" % (head, RULES_REPO_PATH)],
-                               capture_output=True, text=True, timeout=60)
-            if b.returncode != 0:
-                out["unknown"].append("the mirror cannot resolve %s at GitHub's head %s yet" % (RULES_REPO_PATH,
-                                                                                               head[:12]))
-            elif b.stdout.strip() != rec.get("blob"):
-                out["pending"] = ("a newer reviewed rules file (blob %s at GitHub head %s) is not installed; installed "
-                                  "is %s" % (b.stdout.strip()[:12], head[:12], str(rec.get("commit"))[:12]))
+        inst = _installer(installer)
+        head = inst.github_head(upstream)
+        blob_id, _data = inst.verified_blob(mirror, head)
+        if blob_id != rec.get("blob"):
+            out["pending"] = ("a newer reviewed rules file (blob %s at GitHub head %s) is not installed; installed is %s"
+                              % (blob_id[:12], head[:12], str(rec.get("commit"))[:12]))
     except Exception as e:
-        out["unknown"].append("the branch-head comparison failed (%s)" % type(e).__name__)
+        out["unknown"].append("the branch-head comparison could not run (%s: %s)" % (type(e).__name__, str(e)[:120]))
     return out
 
 
@@ -464,7 +469,12 @@ def run(quiet=False, injected_total=None, injected_archive_bytes=None):
     #    while the liveness alert had silently failed to arm.
     # ⛔ A DRILL MUST NOT TOUCH IT: resolving a real pending alert on the strength of a
     #    synthetic total would re-arm liveness from a run that never measured anything.
-    rules = rules_check()
+    # a detector fault must not abort the run before the heartbeat re-arms (Langston r2 record item)
+    try:
+        rules = rules_check()
+    except Exception as e:
+        rules = {"target": RULES_TARGET, "record": None, "tamper": [], "pending": None,
+                 "unknown": ["the rules check itself failed (%s: %s)" % (type(e).__name__, str(e)[:120])]}
     rules_delivery = "no alarm"
     if rules["tamper"]:
         rules_delivery = post(prefix + "⛔ LANGSTON'S RULES FILE (" + rules["target"] + ") DOES NOT MATCH ITS INSTALL: " +

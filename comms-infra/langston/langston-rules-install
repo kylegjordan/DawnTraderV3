@@ -7,30 +7,33 @@ B-LANGSTON-CLAUDEMD-RESIDUAL (Langston's ruling, 2026-10-20): his auto-loaded ru
 changes ONLY by installing a reviewed commit. The repo copy is comms-infra/langston/LANGSTON_CLAUDE.md (not named
 CLAUDE.md: the governance checker treats every file of that name as housekeeping, so an untagged edit would pass).
 
-What it does, in order, or refuses:
-  1. the sha is 40 hex characters and is an ancestor of migration/aws-supabase AS GITHUB REPORTS IT (`git ls-remote`,
-     run as root). ⛔ Langston r1 B-1: the backup mirror is langston-writable (objects, refs and config), so a ref
-     read from it could be moved by his own account. The mirror is used ONLY as an object store: commit ids are
-     content hashes, so the ancestry from GitHub's head down to <sha> cannot be forged there - only made missing,
-     which refuses. Once the repository is private this read needs a root-held credential, or it refuses.
-  2. it reads the blob at <sha>:comms-infra/langston/LANGSTON_CLAUDE.md from the mirror and re-hashes it against the
-     tree's own object id (kept as a check; git's own read fails first on a corrupt object, so it is not a tested arm);
-  3. it reads the live file WITHOUT following a link (O_NOFOLLOW) and reports what it found: absent, a link, not a
-     regular file, or a regular file with its owner, mode and immutable flag;
-  4. if the content, root:root 0644 AND the immutable flag already hold, nothing is done (Langston r1 B-2: matching
-     content alone is not "installed" - the property is content and owner and protection);
-  5. otherwise: the previous version (if a regular file) is copied to /root/langston-rules-backup/<sha256>.md (root
-     0700, exclusive create); the new bytes are staged in that root-only directory, set root:root 0644 on the open
-     file, fsynced, the target's immutable flag cleared, the staged file renamed over the target (same filesystem;
-     a rename replaces whatever name is there and follows nothing), and the immutable flag set again IN A FINALLY;
-  6. it records what it installed in /root/langston-rules-backup/INSTALLED and a root:root 0644 copy at
-     /etc/langston/rules-installed (Langston can read it, not write it) - the size watch compares the live file to it.
+⛔ THE BACKUP MIRROR IS LANGSTON-WRITABLE (objects, refs and config) AND IS TREATED AS UNTRUSTED INPUT.
+   r1 B-1: its branch ref could be moved, so the head comes from GitHub (`git ls-remote`, as root).
+   r2 B-3 (Langston, measured on git 2.43.0): a LOOSE TREE object overwritten at its genuine id is NOT checked by
+   `git rev-parse <sha>:<path>`, so a forged tree could name any blob and the blob would then re-hash to itself.
+   ⇒ every object on the path commit -> tree -> tree -> tree -> blob is read with `git cat-file <type>` and
+   RE-HASHED HERE; a mismatch refuses (exit 5). Commit ancestry is walked by git, which verifies commit objects on
+   read (a forged commit makes `merge-base` fail -> exit 4). Once the repository is private, the ls-remote needs a
+   root-held credential or it refuses.
 
-⛔ NO INPUT FROM LANGSTON'S SIDE: no path, ref or content argument beyond the sha the ROOT operator passes; no sudo
-   entry for him. A rule that must land now: he asks a CC session in the channel, which commits and installs it (the
-   hotfix path if urgent) - never parked in his MEMORY.md.
-Exit codes: 0 installed (or already installed / dry run) · 2 bad input · 3 not root · 4 sha not on GitHub's branch,
-GitHub unreadable, or an object missing in the mirror · 5 blob hash mismatch · 6 write or protect failed.
+What it does, in order, or refuses:
+  1. the sha is 40 hex and an ancestor of GitHub's migration/aws-supabase head (the head object present in the mirror);
+  2. the blob is reached by the verified walk (`verified_blob`) - the same function the size watch uses;
+  3. the live file is read WITHOUT following a link; it is reported as absent / a link / not regular / a regular file
+     with owner, mode and immutable flag;
+  4. if content, root:root 0644, the immutable flag AND the install record all hold, nothing is done;
+  5. otherwise: the previous regular file is kept in /root/langston-rules-backup/<sha256>.md; the new bytes are staged
+     in that root-only dir, set root:root 0644 on the open file, fsynced; the target's flag cleared, the staged file
+     renamed over it (same filesystem; follows nothing), and the flag set again IN A FINALLY;
+  6. the record is written to /root/langston-rules-backup/INSTALLED and /etc/langston/rules-installed (root:root 0644).
+     A record that fails to write after a good install says so: re-running is safe and rewrites it.
+
+⛔ NO INPUT FROM LANGSTON'S SIDE: no path, ref or content argument beyond the sha the ROOT operator passes, and his
+   object store is never trusted for content. A rule that must land now: he asks a CC session in the channel, which
+   commits and installs it (the hotfix path if urgent) - never parked in his MEMORY.md.
+Exit codes: 0 installed / already installed / dry run · 2 bad input · 3 not root · 4 sha not on GitHub's branch,
+GitHub unreadable, or an object missing · 5 an object does not hash to its id · 6 write or protect failed (the
+message says whether the live file was replaced).
 """
 import hashlib, json, os, re, stat, subprocess, sys, tempfile, time
 
@@ -41,7 +44,13 @@ REPO_PATH = "comms-infra/langston/LANGSTON_CLAUDE.md"
 TARGET = os.environ.get("LRI_TARGET", "/home/langston/CLAUDE.md")
 BACKUP_DIR = os.environ.get("LRI_BACKUP", "/root/langston-rules-backup")
 PUBLIC_RECORD = os.environ.get("LRI_PUBLIC_RECORD", "/etc/langston/rules-installed")
-USE_IMMUTABLE = os.environ.get("LRI_NO_IMMUTABLE") != "1"     # tests on a filesystem without chattr may turn it off
+USE_IMMUTABLE = os.environ.get("LRI_NO_IMMUTABLE") != "1"
+
+
+class Refused(Exception):
+    def __init__(self, code, msg):
+        Exception.__init__(self, msg)
+        self.code = code
 
 
 def run(cmd, binary=False, timeout=120):
@@ -50,17 +59,60 @@ def run(cmd, binary=False, timeout=120):
     return r.returncode, out, r.stderr.decode("utf-8", "replace").strip()
 
 
-def git(*args, binary=False):
-    return run(["git", "-C", MIRROR] + list(args), binary=binary)
+def git(mirror, *args, binary=False):
+    return run(["git", "-C", mirror] + list(args), binary=binary)
 
 
-def die(code, msg):
-    print("REFUSED: " + msg)
-    sys.exit(code)
+def github_head(upstream=None):
+    rc, out, err = run(["git", "ls-remote", upstream or UPSTREAM, "refs/heads/" + BRANCH], timeout=60)
+    head = out.split()[0] if rc == 0 and out else ""
+    if not re.fullmatch(r"[0-9a-f]{40}", head):
+        raise Refused(4, "cannot read %s's head from %s (%s)" % (BRANCH, upstream or UPSTREAM, err or out or "empty"))
+    return head
+
+
+def read_verified(mirror, oid, kind):
+    rc, data, err = git(mirror, "cat-file", kind, oid, binary=True)
+    if rc != 0:
+        raise Refused(4, "the mirror cannot serve %s %s (%s)" % (kind, oid[:12], err[:120]))
+    got = hashlib.sha1(b"%s %d\0" % (kind.encode(), len(data)) + data).hexdigest()
+    if got != oid:
+        raise Refused(5, "%s %s in the mirror re-hashes to %s - its object is not what GitHub served" %
+                      (kind, oid[:12], got[:12]))
+    return data
+
+
+def tree_entry(tree, name):
+    i = 0
+    while i < len(tree):
+        sp = tree.index(b" ", i)
+        nul = tree.index(b"\0", sp)
+        if tree[sp + 1:nul] == name:
+            return tree[i:sp], tree[nul + 1:nul + 21].hex()
+        i = nul + 21
+    return None
+
+
+def verified_blob(mirror, commit, path=REPO_PATH):
+    """(blob id, bytes) for <commit>:<path>, every object on the path re-hashed here (Langston r2 B-3)."""
+    c = read_verified(mirror, commit, "commit")
+    first = c.split(b"\n", 1)[0]
+    if not first.startswith(b"tree "):
+        raise Refused(4, "commit %s has no tree line" % commit[:12])
+    tid = first[5:].decode()
+    parts = path.split("/")
+    for d in parts[:-1]:
+        e = tree_entry(read_verified(mirror, tid, "tree"), d.encode())
+        if not e or e[0] != b"40000":
+            raise Refused(4, "%s has no directory %s on %s" % (commit[:12], d, path))
+        tid = e[1]
+    e = tree_entry(read_verified(mirror, tid, "tree"), parts[-1].encode())
+    if not e or e[0] not in (b"100644", b"100755"):
+        raise Refused(4, "%s has no file %s" % (commit[:12], path))
+    return e[1], read_verified(mirror, e[1], "blob")
 
 
 def immutable(path):
-    """True / False from lsattr, or None if it cannot be read."""
     rc, out, _e = run(["lsattr", "-d", path])
     if rc != 0 or not out:
         return None
@@ -82,23 +134,34 @@ def live_state():
     except OSError as e:
         if os.path.islink(TARGET):
             return None, "a symbolic link (not followed, not backed up)", False, None
-        die(6, "cannot open %s (%s)" % (TARGET, e))
+        raise Refused(6, "cannot open %s (%s)" % (TARGET, e))
     try:
         st = os.fstat(fd)
         if not stat.S_ISREG(st.st_mode):
             return None, "not a regular file (mode %o)" % st.st_mode, False, None
-        data = b""
+        chunks = []
         while True:
             chunk = os.read(fd, 1 << 20)
             if not chunk:
                 break
-            data += chunk
+            chunks.append(chunk)
     finally:
         os.close(fd)
     ok = st.st_uid == 0 and st.st_gid == 0 and stat.S_IMODE(st.st_mode) == 0o644
     imm = immutable(TARGET)
-    return data, "a regular file, owner %d:%d mode %o, immutable %s" % (
+    return b"".join(chunks), "a regular file, owner %d:%d mode %o, immutable %s" % (
         st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode), imm), ok, imm
+
+
+def record_matches(new_sha):
+    try:
+        with open(os.path.join(BACKUP_DIR, "INSTALLED"), encoding="utf-8") as fh:
+            a = json.load(fh)
+        with open(PUBLIC_RECORD, encoding="utf-8") as fh:
+            b = json.load(fh)
+        return a.get("sha256") == new_sha and b.get("sha256") == new_sha
+    except Exception:
+        return False
 
 
 def write_record(sha, new_sha, blob_id):
@@ -116,51 +179,42 @@ def write_record(sha, new_sha, blob_id):
         os.replace(tmp, path)
 
 
-def main(argv):
+def install(argv):
     args = [a for a in argv if a != "--dry-run"]
     dry = "--dry-run" in argv
     if os.geteuid() != 0:
-        die(3, "run as root")
+        raise Refused(3, "run as root")
     if len(args) != 1 or not re.fullmatch(r"[0-9a-f]{40}", args[0]):
-        die(2, "usage: langston-rules-install <full-40-char-sha> [--dry-run]")
+        raise Refused(2, "usage: langston-rules-install <full-40-char-sha> [--dry-run]")
     sha = args[0]
-    rc, out, err = run(["git", "ls-remote", UPSTREAM, "refs/heads/" + BRANCH], timeout=60)
-    head = out.split()[0] if rc == 0 and out else ""
-    if not re.fullmatch(r"[0-9a-f]{40}", head):
-        die(4, "cannot read %s's head from %s (%s)" % (BRANCH, UPSTREAM, err or out or "empty"))
-    rc, _o, err = git("cat-file", "-e", head + "^{commit}")
+    head = github_head()
+    rc, _o, err = git(MIRROR, "cat-file", "-e", head + "^{commit}")
     if rc != 0:
-        die(4, "the mirror does not yet hold GitHub's head %s - wait for its sync and re-run" % head[:12])
-    rc, _o, err = git("merge-base", "--is-ancestor", sha, head)
+        raise Refused(4, "the mirror does not yet hold GitHub's head %s - wait for its sync and re-run" % head[:12])
+    rc, _o, err = git(MIRROR, "merge-base", "--is-ancestor", sha, head)
     if rc != 0:
-        die(4, "%s is not an ancestor of GitHub's %s head %s (%s)" % (sha, BRANCH, head[:12], err or "not an ancestor"))
-    rc, want_id, err = git("rev-parse", "%s:%s" % (sha, REPO_PATH))
-    if rc != 0:
-        die(4, "%s has no %s (%s)" % (sha, REPO_PATH, err))
-    rc, data, err = git("cat-file", "blob", want_id, binary=True)
-    if rc != 0:
-        die(4, "cannot read blob %s (%s)" % (want_id, err))
-    got_id = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
-    if got_id != want_id:
-        die(5, "blob %s re-hashes to %s" % (want_id, got_id))
+        raise Refused(4, "%s is not an ancestor of GitHub's %s head %s (%s)" % (sha, BRANCH, head[:12],
+                                                                              err or "not an ancestor"))
+    blob_id, data = verified_blob(MIRROR, sha)
     old, desc, ok, imm = live_state()
     new_sha = hashlib.sha256(data).hexdigest()
-    old_sha = hashlib.sha256(old).hexdigest() if old is not None else None
     print("live %s: %s" % (TARGET, desc))
-    print("install %s (%d B) from %s, GitHub head %s" % (new_sha[:12], len(data), sha[:12], head[:12]))
-    if old == data and ok and (imm or not USE_IMMUTABLE):
-        print("already installed - content, root:root 0644 and protection all hold")
+    print("install %s (%d B) from %s, GitHub head %s, every object on the path re-hashed" %
+          (new_sha[:12], len(data), sha[:12], head[:12]))
+    if old == data and ok and (imm or not USE_IMMUTABLE) and record_matches(new_sha):
+        print("already installed - content, root:root 0644, protection and the record all hold")
         return 0
     if old == data:
-        print("content matches but owner/mode/protection do not - re-installing to fix them")
+        print("content matches but owner/mode/protection/record do not - re-installing to fix them")
     if dry:
         print("DRY RUN - nothing written")
         return 0
+    replaced = False
     try:
         os.makedirs(BACKUP_DIR, mode=0o700, exist_ok=True)
         os.chmod(BACKUP_DIR, 0o700)
         if old is not None:
-            bpath = os.path.join(BACKUP_DIR, old_sha + ".md")
+            bpath = os.path.join(BACKUP_DIR, hashlib.sha256(old).hexdigest() + ".md")
             if not os.path.exists(bpath):
                 fd = os.open(bpath, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(fd, "wb") as fh:
@@ -168,7 +222,7 @@ def main(argv):
                     fh.flush()
                     os.fsync(fh.fileno())
             print("previous version kept at %s" % bpath)
-        fd, tmp = tempfile.mkstemp(prefix="stage-", dir=BACKUP_DIR)     # root-only staging (Langston r1 record)
+        fd, tmp = tempfile.mkstemp(prefix="stage-", dir=BACKUP_DIR)
         try:
             with os.fdopen(fd, "wb") as fh:
                 fh.write(data)
@@ -180,19 +234,34 @@ def main(argv):
                 if USE_IMMUTABLE and os.path.lexists(TARGET) and not os.path.islink(TARGET) and immutable(TARGET):
                     set_immutable(TARGET, False)
                 os.replace(tmp, TARGET)
+                replaced = True
             finally:
                 if USE_IMMUTABLE and os.path.exists(TARGET) and not os.path.islink(TARGET):
                     set_immutable(TARGET, True)
         finally:
             if os.path.lexists(tmp):
                 os.unlink(tmp)
-        write_record(sha, new_sha, want_id)
     except OSError as e:
-        die(6, "write or protect failed (%s: %s)" % (type(e).__name__, e))
+        raise Refused(6, "write or protect failed (%s: %s); the live file %s" % (
+            type(e).__name__, e, "WAS replaced - check its flag" if replaced else "was NOT replaced"))
+    try:
+        write_record(sha, new_sha, blob_id)
+    except OSError as e:
+        raise Refused(6, "INSTALLED, but the record could not be written (%s: %s) - re-run the same command: it is "
+                         "safe and rewrites the record; until then the size watch will report a mismatch" % (
+                             type(e).__name__, e))
     back, desc, ok, imm = live_state()
     good = back == data and ok and (imm or not USE_IMMUTABLE)
     print("INSTALLED: %s now %s, sha256 %s" % (TARGET, desc, hashlib.sha256(back or b"").hexdigest()[:12]))
     return 0 if good else 6
+
+
+def main(argv):
+    try:
+        return install(argv)
+    except Refused as r:
+        print("REFUSED: " + str(r))
+        return r.code
 
 
 if __name__ == "__main__":
