@@ -2277,9 +2277,13 @@ export class ActiveExecutionEngine {
           // never a second venue, never the clock, never the session. On HOLLOW it withholds this
           // tick exactly as the two skips above do, and (Langston C1) writes NOTHING to the shared
           // cache: a collapsed-bid mid under the venue tag is indistinguishable from a real one to
-          // every reader (#546). The withholding is TIME-BOUNDED (constraint 7): at `hollow_skip_cap`
-          // consecutive hollow ticks the guard YIELDS — the evaluator runs on the book as it is, the
-          // row is labelled hollow+yielded, an alert names it. Never trap, never re-price, never widen.
+          // every reader (#546). At `hollow_skip_cap` consecutive hollow ticks the guard YIELDS ITS
+          // COMPARATOR (so a re-seed can be judged) — but since D3 (2026-09-11, below) the tick is STILL
+          // REFUSED (`book_state_yield_refused`): BOTH hollow arms `continue`, so the evaluator never runs on
+          // an unusable book, and an alert names the yield. For an exit that refusal is a HOLD. (This header
+          // read "the evaluator runs on the book as it is" until 2026-10-21 — D3 superseded that; corrected
+          // in row 2 (4b), Langston's Step-2 fold. The venue-transition pause below relies on this: a blown
+          // book never reaches it.) Never trap, never re-price, never widen.
           {
             const _bs = assessBookStateNow(position.symbol);
             if (!_bs.ok) {
