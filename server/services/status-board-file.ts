@@ -12,6 +12,9 @@ import { readFile } from 'fs/promises';
 
 export const STATUS_BOARD_FILE = process.env.GOV_BOARD_FILE || '/var/lib/governance-checker/status-board.json';
 export const STATUS_BOARD_STALE_MS = 60 * 60 * 1000;
+// The board file's version this reader understands (BOARD_SCHEMA in scripts/governance-checker/status-board.mjs).
+// Anything else is refused with a reason, so a writer change cannot reach the page unread (Langston gate C (b)).
+export const STATUS_BOARD_SCHEMA = 1;
 
 export interface StatusBoardResponse {
   status: number;
@@ -38,6 +41,10 @@ export async function readStatusBoard(path: string = STATUS_BOARD_FILE, nowMs: n
   if (!Number.isFinite(generated)) {
     return { status: 503, body: { ok: false, reason: 'the board file carries no generated_at', pageBuild: build } };
   }
+  if (board?.schema !== STATUS_BOARD_SCHEMA) {
+    return { status: 503, body: { ok: false, reason: `the board file is version ${board?.schema ?? 'unknown'}; this page reads version ${STATUS_BOARD_SCHEMA}`, pageBuild: build } };
+  }
   const ageMs = Math.max(0, nowMs - generated);
-  return { status: 200, body: { ok: true, ...board, ageMs, stale: ageMs > STATUS_BOARD_STALE_MS, pageBuild: build } };
+  // `ok` and the computed fields come AFTER the spread, so nothing in the file can override them (Langston gate C (a)).
+  return { status: 200, body: { ...board, ok: true, ageMs, stale: ageMs > STATUS_BOARD_STALE_MS, pageBuild: build } };
 }

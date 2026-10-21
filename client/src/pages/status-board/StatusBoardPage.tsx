@@ -13,6 +13,8 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { AlertCircle, ChevronDown, ChevronRight, Clock, GitCommit } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
+import { unavailableFromError, type Unavailable } from './unavailable';
 
 type Waiting = { waiting: string; text: string };
 type Step = { step: number; at: string; sha: string } | null;
@@ -33,7 +35,6 @@ type Board = {
   items: Item[]; rest: RestRow[]; couldNotRead: { lineNo: number; why: string }[]; conflicts: { lineNo: number; item: string; why: string }[];
   counts: { items: number; rest: number; unrecognised: number; descriptionsOwed: number; conflicts: number; couldNotRead: number };
 };
-type Unavailable = { ok: false; reason: string; pageBuild: string | null };
 
 const SESSIONS: { key: string; name: string }[] = [
   { key: 'CC-A', name: 'OLD Claude' }, { key: 'CC-B', name: 'NEW Claude' },
@@ -117,6 +118,11 @@ function Section({ title, hint, children, defaultOpen = true }: { title: string;
 export default function StatusBoardPage() {
   const { data, isLoading, error } = useQuery<Board | Unavailable>({
     queryKey: ['/api/status-board'],
+    // Langston gate C: the default fetcher throws on a 503, so the board's own reason would never arrive. Read it back.
+    queryFn: async () => {
+      try { return await apiFetch('/api/status-board'); }
+      catch (e) { const u = unavailableFromError(e); if (u) return u; throw e; }
+    },
     // The checker writes every 30 minutes; a faster poll would only re-read one file.
     refetchInterval: 5 * 60 * 1000,
   });
@@ -132,6 +138,7 @@ export default function StatusBoardPage() {
             <h2 className="font-medium">No board to show</h2>
             <p className="mt-1 text-sm text-muted-foreground">{reason}</p>
             <p className="mt-2 text-xs text-muted-foreground">Shown as missing on purpose: an empty board and an unwritten one are different things.</p>
+            {data && !data.ok && <p className="mt-1 text-xs text-muted-foreground">Page build {data.pageBuild ? data.pageBuild.slice(0, 9) : 'unknown'}</p>}
           </div>
         </div>
       </div>
@@ -167,7 +174,7 @@ export default function StatusBoardPage() {
         {(b.counts.couldNotRead > 0 || b.counts.conflicts > 0 || b.counts.unrecognised > 0) && (
           <div className="rounded bg-red-500/10 px-2 py-1 text-xs text-red-700">
             Not everything could be read: {b.counts.couldNotRead} plan line{b.counts.couldNotRead === 1 ? '' : 's'} unreadable, {b.counts.conflicts} entr{b.counts.conflicts === 1 ? 'y' : 'ies'} to fix, {b.counts.unrecognised} status{b.counts.unrecognised === 1 ? '' : 'es'} not recognised.
-            {b.couldNotRead.map((c) => <div key={c.lineNo}>plan line {c.lineNo}: {c.why}</div>)}
+            {b.couldNotRead.map((c, i) => <div key={`${c.lineNo}-${i}`}>plan line {c.lineNo}: {c.why}</div>)}
           </div>
         )}
       </header>
@@ -194,8 +201,8 @@ export default function StatusBoardPage() {
         {waves.map((w) => (
           <Section key={w.wave} title={`${w.wave} (${w.rows.length})`} defaultOpen={false}>
             <ul className="space-y-1">
-              {w.rows.map((r) => (
-                <li key={r.planRow} className="rounded border bg-card px-2 py-1.5 text-sm">
+              {w.rows.map((r, i) => (
+                <li key={`${r.planRow}-${i}`} className="rounded border bg-card px-2 py-1.5 text-sm">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-2">
                     <span><span className="text-muted-foreground">{r.planRow}</span> {r.item}</span>
                     {r.state !== 'queued' && <StatePill state={r.state} label={r.stateLabel} />}

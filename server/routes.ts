@@ -1984,9 +1984,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // checker. Behind the login (authenticateToken), like every route that is not a public probe. Serves the
   // checker's file as written; 503 with a reason when it is missing or unreadable.
   apiRouter.get('/status-board', authenticateToken, async (_req: AuthenticatedRequest, res) => {
-    const { readStatusBoard } = await import('./services/status-board-file');
-    const out = await readStatusBoard();
-    res.status(out.status).json(out.body);
+    // Express 4 sends nothing for a rejected async handler; the import is the only throw surface (Langston gate C (2)).
+    try {
+      const { readStatusBoard } = await import('./services/status-board-file');
+      const out = await readStatusBoard();
+      res.status(out.status).json(out.body);
+    } catch (e: any) {
+      res.status(503).json({ ok: false, reason: `the status board could not be served (${String(e?.message ?? e).slice(0, 200)})`, pageBuild: null });
+    }
   });
 
   // POST /api/system/force-sync-canonical - Directive 11.7F: Force sync bridge documents from canonical
