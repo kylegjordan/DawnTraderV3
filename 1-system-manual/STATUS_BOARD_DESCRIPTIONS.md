@@ -32,19 +32,19 @@ Stopped sessions being woken every 30 minutes for nothing: each session's wake w
 ## CC-B (New Claude)
 
 ### B-ENTRY-GATE
-Refuses a trade entry whose price has drifted too far from its plan, in either direction, and makes the RTB refresh re-price what it holds. Carries the entry re-check and the crypto birth-feed items folded into it.
+Refuses a trade entry whose price has drifted more than 25% of the stop distance from its plan, checks the trade is still worth taking at the price actually paid, and makes the RTB refresh re-price the plan it holds. Carries the entry re-check and the crypto birth-feed items folded into it.
 
 ### B-BOOK-CHECKSUM-CIRCUIT-BREAKER
 Detects an order book that no longer matches the venue's, by the venue's own checksum, and switches that coin's book off until it is rebuilt, so no decision is made on a corrupted book.
 
 ### B-PRICE-FEED-COVERAGE
-Most crypto signals are priced from a 30-60 second poll while the live feed is sub-second. This puts every signal on the live feed and gives "fresh" one definition across the pipeline.
+First measures how fresh a price must be for the system to trade well, as one rule for every symbol. Then gives the SQE, the RTB refresh, promotion, resting orders and the price-driven strategies prices that meet it; a symbol whose feed cannot meet it is not traded.
 
 ### B-PLAN-PRICE-BASIS
-A signal's stop and target are set from one "now" price that is a smoothed midpoint for crypto or a thin stock's last trade for xStock. This bases the plan on the price a real trade would get.
+A signal's stop and target are set from one "now" price that is a smoothed midpoint for crypto or a thin stock's last trade for xStock. This bases each strategy's plan on the price a real trade would get, fixes the strategy-input defects found alongside it, and switches on the remaining xStock strategies.
 
 ### B-BOOK-TRUST-FLEET-GUARD
-Limits how many order books the checksum breaker can switch off at once, and makes a mass event raise one alert instead of one per coin.
+Limits how many order books the checksum breaker can switch off at once, makes a mass event raise one alert instead of one per coin with a bulk re-check, and closes two small gaps Langston found in the breaker's bookkeeping.
 
 ### B-ENTRY-LEVEL-RECHECK
 Re-checks an entry's price against its plan at the moment of entry. Moved into B-ENTRY-GATE by Kyle's locked list.
@@ -77,7 +77,7 @@ A decision on the archive's retention windows, raised when the disk reached 65% 
 Proves that recorded market history replays to the same trading decisions, so tests run on replays can be trusted.
 
 ### PAPER-RESET-3000
-Resets paper mode to its new $820-per-slot sizing and starts a new dashboard epoch, so results from before and after the trading fixes are not mixed. Runs only on Kyle's decision.
+Resets paper mode to $820 and starts a new dashboard epoch, so results from before and after the trading fixes are not mixed. Runs only on Kyle's decision.
 
 ### row 100
 The learning-record restart: once the last fix that changes what a closed trade looks like has landed, the learning record starts again from that point, so the system learns only from trades recorded the right way.
