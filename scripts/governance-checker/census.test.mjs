@@ -12,6 +12,7 @@ import {
   historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord, recountAfterLive,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
+import { presprintRows, idsInCell, mapStatus, mapWaiting, planRowsByBatch } from './checker.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -140,11 +141,17 @@ const throws = (fn, re) => { try { fn(); return false; } catch (e) { return re.t
 const PLAN = [
   '# plan',
   '## 0. Clear the plates',
+  'moved into the pre-sprint table below (B-STATUS-BOARD)',
+  '## 0a. Pre-sprint',
+  '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |',
+  '|---|---|---|---|---|---|---|---|---|',
+  '| 0 — clear the plates | 1 | B-GOV-REPORTING | CC-A (Old Claude) | none | | Kyle 2026-09-28 | ✅ CLOSED 2026-09-29 | nothing |',
+  '| 0 — clear the plates | 2 | B-CREDENTIALS-PRIVATE-REPO | Infra Claude | none | #1023 | Kyle 2026-09-28 | IN FLIGHT — OBJ-4a DONE 2026-09-29 | Infra Claude |',
+  '| 0 — clear the plates | 3 | B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN FLIGHT — Step 7 | nothing |',
+  '### history',
   '| session | in flight now | disposition |',
   '|---|---|---|',
-  '| CC-A (Old Claude) | B-GOV-REPORTING — ✅ CLOSED 2026-09-29 | ✅ done |',
-  '| Infra Claude | B-CREDENTIALS-PRIVATE-REPO (#1023) — NEW: (4) OBJ-4a DONE 2026-09-29 | RUN NOW |',
-  '| CC-C (Analyst Claude) | B-OPEN-THING — Step 7 | FINISH |',
+  '| CC-A (Old Claude) | B-HISTORY-ONLY — Step 2 | FINISH |',
   '## 4. The plan',
   '| # | item | batch / reference | owner | status | report | note |',
   '|---:|---|---|---|---|---|---|',
@@ -611,6 +618,65 @@ function frameResurface(alert, d, nowMs) {
   ok('A9 an unparseable stated count is shown, never read as 0', unp.unparseable.length === 1 && unp.al >= 1);
   let threw = false; try { recountAfterLive('# no heading here'); } catch { threw = true; }
   ok('A10 no "## After live" heading refuses', threw);
+}
+
+// ── B-STATUS-BOARD (#1227) OBJ-1: the ONE pre-sprint table, read by presprintRows; §0's 3-column reader removed ──
+{
+  // Langston's mutation pair (scope r4 condition 1): a row under `### history` must NOT move the census; the same
+  // item changed in the new table MUST.
+  const base = parsePlan(PLAN);
+  ok('PS1 the census §0 list is the new table (3 items), and the history row is not in it',
+    base.s0.length === 3 && !base.s0.some((r) => r.inFlight.includes('B-HISTORY-ONLY')), JSON.stringify(base.s0.map((r) => r.inFlight)));
+  const histMut = parsePlan(PLAN.replace('B-HISTORY-ONLY — Step 2', 'B-HISTORY-MUTATED — Step 9'));
+  ok('PS2 mutating a HISTORY row does not move the census §0 list',
+    JSON.stringify(histMut.s0) === JSON.stringify(base.s0) && JSON.stringify(planLines(histMut)) === JSON.stringify(planLines(base)));
+  const tableMut = parsePlan(PLAN.replace('| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN FLIGHT — Step 7 |',
+    '| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | ✅ CLOSED 2026-10-21 |'));
+  const closedOf = (pl, id) => planLines(pl).find((x) => x.id === id)?.closed;
+  ok('PS3 mutating the same item IN THE TABLE does move it (open → closed)', closedOf(base, 'B-OPEN-THING') === false && closedOf(tableMut, 'B-OPEN-THING') === true);
+  ok('PS4 a header that differs by one character refuses (no silent empty list)',
+    throws(() => parsePlan(PLAN.replace('| issue | agreed |', '| issue | agreed  |')), /pre-sprint header/));
+  ok('PS5 two copies of the header refuse', throws(() => parsePlan(PLAN.replace('### history', '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |\n### history')), /appears 2 times/));
+  // #1200's positive control: an issue placed ONLY in the pre-sprint table reads placed; removed, it is unplaced again.
+  const L = parseLedger(['### #1023 OPEN (Infra Claude) x', 'HOME: somewhere, no id'].join('\n'));
+  const pls = parseAfterLive('## After live — 0\n');
+  const rm = parseRoadmap('| 19-1 | a | b |');
+  ok('PS6 an issue named only in the pre-sprint table is placed (#1200 closed)', placement(L, base, pls, rm, []).get(1023) === 'number');
+  const without = parsePlan(PLAN.replace(' #1023 ', ' '));
+  ok('PS7 ...and is unplaced again when the table no longer names it', placement(L, without, pls, rm, []).get(1023) !== 'number');
+  // A row-backed item keeps its id for placement but not its own closure (its §4 row is the one copy).
+  const rowBacked = parsePlan(PLAN.replace('| B-OPEN-THING | CC-C (Analyst Claude) | none | | Kyle 2026-09-28 | IN FLIGHT — Step 7 |',
+    '| B-ALPHA | CC-A (Old Claude) | 1 | | Kyle 2026-09-28 | row |'));
+  ok('PS8 a row-backed item is not a second closure line (planLines carries only its §4 key)',
+    planLines(rowBacked).filter((x) => x.id === 'B-ALPHA').every((x) => x.where.startsWith('§4')));
+}
+{
+  // presprintRows directly: conflicts are per-row marks, never throws; ids are an exact SET (the B-TOKEN-WATCH pair).
+  const T = (rows) => ['## 0a. x', '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |', '|---|---|---|---|---|---|---|---|---|', ...rows, '## 1. next'].join('\n');
+  const r = presprintRows(T([
+    '| s | 1 | B-TOKEN-WATCH | Infra Claude | none | | Kyle | PARKED | Kyle |',
+    '| s | 2 | B-OWNS-A-ROW | CC-A | 12 | | Kyle | QUEUED | nothing |',
+    '| s | 3 | B-NO-ROW | CC-A | none | | Kyle | row | nothing |',
+    '| s | 4 | too | few | cells |',
+  ]));
+  ok('PS9 four rows read, one malformed, two one-copy conflicts, no throw', r.items.length === 3 && r.malformed.length === 1 && r.conflicts.length === 2);
+  ok('PS10 `B-TOKEN-WATCH` is its own id, not a prefix of `B-TOKEN-WATCH-AUTH`',
+    JSON.stringify(idsInCell('B-TOKEN-WATCH')) === '["B-TOKEN-WATCH"]' && !idsInCell('B-TOKEN-WATCH-AUTH').includes('B-TOKEN-WATCH'));
+  ok('PS11 F-G ids are seen (the config grammar cannot, config.mjs:30-31)', idsInCell('F-G-1 and F-G-2').length === 2);
+  // Langston's pre-audit condition 4: a broken §0a must not freeze the §4/§5 rule.
+  const broken = PLAN.replace('| stage | order | item |', '| stage | ordr | item |');
+  let p4ok = true; try { planRowsByBatch(broken); } catch { p4ok = false; }
+  ok('PS12 a broken pre-sprint header leaves planRowsByBatch (the §4/§5 gate) reading', p4ok);
+  ok('PS13 ...while presprintRows refuses the same text', throws(() => presprintRows(broken), /pre-sprint header/));
+}
+{
+  // The seven states: the stated normaliser (strip leading non-alphanumerics, longest prefix, case-insensitive).
+  const cases = [['QUEUED', 'queued'], ['✅ CLOSED 2026-10-15', 'done'], ['⏳ IN OBSERVATION 2026-10-17', 'observation'],
+    ['IN FLIGHT — Step 7', 'in_progress'], ['STEP 7 of 11', 'in_progress'], ['⏸ PAUSED', 'parked'], ['FOLDED into row 2', 'moved'],
+    ['BUILT — deploy after', 'built'], ['—', 'unrecognised'], ['REOPENED — Step 3', 'unrecognised']];
+  for (const [cell, want] of cases) ok(`PS14 status "${cell}" → ${want}`, mapStatus(cell).state === want, mapStatus(cell).state);
+  ok('PS15 waiting-on: a data window, a declared word, and an unknown word', mapWaiting('data — 20 closes').waiting === 'data'
+    && mapWaiting('Kyle (both-sided window)').waiting === 'Kyle' && mapWaiting('me').waiting === 'unrecognised');
 }
 
 // ── THE FENCE (#1180, Langston Step 4; at the END so every real runCensus result above is in the union) ──

@@ -16,6 +16,7 @@ import {
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
   SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
   extractBatchId, batchIdToFileRegex, LEDGER_ROWS, GOV_REF, PLAN_LINE, extractLeadingBatchId,
+  STATUS_PREFIXES, WAITING_WORDS,
 } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -373,6 +374,69 @@ export function planRowsByBatch(planText, extract = extractLeadingBatchId) {
     throw new Error(`the §5 header (${PLAN_LINE.s5Header}) appears ${s5Headers.length} times${s5Headers.length ? ` (lines ${s5Headers.join(', ')})` : ''}; exactly one is required`);
   }
   return { rows, unparsed, malformed, rows4, rows5 };
+}
+
+// ── THE PRE-SPRINT TABLE (B-STATUS-BOARD #1227, OBJ-1) ─────────────────────────────────────────────────────
+// A SEPARATE reader, deliberately not part of planRowsByBatch: decidePlanLineTick (poller.mjs) freezes the §4/§5
+// rule for the tick on ANY throw from planRowsByBatch, so a fault in this table must never reach it (Langston,
+// pre-audit condition 4). This reader throws only on the table's own header contract; its callers catch.
+// It reads ONLY the text it is handed; callers pass the plan (four files carry a `## 0a.` heading).
+// The section runs from `## 0a.` to the next `## ` heading. Inside it, exactly ONE line equals
+// PLAN_LINE.s0aHeader (strict-equal, §5's rule); the table is the contiguous run of `|` lines after it. Every
+// other table in the section (the `history` tables) is ignored. A row of the wrong width is a per-row
+// `malformed` entry and a one-copy conflict a per-row `conflicts` entry — neither throws (scope C3).
+const PRESPRINT_NONE = /^(?:none|—|-|)$/i;
+export function presprintRows(planText) {
+  if (typeof planText !== 'string' || planText.trim() === '') throw new Error('the plan text is empty or absent');
+  const width = planCells(PLAN_LINE.s0aHeader).length;
+  const items = [], malformed = [], conflicts = [], headers = [];
+  let inSection = false, inTable = false;
+  planText.split('\n').forEach((raw, i) => {
+    const line = raw.replace(/\r$/, ''), lineNo = i + 1;
+    if (/^## /.test(line)) { inSection = /^## 0a\./.test(line); inTable = false; return; }
+    if (!inSection) return;
+    if (line.trimEnd() === PLAN_LINE.s0aHeader) { headers.push(lineNo); inTable = true; return; }
+    if (!line.trim().startsWith('|')) { inTable = false; return; }
+    if (!inTable || PLAN_SEPARATOR.test(line.trim())) return;
+    const cells = planCells(line);
+    if (cells.length !== width) { malformed.push({ lineNo, cellCount: cells.length }); return; }
+    const [stage, order, item, owner, planRow, issue, agreed, status, waitingOn] = cells;
+    const pr = deMark(planRow);
+    const row = { lineNo, stage, order, item, owner, planRow: PRESPRINT_NONE.test(pr) ? null : pr,
+      issue, agreed, status, waitingOn, ids: idsInCell(item) };
+    const own = deMark(status).toLowerCase() === 'row';
+    if (row.planRow && !own) conflicts.push({ lineNo, item, why: 'owns a §4 row but carries its own status (one copy: the §4 row is the status)' });
+    if (!row.planRow && own) conflicts.push({ lineNo, item, why: 'reads `row` but names no §4 row' });
+    items.push(row);
+  });
+  if (headers.length !== 1) {
+    throw new Error(`the pre-sprint header (${PLAN_LINE.s0aHeader}) appears ${headers.length} times${headers.length ? ` (lines ${headers.join(', ')})` : ''} in ## 0a.; exactly one is required`);
+  }
+  return { items, malformed, conflicts, headerLine: headers[0] };
+}
+// Exact ids in a cell, as a SET — never substring (Langston's pre-audit r3 condition: `B-TOKEN-WATCH` must not
+// match row 197a's `B-TOKEN-WATCH-AUTH`). The config grammar plus the F-G-* form it lacks (config.mjs:30-31) and
+// the PAPER-RESET-* procedure name.
+const CELL_ID = /(?<![A-Za-z0-9-])(?:P\d{1,3}-B\d+(?:\.\d+)?[a-z]?|B-NEW-\d+[a-z]?|B-[A-Z][A-Z0-9]+(?:-(?:[A-Z0-9]*\d[a-z]|[A-Z0-9]+))*(?:\.\d+)?|T-[A-Z][A-Z0-9]+(?:-[A-Z0-9]+)*|F-G-\d+[a-z]?|PAPER-RESET-\d+)(?![A-Za-z0-9_])(?!-[A-Za-z0-9])/g;
+export function idsInCell(cell) { return [...new Set(deMark(cell).match(CELL_ID) || [])]; }
+// The seven plain states (config.mjs STATUS_PREFIXES): strip leading non-alphanumerics, longest prefix wins.
+const PREFIXES_LONGEST_FIRST = [...STATUS_PREFIXES].sort((a, b) => b[0].length - a[0].length);
+export function mapStatus(cell) {
+  const text = deMark(cell);
+  const stripped = text.replace(/^[^A-Za-z0-9]+/u, '');
+  if (!stripped) return { state: 'unrecognised', text };
+  const up = stripped.toUpperCase();
+  const hit = PREFIXES_LONGEST_FIRST.find(([p]) => up.startsWith(p));
+  return hit ? { state: hit[1], text } : { state: 'unrecognised', text };
+}
+// `waiting on` (scope OBJ-1, C2): a declared word, a `data — …` window, or `unrecognised`.
+export function mapWaiting(cell) {
+  const text = deMark(cell);
+  if (!text) return { waiting: 'nothing', text: '' };
+  if (/^data\s*[—-]/i.test(text)) return { waiting: 'data', text };
+  const low = text.toLowerCase();
+  const hit = WAITING_WORDS.find((w) => low === w.toLowerCase() || low.startsWith(w.toLowerCase() + ' ') || low.startsWith(w.toLowerCase() + ' (') || low.startsWith(w.toLowerCase() + ','));
+  return hit ? { waiting: hit, text } : { waiting: 'unrecognised', text };
 }
 
 // The STATUS test — fail on the machine default only (Langston §10g N6): FAIL iff deMark(status) is EMPTY or

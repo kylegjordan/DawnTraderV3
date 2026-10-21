@@ -203,7 +203,39 @@ export const PLAN_LINE = {
   enabled: true,   // P61 flip (B-PLAN-CURRENCY-CHECK, Langston Step 4) — this commit; the comment above records the gate.
   s4Header: '| # | item | batch / reference | owner | status | report | note |',
   s5Header: '| item | owner | closes | report |',
+  // B-STATUS-BOARD (#1227) OBJ-1: the ONE pre-sprint table in `## 0a.`, which replaced §0's and §0a's prose
+  // tables. Read by presprintRows() (checker.mjs) — a SEPARATE reader, never inside planRowsByBatch, so a
+  // fault here cannot freeze the §4/§5 rule (Langston, pre-audit condition 4). Exactly ONE header line,
+  // strict-equal (§5's rule); a lone edit to this constant or to the plan's header makes the table unreadable.
+  s0aHeader: '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |',
 };
+
+// ── THE STATUS BOARD (B-STATUS-BOARD #1227) ───────────────────────────────────────────────────────────────
+// The board file the checker writes and the app reads. Default under /var/lib (NOT the script dir, which the
+// auto-redeploy fast-forwards); written with writeStateAtomic. The pairing of the two is new (pre-audit A2).
+export const BOARD_FILE = process.env.GOV_BOARD_FILE || '/var/lib/governance-checker/status-board.json';
+export const BOARD_DESCRIPTIONS_PATH = '1-system-manual/STATUS_BOARD_DESCRIPTIONS.md';
+// A status cell maps to ONE of seven plain states by a STATED rule (Langston B6): strip leading
+// non-alphanumeric characters (the ✅ ⏳ ⏸ markers), then take the LONGEST declared prefix, case-insensitive.
+// Nothing left, or no prefix matches ⇒ 'unrecognised'. Every live §4 cell maps at the commit that wrote this
+// (319/319); status-board.test.mjs fails on a new leading word, in §4 OR the pre-sprint table.
+export const STATUS_PREFIXES = [
+  ['IN OBSERVATION', 'observation'], ['OBSERVATION', 'observation'],
+  ['IN FLIGHT', 'in_progress'], ['STEP', 'in_progress'], ['OBJ-', 'in_progress'], ['INCREMENT', 'in_progress'],
+  ['OPEN', 'in_progress'], ['HOTFIX', 'in_progress'],
+  ['QUEUED', 'queued'], ['BUILT', 'built'], ['PARKED', 'parked'], ['HELD', 'parked'], ['PAUSED', 'parked'],
+  ['DONE', 'done'], ['CLOSED', 'done'], ['VERIFIED', 'done'],
+  ['MOVED', 'moved'], ['SUBSUMED', 'moved'], ['FOLDED INTO', 'moved'], ['WITHDRAWN', 'moved'],
+];
+export const STATE_LABELS = {
+  queued: 'queued', in_progress: 'in progress', built: 'built, not yet live', observation: 'watching data',
+  parked: 'parked', done: 'done', moved: 'moved or withdrawn', unrecognised: 'unrecognised',
+};
+// `waiting on` vocabulary (scope OBJ-1, C2). A session is named by its plan owner form; `data — …` is free text
+// after the dash. Anything else renders `unrecognised — <text>`.
+export const WAITING_WORDS = ['nothing', 'Kyle', 'Langston', 'Coltrane', 'CC-A', 'CC-B', 'CC-C', 'Infra Claude'];
+export const BOARD_STALE_MS = 60 * 60 * 1000;      // the page's stale banner (OBJ-4)
+export const DESCRIPTION_MAX_CHARS = 700;          // one paragraph; longer shows a `too long` mark (OBJ-2)
 
 // Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
 export const DEFAULT_CLASS = 'architecture';

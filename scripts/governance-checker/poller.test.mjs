@@ -1304,7 +1304,7 @@ const planFixture = ({ waveB = H4, s5 = [H5], s4a = [], s4b = [], s5rows = [] } 
   const MON = Date.parse('2026-09-28T09:00:00Z');                   // Monday of ISO week 2026-W40
   const DAY = 24 * HOUR;
   const W40 = '2026-W40', W41 = '2026-W41';
-  const PLANTEXT = ['## 0. x', '| session | in flight now | disposition |', '|---|---|---|', '| CC-A (Old Claude) | B-FOO — Step 3 | FINISH |',
+  const PLANTEXT = ['## 0. x', '## 0a. pre-sprint', '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |', '|---|---|---|---|---|---|---|---|---|', '| 0 | 1 | B-FOO | CC-A (Old Claude) | 1 | | Kyle | row | nothing |',
     '## 4. The plan', '| # | item | batch / reference | owner | status | report | note |', '|---:|---|---|---|---|---|---|',
     '| 1 | foo | B-FOO | CC-A (Old Claude) | QUEUED | — | — |', '## 5. Running now', '| item | owner | closes | report |', '|---|---|---|---|',
     '## 6. Who', '| session | group | items |', '|---|---|---:|', '| CC-A (Old Claude) | g | 1 |', '## 7. end'].join('\n');

@@ -28,7 +28,7 @@ import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { BATCH_ID_PATTERNS, extractLeadingBatchId, batchIdToFileRegex, DOCS, CENSUS_BODY_MAX, isoWeek } from './config.mjs';
-import { findGlobDoc, showFileAt, lsTreeNamesAt } from './checker.mjs';
+import { findGlobDoc, showFileAt, lsTreeNamesAt, presprintRows } from './checker.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -368,14 +368,22 @@ export function parsePlan(text) {
     if (section in sec) sec[section].push(line);
     if (!line.trim().startsWith('|') || SEPARATOR.test(line.trim())) return;
     const c = tableCells(line), lineNo = i + 1;
-    if (section === 0 && c.length === 3 && c[0] !== 'session') s0.push({ lineNo, session: c[0], inFlight: c[1], disposition: c[2] });
-    else if (section === 4 && c.length === 7 && /^\d+[a-z0-9]*$/.test(c[0])) {   // ids like 2a0b (#1139 P1)
+    if (section === 4 && c.length === 7 && /^\d+[a-z0-9]*$/.test(c[0])) {   // ids like 2a0b (#1139 P1)
       const [rowNo, item, batch, owner, status, report, note] = c;
       s4.push({ lineNo, rowNo, item, batch, owner, status, report, note });
     } else if (section === 5 && c.length >= 3 && c[0] !== 'item') s5.push({ lineNo, item: c[0], owner: c[1], closes: c[2], report: c[3] ?? '' });
     else if (section === 6 && c.length === 3 && c[0] !== 'session') s6.push({ lineNo, session: c[0], group: c[1], items: c[2] });
   });
   if (s4.length === 0) throw new Error(`census: ${CENSUS_SOURCES.plan} has ZERO §4 rows — refusing`);
+  // B-STATUS-BOARD (#1227) OBJ-1: §0's 3-column reader is REMOVED (Langston, scope r4 condition 1 — its section
+  // tracker cannot see a `history` sub-heading, so moved rows would still have parsed as live). `s0` is now the
+  // ONE pre-sprint table in `## 0a.`, read by checker.mjs presprintRows (a throw on its header contract fails
+  // this census run, visibly). A row-backed item (`status` = `row`) keeps its id here for placement and the
+  // `after §0` references, but its closure is its §4 row's, so planLines skips it.
+  for (const it of presprintRows(text).items) {
+    s0.push({ lineNo: it.lineNo, session: it.owner, inFlight: [it.item, it.issue].join(' '), disposition: it.status,
+      rowBacked: deMark(it.status).toLowerCase() === 'row' });
+  }
   return { s0, s4, s5, s6, s6Text: sec[6].join('\n') };
 }
 
@@ -432,8 +440,9 @@ export function placement(ledger, plan, pls, roadmap, reportNames, opts = {}) {
     const homeLines = e.block.map((b) => b.text).filter((t) => /\bHOME\b/.test(t));
     const homeIds = [...new Set(homeLines.flatMap(idsIn))];
     const numIn = (t) => hasNum(t, n);
-    if (plan.s4.some((r) => inRow(r, numIn, (note) => noteHomesNum(note, n))) || pls.afterLive.some(numIn)) { res.set(n, 'number'); continue; }
-    if (homeIds.some((id) => plan.s4.some((r) => inRow(r, (t) => hasId(t, id), (note) => noteHomesId(note, id))) || pls.afterLive.some((l) => hasId(l, id)))) { res.set(n, 'homeBatch'); continue; }
+    // B-STATUS-BOARD closes #1200: the pre-sprint table (plan.s0, its item and issue cells) is a placement list.
+    if (plan.s4.some((r) => inRow(r, numIn, (note) => noteHomesNum(note, n))) || pls.afterLive.some(numIn) || plan.s0.some((r) => numIn(r.inFlight))) { res.set(n, 'number'); continue; }
+    if (homeIds.some((id) => plan.s4.some((r) => inRow(r, (t) => hasId(t, id), (note) => noteHomesId(note, id))) || pls.afterLive.some((l) => hasId(l, id)) || plan.s0.some((r) => hasId(r.inFlight, id)))) { res.set(n, 'homeBatch'); continue; }
     if (pls.parked.some(numIn) || homeIds.some((id) => pls.parked.some((l) => hasId(l, id)))) { res.set(n, 'parked'); continue; }
     const rmNum = roadmap.rows.some(numIn);
     const rmHome = homeLines.some((l) => /POST_AUDIT_ROADMAP|roadmap/i.test(l) &&
@@ -503,7 +512,7 @@ export function listE(plan) {
 export function planLines(plan) {
   const out = [];
   for (const r of plan.s4) for (const id of idsIn(r.batch)) out.push({ key: `§4:${r.rowNo}:${id}`, id, closed: cellClosed(r.status), owner: firstSession(r.owner), where: `§4 row ${r.rowNo}` });
-  for (const r of plan.s0) for (const id of idsIn(r.inFlight)) out.push({ key: `§0:${id}`, id, closed: s0Closed(r), owner: firstSession(r.session), where: '§0' });
+  for (const r of plan.s0) if (!r.rowBacked) for (const id of idsIn(r.inFlight)) out.push({ key: `§0:${id}`, id, closed: s0Closed(r), owner: firstSession(r.session), where: '§0' });
   for (const r of plan.s5) for (const id of idsIn(r.item)) out.push({ key: `§5:${id}`, id, closed: cellClosed(r.closes), owner: firstSession(r.owner), where: '§5' });
   return out;
 }
