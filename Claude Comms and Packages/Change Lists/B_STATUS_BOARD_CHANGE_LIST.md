@@ -1,7 +1,7 @@
 # B-STATUS-BOARD — CHANGE LIST (Step 4)
 
 **Owner:** CC-A · **Issue:** `#1227` (closes `#1200`) · **Reviewer:** Langston
-**Review ref:** `review/b-status-board` at **`3bbf2a890`** (five commits on `e8eb7143e`). **Not on `migration/aws-supabase`:** a push of checker code there IS its deploy (the box fast-forwards before every tick), so this branch is reviewed by sha first (`dt-review show 3bbf2a890 <path>`).
+**Review ref:** `review/b-status-board` at **`06bb59bff`** (six commits on `e8eb7143e`). **Not on `migration/aws-supabase`:** a push of checker code there IS its deploy (the box fast-forwards before every tick), so this branch is reviewed by sha first (`dt-review show 06bb59bff <path>`).
 
 ## Dispatch header (`workflow-04-code-review`)
 | # | field | value |
@@ -10,22 +10,22 @@
 | ii | **the class's doc set** | **scope** present — `Scope Files/B_STATUS_BOARD_SCOPE.md` r6 · **pre-audit** present — `Scope Files/B_STATUS_BOARD_PRE_AUDIT.md` r4 · **change list** present — this file · **CHANGES_AND_FIXES** absent, lands at Step 10 · **BATCH_CATALOG** absent, Step 10 · **RUNNING_ISSUES** (`#1227`, `#1200` close, `#670` and `B-CREW-STATUS-2` dissolve) absent, Step 10 · **task-list row** absent, Step 10 · **SIM** applicable (a new component and a new cross-cutting file), Step 10 · **System Manual** judged N/A: no architecture, strategy, regime, filter, signal-pipeline or maths change — a display and governance-tooling batch · **completion report** absent, Step 11 · **DELETED_COMPONENTS_LOG / STORAGE_POLICY / GOVERNANCE_EXCEPTIONS** rows land with P10 (crew-status retirement) after the board is verified |
 | iii | **Step-2 reference** | `Scope Files/B_STATUS_BOARD_PRE_AUDIT.md` (approved on r3 at `42aa8c4f9`; r4 at `a54b4b0f0` answers the r5 read) |
 
-## Files (16; `git diff --stat e8eb7143e 3bbf2a890`, untracked checked: none but local `.claude/launch.json`)
+## Files (16; `git diff --stat e8eb7143e 06bb59bff`, untracked checked: none but local `.claude/launch.json`)
 | file | what | plan item |
 |---|---|---|
 | `scripts/governance-checker/config.mjs` | `PLAN_LINE.s0aHeader`; `BOARD_FILE`, `BOARD_DESCRIPTIONS_PATH`, `STATUS_PREFIXES` (the 17 measured words + `PAUSED`, `VERIFIED`), `STATE_LABELS`, `WAITING_WORDS`, `BOARD_STALE_MS`, `DESCRIPTION_MAX_CHARS` | P1, P4 |
-| `scripts/governance-checker/checker.mjs` | `presprintRows` (separate export), `idsInCell` (exact-set ids), `mapStatus`, `mapWaiting` | P1, P4 |
+| `scripts/governance-checker/checker.mjs` | `presprintRows` (separate export), `idsInCell` (exact-set ids; every config form incl. `B79.0n`, plus `F-G-*`, `PAPER-RESET-*`), `mapStatus`, `mapWaiting` | P1, P4 |
 | `scripts/governance-checker/census.mjs` | §0's 3-column branch removed; `s0` built from `presprintRows`; row-backed items skipped by `planLines`; `placement()` also reads the table (the `#1200` fix) | P3 |
 | `scripts/governance-checker/status-board.mjs` (new) | `parseDescriptions`, `lastStepFor` (anchored), `buildBoard` (pure), `allSubjects`, `runStatusBoard` (atomic write + `gov-board-failed`) | P6 |
 | `scripts/governance-checker/poller.mjs` | `parseExceptionsLegacy` adds `openReason`; `runStatusBoardSafely` at BOTH `maybeRunWeekly` sites; `status-board.mjs` in `DRIFT_LOADED_FILES` | P5, P6 |
-| `*.test.mjs` (census, poller, status-board) · `.github/workflows/ci.yml` | fixtures moved to the new table; PS1-PS15; SB1-SB27 + SB12b; LIVE0-LIVE5 on the real plan; a CI step | P9 |
+| `*.test.mjs` (census, poller, status-board) · `.github/workflows/ci.yml` | fixtures moved to the new table; PS1-PS15; SB1-SB28 + SB12b; LIVE0-LIVE5 on the real plan; a CI step | P9 |
 | `server/services/status-board-file.ts` (new) · `server/routes.ts` | `GET /api/status-board` behind `authenticateToken`; 503 with a reason when the file is missing or unreadable; two ages | P7 |
 | `client/src/pages/status-board/StatusBoardPage.tsx` (new) · `client/src/App.tsx` | the page, inside `RequireAuth` | P8 |
 | `server/tests/unit/b-status-board.test.ts` (new) | the reader by behaviour; the login by structure | P9 |
 | `1-system-manual/SPRINT_TO_LIVE_PLAN.md` | §0 and §0a become ONE 72-line table in §0a; both old tables verbatim under `### history` | P2 |
 | `1-system-manual/STATUS_BOARD_DESCRIPTIONS.md` (new) | one plain line per item, drafted from each item's own plan row, scope or issue, for owners to correct | P3 (descriptions) |
 
-**Local runs at `3bbf2a890`:** status board 34/34 · census 221/221 · poller 443/443 · vitest (`b-status-board`, `b-mutating-routes-auth`) 23/23 · tsc baseline 329 = 329. **Mutations proven:** LIVE0 (failed before the migration landed), the census PS pair (a history row moves nothing; the same item in the table moves the census), SB12b and LIVE5 (each fails on a planted fault). SB15 (the `B-TOKEN-WATCH` / `-AUTH` pair) is a fixture assertion, not mutation-proved.
+**Local runs at `06bb59bff`:** status board 35/35 · census 221/221 · poller 443/443 · vitest (`b-status-board`, `b-mutating-routes-auth`) 23/23 · tsc baseline 329 = 329. **Mutations proven:** LIVE0 (failed before the migration landed), the census PS pair (a history row moves nothing; the same item in the table moves the census), SB12b, SB28 and LIVE5 (each fails on a planted fault). SB15 (the `B-TOKEN-WATCH` / `-AUTH` pair) is a fixture assertion, not mutation-proved.
 
 ## Load-bearing hunks
 
