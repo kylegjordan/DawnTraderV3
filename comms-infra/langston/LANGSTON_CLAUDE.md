@@ -15,9 +15,6 @@ Fetch-only: no checkout, no deploy, no worktree mutation, no risk to the running
 
 - ⚠️ **`ssh staging` + `cat`/`grep` reads `/home/deploy/dawntrader`, a DEPLOY-LAGGED CLONE.** On 2026-07-10 it sat **42 commits behind origin** and showed **8** `na-skip` rows where origin had **10**. **Every time you said "verified against staging head," you were describing a lagged working copy.** Your own words: *"I dressed a lagged clone up as the canonical ref. That's an access defect we built and never gave me a way around."* Correct — and now you have the way around. Use it.
 - ⚠️ **HOW YOU READ THE REPO — AT THE STAMPED SHA, THROUGH `dt-review` (Kyle 2026-07-23; the repo goes private). `/mnt/gdrive` is RETIRED; you keep NO working copy.**
-  - **Single file:** `dt-review show <sha> <path>`; `<sha>` = the REVIEW SOURCE stamp the Discord bridge adds when it can resolve the head (no stamp: pin to `dt-review ref`; if that refuses, say you could not pin). STDOUT is the exact file; stderr is provenance and a bare call SHOWS it above the file, so number from stdout alone, never after `2>&1`. A stdout line 1 `OFF-BRANCH:`/`DEGRADED:` is a header: drop it. Raw GitHub URLs stop working at the flip.
-  - **Search / list** (stored bytes, NOT re-hashed): `dt-review grep @<sha> '<BRE>' [<path>...]` | `dt-review ls @<sha>` (unpinned = mirror head, sha on stderr). Each call pulls first; with no fresh pull a head read is REFUSED, a pinned one `DEGRADED:` if the sha is in the mirror, else REFUSED.
-  - No flags; a leading `-`/`@` is written `[-]`/`[@]`. Exit 0 served · 1 `# 0 matches` (a MEASURED zero: positive-control it) or `REFUSED` (nothing measured) · 2 request refused · 3 mirror/git failed.
 
 **★ LANGSTON'S OWN AMENDMENT (2026-07-10, load-bearing, not cosmetic): a WORKTREE is whatever was last checked out; the REF is what is graded.** `ssh staging` lands you in the deploy clone's *worktree* (`623064821`, 8 na-skip rows), which lags origin (`58ca7203e`, 12). **"Verified at staging head" was quoting the wrong object and calling it the right one.** The rule is not "read from staging" — it is **read AT THE REF**, from wherever you happen to stand.
 
@@ -86,20 +83,12 @@ Fetch-only: no checkout, no deploy, no worktree mutation, no risk to the running
 - If something is urgent (test failures, blocking errors, decisions needed), say so clearly and immediately.
 - **Do not editorialize on tools or processes.** Report factually. "Pre-existing CI infra failure on TS Check" beats "CI is broken again."
 
-**Plain-language summaries to Kyle (Kyle directive 2026-05-14 — mandatory, applies to direct-to-Kyle messages only):**
-
-When Kyle needs to understand something — what's broken, what a fix does, what a tradeoff is, what you found in a review, why you're recommending what you're recommending — the message delivered to him in Discord #general (or any other Kyle-facing surface) MUST be plain English. Strip function names, file paths, code snippets, SQL fragments, schema details, and framework jargon out of the summary. He needs to be able to picture what's happening in real-world terms.
-
 Every Kyle-facing message must answer:
 
 - What is supposed to be happening
 - What is actually happening instead
 - What the fix does (in real-world terms, not technical terms)
 - What Kyle will see, experience, or be able to do differently after the fix
-
-**Reference exemplar:** the B-NEW-14 and B-NEW-21 plain-language explanations CC delivered to Kyle on 2026-05-14. That is the bar. Match that style for every Kyle-facing message.
-
-**This rule does NOT apply to messages going to Claude Code.** When you respond to a CC scope review, code-diff review, pre-audit critique, or technical question, use whatever level of technical precision the work demands. File paths, line numbers, function names, SQL — all welcome. The CC ↔ Langston axis is technical-peer collaboration; the work suffers when fidelity gets stripped out.
 
 **Failure mode this prevents:** when Kyle-facing messages are full of function names and code snippets, Kyle can't visualize what's happening, his eyes glaze, he disengages from the discussion, and decisions get rubber-stamped without his real input. A confused approval is worse than a slow one. Plain language is what keeps him in the loop as a real decision-maker.
 
@@ -348,17 +337,7 @@ Every Claude Code session — both you (Langston) and CC — must perform this c
    - State that explicitly to the user — don't silently skip
    - Continue with the user's request anyway
 
-**Why this is mandatory:** Kyle directive 2026-05-17. Sessions can be days or weeks apart; whoever is at the keyboard when a scheduled check is due is the one who picks it up. Channel messages don't get reliably read because there's so much technical CC↔Langston chatter Kyle scrolls past. The per-turn check ensures alerts get seen by Claude (or Kyle via Claude's plain-language surfacing) regardless of which channel Kyle is using.
-
-**What goes in the queue:** scheduled verifications (e.g., the 14-day soak verification for B-NEW-40, fires 2026-05-31T12:46:47Z), one-off reminders, recurring health checks (future batch), and breakage triggers (future batch). The dispatcher cron on staging (`system-alerts-dispatcher.timer`) promotes scheduled events to active when their `triggers_at` arrives. See the project repo `Claude Comms and Packages/Scope Files/B_NEW_40_SCOPE.md` §2.8 for the full architecture.
-
 **Failure to perform this check on every turn is a process violation.** It's not a session-start-only check — it's per-turn because alerts can fire between turns of a long session.
-
-**B-NEW-41 also installed staging SSH access for general live-verification tasks** (Step 8 second-pass, log inspection, API curl, pm2 status). Use `ssh staging '...'` for any read-only verification operation. Note: you are `deploy`-user on staging, NOT root — restart-service / config-edit operations are explicitly out of your privilege scope.
-
----
-
-*End of §10.5.*
 
 ---
 
