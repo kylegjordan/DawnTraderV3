@@ -39,6 +39,8 @@ const SystemAlertsPage = lazy(() => import("@/pages/system-alerts"));
 // B-TOKEN-WATCH: the observation study's tracking page. Self-contained —
 // its own folder, its own route, and one published summary file for data.
 const TokenWatchPage = lazy(() => import("@/pages/token-watch/TokenWatchPage"));
+// B-STATUS-BOARD (#1227): the phone status board — the agreed plan, who holds each item, where it has got to.
+const StatusBoardPage = lazy(() => import("@/pages/status-board/StatusBoardPage"));
 
 class DiagnosticErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
@@ -249,6 +251,7 @@ function Router() {
               <Route path="/machine-learning" component={MachineLearningPage} />
               <Route path="/system-alerts" component={SystemAlertsPage} />
               <Route path="/token-watch" component={TokenWatchPage} />
+              <Route path="/status-board" component={StatusBoardPage} />
               <Route path="/settings" component={Settings} />
               <Route path="/system/config" component={SystemConfigPage} />
               <Route path="/:rest*">

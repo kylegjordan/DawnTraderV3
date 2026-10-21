@@ -1980,6 +1980,15 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // GET /api/status-board - B-STATUS-BOARD (#1227): the phone status board's data, written by the governance
+  // checker. Behind the login (authenticateToken), like every route that is not a public probe. Serves the
+  // checker's file as written; 503 with a reason when it is missing or unreadable.
+  apiRouter.get('/status-board', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    const { readStatusBoard } = await import('./services/status-board-file');
+    const out = await readStatusBoard();
+    res.status(out.status).json(out.body);
+  });
+
   // POST /api/system/force-sync-canonical - Directive 11.7F: Force sync bridge documents from canonical
   apiRouter.post('/system/force-sync-canonical', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
