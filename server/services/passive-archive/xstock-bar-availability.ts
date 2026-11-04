@@ -490,6 +490,7 @@ export async function repairPendingXstockCertificates(limit = 1_000): Promise<nu
 
 async function runPendingCertificateRepair(limit: number): Promise<number> {
   let revisionIds: string[] = [];
+  let repairCertifyStartedAt: number | null = null;
   try {
     // This read commits before certifyRevisionIds starts its own transaction. Repair therefore
     // retains the same later-statement causal boundary as first-pass certification.
@@ -504,12 +505,16 @@ async function runPendingCertificateRepair(limit: number): Promise<number> {
       return resultRows<{ revision_id: string }>(result).map((row) => row.revision_id);
     });
     if (revisionIds.length === 0) return 0;
+    repairCertifyStartedAt = Date.now();
     await certifyRevisionIds(revisionIds);
     console.log(`[B-XSTOCK-BAR-AVAILABILITY] repaired ${revisionIds.length} pending visibility certificates`);
     return revisionIds.length;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    console.error(`[B-XSTOCK-BAR-AVAILABILITY] certificate repair failed: ${detail}`);
+    const elapsed = repairCertifyStartedAt === null
+      ? 'before certify'
+      : `${Date.now() - repairCertifyStartedAt} ms into certify`;
+    console.error(`[B-XSTOCK-BAR-AVAILABILITY] certificate repair failed (${elapsed}): ${detail}`);
     await raiseCertificationAlert(detail.slice(0, 600), revisionIds);
     return 0;
   }
@@ -605,13 +610,15 @@ export async function writeXstockProjectionAttempts(
   }
 
   const revisionIds = attempts.map((attempt) => attempt.revisionId);
+  const certifyStartedAt = Date.now();
   try {
     const certificates = await certifyRevisionIds(revisionIds);
     return { attempts, certificates, certification: 'certified' };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error(
-      `[B-XSTOCK-BAR-AVAILABILITY] certificate failed for ${revisionIds.length} committed revisions; `
+      `[B-XSTOCK-BAR-AVAILABILITY] certificate failed after ${Date.now() - certifyStartedAt} ms `
+      + `for ${revisionIds.length} committed revisions; `
       + `left NULL/ineligible for repair: ${detail}`,
     );
     await raiseCertificationAlert(detail.slice(0, 600), revisionIds);

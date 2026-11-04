@@ -15,8 +15,11 @@ vi.mock('../../services/passive-archive/xstock-bar-availability.js', () => ({
   ),
 }));
 
+import { addAlert } from '../../services/system-alerts.js';
 import {
   RETRY_BUFFER_MAX,
+  XSTOCK_STUCK_FLUSH_ALERT_AT,
+  isXstockProjectionRetryable,
   bufferOhlcBar,
   flushAssetClass,
   stopBatchWriter,
@@ -143,5 +146,64 @@ describe('xStock logical flush transaction boundary', () => {
     state.repair.mockClear();
     await stopBatchWriter();
     expect(state.repair).toHaveBeenCalledTimes(2);
+  });
+
+  it('R5d: retains an xStock projection statement timeout and retries the SAME flush ID', async () => {
+    state.write.mockRejectedValueOnce(new Error('canceling statement due to statement timeout'));
+    bufferOhlcBar('xstock_spot', {
+      symbol: 'NVDA/USD',
+      intervalBegin: new Date('2026-10-15T00:02:00Z'),
+    } as any);
+
+    await flushAssetClass('xstock_spot');
+    await flushAssetClass('xstock_spot');
+    expect(state.write).toHaveBeenCalledTimes(2);
+    expect(state.write.mock.calls[1][1]).toEqual(state.write.mock.calls[0][1]);
+    expect(state.write.mock.calls[1][0]).toBe(state.write.mock.calls[0][0]);
+  });
+
+  it('R5d: the exemption is xStock-only and timeout-only (#705 keeps its rule elsewhere)', () => {
+    const timeout = new Error('canceling statement due to statement timeout');
+    expect(isXstockProjectionRetryable('xstock_spot', timeout)).toBe(true);
+    expect(isXstockProjectionRetryable('crypto_spot', timeout)).toBe(false);
+    expect(isXstockProjectionRetryable('xstock_spot', new Error('column does not exist'))).toBe(false);
+    expect(isXstockProjectionRetryable('xstock_spot', new Error('Query read timeout'))).toBe(false);
+  });
+
+  it('R5d condition 1: alerts once, naming the flush ID, at the consecutive-failure threshold', async () => {
+    vi.mocked(addAlert).mockClear();
+    state.write.mockRejectedValue(new Error('canceling statement due to statement timeout'));
+    bufferOhlcBar('xstock_spot', {
+      symbol: 'AMD/USD',
+      intervalBegin: new Date('2026-10-15T00:03:00Z'),
+    } as any);
+    for (let i = 0; i < XSTOCK_STUCK_FLUSH_ALERT_AT + 3; i += 1) await flushAssetClass('xstock_spot');
+    await vi.waitFor(() => expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(1));
+    const alert = vi.mocked(addAlert).mock.calls[0][0] as any;
+    const flushId = state.write.mock.calls[0][1].flushId;
+    expect(alert.dedupe_key).toBe(`xstock-bar-availability-flush-stuck:${flushId}`);
+    expect(alert.metadata.consecutiveFailures).toBe(XSTOCK_STUCK_FLUSH_ALERT_AT);
+
+    // A success clears the count: the same number of failures under a NEW flush ID alerts again.
+    state.write.mockReset();
+    state.write.mockImplementation(async (rows: any[]) => ({
+      attempts: rows.map((_: unknown, index: number) => ({
+        revisionId: String(index), projectionApplied: true, payloadRepeatedFromWinner: false,
+      })),
+      certificates: [],
+      certification: 'certified' as const,
+    }));
+    await flushAssetClass('xstock_spot');
+    vi.mocked(addAlert).mockClear();
+    state.write.mockRejectedValue(new Error('canceling statement due to statement timeout'));
+    bufferOhlcBar('xstock_spot', {
+      symbol: 'AMD/USD',
+      intervalBegin: new Date('2026-10-15T00:04:00Z'),
+    } as any);
+    for (let i = 0; i < XSTOCK_STUCK_FLUSH_ALERT_AT - 1; i += 1) await flushAssetClass('xstock_spot');
+    expect(vi.mocked(addAlert)).not.toHaveBeenCalled();
+    await flushAssetClass('xstock_spot');
+    await vi.waitFor(() => expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(1));
+    state.write.mockReset();
   });
 });

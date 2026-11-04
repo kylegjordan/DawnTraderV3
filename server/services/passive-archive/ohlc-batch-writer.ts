@@ -139,6 +139,74 @@ export const ALERT_RE_ARM_MS = 6 * 60 * 60 * 1000;
 const _permanentAlerted: Record<string, number> = {};
 let _xstockBufferFailStopAlerted = false;
 
+/**
+ * R5d (B-XSTOCK-BAR-AVAILABILITY, Langston-approved 2026-11-04): on the xStock lane a server
+ * statement timeout in the PROJECTION phase is retained and retried under the SAME flush ID.
+ * #705's rule (a statement timeout is permanent) rests on "a wrongly-dropped transient batch costs
+ * one flush window". On this lane that is false: the admission stores only the population hash, so
+ * the in-memory snapshot is the only copy of the payload, and the projection is the only OHLC writer
+ * for xstock_spot. A drop loses the bars and leaves an orphan admission that makes the writer
+ * handoff refuse. The retry is safe because `apply_xstock_bar_revision_flush` is idempotent per
+ * flush ID (it returns the saved event set once a completion exists), and it is bounded: the
+ * 50,000-frame fail-stop refuses intake, and the stuck-flush alert below names the flush ID.
+ * Every other class, and every other error, keeps #705's rule.
+ */
+export function isXstockProjectionRetryable(assetClass: ArchiveAssetClass, err: unknown): boolean {
+  if (assetClass !== 'xstock_spot') return false;
+  const m = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  return m.includes('canceling statement due to statement timeout');
+}
+
+/** Consecutive failures of ONE xStock flush ID (Langston R5d condition 1). */
+export const XSTOCK_STUCK_FLUSH_ALERT_AT = 12;
+let xstockFlushFailures: { flushId: string; count: number } | null = null;
+
+function recordXstockFlushFailure(flushId: string | undefined, detail: string): void {
+  if (!flushId) return;
+  xstockFlushFailures = xstockFlushFailures?.flushId === flushId
+    ? { flushId, count: xstockFlushFailures.count + 1 }
+    : { flushId, count: 1 };
+  if (xstockFlushFailures.count === XSTOCK_STUCK_FLUSH_ALERT_AT) {
+    void alertXstockStuckFlush(flushId, xstockFlushFailures.count, detail);
+  }
+}
+
+function clearXstockFlushFailures(): void {
+  xstockFlushFailures = null;
+  // The fail-stop latch had no clear-on-success (Langston R5d condition 1): a later fail-stop in
+  // the same process would have been silent.
+  _xstockBufferFailStopAlerted = false;
+}
+
+async function alertXstockStuckFlush(flushId: string, count: number, detail: string): Promise<void> {
+  try {
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'warning',
+      title: 'xStock bar flush failing repeatedly under one flush ID',
+      body: `xStock flush ${flushId} has failed ${count} consecutive times and is still being retried `
+        + `with its snapshot retained. A slow database recovers on its own; a flush that can never `
+        + `complete keeps failing and the buffer grows toward the ${RETRY_BUFFER_MAX}-frame fail-stop. `
+        + `Read the error log for this flush ID. Last error: ${detail.slice(0, 300)}`,
+      metadata: {
+        assetClass: 'xstock_spot',
+        flushId,
+        consecutiveFailures: count,
+        source: 'ohlc-batch-writer',
+        batch: 'B-XSTOCK-BAR-AVAILABILITY',
+      },
+      dedupe_key: `xstock-bar-availability-flush-stuck:${flushId}`,
+    });
+  } catch (error) {
+    console.error(
+      '[B-XSTOCK-BAR-AVAILABILITY] FAILED TO RAISE stuck-flush alert:',
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
+
 async function alertXstockBufferFailStop(): Promise<void> {
   if (_xstockBufferFailStopAlerted) return;
   _xstockBufferFailStopAlerted = true;
@@ -517,6 +585,7 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     };
     xstockAvailabilityTelemetry.bufferSuperseded += bufferSuperseded;
   }
+  const flushStartedAt = Date.now();
   try {
     await acquireSlot();
     try {
@@ -569,22 +638,30 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
     // P1: the write succeeded — NOW the snapshot leaves the buffer. Rows pushed during the flush
     // sit behind it and stay for the next one.
     buf.splice(0, n);
-    if (assetClass === 'xstock_spot') pendingXstockFlush = null;
+    if (assetClass === 'xstock_spot') {
+      pendingXstockFlush = null;
+      clearXstockFlushFailures();
+    }
     // BLOCKER-11: the fault is over, so the NEXT permanent failure is genuinely new and must
     // not be swallowed by a latch set hours ago.
     clearPermanentAlertLatch('ohlc', assetClass);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     const admissionUnconfirmed = assetClass === 'xstock_spot' && isXstockAdmissionFailure(err);
-    if (!admissionUnconfirmed && !isTransientWriteError(err)) {
+    const projectionRetryable = !admissionUnconfirmed && isXstockProjectionRetryable(assetClass, err);
+    const elapsedMs = Date.now() - flushStartedAt;
+    if (!admissionUnconfirmed && !projectionRetryable && !isTransientWriteError(err)) {
       // PERMANENT — do NOT re-buffer. Retrying rows that will fail identically forever is the
       // OOM #705 warns about, and #704 is the measured case: 15 hours, 4,802 stderr lines, and
       // ZERO alerts. The drop stays; the SILENCE is what this fixes.
       // The snapshot's `n` raw rows leave the buffer here, on the permanent branch only.
       buf.splice(0, n);
-      if (assetClass === 'xstock_spot') pendingXstockFlush = null;
+      if (assetClass === 'xstock_spot') {
+        pendingXstockFlush = null;
+        xstockFlushFailures = null;
+      }
       console.error(
-        `[B74][batch-writer] ${assetClass} PERMANENT flush failure (`
+        `[B74][batch-writer] ${assetClass} PERMANENT flush failure after ${elapsedMs} ms (`
         + (assetClass === 'xstock_spot'
           ? `${rows.length} admitted attempts left without a successful completion`
           : `up to ${rows.length} rows dropped, NOT retried; earlier chunks may have landed`)
@@ -623,10 +700,14 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
         + `oldest rows. The retry is not keeping up; this is data loss and it is being reported, not hidden.`,
       );
     }
+    if (assetClass === 'xstock_spot') recordXstockFlushFailure(xstockFlushId, detail);
+    const retainedKind = admissionUnconfirmed
+      ? 'ADMISSION UNCONFIRMED'
+      : projectionRetryable ? 'PROJECTION TIMEOUT' : 'TRANSIENT';
+    const flushIdNote = xstockFlushId ? `, flushId=${xstockFlushId}` : '';
     console.error(
-      `[B74][batch-writer] ${assetClass} ${admissionUnconfirmed ? 'ADMISSION UNCONFIRMED' : 'TRANSIENT'} `
-      + `flush failure (${rows.length} rows RETAINED for retry, `
-      + `buffer=${buf.length}):`,
+      `[B74][batch-writer] ${assetClass} ${retainedKind} flush failure after ${elapsedMs} ms (`
+      + `${rows.length} rows RETAINED for retry, buffer=${buf.length}${flushIdNote}):`,
       detail,
     );
   }
