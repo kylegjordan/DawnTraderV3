@@ -174,7 +174,7 @@ Makes the xStock price recorder reload its list of stocks every day. Moved out o
 ## Infra Claude
 
 ### B-LANGSTON-RELIEF
-The lasting fix for Langston's delays: people's posts are answered ahead of alerts, a cheaper model triages alerts and escalates to Langston by his rules, and his memory is trimmed daily. In its observation window.
+The lasting fix for Langston's delays: people's posts are answered ahead of alerts, a cheaper model triages alerts and escalates to Langston by his rules, and his memory is trimmed daily.
 
 ### B-LANGSTON-CLAUDEMD-RESIDUAL
 Brings Langston's always-loaded files under their size ceiling: after the memory trim he is still over it, mostly from his rules file, which needs its own method.
@@ -183,10 +183,10 @@ Brings Langston's always-loaded files under their size ceiling: after the memory
 Takes passwords out of the repository for good and makes the repository private, after giving every reader that needs it, Langston included, its own read key.
 
 ### B-CREW-ACCESS-HARDEN
-Hardens how the sessions and agents reach the servers, from Kyle's 2026-10-08 alert. Paused by Kyle for B-LANGSTON-RELIEF.
+Hardens how the sessions and agents reach the servers, from Kyle's 2026-10-08 alert: no admin rights where none are needed, no password logins to the agent server, and protected keys.
 
 ### B-LANGSTON-CONTEXT
-Keeps Langston's working memory continually trimmed by a standing system. Chunk 1 is closed; the rest is partly overtaken by B-LANGSTON-RELIEF and waits for a re-scope.
+Keeps Langston's working memory continually trimmed by a standing system. Much of it was overtaken by B-LANGSTON-RELIEF, so what is left needs re-scoping before it runs.
 
 ### B-LANGSTON-AUTOMEMORY-TRIM
 Cut Langston's memory index from about 25 KB to about 9 KB so it stopped being cut off when it loads. Done inside B-LANGSTON-RELIEF.
@@ -219,7 +219,7 @@ Deletes the old Chaplet router, which once served the app's own files to the pub
 Turns old session conversations into text-only, searchable archives with an index, keeping all history.
 
 ### B-TOKEN-WATCH
-A capture-only observation of new Solana token launches, recording them without trading. Parked until after live.
+A capture-only observation of new Solana token launches, recording them without trading.
 
 ### B-CREW-STATUS-2
 The follow-up to the old crew status page. It dissolves when this status board retires that page.
