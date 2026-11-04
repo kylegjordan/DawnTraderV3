@@ -48,7 +48,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
 import { chooseObjectsByLabel, isProvenBasis } from '../services/data-archive/archive-completeness.js';
-import { DISK_FILE_FORMAT, DISK_FILE_SOURCE_PREFIX, digestGunzipped } from '../services/data-archive/disk-file-tiering.js';
+import { DISK_FILE_FORMAT, DISK_FILE_SOURCE_PREFIX, digestFile } from '../services/data-archive/disk-file-tiering.js';
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 
@@ -119,11 +119,12 @@ async function queryManifest(
     checksum: string;
     completeness_basis: string | null;
     format: string;
+    original_partition_size_bytes: number | null;
   }>
 > {
   const r = await client.query(
     `SELECT id, partition_label, tier, state, storage_uri, row_count, bytes_compressed,
-            min_ts, max_ts, checksum, completeness_basis, format
+            min_ts, max_ts, checksum, completeness_basis, format, original_partition_size_bytes
        FROM data_archive_manifest
       WHERE source_table = $1
         AND state IN ('verified', 'active', 'migrating', 'migrated')
@@ -140,6 +141,7 @@ async function queryManifest(
     ...row,
     row_count: Number(row.row_count),
     bytes_compressed: Number(row.bytes_compressed),
+    original_partition_size_bytes: row.original_partition_size_bytes == null ? null : Number(row.original_partition_size_bytes),
   }));
 }
 
@@ -264,16 +266,21 @@ async function main(): Promise<void> {
     // name — a consumer globbing `<table>_*.jsonl.gz` (as this header instructs) would pick
     // it up. Keep it for diagnosis, but rename it out of the glob.
     let outPath = localPath;
+    // The good-named object and its sidecar: for a disk file that is the RESTORED original, not the .gz — one
+    // name computed once, so the stale-sidecar removal below can never target the wrong file (Langston part 3).
+    const restored = path.join(args.out, label);
+    const goodSidecar = `${isDiskFile ? restored : localPath}.completeness.json`;
     if (checksumOk && isDiskFile) {
-      // Inflate to the original name and check it against the manifest: the newline count is the
-      // evidence row's count (row_count), so a short or padded inflate is caught, not trusted.
-      const restored = path.join(args.out, label);
+      // Inflate to the original name, then read THAT file and check it against the manifest: its newline
+      // count is the evidence row's (row_count) and its size the original's (original_partition_size_bytes),
+      // so a short or padded restore is caught, not trusted.
       await pipeline(fs.createReadStream(localPath), zlib.createGunzip(), fs.createWriteStream(restored));
-      const d = await digestGunzipped(localPath);
-      if (d.newlines !== download.row_count) {
+      const d = await digestFile(restored);
+      const sizeOk = download.original_partition_size_bytes == null || d.bytes === download.original_partition_size_bytes;
+      if (d.newlines !== download.row_count || !sizeOk) {
         checksumOk = false;
         fs.renameSync(restored, `${restored}.CORRUPT`);
-        console.error(`[B75 rehydrate] ${label}: inflated newline count ${d.newlines} != manifest ${download.row_count}`);
+        console.error(`[B75 rehydrate] ${label}: restored file has ${d.newlines} newlines / ${d.bytes} bytes; manifest says ${download.row_count} / ${download.original_partition_size_bytes}`);
       } else {
         fs.rmSync(localPath, { force: true });
         outPath = restored;
@@ -284,7 +291,7 @@ async function main(): Promise<void> {
       fs.renameSync(localPath, outPath);
       // A reused --out directory may hold an earlier run's good-named sidecar; remove it so
       // no checksum_ok:true record is left with no object behind it (Langston gate C record 1).
-      fs.rmSync(`${localPath}.completeness.json`, { force: true });
+      fs.rmSync(goodSidecar, { force: true });
     }
 
     console.log(

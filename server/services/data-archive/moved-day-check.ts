@@ -36,7 +36,9 @@ const lastCheck = new Map<string, number>();
  *  dayStart <= endMs). */
 export function expectedDayFiles(startMs: number, endMs: number): string[] {
   const out: string[] = [];
-  for (let day = Math.floor(startMs / DAY_MS) * DAY_MS; day <= endMs; day += DAY_MS) {
+  // Start one day early so parity with the reader is exact by construction (on an exact-midnight start the
+  // reader also keeps the day before); the `continue` below drops it whenever the reader would (Langston part 3).
+  for (let day = Math.floor(startMs / DAY_MS) * DAY_MS - DAY_MS; day <= endMs; day += DAY_MS) {
     if (day + DAY_MS < startMs) continue;
     out.push(`${new Date(day).toISOString().slice(0, 10)}.jsonl`);
   }
@@ -63,7 +65,7 @@ export function checkMovedTelemetryDays(telemetryDir: string, window: string, st
   });
 }
 
-async function runCheck(telemetryDir: string, window: string, startMs: number, endMs: number): Promise<void> {
+export async function runCheck(telemetryDir: string, window: string, startMs: number, endMs: number): Promise<void> {
   const present = fs.existsSync(telemetryDir) ? fs.readdirSync(telemetryDir) : [];
   const missing = missingFromDisk(expectedDayFiles(startMs, endMs), present);
   const key = movedDayKey(window);
