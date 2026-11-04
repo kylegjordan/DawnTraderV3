@@ -48,6 +48,9 @@ import path from 'node:path';
 import pg from 'pg';
 import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
 import { chooseObjectsByLabel, isProvenBasis } from '../services/data-archive/archive-completeness.js';
+import { DISK_FILE_FORMAT, DISK_FILE_SOURCE_PREFIX, digestGunzipped } from '../services/data-archive/disk-file-tiering.js';
+import zlib from 'node:zlib';
+import { pipeline } from 'node:stream/promises';
 
 const { Client } = pg;
 
@@ -57,10 +60,12 @@ interface Args {
   to: Date;
   out: string;
   restoreCold: boolean;
+  /** B-DISK-FILE-TIERING (#1233, pre-audit P8): restore moved disk files under their ORIGINAL names. */
+  diskFile: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Partial<Args> = { restoreCold: false };
+  const args: Partial<Args> = { restoreCold: false, diskFile: false };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--table') args.table = argv[++i];
@@ -68,6 +73,7 @@ function parseArgs(argv: string[]): Args {
     else if (flag === '--to') args.to = new Date(argv[++i] + 'T23:59:59.999Z');
     else if (flag === '--out') args.out = argv[++i];
     else if (flag === '--restore-cold') args.restoreCold = true;
+    else if (flag === '--disk-file') args.diskFile = true;
     else if (flag === '--help' || flag === '-h') {
       printUsage();
       process.exit(0);
@@ -75,6 +81,10 @@ function parseArgs(argv: string[]): Args {
   }
   if (!args.table || !args.from || !args.to || !args.out) {
     printUsage();
+    process.exit(1);
+  }
+  if (args.diskFile !== args.table.startsWith(DISK_FILE_SOURCE_PREFIX)) {
+    console.error(`[B75 rehydrate] --disk-file and a ${DISK_FILE_SOURCE_PREFIX}<folder> table go together (got table=${args.table}, --disk-file=${args.diskFile})`);
     process.exit(1);
   }
   if (Number.isNaN(args.from.getTime()) || Number.isNaN(args.to.getTime())) {
@@ -86,7 +96,9 @@ function parseArgs(argv: string[]): Args {
 
 function printUsage(): void {
   console.error(
-    'Usage: b75-rehydrate.ts --table <name> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--restore-cold]',
+    'Usage: b75-rehydrate.ts --table <name> --from <YYYY-MM-DD> --to <YYYY-MM-DD> --out <dir> [--restore-cold] [--disk-file]\n' +
+      '  --disk-file: for a disk_file.<folder> table — restores each moved file under its original name (the\n' +
+      '  manifest partition_label), inflated and checked byte-count and newline-count against the manifest.',
   );
 }
 
@@ -106,11 +118,12 @@ async function queryManifest(
     max_ts: Date;
     checksum: string;
     completeness_basis: string | null;
+    format: string;
   }>
 > {
   const r = await client.query(
     `SELECT id, partition_label, tier, state, storage_uri, row_count, bytes_compressed,
-            min_ts, max_ts, checksum, completeness_basis
+            min_ts, max_ts, checksum, completeness_basis, format
        FROM data_archive_manifest
       WHERE source_table = $1
         AND state IN ('verified', 'active', 'migrating', 'migrated')
@@ -208,7 +221,16 @@ async function main(): Promise<void> {
     const proven = isProvenBasis(download.completeness_basis);
     const basis = download.completeness_basis ?? 'unrecorded';
     const rowsLabel = proven ? 'rows' : 'rows(unproven)';
-    const localPath = path.join(args.out, `${args.table}_${label}.jsonl.gz`);
+    // The object's FORMAT decides its local name and handling, never the storage key's extension: the
+    // cold rotator names every cold key `.jsonl.gz` (B-DISK-FILE-TIERING, Langston Step 2 C2).
+    const isDiskFile = download.format === DISK_FILE_FORMAT;
+    if (isDiskFile !== args.diskFile) {
+      console.warn(`[B75 rehydrate] ${label}: format ${download.format} needs ${isDiskFile ? '' : 'no '}--disk-file; skipping`);
+      continue;
+    }
+    const localPath = isDiskFile
+      ? path.join(args.out, `${label}.gz`) // label = the original file name, whole (P2)
+      : path.join(args.out, `${args.table}_${label}.jsonl.gz`);
     let bytes = 0;
     let checksumOk = false;
 
@@ -242,6 +264,21 @@ async function main(): Promise<void> {
     // name — a consumer globbing `<table>_*.jsonl.gz` (as this header instructs) would pick
     // it up. Keep it for diagnosis, but rename it out of the glob.
     let outPath = localPath;
+    if (checksumOk && isDiskFile) {
+      // Inflate to the original name and check it against the manifest: the newline count is the
+      // evidence row's count (row_count), so a short or padded inflate is caught, not trusted.
+      const restored = path.join(args.out, label);
+      await pipeline(fs.createReadStream(localPath), zlib.createGunzip(), fs.createWriteStream(restored));
+      const d = await digestGunzipped(localPath);
+      if (d.newlines !== download.row_count) {
+        checksumOk = false;
+        fs.renameSync(restored, `${restored}.CORRUPT`);
+        console.error(`[B75 rehydrate] ${label}: inflated newline count ${d.newlines} != manifest ${download.row_count}`);
+      } else {
+        fs.rmSync(localPath, { force: true });
+        outPath = restored;
+      }
+    }
     if (!checksumOk) {
       outPath = `${localPath}.CORRUPT`;
       fs.renameSync(localPath, outPath);
