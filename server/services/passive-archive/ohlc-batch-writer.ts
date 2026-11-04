@@ -668,7 +668,9 @@ async function doFlushAssetClass(assetClass: ArchiveAssetClass): Promise<void> {
       buf.splice(0, n);
       if (assetClass === 'xstock_spot') {
         pendingXstockFlush = null;
-        xstockFlushFailures = null;
+        // The drop drains the buffer below the cap and intake reopens, so a later fail-stop is a
+        // new episode: reset its latch here too (Langston R5d r2 record item).
+        clearXstockFlushFailures();
       }
       console.error(
         `[B74][batch-writer] ${assetClass} PERMANENT flush failure after ${elapsedMs} ms (`
