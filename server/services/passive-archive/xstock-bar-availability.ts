@@ -15,6 +15,34 @@ import { db } from '../../db.js';
 import type { InsertEquitySpotOhlc1m } from '../../../shared/schema.js';
 
 export const XSTOCK_BAR_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1' as const;
+
+/**
+ * Server-side ceiling for every statement inside this module's transactions, set
+ * below the pool's client-side `query_timeout` (30 s, `server/db.ts`).
+ *
+ * WHY (2026-11-04, 18:03-18:16Z): when the database slowed, a certify statement
+ * outlived the client's 30 s read timeout. The client gives up on a statement
+ * without cancelling it on the server, so the transaction's ROLLBACK could not
+ * be sent in time either, and the connection was handed back still inside an
+ * open transaction. Ten of these took every pool slot and stalled the app until
+ * the backends were terminated. With the server's own timer shorter, the server
+ * cancels the statement first, the error comes back on the connection in the
+ * normal way, and ROLLBACK runs at once. Same pattern as the Drift Dashboard's
+ * `SET LOCAL statement_timeout` (drift-dashboard-aggregator.ts).
+ * Residual: a database stalled so hard that ROLLBACK itself takes 30 s still
+ * reaches the client timeout. This bounds the common case; it does not remove
+ * the client-side timeout's failure mode for every caller of the pool.
+ */
+export const XSTOCK_TX_STATEMENT_TIMEOUT_MS = 20_000;
+
+type XstockTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+function boundedTransaction<T>(work: (tx: XstockTx) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${XSTOCK_TX_STATEMENT_TIMEOUT_MS}`));
+    return work(tx);
+  });
+}
 export const XSTOCK_BAR_WRITER_BOOT_ID = randomUUID();
 export const XSTOCK_BAR_WRITER_BUILD_SHA = (() => {
   try {
@@ -121,7 +149,7 @@ function exactNonNegativeInteger(value: unknown, label: string): number {
  * chain rather than two branches. A missing predecessor handoff is retained as
  * a fact and makes the final observation gate fail; startup never invents it. */
 export async function registerXstockWriterBootStart(): Promise<string | null> {
-  return db.transaction(async (tx) => {
+  return boundedTransaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('xstock-bar-writer-boot-chain'))`);
     const predecessorResult = await tx.execute(sql`
       SELECT boot_id
@@ -180,7 +208,7 @@ export async function recordXstockWriterHandoff(
     throw new Error('[B-XSTOCK-BAR-AVAILABILITY] local writer handoff counters do not reconcile');
   }
 
-  await db.transaction(async (tx) => {
+  await boundedTransaction(async (tx) => {
     const aggregateResult = await tx.execute(sql`
       WITH admitted AS MATERIALIZED (
         SELECT * FROM xstock_bar_projection_flush_admission
@@ -407,7 +435,7 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
   // database as a UUID, and the exact-set checks below still reject duplicates
   // or substitutions on either side of the certificate boundary.
   const revisionIdArrayLiteral = `{${revisionIds.join(',')}}`;
-  const certificates = await db.transaction(async (tx) => {
+  const certificates = await boundedTransaction(async (tx) => {
     const result = await tx.execute(sql`
       SELECT * FROM certify_xstock_bar_revision_events(
         ${revisionIdArrayLiteral}::uuid[],
@@ -425,8 +453,28 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
   return certificates;
 }
 
-/** Bounded repair for committed events whose second transaction failed. */
-export async function repairPendingXstockCertificates(limit = 1_000): Promise<number> {
+/**
+ * Bounded repair for committed events whose second transaction failed.
+ *
+ * SINGLE-FLIGHT (2026-11-04): the batch writer calls this on a 5 s timer, and
+ * the timer does not wait for a slow repair. During the 18:03Z slowdown each
+ * failed repair took about 60 s, so a new one started every tick and up to six
+ * were seen failing in the same second, each holding a pool slot. A call that
+ * arrives while a repair is running now joins that run instead of starting
+ * another one; the shutdown drain awaits the same run.
+ */
+let repairInFlight: Promise<number> | null = null;
+
+export function repairPendingXstockCertificates(limit = 1_000): Promise<number> {
+  if (repairInFlight) return repairInFlight;
+  const run = runPendingCertificateRepair(limit).finally(() => {
+    if (repairInFlight === run) repairInFlight = null;
+  });
+  repairInFlight = run;
+  return run;
+}
+
+async function runPendingCertificateRepair(limit: number): Promise<number> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
     throw new Error(`[B-XSTOCK-BAR-AVAILABILITY] invalid certificate repair limit ${limit}`);
   }
@@ -434,7 +482,7 @@ export async function repairPendingXstockCertificates(limit = 1_000): Promise<nu
   try {
     // This read commits before certifyRevisionIds starts its own transaction. Repair therefore
     // retains the same later-statement causal boundary as first-pass certification.
-    revisionIds = await db.transaction(async (tx) => {
+    revisionIds = await boundedTransaction(async (tx) => {
       const result = await tx.execute(sql`
         SELECT revision_id
         FROM xstock_bar_revision_event
@@ -488,7 +536,7 @@ export async function writeXstockProjectionAttempts(
   // fails permanently or its COMMIT acknowledgement is ambiguous, the
   // accepted population remains durable and the retry reuses this flush ID.
   try {
-    await db.transaction(async (tx) => {
+    await boundedTransaction(async (tx) => {
       await tx.execute(sql`
         SELECT admit_xstock_bar_projection_flush(
           ${flushId}::uuid,
@@ -517,7 +565,7 @@ export async function writeXstockProjectionAttempts(
 
   // Awaiting this Drizzle transaction includes its COMMIT acknowledgement. The certificate call
   // below therefore cannot observe an uncommitted event from this transaction.
-  const attempts = await db.transaction(async (tx) => {
+  const attempts = await boundedTransaction(async (tx) => {
     const result = await tx.execute(sql`
       SELECT * FROM apply_xstock_bar_revision_flush(
         ${payloadJson}::jsonb,

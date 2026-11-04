@@ -8,7 +8,8 @@ const state: {
   hold: Promise<void> | null;
   alertCalls: unknown[];
   queries: unknown[];
-} = { results: [], phases: [], holdOrdinal: null, hold: null, alertCalls: [], queries: [] };
+  timeoutsSet: number[];
+} = { results: [], phases: [], holdOrdinal: null, hold: null, alertCalls: [], queries: [], timeoutsSet: [] };
 
 vi.mock('../../db.js', () => ({
   db: {
@@ -17,6 +18,12 @@ vi.mock('../../db.js', () => ({
       state.phases.push(`begin-${ordinal}`);
       const value = await fn({
         execute: async (query?: unknown) => {
+          // 2026-11-04 pool-safety: each transaction first sets its server-side statement
+          // timeout. Recorded apart so the phase and result sequences below stay as written.
+          if (JSON.stringify(query ?? null).includes('SET LOCAL statement_timeout')) {
+            state.timeoutsSet.push(ordinal);
+            return { rows: [] };
+          }
           state.queries.push(query);
           state.phases.push(`execute-${ordinal}`);
           if (ordinal === state.holdOrdinal && state.hold) await state.hold;
@@ -57,6 +64,7 @@ const bar = (close = '10', arrival = arrivedAt) => ({
 beforeEach(() => {
   state.results = [];
   state.phases = [];
+  state.timeoutsSet = [];
   state.holdOrdinal = null;
   state.hold = null;
   state.alertCalls = [];
@@ -117,6 +125,7 @@ describe('xStock availability capture boundary', () => {
       'begin-2', 'execute-2', 'commit-2',
       'begin-3', 'execute-3', 'commit-3',
     ]);
+    expect(state.timeoutsSet).toEqual([1, 2, 3]);
     expect(result.certification).toBe('certified');
     expect(result.certificates[0].visibleSeq).toBe(9);
   });
