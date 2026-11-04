@@ -106,6 +106,24 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 
 **C-P5, the pause-retirement read — EXTENDED.** Two-week window (out-of-hours log files 10-20 → 11-02): 7 distinct stop-side episodes (10 lines) and 2 target lines, under the 10 the rule needs ⇒ the pre-registered extension to four weeks (content to 11-16; the harvest cron covers through 11-17 and goes inert 11-18 02Z). Four-week rule unchanged: ≤4 → propose retirement, 5-9 → keep, ≥10 → rate. A13: blown books leave the path before the pause, so the population it would have caught moved upstream to objective 6.
 
+## 3e. Increment (4b) — Step 7 first-pass read (2026-11-04 US regular session, read by CC-C)
+
+**Criterion as written** (`Scope Files/B_XSTOCK_BID_TRIGGER_RELAND_INC4B_PRE_AUDIT.md`, "Step 7 (pre-registered here)"): *"behaviour-preserving, so the read is that nothing moved. Over the first full regular session after deploy: every xStock `EXIT_TRIGGER` still reads `basis=bid` while armed; the T2/T3 refusal counts keep their pre-deploy shape; the decision counts per lane are within that session's normal range (a count comparison, not a rate)."* Deployed `e1becf801` 2026-11-04 12:13Z; the session is 14:30-21:00Z. Baseline: the 2026-11-03 session, `/home/deploy/harvest/inc4b_baseline_1103_touch.log`.
+**Population and instrument:** `[8a-P3][VTS_TOUCH]` (T2, VTS real) and `[VTS_SHADOW_TOUCH]` (T3, VTS shadow) lines from the size-rotated `out__2026-11-04_*.log` files plus `out.log`, filtered to 14:30-21:00Z, copied to `/tmp/ccc_touch_1104.log` on staging (375 lines per lane against 390 on 11-03; three restarts today: the 18:16Z crash, the 19:36Z and 20:47Z deploys). ⚠️ **These counters reset after every line** (`resetVtsExitCounters`, `vts-runner.ts:4228` and `:4832`), so a session total is the SUM of the lines, not a difference; my first pass treated them as since-start counters and was discarded. A restart only loses the cycles while the process is down.
+
+| check | 11-03 (baseline) | 11-04 (after (4b)) | verdict |
+|---|---|---|---|
+| xStock `EXIT_TRIGGER` lines in session, `basis=` | not harvested | **19 of 19 `basis=bid`**, 0 other | met (positive control: 19 lines exist) |
+| T2 VTS real, xStock: exit looks / no transactable side | 86,572 / 1,800 (2.08%) | 92,754 / 2,163 (2.33%) | shape kept |
+| T3 VTS shadow, xStock: exit looks / no transactable side | 46,384 / 931 (2.01%) | 53,634 / 987 (1.84%) | shape kept |
+| closes in session — paper xStock | 21 | 18 | in range |
+| closes in session — VTS xStock | 506 | 455 | in range |
+| closes in session — VTS crypto | 121 | 131 | in range |
+
+- **Crypto looks moved, and not because of (4b).** VTS crypto exit looks rose from 3,817 to 29,970 (real) and from 3,957 to 156,913 (shadow) because the open crypto VTS population rose from 20 (11-03 18:00Z) to 440 by 11-04 12:00Z, BEFORE the 12:13Z deploy (openings concentrated 05:00-09:00Z), and stayed flat across the session by hour. Shadow crypto "no transactable side" went from 0 to 865 and grew through the day (400 in the 20:00Z hour), consistent with the dead crypto shard (alert `fc34e8cf`, 205 of 408 symbols unpriced, NEW Claude's), not with the trigger rule. `NOT RE-READ`: the shard attribution is by timing, not by symbol.
+- **The shadow lane's new reason** is carried into `lastRefusal` and the unpriced-close path (`vts-runner.ts`, P2 of the plan), not into the touch line, so it is not a count in this table.
+- ⇒ **(4b) Step 7: PASS on all three pre-registered checks.** Langston's Step 8 is next.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
