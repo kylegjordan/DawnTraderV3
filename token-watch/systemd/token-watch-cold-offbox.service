@@ -1,0 +1,25 @@
+[Unit]
+Description=token-watch off-box cold leg: upload each cold archive to B2, read it back, then remove the local copy
+# B-TOKEN-WATCH-STORAGE OBJ-1/2 (#1132). Runs as its own user, tokenwatch-cold, so the internet-facing receiver
+# (user tokenwatch) never shares a uid with the key's run-time copy. The key reaches it only through LoadCredential
+# from a root-only file. It refuses any key that is not restricted to dt-archive-cold, token-watch/, without delete.
+OnFailure=token-watch-failed@%n.service
+
+[Service]
+Type=oneshot
+User=tokenwatch-cold
+Group=tokenwatch-cold
+WorkingDirectory=/opt/token-watch
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+LoadCredential=b2-cold:/etc/token-watch/b2-cold.key
+ExecStart=/usr/bin/python3 /opt/token-watch/ops/cold_offbox.py
+CPUQuota=25%
+MemoryMax=256M
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/token-watch/cold /var/lib/token-watch/offbox

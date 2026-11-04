@@ -43,3 +43,8 @@ comms-infra/tools/** text eol=lf
 # have no extension, and a CRLF copy broke the fake-psql shebang in this batch's own test run.
 comms-infra/staging/** text eol=lf
 comms-infra/agent-staging-session text eol=lf
+
+# B-TOKEN-WATCH-STORAGE (#1132): token-watch is installed on staging (Linux) from git blobs. The blobs are already
+# LF; this keeps every working copy LF too, so a file copied from a Windows working tree cannot ship CRLF into a
+# systemd unit or a script (seven live modules were found carrying CRLF on 2026-11-04 for exactly that reason).
+token-watch/** text eol=lf

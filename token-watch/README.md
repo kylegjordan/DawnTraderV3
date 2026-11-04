@@ -29,7 +29,16 @@ Langston's condition, and the reason for it is arithmetic rather than caution: b
 | `receiver.py` | The birth receiver. The only writer of census records. |
 | `follow_up.py` | Hourly checkpoint sweep. Opens exactly one hour-bucket file. |
 | `budget.py` | Credit reserve, shed order, burn monitor. |
-| `tier.py` | The only deleter — and it can reach nothing but bulky payload. |
+| `tier.py` | Compresses bulky payload a day old into `cold/` and removes the hot copy. It can reach nothing but bulky payload. |
+| `ops/cold_offbox.py` | **The off-box cold leg** (B-TOKEN-WATCH-STORAGE). Daily at 05:30 UTC as user `tokenwatch-cold`: each `cold/*.gz` over an hour old is decompressed to EOF, uploaded to Backblaze B2 (`dt-archive-cold`, under `token-watch/cold/`), downloaded back by file id and compared, logged in `offbox/cold-offbox-manifest.jsonl`, and only then removed locally. It is the only thing that deletes from `cold/`, and it refuses any key not restricted to `token-watch/` or able to delete. |
+| `ops/store_watch.py` | Daily at 06:00 UTC as root: measures the store with `liveness._store_size_check()` (and nothing else from liveness) and mints a system alert above the 6 GiB warn line or the 8 GiB cap. |
+| `ops/unit_failed.py`, `ops/alert_mint.py` | Every token-watch unit names `token-watch-failed@.service` in `OnFailure=`; it mints an alert carrying the unit's last error lines. `alert_mint` is the one mint path (the same form as `dt-deploy-drift.sh`). |
+| `ops/` and the collector | **ops/ is outside the collector on purpose**: `test_pipeline.py` holds the collector to one outbound module (`providers.py`, the budget gate); the ops jobs reach B2 or run local commands for reasons unrelated to the provider budget. `test_ops_boundary.py` keeps the two apart. |
+| `deploy/` | `cold_offbox_access.sh` (the user and ACL, with assertions) and `install_storage.sh` (install from git blobs at a reviewed sha; writes `/opt/token-watch/INSTALLED`). |
+| `tools/mint_cold_key.py`, `tools/prove_cold_key.py` | Mint the restricted B2 key once, and prove by refusal what it cannot do. |
+
+### Reading the off-box archive back
+Each manifest line names the object (`b2_name`) and its `file_id`; fetch by id with any B2 client authorised for `dt-archive-cold`, then check the `sha256`. **If the manifest is ever lost**, the census is the object listing under `token-watch/cold/` with each object's sha1 (which listing call depends on whether the key can hide files — recorded by `prove_cold_key.py` at install; see the B-TOKEN-WATCH-STORAGE completion report). `tools/backfill_creator_stake.py` reads `cold/` directly and will find only the newest day there after the drain; fetch older days from B2 first if it is ever re-run.
 | `tests/` | Five suites, 141 checks. **Every block carries a positive control**, and `test_wiring.py` drives PRODUCTION entry points only — it exists because a reviewer found 57 checks passing while nothing tested the seam between two modules. |
 
 ## Running the tests

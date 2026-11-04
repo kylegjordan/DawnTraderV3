@@ -1,0 +1,11 @@
+[Unit]
+Description=token-watch off-box cold leg, daily
+
+[Timer]
+# An hour after tiering (04:30 plus up to 10 minutes). The upload skips any file modified in the last hour, so the
+# morning's new archive is left for the next day's run: in steady state cold/ always holds about one day's file.
+OnCalendar=*-*-* 05:30:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

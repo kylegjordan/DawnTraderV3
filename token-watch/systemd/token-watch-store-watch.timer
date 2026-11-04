@@ -1,0 +1,10 @@
+[Unit]
+Description=token-watch store-size watch, daily
+
+[Timer]
+# After the off-box upload (05:30), so the reading reflects the day's drain.
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

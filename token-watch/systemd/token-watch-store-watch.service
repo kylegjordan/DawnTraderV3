@@ -1,0 +1,19 @@
+[Unit]
+Description=token-watch store-size watch: alert when the study passes its warn line or its 8 GiB cap
+# B-TOKEN-WATCH-STORAGE OBJ-3 (#1132). Root, because only deploy can mint an alert and the store is tokenwatch-only.
+# ReadOnlyPaths makes "this job writes nothing in the store" a fact, not a promise: it calls
+# liveness._store_size_check() only, never check(), whose save_state would leave root-owned files in state/.
+OnFailure=token-watch-failed@%n.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/token-watch
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/token-watch/ops/store_watch.py
+ReadOnlyPaths=/var/lib/token-watch
+CPUQuota=25%
+MemoryMax=128M
+TasksMax=64

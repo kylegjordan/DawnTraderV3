@@ -1,0 +1,13 @@
+[Unit]
+Description=token-watch: page that %i failed
+# B-TOKEN-WATCH-STORAGE OBJ-4 (#1132). Named by OnFailure= in every token-watch unit. Root, because only deploy
+# can mint an alert. The alert carries the failed unit's last error lines; it is deduped per unit.
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/token-watch
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/token-watch/ops/unit_failed.py %i
+TimeoutStartSec=180
