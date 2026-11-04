@@ -11,7 +11,8 @@
  * Cron (root, beside the B75 jobs):
  *   45 2 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b-disk-file-tiering.ts" >> /var/log/dawntrader/disk-file-tiering.log 2>&1
  * One-off, the Phase 41F-L trace AFTER its writer is gone (P5 — writer first, Langston C1):
- *   npx tsx server/scripts/b-disk-file-tiering.ts --trace diagnostic-reports/phase-41F-L-trace.ndjson
+ *   su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b-disk-file-tiering.ts --trace diagnostic-reports/phase-41F-L-trace.ndjson"
+ *   (as deploy, so it shares the cron run's lock in deploy's home)
  *
  * Per file, in this order, and the original is deleted ONLY at the end:
  *   gzip beside it → uploadWarmFile (streaming; never the whole-file Buffer path) →
@@ -151,7 +152,7 @@ async function moveOne(storage: StorageClient, client: pg.Client, cfg: Cfg, c: C
       // stored object checksum must be reproduced exactly from the file still on disk — AND the object
       // must still be in storage with that checksum, re-read now, before the original goes (prove-then-
       // delete holds on the resume path too; Langston Step 4 part 1 record item).
-      if (prior.checksum !== gz.sha256) throw new Error(`resume refused: the file changed since its proof (stored ${prior.checksum}, now ${gz.sha256})`);
+      if (prior.checksum !== gz.sha256) throw new Error(`resume refused: the file no longer reproduces its proof (stored ${prior.checksum}, now ${gz.sha256}) — a changed file or a changed gzip build`);
       const again = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
       if (again.checksum !== prior.checksum) throw new Error(`resume refused: the stored object reads back ${again.checksum}, the proof says ${prior.checksum}`);
       fs.unlinkSync(c.path);

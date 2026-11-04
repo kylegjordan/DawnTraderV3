@@ -40,8 +40,11 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
    - **O1 — flip archival-health's `disk-file-tiering` entry from `onMissing: 'skip'` to `'alert'`.** Trigger: the first `DONE moved=N failed=0` line in `/var/log/dawntrader/disk-file-tiering.log` on staging. Done as a Step 9 increment, reviewed, deployed.
    - **O2 — install the root crontab line** (`45 2 * * *`, the header of `server/scripts/b-disk-file-tiering.ts`) at Step 6; without it nothing runs and, until O1, nothing pages.
    - **O3 — the forced arming run of the watchdog's disk checks** (Langston C1) at Step 7, with the `df /` reading quoted.
+   - **O5 — exercise both new DONE lines at Step 7 (Langston part 1 ruling (c)), expected output stated first:** pre-create the lock file, run the job, expect exactly `DONE moved=0 failed=1 lock_held=1`, then read back an ACTIVE `archival-health-disk-file-tiering-failed` row after archival-health runs; neither line has ever been emitted, so no log silence is evidence that a skip pages. (Note for reading run one: `/` is under the 15 GiB backlog line, so the first run stops with `stopped_by=run-cap` after about 2 GiB of originals — by design, and still a valid O1 trigger.)
    - **O4 — warm-tier headroom (Langston §13, FOLDED as a Step 7 measurement, not a new batch):** before the first run and after it, read what the `dt-archive` bucket holds and whether Supabase Storage meters against the plan cap that alert `c0a0b00d` reports (130.3 GB of 200 GB); the first run moves at most 2 GiB, so the meter's movement is visible.
 **Record items taken:** the resume path now re-downloads the object and checks its checksum before deleting the original; a `verified` row whose file is already gone (died between delete and `markActive`) is finished at the start of the next run; leftover `.tiering*.gz` temps are swept at the start of every run; the upload's echoed checksum is no longer compared — the gate is stated as TWO independent legs (download sha256 = local .gz; inflated download = original).
+
+**Part 1: PROCEED (Langston, at `955e671c1`).** Record items (a) the `--trace` line now runs as deploy and (b) the resume refusal names both causes — folded with part 2's commit.
 
 ## Numbers
 - tsc 329 = baseline at every increment.
