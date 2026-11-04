@@ -1,9 +1,9 @@
 ---
 name: wake-watcher-heartbeat
-description: Hourly comms + wake-watcher heartbeat for ALL THREE Claude Code sessions (OLD / NEW / ANALYST) — health-check the Discord bridges + system alerts, then post the result to Discord so every session's wake watcher fires and each can re-verify + re-arm its watcher
+description: Hourly comms + wake-watcher heartbeat for ALL FIVE Claude Code sessions (OLD / NEW / ANALYST / Infra / PM) — health-check the Discord bridges + system alerts, then post the result to Discord so every session's wake watcher fires and each can re-verify + re-arm its watcher
 ---
 
-Hourly comms + wake-watcher heartbeat for ALL THREE DawnTrader Claude Code sessions: OLD Claude (CC-A), NEW Claude (CC-B), and ANALYST Claude (CC-C).
+Hourly comms + wake-watcher heartbeat for ALL FIVE DawnTrader Claude Code sessions: OLD Claude (CC-A), NEW Claude (CC-B), ANALYST Claude (CC-C), Infra Claude (CC-INFRA) and PM Claude (CC-PM).
 
 This runs in a FRESH context with no memory of any session. ★ CHANGED 2026-09-30 (B-TOKEN-BURN-CUT, #1127): its value is step 2b — it reads each session's watcher liveness file on this laptop and wakes NOBODY when all are alive. It used to post a line that woke every session hourly so each could check itself; the all-clear has been suppressed since #995, and the watchers now prove their own liveness with a file. Do NOT try to arm or re-arm any Monitor here — the wake watchers live in the interactive sessions, not in this run; anything you arm here is useless to them.
 
@@ -50,7 +50,7 @@ print(len(due),'due:',[str(o.get('id'))[:8] for o in due])"
 3. Compose ONE plain line: "bridges active: <y/n> | inbox-log last-write: <time> | active-unacked alerts: <none / list ids> | watchers: <all alive / DEAD: names / STUCK: names (count) / CENSUS-FAILED: names / not armed: names> | <the control line from step 2c, verbatim>". If a bridge is NOT active or an alert is active+unacked, say so clearly so the woken sessions act on it.
    The control line's states, for reading it: answered · awaiting · re-issued · not yet issued · NOT answered · NOT delivering · STUCK (control pending) · CENSUS-FAILED (control not judged) · not armed · DEAD · held (record reset) · held — another heartbeat run is in progress · stale heartbeat lock taken over · ISSUER GATED BY · ISSUER NOT RUN · log rotated · UNDETERMINED · re-issue failed · control record new / RESET / NOT PERSISTING · remote read failed · script start failed · script error · issued <names> (a note, not a state). A line starting "control: NOT answered" or "control: CHECK FAILED" is a problem; any other control line is not. The script's "NOTIFY" line already says which — never re-decide it from these words.
 
-4. POST that line to Discord so all three watchers fire. The message MUST name ALL FIVE sessions so none of them filter it out. ⚠️ PM Claude was added 2026-11-04 (B-PM-CLAUDE P1b), for the same reason as Infra Claude below: ⚠️ Infra Claude was added 2026-08-26: the post named three, so his filter correctly SUPPRESSED it as "names other sessions, not me" and he sat outside this whole safety layer, and the sender MUST be "Heartbeat" — NOT any session's display name, or that session will treat it as its own post and never wake. Run:
+4. POST that line to Discord so all five watchers fire. The message MUST name ALL FIVE sessions so none of them filter it out. ⚠️ PM Claude was added 2026-11-04 (B-PM-CLAUDE P1b), for the same reason as Infra Claude below: ⚠️ Infra Claude was added 2026-08-26: the post named three, so his filter correctly SUPPRESSED it as "names other sessions, not me" and he sat outside this whole safety layer, and the sender MUST be "Heartbeat" — NOT any session's display name, or that session will treat it as its own post and never wake. Run:
 
    ssh root@204.168.141.77 '/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --sender "Heartbeat" --message "OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: <the line from step 3>."'
 

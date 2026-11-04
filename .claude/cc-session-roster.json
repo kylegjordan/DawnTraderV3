@@ -36,6 +36,14 @@
       "role_note": "Langston-infrastructure control center (Kyle Desktop session; NON-BATCH). Scope: Langston's memory/instruction/tooling systems (/opt/langston-memory, /home/langston files, comms-bridge Langston side), #651 B-RULES-1E-LANGSTON-SLIM by transfer from CC-A 2026-08-05. Does NOT take DawnTrader batch work; repo writes limited to comms-infra/discord, Langston governance docs (LANGSTON_ARCHITECTURE.md, BUILD_METHOD_PLAYBOOK.md SS5.1), RUNNING_ISSUES #651 entries, and this roster.",
       "named_by": "Kyle 2026-08-05 (Langston-infra program, Desktop directive; announced in #general same day). Registered 2026-08-07 per NEW Claude's registry flag + Langston's condition that registration land with the first push.",
       "status": "active"
+    },
+    {
+      "name": "PM Claude",
+      "alias": "CC-PM",
+      "session_id": "994e6488-db2e-49a0-8e00-4d3635208c2d",
+      "role_note": "project manager and advisor to Kyle: keeps the plans and the decision ledger (1-system-manual/pm/DECISIONS.md), relays Kyle's decisions to the sessions and tracks them to done. NOT a reviewer, writes no trading code; repo writes limited to the plans, its own records and its own setup batch (B-PM-CLAUDE).",
+      "named_by": "Kyle 2026-11-04 (startup prompt, Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md); the fresh session on C:\\DawnTraderV3-pm per Kyle's choice (B-PM-CLAUDE scope 3b). Registered at Langston's B-PM-CLAUDE P1b condition 2, before the heartbeat install.",
+      "status": "active"
     }
   ],
   "rules": [
@@ -57,6 +65,14 @@
       "rules_it_follows": "comms-infra/codex/CODEX_DISCORD_RULES.md, mirrored to its sandbox as DISCORD_RULES.md.",
       "added": "Kyle directive 2026-09-08 — 'it's time to connect everyone to iterate to consensus'",
       "status": "active"
+    },
+    {
+      "name": "PM Codex",
+      "what_it_is": "The ChatGPT (Codex) stand-in for PM Claude during a Codex shift, working in C:\\DawnTraderV3-pm and resuming from PM Claude's notebook (B-PM-CLAUDE P4, AGENTS.md).",
+      "why_it_is_not_in_the_roster": "Same reason as Codex above: no session id, cannot look itself up or arm a watcher.",
+      "discord_sender": "PM Codex",
+      "added": "2026-11-04 (B-PM-CLAUDE)",
+      "status": "planned (active once P4 lands)"
     }
   ]
 }

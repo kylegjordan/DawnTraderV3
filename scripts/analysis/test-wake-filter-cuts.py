@@ -17,44 +17,44 @@ def row(kind, sender, text):
     return json.dumps({"ts": "2026-09-03T18:00:00+00:00", "source": "discord-cc-bridge",
                        "transport": "discord", "kind": kind, "sender": sender, "text": text})
 
-HB_OK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_OK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
          "bridges active: y | inbox-log last-write: 36s ago (recent) | active-unacked alerts: none. "
          "Re-verify your wake watcher is alive (are WAKE events arriving?); re-arm only if dead.")
-HB_OK_ALERTS = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_OK_ALERTS = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                 "bridges active: y | inbox-log last-write: 45s ago (recent) | active-unacked alerts: "
                 "5 DUE (b1f58a01, 1d1573c7) — please triage. Re-verify your wake watcher is alive.")
-HB_BAD = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_BAD = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
           "bridges active: n | inbox-log last-write: 9400s ago STALE | active-unacked alerts: none.")
 HB_REWORD = ("OLD Claude / NEW Claude — hourly heartbeat: something new we have never emitted before, "
              "please look at it now.")
 # Langston Step-4 Q2: all 13 live deliveries came through the STALE arm and SIX were negations.
-HB_NOT_STALE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_NOT_STALE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                 "bridges active: y | inbox-log last-write: quiet but not stale | "
                 "active-unacked alerts: none.")
-HB_BORDERLINE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_BORDERLINE = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                  "bridges active: y | inbox-log last-write: borderline stale | "
                  "active-unacked alerts: none.")
 # Step 7 (Langston): the heartbeat now reports a running-but-not-saving watcher as STUCK instead of DEAD.
-HB_STUCK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_STUCK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
             "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
             "watchers: STUCK: CC-B (2 running) | control: not run.")
-HB_DEAD_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_DEAD_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
              "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
              "watchers: DEAD: CC-C | control: not run.")
 # B-WAKE-HEARTBEAT-CONTROL-DATE (#1162): the control decision's own failure verdict, everything else healthy.
-HB_CHECK_FAILED = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_CHECK_FAILED = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                    "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
                    "watchers: all alive | control: CHECK FAILED — control record new; CC-A answered.")
-HB_CONTROL_OK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_CONTROL_OK = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                  "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
                  "watchers: all alive | control: CC-A answered; CC-B awaiting; CC-C re-issued; CC-INFRA DEAD.")
-HB_MIDFIELD_NA = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_MIDFIELD_NA = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                   "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
                   "watchers: all alive | control: CC-A answered; CC-B NOT answered.")
-HB_CENSUS_FAILED = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_CENSUS_FAILED = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
                     "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
                     "watchers: CENSUS-FAILED: CC-B | control: CC-A answered.")
-HB_ALIVE_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: "
+HB_ALIVE_W = ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: "
               "bridges active: y | inbox-log last-write: 40s ago (recent) | active-unacked alerts: none | "
               "watchers: all alive | control: answered.")
 PUSH_ROUTINE = "OLD Claude / NEW Claude / ANALYST Claude — review branch moved to abc1234. Pull before you push."
