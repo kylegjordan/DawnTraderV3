@@ -33,6 +33,16 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 5. **The watchdog's disk thresholds are environment-overridable** (only for the forced arming run, C1). Its CHECK entries for disk carry their own `dedupeKey`, `category`, `severity`, a dynamic body and a `reading`.
 6. **Windows test note:** `b-staging-liveness-watch.test.ts` fails to LOAD on Windows with or without this change (control on the unchanged code: SyntaxError at the `.mjs` import, the shebang); the new tests passed 10/10 against a shebang-free copy. CI on Linux is the graded run.
 
+## Part 1 round 2 (Langston CHANGES on 1a; the data path approved as written) — increment 1a-r2
+1. **The lock** moved out of `/tmp` to deploy's home (`~/.b-disk-file-tiering.lock`, env-overridable), and a lock that cannot be reclaimed now THROWS instead of looping into a permanent quiet skip.
+2. **A skipped or crashed run reads as a failure:** the lock-held path logs `DONE moved=0 failed=1 lock_held=1`, and any fatal error logs `DONE moved=0 failed=1 fatal=1`, so archival-health's latest-DONE read can never find an older green line instead. The general tail-60 narrowing in archival-health is homed on `#744` (B-GATE-GUARD), owner CC-A, beside the unbuilt checker legs (Langston's home, recorded at Step 10).
+3. **OBLIGATIONS BEFORE CLOSE (tracked here and in the completion report, not only in a code comment):**
+   - **O1 — flip archival-health's `disk-file-tiering` entry from `onMissing: 'skip'` to `'alert'`.** Trigger: the first `DONE moved=N failed=0` line in `/var/log/dawntrader/disk-file-tiering.log` on staging. Done as a Step 9 increment, reviewed, deployed.
+   - **O2 — install the root crontab line** (`45 2 * * *`, the header of `server/scripts/b-disk-file-tiering.ts`) at Step 6; without it nothing runs and, until O1, nothing pages.
+   - **O3 — the forced arming run of the watchdog's disk checks** (Langston C1) at Step 7, with the `df /` reading quoted.
+   - **O4 — warm-tier headroom (Langston §13, FOLDED as a Step 7 measurement, not a new batch):** before the first run and after it, read what the `dt-archive` bucket holds and whether Supabase Storage meters against the plan cap that alert `c0a0b00d` reports (130.3 GB of 200 GB); the first run moves at most 2 GiB, so the meter's movement is visible.
+**Record items taken:** the resume path now re-downloads the object and checks its checksum before deleting the original; a `verified` row whose file is already gone (died between delete and `markActive`) is finished at the start of the next run; leftover `.tiering*.gz` temps are swept at the start of every run; the upload's echoed checksum is no longer compared — the gate is stated as TWO independent legs (download sha256 = local .gz; inflated download = original).
+
 ## Numbers
 - tsc 329 = baseline at every increment.
 - Unit: `b-disk-file-tiering.test.ts` 12/12 (boundary test proved by flipping `>` to `>=`: 1/12 fails); `b-disk-file-tiering-moved-day.test.ts` 5/5; watchdog 10/10 (shebang-free copy); actor-allowlist, deploy-actor-parity, venue-quiet store, breaker suites green.

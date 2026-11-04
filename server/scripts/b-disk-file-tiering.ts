@@ -23,6 +23,7 @@
  * ═════════════════════════════════════════════════════════════════════════════
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import pg from 'pg';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
@@ -35,7 +36,10 @@ import {
 } from '../services/data-archive/disk-file-tiering.js';
 
 const { Client } = pg;
-const LOCK_FILE = process.env.B_DISK_FILE_TIERING_LOCK ?? '/tmp/b-disk-file-tiering.lock';
+// Not /tmp: in a world-writable sticky /tmp another uid holding this path would make every later run
+// fail to reclaim it, silently, forever (Langston Step 4 part 1, change 1; #979). Deploy's home, as the
+// liveness watchdog keeps its state file.
+const LOCK_FILE = process.env.B_DISK_FILE_TIERING_LOCK ?? path.join(os.homedir(), '.b-disk-file-tiering.lock');
 const LOCK_STALE_MS = 12 * 60 * 60 * 1000;
 const TRACE_SPEC: DiskFileSpec = { folder: 'diagnostic-reports', sourceTable: 'disk_file.diagnostic_reports', namePattern: /^$/ };
 /** a file being archived whole must have stopped growing (the trace's writer is removed first, P5) */
@@ -82,6 +86,8 @@ function freeBytes(): number {
   return Number(s.bavail) * Number(s.bsize);
 }
 
+/** true = acquired; false = a live run holds it. Any other failure (e.g. an unlink refused) THROWS, so it
+ *  reaches the DONE line as a failure rather than reading as a routine skip. */
 function acquireLock(): boolean {
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -91,9 +97,12 @@ function acquireLock(): boolean {
       return true;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-      try {
-        if (Date.now() - fs.statSync(LOCK_FILE).mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(LOCK_FILE); continue; }
-      } catch { continue; }
+      let ageMs: number;
+      try { ageMs = Date.now() - fs.statSync(LOCK_FILE).mtimeMs; } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue; // vanished between open and stat
+        throw e;
+      }
+      if (ageMs > LOCK_STALE_MS) { fs.unlinkSync(LOCK_FILE); continue; } // an EPERM here throws — loudly
       return false;
     }
   }
@@ -139,17 +148,25 @@ async function moveOne(storage: StorageClient, client: pg.Client, cfg: Cfg, c: C
     const gz = await gzipFile(c.path, gzPath);
     if (prior) {
       // Resume after a crash between the commit and the delete: the gzip is deterministic, so the
-      // stored object checksum must be reproduced exactly from the file still on disk.
+      // stored object checksum must be reproduced exactly from the file still on disk — AND the object
+      // must still be in storage with that checksum, re-read now, before the original goes (prove-then-
+      // delete holds on the resume path too; Langston Step 4 part 1 record item).
       if (prior.checksum !== gz.sha256) throw new Error(`resume refused: the file changed since its proof (stored ${prior.checksum}, now ${gz.sha256})`);
+      const again = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
+      if (again.checksum !== prior.checksum) throw new Error(`resume refused: the stored object reads back ${again.checksum}, the proof says ${prior.checksum}`);
       fs.unlinkSync(c.path);
       await markActive(client, prior.id);
       return original.bytes;
     }
 
-    const upload = await storage.uploadWarmFile(cfg.warmBucket, objPath, gzPath, { size: gz.bytes, checksum: gz.sha256 });
+    await storage.uploadWarmFile(cfg.warmBucket, objPath, gzPath, { size: gz.bytes, checksum: gz.sha256 });
+    // TWO independent legs prove the copy, and only two: (1) the downloaded object's sha256 equals the
+    // local .gz's — downloadWarmFile re-hashes the file it actually wrote; (2) below, the inflated
+    // download equals the original byte for byte. The upload's returned checksum is NOT a leg: it echoes
+    // the value passed in (storage-client.ts, `opts.checksum ?? …`), so comparing it could never fail.
     const dl = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
-    if (upload.checksum !== gz.sha256 || dl.checksum !== gz.sha256) {
-      throw new Error(`checksum mismatch: local=${gz.sha256} upload=${upload.checksum} readback=${dl.checksum}`);
+    if (dl.checksum !== gz.sha256) {
+      throw new Error(`checksum mismatch: local=${gz.sha256} readback=${dl.checksum}`);
     }
     const inflated = await digestGunzipped(verifyPath);
     if (inflated.sha256 !== original.sha256 || inflated.newlines !== original.newlines || inflated.bytes !== original.bytes) {
@@ -200,6 +217,37 @@ async function moveOne(storage: StorageClient, client: pg.Client, cfg: Cfg, c: C
   }
 }
 
+/** Housekeeping under the lock, before any move: (a) temps a killed run left behind (they are inert —
+ *  boundsFromName refuses their names — but they sit in the folders this job exists to shrink);
+ *  (b) a `verified` disk-file row whose file is already gone — the run died after the delete and before
+ *  `markActive` — is finished now, so it is not stranded outside the rotator's `active` selection. */
+async function tidy(client: pg.Client, appRoot: string): Promise<{ temps: number; finished: number }> {
+  let temps = 0;
+  for (const spec of [...DISK_FILE_SPECS, TRACE_SPEC]) {
+    const dir = path.join(appRoot, spec.folder);
+    let names: string[] = [];
+    try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const n of names) {
+      if (n.endsWith('.tiering.gz') || n.endsWith('.tiering.verify.gz')) { rmQuiet(path.join(dir, n)); temps++; }
+    }
+  }
+  const folderOf = new Map([...DISK_FILE_SPECS, TRACE_SPEC].map((sp) => [sp.sourceTable, sp.folder]));
+  const r = await client.query(
+    `SELECT id, source_table, partition_label FROM data_archive_manifest
+      WHERE source_table LIKE 'disk\\_file.%' AND tier = 'warm' AND state = 'verified'`,
+  );
+  let finished = 0;
+  for (const row of r.rows as Array<{ id: string; source_table: string; partition_label: string }>) {
+    const folder = folderOf.get(row.source_table);
+    if (!folder) { log(`WARN verified row ${row.id} has an unknown source_table ${row.source_table}`); continue; }
+    if (fs.existsSync(path.join(appRoot, folder, row.partition_label))) continue; // still on disk: moveOne resumes it
+    await markActive(client, row.id);
+    finished++;
+    log(`finished stranded row ${row.id} ${row.source_table}/${row.partition_label} (file already gone, proof committed)`);
+  }
+  return { temps, finished };
+}
+
 function listCandidates(appRoot: string, cfg: Cfg, nowMs: number): { candidates: Candidate[]; foldersSeen: number } {
   const candidates: Candidate[] = [];
   let foldersSeen = 0;
@@ -239,7 +287,13 @@ async function main(): Promise<void> {
   for (const k of ['DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
     if (!process.env[k]) { log(`${k} not set`); process.exit(1); }
   }
-  if (!acquireLock()) { log('another run holds the lock — skipping this tick'); return; }
+  if (!acquireLock()) {
+    // A skipped run must READ as a failure: archival-health looks for the latest DONE line, and an
+    // older run's DONE in its window would otherwise read green (Langston Step 4 part 1, change 2).
+    log(`another run holds the lock (${LOCK_FILE}) — skipping this tick`);
+    log('DONE moved=0 failed=1 lock_held=1');
+    return;
+  }
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
@@ -249,6 +303,8 @@ async function main(): Promise<void> {
     const nowMs = Date.now();
     const freeStart = freeBytes();
     log(`started run free=${freeStart} cwd=${appRoot}`);
+    const t = await tidy(client, appRoot);
+    if (t.temps || t.finished) log(`tidy: removed ${t.temps} leftover temp(s), finished ${t.finished} stranded row(s)`);
 
     const traceIdx = process.argv.indexOf('--trace');
     let take: Candidate[];
@@ -293,5 +349,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   log(`FATAL ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+  log('DONE moved=0 failed=1 fatal=1'); // a crashed run is a failed run, never a green tail (change 2)
   process.exit(1);
 });
