@@ -78,6 +78,30 @@ const POOL_CONFIG = {
 export const pool = new Pool(POOL_CONFIG);
 export const db = drizzle({ client: pool, schema });
 
+// ─── B-DB-POOL-GUARD OBJ-1 (#1239, 2026-11-04): an ended connection must never crash the app ──────────
+// When the database (or the network) ends a connection that is sitting IDLE in the pool, pg-pool removes
+// it and calls `pool.emit('error', err, client)` (pg-pool 3.7.0 `index.js:51-62`, `makeIdleListener`).
+// An 'error' event with no listener throws, so the whole process restarts. MEASURED: on 2026-11-04 an
+// operator ended ten stuck connections at 18:16:23Z (`57P01 terminating connection due to administrator
+// command` in staging error.log) and PM2 restarted the app at 18:16:28Z.
+// The pool has ALREADY dropped the client by the time this fires and the next acquire opens a fresh one,
+// so there is nothing to repair here: log one line with the code and the pool's counts, and count it.
+// Errors on a CHECKED-OUT client still reject the caller's query as before; this listener sees only idle
+// clients. (The crew board's pool states the same rule with an empty listener, `crew-coordination.ts`;
+// this one logs, so an ended connection is visible rather than swallowed.)
+let poolIdleClientErrors = 0;
+export function getPoolIdleClientErrorCount(): number {
+  return poolIdleClientErrors;
+}
+pool.on('error', (err: Error & { code?: string }) => {
+  poolIdleClientErrors += 1;
+  console.error(
+    `[B-DB-POOL-GUARD][POOL_IDLE_CLIENT_ERROR] code=${err?.code ?? 'none'} ` +
+      `message=${err?.message ?? String(err)} total=${pool.totalCount} idle=${pool.idleCount} ` +
+      `waiting=${pool.waitingCount} count=${poolIdleClientErrors}`,
+  );
+});
+
 // Boot-time confirmation log so config landing is visible in PM2 logs without
 // requiring a DB query. Per Langston Step 1 Q6 #1.
 console.log(
