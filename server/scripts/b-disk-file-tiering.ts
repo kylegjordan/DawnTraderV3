@@ -23,6 +23,9 @@
  * The page is archival-health's (`DONE moved=N failed=N …`, P7), never a second key.
  * ═════════════════════════════════════════════════════════════════════════════
  */
+// The app's .env (DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY): cron's `su - deploy` shell does not carry it, so
+// every B75 job loads it here (found at Step 7: without this line the first scheduled run would have exited at once).
+import 'dotenv/config';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -286,7 +289,8 @@ function traceBounds(p: string, mtimeMs: number): NameBounds {
 
 async function main(): Promise<void> {
   for (const k of ['DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
-    if (!process.env[k]) { log(`${k} not set`); process.exit(1); }
+    // A missing setting is a failed run, and must say so on a DONE line (archival-health reads the latest one).
+    if (!process.env[k]) { log(`${k} not set`); log('DONE moved=0 failed=1 env_missing=1'); process.exit(1); }
   }
   if (!acquireLock()) {
     // A skipped run must READ as a failure: archival-health looks for the latest DONE line, and an
