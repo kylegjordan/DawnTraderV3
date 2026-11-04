@@ -1375,7 +1375,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **WHY:** the six lines were 62.19% of a full rotated app log (1,074,487,652 characters, 18:02-20:56Z 2026-11-04; re-derived by Langston); the disk was at 84%. Disposition (4), connected and removed (Langston C1).
 **BLAST RADIUS:** each tag pair had exactly one emitter (Langston's census at the ref); after the edit `git grep` finds none of the six, and finds the surviving `[I7-WS-D][BROADCAST_SEND]` (control). `rawStr` stays (it is parsed); `payloadStr` had no other use. Readers: the three scripts above, whose consumers (rows `8g`/`8g-bis`) moved to `B-PRICE-STALENESS-BOUND`, closed 2026-10-20 (`GOVERNANCE_EXCEPTIONS:63`); left in place they would print a zero reading as "no cache writes" (Langston C3). Records that cite them (completion reports, change lists, scopes) stay as history.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/<name>.20261104-B-DISK-FILE-TIERING.removed` for each of the three scripts (verbatim); the six log lines are in this entry.
-**COMMIT:** the OBJ-10 commit (sha recorded here at Step 10).
+**COMMIT:** `cdc3e4c60`. ⚠️ The removal comments at each site name the dead tags, so a source `git grep` for a tag still returns a `server/` hit; the cut is verified on a rotated LOG (awk tally by tag pair), not by a source grep (Langston, Step 4).
 
 ---
 

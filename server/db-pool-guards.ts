@@ -14,10 +14,19 @@ import type pg from 'pg';
 //     connection failure even mid-query (`client.js` `_handleErrorEvent`). `pool.query()` covers itself with a
 //     `once('error')`, but a client from `pool.connect()` — every drizzle transaction
 //     (`drizzle-orm/node-postgres/session.js:138`) — has none. MEASURED on staging 2026-11-04, pg 8.13.1: a held
-//     transaction ended by the server (`25P04`) crashed the process ("Unhandled 'error' event", exit 1); with
-//     listener (2), exit 0 and the next query ran on a fresh connection.
+//     transaction ended by the server crashed the process ("Unhandled 'error' event", exit 1); with listener (2),
+//     exit 0 and the next query ran on a fresh connection. (That run is the integration evidence; this repo's unit
+//     tests stub the emitters, so a pg / pg-pool version bump that changes this wiring is NOT caught by CI.)
+//     WHAT THE EVENT CARRIES (Langston, Step 4): with a query IN FLIGHT the server's FATAL (e.g. `25P04`) goes to
+//     that query's rejection, and the 'error' event that follows is pg's own `Connection terminated unexpectedly`
+//     with NO code (`client.js:130-149`), so the line logs `code=none` and cannot tell a timeout from a lost network
+//     link — the CALLER's rejection carries the code. With no query in flight (e.g. `25P03` idle-in-transaction) the
+//     event itself carries the code.
 // In both cases the pool already discards the dead client (on removal, or on release because it is no longer
 // queryable), so the listeners only LOG and COUNT. Volume is bounded by OBJ-5's per-window alert, not here.
+// POPULATIONS (Langston): `checkedOutClientErrors` counts connection errors on checked-out clients, INCLUDING plain
+// `pool.query()` ones that were already safe, so it is not a count of crashes prevented. Until OBJ-5 reads the
+// counts, the LOG LINE is the carrier; the counters have no reader yet.
 
 export interface PoolGuardCounts {
   idleClientErrors: number;
@@ -53,9 +62,11 @@ export function attachPoolGuards(pool: pg.Pool, label: string): void {
   pool.on('connect', (client) => {
     const gc = client as unknown as GuardedClient;
     gc.on('error', (err) => {
-      if (!gc[CHECKED_OUT]) return; // idle: the pool listener above owns it
-      c.checkedOutClientErrors += 1;
-      console.error(line('POOL_CHECKED_OUT_CLIENT_ERROR', label, pool, err, c.checkedOutClientErrors));
+      // Langston C2: always LOG (a wrong flag must never mean silence); COUNT only while checked out. On an idle
+      // error this fires first with checkedOut=false and the pool listener above then logs and counts it.
+      const checkedOut = !!gc[CHECKED_OUT];
+      if (checkedOut) c.checkedOutClientErrors += 1;
+      console.error(`${line('POOL_CLIENT_ERROR', label, pool, err, c.checkedOutClientErrors)} checkedOut=${checkedOut}`);
     });
   });
   pool.on('acquire', (client) => {

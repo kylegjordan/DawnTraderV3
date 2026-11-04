@@ -43,12 +43,18 @@ describe('the app pool survives an ended idle connection', () => {
     const before = getPoolCheckedOutClientErrorCount();
     expect(() => client.emit('error', Object.assign(new Error('terminating connection due to transaction timeout'), { code: '25P04' }))).not.toThrow();
     expect(getPoolCheckedOutClientErrorCount()).toBe(before + 1);
-    const line = spy.mock.calls.map((c) => String(c[0])).find((s) => s.includes('[B-DB-POOL-GUARD][POOL_CHECKED_OUT_CLIENT_ERROR]'));
+    const line = spy.mock.calls.map((c) => String(c[0])).find((s) => s.includes('[B-DB-POOL-GUARD][POOL_CLIENT_ERROR]'));
+    // NOTE (Langston C1): this stub carries a code; with real pg and a query in flight the event is
+    // "Connection terminated unexpectedly" with NO code (the 25P04 goes to the caller's rejection), so production
+    // lines read code=none on that path. The staging process-exit run is the integration evidence.
     expect(line).toContain('code=25P04');
-    // Once released it is idle again: the per-client listener stays silent (the pool's own listener owns that case).
+    expect(line).toContain('checkedOut=true');
+    // Once released it is idle again: the line is still written (never silent, C2) but the counter does not move.
     pool.emit('release', undefined, client);
+    spy.mockClear();
     expect(() => client.emit('error', new Error('later'))).not.toThrow();
     expect(getPoolCheckedOutClientErrorCount()).toBe(before + 1);
+    expect(String(spy.mock.calls.at(-1)?.[0])).toContain('checkedOut=false');
     spy.mockRestore();
   });
 
@@ -92,5 +98,7 @@ describe('the app pool survives an ended idle connection', () => {
     await import('../../db.js');
     expect(pool.listenerCount('error')).toBe(1);
     expect(pool.listenerCount('connect')).toBe(1);
+    expect(pool.listenerCount('acquire')).toBe(1);
+    expect(pool.listenerCount('release')).toBe(1);
   });
 });
