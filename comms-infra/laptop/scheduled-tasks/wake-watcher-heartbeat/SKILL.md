@@ -35,7 +35,7 @@ for l in sys.stdin:
     due.append(o)
 print(len(due),'due:',[str(o.get('id'))[:8] for o in due])"
 
-2b. WATCHER LIVENESS — read on THIS laptop, wakes nobody (B-TOKEN-BURN-CUT, #1127). Each session's event-only watcher writes C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json.alive every 300 s. For each of CC-A CC-B CC-C CC-INFRA:
+2b. WATCHER LIVENESS — read on THIS laptop, wakes nobody (B-TOKEN-BURN-CUT, #1127). Each session's event-only watcher writes C:/Users/kyleg/.claude/cc-wake-state/<ALIAS>.json.alive every 300 s. For each of CC-A CC-B CC-C CC-INFRA CC-PM:
    python -c "import os,time,sys; p='C:/Users/kyleg/.claude/cc-wake-state/'+sys.argv[1]+'.json.alive'; print(sys.argv[1], 'none' if not os.path.exists(p) else int(time.time()-os.path.getmtime(p)))" <ALIAS>
    Older than 900 s is NOT yet DEAD: since cfe70f92c a watcher that runs but cannot save its position stops refreshing the file on purpose (Langston, B-TOKEN-BURN-CUT Step 7). For each stale alias, count its running watchers:
    bash ~/.claude/cc-wake-count.sh <ALIAS>
@@ -43,16 +43,16 @@ print(len(due),'due:',[str(o.get('id'))[:8] for o in due])"
    ⛔ A DEAD watcher CANNOT be woken by the Discord post in step 4 — it is the thing that is dead. That is why a DEAD result adds --notify (Kyle's phone) in step 4.
 
 2c. DAILY CONTROL — DECIDED BY A SCRIPT, NEVER BY YOU (B-WAKE-HEARTBEAT-CONTROL-DATE, #1162). Run it on EVERY run, passing each alias's result from step 2b (alive / DEAD / STUCK / CENSUS-FAILED / not armed — quote "not armed"):
-   python C:/Users/kyleg/.claude/scheduled-tasks/wake-watcher-heartbeat/control_state.py --liveness CC-A=<state> CC-B=<state> CC-C=<state> CC-INFRA="<state>"
+   python C:/Users/kyleg/.claude/scheduled-tasks/wake-watcher-heartbeat/control_state.py --liveness CC-A=<state> CC-B=<state> CC-C=<state> CC-INFRA="<state>" CC-PM="<state>"
    It prints exactly two lines. Copy the first line ("control: …") into step 3 VERBATIM — do not reword it, shorten it or add to it. The second line is "NOTIFY yes" or "NOTIFY no"; step 4 uses it.
    ⛔ Do NOT issue control lines yourself, and do NOT judge "answered" from dates or the local clock. The script issues the day's control on the issuer's UTC date, re-issues once to a watcher that started after its line, and decides each session's state from the watcher's files and byte positions (scope §3). Until 2026-10-16 this step was a judgement made from prompt text, and it paged Kyle five times in one day for watchers that were alive.
 
 3. Compose ONE plain line: "bridges active: <y/n> | inbox-log last-write: <time> | active-unacked alerts: <none / list ids> | watchers: <all alive / DEAD: names / STUCK: names (count) / CENSUS-FAILED: names / not armed: names> | <the control line from step 2c, verbatim>". If a bridge is NOT active or an alert is active+unacked, say so clearly so the woken sessions act on it.
    The control line's states, for reading it: answered · awaiting · re-issued · not yet issued · NOT answered · NOT delivering · STUCK (control pending) · CENSUS-FAILED (control not judged) · not armed · DEAD · held (record reset) · held — another heartbeat run is in progress · stale heartbeat lock taken over · ISSUER GATED BY · ISSUER NOT RUN · log rotated · UNDETERMINED · re-issue failed · control record new / RESET / NOT PERSISTING · remote read failed · script start failed · script error · issued <names> (a note, not a state). A line starting "control: NOT answered" or "control: CHECK FAILED" is a problem; any other control line is not. The script's "NOTIFY" line already says which — never re-decide it from these words.
 
-4. POST that line to Discord so all three watchers fire. The message MUST name ALL FOUR sessions so none of them filter it out. ⚠️ Infra Claude was added 2026-08-26: the post named three, so his filter correctly SUPPRESSED it as "names other sessions, not me" and he sat outside this whole safety layer, and the sender MUST be "Heartbeat" — NOT any session's display name, or that session will treat it as its own post and never wake. Run:
+4. POST that line to Discord so all three watchers fire. The message MUST name ALL FIVE sessions so none of them filter it out. ⚠️ PM Claude was added 2026-11-04 (B-PM-CLAUDE P1b), for the same reason as Infra Claude below: ⚠️ Infra Claude was added 2026-08-26: the post named three, so his filter correctly SUPPRESSED it as "names other sessions, not me" and he sat outside this whole safety layer, and the sender MUST be "Heartbeat" — NOT any session's display name, or that session will treat it as its own post and never wake. Run:
 
-   ssh root@204.168.141.77 '/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --sender "Heartbeat" --message "OLD Claude / NEW Claude / ANALYST Claude / Infra Claude — hourly heartbeat: <the line from step 3>."'
+   ssh root@204.168.141.77 '/opt/discord-bridges/venv/bin/python3 /opt/discord-bridges/discord-cc-bridge.py send --sender "Heartbeat" --message "OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat: <the line from step 3>."'
 
    An all-clear post wakes nobody (every filter suppresses it, #995 OBJ-10). Add --notify ONLY when a watcher is DEAD or step 2c printed "NOTIFY yes" (NOT for STUCK: a stuck watcher is running, so this post reaches its session): that pings Kyle's phone, because a dead watcher cannot be reached any other way (the out-of-band wake is `B-WAKE-OUT-OF-BAND`, after live). Otherwise do NOT add --notify. Every post that pages Kyle also wakes the sessions: the wake filter delivers "control: NOT answered" and "control: CHECK FAILED" (#1162).
 

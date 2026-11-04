@@ -25,7 +25,7 @@ Test seams (never touch live files from a test - the #1192 fixture-not-process l
 import argparse, json, os, re, subprocess, sys
 from datetime import datetime, timezone, timedelta
 
-ALIASES = ("CC-A", "CC-B", "CC-C", "CC-INFRA")
+ALIASES = ("CC-A", "CC-B", "CC-C", "CC-INFRA", "CC-PM")   # CC-PM: PM Claude, B-PM-CLAUDE P1b (2026-11-04)
 LIVE_LOG = "/var/log/cc-wake.log"      # the key the watchers use in pos{} and the file on Helsinki
 LOCK_STALE = timedelta(minutes=30)     # Langston, Step 2: self-healing against the 60-min cadence
 MAX_REISSUE_ARMS = 3                   # R1: two re-issues, then page AT the third distinct arm against one token

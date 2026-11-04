@@ -13,10 +13,13 @@ import ast, contextlib, importlib.util, io, itertools, json, os, re, sys, tempfi
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CS_PATH = os.path.join(ROOT, "comms-infra", "laptop", "scheduled-tasks", "wake-watcher-heartbeat", "control_state.py")
 FILTER = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "comms-infra", "laptop", "cc-wake-filter.py")
-ALIASES = ("CC-A", "CC-B", "CC-C", "CC-INFRA")
-
 spec = importlib.util.spec_from_file_location("control_state", CS_PATH)
 cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
+# B-PM-CLAUDE P1b: the alias set is READ from control_state, never restated, so adding a session cannot leave the
+# suite asserting an old count (it carried a literal 4 in five places). N = how many sessions the heartbeat covers.
+ALIASES = tuple(cs.ALIASES)
+N = len(ALIASES)
+assert "CC-PM" in ALIASES, "P1b: PM Claude must be in the heartbeat alias set"
 
 PASS, FAIL = [], []
 ALL_LINES = []          # every (control line, NOTIFY yes?) the suite produced - P4 checks them ALL (gate-B condition 1)
@@ -109,15 +112,15 @@ fx = Fx(); fx.ok_record()
 all_ready(fx, token="20261015")
 rc, o, per = fx.run(today="20261015", now="2026-10-15T22:30:00Z")
 case("OBJ-1 yesterday-local token, answered -> answered (the old local-date test read NOT answered)",
-     o[1] == "NOTIFY no" and o[0].count("answered") == 4 and "NOT answered" not in o[0] and len(fx.lines()) == 4, o)
+     o[1] == "NOTIFY no" and o[0].count("answered") == N and "NOT answered" not in o[0] and len(fx.lines()) == N, o)
 
 # ── issue rule: N != D and all four alive -> issue per alias; the fresh line reads awaiting ──────────────
 fx = Fx(); fx.ok_record()
 all_ready(fx, token="20261015")
 rc, o, per = fx.run()
 new = [l for l in fx.lines() if l.endswith("20261016")]
-case("issue: every alias whose N != D gets today's line, and reads awaiting", len(new) == 4 and "issued CC-A/CC-B/CC-C/CC-INFRA" in o[0]
-     and o[0].count("awaiting") == 4 and o[1] == "NOTIFY no", o)
+case("issue: every alias whose N != D gets today's line, and reads awaiting", len(new) == N and ("issued " + "/".join(ALIASES)) in o[0]
+     and o[0].count("awaiting") == N and o[1] == "NOTIFY no", o)
 
 # per-alias issue: a half-written day self-corrects without duplicating the others (Step-2 BLOCKER-3)
 fx = Fx(); fx.ok_record()
@@ -129,13 +132,13 @@ for x in ALIASES:
 fx.answer("CC-A", "20261016"); fx.answer("CC-B", "20261016")
 rc, o, per = fx.run()
 today_lines = [l for l in fx.lines() if l.endswith("20261016")]
-case("per-alias issue: only CC-C and CC-INFRA are written", len(today_lines) == 4 and "issued CC-C/CC-INFRA" in o[0], o)
+case("per-alias issue: only the sessions without today's line are written (CC-C, CC-INFRA, CC-PM)", len(today_lines) == N and ("issued " + "/".join(x for x in ALIASES if x not in ("CC-A", "CC-B"))) in o[0], o)
 
 # GATED: one .alive missing -> no issue, reported, not paged
 fx = Fx(); fx.ok_record()
 all_ready(fx, token="20261015")
 before = len(fx.lines())
-rc, o, per = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, per = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("ISSUER GATED BY CC-B: nothing written, reported, NOTIFY no", len(fx.lines()) == before and "ISSUER GATED BY CC-B" in o[0]
      and o[1] == "NOTIFY no", o)
 
@@ -183,16 +186,16 @@ case("R1: the third distinct arm against one token -> NOT answered, paged", "CC-
 
 # ── 1 / 1a / 1b / 2 ──────────────────────────────────────────────────────────────────────────────────────
 fx = skipped(); before = len(fx.lines())
-rc, o, _ = fx.run(liveness={"CC-A": "DEAD", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, _ = fx.run(liveness={"CC-A": "DEAD", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("1: DEAD -> DEAD, never re-issued, never a control page", "CC-A DEAD" in o[0] and len(fx.lines()) == before and o[1] == "NOTIFY no", o)
 fx = skipped()
-rc, o, _ = fx.run(liveness={"CC-A": "STUCK", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, _ = fx.run(liveness={"CC-A": "STUCK", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("1a: STUCK short of its answer -> STUCK (control pending), no page", "CC-A STUCK (control pending)" in o[0] and o[1] == "NOTIFY no", o)
 fx = skipped(); fx.answer("CC-A", "20261016")
-rc, o, _ = fx.run(liveness={"CC-A": "STUCK", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, _ = fx.run(liveness={"CC-A": "STUCK", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("1a: STUCK that answered -> answered (the .control write is independent of the position save)", "CC-A answered" in o[0], o)
 fx = skipped()
-rc, o, _ = fx.run(liveness={"CC-A": "CENSUS-FAILED", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, _ = fx.run(liveness={"CC-A": "CENSUS-FAILED", "CC-B": "alive", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("1b: CENSUS-FAILED -> not judged, no page", "CC-A CENSUS-FAILED (control not judged)" in o[0] and o[1] == "NOTIFY no", o)
 
 # ── the record: new / RESET / NOT PERSISTING all page; held states draw no decision ────────────────────
@@ -263,7 +266,7 @@ for x in ALIASES:
 for x in ALIASES:
     fx.answer(x, "20261013")
 rc, o, _ = fx.run(now="2026-10-16T13:00:00Z")
-case("rotation: log rotated, re-issued to all, no page", "log rotated" in o[0] and o[0].count("re-issued (log rotated)") == 4
+case("rotation: log rotated, re-issued to all, no page", "log rotated" in o[0] and o[0].count("re-issued (log rotated)") == N
      and o[1] == "NOTIFY no", o)
 
 # ── 7 UNDETERMINED: P absent, or a foreign inode outside a rotation -> paged with the raw inputs ───────
@@ -361,7 +364,7 @@ for x in ALIASES:
     fx.answer(x, "20261016"); fx.pos(x, fx.size()); fx.lease(x, "2026-10-16T09:00:00Z")
 before = len(fx.lines())
 # Reachable only while the issue is GATED (otherwise N is re-written as the issuer's safe date D first): CC-B not armed.
-rc, o, _ = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive"})
+rc, o, _ = fx.run(liveness={"CC-A": "alive", "CC-B": "not armed", "CC-C": "alive", "CC-INFRA": "alive", "CC-PM": "alive"})
 case("token validation: a quote in N is never echoed back -> UNDETERMINED, paged, nothing appended",
      "unsafe token" in o[0] and len(fx.lines()) == before and o[1] == "NOTIFY yes", o)
 
