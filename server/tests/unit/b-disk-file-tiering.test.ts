@@ -98,6 +98,34 @@ describe('the round trip — what makes deleting the original safe', () => {
   });
 });
 
+// The boot contract (Langston Step 9 condition, 2026-11-04): a job run from cron gets no app environment —
+// `su - deploy -c "... npx tsx ..."` carries no .env — so a job that reads the database settings must load
+// them itself. B-DISK-FILE-TIERING shipped without it and was caught only by running it the way cron does.
+describe('cron-run jobs load the app .env themselves', () => {
+  const dir = path.join(__dirname, '..', '..', 'scripts');
+  const src = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
+  const loadsEnv = (s: string) => /^import 'dotenv\/config';/m.test(s);
+  const readsDb = (s: string) => /process\.env(\.DATABASE_URL|\[k\])|SUPABASE_SERVICE_ROLE_KEY/.test(s);
+
+  // The DB-using jobs in staging's root crontab, read 2026-11-04 (b74-refresh-universe is also scheduled,
+  // but reads only Kraken's public API and needs no settings).
+  const SCHEDULED = [
+    'b-disk-file-tiering.ts', 'b-storage-archival-health.ts', 'b75-retention-sweep.ts', 'b75-cold-rotator.ts',
+    'b75-cold-liveness.ts', 'b74-create-daily-partitions.ts', 'b74-create-monthly-partitions.ts',
+    'b70-create-monthly-partitions.ts',
+  ];
+  it.each(SCHEDULED)('%s loads the .env', (f) => { expect(loadsEnv(src(f))).toBe(true); });
+
+  it('any script whose header says it runs from cron and that reads the database settings loads the .env (catches the next new job)', () => {
+    const offenders = fs.readdirSync(dir).filter((f) => f.endsWith('.ts')).filter((f) => {
+      const s = src(f);
+      const header = s.split('\n').slice(0, 60).join('\n');
+      return /\bcron(tab)?\b/i.test(header) && readsDb(s) && !loadsEnv(s);
+    });
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('warmObjectPath', () => {
   it('keeps the whole original name under the disk-files prefix', () => {
     expect(warmObjectPath('warm', spec('logs/data_aggregates/hourly'), 'passive_2026-10-01T05.json'))
