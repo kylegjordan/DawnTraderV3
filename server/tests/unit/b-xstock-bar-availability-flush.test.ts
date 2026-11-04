@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   write: vi.fn(),
+  repair: vi.fn(async () => 0),
 }));
 
 vi.mock('../../db.js', () => ({ db: {} }));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: vi.fn() }));
 vi.mock('../../services/passive-archive/xstock-bar-availability.js', () => ({
   writeXstockProjectionAttempts: state.write,
-  repairPendingXstockCertificates: vi.fn(),
+  repairPendingXstockCertificates: state.repair,
   isXstockAdmissionFailure: (error: unknown) => Boolean(
     error instanceof Error && (error as Error & { xstockAdmissionFailed?: boolean }).xstockAdmissionFailed,
   ),
@@ -136,5 +137,11 @@ describe('xStock logical flush transaction boundary', () => {
     await flushAssetClass('xstock_spot');
     expect(state.write).toHaveBeenCalledTimes(1);
     expect(state.write.mock.calls[0][1].flushId).toMatch(/^[0-9a-f-]{36}$/i);
+  });
+
+  it('ends the shutdown drain with two repair calls, so the last one is a fresh run (R5 C1)', async () => {
+    state.repair.mockClear();
+    await stopBatchWriter();
+    expect(state.repair).toHaveBeenCalledTimes(2);
   });
 });

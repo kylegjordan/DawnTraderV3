@@ -72,8 +72,9 @@ describe('bar-availability pool safety (2026-11-04 jam)', () => {
   it('joins a repair already in flight instead of starting a second one', async () => {
     const first = repairPendingXstockCertificates();
     const second = repairPendingXstockCertificates();
-    expect(second).toBe(first);
     await until(() => state.releaseRepairRead !== null);
+    // Both callers share one run: only one transaction has been opened.
+    expect(state.transactionCalls).toBe(1);
     state.releaseRepairRead!();
     await Promise.all([first, second]);
     expect(state.transactionCalls).toBe(1);
@@ -81,9 +82,33 @@ describe('bar-availability pool safety (2026-11-04 jam)', () => {
     // After it finishes, the next call starts a fresh run.
     state.releaseRepairRead = null;
     const third = repairPendingXstockCertificates();
-    expect(third).not.toBe(first);
     await until(() => state.transactionCalls === 2 && state.releaseRepairRead !== null);
     state.releaseRepairRead!();
     await third;
+  });
+
+  it('validates the limit before the single-flight gate, even while a repair is running', async () => {
+    const running = repairPendingXstockCertificates();
+    await until(() => state.releaseRepairRead !== null);
+    await expect(repairPendingXstockCertificates(0)).rejects.toThrow(/invalid certificate repair limit/);
+    await expect(repairPendingXstockCertificates(10_001)).rejects.toThrow(/invalid certificate repair limit/);
+    state.releaseRepairRead!();
+    await running;
+    expect(state.transactionCalls).toBe(1);
+  });
+
+  it('does not serve a caller with a different limit from the running repair', async () => {
+    const running = repairPendingXstockCertificates(1_000);
+    await until(() => state.releaseRepairRead !== null);
+    const other = repairPendingXstockCertificates(50);
+    const release = state.releaseRepairRead!;
+    state.releaseRepairRead = null;
+    release();
+    await running;
+    // The different-limit caller starts its own run after the first one ends.
+    await until(() => state.transactionCalls === 2 && state.releaseRepairRead !== null);
+    expect(state.statements[1].join(' ')).toContain('50');
+    state.releaseRepairRead!();
+    await other;
   });
 });

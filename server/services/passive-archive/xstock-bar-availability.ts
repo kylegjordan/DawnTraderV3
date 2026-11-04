@@ -463,21 +463,28 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
  * arrives while a repair is running now joins that run instead of starting
  * another one; the shutdown drain awaits the same run.
  */
-let repairInFlight: Promise<number> | null = null;
+let repairInFlight: { run: Promise<number>; limit: number } | null = null;
 
-export function repairPendingXstockCertificates(limit = 1_000): Promise<number> {
-  if (repairInFlight) return repairInFlight;
+export async function repairPendingXstockCertificates(limit = 1_000): Promise<number> {
+  // Validated BEFORE the single-flight gate, so a joining caller's limit is never unchecked.
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
+    throw new Error(`[B-XSTOCK-BAR-AVAILABILITY] invalid certificate repair limit ${limit}`);
+  }
+  const current = repairInFlight;
+  if (current) {
+    if (current.limit === limit) return current.run;
+    // A different limit is not served by a join: wait the running repair out, then run its own.
+    await current.run.catch(() => undefined);
+    return repairPendingXstockCertificates(limit);
+  }
   const run = runPendingCertificateRepair(limit).finally(() => {
-    if (repairInFlight === run) repairInFlight = null;
+    if (repairInFlight?.run === run) repairInFlight = null;
   });
-  repairInFlight = run;
+  repairInFlight = { run, limit };
   return run;
 }
 
 async function runPendingCertificateRepair(limit: number): Promise<number> {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 10_000) {
-    throw new Error(`[B-XSTOCK-BAR-AVAILABILITY] invalid certificate repair limit ${limit}`);
-  }
   let revisionIds: string[] = [];
   try {
     // This read commits before certifyRevisionIds starts its own transaction. Repair therefore

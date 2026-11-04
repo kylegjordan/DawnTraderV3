@@ -661,6 +661,13 @@ export async function stopBatchWriter(): Promise<void> {
   // the shutdown drain skip a class. (The drain's race with `process.exit` stays `#1034`'s.)
   await Promise.allSettled(Object.values(inFlight));
   await Promise.all(ALL_ARCHIVE_CLASSES.map(flushAssetClass)); // derived, see the timer above
+  // ⛔ SAME HAZARD FOR THE REPAIR (Langston, R5 C1). Repair is single-flight, and
+  // `clearInterval` does not stop a timer callback already sitting at its own repair, so the
+  // first call here can JOIN that run, whose pending-certificate read predates the final flush
+  // above. Its leftovers would make the writer handoff refuse (`pendingCertificates !== 0`) and
+  // the process exit 1 with no handoff. The second call is always a fresh run: the in-flight
+  // slot is cleared before the first promise settles.
+  await repairPendingXstockCertificates();
   await repairPendingXstockCertificates();
 }
 
