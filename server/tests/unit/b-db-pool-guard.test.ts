@@ -72,24 +72,40 @@ describe('the app pool survives an ended idle connection', () => {
     spy.mockRestore();
   });
 
-  it('census: every in-process file that builds a pg Pool attaches an error guard (Langston: three pools, not two)', () => {
+  it('census: every in-process file that builds a pg Pool attaches the shared guard (Langston: three pools, not two)', () => {
     const root = path.join(__dirname, '..', '..', '..');
-    const files: string[] = [];
+    const serverFiles: string[] = [];
     const walk = (d: string) => {
       for (const e of fs.readdirSync(d, { withFileTypes: true })) {
         const f = path.join(d, e.name);
-        if (e.isDirectory()) { if (!['tests', 'node_modules', 'scripts'].includes(e.name)) walk(f); }
-        else if (/\.ts$/.test(e.name)) files.push(f);
+        // Langston C1: server/scripts is NOT excluded — schedulers import from it at run time.
+        if (e.isDirectory()) { if (!['tests', 'node_modules'].includes(e.name)) walk(f); }
+        else if (/\.ts$/.test(e.name)) serverFiles.push(f);
       }
     };
     walk(path.join(root, 'server'));
-    files.push(path.join(root, 'scripts', 'b-new-34b-prewarm-snapshot.ts')); // runs in-process via the session-lifecycle controller
+    // Langston C3: DERIVE which root scripts/ files run in-process — every import (static or dynamic) from a
+    // non-test server file that resolves under <root>/scripts — instead of a hand-kept literal.
+    const rootScripts = path.join(root, 'scripts') + path.sep;
+    const inProcessRootScripts = new Set<string>();
+    for (const f of serverFiles) {
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/(?:from\s+|import\()\s*['"](\.{1,2}\/[^'"]+)['"]/g)) {
+        const resolved = path.resolve(path.dirname(f), m[1]).replace(/\.js$/, '');
+        if ((resolved + path.sep).startsWith(rootScripts) || resolved.startsWith(rootScripts)) {
+          inProcessRootScripts.add(resolved.endsWith('.ts') ? resolved : `${resolved}.ts`);
+        }
+      }
+    }
+    expect([...inProcessRootScripts].map((f) => path.basename(f)).sort()).toEqual(['b-new-34b-prewarm-snapshot.ts']);
+    const files = [...serverFiles, ...inProcessRootScripts];
     const builders = files.filter((f) => /new (pg\.)?Pool\(/.test(fs.readFileSync(f, 'utf8')));
+    // ⚠️ B-CREW-BOARD-REMOVAL deletes crew-coordination.ts: this list then fails by design — update it there.
     expect(builders.map((f) => path.basename(f)).sort()).toEqual(['b-new-34b-prewarm-snapshot.ts', 'crew-coordination.ts', 'db.ts']);
-    const unguarded = builders.filter((f) => {
-      const s = fs.readFileSync(f, 'utf8');
-      return !/attachPoolGuards\(/.test(s) && !/\.on\('error'/.test(s);
-    });
+    // Langston C2: require the SHARED guard. The crew board's empty swallow is the one named exemption (its pool
+    // has no transaction, so pool.query's own listener covers it) until B-CREW-BOARD-REMOVAL deletes the file.
+    const EXEMPT = new Set(['crew-coordination.ts']);
+    const unguarded = builders.filter((f) => !EXEMPT.has(path.basename(f)) && !/attachPoolGuards\(/.test(fs.readFileSync(f, 'utf8')));
     expect(unguarded).toEqual([]);
   });
 

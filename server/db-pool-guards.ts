@@ -62,11 +62,21 @@ export function attachPoolGuards(pool: pg.Pool, label: string): void {
   pool.on('connect', (client) => {
     const gc = client as unknown as GuardedClient;
     gc.on('error', (err) => {
-      // Langston C2: always LOG (a wrong flag must never mean silence); COUNT only while checked out. On an idle
-      // error this fires first with checkedOut=false and the pool listener above then logs and counts it.
+      // Langston C2: always LOG (a wrong flag must never mean silence); COUNT only while checked out. An IDLE error
+      // therefore writes TWO lines — this one (checkedOut=false) and the pool listener's POOL_IDLE_CLIENT_ERROR — in
+      // an order that is NOT fixed (pg-pool registers its listener before ours on a new client and after ours once
+      // the client has been released once). Anything counting lines must count one tag, not both (OBJ-5).
       const checkedOut = !!gc[CHECKED_OUT];
-      if (checkedOut) c.checkedOutClientErrors += 1;
-      console.error(`${line('POOL_CLIENT_ERROR', label, pool, err, c.checkedOutClientErrors)} checkedOut=${checkedOut}`);
+      if (checkedOut) {
+        c.checkedOutClientErrors += 1;
+        console.error(`${line('POOL_CLIENT_ERROR', label, pool, err, c.checkedOutClientErrors)} checkedOut=true`);
+      } else {
+        // no count field here: on this path the checked-out counter did not move
+        console.error(
+          `[B-DB-POOL-GUARD][POOL_CLIENT_ERROR] pool=${label} code=${err?.code ?? 'none'} message=${err?.message || String(err)} ` +
+            `total=${pool.totalCount} idle=${pool.idleCount} waiting=${pool.waitingCount} checkedOut=false`,
+        );
+      }
     });
   });
   pool.on('acquire', (client) => {

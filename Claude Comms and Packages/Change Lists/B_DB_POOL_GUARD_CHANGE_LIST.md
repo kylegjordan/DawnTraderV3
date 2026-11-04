@@ -1,7 +1,7 @@
 # B-DB-POOL-GUARD — CHANGE LIST (`#1239`, owner CC-A)
 
 **DECLARED CHANGE-CLASS:** `architecture` (scope header).
-**DOC SET for `architecture`:** scope — present, `Scope Files/B_DB_POOL_GUARD_SCOPE.md` (r1; r2 in progress) · pre-audit — absent, Step 2 not yet run · completion report — absent (Step 11) · BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL (database chapter still describes the Neon pool, plus `:49`, `:9381`, `:11290`), SYSTEM_IMPACT_MAP (`server/db.ts` row) — absent, Step 10.
+**DOC SET for `architecture`:** scope — present, `Scope Files/B_DB_POOL_GUARD_SCOPE.md` r2 (approved) · pre-audit — present, `Scope Files/B_DB_POOL_GUARD_PRE_AUDIT.md` r1 (with Langston); OBJ-1b/1c are Step-2 finds on the same object, accepted by Langston · completion report — absent (Step 11) · BATCH_CATALOG, PHASE_HISTORY, SYSTEM_MANUAL (database chapter still describes the Neon pool, plus `:49`, `:9381`, `:11290`), SYSTEM_IMPACT_MAP (`server/db.ts` row) — absent, Step 10.
 **STEP-2 REFERENCE:** `NO STEP 2 — Langston cleared OBJ-1 to implement ahead of scope r2 and before Step 2 (ruling on r1, Discord 1567651432465694905, 2026-11-04): "its evidence is complete and I re-derived all of it, it is the order constraint on OBJ-3 … Ship it as its own commit."`
 
 ## Increment 1 — OBJ-1: an ended idle connection no longer crashes the app
@@ -31,3 +31,9 @@
 - **C3:** the idempotence test asserts all four pool listeners (`error`, `connect`, `acquire`, `release`).
 - **Record items:** `checkedOutClientErrors` counts connection errors on checked-out clients INCLUDING plain `pool.query()` ones that were already safe (pg-pool `index.js:414` registers its `once('error')` after ours) — not crashes prevented. Neither counter has a reader until OBJ-5; the log line is the carrier. The unit tests stub the emitters; the staging process-exit runs (exit 1 without, exit 0 with) are the integration evidence and are NOT CI-re-runnable, so a pg / pg-pool bump that changes the wiring is not caught here.
 - **OBJ-3/3b get no gate until Step 2 is approved** (his ruling).
+
+## Langston Step 4 on OBJ-1c (graded at `bec9ebcfb`, CI run `41929763930` 4/4 per job): PROCEED, three test conditions folded, no re-review
+- **C1:** `server/scripts` is no longer excluded from the census walk — it IS imported at run time (`archival-scheduler.ts:24-26`, `routes/regime-archive.ts:34-36`, `routes/calibration.ts:20`, `autonomy-scheduler.ts:21`, dynamic `sync-canonical-bridge`); it builds no Pool today.
+- **C2:** every builder must call `attachPoolGuards(`; `crew-coordination.ts` is the one named exemption (no transaction there, so `pool.query()`'s own listener covers it) until `B-CREW-BOARD-REMOVAL`. Mutation: the prewarm guard swapped for an empty `pool.on('error')`, the census fails (the old file-wide substring check accepted it).
+- **C3:** the in-process root-script set is DERIVED from every non-test `server/` import that resolves under `<root>/scripts`, asserted equal to `b-new-34b-prewarm-snapshot.ts`.
+- **Record items folded:** the idle-path line no longer prints an unmoved count; the comment states that one idle error writes two lines in an order that is not fixed (so no Step-7 check may rely on order). **For OBJ-5's scope:** count one tag, not both; `getPoolGuardCounts` of an unknown label returns zeros indistinguishable from "no errors", and a second `attachPoolGuards` on a guarded pool with a different label is silently ignored — both handled there (#546 class). **Forward-binding:** `B-CREW-BOARD-REMOVAL` will fail this census by design (the builder list names `crew-coordination.ts`); it is a fence, not a regression.
