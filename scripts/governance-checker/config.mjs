@@ -235,6 +235,12 @@ export const STATE_LABELS = {
 // after the dash. Anything else renders `unrecognised — <text>`.
 export const WAITING_WORDS = ['nothing', 'Kyle', 'Langston', 'Coltrane', 'CC-A', 'CC-B', 'CC-C', 'Infra Claude'];
 export const BOARD_STALE_MS = 60 * 60 * 1000;      // the page's stale banner (OBJ-4)
+// OBJ-9 (Kyle 2026-11-04): a QUEUED line whose batch has a Step commit newer than this reads in progress; older reads
+// "work stopped". DERIVATION (Langston, Step-9 r1, measured 2026-11-04 over 800 commits 2026-10-11..11-04): 416 consecutive
+// same-id Step gaps over 31 ids - p50 0.01 d, p95 0.29 d, p99 2.80 d, max 14.43 d (B-STATUS-BOARD's own Step 3 -> 9, across
+// the crew's two-week break). 14 d is ~5x p99. CLOCK: the date is the commit's COMMITTER (landed) date, which a rebase can
+// move up to ~3.3 d after authoring (measured) - so never tighten this below ~4 d.
+export const WORK_RECORD_RECENT_MS = 14 * 24 * 60 * 60 * 1000;
 export const DESCRIPTION_MAX_CHARS = 700;          // one paragraph; longer shows a `too long` mark (OBJ-2)
 
 // Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
