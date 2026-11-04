@@ -132,6 +132,33 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
     expect(next.id).not.toBe(open.id);
   });
 
+  it('diskBand pins the band (Langston part 2 r2, record 5): warning arms at 85 and clears under 83; critical arms at 90 or under 8 GiB free and clears under 88 with 9 GiB free', () => {
+    const GiB = 1024 ** 3;
+    const t = { warnPct: 85, critPct: 90, critFreeBytes: 8 * GiB, clearMarginPct: 2, clearFreeBytes: 9 * GiB };
+    const at = (usedPct: number, freeGiB: number) => mod.diskBand({ usedPct, freeBytes: freeGiB * GiB }, t);
+    expect(at(84.9, 20)).toMatchObject({ warnOk: true, warnClear: false });   // inside the band: ok, but no clear
+    expect(at(82.9, 20)).toMatchObject({ warnOk: true, warnClear: true });
+    expect(at(85.0, 20)).toMatchObject({ warnOk: false, warnClear: false });
+    expect(at(80, 7.9)).toMatchObject({ critOk: false, critClear: false });   // the floor binds before 90 %
+    expect(at(80, 8.5)).toMatchObject({ critOk: true, critClear: false });    // over the floor, under the clear floor
+    expect(at(87.9, 9.0)).toMatchObject({ critOk: true, critClear: true });
+    expect(at(88.0, 20)).toMatchObject({ critOk: true, critClear: false });
+  });
+
+  it('throwStep: two consecutive throws page, a clean run resets; openDedupeKeys reads each alert\'s LAST line', () => {
+    let s = mod.throwStep(0, true, 2); expect(s).toEqual({ count: 1, page: false });
+    s = mod.throwStep(s.count, true, 2); expect(s).toEqual({ count: 2, page: true });
+    expect(mod.throwStep(s.count, false, 2)).toEqual({ count: 0, page: false });
+    const f = path.join(tmpDir, 'open-keys.jsonl');
+    fs.writeFileSync(f, [
+      JSON.stringify({ id: 'a', dedupe_key: 'k1', state: 'active' }),
+      JSON.stringify({ id: 'a', dedupe_key: 'k1', state: 'resolved' }), // a rewritten row: resolved now
+      JSON.stringify({ id: 'b', dedupe_key: 'k2', state: 'active' }),
+      JSON.stringify({ id: 'c', dedupe_key: 'k2', state: 'resolved' }), // another id for k2, resolved: k2 still open
+    ].join('\n') + '\n');
+    expect([...mod.openDedupeKeys(f)].sort()).toEqual(['k2']);
+  });
+
   it('envNumber: an unset override falls back, a numeric one is used, a typo THROWS rather than comparing against NaN', () => {
     delete process.env.WD_TEST_NUM;
     expect(mod.envNumber('WD_TEST_NUM', 85)).toBe(85);

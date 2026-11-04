@@ -51,8 +51,11 @@ const RUN_ID = crypto.randomUUID(); // logged at start; a resolve's evidence cit
 // Server-disk thresholds (B-DISK-FILE-TIERING P7). Environment-overridable ONLY so the arming can be
 // FORCED in a one-off run (Langston C1) — the watchdog has zero app imports, so it cannot read the DB.
 const DISK_PATH = process.env.WATCHDOG_DISK_PATH || '/';
-/** An override that is set must be a real number — a typo throws at load (so the run fails and the
- *  systemd OnFailure self-fail page fires) instead of silently comparing against NaN. */
+/** An override that is set must be a real number — a typo throws at load instead of silently comparing
+ *  against NaN. The service unit sets no WATCHDOG_* variable, so in practice an override comes from a
+ *  hand-run, where the operator sees the throw. (If one were ever added to the unit with a typo, the
+ *  OnFailure self-fail run loads this same module and would throw too — no page, only journald and the
+ *  weekly heartbeat's absence. Langston part 2 r2, record 2.) */
 export function envNumber(name, fallback) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -67,13 +70,37 @@ const DISK_FORCED = ['WATCHDOG_DISK_PATH', 'WATCHDOG_DISK_WARN_PCT', 'WATCHDOG_D
 const DISK_WARN_PCT = envNumber('WATCHDOG_DISK_WARN_PCT', 85);
 const DISK_CRIT_PCT = envNumber('WATCHDOG_DISK_CRIT_PCT', 90);
 // A level alert clears only below a margin under its line, so a disk hovering at the line keeps ONE
-// row (which re-surfaces and escalates to Kyle) instead of minting a fresh row each crossing
-// (Langston Step 4 part 2, C3: a resolve resets the row's resurface count).
+// long-lived row. Its re-surface count climbs on the dispatcher's TIME clock (computeResurfaceStale,
+// escalating to Kyle at count >= 1); a resolve-then-remint would start a fresh row at count 0 and never
+// get there (Langston Step 4 part 2, C3 — a dedupe hit itself writes nothing).
 const DISK_CLEAR_MARGIN_PCT = 2;
-// 90 % of this 75 GB volume leaves 7.5 GB — about 14 hours of stdout at the measured rate — so
-// critical also fires on an absolute floor (Langston Step 2 C4).
+// Critical also fires on an absolute floor (Langston Step 2 C4). On this 75 GB volume 90 % leaves about
+// 7.5 GB, under the 8 GiB floor, so the FLOOR binds first and DISK_CRIT_PCT is inert here — tuning the
+// percentage will move nothing. Runway at the floor, measured 2026-11-04: about 12 h at the day's average
+// stdout rate (0.67 GiB/h), about 2.25 h at the observed peak (3.4 GiB/h); the 2-tick debounce costs 10 min.
 const DISK_CRIT_FREE_BYTES = envNumber('WATCHDOG_DISK_CRIT_FREE_BYTES', 8 * 1024 ** 3);
 const DISK_CLEAR_FREE_BYTES = DISK_CRIT_FREE_BYTES + 1024 ** 3;
+const DISK_T = { warnPct: DISK_WARN_PCT, critPct: DISK_CRIT_PCT, critFreeBytes: DISK_CRIT_FREE_BYTES,
+  clearMarginPct: DISK_CLEAR_MARGIN_PCT, clearFreeBytes: DISK_CLEAR_FREE_BYTES };
+
+/** The disk band, pure (Langston part 2 r2, record 5 — pinned by tests): ok = not over the line;
+ *  clear = far enough under it to resolve an open row. */
+export function diskBand(d, t) {
+  return {
+    warnOk: d.usedPct < t.warnPct,
+    warnClear: d.usedPct < t.warnPct - t.clearMarginPct,
+    critOk: d.usedPct < t.critPct && d.freeBytes >= t.critFreeBytes,
+    critClear: d.usedPct < t.critPct - t.clearMarginPct && d.freeBytes >= t.clearFreeBytes,
+  };
+}
+
+/** One tick of a check's throw counter, pure: a throw counts up and pages once it reaches the debounce;
+ *  a run that did not throw resets it. Clearing the page is gated on the FILE, never on this counter. */
+export function throwStep(prevCount, threw, debounce) {
+  if (!threw) return { count: 0, page: false };
+  const count = (prevCount || 0) + 1;
+  return { count, page: count >= debounce };
+}
 
 /**
  * Builds a fallback alert row shaped EXACTLY like system-alerts.ts addAlert()
@@ -107,6 +134,22 @@ export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity 
 }
 
 /** Non-resolved row with this dedupe_key already in the file? (same semantic addAlert applies) */
+/** Every dedupe key with a non-resolved row, from ONE read of the file (the run reads it once, not per check). */
+export function openDedupeKeys(alertsFilePath) {
+  // Each alert's LAST line wins (a row may be rewritten); a key is open if ANY of its alerts is unresolved
+  // — the same rule addAlert's dedupe applies, so this never reads closed while the store still blocks.
+  const latest = new Map();
+  if (fs.existsSync(alertsFilePath)) {
+    for (const line of fs.readFileSync(alertsFilePath, 'utf8').split('\n')) {
+      if (!line.trim()) continue;
+      try { const row = JSON.parse(line); if (row.id) latest.set(row.id, row); } catch { /* torn line */ }
+    }
+  }
+  const open = new Set();
+  for (const row of latest.values()) if (row.dedupe_key && row.state !== 'resolved') open.add(row.dedupe_key);
+  return open;
+}
+
 export function fileHasOpenDedupeKey(alertsFilePath, dedupeKey) {
   if (!fs.existsSync(alertsFilePath)) return false;
   const lines = fs.readFileSync(alertsFilePath, 'utf8').split('\n');
@@ -176,8 +219,10 @@ async function resolveKey(dedupeKey, reading) {
     ], { cwd: APP_DIR, timeout: 60_000 });
     const out = cliJson(stdout);
     log(`resolved ${dedupeKey}: ${out ? JSON.stringify(out.resolved) : 'CLI output not parsed'}`);
+    return true;
   } catch (err) {
     log(`resolve of ${dedupeKey} FAILED (${err?.message?.slice(0, 200)}) — retried next tick while the row stays open`);
+    return false;
   }
 }
 
@@ -251,20 +296,20 @@ const CHECKS = [
     // B-DISK-FILE-TIERING P7 — the server's OWN disk. A level alert: it stays unresolved while the disk
     // is over the line (do NOT ack it — an ack silences the key that notices a drain not happening)
     // and resolves itself here once usage is back under the threshold.
-    key: 'disk-warning', run: async () => readDisk().usedPct < DISK_WARN_PCT,
-    clear: () => readDisk().usedPct < DISK_WARN_PCT - DISK_CLEAR_MARGIN_PCT,
+    key: 'disk-warning', run: async () => diskBand(readDisk(), DISK_T).warnOk,
+    clear: () => diskBand(readDisk(), DISK_T).warnClear,
     dedupeKey: 'server-disk-utilization-warning', category: 'health_check', severity: 'warning',
     reading: diskText, forced: DISK_FORCED,
     title: `${DISK_FORCED ? '[FORCED TEST] ' : ''}Server disk WARNING: staging ${DISK_PATH} over ${DISK_WARN_PCT}%`,
-    body: () => `The staging server's own disk is at ${diskText()} (warning at ${DISK_WARN_PCT}%), ${DEBOUNCE_TICKS} consecutive ticks. This is the SERVER disk, not the Supabase database (that is disk-utilization-*). Where the space is: run du -sh on /var/log/dawntrader, /home/deploy/dawntrader/logs/* and /home/deploy/dawntrader/diagnostic-reports; the nightly disk-file tiering job (server/scripts/b-disk-file-tiering.ts, 02:45 UTC) moves old data files off this disk, and once it has run its log is /var/log/dawntrader/disk-file-tiering.log. Resolves itself when usage falls under ${DISK_WARN_PCT - DISK_CLEAR_MARGIN_PCT}%.`,
+    body: () => `The staging server's own disk is at ${diskText()} (warning at ${DISK_WARN_PCT}%), ${DEBOUNCE_TICKS} consecutive ticks. This is the SERVER disk, not the Supabase database (that is disk-utilization-*). Where the space is: run du -sh on /var/log/dawntrader, /home/deploy/dawntrader/logs/* and /home/deploy/dawntrader/diagnostic-reports; the nightly disk-file tiering job (server/scripts/b-disk-file-tiering.ts, 02:45 UTC) moves old data files off this disk, and once it has run its log is /var/log/dawntrader/disk-file-tiering.log. Also /var/lib/token-watch (the token-launch study's store): du needs root there (as deploy it under-reads about 5x); its own token-watch store alert carries the true figure. Resolves itself when usage falls under ${DISK_WARN_PCT - DISK_CLEAR_MARGIN_PCT}%.`,
   },
   {
-    key: 'disk-critical', run: async () => { const d = readDisk(); return d.usedPct < DISK_CRIT_PCT && d.freeBytes >= DISK_CRIT_FREE_BYTES; },
-    clear: () => { const d = readDisk(); return d.usedPct < DISK_CRIT_PCT - DISK_CLEAR_MARGIN_PCT && d.freeBytes >= DISK_CLEAR_FREE_BYTES; },
+    key: 'disk-critical', run: async () => diskBand(readDisk(), DISK_T).critOk,
+    clear: () => diskBand(readDisk(), DISK_T).critClear,
     dedupeKey: 'server-disk-utilization-critical', category: 'health_check', severity: 'critical',
     reading: diskText, forced: DISK_FORCED,
     title: `${DISK_FORCED ? '[FORCED TEST] ' : ''}Server disk CRITICAL: staging ${DISK_PATH} over ${DISK_CRIT_PCT}% or under ${(DISK_CRIT_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free`,
-    body: () => `The staging server's own disk is at ${diskText()}, ${DEBOUNCE_TICKS} consecutive ticks — at the measured write rate that is hours of runway, not days. If the disk fills, the app cannot log and the archive jobs cannot stage files. Where the space is: run du -sh on /var/log/dawntrader, /home/deploy/dawntrader/logs/* and /home/deploy/dawntrader/diagnostic-reports; the nightly disk-file tiering job (server/scripts/b-disk-file-tiering.ts, 02:45 UTC) moves old data files off this disk, and once it has run its log is /var/log/dawntrader/disk-file-tiering.log. Resolves itself when usage is back under ${DISK_CRIT_PCT - DISK_CLEAR_MARGIN_PCT}% with at least ${(DISK_CLEAR_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free.`,
+    body: () => `The staging server's own disk is at ${diskText()}, ${DEBOUNCE_TICKS} consecutive ticks — at the measured write rate that is hours of runway, not days. If the disk fills, the app cannot log and the archive jobs cannot stage files. Where the space is: run du -sh on /var/log/dawntrader, /home/deploy/dawntrader/logs/* and /home/deploy/dawntrader/diagnostic-reports; the nightly disk-file tiering job (server/scripts/b-disk-file-tiering.ts, 02:45 UTC) moves old data files off this disk, and once it has run its log is /var/log/dawntrader/disk-file-tiering.log. Also /var/lib/token-watch (the token-launch study's store): du needs root there (as deploy it under-reads about 5x); its own token-watch store alert carries the true figure. Resolves itself when usage is back under ${DISK_CRIT_PCT - DISK_CLEAR_MARGIN_PCT}% with at least ${(DISK_CLEAR_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free.`,
   },
 ];
 
@@ -274,6 +319,7 @@ async function main() {
   state.alerted = state.alerted || {};
   state.throws = state.throws || {};
   log(`run ${RUN_ID} started${DISK_FORCED ? ' (FORCED disk thresholds)' : ''}`);
+  const open = openDedupeKeys(ALERTS_FILE); // one read per run; kept current as this run resolves
   for (const check of CHECKS) {
     const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
     let ok;
@@ -282,11 +328,12 @@ async function main() {
     } catch (err) {
       // A THROW is not a skip (Langston part 2, C2): one throw must not end the run for the other checks,
       // but a check that throws every tick must page, not log to journald forever.
-      const n = (state.throws[check.key] || 0) + 1;
+      const t = throwStep(state.throws[check.key], true, DEBOUNCE_TICKS);
+      const n = t.count;
       state.throws[check.key] = n;
       log(`${check.key}: CHECK-THREW (${n}/${DEBOUNCE_TICKS}): ${err?.message?.slice(0, 200)}`);
       const errKey = `watchdog-check-error-${check.key}`;
-      if (n >= DEBOUNCE_TICKS && !fileHasOpenDedupeKey(ALERTS_FILE, errKey)) {
+      if (t.page && !open.has(errKey)) {
         await emitAlert({
           title: `WATCHDOG CHECK BROKEN — the ${check.key} check throws every tick`,
           body: `The staging liveness watchdog's ${check.key} check has thrown ${n} consecutive ticks, so it is NOT watching what it is meant to watch. Last error: ${String(err?.message || err).slice(0, 300)}. Check journalctl -u dawntrader-watchdog.service. Resolves itself when the check runs without throwing.`,
@@ -297,11 +344,11 @@ async function main() {
       }
       continue;
     }
-    if (state.throws[check.key]) {
-      state.throws[check.key] = 0;
-      const errKey = `watchdog-check-error-${check.key}`;
-      if (fileHasOpenDedupeKey(ALERTS_FILE, errKey)) await resolveKey(errKey, `${check.key} check ran without throwing`);
-    }
+    state.throws[check.key] = throwStep(state.throws[check.key], false, DEBOUNCE_TICKS).count;
+    // Gated on the FILE alone, so a failed resolve is retried next tick (Langston part 2 r2 blocker: the
+    // old counter gate zeroed first and never retried).
+    const errKey = `watchdog-check-error-${check.key}`;
+    if (open.has(errKey) && await resolveKey(errKey, `${check.key} check ran without throwing`)) open.delete(errKey);
     if (ok === null) { log(`${check.key}: skipped (precondition unreachable)`); continue; }
     if (ok) {
       if (state.streaks[check.key] > 0) log(`${check.key}: recovered`);
@@ -309,9 +356,9 @@ async function main() {
       state.alerted[check.key] = false; // recovery re-arms the latch for the NEXT outage
       // ... and the STORE is cleared too, or the next outage is deduped into this row (P7 clear edge).
       // A level check clears only past its margin (check.clear); between the line and the margin the row
-      // stays open, so a re-crossing re-uses it and its re-surface count keeps climbing toward Kyle.
+      // stays open, so a re-crossing re-uses it and its time-driven re-surface count keeps climbing.
       const mayClear = check.clear ? check.clear() : true;
-      if (mayClear && fileHasOpenDedupeKey(ALERTS_FILE, dedupeKey)) await resolveKey(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`);
+      if (mayClear && open.has(dedupeKey) && await resolveKey(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`)) open.delete(dedupeKey);
       continue;
     }
     state.streaks[check.key] = (state.streaks[check.key] || 0) + 1;
