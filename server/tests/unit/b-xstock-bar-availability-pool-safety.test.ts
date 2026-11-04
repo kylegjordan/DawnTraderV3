@@ -107,7 +107,11 @@ describe('bar-availability pool safety (2026-11-04 jam)', () => {
     await running;
     // The different-limit caller starts its own run after the first one ends.
     await until(() => state.transactionCalls === 2 && state.releaseRepairRead !== null);
-    expect(state.statements[1].join(' ')).toContain('50');
+    // Read the repair SELECT itself (statement 0 is the SET LOCAL, whose number could also
+    // contain '50'), and check the default limit is absent (Langston R5 r2 record 1).
+    expect(state.statements[1][1]).toContain('visible_by IS NULL');
+    expect(state.statements[1][1]).toContain('50');
+    expect(state.statements[1][1]).not.toContain('1000');
     state.releaseRepairRead!();
     await other;
   });

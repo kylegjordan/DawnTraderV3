@@ -474,6 +474,10 @@ export async function repairPendingXstockCertificates(limit = 1_000): Promise<nu
   if (current) {
     if (current.limit === limit) return current.run;
     // A different limit is not served by a join: wait the running repair out, then run its own.
+    // The catch is defence only: runPendingCertificateRepair returns 0 on every failure, so this
+    // promise does not reject at present. Known fence limit (Langston R5 r2): the recursion can
+    // be starved if the 5 s timer re-claims the slot with the default limit first. Both live
+    // callers use the default, so this path is unreached; a non-default caller must not rely on it.
     await current.run.catch(() => undefined);
     return repairPendingXstockCertificates(limit);
   }
