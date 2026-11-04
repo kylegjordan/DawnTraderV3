@@ -23,9 +23,12 @@ WHAT ONE RUN DOES, per `cold/*.gz` not modified in the last hour, oldest first:
   5. append a manifest line (fsynced) to `offbox/cold-offbox-manifest.jsonl`;
   6. only then unlink the local file.
   After the loop, if anything moved, the manifest itself is uploaded under
-  `token-watch/manifest/`. Fallback census if the manifest is ever lost:
-  `b2_list_file_names` (or `b2_list_file_versions`, see the README) under
-  `token-watch/cold/`, with each object's sha1.
+  `token-watch/manifest/`. ⛔ THE MANIFEST IS THE AUTHORITY on which uploads
+  were verified. If it is ever lost, listing `token-watch/cold/` finds every
+  uploaded version, but it CANNOT tell a verified object from the orphan of a
+  failed read-back (whose sha1 matches its own body). Such an orphan is named,
+  with its file id, in the run's ERROR line; the key cannot delete it, by design,
+  and the next run uploads the file again.
 
 ERRORS ARE CLASSIFIED (Langston, Step 2 condition 4):
   • AUTH / TRANSPORT (401, 403, connection failures, timeouts, a 5xx or 429
@@ -94,8 +97,12 @@ MANIFEST_OBJECT = KEY_PREFIX + "manifest/cold-offbox-manifest.jsonl"
 OFFBOX_DIR = os.path.join(ROOT, "offbox")
 MANIFEST_PATH = os.path.join(OFFBOX_DIR, "cold-offbox-manifest.jsonl")
 AUTH_URL = os.environ.get("TOKEN_WATCH_B2_AUTH_URL",
-                          "https://api.backblazeb2.com/b2api/v3/b2_authorize_account")
+                          "https://api.backblazeb2.com/b2api/v4/b2_authorize_account")
 CREDENTIAL_NAME = "b2-cold"
+# The ONLY capabilities the key may hold. Validated as a set against this, never as "deleteFiles is absent":
+# an absence test over a field that has moved or vanished passes vacuously (Langston, Step 4 condition 1; #744).
+ALLOWED_CAPABILITIES = frozenset({"listFiles", "readFiles", "writeFiles"})
+API = "/b2api/v4/"
 CHUNK = 1 << 20
 TIMEOUT = 300
 
@@ -182,24 +189,33 @@ class Session:
 def authorize(key_id: str, app_key: str, auth_url: str = AUTH_URL) -> Session:
     basic = base64.b64encode(("%s:%s" % (key_id, app_key)).encode("utf-8")).decode("ascii")
     data = _json(auth_url, basic=basic)
+    # ⛔ THE v4 SHAPE, AND ONLY IT (Langston, Step 4 BLOCKER). v4 holds every restriction inside
+    #    `storageApi.allowed` = {buckets: [{id, name}], capabilities: [...], namePrefix}; v3 has no `allowed` and
+    #    keeps them flat. Measured on staging 2026-11-04 with the app's key: v3 storageApi keys = absoluteMinimumPartSize,
+    #    apiUrl, bucketId, bucketName, capabilities, downloadUrl, infoType, namePrefix, recommendedPartSize, s3ApiUrl;
+    #    v4 = absoluteMinimumPartSize, allowed, apiUrl, downloadUrl, recommendedPartSize, s3ApiUrl, and v4 allowed =
+    #    buckets, capabilities, namePrefix. A response of any other shape is refused, never interpreted.
     api = data["apiInfo"]["storageApi"]
-    allowed = api.get("allowed") or {}
-    caps = set(api.get("capabilities") or allowed.get("capabilities") or [])
-    buckets = allowed.get("buckets") or []
-    match = [b for b in buckets if b.get("name") == BUCKET_NAME]
-    # ⛔ REFUSE ANY KEY THAT IS NOT THE RESTRICTED ONE (see the module header).
-    if len(buckets) != 1 or not match:
-        raise Abort("the key is not restricted to the %s bucket alone (allowed buckets: %r)"
-                    % (BUCKET_NAME, [b.get("name") for b in buckets]))
+    allowed = api.get("allowed")
+    if not isinstance(allowed, dict):
+        raise Abort("the authorize response has no storageApi.allowed: not the v4 shape this job reads")
+    caps = allowed.get("capabilities")
+    if not isinstance(caps, list) or not caps:
+        raise Abort("storageApi.allowed.capabilities is missing or empty: cannot tell what the key can do")
+    if set(caps) != ALLOWED_CAPABILITIES:
+        raise Abort("the key's capabilities are %r; this job runs only with exactly %r (no delete)"
+                    % (sorted(caps), sorted(ALLOWED_CAPABILITIES)))
+    buckets = allowed.get("buckets")
+    if not isinstance(buckets, list) or len(buckets) != 1 or buckets[0].get("name") != BUCKET_NAME \
+            or not buckets[0].get("id"):
+        raise Abort("the key is not restricted to the %s bucket alone (allowed buckets: %r)" % (BUCKET_NAME, buckets))
     if allowed.get("namePrefix") != KEY_PREFIX:
         raise Abort("the key is not restricted to the %r prefix (it has %r)" % (KEY_PREFIX, allowed.get("namePrefix")))
-    if "deleteFiles" in caps:
-        raise Abort("the key carries deleteFiles; this job must run with a key that cannot delete")
-    return Session(api["apiUrl"], api["downloadUrl"], data["authorizationToken"], match[0]["id"])
+    return Session(api["apiUrl"], api["downloadUrl"], data["authorizationToken"], buckets[0]["id"])
 
 
 def get_upload_url(s: Session) -> tuple[str, str]:
-    d = _json(s.api_url + "/b2api/v3/b2_get_upload_url", token=s.token, body={"bucketId": s.bucket_id})
+    d = _json(s.api_url + API + "b2_get_upload_url", token=s.token, body={"bucketId": s.bucket_id})
     return d["uploadUrl"], d["authorizationToken"]
 
 
@@ -224,7 +240,7 @@ def upload(path: str, name: str, sha1: str, size: int, upload_url: str, upload_t
 
 
 def download_sha256(s: Session, file_id: str) -> tuple[str, int]:
-    url = s.download_url + "/b2api/v3/b2_download_file_by_id?fileId=" + urllib.parse.quote(file_id)
+    url = s.download_url + API + "b2_download_file_by_id?fileId=" + urllib.parse.quote(file_id)
 
     def go():
         req = urllib.request.Request(url, headers={"Authorization": s.token})
@@ -292,6 +308,7 @@ def append_manifest(record: dict, manifest_path: str) -> None:
         fh.write(json.dumps(record, sort_keys=True) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
+    _fsync_dir(os.path.dirname(manifest_path))   # the manifest's entry is durable before any unlink
 
 
 def _fsync_dir(path: str) -> None:
@@ -317,8 +334,9 @@ def move_one(s: Session, path: str, manifest_path: str) -> dict:
                          % (name, up.get("contentSha1"), up.get("contentLength")))
     back_sha, back_n = download_sha256(s, up["fileId"])
     if back_sha != sha256 or back_n != size:
-        raise FileFailed("read-back of %s does not match (sha256 %s vs %s, %d vs %d B); the local copy is KEPT"
-                         % (name, back_sha, sha256, back_n, size))
+        raise FileFailed("read-back of %s does not match (sha256 %s vs %s, %d vs %d B); the local copy is KEPT, and "
+                         "the uploaded version (file id %s) is an ORPHAN with no manifest line"
+                         % (name, back_sha, sha256, back_n, size, up["fileId"]))
     record = {
         "name": name, "b2_name": b2_name, "file_id": up["fileId"], "sha256": sha256, "sha1": sha1,
         "bytes": size, "uncompressed_bytes": uncompressed,
@@ -370,7 +388,7 @@ def run(*, cold_dir: str = COLD_DIR, manifest_path: str = MANIFEST_PATH, auth_ur
     if moved:
         try:
             upload_manifest(s, manifest_path)
-        except (Abort, FileFailed) as exc:
+        except Exception as exc:              # noqa: BLE001 — including a non-transient HTTPError
             LOG.error("the manifest could not be uploaded: %s (the local manifest is intact)", exc)
             failed.append("(manifest upload)")
     LOG.info("done: moved %d file(s), %d B; kept %d: %s", len(moved), sum(r["bytes"] for r in moved),

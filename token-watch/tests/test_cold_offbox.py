@@ -40,6 +40,19 @@ else:
 
 PASS = FAIL = 0
 
+# The refusal REASON is part of the contract (Langston, Step 4): a page that names the wrong cause sends people to
+# rotate a key that was never the problem. So the abort lines are captured and each refusal block checks its reason.
+import logging  # noqa: E402
+ERRORS = []
+
+
+class _Capture(logging.Handler):
+    def emit(self, record):
+        ERRORS.append(record.getMessage())
+
+
+logging.getLogger("token-watch.cold-offbox").addHandler(_Capture())
+
 
 def check(label, cond, detail=""):
     global PASS, FAIL
@@ -52,7 +65,7 @@ def check(label, cond, detail=""):
 
 
 class Fake:
-    mode = set()          # 'corrupt', 'auth401', 'upload500', 'wide', 'delete'
+    mode = set()          # 'corrupt', 'auth401', 'upload500', 'wide', 'delete', 'v3', 'nocaps', 'extracap'
     objects = {}          # fileId -> bytes
     names = {}            # fileId -> name
     calls = []
@@ -77,11 +90,34 @@ class H(BaseHTTPRequestHandler):
         if u.path.endswith("b2_authorize_account"):
             if "auth401" in Fake.mode:
                 return self.send_json(401, {"code": "unauthorized"})
-            caps = ["listFiles", "readFiles", "writeFiles"] + (["deleteFiles"] if "delete" in Fake.mode else [])
+            # ⛔ PROVENANCE OF THIS FIXTURE'S SHAPE (Langston, Step 4: a fixture that reads a vendor response must cite
+            #    the documented schema). Backblaze's v4 b2_authorize_account moved every key restriction into
+            #    storageApi.allowed = {buckets: [{id, name}], capabilities, namePrefix}; v3 kept them flat and has no
+            #    `allowed`. MEASURED on staging 2026-11-04 with the app's key, field names only:
+            #      v3 storageApi: absoluteMinimumPartSize apiUrl bucketId bucketName capabilities downloadUrl infoType
+            #                     namePrefix recommendedPartSize s3ApiUrl
+            #      v4 storageApi: absoluteMinimumPartSize allowed apiUrl downloadUrl recommendedPartSize s3ApiUrl
+            #      v4 allowed:    buckets capabilities namePrefix
+            #    The r1 fixture returned BOTH shapes at once, which no B2 version does — that is how a parser reading
+            #    v4 against a v3 URL passed 35 checks. This fixture returns ONE shape per request.
+            caps = ["listFiles", "readFiles", "writeFiles"]
+            if "delete" in Fake.mode:
+                caps.append("deleteFiles")
+            if "extracap" in Fake.mode:
+                caps.append("writeKeys")
+            if "v3" in Fake.mode:
+                return self.send_json(200, {"accountId": "a", "authorizationToken": "t", "apiInfo": {"storageApi": {
+                    "absoluteMinimumPartSize": 5000000, "apiUrl": base, "bucketId": "b1", "bucketName": "dt-archive-cold",
+                    "capabilities": caps, "downloadUrl": base, "infoType": "apiInfo", "namePrefix": "token-watch/",
+                    "recommendedPartSize": 100000000, "s3ApiUrl": base}}})
             allowed = {"buckets": [{"id": "b1", "name": "dt-archive-cold"}],
+                       "capabilities": caps,
                        "namePrefix": None if "wide" in Fake.mode else "token-watch/"}
-            return self.send_json(200, {"authorizationToken": "t", "apiInfo": {"storageApi": {
-                "apiUrl": base, "downloadUrl": base, "capabilities": caps, "allowed": allowed}}})
+            if "nocaps" in Fake.mode:
+                del allowed["capabilities"]
+            return self.send_json(200, {"accountId": "a", "authorizationToken": "t", "apiInfo": {"storageApi": {
+                "absoluteMinimumPartSize": 5000000, "allowed": allowed, "apiUrl": base, "downloadUrl": base,
+                "recommendedPartSize": 100000000, "s3ApiUrl": base}}})
         if u.path.endswith("b2_download_file_by_id"):
             fid = parse_qs(u.query)["fileId"][0]
             data = Fake.objects[fid]
@@ -116,7 +152,8 @@ class H(BaseHTTPRequestHandler):
 
 srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
-AUTH = "http://127.0.0.1:%d/b2api/v3/b2_authorize_account" % srv.server_port
+AUTH = "http://127.0.0.1:%d/b2api/v4/b2_authorize_account" % srv.server_port
+check("fixture control: the module's own AUTH_URL is v4", "/b2api/v4/" in co.AUTH_URL, co.AUTH_URL)
 KEY = ("kid", "secret")
 COLD = os.path.join(ROOT, "cold")
 MANIFEST = os.path.join(ROOT, "offbox", "cold-offbox-manifest.jsonl")
@@ -173,6 +210,7 @@ check("T1 objects named under token-watch/cold/", all(Fake.names[r["file_id"]] =
                                                        for r in m))
 check("T1 the manifest itself was uploaded", "token-watch/manifest/cold-offbox-manifest.jsonl" in Fake.names.values())
 check("T1 oldest first", [r["name"] for r in m][0] == "provenance-raw-2026-10-01.jsonl.gz")
+check("T1 every B2 call used the v4 API", all("/b2api/v4/" in c for c in Fake.calls if "b2api" in c), repr(Fake.calls))
 
 # ── T7: a re-run with nothing to move ───────────────────────────────────────
 print("T7 expect: a second run finds only the fresh file, exits 0, calls B2 not at all, and writes no manifest line")
@@ -233,10 +271,18 @@ check("T5 exactly two upload attempts (one retry)", sum(1 for c in Fake.calls if
       repr(Fake.calls))
 
 # ── T6 / T8: a key that is too wide is refused before anything ──────────────
-for label, mode in (("T6 a key with no prefix restriction", "wide"), ("T8 a key that can delete", "delete")):
+REASON = {"wide": "prefix", "delete": "capabilities are", "v3": "not the v4 shape",
+          "nocaps": "capabilities is missing", "extracap": "capabilities are"}
+for label, mode in (("T6 a key with no prefix restriction", "wide"), ("T8 a key that can delete", "delete"),
+                    ("T10 a v3-shaped response (restrictions flat, no `allowed`)", "v3"),
+                    ("T11 a response with no capabilities field (must not pass vacuously)", "nocaps"),
+                    ("T12 a key with an extra capability (writeKeys)", "extracap")):
     print("%s expect: refused at authorize, exit 1, nothing touched" % label)
     reset(["a-2026-10-01.jsonl.gz"], mode={mode})
+    ERRORS.clear()
     rc = run()
+    check(label + ": refused for the RIGHT reason (%r)" % REASON[mode],
+          any("ABORT before any file" in e and REASON[mode] in e for e in ERRORS), repr(ERRORS))
     check(label + ": exit 1", rc == 1)
     check(label + ": file kept", os.listdir(COLD) == ["a-2026-10-01.jsonl.gz"])
     check(label + ": no upload URL taken", not any("get_upload_url" in c for c in Fake.calls))

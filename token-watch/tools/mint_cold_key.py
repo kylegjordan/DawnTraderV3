@@ -31,6 +31,9 @@ PREFIX = "token-watch/"
 CAPABILITIES = ["listFiles", "readFiles", "writeFiles"]
 KEY_NAME = "token-watch-cold-offbox"
 AUTH_URL = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
+# v3 deliberately: only apiUrl, accountId and the token are read from it, and v3 b2_create_key takes a single
+# bucketId. A single-bucket key created at v3 authorizes at v4 with that bucket in storageApi.allowed.buckets,
+# which is what ops/cold_offbox.py and prove_cold_key.py read.
 
 
 def app_key():

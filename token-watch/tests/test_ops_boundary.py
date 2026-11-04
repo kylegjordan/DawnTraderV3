@@ -27,8 +27,11 @@ except Exception:
 
 PKG = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OPS = os.path.join(PKG, "ops")
-FORBIDDEN_FOR_OPS = ("providers", "budget", "receiver", "follow_up", "promote", "provenance")
+# An ALLOWLIST (Langston, Step 4 record (d)): the collector modules ops/ may import. Anything else from the
+# collector is refused by default, so a new collector module is outside ops/ until it is argued in here.
+ALLOWED_FOR_OPS = frozenset({"config", "tier", "liveness"})
 OPS_MODULES = sorted(f[:-3] for f in os.listdir(OPS) if f.endswith(".py"))
+COLLECTOR = frozenset(f[:-3] for f in os.listdir(PKG) if f.endswith(".py"))
 PASS = FAIL = 0
 
 
@@ -51,8 +54,9 @@ def imports(text):
     return out
 
 
-def ops_violations(texts):
-    return sorted("%s imports %s" % (n, i) for n, t in texts.items() for i in imports(t) & set(FORBIDDEN_FOR_OPS))
+def ops_violations(texts, collector=COLLECTOR):
+    return sorted("%s imports %s" % (n, i) for n, t in texts.items()
+                  for i in (imports(t) & collector) - ALLOWED_FOR_OPS)
 
 
 def collector_violations(texts):
@@ -74,7 +78,10 @@ check("ops/ modules", OPS_MODULES == ["alert_mint", "cold_offbox", "store_watch"
 
 print("control: a planted `import providers` in an ops module IS detected")
 check("control 1", ops_violations({"x.py": "import providers\n"}) == ["x.py imports providers"])
-print("expect: no ops/ module imports a provider- or budget-facing collector module")
+check("control 1b: a collector module NOT on any list (summary) is refused too",
+      ops_violations({"x.py": "from summary import build\n"}) == ["x.py imports summary"])
+check("control 1c: an allowed one (config) passes", ops_violations({"x.py": "from config import ROOT\n"}) == [])
+print("expect: ops/ imports nothing from the collector except config, tier and liveness")
 check("1 ops/ stays off the provider path", ops_violations(ops_texts) == [], repr(ops_violations(ops_texts)))
 
 print("control: a planted `from cold_offbox import run` in a collector module IS detected")

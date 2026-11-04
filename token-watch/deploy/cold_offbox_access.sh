@@ -35,7 +35,9 @@ runuser -u "$U" -- sh -c "echo probe > '$OFFBOX/.probe' && rm -f '$OFFBOX/.probe
 tw="$COLD/.tier-probe-$$"
 runuser -u tokenwatch -- sh -c "umask 027; echo probe > '$tw'" || fail "tokenwatch can no longer write $COLD"
 getfacl -p "$tw" | grep -q '^user::rw-$' || { rm -f "$tw"; fail "a new tokenwatch file lost its owner rw-"; }
-getfacl -p "$tw" | grep -q "^user:$U:r--" || { rm -f "$tw"; fail "a new tokenwatch file did not give $U r--"; }
+# Prove the inherited entry by READING, not by matching getfacl text: an entry neutered by the mask still prints
+# `user:<U>:r--` with `#effective:---` on the same line (Langston, Step 4 record (f)).
+runuser -u "$U" -- head -c 1 "$tw" >/dev/null || { rm -f "$tw"; fail "a new tokenwatch file is not readable by $U"; }
 rm -f "$tw"
 unreadable=$(find "$COLD" -maxdepth 1 -type f -name '*.gz' ! -exec runuser -u "$U" -- test -r {} \; -print | wc -l)
 [ "$unreadable" = 0 ] || fail "$unreadable backlog file(s) still unreadable by $U"

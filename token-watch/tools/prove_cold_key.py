@@ -29,7 +29,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 KEY_FILE = "/etc/token-watch/b2-cold.key"
-AUTH_URL = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account"
+AUTH_URL = "https://api.backblazeb2.com/b2api/v4/b2_authorize_account"   # v4: restrictions live in storageApi.allowed
 fails = 0
 
 
@@ -63,7 +63,7 @@ def main():
     auth = json.loads(body)
     api = auth["apiInfo"]["storageApi"]
     allowed = api.get("allowed") or {}
-    caps = sorted(api.get("capabilities") or allowed.get("capabilities") or [])
+    caps = sorted(allowed.get("capabilities") or [])
     expect("1 capabilities", caps, ["listFiles", "readFiles", "writeFiles"])
     expect("1 bucket", [b.get("name") for b in allowed.get("buckets") or []], ["dt-archive-cold"])
     expect("1 prefix", allowed.get("namePrefix"), "token-watch/")
@@ -74,7 +74,7 @@ def main():
     name = "token-watch/proof/prove_cold_key-%s.txt" % stamp
     data = ("proof object written by prove_cold_key.py at %s\n" % stamp).encode()
     print("2. expect: writing %s is ALLOWED (200)" % name)
-    st, body = post(api_url + "/b2api/v3/b2_get_upload_url", token, {"bucketId": bucket_id})
+    st, body = post(api_url + "/b2api/v4/b2_get_upload_url", token, {"bucketId": bucket_id})
     up = json.loads(body)
     st, body = call(urllib.request.Request(up["uploadUrl"], data=data, method="POST", headers={
         "Authorization": up["authorizationToken"], "X-Bz-File-Name": urllib.parse.quote(name, safe="/"),
@@ -84,7 +84,7 @@ def main():
     file_id = json.loads(body).get("fileId")
 
     print("3. expect: deleting that version is REFUSED (401)")
-    st, body = post(api_url + "/b2api/v3/b2_delete_file_version", token, {"fileName": name, "fileId": file_id})
+    st, body = post(api_url + "/b2api/v4/b2_delete_file_version", token, {"fileName": name, "fileId": file_id})
     expect("3 delete-version refused", st, 401)
     print("   B2 said: %s" % body[:200].decode(errors="replace"))
 
@@ -96,7 +96,7 @@ def main():
     print("   B2 said: %s" % body[:200].decode(errors="replace"))
 
     print("5. UNKNOWN by design (Langston's hypothesis): can this key HIDE a file?")
-    st, body = post(api_url + "/b2api/v3/b2_hide_file", token, {"bucketId": bucket_id, "fileName": name})
+    st, body = post(api_url + "/b2api/v4/b2_hide_file", token, {"bucketId": bucket_id, "fileName": name})
     hide = "ALLOWED" if st == 200 else "REFUSED" if st == 401 else "HTTP %s" % st
     print("RESULT 5 hide-file: %s  (%s)" % (hide, body[:200].decode(errors="replace")))
     print("   => fallback census must use %s" % ("b2_list_file_versions" if hide == "ALLOWED" else
