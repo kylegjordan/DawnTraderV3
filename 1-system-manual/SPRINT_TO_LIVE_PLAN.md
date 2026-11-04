@@ -44,7 +44,7 @@
 | 2 — exit, in order | 9 | [C3] with row 62 | CC-C (Analyst Claude) | 62 |  | Kyle 2026-10-07 | row | nothing |
 | 3 — feed | 1 | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | none | #960, #1175 | Kyle 2026-10-07 | MOVED out of the pre-sprint into the sprint (Kyle 2026-10-07; row 31 keeps its place) | nothing |
 | 3 — feed | 2 | CORZ investigation | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | ✅ DONE | nothing |
-| 3 — feed | 3 | B-XSTOCK-BAR-AVAILABILITY | CC-C (Analyst Claude) | none | #707 | Kyle 2026-10-07 | IN FLIGHT — Step 9 | CC-C (the window ended 2026-10-25; its read is owed) |
+| 3 — feed | 3 | B-XSTOCK-BAR-AVAILABILITY | CC-C (Analyst Claude) | none | #707 | Kyle 2026-10-07 | IN FLIGHT — Step 9 | CC-C (read 2026-11-04: the window FAILED its handoff rule — one writer stopped without a handoff on 10-17 — so a fresh window needs a reviewed re-registration; plan to Langston) |
 | 3 — feed | 4 | B-B75-EXPORT-COMPLETENESS | CC-A (Old Claude) | none | #1195 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-18 (report B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md) | nothing |
 | 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | QUEUED | CC-B (its locked list first) |
 | 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | QUEUED | nothing |
