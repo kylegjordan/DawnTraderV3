@@ -20,7 +20,7 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 | increment | sha | plan items | files |
 |---|---|---|---|
 | 1a | `8f59fce0d` | P1, P2, P3, P4, P7 (archival-health) | `drizzle/migrations/2026-11-04-b-disk-file-tiering.sql` + `-rollback.sql`, `MANIFEST.txt`, `server/services/data-archive/disk-file-tiering.ts` (new), `server/scripts/b-disk-file-tiering.ts` (new), `server/scripts/b-storage-archival-health.ts`, `server/tests/unit/b-disk-file-tiering.test.ts` (new) |
-| 1b | `fefd41e51`, revised through Step 4 part 2 r2-r4 (head: see the part 2 r4 commit) | P7 (watchdog disk checks, clear edge, honest dedupe log, category) | `server/scripts/staging-liveness-watchdog.mjs`, `scripts/system-alerts.ts` (`resolve-key`), `server/services/system-alerts.ts` (actor), `server/tests/unit/b-staging-liveness-watch.test.ts` |
+| 1b | `fefd41e51`, revised through Step 4 part 2 r2-r4 (graded head `3be1433ce`; Langston PROCEED on part 2 at that ref) | P7 (watchdog disk checks, clear edge, honest dedupe log, category) | `server/scripts/staging-liveness-watchdog.mjs`, `scripts/system-alerts.ts` (`resolve-key`), `server/services/system-alerts.ts` (actor), `server/tests/unit/b-staging-liveness-watch.test.ts` |
 | 1c | `a846b0d08` | P5 writer removal | `server/services/context-bridge.ts`, `DELETED_COMPONENTS_LOG.md`, `_archive/deleted-code/context-bridge.phase-41F-L-trace-writer.20261104-B-DISK-FILE-TIERING.ts.removed` |
 | 1d | `065863526` | P8 | `server/scripts/b75-rehydrate.ts` |
 | 1e | `8495b8768` | P6 | `server/services/data-archive/moved-day-check.ts` (new), `server/services/drift-dashboard-aggregator.ts`, `server/services/system-alerts.ts` (actor), `server/tests/unit/b-disk-file-tiering-moved-day.test.ts` (new) |
