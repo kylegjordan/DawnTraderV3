@@ -206,4 +206,24 @@ describe('xStock logical flush transaction boundary', () => {
     await vi.waitFor(() => expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(1));
     state.write.mockReset();
   });
+
+  it('R5d r2: a failed stuck-flush alert releases its claim and the next failure tries again', async () => {
+    vi.mocked(addAlert).mockClear();
+    vi.mocked(addAlert).mockRejectedValueOnce(new Error('alerts file unwritable'));
+    state.write.mockRejectedValue(new Error('canceling statement due to statement timeout'));
+    bufferOhlcBar('xstock_spot', {
+      symbol: 'TSLA/USD',
+      intervalBegin: new Date('2026-10-15T00:05:00Z'),
+    } as any);
+    for (let i = 0; i < XSTOCK_STUCK_FLUSH_ALERT_AT; i += 1) await flushAssetClass('xstock_spot');
+    await vi.waitFor(() => expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 0));
+    await flushAssetClass('xstock_spot');
+    await vi.waitFor(() => expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(2));
+    // Once raised, it stays raised for that flush ID.
+    await flushAssetClass('xstock_spot');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(addAlert)).toHaveBeenCalledTimes(2);
+    state.write.mockReset();
+  });
 });

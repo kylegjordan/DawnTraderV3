@@ -150,6 +150,10 @@ let _xstockBufferFailStopAlerted = false;
  * flush ID (it returns the saved event set once a completion exists), and it is bounded: the
  * 50,000-frame fail-stop refuses intake, and the stuck-flush alert below names the flush ID.
  * Every other class, and every other error, keeps #705's rule.
+ * ⛔ COUPLED TO R5 (Langston): this can only fire because `XSTOCK_TX_STATEMENT_TIMEOUT_MS`
+ * (xstock-bar-availability.ts) makes the SERVER cancel before the pool's 30 s client timeout. If
+ * that bound is raised to 30 s or more, or the SET LOCAL is removed, this exemption becomes dead
+ * code and the drops come back as "Query read timeout", which is deliberately not exempted.
  */
 export function isXstockProjectionRetryable(assetClass: ArchiveAssetClass, err: unknown): boolean {
   if (assetClass !== 'xstock_spot') return false;
@@ -159,14 +163,18 @@ export function isXstockProjectionRetryable(assetClass: ArchiveAssetClass, err: 
 
 /** Consecutive failures of ONE xStock flush ID (Langston R5d condition 1). */
 export const XSTOCK_STUCK_FLUSH_ALERT_AT = 12;
-let xstockFlushFailures: { flushId: string; count: number } | null = null;
+let xstockFlushFailures: { flushId: string; count: number; alerted: boolean } | null = null;
 
 function recordXstockFlushFailure(flushId: string | undefined, detail: string): void {
   if (!flushId) return;
   xstockFlushFailures = xstockFlushFailures?.flushId === flushId
-    ? { flushId, count: xstockFlushFailures.count + 1 }
-    : { flushId, count: 1 };
-  if (xstockFlushFailures.count === XSTOCK_STUCK_FLUSH_ALERT_AT) {
+    ? { ...xstockFlushFailures, count: xstockFlushFailures.count + 1 }
+    : { flushId, count: 1, alerted: false };
+  // `>=` with a claim flag, not `===` on the count: if the raise fails, the claim is released
+  // and the next failure of the same flush ID tries again (Langston R5d r2; same rule as the
+  // fail-stop latch and `_permanentAlerted` below).
+  if (xstockFlushFailures.count >= XSTOCK_STUCK_FLUSH_ALERT_AT && !xstockFlushFailures.alerted) {
+    xstockFlushFailures.alerted = true;
     void alertXstockStuckFlush(flushId, xstockFlushFailures.count, detail);
   }
 }
@@ -200,6 +208,8 @@ async function alertXstockStuckFlush(flushId: string, count: number, detail: str
       dedupe_key: `xstock-bar-availability-flush-stuck:${flushId}`,
     });
   } catch (error) {
+    // RELEASE THE CLAIM: the alert never got out, so the next failure of this flush must try again.
+    if (xstockFlushFailures?.flushId === flushId) xstockFlushFailures.alerted = false;
     console.error(
       '[B-XSTOCK-BAR-AVAILABILITY] FAILED TO RAISE stuck-flush alert:',
       error instanceof Error ? error.message : error,

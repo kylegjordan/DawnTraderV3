@@ -32,6 +32,10 @@ export const XSTOCK_BAR_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1' as 
  * Residual: a database stalled so hard that ROLLBACK itself takes 30 s still
  * reaches the client timeout. This bounds the common case; it does not remove
  * the client-side timeout's failure mode for every caller of the pool.
+ * ⛔ FORWARD-BINDING (Langston R5d): the writer's statement-timeout retry
+ * (`isXstockProjectionRetryable`, ohlc-batch-writer.ts) depends on this value staying BELOW the
+ * pool's 30 s client timeout. Raise it to 30 s or more, or remove the SET LOCAL, and that retry
+ * becomes dead code: the drops return as "Query read timeout", which is not retried.
  */
 export const XSTOCK_TX_STATEMENT_TIMEOUT_MS = 20_000;
 
