@@ -1,4 +1,4 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r1a (`#1235`) — r1a: F1 folded as OBJ-1b
+# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r1a (`#1235`) — r1b: F1 folded as OBJ-1b; its settings row is missing, so OBJ-1b seeds one
 
 change-class: non_architecture
 
@@ -48,7 +48,8 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 - *Verify:* a unit test drives the detect call and asserts that the object detect receives carries the three values; a mutation removing them turns it red; a test with `propagatedDbs` undefined asserts the fields are absent, not 0.
 
 **OBJ-1b — `volatility_edge` reads its strong-DBS threshold from the database (folded F1, §9.4 #1).** `volatility-edge.ts:94` replaces its fixed `0.35` with the same lookup its siblings use: `getCachedNumberRequired('strategy_dbs_routing_guards', 'dbs_min_threshold', {exchange:'*', assetClass, strategy, regime:'*'})` (`morning-star.ts:98-102`). The row's value is 0.35, so behavior is unchanged on crypto. Its absence fails hard, as on the siblings: no fallback.
-- *Verify:* Step 2 confirms a row resolves for `volatility_edge` on both classes (or that the wildcard row covers it) before the change; a unit test with the row set to a different value proves the strategy reads it; a source fence that no literal `0.35` remains at that guard.
+- **MEASURED 2026-11-05 ~00:10Z (staging, `module_constants WHERE module_name='strategy_dbs_routing_guards'`): 4 rows, all `dbs_min_threshold = 0.35` at `asset_class='*'`, for `defensive_hedge`, `morning_star`, `reverse_impulse`, `strong_bull_trend`. NONE for `volatility_edge`.** So OBJ-1b needs ONE seeded row (`volatility_edge`, `*`/`*`/`*`, 0.35, matching its siblings' shape) in a migration with a rollback file, a MANIFEST entry and a count assertion. With the row absent the new lookup would fail hard, which is why the row ships in the same deploy, before the code reads it.
+- *Verify:* the migration's own assertion (exactly 1 row inserted); a unit test with the row set to a different value proves the strategy reads it; a source fence that no literal `0.35` remains at that guard; on staging, `volatility_edge` keeps producing crypto signals after the deploy (no config-missing refusals).
 
 **OBJ-2 — paper xStock inherits it with no second change.** *Verify:* trace at Step 2 that `dispatchXstockActiveSignal` carries the detect result built from the OBJ-1 object, with no path that re-runs detect with the old object.
 
@@ -74,4 +75,4 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 System Manual (the xStock detect input), System Impact Map (the eval-cycle entry and its DBS hand-off), `RUNNING_ISSUES` `#1235`, `CHANGES_AND_FIXES`, `BATCH_CATALOG`, `PHASE_HISTORY`, the task lists, memory, and the plan's pre-sprint line. A progress report only if OBJ-4 needs a second session.
 
 ## 7. Risk
-Small code change, real trading change. About one xStock open in five is expected to be refused, and `strong_bull_trend` may start opening xStock trades. Both are the intended behavior that has been silently missing since 2026-05-18. No database change and no new setting.
+Small code change, real trading change. About one xStock open in five is expected to be refused, and `strong_bull_trend` may start opening xStock trades. Both are the intended behavior that has been silently missing since 2026-05-18. One new settings row (OBJ-1b's `volatility_edge` threshold, at the value the code already uses), no schema change.
