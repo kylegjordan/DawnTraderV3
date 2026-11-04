@@ -129,6 +129,14 @@ GROUP BY 1, 2 ORDER BY 1, 2;
 ```
 
 
+### 4a. Interim read 2026-11-04 (hi = 13:52:11Z) — CC-B, alert `07df291f`. INTERIM, NOT THE VERDICT; the read of record is the terminal alert `20bba77f` at 2026-11-07T13:03:42Z.
+⚠️ The weekly reads due 10-24 and 10-31 were NOT taken: the alert was minted with no repeat setting (`recurrence_interval_seconds: null`), so it never re-armed, and the crew was frozen 10-21 → 11-04. This is the first read since the window opened. The miss is homed on `#1074`.
+- **Class query: did NOT complete** — `canceling statement due to statement timeout` on the full archive scan. Its counts are NOT MEASURED here, and are NOT inferred from the rule-(a) query. The terminal read must run it with a raised `statement_timeout`; that is a condition on the read of record, not a change to the criterion.
+- **Rule (a) query, xStock (graded = the query's own `graded` flag):** 141 graded opens across 7 cells. **vwap_pullback: 69 graded (48.9 % of class), 18 `direct_taker` / 51 `maker_to_taker`, 9 positive slips, qualifies; nearest-rank p90 of `adverseR / s_own` = 60.33 (FAIL threshold > 1.0); 6 slips over their own bound; `s_own` min 0.0040.** Every other cell has 0 positive slips and does not qualify.
+- **Against the pre-registered rules, as of this read:** rule (a) — the only qualifying cell covers **48.9 % < 50 %** ⇒ **INSUFFICIENT** (its statistic would FAIL on its own). Rule (b) — would-refuse 6 of 141 graded = 4.3 % (≤ 5 %), but `direct_taker` = 18 < 20 ⇒ **INSUFFICIENT, never PASS**. Neither early-stop condition holds; the window runs to its end.
+- **Crypto:** 38 AEE rows in the 14 days to the read, all `admitted`, so its baseline is non-empty; its taker leg is assessed at the terminal read.
+- **The §3 prediction** ("if slips accrue, rule (a) most likely FAILS") is tracking: the qualifying cell's statistic is 60× its bound.
+
 ## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
 Written before any post-deploy taker opens exists (crypto `maker_only`, xStock shut since Friday 20:00 ET):
 - **Every** admitted xStock taker row from 2026-10-17T13:03:42Z carries `consumptionArm` — **0** taker rows without the key after the deploy (a non-zero count is a defect, not a warm-up).
