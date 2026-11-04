@@ -164,14 +164,28 @@ async function main(): Promise<void> {
 
   const args = parseArgs(process.argv.slice(2));
 
-  // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4): the output folder must be the operator's own. A
-  // symlink there is refused (a planted link would send the restore wherever it points, e.g. into the live
-  // telemetry folder), and a folder this script creates is private (0700).
-  if (fs.existsSync(args.out) && fs.lstatSync(args.out).isSymbolicLink()) {
-    console.error(`[B75 rehydrate] --out ${args.out} is a symbolic link; refusing — use a private folder you own`);
+  // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4 + its condition): the output folder must be the
+  // operator's own and private. ONE lstat decides all four cases: a symbolic link (dangling or not) is refused —
+  // a planted link would send the restore wherever it points, e.g. into the live telemetry folder; anything
+  // that is not a directory is refused; an existing directory with any group/other bits is refused (the
+  // operator chmods it — this script never silently changes their folder); otherwise it is created 0700.
+  const refuseOut = (why: string): never => {
+    console.error(`[B75 rehydrate] --out ${args.out} ${why}; refusing — use a private folder you own`);
     process.exit(1);
+  };
+  let outStat: fs.Stats | null = null;
+  try {
+    outStat = fs.lstatSync(args.out);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
   }
-  if (!fs.existsSync(args.out)) fs.mkdirSync(args.out, { recursive: true, mode: 0o700 });
+  if (outStat) {
+    if (outStat.isSymbolicLink()) refuseOut('is a symbolic link');
+    if (!outStat.isDirectory()) refuseOut('is not a directory');
+    if ((outStat.mode & 0o077) !== 0) refuseOut(`is mode ${(outStat.mode & 0o777).toString(8)} (group or others can reach it): run chmod 0700 ${args.out} first`);
+  } else {
+    fs.mkdirSync(args.out, { recursive: true, mode: 0o700 });
+  }
 
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
