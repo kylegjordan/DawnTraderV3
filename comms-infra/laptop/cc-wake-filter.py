@@ -58,7 +58,12 @@ NAMES = {
     # into a wake for PM alone and cost the other sessions their wake (Langston's compound-collision case,
     # measured 0 of 32,932 inbox bodies on 2026-11-04). Long form only, no optional-suffix alternative.
     # ⚠️ ADDING THIS ENTRY CHANGES THE OTHER SESSIONS TOO: a message naming ONLY PM Claude stops waking them.
-    "CC-PM": [r"(?-i:PM)[\s_-]*claude", r"claude[\s_-]*(?-i:PM)", r"cc[\s_-]*pm"],
+    # Step-4 conditions 1-2 (Langston 2026-11-04T21:34Z): a digit before "PM" (with or without one space) means a clock
+    # time, not the name - "at 3 PM Claude will post" must stay a broadcast; it was the missed-wake direction for the
+    # other four. Measured on 33,094 inbox bodies: 65 PM hits before, 65 after, 0 lost. Accepted residual: a non-digit
+    # "PM" directly before "Claude" still names PM (0 occurrences). The "Claude PM" form is dropped: 0 real uses, and
+    # every extra alternative widens OTHERS_RE for the other four sessions, where the failure mode is silence.
+    "CC-PM": [r"(?<![0-9])(?<![0-9][\s])(?-i:PM)[\s_-]*claude", r"cc[\s_-]*pm"],
 }
 ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "CC-C": "ANALYST Claude",
               "CC-INFRA": "Infra Claude",

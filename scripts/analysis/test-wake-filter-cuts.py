@@ -446,6 +446,11 @@ PM_CASES = [
     ("CC-PM", "",            None,         "markets close 4 PM ET, then pm2 restarts",   True,  "C4: the same unaddressed Kyle message also reaches PM (broadcast)"),
     ("CC-A",  "",            None,         "OLD Claude and PM Claude, please sync.",     True,  "PM: naming OLD and PM wakes OLD (multi-recipient)"),
     ("CC-PM", "",            None,         "OLD Claude and PM Claude, please sync.",     True,  "PM: ... and wakes PM"),
+    # Step-4 condition 3 (Langston): the UPPERCASE clock-time case, which case-sensitivity alone does not guard.
+    ("CC-A",  "",            None,         "at 3 PM Claude will post the numbers",       True,  "C4 uppercase: '3 PM Claude' is a time, not PM - still broadcasts to OLD"),
+    ("CC-PM", "",            None,         "at 3 PM Claude will post the numbers",       True,  "C4 uppercase: ... and still reaches PM as a broadcast"),
+    ("CC-B",  "",            None,         "need the census by 8 PM\nClaude, can you confirm?", True, "C4 uppercase across a line break: still a broadcast to NEW"),
+    ("CC-B",  "",            None,         "Claude PM, where are we?",                   True,  "condition 2: the dropped 'Claude PM' form no longer names PM - a broadcast, NEW still woken"),
 ]
 print()
 for alias, kind, sender, text, expect, label in PM_CASES:
