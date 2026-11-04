@@ -1364,6 +1364,21 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **LEFT, NAMED, so a later grep is not read as a missed sweep:** `Claude Comms and Packages/Langston/langston-call.sh` (and its sibling fork `Claude Comms and Packages/comms-infra/langston-call.sh`) — stale copies of the LIVE `/usr/local/bin/langston-call`, kept with a one-line warning; making the live script repo-canonical is `#1004` (P19-B12, `#652`). `.gitignore:72` (ignores `LANGSTON_SETUP_REFERENCE.md`, the credentials reference the archived CCPI names) — KEPT, Langston r2 C-1.
 **ARCHIVE:** each file moved by `git mv` to the path in the table (history follows the rename; git is authoritative). **COMMIT:** `9384b919a`, 2026-10-20T22:54:09Z. ⚠️ The archive filenames and the warning lines say `20261021`/`2026-10-21` — the laptop's local date — while the commit is 2026-10-20 UTC (Langston r1 record item). The filenames are left as they are; this line is the correction.
 
+## 2026-11-04 — six per-tick debug log lines and the three scripts that read two of them — B-DISK-FILE-TIERING OBJ-10 (`#1240`, Kyle KD-2), CC-A
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| `console.log("[I7-WS-RAW]", rawStr.slice(0, 200))` | `server/exchanges/kraken/kraken-websocket-adapter.ts:811` | every raw socket frame, first 200 chars (`768039bc7`, 2025-12-09, Replit) |
+| `[I7-WS-D][BROADCAST_THROTTLED]`, `[I7-WS-D][CACHE_WRITE]`, `[8.8.3-I5][CACHE_UPDATE]`, `[I7-WS-A][CACHE_UPDATE]` | `server/services/live-pricing-adapter.ts:1093`, `:1253`, `:1264`, `:1267` | per-tick cache diagnostics (`ce75ed7c0`, `10883c44b`, `aae6eb614`, 2025-12-08, Replit) |
+| `[34.A][BROADCAST]` payload line and its `payloadStr` | `server/services/context-bridge.ts:171-172` | the broadcast payload, 300 chars (`7726b16ff`, 2025-10-31, Replit); the count line at `:168` stays, 1:1 with it |
+| `scripts/analysis/b_price_age_truth_reserve_age_split.py` + `.sh` | `scripts/analysis/` | B-PRICE-AGE-TRUTH (`#951`) one-shot read of `[I7-WS-D][CACHE_WRITE]`, 2026-09-11 (`b8beed879`) |
+| `scripts/analysis/b_price_side_obj7_step7_reads.sh` | `scripts/analysis/` | B-PRICE-SIDE-BY-JOB OBJ-7 Step-7 reads incl. `[I7-WS-A]`, 2026-09-12 (`96fe877c0`) |
+**WHY:** the six lines were 62.19% of a full rotated app log (1,074,487,652 characters, 18:02-20:56Z 2026-11-04; re-derived by Langston); the disk was at 84%. Disposition (4), connected and removed (Langston C1).
+**BLAST RADIUS:** each tag pair had exactly one emitter (Langston's census at the ref); after the edit `git grep` finds none of the six, and finds the surviving `[I7-WS-D][BROADCAST_SEND]` (control). `rawStr` stays (it is parsed); `payloadStr` had no other use. Readers: the three scripts above, whose consumers (rows `8g`/`8g-bis`) moved to `B-PRICE-STALENESS-BOUND`, closed 2026-10-20 (`GOVERNANCE_EXCEPTIONS:63`); left in place they would print a zero reading as "no cache writes" (Langston C3). Records that cite them (completion reports, change lists, scopes) stay as history.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/<name>.20261104-B-DISK-FILE-TIERING.removed` for each of the three scripts (verbatim); the six log lines are in this entry.
+**COMMIT:** the OBJ-10 commit (sha recorded here at Step 10).
+
+---
+
 ## 2026-11-04 — the Phase 41F-L broadcast trace writer — B-DISK-FILE-TIERING (`#1233`, pre-audit P5), CC-A
 | removed | where (pre-removal) | what it was |
 |---|---|---|

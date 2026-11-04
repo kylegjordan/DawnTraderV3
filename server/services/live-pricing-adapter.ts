@@ -1089,8 +1089,6 @@ export class LivePricingAdapter {
       
       // D1: Minimal throttling at 150ms (not 1000ms) to prevent flooding while ensuring updates
       if (now - lastBroadcast < this.BROADCAST_THROTTLE_MS) {
-        // Log throttled broadcasts for diagnostic visibility
-        console.log(`[I7-WS-D][BROADCAST_THROTTLED] symbol=${quote.symbol} timeSinceLast=${now - lastBroadcast}ms`);
         return;
       }
       
@@ -1249,9 +1247,9 @@ export class LivePricingAdapter {
       priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null, _writer);
     }
     
-    // Phase 8.8.3-I7-WS-D (D6): Diagnostic log for cache write
-    console.log(`[I7-WS-D][CACHE_WRITE] symbol=${normalized} price=${price} source=${source}`);
-    
+    // B-DISK-FILE-TIERING OBJ-10 (#1240): three per-tick diagnostic lines were removed here ([I7-WS-D][CACHE_WRITE],
+    // [8.8.3-I5][CACHE_UPDATE], [I7-WS-A][CACHE_UPDATE]; with the throttle line above, about 37% of all app log bytes).
+
     // Phase 8.8.3-I7-WS-C (C2 Stage 3): Log cache update with trace ID
     if (traceId) {
       priceTraceService.recordStage(traceId, 3, 'CACHE_UPDATE', {
@@ -1259,12 +1257,6 @@ export class LivePricingAdapter {
         price
       });
     }
-    
-    // Phase 8.8.3-I5: Diagnostic logging for cache update audit
-    console.log(`[8.8.3-I5][CACHE_UPDATE] symbol=${normalized} newPrice=${price} lastTickMsAgo=0 timestamp=${now}`);
-    
-    // Phase 8.8.3-I7-WS-A (A4): Log cache update for diagnostic audit
-    console.log(`[I7-WS-A][CACHE_UPDATE] internal_symbol=${normalized} price=${price}`);
     
     if (!this.trackedSymbols.has(normalized)) {
       this.trackedSymbols.add(normalized);

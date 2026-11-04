@@ -806,9 +806,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     // Directive 9.0.A: Update heartbeat on any valid message
     this.handleHeartbeatMessage();
     
-    // I7-WS-RAW: Log raw incoming Kraken messages (first 200 chars)
+    // B-DISK-FILE-TIERING OBJ-10 (#1240): the per-frame [I7-WS-RAW] log line (first 200 chars of every frame,
+    // about 20% of all app log bytes) was removed. Raw frames are sampled by rawcap.cjs (#1242).
     const rawStr = data.toString();
-    console.log("[I7-WS-RAW]", rawStr.slice(0, 200));
     
     try {
       const message = JSON.parse(rawStr);

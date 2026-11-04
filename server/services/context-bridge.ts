@@ -167,9 +167,8 @@ class ContextBridge extends EventEmitter {
     
     console.log(`[ContextBridge] Broadcasting ${update.type} to ${targetClients.length}/${this.clients.size} clients (${filterDesc})`);
     
-    // Phase 34.A + 41.2: Detailed broadcast payload logging for diagnostics (safe stringify)
-    const payloadStr = update.payload ? JSON.stringify(update.payload).substring(0, 300) : 'undefined';
-    console.log(`[34.A][BROADCAST] type=${update.type}, payload=${payloadStr}`);
+    // B-DISK-FILE-TIERING OBJ-10 (#1240): the [34.A][BROADCAST] payload line was removed; the count line above
+    // still logs every broadcast (same event, 1:1).
 
     // Send to filtered clients with retry logic
     const promises = targetClients.map(([ws, metadata]) => 
