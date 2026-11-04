@@ -18,7 +18,7 @@
 | 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 1 (scope r1 with Langston) | KD-2 order 3 |
 | 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 7 (deployed 2026-11-04; trim not yet scoped) | KD-2 order 5 |
 | 3 | `B-STATUS-BOARD` (`#1227`) — remaining Step 7 checks, then Steps 8-11 | IN FLIGHT, Step 7 | already agreed |
-| 4 | `#527` — xStock paper-trading costs split into their parts, so paper matches what live would cost | QUEUED, before live, after items 1-2 | KD-13 |
+| 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
 | — | Crew-tooling and governance-checker improvements | after live | KD-15 |
