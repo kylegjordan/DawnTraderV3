@@ -1,4 +1,6 @@
-# B-TOKEN-WATCH-STORAGE — SCOPE r2
+# B-TOKEN-WATCH-STORAGE — SCOPE r2 (+ Step-1 conditions, 2026-11-04)
+
+> **Langston PROCEEDED on r2 with two in-commit conditions, applied here in the Step-2 commit:** (1) the ACL entry is applied to the 86 files already in `cold/` (82 of them are 0640 and a default ACL does not reach them), and (2) the claim that `deploy` reads the whole store is corrected — it reads `cold/` and `public/` only.
 
 > **r2 (2026-11-04), answering Langston's r1 send-back (B1-B3, his four rulings, two record items).** §§1-3 were approved as written and are unchanged except §0's sizing table. Board card `PVTI_lAHODmulEM4BfQP4zhF-9jU` created (Sub-batch, Infra Claude).
 
@@ -65,7 +67,7 @@ change-class: sub_batch
 - **Verify by `fileId`, never by name (Langston (2)):** on a keep-all-versions bucket a retried run leaves several versions under one name, so the download-back uses `b2_download_file_by_id` with the id the upload returned.
 - **The manifest has its own directory, `offbox/` (B2):** `/var/lib/token-watch/offbox/cold-offbox-manifest.jsonl` (name, fileId, sha256, compressed bytes, uncompressed bytes, uploaded_at). After each run that moved anything, the manifest itself is uploaded to `token-watch/manifest/cold-offbox-manifest.jsonl`; versions accumulate and are never deleted. **Fallback census if the manifest is lost:** `b2_list_file_names` under `token-watch/cold/`, plus each object's `X-Bz-Content-Sha1`.
 - **Verify:**
-  - (i) after the first run, `cold/` holds only files younger than an hour, and the manifest line count equals the files removed;
+  - (i) after the first run, `cold/` holds only files younger than an hour, and the manifest holds **86** lines for the backlog (the count measured 2026-11-04 13:22Z; any file `tier.py` adds before the run is counted and named), equal to the files removed;
   - (ii) **three manifest entries chosen by a rule stated now: the oldest, the largest and the newest** are re-downloaded by fileId; `gunzip -t` passes, and both the sha256 and the uncompressed byte count match the manifest;
   - (iii) free space on `/` rises by about the 5.7 GB moved (`df` before and after, both stated);
   - (iv) **mutations, judged by exit code, never by grepping:** corrupted downloaded bytes, and a truncated local `.gz`, each leave the local file in place and exit non-zero;
@@ -81,7 +83,12 @@ change-class: sub_batch
   - **At rest:** the key reaches the unit only through systemd `LoadCredential=` from a root-only file (`/etc/token-watch/b2-cold.key`, 0600 root:root). This is the load-bearing half: nothing can read the key all day.
   - **During the run:** the upload runs as a **new system user `tokenwatch-cold`**, so the run-time copy in `/run/credentials/<unit>/` (0400, directory 0700, owned by the unit's user) is not readable by `tokenwatch`.
   - **The residual is compound:** a compromised receiver would first have to escape its own network fence (`IPAddressAllow=localhost`, `IPAddressDeny=any`, `RestrictAddressFamilies`, `NoNewPrivileges`, `MemoryDenyWriteExecute` in its unit) before any call to B2 was possible, and then could only add objects under `token-watch/`.
-- **Access for `tokenwatch-cold`, added to the store's EXISTING ACL (B2):** the root and every subdirectory already carry `user:deploy:r-x` with matching default entries, so `deploy` already reads the whole store. This batch adds entries; it does not create the ACL. It grants `--x` on the store root, `rwx` on `cold/` plus a default `r--` for new files, and `rwx` on the new `offbox/`. **Nothing store-wide.** The unit names exactly `ReadWritePaths=/var/lib/token-watch/cold /var/lib/token-watch/offbox`.
+- **Access for `tokenwatch-cold`, added to the store's EXISTING ACL (B2; corrected per Langston's condition 2):** the root and every subdirectory carry a `user:deploy:r-x` entry with matching default entries, **but on 7 of the 9 directories the mask is `---`** (`getfacl` prints `user:deploy:r-x #effective:---`), so **`deploy` reads `cold/` and `public/` only**, as §0 says. This batch adds entries; it does not create the ACL. It grants:
+  - `--x` on the store root;
+  - `rwx` on `cold/`, plus a default `r--` for new files, **and `r--` applied to the 86 files already there** (`setfacl -R -m u:tokenwatch-cold:r--`; Langston's condition 1 — the mode census is 82 at 0640 and 4 at 0644, so without it the new user could read 4 of 86). `setfacl -m` recalculates `cold/`'s mask from `r-x` to `rwx`; `deploy` keeps `r-x` on the directory and `r--` on files through its own entries.
+  - `rwx` on the new `offbox/`.
+  - **Nothing store-wide.** The unit names exactly `ReadWritePaths=/var/lib/token-watch/cold /var/lib/token-watch/offbox`.
+- **A decision, stated (Langston's condition 2, third surface):** `offbox/` is created under the root, so it inherits `default:user:deploy:r-x` with `default:mask::r-x`; **the manifest will be readable by `deploy`**, unlike `births/` or `state/`. It holds file names, B2 file ids, hashes and sizes — no secret — so this is accepted, not fenced.
 - **Minting the key (Langston (3): inside Kyle's approval).** The account-wide key already lives on staging for the B75 rotator, so this adds no new exposure of it. Conditions:
   - no `validDurationInSeconds`, because an expiring key would die quietly;
   - the secret is returned once, and is written inside the same process under `umask 077` — never on a command line, in a redirect, in shell history or in the journal;
@@ -110,7 +117,7 @@ change-class: sub_batch
 **OBJ-5: the backlog.** The 5.7 GB already in `cold/` moves through OBJ-1's own path. There is no special one-off script, so the backlog is the first real exercise of the code. It is run once by hand after deploy, then left to the timer.
 
 **OBJ-6: governance.**
-- A **SYSTEM_IMPACT_MAP entry for token-watch**: every unit (receiver, tier, summary, follow-up (disabled), cold-offbox, store-watch, the failure template), every store, both users, the caps, the off-box leg, **the existing ACL that lets `deploy` read the whole store**, and the shared-box blast radius (an existing gap, closed here).
+- A **SYSTEM_IMPACT_MAP entry for token-watch**: every unit (receiver, tier, summary, follow-up (disabled), cold-offbox, store-watch, the failure template), every store, both users, the caps, the off-box leg, **the existing ACL (`deploy` has entries everywhere but reads only `cold/`, `public/` and the new `offbox/`, because the mask is `---` elsewhere)**, and the shared-box blast radius (an existing gap, closed here).
 - **STORAGE_POLICY:** a token-watch row with the hot windows (raw 1 day, working index 90 days, births never deleted) and `cold → dt-archive-cold/token-watch/`.
 - A SYSTEM_MANUAL one-liner (cold-tier contents).
 - `token-watch/README.md` and the B-TOKEN-WATCH pre-registration as an appended AMENDMENT.
