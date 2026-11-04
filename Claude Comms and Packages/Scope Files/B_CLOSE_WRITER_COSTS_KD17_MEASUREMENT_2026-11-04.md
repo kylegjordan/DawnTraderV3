@@ -21,3 +21,6 @@ Kyle (KD-17, via PM Claude): *"when the system closes a trade, writing the recor
 
 ## The structural point
 `shared/schema.ts` `closed_trades`: `fees`, `slippage`, `entry_fee`, `exit_fee`, `total_fee`, `total_cost`, `gross_pnl`, `net_pnl` all `.default("0")`. **A close that never wrote its fee reads exactly like a real zero.** Today the only zeros are never-filled orders, but the table cannot tell them apart; that default is a fallback in Kyle's sense.
+
+## Added ~22:40 local: how a close finds its record
+`active-execution-engine.ts:4678-4679` looks the record up by SYMBOL (first row with `openedAt` and no `closedAt`); `active_open_positions` stores no trade-row id. Paper trades open at the same time on the same symbol: **0 pairs** across all records, never_filled included (control: the same query finds **16,323** overlapping pairs on different symbols). Safe today only because one position per symbol holds elsewhere.
