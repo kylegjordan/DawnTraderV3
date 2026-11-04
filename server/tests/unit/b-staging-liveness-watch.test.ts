@@ -85,3 +85,57 @@ describe('fallback dedupe: idempotent against file contents, converges with the 
     expect(fileHasOpenDedupeKey(tmpAlerts, 'watchdog-http')).toBe(true);
   });
 });
+
+// B-DISK-FILE-TIERING (#1233, pre-audit P7): the server-disk checks, their category, the honest
+// dedupe log, and the clear edge that stops a recovered outage from swallowing the next one.
+describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, disk reading', () => {
+  let mod: any;
+  let alerts: any;
+  beforeAll(async () => {
+    mod = await import('../../scripts/staging-liveness-watchdog.mjs');
+    alerts = await import('../../services/system-alerts.js');
+  });
+
+  it('the fallback carries the category it is given and keeps the addAlert key set (C3)', async () => {
+    const real = await alerts.addAlert({
+      triggers_at: new Date(), category: 'health_check', severity: 'warning',
+      title: 'disk shape control', body: 'x', dedupe_key: 'disk-shape-control',
+    });
+    const fb = mod.buildFallbackAlert({ title: 't', body: 'b', dedupeKey: 'server-disk-utilization-warning', metadata: {}, severity: 'warning', category: 'health_check' });
+    expect(Object.keys(fb).sort()).toEqual(Object.keys(real).sort());
+    expect([fb.category, fb.severity]).toEqual(['health_check', 'warning']);
+  });
+
+  it('a dedupe returns the EXISTING row, so its triggers_at differs from the one just sent — the discriminator holds (C4)', async () => {
+    const first = await alerts.addAlert({ triggers_at: new Date('2026-11-04T10:00:00Z'), category: 'health_check', severity: 'warning', title: 'd1', body: 'd1', dedupe_key: 'disc-key' });
+    const sent = new Date('2026-11-04T11:00:00Z');
+    const second = await alerts.addAlert({ triggers_at: sent, category: 'health_check', severity: 'warning', title: 'd2', body: 'd2', dedupe_key: 'disc-key' });
+    expect(second.id).toBe(first.id);
+    expect(second.triggers_at).not.toBe(sent.toISOString());
+  });
+
+  it('cliJson reads the CLI\'s JSON after npm\'s preamble, and returns null when there is none', () => {
+    expect(mod.cliJson('\n> dawntrader@1.0.0 system-alerts\n> tsx scripts/system-alerts.ts add\n\n{\n  "id": "abc",\n  "dedupe_key": "k"\n}\n')).toEqual({ id: 'abc', dedupe_key: 'k' });
+    expect(mod.cliJson('{"resolved":[]}')).toEqual({ resolved: [] });
+    expect(mod.cliJson('npm ERR! nothing here')).toBeNull();
+  });
+
+  it('the clear edge: resolving by key under the watchdog actor stamps cli, and the NEXT outage mints a new row (B1, B2)', async () => {
+    const open = await alerts.addAlert({ triggers_at: new Date(), category: 'breakage', severity: 'critical', title: 'outage 1', body: 'o', dedupe_key: 'watchdog-pm2' });
+    expect(mod.fileHasOpenDedupeKey(tmpAlerts, 'watchdog-pm2')).toBe(true);
+    const ids = await alerts.resolveAlertsByDedupeKey('watchdog-pm2', 'staging-liveness-watchdog', `watchdog run ${crypto.randomUUID()}: cleared`, 'cli');
+    expect(ids).toEqual([open.id]);
+    const row = alerts.readAllAlerts().find((r: any) => r.id === open.id);
+    expect([row.state, row.resolved_by_claimed, row.resolved_by_transport]).toEqual(['resolved', 'staging-liveness-watchdog', 'cli']);
+    expect(mod.fileHasOpenDedupeKey(tmpAlerts, 'watchdog-pm2')).toBe(false);
+    const next = await alerts.addAlert({ triggers_at: new Date(), category: 'breakage', severity: 'critical', title: 'outage 2', body: 'o', dedupe_key: 'watchdog-pm2' });
+    expect(next.id).not.toBe(open.id);
+  });
+
+  it('diskUsage is df\'s Use%: used / (used + available to unprivileged users)', () => {
+    // 100 blocks of 4096: 20 free, of which 15 available to users ⇒ used 80, Use% = 80 / 95.
+    const d = mod.diskUsage({ blocks: 100, bfree: 20, bavail: 15, bsize: 4096 });
+    expect(d.usedPct).toBeCloseTo((80 / 95) * 100, 6);
+    expect(d.freeBytes).toBe(15 * 4096);
+  });
+});

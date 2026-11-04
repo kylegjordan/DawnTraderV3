@@ -46,6 +46,7 @@ import {
   listAlerts,
   ackAlert,
   resolveAlert,
+  resolveAlertsByDedupeKey,
   AlertActorError,
   processResurface,
   shouldDeliverToDiscord,
@@ -324,13 +325,39 @@ async function cmdResolve(args: string[]): Promise<void> {
   console.log(JSON.stringify(updated, null, 2));
 }
 
+/**
+ * B-DISK-FILE-TIERING (#1233, pre-audit P7): resolve every non-terminal row with a dedupe key.
+ * For a caller that knows the condition, not the row id — the staging watchdog clearing its own
+ * page once the re-measured condition is gone. Every row goes through resolveAlert's gates
+ * (canonical actor, evidence). Transport is 'cli', stamped here exactly as `resolve` stamps it:
+ * the call IS a CLI call, and transport must never follow from which verb a caller chose
+ * (system-alerts.ts, the ResolveTransport block; Langston Step 2 r3 B1). The actor carries who.
+ */
+async function cmdResolveKey(args: string[]): Promise<void> {
+  const key = args[1];
+  if (!key || key.startsWith('--')) {
+    console.error('Usage: resolve-key <dedupe-key> --by <canonical actor> --evidence <reference-or-sentinel>');
+    process.exit(1);
+  }
+  const by = requireFlag(args, 'by');
+  const evidence = requireFlag(args, 'evidence');
+  let resolved: string[];
+  try {
+    resolved = await resolveAlertsByDedupeKey(key, by, evidence, 'cli');
+  } catch (err) {
+    console.error(String(err instanceof Error ? err.message : err));
+    process.exit(1);
+  }
+  console.log(JSON.stringify({ dedupe_key: key, resolved }, null, 2));
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd) {
-    console.error('Usage: system-alerts <add|fire-due|list|ack|resolve> [...flags]');
+    console.error('Usage: system-alerts <add|fire-due|list|ack|resolve|resolve-key> [...flags]');
     console.error(`Storage: ${ALERTS_FILE}`);
     process.exit(1);
   }
@@ -349,6 +376,9 @@ async function main(): Promise<void> {
       break;
     case 'resolve':
       await cmdResolve(args);
+      break;
+    case 'resolve-key':
+      await cmdResolveKey(args);
       break;
     default:
       console.error(`Unknown command: ${cmd}`);

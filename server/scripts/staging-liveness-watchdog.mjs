@@ -11,6 +11,15 @@
  *   pm2     — `pm2 jlist` reports the app process online
  *   engine  — GET /api/health/liveness: engineExpected && !engineRunning is the
  *             silent-halt signature (#520). Only meaningful when http is OK.
+ *   disk-warning / disk-critical — the SERVER's own `/` (B-DISK-FILE-TIERING #1233): nothing
+ *             else on staging watches it; the database's disk-utilization-* alerts are Supabase.
+ *
+ * CLEAR EDGE (B-DISK-FILE-TIERING P7, Langston Step 2 C4/B2): when a check passes and the
+ * alerts file still holds an unresolved row for its key, the watchdog resolves it through the
+ * CLI `resolve-key` verb as actor `staging-liveness-watchdog` (transport `cli`). Before this a
+ * recovered outage left its row open, and the store's dedupe then swallowed the NEXT outage
+ * while the CLI exited 0. Resolving goes through the CLI only — no direct-write fallback — and
+ * a missed clear is retried on the next tick because the FILE, not the latch, gates it.
  *
  * Alert emit: PRIMARY = the app's alerts CLI (validates via addAlert; carries
  * --dedupe-key). FALLBACK = direct schema-valid append to the alerts jsonl —
@@ -37,6 +46,16 @@ const ALERTS_FILE = process.env.SYSTEM_ALERTS_FILE || '/var/log/dawntrader/syste
 const STATE_FILE = process.env.WATCHDOG_STATE_FILE || '/home/deploy/.dawntrader-watchdog-state.json';
 const PM2_APP_NAME = process.env.WATCHDOG_PM2_NAME || 'dawntrader';
 const DEBOUNCE_TICKS = 2; // 2 × 5min — matches the pre-audit; safe post-#520 (resume completes in seconds)
+const WATCHDOG_ACTOR = 'staging-liveness-watchdog';
+const RUN_ID = crypto.randomUUID(); // logged at start; a resolve's evidence cites it (a re-derivable token)
+// Server-disk thresholds (B-DISK-FILE-TIERING P7). Environment-overridable ONLY so the arming can be
+// FORCED in a one-off run (Langston C1) — the watchdog has zero app imports, so it cannot read the DB.
+const DISK_PATH = process.env.WATCHDOG_DISK_PATH || '/';
+const DISK_WARN_PCT = Number(process.env.WATCHDOG_DISK_WARN_PCT || 85);
+const DISK_CRIT_PCT = Number(process.env.WATCHDOG_DISK_CRIT_PCT || 90);
+// 90 % of this 75 GB volume leaves 7.5 GB — about 14 hours of stdout at the measured rate — so
+// critical also fires on an absolute floor (Langston Step 2 C4).
+const DISK_CRIT_FREE_BYTES = Number(process.env.WATCHDOG_DISK_CRIT_FREE_BYTES || 8 * 1024 ** 3);
 
 /**
  * Builds a fallback alert row shaped EXACTLY like system-alerts.ts addAlert()
@@ -44,7 +63,7 @@ const DEBOUNCE_TICKS = 2; // 2 × 5min — matches the pre-audit; safe post-#520
  * see server/tests/unit/b-staging-liveness-watch.test.ts. Do not add/remove
  * fields here without that test in the same diff.
  */
-export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity = 'critical' }) {
+export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity = 'critical', category = 'breakage' }) {
   const now = new Date().toISOString();
   return {
     schema_version: 1,
@@ -59,7 +78,7 @@ export function buildFallbackAlert({ title, body, dedupeKey, metadata, severity 
     resolved_by_transport: null,
     resolution_evidence: null,
     state: 'scheduled',
-    category: 'breakage',
+    category,
     severity,
     title,
     body,
@@ -83,17 +102,33 @@ export function fileHasOpenDedupeKey(alertsFilePath, dedupeKey) {
   return false;
 }
 
-async function emitAlert({ title, body, dedupeKey, metadata, severity = 'critical' }) {
+/** The JSON object the CLI printed, after npm's own preamble lines; null if there is none. */
+export function cliJson(stdout) {
+  const out = String(stdout || '');
+  const start = out.startsWith('{') ? 0 : out.indexOf('\n{') + 1;
+  if (start === 0 && !out.startsWith('{')) return null;
+  try { return JSON.parse(out.slice(start)); } catch { return null; }
+}
+
+async function emitAlert({ title, body, dedupeKey, metadata, severity = 'critical', category = 'breakage' }) {
   // PRIMARY: the app's CLI (full validation + the same B-NEW-51 dedup).
+  const sentTriggersAt = new Date().toISOString();
   try {
-    await pExecFile('npm', ['run', 'system-alerts', '--', 'add',
-      '--triggers-at', new Date().toISOString(),
-      '--category', 'breakage', '--severity', severity,
+    const { stdout } = await pExecFile('npm', ['run', 'system-alerts', '--', 'add',
+      '--triggers-at', sentTriggersAt,
+      '--category', category, '--severity', severity,
       '--title', title, '--body', body,
       '--metadata', JSON.stringify({ source: 'staging-liveness-watchdog', emit_path: 'cli', ...metadata }),
       '--dedupe-key', dedupeKey,
     ], { cwd: APP_DIR, timeout: 60_000 });
-    log(`alert emitted via CLI (dedupe_key=${dedupeKey})`);
+    // On a dedupe, addAlert returns the EXISTING row, so its triggers_at is not the one just sent
+    // (system-alerts.ts, the non-terminal dedupe check; Langston Step 2 r4 C4). Say so, never "emitted".
+    const row = cliJson(stdout);
+    if (row && row.dedupe_key === dedupeKey && row.triggers_at !== sentTriggersAt) {
+      log(`CLI deduped (dedupe_key=${dedupeKey}): unresolved row ${row.id} already holds the key — no new alert`);
+      return 'deduped';
+    }
+    log(`alert emitted via CLI (dedupe_key=${dedupeKey}${row ? `, id=${row.id}` : ', CLI output not parsed'})`);
     return 'cli';
   } catch (cliErr) {
     log(`CLI emit failed (${cliErr?.message?.slice(0, 200)}) — using direct-append fallback`);
@@ -103,7 +138,7 @@ async function emitAlert({ title, body, dedupeKey, metadata, severity = 'critica
     log(`fallback: non-resolved ${dedupeKey} row already present — not appending`);
     return 'deduped';
   }
-  const row = buildFallbackAlert({ title, body, dedupeKey, metadata, severity });
+  const row = buildFallbackAlert({ title, body, dedupeKey, metadata, severity, category });
   fs.mkdirSync(path.dirname(ALERTS_FILE), { recursive: true });
   fs.appendFileSync(ALERTS_FILE, JSON.stringify(row) + '\n');
   log(`alert appended directly (dedupe_key=${dedupeKey})`);
@@ -112,6 +147,37 @@ async function emitAlert({ title, body, dedupeKey, metadata, severity = 'critica
 
 function log(msg) {
   console.log(`[WATCHDOG] ${new Date().toISOString()} ${msg}`);
+}
+
+/** Resolve every unresolved row for `dedupeKey` through the CLI (gated by the caller on the file). */
+async function resolveKey(dedupeKey, reading) {
+  try {
+    const { stdout } = await pExecFile('npm', ['run', 'system-alerts', '--', 'resolve-key', dedupeKey,
+      '--by', WATCHDOG_ACTOR,
+      '--evidence', `watchdog run ${RUN_ID}: ${dedupeKey} condition cleared (${reading})`,
+    ], { cwd: APP_DIR, timeout: 60_000 });
+    const out = cliJson(stdout);
+    log(`resolved ${dedupeKey}: ${out ? JSON.stringify(out.resolved) : 'CLI output not parsed'}`);
+  } catch (err) {
+    log(`resolve of ${dedupeKey} FAILED (${err?.message?.slice(0, 200)}) — retried next tick while the row stays open`);
+  }
+}
+
+/** One `/` reading per run, shared by both disk checks (Langston r3 (b): one cached read, one latch each).
+ *  Use% is df's: used / (used + available to unprivileged users). */
+let diskReading = null;
+export function diskUsage(statfs) {
+  const used = (Number(statfs.blocks) - Number(statfs.bfree)) * Number(statfs.bsize);
+  const avail = Number(statfs.bavail) * Number(statfs.bsize);
+  return { usedPct: (used / (used + avail)) * 100, freeBytes: avail };
+}
+function readDisk() {
+  if (!diskReading) diskReading = diskUsage(fs.statfsSync(DISK_PATH));
+  return diskReading;
+}
+function diskText() {
+  const d = readDisk();
+  return `${DISK_PATH} ${d.usedPct.toFixed(1)}% used, ${(d.freeBytes / 1024 ** 3).toFixed(2)} GiB free`;
 }
 
 function loadState() {
@@ -163,19 +229,41 @@ const CHECKS = [
     title: 'ENGINE HALTED — expected running, not running',
     body: `The active engine is expected to be running (isEngineActive=true) but the process reports it stopped, ${DEBOUNCE_TICKS} consecutive ticks. This is the #520 silent-halt signature — post-fix it should not occur; investigate the session table + resume path. Detection-only: the watchdog restarts nothing.`,
   },
+  {
+    // B-DISK-FILE-TIERING P7 — the server's OWN disk. A level alert: it stays unresolved while the disk
+    // is over the line (do NOT ack it — an ack silences the key that notices a drain not happening)
+    // and resolves itself here once usage is back under the threshold.
+    key: 'disk-warning', run: async () => readDisk().usedPct < DISK_WARN_PCT,
+    dedupeKey: 'server-disk-utilization-warning', category: 'health_check', severity: 'warning',
+    reading: diskText,
+    title: `Server disk WARNING: staging ${DISK_PATH} over ${DISK_WARN_PCT}%`,
+    body: () => `The staging server's own disk is at ${diskText()} (warning at ${DISK_WARN_PCT}%), ${DEBOUNCE_TICKS} consecutive ticks. This is the SERVER disk, not the Supabase database (that is disk-utilization-*). The daily disk-file tiering job moves old data files off it; check its log (/var/log/dawntrader/disk-file-tiering.log). Resolves itself when usage falls back under ${DISK_WARN_PCT}%.`,
+  },
+  {
+    key: 'disk-critical', run: async () => { const d = readDisk(); return d.usedPct < DISK_CRIT_PCT && d.freeBytes >= DISK_CRIT_FREE_BYTES; },
+    dedupeKey: 'server-disk-utilization-critical', category: 'health_check', severity: 'critical',
+    reading: diskText,
+    title: `Server disk CRITICAL: staging ${DISK_PATH} over ${DISK_CRIT_PCT}% or under ${(DISK_CRIT_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free`,
+    body: () => `The staging server's own disk is at ${diskText()}, ${DEBOUNCE_TICKS} consecutive ticks — at the measured write rate that is hours of runway, not days. If the disk fills, the app cannot log and the archive jobs cannot stage files. Free space now: the disk-file tiering job (/var/log/dawntrader/disk-file-tiering.log) and the rotated logs in /var/log/dawntrader. Resolves itself when usage is back under ${DISK_CRIT_PCT}% with at least ${(DISK_CRIT_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free.`,
+  },
 ];
 
 async function main() {
   const state = loadState();
   state.streaks = state.streaks || {};
   state.alerted = state.alerted || {};
+  log(`run ${RUN_ID} started`);
   for (const check of CHECKS) {
-    const ok = await check.run();
+    const dedupeKey = check.dedupeKey || `watchdog-${check.key}`;
+    let ok;
+    try { ok = await check.run(); } catch (err) { log(`${check.key}: check threw (${err?.message?.slice(0, 200)}) — treated as skipped`); ok = null; }
     if (ok === null) { log(`${check.key}: skipped (precondition unreachable)`); continue; }
     if (ok) {
       if (state.streaks[check.key] > 0) log(`${check.key}: recovered`);
       state.streaks[check.key] = 0;
       state.alerted[check.key] = false; // recovery re-arms the latch for the NEXT outage
+      // ... and the STORE is cleared too, or the next outage is deduped into this row (P7 clear edge).
+      if (fileHasOpenDedupeKey(ALERTS_FILE, dedupeKey)) await resolveKey(dedupeKey, check.reading ? check.reading() : `${check.key} check passed`);
       continue;
     }
     state.streaks[check.key] = (state.streaks[check.key] || 0) + 1;
@@ -183,9 +271,11 @@ async function main() {
     if (state.streaks[check.key] >= DEBOUNCE_TICKS && !state.alerted[check.key]) {
       const emitPath = await emitAlert({
         title: check.title,
-        body: check.body,
-        dedupeKey: `watchdog-${check.key}`,
-        metadata: { check: check.key, streak: state.streaks[check.key] },
+        body: typeof check.body === 'function' ? check.body() : check.body,
+        dedupeKey,
+        metadata: { check: check.key, streak: state.streaks[check.key], ...(check.reading ? { reading: check.reading() } : {}) },
+        ...(check.severity ? { severity: check.severity } : {}),
+        ...(check.category ? { category: check.category } : {}),
       });
       state.alerted[check.key] = emitPath !== 'error';
     }
