@@ -1,4 +1,4 @@
-# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-10-12
+# CC-B (NEW Claude) — SESSION TASK LIST — plain language, as of 2026-11-04
 
 > **Rebuilt 2026-09-29 from `SPRINT_TO_LIVE_PLAN.md`, which is the authority: if this list and the plan disagree, this list is stale.** The previous version (as of 2026-09-13, with the original 2026-09-01 census) is in git history at `23b4700b2`. Every row points at its record (plan row, `RUNNING_ISSUES` number, alert id); the record is the truth, this file is the index. Kyle 2026-09-05: every slotted task lands here in the same turn.
 
@@ -6,6 +6,7 @@
 
 | batch | step | waiting on |
 |---|---|---|
+| **`B-CRYPTO-FEED-WATCHDOG`** (row 33a, `#1232`) | **STEP 7 of 11** — deployed `b8685a453` 2026-11-04 15:47Z | the pre-registered 48 h watch to 2026-11-06 ~15:47Z (alert `d766f9b3`, record `Change Lists/B_CRYPTO_FEED_WATCHDOG_STEP7_2026-11-04.md`), then Langston Step 8 |
 | **`B-ENGINE-STOP-DURATION-COLUMN`** (row 2a0, `#1067`) | **deployed 2026-10-07 — STEP 7** | the engine stop, run as the pre-sprint reset's first act (Langston ruled; five conditions in `Change Lists/RELEASE_DEPLOY_2026-10-07_PLAN.md`) |
 | **`B-RTB-ADMISSION-TIEBREAK-LIVE`** (row 59f) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~08:47Z)** | carried: `#1204` row 59g, `#378`; the legacy tail drains |
 | **`B-RTB-QUEUED-STATUS-SWEEP`** (row 59g, `#1204`) | ✅ **CLOSED 2026-10-17 (Langston confirmed Step 11, ~15:30Z)** | carried: `#1124` row 134a, `#1006` |
@@ -25,6 +26,11 @@
 | alert | when | what |
 |---|---|---|
 | `be06cec8` | 2026-10-13T07:00Z | the weekly `dt-deploy` observation (10-06 run: all four PASS at `ea456ad40`); re-mint on each resolve |
+
+## ★★ STAGE 00 — DATA TRUTH FIRST (Kyle decision D-2, 2026-11-04, `1-system-manual/pm/DECISIONS.md`) — AHEAD of everything below
+1. `B-CRYPTO-FEED-WATCHDOG` (`#1232`, row 33a) — finish it: Step 7 watch to 2026-11-06, then Steps 8-11.
+2. **The xStock direction-score fix (`#1235`)** — xStock strategies receive the DBS; own batch, named at Step 1. Straight after the watchdog, AHEAD of `B-ENTRY-GATE` (D-2 order 4).
+3. Then `B-ENTRY-GATE` and the locked list below resume. Row 119 `B-ARCHIVE-WRITER-LIFECYCLE` gives up `#1062` to OLD Claude's `B-DB-POOL-GUARD` (`#1239`, D-2 order 3).
 
 ## ★ MY PRE-SPRINT LIST — Kyle-assigned 2026-10-20, re-ordered and LOCKED by Kyle the same evening (Desktop). Nothing else starts until these are done; anything new is asked first. The plan's §0a row is the authority.
 1. `B-BOOK-CHECKSUM-CIRCUIT-BREAKER` (`#1220`) — catch an order book that no longer matches Kraken's checksum and stop that symbol's requests straight away; never let a reconnect leave a second connection running beside the first (the 2026-10-13 storm). **✅ CLOSED 2026-10-20 — deployed `725a7f3f5`, Langston Step 8 + 11 CONFIRMED; report `Batch Completion/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_COMPLETION_REPORT.md`.**
