@@ -1,4 +1,4 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r1 (`#1235`)
+# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r1a (`#1235`) — r1a: F1 folded as OBJ-1b
 
 change-class: non_architecture
 
@@ -47,6 +47,9 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 - **When `propagatedDbs` is undefined** (the scanner lacked history, ATR or sector), the three fields are undefined and the strategies' `?? 0` neutral applies, the same as crypto. No new fallback.
 - *Verify:* a unit test drives the detect call and asserts that the object detect receives carries the three values; a mutation removing them turns it red; a test with `propagatedDbs` undefined asserts the fields are absent, not 0.
 
+**OBJ-1b — `volatility_edge` reads its strong-DBS threshold from the database (folded F1, §9.4 #1).** `volatility-edge.ts:94` replaces its fixed `0.35` with the same lookup its siblings use: `getCachedNumberRequired('strategy_dbs_routing_guards', 'dbs_min_threshold', {exchange:'*', assetClass, strategy, regime:'*'})` (`morning-star.ts:98-102`). The row's value is 0.35, so behavior is unchanged on crypto. Its absence fails hard, as on the siblings: no fallback.
+- *Verify:* Step 2 confirms a row resolves for `volatility_edge` on both classes (or that the wildcard row covers it) before the change; a unit test with the row set to a different value proves the strategy reads it; a source fence that no literal `0.35` remains at that guard.
+
 **OBJ-2 — paper xStock inherits it with no second change.** *Verify:* trace at Step 2 that `dispatchXstockActiveSignal` carries the detect result built from the OBJ-1 object, with no path that re-runs detect with the old object.
 
 **OBJ-3 — a count the reader can see: how many xStock evaluations carried a DBS this cycle.** One field in the existing xStock cycle summary (evaluations with `propagatedDbs` defined / total). **Positive control for OBJ-4:** zero would mean the hand-off is inert.
@@ -62,7 +65,7 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 
 ## 5. Findings outside the scope (§9.4)
 - **F1 — `volatility_edge`'s strong-DBS exclusion is a fixed 0.35 in code** (`volatility-edge.ts:94`). Its siblings read `strategy_dbs_routing_guards.dbs_min_threshold` from the database (`morning-star.ts:98-102`, documented class-invariant at 0.35). The value is the same today, so behavior is identical. But it is a hardcoded copy of a DB-governed setting, and **this batch makes it live on xStock for the first time.**
-  **DISPOSITION: decision required — no work without Kyle's slot (his 2026-10-19 rule).** Recommendation: fold into this batch (§9.4 #1, a one-line change to the same lookup the siblings use, with a test). Asked of Kyle through PM Claude, 2026-11-05.
+  **DISPOSITION: folded into this batch (§9.4 #1) as OBJ-1b.** PM Claude ruled 2026-11-05 that Kyle's standing rules already decide it (rule 23 fix-on-find, and no hard-coded values for DB-governed settings); Kyle is told as information, not asked.
 - **F2 — xStock's strong-trend lane does not attach crypto's strong-trend stop/target override** (`vts-runner.ts:1835` attaches `strongTrendGeometryOverride` for the `quant-strong_trend` lane; `eval-cycle.ts` has an `xstock-strong_trend` lane and no override). **NOT ESTABLISHED:** whether any strategy that reads the override (`vwap_pullback`, `strategy-engine.ts:243`) runs in xStock's strong-trend lane.
   **DISPOSITION: review scheduled at this batch's Step 2** (the census settles whether it bites). If it does, it is a separate decision for Kyle, not folded here.
 - **F3 — the guard thresholds (±0.35) were set on crypto's DBS scale.** xStock's DBS uses its own lookbacks (System Manual `:12821`), so whether 0.35 suits xStock is a calibration question. **DISPOSITION: no work in this batch.** Calibration reads it once the guards are live; this batch only makes them live.
