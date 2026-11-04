@@ -1,4 +1,6 @@
-# B-TOKEN-WATCH-STORAGE — SCOPE r1
+# B-TOKEN-WATCH-STORAGE — SCOPE r2
+
+> **r2 (2026-11-04), answering Langston's r1 send-back (B1-B3, his four rulings, two record items).** §§1-3 were approved as written and are unchanged except §0's sizing table. Board card `PVTI_lAHODmulEM4BfQP4zhF-9jU` created (Sub-batch, Infra Claude).
 
 change-class: sub_batch
 
@@ -11,9 +13,11 @@ change-class: sub_batch
 | what | value | how |
 |---|---|---|
 | `/` on staging | 75G, 62G used, 11G free (86%) | `df -h /` |
-| token-watch store | 13,801,205,273 B | `du -sb /var/lib/token-watch` |
+| token-watch store | **13,822,564,314 B** (13:22Z; the 13,801,205,273 B in r1 was the same command about an hour earlier) | `du -sb .` **as root**, and the nine directories below sum to it exactly |
 | the store cap | 8 GiB = 8,589,934,592 B (`config.py` `STORE_CAP_BYTES`) | repo at `6584f6b05` |
-| `cold/` (same disk) | 5.7G, 86 files | `du -sh`, `ls \| wc -l` |
+| `cold/` (same disk) | 6,084,884,329 B, 86 files | `du -sb` as root, `ls \| wc -l` |
+| **composition, `du -sb` per directory, as root, 13:22Z** | births 1,419,901,828 · **cold 6,084,884,329** · dead 258,564,193 · **due 2,807,777,303** · observations 1,880,342,585 · provenance 393,424,021 · public 55,855 · state 599,991,562 · study 377,622,638 · files at the root 0 | sums to 13,822,564,314 B exactly. ⚠️ **A `du` as `deploy` is permission-truncated** (it can traverse only `cold/` and `public/`); Langston measured that wall at r1 |
+| **after OBJ-1 drains `cold/`** | **7,737,679,985 B** = total − cold. Cap 8,589,934,592 B ⇒ **852,254,607 B (~0.85 GB) of headroom**; warn line 6,442,450,944 B ⇒ **above warn by design** | arithmetic on the row above, all in apparent bytes (`-sb`) |
 | written on 11-03, by store | births 28 MB · cold 104 MB · due 92 MB · others 0 | `find -newermt` sizes, one day — a single-day reading, not a rate |
 | follow-up sweep | `failed (Result: oom-kill)` since 2026-09-30 13:05Z; timer `disabled` | `systemctl status`, `list-unit-files` |
 | the size check | runs only inside `follow_up.py` (the dead-man's switch) | `follow_up.py:220` calls `liveness.check()`, which calls `_store_size_check()` at `liveness.py:287` (defined `:291`) |
@@ -57,11 +61,14 @@ change-class: sub_batch
 - download it back by name and compare the SHA-256 of the downloaded bytes with the local file's;
 - only on a match: append a manifest line to `state/cold-offbox-manifest.jsonl` (name, B2 fileId, sha256, bytes, uploaded_at), then unlink the local file;
 - on any error or mismatch: keep the local file, log ERROR, exit non-zero.
+- **★ BEFORE upload (B3): decompress the local `.gz` to EOF** and count the uncompressed bytes. `tier.py:178-180` only reads the first byte, so a truncated archive passes it today, the hot copy is already gone, and an upload by itself would faithfully archive the truncation. A decompress failure keeps the file, logs ERROR, and fails the run. The uncompressed count goes in the manifest.
+- **Verify by `fileId`, never by name (Langston (2)):** on a keep-all-versions bucket a retried run leaves several versions under one name, so the download-back uses `b2_download_file_by_id` with the id the upload returned.
+- **The manifest has its own directory, `offbox/` (B2):** `/var/lib/token-watch/offbox/cold-offbox-manifest.jsonl` (name, fileId, sha256, compressed bytes, uncompressed bytes, uploaded_at). After each run that moved anything, the manifest itself is uploaded to `token-watch/manifest/cold-offbox-manifest.jsonl`; versions accumulate and are never deleted. **Fallback census if the manifest is lost:** `b2_list_file_names` under `token-watch/cold/`, plus each object's `X-Bz-Content-Sha1`.
 - **Verify:**
   - (i) after the first run, `cold/` holds only files younger than an hour, and the manifest line count equals the files removed;
-  - (ii) three manifest entries chosen by line number are re-downloaded on the box, `gunzip -t` passes and the sha256 matches the manifest;
+  - (ii) **three manifest entries chosen by a rule stated now: the oldest, the largest and the newest** are re-downloaded by fileId; `gunzip -t` passes, and both the sha256 and the uncompressed byte count match the manifest;
   - (iii) free space on `/` rises by about the 5.7 GB moved (`df` before and after, both stated);
-  - (iv) **mutation:** a test that corrupts the downloaded bytes leaves the local file in place and exits non-zero, judged by exit code, never by grepping;
+  - (iv) **mutations, judged by exit code, never by grepping:** corrupted downloaded bytes, and a truncated local `.gz`, each leave the local file in place and exit non-zero;
   - (v) a re-run with nothing to move exits 0 and writes no manifest line.
 
 **OBJ-2: least-privilege credential.**
@@ -70,25 +77,40 @@ change-class: sub_batch
   - name prefix `token-watch/`;
   - capabilities `listFiles`, `readFiles` and `writeFiles` only — **no `deleteFiles`**.
 - **Why that is enough:** with keep-all-versions, a writer without `deleteFiles` cannot destroy an archived object.
-- **Who can read it:** the receiver is internet-facing and runs as `tokenwatch`. So the upload runs as a **new system user `tokenwatch-cold`**, and the key reaches it only through systemd `LoadCredential=` from a root-only file (`/etc/token-watch/b2-cold.key`, 0600 root:root). `tokenwatch-cold` gets an ACL on `cold/`: `rwx` on the directory, plus a default `r` for new files. It gets no other access to the store.
-- **Verify:** `b2_authorize_account` with the new key reports exactly the three capabilities, the bucket and the prefix. As `tokenwatch`, reading the key file is refused (exit code, stated before it runs).
+- **Who can read it, on two separate axes (Langston (1)):**
+  - **At rest:** the key reaches the unit only through systemd `LoadCredential=` from a root-only file (`/etc/token-watch/b2-cold.key`, 0600 root:root). This is the load-bearing half: nothing can read the key all day.
+  - **During the run:** the upload runs as a **new system user `tokenwatch-cold`**, so the run-time copy in `/run/credentials/<unit>/` (0400, directory 0700, owned by the unit's user) is not readable by `tokenwatch`.
+  - **The residual is compound:** a compromised receiver would first have to escape its own network fence (`IPAddressAllow=localhost`, `IPAddressDeny=any`, `RestrictAddressFamilies`, `NoNewPrivileges`, `MemoryDenyWriteExecute` in its unit) before any call to B2 was possible, and then could only add objects under `token-watch/`.
+- **Access for `tokenwatch-cold`, added to the store's EXISTING ACL (B2):** the root and every subdirectory already carry `user:deploy:r-x` with matching default entries, so `deploy` already reads the whole store. This batch adds entries; it does not create the ACL. It grants `--x` on the store root, `rwx` on `cold/` plus a default `r--` for new files, and `rwx` on the new `offbox/`. **Nothing store-wide.** The unit names exactly `ReadWritePaths=/var/lib/token-watch/cold /var/lib/token-watch/offbox`.
+- **Minting the key (Langston (3): inside Kyle's approval).** The account-wide key already lives on staging for the B75 rotator, so this adds no new exposure of it. Conditions:
+  - no `validDurationInSeconds`, because an expiring key would die quietly;
+  - the secret is returned once, and is written inside the same process under `umask 077` — never on a command line, in a redirect, in shell history or in the journal;
+  - the new `keyId` **and** the account-wide key's `keyId` are recorded in governance, so either can be revoked.
+- **Verify, by refusal and not only by metadata:**
+  - `b2_authorize_account` with the new key reports exactly the three capabilities, the bucket and the prefix;
+  - with the new key, **`b2_delete_file_version` on a test object under `token-watch/` is REFUSED**, and **a read of an object outside `token-watch/` is REFUSED** (expected outcomes stated before each runs, judged by HTTP status);
+  - as `tokenwatch`, reading `/etc/token-watch/b2-cold.key` is refused (exit code).
 
 **OBJ-3: the size check runs on its own.** A new root-run daily unit, `token-watch-store-watch`, runs `token-watch/store_watch.py`.
 - It calls `liveness._store_size_check()`, the single home of the cap and its warn line.
 - On `warn` or `over_cap` it mints a system alert as `deploy`: `npm run system-alerts -- add --dedupe-key token-watch-store-<state> --severity warning|critical`, with the measured bytes, the per-directory split and the cap in the body.
 - It is the same mint form as `dt-deploy-drift.sh:165`, and a failed mint is logged as `MINT_FAILED`, never swallowed.
+- **It calls `_store_size_check()` and NEVER `check()` or `python3 liveness.py`** (Langston's record item). `check()` ends in `save_state` into `state/`, so a root run would leave root-owned files that `tokenwatch` cannot rewrite, and the liveness switch would stay broken; `liveness.py`'s `__main__` *is* `check()`. Made a mechanism: the unit has `ReadOnlyPaths=/var/lib/token-watch`, and a test asserts the run writes nothing under the store.
+- **★ THE WARN ROW IS A STANDING CONDITION, NOT AN EVENT (Langston B1).** After OBJ-1 the store is about 7.74 GB, above the 6 GiB warn line by design, so `token-watch-store-warn` will stay open. Its body says so and names what clears it (the store back under 6 GiB). It is **not** resolved as fixed, and Step 8 must not read it as a pass.
+- **Time to the cap after the drain:** about 852 MB of headroom. On 11-03 the stores that stay grew about 120 MB (births 28 + due 92; a single-day reading). So **the critical row would fire in roughly a week** unless `due/` stops growing; `due/` buckets only start pruning after 91 days, from about 2026-11-30. This goes to Kyle now, not at Step 8.
 - **Verify:**
-  - (i) a run today mints an alert. Predicted before it runs: the store is 13.8 GB against the 8 GiB cap, so `over_cap`/critical before OBJ-1 moves anything, and `warn` after it (about 8.1 GB, above the 6 GiB warn line);
+  - (i) a run today mints an alert. Predicted before it runs: `over_cap`/critical while `cold/` is undrained (13.82 GB against 8.59 GB), and `warn` after OBJ-1 (7.74 GB, above 6.44 GB);
   - (ii) a run with the cap raised in a test copy mints nothing;
   - (iii) a second run with the row still open does not mint a duplicate (dedupe).
 
-**OBJ-4: failures are not silent.** `OnFailure=` on the tier, cold-offbox and store-watch units starts a root template `token-watch-failed@.service`, which mints a system alert naming the failed unit. This is `#1132` (c), for the units this batch touches. The follow-up unit gets it in `B-TOKEN-WATCH-FOLLOWUP-MEMORY`.
+**OBJ-4: failures are not silent.** `OnFailure=` on **the tier, summary, receiver, cold-offbox and store-watch units** starts a root template `token-watch-failed@.service`, which mints a system alert naming the failed unit. This is `#1132` (c). The follow-up unit gets it in `B-TOKEN-WATCH-FOLLOWUP-MEMORY`, when it is fixed and re-enabled.
+- **The summary unit and timer are live on staging with no copy in the repo** (Langston's record item; same class as `#1004`). Their absence once made the tracking page go stale invisibly. Both are copied into `token-watch/systemd/` byte-for-byte from the box first, then edited only to add `OnFailure=`.
 - **Verify:** a deliberately failing run of `cold_offbox` (bad key path) mints exactly one alert naming the unit, and that test alert is then resolved.
 
 **OBJ-5: the backlog.** The 5.7 GB already in `cold/` moves through OBJ-1's own path. There is no special one-off script, so the backlog is the first real exercise of the code. It is run once by hand after deploy, then left to the timer.
 
 **OBJ-6: governance.**
-- A **SYSTEM_IMPACT_MAP entry for token-watch**: all its units, stores, users, caps, the off-box leg, and the shared-box blast radius (an existing gap, closed here).
+- A **SYSTEM_IMPACT_MAP entry for token-watch**: every unit (receiver, tier, summary, follow-up (disabled), cold-offbox, store-watch, the failure template), every store, both users, the caps, the off-box leg, **the existing ACL that lets `deploy` read the whole store**, and the shared-box blast radius (an existing gap, closed here).
 - **STORAGE_POLICY:** a token-watch row with the hot windows (raw 1 day, working index 90 days, births never deleted) and `cold → dt-archive-cold/token-watch/`.
 - A SYSTEM_MANUAL one-liner (cold-tier contents).
 - `token-watch/README.md` and the B-TOKEN-WATCH pre-registration as an appended AMENDMENT.
@@ -98,7 +120,7 @@ change-class: sub_batch
 
 - **The follow-up sweep's memory fix and restart:** `B-TOKEN-WATCH-FOLLOWUP-MEMORY` (§0a order 4, after `B-LANGSTON-CLAUDEMD-RESIDUAL`).
 - **Births stay on the box:** by design (scope §4, never deleted). They are about 28 MB a day.
-- **Finding, not fixed here: `due/` has no measured steady state.** `prune_due_buckets` removes hour buckets older than 91 days, so `due/` should plateau. The buckets date from 2026-08-31, so the plateau is not reached yet and its size is unmeasured. If it sits near today's growth, it would hold the store above the 6 GiB warn line on its own. OBJ-3's alert will show this; sizing it is folded into `B-TOKEN-WATCH-FOLLOWUP-MEMORY`, where the sweep that reads `due/` is fixed. *DISPOSITION: added to B-TOKEN-WATCH-FOLLOWUP-MEMORY.*
+- **Finding, not fixed here: `due/` has no measured steady state** (2,807,777,303 B today, §0; Langston accepted the disposition). `prune_due_buckets` removes hour buckets older than 91 days, so `due/` should plateau. The buckets date from 2026-08-31, so the plateau is not reached yet and its size is unmeasured. If it sits near today's growth, it would hold the store above the 6 GiB warn line on its own. OBJ-3's alert will show this; sizing it is folded into `B-TOKEN-WATCH-FOLLOWUP-MEMORY`, where the sweep that reads `due/` is fixed. *DISPOSITION: added to B-TOKEN-WATCH-FOLLOWUP-MEMORY.*
 - **The rest of staging's disk** (telemetry files, the March trace): OLD Claude's, per Kyle 2026-11-04.
 
 ## 5. What I want attacked
