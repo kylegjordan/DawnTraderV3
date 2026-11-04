@@ -4,8 +4,8 @@
 
 # ▶▶ CURRENT POSITION — READ FIRST
 - **`B-PM-CLAUDE` STEP: 7 of 11 (increment P1b, heartbeat) · NEXT STEP: 3 of 11 for P1c (ALERT_OWNERS + its two copies).** P1 DONE (installed 21:47Z, four live wakes). P1b installed (blobs at `b1a555649`, CI 41927726582 4/4, record `87dd12067` pushed); Step 7 = the next hourly heartbeat post names all five sessions and lists CC-PM with no CHECK FAILED. Then P1c, P2…
-- **Decision ledger KD-1..KD-25** (`1-system-manual/pm/DECISIONS.md`). Run `node scripts/pm/reconcile-decisions.mjs` at every check and before any status report (last: 0 mismatches at `a79aa147d`).
-- **KD-25 (22:4xZ):** coin + xStock sharing a ticker may be open at once within one mode → CLOSING objective of B-SYMBOL-CLASS-IDENTITY (row 19, #1024). **Owner question out (msg `1567672216030683218`): ANALYST replied NOT HIS (sprint names Infra; #1024's owner line is stale). Waiting on Infra's reply + load → take an owner recommendation to Kyle; then fix #1024's owner line.**
+- **Decision ledger KD-1..KD-26** (`1-system-manual/pm/DECISIONS.md`). Run `node scripts/pm/reconcile-decisions.mjs` at every check and before any status report (last: 0 mismatches at `a79aa147d`).
+- **KD-25/KD-26:** coin + xStock sharing a ticker may be open at once within a mode = CLOSING objective of row 19. **Rows 18+19 now OLD Claude's, after B-CLOSE-WRITER-COSTS (KD-26, relayed msg `1567673682611019779`). Waiting on OLD's ACK KD-26.** Board cards for rows 18/19 still show Infra if they exist — fix on next board pass.
 - **OPEN WITH LANGSTON + OLD:** B-CLOSE-WRITER-COSTS final scope (KD-17/24; OLD ACKed; Langston ruling pending) → bring to Kyle for a yes. Also Langston's ruling on WHEN the end-to-end audit (#522/#235) runs.
 - **WAITING ON OTHERS:** NEW's ACK of KD-7/9/10/11.
 - ⚠️ The laptop clock is UTC+1: use `date -u`.
