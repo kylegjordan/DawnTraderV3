@@ -46,6 +46,11 @@ import { getCachedNumberRequired } from '../module-constants-service.js';
 export const RECORDER_WATCHDOG_ACTOR = 'passive-archive-watchdog';
 /** One watch tick for every registered connection. */
 export const RECORDER_WATCH_TICK_MS = 30_000;
+/** A socket that never completes its opening handshake is failed by `ws` after this long (error + close ⇒ the single
+ *  reconnect path). Without it a socket stuck CONNECTING is never checked: the silence check only judges OPEN sockets.
+ *  The same value the trading adapter uses (`kraken-websocket-adapter.ts` HANDSHAKE_TIMEOUT_MS) — a protocol timeout,
+ *  not a tuned threshold. */
+export const RECORDER_HANDSHAKE_TIMEOUT_MS = 15_000;
 
 export interface RecorderWatchConfig {
   /** No DATA frame for longer than this ⇒ terminate + reconnect. */
@@ -181,7 +186,7 @@ export class RecorderConnection {
     this.clearReconnectTimer();
     this.clearSubscribeTimer();
     if (this.ws) { detachAndTerminate(this.ws); this.ws = null; }
-    const ws = new WebSocket(this.opts.url);
+    const ws = new WebSocket(this.opts.url, { handshakeTimeout: RECORDER_HANDSHAKE_TIMEOUT_MS });
     this.ws = ws;
     ws.on('open', () => {
       if (this.ws !== ws) return;

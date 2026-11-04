@@ -23,7 +23,7 @@ vi.mock('ws', async () => {
     readyState = 0;
     terminated = false;
     sent: string[] = [];
-    constructor(public url: string) { super(); sockets.push(this); }
+    constructor(public url: string, public opts?: { handshakeTimeout?: number }) { super(); sockets.push(this); }
     send(s: string) { this.sent.push(s); }
     terminate() { this.terminated = true; this.readyState = 3; }
     close() { this.readyState = 2; }
@@ -147,6 +147,11 @@ describe('P1 — one socket, one timer, reset on data', () => {
     expect(conn.reconnectPending).toBe(false);
     vi.advanceTimersByTime(60_000);
     expect(sockets.length).toBe(2);                    // and nothing else opened later
+  });
+  it('every socket is created with a handshake timeout (a socket stuck CONNECTING is never silence-checked)', () => {
+    conn = makeConn();
+    conn.connect();
+    expect(last().opts?.handshakeTimeout).toBe(15_000);
   });
   it('scheduleReconnect is idempotent while one is pending', () => {
     conn = makeConn();
