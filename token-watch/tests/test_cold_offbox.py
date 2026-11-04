@@ -44,14 +44,17 @@ PASS = FAIL = 0
 # rotate a key that was never the problem. So the abort lines are captured and each refusal block checks its reason.
 import logging  # noqa: E402
 ERRORS = []
+DONE = []
 
 
 class _Capture(logging.Handler):
     def emit(self, record):
-        ERRORS.append(record.getMessage())
+        msg = record.getMessage()
+        (DONE if msg.startswith("done:") else ERRORS).append(msg)
 
 
 logging.getLogger("token-watch.cold-offbox").addHandler(_Capture())
+logging.getLogger("token-watch.cold-offbox").setLevel(logging.INFO)   # the "done:" line is INFO
 
 
 def check(label, cond, detail=""):
@@ -68,7 +71,8 @@ class Fake:
     mode = set()          # 'corrupt', 'auth401', 'upload500', 'wide', 'delete', 'v3', 'nocaps', 'extracap',
                           # 'unrestricted' (buckets: None, as the account-wide key returns), 'twobuckets',
                           # 'wrongname' (one bucket, the WRONG one), 'noid', 'notdict',
-                          # 'cap' (B2's measured download_cap_exceeded 403 on the read-back, after the first file)
+                          # 'cap' (B2's measured download_cap_exceeded 403 on the read-back, after the first file),
+                          # 'dl404' (the read-back refused with a plain 404)
     objects = {}          # fileId -> bytes
     names = {}            # fileId -> name
     calls = []
@@ -133,6 +137,8 @@ class H(BaseHTTPRequestHandler):
                 "recommendedPartSize": 100000000, "s3ApiUrl": base}}})
         if u.path.endswith("b2_download_file_by_id"):
             fid = parse_qs(u.query)["fileId"][0]
+            if "dl404" in Fake.mode:
+                return self.send_json(404, {"code": "not_found", "status": 404, "message": "file not present"})
             if "cap" in Fake.mode and sum(1 for c in Fake.calls if c.endswith("b2_download_file_by_id")) > 1:
                 # the body B2 actually returned on staging, 2026-11-04 16:35Z
                 return self.send_json(403, {"code": "download_cap_exceeded", "status": 403, "message":
@@ -289,6 +295,7 @@ check("T5 exactly two upload attempts (one retry)", sum(1 for c in Fake.calls if
       repr(Fake.calls))
 
 # ── T18: the account's download cap mid-run — named as the cap, not the key; the orphan is named ─────────
+DONE.clear()
 print("T18 expect: the 2nd read-back hits B2's download cap -> file 1 moved, run stops: exit 1, files 2-3 kept, the "
       "abort names the CAP (not the key) and the orphaned file id of file 2")
 reset(["a-2026-10-01.jsonl.gz", "b-2026-10-02.jsonl.gz", "c-2026-10-03.jsonl.gz"], mode={"cap"})
@@ -303,6 +310,19 @@ check("T18 it does NOT say the key is wrong", not any("the key is wrong" in e fo
 check("T18 the orphan (file 2's uploaded version) is named by id",
       any("b-2026-10-02.jsonl.gz was uploaded (file id f1)" in e for e in ERRORS), repr(ERRORS))
 check("T18 the manifest holds only the verified file", [r["name"] for r in manifest()] == ["a-2026-10-01.jsonl.gz"])
+check("T18 the closing line counts the files still on the box (2), not the abort event (1)",
+      any(e.startswith("done:") and "2 file(s) still on the box" in e and "b-2026-10-02.jsonl.gz" in e
+          and "1 not attempted" in e for e in DONE), repr(DONE))
+
+# ── T19: a read-back refused with a plain 404 also names the orphan ─────────
+print("T19 expect: a 404 on the read-back keeps the file (integrity class, the run carries on) and names the orphan")
+reset(["a-2026-10-01.jsonl.gz"], mode={"dl404"})
+ERRORS.clear()
+rc = run()
+check("T19 exit 1, file kept", rc == 1 and os.listdir(COLD) == ["a-2026-10-01.jsonl.gz"])
+check("T19 FILE KEPT names the orphan, the file and that the local copy is kept",
+      any("FILE KEPT" in e and "a-2026-10-01.jsonl.gz was uploaded (file id f0)" in e and "ORPHAN" in e for e in ERRORS),
+      repr(ERRORS))
 
 # ── T6 / T8: a key that is too wide is refused before anything ──────────────
 REASON = {"wide": "prefix", "delete": "capabilities are", "v3": "not the v4 shape",

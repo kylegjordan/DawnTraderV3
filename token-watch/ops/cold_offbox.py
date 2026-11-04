@@ -365,6 +365,9 @@ def move_one(s: Session, path: str, manifest_path: str) -> dict:
     except Abort as exc:      # the upload landed but cannot be checked: name the unverified version, then stop
         raise Abort("%s — %s was uploaded (file id %s) but NOT verified; the local copy is KEPT and that version is an "
                     "ORPHAN with no manifest line" % (exc, name, up["fileId"]))
+    except FileFailed as exc:  # same, for a read-back refused with any other status (Langston, Step 9 item 1)
+        raise FileFailed("%s — %s was uploaded (file id %s) but NOT verified; the local copy is KEPT and that version "
+                         "is an ORPHAN with no manifest line" % (exc, name, up["fileId"]))
     if back_sha != sha256 or back_n != size:
         raise FileFailed("read-back of %s does not match (sha256 %s vs %s, %d vs %d B); the local copy is KEPT, and "
                          "the uploaded version (file id %s) is an ORPHAN with no manifest line"
@@ -405,27 +408,35 @@ def run(*, cold_dir: str = COLD_DIR, manifest_path: str = MANIFEST_PATH, auth_ur
     except Exception as exc:                  # noqa: BLE001 — Abort, or anything unexpected: nothing was touched
         LOG.error("ABORT before any file: %s", exc)
         return 1
-    moved, failed = [], []
-    for path in todo:
+    # ⛔ THE CLOSING LINE COUNTS FILES, NOT EVENTS (Langston, Step 9 item 2): the measured capped run closed with
+    #    "kept 1: (run aborted)" while 24 files were still on the box. `kept` is every file still in cold/ from this
+    #    run's list — attempted-and-kept (named) plus never-attempted after an abort (counted).
+    moved, kept, not_attempted, problems = [], [], 0, []
+    for i, path in enumerate(todo):
         try:
             moved.append(move_one(s, path, manifest_path))
         except FileFailed as exc:
-            failed.append(os.path.basename(path))
+            kept.append(os.path.basename(path))
             LOG.error("FILE KEPT: %s", exc)
         except Exception as exc:              # noqa: BLE001 — Abort, or anything unexpected: stop, keep every file left
-            LOG.error("ABORT after %d moved: %s — %d file(s) not attempted", len(moved), exc,
-                      len(todo) - len(moved) - len(failed))
-            failed.append("(run aborted)")
+            kept.append(os.path.basename(path))
+            not_attempted = len(todo) - i - 1
+            LOG.error("ABORT after %d moved: %s — %s kept, %d more not attempted", len(moved), exc,
+                      os.path.basename(path), not_attempted)
+            problems.append("run aborted")
             break
     if moved:
         try:
             upload_manifest(s, manifest_path)
         except Exception as exc:              # noqa: BLE001 — including a non-transient HTTPError
             LOG.error("the manifest could not be uploaded: %s (the local manifest is intact)", exc)
-            failed.append("(manifest upload)")
-    LOG.info("done: moved %d file(s), %d B; kept %d: %s", len(moved), sum(r["bytes"] for r in moved),
-             len(failed), ", ".join(failed) or "none")
-    return 1 if failed else 0
+            problems.append("manifest not uploaded")
+    LOG.info("done: moved %d file(s), %d B; %d file(s) still on the box (%s%s)%s",
+             len(moved), sum(r["bytes"] for r in moved), len(kept) + not_attempted,
+             ", ".join(kept) or "none attempted-and-kept",
+             "; %d not attempted" % not_attempted if not_attempted else "",
+             "; " + ", ".join(problems) if problems else "")
+    return 1 if (kept or not_attempted or problems) else 0
 
 
 if __name__ == "__main__":
