@@ -1,0 +1,23 @@
+// ARCHIVED by B-DISK-FILE-TIERING (#1233, pre-audit P5, rule 18) on 2026-11-04. NOT COMPILED (.removed).
+// Removed from server/services/context-bridge.ts (broadcast path, inside the per-update broadcast method),
+// with its only import, `import { appendFileSync } from 'fs';` (line 6). Introduced by 3478ddcbd (2025-11-02),
+// the Phase 41F-L paper-trading test directives. It appended every trade_* / health_engine broadcast to
+// diagnostic-reports/phase-41F-L-trace.ndjson, forever, swallowing failures; no reader exists (census D).
+// The file it wrote (5.37 GB on staging) is archived to warm storage AFTER this removal (Langston C1).
+
+    // Phase 41F-L: Record trade and health broadcasts to NDJSON trace file
+    if (update.type.startsWith('trade_') || update.type === 'health_engine' || update.type === 'trade_event') {
+      try {
+        const record = { 
+          ts: Date.now(), 
+          type: update.type, 
+          payload: update.payload,
+          mode: update.mode,
+          traceId: fullUpdate.traceId
+        };
+        appendFileSync('diagnostic-reports/phase-41F-L-trace.ndjson', JSON.stringify(record) + '\n');
+      } catch (err) {
+        // Silent fail - don't break broadcasts for tracing
+      }
+    }
+
