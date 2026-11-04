@@ -1,10 +1,10 @@
-# B-PM-CLAUDE — SCOPE r2 (2026-11-04)
+# B-PM-CLAUDE — SCOPE r3 (2026-11-04; class re-declared non_architecture)
 
-change-class: architecture
+change-class: non_architecture
 
 > **Step-1 review record:** r1 at `f17130187` → Langston **PROCEED** with six conditions (C1–C6), inbox 2026-11-04T19:09:10Z, reply to msg `1567613374253109324`; class `architecture` confirmed (*"I'm not lowering it"*). r2 folds all six; no Step-1 re-round.
 
-> **Why `architecture` and not `non_architecture`:** the batch changes shared crew machinery that every session loads (the session roster, the per-session memory loader, the wake filter) and one server table (`ALERT_ACTORS`, which `dt-deploy` derives its actor table from). It changes no trading behaviour. Declared at the strictest set so the checker keeps its teeth; Langston may lower it.
+> **Why `non_architecture` (RE-DECLARED 2026-11-04 by Langston at Step 2, reply 20:17:07Z; it was `architecture` in r1-r2):** the batch changes shared crew machinery — the session roster, the per-session memory loader, the wake filter, the crew switch, the checker's name lists — and adds two alert-only actors. It changes no trading behaviour, strategy, regime, filter, signal pipeline or maths, so it is SIM-scope and not System-Manual-scope (§2). r1 declared `architecture` "so the checker keeps its teeth" — the class used as a lever — and its stated reason ("`ALERT_ACTORS`, which `dt-deploy` derives its actor table from") was withdrawn by the pre-audit's PREVIOUSLY/NOW 0.2: the deploy table is hand-maintained. **The System Impact Map obligation does not drop with the class: Langston holds it as a condition of his Step-2 PROCEED** (Session-Instruction Loading Estate, Discord Comms Fabric, B-CODEX-FAILOVER, alert actors).
 
 **Owner:** PM Claude — the fresh session opened on `C:\DawnTraderV3-pm` (CLI session id `994e6488-db2e-49a0-8e00-4d3635208c2d`, self-ID from a background task's output path), per Kyle's §3b decision; r1 was drafted by the first PM session (`30a52af3-…`), which stood down. **Issue:** none for the batch; the Infra backup gap it closes is `#1237` (§3a). **Board card:** `PVTI_lAHODmulEM4BfQP4zhGEKyM` (Batch, Scope; Owner field empty because the board has no PM option, see OBJ-6).
 **Directive:** Kyle 2026-11-04, design conversation with OLD Claude, written up as `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md` (r3, `5c7d782bf`) and the rules draft `1-system-manual/PM_CLAUDE_RULES.md`. The prompt records the approval: *"Kyle has approved it (2026-11-04)."* ⚠️ **The prompt's account of Kyle's intent is OLD Claude's summary ("Kyle's words, summarised"), not a quote.** Where this scope cites intent, it cites the prompt, never as Kyle's own words.
