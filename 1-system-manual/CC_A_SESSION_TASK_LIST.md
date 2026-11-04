@@ -23,7 +23,7 @@
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
 | — | Crew-tooling and governance-checker improvements | after live | KD-15 |
 | 7 | End-to-end pipeline audit, split (`#522`, `#235`): row 101m mechanics — BEFORE row 100's learning-record restart, once row 100's other prerequisites are done; row 101 observation legs — after the restart, before live; row 101r re-confirmation — Wave B4 | QUEUED | KD-22 |
-| 8 | `B-CLOSE-WRITER-COSTS` (row 72): the close finds its record by symbol + asset class + mode; the open-side duplicate guard per mode (paper never affects live); fees required, readers made honest | QUEUED | KD-17, KD-24 |
+| 8 | `B-CLOSE-WRITER-COSTS` (row 72): the close finds its record by symbol + asset class + mode; the open-side duplicate guard per mode (paper never affects live); fees required, readers made honest | QUEUED, after items 4-5 (KD-27: Kyle kept this order 2026-11-05) | KD-17, KD-24, KD-27 |
 | 9 | `B-UNIVERSE-REFRESH-ACTS` (row 18, `#1018`): the daily coin-list re-check acts on what it finds | QUEUED, straight after item 8 | KD-26 |
 | 10 | `B-SYMBOL-CLASS-IDENTITY` (row 19, `#1024`): a ticker shared by a coin and an xStock becomes two instruments; closes with KD-25 (both may be open at once in one mode) | QUEUED, after item 9 | KD-26, KD-25 |
 | ? | `#914` (row 126) | open with Kyle via PM Claude | pending |
