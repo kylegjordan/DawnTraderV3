@@ -404,6 +404,59 @@ export function assertExactRevisionIdSet(expected: readonly string[], returned: 
   }
 }
 
+/**
+ * R1 (Step 9 re-run plan, Langston PROCEED 2026-11-04): a durable trace of a failed writer
+ * lifecycle step. A shutdown that fails exits 1 and its only record was `error.log`, which rotates
+ * in days; the 10-17 failed handoff's cause was lost exactly that way. This writes one warning row
+ * per boot and step to the alerts FILE store, which does not depend on the database whose stall it
+ * may be recording. Bounded: the store's own lock budget is 5 s, and this races a 6 s ceiling, so it
+ * can never hold the exit; every failure is swallowed into `console.error`.
+ */
+export type XstockLifecycleStep = 'shutdown-archive-handoff' | 'shutdown-after-handoff' | 'boot-registration';
+export const XSTOCK_LIFECYCLE_TRACE_CEILING_MS = 6_000;
+
+export async function recordXstockLifecycleFailure(step: XstockLifecycleStep, error: unknown): Promise<void> {
+  const detail = (error instanceof Error ? error.message : String(error)).slice(0, 600);
+  const write = (async () => {
+    const { addAlert } = await import('../system-alerts.js');
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'warning',
+      title: `xStock bar writer ${step} failed`,
+      body: `The xStock bar writer's ${step} step failed for boot ${XSTOCK_BAR_WRITER_BOOT_ID} `
+        + `(build ${XSTOCK_BAR_WRITER_BUILD_SHA}). A failed shutdown step means no clean writer handoff `
+        + `for this boot, which fails the Step 9 observation window. Error: ${detail}`,
+      metadata: {
+        source: 'xstock-bar-availability',
+        batch: 'B-XSTOCK-BAR-AVAILABILITY',
+        step,
+        bootId: XSTOCK_BAR_WRITER_BOOT_ID,
+        buildSha: XSTOCK_BAR_WRITER_BUILD_SHA,
+        error: detail,
+      },
+      dedupe_key: `xstock-bar-writer-lifecycle-failure:${XSTOCK_BAR_WRITER_BOOT_ID}:${step}`,
+    });
+  })();
+  let timer: NodeJS.Timeout | undefined;
+  const ceiling = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), XSTOCK_LIFECYCLE_TRACE_CEILING_MS);
+  });
+  try {
+    const outcome = await Promise.race([write.then(() => 'written' as const), ceiling]);
+    if (outcome === 'timeout') {
+      console.error(`[B-XSTOCK-BAR-AVAILABILITY][LIFECYCLE] trace for ${step} not written within `
+        + `${XSTOCK_LIFECYCLE_TRACE_CEILING_MS} ms; proceeding`);
+    }
+  } catch (traceError) {
+    console.error(`[B-XSTOCK-BAR-AVAILABILITY][LIFECYCLE] FAILED TO RECORD ${step} failure:`,
+      traceError instanceof Error ? traceError.message : traceError);
+  } finally {
+    if (timer) clearTimeout(timer);
+    write.catch(() => undefined);
+  }
+}
+
 async function raiseCertificationAlert(detail: string, revisionIds: readonly string[]): Promise<void> {
   try {
     const { addAlert } = await import('../system-alerts.js');

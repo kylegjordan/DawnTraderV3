@@ -34,7 +34,7 @@ import { getConstant, prefetchModule } from '../services/module-constants-servic
 import { cutoverForTable } from '../services/data-archive/daily-partition-cutover.js';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
-import { registerXstockWriterBootStart } from '../services/passive-archive/xstock-bar-availability.js';
+import { recordXstockLifecycleFailure, registerXstockWriterBootStart } from '../services/passive-archive/xstock-bar-availability.js';
 
 // P19-B-PERPFEED OBJ-2-ii (renamed from SIX_TABLES — a constant named "six"
 // holding eight entries is the next reader's trap): the archive tables whose
@@ -233,6 +233,8 @@ export async function passiveArchiveBootstrap(): Promise<void> {
       '[B-XSTOCK-BAR-AVAILABILITY][BOOT] writer boot registration FAILED:',
       error instanceof Error ? error.message : error,
     );
+    // R1: the registration failure voids the window, so its cause must outlive log rotation.
+    await recordXstockLifecycleFailure('boot-registration', error);
   }
   startBatchWriter();
   startTickerWriter();

@@ -1611,6 +1611,8 @@ app.use((req, res, next) => {
   // Directive 8.8.4-A4.R10R-4: Graceful shutdown for all core services
   const shutdownHandler = async (signal: string) => {
     console.log(`[A4.R10R-4][SHUTDOWN] Received ${signal}, initiating graceful shutdown...`);
+    // R1 (B-XSTOCK-BAR-AVAILABILITY): which step was running when shutdown failed.
+    let shutdownStep: 'shutdown-archive-handoff' | 'shutdown-after-handoff' = 'shutdown-archive-handoff';
     try {
       // B-XSTOCK-BAR-AVAILABILITY: this is the shutdown owner that reaches
       // process.exit. Stop intake, drain, and persist the writer handoff here
@@ -1619,6 +1621,7 @@ app.use((req, res, next) => {
       const { drainArchiveBuffersForShutdown } = await import('./services/passive-archive/ohlc-batch-writer.js');
       await drainArchiveBuffersForShutdown();
       console.log('[B-XSTOCK-BAR-AVAILABILITY][SHUTDOWN] archive handoff persisted');
+      shutdownStep = 'shutdown-after-handoff';
 
       // Phase 41F: Shutdown operation queues
       const { shutdownAllQueues } = await import('./utils/operation-queue.js');
@@ -1666,6 +1669,14 @@ app.use((req, res, next) => {
       process.exit(0);
     } catch (error) {
       console.error('[A4.R10R-4][SHUTDOWN] Shutdown error:', error);
+      // R1: a durable trace of WHICH step failed and why, bounded (6 s) and never throwing, so it
+      // cannot hold or replace the exit.
+      try {
+        const { recordXstockLifecycleFailure } = await import('./services/passive-archive/xstock-bar-availability.js');
+        await recordXstockLifecycleFailure(shutdownStep, error);
+      } catch (traceError) {
+        console.error('[A4.R10R-4][SHUTDOWN] lifecycle trace import failed:', traceError);
+      }
       process.exit(1);
     }
   };
