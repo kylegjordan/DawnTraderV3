@@ -173,6 +173,12 @@ Makes the xStock price recorder reload its list of stocks every day. Moved out o
 
 ## Infra Claude
 
+### B-TOKEN-WATCH-STORAGE
+Stops the token-launch study filling the trading server's disk. Each day's compressed data is copied to the off-site archive, checked by reading it back, and only then removed from the server. A daily size check raises an alert if the study passes its 8 GB limit.
+
+### B-TOKEN-WATCH-FOLLOWUP-MEMORY
+Restarts the half of the token-launch study that records what happens to each token after it launches. It was switched off on September 30 because it kept running out of memory on the trading server, so it needs a memory fix before it can run again.
+
 ### B-LANGSTON-RELIEF
 The lasting fix for Langston's delays: people's posts are answered ahead of alerts, a cheaper model triages alerts and escalates to Langston by his rules, and his memory is trimmed daily.
 
