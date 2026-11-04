@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — PROGRESS REPORT
 
-## OPEN — waiting on: increment (4a)'s three-session window · increments A and C's EST reads (2026-11-01/02/03) · increment (4b), objective 8's shared paper/VTS trigger module (not yet built) · increment B Step 10 done 2026-10-20 (§6b) · objective 6's S6 EXERCISED 2026-10-19 (§3c)
+## OPEN — waiting on: increment (4b)'s Step 7 read (deployed `e1becf801` 2026-11-04 12:13Z) · the rework of (4a), which FAILED its pages term (§3d) · C-P5's four-week read (content to 11-16) · ended windows read 2026-11-04 in §3d: C's EST reads PASS, objective 6 observed
 
 change-class: `architecture` (scope header) · owner CC-C (Analyst Claude) · sprint plan row 2 · `#1191` (increment 4a), `#1199` (placed follow-up)
 
@@ -71,10 +71,43 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 (`spreadBlownStopHeldMs` and `lastReleaseBidToStopPct`; the five seed-frame trades above — CRM, TTWO, GE, JD, LECO — are a subset of these 15, not the S6 population.) **S6 PASS** — both fields populated and the release records the bid against the stop. **What it shows:** the hold refused sales at stub bids as far as 15.5% below the stop (MRNA 180 vs 213.06; WDAY, CRM and TXN 10-15%) and, of the 10 stop-side rows, released 5 with the bid back above the stop, 4 within 0.21% below it, and LECO 0.76% below. **Its cost is a distribution, not one number:** stop-side holds run from seconds to 30.5 h; the two long ones split — **NTAP held 17.5 h and released 0.34% ABOVE its stop** (sold 205.07 against 204.37), **LECO held 30.5 h and released 0.76% below** (closed 255.61, the worst); on the target side WDAY held 27.9 h to a `target_hit`. (The indefinite hold is Kyle's 2026-10-16 decision; this is its first measured cost.)
 **Step 8 (Langston, 2026-10-20 21:17Z): CONFIRM on all six legs and the seed-frame anchor; this section folds his F1-F8 corrections into the body.**
 
+## 3d. The windows that ended during the 2026-10-22 → 11-04 pause — read 2026-11-04 by CC-C
+
+**(4a), objective 11 — FAIL on one term.** Criterion as written in §4. Object: the `[VTS_RAIL][SWEEP]` lines harvested to `/home/deploy/harvest/incb4a-rail-window.log` (2,625 lines, harvest ended 10-22); the counters are since-start, so each session is the delta from its own first line.
+
+| session | crossings | joins | join share | pagesAttempted | dedupeHits |
+|---|---|---|---|---|---|
+| 10-19 | 60 | 50 | 83.3% | 12 | 0 |
+| 10-20 | 83 | 60 | 72.3% | 30 | 0 |
+| 10-21 | 119 | 97 | 81.5% | 38 | 0 |
+
+- **pagesAttempted falling: NOT MET** — 12 → 30 → 38. ⇒ **FAIL.**
+- `dedupeHits == 0`: met all three sessions (2,625 of 2,625 lines). `markMissedRowMarks`: 0 on 2,625 of 2,625 lines.
+- `no-trigger-vts-*` rows resolved by `cli` from 10-19 on: **0** (all 389 resolved by `engine` / `vts-exit-monitor`: 12, 30, 39 in the three sessions, 308 after) — the self-clearing half works.
+- `alertFileBytes`: about 90 KB a day, under the 1 MB/day line.
+- **What the pages were** (347 rows minted 10-21 → 11-04, all resolved by the rail): 211 "no decision for 10 minutes", 126 "left the wide-book list (now `too_old` / `no_usable_mark`)", 10 at 30 minutes; 332 of 347 xStock. The FAIL clause's own isolated-staleness term is met — those 126 paged rather than joined, which is the designed behaviour. The failure is that ordinary thin-book quiet is reaching the paging arm at all.
+- **Cause: NOT ESTABLISHED.** Hypothesis, unchecked: `too_old` is judged against a class-wide age rather than the symbol's own normal quote gap, so a thinly quoted xStock reads as a broken feed. ⇒ **DISPOSITION: folded into this batch** — reworked inside row 2 with Langston, cause checked at the code and the data before anything is built (Kyle 2026-11-04, via OLD Claude).
+
+**Increment C, the EST reads — PASS on all three legs.** Criterion as written (INCC pre-audit, pre-registered line): each spike at the ET-anchored time; a spike at the UTC-anchored time = FAIL. ⚠️ **Instrument changed, stated:** the named script reads `[XS_FRAME]` lines, and since objective 6 a book wider than 1% is held out of those frames, so it can no longer see a spike. The read used `xstock_spot_ticker_snap`, per minute, share of books wider than 1%.
+- **(ii) weekday 16:15, 11-02:** 76.8% wide at 21:15Z against 0.1% at 20:15Z; the pause started 21:14:00Z. ET-anchored.
+- **(iii) 20:15, Monday evening, 11-03:** 75.6% wide at 01:15Z against an 18.9% baseline at 00:15Z. ET-anchored.
+- **(i) Sunday reopen, 11-01 (20:00 EST = 01:00Z 11-02):** pause START `window=sun_reopen` 01:00:37Z, END 01:35:37Z; the venue's burst came at 01:15Z (2,968 rows, 77% wide), inside the pause. ET-anchored. A one-minute blip at 00:14:47Z (467 symbols, one row each inside 60 ms, prices identical to Saturday's last quotes, e.g. AAPL 339.12/349.71) is the recorder re-sending on reconnect, not a venue event; the app was in its weekend close.
+
+**Increment A — no EST read was ever pre-registered.** The header and §4 of this report said "increments A and C's EST reads"; only C's exists (INCC pre-audit). A's one clock-dependent input is the feed's `is_extended_hours` flag behind the entry yardstick, and it is the venue's flag, not our clock. **Informational only, not a criterion:** it moved with the clock — first regular-session row 13:45Z on 10-29 and 10-30, 14:45Z on 11-02 and 11-03; last 20:15Z (10-29) → 21:15Z (11-02, 11-03). 17 off-schedule `false` rows were seen (13 at 10-30 21:50Z, 4 on 11-04 morning around the restart), at most one row per symbol in the yardstick's window.
+
+**Objective 6, the observation read (Kyle 2026-10-16: "turn it on and then review and observe") — what the stop-hold did.** Population: xStock closed trades since the 10-16 deploy whose `exitRefusal` carries `spreadBlownFirstStopRefusedBid` — **81 of 297** xStock closes, 76 symbols. `NOT RE-READ`.
+- **How it ended:** 60 at the stop, **21 at the target** — the book came back far enough to reach the target after the stop had been crossed.
+- **How long it held:** median 5.6 h; under 1 h: 31 · 1-6 h: 10 · 6-24 h: 17 · 1-3 days: 15 · over 3 days: 8. Longest: PPL 212 h (ended at the target), CARR 162 h (stop), INCY 149 h (target), PGR 138 h (target), COR 116 h (stop).
+- **What it refused:** the first bid it would not sell at sat a median 2.5% below the stop (worst 99.6% — a near-zero stub bid).
+- **What it released on:** 50 of 81 with the bid at or above the stop, 31 below it (worst −3.63%, CARR). Average exit 1.59% above the recorded stop.
+- ⇒ This is the input `#1199` (`B-SPREAD-BLOWN-RELEASE-MOVEMENT`, sprint row 2.3) waits on: 31 releases below the stop are the cases a movement test would have held longer. **Recorded here; `#1199` may now be scoped when it is reached in the queue.** No time limit, by Kyle's 10-09 answer.
+
+**C-P5, the pause-retirement read — EXTENDED.** Two-week window (out-of-hours log files 10-20 → 11-02): 7 distinct stop-side episodes (10 lines) and 2 target lines, under the 10 the rule needs ⇒ the pre-registered extension to four weeks (content to 11-16; the harvest cron covers through 11-17 and goes inert 11-18 02Z). Four-week rule unchanged: ≤4 → propose retirement, 5-9 → keep, ≥10 → rate. A13: blown books leave the path before the pause, so the population it would have caught moved upstream to objective 6.
+
 ## 4. PRE-REGISTERED close criteria (written before the data)
 **(4a), objective 11 — WINDOW: the first three full weekday US regular sessions after the deploy (2026-10-19, 10-20, 10-21).** Quoted from the pre-audit (r5e, Langston's reading): *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · `dedupeHits == 0` as a SEPARATE tripwire, never a term (non-zero = FAIL)."* Also PASS requires `markMissedRowMarks` near zero and zero `no-trigger-vts-*` rows resolved by `cli`. **FAIL:** any `no_usable_mark` or isolated-staleness crossing that joins instead of paging; minted down with `dedupeHits` up; or `alertFileBytes` growing faster than ~1 MB/day. Source: the `[VTS_RAIL][SWEEP]` lines (cumulative since start).
 **Objective 6 — S6 (the stop-hold cost) — QUANTITY WINDOW: the first `spread_blown` refused tick with the bid at or below the stop.** PASS: `spreadBlownFirstStopRefusedBid` and `spreadBlownStopHeldMs` are populated for that position and its release or close records the bid against the stop. Until then S6 is **UNEXERCISED** and no silence may be cited as a pass (Langston, Step 8).
-**Increments A and C** — their pre-registered EST reads (2026-11-01/02/03) stand as written in `WINDOW_READ.md`.
+**Increment C** — its pre-registered EST reads (2026-11-01/02/03) are in the INCC pre-audit; read in §3d. *(This line read "increments A and C … in `WINDOW_READ.md`": A never registered one and `WINDOW_READ.md` holds neither — corrected 2026-11-04.)*
 
 ## 5. Unproven, stated
 - S6 has never fired (above).
