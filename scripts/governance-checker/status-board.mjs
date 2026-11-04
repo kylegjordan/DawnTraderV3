@@ -76,7 +76,8 @@ function wavesByLine(planText) {
 // started but the plan line still reads QUEUED, the board shows the recorded step instead, labelled with where it came
 // from and keeping the line's own words. ONLY queued is overridden; a person's call (parked, moved, done, watching data,
 // waiting) stays as written. Not applied when the id sits on more than one board line (row 4 and its increment 2 share
-// one id), because the commits cannot say which line they belong to; the plan-behind mark still shows there.
+// one id), because the commits cannot say which line they belong to; for the same reason no plan-behind mark shows
+// there either (Step-9 r4, Langston) - the page's "Last recorded step" line still shows the commit.
 // RECENT work only reads as in progress (WORK_RECORD_RECENT_MS, config.mjs, with its derivation): an older step (e.g. a
 // scope written months ago and never taken further) stays QUEUED and says the work stopped, so old scopes never fill Now.
 // The page already prints the recorded step and its date ("Last recorded step"), so the text carries only what that line

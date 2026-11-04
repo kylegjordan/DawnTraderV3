@@ -139,6 +139,8 @@ ok('SB30 drift: error never resolves; clean resolves; drifted opens once', drift
   ok('SB37 a sprint row with a recent Step commit carries fromWorkRecord and the words of its line', rr?.fromWorkRecord === true && rr.state === 'in_progress'
     && rr.statusText === 'the §4 row 197a line still reads: QUEUED', JSON.stringify(rr && [rr.fromWorkRecord, rr.state, rr.statusText]));
   // Live 2026-11-04: row 4b shared B-VTS-NO-DECISION-VALVE with row 4 and still read "the plan has not caught up".
+  // This fences the no-plan-row variant (threshold 1, count 2); the live case carries a plan row (threshold 2) through
+  // the SAME `shared` expression, which this fix does not change (Langston r4 record item).
   const two = PLAN.replace("| CC-B list | 2 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 | QUEUED | CC-B |",
     ["| CC-B list | 2 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 | QUEUED | CC-B |",
       "| CC-B list | 3 | B-PRICE-FEED-COVERAGE increment 2 | CC-B (New Claude) | none | | Kyle 2026-10-20 | QUEUED | CC-B |"].join(String.fromCharCode(10)));
