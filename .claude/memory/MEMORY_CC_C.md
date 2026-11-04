@@ -47,7 +47,7 @@
 ⛔⛔ **KYLE 2026-10-19 (via Langston, binds all): (1) main Dashboard + AI pages OFF-LIMITS unless breaking paper/VTS; (2) NO NEW BATCH unless on Kyle's AGREED list — a find gets ASKED to Kyle, never filed+started; a Langston placement is NOT Kyle's agreement.** My off-list rows 16a (`B-WRITE-TIMEOUT-ORDERING`) and 59g1b (`#1213`) wait for Kyle.
 
 ## ★★★ CURRENT POSITION (2026-11-04, after Kyle's two weeks off) — READ FIRST
-▶ **FREEZE LIFTED 11-04. Row 2 `STEP: 7 of 11` (4b deployed `e1becf801` 12:13Z; Step-7 read after 21:00Z, timer bbrtxge6a). §3d written: (4a) PASS vs A3 (my FAIL was wrong-object, corrected to Kyle) — Langston gate sent 11-04 ~14:40Z; opening-bell pages (350/389 at +10-13 min, clear at +15-20) = fix shape next. C EST PASS; obj-6 read recorded; C-P5 extends to 11-16. Bar-availability: window FAILED handoff rule (10-17 boot e1f4d3ac) — re-run plan to Langston next (`e202c63b4`). Alert 28aa04fa resolved.**
+▶ **FREEZE LIFTED 11-04. Row 2 `STEP: 7 of 11` (4b deployed `e1becf801` 12:13Z; Step-7 read after 21:00Z, timer bbrtxge6a). §3d written: (4a) PASS vs A3 (my FAIL was wrong-object, corrected to Kyle) — Langston gate sent 11-04 ~14:40Z; opening-bell pages (350/389 at +10-13 min, clear at +15-20) = fix shape next. C EST PASS; obj-6 read recorded; C-P5 extends to 11-16. Bar-availability: window FAILED handoff rule (10-17 boot e1f4d3ac) — re-run plan to Langston next (`e202c63b4`). Alerts 28aa04fa, f2ac0003, d7dffee8 resolved; re-run plan R1-R4 in bar pre-audit awaits Langston after (4a).**
 
 ## (superseded) POSITION 2026-10-16
 
