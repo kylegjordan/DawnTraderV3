@@ -3,14 +3,13 @@
 > Per-session notebook (cap 10 KB; rules file + this ≤ 18 KB). Rules: `1-system-manual/PM_CLAUDE_RULES.md`. Startup prompt: `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md`. Clone: `C:\DawnTraderV3-pm`. Records: `1-system-manual/pm/` (DECISIONS.md, reviews/).
 
 # ▶▶ CURRENT POSITION — READ FIRST
-- **`B-PM-CLAUDE` STEP: 7 of 11 (increment P1b, heartbeat) · NEXT STEP: 3 of 11 for P1c (ALERT_OWNERS + its two copies).** P1 DONE (installed 21:47Z, four live wakes). P1b installed (blobs at `b1a555649`, CI 41927726582 4/4, record `87dd12067` pushed); Step 7 = the next hourly heartbeat post names all five sessions and lists CC-PM with no CHECK FAILED. Then P1c, P2…
-- **Decision ledger KD-1..KD-26** (`1-system-manual/pm/DECISIONS.md`). Run `node scripts/pm/reconcile-decisions.mjs` at every check and before any status report (last: 0 mismatches at `a79aa147d`).
-- **KD-25/KD-26:** coin + xStock sharing a ticker may be open at once within a mode = CLOSING objective of row 19. **Rows 18+19 now OLD Claude's, after B-CLOSE-WRITER-COSTS (KD-26, relayed msg `1567673682611019779`). Waiting on OLD's ACK KD-26.** Board cards for rows 18/19 still show Infra if they exist — fix on next board pass.
-- **OPEN WITH LANGSTON + OLD:** B-CLOSE-WRITER-COSTS final scope (KD-17/24; OLD ACKed; Langston ruling pending) → bring to Kyle for a yes. Also Langston's ruling on WHEN the end-to-end audit (#522/#235) runs.
-- **WAITING ON OTHERS:** NEW's ACK of KD-7/9/10/11.
-- ⚠️ The laptop clock is UTC+1: use `date -u`.
-- **I am session `994e6488-db2e-49a0-8e00-4d3635208c2d`, wake alias CC-PM; watcher ARMED (re-arm after every wake, shared MEMORY 4.5, A=CC-PM).** Until P2 lands nothing auto-injects this file or the rules; read both plus shared `MEMORY.md` by hand after a compaction.
-- **Pushing:** check CI is idle as its own call, then push; commit and push in SEPARATE calls.
+- **`B-PM-CLAUDE` P1d (slot check, KD-28) STEP: 1 of 11 · NEXT STEP: 2 of 11.** Scope r4 adds OBJ-9 at `a74a15b19`; sent to Langston msg `1567679895281213594` with 3 questions (Guard-1 fail mode; `kind` column for Guard 2; plan as authority since only CC_A's task list has an order table). P1d runs AHEAD of P1c. Design: deterministic `scripts/pm/slot-check.mjs` (reuse planRowsByBatch/firstSession/presprintRows), Sonnet/Haiku agent reads it, Guard 1 on wrap_up + cc-send, Guard 2 on DECISIONS commits + reconcile.
+- **P1b (heartbeat) STEP: 7 of 11** — read the next hourly heartbeat post: names all five, lists CC-PM, no CHECK FAILED.
+- ⛔ **UNTIL P1d LANDS: before ANY slotting/owner/order advice, read the owner's task list section 00, their open plan rows and every KD binding them (rules file, KD-28).**
+- **Ledger KD-1..KD-28; run `node scripts/pm/reconcile-decisions.mjs` at every check.** KD-25/26/27 ACKED by OLD (rows 18-19 his, after #527, 25-9, then row 72). B-CLOSE-WRITER-COSTS scope RULED by Langston (msg `1567679032332521534`): guard + unique index + lookup one key; no-row close stops deleting the position same increment. Relayed to OLD.
+- **WAITING ON OTHERS:** Langston on r4; NEW's ACK of KD-7/9/10/11.
+- ⚠️ Laptop clock is UTC+1: use `date -u`. I am session `994e6488-…`, alias CC-PM; watcher armed (re-arm after every wake, shared MEMORY 4.5). Nothing auto-injects this file until P2; after a compaction read it, the rules and shared MEMORY by hand.
+- **Pushing:** CI idle check as its own call; commit and push in SEPARATE calls.
 
 # DONE TODAY (2026-11-04; detail in git)
 - Sweep of 4 weeks of chats → `1-system-manual/pm/reviews/2026-11-04_PLAN_SWEEP.md` (`e98581076`). 451 items, ~50 unplaced, 25 stalled.
