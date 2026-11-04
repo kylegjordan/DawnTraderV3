@@ -33,6 +33,8 @@ MUTATIONS = [
      "    if set(caps) != ALLOWED_CAPABILITIES:", "    if False:", "FAIL T8"),
     ("capabilities-present check off (the vacuous-pass case)",
      "    if not isinstance(caps, list) or not caps:", "    if False:", "FAIL T11"),
+    ("bucket check off",
+     "    if not _one_bucket(buckets):", "    if False:", "FAIL T13"),
     ("v4-shape check off",
      "    if not isinstance(allowed, dict):", "    if False:", "FAIL T10"),
     ("abort on transport failure off (carry on instead)",

@@ -181,6 +181,12 @@ def _json(url: str, *, token: str | None = None, body: dict | None = None, basic
     return _call(go, url.rsplit("/", 1)[-1])
 
 
+def _one_bucket(buckets) -> bool:
+    """Exactly one allowed bucket, named dt-archive-cold, with an id. An account-wide key has `buckets: None`."""
+    return (isinstance(buckets, list) and len(buckets) == 1 and isinstance(buckets[0], dict)
+            and buckets[0].get("name") == BUCKET_NAME and bool(buckets[0].get("id")))
+
+
 class Session:
     def __init__(self, api_url: str, download_url: str, token: str, bucket_id: str):
         self.api_url, self.download_url, self.token, self.bucket_id = api_url, download_url, token, bucket_id
@@ -206,8 +212,7 @@ def authorize(key_id: str, app_key: str, auth_url: str = AUTH_URL) -> Session:
         raise Abort("the key's capabilities are %r; this job runs only with exactly %r (no delete)"
                     % (sorted(caps), sorted(ALLOWED_CAPABILITIES)))
     buckets = allowed.get("buckets")
-    if not isinstance(buckets, list) or len(buckets) != 1 or buckets[0].get("name") != BUCKET_NAME \
-            or not buckets[0].get("id"):
+    if not _one_bucket(buckets):
         raise Abort("the key is not restricted to the %s bucket alone (allowed buckets: %r)" % (BUCKET_NAME, buckets))
     if allowed.get("namePrefix") != KEY_PREFIX:
         raise Abort("the key is not restricted to the %r prefix (it has %r)" % (KEY_PREFIX, allowed.get("namePrefix")))

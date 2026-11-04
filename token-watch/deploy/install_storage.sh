@@ -7,8 +7,11 @@
 # ⛔ THE SHA MUST BE ON origin/migration/aws-supabase. A commit that was never pushed was never reviewed.
 # ⛔ EVERYTHING IS CHECKED BEFORE ANYTHING IS INSTALLED, AND `INSTALLED` IS WRITTEN LAST (Langston, Step 4): a check
 #    that fails leaves the live tree untouched and no record claiming success.
-# ⛔ THE COLLECTOR FILES THE OPS JOBS IMPORT ARE PINNED TOO (Step 4 condition 2): config.py (the root, the cap and the
-#    warn line), tier.py (the one-hour guard) and liveness.py (the size check). Before overwriting each, the live copy
+# ⛔ THE COLLECTOR FILES THE OPS JOBS LOAD ARE PINNED TOO (Step 4 condition 2, r3): the whole IMPORT CLOSURE, not
+#    the direct imports — config.py (the root, the cap and the warn line), tier.py (the one-hour guard), liveness.py
+#    (the size check), and store.py and provenance.py, which tier.py and liveness.py load on every run.
+#    tests/test_ops_boundary.py computes the closure from the code and FAILS if PINNED below drifts from it.
+#    Before overwriting each, the live copy
 #    is compared with the blob IGNORING CARRIAGE RETURNS, and any other difference REFUSES the install: pre-audit A6
 #    measured them as differing only in CR bytes, so pinning them changes no behaviour. If that ever stops being true,
 #    something was edited on the box and must be understood first.
@@ -30,7 +33,7 @@ g fetch -q origin migration/aws-supabase
 g merge-base --is-ancestor "$SHA" origin/migration/aws-supabase || fail "$SHA is not on origin/migration/aws-supabase"
 
 OPS="ops/alert_mint.py ops/cold_offbox.py ops/store_watch.py ops/unit_failed.py"
-PINNED="config.py tier.py liveness.py"
+PINNED="config.py liveness.py provenance.py store.py tier.py"
 UNIT_FILES="token-watch-cold-offbox.service token-watch-cold-offbox.timer token-watch-store-watch.service
 token-watch-store-watch.timer token-watch-failed@.service token-watch-tier.service token-watch-receiver.service
 token-watch-followup.service token-watch-summary.service"
