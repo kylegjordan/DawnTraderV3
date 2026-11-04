@@ -58,3 +58,13 @@ Install the blob to `~/.claude/cc-wake-filter.py` (sha256 checked against the re
 | 4 · a Langston reply led "PM Claude" | `langston_outbound` 21:34:20Z | 0 | 0 | 0 | 0 | **1** |
 
 Positive controls are rows 1, 2 and 4: the same replay emits a wake where one is owed, so its zeros are evidence. Kyle-authored probes were not run (they need Kyle to post); the filter treats Kyle's posts by the same name rule, covered by the suite's Kyle cases.
+
+---
+
+## P1b record — PM Claude in the hourly heartbeat (2026-11-04)
+
+- **Step 4:** Langston PROCEED (reply `1567669347781058611`) with three conditions, all in `5b221836a`: C2 PM Claude registered in `.claude/cc-session-roster.json` (alias CC-PM, session `994e6488-…`, plus PM Codex as a planned non-session participant); C3 the skill's "ALL THREE" wording fixed to five; the wake suite's heartbeat literals now carry the five-name prefix the task emits. Suites: wake ALL PASS, heartbeat 44/44.
+- **Step 5:** CI run `41927726582` on `b1a555649` (contains `5b221836a`), per job: Build, Test Suite, TypeScript Check, Docker Build all success. *(The earlier run `41927396062` on `5b221836a` itself had two jobs cancelled by a later push and is not counted.)*
+- **Condition 1, checked before install:** the three files `decide()` reads for CC-PM exist: `CC-PM.json` with `pos["/var/log/cc-wake.log"] = [1255, 106157]`, `CC-PM.lease` (taken 22:46:06Z), `CC-PM.json.alive`.
+- **Step 6 (install):** both files copied together from `b1a555649` to `~/.claude/scheduled-tasks/wake-watcher-heartbeat/`; sha256 installed = blob for both (`control_state.py` `2e5f7c4c…`, `SKILL.md` `a66805d0…`); previous files kept as `*.pre-b-pm-claude-p1b`.
+- **Step 7 (owed):** the next hourly heartbeat post names all five sessions and lists CC-PM in its watcher and control fields without a CHECK FAILED page.
