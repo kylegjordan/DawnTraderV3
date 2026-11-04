@@ -24,3 +24,10 @@ Kyle (KD-17, via PM Claude): *"when the system closes a trade, writing the recor
 
 ## Added ~22:40 local: how a close finds its record
 `active-execution-engine.ts:4678-4679` looks the record up by SYMBOL (first row with `openedAt` and no `closedAt`); `active_open_positions` stores no trade-row id. Paper trades open at the same time on the same symbol: **0 pairs** across all records, never_filled included (control: the same query finds **16,323** overlapping pairs on different symbols). Safe today only because one position per symbol holds elsewhere.
+
+## Langston on the (a)/(b)/(c) shape, 2026-11-04 ~22:35Z (Discord 1567666376896684093) — for the batch's Step 1
+- **(a) approved on shape, written as a FENCE, not a repair:** the no-trade-row close has **never been observed** (0 alerts all-history, 0 log lines in 14 days; the log zero has no denominator). I was wrong to call it "the measured failure". Rule 24 outcome **(2), working-as-designed-but-unaddressed** — a structural guard against a path measured at zero.
+- **Why it is a correctness property:** the lookup (`storage.ts:3581-3591`) filters by symbol and `close_reason <> never_filled` only; it accepts `mode` and never uses it, and has no asset-class filter. Cross-class names exist today (`DASH/USD`, `#1093`; 33 in the `3n.q3` collision set); cross-mode arrives with live. An id closes all three.
+- **§15:** `active-execution-engine.ts:4678` is the only production caller of `getClosedTradesBySymbol`; once (a) ships it has none — dispose in the same batch. The unused `mode` parameter: folded.
+- **(b)** add: the fee-NULL reader census covers SQL and view readers (`SUM(fees)` in a route query or a view), not only TS call sites.
+- **(c)** agreed: code read.
