@@ -133,6 +133,11 @@ ok('SB30 drift: error never resolves; clean resolves; drifted opens once', drift
     JSON.stringify([pfc.state, pfc.statusSource, pfc.statusText, pfc.planBehind]));
   const tw = buildBoard({ planText: PLAN, descText: DESC, subjects: [{ hash: 'e'.repeat(40), date: '2026-10-08T01:00:00Z', subject: 'B-TOKEN-WATCH Step-6: x' }, ...SUBJECTS],
     openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW }).items.find((i) => i.key === 'B-TOKEN-WATCH');
+  // Langston OBJ-9 r2 condition: the REST arm's flag is the page line's only signal - fence it (M6 passed without this).
+  const rr = buildBoard({ planText: PLAN, descText: DESC, subjects: [{ hash: 'f'.repeat(40), date: '2026-10-18T01:00:00Z', subject: 'B-TOKEN-WATCH-AUTH Step-2: pre-audit' }, ...SUBJECTS],
+    openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW }).rest.find((r) => r.planRow === '197a');
+  ok('SB37 a sprint row with a recent Step commit carries fromWorkRecord and the words of its line', rr?.fromWorkRecord === true && rr.state === 'in_progress'
+    && rr.statusText === 'the §4 row 197a line still reads: QUEUED', JSON.stringify(rr && [rr.fromWorkRecord, rr.state, rr.statusText]));
   ok('SB33 a person\'s call is never overridden: a PARKED line with Step commits stays parked', tw.state === 'parked' && tw.statusSource === 'pre-sprint table');
   ok('SB34 fromWorkRecord: no step, a non-queued state, or a shared id gives no override', fromWorkRecord({ state: 'queued', text: 'QUEUED' }, null, false, NOW) === null
     && fromWorkRecord({ state: 'parked', text: 'PARKED' }, { step: 3, at: '2026-10-20' }, false, NOW) === null
