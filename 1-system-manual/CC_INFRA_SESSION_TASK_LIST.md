@@ -1,4 +1,4 @@
-# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-10-20
+# CC-INFRA (Infra Claude) — SESSION TASK LIST — plain language, as of 2026-11-04
 
 > 📁 **Lives in `1-system-manual/`** beside the other session lists (`workflow-10-governance` Tier-1 task-list row).
 > ⚠️ **CREATED 2026-09-11 AT `B-WAKE-LEAD-NAME` STEP 10 — IT DID NOT EXIST BEFORE.** Only `CC_A_SESSION_TASK_LIST.md` was in this folder (control: the same listing showed that file), so every earlier close by this session had no list to update.
@@ -11,9 +11,13 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
-| ⏳ **`B-LANGSTON-RELIEF`** (sprint §0 row, Kyle 2026-10-16) | **Observation** after Step 10 | the alert lane's 7-day window, ends 2026-10-23T13:47Z; then the completion report and Langston's Step-11 confirm | OBJ-1 and OBJ-4 met; OBJ-3's ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle 2026-10-20). Progress report `Batch Completion/B_LANGSTON_RELIEF_PROGRESS_REPORT.md` |
-| ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (sprint §0 row right after `B-LANGSTON-RELIEF`, Kyle-slotted 2026-10-20; folds in `#974` `B-RULES-1E-LANGSTON-SLIM`, unparked) | **Step 1** — scope r1 `ccd5055b3` | Langston's scope review | version his rules file, a per-section census, lean core + verbatim modules, meet the carried ceiling |
-| ⏸ **`B-CREW-ACCESS-HARDEN`** (`#1092`, `#924`) | **Step 9**, paused for `B-LANGSTON-RELIEF` (Kyle 2026-10-16) | me | P3a fixes at `ddf7eafac` unreviewed; disposable keys stay |
+| ▶ **`B-TOKEN-WATCH-STORAGE`** (`#1132`; plan §0a stage 00 "data truth first", order 5b — Kyle D-2, 2026-11-04) | **Step 7** — installed `41b538165` 17:26Z; 62 of 86 backlog files moved 11-04 | data — the rest moves at 05:30Z 11-05 after B2's daily download cap resets; then the read-back sample, the size re-check, the two alerts resolved, Langston's Step 8, Step 10 | Kyle D-3: no paid B2 storage for now (10 GB free tier reached in ~5-6 weeks; re-measure after the data-truth fixes) |
+| ⏳ **`B-LANGSTON-MEMORY-WRITE-FENCE`** (`#1234`, Kyle-placed 2026-11-04 right after the rules-file batch) | queued | me, after `B-LANGSTON-CLAUDEMD-RESIDUAL` | the composed memory file writable only through the tool |
+| ⏳ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | queued | me, after the fence | the follow-up recorder's memory fix; the `due/` steady state; the B2 version census + orphan reconciliation (Langston Step 9) |
+| ⏳ **`#1238`** Codex conversation backup | after live (Kyle D-1, 2026-11-04) | me | the ChatGPT stand-ins' conversations are not backed up |
+| ⏳ **`B-LANGSTON-RELIEF`** (sprint §0 row, Kyle 2026-10-16) | **Step 10** — the alert lane's 7-day window ended 2026-10-23 | me — the completion report (ceiling NOT met: about 152 KB vs 143.9 KB, carried to the rules-file batch) and Langston's Step-11 confirm | Kyle 2026-11-04: after the storage work and the rules-file installer fix |
+| ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (Kyle-slotted 2026-10-20; folds `#974`) | **Step 4 part 1** — the installer sent back by Langston 2026-10-21 (B-4: prove ancestry by walking parents through the verified read) | me — next after the storage work (Kyle 2026-11-04) | trims committed (54,878 B), not reviewed or installed |
+| ⏸ **`B-CREW-ACCESS-HARDEN`** (`#1092`, `#924`) | **Step 9**, paused | **Kyle** — stays paused until he says otherwise (2026-11-04) | P3a fixes at `ddf7eafac` unreviewed; disposable keys stay; add `C:\DawnTraderV3-pm` to the caller census on resume (#1092) |
 | ⏳ **`B-LANGSTON-CONTEXT`** increment 2 (rows 2.8b / pre-audit §20-§21) | **chunk 1: Step 7** (Step 6 approved 16:53Z) · **chunk 2 part 1** (P-6a.1, P-6a.2) at Step 3, pushed `624cd1733` | tonight's SCHEDULED runs (04:10Z index, 05:40/05:51Z size watches, 06:00Z privacy) — Langston's condition 3 | then chunk 2's writer (P-6b), P-2, Langston's retrofit, P-1b |
 | ⏳ **`B-WAKE-LEAD-NAME`** (row 4.51, `#1040`) | **Step 10** — Step 8 confirmed; FINDING-A approved; the FINDING-D hunk is with Langston | Langston's okay on `0df01c687` | then install the folded filter and write the completion report |
 | ⏸ **`B-TOKEN-WATCH`** | **Step 7**, paused | me — Langston round 11 is owed; the Helius feed is not yet pointed at the endpoint | ⛔ the Alchemy switch is NOT cleared (pre-registration amendment 15) |
