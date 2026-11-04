@@ -174,7 +174,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 16.4 Wave 7: Post-L-Series Cleanup — - SafetyGuardrails service r (—) — remove the old SafetyGuardrails service — only matters if any live path still consults it
 - 16.5 LSP Error Resolution — - Delete legacy files causing LSP err (—) — editor/type error cleanup
 - 16.8 Predictive-Learning / ML-Era Teardown REMAINDER (added 2026- (CC-A) — ML-era teardown remainder — Kyle decided REMOVE · + `#174` (W41 triage)
-- 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16
+- 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16 (`#936`, B-RATE-LIMITER-RESET-DISPOSITION)
 - row:3n.b (CC-C) — orphan level tables (disposition 5) — legacy removal
 
 ### Other (research, UI, refactors) — 80
