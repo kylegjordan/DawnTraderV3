@@ -86,9 +86,8 @@ export const db = drizzle({ client: pool, schema });
 // command` in staging error.log) and PM2 restarted the app at 18:16:28Z.
 // The pool has ALREADY dropped the client by the time this fires and the next acquire opens a fresh one,
 // so there is nothing to repair here: log one line with the code and the pool's counts, and count it.
-// Errors on a CHECKED-OUT client still reject the caller's query as before; this listener sees only idle
-// clients. (The crew board's pool states the same rule with an empty listener, `crew-coordination.ts`;
-// this one logs, so an ended connection is visible rather than swallowed.)
+// (The crew board's pool states the same rule with an empty listener, `crew-coordination.ts`; this one
+// logs, so an ended connection is visible rather than swallowed.)
 let poolIdleClientErrors = 0;
 export function getPoolIdleClientErrorCount(): number {
   return poolIdleClientErrors;
@@ -100,6 +99,44 @@ pool.on('error', (err: Error & { code?: string }) => {
       `message=${err?.message ?? String(err)} total=${pool.totalCount} idle=${pool.idleCount} ` +
       `waiting=${pool.waitingCount} count=${poolIdleClientErrors}`,
   );
+});
+
+// ─── B-DB-POOL-GUARD OBJ-1b: …and neither may one that is CHECKED OUT ────────────────────────────────────
+// pg-pool removes its own error listener from a client when it hands it out (`index.js` `_acquireClient`:
+// `client.removeListener('error', idleListener)`) and restores it on release. pg's Client emits 'error' on
+// any connection-level failure even while a query is running (`client.js` `_handleErrorEvent`: reject the
+// queries, then `this.emit('error')`). `pool.query()` covers itself with a `once('error')` for its one query;
+// a drizzle TRANSACTION holds the client from `pool.connect()` (`drizzle-orm/node-postgres/session.js:138`)
+// with no listener at all. MEASURED on staging 2026-11-04 with pg 8.13.1: a pooled client checked out in a
+// transaction and ended by the server (`25P04 terminating connection due to transaction timeout`) crashed
+// the Node process with "Unhandled 'error' event", even with a pool 'error' listener; the same end on a
+// client released back to the pool reached the pool listener and the process lived.
+// So every client gets a permanent listener when it is created. It logs only while the client is checked
+// out (the pool listener above already logs idle ones); the caller's query has already been rejected, and
+// pg-pool discards the client on release because it is no longer queryable.
+let poolCheckedOutClientErrors = 0;
+export function getPoolCheckedOutClientErrorCount(): number {
+  return poolCheckedOutClientErrors;
+}
+const CHECKED_OUT = Symbol('dtPoolCheckedOut');
+type GuardedClient = { [CHECKED_OUT]?: boolean; on: (event: 'error', fn: (err: Error & { code?: string }) => void) => unknown };
+pool.on('connect', (client) => {
+  const c = client as unknown as GuardedClient;
+  c.on('error', (err) => {
+    if (!c[CHECKED_OUT]) return; // idle: the pool's own listener and the one above handle it
+    poolCheckedOutClientErrors += 1;
+    console.error(
+      `[B-DB-POOL-GUARD][POOL_CHECKED_OUT_CLIENT_ERROR] code=${err?.code ?? 'none'} ` +
+        `message=${err?.message ?? String(err)} total=${pool.totalCount} idle=${pool.idleCount} ` +
+        `waiting=${pool.waitingCount} count=${poolCheckedOutClientErrors}`,
+    );
+  });
+});
+pool.on('acquire', (client) => {
+  (client as unknown as GuardedClient)[CHECKED_OUT] = true;
+});
+pool.on('release', (_err, client) => {
+  (client as unknown as GuardedClient)[CHECKED_OUT] = false;
 });
 
 // Boot-time confirmation log so config landing is visible in PM2 logs without
