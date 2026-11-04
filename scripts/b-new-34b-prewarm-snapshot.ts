@@ -53,6 +53,7 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { XSTOCK_SPOT_REGISTRY } from '../shared/asset-classes.js';
+import { attachPoolGuards } from '../server/db-pool-guards.js';
 
 const { Pool } = pg;
 
@@ -263,6 +264,10 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
     keepAlive: true,
     keepAliveInitialDelayMillis: 10_000,
   });
+  // B-DB-POOL-GUARD (#1239, Langston's OBJ-1 ruling): this pool runs IN the app process (the session-lifecycle
+  // controller imports runPrewarm on the Fri-close / Sun-reopen hooks), holds a connection for the whole run, and had
+  // no error listener, so a server-side end of its idle connection would restart the app. Same guard as the app pool.
+  attachPoolGuards(pool, 'b-new-34b-prewarm');
   let totalBuckets = 0;
   let totalUpserts = 0;
   let symbolsWithData = 0;
