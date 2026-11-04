@@ -105,14 +105,18 @@ describe('cron-run jobs load the app .env themselves', () => {
   const dir = path.join(__dirname, '..', '..', 'scripts');
   const src = (f: string) => fs.readFileSync(path.join(dir, f), 'utf8');
   const loadsEnv = (s: string) => /^import 'dotenv\/config';/m.test(s);
-  const readsDb = (s: string) => /process\.env(\.DATABASE_URL|\[k\])|SUPABASE_SERVICE_ROLE_KEY/.test(s);
+  // Langston CHANGE 1 (2026-11-04): the commonest dependency is importing the app pool, which throws at module
+  // load without DATABASE_URL; a script that names the variable only in comments is invisible to the env regex.
+  const readsDb = (s: string) =>
+    /process\.env(\.DATABASE_URL|\[k\])|SUPABASE_SERVICE_ROLE_KEY/.test(s) || /^import [^;]*from '\.\.\/db(\.js)?';/m.test(s);
 
   // The DB-using jobs in staging's root crontab, read 2026-11-04 (b74-refresh-universe is also scheduled,
-  // but reads only Kraken's public API and needs no settings).
+  // but reads only Kraken's public API and needs no settings). replay-ablation runs through `npm run
+  // b67:replay-ablation` (package.json), which a search for `tsx server/scripts/` misses (Langston CHANGE 2).
   const SCHEDULED = [
     'b-disk-file-tiering.ts', 'b-storage-archival-health.ts', 'b75-retention-sweep.ts', 'b75-cold-rotator.ts',
     'b75-cold-liveness.ts', 'b74-create-daily-partitions.ts', 'b74-create-monthly-partitions.ts',
-    'b70-create-monthly-partitions.ts',
+    'b70-create-monthly-partitions.ts', 'replay-ablation.ts',
   ];
   it.each(SCHEDULED)('%s loads the .env', (f) => { expect(loadsEnv(src(f))).toBe(true); });
 
