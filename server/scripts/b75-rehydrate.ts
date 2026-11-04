@@ -164,11 +164,13 @@ async function main(): Promise<void> {
 
   const args = parseArgs(process.argv.slice(2));
 
-  // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4 + its condition): the output folder must be the
-  // operator's own and private. ONE lstat decides all four cases: a symbolic link (dangling or not) is refused —
-  // a planted link would send the restore wherever it points, e.g. into the live telemetry folder; anything
+  // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4 + its condition): the output folder must be private.
+  // ONE lstat of --out ITSELF decides four cases: a symbolic link (dangling or not) is refused — a planted link
+  // would send the restore wherever it points, e.g. into the live telemetry folder; anything
   // that is not a directory is refused; an existing directory with any group/other bits is refused (the
   // operator chmods it — this script never silently changes their folder); otherwise it is created 0700.
+  // NOT checked (Langston, 2026-11-04): who owns the folder (uid is not compared), and links in a PARENT of
+  // --out — mkdirSync creates through a symlinked parent. --out is operator-typed and normally under ~/.
   const refuseOut = (why: string): never => {
     console.error(`[B75 rehydrate] --out ${args.out} ${why}; refusing — use a private folder you own`);
     process.exit(1);
