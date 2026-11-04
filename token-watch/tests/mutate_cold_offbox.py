@@ -41,6 +41,8 @@ MUTATIONS = [
     ("bucket entry type clause dropped",
      "    return (isinstance(buckets, list) and len(buckets) == 1 and isinstance(buckets[0], dict)",
      "    return (isinstance(buckets, list) and len(buckets) == 1", "FAIL T17"),
+    ("cap classification off (every 401/403 blamed on the key)",
+     "                if code in CAP_CODES:", "                if False:", "FAIL T18"),
     ("v4-shape check off",
      "    if not isinstance(allowed, dict):", "    if False:", "FAIL T10"),
     ("abort on transport failure off (carry on instead)",

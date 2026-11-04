@@ -67,7 +67,8 @@ def check(label, cond, detail=""):
 class Fake:
     mode = set()          # 'corrupt', 'auth401', 'upload500', 'wide', 'delete', 'v3', 'nocaps', 'extracap',
                           # 'unrestricted' (buckets: None, as the account-wide key returns), 'twobuckets',
-                          # 'wrongname' (one bucket, the WRONG one), 'noid', 'notdict'
+                          # 'wrongname' (one bucket, the WRONG one), 'noid', 'notdict',
+                          # 'cap' (B2's measured download_cap_exceeded 403 on the read-back, after the first file)
     objects = {}          # fileId -> bytes
     names = {}            # fileId -> name
     calls = []
@@ -132,6 +133,11 @@ class H(BaseHTTPRequestHandler):
                 "recommendedPartSize": 100000000, "s3ApiUrl": base}}})
         if u.path.endswith("b2_download_file_by_id"):
             fid = parse_qs(u.query)["fileId"][0]
+            if "cap" in Fake.mode and sum(1 for c in Fake.calls if c.endswith("b2_download_file_by_id")) > 1:
+                # the body B2 actually returned on staging, 2026-11-04 16:35Z
+                return self.send_json(403, {"code": "download_cap_exceeded", "status": 403, "message":
+                                            "Cannot download file, download bandwidth or transaction (Class B) cap "
+                                            "exceeded. See the Caps & Alerts page to increase your cap."})
             data = Fake.objects[fid]
             if "corrupt" in Fake.mode:
                 data = data[:-1] + bytes([data[-1] ^ 0xFF])
@@ -281,6 +287,22 @@ check("T5 all files kept", len(os.listdir(COLD)) == 3)
 check("T5 only the first file was decompressed", seen == ["a-2026-10-01.jsonl.gz"], repr(seen))
 check("T5 exactly two upload attempts (one retry)", sum(1 for c in Fake.calls if c == "/upload") == 2,
       repr(Fake.calls))
+
+# ── T18: the account's download cap mid-run — named as the cap, not the key; the orphan is named ─────────
+print("T18 expect: the 2nd read-back hits B2's download cap -> file 1 moved, run stops: exit 1, files 2-3 kept, the "
+      "abort names the CAP (not the key) and the orphaned file id of file 2")
+reset(["a-2026-10-01.jsonl.gz", "b-2026-10-02.jsonl.gz", "c-2026-10-03.jsonl.gz"], mode={"cap"})
+ERRORS.clear()
+rc = run()
+check("T18 exit 1", rc == 1)
+check("T18 the first file moved", not os.path.exists(os.path.join(COLD, "a-2026-10-01.jsonl.gz")))
+check("T18 the other two kept", sorted(os.listdir(COLD)) == ["b-2026-10-02.jsonl.gz", "c-2026-10-03.jsonl.gz"])
+check("T18 the abort names the account cap", any("ABORT" in e and "cap is reached, not the key" in e for e in ERRORS),
+      repr(ERRORS))
+check("T18 it does NOT say the key is wrong", not any("the key is wrong" in e for e in ERRORS), repr(ERRORS))
+check("T18 the orphan (file 2's uploaded version) is named by id",
+      any("b-2026-10-02.jsonl.gz was uploaded (file id f1)" in e for e in ERRORS), repr(ERRORS))
+check("T18 the manifest holds only the verified file", [r["name"] for r in manifest()] == ["a-2026-10-01.jsonl.gz"])
 
 # ── T6 / T8: a key that is too wide is refused before anything ──────────────
 REASON = {"wide": "prefix", "delete": "capabilities are", "v3": "not the v4 shape",

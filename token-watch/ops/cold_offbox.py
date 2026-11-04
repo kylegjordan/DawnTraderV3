@@ -138,6 +138,23 @@ def _transient(exc: Exception) -> bool:
     return isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError, OSError))
 
 
+# ⛔ A 401/403 IS NOT ALWAYS THE KEY. MEASURED 2026-11-04 on the first backlog run: after 62 successful read-backs
+#    the 63rd download returned 403 {"code": "download_cap_exceeded", "message": "Cannot download file, download
+#    bandwidth or transaction (Class B) cap exceeded. ..."} — the B2 ACCOUNT'S daily download cap, which the
+#    download-verify spends at the same rate the upload does. The r1 message said "the key is wrong", which is the
+#    exact wrong-cause page Langston warned about at Step 4. B2's error body carries a `code`; it is read and named.
+CAP_CODES = frozenset({"download_cap_exceeded", "transaction_cap_exceeded", "storage_cap_exceeded", "cap_exceeded"})
+
+
+def _b2_error(exc: urllib.error.HTTPError) -> tuple[str, str]:
+    """(code, message) from a B2 error body, or ("", "") if it is not one."""
+    try:
+        body = json.loads(exc.read().decode("utf-8", errors="replace") or "{}")
+        return str(body.get("code") or ""), str(body.get("message") or "")
+    except Exception:                            # noqa: BLE001 — an unreadable body names no cause
+        return "", ""
+
+
 def _call(make_request, what: str):
     """Run `make_request()` (which opens and returns a response), retrying ONCE on a transient
     failure. 401/403 and any failure that survives the retry are Abort; other HTTP errors are raised."""
@@ -146,7 +163,13 @@ def _call(make_request, what: str):
             return make_request()
         except urllib.error.HTTPError as exc:
             if exc.code in (401, 403):
-                raise Abort("%s refused (%s): the key is wrong, revoked or not allowed this" % (what, exc.code))
+                code, msg = _b2_error(exc)
+                if code in CAP_CODES:
+                    raise Abort("%s refused (%s %s): the B2 ACCOUNT's cap is reached, not the key — %s The run stops; "
+                                "the next run continues after B2's daily reset, or raise the cap on the B2 Caps & "
+                                "Alerts page." % (what, exc.code, code, msg))
+                raise Abort("%s refused (%s %s): the key is wrong, revoked or not allowed this (%s)"
+                            % (what, exc.code, code or "no code", msg or "no message"))
             if _transient(exc) and attempt == 1:
                 LOG.warning("%s: HTTP %s, retrying once", what, exc.code)
                 time.sleep(2)
@@ -337,7 +360,11 @@ def move_one(s: Session, path: str, manifest_path: str) -> dict:
     if up.get("contentSha1") not in (sha1, "unverified:" + sha1) or int(up.get("contentLength", -1)) != size:
         raise FileFailed("B2 recorded a different body for %s (sha1 %s, %s B)"
                          % (name, up.get("contentSha1"), up.get("contentLength")))
-    back_sha, back_n = download_sha256(s, up["fileId"])
+    try:
+        back_sha, back_n = download_sha256(s, up["fileId"])
+    except Abort as exc:      # the upload landed but cannot be checked: name the unverified version, then stop
+        raise Abort("%s — %s was uploaded (file id %s) but NOT verified; the local copy is KEPT and that version is an "
+                    "ORPHAN with no manifest line" % (exc, name, up["fileId"]))
     if back_sha != sha256 or back_n != size:
         raise FileFailed("read-back of %s does not match (sha256 %s vs %s, %d vs %d B); the local copy is KEPT, and "
                          "the uploaded version (file id %s) is an ORPHAN with no manifest line"
