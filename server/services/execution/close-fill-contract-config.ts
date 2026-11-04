@@ -18,6 +18,12 @@
  *    close YIELDS (walks anyway, stamps the yield, raises an alert). The same
  *    bounded-hold pattern as `hollow_skip_cap` (asset_classes/xstock_spot/book-state.ts),
  *    so a refused close can never become a position that can never exit.
+ *  - `witness_max_age_ms` — CRYPTO ONLY (B-CRYPTO-FEED-WATCHDOG #1232, P7): the oldest
+ *    ticker witness the not-warm gate will grade against. Older ⇒ the witness is
+ *    UNVOUCHED and the close is not graded (`walk_witness_unvouched`). A quiet coin's
+ *    newest recorder row is legitimately hours old (healthy per-symbol max gap 2.97 h,
+ *    pre-audit A5/A6), so this is a backstop beside the recorder-liveness test, not the
+ *    test itself. Seed 6 h = 2 × 2.97 h; re-read after the deploy (Step 7).
  *
  * ⛔ A SEPARATE MODULE FROM `fill_depth_gate` ON PURPOSE: `resolveFillDepthGateConfig`
  * returns null when ANY of its keys is missing, and a null there BLOCKS EVERY OPEN.
@@ -40,9 +46,13 @@ export interface CloseFillContractConfig {
   upTol: number;
   /** Consecutive refused closes on one position before the close yields. */
   coldRefusalCap: number;
+  /** CRYPTO ONLY: the oldest witness the gate grades against (ms); null on classes that do not carry it. */
+  witnessMaxAgeMs: number | null;
 }
 
 const REQUIRED_KEYS = ['up_tol', 'cold_refusal_cap'] as const;
+/** Per-class extra required keys: the witness-age backstop exists only where the witness is an independent feed (crypto). */
+const CLASS_REQUIRED_KEYS: Partial<Record<string, readonly string[]>> = { crypto_spot: ['witness_max_age_ms'] };
 
 interface CachedConfig { value: CloseFillContractConfig | null; expiresAt: number; }
 const _cache = new Map<AssetClass, CachedConfig>();
@@ -67,7 +77,8 @@ export async function resolveCloseFillContractConfig(
       strategy: '*',
       regime: '*',
     });
-    const missing = REQUIRED_KEYS.filter((k) => typeof rows[k] !== 'number');
+    const required: readonly string[] = [...REQUIRED_KEYS, ...(CLASS_REQUIRED_KEYS[assetClass] ?? [])];
+    const missing = required.filter((k) => typeof rows[k] !== 'number');
     if (missing.length > 0) {
       console.error(
         `[B-FEED-MISMATCH-FIX][CLOSE_FILL_CONTRACT] FAIL-CLOSED: missing/non-numeric module_constants keys [${missing.join(', ')}] for assetClass=${assetClass} — not-warm closes are REFUSED until seeded`,
@@ -75,12 +86,13 @@ export async function resolveCloseFillContractConfig(
     } else {
       const upTol = rows.up_tol as number;
       const cap = rows.cold_refusal_cap as number;
-      if (!(upTol > 0 && upTol < 1) || !(Number.isInteger(cap) && cap >= 1)) {
+      const witnessMaxAgeMs = CLASS_REQUIRED_KEYS[assetClass]?.includes('witness_max_age_ms') ? (rows.witness_max_age_ms as number) : null;
+      if (!(upTol > 0 && upTol < 1) || !(Number.isInteger(cap) && cap >= 1) || (witnessMaxAgeMs !== null && !(witnessMaxAgeMs > 0))) {
         console.error(
-          `[B-FEED-MISMATCH-FIX][CLOSE_FILL_CONTRACT] FAIL-CLOSED: out-of-range up_tol=${upTol} cold_refusal_cap=${cap} for assetClass=${assetClass}`,
+          `[B-FEED-MISMATCH-FIX][CLOSE_FILL_CONTRACT] FAIL-CLOSED: out-of-range up_tol=${upTol} cold_refusal_cap=${cap} witness_max_age_ms=${witnessMaxAgeMs} for assetClass=${assetClass}`,
         );
       } else {
-        value = { upTol, coldRefusalCap: cap };
+        value = { upTol, coldRefusalCap: cap, witnessMaxAgeMs };
       }
     }
   } catch (err) {

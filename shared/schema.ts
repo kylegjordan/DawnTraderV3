@@ -1873,6 +1873,13 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  distinguishable only by `closed_at`, and that is the honest limit of this backfill-free change. */
   exitTickerBid: decimal("exit_ticker_bid", { precision: 20, scale: 10 }),
   exitTickerAsk: decimal("exit_ticker_ask", { precision: 20, scale: 10 }),
+  /** ★ B-CRYPTO-FEED-WATCHDOG (#1232, P8) — WHEN the witness above was captured (the recorder row's `captured_at`), and HOW
+   *  that was known: `at_close` (stamped by `closePosition` from `getTickerWitness().capturedAtMs`), `backfill_matched`
+   *  (derived later by matching the stored bid/ask to the recorder row, exact `numeric =`), or `underivable` (no matching
+   *  row could be found). NULL/NULL = no witness stored. A witness is a LAGGED observation; on 2026-10-21 → 11-04 thirteen
+   *  crypto closes carried one 2-13 days old with no way to tell. The age is `closed_at − exit_ticker_captured_at`. */
+  exitTickerCapturedAt: timestamp("exit_ticker_captured_at", { withTimezone: true }),
+  exitTickerAgeBasis: text("exit_ticker_age_basis"),
   /** ★ B-XSTOCK-FEED-SANITY (`#943`, closes `#567`) — WHAT THE BOOK LOOKED LIKE. A LABEL, NEVER MONEY.
    *  `exit_book_state` ∈ {two_sided, hollow, unknown} at the DECISION instant (`unknown` = the guard
    *  LOOKED and had no comparator yet); `exit_book_state_at_fill` the same at the FILL instant (a resting

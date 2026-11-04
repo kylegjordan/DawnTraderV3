@@ -30,6 +30,9 @@ const h = vi.hoisted(() => ({
   getTickerWitness: vi.fn(),
   resolveFillDepthGateConfig: vi.fn(),
   resolveCloseFillContractConfig: vi.fn(),
+  // B-CRYPTO-FEED-WATCHDOG (#1232, P7): the recorder's in-memory answers the vouch reads.
+  isInCryptoRecorderUniverse: vi.fn(),
+  isCryptoRecorderSymbolConnectionLive: vi.fn(),
 }));
 
 vi.mock('../../services/system-alerts.js', async (orig) => ({ ...(await orig<Record<string, unknown>>()), addAlert: h.addAlert }));
@@ -60,6 +63,11 @@ vi.mock('../../services/execution/depth-gate-config.js', async (orig) => ({
 vi.mock('../../services/execution/close-fill-contract-config.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   resolveCloseFillContractConfig: h.resolveCloseFillContractConfig,
+}));
+vi.mock('../../services/passive-archive/crypto-spot-archiver.js', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  isInCryptoRecorderUniverse: h.isInCryptoRecorderUniverse,
+  isCryptoRecorderSymbolConnectionLive: h.isCryptoRecorderSymbolConnectionLive,
 }));
 vi.mock('../../core/math/cost-model.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -186,6 +194,55 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getTickerWitness.mockResolvedValue(null);
     await proto.closePosition.call(eng, 'pos-BTC/USD', 95, { type: 'manual_stop', price: 95, reason: 't' }, 'test', { flatten: true }).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-BTC/USD')).toBe(false);
+    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
+  });
+});
+
+describe('B-CRYPTO-FEED-WATCHDOG (#1232, P7) — the not-warm gate grades a crypto witness only when VOUCHED', () => {
+  const CRYPTO_CONTRACT = { upTol: 0.01, coldRefusalCap: 3, witnessMaxAgeMs: 21_600_000 };
+  // The 2026-10-28 DOS/USD shape: a walk well above a witness bid frozen at 10-21 10:19:57Z (> up_tol above it).
+  const frozenWitness = () => ({ bid: 81.26, ask: 81.5, capturedAtMs: Date.now() - 7 * 86_400_000 });
+  const freshWitness = () => ({ bid: 81.26, ask: 81.5, capturedAtMs: Date.now() - 5_000 });
+
+  it('V1. ★ a witness from a SILENT recorder connection does not refuse the close; it is stamped unvouched', async () => {
+    const eng = fakeEngine();
+    h.resolveCloseFillContractConfig.mockResolvedValue(CRYPTO_CONTRACT);
+    h.isInCryptoRecorderUniverse.mockReturnValue(true);
+    h.isCryptoRecorderSymbolConnectionLive.mockReturnValue(false);
+    h.getActiveOpenPosition.mockResolvedValue(position('DOS/USD', 'crypto_spot'));
+    h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));          // not warm
+    h.getTickerWitness.mockResolvedValue(frozenWitness());
+    await proto.closePosition.call(eng, 'pos-DOS/USD', 90, STOP, 'test', {}).catch(() => {});
+    expect(eng._closeRefusalStreak.has('pos-DOS/USD')).toBe(false);
+    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();                 // proceeded to persist
+    const warned = (console.warn as any).mock.calls.map((c: unknown[]) => String(c[0]));
+    expect(warned.some((w: string) => w.includes('[WITNESS_UNVOUCHED]') && w.includes('reason=connection_not_live'))).toBe(true);
+  });
+
+  it('V2. the same walk against a VOUCHED witness is still refused (the gate is not weakened)', async () => {
+    const eng = fakeEngine();
+    h.resolveCloseFillContractConfig.mockResolvedValue(CRYPTO_CONTRACT);
+    h.isInCryptoRecorderUniverse.mockReturnValue(true);
+    h.isCryptoRecorderSymbolConnectionLive.mockReturnValue(true);
+    h.getActiveOpenPosition.mockResolvedValue(position('DOS/USD', 'crypto_spot'));
+    h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));
+    h.getTickerWitness.mockResolvedValue(freshWitness());
+    await proto.closePosition.call(eng, 'pos-DOS/USD', 90, STOP, 'test', {});
+    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
+    expect(h.updateClosedTrade).not.toHaveBeenCalled();
+    expect(eng._closeRefusalStreak.get('pos-DOS/USD')).toBe(1);
+  });
+
+  it('V3. the GLMR/USD shape: a symbol outside the recorder universe is not graded', async () => {
+    const eng = fakeEngine();
+    h.resolveCloseFillContractConfig.mockResolvedValue(CRYPTO_CONTRACT);
+    h.isInCryptoRecorderUniverse.mockReturnValue(false);
+    h.isCryptoRecorderSymbolConnectionLive.mockReturnValue(null);
+    h.getActiveOpenPosition.mockResolvedValue(position('GLMR/USD', 'crypto_spot'));
+    h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));
+    h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 81.5, capturedAtMs: Date.now() - 40 * 3_600_000 });
+    await proto.closePosition.call(eng, 'pos-GLMR/USD', 90, STOP, 'test', {}).catch(() => {});
+    expect(eng._closeRefusalStreak.has('pos-GLMR/USD')).toBe(false);
     expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
   });
 });
