@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 224 after live (+6 moved to the sprint, +4 struck through, listed below)
+## After live — 226 after live (+6 moved to the sprint, +4 struck through, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (4). Recounted 2026-10-08: 234 − 6 − 4 = 224 (the weekly census re-counts it since B-AFTERLIVE-TOTAL-RULE, #1180). The theme headings below use the same rule.
 
@@ -267,7 +267,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-FUNNEL-PERP-CLASSES (CC-C) — open: the funnel can only key the two spot classes; perps come after live (an interim alert shipped in F-G-1)
 - B-FUTURES-BAR-FINAL (CC-C) — futures bar finality — perps are post-live, but check whether any live-class signal reads these bars
 
-### Storage, database and production hardening — 14
+### Storage, database and production hardening — 16
 
 - #407 (CC-A) — `vts_open_trades` has no drizzle schema declaration (the table exists live; W40 census, 2026-09-30)
 - #437 (CC-A) — the `db:migrate` ledger showed an applied migration as pending (2026-07-08); re-measure before scoping (W40 census)
@@ -283,6 +283,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 20.3.1 — Unit/integration test-tier separation (RUNNING_ISSUES #226 (Infra Claude) — unit / integration test-tier separation
 - 20.4.5 Observability hardening (NEW 2026-06-12 — §19.6.6 long-tail) (—) — observability hardening
 - 20.5 Architecture Cleanup — - Decompose monolithic pages (enhance (—) — decompose large pages and route files
+- row 16a B-WRITE-TIMEOUT-ORDERING (CC-C) — the database's own timeout should cut a slow price-bar write before the app gives up; measured as a short burst at restart, not a calibration blocker (Kyle 2026-11-04, calibration-first rule: after live)
+- row 59g1b B-VTS-TELEMETRY-UNPARSEABLE-DAYS (`#1213`, CC-C) — four days of VTS telemetry files unreadable and skipped without an alert; a diagnostics record, not a calibration input (Kyle 2026-11-04: after live)
 
 ## Parked by Kyle — 7 (unchanged)
 
