@@ -15,6 +15,13 @@
  *      A readiness gate must NOT pass off one lively symbol; require most of the
  *      subscribed set fresh, err toward not-ready.
  *  - STATUS / DISPLAY (health-monitor, system-health-monitor) → freshest-symbol.
+ *  - CRYPTO RECORDER (feed-integrity-monitor, B-CRYPTO-FEED-WATCHDOG #1232) → PROPORTION-fresh
+ *      (`proportionFresh`) PER RECORDER CONNECTION over its SUBSCRIBED universe (never the symbols
+ *      that happened to tick), against a floor, warmth-gated on the same window. A fifth consumer
+ *      with a different aggregate ON PURPOSE: freshest-symbol is the reason the alarm could not see
+ *      half the recorder dark for 14 days (2026-10-21 → 11-04) — one live connection kept the
+ *      freshest symbol fresh. The trading classes above keep their aggregates unchanged; the alarm
+ *      takes the worse of the two, so the dashboard and the alarm read the same numbers.
  *
  * These are pure functions over a minimal shape so they unit-test without a live
  * adapter. Asset-class partitioning + the xStock market-hours gate + warmup grace

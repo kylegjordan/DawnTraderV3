@@ -346,6 +346,9 @@ import {
   recordDepthGateBlock,
   type DepthSnapshot,
 } from './execution/depth-source.js';
+// B-CRYPTO-FEED-WATCHDOG (#1232, P7): a crypto witness grades a close only when VOUCHED by a live recorder connection.
+import { decideWitnessVouch, type WitnessVouch } from '../core/trading/witness-vouch.js';
+import { isInCryptoRecorderUniverse, isCryptoRecorderSymbolConnectionLive } from './passive-archive/crypto-spot-archiver.js';
 // P19-B6.6 (#236): xStock price-discovery-liveness — the 2nd half of the fill-time
 // "is the book real?" guard, called at the open seam AFTER the depth gate passes.
 import { evaluateXstockPriceLiveness } from '../asset_classes/xstock_spot/price-liveness.js';
@@ -4448,8 +4451,28 @@ export class ActiveExecutionEngine {
       } else if (_fillWarm) {
         _fillArm = _isFlatten ? 'flatten_walk' : 'walk';
       } else {
-        const _refBid = _witness ? _witness.bid : null;
-        if (_refBid === null) {
+        // B-CRYPTO-FEED-WATCHDOG (#1232, P7): on crypto the witness is the recorder's — a dead recorder hands this gate a
+        // FROZEN PRESENCE, not an absence (13 closes on 2026-10-21 → 11-04 carried a witness frozen at 10:19:57Z; GLMR/USD
+        // one from a symbol no longer recorded). Grade only a VOUCHED witness (in the recorder's universe, its connection
+        // receiving data, within `witness_max_age_ms`); otherwise do not grade, stamp `walk_witness_unvouched` — distinct
+        // from `walk_no_reference` (no witness at all) and from `walk_stale` (graded and agreed). Bound on the consumer only.
+        let _vouch: WitnessVouch | null = null;
+        if (_witness && _closeClass === 'crypto_spot' && _closeContract && typeof _closeContract.witnessMaxAgeMs === 'number') {
+          const _nowV = Date.now();
+          _vouch = decideWitnessVouch({
+            inRecorderUniverse: isInCryptoRecorderUniverse(position.symbol),
+            connectionLive: isCryptoRecorderSymbolConnectionLive(position.symbol, _nowV),
+            capturedAtMs: _witness.capturedAtMs,
+            nowMs: _nowV,
+            maxAgeMs: _closeContract.witnessMaxAgeMs,
+          });
+        }
+        const _refBid = _witness && (!_vouch || _vouch.vouched) ? _witness.bid : null;
+        if (_vouch && !_vouch.vouched) {
+          _fillArm = 'walk_witness_unvouched';
+          console.warn(`[B-CRYPTO-FEED-WATCHDOG][WITNESS_UNVOUCHED] ${position.symbol} pos=${positionId} reason=${_vouch.reason} `
+            + `witnessAgeMs=${_vouch.ageMs} witnessBid=${_witness!.bid} walked=${actualExitPrice!} — not graded, close proceeds`);
+        } else if (_refBid === null) {
           _fillArm = 'walk_no_reference'; // e.g. EUR-quoted pairs (#966): nothing to grade against
         } else if (_closeContract && !walkAboveReference(actualExitPrice!, _refBid, _closeContract.upTol)) {
           _fillArm = _isFlatten ? 'flatten_walk' : 'walk_stale';
@@ -4819,6 +4842,15 @@ export class ActiveExecutionEngine {
         exitTickerAsk: options?.exitProvenance?.tickerAsk != null
           ? options.exitProvenance.tickerAsk.toString()
           : (_witness ? _witness.ask.toString() : null),
+        // B-CRYPTO-FEED-WATCHDOG (#1232, P8): WHEN the witness above was captured, so a stale one can never again pass as
+        // fresh. `at_close` = read at this close; NULL/NULL when no witness was stored. A caller-supplied ticker (never
+        // today — the payload fields are null by construction) would have no capture time: `underivable`.
+        exitTickerCapturedAt: options?.exitProvenance?.tickerBid != null
+          ? null
+          : (_witness ? new Date(_witness.capturedAtMs) : null),
+        exitTickerAgeBasis: options?.exitProvenance?.tickerBid != null
+          ? 'underivable'
+          : (_witness ? 'at_close' : null),
         // ── B-XSTOCK-FEED-SANITY P5 — THE LABEL, outside every money expression. Basis `guard` means
         // A LIVE FRAME WAS ASSESSED at that instant, and is written only when one was: the decision
         // label is the exit stamp's verdict or NULL (a flatten through `forceClosePosition` carries

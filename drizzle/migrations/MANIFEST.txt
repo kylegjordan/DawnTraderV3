@@ -233,3 +233,4 @@
 2026-10-17-b-b75-export-completeness.sql
 2026-10-17-b-rtb-queued-status-sweep.sql
 2026-10-17-b-rtb-queued-status-sweep-part2.sql
+2026-11-04-b-crypto-feed-watchdog.sql

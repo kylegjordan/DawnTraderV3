@@ -18,6 +18,14 @@
  *   - Shard count = ceil(universe.length / 300)
  *
  * Reference: BATCH_74_SCOPE.md v1.1 + Langston cc-inbox #867 + #869.
+ *
+ * B-CRYPTO-FEED-WATCHDOG (#1232, row 33a): each shard's socket is now a
+ * `RecorderConnection` (recorder-connection.ts) — one socket and one reconnect
+ * timer per shard, a DATA-frame silence check, the subscribe-reply check and one
+ * self-clearing alert. On 2026-10-21 shard0 sat OPEN and silent for 14.08 days
+ * because the only reconnect path was the socket's `close` event. This file keeps
+ * the recorder's own job (parse, buffer, count) and adds the per-symbol UPDATE
+ * clock the feed-health grade and the close-gate's witness vouch read.
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -27,7 +35,7 @@ import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
-import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
+import { RecorderConnection, startRecorderWatch } from './recorder-connection.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
 // B69: unchanged value (crypto_spot was already correct), renamed var for consistency
@@ -36,9 +44,11 @@ const SHARD_SIZE = 300;
 
 export interface Shard {
   id: number;
-  ws: WebSocket | null;
+  /** The watched connection (null only in detached test shards). */
+  conn: RecorderConnection | null;
   symbols: string[];
-  backoff: BackoffPolicy;
+  /** Any frame, heartbeats included — the health line's `last_msg_age_ms`. NOT a liveness signal (a heartbeat
+   *  arrives about once a second on a subscribed connection); the connection's DATA clock is. */
   lastMsgAt: number;
   /** *persisted*: OHLC bars BUFFERED in the last minute — the health line's `rows_persisted_60s`.
    *  ⚠️ Buffered, not rows persisted (pre-audit R5). Bumped only when `parseOhlcBar` returns true (#1029). */
@@ -57,6 +67,14 @@ const state = {
   shards: [] as Shard[],
 };
 
+/** B-CRYPTO-FEED-WATCHDOG (C1/P6): the subscribed universe, symbol → shard id. Static per process (loaded once at start). */
+const symbolShard = new Map<string, number>();
+/** Receipt time of the last ticker UPDATE per symbol. A `snapshot` (sent on every subscribe) is the venue replaying the
+ *  current state, however old, and does not count as the symbol ticking (the xStock recorder's B-VENUE-QUIET-ALERTING r4 lesson). */
+const lastTickerUpdateAt = new Map<string, number>();
+/** When THIS process received its first ticker update — the warmth clock (C2: warm once a full live-share window has passed). */
+let firstTickerUpdateAtMs: number | null = null;
+
 export function getCryptoSpotStats(): {
   connected: boolean;
   configuredSymbols: number;
@@ -69,7 +87,7 @@ export function getCryptoSpotStats(): {
   const totalOhlc = state.shards.reduce((s, sh) => s + sh.cumulativeOhlcRows, 0);
   const totalTicker = state.shards.reduce((s, sh) => s + sh.cumulativeTickerSnaps, 0);
   const totalSkipped = state.shards.reduce((s, sh) => s + sh.ohlcFramesSkipped, 0);
-  const allConnected = state.shards.length > 0 && state.shards.every(sh => sh.ws?.readyState === WebSocket.OPEN);
+  const allConnected = state.shards.length > 0 && state.shards.every(sh => sh.conn?.ws?.readyState === WebSocket.OPEN);
   return {
     connected: allConnected,
     configuredSymbols: totalSymbols,
@@ -78,6 +96,48 @@ export function getCryptoSpotStats(): {
     ohlcFramesSkipped: totalSkipped,
     shardCount: state.shards.length,
   };
+}
+
+/** B-CRYPTO-FEED-WATCHDOG (C1/P6): every subscribed symbol of one shard (or all shards) with its age since its last
+ *  ticker UPDATE — `null` for a symbol that has not updated in this process. The list IS the universe, so a dark shard
+ *  shows as many nulls/old ages, never as a shorter list. Read-only. */
+export function getCryptoRecorderSymbolAges(nowMs: number, shardId?: number): { symbol: string; ageMs: number | null }[] {
+  const out: { symbol: string; ageMs: number | null }[] = [];
+  for (const sh of state.shards) {
+    if (shardId !== undefined && sh.id !== shardId) continue;
+    for (const symbol of sh.symbols) {
+      const at = lastTickerUpdateAt.get(symbol);
+      out.push({ symbol, ageMs: at === undefined ? null : Math.max(0, nowMs - at) });
+    }
+  }
+  return out;
+}
+
+/** The shard ids, for per-connection grading. */
+export function getCryptoRecorderShardIds(): number[] { return state.shards.map((s) => s.id); }
+
+/** C2: the live-share reading is meaningful only once a full window has passed since this process's first ticker update.
+ *  The window is the caller's (ONE DB value, `feed_health.recorder_live_window_ms`), so the warmth and the share can never
+ *  use different windows. Blind for the first window after every process start — stated in the pre-audit and Step 7. */
+export function isCryptoRecorderWarm(nowMs: number, windowMs: number): boolean {
+  return firstTickerUpdateAtMs !== null && nowMs - firstTickerUpdateAtMs >= windowMs;
+}
+
+/** C3/P7: is this symbol in the recorder's subscribed universe? (GLMR/USD on 2026-10-22 was not — its witness was days old.) */
+export function isInCryptoRecorderUniverse(symbol: string): boolean {
+  return symbolShard.has(symbol);
+}
+
+/** C3/P7: is DATA arriving on the connection that owns this symbol? `null` when the symbol is not in the universe or the
+ *  connection's threshold cannot be read (the caller treats unknown as NOT vouched — never as live). Sync, in-memory. */
+export function isCryptoRecorderSymbolConnectionLive(symbol: string, nowMs: number): boolean | null {
+  const id = symbolShard.get(symbol);
+  if (id === undefined) return null;
+  const sh = state.shards.find((s) => s.id === id);
+  if (!sh?.conn) return null;
+  const cfg = sh.conn.resolveConfig();
+  if (!cfg) return null;
+  return sh.conn.isDataLive(nowMs, cfg.silenceMs);
 }
 
 /**
@@ -174,13 +234,21 @@ function parseTickerSnap(data: any): void {
   } as any);
 }
 
-function handleMessage(shard: Shard, raw: WebSocket.RawData): void {
-  shard.lastMsgAt = Date.now();
+/** Returns whether the frame carried DATA (ohlc / ticker rows) — the connection's silence clock moves only on those —
+ *  and a short kind label for the diagnostic ring. Subscribe replies are handed to the connection (P4). */
+function handleMessage(shard: Shard, raw: WebSocket.RawData): { data: boolean; kind: string } {
+  const now = Date.now();
+  shard.lastMsgAt = now;
   let msg: any;
   try {
     msg = JSON.parse(raw.toString());
   } catch {
-    return;
+    return { data: false, kind: 'unparsable' };
+  }
+  if (msg.method === 'subscribe') {
+    // Wire capture 2026-11-04: one reply per symbol per channel; success:false carries `error` and `symbol`.
+    shard.conn?.noteSubscribeReply(msg.success === true, typeof msg.symbol === 'string' ? msg.symbol : null);
+    return { data: false, kind: msg.success === true ? 'subscribe_ok' : 'subscribe_rejected' };
   }
   if (msg.channel === 'ohlc' && Array.isArray(msg.data)) {
     for (const bar of msg.data) {
@@ -190,59 +258,48 @@ function handleMessage(shard: Shard, raw: WebSocket.RawData): void {
       if (parseOhlcBar(bar)) shard.rowsPersistedLastMinute++;
       else shard.ohlcFramesSkipped++;
     }
+    return { data: msg.data.length > 0, kind: `ohlc/${msg.type ?? '?'}` };
   } else if (msg.channel === 'ticker' && Array.isArray(msg.data)) {
+    const isUpdate = msg.type === 'update';
     for (const snap of msg.data) {
       parseTickerSnap(snap);
       shard.cumulativeTickerSnaps++;
+      if (isUpdate && typeof snap?.symbol === 'string') {
+        lastTickerUpdateAt.set(snap.symbol, now);
+        if (firstTickerUpdateAtMs === null) firstTickerUpdateAtMs = now;
+      }
     }
+    return { data: msg.data.length > 0, kind: `ticker/${msg.type ?? '?'}` };
   }
+  return { data: false, kind: typeof msg.channel === 'string' ? msg.channel : 'other' };
 }
 
-function subscribe(shard: Shard): void {
-  if (!shard.ws) return;
-  shard.ws.send(JSON.stringify({
+function subscribe(shard: Shard, ws: WebSocket): void {
+  ws.send(JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ohlc', symbol: shard.symbols, interval: 1 },
   }));
-  shard.ws.send(JSON.stringify({
+  ws.send(JSON.stringify({
     method: 'subscribe',
     params: { channel: 'ticker', symbol: shard.symbols },
   }));
   console.log(`[B74][crypto-spot][shard${shard.id}] subscribed to ohlc(1) + ticker for ${shard.symbols.length} symbols`);
 }
 
-async function connectShard(shard: Shard): Promise<void> {
-  if (!state.enabled) return;
-  if (shard.ws) {
-    try { shard.ws.close(); } catch { /* ignore */ }
-    shard.ws = null;
-  }
-  const ws = new WebSocket(WS_URL);
-  shard.ws = ws;
-
-  ws.on('open', () => {
-    console.log(`[B74][crypto-spot][shard${shard.id}] connected (attempt ${shard.backoff.attempts() + 1})`);
-    shard.backoff.reset();
-    subscribe(shard);
+/** The shard's watched connection. Reconnects, silence and alerts are the connection's (recorder-connection.ts). */
+function makeShardConnection(shard: Shard): RecorderConnection {
+  return new RecorderConnection({
+    label: `crypto-spot][shard${shard.id}`,
+    recorderKey: `crypto-spot:shard${shard.id}`,
+    silenceConstant: 'crypto_spot_silence_ms',
+    url: WS_URL,
+    configAssetClass: ASSET_CLASS,
+    onOpen: (ws) => subscribe(shard, ws),
+    onMessage: (raw) => handleMessage(shard, raw),
+    isEnabled: () => state.enabled,
+    // Two channels, one reply per symbol each (wire capture 2026-11-04).
+    expectedSubscribeReplies: () => shard.symbols.length * 2,
   });
-
-  ws.on('message', (raw) => handleMessage(shard, raw));
-
-  ws.on('close', (code, reason) => {
-    console.warn(`[B74][crypto-spot][shard${shard.id}] disconnected code=${code} reason=${reason.toString()}`);
-    scheduleReconnect(shard);
-  });
-
-  ws.on('error', (err) => {
-    console.warn(`[B74][crypto-spot][shard${shard.id}] ws error: ${err.message}`);
-  });
-}
-
-function scheduleReconnect(shard: Shard): void {
-  if (!state.enabled) return;
-  const delay = shard.backoff.nextDelayMs();
-  console.warn(`[B74][crypto-spot][shard${shard.id}] reconnecting in ${delay}ms (attempt ${shard.backoff.attempts()})`);
-  setTimeout(() => { connectShard(shard).catch(err => console.error(`[B74][crypto-spot][shard${shard.id}] reconnect failed:`, err)); }, delay);
 }
 
 // Health log every 60s across all shards
@@ -251,9 +308,12 @@ setInterval(() => {
   const now = Date.now();
   for (const shard of state.shards) {
     const lastMsgAge = shard.lastMsgAt > 0 ? now - shard.lastMsgAt : -1;
+    const c = shard.conn;
+    const dataAge = c && c.lastDataAtMs > 0 ? now - c.lastDataAtMs : -1;
+    // `connected=` is the socket state; `data_age_ms` is what liveness is judged on (#1232). Both printed, never one for the other.
     console.log(
-      `[B74][crypto-spot][shard${shard.id}] connected=${shard.ws?.readyState === WebSocket.OPEN} ` +
-      `symbols=${shard.symbols.length} last_msg_age_ms=${lastMsgAge} rows_persisted_60s=${shard.rowsPersistedLastMinute}`
+      `[B74][crypto-spot][shard${shard.id}] connected=${c?.ws?.readyState === WebSocket.OPEN} ` +
+      `symbols=${shard.symbols.length} last_msg_age_ms=${lastMsgAge} data_age_ms=${dataAge} rows_persisted_60s=${shard.rowsPersistedLastMinute}`
     );
     shard.rowsPersistedLastMinute = 0;
   }
@@ -272,41 +332,60 @@ export async function startCryptoSpotArchiver(): Promise<void> {
   state.enabled = true;
   state.shards = buckets.map((symbols, id) => ({
     id,
-    ws: null,
+    conn: null,
     symbols,
-    backoff: makeBackoff(30),
     lastMsgAt: 0,
     rowsPersistedLastMinute: 0,
     cumulativeOhlcRows: 0,
     cumulativeTickerSnaps: 0,
     ohlcFramesSkipped: 0,
   }));
+  symbolShard.clear();
+  for (const sh of state.shards) for (const sym of sh.symbols) symbolShard.set(sym, sh.id);
 
   console.log(
     `[B74][crypto-spot] starting ${state.shards.length} shard(s) ` +
     `(${result.symbols.length} symbols total, shard_size_target=${SHARD_SIZE})`
   );
 
-  await Promise.all(state.shards.map(s => connectShard(s)));
+  for (const s of state.shards) {
+    s.conn = makeShardConnection(s);
+    s.conn.connect();
+  }
+  startRecorderWatch();
 }
 
 export function stopCryptoSpotArchiver(): void {
   state.enabled = false;
   for (const shard of state.shards) {
-    if (shard.ws) {
-      try { shard.ws.close(); } catch { /* ignore */ }
-      shard.ws = null;
-    }
+    shard.conn?.stop();
+    shard.conn = null;
   }
   state.shards = [];
+  symbolShard.clear();
 }
 
 // B-OHLC-FRAME-GUARD P8 (test-only): drive real frames through `handleMessage` against a detached shard,
 // so the counter tests read the same bumps production makes (pre-audit A9).
 export function _makeShardForTests(id = 0, symbols: string[] = []): Shard {
   return {
-    id, ws: null, symbols, backoff: makeBackoff(30), lastMsgAt: 0,
+    id, conn: null, symbols, lastMsgAt: 0,
     rowsPersistedLastMinute: 0, cumulativeOhlcRows: 0, cumulativeTickerSnaps: 0, ohlcFramesSkipped: 0,
   };
 }
 export { handleMessage as _handleCryptoMessageForTests };
+
+/** Test-only: install shards (with optional connections) as the running universe, without opening sockets. */
+export function _installShardsForTests(shards: Shard[]): void {
+  state.enabled = true;
+  state.shards = shards;
+  symbolShard.clear();
+  for (const sh of shards) for (const sym of sh.symbols) symbolShard.set(sym, sh.id);
+}
+/** Test-only: clear the per-symbol update clock and the warmth clock. */
+export function _resetCryptoRecorderClockForTests(): void {
+  lastTickerUpdateAt.clear();
+  firstTickerUpdateAtMs = null;
+  state.shards = [];
+  symbolShard.clear();
+}

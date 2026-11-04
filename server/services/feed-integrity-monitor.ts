@@ -5,6 +5,7 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 import {
   gradePerClassFeedLiveness,
   computeRollingWindowReadiness,
+  proportionFresh,
   type SymbolFreshness,
   type PerClassThresholds,
   type FeedAliveGrade,
@@ -13,6 +14,7 @@ import {
 import { resolveAssetClass } from '../../shared/asset-classes.js';
 import { isXstockMarketOpenUTC, isInXstockWeekendClose } from '../asset_classes/xstock_spot/market-hours.js';
 import { getEquityTickerUpdateAges, isEquityTickingCountWarm } from './passive-archive/equity-spot-archiver.js';
+import { getCryptoRecorderSymbolAges, getCryptoRecorderShardIds, isCryptoRecorderWarm } from './passive-archive/crypto-spot-archiver.js';
 import { getCachedNumberRequired } from './module-constants-service.js';
 import fs from 'fs';
 
@@ -117,11 +119,28 @@ export interface ClassLivenessReading {
   thresholdPresent: boolean;
   symbolCount: number;
 }
+/**
+ * B-CRYPTO-FEED-WATCHDOG (#1232, P6): the crypto RECORDER (passive archive) graded as its own source, per connection, by the
+ * SHARE of its subscribed symbols that received a ticker update within the window. The trading feed's freshest-symbol grade
+ * could not see it: on 2026-10-21 → 11-04 half the recorder was dark for 14 days while every class graded healthy.
+ * `graded=false` (warming / no config / no recorder) is NOT a healthy reading and must never print like one (#546).
+ */
+export interface RecorderLivenessReading {
+  graded: boolean;
+  /** Why not graded: 'warming' (the first window after a process start — C2), 'config_missing', 'no_recorder'. */
+  notGradedReason: string | null;
+  windowMs: number | null;
+  floor: number | null;
+  shards: { shardId: number; liveShare: number; symbolCount: number; grade: FeedAliveGrade }[];
+  grade: FeedAliveGrade;
+}
 export interface LivenessReading {
   atMs: number;
   /** true when NO class had thresholds (config not warm or not seeded) — the cycle graded nothing */
   configMissing: boolean;
   classes: ClassLivenessReading[];
+  /** B-CRYPTO-FEED-WATCHDOG: the crypto recorder's per-connection live-share grade. */
+  recorder?: RecorderLivenessReading;
 }
 
 /**
@@ -311,9 +330,12 @@ class FeedIntegrityMonitorService {
       const criticalMs = this.tryGetConfig(cls, 'critical_age_ms');
       if (warningMs !== null && criticalMs !== null) thresholds[cls] = { warningMs, criticalMs };
     }
+    // B-CRYPTO-FEED-WATCHDOG (P6): graded independently of the trading classes' thresholds.
+    const recorder = this.computeRecorderLiveness(now);
+
     if (Object.keys(thresholds).length === 0) {
-      this.lastLiveness = { atMs: now, configMissing: true, classes: [] };
-      return { grade: 'healthy', worstAgeSec: 0 }; // config not warmed yet → do not alarm (and the reading says NOT GRADED)
+      this.lastLiveness = { atMs: now, configMissing: true, classes: [], recorder };
+      return { grade: recorder.grade, worstAgeSec: 0 }; // trading classes not graded; the recorder grade still stands
     }
 
     const result = gradePerClassFeedLiveness(health, {
@@ -346,8 +368,40 @@ class FeedIntegrityMonitorService {
         thresholdPresent: thresholds[c.assetClass] !== undefined,
         symbolCount: c.symbolCount,
       })),
+      recorder,
     };
-    return { grade: result.overall, worstAgeSec: Math.round(worstAgeMs / 1000) };
+    const rank: Record<FeedAliveGrade, number> = { healthy: 0, warning: 1, critical: 2 };
+    const grade = rank[recorder.grade] > rank[result.overall] ? recorder.grade : result.overall;
+    return { grade, worstAgeSec: Math.round(worstAgeMs / 1000) };
+  }
+
+  /**
+   * B-CRYPTO-FEED-WATCHDOG (#1232, P6; Langston Step-2 C1/C2). Per recorder connection: the share of its SUBSCRIBED symbols
+   * (C1 — the denominator is the universe, never the symbols that happened to tick) with a ticker update inside the window,
+   * against the floor. ONE window (`feed_health.recorder_live_window_ms`) for both the share and the warmth gate (C2), so the
+   * reading is blind for the first window after every process start — reported as NOT GRADED ('warming'), never as healthy.
+   * Measured basis (pre-audit A5): 2 h share healthy 0.80-0.99 (Sunday 0.785+), half-dead ≤ 0.44; floor 0.60.
+   */
+  private computeRecorderLiveness(now: number): RecorderLivenessReading {
+    const ids = getCryptoRecorderShardIds();
+    if (ids.length === 0) {
+      // No recorder running (capture disabled, or not started): nothing to grade — and no config read either.
+      return { graded: false, notGradedReason: 'no_recorder', windowMs: null, floor: null, shards: [], grade: 'healthy' };
+    }
+    const windowMs = this.tryGetConfig('crypto_spot', 'recorder_live_window_ms');
+    const floor = this.tryGetConfig('crypto_spot', 'recorder_live_share_floor');
+    const base = { windowMs, floor, shards: [] as RecorderLivenessReading['shards'] };
+    if (windowMs === null || floor === null) return { ...base, graded: false, notGradedReason: 'config_missing', grade: 'healthy' };
+    if (!isCryptoRecorderWarm(now, windowMs)) return { ...base, graded: false, notGradedReason: 'warming', grade: 'healthy' };
+    let grade: FeedAliveGrade = 'healthy';
+    for (const id of ids) {
+      const items = getCryptoRecorderSymbolAges(now, id);
+      const liveShare = proportionFresh(items, windowMs);
+      const g: FeedAliveGrade = liveShare < floor ? 'critical' : 'healthy';
+      if (g === 'critical') grade = 'critical';
+      base.shards.push({ shardId: id, liveShare, symbolCount: items.length, grade: g });
+    }
+    return { ...base, graded: true, notGradedReason: null, grade };
   }
 
   /** B-FEED-HEALTH-GRADE-ARM: the last cycle's per-class liveness (read-only; null before the first graded cycle). */
@@ -506,6 +560,16 @@ class FeedIntegrityMonitorService {
       if (c.suppressed || c.grade === 'healthy') continue;
       const age = c.freshestAgeMs === null ? 'no tick yet' : `${Math.round(c.freshestAgeMs / 1000)}s old`;
       issues.push(`${c.grade === 'critical' ? 'Critical' : 'Warning'}: ${c.assetClass} freshest tick ${age}`);
+    }
+
+    // B-CRYPTO-FEED-WATCHDOG (P6): the crypto recorder's per-connection live share — and a NOT GRADED line, never silence.
+    const rec = this.lastLiveness?.recorder;
+    if (rec && !rec.graded && rec.notGradedReason !== 'no_recorder') {
+      issues.push(`Info: crypto recorder live share NOT GRADED (${rec.notGradedReason})`);
+    }
+    for (const sh of rec?.graded ? rec.shards : []) {
+      if (sh.grade === 'healthy') continue;
+      issues.push(`Critical: crypto recorder shard${sh.shardId} live share ${(sh.liveShare * 100).toFixed(1)}% of ${sh.symbolCount} symbols (floor ${((rec!.floor ?? 0) * 100).toFixed(0)}%)`);
     }
 
     // Check for fallback

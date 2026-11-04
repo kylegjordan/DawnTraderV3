@@ -18,6 +18,13 @@
  *   2. REST polling (`https://futures.kraken.com/api/charts/v1/trade/<sym>/1m`)
  *      every 60s, deduped on last-seen interval_begin. Verified 2026-08-17 to
  *      serve crypto perp symbols identically (PF_XBTUSD → 2,000 live candles).
+ *
+ * B-CRYPTO-FEED-WATCHDOG (#1232, row 33a): the ticker socket is a `RecorderConnection`
+ * (recorder-connection.ts) — one socket and one reconnect timer, the DATA-frame silence
+ * check and one self-clearing alert. Same defects as the crypto-spot recorder that went
+ * silent for 14 days (reconnect only on `close`, reset on open, a replaced socket's late
+ * close re-scheduling). The subscribe-reply check is off here: the Futures v1 protocol's
+ * replies were not wire-captured for this batch.
  * ═════════════════════════════════════════════════════════════════════════════
  */
 
@@ -26,7 +33,7 @@ import { bufferOhlcBar, type ArchiveAssetClass } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
-import { makeBackoff, type BackoffPolicy } from './reconnect-policy.js';
+import { RecorderConnection, startRecorderWatch } from './recorder-connection.js';
 
 const WS_URL = 'wss://futures.kraken.com/ws/v1';
 const REST_BASE = 'https://futures.kraken.com/api/charts/v1/trade';
@@ -51,9 +58,8 @@ export interface KrakenFuturesArchiverStats {
 }
 
 export class KrakenFuturesArchiver {
-  private ws: WebSocket | null = null;
+  private conn: RecorderConnection | null = null;
   private symbols: string[] = [];
-  private backoff: BackoffPolicy = makeBackoff(30);
   private enabled = false;
   private lastMsgAt = 0;
   /** *persisted*: candles BUFFERED in the last minute — the health line's `rows_persisted_60s`.
@@ -74,7 +80,7 @@ export class KrakenFuturesArchiver {
 
   getStats(): KrakenFuturesArchiverStats {
     return {
-      connected: this.ws?.readyState === WebSocket.OPEN,
+      connected: this.conn?.ws?.readyState === WebSocket.OPEN,
       configuredSymbols: this.symbols.length,
       cumulativeOhlcRows: this.cumulativeOhlcRows,
       cumulativeTickerSnaps: this.cumulativeTickerSnaps,
@@ -187,13 +193,16 @@ export class KrakenFuturesArchiver {
     } as any);
   }
 
-  private handleMessage(raw: WebSocket.RawData): void {
+  /** Returns whether the frame carried DATA (a ticker) — the connection's silence clock moves only on those. */
+  private handleMessage(raw: WebSocket.RawData): { data: boolean; kind: string } {
     this.lastMsgAt = Date.now();
     let msg: any;
-    try { msg = JSON.parse(raw.toString()); } catch { return; }
+    try { msg = JSON.parse(raw.toString()); } catch { return { data: false, kind: 'unparsable' }; }
     if (msg.feed === 'ticker' || msg.feed === 'ticker_snapshot') {
       this.parseTickerSnap(msg);
+      return { data: true, kind: String(msg.feed) };
     }
+    return { data: false, kind: typeof msg.feed === 'string' ? msg.feed : typeof msg.event === 'string' ? `event:${msg.event}` : 'other' };
   }
 
   private subscribe(ws: WebSocket): void {
@@ -205,38 +214,19 @@ export class KrakenFuturesArchiver {
     console.log(`[B74][${this.cfg.legLabel}] subscribed to ticker for ${this.symbols.length} symbols (OHLC via REST polling at ${REST_POLL_INTERVAL_MS / 1000}s interval)`);
   }
 
-  private async connect(): Promise<void> {
-    if (!this.enabled) return;
-    if (this.ws) {
-      try { this.ws.close(); } catch { /* ignore */ }
-      this.ws = null;
-    }
-    const ws = new WebSocket(WS_URL);
-    this.ws = ws;
-
-    ws.on('open', () => {
-      console.log(`[B74][${this.cfg.legLabel}] connected (attempt ${this.backoff.attempts() + 1})`);
-      this.backoff.reset();
-      this.subscribe(ws);
+  /** The leg's watched connection. Reconnects, silence and alerts are the connection's (recorder-connection.ts). */
+  private makeConnection(): RecorderConnection {
+    return new RecorderConnection({
+      label: this.cfg.legLabel,
+      recorderKey: this.cfg.legLabel,
+      silenceConstant: 'futures_silence_ms',
+      url: WS_URL,
+      configAssetClass: this.cfg.assetClass,
+      onOpen: (ws) => this.subscribe(ws),
+      onMessage: (raw) => this.handleMessage(raw),
+      isEnabled: () => this.enabled,
+      expectedSubscribeReplies: () => 0,
     });
-
-    ws.on('message', (raw) => this.handleMessage(raw));
-
-    ws.on('close', (code, reason) => {
-      console.warn(`[B74][${this.cfg.legLabel}] disconnected code=${code} reason=${reason.toString()}`);
-      this.scheduleReconnect();
-    });
-
-    ws.on('error', (err) => {
-      console.warn(`[B74][${this.cfg.legLabel}] ws error: ${err.message}`);
-    });
-  }
-
-  private scheduleReconnect(): void {
-    if (!this.enabled) return;
-    const delay = this.backoff.nextDelayMs();
-    console.warn(`[B74][${this.cfg.legLabel}] reconnecting in ${delay}ms (attempt ${this.backoff.attempts()})`);
-    setTimeout(() => { this.connect().catch(err => console.error(`[B74][${this.cfg.legLabel}] reconnect failed:`, err)); }, delay);
   }
 
   async start(): Promise<void> {
@@ -246,7 +236,9 @@ export class KrakenFuturesArchiver {
       return;
     }
     this.enabled = true;
-    await this.connect();
+    this.conn = this.makeConnection();
+    this.conn.connect();
+    startRecorderWatch();
 
     // REST polling timer for OHLC; initial poll immediately so we don't wait 60s.
     this.restPollTimer = setInterval(() => {
@@ -260,9 +252,11 @@ export class KrakenFuturesArchiver {
       if (!this.enabled) return;
       const now = Date.now();
       const lastMsgAge = this.lastMsgAt > 0 ? now - this.lastMsgAt : -1;
+      const c = this.conn;
+      const dataAge = c && c.lastDataAtMs > 0 ? now - c.lastDataAtMs : -1;
       console.log(
-        `[B74][${this.cfg.legLabel}] connected=${this.ws?.readyState === WebSocket.OPEN} ` +
-        `last_msg_age_ms=${lastMsgAge} rows_persisted_60s=${this.rowsPersistedLastMinute}`
+        `[B74][${this.cfg.legLabel}] connected=${c?.ws?.readyState === WebSocket.OPEN} ` +
+        `last_msg_age_ms=${lastMsgAge} data_age_ms=${dataAge} rows_persisted_60s=${this.rowsPersistedLastMinute}`
       );
       this.rowsPersistedLastMinute = 0;
     }, 60_000);
@@ -278,9 +272,7 @@ export class KrakenFuturesArchiver {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
     }
-    if (this.ws) {
-      try { this.ws.close(); } catch { /* ignore */ }
-      this.ws = null;
-    }
+    this.conn?.stop();
+    this.conn = null;
   }
 }
