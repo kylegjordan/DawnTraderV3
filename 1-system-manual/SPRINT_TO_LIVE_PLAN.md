@@ -35,7 +35,7 @@
 | P1c — fill mode | 1 | B-CLASS-LEG-FILL-MODE | CC-C (Analyst Claude) | none | #1170 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-15 (Coltrane Step 11) | nothing |
 | 2 — exit, in order | 1 | P-8e split (the extrapolated-fill field) | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | QUEUED (lands with or before row 2's verification; carrier: the B-PRICE-SIDE-BY-JOB pre-audit) | nothing |
 | 2 — exit, in order | 2 | B-XSTOCK-BID-TRIGGER-RELAND | CC-C (Analyst Claude) | 2 |  | Kyle 2026-10-07 | row | CC-C ((4b) deployed 2026-11-04 12:13Z, Step 7 read after today's US session; (4a) passed against its baseline (pages 92/103/77 → 12/30/39), Langston to rule, plus the opening-bell pages it left; C-P5 four-week read to 11-16) |
-| 2 — exit, in order | 3 | B-SPREAD-BLOWN-RELEASE-MOVEMENT | CC-C (Analyst Claude) | none | #1199 | Kyle 2026-10-07 | QUEUED | none — objective 6's observation read is recorded on row 2 (progress report §3d, 2026-11-04: 81 held exits, 31 released below the stop); waits only for its turn in the queue |
+| 2 — exit, in order | 3 | B-SPREAD-BLOWN-RELEASE-MOVEMENT | CC-C (Analyst Claude) | none | #1199 | Kyle 2026-10-07 | QUEUED | nothing (objective 6's observation read is recorded on row 2, progress report §3d, 2026-11-04: 81 held exits, 31 released below the stop; waits only for its turn in the queue) |
 | 2 — exit, in order | 4 | B-CRYPTO-MARK-AGE-GATE | CC-C (Analyst Claude) | 38 |  | Kyle 2026-10-10 | row | nothing |
 | 2 — exit, in order | 5 | B-EXIT-TICKER-LEG-ADAPTER-SIDES | CC-C (Analyst Claude) | 65 |  | Kyle 2026-10-07 | row | nothing |
 | 2 — exit, in order | 6 | B-STALE-BOOK-DEPTH-REFUSAL | CC-C (Analyst Claude) | 8b | #1085 | Kyle 2026-10-07 | row | nothing |
