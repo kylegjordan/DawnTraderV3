@@ -73,22 +73,23 @@
 | 0 — clear the plates (Infra Claude) | 1 | B-TOKEN-WATCH-STORAGE | Infra Claude | none | #1132 | Kyle 2026-11-04 (ahead of the Langston size work) | IN FLIGHT — Step 1 | Infra Claude |
 | 0 — clear the plates (Infra Claude) | 2 | B-LANGSTON-RELIEF | Infra Claude | none |  | Kyle 2026-10-16 | IN FLIGHT — Step 10 (the alert lane's 7-day window ended 2026-10-23; the ceiling was not met and its last part moved to B-LANGSTON-CLAUDEMD-RESIDUAL, Kyle 2026-10-20); completion report and Step 11 owed | Infra Claude (held for Kyle's 2026-11-04 restart review) |
 | 0 — clear the plates (Infra Claude) | 3 | B-LANGSTON-CLAUDEMD-RESIDUAL | Infra Claude | none | #974 | Kyle 2026-10-20 | IN FLIGHT — Step 4 part 1 (the installer) sent back by Langston 2026-10-21 with one blocker; the trims are committed, not yet reviewed or installed | Infra Claude (the fix, held for Kyle's 2026-11-04 restart review), then Langston |
-| 0 — clear the plates (Infra Claude) | 4 | B-TOKEN-WATCH-FOLLOWUP-MEMORY | Infra Claude | none | #1132 | Kyle 2026-11-04 (after the Langston size work) | QUEUED | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
-| 0 — clear the plates (Infra Claude) | 5 | B-CREDENTIALS-PRIVATE-REPO | Infra Claude | none | #1023 | Kyle 2026-09-28 | IN FLIGHT — OBJ-1 closed 2026-10-13; the GB-8 bridges increment next | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
-| 0 — clear the plates (Infra Claude) | 6 | B-CREW-ACCESS-HARDEN | Infra Claude | none | #1092, #924 | Kyle 2026-09-28 | PARKED — Step 9, paused by Kyle 2026-10-16 for B-LANGSTON-RELIEF | Infra Claude (after the current batches) |
-| 0 — clear the plates (Infra Claude) | 7 | B-LANGSTON-CONTEXT (increment 2) | Infra Claude | none |  | Kyle 2026-10-08 | PARKED (chunk 1 closed; the rest partly overtaken by B-LANGSTON-RELIEF) | Infra Claude (re-scope against B-LANGSTON-RELIEF), then Kyle |
-| 0 — clear the plates (Infra Claude) | 8 | B-LANGSTON-AUTOMEMORY-TRIM | Infra Claude | none |  | Kyle 2026-10-16 | ✅ DONE 2026-10-17 (inside B-LANGSTON-RELIEF) | nothing |
-| 0 — clear the plates (Infra Claude) | 9 | B-SIZE-WATCH-BREACH-ALARM | Infra Claude | none | #1215 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 10 | B-LANGSTON-MEMORY-NOTICES | Infra Claude | none | #1216 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 11 | B-AGENT-INVOKE-FAILURE-NOTICE | Infra Claude | none | #1198, #1206 | Langston 2026-10-16 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 12 | B-AGENT-PRIVATE-TMP | Infra Claude | none | #979, #1205 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 13 | B-LANGSTON-REPOST-FAILED | Infra Claude | none | #1207 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle (and after B-AGENT-PRIVATE-TMP) |
-| 0 — clear the plates (Infra Claude) | 14 | B-ALERT-LANE-LEDGER-OWNER | Infra Claude | none | #1201 | Langston 2026-10-16 (home) | QUEUED (owner accepted by Infra Claude 2026-11-04; not started) | Kyle |
-| 0 — clear the plates (Infra Claude) | 15 | B-LANGSTON-RECONCILE-VERB | Infra Claude | none | #1057 | Kyle 2026-09-28 | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 16 | B-CHAPLET-DELETE | Infra Claude | none | #1101 | Kyle 2026-09-28 | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 17 | B-TRANSCRIPT-ARCHIVE | Infra Claude | none |  | Kyle 2026-09-29 | QUEUED | Kyle |
-| 0 — clear the plates (Infra Claude) | 18 | B-TOKEN-WATCH | Infra Claude | none |  | Kyle 2026-09-28 | PARKED (research, after live; it owns no sprint row, and row 197a is a different batch) | Kyle |
-| 0 — clear the plates (Infra Claude) | 19 | B-CREW-STATUS-2 | Infra Claude | none | #670 | Kyle 2026-09-28 | PARKED (after live; it and #670 dissolve when the status board retires the crew status page) | nothing |
+| 0 — clear the plates (Infra Claude) | 4 | B-LANGSTON-MEMORY-WRITE-FENCE | Infra Claude | none | #1234 | Kyle 2026-11-04 (right after B-LANGSTON-CLAUDEMD-RESIDUAL) | QUEUED | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
+| 0 — clear the plates (Infra Claude) | 5 | B-TOKEN-WATCH-FOLLOWUP-MEMORY | Infra Claude | none | #1132 | Kyle 2026-11-04 (after the Langston size work) | QUEUED | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
+| 0 — clear the plates (Infra Claude) | 6 | B-CREDENTIALS-PRIVATE-REPO | Infra Claude | none | #1023 | Kyle 2026-09-28 | IN FLIGHT — OBJ-1 closed 2026-10-13; the GB-8 bridges increment next | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
+| 0 — clear the plates (Infra Claude) | 7 | B-CREW-ACCESS-HARDEN | Infra Claude | none | #1092, #924 | Kyle 2026-09-28 | PARKED — Step 9, paused by Kyle 2026-10-16 for B-LANGSTON-RELIEF | Infra Claude (after the current batches) |
+| 0 — clear the plates (Infra Claude) | 8 | B-LANGSTON-CONTEXT (increment 2) | Infra Claude | none |  | Kyle 2026-10-08 | PARKED (chunk 1 closed; the rest partly overtaken by B-LANGSTON-RELIEF) | Infra Claude (re-scope against B-LANGSTON-RELIEF), then Kyle |
+| 0 — clear the plates (Infra Claude) | 9 | B-LANGSTON-AUTOMEMORY-TRIM | Infra Claude | none |  | Kyle 2026-10-16 | ✅ DONE 2026-10-17 (inside B-LANGSTON-RELIEF) | nothing |
+| 0 — clear the plates (Infra Claude) | 10 | B-SIZE-WATCH-BREACH-ALARM | Infra Claude | none | #1215 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 11 | B-LANGSTON-MEMORY-NOTICES | Infra Claude | none | #1216 | Langston 2026-10-17 (proposed) | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 12 | B-AGENT-INVOKE-FAILURE-NOTICE | Infra Claude | none | #1198, #1206 | Langston 2026-10-16 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 13 | B-AGENT-PRIVATE-TMP | Infra Claude | none | #979, #1205 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 14 | B-LANGSTON-REPOST-FAILED | Infra Claude | none | #1207 | Langston 2026-10-17 (placed before Kyle's 10-19 rule) | QUEUED | Kyle (and after B-AGENT-PRIVATE-TMP) |
+| 0 — clear the plates (Infra Claude) | 15 | B-ALERT-LANE-LEDGER-OWNER | Infra Claude | none | #1201 | Langston 2026-10-16 (home) | QUEUED (owner accepted by Infra Claude 2026-11-04; not started) | Kyle |
+| 0 — clear the plates (Infra Claude) | 16 | B-LANGSTON-RECONCILE-VERB | Infra Claude | none | #1057 | Kyle 2026-09-28 | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 17 | B-CHAPLET-DELETE | Infra Claude | none | #1101 | Kyle 2026-09-28 | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 18 | B-TRANSCRIPT-ARCHIVE | Infra Claude | none |  | Kyle 2026-09-29 | QUEUED | Kyle |
+| 0 — clear the plates (Infra Claude) | 19 | B-TOKEN-WATCH | Infra Claude | none |  | Kyle 2026-09-28 | PARKED (research, after live; it owns no sprint row, and row 197a is a different batch) | Kyle |
+| 0 — clear the plates (Infra Claude) | 20 | B-CREW-STATUS-2 | Infra Claude | none | #670 | Kyle 2026-09-28 | PARKED (after live; it and #670 dissolve when the status board retires the crew status page) | nothing |
 
 
 Out, with reasons in the plan: row 53 (owes one ranking-path measurement), row 37. **Kyle approved 2026-10-07:** entries refuse on distance and never move the stop or target (the distance, 25% of the stop distance either side, goes to Langston); the RTB refresh checks the live price (P1a); the fill-mode switch (`#1170`, P1c); row 31 is a small fix, not a decision.
