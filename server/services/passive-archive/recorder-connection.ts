@@ -137,11 +137,18 @@ export interface RecorderConnectionOptions {
 interface AlertDeps {
   addAlert: (opts: any) => Promise<unknown>;
   resolveByKey: (key: string, by: string, evidence: string, transport: 'engine') => Promise<string[]>;
+  /** Is a non-resolved row already open for this dedupe key? (adopted at the first tick — a row raised before a
+   *  restart or a stop must still be clearable by this process; Langston Step-4 record item 4). */
+  hasOpen: (key: string) => Promise<boolean>;
 }
 
 async function defaultAlertDeps(): Promise<AlertDeps> {
   const m = await import('../system-alerts.js');
-  return { addAlert: m.addAlert, resolveByKey: m.resolveAlertsByDedupeKey as AlertDeps['resolveByKey'] };
+  return {
+    addAlert: m.addAlert,
+    resolveByKey: m.resolveAlertsByDedupeKey as AlertDeps['resolveByKey'],
+    hasOpen: async (key) => m.readAllAlerts().some((a) => a.dedupe_key === key && a.state !== 'resolved'),
+  };
 }
 let _alertDeps: () => Promise<AlertDeps> = defaultAlertDeps;
 /** Test-only: replace the alert sink. */
@@ -175,6 +182,8 @@ export class RecorderConnection {
   readonly subscribeRejected: string[] = [];
   private subscribeTimer: NodeJS.Timeout | null = null;
   private configMissingWarned = false;
+  /** Whether this process has looked for an already-open silent row to adopt (once, at the first tick). */
+  private adoptChecked = false;
 
   constructor(readonly opts: RecorderConnectionOptions) {
     _registry.add(this);
@@ -278,7 +287,15 @@ export class RecorderConnection {
     this.scheduleReconnect();
   }
 
-  /** Is data arriving on this connection (data frame within `silenceMs`)? */
+  /**
+   * Is data arriving on this CONNECTION (a data frame within `silenceMs`, socket OPEN)?
+   * ⚠️ TWO NOTIONS OF "LIVE" IN THIS CLASS, ON PURPOSE (Langston Step-4 record item 1) — do not merge them:
+   *   - HERE, connection-scoped: `lastDataAtMs` survives a socket replacement, so for up to `silenceMs` after a
+   *     reconnect this reads live on a socket that has received nothing yet. The witness vouch asks exactly this
+   *     ("is this connection delivering?"), and `silenceMs` (120 s) is far inside the 6 h witness ceiling.
+   *   - `liveSinceMs`, socket-scoped: reset on every open, set on the first data frame. The ALERT CLEAR reads it, so a
+   *     page clears only after a full window of data on the CURRENT socket. Never move the clear onto `lastDataAtMs`.
+   */
   isDataLive(nowMs: number, silenceMs: number): boolean {
     const open = this.ws?.readyState === WebSocket.OPEN;
     return open && this.lastDataAtMs > 0 && nowMs - this.lastDataAtMs <= silenceMs;
@@ -308,6 +325,12 @@ export class RecorderConnection {
   /** One watch tick: the silence check, then the alert raise / clear. */
   async watchTick(nowMs: number): Promise<WatchDecision> {
     if (!this.opts.isEnabled()) return 'skip';
+    if (!this.adoptChecked) {
+      this.adoptChecked = true;
+      try {
+        if (await (await _alertDeps()).hasOpen(this.dedupeKey())) this.alertRaised = true; // adopt it: this process can clear it
+      } catch { this.adoptChecked = false; /* retry next tick */ }
+    }
     const cfg = this.resolveConfig();
     if (!cfg) return 'skip';
     const decision = decideSilence({
@@ -367,6 +390,9 @@ export class RecorderConnection {
   private dedupeKey(): string { return `passive-archive-silent:${this.opts.recorderKey}`; }
 
   private async raiseSilentAlert(cfg: RecorderWatchConfig, nowMs: number): Promise<void> {
+    // Set BEFORE the write: a re-entrancy guard (ticks are not awaited and a slow write can overlap the next one).
+    // Reset in the catch: a FAILED write must be retried next tick, or the page is lost for the life of the process
+    // on the very connection that is dead (Langston Step-4 BLOCKER).
     this.alertRaised = true;
     const all = registeredRecorderConnections();
     const silentOthers = all.filter((c) => c !== this && !c.isDataLive(nowMs, cfg.silenceMs)).map((c) => c.opts.recorderKey);
@@ -388,7 +414,8 @@ export class RecorderConnection {
         dedupe_key: this.dedupeKey(),
       });
     } catch (err) {
-      console.error(`[B74][${this.opts.label}][WATCH] failed to raise the silent-connection alert:`, err);
+      this.alertRaised = false;
+      console.error(`[B74][${this.opts.label}][WATCH] failed to raise the silent-connection alert (will retry next tick):`, err);
     }
   }
 
@@ -411,12 +438,13 @@ export class RecorderConnection {
         category: 'breakage',
         severity: 'critical',
         title: 'Price recorder watchdog config missing — silence check inert',
-        body: `The recorder silence check could not resolve its passive_archive thresholds and is INERT (the socket-close reconnect still works). Seed the rows. Detail: ${detail}. B-CRYPTO-FEED-WATCHDOG #1232.`,
+        body: `The recorder silence check could not resolve its passive_archive thresholds and is INERT (the socket-close reconnect still works), and the crypto close gate stops grading witnesses it cannot vouch for. Seed the rows, THEN RESOLVE THIS ROW by hand — it has no in-app clear. Detail: ${detail}. B-CRYPTO-FEED-WATCHDOG #1232.`,
         metadata: { recorderKey: this.opts.recorderKey },
         dedupe_key: 'passive-archive-config-missing',
       });
     } catch (err) {
-      console.error(`[B74][${this.opts.label}][WATCH] failed to raise the config-missing alert:`, err);
+      this.configMissingWarned = false; // a failed write is retried on the next resolve, never lost (Langston Step-4 BLOCKER)
+      console.error(`[B74][${this.opts.label}][WATCH] failed to raise the config-missing alert (will retry):`, err);
     }
   }
 

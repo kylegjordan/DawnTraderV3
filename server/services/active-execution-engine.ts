@@ -4845,12 +4845,14 @@ export class ActiveExecutionEngine {
         // B-CRYPTO-FEED-WATCHDOG (#1232, P8): WHEN the witness above was captured, so a stale one can never again pass as
         // fresh. `at_close` = read at this close; NULL/NULL when no witness was stored. A caller-supplied ticker (never
         // today — the payload fields are null by construction) would have no capture time: `underivable`.
+        // ⚠️ `getTickerWitness` maps an unparsable `captured_ms` to 0 (`|| 0`); a 0 is NOT a capture time and must not
+        // stamp 1970 with basis `at_close` (Langston Step-4 record item 2, the #546 shape) — it is `underivable`.
         exitTickerCapturedAt: options?.exitProvenance?.tickerBid != null
           ? null
-          : (_witness ? new Date(_witness.capturedAtMs) : null),
+          : (_witness && _witness.capturedAtMs > 0 ? new Date(_witness.capturedAtMs) : null),
         exitTickerAgeBasis: options?.exitProvenance?.tickerBid != null
           ? 'underivable'
-          : (_witness ? 'at_close' : null),
+          : (_witness ? (_witness.capturedAtMs > 0 ? 'at_close' : 'underivable') : null),
         // ── B-XSTOCK-FEED-SANITY P5 — THE LABEL, outside every money expression. Basis `guard` means
         // A LIVE FRAME WAS ASSESSED at that instant, and is written only when one was: the decision
         // label is the exit stamp's verdict or NULL (a flatten through `forceClosePosition` carries

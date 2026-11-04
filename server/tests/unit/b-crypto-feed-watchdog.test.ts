@@ -76,7 +76,7 @@ import {
 import { decideWitnessVouch } from '../../core/trading/witness-vouch.js';
 import { proportionFresh } from '../../services/market-data/feed-health-aggregate.js';
 
-const alerts = { added: [] as any[], resolved: [] as string[] };
+const alerts = { added: [] as any[], resolved: [] as string[], throwOnAdd: 0, open: new Set<string>() };
 const T0 = new Date('2026-11-05T10:00:00Z').getTime();
 
 function makeConn(over: Partial<ConstructorParameters<typeof RecorderConnection>[0]> = {}) {
@@ -105,10 +105,14 @@ beforeEach(() => {
   vi.setSystemTime(T0);
   sockets.length = 0;
   CFG.rows = { ...FULL_CFG };
-  alerts.added = []; alerts.resolved = [];
+  alerts.added = []; alerts.resolved = []; alerts.throwOnAdd = 0; alerts.open = new Set();
   _setRecorderAlertDepsForTests(async () => ({
-    addAlert: async (o: any) => { alerts.added.push(o); return o; },
+    addAlert: async (o: any) => {
+      if (alerts.throwOnAdd > 0) { alerts.throwOnAdd--; throw new Error('alert file write failed'); }
+      alerts.added.push(o); return o;
+    },
     resolveByKey: async (k: string) => { alerts.resolved.push(k); return [k]; },
+    hasOpen: async (k: string) => alerts.open.has(k),
   }));
   _resetRecorderRegistryForTests();
   _resetCryptoRecorderClockForTests();
@@ -279,6 +283,50 @@ describe('P5 — the alert', () => {
       await conn.watchTick(Date.now());
     }
     expect(alerts.resolved).toEqual(['passive-archive-silent:test:shard0']);
+  });
+});
+
+describe('Step-4 BLOCKER — a failed alert write is retried, never lost', () => {
+  it('a throwing addAlert does not disarm the page: a later tick mints it', async () => {
+    conn = makeConn();
+    conn.connect();
+    alerts.throwOnAdd = 1;                       // the FIRST write fails
+    for (let i = 0; i < 3; i++) {
+      last()._open();
+      vi.advanceTimersByTime(121_000);
+      await conn.watchTick(Date.now());
+      vi.advanceTimersByTime(10_000);
+    }
+    await conn.watchTick(Date.now());            // streak reached: the raise is attempted and THROWS
+    await conn.watchTick(Date.now());            // the next tick retries
+    const silent = alerts.added.filter((a) => a.dedupe_key === 'passive-archive-silent:test:shard0');
+    expect(silent.length).toBe(1);
+  });
+  it('a failed config-missing write is retried on the next resolve', async () => {
+    delete CFG.rows.crypto_spot_silence_ms;
+    alerts.throwOnAdd = 1;
+    conn = makeConn();
+    conn.connect();
+    last()._open();
+    await conn.watchTick(Date.now());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    await conn.watchTick(Date.now());
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+    expect(alerts.added.filter((a) => a.dedupe_key === 'passive-archive-config-missing').length).toBe(1);
+  });
+  it('a silent row left open before a restart is ADOPTED and cleared once data flows (record item 4)', async () => {
+    alerts.open.add('passive-archive-silent:test:shard0');
+    conn = makeConn();
+    conn.connect();
+    last()._open();
+    last()._msg({ channel: 'ticker', type: 'update', data: [{ symbol: 'X/USD' }] });
+    for (let i = 0; i < 21; i++) {
+      vi.advanceTimersByTime(30_000);
+      last()._msg({ channel: 'ticker', type: 'update', data: [{ symbol: 'X/USD' }] });
+      await conn.watchTick(Date.now());
+    }
+    expect(alerts.resolved).toEqual(['passive-archive-silent:test:shard0']);
+    expect(alerts.added.length).toBe(0);
   });
 });
 

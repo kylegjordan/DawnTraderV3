@@ -132,6 +132,8 @@ export interface RecorderLivenessReading {
   windowMs: number | null;
   floor: number | null;
   shards: { shardId: number; liveShare: number; symbolCount: number; grade: FeedAliveGrade }[];
+  /** The fold input. ⚠️ On a NOT-GRADED reading this is `'healthy'` as a FOLD-NEUTRAL SENTINEL (it must not move the
+   *  overall status), NOT a verdict — read `graded` first; the issues list prints NOT GRADED (Langston Step-4 item 3, #546). */
   grade: FeedAliveGrade;
 }
 export interface LivenessReading {
