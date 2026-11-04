@@ -20,7 +20,7 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 | increment | sha | plan items | files |
 |---|---|---|---|
 | 1a | `8f59fce0d` | P1, P2, P3, P4, P7 (archival-health) | `drizzle/migrations/2026-11-04-b-disk-file-tiering.sql` + `-rollback.sql`, `MANIFEST.txt`, `server/services/data-archive/disk-file-tiering.ts` (new), `server/scripts/b-disk-file-tiering.ts` (new), `server/scripts/b-storage-archival-health.ts`, `server/tests/unit/b-disk-file-tiering.test.ts` (new) |
-| 1b | `fefd41e51` | P7 (watchdog disk checks, clear edge, honest dedupe log, category) | `server/scripts/staging-liveness-watchdog.mjs`, `scripts/system-alerts.ts` (`resolve-key`), `server/services/system-alerts.ts` (actor), `server/tests/unit/b-staging-liveness-watch.test.ts` |
+| 1b | `fefd41e51`, revised through Step 4 part 2 r2-r4 (head: see the part 2 r4 commit) | P7 (watchdog disk checks, clear edge, honest dedupe log, category) | `server/scripts/staging-liveness-watchdog.mjs`, `scripts/system-alerts.ts` (`resolve-key`), `server/services/system-alerts.ts` (actor), `server/tests/unit/b-staging-liveness-watch.test.ts` |
 | 1c | `a846b0d08` | P5 writer removal | `server/services/context-bridge.ts`, `DELETED_COMPONENTS_LOG.md`, `_archive/deleted-code/context-bridge.phase-41F-L-trace-writer.20261104-B-DISK-FILE-TIERING.ts.removed` |
 | 1d | `065863526` | P8 | `server/scripts/b75-rehydrate.ts` |
 | 1e | `8495b8768` | P6 | `server/services/data-archive/moved-day-check.ts` (new), `server/services/drift-dashboard-aggregator.ts`, `server/services/system-alerts.ts` (actor), `server/tests/unit/b-disk-file-tiering-moved-day.test.ts` (new) |
@@ -31,7 +31,7 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 3. **`row_count` = newline count, `cursor_contract 'disk-file-lines-v1'`** — the evidence row's three counts are all the newline count (source = exported = the original's; downloaded = the inflated download's). The stronger proof (byte-identical sha256) is checked by the job but is not stored except as the object checksum. Enough?
 4. **The moved-day key is per WINDOW** (`…:phase15b_dbs_telemetry:<window>`), not per folder or folder+day as your r1 P5 offered — so a clean `rolling_30d` check cannot resolve a `cohort_latest` alert and flap. And the in-app check resolves its own row under a new machine actor `drift-dashboard-moved-day`, transport `engine`.
 5. **The watchdog's disk thresholds are environment-overridable** (only for the forced arming run, C1). Its CHECK entries for disk carry their own `dedupeKey`, `category`, `severity`, a dynamic body and a `reading`.
-6. **Windows test note:** `b-staging-liveness-watch.test.ts` fails to LOAD on Windows with or without this change (control on the unchanged code: SyntaxError at the `.mjs` import, the shebang); the new tests passed 10/10 against a shebang-free copy. CI on Linux is the graded run.
+6. **Windows test note:** `b-staging-liveness-watch.test.ts` fails to LOAD on Windows with or without this change (control on the unchanged code: SyntaxError at the `.mjs` import, the shebang); the new tests passed against a shebang-free copy (14 tests in the file at part 2 r4: 5 original, 9 added by this batch). CI on Linux is the graded run.
 
 ## Part 1 round 2 (Langston CHANGES on 1a; the data path approved as written) — increment 1a-r2
 1. **The lock** moved out of `/tmp` to deploy's home (`~/.b-disk-file-tiering.lock`, env-overridable), and a lock that cannot be reclaimed now THROWS instead of looping into a permanent quiet skip.
@@ -48,4 +48,4 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 
 ## Numbers
 - tsc 329 = baseline at every increment.
-- Unit: `b-disk-file-tiering.test.ts` 12/12 (boundary test proved by flipping `>` to `>=`: 1/12 fails); `b-disk-file-tiering-moved-day.test.ts` 5/5; watchdog 10/10 (shebang-free copy); actor-allowlist, deploy-actor-parity, venue-quiet store, breaker suites green.
+- Unit: `b-disk-file-tiering.test.ts` 12/12 (boundary test proved by flipping `>` to `>=`: 1/12 fails); `b-disk-file-tiering-moved-day.test.ts` 5/5; watchdog 14/14 at part 2 r4 (shebang-free copy); actor-allowlist, deploy-actor-parity, venue-quiet store, breaker suites green.

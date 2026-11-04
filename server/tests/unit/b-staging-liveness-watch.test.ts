@@ -159,6 +159,13 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
     expect([...mod.openDedupeKeys(f)].sort()).toEqual(['k2']);
   });
 
+  it('shouldMint: the alerts file decides — an open row never re-mints; no open row mints at the debounce, even right after a person resolved it', () => {
+    expect(mod.shouldMint(1, 2, false)).toBe(false); // under the debounce
+    expect(mod.shouldMint(2, 2, true)).toBe(false);  // a page is already up
+    expect(mod.shouldMint(2, 2, false)).toBe(true);  // no open row: mint
+    expect(mod.shouldMint(9, 2, false)).toBe(true);  // still failing after a hand resolve: mint again
+  });
+
   it('envNumber: an unset override falls back, a numeric one is used, a typo THROWS rather than comparing against NaN', () => {
     delete process.env.WD_TEST_NUM;
     expect(mod.envNumber('WD_TEST_NUM', 85)).toBe(85);

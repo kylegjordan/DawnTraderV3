@@ -96,6 +96,12 @@ export function diskBand(d, t) {
 
 /** One tick of a check's throw counter, pure: a throw counts up and pages once it reaches the debounce;
  *  a run that did not throw resets it. Clearing the page is gated on the FILE, never on this counter. */
+/** Whether a failing check mints its page, pure: only at or past the debounce, and only when the alerts
+ *  file holds no unresolved row for its key. The file is the single authority for "a page is up". */
+export function shouldMint(streak, debounce, rowOpen) {
+  return (streak || 0) >= debounce && !rowOpen;
+}
+
 export function throwStep(prevCount, threw, debounce) {
   if (!threw) return { count: 0, page: false };
   const count = (prevCount || 0) + 1;
@@ -244,7 +250,7 @@ function diskText() {
 }
 
 function loadState() {
-  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return { streaks: {}, alerted: {} }; }
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch { return { streaks: {} }; }
 }
 function saveState(state) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(state));
@@ -316,7 +322,7 @@ const CHECKS = [
 async function main() {
   const state = loadState();
   state.streaks = state.streaks || {};
-  state.alerted = state.alerted || {};
+  delete state.alerted; // the old in-memory latch: the alerts FILE is the one authority now (Langston part 2 r3)
   state.throws = state.throws || {};
   log(`run ${RUN_ID} started${DISK_FORCED ? ' (FORCED disk thresholds)' : ''}`);
   const open = openDedupeKeys(ALERTS_FILE); // one read per run; kept current as this run resolves
@@ -353,7 +359,6 @@ async function main() {
     if (ok) {
       if (state.streaks[check.key] > 0) log(`${check.key}: recovered`);
       state.streaks[check.key] = 0;
-      state.alerted[check.key] = false; // recovery re-arms the latch for the NEXT outage
       // ... and the STORE is cleared too, or the next outage is deduped into this row (P7 clear edge).
       // A level check clears only past its margin (check.clear); between the line and the margin the row
       // stays open, so a re-crossing re-uses it and its time-driven re-surface count keeps climbing.
@@ -363,7 +368,9 @@ async function main() {
     }
     state.streaks[check.key] = (state.streaks[check.key] || 0) + 1;
     log(`${check.key}: FAIL (streak ${state.streaks[check.key]}/${DEBOUNCE_TICKS})`);
-    if (state.streaks[check.key] >= DEBOUNCE_TICKS && !state.alerted[check.key]) {
+    // Mint gated on the FILE, like the clear: an open row means a page is already up; no open row means
+    // mint — even if a person resolved the row while the condition still holds (Langston part 2 r3).
+    if (shouldMint(state.streaks[check.key], DEBOUNCE_TICKS, open.has(dedupeKey))) {
       const emitPath = await emitAlert({
         title: check.title,
         body: typeof check.body === 'function' ? check.body() : check.body,
@@ -372,7 +379,7 @@ async function main() {
         ...(check.severity ? { severity: check.severity } : {}),
         ...(check.category ? { category: check.category } : {}),
       });
-      state.alerted[check.key] = emitPath !== 'error';
+      if (emitPath !== 'deduped') open.add(dedupeKey);
     }
   }
   saveState(state);
