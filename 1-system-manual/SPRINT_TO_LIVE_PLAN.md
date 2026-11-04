@@ -293,7 +293,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | # | item | batch / reference | owner | status | report | note |
 |---:|---|---|---|---|---|---|
 | 18 | B-UNIVERSE-REFRESH-ACTS | B-UNIVERSE-REFRESH-ACTS | Infra Claude | QUEUED | — | first link of the identity chain |
-| 19 | B-SYMBOL-CLASS-IDENTITY | B-SYMBOL-CLASS-IDENTITY | Infra Claude | QUEUED | — | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
+| 19 | B-SYMBOL-CLASS-IDENTITY | B-SYMBOL-CLASS-IDENTITY | Infra Claude | QUEUED | — | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments · **Kyle 2026-11-04 (KD-25): CLOSING OBJECTIVE — once a shared ticker is two instruments everywhere, the open-side duplicate guard moves from one-per-symbol to (symbol, asset class, mode), so a crypto coin and an xStock sharing a ticker (DASH) may be open at once in the same mode; B-CLOSE-WRITER-COSTS' pinning test is updated with it. ⚠️ Owner to be settled: this row says Infra Claude, #1024 says CC-C** |
 | 20 | B-RTB-SIGNAL-IDENTITY | B-RTB-SIGNAL-IDENTITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
 | 21 | B-VTS-CLASS-LABEL-INTEGRITY | B-VTS-CLASS-LABEL-INTEGRITY | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows · carries `#1068` |
 | 22 | B-CLOSED-TRADES-CLASS-BACKFILL | B-CLOSED-TRADES-CLASS-BACKFILL | Infra Claude | QUEUED | — | after B-SYMBOL-CLASS-IDENTITY |
