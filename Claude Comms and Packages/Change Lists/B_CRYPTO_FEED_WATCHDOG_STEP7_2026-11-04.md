@@ -4,6 +4,8 @@
 **CI on the deployed sha:** run `41857051966` — Build success · Test Suite success · TypeScript Check (baseline gate) success · Docker Build success.
 **Runtime code in the range `e1becf801..b8685a453`:** this batch's files plus `client/src/pages/status-board/StatusBoardPage.tsx` (CC-A's B-STATUS-BOARD `222f7bf8c`, Langston-approved, waiting for a restart — told to CC-A).
 
+⛔ **CORRECTION (2026-11-05, Langston-caught, re-derived by CC-B at `out__2026-11-04_12-32-08.log`): the 14-day half-open shard0 was cleared at `2026-11-04T12:13:26Z` by the restart that deployed `e1becf801` (ANALYST Claude's (4b)), NOT by this batch's 15:47:10Z deploy.** Last dead line `12:13:09Z shard0 connected=true symbols=196 last_msg_age_ms=1216341638 rows_persisted_60s=0`; then `12:13:26Z connected (attempt 1)` + `subscribed … 206 symbols`; `12:14:24Z last_msg_age_ms=7 rows_persisted_60s=2298`. So rows 1-2 below record a HEALTHY recorder reconnecting on this deploy, not the recovery. ⇒ **the watchdog's acting half (silence raise, forced reconnect, clear) is still unexercised on a real half-open connection, and this recovery may not be cited as evidence that it works** (the ⚠️ line under "Still to read" is now load-bearing).
+
 ## Read so far (instrument, object, result)
 | # | check | instrument | result |
 |---|---|---|---|
