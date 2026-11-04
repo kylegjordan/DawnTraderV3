@@ -66,7 +66,8 @@ def check(label, cond, detail=""):
 
 class Fake:
     mode = set()          # 'corrupt', 'auth401', 'upload500', 'wide', 'delete', 'v3', 'nocaps', 'extracap',
-                          # 'unrestricted' (buckets: None, as the account-wide key returns), 'twobuckets'
+                          # 'unrestricted' (buckets: None, as the account-wide key returns), 'twobuckets',
+                          # 'wrongname' (one bucket, the WRONG one), 'noid', 'notdict'
     objects = {}          # fileId -> bytes
     names = {}            # fileId -> name
     calls = []
@@ -120,6 +121,12 @@ class H(BaseHTTPRequestHandler):
                 allowed["buckets"] = None
             if "twobuckets" in Fake.mode:
                 allowed["buckets"] = [{"id": "b1", "name": "dt-archive-cold"}, {"id": "b2", "name": "dt-archive"}]
+            if "wrongname" in Fake.mode:      # the dangerous one: accepted, it would upload to dt-archive and unlink
+                allowed["buckets"] = [{"id": "b2", "name": "dt-archive"}]
+            if "noid" in Fake.mode:
+                allowed["buckets"] = [{"name": "dt-archive-cold"}]
+            if "notdict" in Fake.mode:
+                allowed["buckets"] = ["dt-archive-cold"]
             return self.send_json(200, {"accountId": "a", "authorizationToken": "t", "apiInfo": {"storageApi": {
                 "absoluteMinimumPartSize": 5000000, "allowed": allowed, "apiUrl": base, "downloadUrl": base,
                 "recommendedPartSize": 100000000, "s3ApiUrl": base}}})
@@ -278,13 +285,17 @@ check("T5 exactly two upload attempts (one retry)", sum(1 for c in Fake.calls if
 # ── T6 / T8: a key that is too wide is refused before anything ──────────────
 REASON = {"wide": "prefix", "delete": "capabilities are", "v3": "not the v4 shape",
           "nocaps": "capabilities is missing", "extracap": "capabilities are",
-          "unrestricted": "bucket alone", "twobuckets": "bucket alone"}
+          "unrestricted": "bucket alone", "twobuckets": "bucket alone", "wrongname": "bucket alone",
+          "noid": "bucket alone", "notdict": "bucket alone"}
 for label, mode in (("T6 a key with no prefix restriction", "wide"), ("T8 a key that can delete", "delete"),
                     ("T10 a v3-shaped response (restrictions flat, no `allowed`)", "v3"),
                     ("T11 a response with no capabilities field (must not pass vacuously)", "nocaps"),
                     ("T12 a key with an extra capability (writeKeys)", "extracap"),
                     ("T13 a key not restricted to any bucket (buckets: None, the account-wide case)", "unrestricted"),
-                    ("T14 a key restricted to two buckets", "twobuckets")):
+                    ("T14 a key restricted to two buckets", "twobuckets"),
+                    ("T15 a key restricted to ONE WRONG bucket (dt-archive) with the right prefix", "wrongname"),
+                    ("T16 a bucket entry with no id", "noid"),
+                    ("T17 a bucket entry that is not an object", "notdict")):
     print("%s expect: refused at authorize, exit 1, nothing touched" % label)
     reset(["a-2026-10-01.jsonl.gz"], mode={mode})
     ERRORS.clear()

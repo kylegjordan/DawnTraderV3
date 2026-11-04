@@ -88,17 +88,23 @@ The unit edit, one hunk per file:
 - `README.md` — the pieces table and *Reading the off-box archive back*.
 - `.gitattributes` — `token-watch/** text eol=lf`. The blobs were already LF; this keeps working copies LF.
 
-## Tests
+## Tests (current at Step 4 r4; r1 figures superseded)
 
 | suite | Windows | staging Linux (scratch copy) |
 |---|---|---|
-| `test_cold_offbox.py` (fake B2 in-process) | 35 / 0 | 35 / 0 |
+| `test_cold_offbox.py` (fake B2 returning ONE measured v4 shape per request; refusal blocks check their REASON) | 71 / 0 | 71 / 0 |
 | `test_store_watch.py` | 31 / 0 | 31 / 0 |
-| `test_ops_boundary.py` (each check with a planted positive) | 7 / 0 | 7 / 0 |
-| `mutate_cold_offbox.py`: read-back compare off · EOF check off · prefix refusal off · delete refusal off · abort→carry-on | 5 of 5 caught | 5 of 5 caught |
-| every other token-watch suite | all pass (`test_isolation` 6 passed, 4 skipped on Windows) | `test_pipeline` passes; `test_isolation` 20/0/0; `test_tiering` 28/0 |
+| `test_ops_boundary.py`: direct-import allowlist, the computed import CLOSURE within {config, tier, liveness, store, provenance}, `PINNED` == closure, `OPS` == ops/ modules | 14 / 0 | 14 / 0 |
+| `mutate_cold_offbox.py`: read-back compare off · EOF check off · prefix refusal off · capability allowlist off · capabilities-present off · v4-shape off · bucket check off · bucket name+id clauses dropped · bucket entry type dropped · abort→carry-on | 10 of 10 caught | 10 of 10 caught |
+| every other token-watch suite | all pass (`test_isolation` skips 4 on Windows) | all 19 suites exit 0 at r4 (`test_isolation` 20/0/0) |
 
 The mutations are applied **by exact line**: the runner refuses if the line is not found exactly once. Each one is judged by **the suite's exit code AND the named block's FAIL line**.
+
+**Round history:**
+- **r2** — the v4 blocker: auth at v4, the v4 shape only, and a capability ALLOWLIST. Also: the measured fixture, reason checks, the pinned collector files, and checks before install.
+- **r3** — the bucket leg fenced (T13, T14), and `PINNED` is the measured import closure.
+- **r4** — the wrong-bucket, no-id and not-an-object cases (T15-T17) and their two mutations, and `OPS` asserted equal to the ops/ modules.
+- **Positive control on staging:** the real account-wide key is REFUSED at v4 for its capabilities. That proves the refusal side only; the PASS side is `prove_cold_key.py` step 1, after the mint.
 
 ## Judgement calls I want attacked
 

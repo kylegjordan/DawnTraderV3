@@ -138,5 +138,11 @@ print("expect: install_storage.sh pins exactly that closure")
 check("5 PINNED == the measured closure", pinned_set == OPS_CLOSURE,
       "pinned %s vs closure %s" % (sorted(pinned_set), sorted(OPS_CLOSURE)))
 
+ops_line = re.search(r'^OPS="([^"]*)"', open(os.path.join(PKG, "deploy", "install_storage.sh"), encoding="utf-8").read(),
+                     re.M)
+ops_set = {x[len("ops/"):-3] for x in ops_line.group(1).split()} if ops_line else set()
+print("expect: install_storage.sh installs exactly the modules in ops/ (a new job cannot be left uninstalled)")
+check("6 OPS == the modules in ops/", ops_set == set(OPS_MODULES), "script %s vs ops/ %s" % (sorted(ops_set), OPS_MODULES))
+
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
