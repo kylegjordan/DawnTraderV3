@@ -25,6 +25,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
+import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
 // B64a: regime names imported from the canonical SSOT to satisfy the
 // regime_mapping_integrity test ("no hardcoded regime strings outside config/tests").
 import { CANONICAL_REGIMES, REGIMES, type CanonicalRegimeType } from '../config/canonical-regime-strategy-map.js';
@@ -381,6 +382,9 @@ export function computeDriftDashboard(window: DashboardWindow): DriftDashboardRe
   const trades = readClosedTrades(tradeFiles, startMs, endMs);
 
   const regimeMetrics = aggregateRegimeMetrics(startMs, endMs);
+  // B-DISK-FILE-TIERING P6: a day moved to warm storage is ABSENT from the reader's list, not an error —
+  // this asks the manifest about any expected day missing from disk and alerts (fire-and-forget, throttled).
+  checkMovedTelemetryDays(TELEMETRY_DIR, window, startMs, endMs);
   const strategiesByRegime = aggregateStrategyByRegime(trades);
 
   // Trade tallies
