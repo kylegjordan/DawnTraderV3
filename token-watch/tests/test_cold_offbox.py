@@ -72,7 +72,8 @@ class Fake:
                           # 'unrestricted' (buckets: None, as the account-wide key returns), 'twobuckets',
                           # 'wrongname' (one bucket, the WRONG one), 'noid', 'notdict',
                           # 'cap' (B2's measured download_cap_exceeded 403 on the read-back, after the first file),
-                          # 'dl404' (the read-back refused with a plain 404)
+                          # 'dl404' (the read-back refused with a plain 404),
+                          # 'manifestfail' (every file moves, the manifest's own upload is rejected)
     objects = {}          # fileId -> bytes
     names = {}            # fileId -> name
     calls = []
@@ -162,6 +163,8 @@ class H(BaseHTTPRequestHandler):
         if self.path.endswith("b2_get_upload_url"):
             return self.send_json(200, {"uploadUrl": base + "/upload", "authorizationToken": "u"})
         if self.path == "/upload":
+            if "manifestfail" in Fake.mode and "manifest" in (self.headers.get("X-Bz-File-Name") or ""):
+                return self.send_json(400, {"code": "bad_request", "status": 400, "message": "manifest rejected"})
             if "upload500" in Fake.mode:
                 return self.send_json(500, {"code": "internal_error"})
             sha1 = hashlib.sha1(body).hexdigest()
@@ -323,6 +326,41 @@ check("T19 exit 1, file kept", rc == 1 and os.listdir(COLD) == ["a-2026-10-01.js
 check("T19 FILE KEPT names the orphan, the file and that the local copy is kept",
       any("FILE KEPT" in e and "a-2026-10-01.jsonl.gz was uploaded (file id f0)" in e and "ORPHAN" in e for e in ERRORS),
       repr(ERRORS))
+
+# ── T20: files move but the manifest's own upload fails -> the run must say so and exit 1 ───────────────
+print("T20 expect: both files move, the manifest upload is rejected -> exit 1, closing line says 'manifest not uploaded'")
+reset(["a-2026-10-01.jsonl.gz", "b-2026-10-02.jsonl.gz"], mode={"manifestfail"})
+DONE.clear()
+ERRORS.clear()
+rc = run()
+check("T20 exit 1", rc == 1, "rc=%r" % rc)
+check("T20 both files moved", os.listdir(COLD) == [])
+check("T20 the closing line says the manifest was not uploaded",
+      any(e.startswith("done:") and "manifest not uploaded" in e for e in DONE), repr(DONE))
+
+# ── T21: a failure AFTER the unlink must not report the file as still on the box ────────────────────────
+print("T21 expect: the directory fsync fails after the unlink -> the file is gone and manifested; the closing line "
+      "says 0 still on the box, not the file's name")
+reset(["a-2026-10-01.jsonl.gz"])
+DONE.clear()
+real_fsync = co._fsync_dir
+
+
+def _boom(path):
+    # only the fsync of cold/ itself, which follows the unlink; the manifest's offbox/ fsync (before it) still runs
+    if os.path.abspath(path) == os.path.abspath(COLD):
+        raise OSError("simulated fsync failure after the unlink")
+    return real_fsync(path)
+
+
+co._fsync_dir = _boom
+rc = run()
+co._fsync_dir = real_fsync
+check("T21 the file is gone", os.listdir(COLD) == [])
+check("T21 it is in the manifest", [r["name"] for r in manifest()] == ["a-2026-10-01.jsonl.gz"])
+check("T21 the closing line says 0 still on the box and does not name it",
+      any(e.startswith("done:") and "0 file(s) still on the box" in e and "a-2026-10-01" not in e for e in DONE),
+      repr(DONE))
 
 # ── T6 / T8: a key that is too wide is refused before anything ──────────────
 REASON = {"wide": "prefix", "delete": "capabilities are", "v3": "not the v4 shape",

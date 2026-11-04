@@ -416,10 +416,14 @@ def run(*, cold_dir: str = COLD_DIR, manifest_path: str = MANIFEST_PATH, auth_ur
         try:
             moved.append(move_one(s, path, manifest_path))
         except FileFailed as exc:
-            kept.append(os.path.basename(path))
+            # ⛔ "still on the box" is MEASURED, never assumed (Langston, Step 9 r2 condition 2): two raise points sit
+            #    after the unlink (_fsync_dir, the log line), and there the file is gone and manifested.
+            if os.path.exists(path):
+                kept.append(os.path.basename(path))
             LOG.error("FILE KEPT: %s", exc)
         except Exception as exc:              # noqa: BLE001 — Abort, or anything unexpected: stop, keep every file left
-            kept.append(os.path.basename(path))
+            if os.path.exists(path):
+                kept.append(os.path.basename(path))
             not_attempted = len(todo) - i - 1
             LOG.error("ABORT after %d moved: %s — %s kept, %d more not attempted", len(moved), exc,
                       os.path.basename(path), not_attempted)
