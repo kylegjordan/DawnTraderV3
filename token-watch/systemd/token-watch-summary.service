@@ -10,6 +10,9 @@ Documentation=file:///opt/token-watch/summary.py
 #    write the published file. So every component looked healthy and the page went stale.
 #    ★ Found by Coltrane and Langston independently, on their first-ever look at the page,
 #      because the page's own staleness badge said so and nobody had been looking.
+# B-TOKEN-WATCH-STORAGE OBJ-4 (#1132): a failure pages instead of passing silently.
+OnFailure=token-watch-failed@%n.service
+
 [Service]
 Type=oneshot
 User=tokenwatch

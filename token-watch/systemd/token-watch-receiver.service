@@ -20,6 +20,8 @@ Description=token-watch birth receiver (capture-only observation study)
 Documentation=file:///opt/token-watch/README.md
 After=network-online.target
 Wants=network-online.target
+# B-TOKEN-WATCH-STORAGE OBJ-4 (#1132): a failure pages instead of passing silently.
+OnFailure=token-watch-failed@%n.service
 
 [Service]
 Type=simple

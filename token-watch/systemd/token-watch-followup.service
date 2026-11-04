@@ -1,5 +1,7 @@
 [Unit]
 Description=token-watch follow-up checkpoint sweep (one hour bucket)
+# B-TOKEN-WATCH-STORAGE OBJ-4 (#1132): a failure pages instead of passing silently.
+OnFailure=token-watch-failed@%n.service
 
 [Service]
 Type=oneshot
