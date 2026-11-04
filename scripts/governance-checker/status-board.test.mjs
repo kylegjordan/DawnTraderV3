@@ -138,6 +138,14 @@ ok('SB30 drift: error never resolves; clean resolves; drifted opens once', drift
     openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW }).rest.find((r) => r.planRow === '197a');
   ok('SB37 a sprint row with a recent Step commit carries fromWorkRecord and the words of its line', rr?.fromWorkRecord === true && rr.state === 'in_progress'
     && rr.statusText === 'the §4 row 197a line still reads: QUEUED', JSON.stringify(rr && [rr.fromWorkRecord, rr.state, rr.statusText]));
+  // Live 2026-11-04: row 4b shared B-VTS-NO-DECISION-VALVE with row 4 and still read "the plan has not caught up".
+  const two = PLAN.replace("| CC-B list | 2 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 | QUEUED | CC-B |",
+    ["| CC-B list | 2 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 | QUEUED | CC-B |",
+      "| CC-B list | 3 | B-PRICE-FEED-COVERAGE increment 2 | CC-B (New Claude) | none | | Kyle 2026-10-20 | QUEUED | CC-B |"].join(String.fromCharCode(10)));
+  const sh = buildBoard({ planText: two, descText: DESC, subjects: subs, openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW })
+    .items.filter((i) => i.ids.includes('B-PRICE-FEED-COVERAGE'));
+  ok('SB38 an id shared by two lines: neither line is overridden, and neither says the plan is behind', sh.length === 2
+    && sh.every((i) => i.state === 'queued' && i.planBehind === false), JSON.stringify(sh.map((i) => [i.item, i.state, i.planBehind])));
   ok('SB33 a person\'s call is never overridden: a PARKED line with Step commits stays parked', tw.state === 'parked' && tw.statusSource === 'pre-sprint table');
   ok('SB34 fromWorkRecord: no step, a non-queued state, or a shared id gives no override', fromWorkRecord({ state: 'queued', text: 'QUEUED' }, null, false, NOW) === null
     && fromWorkRecord({ state: 'parked', text: 'PARKED' }, { step: 3, at: '2026-10-20' }, false, NOW) === null

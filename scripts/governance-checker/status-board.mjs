@@ -138,7 +138,8 @@ export function buildBoard({ planText, descText, subjects, openReason, rulebookR
       statusSource: wr ? `work record + ${base}` : base,
       waiting: mapWaiting(it.waitingOn), lastStep: step,
       // Once the work record has spoken (either arm) the old "plan has not caught up" line would contradict it (F2).
-      planBehind: Boolean(step && st.state === 'queued' && !wr),
+      // An id on more than one board line is not attributed (OBJ-9), so the work record cannot say THIS line is behind either.
+      planBehind: Boolean(step && st.state === 'queued' && !wr && !shared),
       description, descriptionTooLong: Boolean(description && description.length > DESCRIPTION_MAX_CHARS),
       openReason: shortReason(reasonFull), openReasonFull: reasonFull ? deMark(reasonFull) : null,
       conflict,
