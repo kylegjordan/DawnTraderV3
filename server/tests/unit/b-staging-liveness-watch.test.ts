@@ -132,6 +132,16 @@ describe('B-DISK-FILE-TIERING — category, dedupe discriminator, clear edge, di
     expect(next.id).not.toBe(open.id);
   });
 
+  it('envNumber: an unset override falls back, a numeric one is used, a typo THROWS rather than comparing against NaN', () => {
+    delete process.env.WD_TEST_NUM;
+    expect(mod.envNumber('WD_TEST_NUM', 85)).toBe(85);
+    process.env.WD_TEST_NUM = '1';
+    expect(mod.envNumber('WD_TEST_NUM', 85)).toBe(1);
+    process.env.WD_TEST_NUM = '8S';
+    expect(() => mod.envNumber('WD_TEST_NUM', 85)).toThrow(/not a number/);
+    delete process.env.WD_TEST_NUM;
+  });
+
   it('diskUsage is df\'s Use%: used / (used + available to unprivileged users)', () => {
     // 100 blocks of 4096: 20 free, of which 15 available to users ⇒ used 80, Use% = 80 / 95.
     const d = mod.diskUsage({ blocks: 100, bfree: 20, bavail: 15, bsize: 4096 });
