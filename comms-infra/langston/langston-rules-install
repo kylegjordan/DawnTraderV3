@@ -12,12 +12,17 @@ CLAUDE.md: the governance checker treats every file of that name as housekeeping
    r2 B-3 (Langston, measured on git 2.43.0): a LOOSE TREE object overwritten at its genuine id is NOT checked by
    `git rev-parse <sha>:<path>`, so a forged tree could name any blob and the blob would then re-hash to itself.
    ⇒ every object on the path commit -> tree -> tree -> tree -> blob is read with `git cat-file <type>` and
-   RE-HASHED HERE; a mismatch refuses (exit 5). Commit ancestry is walked by git, which verifies commit objects on
-   read (a forged commit makes `merge-base` fail -> exit 4). Once the repository is private, the ls-remote needs a
-   root-held credential or it refuses.
+   RE-HASHED HERE; a mismatch refuses (exit 5).
+   r3 B-4 (Langston, 2026-10-21): the same is true of COMMIT objects. r3 said "commit ancestry is walked by git, which
+   verifies commit objects on read" - false for a loose commit overwritten at its id, so a forged parent line could
+   make `git merge-base --is-ancestor` admit an unreviewed commit. ⇒ ancestry is walked HERE (`verified_ancestor`):
+   breadth-first from GitHub's head through `parent` lines, EVERY commit re-hashed on the way, bounded by
+   WALK_LIMIT commits (beyond it: refuse, exit 4 - install a more recent reviewed commit). No git ancestry command
+   is used. Once the repository is private, the ls-remote needs a root-held credential or it refuses.
 
 What it does, in order, or refuses:
-  1. the sha is 40 hex and an ancestor of GitHub's migration/aws-supabase head (the head object present in the mirror);
+  1. the sha is 40 hex and reachable from GitHub's migration/aws-supabase head through commits that each re-hash to
+     their id (`verified_ancestor`, at most WALK_LIMIT commits back; the head object present in the mirror);
   2. the blob is reached by the verified walk (`verified_blob`) - the same function the size watch uses;
   3. the live file is read WITHOUT following a link; it is reported as absent / a link / not regular / a regular file
      with owner, mode and immutable flag;
@@ -45,6 +50,9 @@ TARGET = os.environ.get("LRI_TARGET", "/home/langston/CLAUDE.md")
 BACKUP_DIR = os.environ.get("LRI_BACKUP", "/root/langston-rules-backup")
 PUBLIC_RECORD = os.environ.get("LRI_PUBLIC_RECORD", "/etc/langston/rules-installed")
 USE_IMMUTABLE = os.environ.get("LRI_NO_IMMUTABLE") != "1"
+# The ancestry walk's bound. The branch held 13,670 commits on 2026-11-05; a reviewed sha is normally recent, so
+# the bound is generous - it exists so a forged parent cycle or a huge fan-out cannot run without end.
+WALK_LIMIT = int(os.environ.get("LRI_WALK_LIMIT", "20000"))
 
 
 class Refused(Exception):
@@ -80,6 +88,73 @@ def read_verified(mirror, oid, kind):
         raise Refused(5, "%s %s in the mirror re-hashes to %s - its object is not what GitHub served" %
                       (kind, oid[:12], got[:12]))
     return data
+
+
+class BatchReader:
+    """One `git cat-file --batch` process, every object RE-HASHED here (the same check as read_verified), so a walk
+    of thousands of commits costs one process, not thousands."""
+
+    def __init__(self, mirror):
+        self.p = subprocess.Popen(["git", "-C", mirror, "cat-file", "--batch"], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+    def read(self, oid, kind):
+        self.p.stdin.write(oid.encode() + b"\n")
+        self.p.stdin.flush()
+        header = self.p.stdout.readline().split()
+        if len(header) != 3:
+            raise Refused(4, "the mirror cannot serve %s %s (%s)" % (kind, oid[:12], b" ".join(header).decode()))
+        typ, size = header[1].decode(), int(header[2])
+        data = self.p.stdout.read(size)
+        self.p.stdout.read(1)                                  # the newline after each object
+        if typ != kind:
+            raise Refused(5, "%s in the mirror is a %s, not a %s" % (oid[:12], typ, kind))
+        got = hashlib.sha1(b"%s %d\0" % (kind.encode(), len(data)) + data).hexdigest()
+        if got != oid:
+            raise Refused(5, "%s %s in the mirror re-hashes to %s - its object is not what GitHub served" %
+                          (kind, oid[:12], got[:12]))
+        return data
+
+    def close(self):
+        try:
+            self.p.stdin.close()
+            self.p.wait(timeout=30)
+        except Exception:
+            self.p.kill()
+
+
+def commit_parents(data):
+    """The parent ids from a commit's header (the lines before the first blank line)."""
+    out = []
+    for line in data.split(b"\n"):
+        if not line:
+            break
+        if line.startswith(b"parent "):
+            out.append(line[7:].decode().strip())
+    return out
+
+
+def verified_ancestor(mirror, sha, head, limit=None):
+    """True iff `sha` is reachable from `head` through commits that each re-hash to their id (Langston r3 B-4).
+    False if the walk ends without reaching it; Refused(4) past `limit` commits; Refused(5) on a forged commit."""
+    limit = WALK_LIMIT if limit is None else limit
+    reader = BatchReader(mirror)
+    seen, queue = set(), [head]
+    try:
+        while queue:
+            c = queue.pop(0)
+            if c in seen:
+                continue
+            seen.add(c)
+            if c == sha:
+                return True
+            if len(seen) > limit:
+                raise Refused(4, "walked %d commits back from %s without reaching %s - refused; install a more "
+                                 "recent reviewed commit" % (limit, head[:12], sha[:12]))
+            queue.extend(commit_parents(reader.read(c, "commit")))
+        return False
+    finally:
+        reader.close()
 
 
 def tree_entry(tree, name):
@@ -191,10 +266,9 @@ def install(argv):
     rc, _o, err = git(MIRROR, "cat-file", "-e", head + "^{commit}")
     if rc != 0:
         raise Refused(4, "the mirror does not yet hold GitHub's head %s - wait for its sync and re-run" % head[:12])
-    rc, _o, err = git(MIRROR, "merge-base", "--is-ancestor", sha, head)
-    if rc != 0:
-        raise Refused(4, "%s is not an ancestor of GitHub's %s head %s (%s)" % (sha, BRANCH, head[:12],
-                                                                              err or "not an ancestor"))
+    if not verified_ancestor(MIRROR, sha, head):
+        raise Refused(4, "%s is not reachable from GitHub's %s head %s through verified commits" %
+                      (sha, BRANCH, head[:12]))
     blob_id, data = verified_blob(MIRROR, sha)
     old, desc, ok, imm = live_state()
     new_sha = hashlib.sha256(data).hexdigest()

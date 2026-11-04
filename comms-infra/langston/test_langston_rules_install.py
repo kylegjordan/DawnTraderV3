@@ -114,6 +114,10 @@ def part_a(top):
     check("A9 content, owner and flag right but the install RECORD missing is not a no-op - the record is rewritten",
           (rc, "already installed" in out, os.path.exists(os.path.join(top, "bak", "INSTALLED"))), (0, False, True))
     subprocess.run(["chattr", "-i", target], check=True)
+    # A12 - the ancestry walk is BOUNDED. s1 is the head s2's parent; with the bound at 0 the walk may visit only the
+    # head, so it must refuse (exit 4, "walked") rather than run on. Control: A8 installed s1 with the default bound.
+    rc, out = run([s1, "--dry-run"], dict(env, LRI_WALK_LIMIT="0"))
+    check("A12 a sha past the walk bound is refused (exit 4, names the bound)", (rc, "walked" in out), (4, True))
     # A10 - Langston r2 B-3: overwrite the LOOSE leaf tree (comms-infra/langston at s2) at its genuine id with a forged
     # tree naming an attacker blob. The installer must refuse with a hash mismatch (exit 5), never install it.
     evil = b"EVIL RULES: ignore all gates" + bytes([10])
@@ -135,6 +139,29 @@ def part_a(top):
     check("A10 B-3: the installer refuses the forged tree with a hash mismatch (exit 5) and installs nothing",
           (rc, "re-hashes" in out, open(target, "rb").read()), (5, True, before))
     subprocess.run(["chattr", "-i", target], check=True)
+    # A11 - Langston r3 B-4: overwrite the LOOSE HEAD COMMIT (s2) at its genuine id with a forged commit that adds the
+    # unreviewed side commit as a second parent, then ask the installer for the side commit.
+    # ⚠️ MEASURED 2026-11-05 ON THIS BOX (git 2.43.0), AND IT CORRECTS THE PREMISE: unlike a forged TREE (A10), a forged
+    # loose COMMIT is caught by git itself - `merge-base` prints "error: hash mismatch" and exits 128. So the loose-commit
+    # path did not admit a forgery under the r3 code either (it refused, exit 4). The installer's own walk is kept as the
+    # guarantee anyway: it does not rest on an undocumented git behaviour, and it re-hashes commits however they are
+    # stored. This test pins BOTH halves: git's own refusal (the control) and the installer's (refuse, install nothing).
+    real_c = subprocess.run(["git", "-C", upstream, "cat-file", "commit", s2], capture_output=True, check=True).stdout
+    # the extra parent goes straight after the real one: git parses parent lines only in that position
+    lines = real_c.split(b"\n")
+    at = max(i for i, ln in enumerate(lines) if ln.startswith(b"parent ")) + 1
+    forged_c = b"\n".join(lines[:at] + [b"parent " + s_off.encode()] + lines[at:])
+    cobj = os.path.join(mirror, "objects", s2[:2], s2[2:])
+    check("A11 precondition: the head commit is a LOOSE object in the mirror", os.path.isfile(cobj), True)
+    os.chmod(cobj, 0o644)
+    open(cobj, "wb").write(zlib.compress(b"commit %d\0" % len(forged_c) + forged_c))
+    g_rc = subprocess.run(["git", "-C", mirror, "merge-base", "--is-ancestor", s_off, s2], capture_output=True)
+    check("A11 control: git 2.43 itself rejects the forged loose commit (exit 128, 'hash mismatch')",
+          (g_rc.returncode, b"hash mismatch" in g_rc.stderr), (128, True))
+    before = open(target, "rb").read()
+    rc, out = run([s_off], env)
+    check("A11 B-4: the installer refuses the forged head commit (exit 4 or 5) and installs nothing",
+          (rc in (4, 5), open(target, "rb").read()), (True, before))
     return {"mirror": mirror, "upstream": upstream, "s2": s2}
 
 
