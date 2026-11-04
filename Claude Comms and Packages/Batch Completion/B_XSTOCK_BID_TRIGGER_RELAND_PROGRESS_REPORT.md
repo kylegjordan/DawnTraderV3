@@ -1,6 +1,6 @@
 # B-XSTOCK-BID-TRIGGER-RELAND — PROGRESS REPORT
 
-## OPEN — waiting on: increment (4b)'s Step 7 read (deployed `e1becf801` 2026-11-04 12:13Z) · the rework of (4a), which FAILED its pages term (§3d) · C-P5's four-week read (content to 11-16) · ended windows read 2026-11-04 in §3d: C's EST reads PASS, objective 6 observed
+## OPEN — waiting on: increment (4b)'s Step 7 read (deployed `e1becf801` 2026-11-04 12:13Z) · Langston's ruling on (4a) (PASS against its baseline, §3d) and on the opening-bell pages it left · C-P5's four-week read (content to 11-16) · ended windows read 2026-11-04 in §3d: C's EST reads PASS, objective 6 observed
 
 change-class: `architecture` (scope header) · owner CC-C (Analyst Claude) · sprint plan row 2 · `#1191` (increment 4a), `#1199` (placed follow-up)
 
@@ -73,20 +73,22 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 
 ## 3d. The windows that ended during the 2026-10-22 → 11-04 pause — read 2026-11-04 by CC-C
 
-**(4a), objective 11 — FAIL on one term.** Criterion as written in §4. Object: the `[VTS_RAIL][SWEEP]` lines harvested to `/home/deploy/harvest/incb4a-rail-window.log` (2,625 lines, harvest ended 10-22); the counters are since-start, so each session is the delta from its own first line.
+**(4a), objective 11 — PASS against its registered baseline (my reading; Langston to rule).** Criterion as written in §4, and the INC4A pre-audit's registration: *"P5's counts per day beside A3"* and Langston's reading *"crossings conserved against A3 · joins taking the too_wide/quiet share · pagesAttempted falling · dedupeHits == 0"*. Object: the `[VTS_RAIL][SWEEP]` lines harvested to `/home/deploy/harvest/incb4a-rail-window.log` (2,625 lines); counters are since-start, so each session is a delta, and the one counter reset (a restart at 10-20 21:49Z, after the close) is handled — no mid-session restart, so the restart filter removes nothing.
 
-| session | crossings | joins | join share | pagesAttempted | dedupeHits |
-|---|---|---|---|---|---|
-| 10-19 | 60 | 50 | 83.3% | 12 | 0 |
-| 10-20 | 83 | 60 | 72.3% | 30 | 0 |
-| 10-21 | 119 | 97 | 81.5% | 38 | 0 |
+| session | crossings (A3) | joins | pagesAttempted (A3 attempted) | minted (A3) | dedupeHits (A3 suppressed) | escalations | reasonExits |
+|---|---|---|---|---|---|---|---|
+| 10-19 | 60 (92) | 50 | **12 (92)** | 12 (64) | 0 (28) | 0 | 2 |
+| 10-20 | 83 (103) | 60 | **30 (103)** | 30 (33) | 0 (70) | 0 | 7 |
+| 10-21 | 120 (77) | 97 | **39 (77)** | 39 (21) | 0 (56) | 0 | 16 |
 
-- **pagesAttempted falling: NOT MET** — 12 → 30 → 38. ⇒ **FAIL.**
-- `dedupeHits == 0`: met all three sessions (2,625 of 2,625 lines). `markMissedRowMarks`: 0 on 2,625 of 2,625 lines.
-- `no-trigger-vts-*` rows resolved by `cli` from 10-19 on: **0** (all 389 resolved by `engine` / `vts-exit-monitor`: 12, 30, 39 in the three sessions, 308 after) — the self-clearing half works.
-- `alertFileBytes`: about 90 KB a day, under the 1 MB/day line.
-- **What the pages were** (347 rows minted 10-21 → 11-04, all resolved by the rail): 211 "no decision for 10 minutes", 126 "left the wide-book list (now `too_old` / `no_usable_mark`)", 10 at 30 minutes; 332 of 347 xStock. The FAIL clause's own isolated-staleness term is met — those 126 paged rather than joined, which is the designed behaviour. The failure is that ordinary thin-book quiet is reaching the paging arm at all.
-- **Cause: NOT ESTABLISHED.** Hypothesis, unchecked: `too_old` is judged against a class-wide age rather than the symbol's own normal quote gap, so a thinly quoted xStock reads as a broken feed. ⇒ **DISPOSITION: folded into this batch** — reworked inside row 2 with Langston, cause checked at the code and the data before anything is built (Kyle 2026-11-04, via OLD Claude).
+- **PREVIOUSLY STATED (this section, `f66a71e2f`, and to Kyle via OLD Claude 11-04): FAIL — pagesAttempted 12 → 30 → 38. NOW: PASS. REASON: I read "falling" as a trend inside the window; the registration reads every count BESIDE A3, and against A3's 92/103/77 page attempts fell on every day (87%, 71%, 49%).** (10-21 was 119/38 before the restart reset was handled; 120/39 now.)
+- Crossings stay the same order as A3 (262 vs 272 over three days). Joins are 83%, 72%, 81% of crossings against A3's `too_wide` share of 79%, 70%, 83%.
+- Every mint is exceptional by construction: pages = non-joined crossings + members leaving the list (10+2, 23+7, 23+16). `dedupeHits` 0 against A3's 28/70/56 suppressed; `markMissedRowMarks` 0 on 2,625 of 2,625 lines; 0 `no-trigger-vts-*` rows resolved by `cli` (389 resolved by `engine` / `vts-exit-monitor` from 10-19 on); alert file about 90 KB a day, under the 1 MB/day line.
+- FAIL clause "a `no_usable_mark` or isolated-staleness crossing that joins": not reachable — the predicate joins only `too_wide`, and `too_old` only on a `quiet`/`closed` verdict (`server/core/trading/vts-rail.ts:53-57`). Escalations at 30 minutes: 0.
+- ⚠️ **One clause for Langston to rule on:** r4's *"joins ≈ attempted while minted stays near A3"* FAIL. Minted 12/30/39 against A3's 64/33/21 is below, near and above it — but A3's minted was held down by 28/70/56 suppressed duplicates, which is the blind spot that clause was written to catch, and `dedupeHits` is now 0. I read it as not triggered.
+- REVIEWER: object handed (the pre-audit at the ref + the counts) · what readings of the criterion are consistent with the text, and the verdict under each · HIT: "falling" against A3 = PASS, as a within-window trend = FAIL, and line 71's "beside A3" supports the first; `minted`/`escalations` were not given · re-derived y (both now in the table).
+
+**What the remaining pages are — a finding, not the criterion.** 389 rail rows minted 10-19 → 11-03, every one resolved by the rail. **350 were minted 10-13 minutes after the US open** (204 at minute 10) and **297 of those cleared 15-20 minutes after the open**, 50 more by minute 30. Reasons: `too_old` 248 (133 of them members leaving the list), `no_usable_mark` 123, `too_wide` past 30 minutes 9, `implausible_spread` 9. ⇒ VTS trades waiting at the open cross the 10-minute page line at 09:40 ET; the venue's own regular-session flag flips at 09:45 ET (measured: 13:45Z on 10-29/30, 14:45Z on 11-02/03); the books turn usable and the pages clear themselves minutes later. **Mechanism cited, NOT RE-READ:** the paging clock starts at the engine's 09:30 regular session (`vts-runner.ts`, `_ntXsOffHours` / `getXstockSession`), 15 minutes before the venue's flag. My earlier "thin stocks judged against the class" hypothesis is withdrawn — the pattern is the opening bell. ⇒ **DISPOSITION: folded into this batch** — a fix shape goes to Langston inside row 2 (Kyle 2026-11-04 ordered the rework here); nothing is built before he rules.
 
 **Increment C, the EST reads — PASS on all three legs.** Criterion as written (INCC pre-audit, pre-registered line): each spike at the ET-anchored time; a spike at the UTC-anchored time = FAIL. ⚠️ **Instrument changed, stated:** the named script reads `[XS_FRAME]` lines, and since objective 6 a book wider than 1% is held out of those frames, so it can no longer see a spike. The read used `xstock_spot_ticker_snap`, per minute, share of books wider than 1%.
 - **(ii) weekday 16:15, 11-02:** 76.8% wide at 21:15Z against 0.1% at 20:15Z; the pause started 21:14:00Z. ET-anchored.
