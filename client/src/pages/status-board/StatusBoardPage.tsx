@@ -28,7 +28,7 @@ type Item = {
 };
 type RestRow = {
   key: string; planRow: string; wave: string | null; item: string; ids: string[]; owner: string; session: string | null;
-  state: string; stateLabel: string; statusText: string; lastStep: Step; description: string | null; descriptionTooLong: boolean;
+  state: string; stateLabel: string; statusText: string; lastStep: Step; fromWorkRecord?: boolean; description: string | null; descriptionTooLong: boolean;
 };
 type Board = {
   ok: true; generated_at: string; ref: string; rulebook: 'read' | 'unreadable'; ageMs: number; stale: boolean; pageBuild: string | null;
@@ -208,6 +208,10 @@ export default function StatusBoardPage() {
                     {r.state !== 'queued' && <StatePill state={r.state} label={r.stateLabel} />}
                   </div>
                   <div className="text-xs text-muted-foreground">{sessionName(r.session, r.owner)}</div>
+                  {/* OBJ-9: a row the work record has spoken for shows why (Langston F1): its words and the recorded step. */}
+                  {r.fromWorkRecord && (
+                    <div className="text-xs text-amber-700">{r.statusText}{r.lastStep ? ` · last recorded step: Step ${r.lastStep.step} of 11, ${new Date(r.lastStep.at).toLocaleDateString()}` : ''}</div>
+                  )}
                   {r.description && <p className="mt-1 text-xs">{r.description}</p>}
                 </li>
               ))}
