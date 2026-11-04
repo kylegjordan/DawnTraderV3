@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 229 after live (+6 moved to the sprint, +4 struck through, listed below)
+## After live — 230 after live (+6 moved to the sprint, +4 struck through, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (4). Recounted 2026-10-08: 234 − 6 − 4 = 224 (the weekly census re-counts it since B-AFTERLIVE-TOTAL-RULE, #1180). The theme headings below use the same rule.
 
@@ -178,7 +178,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 16.9 resetRateLimiter() — INERT ON THE ONLY ENVIRONMENT WE RUN (a (—) — inert rate-limiter reset — Kyle slotted it in Phase 16 (`#936`, B-RATE-LIMITER-RESET-DISPOSITION)
 - row:3n.b (CC-C) — orphan level tables (disposition 5) — legacy removal
 
-### Other (research, UI, refactors) — 80
+### Other (research, UI, refactors) — 81
+- B-RAW-BOOK-CAPTURE-WIDEN (CC-A) — #1242: record more raw order-book messages than the 20-minute daily sample, as a forensic replay tool; ONLY IF A NEED APPEARS — nothing has needed it so far (Kyle 2026-11-04, KD-23)
 
 - B-NULL-REASON-RETURN-VALUE (CC-B) — #1178: make each strategy evaluation's "why no signal" reason its own (a return value, not one shared global) across the 166 production call sites; after B-NULL-REASON-LOCAL (sprint row 52a), which measures first
 - B-EVENT-LOOP-RESIDUAL (CC-B) — #225: scattered event-loop stalls after the scan-stall fix (measured 2026-10-06: 8.8/h, p50 193 ms, max 318 ms, at the pinned ceiling); most follow the FX5 scanner's cycle tail
