@@ -24,7 +24,7 @@
 
 The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observation windows are its §5. This file carried a second, generated copy of both until `B-PLAN-CURRENCY-CHECK` removed it on 2026-09-30, after reconciling it against the plan (the plan's value stood on every divergence: `Claude Comms and Packages/Scope Files/B_PLAN_CURRENCY_CHECK_PRE_AUDIT.md`, findings DL-A6 to DL-A9). The removed copy's Wave 0 GATE heading is not lost: its content lives on as the GATE sentence of the sprint plan's Wave 0 heading, `### Wave 0 — NOW — urgent, cheap, or already in flight`, in form (c) — no sha, no holder, no date — citing the current `deploy-hold` row(s) in `GOVERNANCE_EXCEPTIONS.md` by name, which carry the held commit, the window and its end (`1-system-manual/DELETED_COMPONENTS_LOG.md`, the `B-PLAN-CURRENCY-CHECK` entry).
 
-## After live — 228 after live (+6 moved to the sprint, +4 struck through, listed below)
+## After live — 229 after live (+6 moved to the sprint, +4 struck through, listed below)
 
 > Counting rule: every `- ` line under this heading, less the lines marked ➡️ MOVED to the sprint (6) and the struck-through lines that record a withdrawal, supersession or closure (4). Recounted 2026-10-08: 234 − 6 − 4 = 224 (the weekly census re-counts it since B-AFTERLIVE-TOTAL-RULE, #1180). The theme headings below use the same rule.
 
@@ -72,7 +72,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
-### Crew, reviewer, governance and alert tooling — 73 (+3 struck through)
+### Crew, reviewer, governance and alert tooling — 74 (+3 struck through)
+- B-CODEX-CONVERSATION-BACKUP (Infra Claude) — #1238: none of the five ChatGPT (Codex) stand-ins has its conversations backed up; decisions still land in git and Discord, only the working chat is at risk (Kyle 2026-11-04: after live, on PM Claude's recommendation)
 - B-CI-TEST-HYGIENE (Infra Claude) — #403: the storage/SQE asset-class routing test times out under full-suite database contention; raise the per-test timeout or mock the call
 - #565 (—) — B-COMMS-RESTART-DURABILITY: a Discord message group lost when the bridge restarts (CC-C) — crew tooling, after live (W41 homing 2026-10-06)
 

@@ -11432,7 +11432,7 @@ HOME: B-DISK-FILE-TIERING, owner CC-A, placed in SPRINT_TO_LIVE_PLAN.md pre-spri
 **The fix is forward-only:** adding the folder backs it up from the next nightly run; it recovers nothing missed before.
 `HOME: folded into B-PM-CLAUDE (§9.4 disposition 1), owner PM Claude, OBJ-4(d)` — the batch edits those exact lines to add its own folder; Infra Claude is told before the edit.
 
-### #1238 SURFACED 2026-11-04 — awaiting Kyle's slot (PM Claude; found in `B-PM-CLAUDE` pre-audit A7, numbered at Langston's Step-2 ruling) — **NONE OF THE FIVE CODEX STAND-INS HAS ITS CONVERSATIONS BACKED UP.**
+### #1238 OPEN 2026-11-04 — after live (PM Claude; found in `B-PM-CLAUDE` pre-audit A7, numbered at Langston's Step-2 ruling) — **NONE OF THE FIVE CODEX STAND-INS HAS ITS CONVERSATIONS BACKED UP.**
 **What:** a Codex session works in its Claude counterpart's folder and notebook (`AGENTS.md` §1), but its own conversation history lives in the ChatGPT app. No crew script copies it: the nightly backup (`~/.claude/session-fix/nightly-backup.ps1:12`) covers only Claude's conversation folders. So whatever a Codex stand-in discussed during a shift is not in any backup. Same family as `#1237` (Infra Claude's Claude conversations), the same instrument would carry it.
 **Not built in `B-PM-CLAUDE`** (Langston 2026-11-04: the gap is identical for all five mirrors, so it is not this batch's to fix).
-DISPOSITION: own batch (§9.4 disposition 3), proposed owner Infra Claude, placement awaiting Kyle's agreement (Kyle's standing rule: nothing is slotted without it).
+`HOME: B-CODEX-CONVERSATION-BACKUP, owner Infra Claude, placed in PRE_LIVE_SPRINT.md after-live list, "Crew, reviewer, governance and alert tooling", first line` — Kyle 2026-11-04: *"Yes, the ChatGPT fix can go after live."* (on PM Claude's recommendation: blocks no calibration, risks no money or data, Infra Claude's queue is the most loaded).
