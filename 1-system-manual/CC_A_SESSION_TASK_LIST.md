@@ -11,6 +11,21 @@
 
 ---
 
+## 00. ⭐ CURRENT ORDER — KYLE'S DECISIONS OF 2026-11-04 (`1-system-manual/pm/DECISIONS.md`, relayed by PM Claude). THIS SECTION SUPERSEDES THE OLDER QUEUES BELOW WHERE THEY DIFFER.
+
+| # | item | status | decision |
+|---|---|---|---|
+| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 1 (scope r1 with Langston) | KD-2 order 3 |
+| 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 7 (deployed 2026-11-04; trim not yet scoped) | KD-2 order 5 |
+| 3 | `B-STATUS-BOARD` (`#1227`) — remaining Step 7 checks, then Steps 8-11 | IN FLIGHT, Step 7 | already agreed |
+| 4 | `#527` — xStock paper-trading costs split into their parts, so paper matches what live would cost | QUEUED, before live, after items 1-2 | KD-13 |
+| 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
+| 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
+| — | Crew-tooling and governance-checker improvements | after live | KD-15 |
+| ? | `B-CLOSE-WRITER-COSTS` (row 72), `#914` (row 126), the end-to-end pipeline audit (`#522`/`#235`, rows 101-102) | open with Kyle via PM Claude | pending |
+
+---
+
 ## 0a. ⛔⛔ OPEN AND STALLED — BATCHES I STARTED AND LEFT. **THIS SECTION IS THE POINT OF THE FILE** (Kyle 2026-09-05)
 
 > ⭐ **KYLE:** *"We've got four batches open that we've started and are just left sitting there… without it, we lose visibility into what we've opened and started and then got distracted and interrupted and left flapping in the wind."*
