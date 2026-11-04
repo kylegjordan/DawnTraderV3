@@ -9,6 +9,7 @@
 - **Ledger KD-1..KD-28; run `node scripts/pm/reconcile-decisions.mjs` at every check.** KD-25/26/27 ACKED by OLD (rows 18-19 his, after #527, 25-9, then row 72). B-CLOSE-WRITER-COSTS scope RULED by Langston (msg `1567679032332521534`): guard + unique index + lookup one key; no-row close stops deleting the position same increment. Relayed to OLD.
 - **WAITING ON OTHERS:** Langston on r4; NEW's ACK of KD-7/9/10/11.
 - ⚠️ Laptop clock is UTC+1: use `date -u`. I am session `994e6488-…`, alias CC-PM; watcher armed (re-arm after every wake, shared MEMORY 4.5). Nothing auto-injects this file until P2; after a compaction read it, the rules and shared MEMORY by hand.
+- **OVERNIGHT USAGE GUARD (Kyle 2026-11-05 ~00:35Z, going to bed):** at 85% of the weekly limit, stop all four sessions at a good stopping point. Hourly job `3d9afd11` (:17, session-only, dies if this session closes) runs the check. 33% at 00:33Z; weekly resets 2026-11-05 22:59Z. Leave COMMAND CENTER alone (other project).
 - **Pushing:** CI idle check as its own call; commit and push in SEPARATE calls.
 
 # DONE TODAY (2026-11-04; detail in git)
