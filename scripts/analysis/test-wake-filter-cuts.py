@@ -418,6 +418,44 @@ if os.name != "nt" and os.geteuid() != 0:
           f"(rc={_p4.returncode}, woke={b'read-only wake' in _p4.stdout}, dropped={b'LINE DROPPED' in _p4.stderr})")
 else:
     print("  SKIP       #1142 P4 (read-only directory): POSIX non-root only; on Windows the held-file leg is the save-failure case")
+# B-PM-CLAUDE P1 (2026-11-04): PM Claude joins the name registry as CC-PM. Each case runs the filter AS a given session,
+# so it tests both sides of the change: PM wakes on its own name, and the four others stop waking on a PM-only message.
+# The routing rule under test (filter :38-43): named me -> deliver; named only others -> suppress; no name -> broadcast.
+# Senders are other SESSIONS (cc_outbound) or Kyle (kind ""). Langston's C4 negatives: "4 PM", "PM ET", "pm2" and the
+# compound "at 3 pm Claude will post" must NOT read as naming PM, so a Kyle message carrying them still reaches everyone.
+def run_as(alias, kind, sender, text):
+    st = os.path.join(tempfile.mkdtemp(prefix="wakepm-"), f"{alias}.json")
+    d = {"ts": "2026-11-04T21:00:00+00:00", "source": "discord-cc-bridge", "transport": "discord", "kind": kind, "text": text}
+    if sender is not None:
+        d["sender"] = sender
+    p = subprocess.run([sys.executable, FILTER, alias, "--state", st], input=(f"==> {LOG} <==\n" + json.dumps(d) + "\n").encode("utf-8"),
+                       capture_output=True, timeout=120)
+    if p.returncode != 0:
+        print("HARNESS FAILED (PM cases) — filter exited", p.returncode); print(p.stderr.decode("utf-8", "replace")[:800]); sys.exit(2)
+    return any(l.startswith("WAKE[") for l in p.stdout.decode("utf-8", "replace").splitlines())
+
+PM_CASES = [
+    ("CC-PM", "cc_outbound", "OLD Claude", "PM Claude — the held list is in.",           True,  "PM: a session post naming PM Claude wakes PM"),
+    ("CC-A",  "cc_outbound", "NEW Claude", "PM Claude — the held list is in.",           False, "PM: the same post does NOT wake OLD Claude (named only PM) — the deliberate change for the four"),
+    ("CC-PM", "cc_outbound", "NEW Claude", "OLD Claude — your census is due.",           False, "PM: a post naming only OLD Claude does not wake PM"),
+    ("CC-PM", "cc_outbound", "PM Claude",  "PM Claude — note to self.",                  False, "PM: PM's own post never wakes PM (self-wake control)"),
+    ("CC-PM", "",            None,         "PM Claude, where are we?",                   True,  "PM: Kyle naming PM Claude wakes PM"),
+    ("CC-B",  "",            None,         "PM Claude, where are we?",                   False, "PM: Kyle naming only PM Claude no longer broadcasts to NEW Claude"),
+    ("CC-B",  "",            None,         "at 3 pm Claude will post the numbers",       True,  "C4 compound: lowercase 'pm Claude' is NOT PM's name — Kyle's message still broadcasts"),
+    ("CC-A",  "",            None,         "markets close 4 PM ET, then pm2 restarts",   True,  "C4: '4 PM', 'PM ET', 'pm2' do not name PM — still a broadcast"),
+    ("CC-PM", "",            None,         "markets close 4 PM ET, then pm2 restarts",   True,  "C4: the same unaddressed Kyle message also reaches PM (broadcast)"),
+    ("CC-A",  "",            None,         "OLD Claude and PM Claude, please sync.",     True,  "PM: naming OLD and PM wakes OLD (multi-recipient)"),
+    ("CC-PM", "",            None,         "OLD Claude and PM Claude, please sync.",     True,  "PM: ... and wakes PM"),
+]
+print()
+for alias, kind, sender, text, expect, label in PM_CASES:
+    got = run_as(alias, kind, sender, text)
+    ok = got == expect
+    if not ok: fails += 1
+    print(f"  {'PASS' if ok else '** FAIL **':10} as {alias:9} expected {'WAKE   ' if expect else 'silent '} got {'WAKE   ' if got else 'silent '}  {label}")
+if not any(run_as(a, k, s, t) for a, k, s, t, e, _ in PM_CASES if e):
+    print("HARNESS FAILED — no PM case produced a wake, including the positive controls"); sys.exit(2)
+
 print()
 print(f"({sum(1 for _, w in results if w)} of {len(CASES)} cases produced a wake — the instrument speaks)")
 print("ALL PASS" if fails == 0 else f"{fails} FAILED")

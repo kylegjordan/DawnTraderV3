@@ -52,9 +52,17 @@ NAMES = {
     # him now suppresses for CC-A/B/C rather than broadcasting to them, which is the
     # behaviour the suppression entry was pre-placed to make correct.
     "CC-INFRA": [r"infra[\s_-]*claude", r"claude[\s_-]*infra", r"cc[\s_-]*infra"],
+    # CC-PM (PM Claude, Kyle 2026-11-04, B-PM-CLAUDE P1). ⛔ NO BARE "pm" ANYWHERE (Langston C4): it matches
+    # "4 PM", "PM ET" and "pm2". And "PM" itself is matched CASE-SENSITIVELY via the scoped (?-i:...) group, so
+    # "at 3 pm Claude will post" does NOT read as naming this session - a match there would turn a broadcast
+    # into a wake for PM alone and cost the other sessions their wake (Langston's compound-collision case,
+    # measured 0 of 32,932 inbox bodies on 2026-11-04). Long form only, no optional-suffix alternative.
+    # ⚠️ ADDING THIS ENTRY CHANGES THE OTHER SESSIONS TOO: a message naming ONLY PM Claude stops waking them.
+    "CC-PM": [r"(?-i:PM)[\s_-]*claude", r"claude[\s_-]*(?-i:PM)", r"cc[\s_-]*pm"],
 }
 ALIAS_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "CC-C": "ANALYST Claude",
-              "CC-INFRA": "Infra Claude"}  # display names (Kyle 2026-06-20; CC-C 2026-07-19; CC-INFRA 2026-08-26)
+              "CC-INFRA": "Infra Claude",
+              "CC-PM": "PM Claude"}  # display names (Kyle 2026-06-20; CC-C 2026-07-19; CC-INFRA 2026-08-26; CC-PM 2026-11-04)
 # ⚠️ THE DISPLAY NAME IS ALSO THE `--sender` VALUE AND MUST MATCH THE CHANNEL EXACTLY, or
 # the session wakes on its own posts. "Infra Claude" is the form measured on the live
 # channel (31 posts as of the 2026-08-23 census), not "Claude Infra".
