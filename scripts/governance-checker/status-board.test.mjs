@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildBoard, parseDescriptions, lastStepFor, runStatusBoard, BOARD_FAILED_KEY } from './status-board.mjs';
+import { buildBoard, parseDescriptions, lastStepFor, runStatusBoard, BOARD_FAILED_KEY, fromWorkRecord } from './status-board.mjs';
 import { parseExceptionsLegacy, parseExceptions, runStatusBoardSafely, DRIFT_LOADED_FILES, driftAlertAction } from './poller.mjs';
 import { presprintRows, planRowsByBatch, mapStatus, mapWaiting, idsInCell } from './checker.mjs';
 import { PLAN_LINE, BOARD_DESCRIPTIONS_PATH } from './config.mjs';
@@ -122,6 +122,23 @@ ok('SB30 drift: error never resolves; clean resolves; drifted opens once', drift
   const b3 = buildBoard({ planText: t, descText: DESC, subjects: SUBJECTS, openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW });
   const it = b3.items.find((i) => i.key === 'B-CONFLICT');
   ok('SB31 a `2a0` row id resolves to its §4 row (done, from that row), with no conflict', it?.state === 'done' && it.statusSource === '§4 row 2a0' && !it.conflict, JSON.stringify(it && [it.state, it.statusSource, it.conflict]));
+}
+// Kyle 2026-11-04: the work record overrides a stale QUEUED - and only QUEUED, and only for an id on one board line.
+{
+  const subs = [{ hash: 'd'.repeat(40), date: '2026-10-15T01:00:00Z', subject: 'B-PRICE-FEED-COVERAGE Step-7: verified on staging' }, ...SUBJECTS];
+  const b4 = buildBoard({ planText: PLAN, descText: DESC, subjects: subs, openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW });
+  const pfc = b4.items.find((i) => i.key === 'B-PRICE-FEED-COVERAGE');
+  ok('SB32 a QUEUED line whose batch has Step commits shows the recorded step, labelled, keeping the line\'s words', pfc.state === 'in_progress'
+    && pfc.statusSource === 'work record' && /^Step 7 of 11 \(from the work record, 2026-10-15; the plan line still reads: QUEUED\)$/.test(pfc.statusText), JSON.stringify([pfc.state, pfc.statusText]));
+  const tw = buildBoard({ planText: PLAN, descText: DESC, subjects: [{ hash: 'e'.repeat(40), date: '2026-10-08T01:00:00Z', subject: 'B-TOKEN-WATCH Step-6: x' }, ...SUBJECTS],
+    openReason: reasons, rulebookReadable: true, ref: 'f'.repeat(40), nowMs: NOW }).items.find((i) => i.key === 'B-TOKEN-WATCH');
+  ok('SB33 a person\'s call is never overridden: a PARKED line with Step commits stays parked', tw.state === 'parked' && tw.statusSource === 'pre-sprint table');
+  ok('SB34 fromWorkRecord: no step, a non-queued state, or a shared id gives no override', fromWorkRecord({ state: 'queued', text: 'QUEUED' }, null, false, NOW) === null
+    && fromWorkRecord({ state: 'parked', text: 'PARKED' }, { step: 3, at: '2026-10-20' }, false, NOW) === null
+    && fromWorkRecord({ state: 'queued', text: 'QUEUED' }, { step: 3, at: '2026-10-20' }, true, NOW) === null);
+  const old = fromWorkRecord({ state: 'queued', text: 'QUEUED' }, { step: 1, at: '2026-07-23T00:00:00Z' }, false, NOW);
+  ok('SB35 an OLD recorded step stays queued and says it stalled (an old scope never fills Now)', old.state === 'queued'
+    && old.text === 'QUEUED (the work record shows Step 1 of 11 on 2026-07-23, nothing since)', JSON.stringify(old));
 }
 // the failure fence: a failure writes nothing, opens one alert, never throws; the next good write resolves it
 {

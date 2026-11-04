@@ -72,6 +72,23 @@ function wavesByLine(planText) {
   return waves;
 }
 
+// THE WORK RECORD OVERRIDES A STALE "QUEUED" (Kyle 2026-11-04): when the batch's own `<id> Step-N` commits show work has
+// started but the plan line still reads QUEUED, the board shows the recorded step instead, labelled with where it came
+// from and keeping the line's own words. ONLY queued is overridden; a person's call (parked, moved, done, watching data,
+// waiting) stays as written. Not applied when the id sits on more than one board line (row 4 and its increment 2 share
+// one id), because the commits cannot say which line they belong to; the plan-behind mark still shows there.
+// RECENT work only reads as in progress: a step recorded more than WORK_RECORD_RECENT_MS ago (e.g. a scope written months
+// ago and never taken further) stays QUEUED, its text naming the stalled step and date, so old scopes never fill "Now".
+export const WORK_RECORD_RECENT_MS = 14 * 24 * 60 * 60 * 1000;
+export function fromWorkRecord(st, step, idShared, nowMs) {
+  if (st.state !== 'queued' || !step || idShared) return null;
+  const day = String(step.at || '').slice(0, 10);
+  const at = Date.parse(step.at);
+  if (!Number.isFinite(at) || nowMs - at > WORK_RECORD_RECENT_MS) {
+    return { state: 'queued', text: `${st.text} (the work record shows Step ${step.step} of 11 on ${day || 'an unknown date'}, nothing since)` };
+  }
+  return { state: 'in_progress', text: `Step ${step.step} of 11 (from the work record, ${day}; the plan line still reads: ${st.text})` };
+}
 // PURE. Every count on the page is computed here from the data, never carried (pre-audit record item (ii)).
 export function buildBoard({ planText, descText, subjects, openReason, rulebookReadable, ref, nowMs }) {
   const pre = presprintRows(planText);
@@ -87,12 +104,19 @@ export function buildBoard({ planText, descText, subjects, openReason, rulebookR
     if (rowNo && desc.has(`row ${rowNo}`)) return desc.get(`row ${rowNo}`);
     return null;
   };
+  // How many board lines (table items and sprint rows) carry each id - a shared id cannot be attributed by commits.
+  const idLines = new Map();
+  for (const it of pre.items) for (const id of new Set(it.ids)) idLines.set(id, (idLines.get(id) || 0) + 1);
+  for (const r of s4ByRow.values()) for (const id of new Set(idsInCell(r.batch))) idLines.set(id, (idLines.get(id) || 0) + 1);
   const items = pre.items.map((it, idx) => {
     const ids = it.ids;
     const row = it.planRow ? s4ByRow.get(it.planRow) : null;
     const statusCell = it.planRow ? (row ? row.status : '') : it.status;
     const st = it.planRow && !row ? { state: 'unrecognised', text: `plan row ${it.planRow} not found` } : mapStatus(statusCell);
     const step = ids.length ? lastStepFor(ids[0], subjects) : null;
+    // A row-backed item's id is counted on its table line AND its own sprint row: that is one item, not a shared id.
+    const shared = ids.length ? (idLines.get(ids[0]) || 0) > (it.planRow ? 2 : 1) : false;
+    const wr = fromWorkRecord(st, step, shared, nowMs);
     // An item with neither a batch id nor a plan row is keyed by its item text (its board key).
     const description = descFor(ids, it.planRow) ?? (!ids.length && !it.planRow ? desc.get(deMark(it.item)) ?? null : null);
     const reasonFull = rulebookReadable && ids.length ? (openReason?.get(ids[0]) ?? null) : null;
@@ -101,7 +125,8 @@ export function buildBoard({ planText, descText, subjects, openReason, rulebookR
       key: ids[0] || (it.planRow ? `row ${it.planRow}` : deMark(it.item)),
       position: idx, stage: deMark(it.stage), order: deMark(it.order), item: deMark(it.item), ids,
       owner: deMark(it.owner), session: firstSession(it.owner), planRow: it.planRow, issue: deMark(it.issue), agreed: deMark(it.agreed),
-      state: st.state, stateLabel: STATE_LABELS[st.state], statusText: st.text, statusSource: it.planRow ? `§4 row ${it.planRow}` : 'pre-sprint table',
+      state: (wr || st).state, stateLabel: STATE_LABELS[(wr || st).state], statusText: (wr || st).text,
+      statusSource: wr ? 'work record' : it.planRow ? `§4 row ${it.planRow}` : 'pre-sprint table',
       waiting: mapWaiting(it.waitingOn), lastStep: step,
       planBehind: Boolean(step && st.state === 'queued'),
       description, descriptionTooLong: Boolean(description && description.length > DESCRIPTION_MAX_CHARS),
@@ -114,11 +139,13 @@ export function buildBoard({ planText, descText, subjects, openReason, rulebookR
     .filter((r) => !inTable.has(`row ${r.rowNo}`) && !idsInCell(r.batch).some((id) => inTable.has(id)))
     .sort((a, b) => a.lineNo - b.lineNo)
     .map((r) => {
-      const st = mapStatus(r.status); const ids = idsInCell(r.batch);
+      const st0 = mapStatus(r.status); const ids = idsInCell(r.batch);
+      const step = ids.length ? lastStepFor(ids[0], subjects) : null;
+      const st = fromWorkRecord(st0, step, ids.length ? (idLines.get(ids[0]) || 0) > 1 : false, nowMs) || st0;
       const description = descFor(ids, r.rowNo);
       return { key: ids[0] || `row ${r.rowNo}`, planRow: r.rowNo, wave: waves[r.lineNo] || null, item: deMark(r.item), ids,
         owner: deMark(r.owner), session: firstSession(r.owner), state: st.state, stateLabel: STATE_LABELS[st.state], statusText: st.text,
-        lastStep: ids.length ? lastStepFor(ids[0], subjects) : null, description, descriptionTooLong: Boolean(description && description.length > DESCRIPTION_MAX_CHARS) };
+        lastStep: step, description, descriptionTooLong: Boolean(description && description.length > DESCRIPTION_MAX_CHARS) };
     });
   const count = (arr, k) => arr.reduce((m, x) => (m[x[k]] = (m[x[k]] || 0) + 1, m), {});
   return {
