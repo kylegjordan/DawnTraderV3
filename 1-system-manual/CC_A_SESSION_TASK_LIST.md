@@ -22,7 +22,8 @@
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
 | — | Crew-tooling and governance-checker improvements | after live | KD-15 |
-| ? | `B-CLOSE-WRITER-COSTS` (row 72), `#914` (row 126), the end-to-end pipeline audit (`#522`/`#235`, rows 101-102) | open with Kyle via PM Claude | pending |
+| 7 | End-to-end pipeline audit, split (`#522`, `#235`): row 101m mechanics — BEFORE row 100's learning-record restart, once row 100's other prerequisites are done; row 101 observation legs — after the restart, before live; row 101r re-confirmation — Wave B4 | QUEUED | KD-22 |
+| ? | `B-CLOSE-WRITER-COSTS` (row 72; KD-17 measured, scope being settled with Langston and PM Claude), `#914` (row 126) | open with Kyle via PM Claude | pending |
 
 ---
 
