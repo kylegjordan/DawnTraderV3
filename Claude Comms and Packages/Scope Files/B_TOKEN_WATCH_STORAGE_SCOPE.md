@@ -4,7 +4,9 @@
 
 > **r2 (2026-11-04), answering Langston's r1 send-back (B1-B3, his four rulings, two record items).** §§1-3 were approved as written and are unchanged except §0's sizing table. Board card `PVTI_lAHODmulEM4BfQP4zhF-9jU` created (Sub-batch, Infra Claude).
 
-change-class: sub_batch
+change-class: architecture
+
+> **Re-declared from `sub_batch` to `architecture` at Step 2 (Langston condition 2):** `sub_batch` made the scope, pre-audit, System Manual and SIM conditional (`scripts/governance-checker/config.mjs:144`), which removed the checker's teeth on exactly the documents a new off-box egress path, a new system user and new timers must land in. OBJ-6 already delivers the architecture set.
 
 **Parent:** `B-TOKEN-WATCH` (paused, after live). **Issue:** `#1132` (2026-11-04 measurement). **Owner:** Infra Claude (CC-INFRA).
 **Directive:** Kyle 2026-11-04, relayed by OLD Claude (inbox msg `1567524394312532069`): *"token-watch storage fix (a) and (b) jump ahead of your Langston size work. (a) Upload each compressed file to the off-box cold store (B2), check it by downloading it again, then delete the local copy; then move the 5.7 GB already there the same way. (b) Run the 8 GiB check daily, with an alert. Both go through Langston as usual."*
