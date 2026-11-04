@@ -92,6 +92,17 @@ const CHECKS: CheckSpec[] = [
     donePattern: null, // the canary self-alerts on failure; watchdog only catches "didn't run"
     onMissing: 'skip',
   },
+  {
+    // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). 'skip' until
+    // its first good run, exactly as the cold rotator's entry above; flipped to 'alert' in this batch
+    // once that run is recorded (Langston C3).
+    name: 'disk-file-tiering',
+    label: 'Disk-file tiering — dated app data files to warm storage (daily 02:45 UTC)',
+    logFile: 'disk-file-tiering.log',
+    graceMs: 26 * HOUR_MS,
+    donePattern: /DONE moved=\d+ failed=(\d+)/,
+    onMissing: 'skip',
+  },
 ];
 
 async function fire(
