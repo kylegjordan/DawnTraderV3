@@ -73,7 +73,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
 
 ### Crew, reviewer, governance and alert tooling — 74 (+3 struck through)
-- B-CODEX-CONVERSATION-BACKUP (Infra Claude) — #1238: none of the five ChatGPT (Codex) stand-ins has its conversations backed up; decisions still land in git and Discord, only the working chat is at risk (Kyle 2026-11-04: after live, on PM Claude's recommendation)
+- B-CODEX-CONVERSATION-BACKUP (Infra Claude) — #1238: none of the five ChatGPT (Codex) stand-ins has its conversations backed up; decisions still land in git and Discord, only the working chat is at risk (Kyle 2026-11-04, KD-1: after live, on PM Claude's recommendation)
 - B-CI-TEST-HYGIENE (Infra Claude) — #403: the storage/SQE asset-class routing test times out under full-suite database contention; raise the per-test timeout or mock the call
 - #565 (—) — B-COMMS-RESTART-DURABILITY: a Discord message group lost when the bridge restarts (CC-C) — crew tooling, after live (W41 homing 2026-10-06)
 
