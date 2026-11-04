@@ -12,7 +12,7 @@
  *     --table xstock_spot_ohlc_1m \
  *     --from 2025-12-01 \
  *     --to   2026-02-28 \
- *     --out  /tmp/rehydrated/ \
+ *     --out  ~/rehydrated/ \   (a private folder in your home — never a shared /tmp path)
  *     [--restore-cold]
  *
  * The `--restore-cold` flag attempts to download cold-tier objects directly
@@ -164,7 +164,14 @@ async function main(): Promise<void> {
 
   const args = parseArgs(process.argv.slice(2));
 
-  if (!fs.existsSync(args.out)) fs.mkdirSync(args.out, { recursive: true });
+  // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4): the output folder must be the operator's own. A
+  // symlink there is refused (a planted link would send the restore wherever it points, e.g. into the live
+  // telemetry folder), and a folder this script creates is private (0700).
+  if (fs.existsSync(args.out) && fs.lstatSync(args.out).isSymbolicLink()) {
+    console.error(`[B75 rehydrate] --out ${args.out} is a symbolic link; refusing — use a private folder you own`);
+    process.exit(1);
+  }
+  if (!fs.existsSync(args.out)) fs.mkdirSync(args.out, { recursive: true, mode: 0o700 });
 
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
