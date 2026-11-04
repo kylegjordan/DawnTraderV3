@@ -48,7 +48,7 @@
 
 ## ★★★ CURRENT POSITION (2026-11-04, after Kyle's two weeks off) — READ FIRST
 ▶ **FREEZE LIFTED 11-04. Row 2 `STEP: 7 of 11` (4b deployed `e1becf801` 12:13Z; Step-7 read after 21:00Z, timer bbrtxge6a). §3d written: (4a) PASS vs A3 (my FAIL was wrong-object, corrected to Kyle) — Langston gate sent 11-04 ~14:40Z; opening-bell pages (350/389 at +10-13 min, clear at +15-20) = fix shape next. C EST PASS; obj-6 read recorded; C-P5 extends to 11-16. Bar-availability: window FAILED handoff rule (10-17 boot e1f4d3ac) — re-run plan to Langston next (`e202c63b4`). Alerts 28aa04fa, f2ac0003, d7dffee8 resolved; re-run plan R1-R4 in bar pre-audit awaits Langston after (4a).**
-▶ **18:03-18:16Z POOL JAM was my bar-availability code (client 30 s timeout < role 2 min; ROLLBACK never sent; clock-guard FOR UPDATE). Terminated 10 backends 18:16:23Z (crash+PM2 restart). Fix R5 (SET LOCAL 20 s in all 6 txns + single-flight repair) pushed `507260a2d`, Langston Step-4 gate SENT ~18:40Z; deploy only after his PROCEED + CI. Pre-audit :367. Other 4 txn sites = Kyle decision.**
+▶ **KYLE D-2 (11-04): my order 2 = finish B-XSTOCK-BAR-AVAILABILITY. Pool jam 18:03Z was mine; R5 (SET LOCAL 20 s + single-flight) LIVE `20dbf37cc` 19:36Z. R5d (retry xStock projection timeout, stuck alert @12/flushId, elapsed-ms logs) at `3d0b8166f` awaits Langston; then deploy; then R6 stall basis (folded, not new batch); then R1-R4. Pool guard #1239 = OLD Claude (handover sent); 16a overlap to settle. Orphans 764b6ed9/6d8d869d/7c351004 unreconcilable. ALWAYS confirm push landed BEFORE naming a sha.**
 
 ## (superseded) POSITION 2026-10-16
 
