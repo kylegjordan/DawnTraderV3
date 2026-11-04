@@ -41,8 +41,8 @@
 | 7 | Install the context_bridge_log 14-day TTL job | this week: make the retention demonstrably free bytes on a named table - install the missing 14-day job (1.48  |
 | 11 | #521 | wave 0 (Langston F11): nothing notices a dead engine - a silent halt voids every observation window |
 | 12 | Fix duplicated plan ids | a chore, not mechanics (Langston): no two plan items share a number |
-| 18 | B-UNIVERSE-REFRESH-ACTS | first link of the identity chain |
-| 19 | B-SYMBOL-CLASS-IDENTITY | after B-UNIVERSE-REFRESH-ACTS: a ticker shared by a coin and a stock becomes two instruments |
+| ~~18~~ | ~~B-UNIVERSE-REFRESH-ACTS~~ | moved to OLD Claude (Kyle KD-26, 2026-11-04) |
+| ~~19~~ | ~~B-SYMBOL-CLASS-IDENTITY~~ | moved to OLD Claude (Kyle KD-26, 2026-11-04), after row 18; closes with KD-25 |
 | 20 | B-RTB-SIGNAL-IDENTITY | after B-SYMBOL-CLASS-IDENTITY |
 | 21 | B-VTS-CLASS-LABEL-INTEGRITY | after B-SYMBOL-CLASS-IDENTITY: correct the mislabelled VTS rows |
 | 22 | B-CLOSED-TRADES-CLASS-BACKFILL | after B-SYMBOL-CLASS-IDENTITY |
