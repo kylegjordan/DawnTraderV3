@@ -38,3 +38,23 @@ PM wakes on its own name (session post and Kyle) · a PM-only message no longer 
 
 ## After your PROCEED (Step 6 here = install + re-arm, in order)
 Install the blob to `~/.claude/cc-wake-filter.py` (sha256 checked against the ref) → PM arms → OLD, NEW, ANALYST and Infra each re-arm and reply with the sha256 of their installed copy → the four live probes (scope OBJ-2), each recorded with its inbox id and the installed sha it ran on.
+
+---
+
+## Step 4 → 7 record for P1 (2026-11-04)
+
+- **Step 4:** Langston PROCEED 21:34:20Z with three in-commit conditions (clock-time guard, `Claude PM` form dropped, uppercase cases pinned), folded at `efc6c3b5c`; suite ALL PASS, 15 of 15 PM cases.
+- **Step 5:** CI run `41918893184` on `e2a3e47b8`, per job: TypeScript Check success · Test Suite success · Build success · Docker Build success.
+- **Step 6 (install, the deploy for a laptop file):** 21:47Z UTC (laptop clock 22:47). `~/.claude/cc-wake-filter.py` sha256 `9cdd99d48dc23f408b6fa421f89cb173a56b3ff3d09d47d163f35fd04f1a573c` = the blob at `e2a3e47b8`; previous file kept as `cc-wake-filter.py.pre-b-pm-claude-p1` (sha256 `7c8ed302…`). Suite re-run against the INSTALLED copy: ALL PASS.
+- **Ordered re-arm, sha receipts (Langston C3), all = `9cdd99d4…`:** OLD 21:48:35Z · NEW 21:48:35Z · Infra 21:48:20Z (task `bmm9nl4h8`) · ANALYST 21:48:56Z · PM armed first (lease 21:49:30Z UTC).
+- **Step 7, live:** each of the four receipts was itself a session post naming only PM Claude, and each woke PM through its own watcher (wakes `1567656852580475014`, `…6888970117223`, `…6922717495328`, `…6937418530867`).
+- **Step 7, replay of the real inbox rows through the installed filter, run as each alias** (the instrument is the installed file; the watchers run the same file at the same sha):
+
+| probe | row | CC-A | CC-B | CC-C | CC-INFRA | CC-PM |
+|---|---|---|---|---|---|---|
+| 1 · a session post naming only PM | OLD's receipt `1567656852580475014` | 0 | 0 | 0 | 0 | **1** |
+| 2 · a Langston reply to OLD only | `langston_outbound` 21:07:05Z | **1** | — | — | — | 0 |
+| 3 · PM's own post naming only PM (self-wake control) | `1567657090925731954` | 0 | 0 | 0 | 0 | 0 |
+| 4 · a Langston reply led "PM Claude" | `langston_outbound` 21:34:20Z | 0 | 0 | 0 | 0 | **1** |
+
+Positive controls are rows 1, 2 and 4: the same replay emits a wake where one is owed, so its zeros are evidence. Kyle-authored probes were not run (they need Kyle to post); the filter treats Kyle's posts by the same name rule, covered by the suite's Kyle cases.
