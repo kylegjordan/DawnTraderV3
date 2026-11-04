@@ -14,6 +14,12 @@
 
 | stage | order | item | owner | plan row | issue | agreed | status | waiting on |
 |---|---|---|---|---|---|---|---|---|
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 1 | B-CRYPTO-FEED-WATCHDOG | CC-B (New Claude) | 33a | #1232 | Kyle 2026-11-04 | row | nothing |
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 2 | B-XSTOCK-BAR-AVAILABILITY | CC-C (Analyst Claude) | none | #707 | Kyle 2026-10-07 | IN FLIGHT — Step 9 | CC-C (read 2026-11-04: the window FAILED its handoff rule — one writer stopped without a handoff on 10-17 — so a fresh window needs a reviewed re-registration; plan to Langston) |
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 3 | B-DB-POOL-GUARD (guard the 10 shared database connections: a time limit to get one, a page when one comes back mid-transaction, slots kept for writers; absorbs `#1062` from row 119) | CC-A (Old Claude) | none | #1239, #1062 | Kyle 2026-11-04 (D-2; Langston proposed it 2026-11-04) | QUEUED | nothing |
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 4 | xStock strategies receive the direction score (DBS) — batch named at Step 1 | CC-B (New Claude) | none | #1235 | Kyle 2026-11-04 (D-2) | QUEUED | CC-B (after B-CRYPTO-FEED-WATCHDOG) |
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 5a | B-DISK-FILE-TIERING (+ the price-feed debug-log trim, `#1240`, D-2) | CC-A (Old Claude) | none | #1233 | Kyle 2026-11-04 | IN FLIGHT — Step 7 (reviewed in three parts; deployed 2026-11-04 19:35Z with ANALYST Claude's fix; the first test found the job did not load its settings, so the nightly run is paused until that one-line fix is reviewed and deployed; the compression fix waits until after 2026-11-18) | Langston |
+| 00 — data truth first (Kyle 2026-11-04, D-2) | 5b | B-TOKEN-WATCH-STORAGE | Infra Claude | none | #1132 | Kyle 2026-11-04 (ahead of the Langston size work) | IN FLIGHT — Step 7 (installed 2026-11-04 at 41b538165; 62 of 86 backlog files moved, the rest after the storage provider's download limit resets; then the checks, Langston's Step 8, Step 10) | data — the rest of the backlog moves when the storage provider's daily download limit resets (05:30Z 2026-11-05); then Infra Claude |
 | 0 — reset safety | 1 | B-LOSS-WINDOW-OPERATOR-CLOSES | CC-C (Analyst Claude) | 183b | #1154 | Kyle 2026-10-07 | row | nothing |
 | 0 — reset safety | 2 | B-ENGINE-STOP-DURATION-COLUMN (row 173 is an alias) | CC-B (New Claude) | 2a0 | #1067 | Kyle 2026-10-07 | row | nothing |
 | 1 — feed truth under the exits | 1 | B-PRICE-STALENESS-BOUND (the old cell read "32/33"; there is no row 32) | CC-C (Analyst Claude) | 33 |  | Kyle 2026-10-07 | row | nothing |
@@ -22,7 +28,6 @@
 | P1a — entry | 1 | B-ENTRY-LEVEL-RECHECK | CC-B (New Claude) | none | #1168 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 59 keeps its sprint place) | nothing |
 | P1a — entry | 2 | B-CRYPTO-BIRTH-FEED | CC-B (New Claude) | none | #1060 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 39a keeps its sprint place) | nothing |
 | CC-B list | 1 | B-BOOK-CHECKSUM-CIRCUIT-BREAKER | CC-B (New Claude) | none | #1220 | Kyle 2026-10-20 (locked) | ✅ CLOSED 2026-10-20 (Langston Step 8 and Step 11; deployed 725a7f3f5) | nothing |
-| CC-B list | 1a | B-CRYPTO-FEED-WATCHDOG | CC-B (New Claude) | 33a | #1232 | Kyle 2026-11-04 | row | nothing |
 | CC-B list | 2 | B-ENTRY-GATE | CC-B (New Claude) | none | #1224 | Kyle 2026-10-20 (locked) | IN FLIGHT — Step 1 (scope r1 sent back 2026-10-21; r2 waits behind B-CRYPTO-FEED-WATCHDOG, Kyle 2026-11-04) | Coltrane (Kyle delegated the window side to NEW Claude, Langston and Coltrane 2026-11-04; Langston confirmed adverse-only and economic test Reply A) |
 | CC-B list | 3 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-SQE-FEED-FANOUT) | nothing |
 | CC-B list | 4 | B-PLAN-PRICE-BASIS | CC-B (New Claude) | none | #1223, #1221 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-STRATEGY-INPUT-FIXES) | nothing |
@@ -30,7 +35,6 @@
 | after the CC-B list | 1 | B-BALANCE-SESSION-PAIRING | CC-C (Analyst Claude) | none |  | Kyle 2026-10-20 | QUEUED | CC-B (waits behind CC-B's list, Kyle 2026-10-20) |
 | CC-A list | 1 | B-MUTATING-ROUTES-AUTH | CC-A (Old Claude) | none | #1228 | Kyle 2026-10-21 (option 2) | ✅ DONE 2026-10-21 (verified on staging, d307debe5) | nothing |
 | CC-A list | 2 | B-STATUS-BOARD | CC-A (Old Claude) | none | #1227 | Kyle 2026-10-20/21 | IN FLIGHT — Step 7 (page live on staging since 2026-11-04 12:13Z; OBJ-9 work-record override merged; a shared-id fix with Langston; owed: Kyle's phone check and the absent-file and stale-banner renders at the next planned restart) | Langston |
-| CC-A list | 3 | B-DISK-FILE-TIERING | CC-A (Old Claude) | none | #1233 | Kyle 2026-11-04 | IN FLIGHT — Step 7 (reviewed in three parts; deployed 2026-11-04 19:35Z with ANALYST Claude's fix; the first test found the job did not load its settings, so the nightly run is paused until that one-line fix is reviewed and deployed; the compression fix waits until after 2026-11-18) | Langston |
 | P1b — entry | 1 | B-ENTRY-CONSUMPTION-FRESHNESS | CC-C (Analyst Claude) | 40 |  | Kyle 2026-10-07 | row | nothing |
 | P1c — fill mode | 1 | B-CLASS-LEG-FILL-MODE | CC-C (Analyst Claude) | none | #1170 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-15 (Coltrane Step 11) | nothing |
 | 2 — exit, in order | 1 | P-8e split (the extrapolated-fill field) | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | QUEUED (lands with or before row 2's verification; carrier: the B-PRICE-SIDE-BY-JOB pre-audit) | nothing |
@@ -44,7 +48,6 @@
 | 2 — exit, in order | 9 | [C3] with row 62 | CC-C (Analyst Claude) | 62 |  | Kyle 2026-10-07 | row | nothing |
 | 3 — feed | 1 | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | none | #960, #1175 | Kyle 2026-10-07 | MOVED out of the pre-sprint into the sprint (Kyle 2026-10-07; row 31 keeps its place) | nothing |
 | 3 — feed | 2 | CORZ investigation | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | ✅ DONE | nothing |
-| 3 — feed | 3 | B-XSTOCK-BAR-AVAILABILITY | CC-C (Analyst Claude) | none | #707 | Kyle 2026-10-07 | IN FLIGHT — Step 9 | CC-C (read 2026-11-04: the window FAILED its handoff rule — one writer stopped without a handoff on 10-17 — so a fresh window needs a reviewed re-registration; plan to Langston) |
 | 3 — feed | 4 | B-B75-EXPORT-COMPLETENESS | CC-A (Old Claude) | none | #1195 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-18 (report B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md) | nothing |
 | 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | QUEUED | CC-B (its locked list first) |
 | 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | QUEUED | nothing |
@@ -70,7 +73,6 @@
 | 0 — clear the plates (CC-C) | 6 | B-REST-SIDES-TO-CACHE | CC-C (Analyst Claude) | 14 |  | Kyle 2026-09-28 | row | nothing |
 | 0 — clear the plates (CC-C) | 7 | B-BOOK-STATE-RESTART-DURABLE | CC-C (Analyst Claude) | 15 |  | Kyle 2026-09-28 | row | nothing |
 | 0 — clear the plates (CC-C) | 8 | B-SIZING-DEC-RESTORE | CC-C (Analyst Claude) | 9 |  | Kyle 2026-09-28 | row | nothing |
-| 0 — clear the plates (Infra Claude) | 1 | B-TOKEN-WATCH-STORAGE | Infra Claude | none | #1132 | Kyle 2026-11-04 (ahead of the Langston size work) | IN FLIGHT — Step 7 (installed 2026-11-04 at 41b538165; 62 of 86 backlog files moved, the rest after the storage provider's download limit resets; then the checks, Langston's Step 8, Step 10) | data — the rest of the backlog moves when the storage provider's daily download limit resets (05:30Z 2026-11-05); then Infra Claude |
 | 0 — clear the plates (Infra Claude) | 2 | B-LANGSTON-RELIEF | Infra Claude | none |  | Kyle 2026-10-16 | IN FLIGHT — Step 10 (the alert lane's 7-day window ended 2026-10-23; the ceiling was not met and its last part moved to B-LANGSTON-CLAUDEMD-RESIDUAL, Kyle 2026-10-20); completion report and Step 11 owed | Infra Claude (held for Kyle's 2026-11-04 restart review) |
 | 0 — clear the plates (Infra Claude) | 3 | B-LANGSTON-CLAUDEMD-RESIDUAL | Infra Claude | none | #974 | Kyle 2026-10-20 | IN FLIGHT — Step 4 part 1 (the installer) sent back by Langston 2026-10-21 with one blocker; the trims are committed, not yet reviewed or installed | Infra Claude (the fix, held for Kyle's 2026-11-04 restart review), then Langston |
 | 0 — clear the plates (Infra Claude) | 4 | B-LANGSTON-MEMORY-WRITE-FENCE | Infra Claude | none | #1234 | Kyle 2026-11-04 (right after B-LANGSTON-CLAUDEMD-RESIDUAL) | QUEUED | Infra Claude (after B-LANGSTON-CLAUDEMD-RESIDUAL) |
@@ -425,7 +427,7 @@ Status: `QUEUED` · `IN FLIGHT — Step N` · `BUILT` · `OBSERVATION` · `DONE 
 | 116 | #658 | #658 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | VTS posture multipliers contaminating learning rows |
 | 117 | #220 | #220 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | an error thrown 64,494 times in VTS strategy runs |
 | 118 | #1072 | #1072 — batch named at Step 1 | CC-C (Analyst Claude) | QUEUED | — | the price-history recorder's frozen symbol set |
-| 119 | B-ARCHIVE-WRITER-LIFECYCLE | B-ARCHIVE-WRITER-LIFECYCLE | CC-B (New Claude) | QUEUED | — | the archive writer's lifecycle · + `#1062` (analytical queries filled the connection pool and the ticker and archive writers dropped rows; Step 1 reviews it with `#1037`; coordinate with `#1082`) - homed 2026-09-29 by CC-B |
+| 119 | B-ARCHIVE-WRITER-LIFECYCLE | B-ARCHIVE-WRITER-LIFECYCLE | CC-B (New Claude) | QUEUED | — | the archive writer's lifecycle · ~~+ `#1062`~~ **`#1062` MOVED to B-DB-POOL-GUARD (pre-sprint stage 00, Kyle 2026-11-04, D-2)** (analytical queries filled the connection pool and the ticker and archive writers dropped rows; Step 1 reviews it with `#1037`; coordinate with `#1082`) - homed 2026-09-29 by CC-B |
 | 120 | B-ARCHIVE-FLUSH-DRAIN-ORDER | B-ARCHIVE-FLUSH-DRAIN-ORDER (`#1078`) | CC-B (New Claude) | QUEUED | — | B-ARCHIVE-FLUSH-DRAIN-ORDER: the writer drains its buffer before it holds a slot, so a slot timeout throws the rows away (670 on 2026-09-28) - in the sprint because it loses learning data |
 | 121 | B-ROLLBACK-EPOCH-FORWARD | B-ROLLBACK-EPOCH-FORWARD | CC-B (New Claude) | QUEUED | — | epochs across a rollback · carries `#1045` |
 | 122 | #590 | #590 — batch named at Step 1 | CC-B (New Claude) | QUEUED | — | calibration store reset at the formula change + `#596` (W41 triage) |
