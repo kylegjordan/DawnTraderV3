@@ -133,3 +133,60 @@ Populations today: 0 of 19 open positions lack a `tradeId` (Langston, `88c35cab9
 **Langston's three answers, recorded:** (1) hard reset economics-free — P-13. (2) manual close through `closePosition`, refusable — P-10; ⚠️ **consequence surfaced to Kyle (via PM Claude, 2026-11-05):** with the entry-price fallback gone, a position on a cold book has NO operator close (the flatten is price-gated too) — his to accept or fund; no row placed by me. (3) admin route — P-12.
 
 **In plain language:** Langston found that the plan counted the places that finish a trade's record but not the places that delete a position. Three of those six can delete one and leave its record hanging. The revision makes each finish the record first, or keep the position and raise an alert, and deletes an old debugging button that throws trades away. The "which closes count as real trades" rule becomes one shared list: anything unrecognised is left out and flagged. And the database change is ordered so that no trade can fail to save while the new code is starting up.
+
+---
+
+## r3 AMENDMENT (2026-11-05, CC-A) — Langston's CHANGES on r2, scoped to P-15 (Discord `1567869171407257653`) + his riders
+
+A-8, A-9 and conditions (a)-(d), (f)-(h) stand as ruled. Read at `e43cae96e`.
+
+**PREVIOUSLY STATED → NOW:**
+- **PREVIOUSLY STATED (A-10):** the money routes filter `never_filled` and the classifier replaces that. **NOW: each route has MORE predicates than A-10 listed** — the full sets below — and the classifier is reason-pure, with a separately named data-validity predicate. **REASON:** Langston P-15 items 1-2.
+- **PREVIOUSLY STATED (P-15):** a compile-time exhaustiveness check over `ExitCondition['type']`. **NOW: over ONE exported `CloseReason` union typed at the record writers.** **REASON:** P-15 item 3 — all seven `ExitCondition` members are booked, so a check over that union could never catch a new NON-outcome reason.
+
+### A-11 — the predicate census of the two money routes, at `e43cae96e`
+| route | predicate | kind |
+|---|---|---|
+| `GET /active-engine/balance-curve` (`routes.ts:12280`) | `getClosedTrades(mode, { closedOnly: true })` | fetch |
+| | `t.closedAt && t.closeReason !== 'never_filled'` (`:12312`) | outcome (by name) |
+| | `isInObservationEpoch(t, _curveEpoch)` (`:12317`, `dashboard-metrics.ts:115`; both legs keyed to the epoch, `#741`) | **window** |
+| `GET /active-engine/trades/analytics` (`routes.ts:12853`) | `getClosedTrades(mode, { limit: 'all' })` | fetch |
+| | `closeReason === 'never_filled'` excluded (`:12921`) | outcome (by name) |
+| | `hasExitPrice` — `exitPrice > 0` (`:12922`) | **data validity** |
+| | `hasCloseReason` — non-blank (`:12923`) | outcome (blank) |
+| | the `startTime` window by OPEN time (`1h` … `all`, default 24 h; engine stopped ⇒ an unreachable floor) | **window** |
+
+**Measured distribution (staging, `closed_trades`, all rows, 2026-11-05 ~12:00Z)** — every predicate applied, per reason:
+
+| reason | rows | closed | closed, exit price > 0 | closed, no exit price |
+|---|---|---|---|---|
+| `stop_hit` | 909 | 909 | 909 | 0 |
+| `target_hit` | 434 | 434 | 434 | 0 |
+| `never_filled` | 182 | 182 | 0 | 182 |
+| `trailing_stop_hit` | 15 | 15 | 15 | 0 |
+| `reset` | 9 | 9 | 9 | 0 |
+| `max_holding_period` | 4 | 4 | 4 | 0 |
+| `manual_stop` | 1 | 1 | 1 | 0 |
+| **blank** | **20** | **0** | 0 | 0 |
+
+All rows `mode='paper'`; 1,574 total, 20 open (the 20 blank-reason rows ARE the 20 open records — a record's reason is written at close). ⇒ **On closed rows today, `hasExitPrice` and `hasCloseReason` exclude exactly the 182 `never_filled` rows and nothing else**, so moving them into a shared seam changes no counted set on either route.
+
+### P-15 (r3)
+- **The classifier is reason-pure:** `closeOutcomeClass(reason: string | null)` → `'booked' | 'non_outcome' | 'unknown'`. Blank or null ⇒ `unknown`.
+- **The ONE shared seam, named:** `countedTrades(rows)` keeps a row iff (1) `closedAt` set, (2) `closeOutcomeClass === 'booked'`, (3) **`exitPrice > 0` — a data-validity predicate, named as such, not an outcome rule**. It returns the counted set and THREE separate exclusion counts: `nonOutcome`, `unknownReason`, `bookedWithoutExitPrice`. The last two alert (`close-reason-unknown-<reason>`; `booked-close-without-exit-price`, both resolve-only): under KD-17 a booked close with no exit price is a writer defect, not a row to drop quietly.
+- **Window predicates stay route-specific and are applied AFTER the seam, by name:** balance-curve keeps `isInObservationEpoch`; analytics keeps its `startTime` window. They are not outcome rules and the seam does not absorb them.
+- ⇒ **Effect per route, stated:** analytics: its three outcome/validity predicates become the seam — same counted set today. Balance-curve: GAINS the blank-reason and exit-price predicates through the seam — same counted set today (0 such closed rows). The scoreboard SQL takes the BOOKED list and `exit_price > 0`.
+- **Exhaustiveness — one `CloseReason` union, typed at the writers** (the `#448` single-source shape): `CloseReason = ExitCondition['type']` (the seven: `target_hit`, `stop_hit`, `trailing_stop_hit`, `max_holding_period`, `guardrail`, `manual_stop`, `reset`) `| 'never_filled' | 'hard_reset' | 'engine_stop_cleanup'` plus whatever P-10's operator closes pass (fixed in the diff). `createClosedTrade` / `updateClosedTrade` take `closeReason: CloseReason`; the classes are a `Record<CloseReason, 'booked' | 'non_outcome'>`, so a new reason anywhere is a compile error until it is classed. The runtime `unknown` arm remains for legacy and blank values. `guardrail`: 0 rows, auto-classed booked — correct, noted.
+- **Re-registered Step-7 equality (replacing r2's):** for one fixed window per route, the counted set (row ids), win rate, profit factor, net P&L, fee drag, by-class and curve points are identical before and after the deploy; `nonOutcome` = the window's `never_filled` count; `unknownReason` = 0; `bookedWithoutExitPrice` = 0. Any difference stops the batch.
+
+### P-5 riders (Langston (i)-(iii))
+- **(i)** the migration sets `lock_timeout` (5 s) before its ACCESS EXCLUSIVE work, so a wedged migration fails the deploy instead of stalling opens; `dt-deploy` then refuses to restart (migrate precedes restart at the installed `/usr/local/bin/dt-deploy` `:242`/`:253`), so the old code keeps running on the old schema.
+- **(ii)** r2's "read that every interim row is `'paper'`" is **dropped as a claim** — positions are deleted at close, so the interim set is likely empty and an empty read is indistinguishable from a clean one. Migration 2 is discharged instead by the CODE: a unit test that the open insert names `mode` explicitly, and migration 2 prints the row count it saw (a presence figure, not a proof).
+- **(iii)** rollback order: CODE first, then schema — reversed, every new insert fails NOT NULL.
+
+### P-18 rider
+`docs/audits/aj19-metrics-and-trade-closure-analysis.md:206` tells an operator to call the deleted route — rewritten in the same deploy to point at the hard reset and the stranded-clear path. `B_CREDENTIALS_PRIVATE_REPO_PRE_AUDIT.md:723` enumerates the route in a past batch's record — left as history, listed as left-intentionally in the deletion-log entry.
+
+**`RULED ON REPORTED FACT` items Langston bound in:** the close-reason distribution is re-derived above with the predicates applied (it replaces A-3's headline count for P-15's purpose: 1,574 rows = 1,372 booked closed + 182 never-filled + 20 open). A-5's 36 readers and A-9's intent table are re-checked at implementation against the diff.
+
+**In plain language:** Langston found that the two dashboard number routes already filter trades slightly differently, and that my list missed a date-window filter on one of them. The revision lists every filter on both routes. It keeps "is this a real trade" separate from "does this trade have a price" and from each route's own date window. It checks the trade data to show that none of today's numbers will change. And it makes forgetting to classify a new kind of close a build error.
