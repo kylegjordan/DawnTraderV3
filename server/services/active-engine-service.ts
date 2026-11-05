@@ -435,12 +435,15 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
         const _num = (v: unknown) => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : NaN; };
         const _cls = asValidAssetClass((trade as any).assetClass);
         const _cfg = _cls ? await resolveFillDepthGateConfig(_cls) : null;
-        const entryFee = _num((trade as any).entryFee);
+        // ⛔ The ENTRY fee of an OPEN record is `fees`: the open path writes `fees: entryFee` (active-execution-engine.ts, the
+        // open-time createClosedTrade) and does NOT write `entry_fee`, whose column DEFAULT is '0' — so `entryFee` reads a
+        // silent zero on every open record. `fees` is overwritten with the total only AT close, and this record is open.
+        const entryFee = _num((trade as any).fees);
         const entryPrice = _num((trade as any).actualEntryPrice ?? trade.entryPrice);
         const quantity = _num(trade.quantity);
         const _cantPrice = !_cls ? `no valid asset class (${String((trade as any).assetClass)})`
           : !_cfg ? 'no fill-depth config for its class (the penalty)'
-          : !Number.isFinite(entryFee) ? 'no entry fee on its record'
+          : !Number.isFinite(entryFee) ? 'no entry fee on its record (fees)'
           : !(entryPrice > 0) || !(quantity > 0) ? 'no usable entry price or quantity on its record'
           : null;
         if (_cantPrice) {
