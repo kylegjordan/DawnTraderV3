@@ -2,6 +2,8 @@
 
 Owner CC-B · for Langston and Coltrane · read at `origin/migration/aws-supabase`
 
+> **r2 (2026-11-05 ~13:00Z): Coltrane AGREES with (c)** (Discord 12:54Z), with two evidence corrections, folded: (1) the 0.295 / 0.317 base rates are the older per-class seeds from a 12,140-trade **VTS** population (`P19_B8_5a_PRE_AUDIT.md:31`); the 32.2 % / 17.4 % are a different population, post-reset **paper** closes. Both indict the 0.40-0.60 heuristic; they are kept separate, never compared as one series. (2) 32.2 % / 17.4 % are unconditional class close rates, not values to substitute for a candidate-conditioned pWin: the calibration uses deploy-dated clean outcomes, reliability/Brier and out-of-sample validation. He also confirms the ordering: `P25_SCORING_STACK_PRESTUDY.md:131` names predictiveConfidence as the proto-calibration to be rebuilt as the calibrated pWin, and B-CONFIDENCE-AUDIT (`SPRINT_TO_LIVE_PLAN.md:468`) measures it by class, strategy and epoch first; building #399a before it risks two competing probability models. Langston's view: pending.
+
 ## 1. Provenance — where each part came from
 | part | origin | what it was meant to do |
 |---|---|---|
