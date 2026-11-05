@@ -19,8 +19,8 @@ def check(name, got, want):
     print(("PASS " if ok else "FAIL ") + name + ("" if ok else "  expected %r got %r" % (want, got)))
 
 
-def run(args, env):
-    r = subprocess.run([sys.executable, INST] + args, capture_output=True, text=True, env=env, timeout=120)
+def run(args, env, cwd=None):
+    r = subprocess.run([sys.executable, INST] + args, capture_output=True, text=True, env=env, timeout=120, cwd=cwd)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -114,6 +114,19 @@ def part_a(top):
     check("A9 content, owner and flag right but the install RECORD missing is not a no-op - the record is rewritten",
           (rc, "already installed" in out, os.path.exists(os.path.join(top, "bak", "INSTALLED"))), (0, False, True))
     subprocess.run(["chattr", "-i", target], check=True)
+    # A13 - Langston r4 B-5: plant a repository ABOVE the cwd whose config re-points the upstream URL. Plain git run from
+    # inside it is redirected (the control); the installer, run from the same cwd, must still read the REAL head (a dry
+    # run that succeeds) because it runs ls-remote from "/".
+    plant = os.path.join(top, "plant")
+    g(top, "init", "-q", plant)
+    g(plant, "config", "url.file:///nonexistent-attacker/.insteadOf", "file://" + upstream)
+    inner = os.path.join(plant, "deep", "er")
+    os.makedirs(inner)
+    ctl = subprocess.run(["git", "ls-remote", "file://" + upstream], cwd=inner, capture_output=True, text=True)
+    check("A13 control: plain git run under the planted repo is redirected (ls-remote fails)", ctl.returncode != 0,
+          True)
+    rc, out = run([s2, "--dry-run"], env, cwd=inner)
+    check("A13 B-5: the installer run from the same cwd still reads the real head (dry run exits 0)", rc, 0)
     # A12 - the ancestry walk is BOUNDED. s1 is the head s2's parent; with the bound at 0 the walk may visit only the
     # head, so it must refuse (exit 4, "walked") rather than run on. Control: A8 installed s1 with the default bound.
     rc, out = run([s1, "--dry-run"], dict(env, LRI_WALK_LIMIT="0"))

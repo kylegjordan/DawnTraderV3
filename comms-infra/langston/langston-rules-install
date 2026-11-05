@@ -61,8 +61,8 @@ class Refused(Exception):
         self.code = code
 
 
-def run(cmd, binary=False, timeout=120):
-    r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+def run(cmd, binary=False, timeout=120, cwd=None, env=None):
+    r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd, env=env)
     out = r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()
     return r.returncode, out, r.stderr.decode("utf-8", "replace").strip()
 
@@ -72,7 +72,17 @@ def git(mirror, *args, binary=False):
 
 
 def github_head(upstream=None):
-    rc, out, err = run(["git", "ls-remote", upstream or UPSTREAM, "refs/heads/" + BRANCH], timeout=60)
+    # ⛔ B-5 (Langston r4, measured on git 2.43.0): with no cwd, `git ls-remote` reads the config of whatever repository
+    #    git discovers by walking up from root's current directory, so a planted `.git` carrying
+    #    `url.<x>.insteadOf = https://github.com/` would re-point the ANCHOR, and every re-hash after it would pass.
+    #    cwd="/" leaves nothing to discover. GIT_TERMINAL_PROMPT=0 and the timeout catch make a missing credential (once
+    #    the repository is private) a documented refusal, exit 4, not a 60 s hang and a traceback.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    try:
+        rc, out, err = run(["git", "ls-remote", upstream or UPSTREAM, "refs/heads/" + BRANCH], timeout=60, cwd="/",
+                           env=env)
+    except subprocess.TimeoutExpired:
+        raise Refused(4, "reading %s's head from %s timed out (60 s)" % (BRANCH, upstream or UPSTREAM))
     head = out.split()[0] if rc == 0 and out else ""
     if not re.fullmatch(r"[0-9a-f]{40}", head):
         raise Refused(4, "cannot read %s's head from %s (%s)" % (BRANCH, upstream or UPSTREAM, err or out or "empty"))
@@ -99,8 +109,11 @@ class BatchReader:
                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
     def read(self, oid, kind):
-        self.p.stdin.write(oid.encode() + b"\n")
-        self.p.stdin.flush()
+        try:
+            self.p.stdin.write(oid.encode() + b"\n")
+            self.p.stdin.flush()
+        except (BrokenPipeError, OSError) as e:      # git died: a documented refusal, never a traceback
+            raise Refused(4, "the mirror's object reader stopped (%s) while asking for %s" % (e, oid[:12]))
         header = self.p.stdout.readline().split()
         if len(header) != 3:
             raise Refused(4, "the mirror cannot serve %s %s (%s)" % (kind, oid[:12], b" ".join(header).decode()))
