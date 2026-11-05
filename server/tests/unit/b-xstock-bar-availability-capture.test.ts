@@ -24,6 +24,10 @@ vi.mock('../../db.js', () => ({
             state.timeoutsSet.push(ordinal);
             return { rows: [] };
           }
+          // R6a: the guard-wait read after certify is an instrument, not part of the phase sequence.
+          if (JSON.stringify(query ?? null).includes('xstock_bar.guard_wait_ms')) {
+            return { rows: [{ guard_wait_ms: null }] };
+          }
           state.queries.push(query);
           state.phases.push(`execute-${ordinal}`);
           if (ordinal === state.holdOrdinal && state.hold) await state.hold;

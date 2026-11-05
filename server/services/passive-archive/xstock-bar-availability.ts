@@ -632,6 +632,11 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
         ${XSTOCK_BAR_AVAILABILITY_CONTRACT}::text
       )
     `);
+    // R6a guardWaitMs (C5): the function stored its wait for the clock-guard lock in a transaction-local
+    // setting; read it in this same transaction. Absent (an older function body) means no sample.
+    const guard = await tx.execute(sql`SELECT current_setting('xstock_bar.guard_wait_ms', true) AS guard_wait_ms`);
+    const guardWait = Number(resultRows<{ guard_wait_ms: string | null }>(guard)[0]?.guard_wait_ms ?? Number.NaN);
+    if (Number.isFinite(guardWait)) recordXstockBarTiming('guardWait', guardWait);
     return resultRows<DbCertificateRow>(result).map((row) => ({
       revisionId: row.revision_id,
       visibleBy: new Date(row.visible_by),
