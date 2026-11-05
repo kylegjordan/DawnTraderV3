@@ -3158,8 +3158,9 @@ export class DatabaseStorage implements IStorage {
     // B-BALANCE-TRUTH Step F (#618): STAMP THE MODE. This function has always RECEIVED
     // `mode` and thrown it away -- threaded correctly all the way here, then dropped on the
     // floor, which is why seven readers could accept a mode and none could filter on one.
-    // This is the SINGLE physical INSERT into closed_trades (census 2026-08-21: one site,
-    // three callers, all already passing a correct mode).
+    // One of TWO physical INSERTs into closed_trades (census 2026-08-21 found one site, three
+    // callers, all passing a correct mode; B-CLOSE-WRITER-COSTS P-12 added the second,
+    // `insertOpenTradeRecordIfNoneOpen`, the restore's atomic insert, which also stamps `mode`).
     const normalizedTrade = { ...trade, symbol: canonicalSymbol, mode };
     const [result] = await db.insert(closedTradesTable).values(normalizedTrade).returning();
     return result;
