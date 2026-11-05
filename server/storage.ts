@@ -190,6 +190,19 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
+
+// B-CLOSE-WRITER-COSTS P-15 (C-4, C-10, C-13): the "not a trade outcome" rule, ONE source. Every SQL reader that
+// excluded `never_filled` by a hand-written literal now binds the list DERIVED from `TRADE_CLOSE_REASON_CLASS`, so
+// `hard_reset` (and any later non-outcome) is excluded everywhere at once. NULL is kept (an open record's reason is
+// blank until close) — the same semantics as the `IS DISTINCT FROM` it replaces. Two read predicates keep their
+// literal BY KYLE'S DECISION and are the fence's only named exceptions: `getLastClosedAtForSymbol` (a never-filled
+// maker STARTS the cooldown) and `getClosedTradesPaginated` (never-filled rows are VISIBLE in the history list).
+const closeReasonList = (reasons: readonly string[]): SQL => sql.join(reasons.map((r) => sql`${r}`), sql`, `);
+function notNonOutcomeReason(col: SQL | typeof closedTradesTable.closeReason = closedTradesTable.closeReason): SQL {
+  return sql`(${col} IS NULL OR ${col} NOT IN (${closeReasonList(NON_OUTCOME_CLOSE_REASONS)}))`;
+}
 
 /** B-CLOSE-WRITER-COSTS P-1: the result of the keyed open-record lookup (exactly one, none, or several by id). */
 export type OpenTradeRecordLookup =
@@ -3220,13 +3233,13 @@ export class DatabaseStorage implements IStorage {
     if (closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
-    // P19-B7.2c TYPED GUARD (Langston Step-4 condition 4): never_filled rows (a dropped
-    // pending maker — an order that never traded) are EXCLUDED at the SQL level BY DEFAULT
+    // P19-B7.2c TYPED GUARD (Langston Step-4 condition 4): non-outcome rows (`never_filled` — a dropped pending
+    // maker, an order that never traded — and, since B-CLOSE-WRITER-COSTS, `hard_reset`) are EXCLUDED at the SQL level BY DEFAULT
     // so no aggregate/ML/session-metrics reader can accidentally count a phantom flat.
     // Visibility is opt-in: the paginated UI list passes them explicitly; a fill-rate
     // reader sets includeNeverFilled: true.
     if (!filters.includeNeverFilled) {
-      conditions.push(sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+      conditions.push(notNonOutcomeReason() as any);
     }
 
     if (conditions.length > 0) {
@@ -3261,7 +3274,7 @@ export class DatabaseStorage implements IStorage {
    * CLOSE time is the defect; this expresses the window the caller actually wants.
    *
    * The two predicates below are COPIED FROM getClosedTrades ON PURPOSE (closedAt NOT NULL +
-   * never_filled excluded, the P19-B7.2c typed guard) so the POPULATION is identical and only
+   * non-outcome reasons excluded — `never_filled`, `hard_reset`, the P19-B7.2c typed guard) so the POPULATION is identical and only
    * the row bound is removed — a reader comparing the two should see one difference, not two.
    * Both properties are fenced in `server/tests/integration/b-killswitch-window.test.ts`.
    *
@@ -3304,7 +3317,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closedAt} >= ${since}` as any,
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        notNonOutcomeReason() as any,
         eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ));
     return {
@@ -3315,7 +3328,7 @@ export class DatabaseStorage implements IStorage {
 
   /**
    * B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P1): the entry cost of every position that was OPEN at an anchor
-   * event — opened before `at`, and closed after it or still open (`closed_at` NULL), `never_filled` excluded (the same
+   * event — opened before `at`, and closed after it or still open (`closed_at` NULL), non-outcome reasons excluded (the same
    * predicate as `getRealizedPnlSince`). An anchor value is cash NOT committed to paper positions at the event, so these
    * positions' committed cash is added back (A4). Basis: quantity x entry_price, the exposure numerator's basis.
    * `invalidCount` counts rows whose quantity or entry price is not positive: the caller REFUSES on any (never sums a 0).
@@ -3331,7 +3344,7 @@ export class DatabaseStorage implements IStorage {
         eq(closedTradesTable.mode, mode),
         sql`${closedTradesTable.openedAt} < ${at}` as any,
         sql`(${closedTradesTable.closedAt} IS NULL OR ${closedTradesTable.closedAt} > ${at})` as any,
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        notNonOutcomeReason() as any,
       ));
     return {
       entryCost: parseFloat(String(row?.entryCost ?? '0')),
@@ -3356,7 +3369,7 @@ export class DatabaseStorage implements IStorage {
    *
    * PREDICATE PARITY IS DELIBERATE AND LOAD-BEARING: every method below uses the SAME three
    * predicates as `getRealizedPnlSince` (`closed_at IS NOT NULL` + the window + `close_reason IS
-   * DISTINCT FROM 'never_filled'`), so a reader comparing any two of them sees ONE difference —
+   * the shared non-outcome list, `notNonOutcomeReason()`), so a reader comparing any two of them sees ONE difference —
    * the question asked — and never a population difference. Basis stays `pnl` throughout: the
    * kill-switch numerator and denominator both sum `pnl`, and B-COST-MATH-CONSOLIDATION's `netPnl`
    * migration must move EVERY site in ONE batch or the ratio becomes incoherent (Langston's
@@ -3378,13 +3391,13 @@ export class DatabaseStorage implements IStorage {
    * A count that silently stops counting when the table outgrows a number nobody remembers
    * choosing is exactly the #618 failure, and it fails in the direction that looks healthy.
    *
-   * Predicate parity with the reader it replaces: never_filled excluded always; `closedOnly`
+   * Predicate parity with the reader it replaces: non-outcome reasons excluded always; `closedOnly`
    * optional and matching the reader's own default of false.
    */
   async getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number> {
     const conditions = [
       eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
-      sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      notNonOutcomeReason() as any,
     ];
     if (opts?.closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
@@ -3406,7 +3419,7 @@ export class DatabaseStorage implements IStorage {
    * mean two statements of one rule, which is the divergence this batch exists to delete. So SQL
    * does the summing it is good at and the branch logic stays exactly where it already is.
    *
-   * PREDICATE PARITY with the capped read it replaces: `closed_at IS NOT NULL` + never_filled
+   * PREDICATE PARITY with the capped read it replaces: `closed_at IS NOT NULL` + non-outcome reasons
    * excluded. VERIFIED, not assumed — all four derived metrics reproduce the deployed endpoint
    * to floating-point precision over these 478 rows (drawdown 47.15076954411425 vs .1143,
    * profit factor 0.88097850108280044 vs ...7998, Sharpe -0.09478015083688222 vs ...217,
@@ -3467,7 +3480,10 @@ export class DatabaseStorage implements IStorage {
                anchor_balance_at_open::numeric        AS base
           FROM closed_trades
          WHERE closed_at IS NOT NULL
-           AND close_reason IS DISTINCT FROM 'never_filled'
+           -- B-CLOSE-WRITER-COSTS P-15 (r4 item 4): the BOOKED allowlist, bound from the TS constant, and a booked
+           -- close must carry an exit price (0 rows affected today — Langston measured).
+           AND close_reason IN (${closeReasonList(BOOKED_CLOSE_REASONS)})
+           AND exit_price > 0
            AND mode = ${mode}
            AND closed_at >= COALESCE((SELECT ts FROM epoch), '-infinity'::timestamptz)
            -- * BOTH-LEG KEYING (added 2026-08-24). This clause was MISSING, so the lifetime
@@ -3516,7 +3532,7 @@ export class DatabaseStorage implements IStorage {
     const res: any = await db.execute(sql`
       WITH q AS (
         SELECT * FROM closed_trades
-         WHERE closed_at IS NOT NULL AND close_reason IS DISTINCT FROM 'never_filled'
+         WHERE closed_at IS NOT NULL AND ${notNonOutcomeReason(sql.raw('close_reason'))}
            AND mode = ${mode}
       ),
       r AS (SELECT closed_at, SUM(pnl::numeric) OVER (ORDER BY closed_at) AS run FROM q),
@@ -3553,7 +3569,7 @@ export class DatabaseStorage implements IStorage {
       .from(closedTradesTable)
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        notNonOutcomeReason() as any,
         eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ));
     return {
@@ -3585,7 +3601,7 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
         sql`${closedTradesTable.closedAt} >= ${since}` as any,
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        notNonOutcomeReason() as any,
         eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ))
       .groupBy(sql`to_char(${closedTradesTable.closedAt} AT TIME ZONE 'UTC', 'YYYY-MM-DD')`)
@@ -3604,7 +3620,7 @@ export class DatabaseStorage implements IStorage {
       .from(closedTradesTable)
       .where(and(
         sql`${closedTradesTable.closedAt} IS NOT NULL` as any,
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+        notNonOutcomeReason() as any,
         eq(closedTradesTable.mode, mode), // Step F (#618): the mode argument is real now
       ))
       .orderBy(desc(closedTradesTable.closedAt))
@@ -3726,8 +3742,8 @@ export class DatabaseStorage implements IStorage {
     // Valid trade = closed_at IS NOT NULL AND exit_price > 0 AND close_reason IS NOT NULL AND close_reason != ''
     // P19-B7.2c: never_filled rows (a dropped pending maker — closed, NO exit price by
     // construction) pass the ghost filter EXPLICITLY so they are VISIBLE in the closed
-    // list (Kyle); they are excluded from analytics separately (typed closeReason check
-    // at the analytics endpoint), i.e. visible ≠ counted.
+    // list (Kyle); they are excluded from analytics separately (the `countedTrades` outcome rule
+    // at the money routes, B-CLOSE-WRITER-COSTS P-15), i.e. visible ≠ counted.
     if (filters.closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL`);
       conditions.push(sql`(
@@ -3810,9 +3826,9 @@ export class DatabaseStorage implements IStorage {
     if (closedOnly) {
       conditions.push(sql`${closedTradesTable.closedAt} IS NOT NULL` as any);
     }
-    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getClosedTrades).
+    // P19-B7.2c: non-outcome rows excluded by default (typed guard — see getClosedTrades).
     if (!filters?.includeNeverFilled) {
-      conditions.push(sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any);
+      conditions.push(notNonOutcomeReason() as any);
     }
 
     const query = db.select()

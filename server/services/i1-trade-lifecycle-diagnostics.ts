@@ -18,19 +18,14 @@ type TradeEventType =
   | 'TRADE_CLOSE'
   | 'TRADE_FORCE_CLOSE';
 
+import type { TradeCloseReason } from './trade-close-reason';
+
 type TradeSource = 'normal' | 'hard_stop' | 'manual' | 'cleanup';  // Phase 8.8.3-I3: Added 'cleanup' for reconciliation
 
-type CloseReason = 
-  | 'target_hit'
-  | 'stop_hit'
-  | 'stop_loss'
-  | 'trailing_stop_hit'
-  | 'max_holding_period'
-  | 'guardrail'
-  | 'manual_stop'
-  | 'reset'  // B-SIZING-DEC-RESTORE increment 3: the PAPER-RESET-3000 flatten
-  | 'engine_stop_cleanup'  // Phase 8.8.3-I3: Added for trade reconciliation on stop
-  | 'unknown';
+// B-CLOSE-WRITER-COSTS P-15 (C-2): DERIVED from the one close-reason vocabulary, not a parallel copy. (The copy held two
+// members no caller passes — `stop_loss` and `unknown`; its producers pass an exit condition, `reset`/`manual_stop`, or
+// `engine_stop_cleanup`.)
+type CloseReason = TradeCloseReason;
 
 interface TradeLifecycleEvent {
   tradeId: string;

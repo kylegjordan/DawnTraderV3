@@ -64,7 +64,8 @@ import { getCache, setCache, coalesce } from './services/cache';
 import { metricsService } from './services/metrics-service';
 import { activeFilterPool } from './services/active-filter-pool.js';
 // P19-B8.3: pure dashboard-metric math (unit-tested — Langston Step-4 conditions).
-import { num, honestNetPnl, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull, isInObservationEpoch, clampWindowToEpoch } from './services/dashboard-metrics.js';
+import { num, honestNetPnl, countedTrades, computeRollingEarnings, computeFeeDrag, computeMakerTakerMix, computeAvgNetR, computeMaxDrawdownUsd, computeByAssetClass, profitFactorOrNull, isInObservationEpoch, clampWindowToEpoch } from './services/dashboard-metrics.js';
+import { raiseOutcomeSeamAlerts } from './services/outcome-seam-alerts';
 import { marketVolumeCache } from './services/market-volume-cache.js';
 import { b5SizingAudit } from './services/b5-sizing-audit.js';
 import { livePricingAdapter, isRestFallbackSource, isPriceVenueQuiet } from './services/live-pricing-adapter.js';
@@ -12276,6 +12277,14 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     try {
       const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
       const days = Math.max(1, Math.min(3650, parseInt(String(req.query.days ?? '30')) || 30));
+      // B-CLOSE-WRITER-COSTS P-15 (r6 BLOCKER-2): an OPTIONAL `asOf` instant. Absent ⇒ today's behaviour, byte for byte.
+      // Present ⇒ every row is bounded `closed_at < asOf` and every window ends at `asOf`. It exists for the batch's
+      // Step-7 before/after equality read (two reads at one frozen instant); the page never sends it.
+      const _asOfRaw = req.query.asOf;
+      const asOf = _asOfRaw === undefined ? null : new Date(String(_asOfRaw));
+      if (asOf && !Number.isFinite(asOf.getTime())) {
+        return res.status(400).json({ ok: false, error: `asOf is not a valid instant: ${String(_asOfRaw)}` });
+      }
 
       // B-OBSERVATION-EPOCH (Kyle 2026-08-26): this curve was the LAST unscoped reader on the
       // Paper Trading page. Every other figure on that card resets at the observation epoch; the
@@ -12286,25 +12295,34 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // #900 exists to stop.
       const _curveLifetime = await storage.getLifetimeScoreboard(mode);
       const _curveEpoch = _curveLifetime.epochStartedAt ? new Date(_curveLifetime.epochStartedAt) : null;
-      const windowStart = clampWindowToEpoch(new Date(Date.now() - days * 24 * 60 * 60 * 1000), _curveEpoch);
+      const windowStart = clampWindowToEpoch(new Date((asOf ? asOf.getTime() : Date.now()) - days * 24 * 60 * 60 * 1000), _curveEpoch);
 
       const { db: curveDb } = await import('./db.js');
       const { portfolioAnchorEvents } = await import('@shared/schema');
       const { eq: curveEq, asc: curveAsc } = await import('drizzle-orm');
-      const anchors = await curveDb.select()
+      const _anchorsAll = await curveDb.select()
         .from(portfolioAnchorEvents)
         .where(curveEq(portfolioAnchorEvents.mode, mode))
         .orderBy(curveAsc(portfolioAnchorEvents.occurredAt));
+      // `asOf` freezes the anchors too, or a re-anchor after it would move the curve between two frozen reads.
+      const anchors = asOf ? _anchorsAll.filter(a => new Date(a.occurredAt as any) < asOf) : _anchorsAll;
 
       // B-BALANCE-TRUTH Step C (#618): the 100-row cap is GONE. This curve accumulates a running
       // total across the whole closed history and carries the last point from BEFORE the requested
       // window, so it cannot be bounded by time either -- a `days` bound would silently start the
       // running level from the wrong place and the chart would render a plausible wrong shape.
       // Capped at 100 by open time, the curve simply omitted older closes from the accumulation.
-      const allClosed = await storage.getClosedTrades(mode, { limit: 'all', closedOnly: true });
+      // B-CLOSE-WRITER-COSTS P-15 (r4 item 1): the fetch is NOT an outcome rule any more (`includeNeverFilled: true`) —
+      // `countedTrades` is the ONE outcome rule, run once here, so its `nonOutcome` count is a real number.
+      const allClosed = await storage.getClosedTrades(mode, { limit: 'all', closedOnly: true, includeNeverFilled: true });
+      const _curveSeam = countedTrades(asOf ? allClosed.filter(t => t.closedAt && new Date(t.closedAt) < asOf) : allClosed);
+      void raiseOutcomeSeamAlerts(mode, 'GET /active-engine/balance-curve', _curveSeam);
+      const outcomeExclusions = {
+        notClosed: _curveSeam.notClosed, nonOutcome: _curveSeam.nonOutcome,
+        unknownReason: _curveSeam.unknownReason, bookedWithoutExitPrice: _curveSeam.bookedWithoutExitPrice,
+      };
       const num = (v: unknown): number => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : 0; };
-      const closes = allClosed
-        .filter(t => t.closedAt && t.closeReason !== 'never_filled')
+      const closes = _curveSeam.counted
         // BOTH-LEG epoch keying, via the shared predicate. A trade OPENED before the epoch carries
         // an entry price taken through the contaminated mini-book (#741), so it is not "properly
         // traded with the right pricing data" and must not accrue onto the post-reset curve.
@@ -12313,7 +12331,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         .sort((a, b) => a.at.getTime() - b.at.getTime());
 
       if (anchors.length === 0 && closes.length === 0) {
-        return res.json({ ok: true, mode, days, basis: 'realized', hasData: false, points: [] });
+        return res.json({ ok: true, mode, days, basis: 'realized', hasData: false, points: [], outcomeExclusions, ...(asOf ? { asOf: asOf.toISOString() } : {}) });
       }
 
       // Merge-walk: anchors RESET the level; trade closes accrue onto it.
@@ -12347,6 +12365,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
 
       res.json({
         ok: true, mode, days, basis: 'realized',
+        outcomeExclusions, ...(asOf ? { asOf: asOf.toISOString() } : {}),
         // ★ THE EFFECTIVE WINDOW START, PUBLISHED — added 2026-08-26 after Step-7 UI verification.
         // `days` is the REQUESTED span and is NOT the window actually used: `clampWindowToEpoch`
         // moves the start forward to the observation epoch. Any consumer that re-derives the start
@@ -12852,9 +12871,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // P19-B8.3 (OBJ-1): mode-parameterized — ?mode=paper|live, default 'paper'
       // (zero behavior change for existing callers; anything else coerces to paper).
       const mode: 'paper' | 'live' = req.query.mode === 'live' ? 'live' : 'paper';
+      // B-CLOSE-WRITER-COSTS P-15 (r6 BLOCKER-2): an OPTIONAL `asOf` instant. Absent ⇒ today's behaviour, byte for byte.
+      // Present ⇒ every row is bounded `closed_at < asOf` and every window ends at `asOf`. It exists for the batch's
+      // Step-7 before/after equality read (two reads at one frozen instant); the page never sends it.
+      const _asOfRaw = req.query.asOf;
+      const asOf = _asOfRaw === undefined ? null : new Date(String(_asOfRaw));
+      if (asOf && !Number.isFinite(asOf.getTime())) {
+        return res.status(400).json({ ok: false, error: `asOf is not a valid instant: ${String(_asOfRaw)}` });
+      }
 
       // Calculate time range
-      const now = new Date();
+      const now = asOf ?? new Date();
       let startTime: Date;
       let isCurrentSimulation = false;
 
@@ -12902,22 +12929,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // zero non-never_filled closed rows lack an exit price). It costs nothing, and the fence in
       // b-balance-truth-ghost-redundancy-fence.test.ts asserts the redundancy -- so if that ever
       // stops holding, this site is still protected and the fence tells us the assumption broke.
-      const allTrades = await storage.getClosedTrades(mode, { limit: 'all' });
-      
-      // Phase 8.8.3-B3: Filter out ghost trades from analytics
-      // Ghost trades = closed trades without proper exit_price or close_reason
-      // P19-B7.2c: this ALSO (correctly) excludes closeReason='never_filled' rows —
-      // a dropped pending maker has NO exit price (it never opened), so it can never
-      // enter win-rate/expectancy here. The explicit closeReason check makes the
-      // exclusion typed + durable even if a future record carries a synthetic price.
-      const validTrades = allTrades.filter(trade => {
-        // Only consider properly closed trades (have closedAt, exit_price, and close_reason)
-        if (!trade.closedAt) return false;
-        if (trade.closeReason === 'never_filled') return false; // visible in the list, never in stats
-        const hasExitPrice = trade.exitPrice && parseFloat(trade.exitPrice.toString()) > 0;
-        const hasCloseReason = trade.closeReason && trade.closeReason.trim() !== '';
-        return hasExitPrice && hasCloseReason;
-      });
+      // B-CLOSE-WRITER-COSTS P-15 (r4 item 1; r7 C-12 — the fetch keeps `closedOnly` off, so `notClosed` is real here):
+      // the fetch is NOT an outcome rule any more (`includeNeverFilled: true`).
+      const allTrades = await storage.getClosedTrades(mode, { limit: 'all', includeNeverFilled: true });
+
+      // ⛔ THE ONE OUTCOME RULE, run ONCE (B-CLOSE-WRITER-COSTS P-15). It replaces the Phase 8.8.3-B3 ghost filter and the
+      // P19-B7.2c `never_filled` check that stood here, leg for leg: closed → a booked reason (non-outcome and unknown
+      // set aside separately) → an exit price > 0 (data validity). Every metric below reads `validTrades`; the windows
+      // stay route-specific and are applied after it. `earnings` and `lifetime` read it unwindowed, as before (r4 C-5).
+      const _seam = countedTrades(asOf ? allTrades.filter(t => !t.closedAt || new Date(t.closedAt) < asOf) : allTrades);
+      void raiseOutcomeSeamAlerts(mode, 'GET /active-engine/trades/analytics', _seam);
+      const outcomeExclusions = {
+        notClosed: _seam.notClosed, nonOutcome: _seam.nonOutcome,
+        unknownReason: _seam.unknownReason, bookedWithoutExitPrice: _seam.bookedWithoutExitPrice,
+      };
+      const validTrades = _seam.counted;
       
       // ═══ B-OBSERVATION-EPOCH PARITY (2026-08-24) — THE EPOCH IS READ *HERE*, ABOVE THE WINDOW ═══
       // It used to be read ~180 lines below, next to the lifetime block, which is WHY this window
@@ -12960,6 +12986,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           range,
           mode,
           engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
+          outcomeExclusions, ...(asOf ? { asOf: asOf.toISOString() } : {}),
           analytics: {
             totalOpened: 0,
             closedAtTP: { count: 0, percent: 0 },
@@ -13166,6 +13193,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         range,
         mode, // P19-B8.3: echo the resolved mode
         engineRunning: isEngineRunning, // true if engine is running, derived from actual engine state
+        outcomeExclusions, ...(asOf ? { asOf: asOf.toISOString() } : {}),
         analytics: {
           totalOpened: trades.length,
           closedAtTP: { count: closedAtTP.length, percent: (closedAtTP.length / trades.length) * 100 },
