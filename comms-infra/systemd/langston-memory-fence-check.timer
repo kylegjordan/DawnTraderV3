@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily run of the Langston memory-write fence check
+
+[Timer]
+# 05:50Z - after the 03:50Z trim (a root writer call, which re-asserts the fence) and the 05:40Z size watch, before
+# the 06:00Z privacy check. A flag cleared by a killed write is therefore seen within a day (C-4).
+OnCalendar=*-*-* 05:50:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

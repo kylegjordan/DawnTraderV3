@@ -80,6 +80,9 @@ class Home:
         return m
 
     def done(self):
+        # B-LANGSTON-MEMORY-WRITE-FENCE: the writer now sets the immutable flag on MEMORY.md, MEMORY-ARCHIVE.md and
+        # compose-state.json - clear it, then remove WITHOUT ignore_errors so a leak fails the run (C-8)
+        subprocess.run(["chattr", "-R", "-i", self.top], check=True, capture_output=True, timeout=60)
         shutil.rmtree(self.top)
 
 

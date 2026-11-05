@@ -1,0 +1,14 @@
+[Unit]
+Description=Langston memory writes - wake the root spool service when a request arrives (B-LANGSTON-MEMORY-WRITE-FENCE P3)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+
+[Path]
+# in/ only: the client writes tmp/<id>.req and RENAMES it here complete, so a wake never meets half a request, and a
+# client killed mid-write leaves its debris in tmp/, which wakes nothing. The service empties in/ on every run
+# (answered, refused or dropped), so a non-empty in/ never re-triggers in a loop.
+# ⛔ If this unit is stopped or masked his memory FREEZES and he cannot notice - langston-memory-fence-check pages it.
+DirectoryNotEmpty=/var/spool/langston-memory/in
+Unit=langston-memory-spoold.service
+
+[Install]
+WantedBy=paths.target

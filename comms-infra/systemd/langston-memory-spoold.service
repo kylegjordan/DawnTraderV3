@@ -1,0 +1,17 @@
+[Unit]
+Description=Langston memory writes - the root side: answer every spooled request through the allowlist (B-LANGSTON-MEMORY-WRITE-FENCE P3)
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+# A request the service could not answer leaves him waiting until his client times out: page it.
+OnFailure=agent-unit-failure@%N.service
+
+[Service]
+Type=oneshot
+# -I: no PYTHON* variable, no user site and no script directory on sys.path can change what root runs.
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/langston-memory-spoold
+StandardInput=null
+# One writer call is capped at 300 s inside the service; a short queue fits well within this.
+TimeoutStartSec=1800
+NoNewPrivileges=yes
+PrivateTmp=yes
+UMask=0077
+# NOT Restart= - the path unit starts it again while in/ is not empty.

@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""langston-memory-spoold - the ROOT side of Langston's memory writes (B-LANGSTON-MEMORY-WRITE-FENCE P3, design D1).
+
+After the fence his account cannot write his memory files (root-owned, immutable). He keeps writing them himself: run
+as his account, `langston-memory-write` puts the request in this spool and waits; this service, started by
+langston-memory-spoold.path whenever spool/in/ is not empty, answers every request there and exits. No sudo rule.
+
+⛔ THE SPOOL IS TREATED AS HOSTILE - his account creates its entries, and an agent fed from Discord runs as it:
+   · each entry is opened O_NOFOLLOW (a link REFUSES), must be a regular file with ONE link, owned by his account;
+   · it is READ ONCE, BY ITS FD, size-capped - and then (ORDER BINDING, Langston r2) the IN-MEMORY copy is validated by
+     langston_memory_allowlist (the authority) and the writer is run from THAT SAME COPY. Nothing is re-read by path;
+     the entry's name is unlinked only AFTER the read, and only if it still names the inode that was read;
+   · the writer runs as root with --by forced to langston; its exit code, stdout and stderr go back VERBATIM in
+     out/<id>.res (root:<owner> 0640), written to a temp in root-only out/ and renamed, so he never reads half.
+Layout (LAYOUT below; the daily fence check reads the same table): spool/ 0750 · in/ 1730 · tmp/ 1730 · out/ 0750,
+all root:<his primary group>. in/ and tmp/ are create-only for him (sticky, no read); only in/ wakes the service.
+The allowlist is loaded from source by fd (never through a .pyc) after a root-ownership check of its path chain.
+
+Exit 0 every entry answered (refusals included) · 1 an entry could not be answered or removed · 3 refused to run
+(not root, not Linux, a test seam beside the live home, the spool layout or the allowlist's trust chain is wrong).
+"""
+import base64, errno, json, os, pwd, shutil, stat, subprocess, sys, time, traceback
+
+sys.dont_write_bytecode = True
+LIVE_HOME = "/home/langston"
+HOME = os.environ.get("LANGSTON_HOME") or LIVE_HOME
+HOME_IS_LIVE = os.path.realpath(HOME) == os.path.realpath(LIVE_HOME)
+# TEST SEAMS (P6): honoured only beside a test home; set beside the live home they REFUSE (main), never ignored.
+SEAMS = ("LMW_SPOOL_DIR", "LMW_WRITER", "LMW_OWNER", "LANGSTON_MEMORY_READER")
+SPOOL = os.environ.get("LMW_SPOOL_DIR") or "/var/spool/langston-memory"
+WRITER = os.environ.get("LMW_WRITER") or "/usr/local/bin/langston-memory-write"
+OWNER = os.environ.get("LMW_OWNER") or "langston"
+ALLOWLIST = os.path.join(os.path.dirname(os.path.realpath(__file__)), "langston_memory_allowlist.py")
+LAYOUT = (("", 0o750), ("in", 0o1730), ("tmp", 0o1730), ("out", 0o750))     # all root:<OWNER's primary group>
+NOFOLLOW = getattr(os, "O_NOFOLLOW", None)       # None off Linux: main() refuses to run, it never runs without it
+OPEN_FLAGS = None if NOFOLLOW is None else os.O_RDONLY | NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
+WRITER_TIMEOUT = 300
+STALE_TMP_S, STALE_OUT_S = 3600, 86400
+NAME_SUFFIX = ".req"
+
+
+def log(msg):
+    print(msg, flush=True)                       # the journal is the service's record
+
+
+def owner_ids():
+    pw = pwd.getpwnam(OWNER)
+    return pw.pw_uid, pw.pw_gid
+
+
+def layout_problems(spool, gid):
+    out = []
+    for sub, mode in LAYOUT:
+        p = os.path.join(spool, sub) if sub else spool
+        try:
+            st = os.lstat(p)
+        except OSError as e:
+            out.append("%s: %s" % (p, type(e).__name__))
+            continue
+        if not stat.S_ISDIR(st.st_mode):
+            out.append("%s is not a directory" % p)
+        elif (st.st_uid, st.st_gid, stat.S_IMODE(st.st_mode)) != (0, gid, mode):
+            out.append("%s is %d:%d %s, the layout says 0:%d %s" % (p, st.st_uid, st.st_gid,
+                                                                    oct(stat.S_IMODE(st.st_mode)), gid, oct(mode)))
+    return out
+
+
+def trust_problems(path):
+    """Everything that decides what root executes must be root's and not group/other-writable: the file and every
+    directory up to /, as given and with links resolved (the writer's reader_trust_problems, for one file)."""
+    out, seen = [], set()
+    for start in (os.path.abspath(path), os.path.realpath(path)):
+        q = start
+        while True:
+            if q not in seen:
+                seen.add(q)
+                try:
+                    st = os.lstat(q)
+                    if st.st_uid != 0:
+                        out.append("%s is owned by uid %d" % (q, st.st_uid))
+                    elif not stat.S_ISLNK(st.st_mode) and stat.S_IMODE(st.st_mode) & 0o022:
+                        out.append("%s is group- or other-writable" % q)
+                except OSError as e:
+                    out.append("%s: %s" % (q, type(e).__name__))
+            if os.path.dirname(q) == q:
+                break
+            q = os.path.dirname(q)
+    return out
+
+
+def load_allowlist():
+    """From SOURCE, by fd: no import machinery, so no __pycache__ can stand in for it."""
+    import types
+    fd = os.open(ALLOWLIST, OPEN_FLAGS)
+    try:
+        src = b""
+        while True:
+            b = os.read(fd, 1 << 16)
+            if not b:
+                break
+            src += b
+    finally:
+        os.close(fd)
+    mod = types.ModuleType("langston_memory_allowlist")
+    exec(compile(src, ALLOWLIST, "exec"), mod.__dict__)
+    return mod
+
+
+def take_entry(path, owner_uid, cap, osmod=os):
+    """READ ONCE, BY FD: (bytes or None, refusal or None, (dev, ino) or None). Nothing here touches the name after the
+    open - no stat, no unlink, no second open."""
+    try:
+        fd = osmod.open(path, OPEN_FLAGS)
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            return None, "the spool entry is a symbolic link", None
+        return None, "the spool entry cannot be opened (%s)" % errno.errorcode.get(e.errno, e.errno), None
+    try:
+        st = osmod.fstat(fd)
+        ident = (st.st_dev, st.st_ino)
+        if not stat.S_ISREG(st.st_mode):
+            return None, "the spool entry is not a regular file", ident
+        if st.st_uid != owner_uid:
+            return None, "the spool entry was not created by %s" % OWNER, ident
+        if st.st_nlink != 1:
+            return None, "the spool entry has %d links (a hard link is refused)" % st.st_nlink, ident
+        chunks, total = [], 0
+        while True:
+            b = osmod.read(fd, min(1 << 16, cap + 1 - total))
+            if not b:
+                break
+            chunks.append(b)
+            total += len(b)
+            if total > cap:
+                return None, "the request is too large (over %d B)" % cap, ident
+        return b"".join(chunks), None, ident
+    finally:
+        osmod.close(fd)
+
+
+def remove_entry(path, ident, osmod=os):
+    """AFTER the read: unlink the name only if it still holds the inode that was read; a replaced name is a NEW
+    request and stays for the next run."""
+    try:
+        st = osmod.lstat(path)
+    except FileNotFoundError:
+        return True
+    if ident is not None and (st.st_dev, st.st_ino) != ident:
+        log("left %s: replaced since it was read - it is answered on the next run" % path)
+        return True
+    if stat.S_ISDIR(st.st_mode):
+        shutil.rmtree(path)
+    else:
+        osmod.unlink(path)
+    return True
+
+
+def execute(argv, stdin):
+    env = {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8"}
+    if not HOME_IS_LIVE:
+        env.update({k: os.environ[k] for k in ("LANGSTON_HOME", "LMW_OWNER", "LANGSTON_MEMORY_READER")
+                    if k in os.environ})
+    try:
+        p = subprocess.run([sys.executable, "-I", WRITER] + argv, input=stdin, capture_output=True, env=env,
+                           timeout=WRITER_TIMEOUT)
+        return p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired:
+        return 6, b"", ("REFUSED by the root memory service: the writer ran past %d s and was killed. A kill inside a "
+                        "write leaves the immutable flag clear until the next call; re-read the file before redoing "
+                        "and tell Infra Claude.\n" % WRITER_TIMEOUT).encode("utf-8")
+
+
+def reply(spool, rid, rc, out, err, gid):
+    data = json.dumps({"v": 1, "id": rid, "rc": rc, "stdout_b64": base64.b64encode(out).decode("ascii"),
+                       "stderr_b64": base64.b64encode(err).decode("ascii")}).encode("utf-8")
+    tmp = os.path.join(spool, "out", "." + rid + ".tmp")
+    try:
+        os.unlink(tmp)                           # a crash's leftover; out/ is root-only
+    except FileNotFoundError:
+        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | NOFOLLOW | os.O_CLOEXEC, 0o600)
+    try:
+        view = memoryview(data)
+        while view:
+            view = view[os.write(fd, view):]
+        os.fchown(fd, 0, gid)
+        os.fchmod(fd, 0o640)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.replace(tmp, os.path.join(spool, "out", rid + ".res"))
+
+
+def handle(name, ctx, osmod=os):
+    """One entry: read once -> validate the in-memory copy -> execute from that copy -> answer. Returns False only
+    when the entry could not be answered or removed."""
+    path = os.path.join(ctx["spool"], "in", name)
+    rid = name[:-len(NAME_SUFFIX)] if name.endswith(NAME_SUFFIX) else ""
+    if not (len(rid) == 32 and all(c in "0123456789abcdef" for c in rid)):
+        rid = None
+    al = ctx["allowlist"]
+    data, why, ident = take_entry(path, ctx["owner_uid"], al.MAX_REQUEST_BYTES, osmod)
+    removed = remove_entry(path, ident, osmod)
+    if rid is None:
+        log("dropped %r: not <32 hex>%s, so there is no one to answer (%s)" % (name, NAME_SUFFIX, why or "read"))
+        return removed
+    if why is None:
+        try:
+            argv, stdin = al.parse_request(data, rid)
+            shape, run_argv = al.validate(argv, stdin, os.path.join(ctx["home"], "memory-parts"))
+        except al.Refusal as r:
+            why = str(r)
+    if why is not None:
+        rc, out, err = 2, b"", ("REFUSED by the root memory service: %s. Nothing was run.\n" % why).encode("utf-8")
+        log("request %s refused: %s" % (rid, why))
+    else:
+        rc, out, err = ctx["execute"](run_argv, stdin)
+        log("request %s: %s, exit %d" % (rid, shape, rc))
+    ctx["reply"](ctx["spool"], rid, rc, out, err, ctx["owner_gid"])
+    return removed
+
+
+def sweep(directory, age_s):
+    now = time.time()
+    for n in os.listdir(directory):
+        p = os.path.join(directory, n)
+        try:
+            st = os.lstat(p)
+        except FileNotFoundError:
+            continue
+        if now - st.st_mtime < age_s:
+            continue
+        if stat.S_ISDIR(st.st_mode):
+            shutil.rmtree(p)
+        else:
+            os.unlink(p)
+        log("swept stale %s" % p)
+
+
+def main(argv):
+    if argv:
+        print("REFUSED: langston-memory-spoold takes no arguments (got %r)" % argv)
+        return 3
+    if NOFOLLOW is None or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        print("REFUSED: run as root, on Linux")
+        return 3
+    if HOME_IS_LIVE and any(k in os.environ for k in SEAMS):
+        print("REFUSED: a test seam (%s) is set beside the live home" % ", ".join(k for k in SEAMS if k in os.environ))
+        return 3
+    uid, gid = owner_ids()
+    problems = layout_problems(SPOOL, gid) + trust_problems(ALLOWLIST) + trust_problems(WRITER)
+    if problems:
+        print("REFUSED: %s" % "; ".join(problems))
+        return 3
+    ctx = {"spool": SPOOL, "home": HOME, "owner_uid": uid, "owner_gid": gid, "allowlist": load_allowlist(),
+           "execute": execute, "reply": reply}
+    sweep(os.path.join(SPOOL, "tmp"), STALE_TMP_S)
+    sweep(os.path.join(SPOOL, "out"), STALE_OUT_S)
+    ok = True
+    for name in sorted(os.listdir(os.path.join(SPOOL, "in"))):
+        try:
+            ok = handle(name, ctx) and ok
+        except Exception:
+            ok = False
+            log("entry %r could not be answered:" % name)
+            traceback.print_exc(file=sys.stdout)
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except SystemExit:
+        raise
+    except BaseException:
+        traceback.print_exc()
+        sys.exit(1)

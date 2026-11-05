@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""langston-memory-fence-check - is Langston's memory-write fence still ON? Daily, root (B-LANGSTON-MEMORY-WRITE-FENCE
+P4, OBJ-4; folds #1057(b)). A fence that has been switched off must be noticed, because nothing else would: Langston
+is stateless, and a frozen memory or a hand edit reads as normal until a write is refused.
+
+WHAT IT CHECKS - every fenced path from the SAME table the writer enforces (FENCE / fence_table() in
+langston-memory-write, loaded from source after its trust chain passes), never a copy:
+  1. owner, group, mode (lstat, never through a link) and the immutable flag (lsattr - an instrument independent of the
+     writer's own ioctl) of every category a/b row; a required row that is missing; any non-root entry in the archive dir;
+  2. the live MEMORY.md sha against compose-state's last_written_sha (C-1: compose-state is root:root 0600 +i);
+  3. the root spool service (C-6): langston-memory-spoold.path loaded, active and enabled; its .service not failed or
+     masked; the spool layout by the service's own LAYOUT table - if it is down his memory freezes and he cannot notice;
+  4. the reader-trust chain (A10, narrowed by C-15 to a LATENT single point of failure): the writer's own
+     reader_trust_problems() over the reader, every file in the reader's __pycache__ root-owned, and the writer, the
+     service and the allowlist root-owned and not group/other-writable along their whole paths. Root runs his writes
+     now, so one stray `chmod g+w` here stops every write he makes (exit 6). Never "fix" it by loosening those modes.
+
+⛔ ITS ALERT NEVER CLEARS ITSELF (C-5): no machine actor exists to resolve it (as B-TOKEN-WATCH-STORAGE A8), so a passing
+   run does NOT resolve it - it is RESOLVED BY HAND, with evidence, and never acked (an ack silences the row and blocks
+   the key's next mint, #982). The body says so. A tracked alert someone acked is a delivery failure (exit 2).
+EXIT  0 PASS · 1 BROKEN, alert armed (or still open) and read back live - a CORRECT run · 2 INSTRUMENT: something could
+   not be measured, the alert could not be delivered, or the tool crashed - never reads as PASS · 3 refused.
+"""
+import datetime, hashlib, json, os, pwd, shlex, stat, subprocess, sys, traceback, types
+
+sys.dont_write_bytecode = True
+STATE_DIR = "/opt/langston-memory/state"        # root:root, readable by langston, writable only by root
+CONFIG = {
+    "home": "/home/langston", "owner": "langston",
+    "writer": "/usr/local/bin/langston-memory-write",
+    "spoold": "/usr/local/sbin/langston-memory-spoold",
+    "allowlist": "/usr/local/sbin/langston_memory_allowlist.py",
+    "reader": None,                               # None = the writer's own READER
+    "spool": "/var/spool/langston-memory",
+    "path_unit": "langston-memory-spoold.path", "service_unit": "langston-memory-spoold.service",
+    "runlog": STATE_DIR + "/fence-check.jsonl", "statefile": STATE_DIR + "/fence-check-state.json",
+}
+STAGING_CMD = "cd /home/deploy/dawntrader && npm run --silent system-alerts --"
+KEY_BROKEN = "langston-memory-fence-broken"
+KEY_INSTRUMENT = "langston-memory-fence-instrument"
+TOOL_TIMEOUT = 120
+NL = chr(10)
+
+
+class ToolTimeout(OSError):
+    """An OSError on purpose (langston-rules-install): a hung tool is a refusal the caller already handles."""
+
+
+def run_tool(cmd):
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=TOOL_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise ToolTimeout("%s timed out after %d s" % (" ".join(cmd[:3]), TOOL_TIMEOUT))
+    return p.returncode, p.stdout.decode("utf-8", "replace"), p.stderr.decode("utf-8", "replace")
+
+
+def utc():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def trust_problems(path):
+    out, seen = [], set()
+    for q in (os.path.abspath(path), os.path.realpath(path)):
+        while True:
+            if q not in seen:
+                seen.add(q)
+                try:
+                    st = os.lstat(q)
+                    if st.st_uid != 0:
+                        out.append("%s is owned by uid %d" % (q, st.st_uid))
+                    elif not stat.S_ISLNK(st.st_mode) and stat.S_IMODE(st.st_mode) & 0o022:
+                        out.append("%s is group- or other-writable" % q)
+                except OSError as e:
+                    out.append("%s: %s" % (q, type(e).__name__))
+            if os.path.dirname(q) == q:
+                break
+            q = os.path.dirname(q)
+    return out
+
+
+def load_source(path, name):
+    """From source, read by fd - no __pycache__ can stand in for it. Called only after trust_problems(path) is empty."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        src = b""
+        while True:
+            b = os.read(fd, 1 << 16)
+            if not b:
+                break
+            src += b
+    finally:
+        os.close(fd)
+    mod = types.ModuleType(name)
+    mod.__file__ = path
+    exec(compile(src, path, "exec"), mod.__dict__)
+    return mod
+
+
+def lsattr_immutable(paths):
+    """{path: bool} for every path lsattr reported; a path it did not report is absent (the caller calls that
+    INSTRUMENT - an unread flag is never 'not set')."""
+    out = {}
+    for i in range(0, len(paths), 100):
+        _rc, so, _se = run_tool(["lsattr", "-d", "--"] + paths[i:i + 100])
+        for line in so.splitlines():
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                out[parts[1]] = "i" in parts[0]
+    return out
+
+
+def systemctl_state(unit):
+    rc, so, se = run_tool(["systemctl", "show", unit, "-p", "LoadState", "-p", "ActiveState", "-p", "UnitFileState"])
+    if rc != 0:
+        raise OSError("systemctl show %s exited %d: %s" % (unit, rc, se.strip()[:120]))
+    return dict(l.split("=", 1) for l in so.splitlines() if "=" in l)
+
+
+def evaluate(cfg):
+    """{"verdict", "findings", "instrument"} - findings say the fence is off; instrument says something was not read."""
+    findings, instrument = [], []
+    add = lambda kind, path, detail: findings.append({"kind": kind, "path": path, "detail": detail})
+    # 4 first: nothing below may be loaded and executed as root until its own chain passes
+    trusted = {}
+    for key in ("writer", "spoold", "allowlist"):
+        probs = trust_problems(cfg[key])
+        trusted[key] = not probs
+        for p in probs:
+            add("trust", cfg[key], p)
+    if not (trusted["writer"] and trusted["spoold"]):
+        instrument.append("the writer or the service failed its trust chain, so its table was not loaded")
+        return {"findings": findings, "instrument": instrument}
+    w = cfg.get("writer_mod") or load_source(cfg["writer"], "lmw_fence_check_writer")
+    sp = cfg.get("spoold_mod") or load_source(cfg["spoold"], "lmw_fence_check_spoold")
+    reader = cfg["reader"] or w.READER
+    for p in w.reader_trust_problems(reader):
+        add("reader-trust", reader, p)
+    cache = os.path.join(os.path.dirname(os.path.abspath(reader)), "__pycache__")
+    if os.path.isdir(cache):
+        for n in sorted(os.listdir(cache)):
+            st = os.lstat(os.path.join(cache, n))
+            if st.st_uid != 0:
+                add("reader-trust", os.path.join(cache, n), "a .pyc owned by uid %d runs in place of the reader" % st.st_uid)
+    # 1. the table
+    table = w.fence_table(cfg["home"], cfg["owner"])
+    flag_rows = []
+    for row in table:
+        if row["cat"] == "c":
+            continue
+        paths = w.row_paths(row)
+        if row["required"] and not paths:
+            add("missing", row.get("path", row["name"]), "a required fenced path is absent")
+        uid, gid = w.row_ids(row)
+        for p in paths:
+            st = os.lstat(p)
+            want_dir = row["kind"] == "dir"
+            if stat.S_ISLNK(st.st_mode) or (stat.S_ISDIR(st.st_mode) != want_dir) or not (
+                    stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
+                add("kind", p, "not a %s (mode %s)" % (row["kind"], oct(st.st_mode)))
+                continue
+            for d in w.fence_drift(st.st_uid, st.st_gid, st.st_mode, row, uid, gid):
+                add("owner/mode", p, d)
+            flag_rows.append((p, row))
+    arch = os.path.join(os.path.abspath(cfg["home"]), ".memory-archive")
+    if os.path.isdir(arch) and not os.path.islink(arch):
+        for n in sorted(os.listdir(arch)):
+            st = os.lstat(os.path.join(arch, n))
+            if st.st_uid != 0:
+                add("archive-entry", os.path.join(arch, n), "owned by uid %d inside the root-owned archive" % st.st_uid)
+    try:
+        flags = cfg["lsattr"]([p for p, _r in flag_rows])
+    except OSError as e:
+        flags = {}
+        instrument.append("lsattr failed: %s" % e)
+    for p, row in flag_rows:
+        if p not in flags:
+            instrument.append("the immutable flag of %s was not read" % p)
+        elif flags[p] != row["immutable"]:
+            add("flag", p, "immutable %s, the table says %s" % (flags[p], row["immutable"]))
+    # 2. the sha
+    mem = os.path.join(os.path.abspath(cfg["home"]), "MEMORY.md")
+    state_path = os.path.join(arch, "compose-state.json")
+    try:
+        with open(mem, "rb") as fh:
+            live = hashlib.sha256(fh.read()).hexdigest()
+        with open(state_path, "rb") as fh:
+            state = json.loads(fh.read().decode("utf-8"))
+        last = state.get("last_written_sha") if isinstance(state, dict) else None
+        if not isinstance(last, str) or len(last) != 64:
+            instrument.append("compose-state carries no last_written_sha")
+        elif live != last:
+            pend = " (it equals pending_sha: a write was killed between rename and state collapse)" if (
+                live == state.get("pending_sha")) else " - edited outside the writer, or compose-state forged"
+            add("sha", mem, "MEMORY.md sha %s != compose-state last_written_sha %s%s" % (live[:16], last[:16], pend))
+    except (OSError, ValueError) as e:
+        instrument.append("MEMORY.md or compose-state could not be read (%s: %s)" % (type(e).__name__, e))
+    # 3. the service and its spool
+    try:
+        pu, su = cfg["unit_state"](cfg["path_unit"]), cfg["unit_state"](cfg["service_unit"])
+        if (pu.get("LoadState"), pu.get("ActiveState"), pu.get("UnitFileState")) != ("loaded", "active", "enabled"):
+            add("service", cfg["path_unit"], "LoadState=%s ActiveState=%s UnitFileState=%s - his writes are not "
+                "being answered" % (pu.get("LoadState"), pu.get("ActiveState"), pu.get("UnitFileState")))
+        if su.get("LoadState") != "loaded" or su.get("ActiveState") == "failed":
+            add("service", cfg["service_unit"], "LoadState=%s ActiveState=%s" % (su.get("LoadState"), su.get("ActiveState")))
+    except OSError as e:
+        instrument.append("the service state could not be read: %s" % e)
+    for p in sp.layout_problems(cfg["spool"], pwd.getpwnam(cfg["owner"]).pw_gid):
+        add("spool", cfg["spool"], p)
+    return {"findings": findings, "instrument": instrument}
+
+
+def verdict_of(result):
+    return "INSTRUMENT" if result["instrument"] else ("BROKEN" if result["findings"] else "PASS")
+
+
+def _alerts(argv):
+    inner = STAGING_CMD + " " + " ".join(shlex.quote(a) for a in argv)
+    cmd = ["sudo", "-u", "langston", "ssh", "-o", "ConnectTimeout=25", "-o", "BatchMode=yes", "staging", inner]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
+        return p.returncode, (p.stdout or ""), (p.stderr or "")
+    except Exception as e:
+        return 255, "", "%s: %s" % (type(e).__name__, e)
+
+
+def alert_state(alerts, alert_id):
+    """'live' | 'acked' | 'gone' (resolved or not listed) | 'unknown' - read back, never assumed (#982)."""
+    rc, out, _err = alerts(["list", "--category", "health_check"])
+    if rc != 0:
+        return "unknown"
+    rows = [l for l in out.splitlines() if ("id=" + str(alert_id)) in l]
+    if not rows:
+        return "gone"
+    if "(acked by" in rows[0]:
+        return "acked"
+    return "live" if rows[0].split()[:1] in (["active"], ["scheduled"]) else "gone"
+
+
+def alert_text(verdict, result, evidence):
+    items = (["%s %s: %s" % (f["kind"], f["path"], f["detail"]) for f in result["findings"]]
+             + ["not measured: %s" % i for i in result["instrument"]])
+    shown = items[:12]
+    head = "%d item(s); %d shown; full set at %s. " % (len(items), len(shown), evidence)
+    tail = (" ⛔ THIS ALERT DOES NOT CLEAR ITSELF - a passing run never resolves it. Confirm the fence by hand (every "
+            "row of FENCE in langston-memory-write; MEMORY.md sha vs compose-state last_written_sha; "
+            "langston-memory-spoold.path active), then RESOLVE it with evidence (`npm run system-alerts -- resolve <id> "
+            "--by <actor> --evidence <ref>`). Never ack it - an ack silences it and blocks the next one (#982). "
+            "Break-glass for his write path: the install record. Owner CC-INFRA.")
+    if verdict == "BROKEN":
+        return ("Langston's memory-write fence is off or bypassed",
+                head + "; ".join(shown) + ". A clear flag or a forged state lets a direct edit through or lock every "
+                "write (exit 4); a stopped service freezes his memory and he cannot notice." + tail)
+    return ("Langston's memory-write fence check cannot measure", head + "; ".join(shown) + "." + tail)
+
+
+def reconcile(verdict, result, st, alerts, evidence):
+    """Arm (or keep) the alert for this verdict; NEVER resolve one. Returns (notes, delivered)."""
+    notes, delivered = [], True
+    wanted = {"BROKEN": KEY_BROKEN, "INSTRUMENT": KEY_INSTRUMENT}.get(verdict)
+    for key in (KEY_BROKEN, KEY_INSTRUMENT):
+        if not st.get(key):
+            continue
+        s = alert_state(alerts, st[key])
+        if s == "gone":
+            notes.append("%s was resolved by hand" % st.pop(key))
+        elif s == "acked":
+            delivered = False if key == wanted else delivered
+            notes.append("%s is ACKNOWLEDGED - silenced; it must be resolved, not acked" % st[key])
+        elif s == "unknown":
+            delivered = False if key == wanted else delivered
+            notes.append("%s could not be read back" % st[key])
+        else:
+            notes.append("%s still open - awaits a hand-resolve" % st[key])
+    if wanted and not st.get(wanted):
+        title, body = alert_text(verdict, result, evidence)
+        rc, out, err = alerts(["add", "--triggers-at", utc(), "--category", "health_check", "--severity", "warning",
+                               "--dedupe-key", wanted, "--title", title, "--body", body])
+        try:
+            row = json.loads(out) if rc == 0 else {}
+        except ValueError:
+            row = {}
+        if row.get("id") and not row.get("acknowledged_at") and alert_state(alerts, row["id"]) == "live":
+            st[wanted] = row["id"]
+            notes.append("armed %s" % row["id"])
+        else:
+            delivered = False
+            notes.append("ARM FAILED or returned a silenced row: rc=%d %s" % (rc, (err or out)[:160]))
+    return notes, delivered
+
+
+def run_once(cfg, alerts):
+    result = evaluate(cfg)
+    verdict = verdict_of(result)
+    try:
+        with open(cfg["statefile"], encoding="utf-8") as fh:
+            st = json.load(fh)
+    except FileNotFoundError:
+        st = {}
+    try:
+        with open(cfg["runlog"], encoding="utf-8") as fh:
+            line = sum(1 for _ in fh) + 1
+    except FileNotFoundError:
+        line = 1
+    notes, delivered = reconcile(verdict, result, st, alerts, "%s:%d" % (cfg["runlog"], line))
+    tmp = cfg["statefile"] + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(st, fh, indent=2)
+    os.replace(tmp, cfg["statefile"])
+    row = {"ts": utc(), "verdict": verdict, "findings": result["findings"], "instrument": result["instrument"],
+           "alerts": notes, "delivered": delivered}
+    with open(cfg["runlog"], "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + NL)
+    code = {"PASS": 0, "BROKEN": 1}.get(verdict, 2)
+    return row, (code if delivered else 2)
+
+
+def main(argv):
+    if argv not in ([], ["--dry-run"]):
+        print("REFUSED: usage: langston-memory-fence-check [--dry-run]")
+        return 3
+    if os.geteuid() != 0:
+        print("REFUSED: run as root")
+        return 3
+    cfg = dict(CONFIG, lsattr=lsattr_immutable, unit_state=systemctl_state)
+    if argv == ["--dry-run"]:
+        result = evaluate(cfg)
+        print(json.dumps(dict(result, verdict=verdict_of(result)), indent=2))
+        return {"PASS": 0, "BROKEN": 1}.get(verdict_of(result), 2)
+    row, code = run_once(cfg, _alerts)
+    print("%s: %d finding(s), %d unmeasured; alerts: %s" % (row["verdict"], len(row["findings"]),
+                                                          len(row["instrument"]), "; ".join(row["alerts"]) or "none"))
+    return code
+
+
+def entry():
+    """Exit codes disjoint from Python's own: an uncaught exception would exit 1, which the unit reads as a correct
+    BROKEN run - so ANY exception is 2, and the unit's OnFailure page carries it."""
+    try:
+        return main(sys.argv[1:])
+    except SystemExit:
+        raise
+    except BaseException:
+        traceback.print_exc()
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(entry())

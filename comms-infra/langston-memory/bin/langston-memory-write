@@ -11,15 +11,18 @@
    · no durable copy of what an overwrite removed - a removal with no copy is unrecoverable.
 
 ⛔ WHAT IT DOES, IN ORDER (Langston r7, pre-audit §20.2-§20.3):
+   0. (B-LANGSTON-MEMORY-WRITE-FENCE) run as the OWNER account it writes nothing itself: it hands the request to the
+      root memory service (langston-memory-spoold) and relays the answer verbatim - see run() and run_as_client();
    1. content arrives on STDIN - no file in a shared temp directory at any hop;
-   2. flock on a lock file inside the target's own directory;
+   2. flock on a lock file inside the root-owned .memory-archive/ (C-2: moved out of the owner's home), and under
+      it ensure_fence() re-asserts the FENCE table (C-4);
    3. COMPARE-AND-SWAP: the caller passes --expect-sha <sha256 OF THE BYTES IT READ AND EDITED>; under the lock
       the target is re-hashed and the write proceeds only on a match. ⛔ A sha taken fresh at write time
       defeats this entirely - it matches whoever wrote in between (Langston Step-4 BLOCKER-1).
    4. the OLD content goes to the archive as <sha256>.md, created EXCLUSIVELY, plus an append-only index row
       for the ATTEMPT - BEFORE anything is replaced;
-   5. a temp file in the TARGET'S OWN DIRECTORY, fsynced, renamed into place - owner preserved, mode set OWNER-ONLY
-      (group/other cleared; the archive was 700/600 while the primary output kept 644 - Langston, 18:37Z);
+   5. a temp file STAGED IN THE ROOT-ONLY .memory-archive/ (C-10), fsynced, given the FENCE table's owner and mode,
+      renamed into place; an immutable target has its flag cleared before and set again after (the RESIDUAL method);
    6. TWO counters must move by exactly what the call declared, or the old content is restored:
        · RETRACTIONS - entries parsed by the reader (langston_memory.py), IMPORTED, never re-implemented (rule 4);
        · THE WHOLE REVIEWER LEDGER - column-0 '- ' bullets between the '## … REVIEWER LEDGER' heading and the
@@ -27,9 +30,10 @@
          of the ledger's three subsections; deleting every GENERALISE ruling passed the first version with
          exit 0 (Langston Step-4 BLOCKER-2). This counter measures a DIFFERENT OBJECT; the reader is untouched.
 
-⛔ OWNERSHIP (Langston Step-4 BLOCKER-3): every call in the recipe is ssh root, and Langston must still be able to
-   run this afterwards. So when running as root, the lock, the archive directory, every archive file and the index
-   are handed to the TARGET'S owner, and any unwritable one is a stated refusal, never a traceback.
+⛔ OWNERSHIP - DISPOSITION (2), B-LANGSTON-MEMORY-WRITE-FENCE (C-7, C-14). It was (Langston Step-4 BLOCKER-3): when
+   root, everything this tool creates is handed to the TARGET'S owner, so Langston could still run it after a root
+   call. The fence inverts that: owner, group, mode and the immutable flag of every path come from ONE table (FENCE,
+   below), and Langston's own calls reach this code only through the root memory service.
 
 ⛔ --by IS RECORDED AS A CLAIM. Every session reaches this box as root (the dt-deploy precedent), so the
    observed identity cannot attribute a write to a session; the real uid is kept beside it as `via_uid`.
@@ -57,9 +61,10 @@ MODES
 
 EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4 compare-and-swap mismatch (nothing
       written; the message says whether the file changed OUTSIDE this tool) · 5 a declared count was wrong and the
-      previous content was RESTORED · 6 a refusal about the environment, or an internal error (see stderr)
+      previous content was RESTORED · 6 a refusal about the environment, or an internal error (see stderr) ·
+      7 a growth over the loaded-set ceiling was refused. Run as the owner, the root service's code is returned.
 """
-import datetime, fcntl, hashlib, importlib.util, json, os, pwd, re, stat, subprocess, sys, tempfile, time, traceback
+import base64, datetime, errno, fcntl, hashlib, importlib.util, json, os, pwd, re, secrets, stat, struct, subprocess, sys, tempfile, time, traceback
 
 sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pycache__ beside a langston-owned reader
 # ⛔ GUARD (c) condition (Langston, 20:26Z): cache_from_source honours sys.pycache_prefix, so an env var
@@ -72,13 +77,29 @@ sys.dont_write_bytecode = True   # a root run must not leave a root-owned __pyca
 #    PYTHON* var in any unit, /etc/environment or /etc/profile.d.
 sys.pycache_prefix = None
 
-OWNER = "langston"
 LIVE_HOME = "/home/langston"
 LANGSTON_HOME = os.environ.get("LANGSTON_HOME", LIVE_HOME)
+HOME_IS_LIVE = os.path.realpath(LANGSTON_HOME) == os.path.realpath(LIVE_HOME)
+# TEST SEAM (B-LANGSTON-MEMORY-WRITE-FENCE P6): a test home names a stand-in account for Langston's. Honoured only off
+#   the live home, by construction; set beside the live home it REFUSES (run()), never silently ignored.
+_OWNER_ENV = os.environ.get("LMW_OWNER")
+OWNER = _OWNER_ENV if (_OWNER_ENV and not HOME_IS_LIVE) else "langston"
 TARGET = os.path.join(LANGSTON_HOME, "MEMORY.md")
 ARCHIVE_DIR = os.path.join(LANGSTON_HOME, ".memory-archive")
 ARCHIVE_INDEX = os.path.join(ARCHIVE_DIR, "index.jsonl")
-LOCK = os.path.join(LANGSTON_HOME, ".memory-write.lock")
+# C-2: the lock moved INTO the root-owned archive dir - in the owner's home his account could unlink and recreate it,
+#   splitting mutual exclusion across two inodes. P5 takes the OLD lock (home/.memory-write.lock) across the move.
+LOCK = os.path.join(ARCHIVE_DIR, ".memory-write.lock")
+# C-10: every replace is STAGED here. Root-only for writes after the fence, and inside the home, so the same
+#   filesystem - the rename stays atomic. Staged in the owner's home, his account could swap the temp between fsync
+#   and rename and have root install his bytes under the composer's own stamp.
+STAGE_DIR = ARCHIVE_DIR
+# D1 (OBJ-3): where the owner account's requests go. The client is unprivileged, so this env var is not a seam into
+#   root; the service's own spool is fixed in its unit.
+_SPOOL_ENV = os.environ.get("LMW_SPOOL_DIR")
+SPOOL_DIR = _SPOOL_ENV or "/var/spool/langston-memory"
+CLIENT_TIMEOUT = int(os.environ.get("LMW_CLIENT_TIMEOUT") or "600")
+RESULT_UID = 0          # an answer must be root's; a constant so the pure suite can run as an ordinary user
 PARTS_DIR = os.path.join(LANGSTON_HOME, "memory-parts")          # P-2: the parts MEMORY.md is composed from
 COMPOSE_STATE = os.path.join(ARCHIVE_DIR, "compose-state.json")  # in the backed-up, owner-only archive dir
 STAMP_RE = re.compile(r"^<!-- composed .*-->$")
@@ -89,12 +110,206 @@ LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
 KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth")
 VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to", "--allow-growth")
 NL = chr(10)
+ARCHIVE_NAME_RE = re.compile(r"[0-9a-f]{64}\.md")
+PART_NAME_RE = re.compile(r"[^./][^/]*")      # a member of what read_parts() enumerates (valid_part_name, below)
+
+
+def fence_table(home, owner):
+    """⛔ THE FENCE (B-LANGSTON-MEMORY-WRITE-FENCE P1, C-14): ONE table gives owner, group, mode and the immutable flag of
+    every path this tool writes. owner_only() and hand_to_owner() read it at every write site (C-7), ensure_fence()
+    re-asserts it under the lock at the start of every root call (C-4), and langston-memory-fence-check reads the SAME
+    table daily (P4) - so a row is changed here or nowhere.
+    `group` names an ACCOUNT whose PRIMARY gid is the group (A2: langston's group has no supplementary members).
+    cat a = a direct write LOCKS the tool · b = a direct write DISARMS the fence or its detector · c = caught per call
+    by --expect-sha, deliberately NOT fenced (scope Q3); c rows exist so every write site has one source for its mode.
+    `adopt` = ensure_fence may take over a row found owned by another account. Only MEMORY.md: its bytes are checked
+    against root-held compose-state on every write, so adopting it launders nothing. Every other fenced row's CONTENT
+    is trusted (or, for the dir, contains trusted content), so a foreign owner is a tamper or an unmigrated home: it
+    REFUSES, loudly, and P5's migration does the one-time chown."""
+    home = os.path.abspath(home)
+    arch = os.path.join(home, ".memory-archive")
+    row = lambda name, kind, user, group, mode, imm, cat, adopt=False, required=False, **where: dict(
+        name=name, kind=kind, user=user, group=group, mode=mode, immutable=imm, cat=cat, adopt=adopt,
+        required=required, **where)
+    return (
+        row("MEMORY.md", "file", "root", owner, 0o640, True, "a", adopt=True, required=True,
+            path=os.path.join(home, "MEMORY.md")),
+        row("MEMORY-ARCHIVE.md", "file", "root", owner, 0o640, True, "a", path=os.path.join(home, "MEMORY-ARCHIVE.md")),
+        row("compose-state.json", "file", "root", "root", 0o600, True, "b", path=os.path.join(arch, "compose-state.json")),
+        row(".memory-archive/", "dir", "root", owner, 0o750, False, "b", required=True, path=arch),
+        row("index.jsonl", "file", "root", owner, 0o640, False, "b", path=os.path.join(arch, "index.jsonl")),
+        row("archive file <sha256>.md", "file", "root", owner, 0o640, False, "b", dir=arch, pattern=ARCHIVE_NAME_RE),
+        row("the write lock", "file", "root", "root", 0o600, False, "b", path=os.path.join(arch, ".memory-write.lock")),
+        row("LEDGER.md", "file", owner, owner, 0o600, False, "c", path=os.path.join(home, "LEDGER.md")),
+        row("memory part", "file", owner, owner, 0o600, False, "c", dir=os.path.join(home, "memory-parts"),
+            pattern=PART_NAME_RE),
+    )
+
+
+FENCE = fence_table(LANGSTON_HOME, OWNER)
 
 
 class Refused(Exception):
     def __init__(self, code, msg):
         super().__init__(msg)
         self.code = code
+
+
+class FenceError(OSError):
+    """The immutable-flag step failed. An OSError on purpose, as langston-rules-install's ToolTimeout: every caller's
+    existing `except OSError` / rollback sees it. The message says whether the file WAS replaced."""
+
+
+class ClientResult(Exception):
+    """The root service's answer to a request made as the owner account: exit code, stdout, stderr - verbatim bytes."""
+
+    def __init__(self, code, out, err):
+        super().__init__("exit %d" % code)
+        self.code, self.out, self.err = code, out, err
+
+
+def euid():
+    return os.geteuid()
+
+
+def owner_uid():
+    return pwd.getpwnam(OWNER).pw_uid
+
+
+def row_ids(row):
+    """(uid, gid) for a FENCE row: root is 0:0; an account's uid and its PRIMARY gid (A2)."""
+    uid = 0 if row["user"] == "root" else pwd.getpwnam(row["user"]).pw_uid
+    gid = 0 if row["group"] == "root" else pwd.getpwnam(row["group"]).pw_gid
+    return uid, gid
+
+
+def fence_row(path, table=None):
+    p = os.path.abspath(path)
+    table = FENCE if table is None else table
+    for r in table:
+        if r.get("path") == p:
+            return r
+    d, b = os.path.split(p)
+    for r in table:
+        if r.get("dir") == d and r["pattern"].fullmatch(b):
+            return r
+    raise Refused(6, "REFUSED: %s has no row in the FENCE table - this tool writes only the paths that table names. "
+                     "Nothing was written; tell Infra Claude." % path)
+
+
+def fence_drift(st_uid, st_gid, st_mode, row, uid, gid):
+    """Pure: how an object's owner, group and mode differ from its row (the flag is read separately)."""
+    out = []
+    if st_uid != uid:
+        out.append("owner uid %d, table %d" % (st_uid, uid))
+    if st_gid != gid:
+        out.append("group gid %d, table %d" % (st_gid, gid))
+    if stat.S_IMODE(st_mode) != row["mode"]:
+        out.append("mode %s, table %s" % (oct(stat.S_IMODE(st_mode)), oct(row["mode"])))
+    return out
+
+
+# THE IMMUTABLE FLAG, set and cleared BY FILE DESCRIPTOR (FS_IOC_GETFLAGS / FS_IOC_SETFLAGS, the ioctl chattr itself
+#   issues). Not `chattr <path>`: this runs on demand of the account the fence is against, inside a directory he owns,
+#   and chattr re-resolves the NAME (lstat, then open) - a name he swaps in that window would take the flag. An fd taken
+#   with O_NOFOLLOW is the object itself. The daily check reads the flag with lsattr, an instrument independent of this.
+_LONG = struct.calcsize("l")
+FS_IOC_GETFLAGS = (2 << 30) | (_LONG << 16) | (ord("f") << 8) | 1
+FS_IOC_SETFLAGS = (1 << 30) | (_LONG << 16) | (ord("f") << 8) | 2
+FS_IMMUTABLE_FL = 0x10
+
+
+def get_flags(fd):
+    # the kernel reads and writes an int at the argument, whatever the number's encoded size says
+    return struct.unpack("i", fcntl.ioctl(fd, FS_IOC_GETFLAGS, bytes(_LONG))[:4])[0]
+
+
+def set_flags(fd, flags):
+    fcntl.ioctl(fd, FS_IOC_SETFLAGS, struct.pack("i", flags) + bytes(_LONG - 4))
+
+
+def set_immutable_fd(fd, on):
+    f = get_flags(fd)
+    want = (f | FS_IMMUTABLE_FL) if on else (f & ~FS_IMMUTABLE_FL)
+    if want != f:
+        set_flags(fd, want)
+
+
+def open_nofollow(path, directory=False):
+    """An fd on the object AT path, never through a link; None when absent. A link, or the wrong kind of object,
+    refuses - a fenced name holding a link was put there by someone else."""
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC | (os.O_DIRECTORY if directory else 0)
+    try:
+        fd = os.open(path, flags)
+    except FileNotFoundError:
+        return None
+    except OSError as e:
+        if e.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise Refused(6, "REFUSED: %s is a symbolic link or not a %s - a fenced name never is. Nothing was "
+                             "written; tell Infra Claude." % (path, "directory" if directory else "file"))
+        raise
+    st = os.fstat(fd)
+    if not (stat.S_ISDIR(st.st_mode) if directory else stat.S_ISREG(st.st_mode)):
+        os.close(fd)
+        raise Refused(6, "REFUSED: %s is not a regular %s - nothing was written; tell Infra Claude."
+                      % (path, "directory" if directory else "file"))
+    return fd
+
+
+def fix_path(path, row):
+    """Make ONE existing object equal its row, by fd. Returns what it changed (empty = already equal)."""
+    fd = open_nofollow(path, row["kind"] == "dir")
+    if fd is None:
+        return []
+    try:
+        st = os.fstat(fd)
+        uid, gid = row_ids(row)
+        if st.st_uid != uid and not row["adopt"]:
+            raise Refused(6, "REFUSED: %s is owned by uid %d, not the FENCE table's %d. This row is never adopted - its "
+                             "content is trusted - so a foreign owner is a tamper or an unmigrated home. Nothing was "
+                             "written; tell Infra Claude." % (path, st.st_uid, uid))
+        drift = fence_drift(st.st_uid, st.st_gid, st.st_mode, row, uid, gid)
+        flags = get_flags(fd)
+        if drift:
+            if flags & FS_IMMUTABLE_FL:                       # owner and mode cannot change under the flag
+                flags &= ~FS_IMMUTABLE_FL
+                set_flags(fd, flags)
+            os.fchown(fd, uid, gid)
+            os.fchmod(fd, row["mode"])
+        imm = bool(flags & FS_IMMUTABLE_FL)
+        if imm != row["immutable"]:
+            set_flags(fd, (flags | FS_IMMUTABLE_FL) if row["immutable"] else (flags & ~FS_IMMUTABLE_FL))
+            drift.append("immutable flag %s, table %s" % (imm, row["immutable"]))
+        return drift
+    finally:
+        os.close(fd)
+
+
+def row_paths(row):
+    if "path" in row:
+        return [row["path"]] if os.path.lexists(row["path"]) else []
+    try:
+        names = os.listdir(row["dir"])
+    except FileNotFoundError:
+        return []
+    return [os.path.join(row["dir"], n) for n in sorted(names) if row["pattern"].fullmatch(n)]
+
+
+def ensure_fence():
+    """C-4: re-assert every fenced row at the START of every root call, under the lock (open_lock calls it), so a
+    SIGKILL between a replace's clear and set leaves the flag clear only until the next call. Idempotent. What it
+    had to repair is said on stderr - a repair means a killed write or a tamper, and either is worth seeing."""
+    repaired = []
+    for row in FENCE:
+        if row["cat"] == "c":
+            continue
+        for p in row_paths(row):
+            d = fix_path(p, row)
+            if d:
+                repaired.append("%s (%s)" % (p, "; ".join(d)))
+    if repaired:
+        print("NOTE: the fence was re-asserted on: " + " | ".join(repaired), file=sys.stderr)
+    return repaired
 
 
 def utc():
@@ -203,7 +418,7 @@ def reader_trust_problems(path):
 
 def load_reader():
     """Rule (4): the writer IMPORTS the reader's parser rather than re-implementing it."""
-    if os.geteuid() == 0:
+    if euid() == 0:
         problems = reader_trust_problems(READER)
         if problems:
             # Run as the OWNER, a reader the owner controls is not an escalation - so the guard is root-only.
@@ -315,36 +530,61 @@ def compose_append(current, entry_text):
     return before.rstrip(NL) + NL + entry_text.strip(NL) + NL + NL + after
 
 
-def hand_to_owner(fd_or_path, st):
-    """BLOCKER-3: when root, anything this tool creates belongs to the TARGET'S owner."""
-    if os.geteuid() != 0:
+def hand_to_owner(fd_or_path, path):
+    """DISPOSITION (2) - name kept, premise inverted (B-LANGSTON-MEMORY-WRITE-FENCE A11, C-14). It was BLOCKER-3
+    (Langston Step-4): when root, anything this tool creates belongs to the TARGET'S owner, so Langston could still run
+    the tool after a root call; all 7 call sites passed the TARGET's stat. Under the fence the target is root's and
+    Langston writes through the root service, so the TARGET's owner is the wrong source - it would leave
+    compose-state.json root:langston where the table says root:root. Owner and group now come from the FENCE row of
+    `path`, the object actually being written. Root only: another uid cannot chown."""
+    if euid() != 0:
         return
+    uid, gid = row_ids(fence_row(path))
     if isinstance(fd_or_path, int):
-        os.fchown(fd_or_path, st.st_uid, st.st_gid)
+        os.fchown(fd_or_path, uid, gid)
     else:
-        os.chown(fd_or_path, st.st_uid, st.st_gid)
+        os.chown(fd_or_path, uid, gid, follow_symlinks=False)
 
 
-def open_lock(st):
+def ensure_archive_dir():
+    """The root-owned .memory-archive/ (A3): created root-only if absent, then made equal to its row. Never adopted
+    from another owner (fix_path refuses) - a directory he made there would hold whatever he put in it."""
     try:
-        fd = os.open(LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
+        os.mkdir(ARCHIVE_DIR, 0o700)
+    except FileExistsError:
+        pass
+    fix_path(ARCHIVE_DIR, fence_row(ARCHIVE_DIR))
+
+
+def open_lock():
+    """The lock, LOCKED, with ensure_fence() run under it (C-4) - re-asserting the fence outside the lock could set a
+    flag another writer had just cleared to replace its file. Lives inside .memory-archive/ (C-2)."""
+    try:
+        ensure_archive_dir()
+        fd = os.open(LOCK, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
     except OSError as e:
-        raise Refused(6, "REFUSED: cannot open the lock %s (%s). It must be writable by root and %s - fix its "
-                         "owner; never bypass the lock. Nothing was written." % (LOCK, type(e).__name__, OWNER))
-    hand_to_owner(fd, st)
+        raise Refused(6, "REFUSED: cannot open the lock %s (%s). It and %s must be root's - never bypass the lock. "
+                         "Nothing was written." % (LOCK, type(e).__name__, ARCHIVE_DIR))
+    try:
+        if os.fstat(fd).st_uid != 0:
+            raise Refused(6, "REFUSED: the lock %s is not root's - nothing was written; tell Infra Claude." % LOCK)
+        os.fchmod(fd, owner_only(LOCK))
+        hand_to_owner(fd, LOCK)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        ensure_fence()
+    except BaseException:
+        os.close(fd)
+        raise
     return fd
 
 
-def archive_old(old_bytes, old_sha, st):
+def archive_old(old_bytes, old_sha):
     """Exclusive create, so an archived version can never be overwritten. If the same content was archived before,
     the existing file must hash to the same value - otherwise the archive is corrupt and we stop."""
     path = os.path.join(ARCHIVE_DIR, old_sha + ".md")
     try:
-        if not os.path.isdir(ARCHIVE_DIR):
-            os.makedirs(ARCHIVE_DIR, mode=0o750, exist_ok=True)
-            hand_to_owner(ARCHIVE_DIR, st)
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         except FileExistsError:
             with open(path, "rb") as fh:
                 if sha(fh.read()) != old_sha:
@@ -352,26 +592,28 @@ def archive_old(old_bytes, old_sha, st):
                                      "Nothing was written." % path)
             return path, False
     except OSError as e:
-        raise Refused(6, "REFUSED: cannot write the archive %s (%s). It must be writable by root and %s. Nothing "
-                         "was written." % (ARCHIVE_DIR, type(e).__name__, OWNER))
+        raise Refused(6, "REFUSED: cannot write the archive %s (%s). It must be root's (the FENCE table). Nothing "
+                         "was written." % (ARCHIVE_DIR, type(e).__name__))
     try:
         os.write(fd, old_bytes)
         os.fsync(fd)
-        hand_to_owner(fd, st)
+        os.fchmod(fd, owner_only(path))          # C-7: the table's group read, at the write, not one call later
+        hand_to_owner(fd, path)
     finally:
         os.close(fd)
     return path, True
 
 
-def append_index(row, st):
+def append_index(row):
     try:
-        fd = os.open(ARCHIVE_INDEX, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        fd = os.open(ARCHIVE_INDEX, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
     except OSError as e:
         raise Refused(6, "REFUSED: cannot append to the archive index %s (%s)" % (ARCHIVE_INDEX, type(e).__name__))
     try:
         os.write(fd, (json.dumps(row, ensure_ascii=False) + NL).encode("utf-8"))
         os.fsync(fd)
-        hand_to_owner(fd, st)
+        os.fchmod(fd, owner_only(ARCHIVE_INDEX))
+        hand_to_owner(fd, ARCHIVE_INDEX)
     finally:
         os.close(fd)
 
@@ -471,10 +713,14 @@ def cas_mismatch_message(live_sha):
             "edited it by hand. Tell Infra Claude before redoing." % (last.get("ts"), str(prior)[:16]))
 
 
-def owner_only(mode):
-    """Group and other bits cleared, owner bits kept. The archive was already 700/600; the primary output was left at
-    whatever mode it had (644 on the live box), protected only by the 750 home around it (Langston, 18:37Z)."""
-    return (mode & 0o7777) & ~0o077
+def owner_only(path):
+    """DISPOSITION (2) - name kept, premise inverted (B-LANGSTON-MEMORY-WRITE-FENCE A9, C-7). It was: group and other
+    bits cleared, owner bits kept - the archive was already 700/600 and the primary output had kept whatever mode it
+    had (644 on the live box), "protected only by the 750 home around it" (Langston, 18:37Z, 2026-10-17). The fence
+    makes GROUP READ load-bearing: the harness's @MEMORY.md, langston-log-loaded, the load canary and the index
+    service read as langston, and clearing the group bit would cut every one of them off on the first write. The mode
+    now comes from the FENCE row of the path being written - never from the previous file's mode."""
+    return fence_row(path)["mode"]
 
 
 # ⛔ THE RATCHET AT WRITE TIME (Langston, 2026-10-17; PHASE_19_PLAN row 2.8b): the loaded set is capped as a SUM and
@@ -546,7 +792,12 @@ def read_ratchet(mem_len):
     return r
 
 
-def growth_gate(old_bytes, new_bytes, opts, st, mode):
+GROWTH_ADVICE = " Shrink something in the same write, or pass --allow-growth \"<reason>\" to record a deliberate override."
+# r2 (Langston ruled --allow-growth DROPPED for his account): what the client shows him instead (run_as_client)
+CLIENT_GROWTH_ADVICE = " Shrink in the same write, or ask Infra Claude to run it as root."
+
+
+def growth_gate(old_bytes, new_bytes, opts, mode):
     """What the gate saw (a dict for the index row), or Refused(7) after recording the refusal."""
     delta = len(new_bytes) - len(old_bytes)
     r = read_ratchet(len(new_bytes))
@@ -567,68 +818,99 @@ def growth_gate(old_bytes, new_bytes, opts, st, mode):
         seen["override"] = {"by": opts.get("--by"), "reason": why}
         return seen
     append_index({"ts": utc(), "target": TARGET, "mode": mode, "outcome": "refused-growth", "ratchet": seen,
-                  "by_claimed": opts.get("--by"), "via_uid": os.getuid(), "reason": opts.get("--reason")}, st)
+                  "by_claimed": opts.get("--by"), "via_uid": os.getuid(), "reason": opts.get("--reason")})
     if unknown:
         msg = "REFUSED: this write grows MEMORY.md by %d B and the ratchet is UNKNOWN: %s." % (delta, unknown)
     else:
         msg = ("REFUSED: this write grows MEMORY.md by %d B and would leave the loaded set at %d B over its ceiling of "
                "%d B (live sum; PHASE_19_PLAN row 2.8b - it may only go down)." % (delta, seen["total_after"],
                                                                                     seen["ceiling_bytes"]))
-    raise Refused(7, msg + " Shrink something in the same write, or pass --allow-growth \"<reason>\" to record a "
-                           "deliberate override. The refusal is recorded; nothing was written.")
+    raise Refused(7, msg + GROWTH_ADVICE + " The refusal is recorded; nothing was written.")
 
 
-def replace_target(new_bytes, st):
-    """Temp file in the target's own directory, fsync, OWNER-ONLY mode and the target's owner, rename, fsync the
-    directory."""
-    d = os.path.dirname(TARGET)
-    fd, tmp = tempfile.mkstemp(prefix=".MEMORY.md.write-", suffix=".tmp", dir=d)
+def replace_target(new_bytes):
+    replace_file(TARGET, new_bytes)
+
+
+def test_hold_after_clear(path):
+    """SELF-TEST SEAM (P6, the SIGKILL case): LMW_TEST_HOLD_AFTER_CLEAR=<basename>:<seconds> holds a write between
+    clearing the flag and the rename, after saying so on stderr, so a test can kill it there. Off the live home only,
+    by construction - as LMW_TEST_CORRUPT_RESTORE."""
+    spec = os.environ.get("LMW_TEST_HOLD_AFTER_CLEAR")
+    if not spec or HOME_IS_LIVE:
+        return
+    name, _, secs = spec.rpartition(":")
+    if name == os.path.basename(path):
+        print("LMW-TEST: flag cleared on %s" % path, file=sys.stderr, flush=True)
+        time.sleep(float(secs))
+
+
+def replace_file(path, new_bytes):
+    """Every replace this tool makes - the RESIDUAL method (langston-rules-install docstring steps 3-5), reused:
+      · STAGED in STAGE_DIR, root-only, on the home's filesystem (C-10), given the FENCE row's owner and mode on the
+        open file and fsynced (C-7 - at the write, never one call later);
+      · an immutable target: its flag cleared, the stage renamed over it, and the flag set again IN A FINALLY - on the
+        STAGED INODE by its fd, so a name swapped in the window never receives it; if the rename failed, the flag goes
+        back on the old file by ITS fd;
+      · ⚠️ SIGKILL inside the window leaves the flag CLEAR (a finally does not run): ensure_fence() re-arms it at the
+        next call and the daily check sees it within a day (C-4). "Fails open on SIGKILL", never "always set".
+    Parts and LEDGER.md (category c) take the same path with no flag."""
+    imm = fence_row(path)["immutable"]
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".write-", suffix=".tmp", dir=STAGE_DIR)
+    old_fd, cleared, replaced = None, False, False
     try:
-        os.write(fd, new_bytes)
-        os.fsync(fd)
-        os.fchmod(fd, owner_only(st.st_mode))
-        hand_to_owner(fd, st)
+        try:
+            os.write(fd, new_bytes)
+            os.fsync(fd)
+            os.fchmod(fd, owner_only(path))
+            hand_to_owner(fd, path)
+            if imm:
+                old_fd = open_nofollow(path)
+                if old_fd is not None:
+                    set_immutable_fd(old_fd, False)
+                    cleared = True
+                    test_hold_after_clear(path)
+            os.replace(tmp, path)
+            replaced = True
+        finally:
+            if imm and replaced:
+                set_immutable_fd(fd, True)
+            elif imm and cleared:
+                set_immutable_fd(old_fd, True)
+        if imm:
+            a, b = os.lstat(path), os.fstat(fd)
+            if (a.st_dev, a.st_ino) != (b.st_dev, b.st_ino):
+                raise FenceError("%s was replaced, but the name now holds a different file - someone swapped it in "
+                                 "the window; the written file is immutable elsewhere. Tell Infra Claude." % path)
+    except FenceError:
+        raise
+    except OSError as e:
+        if imm and (cleared or replaced):
+            raise FenceError("the immutable-flag step on %s failed (%s: %s); the file %s - check its flag"
+                             % (path, type(e).__name__, e, "WAS replaced" if replaced else "was NOT replaced"))
+        raise
     finally:
         os.close(fd)
-    try:
-        os.replace(tmp, TARGET)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    dfd = os.open(d, os.O_RDONLY)
-    try:
-        os.fsync(dfd)
-    finally:
-        os.close(dfd)
+        if old_fd is not None:
+            os.close(old_fd)
+        if not replaced:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    for d in {os.path.dirname(os.path.abspath(path)), os.path.abspath(STAGE_DIR)}:
+        fsync_dir(d)
 
 
-def replace_file(path, new_bytes, st):
-    """Generalises replace_target for part files: temp in path's dir, fsync, owner-only mode + owner, atomic rename."""
-    d = os.path.dirname(path)
-    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".write-", suffix=".tmp", dir=d)
-    try:
-        os.write(fd, new_bytes)
-        os.fsync(fd)
-        os.fchmod(fd, owner_only(st.st_mode))
-        hand_to_owner(fd, st)
-    finally:
-        os.close(fd)
-    try:
-        os.replace(tmp, path)
-    except BaseException:
+def remove_fenced(path):
+    """Unlink a fenced file (a rollback's "it did not exist before"): the flag first, by fd, or the unlink is EPERM."""
+    fd = open_nofollow(path)
+    if fd is not None:
         try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    dfd = os.open(d, os.O_RDONLY)
-    try:
-        os.fsync(dfd)
-    finally:
-        os.close(dfd)
+            set_immutable_fd(fd, False)
+        finally:
+            os.close(fd)
+    os.remove(path)
 
 
 LEDGER_DECL_RE = re.compile(r"\A<!-- part\n.*?\n-->\n", re.DOTALL)
@@ -905,18 +1187,10 @@ def read_compose_state():
         return {}
 
 
-def write_compose_state(d, st):
-    """Owner-only JSON, atomic (temp+rename in the archive dir), full sha256 values only."""
-    os.makedirs(ARCHIVE_DIR, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(prefix=".compose-state-", suffix=".tmp", dir=ARCHIVE_DIR)
-    try:
-        os.write(fd, (json.dumps(d, indent=2) + "\n").encode("utf-8"))
-        os.fsync(fd)
-        os.fchmod(fd, 0o600)
-        hand_to_owner(fd, st)
-    finally:
-        os.close(fd)
-    os.replace(tmp, COMPOSE_STATE)
+def write_compose_state(d):
+    """JSON, atomic, full sha256 values only - through replace_file, so it takes its FENCE row: root:root 0600 and the
+    flag (C-1: its last_written_sha is what every out-of-band refusal and the daily check test; no langston reader)."""
+    replace_file(COMPOSE_STATE, (json.dumps(d, indent=2) + "\n").encode("utf-8"))
 
 
 def do_compose(opts):
@@ -924,12 +1198,11 @@ def do_compose(opts):
     reader = load_reader()
     reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     try:
-        st = os.stat(TARGET)
+        os.stat(TARGET)
     except OSError as e:
         raise Refused(2, "REFUSED: cannot stat the target %s (%s)" % (TARGET, type(e).__name__))
-    lfd = open_lock(st)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         with open(TARGET, "rb") as fh:
             cur = fh.read()
         cur_sha = sha(cur)
@@ -958,18 +1231,18 @@ def do_compose(opts):
                                                                         state.get("pending_sha")))
         composed = body + stamp_line(len(parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         new_sha = sha(composed)
-        growth = growth_gate(cur, composed, opts, st, "compose")
-        arch_path, created = archive_old(cur, cur_sha, st)
+        growth = growth_gate(cur, composed, opts, "compose")
+        arch_path, created = archive_old(cur, cur_sha)
         row = {"ts": utc(), "target": TARGET, "old_sha": cur_sha, "new_sha": new_sha, "old_bytes": len(cur),
                "new_bytes": len(composed), "mode": "compose", "part_count": len(parts), "parts_sha": parts_sha,
                "prev_parts_sha": state.get("parts_sha"), "parts_reconciled": parts_reconciled,
                "body_sha": body_sha, "stamp_bytes": len(composed) - len(body), "by_claimed": opts["--by"],
                "via_uid": os.getuid(), "reason": opts["--reason"], "archived": os.path.basename(arch_path),
                "ratchet": growth}
-        append_index(dict(row, outcome="attempted"), st)
+        append_index(dict(row, outcome="attempted"))
         # pending_sha BEFORE the rename; a crash here leaves it recognisable next time.
-        write_compose_state(dict(state, pending_sha=new_sha, ts=utc()), st)
-        replace_target(composed, st)
+        write_compose_state(dict(state, pending_sha=new_sha, ts=utc()))
+        replace_target(composed)
         if os.environ.get("LMW_TEST_CRASH_BEFORE_STATE") and os.path.realpath(LANGSTON_HOME) != os.path.realpath(LIVE_HOME):
             raise SystemExit(99)   # self-test only, non-live home: crash between rename and state-collapse
         with open(TARGET, "rb") as fh:
@@ -989,8 +1262,8 @@ def do_compose(opts):
                              "%s is at %s (pending_sha stays set; reconcile the parts and recompose)" % (TARGET, arch_path))
         # collapse: the write is durable, pending clears, last_written advances.
         write_compose_state({"last_written_sha": new_sha, "pending_sha": None, "ts": utc(),
-                             "parts_sha": parts_sha, "part_count": len(parts)}, st)
-        append_index(dict(row, ts=utc(), outcome="composed", retractions=[r_before, r_after]), st)
+                             "parts_sha": parts_sha, "part_count": len(parts)})
+        append_index(dict(row, ts=utc(), outcome="composed", retractions=[r_before, r_after]))
         recon = "" if not parts_reconciled else " [parts changed since last compose: %s -> %s]" % (
             (state.get("parts_sha") or "none")[:12], parts_sha[:12])
         return "COMPOSED %s -> %s from %d part(s)%s (%d -> %d B; stamp %d B; retractions %d -> %d); %s" % (
@@ -1034,15 +1307,13 @@ def _fp(reader, entries):
 
 def do_ledger_file_append(opts, content, n):
     """Q2: append N retraction entries to LEDGER.md under the writer's lock, with the same discipline as a part write."""
-    st = os.stat(TARGET)                        # lock ownership follows MEMORY.md, exactly as every other verb
-    lfd = open_lock(st)
+    os.stat(TARGET)                             # MEMORY.md must exist (ownership comes from the FENCE table now)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         if not os.path.isfile(LEDGER_FILE):
             raise Refused(2, "REFUSED: %s is missing. After the split the ledger is NEVER recreated by an append (the "
                              "counters would restart at zero). Restore it from .memory-archive/ and tell Infra Claude."
                           % LEDGER_FILE)
-        lst = os.stat(LEDGER_FILE)
         with open(LEDGER_FILE, "rb") as fh:
             old = fh.read()
         old_sha = sha(old)
@@ -1054,15 +1325,15 @@ def do_ledger_file_append(opts, content, n):
         if s0 != "ok":
             raise Refused(6, "REFUSED: the reader cannot parse LEDGER.md before the append (status %s) - nothing written" % s0)
         new = (old.decode("utf-8").rstrip(NL) + NL + content.strip(NL) + NL).encode("utf-8")
-        arch, _ = archive_old(old, old_sha, st)
-        archive_old(new, sha(new), st)          # the current version is restorable from the backed-up archive too
+        arch, _ = archive_old(old, old_sha)
+        archive_old(new, sha(new))          # the current version is restorable from the backed-up archive too
         # ledger_* keys, never old_sha/new_sha: final_sha_of() reads those as MEMORY.md's sha
         row = {"ts": utc(), "target": LEDGER_FILE, "mode": "ledger-file-append", "ledger_old_sha": old_sha,
                "ledger_new_sha": sha(new),
                "declared_retractions_delta": n, "by_claimed": opts["--by"], "via_uid": os.getuid(),
                "reason": opts["--reason"], "archived": os.path.basename(arch)}
-        append_index(dict(row, outcome="attempted"), st)
-        replace_file(LEDGER_FILE, new, lst)
+        append_index(dict(row, outcome="attempted"))
+        replace_file(LEDGER_FILE, new)
         try:
             with open(LEDGER_FILE, "rb") as fh:
                 if sha(fh.read()) != sha(new):
@@ -1078,16 +1349,16 @@ def do_ledger_file_append(opts, content, n):
             if problems:
                 raise Refused(5, "REFUSED (rule 4): " + "; ".join(problems))
         except BaseException as e:
-            replace_file(LEDGER_FILE, old, lst)
+            replace_file(LEDGER_FILE, old)
             with open(LEDGER_FILE, "rb") as fh:
                 back = sha(fh.read()) == old_sha
-            append_index(dict(row, ts=utc(), outcome="restored" if back else "restore-failed", why=str(e)[:300]), st)
+            append_index(dict(row, ts=utc(), outcome="restored" if back else "restore-failed", why=str(e)[:300]))
             if not back:
                 raise Refused(6, "REFUSED: LEDGER.md restore was NOT byte-identical (cause %s). Prior version at %s - "
                                  "restore by hand and tell Infra Claude." % (str(e)[:160], arch))
             base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
             raise Refused(5, "REFUSED: " + base + " - LEDGER.md restored byte-identical (prior at %s)" % arch)
-        append_index(dict(row, ts=utc(), outcome="written", retractions=[len(e0), len(e1)]), st)
+        append_index(dict(row, ts=utc(), outcome="written", retractions=[len(e0), len(e1)]))
         return "WRITTEN LEDGER.md (%s -> %s); retractions %d -> %d" % (old_sha[:12], sha(new)[:12], len(e0), len(e1))
     finally:
         os.close(lfd)
@@ -1113,10 +1384,9 @@ def do_split_ledger(opts, stub):
     LEDGER.md, so the file of record always holds every retraction."""
     if ledger_split_active():
         raise Refused(2, "REFUSED: %s already exists - the split has been done" % LEDGER_FILE)
-    st = os.stat(TARGET)
-    lfd = open_lock(st)
+    os.stat(TARGET)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         with open(TARGET, "rb") as fh:
             mem_old = fh.read()
         mem_old_sha = sha(mem_old)
@@ -1132,7 +1402,6 @@ def do_split_ledger(opts, stub):
         if part_old_sha != opts["--expect-sha"].strip().lower():
             raise Refused(4, "REFUSED: --expect-sha does not match part %s (current %s)" % (name, part_old_sha))
         part_path = os.path.join(PARTS_DIR, name)
-        pst = os.stat(part_path)
         reader = load_reader()
         reader_requires_offsets(reader)
         check_stub(stub, reader)
@@ -1164,24 +1433,24 @@ def do_split_ledger(opts, stub):
         body, parts_sha, body_sha = compose_body(new_parts)
         mem_new = body + stamp_line(1, parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
-        growth = growth_gate(mem_old, mem_new, opts, st, "split-ledger")
-        part_arch, _ = archive_old(part_old, part_old_sha, st)
-        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        growth = growth_gate(mem_old, mem_new, opts, "split-ledger")
+        part_arch, _ = archive_old(part_old, part_old_sha)
+        mem_arch, _ = archive_old(mem_old, mem_old_sha)
         # the NEW LEDGER.md is archived too: the daily backup covers .memory-archive/, not the live file, so this is what
         # makes "restore LEDGER.md from .memory-archive/" true (Langston Step-4 condition, 2026-10-16)
-        archive_old(ledger_new, sha(ledger_new), st)
+        archive_old(ledger_new, sha(ledger_new))
         row = {"ts": utc(), "target": TARGET, "part": name, "mode": "split-ledger", "part_old_sha": part_old_sha,
                "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
                "ledger_sha": sha(ledger_new), "by_claimed": opts["--by"], "via_uid": os.getuid(),
                "reason": opts["--reason"], "part_archived": os.path.basename(part_arch),
                "mem_archived": os.path.basename(mem_arch), "retractions_moved": len(e_old), "ratchet": growth}
-        append_index(dict(row, outcome="attempted"), st)
+        append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
-        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))
         try:
-            replace_file(LEDGER_FILE, ledger_new, pst)          # Q5: the superset first
-            replace_file(part_path, part_new, pst)
-            replace_target(mem_new, st)
+            replace_file(LEDGER_FILE, ledger_new)          # Q5: the superset first
+            replace_file(part_path, part_new)
+            replace_target(mem_new)
             problems = []
             with open(LEDGER_FILE, "rb") as fh:
                 if sha(fh.read()) != sha(ledger_new):
@@ -1221,9 +1490,9 @@ def do_split_ledger(opts, stub):
                 raise Refused(5, "REFUSED (split): " + "; ".join(problems))
         except BaseException as e:
             try:
-                replace_file(part_path, part_old, pst)
-                replace_target(mem_old, st)
-                write_compose_state(old_state, st)
+                replace_file(part_path, part_old)
+                replace_target(mem_old)
+                write_compose_state(old_state)
                 try:
                     os.remove(LEDGER_FILE)               # Q5b: fail toward the breach - MEMORY.md keeps the block
                 except FileNotFoundError:
@@ -1234,18 +1503,18 @@ def do_split_ledger(opts, stub):
                     part_ok = sha(fh.read()) == part_old_sha
                 restored = mem_ok and part_ok and not os.path.exists(LEDGER_FILE)
             except BaseException as re_err:
-                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__))
                 raise Refused(6, "REFUSED: SPLIT RESTORE FAILED (%s). part at %s, MEMORY.md at %s - restore by hand and "
                                  "remove LEDGER.md; tell Infra Claude." % (type(re_err).__name__, part_arch, mem_arch))
-            append_index(dict(row, ts=utc(), outcome="restored" if restored else "restore-incomplete", why=str(e)[:300]), st)
+            append_index(dict(row, ts=utc(), outcome="restored" if restored else "restore-incomplete", why=str(e)[:300]))
             if not restored:
                 raise Refused(6, "REFUSED: the split rollback was NOT complete (cause: %s). part at %s, MEMORY.md at %s - "
                                  "restore by hand, remove LEDGER.md, tell Infra Claude." % (str(e)[:160], part_arch, mem_arch))
             base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
             raise Refused(5, "REFUSED: " + base + " - MEMORY.md, the part and compose-state restored, LEDGER.md removed")
         write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
-                             "parts_sha": parts_sha, "part_count": 1}, st)
-        append_index(dict(row, ts=utc(), outcome="written"), st)
+                             "parts_sha": parts_sha, "part_count": 1})
+        append_index(dict(row, ts=utc(), outcome="written"))
         return ("SPLIT: %d retractions moved to LEDGER.md (%d B); MEMORY.md %d -> %d B; set equality both ways held; %s"
                 % (len(e_old), len(ledger_new), len(mem_old), len(mem_new), size_line(len(mem_new))))
     finally:
@@ -1335,10 +1604,9 @@ def trim_plan(text):
 
 
 def do_trim(opts):
-    st = os.stat(TARGET)
-    lfd = open_lock(st)
+    os.stat(TARGET)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         with open(TARGET, "rb") as fh:
             mem_old = fh.read()
         mem_old_sha = sha(mem_old)
@@ -1352,7 +1620,6 @@ def do_trim(opts):
             raise Refused(2, "REFUSED: the trim handles the single-part layout only; %d parts exist" % len(parts))
         name, part_old_sha, _pb, part_old = parts[0]
         part_path = os.path.join(PARTS_DIR, name)
-        pst = os.stat(part_path)
         keep_text, evicted, added, open_n = trim_plan(part_old.decode("utf-8"))
         if not evicted:
             if opts.get("--dry-run"):
@@ -1366,7 +1633,7 @@ def do_trim(opts):
             if not noop_rows_exist():
                 row["note"] = ("first trim-noop row: nights before this row have no row BY DESIGN (the row type did "
                                "not exist), not because the trim did not run")
-            append_index(row, st)
+            append_index(row)
             return "TRIM: nothing to evict (%d open batch section(s), 0 unmarked); no-op row recorded" % open_n
         if opts.get("--dry-run"):
             return "TRIM DRY RUN: would evict %d section(s) [%s], %d open stay; part %d -> %d B; nothing written" % (
@@ -1401,11 +1668,11 @@ def do_trim(opts):
         mem_new = body_ + stamp_line(1, parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
         r_before = retraction_count(reader, TARGET)
-        part_arch, _ = archive_old(part_old, part_old_sha, st)
-        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        part_arch, _ = archive_old(part_old, part_old_sha)
+        mem_arch, _ = archive_old(mem_old, mem_old_sha)
         if arch_existed:
-            archive_old(arch_old, sha(arch_old), st)
-        archive_old(arch_new_b, sha(arch_new_b), st)
+            archive_old(arch_old, sha(arch_old))
+        archive_old(arch_new_b, sha(arch_new_b))
         # ⚠️ ERA WARNING (Langston, 2026-10-16): recall dates an archived section by EVICTION time, so its cross-corpus
         #    caution cannot see a section from before the 2026-06-19 Discord cutover. The trim is the only writer of
         #    the archive, so it names any section whose heading lines carry a pre-cutover date - stated, never blocking.
@@ -1417,13 +1684,13 @@ def do_trim(opts):
                "memory_archive_sha": sha(arch_new_b), "evicted": [b for b, _s, _x in evicted], "open_left": open_n,
                "pre_cutover_heading": pre_cutover,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"]}
-        append_index(dict(row, outcome="attempted"), st)
+        append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
-        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))
         try:
-            replace_file(ARCHIVE_FILE, arch_new_b, pst)           # the superset first - fail toward the breach
-            replace_file(part_path, part_new, pst)
-            replace_target(mem_new, st)
+            replace_file(ARCHIVE_FILE, arch_new_b)           # the superset first - fail toward the breach
+            replace_file(part_path, part_new)
+            replace_target(mem_new)
             problems = []
             with open(ARCHIVE_FILE, "rb") as fh:
                 got = fh.read()
@@ -1444,30 +1711,30 @@ def do_trim(opts):
                 raise Refused(5, "REFUSED (trim): " + "; ".join(problems))
         except BaseException as e:
             try:
-                replace_file(part_path, part_old, pst)
-                replace_target(mem_old, st)
-                write_compose_state(old_state, st)
+                replace_file(part_path, part_old)
+                replace_target(mem_old)
+                write_compose_state(old_state)
                 if arch_existed:
-                    replace_file(ARCHIVE_FILE, arch_old, pst)
+                    replace_file(ARCHIVE_FILE, arch_old)
                 elif os.path.exists(ARCHIVE_FILE):
-                    os.remove(ARCHIVE_FILE)
+                    remove_fenced(ARCHIVE_FILE)
                 with open(TARGET, "rb") as fh:
                     ok = sha(fh.read()) == mem_old_sha
                 with open(part_path, "rb") as fh:
                     ok = ok and sha(fh.read()) == part_old_sha
             except BaseException as re_err:
-                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__))
                 raise Refused(6, "REFUSED: TRIM RESTORE FAILED (%s). part at %s, MEMORY.md at %s - tell Infra Claude."
                               % (type(re_err).__name__, part_arch, mem_arch))
-            append_index(dict(row, ts=utc(), outcome="restored" if ok else "restore-incomplete", why=str(e)[:300]), st)
+            append_index(dict(row, ts=utc(), outcome="restored" if ok else "restore-incomplete", why=str(e)[:300]))
             if not ok:
                 raise Refused(6, "REFUSED: the trim rollback was NOT complete (cause: %s). part at %s, MEMORY.md at %s"
                               % (str(e)[:160], part_arch, mem_arch))
             base = str(e) if isinstance(e, Refused) else "the post-write check crashed (%s)" % type(e).__name__
             raise Refused(5, "REFUSED: " + base + " - part, MEMORY.md, compose-state and MEMORY-ARCHIVE.md restored")
         write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
-                             "parts_sha": parts_sha, "part_count": 1}, st)
-        append_index(dict(row, ts=utc(), outcome="written"), st)
+                             "parts_sha": parts_sha, "part_count": 1})
+        append_index(dict(row, ts=utc(), outcome="written"))
         warn = ("" if not pre_cutover else
                 "; ⚠️ PRE-CUTOVER ERA in the heading of %s - recall dates these by eviction time, so its cross-corpus "
                 "caution will NOT fire for them" % ", ".join(pre_cutover))
@@ -1478,20 +1745,135 @@ def do_trim(opts):
         os.close(lfd)
 
 
+# ---------------- the owner account's side of design D1 (B-LANGSTON-MEMORY-WRITE-FENCE P2, OBJ-3) ----------------
+# Run as the owner, this program writes NOTHING itself: after the fence his account gets EPERM on every file it would
+# touch. It hands the request - argv and stdin, unvalidated: the root service's allowlist is the AUTHORITY and a copy
+# here would only drift - to the root-owned spool, waits, and returns the service's exit code, stdout and stderr
+# verbatim (exit 4's text is what tells a hand edit from a stale --expect-sha, C-3). No sudo rule (Langston, Q1).
+#   spool/tmp/<id>.req  written here (root:<owner> 1730: create-only for his account)
+#   spool/in/<id>.req   renamed into place complete - the service's path unit fires on in/ only, so it never sees half
+#   spool/out/<id>.res  the answer, written by root (root:<owner> 0750, the file 0640)
+
+def client_mode():
+    """The owner account, and only it. Root keeps the direct path; any other uid reaches the exit-3 gates."""
+    if euid() == 0:
+        return False
+    try:
+        return euid() == owner_uid()
+    except KeyError:
+        return False
+
+
+def new_request_id():
+    return secrets.token_hex(16)
+
+
+def build_request(rid, argv, stdin_bytes):
+    return json.dumps({"v": 1, "id": rid, "argv": list(argv),
+                       "stdin_b64": base64.b64encode(stdin_bytes).decode("ascii")}).encode("utf-8")
+
+
+def rewrite_growth_advice(rc, err):
+    """--allow-growth is not his to pass (r2, DROPPED): the root service's exit-7 text says to pass it, so the client
+    says what he CAN do instead. Everything else in the text is untouched. If the wording ever drifts, the note is
+    appended rather than lost."""
+    if rc != 7:
+        return err
+    old, new = GROWTH_ADVICE.encode("utf-8"), CLIENT_GROWTH_ADVICE.encode("utf-8")
+    if old in err:
+        return err.replace(old, new)
+    return err + (" (--allow-growth is root-only:" + CLIENT_GROWTH_ADVICE + ")\n").encode("utf-8")
+
+
+def read_result(path, rid):
+    """(rc, stdout, stderr) from the service's answer file, or None while it is absent. Read by fd, never through a
+    link; it must be root's - out/ is root's, so anything else there was not written by the service."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return None
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != RESULT_UID:
+            raise Refused(6, "REFUSED: the answer %s is not a regular file written by root - not trusted. Re-read the "
+                             "file before redoing; tell Infra Claude." % path)
+        chunks = []
+        while True:
+            b = os.read(fd, 1 << 20)
+            if not b:
+                break
+            chunks.append(b)
+    finally:
+        os.close(fd)
+    try:
+        res = json.loads(b"".join(chunks).decode("utf-8"))
+        if res.get("v") != 1 or res.get("id") != rid or not isinstance(res.get("rc"), int):
+            raise ValueError("shape")
+        return res["rc"], base64.b64decode(res["stdout_b64"]), base64.b64decode(res["stderr_b64"])
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        raise Refused(6, "REFUSED: the root memory service's answer %s cannot be read (%s). Re-read the file before "
+                         "redoing; tell Infra Claude." % (path, type(e).__name__))
+
+
+def run_as_client(argv, stdin_bytes):
+    if not HOME_IS_LIVE and not _SPOOL_ENV:
+        raise Refused(2, "REFUSED: run as %s, this writer hands the request to the root memory service, which writes "
+                         "the home IT serves - LANGSTON_HOME=%s would be ignored. Nothing was sent."
+                      % (OWNER, LANGSTON_HOME))
+    rid = new_request_id()
+    tmp = os.path.join(SPOOL_DIR, "tmp", rid + ".req")
+    dst = os.path.join(SPOOL_DIR, "in", rid + ".req")
+    data = build_request(rid, argv, stdin_bytes)
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+        try:
+            view = memoryview(data)
+            while view:
+                view = view[os.write(fd, view):]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.rename(tmp, dst)
+    except OSError as e:
+        raise Refused(6, "REFUSED: cannot hand the request to the root memory service at %s (%s: %s). Nothing was "
+                         "sent; tell Infra Claude." % (SPOOL_DIR, type(e).__name__, e))
+    res_path = os.path.join(SPOOL_DIR, "out", rid + ".res")
+    deadline = time.monotonic() + CLIENT_TIMEOUT
+    while True:
+        got = read_result(res_path, rid)
+        if got is not None:
+            rc, out, err = got
+            raise ClientResult(rc, out, rewrite_growth_advice(rc, err))
+        if time.monotonic() >= deadline:
+            raise Refused(6, "REFUSED: the root memory service did not answer request %s within %d s. It may still run "
+                             "it - re-read the file before redoing - and tell Infra Claude (the service may be down)."
+                          % (rid, CLIENT_TIMEOUT))
+        time.sleep(0.2)
+
+
 def run(argv, stdin_bytes):
+    # ⛔ C-9 - THE FIRST STATEMENT, AND IT MUST STAY HERE. Before ANY os.stat(TARGET), open_lock() or compose-state read:
+    #    run lower, the owner gets EPERM on the root-owned lock and compose-state INSTEAD of his real refusal text - and
+    #    that is also what makes compose-state root:root 0600 safe, since his out-of-band refusals (:955, :1686,
+    #    :1890 at the r2 ref) are now produced by the ROOT run and come back verbatim.
+    if client_mode():
+        return run_as_client(argv, stdin_bytes)
+    if _OWNER_ENV and HOME_IS_LIVE:
+        raise Refused(2, "REFUSED: LMW_OWNER is a test seam honoured only on a test home; it is set beside the live home "
+                         "%s. Nothing was written." % LIVE_HOME)
     opts = parse_args(argv)
     if opts.get("--trim"):
         for req in ("--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
                 raise Refused(2, "REFUSED: %s is required" % req)
-        if os.geteuid() not in (0, pwd.getpwnam(OWNER).pw_uid):
+        if euid() not in (0, owner_uid()):
             raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
         return do_trim(opts)
     if opts.get("--split-ledger"):
         for req in ("--expect-sha", "--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
                 raise Refused(2, "REFUSED: %s is required" % req)
-        if os.geteuid() not in (0, pwd.getpwnam(OWNER).pw_uid):
+        if euid() not in (0, owner_uid()):
             raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
         try:
             stub = stdin_bytes.decode("utf-8")
@@ -1505,20 +1887,17 @@ def run(argv, stdin_bytes):
         for bad in ("--expect-sha", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries"):
             if bad in opts:
                 raise Refused(2, "REFUSED: %s does not apply to --compose" % bad)
-        owner_uid = pwd.getpwnam(OWNER).pw_uid
-        if os.geteuid() not in (0, owner_uid):
+        if euid() not in (0, owner_uid()):
             raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
         return do_compose(opts)
     if opts.get("--rename-part"):
         for req in ("--expect-sha", "--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
                 raise Refused(2, "REFUSED: %s is required" % req)
-        owner_uid = pwd.getpwnam(OWNER).pw_uid
-        if os.geteuid() not in (0, owner_uid):
+        if euid() not in (0, owner_uid()):
             raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
         return do_rename(opts)
-    owner_uid = pwd.getpwnam(OWNER).pw_uid
-    if os.geteuid() not in (0, owner_uid):
+    if euid() not in (0, owner_uid()):
         raise Refused(3, "REFUSED: run as root or %s only" % OWNER)
     for req in ("--expect-sha", "--by", "--reason"):
         if req not in opts or not str(opts[req]).strip():
@@ -1582,9 +1961,8 @@ def do_direct_write_legacy(opts, content, append, declared_ledger, declared_retr
         st = os.stat(TARGET)
     except OSError as e:
         raise Refused(2, "REFUSED: cannot stat the target %s (%s)" % (TARGET, type(e).__name__))
-    lfd = open_lock(st)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         hold = float(os.environ.get("LMW_TEST_HOLD_AFTER_LOCK", "0") or 0)   # self-test only: widen the race window
         with open(TARGET, "rb") as fh:
             old = fh.read()
@@ -1598,20 +1976,20 @@ def do_direct_write_legacy(opts, content, append, declared_ledger, declared_retr
         new_text = compose_append(old.decode("utf-8"), content) if append else content
         new = new_text.encode("utf-8")
         new_sha = sha(new)
-        growth = growth_gate(old, new, opts, st, "ledger-append" if append else "whole-file")
-        arch_path, created = archive_old(old, old_sha, st)
+        growth = growth_gate(old, new, opts, "ledger-append" if append else "whole-file")
+        arch_path, created = archive_old(old, old_sha)
         row = {"ts": utc(), "target": TARGET, "old_sha": old_sha, "new_sha": new_sha,
                "old_bytes": len(old), "new_bytes": len(new), "mode": "ledger-append" if append else "whole-file",
                "declared_ledger_delta": declared_ledger, "declared_retractions_delta": declared_retractions,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
                "archived": os.path.basename(arch_path), "archive_created": created,
-               "mode_before": oct(st.st_mode & 0o7777), "mode_after": oct(owner_only(st.st_mode)),
+               "mode_before": oct(st.st_mode & 0o7777), "mode_after": oct(owner_only(TARGET)),
                "ratchet": growth}
-        append_index(dict(row, outcome="attempted"), st)          # FINDING-2: the ATTEMPT is on record first
+        append_index(dict(row, outcome="attempted"))          # FINDING-2: the ATTEMPT is on record first
         try:
-            replace_target(new, st)
+            replace_target(new)
         except OSError as e:
-            append_index(dict(row, ts=utc(), outcome="replace-failed", why=type(e).__name__), st)
+            append_index(dict(row, ts=utc(), outcome="replace-failed", why=type(e).__name__))
             raise Refused(6, "REFUSED: the replace failed (%s). The rename is atomic, so the target should still be "
                              "the previous content; that content is also at %s" % (type(e).__name__, arch_path))
         try:
@@ -1628,15 +2006,15 @@ def do_direct_write_legacy(opts, content, append, declared_ledger, declared_retr
         except BaseException as e:
             try:
                 corrupt = b"#corrupted-by-self-test" if corrupt_switch_armed(LANGSTON_HOME) else b""   # self-test only, never live
-                replace_target(old + corrupt, st)
+                replace_target(old + corrupt)
                 with open(TARGET, "rb") as fh:
                     restored_ok = sha(fh.read()) == old_sha
             except BaseException as re_err:
-                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__))
                 raise Refused(6, "REFUSED: RESTORE FAILED (%s). The target may hold the rejected content. The previous "
                                  "content is at %s (sha %s) - restore it by hand and tell Infra Claude."
                               % (type(re_err).__name__, arch_path, old_sha))
-            append_index(dict(row, ts=utc(), outcome="restored", restored_byte_identical=restored_ok, why=str(e)[:300]), st)
+            append_index(dict(row, ts=utc(), outcome="restored", restored_byte_identical=restored_ok, why=str(e)[:300]))
             if not restored_ok:
                 # ⛔ AMENDMENT E (Langston, 19:06Z): an INEXACT rollback is not a clean one. The operator action differs -
                 #    restore by hand and tell Infra Claude - which is what exit 6 already means. It must not read as 5.
@@ -1655,7 +2033,7 @@ def do_direct_write_legacy(opts, content, append, declared_ledger, declared_retr
             raise Refused(5, "REFUSED: the post-write check crashed (%s) - previous content restored, byte-identical=%s; "
                              "it is also at %s" % (type(e).__name__, restored_ok, arch_path))
         outcome = "no-change" if new_sha == old_sha else "written"
-        append_index(dict(row, ts=utc(), outcome=outcome, retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]), st)
+        append_index(dict(row, ts=utc(), outcome=outcome, retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]))
         return "%s %s -> %s (%d -> %d B; retractions %d -> %d; REVIEWER LEDGER bullets %d -> %d); %s" % (
             outcome.upper(), old_sha[:16], new_sha[:16], len(old), len(new), r_before, r_after, l_before, l_after,
             size_line(len(new)))
@@ -1670,12 +2048,11 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
     reader = load_reader()
     reader_requires_offsets(reader)   # fail-fast before any write if the reader predates the P-2 offset field
     try:
-        st = os.stat(TARGET)
+        os.stat(TARGET)
     except OSError as e:
         raise Refused(2, "REFUSED: cannot stat the target %s (%s)" % (TARGET, type(e).__name__))
-    lfd = open_lock(st)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         hold = float(os.environ.get("LMW_TEST_HOLD_AFTER_LOCK", "0") or 0)   # self-test only: widen the race window
         with open(TARGET, "rb") as fh:
             mem_old = fh.read()
@@ -1711,12 +2088,11 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
         if is_new:
             if os.path.exists(part_path):
                 raise Refused(4, "REFUSED: --part %s exists - pass its current sha as --expect-sha, not 'new'." % target_name)
-            part_old, part_old_sha, pst = b"", None, st   # a new part inherits MEMORY.md's owner/mode
+            part_old, part_old_sha = b"", None   # a new part takes the FENCE table's part row
         else:
             if not os.path.isfile(part_path):
                 raise Refused(4, "REFUSED: part %s does not exist. Pass `--expect-sha new` to create it (with --part); "
                                  "a whole-file write never creates a part implicitly." % part_path)
-            pst = os.stat(part_path)
             with open(part_path, "rb") as fh:
                 part_old = fh.read()
             part_old_sha = sha(part_old)
@@ -1743,9 +2119,9 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
         body, parts_sha, body_sha = compose_body(new_parts)
         mem_new = body + stamp_line(len(new_parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
-        growth = growth_gate(mem_old, mem_new, opts, st, "part-ledger-append" if append else "part-whole-file")
-        part_arch = None if is_new else archive_old(part_old, part_old_sha, st)[0]   # a create has no prior part to archive
-        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        growth = growth_gate(mem_old, mem_new, opts, "part-ledger-append" if append else "part-whole-file")
+        part_arch = None if is_new else archive_old(part_old, part_old_sha)[0]   # a create has no prior part to archive
+        mem_arch, _ = archive_old(mem_old, mem_old_sha)
         row = {"ts": utc(), "target": TARGET, "part": target_name, "part_old_sha": part_old_sha,
                "part_new_sha": sha(part_new), "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
                "mode": "part-ledger-append" if append else "part-whole-file",
@@ -1753,11 +2129,11 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
                "part_archived": (os.path.basename(part_arch) if part_arch else None), "created": is_new,
                "mem_archived": os.path.basename(mem_arch), "resolve_rule": resolve_rule, "ratchet": growth}
-        append_index(dict(row, outcome="attempted"), st)
+        append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
-        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
-        replace_file(part_path, part_new, pst)
-        replace_target(mem_new, st)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))
+        replace_file(part_path, part_new)
+        replace_target(mem_new)
         try:
             with open(part_path, "rb") as fh:
                 if sha(fh.read()) != sha(part_new):
@@ -1799,21 +2175,21 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                             pass
                     part_ok = (not os.path.exists(part_path))
                 else:
-                    replace_file(part_path, part_old, pst)
+                    replace_file(part_path, part_old)
                     with open(part_path, "rb") as fh:
                         part_ok = sha(fh.read()) == part_old_sha
-                replace_target(mem_old + corrupt, st)
-                write_compose_state(old_state, st)
+                replace_target(mem_old + corrupt)
+                write_compose_state(old_state)
                 with open(TARGET, "rb") as fh:
                     mem_ok = sha(fh.read()) == mem_old_sha
                 state_ok = read_compose_state() == old_state
             except BaseException as re_err:
-                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__))
                 raise Refused(6, "REFUSED: THREE-WAY RESTORE FAILED (%s). part at %s, MEMORY.md at %s - restore by hand "
                                  "and tell Infra Claude." % (type(re_err).__name__, part_arch, mem_arch))
             restored_ok = part_ok and mem_ok and state_ok
             append_index(dict(row, ts=utc(), outcome="restored", part_ok=part_ok, mem_ok=mem_ok, state_ok=state_ok,
-                              why=str(e)[:300]), st)
+                              why=str(e)[:300]))
             if not restored_ok:
                 raise Refused(6, "REFUSED: the three-way rollback was NOT byte-identical (part_ok=%s mem_ok=%s state_ok=%s; "
                                  "cause: %s). part at %s, MEMORY.md at %s - restore by hand and tell Infra Claude."
@@ -1822,9 +2198,9 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
             raise Refused(5, "REFUSED: " + base + " - part, MEMORY.md and compose-state all restored byte-identical "
                              "(part at %s, MEMORY.md at %s)" % (part_arch, mem_arch))
         write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
-                             "parts_sha": parts_sha, "part_count": len(new_parts)}, st)
+                             "parts_sha": parts_sha, "part_count": len(new_parts)})
         outcome = "no-change" if mem_new_sha == mem_old_sha else "written"
-        append_index(dict(row, ts=utc(), outcome=outcome, retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]), st)
+        append_index(dict(row, ts=utc(), outcome=outcome, retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]))
         return "%s part %s (%s%s->%s) [resolved: %s]; MEMORY.md %s -> %s (%d -> %d B; retractions %d -> %d; ledger bullets %d -> %d); %s" % (
             outcome.upper(), target_name, ("CREATED " if is_new else ""), (part_old_sha[:12] if part_old_sha else "new"),
             sha(part_new)[:12], resolve_rule, mem_old_sha[:12], mem_new_sha[:12],
@@ -1874,12 +2250,11 @@ def do_rename(opts):
     if old_name == new_name:
         raise Refused(2, "REFUSED: --rename-part and --to are the same name %r - nothing to rename." % old_name)
     try:
-        st = os.stat(TARGET)
+        os.stat(TARGET)
     except OSError as e:
         raise Refused(2, "REFUSED: cannot stat the target %s (%s)" % (TARGET, type(e).__name__))
-    lfd = open_lock(st)
+    lfd = open_lock()
     try:
-        fcntl.flock(lfd, fcntl.LOCK_EX)
         hold = float(os.environ.get("LMW_TEST_HOLD_AFTER_LOCK", "0") or 0)   # self-test only: widen the race window
         with open(TARGET, "rb") as fh:
             mem_old = fh.read()
@@ -1929,18 +2304,18 @@ def do_rename(opts):
         body, parts_sha, body_sha = compose_body(new_parts)
         mem_new = body + stamp_line(len(new_parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
-        part_arch, _ = archive_old(part_bytes, part_sha, st)   # the renamed part's bytes, keyed by sha
-        mem_arch, _ = archive_old(mem_old, mem_old_sha, st)
+        part_arch, _ = archive_old(part_bytes, part_sha)   # the renamed part's bytes, keyed by sha
+        mem_arch, _ = archive_old(mem_old, mem_old_sha)
         row = {"ts": utc(), "target": TARGET, "mode": "rename-part", "old_name": old_name, "new_name": new_name,
                "part_sha": part_sha, "mem_old_sha": mem_old_sha, "mem_new_sha": mem_new_sha,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
                "part_archived": os.path.basename(part_arch), "mem_archived": os.path.basename(mem_arch)}
-        append_index(dict(row, outcome="attempted"), st)
+        append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
-        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()), st)
+        write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))
         os.rename(old_path, new_path)          # atomic; preserves inode, owner and mode - no both/neither window
         fsync_dir(PARTS_DIR)
-        replace_target(mem_new, st)
+        replace_target(mem_new)
         try:
             with open(new_path, "rb") as fh:
                 if sha(fh.read()) != part_sha:
@@ -1978,18 +2353,18 @@ def do_rename(opts):
                 with open(old_path, "rb") as fh:
                     part_ok = sha(fh.read()) == part_sha
                 new_gone = (not os.path.exists(new_path)) or bool(corrupt)
-                replace_target(mem_old + corrupt, st)
-                write_compose_state(old_state, st)
+                replace_target(mem_old + corrupt)
+                write_compose_state(old_state)
                 with open(TARGET, "rb") as fh:
                     mem_ok = sha(fh.read()) == mem_old_sha
                 state_ok = read_compose_state() == old_state
             except BaseException as re_err:
-                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__), st)
+                append_index(dict(row, ts=utc(), outcome="restore-failed", why=type(re_err).__name__))
                 raise Refused(6, "REFUSED: THREE-WAY RESTORE FAILED (%s). the part may be at %s or %s, MEMORY.md at %s "
                                  "- restore by hand and tell Infra Claude." % (type(re_err).__name__, old_path, new_path, mem_arch))
             restored_ok = part_ok and new_gone and mem_ok and state_ok
             append_index(dict(row, ts=utc(), outcome="restored", part_ok=part_ok, new_gone=new_gone, mem_ok=mem_ok,
-                              state_ok=state_ok, why=str(e)[:300]), st)
+                              state_ok=state_ok, why=str(e)[:300]))
             if not restored_ok:
                 raise Refused(6, "REFUSED: the rename rollback was NOT byte-identical (part_ok=%s new_gone=%s mem_ok=%s "
                                  "state_ok=%s; cause: %s). old part at %s, MEMORY.md at %s - restore by hand and tell "
@@ -1998,8 +2373,8 @@ def do_rename(opts):
             raise Refused(5, "REFUSED: " + base + " - part, MEMORY.md and compose-state all restored byte-identical "
                              "(old part at %s, MEMORY.md at %s)" % (part_arch, mem_arch))
         write_compose_state({"last_written_sha": mem_new_sha, "pending_sha": None, "ts": utc(),
-                             "parts_sha": parts_sha, "part_count": len(new_parts)}, st)
-        append_index(dict(row, ts=utc(), outcome="renamed", retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]), st)
+                             "parts_sha": parts_sha, "part_count": len(new_parts)})
+        append_index(dict(row, ts=utc(), outcome="renamed", retractions=[r_before, r_after], ledger_bullets=[l_before, l_after]))
         return "RENAMED part %s -> %s (part sha %s); MEMORY.md %s -> %s (%d -> %d B; retractions %d; ledger bullets %d); %s" % (
             old_name, new_name, part_sha[:12], mem_old_sha[:12], mem_new_sha[:12], len(mem_old), len(mem_new),
             r_after, l_after, size_line(len(mem_new)))
@@ -2016,9 +2391,31 @@ def load_reader_from(path):
 
 def self_test():
     """Drives run() through a SUBPROCESS of this file for every case, so the entry point, stdin handling and exit
-    codes are what is tested. Every refusal asserts the target BYTE-IDENTICAL afterwards."""
+    codes are what is tested. Every refusal asserts the target BYTE-IDENTICAL afterwards.
+    ⛔ ROOT-ONLY (B-LANGSTON-MEMORY-WRITE-FENCE record line): it builds and tears down temp homes carrying the immutable
+    flag, and run as the owner it would be a CLIENT - every case would go to the live root service."""
     import shutil
+    if os.geteuid() != 0:
+        print("REFUSED: --self-test is root-only (it sets and clears the immutable flag on its temp homes)")
+        return 3
+    if _OWNER_ENV and HOME_IS_LIVE:
+        print("REFUSED: LMW_OWNER is set beside the live home; set LANGSTON_HOME to a scratch path as well")
+        return 3
     ok = True
+
+    def unfence(path):
+        """C-8: clear the flag with chattr (the external tool, not the code under test) - a teardown that cannot clear
+        it must FAIL, never swallow the error and print PASSED."""
+        subprocess.run(["chattr", "-R", "-i", path], check=True, capture_output=True, timeout=60)
+
+    def sweep(path):
+        unfence(path)
+        shutil.rmtree(path)                     # WITHOUT ignore_errors (C-8)
+
+    def lsattr_immutable(path):
+        p = subprocess.run(["lsattr", "-d", path], capture_output=True, text=True, timeout=60)
+        return None if p.returncode != 0 or not p.stdout.split() else "i" in p.stdout.split()[0]
+
     top = tempfile.mkdtemp(prefix="lmw-selftest-")
     here = os.path.abspath(__file__)
     # ⛔ CONDITION 2 (Langston, 18:43Z): installed, this file is /usr/local/bin/langston-memory-write and the reader is
@@ -2045,11 +2442,13 @@ def self_test():
     # hand-counted, NOT computed by the functions under test: 2 retractions; 2 + 2 + 1 = 5 ledger bullets
 
     def reset(text=base):
+        if os.path.exists(target):
+            unfence(target)
         with open(target, "w", encoding="utf-8", newline="") as fh:
             fh.write(text)
-        os.chmod(target, 0o644)        # start readable by others, as the live file is, so the narrowing is measured
+        os.chmod(target, 0o644)        # start readable by others, as the live file was, so the table's mode is measured
         if os.path.isdir(arch):
-            shutil.rmtree(arch)
+            sweep(arch)
 
     def current():
         with open(target, "rb") as fh:
@@ -2125,7 +2524,8 @@ def self_test():
         rc, out = call(appendargs(s0), "- one entry" + NL + "- a stray second column-0 bullet" + NL)
         check("a stray second bullet (moves +2, declared +1) refuses -> exit", rc, 5)
         check("  ...target byte-identical after the restore", current()[0] == b0, True)
-        check("  ...and the RESTORE is owner-only too", oct(os.stat(target).st_mode & 0o777), "0o600")
+        check("  ...and the RESTORE takes the FENCE table's mode too (C-7: group read kept)",
+              oct(os.stat(target).st_mode & 0o777), oct(fence_row(target, fence_table(top, OWNER))["mode"]))
         check("  ...the reader still counts 2", retr(), 2)
 
         reset()
@@ -2141,8 +2541,10 @@ def self_test():
               ("loaded-set ceiling UNKNOWN" in out, "cannot be read" in out), (True, True))
         check("  ...the archive gained exactly one file, named by the OLD sha", archived(), [s0 + ".md"])
         check("  ...the index records the ATTEMPT first, then the outcome (FINDING-2)", index_outcomes(), ["attempted", "written"])
-        check("  ...and the target is written OWNER-ONLY, from a 644 start (the 18:37Z ruling)",
-              oct(os.stat(target).st_mode & 0o777), "0o600")
+        check("  ...and the target is written at the FENCE table's 0640 from a 644 start (C-7; was owner-only, 18:37Z)",
+              oct(os.stat(target).st_mode & 0o777), "0o640")
+        check("  ...and carries the immutable flag (lsattr, an instrument independent of the writer)",
+              lsattr_immutable(target), True)
 
         b1, s1 = current()
         rc, out = call(whole(s1, 0, 0), b1.decode("utf-8").replace("- a note outside the ledger", "- a note outside the ledger, edited"))
@@ -2186,6 +2588,7 @@ def self_test():
         check("answer 2: an unchanged rewrite -> exit", rc, 0)
         check("  ...recorded as no-change, not written", index_outcomes()[-1], "no-change")
 
+        unfence(target)                 # a hand edit now needs the flag cleared first - only root can
         with open(target, "ab") as fh:
             fh.write(b"a hand edit" + NL.encode())
         rc, out = call(whole(s4, 0, 0), b4.decode("utf-8"))
@@ -2287,7 +2690,7 @@ def self_test():
                     check("GUARD (c): a root-owned SYMLINK into an owner-owned folder -> exit", rc, 6)
                     check("  ...names the folder the link resolves into, and the target is byte-identical", ("%s is owned by %s" % (gevil, OWNER)) in out and same, True)
                 finally:
-                    shutil.rmtree(groot, ignore_errors=True)
+                    shutil.rmtree(groot)            # C-8: no ignore_errors - a leak fails the run
         else:
             print("  N/A  GUARD (c) cases need root; the guard itself only applies to a root run")
         if os.geteuid() == 0:
@@ -2295,39 +2698,65 @@ def self_test():
                 owner = pwd.getpwnam(OWNER)
             except KeyError:
                 owner = None
-            check("BLOCKER-3 fixture: the owner account exists", owner is not None, True)
+            check("FENCE fixture: the owner account exists", owner is not None, True)
             if owner is not None:
+                # an owner-owned home, as the live one: MEMORY.md his (the one adoptable row), no archive dir yet
                 home3 = tempfile.mkdtemp(prefix="lmw-owner-")
-                bin3 = os.path.join(home3, "bin")
-                os.makedirs(bin3)
-                shutil.copy(here, os.path.join(bin3, "langston-memory-write"))
-                shutil.copy(reader, os.path.join(bin3, "langston_memory.py"))
                 t3 = os.path.join(home3, "MEMORY.md")
                 with open(t3, "w", encoding="utf-8", newline="") as fh:
                     fh.write(base)
-                for dp, dn, fn in os.walk(home3):
-                    os.chown(dp, owner.pw_uid, owner.pw_gid)
-                    for f in fn:
-                        os.chown(os.path.join(dp, f), owner.pw_uid, owner.pw_gid)
-                os.chmod(home3, 0o700)
-                env3 = {"LANGSTON_HOME": home3, "LANGSTON_MEMORY_READER": os.path.join(bin3, "langston_memory.py")}
-                s_a = sha(open(t3, "rb").read())
-                # GUARD (c): a ROOT run may not execute the owner-owned copies in bin3 - that is the escalation path.
-                #   The root leg runs this file with the root-controlled reader; the owner leg below keeps bin3.
-                rc, out = call(appendargs(s_a), "- written by root" + NL, extra_env=dict(env3, LANGSTON_MEMORY_READER=reader))
-                check("BLOCKER-3: a ROOT write -> exit", rc, 0)
-                owned = all(os.stat(p).st_uid == owner.pw_uid for p in (
-                    os.path.join(home3, ".memory-write.lock"), os.path.join(home3, ".memory-archive"),
-                    os.path.join(home3, ".memory-archive", "index.jsonl"), os.path.join(home3, ".memory-archive", s_a + ".md")))
-                check("  ...lock, archive dir, index and archive file all belong to the owner", owned, True)
-                s_b = sha(open(t3, "rb").read())
-                rc, out = call(appendargs(s_b), "- written by the owner after root" + NL, extra_env=env3,
-                               as_user=OWNER, script=os.path.join(bin3, "langston-memory-write"))
-                check("  ...then the OWNER's own write succeeds -> exit", rc, 0)
-                check("  ...with no traceback", "Traceback" in out, False)
-                shutil.rmtree(home3, ignore_errors=True)
+                for p_ in (home3, t3):
+                    os.chown(p_, owner.pw_uid, owner.pw_gid)
+                os.chmod(home3, 0o750)
+                os.chmod(t3, 0o600)
+                env3 = {"LANGSTON_HOME": home3, "LANGSTON_MEMORY_READER": reader}
+                try:
+                    s_a = sha(open(t3, "rb").read())
+                    rc, out = call(appendargs(s_a), "- written by root" + NL, extra_env=env3)
+                    check("FENCE (C-2, was BLOCKER-3): a ROOT write on an owner-owned home -> exit", rc, 0)
+                    # C-14: owner, group, mode AND the flag of EVERY fenced path, generated FROM the table, not listed
+                    for row_ in fence_table(home3, OWNER):
+                        if row_["cat"] == "c":
+                            continue
+                        uid_, gid_ = row_ids(row_)
+                        for p_ in row_paths(row_):
+                            st_ = os.lstat(p_)
+                            check("  ...%s: owner, group, mode, immutable = the table" % os.path.relpath(p_, home3),
+                                  (st_.st_uid, st_.st_gid, oct(stat.S_IMODE(st_.st_mode)), lsattr_immutable(p_)),
+                                  (uid_, gid_, oct(row_["mode"]), row_["immutable"]))
+                    check("  ...and the archive file of the old content exists to be checked",
+                          os.path.exists(os.path.join(home3, ".memory-archive", s_a + ".md")), True)
+                    s_b = sha(open(t3, "rb").read())
+                    rc, out = call(appendargs(s_b), "- a second root write" + NL, extra_env=env3)
+                    check("  ...a second root write -> exit", rc, 0)
+                    check("  ...and its fence pass was idempotent: nothing to re-assert", "re-asserted" in out, False)
+                    s_c = sha(open(t3, "rb").read())
+                    tmp3 = os.path.join(home3, ".lmw-editor-temp")
+                    arch3 = os.path.join(home3, ".memory-archive")
+                    probes = [
+                        (">> on MEMORY.md", "printf x >> %s" % t3, "Operation not permitted"),
+                        ("> on MEMORY.md", "printf x > %s" % t3, "Operation not permitted"),
+                        ("temp-and-rename over MEMORY.md", "printf x > %s && mv -f %s %s" % (tmp3, tmp3, t3),
+                         "Operation not permitted"),
+                        ("mv MEMORY.md away", "mv %s %s.moved" % (t3, t3), "Operation not permitted"),
+                        ("rm MEMORY.md", "rm -f %s" % t3, "Operation not permitted"),
+                        (">> inside .memory-archive/", "printf x >> %s/index.jsonl" % arch3, "Permission denied"),
+                        ("create inside .memory-archive/", "printf x > %s/planted" % arch3, "Permission denied"),
+                        ("rm inside .memory-archive/", "rm -f %s/index.jsonl" % arch3, "Permission denied"),
+                    ]
+                    for label, cmd, why in probes:
+                        p_ = subprocess.run(["sudo", "-n", "-u", OWNER, "sh", "-c", cmd], capture_output=True,
+                                            text=True, timeout=60)
+                        check("  as %s, %s fails with %r" % (OWNER, label, why),
+                              (p_.returncode != 0, why in p_.stderr), (True, True))
+                    p_ = subprocess.run(["sh", "-c", "printf x > %s" % t3], capture_output=True, text=True, timeout=60)
+                    check("  as ROOT, > on MEMORY.md fails too (the flag, not ownership)",
+                          (p_.returncode != 0, "Operation not permitted" in p_.stderr), (True, True))
+                    check("  ...and after every attempt MEMORY.md is byte-identical", sha(open(t3, "rb").read()), s_c)
+                finally:
+                    sweep(home3)
         else:
-            print("  N/A  BLOCKER-3 root-then-owner case needs root; run the self-test as root to exercise it")
+            print("  N/A  the FENCE ownership cases need root; run the self-test as root to exercise them")
         # size line, staged branches - LAST, after reset(), so their extra writes cannot move any count checked above
         reset()
         claude_p = os.path.join(top, "CLAUDE.md")
@@ -2357,7 +2786,11 @@ def self_test():
         for f_ in (claude_p, os.path.join(amem, "MEMORY.md"), os.path.join(top, ".ratchet-state.json")):
             os.remove(f_)
     finally:
-        shutil.rmtree(top, ignore_errors=True)
+        try:
+            sweep(top)
+        except Exception as e:          # C-8: a leaked immutable file FAILS the run - it is never swallowed
+            ok = False
+            print("  FAIL teardown left %s behind (%s: %s)" % (top, type(e).__name__, e))
     print("self-test %s" % ("PASSED" if ok else "FAILED"))
     return 0 if ok else 1
 
@@ -2376,9 +2809,18 @@ def main():
     try:
         print(run(argv, stdin_bytes))
         return 0
+    except ClientResult as c:                    # the root service's answer, byte for byte
+        sys.stdout.buffer.write(c.out)
+        sys.stdout.buffer.flush()
+        sys.stderr.buffer.write(c.err)
+        sys.stderr.buffer.flush()
+        return c.code
     except Refused as r:
         print(str(r), file=sys.stderr)
         return r.code
+    except FenceError as e:
+        print("REFUSED: %s" % e, file=sys.stderr)
+        return 6
 
 
 def entry():

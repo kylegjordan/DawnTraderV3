@@ -1,0 +1,16 @@
+[Unit]
+Description=Langston memory-write fence - daily check that it is still on (B-LANGSTON-MEMORY-WRITE-FENCE P4, #1057(b))
+Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+After=network-online.target
+# INLINE, as langston-privacy-check.service: exit 2 (could not measure, alert not delivered, a crash) pages here.
+OnFailure=agent-unit-failure@%N.service
+
+[Service]
+# BROKEN EXITS 1 BY DESIGN - the check ran correctly, found the fence off, and armed an alert it read back live
+# (the alert IS the page; it clears only by a hand-resolve). Parity with langston-privacy-check.
+SuccessExitStatus=0 1
+Type=oneshot
+ExecStart=/usr/bin/python3 -I /usr/local/sbin/langston-memory-fence-check
+StandardInput=null
+# NOT Restart= - the next daily run is the retry, and the run log shows a skipped day.
+TimeoutStartSec=600
