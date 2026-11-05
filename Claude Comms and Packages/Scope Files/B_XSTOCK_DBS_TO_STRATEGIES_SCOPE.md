@@ -1,4 +1,13 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r2 (`#1235`)
+# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r3 (`#1235`)
+
+> **r3 (2026-11-05):** Langston's ruling on r1c (it crossed with r2) is folded:
+> - **(C1)** the B72 consistency test's strategy list gains `volatility_edge` (OBJ-1b).
+> - **(C2)** OBJ-1b is a value swap, not a shape swap.
+> - **(C3)** the class basis is written on the behavior.
+> - **Item 1:** a coverage denominator, reported (OBJ-3).
+> - **Step 2:** which seed file a fresh database reads.
+>
+> His two rulings disagree on the class: r1 said architecture, r1c said non_architecture would stand if justified. **r3 keeps architecture.** Its required document set is a strict superset of non_architecture's, so nothing either ruling asks for is lost.
 
 > **r2 (2026-11-05): Langston's CHANGES on r1 folded.** He ruled r1, not r1a-r1c. His four points:
 > 1. **The verification test.** OBJ-4 is now a per-row agreement test with a stated denominator, not "at least one of each kind". OBJ-3b records the score detect received on every archived xStock evaluation, so the test is exact. Old (b) is relabelled as a positive control.
@@ -9,6 +18,12 @@
 > Build note taken: OBJ-1 keeps the spread of all ten MCE fields, never crypto's seven-field pick.
 
 change-class: architecture
+
+**Why this class (C3).** The basis is the BEHAVIOR, not the settings rows. The directional score starts reaching every xStock strategy's detect step, on both the VTS and paper trading:
+- guards that never fired start refusing (about 1 xStock open in 5, by `#1235`'s trade-level measure);
+- `strong_bull_trend` becomes able to fire on xStock.
+
+That changes what the signal pipeline does on one asset class. The System Manual has never recorded the hand-off (§2), so its update is not in doubt; the class makes it a REQUIRED row, not a judged one. The three settings rows are each seeded at the value the code already uses; they are not the basis.
 
 **Owner:** CC-B (NEW Claude) · **Placed:** `SPRINT_TO_LIVE_PLAN` pre-sprint table, stage "00 — data truth first", order 4 (Kyle KD-2, 2026-11-04) · **Written:** 2026-11-05 · **Read at:** `origin/migration/aws-supabase` `86caf3040`
 
@@ -56,10 +71,13 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 - *Verify:* a unit test drives the detect call and asserts that the object detect receives carries the three values; a mutation removing them turns it red; a test with `propagatedDbs` undefined asserts the fields are absent, not 0.
 
 **OBJ-1b — `volatility_edge` reads its strong-DBS threshold from the database (folded F1, §9.4 #1).** `volatility-edge.ts:94` replaces its fixed `0.35` with the same lookup its siblings use: `getCachedNumberRequired('strategy_dbs_routing_guards', 'dbs_min_threshold', {exchange:'*', assetClass, strategy, regime:'*'})` (`morning-star.ts:98-102`). The row's value is 0.35, so behavior is unchanged on crypto. Its absence fails hard, as on the siblings: no fallback.
+- **(C2) A VALUE SWAP, NOT A SHAPE SWAP.** `volatility-edge.ts:94` has only the `>= threshold` arm. Its siblings also carry the mirror `<= -threshold` counter-trend arm (`morning-star.ts:109-112`); this batch does NOT add it. Adding it would be a new refusal on crypto. Only the literal changes: `assetClass` and `STRATEGY_KEY` are already in scope, and the one new line is the `getCachedNumberRequired` import.
+- **(C1) THE GROUP'S CONSISTENCY TEST MUST SEE THE NEW MEMBER.** `server/tests/integration/b72-dbs-routing-guards-consistency.test.ts:34` lists the strategies by hand (4 names). Its `:48` assertion is `toBeGreaterThanOrEqual`, and `:83`/`:106` filter to that list, so a fifth row would pass the suite without being covered by it. That test backs the B63 mutual-exclusion guarantee (`LEVER_INVENTORY.md:436`, "non-negotiable"), so `volatility_edge` is added to its list.
 - **MEASURED 2026-11-05 ~00:10Z (staging, `module_constants WHERE module_name='strategy_dbs_routing_guards'`): 4 rows, all `dbs_min_threshold = 0.35` at `asset_class='*'`, for `defensive_hedge`, `morning_star`, `reverse_impulse`, `strong_bull_trend`. NONE for `volatility_edge`.** So OBJ-1b needs ONE seeded row (`volatility_edge`, `*`/`*`/`*`, 0.35, matching its siblings' shape) in a migration with a rollback file, a MANIFEST entry and a count assertion. With the row absent the new lookup would fail hard, which is why the row ships in the same deploy, before the code reads it.
-- *Verify:* the migration's own assertion (exactly 1 row inserted); a unit test with the row set to a different value proves the strategy reads it; a source fence that no literal `0.35` remains at that guard; on staging, `volatility_edge` keeps producing crypto signals after the deploy (no config-missing refusals).
+- *Verify:* the B72 consistency test lists `volatility_edge` and still passes; the migration's own assertion (exactly 1 row inserted); a unit test with the row set to a different value proves the strategy reads it; a source fence that no literal `0.35` remains at that guard; on staging, `volatility_edge` keeps producing crypto signals after the deploy (no config-missing refusals).
 
 **OBJ-1c — crypto's strong-trend geometry override is read from settings, not code (folded part of F2, §9.4 #1; PM Claude 2026-11-05).** `vts-runner.ts:1835-1837` attaches `{ stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0 }` as literals. Move both to `module_constants`, keyed per asset class, seeded for `crypto_spot` at exactly 4.0 and 3.0, read with `getCachedNumberRequired` (no fallback; a missing crypto row fails hard). **Crypto behavior is unchanged. xStock is NOT given the override:** no xStock row is seeded and the xStock loop does not attach it; whether xStock gets one is F2's open decision for Kyle.
+- *Settled at Step 2 (Langston, also OBJ-1b):* `dbs_min_threshold` rows are seeded in TWO migration files, `2026-04-22b-initial-seed-data.sql:159-162` and `2026-05-05-b72-dbs-routing-guards.sql:40-43`. Establish which one a fresh-database build reads, so the new rows are not missing on a clean environment where the code now fails hard.
 - *Settled at Step 2:* the module and constant names (following the existing per-strategy module convention), whether `strategy` is `vwap_pullback` or `*` (the override is consumed only by `vwap_pullback`, `strategy-engine.ts:243`), and a census of every site that attaches or reads the override. The active crypto path at the ref attaches none (`git grep strongTrendGeometryOverride`: only `vts-runner.ts`); Step 2 confirms whether that is by design.
 - *Verify:* migration count assertion (2 rows); a unit test with the rows set to other values proves the attach site reads them; a source fence that no literal `4.0`/`3.0` remains at the attach site; on staging, crypto `vwap_pullback` strong-trend signals keep the 4×ATR stop and 3R target (read from the signal's own stop/target against its ATR).
 
@@ -68,7 +86,11 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 **OBJ-3b — every archived xStock evaluation records the score detect received** (`features.detectDbsScore`). It is read from the OBJ-1 object itself, and is `null` when absent. It is an additive key in the existing `features` jsonb, so there is no schema change. It is what makes OBJ-4 exact, and it is the evidence calibration needs for the xStock guards (F3).
 - *Verify:* a unit test that the archived row carries the value detect received. Step 2 censuses the readers of `signal_eval_archive.features` for any that would break on a new key.
 
-**OBJ-3 — a count the reader can see: how many xStock evaluations carried a DBS this cycle.** One field in the existing xStock cycle summary (evaluations with `propagatedDbs` defined / total). **Positive control for OBJ-4:** zero would mean the hand-off is inert.
+**OBJ-3 — coverage, a count the reader can see (Langston's item 1).** Two fields, reported per cycle in the xStock cycle summary and per session in the Step-7 record. They are reported, not thresholded.
+- **Coverage:** the share of xStock evaluations whose detect input carried a non-null `dbsScore`.
+- **Strong share:** of those, the share at `≥ 0.35`.
+
+The coverage is OBJ-4(a)'s denominator. A per-row agreement test passes vacuously if most symbols arrive with no score and silently keep `?? 0`, and the coverage is what exposes that. **Zero would mean the hand-off is inert.**
 - *Verify:* the field appears in the staging cycle summary and is above 0 during market hours.
 
 **OBJ-4 — staging verification, PRE-REGISTERED here, before any data:**
