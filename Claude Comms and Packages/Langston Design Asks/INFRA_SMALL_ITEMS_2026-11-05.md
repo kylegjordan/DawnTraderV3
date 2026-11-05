@@ -11,8 +11,13 @@ Owner: Infra Claude. Both are proposals for Kyle's list (PM Claude carries them)
 2. Anchor the key where it is minted (`:152`): `relative(REPO_ROOT, resolve(REPO_ROOT, m[1]))`, forward-slashed — the identity on every repo-relative key, so the baseline stays byte-identical (43/43 keys repo-relative today, total 329; no regeneration).
 3. No change to the guard (one fix for one defect).
 4. A comment above `:388`: `newPaths` is the only live arm there; it must never be touch-filtered as drops are at `:360`.
-**Tests, all pure (no tsc run):** (a) `parseErrors` on `../../../server/routes.ts(12,5): error TS2345: x` → key `server/routes.ts` (fails today); (b) **Coltrane's control** on fixed fixtures — the same error set rendered root-shaped and subfolder-shaped gives IDENTICAL `(file, code, message) → count` maps and verdict against the real baseline, including an injected +1 regression detected on both sides (fails today). Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (329 = baseline, OK), not on these tests.
-**Status:** Langston AGREED (with 2 and 4). Coltrane AGREED with the full-map control; the pure-fixture form of (b) put to him 15:37Z — pending his confirm.
+**Tests, all pure (no tsc run) — REVISED by Coltrane (15:5xZ):** the first draft's test (a) contradicted fix 2 — `relative(REPO_ROOT, resolve(REPO_ROOT, "../../../server/routes.ts"))` escapes the repo and can never yield `server/routes.ts`; once tsc is pinned to `REPO_ROOT`, `parseErrors` cannot infer the old caller folder from that string. So the invariant is split:
+- (1) fake `execSync` and assert `runTsc` passes `cwd: REPO_ROOT` — controls `:90` directly;
+- (2) `parseErrors` canonicalises the two valid post-fix forms, `server/routes.ts` and the absolute `${REPO_ROOT}/server/routes.ts`, to the same key;
+- (3) both resulting maps through `computeDiff` against the real baseline give identical results, an injected +1 regression detected in both;
+- (4) the `:388` note made executable: an unknown path stays in `newPaths` and makes the derived verdict fail (the comment stays, but is not the control).
+Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (329 = baseline, OK), not on these tests.
+**Status:** Coltrane AGREES with these four. Langston AGREED to the fix (with 2 and 4); his confirmation of the revised test set is asked 16:0xZ.
 
 ## Item 2 — a root-made snapshot of staging's root crontab, so archival-health checks schedules against the real ones
 
