@@ -2117,8 +2117,9 @@ export class ActiveExecutionEngine {
           + `kept open (a close must never drop its trade record, KD-17) and the close is retried every cycle. What to do: look for `
           + `this position's open record in closed_trades (same mode, symbol and asset class, closed_at IS NULL). If there are `
           + `SEVERAL, find how the duplicate was written and close or remove the wrong one by hand; if there is NONE, the record `
-          + `must be restored from the position — there is no restore action yet (it is B-CLOSE-WRITER-COSTS P-12), so bring it `
-          + `to OLD Claude. B-CLOSE-WRITER-COSTS P-2. DISPOSITION: RESOLVE, do not ACK.`,
+          + `must be restored from the position: on staging run \`npx tsx server/scripts/restore-trade-record.ts ${position.id} --by `
+          + `<actor>\` (or POST /active-engine/positions/${position.id}/restore-record), then the next cycle closes it. `
+          + `B-CLOSE-WRITER-COSTS P-2/P-12. DISPOSITION: RESOLVE, do not ACK.`,
         dedupe_key: `close-record-unresolved-${this.mode}-${position.symbol}`,
       });
     } catch (alertErr) {
