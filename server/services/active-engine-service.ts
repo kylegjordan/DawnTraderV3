@@ -1171,6 +1171,12 @@ export async function stopActiveEngine(
                     console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP_SUCCESS] Removed orphan: ${orphan.id}`);
                   } catch (cleanupErr) {
                     console.error(`[8.8.3-I2][STOP_FLOW][CLEANUP_FAILED] Could not remove orphan: ${orphan.id}`, cleanupErr);
+                    // B-CLOSE-WRITER-COSTS P-17 (Langston Part C C-2): the record was FINISHED above and the delete failed, so a live
+                    // position now sits on a finished record. Reported HERE, at the point of failure — the stop is not a clean
+                    // flatten, and paper-reset-3000 must refuse on it (it reads orphansKept). The next start surfaces it again
+                    // through the close's record check (P-2), but the stop must not report success.
+                    flattenReport.orphansKept.push(orphan.symbol);
+                    console.error(`[B-CLOSE-WRITER-COSTS][STOP_FLOW] orphan ${orphan.symbol} (${orphan.id}): its record was finished but the delete FAILED — position KEPT on a finished record; reported in orphansKept`);
                   }
                 }
               } else {
