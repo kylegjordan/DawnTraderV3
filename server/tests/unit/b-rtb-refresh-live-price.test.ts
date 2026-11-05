@@ -50,6 +50,9 @@ vi.mock('../../storage.js', () => ({
   },
 }));
 vi.mock('../../services/context-bridge', () => ({ contextBridge: { broadcast: async () => undefined } }));
+// B-ENTRY-GATE (#1224) P11: promotion reads entry_gate.rtb_plan_max_age_ms; no row is seeded, so the shipped state is
+// "no row" (undefined) — the limit is off and promotion proceeds as before.
+vi.mock('../../services/module-constants-service.js', async (orig) => ({ ...(await orig<any>()), getCachedConstant: () => undefined }));
 const archived: any[] = [];
 vi.mock('../../services/data-archive/signal-eval-archiver.js', () => ({ archiveSignalEval: (row: any) => { archived.push(row); } }));
 
