@@ -1,0 +1,167 @@
+// B-CLOSE-WRITER-COSTS P-10 + P-12 — the operator closes and their remedy, exercised (Langston Part B C-3: the source-text
+// checks could not see that a refusal's reason never reached the screen).
+//   R-1..R-4  what the two routes send back: every refusal is 200 + success:false + error (the client throws on non-2xx and
+//             its onError discards the body); a partial stranded clear carries `error` too.
+//   C-1       the client's success handlers really do show `result.error` (the zero-client-change premise, pinned).
+//   S-1..S-9  the restore service against a stand-in storage: its four refusals, the success path (fields copied, both fee
+//             columns, the restore stamps, the position pointed at its record), the explicit pending-maker branch, and the
+//             atomic insert losing a race.
+//   O-1..O-2  closeOnePositionByOperator: not found, and the one chain with the operator's tag and 'manual_stop'.
+// POSITIVE CONTROLS (mutation-proved while writing): returning 409 for a refusal fails R-2; dropping `error` from the
+// partial-clear body fails R-4; omitting chosenEntryMode from the restore fails S-6; the pending branch refusing fails S-8.
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const st = vi.hoisted(() => ({
+  getActiveOpenPosition: vi.fn(),
+  findOpenTradeRecord: vi.fn(),
+  getClosedTrade: vi.fn(),
+  insertOpenTradeRecordIfNoneOpen: vi.fn(),
+  updateActiveOpenPosition: vi.fn(async () => ({})),
+}));
+vi.mock('../../storage', () => ({ storage: st }));
+
+import { engineNotRunningResponse, manualCloseResponse, strandedClearResponse } from '../../services/operator-close-response';
+import { restoreOpenTradeRecord } from '../../services/trade-record-restore';
+import { ActivePortfolioManager } from '../../services/active-portfolio-manager';
+
+beforeEach(() => {
+  Object.values(st).forEach((f) => f.mockReset());
+  st.updateActiveOpenPosition.mockResolvedValue({});
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+});
+
+describe('R — what the operator routes send back', () => {
+  it('R-1 engine not running: 200, success false, the remedy in `error`', () => {
+    const r = engineNotRunningResponse('close the position');
+    expect(r.http).toBe(200);
+    expect(r.body).toEqual({ success: false, error: 'Paper trading simulation not running — start the engine, then close the position from Active Trades.' });
+  });
+  it('R-2 a refused close: 200, success false, the reason in `error`', () => {
+    const r = manualCloseResponse('p1', { status: 'left_open', reason: 'close refused by the fill contract or the trade-record check (position still open)', symbol: 'NEM/USD' });
+    expect(r.http).toBe(200);
+    expect(r.body.success).toBe(false);
+    expect(r.body.error).toBe('NEM/USD not closed: close refused by the fill contract or the trade-record check (position still open)');
+    expect(manualCloseResponse('p1', { status: 'not_found' }).http).toBe(200);
+  });
+  it('R-3 a close: 200, success true, a message', () => {
+    expect(manualCloseResponse('p1', { status: 'closed', symbol: 'BTC/USD' }).body).toEqual({ success: true, closedTradeId: 'p1', message: 'Closed BTC/USD position' });
+  });
+  it('R-4 a partial stranded clear carries the message in `error` (the client failure branch reads `error`)', () => {
+    const r = strandedClearResponse(4, [{ symbol: 'NEM/USD', reason: 'no observed price' }]);
+    expect(r.http).toBe(200);
+    expect(r.body.success).toBe(false);
+    expect(r.body.error).toBe('Cleared 4; 1 not cleared (NEM/USD: no observed price)');
+    expect(strandedClearResponse(3, []).body).not.toHaveProperty('error');
+  });
+});
+
+describe('C — the client premise', () => {
+  it('C-1 both Active Trades success handlers show result.error on success:false', () => {
+    const src = readFileSync(resolve(__dirname, '../../../client/src/components/trading/paper-open-trades-tab.tsx'), 'utf8');
+    const close = src.slice(src.indexOf('const closeTradeMutation'), src.indexOf('const clearStrandedMutation'));
+    const clear = src.slice(src.indexOf('const clearStrandedMutation'), src.indexOf('const resetSessionMutation'));
+    for (const block of [close, clear]) {
+      expect(block).toMatch(/onSuccess: \(result: any\) =>/);
+      expect(block).toMatch(/description: result\?\.error \|\|/);
+    }
+  });
+});
+
+const POSITION = {
+  id: 'pos-1', symbol: 'ETH/USD', assetClass: 'crypto_spot', exchange: 'kraken', strategyName: 'momentum', side: 'buy',
+  quantity: '0.5', avgPrice: '2000', intendedEntryPrice: '1999', stopLoss: '1900', takeProfit: '2200', entryFee: '4',
+  entrySlippage: '0.2', confidence: '61', openedAt: new Date('2026-11-05T10:00:00Z'), signalType: 'QUANT', patternType: null,
+  patternStrength: null, sourcePool: 'quant', balanceRatioAtOpen: '0.1', anchorBalanceAtOpen: '3000', anchorVersionAtOpen: 9,
+  chosenEntryMode: 'taker', entryFillPolicy: 'walk', entryFeeRate: '0.004', tradeMode: 'TRAILING_TAKE', state: 'open',
+  metadata: { tradeId: 'gone-1', origin: 'x' },
+};
+
+describe('S — the restore service', () => {
+  it('S-1 position not found → 404', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(undefined);
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 404 });
+  });
+  it('S-2 no valid asset class → 409, no lookup', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, assetClass: 'nope' });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409 });
+    expect(st.findOpenTradeRecord).not.toHaveBeenCalled();
+  });
+  it('S-3 an open record exists → 409 naming it, nothing inserted', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'one', record: { id: 'r-1' } });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'r-1' });
+    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+  });
+  it('S-4 several open records → 409 naming them', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'many', ids: ['a', 'b'], more: false });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordIds: ['a', 'b'] });
+  });
+  it('S-5 the position\'s own tradeId record exists (not open) → 409', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue({ id: 'gone-1', closedAt: new Date() });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'gone-1' });
+    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+  });
+  it('S-6 success: the open-time fields copied (incl. the maker/taker stamps and trade mode), both fee columns, the stamps', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue(undefined);
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+    const r = await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(r).toMatchObject({ ok: true, recordId: 'new-1', pending: false });
+    const [mode, sym, cls, rec] = st.insertOpenTradeRecordIfNoneOpen.mock.calls[0] as [string, string, string, Record<string, unknown>];
+    expect([mode, sym, cls]).toEqual(['paper', 'ETH/USD', 'crypto_spot']);
+    expect(rec).toMatchObject({
+      entryPrice: '2000', actualEntryPrice: '2000', intendedEntryPrice: '1999', fees: '4', entryFee: '4', slippage: '0.2', entrySlippage: '0.2',
+      chosenEntryMode: 'taker', entryFillPolicy: 'walk', entryFeeRate: '0.004', tradeMode: 'TRAILING_TAKE',
+      recordRestoredFromPosition: true, restoredByClaimed: 'cc-a',
+    });
+    expect(rec).not.toHaveProperty('exitPrice');
+    expect(rec).not.toHaveProperty('closedAt');
+  });
+  it('S-7 success points the position at its new record', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+    await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(st.updateActiveOpenPosition).toHaveBeenCalledWith('paper', 'pos-1', { metadata: { tradeId: 'new-1', origin: 'x' } });
+  });
+  it('S-8 a PENDING maker is restored explicitly (no fill asserted; its zero fee is legitimate), flagged in metadata', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, state: 'pending', entryFee: '0', entrySlippage: '0', metadata: {} });
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-2' } });
+    const r = await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(r).toMatchObject({ ok: true, pending: true });
+    const rec = st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3] as Record<string, any>;
+    expect(rec.metadata).toEqual({ restoredWhilePending: true });
+    expect(rec.entryFee).toBe('0');
+  });
+  it('S-9 the atomic insert finds a record appeared meanwhile → 409, the position not repointed', async () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'exists', ids: ['raced-1'] });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordIds: ['raced-1'] });
+    expect(st.updateActiveOpenPosition).not.toHaveBeenCalled();
+  });
+});
+
+describe('O — closeOnePositionByOperator', () => {
+  type Mgr = { mode: string; _flattenOne: ReturnType<typeof vi.fn>; closeOnePositionByOperator: (id: string, tag: string) => Promise<unknown> };
+  const proto = ActivePortfolioManager.prototype as unknown as Mgr;
+  it('O-1 a position that is gone → not_found, no close attempted', async () => {
+    const fake = { mode: 'paper', _flattenOne: vi.fn() };
+    st.getActiveOpenPosition.mockResolvedValue(undefined);
+    expect(await proto.closeOnePositionByOperator.call(fake, 'pos-1', 'manual_close')).toEqual({ status: 'not_found' });
+    expect(fake._flattenOne).not.toHaveBeenCalled();
+  });
+  it('O-2 the one chain: _flattenOne(position, tag, manual_stop), its outcome returned with the symbol', async () => {
+    const fake = { mode: 'paper', _flattenOne: vi.fn(async () => ({ status: 'left_open', reason: 'r' })) };
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    expect(await proto.closeOnePositionByOperator.call(fake, 'pos-1', 'stranded_clear')).toEqual({ status: 'left_open', reason: 'r', symbol: 'ETH/USD' });
+    expect(fake._flattenOne).toHaveBeenCalledWith(POSITION, 'stranded_clear', 'manual_stop');
+  });
+});
