@@ -7,6 +7,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.modules.setdefault("discord", types.SimpleNamespace(Client=object, DMChannel=type("DMChannel", (), {})))
+# B-WAKE-OPENING-LIST: the gate reads address_list.py, installed at /opt/discord-bridges/ on Helsinki; point the bot at the
+# repo copy (its sha is pinned in the bot, so a stale copy would refuse rather than pass).
+os.environ.setdefault("COLTRANE_ADDRESS_LIST", str(HERE.parent / "discord" / "address_list.py"))
 spec = importlib.util.spec_from_file_location("coltrane_bot_recovery_test", HERE / "coltrane-bot.py")
 bot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bot)

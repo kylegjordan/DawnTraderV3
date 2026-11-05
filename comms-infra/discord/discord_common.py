@@ -18,11 +18,13 @@ Parallel-run isolation: the Discord bridges write to /var/log/cc-discord-inbox.j
 (SEPARATE from the live Telegram /var/log/cc-bridge-inbox.jsonl). The live Telegram
 fabric is never touched.
 """
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import types
 import uuid
 import time
 import urllib.request
@@ -36,10 +38,48 @@ SHARED_CONFIG_FILE = "/etc/dawntrader/discord-comms.env"  # CHANNEL_ID + KYLE_DI
 
 # Discord hard limit on message content length
 MSG_LIMIT = 2000
-# B-COMMS-CHUNK-FIX (2026-07-22): mirror of discord-langston-bridge.py ADDRESS_START_RE —
-# the receiver's ANCHORED address gate. Deliberately kept in sync; see
-# 'Claude Comms and Packages/Scope Files/B_COMMS_CHUNK_FIX_PRE_AUDIT.md'.
-ADDRESS_START_RE = re.compile(r'^[\s*_~`>#:\".\-]*langston\b', re.I)
+
+# ─── B-WAKE-OPENING-LIST (#1241): who a post is addressed to ──────────────────
+# One rule for every wake site: the names in the post's OPENING LIST (address_list.py). It is loaded BY PATH from
+# beside this file and pinned by sha-256, because the copy that matters is the INSTALLED one (#1004's class).
+# ⛔ NOTHING HERE RAISES. This module is imported by `cc-send` (via discord-cc-bridge.py) and therefore by
+#    bridge-failed-notify.sh, so a raise would make one module the single point of failure for every session post
+#    and for the alarm that a bridge died. The SENDER degrades (_send_chunks); Langston's bridge reads
+#    ADDRESS_LIST_ERROR and REFUSES TO START (Langston's ruling, pre-audit r2a P2a).
+ADDRESS_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "address_list.py")
+# Computed by address_list_test.py from the committed file; it fails until this equals it. Never hand-typed.
+ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+
+
+def load_address_list(path=ADDRESS_LIST_FILE, expected=ADDRESS_LIST_SHA256):
+    """(module, None) or (None, cause). The bytes that are hashed are the bytes that run (no second read), and the
+    loaded parser must pass a probe with a known answer - a wrong key convention would otherwise match no name at all
+    while the sha matched (Langston C-1)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        got = hashlib.sha256(data).hexdigest()
+        if got != expected:
+            return None, "address_list.py is %s, expected %s" % (got, expected)
+        mod = types.ModuleType("address_list")
+        mod.__file__ = path
+        exec(compile(data, path, "exec"), mod.__dict__)
+        names, _end = mod.opening_list("OLD Claude, Coltrane and Langston - probe", mod.REGISTRY)
+        if names != ["CC-A", "COLTRANE", "LANGSTON"]:
+            return None, "address_list.py loaded but failed its probe (got %r)" % (names,)
+        return mod, None
+    except Exception as load_error:  # absence, a syntax error, re.error at import: all reach the caller as a cause
+        return None, "address_list.py at %s could not be loaded (%s: %s)" % (path, type(load_error).__name__, load_error)
+
+
+ADDRESS_LIST, ADDRESS_LIST_ERROR = load_address_list()
+
+
+def opening_list(text):
+    """(names, end) of `text`'s opening list under the shared rule. Callers check ADDRESS_LIST first."""
+    return ADDRESS_LIST.opening_list(text or "", ADDRESS_LIST.REGISTRY)
+
+
 # Visible + auditable group marker (Langston ruling 2026-07-22: fail-loud beats an
 # invisible sentinel in the one silent-drop path we are closing). Langston-addressed ONLY,
 # so Kyle-facing and §10.5 alert traffic stay byte-identical to before.
@@ -227,7 +267,19 @@ def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, ext
     """
     # B-COMMS-CHUNK-FIX: decide Langston-addressing on the ORIGINAL content, before any
     # mention/marker mutation, so the test is stable.
-    addressed_langston = bool(ADDRESS_START_RE.match(content or ""))
+    # B-WAKE-OPENING-LIST: by the SAME rule the receiver gates on - Langston anywhere in the opening list. A post
+    # opening "Coltrane, and Langston" now reaches him, so it must be split and marked like one opening "Langston".
+    degraded = ADDRESS_LIST is None
+    if degraded:
+        # Langston's ruling (pre-audit r2a P2a): post anyway, as if ADDRESSED - a long post is split at whitespace
+        # and marked, so it can never arrive truncated - and drop the mention rather than guess where it goes. The
+        # marker then shows on Kyle-facing traffic: the visible signal, carried by something that cannot fail with
+        # the module.
+        addressed_langston = True
+        log("send: DEGRADED - %s; sending as Langston-addressed (split at whitespace + group marker if long), "
+            "--notify mention suppressed" % ADDRESS_LIST_ERROR, log_file)
+    else:
+        addressed_langston = "LANGSTON" in opening_list(content)[0]
     chunks = chunk_text(content)
     multi_langston = addressed_langston and len(chunks) > 1
     if multi_langston:
@@ -239,12 +291,12 @@ def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, ext
         if _hard_cuts:
             log('send: WARNING %d unbreakable run(s) >%d chars - a token WAS cut mid-word'
                 % (_hard_cuts, _lim), log_file)
-    if mention_user_id:
-        if addressed_langston:
-            # §2 FIX: NEVER prepend to a Langston-addressed dispatch — '<' is not in the
-            # gate's allowed leading class, so a prepended mention drops the whole message.
-            _m = ADDRESS_START_RE.match(chunks[0])
-            _cut = _m.end() if _m else 0
+    if mention_user_id and not degraded:
+        # §2 FIX, widened: NEVER put the mention in front of an opening list - '<' is not markup, so a prepended
+        # mention empties the list for EVERY reader (Langston, Coltrane, and since this batch the session filters).
+        # It goes just after the list's last name. Read from chunks[0], which is a prefix of the content.
+        _names0, _cut = opening_list(chunks[0])
+        if _names0:
             chunks[0] = chunks[0][:_cut] + f" <@{mention_user_id}>" + chunks[0][_cut:]
         else:
             chunks[0] = f"<@{mention_user_id}> " + chunks[0]

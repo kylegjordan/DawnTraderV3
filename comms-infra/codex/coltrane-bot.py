@@ -27,7 +27,7 @@
 """
 
 import tempfile
-import asyncio, json, os, re, subprocess, sys, time
+import asyncio, hashlib, json, os, re, subprocess, sys, time, types
 from datetime import datetime, timezone
 
 import discord
@@ -90,11 +90,49 @@ SANDBOX = ("--add-dir " + MEMDIR
 NL = chr(10)
 
 NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)
-# ⛔ KYLE MAY NAME COLTRANE ANYWHERE; EVERYONE ELSE MUST LEAD WITH THE NAME (Kyle, 2026-09-11).
-#    NAME_RE alone woke it on ANY mention, so a session or Langston merely writing ABOUT
-#    Coltrane spent a paid invoke nobody asked for. Same address gate as the Langston bridge
-#    (ADDRESS_START_RE), same tolerated leading markup.
-NAME_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*(coltrane|codex)\b", re.I)
+# ⛔ KYLE MAY NAME COLTRANE ANYWHERE; EVERYONE ELSE MUST NAME IT IN THE POST'S OPENING LIST (Kyle, 2026-09-11;
+#    widened from "lead with the name" by KD-20/KD-21, 2026-11-04, B-WAKE-OPENING-LIST #1241). NAME_RE alone woke it on
+#    ANY mention, so a session or Langston merely writing ABOUT Coltrane spent a paid invoke nobody asked for. The
+#    opening-list rule is address_list.py - the same one the Langston bridge and the session filters read - and this
+#    bot loads the ONE Helsinki copy BY ABSOLUTE PATH (it runs from /usr/local/bin, so a plain import cannot find it),
+#    pinned by sha-256. ⛔ On an absent, broken or wrong-sha module main() REFUSES TO START: a gate that cannot read
+#    its rule must not guess.
+ADDRESS_LIST_PATH = os.environ.get("COLTRANE_ADDRESS_LIST", "/opt/discord-bridges/address_list.py")  # env: tests only
+# Computed by comms-infra/discord/address_list_test.py from the committed file; never hand-typed.
+ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+
+
+def load_address_list(path=ADDRESS_LIST_PATH, expected=ADDRESS_LIST_SHA256):
+    """(module, None) or (None, cause). Hashes the bytes it runs, and requires the parser to pass a known-answer probe
+    (a wrong key convention would otherwise match nobody with the sha matching - Langston C-1)."""
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+        got = hashlib.sha256(data).hexdigest()
+        if got != expected:
+            return None, "address_list.py is %s, expected %s" % (got, expected)
+        mod = types.ModuleType("address_list")
+        mod.__file__ = path
+        exec(compile(data, path, "exec"), mod.__dict__)
+        names, _end = mod.opening_list("Langston, and Coltrane - probe", mod.REGISTRY)
+        if names != ["LANGSTON", "COLTRANE"]:
+            return None, "address_list.py loaded but failed its probe (got %r)" % (names,)
+        return mod, None
+    except Exception as load_error:  # absence, a syntax error, re.error at import: all reach main()'s refusal
+        return None, "address_list.py at %s could not be loaded (%s: %s)" % (path, type(load_error).__name__, load_error)
+
+
+ADDRESS_LIST, ADDRESS_LIST_ERROR = load_address_list()
+
+
+def opening_names(text):
+    """The registry keys in `text`'s opening list. Raises when the module did not load - main() refuses to start in
+    that case, so this is reached only by a caller that skipped main() (a test), and it must not guess there either."""
+    if ADDRESS_LIST is None:
+        raise RuntimeError("address list not loaded: " + ADDRESS_LIST_ERROR)
+    return ADDRESS_LIST.opening_list(text, ADDRESS_LIST.REGISTRY)[0]
+
+
 CREW_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 # ⛔ By NAME, not by bot-ness — see the docstring. These are automated notices only.
 MUTE_SENDERS = {"push notice", "heartbeat"}
@@ -121,8 +159,11 @@ def engage_reason(text, author_id, who, is_dm):
     two brakes - a plain function so a replay drives the same decision the bot makes."""
     if is_dm:
         return "direct message from " + who
-    name_re = NAME_RE if (KYLE_ID and str(author_id) == KYLE_ID) else NAME_START_RE
-    if name_re.search(text):
+    if KYLE_ID and str(author_id) == KYLE_ID:
+        named = bool(NAME_RE.search(text))
+    else:
+        named = "COLTRANE" in opening_names(text)
+    if named:
         return "named directly by " + who
     if CREW_RE.search(text):
         return "crew-wide call from " + who
@@ -338,7 +379,8 @@ def invoke(message_text, why, history, role_prompt):
         + "you or Langston owns routine review for this invocation." + NL
         + "⛔ Reply with the MESSAGE TEXT ONLY. It is posted verbatim." + NL
         + "⛔ LEAD your reply with the NAME of whoever you are answering so their session "
-        + "wakes. Answering Langston? His name must be the FIRST WORD." + NL
+        + "wakes. Several people? Open with all their names as a list (\"Langston, and OLD Claude —\"); "
+        + "a name that appears only later in the reply wakes nobody." + NL
         + "✅ Nothing worth saying? Reply with exactly: SILENT" + NL + NL
         + "--- recent context (oldest first) ---" + NL + history + NL + NL
         + "--- the message that woke you ---" + NL + message_text + NL
@@ -517,6 +559,11 @@ class Coltrane(discord.Client):
 
 
 def main():
+    if ADDRESS_LIST is None:
+        # Exit non-zero before connecting: Restart=always retries, the start limit trips and OnFailure pages
+        # (the drop-in's StartLimitIntervalSec makes that reachable - scope OBJ-1, MF-A).
+        print("coltrane-bot: REFUSING TO START - " + ADDRESS_LIST_ERROR, file=sys.stderr, flush=True)
+        return 2
     token = env(TOKEN_FILE, "DISCORD_COLTRANE_BOT_TOKEN")
     if not token:
         print("no token at " + TOKEN_FILE, file=sys.stderr)

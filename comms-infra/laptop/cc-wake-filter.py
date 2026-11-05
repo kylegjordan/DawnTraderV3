@@ -228,6 +228,71 @@ def addressed_to_me(text):
     return True, t                  # no names -> broadcast
 
 
+# ── B-WAKE-OPENING-LIST (#1241, Kyle KD-20/KD-21 2026-11-04): A SESSION POST WAKES THE NAMES IN ITS OPENING LIST ──
+# "Langston, Coltrane, OLD Claude, NEW Claude — …" wakes all four; a passing mention later wakes nobody. The rule is
+# comms-infra/discord/address_list.py - the SAME file Langston's bridge, the sender and Coltrane's bot read - and its
+# installed copy sits beside this file (~/.claude/address_list.py). In the repo it is ../discord/address_list.py, so
+# the suites run the repo file as it stands; the first candidate that exists is loaded.
+# ⛔ THIS FILTER'S FIRST IMPORT THAT CAN FAIL BY ABSENCE (scope OBJ-1, MF-B), so it is loaded by path inside one
+#    `except Exception`: an enumerated tuple misses re.error and anything module-level code raises (Langston A-2).
+#    ANY failure - drift, absence, a broken file, a registry without this alias, a parser that does not return this
+#    alias for its own display name - LATCHES: one WAKE[WATCHER-DRIFT] per cause (recorded in the state file), then the
+#    crew branch decides on MY_RE ANYWHERE, today's rule. Strictly wider, so the latch costs noise, never silence
+#    (Langston C1; the same direction as OPEN_RE's "a spurious WAKE, never a missed one").
+import hashlib, types
+_FILTER_DIR = os.path.dirname(os.path.abspath(__file__))
+ADDRESS_LIST_CANDIDATES = (os.path.join(_FILTER_DIR, "address_list.py"),
+                           os.path.join(os.path.dirname(_FILTER_DIR), "discord", "address_list.py"))
+# Computed by comms-infra/discord/address_list_test.py from the committed file; never hand-typed.
+ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+_LATCH_TAIL = " — re-install it; until then a session post wakes you on your name ANYWHERE (the old rule)"
+
+
+def _load_address_list():
+    """(module, registry, None) when usable, else (None, None, (cause_key, message)). The cause key is what the
+    once-per-cause record stores: the offending sha for a drift, the path and exception type for a failed load."""
+    path = next((p for p in ADDRESS_LIST_CANDIDATES if os.path.exists(p)), ADDRESS_LIST_CANDIDATES[0])
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        got = hashlib.sha256(data).hexdigest()
+        if got != ADDRESS_LIST_SHA256:
+            return None, None, ("sha:" + got, f"address_list.py is {got}, expected {ADDRESS_LIST_SHA256}" + _LATCH_TAIL)
+        mod = types.ModuleType("address_list")
+        mod.__file__ = path
+        exec(compile(data, path, "exec"), mod.__dict__)    # the bytes hashed are the bytes run
+        registry = {**NAMES, **mod.REVIEWER_NAMES}          # the session names are THIS file's NAMES - one list
+        if not registry.get(ALIAS):
+            return None, None, ("registry:" + ALIAS, f"the name registry has no entry for {ALIAS}" + _LATCH_TAIL)
+        # Langston C-1: the sha cannot see a parser whose keys use another convention - the list could then never
+        # hold this session. Checked against the known-good outcome: my own display name opens a post.
+        probe = mod.opening_addressees(f"{MY_NAME}, probe", registry) if MY_NAME else set()
+        if ALIAS not in probe:
+            return None, None, ("probe:" + ALIAS, f"address_list.py does not find {ALIAS} in "
+                                                  f"'{MY_NAME}, probe' (got {sorted(probe)})" + _LATCH_TAIL)
+        return mod, registry, None
+    except Exception as load_error:  # absence, a syntax error, re.error at import - the latch, never a dead watcher
+        return None, None, (f"load:{path}:{type(load_error).__name__}",
+                            f"address_list.py at {path} could not be loaded ({type(load_error).__name__}: "
+                            f"{load_error})" + _LATCH_TAIL)
+
+
+_ADDRESS_LIST, ADDRESS_REGISTRY, ADDRESS_LATCH = _load_address_list()
+
+
+def crew_post_names_me(full):
+    """A session post: am I in its opening list? Latched: my name anywhere. A parse that throws on one line decides
+    that line the old way and says so - the per-line handler would otherwise drop the line AND its wake."""
+    if ADDRESS_LATCH is not None:
+        return bool(MY_RE.search(full))
+    try:
+        return ALIAS in _ADDRESS_LIST.opening_addressees(full, ADDRESS_REGISTRY)
+    except Exception as e:
+        print(f"[cc-wake-filter] opening-list parse FAILED ({type(e).__name__}: {e}) — this line was decided on your "
+              f"name anywhere", file=sys.stderr, flush=True)
+        return bool(MY_RE.search(full))
+
+
 # ── B-COMMS-IMAGES-2: make images VISIBLE to the desktop sessions ───────────────
 # B-COMMS-IMAGES (#657) taught the bridges to SAVE inbound images and record their
 # paths, and Langston reads them natively because he lives on that box. The desktop
@@ -940,6 +1005,22 @@ if ONCE:
               f"time.", flush=True)
         _checkpoint_loud()
 
+    # B-WAKE-OPENING-LIST: an unusable address_list.py is reported ONCE PER CAUSE across arms (Langston C1: r2 ended
+    # the run instead, which re-emitted the same WAKE at every re-arm - an unbounded paid loop for a session that
+    # cannot re-install). Print-then-save, as above: a failed save re-delivers it, never drops it.
+    _latched = STATE_NOW.get("address_list_latch") or {}
+    if ADDRESS_LATCH is None:
+        STATE_NOW.pop("address_list_latch", None)   # healthy again: a later recurrence is reported afresh
+    elif ADDRESS_LATCH[0] not in _latched:
+        TAP.tag = ""
+        print(f"WAKE[WATCHER-DRIFT->{ALIAS}]: {ADDRESS_LATCH[1]}", flush=True)
+        _latched[ADDRESS_LATCH[0]] = _utc()
+        STATE_NOW["address_list_latch"] = _latched
+        _checkpoint_loud()
+elif not SEED and ADDRESS_LATCH is not None:
+    # Streaming mode keeps no state, so it reports the latch at every start.
+    print(f"WAKE[WATCHER-DRIFT->{ALIAS}]: {ADDRESS_LATCH[1]}", flush=True)
+
 
 def _commit(pending):
     if pending:
@@ -1213,7 +1294,10 @@ for raw in sys.stdin:
                     # branch consistent with it rather than inventing a new policy.
                     # ⚠️ KYLE'S OWN POSTS ARE UNCHANGED (the kind=="" branch): an unaddressed
                     # message from him still reaches everyone, because he means it.
-                    deliver = bool(MY_RE.search(full) or CREW_ALL_RE.search(full))
+                    # B-WAKE-OPENING-LIST (#1241, KD-21): "name" now means "in the post's OPENING LIST", not
+                    # anywhere — a passing mention later no longer wakes. @crew / ALL SESSIONS still reach all, anywhere.
+                    # The wake file and Kyle's and Langston's branches keep their own rules (scope §0).
+                    deliver = bool(crew_post_names_me(full) or CREW_ALL_RE.search(full))
                     body = text
                     if deliver:
                         print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)

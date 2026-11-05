@@ -75,14 +75,20 @@ CLAUDE_MODEL = "claude-opus-5[1m]"
 # is routinely 30-50 messages, so any low cap silently swallows legitimate work (it tripped at
 # 6, then 30 was still too low). Kyle wants the limit gone. Set to 100_000 = unreachable in
 # real use (years of traffic) while still bounding a pathological infinite-loop BUG so it can't
-# burn unlimited paid Langston turns. The address-gate (a CC post must START with "Langston")
-# already keeps ordinary chatter from triggering him. Kyle posting anything still resets to 0.
+# burn unlimited paid Langston turns. The address-gate (a CC post must OPEN with "Langston", alone
+# or in a list of names) already keeps ordinary chatter from triggering him. Kyle posting anything still resets to 0.
 BOT_TURN_LIMIT = 100_000
 ADDRESS_RE = re.compile(r"langston", re.I)  # names Langston anywhere (used for Kyle + voice)
-# CC convention (Kyle 2026-06-19): a Claude session addresses Langston by putting his name at the
-# START of the post — so a passing mid-sentence mention does NOT wake him. Tolerates leading
-# markdown / quote / punctuation chars before the name.
-ADDRESS_START_RE = re.compile(r"^[\s*_~`>#:\".\-]*langston\b", re.I)
+# CC convention (Kyle 2026-06-19, widened by KD-20/KD-21 2026-11-04, B-WAKE-OPENING-LIST #1241): a session
+# addresses Langston by naming him in the post's OPENING LIST ("Langston —", "Coltrane, and Langston —"), so a
+# passing mention later does NOT wake him. The rule is address_list.py, which discord_common loads by path and pins
+# by sha-256. ⛔ A gate that cannot read its rule must not guess: on an absent, broken or wrong-sha module this
+# bridge REFUSES TO START (exit 2). Restart=always retries it, the start limit trips, and OnFailure pages.
+# (stderr only: the unit's stderr is journald, and nothing else is set up this early.)
+if dc.ADDRESS_LIST is None:
+    print("discord-langston-bridge: REFUSING TO START - " + dc.ADDRESS_LIST_ERROR
+          + " - re-install the bridges group (deploy.sh --only bridges)", file=sys.stderr, flush=True)
+    sys.exit(2)
 # B-COMMS-CHUNK-FIX (2026-07-22): the sender stamps this on EVERY chunk of a multi-chunk
 # Langston-addressed dispatch (discord_common.GROUP_MARKER_FMT). first_id is sender-log-only
 # and never reaches the wire, so this explicit token is the ONLY deterministic group key.
@@ -91,9 +97,6 @@ GROUP_TIMEOUT_S = 10          # seconds of SILENCE (not group age — Finding A)
                               # partial group is flushed WITH an explicit incomplete
                               # note. Langston ruling: never a silent hold.
 _chunk_groups = {}            # grp -> {parts:{k:text}, n:int, t0:float, base:dict}
-# Name-routing (crossed-wire fix): a Kyle message that names a CC session but NOT Langston is
-# not Langston's to answer — skip it so the CC session handles it (mirrors the wake filter).
-CC_NAME_RE = re.compile(r"claude[\s_-]*(old|new)|(old|new)[\s_-]*claude|\bcc[\s_-]*[ab]\b", re.I)
 
 
 def resolve_recipient_name(task):
@@ -1201,8 +1204,8 @@ def build_client(task_q, recover_floor=None, alert_q=None):
         elif author_is_kyle:
             if not ADDRESS_RE.search(content):
                 return
-        elif author_is_cc_bot and ADDRESS_START_RE.match(content):
-            pass  # a CC post that STARTS with "Langston" (the addressing convention)
+        elif author_is_cc_bot and "LANGSTON" in dc.opening_list(content)[0]:
+            pass  # a CC post whose OPENING LIST names Langston (address_list.py, #1241)
         else:
             return
 
