@@ -102,3 +102,10 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
   },', start) > start`). **Mutation C run:** comma dropped → the control fails; restored → 25/25.
 - **H-3, sharpened:** `b75-retention` does catch one missed night, by ~31 min today; the margin is set by that sweep's own runtime, which nothing bounds, so it is one slow run away from H-3's live case.
 - **#661 leg 3 (stated, not cited as proof):** the `missing` arm has never fired for ANY check in this watchdog — all 3 `archival-health-*` rows ever are `-failed` (2 `b75-retention`, 1 the O5 test row). `fire()` is proven by those; the `statSync` throw branch is not. Log silence is not evidence the never-ran page works.
+
+## O1 Step 6 + Step 7 (2026-11-05)
+- **Deploy:** `c0214c9736ee86d7523fd33319ad4c935a929b80` at 08:08:30Z (with B-DB-POOL-GUARD increment 2 r4), CI `41991032493` attempt 2, 4/4 per job (attempt 1 was cancelled by later pushes and not counted). Rollback `863604025`.
+- **Deployed settings read on staging:** `disk-file-tiering` block `graceMs: 20 * HOUR_MS`, `onMissing: 'alert'`; cron `0 5 * * *` unchanged.
+- **The `missing` arm, exercised for the first time (Langston #661 leg 3):** `disk-file-tiering.log` moved aside, `archival-health` run by hand → `ALERT disk-file-tiering/missing` and row `eefabc37-c594-41a6-a62e-bc2b054c2414` ("Archival cron MISSING: Disk-file tiering …"); log moved back, **byte-identical** (sha256 prefix `64997356f41cf032` before and after, mtime 03:03:49.863 unchanged); the test row resolved with that evidence. The other checks in the same run: daily-runway rows all OK.
+- **No UI surface:** the watchdog's output is an alert row; the alert itself is the surface.
+- **Still owed for close:** OBJ-10 rotated-file PASS, Step 8, H-1..H-3, P9/P10, governance.
