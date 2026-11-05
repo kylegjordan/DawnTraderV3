@@ -12,8 +12,8 @@ The batch ships in three increments (pre-audit plan P-1..P-18). **This dispatch 
 ## INCREMENT 1 — P-1..P-4 (the close finds its one record, or refuses)
 
 ### P-1 — `server/storage.ts`: `findOpenTradeRecord` replaces `getClosedTradesBySymbol`
-- NEW `OpenTradeRecordLookup = { status:'one', record } | { status:'none' } | { status:'many', ids }`.
-- NEW `findOpenTradeRecord(mode, symbol, assetClass)`: `mode = ? AND symbol = ? AND asset_class = ? AND closed_at IS NULL`, `LIMIT 3`. The `never_filled` arm is dropped per amended P-1 (condition (a)): `_dropUnfilledMaker` writes `closed_at` and `close_reason` in one update, so under `closed_at IS NULL` it cannot discriminate.
+- NEW `OpenTradeRecordLookup = { status:'one', record } | { status:'none' } | { status:'many', ids, more }` *(`more` added by C-2)*.
+- NEW `findOpenTradeRecord(mode, symbol, assetClass)`: `mode = ? AND symbol = ? AND asset_class = ? AND closed_at IS NULL`, `LIMIT 4` *(was 3; C-2: four fetched ⇒ "more than 3", the first 3 named)*. The `never_filled` arm is dropped per amended P-1 (condition (a)): `_dropUnfilledMaker` writes `closed_at` and `close_reason` in one update, so under `closed_at IS NULL` it cannot discriminate.
 - DELETED `getClosedTradesBySymbol` (global — it never filtered `mode` despite its comment) and its `IStorage` entry. One caller, replaced.
 
 ### P-2 — `server/services/active-execution-engine.ts` `closePosition`: lookup + refusal BEFORE `_closeRefusalStreak.delete`

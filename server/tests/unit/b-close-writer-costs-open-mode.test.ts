@@ -17,6 +17,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 
 const cap = vi.hoisted(() => ({
   wheres: [] as unknown[],
+  limits: [] as unknown[],
   inserted: [] as Record<string, unknown>[],
   insertError: null as unknown,
   rows: [] as unknown[],
@@ -28,7 +29,7 @@ vi.mock('../../db', () => {
     q.from = () => q;
     q.where = (c: unknown) => { cap.wheres.push(c); return q; };
     q.orderBy = () => q;
-    q.limit = () => q;
+    q.limit = (n: unknown) => { cap.limits.push(n); return q; };
     q.then = (ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) => Promise.resolve(rows()).then(ok, bad);
     return q;
   };
@@ -54,7 +55,7 @@ const render = (c: unknown) => dialect.sqlToQuery(c as never);
 const lastWhere = () => render(cap.wheres[cap.wheres.length - 1]);
 
 beforeEach(() => {
-  cap.wheres.length = 0; cap.inserted.length = 0; cap.insertError = null; cap.rows = [];
+  cap.wheres.length = 0; cap.limits.length = 0; cap.inserted.length = 0; cap.insertError = null; cap.rows = [];
   vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
@@ -101,6 +102,8 @@ describe('B-CLOSE-WRITER-COSTS — open positions carry their mode (KD-24, KD-25
     expect(await storage.findOpenTradeRecord('paper', 'BTC/USD', 'crypto_spot')).toEqual({ status: 'many', ids: ['a', 'b'], more: false });
     const q = lastWhere();
     expect(q.params).toEqual(['paper', 'BTC/USD', 'crypto_spot']);
+    // Langston inc-1 fold: the LIMIT itself is pinned — with .limit(3) `more: true` would be unreachable in production.
+    expect(cap.limits[cap.limits.length - 1]).toBe(4);
   });
 
   it('M-5 the schema declares exactly ONE uniqueness rule on the table: (symbol, mode)', () => {
