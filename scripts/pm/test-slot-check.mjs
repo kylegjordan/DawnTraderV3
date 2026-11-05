@@ -176,6 +176,15 @@ const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0, genAgeH = null } =
   check('r5 C-2: a $(<file) body is unresolved and falls back to the whole command (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
   r = hook(G1, bash('ssh root@x \'cc-send --sender "PM Claude" --message "$BODY"\' # OLD Claude slotted after row 72'), env);
   check('r5 C-2: a $VAR body falls back to the whole command too (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
+  // Langston r5 CHANGES: file bytes are not scanned as shell; a separator straight after the closing quote is accepted
+  const tick = join(e.dir, 'tick.md'); writeFileSync(tick, 'OLD Claude — `B-FOO` is slotted after row 3a1');
+  r = hook(G1, bash(`scp ${tick.replace(/\\/g, '/')} root@x:/root/pm-stage/t.md && ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /root/pm-stage/t.md)"'`), env);
+  check('r6 C-2: a $(cat) body containing a backtick is still judged (slotting refused, not passed via fallback)', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
+  const dol = join(e.dir, 'dol.md'); writeFileSync(dol, 'OLD Claude owns row 19, slotted after $EV row 72');
+  r = hook(G1, bash(`scp ${dol.replace(/\\/g, '/')} root@x:/root/pm-stage/d.md && ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /root/pm-stage/d.md)"'`), env);
+  check('r6 C-2: a $(cat) body containing a bare $WORD is still judged (slotting refused)', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
+  r = hook(G1, bash(`scp ~/x/pm-slot-probe.log root@x:/tmp/a && ssh root@x 'cc-send --sender "PM Claude" --message "OLD Claude, thanks for the update";echo done'`), env);
+  check('r6 record item: a closing quote followed straight by ; is parsed (benign body allowed, not whole-command fallback)', r.status === 0, `${r.status} ${r.stderr}`);
   const srcLines = readFileSync(e.probe, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => x.kind === 'source');
   check('r5 C-3: every PM cc-send logs how its text was obtained (inline, cat-resolved and fallback-cmd all present)',
     ['inline', 'cat-resolved', 'fallback-cmd'].every((h) => srcLines.some((x) => x.how === h)), JSON.stringify(srcLines.map((x) => x.how)));

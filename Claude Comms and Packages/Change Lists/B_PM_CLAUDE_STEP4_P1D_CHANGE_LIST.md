@@ -87,3 +87,9 @@ if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\?["']?PM Claude\b/.test(cmd)) tex
 - **C-3:** `messageSource(cmd)` returns `{text, how}`; every PM `cc-send` appends one `kind: 'source'` line (`inline` / `cat-resolved` / `fallback-cmd`, plus length) to the probe log, whatever the verdict.
 - **Record items:** the honest-limit comment now names the narrowing exactly: `$(cat)` only resolves through a same-command scp or a same-path file read on THIS box (whose bytes may differ from what posts); a multi-source scp resolves to its LAST source; every other substitution falls back.
 - **Tests 82/82 (4 new), mutation-checked by RUNNING:** with the r4 hook (`30a8c416a`) restored, all four new cases FAIL (78/82); with r5, 82/82.
+
+## r6 — Langston's r5 CHANGES folded (C-2 blocker + record item)
+
+- **C-2 blocker:** resolved `$(cat)` file bytes are held aside behind a NUL placeholder; the leftover-substitution test scans only the shell text, then the bytes are spliced back (his fix). Command-substitution output is not re-expanded, so a backtick or `$WORD` inside the staged file no longer forces the whole-command fallback. His two measured misses (backtick body, bare `$EV` body) now refuse.
+- **Record item:** the closing-quote lookahead also accepts `;`, `&`, `)`, `|` straight after the quote, so a benign message followed by `;echo` is parsed, not fallen back.
+- **Tests 85/85 (3 new), mutation-checked by RUNNING:** with the r5 hook (`ef1fad751`) restored, all three FAIL (82/85); with r6, 85/85.

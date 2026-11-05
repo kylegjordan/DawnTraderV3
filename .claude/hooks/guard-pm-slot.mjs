@@ -59,22 +59,27 @@ export function isSlotting(text) { return SLOT_WORDS.test(text) && namedOwners(t
 // cannot resolve falls back to the WHOLE command, so an unreadable body is still checked, never skipped.
 export function messageSource(cmd) {
   // escaped inner quotes (\") stay inside the body (Langston r4 C-1)
-  const m = /--message[\s=]+(\\?["'])((?:\\.|[\s\S])*?)(?<!\\)\1(?=\s|'|$)/.exec(cmd);
+  // the closing quote may be followed by a shell separator with no space (Langston r5 record item)
+  const m = /--message[\s=]+(\\?["'])((?:\\.|[\s\S])*?)(?<!\\)\1(?=\s|'|$|;|&|\)|\|)/.exec(cmd);
   if (!m) return { text: cmd, how: 'fallback-cmd' };
   let body = m[2];
   let unresolved = false;
   let resolvedCat = false;
+  // resolved file bytes are held aside behind a NUL placeholder, so the leftover-substitution test below scans only the
+  // shell text, never the file content (command-substitution output is not re-expanded) (Langston r5 C-2 blocker)
+  const resolved = [];
   body = body.replace(/\$\(\s*cat\s+([^\s)]+)\s*\)/g, (_, remote) => {
     const scp = new RegExp(`\\bscp\\b[^&;|]*?\\s(\\S+)\\s+\\S+:${remote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$|&|;)`).exec(cmd);
     for (const p of [scp && scp[1].replace(/^["']|["']$/g, ''), remote]) {
       if (!p) continue;
-      try { const t = readFileSync(p.replace(/^~(?=\/)/, homedir()), 'utf8'); resolvedCat = true; return t; } catch { /* try the next candidate */ }
+      try { const t = readFileSync(p.replace(/^~(?=\/)/, homedir()), 'utf8'); resolvedCat = true; resolved.push(t); return `\u0000${resolved.length - 1}\u0000`; } catch { /* try the next candidate */ }
     }
     unresolved = true; return '';
   });
-  // any substitution still in the body was not resolved: judge the whole command instead (Langston r4 C-2)
+  // any substitution still in the SHELL text was not resolved: judge the whole command instead (Langston r4 C-2)
   if (/\$\(|`|\$\{|\$[A-Za-z_]/.test(body)) unresolved = true;
   if (unresolved) return { text: cmd, how: 'fallback-cmd' };
+  body = body.replace(/\u0000(\d+)\u0000/g, (_, i) => resolved[Number(i)]);
   return { text: body, how: resolvedCat ? 'cat-resolved' : 'inline' };
 }
 export function messageText(cmd) { return messageSource(cmd).text; }
