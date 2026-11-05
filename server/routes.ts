@@ -12517,16 +12517,17 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const status = await getActiveEngineStatus(req.user!.id);
       const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
       const manager = getGlobalActiveEngineManager('paper');
+      const { engineNotRunningResponse, manualCloseResponse } = await import('./services/operator-close-response.js');
       if (!status.isRunning || !manager) {
-        return res.status(400).json({ success: false, error: 'Paper trading simulation not running — start the engine, then close the position from Active Trades.' });
+        const nr = engineNotRunningResponse('close the position');
+        return res.status(nr.http).json(nr.body);
       }
       const r = await manager.closeOnePositionByOperator(req.params.id, 'manual_close');
-      if (r.status === 'not_found') return res.status(404).json({ success: false, error: 'Position not found' });
-      if (r.status !== 'closed') {
-        return res.status(409).json({ success: false, error: `${r.symbol ?? 'Position'} not closed: ${r.reason ?? r.status}` });
+      if (r.status === 'closed') {
+        contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
       }
-      contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
-      return res.json({ success: true, closedTradeId: req.params.id, message: `Closed ${r.symbol} position${r.reason ? ` (${r.reason})` : ''}` });
+      const out = manualCloseResponse(req.params.id, r);
+      return res.status(out.http).json(out.body);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[B-CLOSE-WRITER-COSTS][CLOSE_TRADE_ERROR]', errorMessage, error);
@@ -12566,8 +12567,10 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const status = await getActiveEngineStatus(req.user!.id);
       const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
       const manager = getGlobalActiveEngineManager('paper');
+      const { engineNotRunningResponse, strandedClearResponse } = await import('./services/operator-close-response.js');
       if (!status.isRunning || !manager) {
-        return res.status(400).json({ success: false, error: 'Paper trading simulation not running — start the engine, then clear stranded positions from Active Trades.' });
+        const nr = engineNotRunningResponse('clear stranded positions');
+        return res.status(nr.http).json(nr.body);
       }
       const positions = await storage.getActiveOpenPositions('paper');
       if (positions.length === 0) {
@@ -12581,15 +12584,8 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
         else notCleared.push({ symbol: position.symbol, reason: r.reason ?? r.status });
       }
       contextBridge.broadcast({ type: 'stranded_trades_cleared', payload: { clearedCount, userId: req.user!.id } }); // the type it always sent
-      return res.json({
-        success: notCleared.length === 0,
-        strandedClosed: clearedCount,
-        clearedCount,
-        notCleared,
-        message: notCleared.length === 0
-          ? `Cleared ${clearedCount} stranded position(s)`
-          : `Cleared ${clearedCount}; ${notCleared.length} not cleared (${notCleared.map((n) => `${n.symbol}: ${n.reason}`).join('; ')})`,
-      });
+      const out = strandedClearResponse(clearedCount, notCleared);
+      return res.status(out.http).json(out.body);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[B-CLOSE-WRITER-COSTS][STRANDED_CLEAR_ERROR]', errorMessage, error);

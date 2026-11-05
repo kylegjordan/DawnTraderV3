@@ -587,6 +587,7 @@ export interface IStorage {
     dateTo?: Date;
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
   findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup>;
+  insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }>;
   getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
 
@@ -3649,6 +3650,34 @@ export class DatabaseStorage implements IStorage {
    * (`closed_trades.opened_at` is NOT NULL, so `closed_at IS NULL` alone is the faithful translation of the old
    * predicate; a `never_filled` row always carries `closed_at`, so it can never match here.)
    */
+  /**
+   * B-CLOSE-WRITER-COSTS P-12 (Langston Part B attack 2): the restore's insert, made ATOMIC. Under a transaction-scoped
+   * advisory lock on (mode, symbol, class), it re-checks that NO open record exists for the key and only then inserts —
+   * so two concurrent restores cannot both insert (the loser gets `exists`, never a duplicate the 'many' alert would then
+   * ask a human to remove by hand). Not a partial unique index: that would fail to create if any historical duplicate
+   * exists. The symbol is normalised the way `createClosedTrade` normalises it, so the lock and the check use the stored form.
+   */
+  async insertOpenTradeRecordIfNoneOpen(mode: TradingMode, symbol: string, assetClass: string, record: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<{ status: 'inserted'; record: ClosedTrade } | { status: 'exists'; ids: string[] }> {
+    const canonicalSymbol = normalizeToInternalSymbol(symbol);
+    return await db.transaction(async (tx) => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`open-record:${mode}:${canonicalSymbol}:${assetClass}`}))`);
+      const open = await tx.select({ id: closedTradesTable.id })
+        .from(closedTradesTable)
+        .where(and(
+          eq(closedTradesTable.mode, mode),
+          eq(closedTradesTable.symbol, canonicalSymbol),
+          eq(closedTradesTable.assetClass, assetClass),
+          isNull(closedTradesTable.closedAt),
+        ))
+        .limit(4);
+      if (open.length > 0) return { status: 'exists' as const, ids: open.map((r) => r.id) };
+      const [inserted] = await tx.insert(closedTradesTable)
+        .values({ ...(record as object), symbol: canonicalSymbol, assetClass, mode } as any)
+        .returning();
+      return { status: 'inserted' as const, record: inserted };
+    });
+  }
+
   async findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup> {
     const rows = await db.select()
       .from(closedTradesTable)
