@@ -76,6 +76,8 @@ import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, ge
 // signal orchestrator + VTS call (F6).
 import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../math/maker-taker-decision.js';
 import { resolveFillPolicy, resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
+import { repriceAtAsk, type RepriceAtAsk } from '../trading/fill-economics.js'; // B-ENTRY-GATE (#1224) P6
+import { resolveFillEconInputs } from '../../services/fill-econ-inputs.js'; // B-ENTRY-GATE (#1224) P6 — the open's own resolver
 import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
 import { getNormalizedVolatility as getVolatility } from '../metrics/market-metrics.js';
@@ -1035,6 +1037,7 @@ class ReadyToBuyService {
               // is at or through its own stop or target is RETIRED — crypto on the first pass, xStock on the second consecutive
               // (`rtb-price-retirement.ts`) — through the refresh's own delete path, counted and archived. This is queue
               // hygiene; the open still refuses a bad fill on its own (row 59 increment 1).
+              let _rpx: RepriceAtAsk | null = null; // B-ENTRY-GATE (#1224) P6 — set inside the price block below
               {
                 const _rpAsk: RetirementAsk = asks?.get(`${mode}:${signal.symbol}:${signal.strategy}`) ?? { ok: false, reason: 'ask_not_supplied' };
                 const _rpStop = parseFloat(String(signal.stopPrice));
@@ -1061,6 +1064,34 @@ class ReadyToBuyService {
                   return;
                 }
                 if (_rpAsk.ok) this._maybeArchivePriceShadow(mode, signal, sqeAssetClass, _rpAsk, _rpStop, _rpTarget, _refreshState, _rp.decision);
+
+                // ⭐ B-ENTRY-GATE (#1224) increment B, P6 (pre-audit A-4): RE-PRICE THE PLAN AT THE LIVE ASK, every priced pass.
+                // Net EV, the maker/taker choice and the worse-side window are asked AT TODAY'S PRICE, as the open will ask them;
+                // the plan's prices never move. The result REPLACES the throttled plan-price re-decide for the SQE's sign check
+                // and the stored snapshot, so a plan whose economics turned negative since it was queued is evicted here
+                // (the refresh's own DELETE; the exploration stamp's NetEV reprieve still applies) instead of reaching the open.
+                // No ask ⇒ no decision on price (the plan-price path stands, exactly as before), and never a retirement.
+                // A missing setting is LOUD and also no decision — it never invents a value.
+                if (_rpAsk.ok) {
+                  try {
+                    _rpx = repriceAtAsk({
+                      inputs: resolveFillEconInputs(signal as any, sqeAssetClass),
+                      planEntry: Number(signal.entryPrice),
+                      ask: _rpAsk.ask,
+                      worseSideFrac: getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
+                        { exchange: '*', assetClass: sqeAssetClass, strategy: '*', regime: '*' }),
+                      policy: resolveFillPolicy(sqeAssetClass, 'entry'),
+                    });
+                    // Logged only when it changes something (a refusal, or a different arm than stored) — one line per queued
+                    // row per pass would be the same flood P9 just stopped in the refresh trace.
+                    if (!_rpx.admitted || _rpx.chosenMode !== (signal as any).chosenEntryMode) console.log(`[B-ENTRY-GATE][P6][REPRICE:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass} ask=${_rpAsk.ask} entry=${signal.entryPrice} ` +
+                      `policy=${_rpx.policy} admitted=${_rpx.admitted} mode=${_rpx.chosenMode ?? 'none'} chosenNetEV=${_rpx.chosenNetEV} takerAtAsk=${_rpx.takerNetEvAtAsk} ` +
+                      `maker=${_rpx.makerNetEVAdjusted} windowRefused=${_rpx.windowRefused}${_rpx.reason ? ` reason=${_rpx.reason}` : ''}`);
+                  } catch (rpxErr) {
+                    console.error(`[B-ENTRY-GATE][P6][REPRICE_UNRESOLVED:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass}: ` +
+                      `${rpxErr instanceof Error ? rpxErr.message : String(rpxErr)} — no decision on price this pass`);
+                  }
+                }
               }
 
               const sqeInput: SQEInput = {
@@ -1093,10 +1124,11 @@ class ReadyToBuyService {
                 // wall). This path replayed the queue-time snapshot, so a signal whose net
                 // expectancy had gone NEGATIVE since queueing was reconfirmed on the old
                 // number. Now prefers THIS tick's re-decide, exactly as the per-signal path does.
-                chosenNetEv: _acq.refreshedMT?.chosenNetEV
-                  ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined),
-                chosenEntryMode: (_acq.refreshedMT?.chosenMode
-                  ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined)) ?? undefined,
+                // B-ENTRY-GATE (#1224) P6: the at-ask re-price decides when there was a price; otherwise as before.
+                chosenNetEv: _rpx ? _rpx.chosenNetEV : (_acq.refreshedMT?.chosenNetEV
+                  ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined)),
+                chosenEntryMode: (_rpx ? (_rpx.chosenMode ?? undefined) : (_acq.refreshedMT?.chosenMode
+                  ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined))) ?? undefined,
               };
               
               // P19-B8.5 OBJ-6: same shadow treatment as the single-refresh site above (#514).
@@ -1136,7 +1168,15 @@ class ReadyToBuyService {
                   // per-signal path — chosen_net_ev is read by BOTH the B7.1 ranker (queue
                   // order) and the [11.8B] open-gate, so a stale stored value mis-ranks and
                   // mis-gates. Atomic with the metadata write below (no half-updated row).
-                  ...(_acq.refreshedMT ? {
+                  // B-ENTRY-GATE (#1224) P6: an admitted at-ask re-price is the snapshot of record (a refused one never
+                  // reaches here — the SQE deleted it). Else the plan-price re-decide, as before.
+                  ...(_rpx?.admitted ? {
+                    chosenEntryMode: _rpx.chosenMode!,
+                    entryFillPolicy: _rpx.policy,
+                    chosenNetEv: _rpx.chosenNetEV.toString(),
+                    takerNetEv: _rpx.takerNetEvAtAsk.toString(),
+                    makerNetEvAdjusted: _rpx.makerNetEVAdjusted.toString(),
+                  } : _acq.refreshedMT ? {
                     chosenEntryMode: _acq.refreshedMT.chosenMode,
                     entryFillPolicy: _acq.refreshedMT.entryFillPolicy,
                     chosenNetEv: _acq.refreshedMT.chosenNetEV.toString(),

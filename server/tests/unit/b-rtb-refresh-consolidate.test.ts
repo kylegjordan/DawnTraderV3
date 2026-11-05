@@ -72,9 +72,9 @@ describe('B-RTB-REFRESH-CONSOLIDATE: one shared acquisition, both mechanisms', (
 describe('B-RTB-REFRESH-CONSOLIDATE: the survivor is handed CURRENT state (OBJ-2)', () => {
   it('★ chosenNetEv prefers this tick re-decide over the stored snapshot (the binding gate)', () => {
     const body = refreshAndRankBody();
-    expect(body).toContain('chosenNetEv: _acq.refreshedMT?.chosenNetEV');
-    // the stored value survives ONLY as the fallback (?? ), never as the primary read
-    expect(body).toMatch(/chosenNetEv: _acq\.refreshedMT\?\.chosenNetEV\s*\n?\s*\?\?/);
+    // B-ENTRY-GATE (#1224) P6: the at-ask re-price (`_rpx`) leads when there was a price; this tick's plan-price
+    // re-decide is next; the stored value survives ONLY as the last fallback (?? ), never as the primary read.
+    expect(body).toMatch(/chosenNetEv: _rpx \? _rpx\.chosenNetEV : \(_acq\.refreshedMT\?\.chosenNetEV\s*\n?\s*\?\?/);
   });
 
   it('volatility is the live read, not the frozen `metadata ?? 0.3` default', () => {
