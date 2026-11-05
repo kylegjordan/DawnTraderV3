@@ -93,20 +93,15 @@ const CHECKS: CheckSpec[] = [
     onMissing: 'skip',
   },
   {
-    // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). It was 'skip' until
-    // its first good run; that run is recorded (2026-11-05 02:45-03:03Z: `DONE moved=1709 failed=0`, all 1,709
-    // manifest rows warm/active with checksums, one day restored byte-exact), so it is now 'alert' (O1): a
-    // missing log means the job never ran. (Stale and failed runs already page whenever the log exists.)
-    // GRACE 20 h, NOT 26 h (Langston O1 CHANGE-1): this watchdog runs once a day (~05:00Z) and the job once a
-    // day (02:45Z). With 26 h a single missed night reads ~25h56m old at the next check and PASSES; any grace
-    // >= 24 h cannot catch one missed run of a daily job checked daily. 20 h: healthy age ~2 h, one miss ~26 h.
-    // The cadence-aware form (cron-fire-evidence-verifier.ts, B-NEW-51) is homed as its own item.
+    // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). 'skip' until
+    // its first good run, exactly as the cold rotator's entry above; flipped to 'alert' in this batch
+    // once that run is recorded (Langston C3).
     name: 'disk-file-tiering',
     label: 'Disk-file tiering — dated app data files to warm storage (daily 02:45 UTC)',
     logFile: 'disk-file-tiering.log',
-    graceMs: 20 * HOUR_MS,
+    graceMs: 26 * HOUR_MS,
     donePattern: /DONE moved=\d+ failed=(\d+)/,
-    onMissing: 'alert',
+    onMissing: 'skip',
   },
 ];
 
