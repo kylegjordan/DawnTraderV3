@@ -26,6 +26,7 @@ from store import load_state  # noqa: E402
 
 UTC = timezone.utc
 OUT = os.path.join(ROOT, "due-census.json")
+LINEAGE_OUT = os.path.join(ROOT, "due-lineage.json")   # the verdict the first prune is gated on (Langston R-4)
 
 
 def census(now: datetime | None = None) -> dict:
@@ -41,10 +42,17 @@ def census(now: datetime | None = None) -> dict:
 
 def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
     """For each REMOVABLE bucket: the share of its entries (mint, age) that have ANY observation row on the bucket's
-    day or the two days after (a read observes, sheds, or records a death - each writes a row keyed by mint and age).
-    A bucket under `floor` is a GAP: evidence that the cursor's lineage may have skipped it, so the backfilled
-    consumed_from is not proven for it (Langston, Step-4 part 1). Read-only; one day's observation set in memory at
-    a time."""
+    day or the two days after. A bucket under `floor` is a GAP: evidence that the cursor's lineage may have skipped
+    it, so the backfilled consumed_from is not proven for it (Langston, Step-4 part 1). Read-only; one day's
+    observation set in memory at a time.
+    ⚠️ NOT EVERY READ WRITES A ROW (Langston R-3): an observation, a shed and a recorded death do (`store.
+       record_observation`, keyed mint+age), but a REQUEUE (the entry is copied to a later bucket and its row is
+       written only when that copy is read) and an observation ERROR write none for this bucket. So a fully read
+       bucket can score below 1.0. FLOOR = 0.5: a bucket in which at least half the entries left a row was read; a
+       never-read bucket scores ~0, because nothing reads it to write any row (a requeue copy carries no row until
+       read, and the next-age entry has a different age - Langston tried to build an aliasing path and could not).
+       The residual is conservative: a read bucket with heavy requeues can be flagged as a gap, never the reverse.
+       Exactly 0.5 is NOT a gap (`<` below) - pinned by test_due_storage.py section 6b."""
     import json as _json
     from collections import defaultdict
     from config import OBSERVATIONS_DIR
@@ -88,7 +96,12 @@ def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
 def main() -> int:
     if sys.argv[1:] == ["--lineage"]:
         out = lineage()
-        print(json.dumps(out, indent=2, sort_keys=True))
+        text = json.dumps(out, indent=2, sort_keys=True)
+        print(text)
+        tmp = LINEAGE_OUT + ".%d.tmp" % os.getpid()
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text + "\n")
+        os.replace(tmp, LINEAGE_OUT)
         return 1 if out["gaps"] else 0
     out = census()
     text = json.dumps(out, indent=2, sort_keys=True)

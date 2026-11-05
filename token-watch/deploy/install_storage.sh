@@ -22,10 +22,14 @@
 #   four lists are asserted disjoint.
 # ⛔ NOT dt-deploy, AND NOTHING IS RESTARTED. token-watch is not part of the app. The long-running receiver keeps the
 #    code it loaded: receiver.py is byte-identical at the ref, and its imports differ only in CR bytes (A6).
-# Writes /opt/token-watch/INSTALLED: the sha, each file's sha256, the actor and a UTC time (#1004 is attribution).
+# Writes /opt/token-watch/INSTALLED: the sha, each file's sha256, the actor and a UTC time. ⚠️ The actor is TWO
+#    fields, never one (Langston, Step-4 part 3 C-2, after #1004 — never name a field we cannot prove):
+#    `actor_declared` is the constant below, a CLAIM; `actor_transport` is what the box observed (SUDO_USER, else
+#    logname, else "unknown"). Every session reaches this box as root, so neither proves which session ran it.
 set -eu
 SHA=${1:-}
-ACTOR=cc-infra
+ACTOR_DECLARED=cc-infra
+ACTOR_TRANSPORT=${SUDO_USER:-$(logname 2>/dev/null || echo unknown)}
 REPO=/home/deploy/dawntrader
 DEST=/opt/token-watch
 UNITS=/etc/systemd/system
@@ -73,9 +77,11 @@ for f in $ALL; do
   g cat-file blob "$PREV:token-watch/$f" > "$prev" 2>"$stage/prev.err" \
     || fail "$DEST/$f is live but has no blob at the previous install $PREV ($(cat "$stage/prev.err")) — stop and look"
   tr -d '\r' < "$DEST/$f" | cmp -s - "$prev" \
-    || fail "$DEST/$f differs from its blob at the previous install $PREV by more than carriage returns; it was edited on the box — stop and look"
+    || fail "$DEST/$f differs from its blob at the previous install $PREV by more than carriage returns — it was edited on the box, OR an earlier install copied files and then failed before writing INSTALLED (its 'NOT recorded' FAIL line says so) — stop and look"
 done
-for f in $OPS $CORE $TOOLS; do python3 -m py_compile "$stage/$f" || fail "$f does not compile"; done
+# ALL, not OPS+CORE+TOOLS (Langston C-1): the guard rewrite makes a CHANGED pinned file installable, so a syntax
+# error in store.py must stop here, not install clean and surface as every timer failing at import.
+for f in $ALL; do python3 -m py_compile "$stage/$f" || fail "$f does not compile"; done
 
 # ── 3. install ──────────────────────────────────────────────────────────────
 install -d -o root -g root -m 0755 "$DEST/ops" "$DEST/tools"
@@ -83,17 +89,17 @@ for f in $ALL; do install -o root -g root -m 0644 "$stage/$f" "$DEST/$f"; done
 for u in $UNIT_FILES; do install -o root -g root -m 0644 "$stage/units/$u" "$UNITS/$u"; done
 systemctl daemon-reload
 for u in token-watch-cold-offbox.service token-watch-store-watch.service token-watch-feed-watch.service; do   # a template cannot be verified bare
-  systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded"
+  systemd-analyze verify "$UNITS/$u" || fail "systemd-analyze rejects $u — files are in place but NOT recorded: INSTALLED still names $PREV, so the next run's guard will report every changed file as edited on the box. Fix the unit and re-run this sha, or restore the files from $PREV"
 done
 
 # ── 4. the record, last ─────────────────────────────────────────────────────
-record="{\"sha\":\"$SHA\",\"previous_sha\":\"$PREV\",\"actor\":\"$ACTOR\",\"installed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"files\":{"
+record="{\"sha\":\"$SHA\",\"previous_sha\":\"$PREV\",\"actor_declared\":\"$ACTOR_DECLARED\",\"actor_transport\":\"$ACTOR_TRANSPORT\",\"installed_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"files\":{"
 sep=""
 for f in $ALL; do record="$record$sep\"$f\":\"$(sha256sum "$DEST/$f" | cut -d' ' -f1)\""; sep=","; done
 for u in $UNIT_FILES; do record="$record$sep\"systemd/$u\":\"$(sha256sum "$UNITS/$u" | cut -d' ' -f1)\""; done
 echo "$record}}" > "$stage/INSTALLED"
 install -o root -g root -m 0644 "$stage/INSTALLED" "$DEST/INSTALLED"
-echo "INSTALLED $SHA by $ACTOR. Timers are NOT enabled by this script: enable them after the first runs by hand"
+echo "INSTALLED $SHA (declared $ACTOR_DECLARED, via $ACTOR_TRANSPORT). Timers are NOT enabled by this script: enable them after the first runs by hand"
 echo "(pre-audit P10):  systemctl enable --now token-watch-cold-offbox.timer token-watch-store-watch.timer"
 echo "Feed watch (amendment 1): drill the mint step (A7) and resolve the drill row FIRST, then:"
 echo "  systemctl enable --now token-watch-feed-watch.timer"

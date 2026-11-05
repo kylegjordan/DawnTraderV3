@@ -247,6 +247,30 @@ check("★ the lineage check removed nothing", present() == before)
 write_obs(GAP_H, [("m3", "1h"), ("m4", "6h")])
 lin = due_census.lineage(NOW)
 check("once observed, no gap", lin["gaps"] == [] and lin["verdict"] == "no gap found", lin)
+# the floor, at its boundary (Langston R-3): exactly half observed is NOT a gap; one third is.
+shutil.rmtree(store.DUE_DIR, ignore_errors=True)
+os.makedirs(store.DUE_DIR)
+HALF_H = FROM + timedelta(days=8)
+THIRD_H = FROM + timedelta(days=12)
+write_bucket(HALF_H, [("h1", "1h"), ("h2", "1h")])
+write_bucket(THIRD_H, [("t1", "1h"), ("t2", "1h"), ("t3", "1h")])
+write_obs(HALF_H, [("h1", "1h")])
+write_obs(THIRD_H, [("t1", "1h")])
+lin = due_census.lineage(NOW)
+check("★ exactly half observed is NOT a gap (floor 0.5, strict)", H(HALF_H) not in [g["bucket"] for g in lin["gaps"]], lin)
+check("★ one third observed IS a gap", [g["bucket"] for g in lin["gaps"]] == [H(THIRD_H)], lin)
+# the verdict is persisted beside due-census.json (Langston R-4)
+saved_argv = sys.argv
+sys.argv = ["due_census.py", "--lineage"]
+try:
+    with redirect_stdout(io.StringIO()):
+        rc = due_census.main()
+finally:
+    sys.argv = saved_argv
+persisted = json.load(open(due_census.LINEAGE_OUT, encoding="utf-8"))
+check("★ --lineage exits 1 on a gap", rc == 1, rc)
+check("★ --lineage persists its verdict", persisted["verdict"].startswith("GAPS")
+      and persisted["gaps"][0]["bucket"] == H(THIRD_H), persisted)
 
 print("=== 7. the one-time backfill ===")
 OBS = store.OBSERVATIONS_DIR
@@ -299,6 +323,22 @@ rc, txt = run_bf(["--apply"])
 check("★ refuses when the derivation disagrees with the literal", rc == 2 and "disagrees" in txt
       and "consumed_from" not in store.load_state("follow_up_cursor", {}), txt[-200:])
 bf.LITERAL = saved_literal
+rc, txt = run_bf(["--bogus"])
+check("★ refuses an unknown argument (usage)", rc == 2 and "usage" in txt, txt[-200:])
+open(store.LOCK_PATH, "w").write("someone-else 1 now\n")
+try:
+    store.save_state("follow_up_cursor", {"last_bucket": "2026-09-30T13"})
+    rc, txt = run_bf(["--apply"])
+    check("★ refuses while another periodic job holds the lock", rc == 2 and "holds the lock" in txt
+          and "consumed_from" not in store.load_state("follow_up_cursor", {}), txt[-200:])
+finally:
+    os.remove(store.LOCK_PATH)
+with open(os.path.join(OBS, "2026-08-31.jsonl"), "w", encoding="utf-8") as fh:   # the first file: miss rows only
+    fh.write(json.dumps({"observed_at": first.isoformat(), "reason": "scheduled_in_the_past"}) + "\n")
+rc, txt = run_bf(["--apply"])
+check("★ refuses when the first file holds no follow-up observation (only miss rows)", rc == 2
+      and "no follow-up observation" in txt and "consumed_from" not in store.load_state("follow_up_cursor", {}),
+      txt[-200:])
 
 print("=== 8. the feed watch's probe: an unreadable census FAILS, never reads as quiet ===")
 births = config.BIRTHS_DIR
@@ -445,6 +485,10 @@ check("the installer installs both units and verifies the service",
       and "token-watch-store-watch.service token-watch-feed-watch.service; do" in inst)
 check("★ the installer's box-edit guard reads the PREVIOUS install's blob",
       '"$PREV:token-watch/$f"' in inst and "INSTALLED" in inst)
+check("★ the installer compiles EVERY list, PINNED included (C-1)",
+      'for f in $ALL; do python3 -m py_compile' in inst and "for f in $OPS $CORE $TOOLS; do python3" not in inst)
+check("★ the record names the actor as declared AND as observed (C-2)",
+      "actor_declared" in inst and "actor_transport" in inst and '\\"actor\\":' not in inst)
 check("the installer carries CORE and TOOLS", 'CORE="follow_up.py"' in inst
       and 'TOOLS="tools/backfill_consumed_from.py tools/due_census.py"' in inst)
 
