@@ -88,3 +88,8 @@ A-8: factor records, including the new xStock correlation records, are deleted a
 
 ## Plain-language summary
 The audit found two things the scope missed. xStocks run on 15-minute price bars, not hourly. And the correlation code lines the two price series up by position rather than by time — for most xStocks that would compare different hours and still look valid. The plan matches bars by time, uses 15-minute bars, records without touching trading, and fixes a related mix-up where the nightly job could attach a crypto trade's result to an xStock record with the same ticker.
+
+## P-11 result (measured 2026-11-05 ~06:55Z, read-only, after r2 was dispatched)
+Crypto 60-minute bars through the app's own `ohlcCache` (Kraken public OHLC), paced 1.5 s apart. Population: 12 crypto VTS symbols of the 250 traded in the last 14 days — the 6 most traded (RUNE/USD 874 trades … TEL/USD 100) and 6 traded once (STBL/EUR, DASH/EUR, KAS/EUR, ALGO/USD, POL/EUR, CRV/EUR). Reference `XXBTZUSD`: 721 bars to 05:00Z.
+**All 12: 721 bars, last 30 positionally aligned with the reference 30/30, all 721 timestamps shared, no gap over an hour.** Kraken returns one continuous hourly series per pair, so positional pairing IS time pairing on the crypto path. The instrument is the A-2 logic, which on the xStock side reported misalignment for 431 of 469, so it can speak.
+⇒ **C-E disposition: no work — withdrawn, citing this measurement.** Limit: 12 of 250 symbols, one moment; the thinnest pairs were included deliberately.
