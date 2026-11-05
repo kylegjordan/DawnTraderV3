@@ -16,6 +16,10 @@ import { reset24hWindow, resetHourlyScanHistory } from './fx5-24h-window.js';
 import { b4Diagnostics } from './b4-diagnostics.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
 import { livePricingAdapter } from './live-pricing-adapter.js';
+import { asValidAssetClass } from '../../shared/asset-classes.js';
+import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js';
+import { getFrictionForAssetClass } from '../core/math/cost-model.js';
+import { computeRealizedPnl, referenceFillPrice, closeFillCosts } from '../core/math/trade-pnl.js';
 import { rtbMetricsService } from './rtb-metrics-service.js';
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
@@ -379,7 +383,8 @@ export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
  * @param mode Trading mode ('paper' or 'live')
  * @param sessionId Current session ID for logging
  */
-async function reconcileIncompleteTrades(
+// Exported for its unit test (B-CLOSE-WRITER-COSTS P-11); called only from the stop flow below.
+export async function reconcileIncompleteTrades(
   mode: 'paper' | 'live',
   sessionId: string,
   // ⛔ B-FEED-MISMATCH-FIX P4 / FINDING-4 — the positions the flatten DELIBERATELY left open (no observed price
@@ -470,18 +475,71 @@ async function reconcileIncompleteTrades(
         }
         const exitPrice = quote.price;
 
-        // Calculate P&L
-        const entryPrice = parseFloat(trade.entryPrice);
-        const quantity = parseFloat(trade.quantity);
-        const pnl = (exitPrice - entryPrice) * quantity;
-        const pnlPercent = entryPrice > 0 ? ((exitPrice - entryPrice) / entryPrice) * 100 : 0;
+        // ⛔ B-CLOSE-WRITER-COSTS P-11 (Kyle KD-17; A-3 path 2): this row used to be booked with GROSS `pnl` only — no
+        // fee, no net. It now books the same economics `closePosition` books for a no-bids close at an observed
+        // reference: the per-class beyond-depth penalty on the reference, the per-class taker fee on that fill, the
+        // RECORD's own entry fee, and net P&L — through the SAME functions the paper order placer uses
+        // (`referenceFillPrice`, `closeFillCosts`, `computeRealizedPnl`), so the two cannot drift.
+        // Anything it cannot price honestly (no valid class, no depth config, no entry fee on the record) is LEFT OPEN
+        // with an alert — never booked with an invented zero.
+        const _num = (v: unknown) => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : NaN; };
+        const _cls = asValidAssetClass((trade as any).assetClass);
+        const _cfg = _cls ? await resolveFillDepthGateConfig(_cls) : null;
+        const entryFee = _num((trade as any).entryFee);
+        const entryPrice = _num((trade as any).actualEntryPrice ?? trade.entryPrice);
+        const quantity = _num(trade.quantity);
+        const _cantPrice = !_cls ? `no valid asset class (${String((trade as any).assetClass)})`
+          : !_cfg ? 'no fill-depth config for its class (the penalty)'
+          : !Number.isFinite(entryFee) ? 'no entry fee on its record'
+          : !(entryPrice > 0) || !(quantity > 0) ? 'no usable entry price or quantity on its record'
+          : null;
+        if (_cantPrice) {
+          console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: ${_cantPrice} — row LEFT OPEN, not booked`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — its costs cannot be priced`,
+              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position, but ${_cantPrice}, `
+                + `so it was LEFT OPEN rather than booked without its fees (B-CLOSE-WRITER-COSTS P-11). DISPOSITION: RESOLVE, do not ACK.`,
+              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
+          }
+          stillOpen++;
+          continue;
+        }
+        const fillPrice = referenceFillPrice(exitPrice, _cfg!.beyondDepthPenaltyBps);
+        const { exitFee, exitSlippage } = closeFillCosts({
+          fillPrice, quantity, requestedPrice: exitPrice, feePercent: getFrictionForAssetClass(_cls!).feeRateTaker * 100,
+        });
+        const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
+          actualEntryPrice: entryPrice, actualExitPrice: fillPrice, quantity, entryFee, exitFee,
+        });
+        const entrySlippage = Number.isFinite(_num((trade as any).entrySlippage)) ? _num((trade as any).entrySlippage) : 0;
+        const pnl = netPnl;
 
         // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
         await storage.updateClosedTrade(mode, trade.id, {
           closedAt: new Date(),
-          exitPrice: exitPrice.toString(),
-          pnl: pnl.toString(),
-          pnlPercent: pnlPercent.toString(),
+          exitPrice: fillPrice.toString(),
+          actualExitPrice: fillPrice.toString(),
+          targetExitPrice: exitPrice.toString(),
+          pnl: netPnl.toString(),
+          pnlPercent: netPnlPercent.toString(),
+          netPnl: netPnl.toString(),
+          netPnlPercent: netPnlPercent.toString(),
+          grossPnl: grossPnl.toString(),
+          totalCost: totalCost.toString(),
+          fees: totalCost.toString(),
+          totalFee: totalCost.toString(),
+          exitFee: exitFee.toString(),
+          exitFeeMode: 'taker',
+          exitSlippage: exitSlippage.toString(),
+          slippage: (entrySlippage + exitSlippage).toString(),
           closeReason: 'engine_stop_cleanup',
           exitDecisionPrice: exitPrice.toString(),
           exitPriceProducer: quote.producer,
@@ -497,12 +555,12 @@ async function reconcileIncompleteTrades(
           trade.symbol,
           strategy,
           'engine_stop_cleanup',
-          exitPrice,
+          fillPrice,
           pnl,
           'cleanup'
         );
         
-        console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} exit=$${exitPrice.toFixed(4)} pnl=$${pnl.toFixed(2)}`);
+        console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} ref=$${exitPrice.toFixed(4)} fill=$${fillPrice.toFixed(4)} exitFee=$${exitFee.toFixed(4)} net=$${netPnl.toFixed(2)}`);
         reconciled++;
         
       } catch (tradeErr) {
