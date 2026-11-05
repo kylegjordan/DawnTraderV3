@@ -1424,3 +1424,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-05 — B-STATUS-BOARD (CC-A, pre-sprint) — ⏳ batch OPEN at Step 10, waiting on Kyle's phone check
 
 **Kyle has one page that shows the whole agreed plan and who is doing what.** The governance checker rebuilds it from the plan every 30 minutes, so it cannot drift from the plan; the plan's two pre-sprint tables became one. The old laptop crew-status page, which had not updated since August, is retired. Langston's second pass rebuilt the board himself and got the same numbers. Open: Kyle's check on his phone.
+
+### 2026-11-05 — B-BOOK-STATE-RESTART-DURABLE (CC-C, sprint plan row 15) — ⏳ closes on Langston's Step-11 confirm
+
+**A restart no longer leaves the xStock exit guard blind.** The guard decides whether a fresh xStock price is believable by comparing that stock's current spread with its normal one, and it used to forget the normal spread at every restart — so in September a restart during an evening price blowout let a false stop-out through. That memory is now saved to the database every 30 seconds and loaded before trading resumes; all twelve restarts in the logs we still keep loaded it cleanly, 253 symbols at the latest. One related gap is placed elsewhere (sprint row 2): nothing reports how long the guard keeps refusing a stock it has judged unbelievable.
