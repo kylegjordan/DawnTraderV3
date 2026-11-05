@@ -176,7 +176,7 @@ CHANGE-CLASS: architecture
 | T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md change |
 | T2 | DELETED_COMPONENTS_LOG.md | N/A | a stale comment and a dead `?? 'unset'` label removed — not components |
 | T2 | MISTAKE_PATTERNS.md | N/A | the Step-7 slip (three boots named, four real) is in the Step-8 commit body for the weekly pass |
-| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no open-age alert on this batch is due this turn |
+| T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | row 2 re-justified 2026-11-05 (alert `e473d7da` came due again while this ledger was being written; first marked N/A, corrected) |
 | T2 | ALERT_HANDLING_PROTOCOL.md | N/A | no new alert class |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | not this batch's |
