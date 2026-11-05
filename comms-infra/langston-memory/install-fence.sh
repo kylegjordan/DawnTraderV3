@@ -76,10 +76,17 @@ install -d -m 0700 "$BK"
 cp -a /usr/local/bin/langston-memory-write "$BK/langston-memory-write.old"
 ( cd "$HOME_L" && stat -c '%U:%G %a %n' MEMORY.md MEMORY-ARCHIVE.md .memory-archive .memory-archive/* ) > "$BK/ownership-before.txt"
 sha256sum "$HOME_L/MEMORY.md" "$ARCH/compose-state.json" > "$BK/sha-before.txt"
-chown root:"$G" "$ARCH"; chmod 0750 "$ARCH"
-find "$ARCH" -mindepth 1 -maxdepth 1 -type f -exec chown root:"$G" {} + -exec chmod 0640 {} +
-chown root:root "$ARCH/compose-state.json"; chmod 0600 "$ARCH/compose-state.json"
-for f in MEMORY.md MEMORY-ARCHIVE.md; do chown root:"$G" "$HOME_L/$f"; chmod 0640 "$HOME_L/$f"; done
+# RE-RUNNABLE (fixed 2026-11-05 after the first install): a path already carrying the immutable flag is already
+# fenced by a previous run's ensure_fence - chown/chmod on it fails with EPERM, so it is SKIPPED, not changed.
+mig() {  # <path> <owner:group> <mode>
+  if lsattr -d "$1" 2>/dev/null | cut -c5 | grep -q i; then echo "already fenced (+i), left as is: $1"; return 0; fi
+  chown "$2" "$1"; chmod "$3" "$1"
+}
+mig "$ARCH" root:"$G" 0750
+find "$ARCH" -mindepth 1 -maxdepth 1 -type f -print0 | while IFS= read -r -d '' f; do
+  [ "$f" = "$ARCH/compose-state.json" ] && continue; mig "$f" root:"$G" 0640; done
+mig "$ARCH/compose-state.json" root:root 0600
+for f in MEMORY.md MEMORY-ARCHIVE.md; do mig "$HOME_L/$f" root:"$G" 0640; done
 install -o root -g "$G" -m 0750 "$ST/writer" /usr/local/bin/langston-memory-write
 echo "== arm: one root call that writes nothing (stale --expect-sha; ensure_fence runs under the lock, then exit 4)"
 set +e
