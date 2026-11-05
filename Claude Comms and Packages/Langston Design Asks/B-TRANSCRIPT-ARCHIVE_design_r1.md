@@ -1,4 +1,4 @@
-# B-TRANSCRIPT-ARCHIVE — design r1 (KD-34, design only; KD-46 gate for the shorter-conversation trial)
+# B-TRANSCRIPT-ARCHIVE — design r1a (KD-34, design only; KD-46 gate for the shorter-conversation trial)
 
 > Owner: Infra Claude. Deciders: Infra Claude + Langston + Coltrane; PM Claude records. **Design only, nothing is built.** Placement is Kyle's (PM is taking it to him). Inputs: `SPRINT_TO_LIVE_PLAN.md:145` (Kyle 2026-09-29, the archive as asked), `1-system-manual/pm/decisions/2026-11-05_cheaper-helpers-and-short-conversations.md` (the trial and the three positions), and KD-46's condition, in Kyle's words: *"everything a session works on, decides, implements, etc., when it gets removed by a restart, it gets stored somewhere where it can be searched and referenced when needed."*
 
@@ -45,7 +45,8 @@ Before any break, the session writes `handoff\<alias>\<UTC>.md`. **Its fields ar
 8. the evidence paths;
 9. the dead ends;
 10. pending commitments ("I said I would …");
-11. **the archive link**: the archived file and its line range for the conversation just ended.
+11. **the archive link**: the archived file and its line range for the conversation just ended;
+12. **the active pack** (Coltrane r1): the scope, pre-audit, design or review pack in hand — its **path, the section or gate, and the exact ref** — or an explicit `none`. The brief (item 2) is the ask; the pack is the artifact the work is graded against, and the two are not the same thing.
 **The new conversation's `SessionStart` hook injects the latest handoff** (the `load-own-memory.mjs` pattern), and the session's own `MEMORY_CC_<X>.md` position block points at it. **Break points (both reviewers): a finished step, never mid-diff, mid-test, mid-deploy or with an unresolved decision.**
 
 ## 5. Staleness of written state — the guard
@@ -58,7 +59,12 @@ Langston named the real cost: *"stale written state that sounds certain."* So:
   - each open dispatch, checked in the inbox for a reply since the handoff;
   - the due alerts, from the existing hook.
   - A handoff **older than 12 h**, or with any DRIFT line, is printed as **STALE — re-derive before acting**.
-- **The pilot test (Coltrane's drill):** a handoff with a **planted omission** (an open dispatch left out, a stale ref) must be caught by the hook's drift lines on restart. If it is not, the trial does not proceed.
+- **The hook also VALIDATES** that the pack path and ref (item 12) and the archive link (item 11) exist and resolve, rather than trusting them.
+- **The pilot test (Coltrane's drill, corrected at r1a — the r1 version was circular).** The hook checked only the dispatches the handoff listed, so it could never discover one the handoff OMITTED. The drill therefore plants an **action-changing omission in an independently enumerated population**:
+  - **Omission run:** the authoritative source holds **2 open dispatches**, and the handoff records **1 of 2**. The one omitted is the dispatch **holding the next gate** (for example, an unanswered review request that blocks a deploy), with a unique message id; the listed one is the positive control. The hook must derive the 2-message population **independently** (from the inbox log's `cc_outbound` rows for this session since its start, with no later reply addressed to it), report **`MISSING_OPEN_DISPATCH <exact id>`**, and mark the handoff **`STALE/BLOCKED`**.
+  - **Stale-ref run, separately:** `origin/<branch>` advances after the handoff is written, and the hook must print the exact old and new shas. **One mutation per run**, so catching the ref cannot hide a failure to catch the omission.
+  - **Each run goes green → planted mutation red for the RIGHT reason → restored green.** Printing some DRIFT line is not a pass. If any leg fails, the trial does not proceed.
+- **What a passing hook means (Coltrane):** **"safe to resume and re-derive"**, never "every inherited claim is true". It proves the machine-re-derivable fields only; it cannot prove that judgements, dead ends or promises are complete.
 - **Honest limit:** the hook proves the facts it CAN re-derive (git, inbox, alerts). A written judgement ("this approach failed because…") cannot be re-derived, and stays labelled as the earlier session's claim.
 
 ## 6. Order of work (for the batch's Step 2 to confirm)
@@ -77,6 +83,6 @@ Langston named the real cost: *"stale written state that sounds certain."* So:
 ## 8. Positions
 - **Infra Claude (owner), r1:** as written above.
 - **Langston:**
-- **Coltrane:**
+- **Coltrane, r1 (cc_outbound 2026-11-05T23:23:44Z, read at `64560d72e`): CONFIRMS the design with one field and the drill changed.** §4 carried 9 of his 10 items; the missing one is the active pack (now item 12). The r1 planted-omission test was circular, because the hook checks only the dispatches the handoff names. His replacement drill (independently enumerated population, 2 dispatches with 1 omitted, the omitted one gate-holding; a separate stale-ref run; one mutation per run; green → red for the right reason → green) is now §5. Also adopted: the hook validates that the pack and archive links resolve, and a pass means "safe to resume and re-derive". **Folded at r1a.**
 
 ## 9. Consensus
