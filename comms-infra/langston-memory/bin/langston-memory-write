@@ -848,14 +848,19 @@ SHRINK_MIN_OLD = 4096
 
 
 def shrink_gate(old_bytes, new_bytes, opts, what):
-    """None, or the override record; Refused(8) on a drastic shrink without --allow-shrink. Records nothing itself:
-    the caller writes nothing on a refusal."""
+    """None, or the override record; Refused(8) on a drastic shrink without --allow-shrink. A refusal is recorded in
+    the index (outcome refused-shrink, both sizes) before it is raised; nothing else is written."""
     old_n, new_n = len(old_bytes), len(new_bytes)
     if old_n < SHRINK_MIN_OLD or new_n >= SHRINK_FLOOR * old_n:
         return None
     why = opts.get("--allow-shrink")
     if why:
         return {"by": opts.get("--by"), "reason": why, "old_bytes": old_n, "new_bytes": new_n}
+    # Langston's FINDING (Step 7): the gate's deciding quantity is logged on the REFUSAL side too - the population
+    # needed to move SHRINK_FLOOR later must exist somewhere (the refused-growth rows are the precedent).
+    append_index({"ts": utc(), "target": TARGET, "mode": what, "outcome": "refused-shrink", "old_bytes": old_n,
+                  "new_bytes": new_n, "floor": SHRINK_FLOOR, "by_claimed": opts.get("--by"), "via_uid": os.getuid(),
+                  "reason": opts.get("--reason")})
     raise Refused(8, "REFUSED: this write shrinks %s from %d B to %d B (under %d%% of its size) - a wipe, not an "
                      "edit. Nothing was written. If the shrink is deliberate, ask Infra Claude to run it as root with "
                      "--allow-shrink \"<reason>\"; --trim is the verb for moving closed sections out."
@@ -2215,7 +2220,7 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
                "part_archived": (os.path.basename(part_arch) if part_arch else None), "created": is_new,
                "mem_archived": os.path.basename(mem_arch), "resolve_rule": resolve_rule, "ratchet": growth,
-               "shrink_override": shrink}
+               "shrink_override": shrink, "part_old_bytes": len(part_old), "part_new_bytes": len(part_new)}
         append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
         write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))

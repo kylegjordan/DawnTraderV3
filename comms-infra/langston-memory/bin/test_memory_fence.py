@@ -417,10 +417,19 @@ def t_root_flags():
 def t_shrink():
     print("6. the shrink gate (Step 7, Langston): a drastic part or body shrink refuses without a root override")
     big, half, tiny = b"a" * 10000 + b"\n", b"a" * 6000 + b"\n", b"x\n"
-    e = raises(W.shrink_gate, big, tiny, {}, "part 00-legacy.md")
+    rows, saved_append = [], W.append_index
+    W.append_index = rows.append                     # an earlier section left a tripwire here; capture instead
+    try:
+        e = raises(W.shrink_gate, big, tiny, {}, "part 00-legacy.md")
+    finally:
+        W.append_index = saved_append
     check("★ 10,001 B -> 2 B refuses with exit 8, naming the part and the sizes",
           (type(e).__name__, getattr(e, "code", None), "00-legacy.md" in str(e) and "10001 B to 2 B" in str(e)),
           ("Refused", 8, True))
+    last = rows[-1] if rows else {}
+    check("★ the refusal is RECORDED in the index with both sizes (Langston's FINDING: the gate's quantity is logged "
+          "on the refusal side)", (last.get("outcome"), last.get("old_bytes"), last.get("new_bytes")),
+          ("refused-shrink", 10001, 2))
     check("an ordinary shrink (10,001 -> 6,001 B) passes", W.shrink_gate(big, half, {}, "p"), None)
     check("a small file (under 4 KiB) is not gated, however it shrinks", W.shrink_gate(b"a" * 3000, tiny, {}, "p"), None)
     ov = W.shrink_gate(big, tiny, {"--allow-shrink": "deliberate", "--by": "cc-infra"}, "p")
