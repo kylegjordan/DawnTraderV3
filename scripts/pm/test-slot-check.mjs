@@ -169,6 +169,16 @@ const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0, genAgeH = null } =
   check('r4 control: a benign $(cat) body is allowed (proves the file, not the command, was judged)', r.status === 0, `${r.status} ${r.stderr}`);
   r = hook(G1, bash(`ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /tmp/nope-zz)"' # OLD Claude slotted after row 72`), env);
   check('r4: an UNRESOLVABLE $(cat) falls back to the whole command, so it is still checked (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
+  // Langston r4 CHANGES C-1..C-3
+  r = hook(G1, bash(`ssh root@x 'cc-send --sender "PM Claude" --message "Kyle said \\"go\\" today so OLD Claude owns row 59g, slotted after 2" --channel general'`), env);
+  check('r5 C-1: an escaped inner quote no longer truncates the body (slotting after the quote is refused)', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
+  r = hook(G1, bash(`ssh root@x 'cc-send --sender "PM Claude" --message "$(</root/pm-stage/b.md)"' # OLD Claude slotted after row 72`), env);
+  check('r5 C-2: a $(<file) body is unresolved and falls back to the whole command (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
+  r = hook(G1, bash('ssh root@x \'cc-send --sender "PM Claude" --message "$BODY"\' # OLD Claude slotted after row 72'), env);
+  check('r5 C-2: a $VAR body falls back to the whole command too (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
+  const srcLines = readFileSync(e.probe, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((x) => x.kind === 'source');
+  check('r5 C-3: every PM cc-send logs how its text was obtained (inline, cat-resolved and fallback-cmd all present)',
+    ['inline', 'cat-resolved', 'fallback-cmd'].every((h) => srcLines.some((x) => x.how === h)), JSON.stringify(srcLines.map((x) => x.how)));
   writeRec(e.recs, 'CC-A');
   r = hook(G1, wrap(SLOTQ), env);
   check('Guard 1 allows it with a FRESH record for that owner', r.status === 0, `${r.status} ${r.stderr}`);

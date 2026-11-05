@@ -79,3 +79,11 @@ if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\?["']?PM Claude\b/.test(cmd)) tex
 **Item 4 — staging under home, 0600 (#979):** adopted as practice: Discord bodies are staged at `/root/pm-stage/` with `umask 077`, not `/tmp`.
 **Item 5 — carry to close:** zero live `allow` verdicts so far is recorded as zero, never cited as silence proving the guard works.
 **Record corrections:** the probe log spans two hook builds (`fd3af2c5c` had no verdict lines), and two probe lines predate `fd3af2c5c`.
+
+## r5 — Langston's r4 CHANGES folded (C-1, C-2, C-3 and both record items)
+
+- **C-1:** the `--message` regex keeps escaped inner quotes: `/--message[\s=]+(\?["'])((?:\.|[\s\S])*?)(?<!\)\1(?=\s|'|$)/` (his fix). His exact case (`Kyle said \"go\" today so ... slotted after 2`) now returns the full body and refuses.
+- **C-2:** after the `$(cat)` pass, any substitution left in the body (`$(`, backtick, `${`, `$VAR`) marks it unresolved, so `$(<f)`, backticks and `$BODY` fall back to the whole command as the comment claims.
+- **C-3:** `messageSource(cmd)` returns `{text, how}`; every PM `cc-send` appends one `kind: 'source'` line (`inline` / `cat-resolved` / `fallback-cmd`, plus length) to the probe log, whatever the verdict.
+- **Record items:** the honest-limit comment now names the narrowing exactly: `$(cat)` only resolves through a same-command scp or a same-path file read on THIS box (whose bytes may differ from what posts); a multi-source scp resolves to its LAST source; every other substitution falls back.
+- **Tests 82/82 (4 new), mutation-checked by RUNNING:** with the r4 hook (`30a8c416a`) restored, all four new cases FAIL (78/82); with r5, 82/82.

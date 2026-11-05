@@ -7,9 +7,11 @@
 //   the hook's own fault      -> exit 0 and a line in the miss log (a broken hook file must never stop another session)
 //   mapped non-PM clone       -> exit 0, silently
 //   unreadable/unmapped dir   -> exit 0 AND a miss-log line (a dead gate is visible)
-// HONEST LIMIT: slotting is recognised BY WORDING AND BY PATH: wording, because an unusually worded recommendation can pass;
-// path, because a message body built some other way than an inline --message or `$(cat f)` from a same-command scp falls back to
-// the whole command text. Guard 2 is the hard gate. (The full fix, checking inside cc-send on the resolved body, is r4 item 1.)
+// HONEST LIMIT: slotting is recognised BY WORDING AND BY PATH. Wording: an unusually worded recommendation can pass. Path: the
+// posted text is read from an inline --message, or from `$(cat REMOTE)` resolved to a same-command `scp LOCAL host:REMOTE` (or to
+// REMOTE read on THIS box, whose bytes may differ from what posts); a multi-source scp resolves to its LAST source; any other
+// substitution (`$(<f)`, backticks, $VAR) falls back to the whole command text. Every PM cc-send logs how its text was obtained.
+// Guard 2 is the hard gate. (The full fix, checking inside cc-send on the resolved body, is still owed, with Infra Claude.)
 // PROBE (P1d-1): every invocation appends one JSON line {ts, tool_name, project, ask} to the probe log, so the first run
 // proves whether the app runs PreToolUse hooks on its own MCP tool (the Bash line is the control).
 // Env overrides, for tests: PM_SLOT_RECORD_DIR, PM_SLOT_MISS_LOG, PM_SLOT_PROBE_LOG.
@@ -55,21 +57,27 @@ export function isSlotting(text) { return SLOT_WORDS.test(text) && namedOwners(t
 // The text actually posted (Langston Step-4 r4 items 1-2): the --message argument, with each `$(cat REMOTE)` replaced by the
 // LOCAL file an `scp LOCAL host:REMOTE` in the same command copied there (or REMOTE itself if it exists here). Anything it
 // cannot resolve falls back to the WHOLE command, so an unreadable body is still checked, never skipped.
-export function messageText(cmd) {
-  const m = /--message[\s=]+(\\?["'])([\s\S]*?)\1(?=\s|'|$)/.exec(cmd);
-  if (!m) return cmd;
+export function messageSource(cmd) {
+  // escaped inner quotes (\") stay inside the body (Langston r4 C-1)
+  const m = /--message[\s=]+(\\?["'])((?:\\.|[\s\S])*?)(?<!\\)\1(?=\s|'|$)/.exec(cmd);
+  if (!m) return { text: cmd, how: 'fallback-cmd' };
   let body = m[2];
   let unresolved = false;
+  let resolvedCat = false;
   body = body.replace(/\$\(\s*cat\s+([^\s)]+)\s*\)/g, (_, remote) => {
     const scp = new RegExp(`\\bscp\\b[^&;|]*?\\s(\\S+)\\s+\\S+:${remote.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=\\s|$|&|;)`).exec(cmd);
     for (const p of [scp && scp[1].replace(/^["']|["']$/g, ''), remote]) {
       if (!p) continue;
-      try { return readFileSync(p.replace(/^~(?=\/)/, homedir()), 'utf8'); } catch { /* try the next candidate */ }
+      try { const t = readFileSync(p.replace(/^~(?=\/)/, homedir()), 'utf8'); resolvedCat = true; return t; } catch { /* try the next candidate */ }
     }
     unresolved = true; return '';
   });
-  return unresolved ? cmd : body;
+  // any substitution still in the body was not resolved: judge the whole command instead (Langston r4 C-2)
+  if (/\$\(|`|\$\{|\$[A-Za-z_]/.test(body)) unresolved = true;
+  if (unresolved) return { text: cmd, how: 'fallback-cmd' };
+  return { text: body, how: resolvedCat ? 'cat-resolved' : 'inline' };
 }
+export function messageText(cmd) { return messageSource(cmd).text; }
 
 function freshRecordFor(dir, alias) {
   const names = readdirSync(dir); // a missing dir throws ENOENT -> determinate "no record" is decided by the caller
@@ -110,7 +118,11 @@ process.stdin.on('end', () => {
     if (tool === 'mcp__ccd_turn__wrap_up') text = `${input.ask ?? ''}\n${input.recap ?? ''}`;
     else if (tool === 'Bash') {
       const cmd = String(input.command ?? '');
-      if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\\?["']?PM Claude\b/.test(cmd)) text = messageText(cmd);
+      if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\\?["']?PM Claude\b/.test(cmd)) {
+        const src = messageSource(cmd); text = src.text;
+        // one line per PM cc-send, whatever the verdict, so an unseen body is visible (Langston r4 C-3)
+        probeAppend(JSON.stringify({ ts: new Date().toISOString(), hook: 'guard-pm-slot', kind: 'source', tool_name: tool, how: src.how, chars: text.length }));
+      }
     }
     if (text === null || !isSlotting(text)) process.exit(0);
 
