@@ -12,6 +12,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { db } from '../../db.js';
+import { captureXstockDbSnapshot } from './xstock-db-snapshot.js';
 import {
   recordXstockBarStatementTimeout,
   recordXstockBarTiming,
@@ -56,7 +57,13 @@ async function timedLeg<T>(leg: XstockTimingLeg, run: () => Promise<T>): Promise
     return value;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (message.includes('canceling statement due to statement timeout')) recordXstockBarStatementTimeout(leg);
+    if (message.includes('canceling statement due to statement timeout')) {
+      recordXstockBarStatementTimeout(leg);
+      // R6a / C4: every statement timeout on the three transactions (the projection's, which R5d then
+      // retries, and the certify failures, first pass and repair) records what every backend was doing.
+      // Best-effort, fresh connection, rate-limited to one a minute, never awaited.
+      void captureXstockDbSnapshot(`${leg} statement timeout`);
+    }
     throw error;
   }
 }
