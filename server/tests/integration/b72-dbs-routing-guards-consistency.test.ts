@@ -3,20 +3,18 @@
  *
  * Asserts the B63 mutual-exclusion guarantee: when |DBS| >= dbs_min_threshold,
  * pairs route exclusively to strong_bull_trend; counter-trend strategies
- * (defensive_hedge, reverse_impulse, morning_star) MUST skip those pairs, and
- * volatility_edge's strong-DBS exclusion uses the same threshold.
+ * (defensive_hedge, reverse_impulse, morning_star) MUST skip those pairs.
  *
  * Group migrated atomically with strong_bull_trend.ts, defensive_hedge.ts,
- * reverse_impulse.ts, morning_star.ts; volatility_edge.ts joined on
- * 2026-11-05 (B-XSTOCK-DBS-TO-STRATEGIES #1235, OBJ-1b — it read a literal 0.35
- * before). A SQL UPDATE that changes one row but not the others would silently
- * break the mutual-exclusion guarantee. This test catches that.
+ * reverse_impulse.ts, morning_star.ts. A SQL UPDATE that changes one row
+ * but not the others would silently break the mutual-exclusion guarantee.
+ * This test catches that.
  *
  * Tests:
- *   1. All 5 rows seeded for `strategy_dbs_routing_guards.dbs_min_threshold`.
- *   2. All 5 rows have equal value (mutual consistency invariant).
+ *   1. All 4 rows seeded for `strategy_dbs_routing_guards.dbs_min_threshold`.
+ *   2. All 4 rows have equal value (mutual consistency invariant).
  *   3. The expected canonical value is the post-B63 calibration: 0.35.
- *   4. All 5 strategies resolve the same threshold via the cached resolver.
+ *   4. All 4 strategies resolve the same threshold via the cached resolver.
  *
  * Run: `npm test -- b72-dbs-routing-guards-consistency`
  */
@@ -33,7 +31,7 @@ import {
 
 const MODULE_NAME = 'strategy_dbs_routing_guards';
 const CONSTANT_NAME = 'dbs_min_threshold';
-const STRATEGIES = ['strong_bull_trend', 'defensive_hedge', 'reverse_impulse', 'morning_star', 'volatility_edge'] as const;
+const STRATEGIES = ['strong_bull_trend', 'defensive_hedge', 'reverse_impulse', 'morning_star'] as const;
 const EXPECTED_CANONICAL_VALUE = 0.35;
 
 // Skip the live-DB suite if no Postgres connection is available (CI without
@@ -54,7 +52,7 @@ describe.skipIf(!dbAvailable)('B72 — DBS routing guards mutual consistency', (
     clearModuleConstantsCache();
   });
 
-  it('seeds every group strategy row in module_constants', async () => {
+  it('seeds all 4 strategy rows in module_constants', async () => {
     const rows = await db
       .select()
       .from(moduleConstants)
@@ -71,7 +69,7 @@ describe.skipIf(!dbAvailable)('B72 — DBS routing guards mutual consistency', (
     }
   });
 
-  it('every group row has equal value (mutual-exclusion invariant)', async () => {
+  it('all 4 rows have equal value (mutual-exclusion invariant)', async () => {
     const rows = await db
       .select()
       .from(moduleConstants)
@@ -111,7 +109,7 @@ describe.skipIf(!dbAvailable)('B72 — DBS routing guards mutual consistency', (
     }
   });
 
-  it('every group strategy resolves to the same threshold via cached resolver', () => {
+  it('all 4 strategies resolve to the same threshold via cached resolver', () => {
     const resolved = STRATEGIES.map((strategy) =>
       getCachedNumberRequired(MODULE_NAME, CONSTANT_NAME, {
         exchange: '*',

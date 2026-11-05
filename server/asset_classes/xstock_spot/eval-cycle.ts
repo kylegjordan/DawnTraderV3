@@ -70,7 +70,6 @@ import { resolveFillPolicy, resolveMakerTakerHaircut, resolveMakerMaxPendingMs }
 import { isMarketableAtPlacement } from '../../core/trading/pending-maker-logic.js';
 // P19-B4a (C2): xStock active-path dispatch (stamp-at-source wire-in; dormant until B7b).
 import { dispatchXstockActiveSignal } from './active-dispatch.js';
-import { buildXstockDetectIndicators, detectDbsScoreOf } from './detect-indicators.js';
 import { resetNullReason, getNullReason } from '../../utils/null-reason-tracker.js';
 import { isXstockMarketOpenUTC } from './market-hours.js';
 import { evaluateXstockGlobalFilter } from './global-filter.js';
@@ -174,12 +173,6 @@ export interface XstockEvalCycleCounters {
   patternFanOut: number;                  // pairs admitted to pattern lane (1 per pair max — not multi-fanout like families)
   strategiesEvaluated: number;
   strategyNulls: number;
-  // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-3): detect-input coverage. detectEvals = strategy detect
-  // calls; dbsCarriedEvals = those whose input carried a non-null dbsScore; dbsStrongEvals = those
-  // at >= 0.35. Reported per cycle, not thresholded: a coverage of zero means the hand-off is inert.
-  detectEvals: number;
-  dbsCarriedEvals: number;
-  dbsStrongEvals: number;
   signalsGenerated: number;
   signalsArchived: number;
   signalsRejectedBySQE: number;
@@ -258,9 +251,6 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     patternFanOut: 0,
     strategiesEvaluated: 0,
     strategyNulls: 0,
-    detectEvals: 0,
-    dbsCarriedEvals: 0,
-    dbsStrongEvals: 0,
     signalsGenerated: 0,
     signalsArchived: 0,
     signalsRejectedBySQE: 0,
@@ -408,12 +398,6 @@ export async function evaluateXstockPairForVTS(
       return;
     }
     const regime = mceContext.regime.regime;
-
-    // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-1): detect receives the MCE indicators PLUS the scanner's
-    // directional score (see detect-indicators.ts for why, and why it is a spread copy). Until this
-    // batch every xStock strategy read `dbsScore ?? 0`. `mceContext.indicators` itself is unchanged.
-    const detectIndicators = buildXstockDetectIndicators(mceContext.indicators, propagatedDbs);
-    const detectDbsScore = detectDbsScoreOf(detectIndicators);
 
     // ── 3a. Family IMF (5 quant lanes) — only if quant global passed ──
     let passedFamilies: string[] = [];
@@ -581,15 +565,10 @@ export async function evaluateXstockPairForVTS(
         // Strategy detect.
         resetNullReason();
         let strategySignal: any = null;
-        counters.detectEvals++;
-        if (detectDbsScore !== null) {
-          counters.dbsCarriedEvals++;
-          if (detectDbsScore >= 0.35) counters.dbsStrongEvals++;
-        }
         try {
           strategySignal = callStrategyDetect(
             strategyKey,
-            detectIndicators,
+            mceContext.indicators,
             ohlc as any,
             stratPatternInput as any,
             symbol,
@@ -607,20 +586,16 @@ export async function evaluateXstockPairForVTS(
         // detect site, via the shared helper (single source of truth — the crypto
         // hooks in vts-runner.ts use the same fn). Captured here so even strategy-
         // null decisions get it; hooks add the resolved stop/target where known.
-        // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE, read from
-        // `detectIndicators`, the EXACT object the detect call above consumed — and the
-        // settled-window hash (computed inside the builder).
-        // B-XSTOCK-DBS-TO-STRATEGIES (#1235, Langston Step-2 C-2): the directional score
-        // detect received is NOT in this provenance block (the builder carries the six bar
-        // scalars only); it is recorded as `features.detectDbsScore` at every one of the
-        // eight archive sites below. That is deliberate — one home for the score.
+        // P19-B8.5b (OBJ-1): + the decision-time indicator scalars BY VALUE — the
+        // EXACT mceContext.indicators object the detect call above consumed — and
+        // the settled-window hash (computed inside the builder).
         const _provBase = buildBarProvenance(ohlc, undefined, undefined, {
-          vwap: detectIndicators.vwap,
-          atr: detectIndicators.atr,
-          sma: detectIndicators.sma,
-          high24h: detectIndicators.high24h,
-          low24h: detectIndicators.low24h,
-          currentVolume: detectIndicators.volume,
+          vwap: mceContext.indicators.vwap,
+          atr: mceContext.indicators.atr,
+          sma: mceContext.indicators.sma,
+          high24h: mceContext.indicators.high24h,
+          low24h: mceContext.indicators.low24h,
+          currentVolume: mceContext.indicators.volume,
         });
 
         if (!strategySignal) {
@@ -650,7 +625,7 @@ export async function evaluateXstockPairForVTS(
               regimeLabel: regime ?? undefined,
               rejectStage: 'strategy_internal',
               gateDecision: { gate: 'strategy_detect', accepted: false, reason },
-              features: { sourcePool: lane.sourcePool, detailReason: reason, detectDbsScore, macro: buildMacroSnapshot() }, // P19-B5b #94; detectDbsScore B-XSTOCK-DBS-TO-STRATEGIES OBJ-3b
+              features: { sourcePool: lane.sourcePool, detailReason: reason, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar only — detect returned null, no stop/target yet.
               provenance: _provBase,
             });
@@ -789,7 +764,7 @@ export async function evaluateXstockPairForVTS(
                 ...archiveCommon,
                 rejectStage: 'sqe',
                 gateDecision: { gate: 'target_normalizer', accepted: false, reason: _b3x.reason },
-                features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() },
+                features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
                 provenance: _provBase
                   ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
                   : undefined,
@@ -907,7 +882,7 @@ export async function evaluateXstockPairForVTS(
                 makerNetEvAdjusted: _xMtDecision.makerNetEVAdjusted,
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
-              features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
                 : undefined,
@@ -960,7 +935,7 @@ export async function evaluateXstockPairForVTS(
                 takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
                 netEvFloor: VTS_NET_EV_FLOOR,
               },
-              features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() }, // P19-B5b #94
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar + the resolved stop/target LEVELS (RI-a checksum).
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
@@ -1008,7 +983,7 @@ export async function evaluateXstockPairForVTS(
                 accepted: false,
                 reason: gateCheck.reason,
               },
-              features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() }, // P19-B5b #94
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() }, // P19-B5b #94
               // B-NEW-53: forming bar + resolved stop/target LEVELS (RI-a checksum).
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
@@ -1064,7 +1039,7 @@ export async function evaluateXstockPairForVTS(
                     reason: 'maker_marketable_dropped',
                     takerNetEv: _xMtDecision.takerNetEV,
                   },
-                  features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() },
+                  features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
                   provenance: _provBase
                     ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
                     : undefined,
@@ -1100,7 +1075,7 @@ export async function evaluateXstockPairForVTS(
               ...archiveCommon,
               rejectStage: 'tcl',
               gateDecision: { gate: 'entry_ask', accepted: false, reason },
-              features: { sourcePool: lane.sourcePool, detectDbsScore, macro: buildMacroSnapshot() },
+              features: { sourcePool: lane.sourcePool, macro: buildMacroSnapshot() },
               provenance: _provBase
                 ? { ..._provBase, resolvedStopPrice: stopLoss, resolvedTargetPrice: takeProfit }
                 : undefined,
@@ -1281,7 +1256,6 @@ export async function evaluateXstockPairForVTS(
             // asset_class in code: hce_study.py loops per `ac`). `netRewardToRisk` is the
             // kernel's native scale-free metric for within-class Phase-25 selectivity.
             features: {
-              detectDbsScore, // B-XSTOCK-DBS-TO-STRATEGIES OBJ-3b: the score detect received
               // Signal economics
               entryPrice: xOpenTrade.entryPrice,
               target: xOpenTrade.takeProfit,

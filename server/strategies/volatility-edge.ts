@@ -37,7 +37,7 @@ import { REGIMES } from '../config/canonical-regime-strategy-map';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.volatility_edge'.
 // VE_BREAKOUT_BUFFER + VE_STOP_BUFFER remain hardcoded — KEEP per LEVER_INVENTORY (structural geometric buffers).
-import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
+import { getCachedNumbersForModule } from '../services/module-constants-service.js';
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants — structural geometric buffers (KEEP)
@@ -91,17 +91,7 @@ export function detectVolatilityEdge(
   const VE_MAX_VOL_BONUS       = c.volume_confidence_bonus_max;
 
   // B63: Belt-and-braces for Path D LONG-only leak.
-  // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-1b): the threshold is the B63 group's DB setting, as its
-  // siblings read it (morning-star.ts, reverse-impulse.ts, defensive-hedge.ts, strong-bull-trend.ts),
-  // not a literal copy. Value swap only: this guard keeps its single `>=` arm — the siblings' mirror
-  // `<= -threshold` counter-trend arm is deliberately NOT added (it would be a new refusal on crypto).
-  // No fallback: a missing row throws, as on the siblings; the row ships in the same migration.
-  const dbsGuardThreshold = getCachedNumberRequired(
-    'strategy_dbs_routing_guards',
-    'dbs_min_threshold',
-    { exchange: '*', assetClass, strategy: STRATEGY_KEY, regime: '*' },
-  );
-  if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
+  if (((indicators as any).dbsScore ?? 0) >= 0.35) {
     setNullReason('b63_strong_dbs_exclusion');
     return null;
   }
