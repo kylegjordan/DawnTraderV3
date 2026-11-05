@@ -662,6 +662,10 @@ async function syncTradeModeToStorage(symbol: string, tradeMode: TradeMode): Pro
   try {
     const { storage } = await import('../storage.js');
     // Update paper positions
+    // B-CLOSE-WRITER-COSTS P-7 (A-9; Langston inc-2 C-2) — ⚠️ A WRITE CHANGE, declared: before the mode column both reads returned the
+    // WHOLE table, so the same row was found in both and updated twice (once as 'paper', once as 'live') every mode sync.
+    // Now each mode finds only its own rows, so a paper row is updated once. A redundant cross-mode write removed. The
+    // symbol-only match below stays P-9's (it needs live rows to bite).
     const paperPositions = await storage.getActiveOpenPositions('paper');
     const paperPosition = paperPositions.find((p: any) => p.symbol === symbol);
     if (paperPosition) {

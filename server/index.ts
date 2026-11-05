@@ -1076,6 +1076,9 @@ app.use((req, res, next) => {
         const { storage } = await import('./storage');
         
         // Check both paper and live positions
+        // B-CLOSE-WRITER-COSTS P-7 (A-9; Langston inc-2 C-2): since the table carries `mode`, each read returns ITS mode's rows. Before, both read the
+        // whole table, so this log printed the same count as `paper: N, live: N`, as if N live positions existed; the Set
+        // union below already collapsed the duplicate, so the audit itself is unchanged — only the false `live` count goes.
         const paperPositions = await storage.getActiveOpenPositions('paper');
         const livePositions = await storage.getActiveOpenPositions('live');
         

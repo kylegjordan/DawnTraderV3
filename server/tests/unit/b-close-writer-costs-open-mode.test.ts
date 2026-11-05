@@ -11,7 +11,7 @@
 // POSITIVE CONTROLS (mutation-proved while writing): removing the mode predicate from getActiveOpenPositions fails M-1;
 // removing it from the dedup-return's read fails M-4; declaring the unique rule on (symbol) alone fails M-5.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PgDialect } from 'drizzle-orm/pg-core';
 
@@ -137,13 +137,25 @@ describe('B-CLOSE-WRITER-COSTS — open positions carry their mode (KD-24, KD-25
     expect(call).toMatch(/\n\s+side: 'buy',/);
   });
 
-  it('M-8 every getActiveOpenPositions call passes a TradingMode; the by-symbol read is deleted (OBJ-8)', () => {
-    const files = ['routes.ts', 'index.ts', 'services/active-execution-engine.ts', 'services/active-engine-service.ts',
-      'services/active-portfolio-manager.ts', 'storage.ts'];
+  it('M-8 every getActiveOpenPositions call in server/ passes a TradingMode; the by-symbol read is deleted (OBJ-8)', () => {
+    // Langston inc-2 C-1: the population is DERIVED (every non-test .ts under server/ that contains the call), not typed —
+    // a typed list covered 6 of 16 files. Positive control: the walk must find the engine and the routes.
+    const root = resolve(__dirname, '../..');
+    const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => {
+      const p = resolve(d, e.name);
+      if (e.isDirectory()) return e.name === 'tests' || e.name === 'node_modules' ? [] : walk(p);
+      return e.name.endsWith('.ts') ? [p] : [];
+    });
+    const files = walk(root).filter((p) => readFileSync(p, 'utf8').includes('getActiveOpenPositions('));
+    expect(files.some((p) => p.endsWith('active-execution-engine.ts'))).toBe(true);
+    expect(files.some((p) => p.endsWith('routes.ts'))).toBe(true);
+    expect(files.length).toBeGreaterThanOrEqual(16);
     const args = new Set<string>();
-    for (const f of files) for (const m of SRC(f).matchAll(/getActiveOpenPositions\(([^)]*)\)/g)) args.add(m[1].trim());
-    expect(args.size).toBeGreaterThan(0);
-    for (const a of args) expect(["'paper'", "'live'", 'this.mode', 'mode', 'mode: TradingMode']).toContain(a);
-    for (const f of files) expect(SRC(f)).not.toContain('getActiveOpenPositionBySymbol');
+    for (const f of files) for (const m of readFileSync(f, 'utf8').matchAll(/getActiveOpenPositions\(([^)]*)\)/g)) args.add(m[1].trim());
+    for (const a of args) expect(["'paper'", "'live'", 'this.mode', 'mode', 'mode: TradingMode',
+      'input.mode', // core/rtb/ready_to_buy_service.ts — `input` is typed with `mode: TradingMode`; found by the derived walk
+      'sizingContext.mode', // services/signal-orchestrator.ts — `SizingContext.mode: 'live' | 'paper'` (:299); found by the walk
+    ]).toContain(a);
+    for (const f of walk(root)) expect(readFileSync(f, 'utf8')).not.toContain('getActiveOpenPositionBySymbol');
   });
 });

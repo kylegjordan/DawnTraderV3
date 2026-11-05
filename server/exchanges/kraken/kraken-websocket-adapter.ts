@@ -3223,6 +3223,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
     console.log('[I7-ROOT-FIX][WS_COVERAGE]', { reason });
     // Use existing auditWebSocketCoverage and autoSubscribeMissingSymbols
     const { storage } = await import('../../storage.js');
+    // B-CLOSE-WRITER-COSTS P-7 (A-9; Langston inc-2 C-2): paper and live are now separate reads of their own rows; the Set union
+    // below is unchanged in effect (it already collapsed the duplicate when both reads returned the whole table).
     const openPositions = await storage.getActiveOpenPositions('paper');
     const livePositions = await storage.getActiveOpenPositions('live');
     const allSymbols = [...new Set([...openPositions.map(p => p.symbol), ...livePositions.map(p => p.symbol)])];

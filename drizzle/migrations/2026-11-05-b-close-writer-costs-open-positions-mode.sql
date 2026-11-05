@@ -63,7 +63,9 @@ BEGIN
     RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-5: after the swap the unique set is %, expected exactly unique_symbol_mode', uniq;
   END IF;
   SELECT count(*) INTO n FROM active_open_positions;
-  -- A presence figure, not a proof (rider (ii)): how many rows took the backfill.
+  -- A presence figure, not a proof (rider (ii)): how many rows took the backfill. ⚠️ NOT DELIVERED by db-migrate, which has
+  -- no notice listener (Langston inc-2 record item) — it shows only when this file is run by hand in psql. The staging
+  -- count before the deploy was read separately (20 rows, 2026-11-05).
   RAISE NOTICE 'B-CLOSE-WRITER-COSTS P-5: % open position row(s) now carry mode=paper', n;
 END $check$;
 

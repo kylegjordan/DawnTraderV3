@@ -27,4 +27,13 @@ ALTER TABLE active_open_positions DROP COLUMN mode;
 
 DELETE FROM _migrations WHERE name = '2026-11-05-b-close-writer-costs-open-positions-mode.sql';
 
+DO $check$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM _migrations WHERE name = '2026-11-05-b-close-writer-costs-open-positions-mode.sql';
+  IF n <> 0 THEN RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-5 rollback: the forward migration is still recorded in _migrations'; END IF;
+  SELECT count(*) INTO n FROM information_schema.columns WHERE table_name = 'active_open_positions' AND column_name = 'mode';
+  IF n <> 0 THEN RAISE EXCEPTION 'B-CLOSE-WRITER-COSTS P-5 rollback: the mode column is still present'; END IF;
+END $check$;
+
 COMMIT;
