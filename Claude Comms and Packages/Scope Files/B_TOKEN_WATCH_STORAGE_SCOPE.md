@@ -1,4 +1,6 @@
-# B-TOKEN-WATCH-STORAGE — SCOPE r2 (+ Step-1 conditions, 2026-11-04)
+# B-TOKEN-WATCH-STORAGE — SCOPE r3 (amendment 1, 2026-11-05: OBJ-7 and OBJ-8 for Langston's Step-1 ruling)
+
+> **Amendment 1 (2026-11-05), from Langston's sizing ruling (03:04Z ask, ruled ~07:20Z):** (A) raising the cap REFUSED; (B) moving births and observations off the box REFUSED as proposed; **(D) APPROVED as the fix, pending the measured split** — prune SPENT `due` buckets on their own constant. Measured below, and corrected on one point: a past bucket is not spent until the follow-up job's cursor has passed it (OBJ-7). OBJ-8 adds the feed's dead-man's switch, which has not run since 2026-09-30 and missed an 8-day stop in the new-token feed. §1-§3 OBJ-1..6 are unchanged.
 
 > **Langston PROCEEDED on r2 with two in-commit conditions, applied here in the Step-2 commit:** (1) the ACL entry is applied to the 86 files already in `cold/` (82 of them are 0640 and a default ACL does not reach them), and (2) the claim that `deploy` reads the whole store is corrected — it reads `cold/` and `public/` only.
 
@@ -124,6 +126,29 @@ change-class: architecture
 - A SYSTEM_MANUAL one-liner (cold-tier contents).
 - `token-watch/README.md` and the B-TOKEN-WATCH pre-registration as an appended AMENDMENT.
 - The `#1132` entry, `BATCH_CATALOG`, my task list, and a completion report.
+
+**OBJ-7 (amendment 1): spent `due` buckets are pruned on their own constant, and only once the reader has passed them.**
+- **Why:** `due` is the largest store and the largest growth term. `prune_due_buckets` keeps every bucket for `WORKING_INDEX_HOT_DAYS + 1` = 91 days (`tier.py:195-216`, `config.py:234`), a constant borrowed from the grid lookback, which says nothing about how long a spent hour is worth keeping (Langston).
+- **The reader, named:** `follow_up.py` reads buckets from its own cursor forward (`_buckets_to_read`, `follow_up.py:130-156`, at most `CATCHUP_MAX_BUCKETS` = 48 per run, through `store.due_now` at `store.py:637`) and advances the cursor after them (`_advance_cursor`). ⛔ **So a past bucket the cursor has not reached is NOT spent: if the job restarts, it reads it.** Langston's premise, "a bucket is dead once its hour passes", holds only while the job is running. Today it has not run since the cursor's `2026-09-30T13`.
+- **Measured 2026-11-05 07:1xZ on staging (`due/` split by bucket hour against `state/follow_up_cursor.json`):**
+
+| buckets | count | bytes |
+|---|---|---|
+| at or before the cursor (`2026-09-30T13`) — consumed, spent | 724 | **1.137 GiB** |
+| after the cursor, hour already past — **never read** | 851 | 1.016 GiB |
+| current and future | 1,767 | 0.497 GiB |
+
+- **The change:** a NEW constant `DUE_SPENT_HOT_DAYS` (never `WORKING_INDEX_HOT_DAYS` reused, so a grid change cannot move retention), with a comment naming the reader. The prune removes a bucket only when its hour is BOTH before the cursor and older than `DUE_SPENT_HOT_DAYS`. **A missing or unreadable cursor prunes nothing** (logged): an unknown position is never read as "all spent". The old 91-day rule is removed, because it could also delete never-read buckets after a 91-day outage.
+- **Proposed value: 3 days.** Nothing reads a consumed bucket; 3 days keeps the last few for an audit read of the schedule. Langston to rule on the number.
+- **Effect today:** frees ~1.14 GiB, store ~7.18 → ~6.04 GiB. The 1.016 GiB of never-read buckets stays: whether a 36-day catch-up is wanted when the job returns is `B-TOKEN-WATCH-FOLLOWUP-MEMORY`'s call.
+- **Verify:** unit cases, each predicted before it runs: consumed and older than 3 days → removed; consumed and younger → kept; past but after the cursor → kept; future → kept; no cursor → nothing removed. Mutation: dropping the cursor bound must fail the after-cursor case. Live: `due/` bytes before and after the next 04:30Z tier run, with the cursor unchanged.
+
+**OBJ-8 (amendment 1): the feed's dead-man's switch runs on its own, and pages.**
+- **Measured:** `liveness.check()` last ran 2026-09-30T13:04:39Z (`state/liveness.json` `checked_at`). Its only caller is the follow-up job (`follow_up.py:220`), whose timer is disabled. **The new-token feed then stopped for 8 days with nothing raised:** the last birth row of 2026-10-18 was written at 20:24Z, the receiver logged 13 receipts on 10-20 (22:14Z) and almost nothing else, and births resumed at 2026-10-27T00:00Z. No birth file exists for 10-19 or 10-21..10-26 (Langston found it in `public/summary.json`; re-derived by me from `births/` and the receiver's journal). Births are never re-derivable.
+- **And even when it ran, it only LOGGED.** `check()` writes a warning and a gap record (`liveness.py:234-270`); it mints no system alert, so an 8-day stop would have been a log line.
+- **The change:** a new hourly unit, `token-watch-feed-watch`, runs `liveness.check()` as `tokenwatch` (it writes `state/`, so never as root — OBJ-3's rule); a root companion step mints `token-watch-feed-gap` (warning) through the same `alert_mint` path as the store watch while `open_gap` is set, with its start time in the body, and the row clears when the gap closes. `OnFailure` per OBJ-4.
+- **Verify:** an open gap in a test store mints exactly one alert; a closed gap mints none; a second run does not duplicate; a run that cannot read the census fails the unit (pages), never reports "no gap".
+- **Not in this batch: why the feed stopped.** Langston proposed `B-TOKEN-WATCH-BIRTH-GAP` (owner Infra Claude, stage 00, after this batch); a new batch needs Kyle's agreement (2026-10-19 rule), so it goes to him through PM Claude.
 
 ## 4. Out of scope, each with its home
 
