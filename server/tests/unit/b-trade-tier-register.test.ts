@@ -43,6 +43,8 @@ describe('B-TRADE-TIER-REGISTER — source fences', () => {
     expect(sweep).toContain('[cutoff, [...NON_OUTCOME_CLOSE_REASONS]]');
     expect(lane).toContain('${sql.param([...NON_OUTCOME_CLOSE_REASONS])}');
     expect(sweep + lane).not.toContain("close_reason IS DISTINCT FROM 'never_filled'");
+    // Langston Part A discharge: a quoted literal written any other way would slip past the line above.
+    expect(sweep + lane).not.toContain("'never_filled'");
   });
 
   it('2. registry: both trade tables archive:true with predicates; the exemption table has no archive flag', () => {
