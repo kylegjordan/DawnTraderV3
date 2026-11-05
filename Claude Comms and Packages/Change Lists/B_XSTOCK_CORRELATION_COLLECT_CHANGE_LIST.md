@@ -47,3 +47,9 @@
 ## Step-7 read, clarified before the deploy (2026-11-05 ~13:20Z)
 - The pre-registered control ("crypto `b68_3` rows in the same window keep accruing") counts **VTS-sourced rows only** (`source_type = 'vts_trade'`). Langston measured 13:02Z that the PAPER active-signal path fails every write (`#231`: a string signal id into an integer column), so paper-sourced rows are 0 for a reason outside this batch. This batch's new xStock record also goes through the VTS source (`kind: 'vts_trade'`, `factor-ablation-emitter.ts:224`), so `#231` does not touch it.
 - **Deploy sha:** `0f4835b5a` (CI 4/4) — before NEW Claude's unreviewed `21c614a0a` and CC-A's unreviewed `e43cae96e`; its range from the deployed `0abfd7102` is this batch only. Held until P-9 (after 14:30Z).
+
+## P-9 — the US-hours repeat of A-2, PASS (2026-11-05 14:36:52Z, CC-A)
+- **Run:** `corr_measure.ts` (scratchpad; the cache's own read path reproduced read-only — snapshot read + live overlay + merge, no write-back) on staging as deploy at the deployed `0abfd7102`, 6 min after the US open; universe 473, population the 472 non-SPY symbols.
+- **Pre-registered threshold (pre-audit P-9, Langston's 90 % stop line):** ≥ 90 % of non-SPY symbols with ≥ 30 shared 15-minute timestamps with SPY. **Result: 461 of 472 = 97.7 %** (median shared 98) — **PASS** (overnight read: 98.5 %).
+- **Controls in the same run:** served ≥ 30 bars 469 of 472; non-finite or non-positive closes in the last 30: 0; **index-aligned 30/30 with SPY: 42 of 469 (9.0 %)** — positional pairing would still pair different hours for 91 % of symbols, so the time alignment is load-bearing in US hours too. 60 m for reference: 285 of 472 (60.4 %) aligned ≥ 30 — this batch uses 15 m for xStock.
+- ⇒ Step 3 closes; deploy at `0f4835b5a` follows.
