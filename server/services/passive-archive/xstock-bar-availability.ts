@@ -47,6 +47,14 @@ export const XSTOCK_TX_STATEMENT_TIMEOUT_MS = 20_000;
 
 type XstockTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** R6a / C-2: parse the guard-wait setting. Only a non-empty string of digits is a sample; '' (the
+ *  value after a transaction ends), NULL (never set) or anything else is no sample. */
+export function parseGuardWaitMs(raw: string | null | undefined): number | null {
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null;
+  const ms = Number(raw);
+  return Number.isFinite(ms) ? ms : null;
+}
+
 /** R6a: time one of the writer's three transactions; a success records its duration, a statement
  *  timeout is counted (its failure line is written where it is handled). */
 async function timedLeg<T>(leg: XstockTimingLeg, run: () => Promise<T>): Promise<T> {
@@ -633,10 +641,13 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
       )
     `);
     // R6a guardWaitMs (C5): the function stored its wait for the clock-guard lock in a transaction-local
-    // setting; read it in this same transaction. Absent (an older function body) means no sample.
+    // setting; read it in this SAME transaction (inside this callback, Langston C-3). Parsed strictly
+    // (Langston C-2, measured 2026-11-05): after a transaction ends the setting reads back as '' rather
+    // than NULL, and Number('') is 0, so only a non-empty string of digits counts. Anything else is NO
+    // SAMPLE, never a 0 ms reading.
     const guard = await tx.execute(sql`SELECT current_setting('xstock_bar.guard_wait_ms', true) AS guard_wait_ms`);
-    const guardWait = Number(resultRows<{ guard_wait_ms: string | null }>(guard)[0]?.guard_wait_ms ?? Number.NaN);
-    if (Number.isFinite(guardWait)) recordXstockBarTiming('guardWait', guardWait);
+    const guardWait = parseGuardWaitMs(resultRows<{ guard_wait_ms: string | null }>(guard)[0]?.guard_wait_ms);
+    if (guardWait !== null) recordXstockBarTiming('guardWait', guardWait);
     return resultRows<DbCertificateRow>(result).map((row) => ({
       revisionId: row.revision_id,
       visibleBy: new Date(row.visible_by),

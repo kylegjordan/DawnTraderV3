@@ -52,6 +52,9 @@ BEGIN
   END IF;
   observed_at := clock_timestamp();
   -- Transaction-local, so only this transaction's caller can read it (current_setting, same transaction).
+  -- ⛔ FORWARD-BINDING (Langston): do NOT add an EXCEPTION handler or a function-level SET clause to this
+  -- function. A plpgsql EXCEPTION block runs in a subtransaction and would roll this setting back; a SET
+  -- clause restores settings at exit. Either silently reverts the guard wait, and nothing would notice.
   PERFORM set_config('xstock_bar.guard_wait_ms',
     round(extract(epoch FROM (observed_at - pre_lock)) * 1000)::text, true);
   IF observed_at < prior_clock THEN

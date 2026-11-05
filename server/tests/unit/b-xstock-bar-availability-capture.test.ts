@@ -9,7 +9,8 @@ const state: {
   alertCalls: unknown[];
   queries: unknown[];
   timeoutsSet: number[];
-} = { results: [], phases: [], holdOrdinal: null, hold: null, alertCalls: [], queries: [], timeoutsSet: [] };
+  guardWait: string | null;
+} = { results: [], phases: [], holdOrdinal: null, hold: null, alertCalls: [], queries: [], timeoutsSet: [], guardWait: null };
 
 vi.mock('../../db.js', () => ({
   db: {
@@ -26,7 +27,7 @@ vi.mock('../../db.js', () => ({
           }
           // R6a: the guard-wait read after certify is an instrument, not part of the phase sequence.
           if (JSON.stringify(query ?? null).includes('xstock_bar.guard_wait_ms')) {
-            return { rows: [{ guard_wait_ms: null }] };
+            return { rows: [{ guard_wait_ms: state.guardWait }] };
           }
           state.queries.push(query);
           state.phases.push(`execute-${ordinal}`);
@@ -49,9 +50,11 @@ vi.mock('../../services/system-alerts.js', () => ({
 import {
   assertExactRevisionIdSet,
   isXstockAdmissionFailure,
+  parseGuardWaitMs,
   writeXstockProjectionAttempts,
   xstockBarPayloadHash,
 } from '../../services/passive-archive/xstock-bar-availability.js';
+import { __resetXstockTimingForTests, takeXstockTimingLine } from '../../services/passive-archive/xstock-bar-timing.js';
 
 const intervalBegin = new Date('2026-10-14T15:00:00.000Z');
 const arrivedAt = new Date('2026-10-14T15:15:00.000Z');
@@ -73,6 +76,8 @@ beforeEach(() => {
   state.hold = null;
   state.alertCalls = [];
   state.queries = [];
+  state.guardWait = null;
+  __resetXstockTimingForTests();
 });
 
 describe('xStock availability capture boundary', () => {
@@ -195,5 +200,53 @@ describe('xStock availability capture boundary', () => {
       bufferSuperseded: 1,
     })).rejects.toThrow(/invalid flush population/);
     expect(state.phases).toEqual([]);
+  });
+  // Langston C-2 (measured on staging 2026-11-05): once a transaction ends, a placeholder setting
+  // reads back as '' rather than NULL, and Number('') is 0. Neither may become a 0 ms sample.
+  it('parses the guard wait strictly: only a non-empty string of digits is a sample', () => {
+    expect(parseGuardWaitMs('')).toBeNull();
+    expect(parseGuardWaitMs(null)).toBeNull();
+    expect(parseGuardWaitMs(undefined)).toBeNull();
+    expect(parseGuardWaitMs(' ')).toBeNull();
+    expect(parseGuardWaitMs('-1')).toBeNull();
+    expect(parseGuardWaitMs('1.5')).toBeNull();
+    expect(parseGuardWaitMs('abc')).toBeNull();
+    expect(parseGuardWaitMs('0')).toBe(0); // a real reading: under 0.5 ms (C12)
+    expect(parseGuardWaitMs('37')).toBe(37);
+  });
+
+  it.each([
+    ['', 0],
+    [null, 0],
+    ['42', 1],
+  ])('a certify whose guard setting reads %j records %i guard-wait samples', async (guardWait, expected) => {
+    state.guardWait = guardWait as string | null;
+    state.results.push([]);
+    state.results.push([
+      {
+        revision_id: '11111111-1111-4111-8111-111111111111',
+        arrived_at: arrivedAt,
+        projection_applied: true,
+        projection_generation: '1',
+        supersedes_revision_id: null,
+        observed_winner_revision_id: null,
+        payload_hash: xstockBarPayloadHash(bar()),
+        payload_repeated_from_winner: false,
+      },
+    ]);
+    state.results.push([
+      {
+        revision_id: '11111111-1111-4111-8111-111111111111',
+        visible_by: new Date(arrivedAt.getTime() + 1),
+        visible_seq: '9',
+        certificate_primary_identity: 'test@primary',
+      },
+    ]);
+    const result = await writeXstockProjectionAttempts([bar()]);
+    expect(result.certification).toBe('certified');
+    const line = takeXstockTimingLine('boot-c2');
+    expect(line.legs.certify.n).toBe(1);
+    expect(line.legs.guardWait.n).toBe(expected);
+    if (expected === 1) expect(line.legs.guardWait.max).toBe(42);
   });
 });
