@@ -98,6 +98,7 @@ import { selectVtsXstockEntryAsk, vtsXstockSideSize } from './vts-xs-select.js';
  *  one constant so the two can never disagree. */
 const VTS_XSTOCK_ENTRY_DOLLAR_VALUE = 150;
 import { refuseTakerBooking, bookedQuantity } from '../../core/trading/entry-booking.js';
+import { entryWindowRefusalAt } from '../../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P3v
 import type { XsQuoteRow } from './vts-xs-instrument.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
 import { buildBarProvenance } from '../../services/data-archive/signal-eval-archiver.js'; // B-NEW-53 shared forming-bar snapshot
@@ -1137,6 +1138,13 @@ export async function evaluateXstockPairForVTS(
           const _xInv = refuseTakerBooking(_xBookedEntry, stopLoss, takeProfit);
           if (_xInv !== null) {
             _xRefuseBooking(_xInv, `taker ask ${_xBookedEntry} vs stop ${stopLoss} / target ${takeProfit}`);
+            continue;
+          }
+          // B-ENTRY-GATE (#1224) P3v (KD-10): the worse-side entry window at the VTS entry (no SQE or queue on this lane).
+          const _xEwW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', { exchange: '*', assetClass: ASSET_CLASS, strategy: '*', regime: '*' });
+          const _xEw = entryWindowRefusalAt(_xBookedEntry, entryPrice, stopLoss, _xEwW);
+          if (_xEw !== null) {
+            _xRefuseBooking(_xEw, `taker ask ${_xBookedEntry} vs plan ${entryPrice} / stop ${stopLoss}, window ${_xEwW}`);
             continue;
           }
         }

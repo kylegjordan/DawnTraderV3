@@ -8,7 +8,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { entryWindowRefusal, cheaperSideRecord } from '../../core/trading/entry-window';
+import { entryWindowRefusal, entryWindowRefusalAt, cheaperSideRecord } from '../../core/trading/entry-window';
 import { entryFillShadow } from '../../core/trading/entry-booking';
 import { rtbMetricsService } from '../../services/rtb-metrics-service';
 
@@ -103,6 +103,28 @@ describe('P3 — the resting maker: would-cancel is RECORDED, never acted on (pr
   it('the record is reported when the rest resolves, on BOTH outcomes', () => {
     expect(body).toMatch(/this\._reportMakerWouldCancel\(position, 'fill'\)/);
     expect(src).toMatch(/this\._reportMakerWouldCancel\?\.\(position, 'drop'\)/);
+  });
+});
+
+describe('P3v — the VTS applies the same window at its taker entries (no SQE or queue on that lane)', () => {
+  it('entryWindowRefusalAt matches entryFillShadow.adverseR at the edges', () => {
+    expect(entryWindowRefusalAt(101, 100, 96, 0.25)).toBeNull();          // exactly +25 %
+    expect(entryWindowRefusalAt(101.01, 100, 96, 0.25)).toBe('entry_window');
+    expect(entryWindowRefusalAt(90, 100, 96, 0.25)).toBeNull();           // below plan: never the window
+    expect(entryWindowRefusalAt(101, 100, 100, 0.25)).toBeNull();         // no planned risk: not a window refusal
+  });
+  const vts = stripComments(readFileSync(new URL('../../services/vts-runner.ts', import.meta.url), 'utf8'));
+  const xs = stripComments(readFileSync(new URL('../../asset_classes/xstock_spot/eval-cycle.ts', import.meta.url), 'utf8'));
+  it('crypto VTS entry, the taker twin, and the xStock VTS entry each read the per-class setting and refuse', () => {
+    expect(vts).toMatch(/entryWindowRefusalAt\(_vtsBookedEntry, entryPrice, adjustedStopLoss, _ewW\)/);
+    expect(vts).toMatch(/entryWindowRefusalAt\(plan\.overlay\.entryPrice, entryPrice, chosenTrade\.stopLoss, _twW\)/);
+    expect(xs).toMatch(/entryWindowRefusalAt\(_xBookedEntry, entryPrice, stopLoss, _xEwW\)/);
+    for (const src of [vts, xs]) expect(src).toMatch(/getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac'/);
+  });
+  it('each VTS window check sits after the geometry refusal at the same site', () => {
+    expect(vts.indexOf('entryWindowRefusalAt(_vtsBookedEntry')).toBeGreaterThan(vts.indexOf('refuseTakerBooking(_vtsBookedEntry'));
+    expect(vts.indexOf('entryWindowRefusalAt(plan.overlay.entryPrice')).toBeGreaterThan(vts.indexOf('refuseTakerBooking(plan.overlay.entryPrice'));
+    expect(xs.indexOf('entryWindowRefusalAt(_xBookedEntry')).toBeGreaterThan(xs.indexOf('refuseTakerBooking(_xBookedEntry'));
   });
 });
 

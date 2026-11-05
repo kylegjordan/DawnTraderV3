@@ -97,6 +97,7 @@ import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, v
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
+import { entryWindowRefusalAt } from '../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P3v
 import { XsVtsInstrument, parseQuoteNumber, type XsQuoteRow } from '../asset_classes/xstock_spot/vts-xs-instrument.js';
 import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-staleness-config.js';
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
@@ -2488,6 +2489,15 @@ async function generatePhase10Signal(
     if (_inv !== null) {
       console.log(`[8a-P4c][VTS][ENTRY_BOOKING_REFUSED] ${symbol}/${strategy} (${_assetClass}) reason=${_inv}: taker ask ${_vtsBookedEntry} vs stop ${adjustedStopLoss} / target ${adjustedTakeProfit} (non-trade)`);
       setNullReason(_inv);
+      return null;
+    }
+    // B-ENTRY-GATE (#1224) P3v (KD-10): the VTS has no SQE or queue, so the worse-side entry window applies at its entry —
+    // the same per-class setting the active fill reads (fail-hard on an absent row).
+    const _ewW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', { exchange: '*', assetClass: _assetClass, strategy: '*', regime: '*' });
+    const _ew = entryWindowRefusalAt(_vtsBookedEntry, entryPrice, adjustedStopLoss, _ewW);
+    if (_ew !== null) {
+      console.log(`[B-ENTRY-GATE][VTS][ENTRY_WINDOW_REFUSED] ${symbol}/${strategy} (${_assetClass}): taker ask ${_vtsBookedEntry} vs plan ${entryPrice} / stop ${adjustedStopLoss}, window ${_ewW} (non-trade)`);
+      setNullReason(_ew);
       return null;
     }
   }
@@ -5365,6 +5375,12 @@ export async function maybeOpenTwin(input: MaybeOpenTwinInput): Promise<void> {
       const _inv = refuseTakerBooking(plan.overlay.entryPrice, chosenTrade.stopLoss, chosenTrade.takeProfit);
       if (_inv !== null) {
         console.log(`[8a-P4c][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=${_inv}: taker twin ask ${plan.overlay.entryPrice} vs stop ${chosenTrade.stopLoss} / target ${chosenTrade.takeProfit}`);
+        return;
+      }
+      // B-ENTRY-GATE (#1224) P3v: the taker twin is a taker entry too — same window against the plan's level.
+      const _twW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', { exchange: '*', assetClass: tradeAssetClass, strategy: '*', regime: '*' });
+      if (entryWindowRefusalAt(plan.overlay.entryPrice, entryPrice, chosenTrade.stopLoss, _twW) !== null) {
+        console.log(`[B-ENTRY-GATE][VTS][TWIN_SKIPPED] ${symbol}/${strategy} (${tradeAssetClass}) reason=entry_window: taker twin ask ${plan.overlay.entryPrice} vs plan ${entryPrice} / stop ${chosenTrade.stopLoss}, window ${_twW}`);
         return;
       }
     }

@@ -26,6 +26,17 @@ export function entryWindowRefusal(adverseR: number | null, worseSideFrac: numbe
   return adverseR > worseSideFrac ? 'entry_window' : null;
 }
 
+/**
+ * The same window for a booking site that has no `entryFillShadow` record (the VTS entries, P3v): the adverse move of
+ * `fill` from `plannedEntry`, in units of the planned risk `plannedEntry − stop`, judged against `worseSideFrac`.
+ * Same definition as `entryFillShadow.adverseR`; a non-positive planned risk is not a window refusal.
+ */
+export function entryWindowRefusalAt(fill: number, plannedEntry: number, stop: number, worseSideFrac: number): EntryWindowRefusal | null {
+  const plannedRisk = plannedEntry - stop;
+  const adverseR = Number.isFinite(fill) && Number.isFinite(plannedEntry) && plannedRisk > 0 ? (fill - plannedEntry) / plannedRisk : null;
+  return entryWindowRefusal(adverseR, worseSideFrac);
+}
+
 export interface CheaperSideRecord {
   /** `(fill − stop) / (plannedEntry − stop)` = `1 + adverseR`; only for a fill BELOW the planned entry, else null. */
   remainingRiskFrac: number | null;
