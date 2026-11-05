@@ -186,10 +186,13 @@ Makes the xStock price recorder reload its list of stocks every day. Moved out o
 ## Infra Claude
 
 ### B-TOKEN-WATCH-STORAGE
-Stops the token-launch study filling the trading server's disk. Each day's compressed data is copied to the off-site archive, checked by reading it back, and only then removed from the server. A daily size check raises an alert if the study passes its 8 GB limit.
+Stops the token-launch study filling the trading server's disk. Each day's compressed data is copied to the off-site archive, checked by reading it back, and only then removed from the server. A daily size check raises an alert if the study passes its 8 GB limit. Its second part clears the hourly scheduling files the study has already read, and adds an hourly watch that raises an alert if new tokens stop arriving.
 
 ### B-LANGSTON-MEMORY-WRITE-FENCE
 Langston's memory file is assembled by a tool from parts. When a session edits the finished file directly, the tool locks for every session until someone repairs it by hand, which has happened at least six times. This makes the finished file writable only through the tool, so a direct edit fails at once instead.
+
+### B-WAKE-OPENING-LIST
+Lets one message reach several crew members at once. Today only the first name counts: a post opening "Langston, and Coltrane —" wakes Langston but never Coltrane. After this, everyone named in the list at the start of a message is woken — Langston, Coltrane and the four sessions alike — and a name mentioned only later in a message wakes nobody. Replayed over a month of real posts, it stops 345 wake-ups that came from passing mentions.
 
 ### B-TOKEN-WATCH-FOLLOWUP-MEMORY
 Restarts the half of the token-launch study that records what happens to each token after it launches. It was switched off on September 30 because it kept running out of memory on the trading server, so it needs a memory fix before it can run again.
