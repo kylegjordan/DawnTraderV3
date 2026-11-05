@@ -10,13 +10,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const fsCalls = vi.hoisted(() => ({ append: [] as Array<[string, string]>, failNext: false }));
+const isDiagLog = vi.hoisted(() => (p: unknown) => /[\\/]logs([\\/]|$)/.test(String(p)));
 vi.mock('node:fs', async (orig) => {
   const actual = await orig<typeof import('node:fs')>();
   return {
     ...actual,
-    existsSync: () => true,
-    mkdirSync: () => undefined,
-    appendFileSync: (p: string, d: string) => {
+    // Only the two diagnostic log targets are faked. Every other path — e.g. a module's own state file read at import
+    // (regime-phase-store) — goes to the real fs, so this fixture cannot tell another module that a missing file exists.
+    // (CI run 42028660545 failed to LOAD this file when `existsSync` answered true for everything.)
+    existsSync: (p: unknown) => (isDiagLog(p) ? true : actual.existsSync(p as string)),
+    mkdirSync: (p: unknown, o?: unknown) => (isDiagLog(p) ? undefined : actual.mkdirSync(p as string, o as any)),
+    appendFileSync: (p: unknown, d: unknown, o?: unknown) => {
+      if (!isDiagLog(p)) return actual.appendFileSync(p as string, d as string, o as any);
       if (fsCalls.failNext) { fsCalls.failNext = false; throw new Error('disk full'); }
       fsCalls.append.push([String(p), String(d)]);
     },
