@@ -153,3 +153,25 @@ export function computeOpenPnl(input: OpenPnlInput): OpenPnl {
 
   return { ...base, grossPnlPercent };
 }
+
+/**
+ * B-CLOSE-WRITER-COSTS P-11 (Kyle KD-17): THE CLOSE ECONOMICS AT A REFERENCE PRICE, ONE IMPLEMENTATION.
+ *
+ * A close that cannot walk a book (no bids) is booked at an OBSERVED reference worsened by the per-class
+ * beyond-depth penalty, and pays the taker fee on that fill. Two writers need exactly that: the paper order placer's
+ * cold-book flatten arm, and the engine-stop cleanup (`reconcileIncompleteTrades`, `engine_stop_cleanup`), which used
+ * to book gross P&L only — no fee, no net. Both now call these two functions, so they cannot drift.
+ * Pure. Bit-identical to the placer's former inline form: fee = (fill × qty) × (pct / 100); slippage = (requested −
+ * fill) × qty, positive when the fill is worse for a sell.
+ */
+export function referenceFillPrice(referencePrice: number, penaltyBps: number): number {
+  return referencePrice * (1 - penaltyBps / 10_000);
+}
+
+export function closeFillCosts(i: { fillPrice: number; quantity: number; requestedPrice: number; feePercent: number }): {
+  exitFee: number;
+  exitSlippage: number;
+} {
+  const notional = i.fillPrice * i.quantity;
+  return { exitFee: notional * (i.feePercent / 100), exitSlippage: (i.requestedPrice - i.fillPrice) * i.quantity };
+}

@@ -40,6 +40,7 @@ import type {
 } from './types.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
 import { openFill, closeFillFull } from './depth-walk.js';
+import { referenceFillPrice, closeFillCosts } from '../../core/math/trade-pnl.js';
 
 /**
  * Returns the per-class fee percentage (e.g. 0.26 for 0.26%) for a symbol.
@@ -132,7 +133,7 @@ export class PaperOrderPlacer implements OrderPlacer {
       fillPrice = walked.avgFillPrice;
       closeSplit = { branch: 'walk', walkedQty: walked.walkedQty, extrapolatedQty: walked.extrapolatedQty };
     } else if (typeof req.coldBookReferencePrice === 'number' && req.coldBookReferencePrice > 0) {
-      fillPrice = req.coldBookReferencePrice * (1 - penaltyBps / 10_000);
+      fillPrice = referenceFillPrice(req.coldBookReferencePrice, penaltyBps); // B-CLOSE-WRITER-COSTS P-11: the shared form
       closeSplit = { branch: 'cold_reference', walkedQty: 0, extrapolatedQty: req.quantity };
       console.warn(
         `[PaperOrderPlacer][CLOSE_COLD_BOOK_REFERENCE] ${req.symbol} pos=${req.positionId} — no live bids; flatten booked at observed reference ${req.coldBookReferencePrice}*(1-${penaltyBps}bps)`,
@@ -143,10 +144,13 @@ export class PaperOrderPlacer implements OrderPlacer {
       );
       return { status: 'rejected', reason: 'no live bids and no observed reference', code: 'cold_book' };
     }
-    const notional = fillPrice * req.quantity;
-    const feeQuote = notional * (this.feePercentFor(req.symbol, req.assetClass) / 100); // P19-B6.5d (OBJ-4): use the carried stamp
-    // Slippage vs requested price (positive when the fill is worse/lower for a sell).
-    const slippageQuote = (req.requestedPrice - fillPrice) * req.quantity;
+    // B-CLOSE-WRITER-COSTS P-11: fee and slippage through the ONE close-cost function the engine-stop cleanup also uses.
+    // Fee on the notional at the carried class's taker rate (P19-B6.5d OBJ-4); slippage vs the requested price, positive
+    // when the fill is worse/lower for a sell.
+    const { exitFee: feeQuote, exitSlippage: slippageQuote } = closeFillCosts({
+      fillPrice, quantity: req.quantity, requestedPrice: req.requestedPrice,
+      feePercent: this.feePercentFor(req.symbol, req.assetClass),
+    });
     return { status: 'filled', fillPrice, fillQty: req.quantity, feeQuote, slippageQuote, closeSplit };
   }
 }
