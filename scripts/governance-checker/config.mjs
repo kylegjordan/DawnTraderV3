@@ -218,7 +218,7 @@ export const BOARD_DESCRIPTIONS_PATH = '1-system-manual/STATUS_BOARD_DESCRIPTION
 // A status cell maps to ONE of seven plain states by a STATED rule (Langston B6): strip leading
 // non-alphanumeric characters (the ✅ ⏳ ⏸ markers), then take the LONGEST declared prefix, case-insensitive.
 // Nothing left, or no prefix matches ⇒ 'unrecognised'. Every live §4 cell maps at the commit that wrote this
-// (319/319); status-board.test.mjs fails on a new leading word, in §4 OR the pre-sprint table.
+// (319/319); plan-table.test.mjs (LIVE1, LIVE2) fails on a new leading word, in §4 OR the pre-sprint table.
 export const STATUS_PREFIXES = [
   ['IN OBSERVATION', 'observation'], ['OBSERVATION', 'observation'],
   ['IN FLIGHT', 'in_progress'], ['STEP', 'in_progress'], ['OBJ-', 'in_progress'], ['INCREMENT', 'in_progress'],
