@@ -25,6 +25,8 @@
  */
 
 import { storage } from '../../storage';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs'; // B-ENTRY-GATE (#1224) P9: ESM imports — `require` throws in the ESM bundle
+import { join as joinPath } from 'node:path';
 // B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
 // Read via cached sync resolver. Module prefetched in b72-warmup.
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
@@ -1348,31 +1350,20 @@ class ReadyToBuyService {
    * Tracks all status transitions for observability
    */
   private logRtbTrace(mode: TradingMode, symbol: string, strategy: string, oldStatus: string, newStatus: string, trigger: string): void {
+    // B-ENTRY-GATE (#1224) P9 (disposition 3, reconnect). This wrote NOTHING since the ESM build: `require` threw inside an
+    // empty catch (staging held no rtb_refresh_trace_*.log, 2026-11-05). Directive 8.8.4-A3.R8's intent is STATUS
+    // TRANSITIONS, so an unchanged status (reconfirmed → reconfirmed, every 120 s per row) is not written — that would be
+    // ~14 MB a day of non-events. A failed write is logged once per process, never thrown into the refresh cycle.
+    if (oldStatus === newStatus) return;
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const logDir = path.join(process.cwd(), 'logs');
-      
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-      
+      const logDir = joinPath(process.cwd(), 'logs');
+      if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
       const timestamp = new Date().toISOString();
       const dateStr = timestamp.split('T')[0].replace(/-/g, '');
-      const logEntry = {
-        timestamp,
-        mode,
-        symbol,
-        strategy,
-        oldStatus,
-        newStatus,
-        trigger
-      };
-      
-      const logPath = path.join(logDir, `rtb_refresh_trace_${dateStr}.log`);
-      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+      appendFileSync(joinPath(logDir, `rtb_refresh_trace_${dateStr}.log`),
+        JSON.stringify({ timestamp, mode, symbol, strategy, oldStatus, newStatus, trigger }) + '\n');
     } catch (err) {
-      // Silent fail - diagnostic logging should not break refresh cycle
+      this.warnDiagnosticWriteFailedOnce('rtb_refresh_trace', err);
     }
   }
 
@@ -1380,29 +1371,25 @@ class ReadyToBuyService {
    * Directive 8.8.4-A3.R2: Log SQE rejection to diagnostic file
    */
   private logSqeRejection(signal: RtbSignal, reason: string, finalScore: number): void {
+    // B-ENTRY-GATE (#1224) P9: reconnected (same `require`-in-ESM defect as logRtbTrace above).
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const logDir = path.join(process.cwd(), 'logs', 'diagnostics');
-
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-
-      const logEntry = {
-        timestamp: new Date().toISOString(),
-        symbol: signal.symbol,
-        strategy: signal.strategy,
-        finalScore: finalScore.toFixed(4),
-        reason,
-        signalId: signal.signalId
-      };
-
-      const logPath = path.join(logDir, 'sqe_rejections.log');
-      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+      const logDir = joinPath(process.cwd(), 'logs', 'diagnostics');
+      if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
+      appendFileSync(joinPath(logDir, 'sqe_rejections.log'), JSON.stringify({
+        timestamp: new Date().toISOString(), symbol: signal.symbol, strategy: signal.strategy,
+        finalScore: finalScore.toFixed(4), reason, signalId: signal.signalId,
+      }) + '\n');
     } catch (err) {
-      // Silent fail - diagnostic logging should not break refresh cycle
+      this.warnDiagnosticWriteFailedOnce('sqe_rejections', err);
     }
+  }
+
+  private _diagnosticWriteWarned = new Set<string>();
+  /** A diagnostic file write must never break the refresh, and must never fail SILENTLY either: warn once per file. */
+  private warnDiagnosticWriteFailedOnce(file: string, err: unknown): void {
+    if (this._diagnosticWriteWarned.has(file)) return;
+    this._diagnosticWriteWarned.add(file);
+    console.warn(`[B-ENTRY-GATE][DIAG_WRITE_FAILED] ${file}: ${err instanceof Error ? err.message : String(err)} — further failures for this file are not logged`);
   }
 
   // ★ B-RTB-REFRESH-CONSOLIDATE OBJ-1 (#532, 2026-07-22): `isRefreshCycleRunning(mode)` DELETED
