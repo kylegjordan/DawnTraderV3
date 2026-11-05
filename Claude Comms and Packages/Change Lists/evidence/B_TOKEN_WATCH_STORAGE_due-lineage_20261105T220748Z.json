@@ -1,0 +1,13 @@
+{
+  "floor": 0.5,
+  "gaps": [
+    {
+      "bucket": "2026-09-30T13",
+      "entries": 18032,
+      "observed": 8927
+    }
+  ],
+  "measured_at": "2026-11-05T22:07:48.182449+00:00",
+  "removable_buckets_checked": 723,
+  "verdict": "GAPS - do not prune"
+}
