@@ -25,6 +25,11 @@ export const SQE_GATE_IDS = [
   'AMR',
   'Governance',
   'NetEV',
+  // B-ENTRY-GATE (#1224) increment B: NetEVMissing (P4s — an absent EV, never admissible by the exploration lane),
+  // EntryWindow (P2 — the plan's price against the worse-side window) and InvalidTarget (P2 — a plan with no usable target).
+  'NetEVMissing',
+  'EntryWindow',
+  'InvalidTarget',
 ] as const;
 export type SqeGateIdShared = (typeof SQE_GATE_IDS)[number] | 'uncategorized';
 
@@ -54,6 +59,9 @@ export function sqeGateLabel(gateId: string): string {
     case 'Governance':        return 'Governance';
     case 'ROI':               return 'ROI';
     case 'AMR':               return 'AMR';
+    case 'NetEVMissing':      return 'Net EV Missing';
+    case 'EntryWindow':       return 'Entry Window';
+    case 'InvalidTarget':     return 'Invalid Target';
     case 'xstock_weekend_closure':     return 'xStock Weekend Closure';
     case 'asset_class_disabled':       return 'Asset Class Disabled';
     case 'unclassifiable_asset_class': return 'Unclassifiable Asset Class';
