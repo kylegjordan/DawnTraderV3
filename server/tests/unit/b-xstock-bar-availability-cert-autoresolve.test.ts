@@ -110,7 +110,12 @@ describe('R4 certification auto-resolve', () => {
       id: 'day-row', created_at: new Date(Date.now() - 60_000).toISOString(), metadata: { failures: 1 },
     }));
     await m.repairPendingXstockCertificates();
-    expect(state.mergeAlertMetadata).toHaveBeenCalledWith('day-row', expect.objectContaining({ failures: 2 }));
+    expect(state.mergeAlertMetadata).toHaveBeenCalledTimes(1);
+    const [rowId, patch] = state.mergeAlertMetadata.mock.calls[0];
+    expect(rowId).toBe('day-row');
+    // C8: the patch is a function of the row's CURRENT metadata (read under the store lock), not of a stale copy.
+    expect(typeof patch).toBe('function');
+    expect(patch({ failures: 5 })).toEqual(expect.objectContaining({ failures: 6 }));
     // The daily key is never resolved by the repair.
     expect(state.resolveAlertsByDedupeKey.mock.calls.some((c) => String(c[0]).includes('failures-day'))).toBe(false);
   });

@@ -894,14 +894,21 @@ export async function resolveAlertsByDedupeKey(
  * for the per-class standing record's membership; the row's title and body are never re-rendered (so #572's body-drift
  * question does not arise). Returns the updated row, or null when the row is missing or resolved.
  */
-export async function mergeAlertMetadata(id: string, patch: Record<string, unknown>): Promise<SystemAlert | null> {
+export async function mergeAlertMetadata(
+  id: string,
+  patch: Record<string, unknown> | ((current: Record<string, unknown>) => Record<string, unknown>),
+): Promise<SystemAlert | null> {
   ensureFileExists();
   let result: SystemAlert | null = null;
   await withLock(() => {
     const all = readAllAlerts();
     const found = all.find((a) => a.id === id);
     if (!found || found.state === 'resolved') return;
-    found.metadata = { ...(found.metadata ?? {}), ...patch };
+    // A function patch is computed INSIDE the lock from the row's current metadata, so a counter's read and
+    // its increment are one step (B-XSTOCK-BAR-AVAILABILITY R4 C8, Langston: two raises must not both read N).
+    const current = (found.metadata ?? {}) as Record<string, unknown>;
+    const delta = typeof patch === 'function' ? patch(current) : patch;
+    found.metadata = { ...current, ...delta };
     result = { ...found };
     writeAllAlertsAtomic(all);
   });

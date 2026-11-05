@@ -59,6 +59,13 @@ describe('mergeAlertMetadata', () => {
     await sa.resolveAlertsByDedupeKey('venue-quiet-paper-xstock_spot', 'active-exit-monitor', UUID, 'engine');
     expect(await sa.mergeAlertMetadata(a.id, { x: 1 })).toBeNull();
   });
+  it('a function patch reads the CURRENT metadata under the lock, so concurrent increments do not collide (R4 C8)', async () => {
+    const a = await sa.addAlert({ ...base, category: 'breakage', severity: 'warning', metadata: { failures: 1 }, dedupe_key: 'c8-counter-test' });
+    await Promise.all(Array.from({ length: 5 }, () =>
+      sa.mergeAlertMetadata(a.id, (cur) => ({ failures: Number(cur.failures ?? 0) + 1 }))));
+    const after = await sa.mergeAlertMetadata(a.id, {});
+    expect((after?.metadata as any).failures).toBe(6);
+  });
   it('the standing record (info, health_check) is never delivered to Discord', () => {
     expect(sa.shouldDeliverToDiscord({ severity: 'info', category: 'health_check' })).toBe(false);
     expect(sa.shouldDeliverToDiscord({ severity: 'warning', category: 'breakage' })).toBe(true);

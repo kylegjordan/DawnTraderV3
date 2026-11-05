@@ -513,9 +513,13 @@ async function recordCertificationFailureDay(revisionCount: number): Promise<voi
     });
     // addAlert returns the EXISTING open row on a dedupe hit; a row created before this call is that
     // case, so its count goes up by one. A row created by this call already carries failures: 1.
+    // C8 (Langston): the increment reads the CURRENT count inside the store's lock, so two interleaved
+    // raises cannot both read N and both write N+1.
     if (Date.parse(row.created_at) < before) {
-      const prior = Number((row.metadata as Record<string, unknown> | undefined)?.failures ?? 1);
-      await mergeAlertMetadata(row.id, { failures: prior + 1, lastRevisionCount: revisionCount });
+      await mergeAlertMetadata(row.id, (current) => ({
+        failures: Number(current.failures ?? 1) + 1,
+        lastRevisionCount: revisionCount,
+      }));
     }
   } catch (error) {
     console.error('[B-XSTOCK-BAR-AVAILABILITY] FAILED TO RECORD certification failure day:',
