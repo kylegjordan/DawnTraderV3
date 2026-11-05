@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   XSTOCK_SNAPSHOT_CONNECT_TIMEOUT_MS,
   XSTOCK_SNAPSHOT_MIN_INTERVAL_MS,
+  XSTOCK_SNAPSHOT_RETRY_AFTER_FAILURE_MS,
   XSTOCK_SNAPSHOT_STATEMENT_TIMEOUT_MS,
   __resetXstockSnapshotForTests,
   captureXstockDbSnapshot,
@@ -45,6 +46,30 @@ describe('R6a / C4 database snapshot', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     await expect(captureXstockDbSnapshot('x', () => c as any, 3_000_000)).resolves.toBe(false);
     expect(c.end).toHaveBeenCalledTimes(1);
+    vi.restoreAllMocks();
+  });
+
+  it('a failed capture holds the floor for 10 s only, not the full minute', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const failing = vi.fn(() => client({ connectFails: true }) as any);
+    expect(await captureXstockDbSnapshot('a', failing, 4_000_000)).toBe(false);
+    const ok = vi.fn(() => client() as any);
+    expect(await captureXstockDbSnapshot('b', ok, 4_000_000 + XSTOCK_SNAPSHOT_RETRY_AFTER_FAILURE_MS - 1)).toBe(false);
+    expect(ok).not.toHaveBeenCalled();
+    expect(await captureXstockDbSnapshot('c', ok, 4_000_000 + XSTOCK_SNAPSHOT_RETRY_AFTER_FAILURE_MS)).toBe(true);
+    expect(XSTOCK_SNAPSHOT_RETRY_AFTER_FAILURE_MS).toBeLessThan(XSTOCK_SNAPSHOT_MIN_INTERVAL_MS);
+    vi.restoreAllMocks();
+  });
+
+  it('a capture skipped by the floor writes one line naming the reason and the time since the last attempt', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    expect(await captureXstockDbSnapshot('first', () => client() as any, 5_000_000)).toBe(true);
+    spy.mockClear();
+    expect(await captureXstockDbSnapshot('apply statement timeout', () => client() as any, 5_000_000 + 1_234)).toBe(false);
+    const lines = spy.mock.calls.map((a) => String(a[0]));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('skipped (apply statement timeout)');
+    expect(lines[0]).toContain('1234 ms since the last attempt');
     vi.restoreAllMocks();
   });
 
