@@ -96,7 +96,8 @@ const instrumented = new WeakSet<object>();
 
 /**
  * Wrap `pool.connect` / `pool.query` and listen for `release`. Idempotent. Returns `flush()` (writes and resets
- * the current minute; used by the timer and the test) and `stop()`.
+ * the current minute; used by the timer and the test) and `stop()`. `stop()` clears the timer ONLY — the wrappers
+ * and the `release` listener stay attached; it is not a detach (never called in production).
  */
 export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolInstrumentOptions = {}) {
   const log = opts.log ?? ((l: string) => console.error(l));
