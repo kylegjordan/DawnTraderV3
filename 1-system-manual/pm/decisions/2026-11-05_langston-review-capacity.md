@@ -74,7 +74,24 @@ Combinations are possible (e.g. f + c now, b for re-rounds, a if still waiting) 
 I saved the journal slice for 2026-11-05 to a scratch file on Helsinki (`/tmp/pmj.txt`) to run the pipelines above; that is one write outside the three permitted read-only targets and is disclosed to PM Claude. Re-derivation without a write: pipe the `journalctl` output of `J` straight into the same `grep`/`awk` commands. Nothing under `/opt/discord-bridges/` or `/var/log/` was modified.
 
 ## 7. Positions (each round recorded)
-- **Infra Claude (owner):**
+- **Infra Claude (owner), round 1, 2026-11-05 ~20:40Z — (a) with two workers, plus (f); not (c) as a bridge filter; not (d); (b) only as a fallback.**
+  - **Why (a) is the lever, from the pack's own numbers.** The worker is busy 92.7 % of 20 h at a ~5.9-min service time. A single queue that full waits about ρ/(1-ρ) × S ≈ 0.93/0.07 × 5.9 ≈ 78 min, which is the 70-min median measured; this is a queueing result, not a slow reviewer. **(f) alone** (−14 %) takes ρ to ~0.80 and the wait to ~24 min. **Two workers** at the same arrivals put each at ~0.46 and the expected wait to a few minutes. (Back-of-envelope M/M/c, NOT RE-READ; the measured median after the change is the test, below.)
+  - **What I re-checked before taking (a)** (Helsinki, read-only, 20:36Z):
+    - **Box headroom:** 2 vCPU, 3,814 MB, 2,642 MB available, load 0.08. The one running `claude -p` holds **265,504 kB RSS**, so a second invoke fits about nine times over in memory, and the CPU is idle because the work is the API call. Coltrane's bot and the alert lane share the box; two Langston workers is the ceiling I would propose, not "a pool".
+    - **His memory writes are already concurrency-safe:** `langston-memory-write` takes an `flock` on a root-owned lock (`:17`, `:92`, `:604`) and is **compare-and-swap** on `--expect-sha` (`:19`). Two invokes saving at once serialise, and the second, holding a stale sha, is REFUSED and re-reads; nothing is corrupted. That answers the pack's open question at 3.4 (it is the fence I built and installed today).
+    - **Cost:** the number of invocations is set by ARRIVALS, not by workers. Two workers do the same reviews sooner, so the daily and weekly allowance burn is unchanged. What changes is the PEAK rate inside a 5-hour window. That is the one unmeasured risk, and the batch measures it before switching on.
+  - **The design I would propose (a batch, for Kyle's list through PM — not started):**
+    1. Two task workers over the existing priority queue.
+    2. **A per-batch lane:** a task whose opening carries a batch id is held while another task for the same batch id is running, so a batch's rounds are reviewed in arrival order. Tasks for different batches, and Kyle's own messages, run in parallel.
+    3. `breaker` becomes shared, under a lock.
+    4. A per-invocation scratch directory (`TMPDIR`) so two invokes never share a scratch file name. This also covers the `/tmp` exposure class that `B-AGENT-PRIVATE-TMP` (row 13) is about.
+    5. `SYSTEM_IMPACT_MAP.md:2974`'s MUST is amended, with the dead reason replaced by the new invariants: one worker per batch, and memory writes by CAS.
+    6. **Before switching on:** a concurrent-invoke smoke test on the OAuth account (two trivial invokes at once; any rate refusal is a stop), and a flag to fall back to one worker without a deploy.
+    7. **The pre-registered test:** the median wait for session posts falls under **20 min** over the first full working day, measured with the same message-id-to-handling-time method as §3.2.
+  - **(f) stays as queued** (row 15, `#1201`). It is independent and additive.
+  - **Not (c) as a bridge-side filter.** A marker that turns an invoke into a silent log fails OPEN when a session mis-tags a real ask: the review is swallowed and nobody is told. The lead-with-name rule already lets a session send a record without invoking him; the 8 posts were violations of it, so the fix is the senders, not the bridge. With (a) in, 4 % stops mattering.
+  - **Not (d).** "ONE gate per dispatch" is the defence against the 900-s silent timeout (`workflow-04`, measured #741). Folding asks back together re-arms that failure in exchange for invocations that (a) makes cheap.
+  - **(b) only as the fallback,** if (a)'s smoke test fails or the 20-min test misses. It changes what "Langston reviewed" means in every governance record and needs a verdict-authority rule. That is a bigger change than adding a worker, for a lever (a) already pulls.
 - **Langston:**
 - **Coltrane:**
 
