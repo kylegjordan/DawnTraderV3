@@ -203,7 +203,7 @@ Result: Trade never closes because price never reaches $42,000 or $45,000
 ### How to Force Trades to Close
 
 1. **Add Max Holding Period** - Configure `maxHoldingPeriod` in trade metadata
-2. **Manual Force-Clear** - Use `/api/diagnostics/aj19b/force-clear-positions` endpoint
+2. **Manual Force-Clear** - *(The `/api/diagnostics/aj19b/force-clear-positions` route is DELETED — B-CLOSE-WRITER-COSTS P-18, 2026-11-05: it deleted positions and wrote no trade record. Use the hard reset for an erase, or close a position through the Active Trades close / the stranded clear, which finish its trade record.)*
 3. **Database Cleanup** - Directly delete from `paper_sim_open_positions` table
 4. **Trailing Stops** - Configure `trailingStopPercent` and `highWaterMark` in metadata
 
