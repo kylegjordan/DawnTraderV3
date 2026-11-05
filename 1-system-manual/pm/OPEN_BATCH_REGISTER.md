@@ -2,7 +2,7 @@
 
 > **How this register is used (Kyle 2026-11-05, KD-29).** PM Claude re-reads it at EVERY crew check (the scheduled check and any slotting decision) and updates it the same turn.
 > - Every open batch carries ONE of three states: **ACTIVE** (being worked now) · **OBSERVATION** (deployed, waiting on a dated read or window; the date is written) · **STALLED** (no recorded activity for 7 days, or an OBSERVATION read whose date has passed with no result).
-> - A session may hold several batches at once, but only because the others are in OBSERVATION. A session that opens a new batch while one of its own is STALLED is flagged to Kyle the same day.
+> - A session may hold several batches at once and may switch between them (an urgent fix, a dependency, a wait). This is NOT restricted (Kyle 2026-11-05, ~11:25Z). The register only TRACKS each one and FOLLOWS UP: a STALLED batch is chased with its owner at the next crew check, and raised to Kyle only if it stays stalled with no recorded reason.
 > - An OBSERVATION read is chased ON its date: if the read is not posted within a day of its date, the owner is nudged; a second miss goes to Kyle.
 > - Deployed batches that only need their final verification and write-up are the first thing a session is pointed back to.
 
