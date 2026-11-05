@@ -52,7 +52,7 @@
 
 ## (superseded) POSITION 2026-10-16
 
-- **Row 2 `B-XSTOCK-BID-TRIGGER-RELAND`** — inc A+C `STEP: 7 of 11` (EST reads 11-01/02/03). Obj 6 + (4a): Step 10 DONE `381a952d1`, card Observation; (4a) window 10-19/20/21 — ⛔ HARVEST `[VTS_RAIL]` lines from staging out__*.log BEFORE ROTATION (~12-16h retained) to `/home/deploy/harvest/` (first: 10-20 21:16Z, 1,533 lines); read + close (4a) after 10-21 20:00Z per report §4. S6 EXERCISED (SNPS first; 15 rows). **Inc B (obj 5+8): deployed `93dce9cb9`; Step 7 PASS `9b6c0ce4f`; Step 8 CONFIRMED 10-20; Step 10 CONFIRMED (r3 `9e42a00ec`, ledger §6b) · `STEP: 10 of 11` DONE for B. (4a): staging harvest `/home/deploy/harvest/ccc_harvest.sh` hourly → `incb4a-rail-window.log`, self-exits 10-22 02:00Z; read after 10-21 20:00Z. (4b) shared exit-trigger rule: Step 4 APPROVED (Langston) + condition/R1-R3 at `b93be7f76`, CI `39535925648` 4/4 · `STEP: 5 of 11` DONE · `NEXT: 6` = dt-deploy AFTER 2026-10-21 20:00Z (timer task bz3eqzmvl), then the (4a) read; R4/R5 + P8 SIM entry + crontab removal owed at Step 10. P7 harvest cron `ccc_cp5_once.sh` (inert 11-18 02Z), closing alert `5561baff`. Fence batch `B-LANGSTON-MEMORY-WRITE-FENCE` (Infra) awaits KYLE.
+- **Row 2:** A, C, B, obj 6, (4a), (4b) all read and confirmed (progress report §3-§6c); (4c) at Step 2; C-P5 four-week read to 11-16, then remove staging crontab `ccc_cp5_once.sh`.
 - Alerts `1ae9a06b` + `e473d7da` (open >7d): never ack; resolve by hand at each batch's close.
 
 ⛔⛔ **THREE THINGS IN FLIGHT — READ THE RECORDS, DO NOT RE-DERIVE:**
@@ -115,7 +115,7 @@
 
 - **⚠️ OPERATIVE RULE, NOT IN THE REPO — `Exit checks skipped` alerts (Langston 2026-08-01):** the recurring deep-evening mark-staleness class; **check exposure vs stop BEFORE dispositioning**, and **`price-skip-paper-*` rows are CC-B's** (lane partition 08-07). ⛔ **xStock exit-skip alerts are exposure-checked and LEFT ACTIVE — no ack, no resolve; they are the signal.**
 
-⛔ **LANGSTON'S MEMORY.md IS COMPOSED FROM PARTS — write ONLY via `langston-memory-write --part <part> --expect-sha <part sha> ... < body`; a direct edit locks the composer for EVERY session (I did it 2026-10-20, reverted byte-exact).**
+⛔ **LANGSTON'S MEMORY.md IS COMPOSED FROM PARTS — write ONLY via `langston-memory-write --part <part> --expect-sha <part sha> ... < body`; a direct edit locks the composer for EVERY session.** Part name WITH `.md`; `--ledger-delta 0 --retractions-delta 0`; build the draft under `umask 077` and delete it in the same command (a world-readable /tmp draft raised `2b6a2da7`, 2026-11-05).
 ⛔ **NEVER A BACKTICK INSIDE A TAGGED TEMPLATE LITERAL** (``sql`…` ``) — it ends the string; tsc far BELOW baseline = a parse break, not a fix (2026-09-03).
 
 ★ OBJ-9: do NOT move `active_fill_max_age_ms` (15 s); counts in `scripts/analysis/obj9_counts_v2.sql`.
