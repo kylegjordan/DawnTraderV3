@@ -102,9 +102,8 @@ import { readXstockSigmaCacheConfig } from '../asset_classes/xstock_spot/mark-st
 import { selectExitTrigger, exitTriggerClass, type ExitTriggerRefusal } from '../core/trading/exit-trigger.js';
 import { selectVtsXstockExitBid, selectVtsXstockEntryAsk, vtsXstockSideSize } from '../asset_classes/xstock_spot/vts-xs-select.js';
 import { ensureSigmaFresh } from '../asset_classes/xstock_spot/sigma-rate-cache.js';
-import { getXstockSession } from '../asset_classes/xstock_spot/time-of-day.js';
 import { markDecided, onCrossing, onMemberReason, isStandingMember, ensureVtsRailIndex, runVtsRailSweep, onUnpricedClose, onShadowUnpriced, productionVtsRailDeps, type VtsRailDeps } from './vts-rail-reporting.js';
-import { isInXstockWeekendClose, isXstockVenueTransitionPause } from '../asset_classes/xstock_spot/market-hours.js';
+import { isInXstockWeekendClose, isXstockVenueTransitionPause, isXstockRailPagingTime } from '../asset_classes/xstock_spot/market-hours.js';
 
 /**
  * B-XSTOCK-BID-TRIGGER-RELAND increment C (row 2, objective 7, pre-audit C-P4) — THE VENUE-TRANSITION PAUSE IN THE VTS.
@@ -4031,8 +4030,10 @@ async function resolveOpenVirtualTrades(): Promise<{
       // (`pageSinceMs`) restarts after any off-hours gap (so a quote slow to resume at the open cannot page on an
       // overnight streak), and pages at most once per such run. Every streak's full length is logged when it ends.
       // The 2026-09-15 crypto-only condition (53 streaks, 14+ of them xStock with no usable mark) is replaced, not dropped.
-      const _ntXsOffHours = trade.assetClass === 'xstock_spot'
-        && (isInXstockWeekendClose(new Date()) || getXstockSession(Date.now()) !== 'regular');
+      // Row 2 increment (4c) P1: paging time starts 15 min AFTER the 09:30 open (`isXstockRailPagingTime`, the venue's
+      // measured regular-session flip), so the earliest crossing page is 09:55 ET and the member doorbell below cannot
+      // fire before 09:45. The streak itself is still measured in full.
+      const _ntXsOffHours = trade.assetClass === 'xstock_spot' && !isXstockRailPagingTime(new Date());
       const _ntPages = trade.assetClass === 'crypto_spot' || (trade.assetClass === 'xstock_spot' && !_ntXsOffHours);
       const _ntNow = Date.now();
       const _ntReason = decision.noDecisionReason === 'no_transactable_side' && _vtsExitRefusal !== null

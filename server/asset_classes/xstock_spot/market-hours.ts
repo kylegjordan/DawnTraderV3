@@ -85,6 +85,32 @@ export function isInXstockWeekendClose(now: Date): boolean {
 }
 
 /**
+ * Row 2 increment (4c), P1 (`B-XSTOCK-BID-TRIGGER-RELAND`, Langston Step 2 r3 PROCEED): how long after the 09:30 ET
+ * open the VTS no-decision rail starts counting PAGING time. The venue's own regular-session flag (`is_extended_hours`)
+ * flips at 09:45 ET, not 09:30 — measured first `false` rows at 13:45Z on 2026-10-29 and 10-30 (EDT) and at 14:45Z on
+ * 11-02 and 11-03 (EST), 4 of 4 across both DST regimes (progress report §3d) — so for 15 minutes our clock calls it
+ * regular while the venue's book is not yet the regular book. Consequence: with the 10-minute page threshold
+ * (`vts-runner.ts` `VTS_NO_TRIGGER_ALERT_AFTER_MS`) the earliest xStock crossing page is 09:55 ET (open + 25 min).
+ * If the venue ever moves its flip, this constant is wrong in a way the (4c) read shows: pages cluster at the new boundary.
+ */
+export const XSTOCK_PAGE_OPEN_SETTLE_MS = 15 * 60_000;
+
+/**
+ * Row 2 increment (4c), P1: is `now` PAGING time for the VTS xStock rail — not the weekend close, and inside the US
+ * regular session (09:30-16:00 ET, the same clock as `getXstockSession`) at least `XSTOCK_PAGE_OPEN_SETTLE_MS` past the
+ * open. ONE predicate per MEANING (Langston r2): this is "time the venue has been in its regular book", read by the
+ * crossing gate and the standing record's member clock. It is NOT the session label — an unpriced close at 09:35 ET is
+ * still a `regular`-session close (`vts-rail-reporting.ts` `isRegularSession`).
+ */
+export function isXstockRailPagingTime(now: Date): boolean {
+  if (isInXstockWeekendClose(now)) return false;
+  const { hour, minute } = getETParts(now);
+  const m = (hour === 24 ? 0 : hour) * 60 + minute;
+  const openPlusSettle = 9 * 60 + 30 + XSTOCK_PAGE_OPEN_SETTLE_MS / 60_000;
+  return m >= openPlusSettle && m < 16 * 60;
+}
+
+/**
  * Returns true iff the xstock_spot market is open at `now` (UTC).
  *
  * Empirical reality (B-NEW-36 sub-batch (c), 2026-05-20):
