@@ -46,22 +46,22 @@ Also shipped inside the batch: the privacy check's repo-text exclusion and bound
 
 **The criterion, as pre-registered in §3 (quoted):** *"PASS: (a) every alert post in the window has either a lane routing reply posted to Discord or a lane escalation; AND (b) Langston is invoked for an alert only through an escalation — no alert-class task reaches him any other way."*
 
-**The data — window 2026-10-16T13:47Z → 2026-10-23T13:47Z, measured 2026-11-05 on Helsinki, read-only** (`/var/log/cc-discord-inbox.jsonl` and the bridge's journal; script `relief_obj2.py`, its method stated here):
+**The data — window 2026-10-16T13:47Z → 2026-10-23T13:47Z, measured 2026-11-05 on Helsinki, read-only** (`/var/log/cc-discord-inbox.jsonl` and the bridge's own log FILE, `/var/log/discord-langston-bridge.log` — readable by Langston's account, unlike the journal, which holds the same lines; script `relief_obj2.py`, its method stated here):
 
 | measure | population | result |
 |---|---|---|
-| alert posts that reached the bridge | `langston_alert_inbound` records in the window | **283** (an alert id was read from 273 of them) |
+| alert posts that reached the bridge | `langston_alert_inbound` records in the window | **283** distinct message ids (384 raw rows: 101 ids appear twice); an alert id was read from 273 of them, and all 10 without one are in the escalated set |
 | lane routing posts | `langston_outbound` with `lane == "alert"` | 121 |
 | **(a)** routed by a lane post that names the alert's id | of the 283 | **181** |
-| **(a)** escalated to Langston | journal `escalated msg <id> to Langston` | **102** |
+| **(a)** escalated to Langston | bridge log `escalated msg <id> to Langston` | **102** |
 | **(a)** NEITHER | of the 283 | **0** |
-| **(b)** Langston alert-task starts | journal `handling msg … kind=alert:` | **101** |
-| **(b)** of those, begun `[ESCALATED to you by the alert lane …]` | — | **101**. Instrument control: the class is non-empty, so the matcher can return a positive |
-| **(b)** started any other way | — | **0** |
+| **(b)** Langston alert-task starts | bridge log `handling msg … kind=alert:` | **101** |
+| **(b)** of those, begun `[ESCALATED to you by the alert lane …]` | — | **101** |
+| **(b)** started any other way | — | **0**. **Instrument control (Langston's, re-derived by me 2026-11-05 from the log file):** of the 2,596 alert starts BEFORE the window, 2,572 are NOT escalation-prefixed — so the matcher can classify a start as non-escalated, which is the zero published here |
 
 **(a) PASS: 181 + 102 = 283, with 0 unaccounted for. (b) PASS: 0 of 101.**
 - The §3 warning said (b)'s instrument *"must be named and proved on a known case before 2026-10-23"*. It was named and proved only on 2026-11-05, after the window. The pre-registered criterion is unchanged and the data is the window's, so the read is valid; it is late.
-- **Residual, stated rather than smoothed:** 102 escalations against 101 task starts. One escalated alert has no matching start inside the window — consistent with it being started after 13:47Z on 10-23, or folded into a restart's recovery pass. It was not traced. It does not touch (b), which counts starts that did NOT come through an escalation (0).
+- **The 102-vs-101 gap is traced (Langston):** `msg 1563186283260678256` — the lane at 13:44:12Z, escalated at 13:45:06Z (*"could not read an alert id"*), started `[ESCALATED …]` at 13:54:54Z, eight minutes after the window closed, answered 14:03:31Z. Not a residual.
 
 **(b) The decision:** OBJ-2 passes on the criterion written before the data, so the batch closes on it. That is what §3 set out: *"This batch closes on OBJ-2's window, recording OBJ-3 as met except the carried ceiling"* (Kyle 2026-10-20, option A). The decision is Infra Claude's, under that rule; Langston confirms at Step 11. **Kyle does not acknowledge a close** (Kyle, 2026-09-02).
 
@@ -77,34 +77,34 @@ Also shipped inside the batch: the privacy check's repo-text exclusion and bound
 
 ## 5. Governance files changed (the Step-10 ledger; closing lines added 2026-11-05)
 
-CHANGE-CLASS: non_architecture
+CHANGE-CLASS: architecture
 
-> **Class re-declared at close, 2026-11-05** (scope header amended in the same commit): `architecture` → `non_architecture`. Under `architecture` the System Manual is REQUIRED, and nothing in this batch is trading architecture, strategy, regime, filter, signal pipeline or math — it is the reviewer's alert lane and his memory trim. A required row cannot take `N/A`, so the class was wrong (`workflow-10-governance`). Same correction and reason as `B-LANGSTON-CLAUDEMD-RESIDUAL` (Langston's Step-4 C-2, 2026-10-20). Raised by the governance checker at close (alerts `ec165426-98cf-4fca-ac29-092cc4a344af`, `6871be49-f704-45c9-b0e8-8a4c934537cd`).
+> **The class stays `architecture` (Langston, Discord 2026-11-05T02:32:40Z (msg 1567728320269910067)).** A same-day re-declaration to `non_architecture` (`3993ace65`) is WITHDRAWN on his ruling. Instead the System Manual — REQUIRED under this class — carries an `na-skip` row in `GOVERNANCE_EXCEPTIONS.md` for him to confirm: nothing here is strategy, regime, filter, signal pipeline or math; the architecture is recorded in the System Impact Map, the bridge runbook and his architecture file. The checker raised the gap (alert `ec165426-98cf-4fca-ac29-092cc4a344af`); the confirmed row resolves it.
 
-| # | document | verdict | one line |
-|---|---|---|---|
-| T1 | `BATCH_CATALOG.md` | ✅ | entry marked closed, with this report's name |
-| T1 | `PHASE_HISTORY.md` | ✅ | entry marked closed, with this report's name |
-| T1 | `SPRINT_TO_LIVE_PLAN.md` — §0a Infra order 2 | ✅ | status + this report's name |
-| T1 | `PHASE_19_PLAN.md` | ✅ | row 2.8b's read-site, earlier in the batch; not a `P19-*` batch |
-| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ | shared: no change owed (no project-consensus fact changed at close); mine: position block, `20943897b` |
-| T1 | the batch `SCOPE` | ✅ | `Scope Files/B_LANGSTON_RELIEF_SCOPE.md` (class amended here) |
-| T1 | the batch `PRE_AUDIT` | ✅ | `Scope Files/B_LANGSTON_RELIEF_PRE_AUDIT.md`, collected after the fact and labelled so (`c60ccd36c`) |
-| T1 | the `COMPLETION_REPORT` | ✅ | this file, converted from the progress report |
-| T1 | the `Observation` column | ✅ | OBJ-2's pre-registered week, 2026-10-16 → 10-23, read in §3b; nothing left under observation |
-| T1 | session task lists — `CC_INFRA_SESSION_TASK_LIST.md` | ✅ mine / N/A — not mine ×3 | this batch moved to Step 11 with this report |
-| T1 | Langston's `/home/langston/MEMORY.md` | BLOCKED — his Step-11 confirm | his row is his to write through `langston-memory-write`; asked for in the confirm dispatch |
-| T2 | `SYSTEM_MANUAL.md` | N/A | no trading architecture, strategy, regime, filter, pipeline or math changed |
-| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | the writer's three-file memory, trim, growth gate and root-only state dir (earlier in the batch) |
-| T2 | `RUNNING_ISSUES.md` | ✅ | `#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219` |
-| T2 | `LANGSTON_ARCHITECTURE.md` | ✅ | his memory files and the alert lane, with before/after |
-| T2 | `COMMS_BRIDGE_RUNBOOK.md` | ✅ | the clean-stop gate and the lane |
-| T2 | `CHANGES_AND_FIXES.md` | N/A | no bug or risk entry opened or closed by this batch |
-| T2 | `STORAGE_POLICY.md` | N/A | the root-only state dir is local tool state, recorded in the map |
+| # | document | under `architecture` | verdict | one line |
+|---|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | REQUIRED | ✅ | entry marked closed, with this report's name |
+| T1 | `PHASE_HISTORY.md` | REQUIRED | ✅ | entry and its section header marked closed, with this report's name |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` — §0a Infra order 2 | REQUIRED (the batch has a row) | ✅ | status + this report's name; the §4 row's report cell fills at confirm |
+| T1 | `PHASE_19_PLAN.md` | judged | ✅ | row 2.8b's read-site, earlier in the batch; not a `P19-*` batch |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ | shared: no change owed (no project-consensus fact changed at close); mine: position block |
+| T1 | the batch `SCOPE` | REQUIRED | ✅ | `Scope Files/B_LANGSTON_RELIEF_SCOPE.md` |
+| T1 | the batch `PRE_AUDIT` | REQUIRED | ✅ | `Scope Files/B_LANGSTON_RELIEF_PRE_AUDIT.md`, collected after the fact and labelled so (`c60ccd36c`) |
+| T1 | the `COMPLETION_REPORT` | REQUIRED | ✅ | this file, converted from the progress report |
+| T1 | the `Observation` column | REQUIRED | ✅ | OBJ-2's pre-registered week, 2026-10-16 → 10-23, read in §3b; nothing left under observation |
+| T1 | session task lists — `CC_INFRA_SESSION_TASK_LIST.md` | REQUIRED | ✅ mine / N/A — not mine ×3 | this batch moved to Step 11 with this report |
+| T1 | Langston's `/home/langston/MEMORY.md` | REQUIRED | BLOCKED — his Step-11 confirm | his row, through `langston-memory-write`, at confirm |
+| T2 | `SYSTEM_MANUAL.md` | REQUIRED | N/A — `na-skip` row in `GOVERNANCE_EXCEPTIONS.md`, his to confirm | no strategy, regime, filter, signal pipeline or math changed |
+| T2 | `SYSTEM_IMPACT_MAP.md` | REQUIRED | ✅ | the writer's three-file memory, trim, growth gate and root-only state dir |
+| T2 | `RUNNING_ISSUES.md` | judged | ✅ | `#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219` |
+| T2 | `LANGSTON_ARCHITECTURE.md` | judged | ✅ | his memory files and the alert lane, with before/after |
+| T2 | `COMMS_BRIDGE_RUNBOOK.md` | judged | ✅ | the clean-stop gate and the lane |
+| T2 | `CHANGES_AND_FIXES.md` | judged | N/A | no bug or risk entry opened or closed by this batch |
+| T2 | `STORAGE_POLICY.md` | judged | N/A | the root-only state dir is local tool state, recorded in the map |
 
 - The two references to the old report name, in the catalog and the history, were updated in the same commit as the rename.
 - **CI** for the branch head carrying every commit of this batch: run 41862993865 at `3add04f48`, all four jobs green, checked one by one on 2026-11-04.
 
 **Earlier in the batch:**
 
-`SYSTEM_IMPACT_MAP.md` · `COMMS_BRIDGE_RUNBOOK.md` · `LANGSTON_ARCHITECTURE.md` · `PHASE_19_PLAN.md` (row 2.8b read-site) · `SPRINT_TO_LIVE_PLAN.md` · `RUNNING_ISSUES.md` (`#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219`) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · the batch `SCOPE` and `PRE_AUDIT` · `B_LANGSTON_CONTEXT_INC2_CHUNK2_PART2_CHANGE_LIST.md` (a pointer) · `.claude/memory/MEMORY_CC_INFRA.md`. **Still owed at close:** the session task list, Langston's `MEMORY.md` (net-zero, through `langston-memory-write`), `BATCH_CATALOG`/`PHASE_HISTORY` close lines, the plan row, the full tier ledger.
+`SYSTEM_IMPACT_MAP.md` · `COMMS_BRIDGE_RUNBOOK.md` · `LANGSTON_ARCHITECTURE.md` · `PHASE_19_PLAN.md` (row 2.8b read-site) · `SPRINT_TO_LIVE_PLAN.md` · `RUNNING_ISSUES.md` (`#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219`) · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · the batch `SCOPE` and `PRE_AUDIT` · `B_LANGSTON_CONTEXT_INC2_CHUNK2_PART2_CHANGE_LIST.md` (a pointer) · `.claude/memory/MEMORY_CC_INFRA.md`. *(The "still owed at close" list that stood here is discharged by the table above.)*
