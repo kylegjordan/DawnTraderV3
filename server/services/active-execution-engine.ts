@@ -52,6 +52,11 @@ import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 
 import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
 import { refuseTakerBooking, entryFillShadow } from '../core/trading/entry-booking.js'; // B-ENTRY-DISTANCE-GUARD (row 59)
 import { entryWindowRefusal, cheaperSideRecord } from '../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P1/P1b
+import { computeFillEconomics, type FillEconomics } from '../core/trading/fill-economics.js'; // B-ENTRY-GATE (#1224) P4
+import { getCachedCostMetrics } from '../core/math/cost-model.js'; // B-ENTRY-GATE (#1224) P4 — the birth decision's own cost read
+import { entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js'; // B-ENTRY-GATE (#1224) P4
+import { resolveMakerTakerHaircut } from './maker-taker-config.js'; // B-ENTRY-GATE (#1224) P4
+import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../config/canonical-regime-strategy-map.js'; // B-ENTRY-GATE (#1224) P4
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js'; // B-ENTRY-DISTANCE-GUARD OBJ-2 shadow floor
 import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -1996,6 +2001,60 @@ export class ActiveExecutionEngine {
    * engine stop's flatten uses it too): a resting maker order that did not fill is DROPPED — the position is deleted
    * (slot freed) and its closed_trades row is closed as `never_filled`, with no exit price and no P&L.
    */
+  /**
+   * B-ENTRY-GATE (#1224) P4 — resolve the birth decision's own inputs for this signal (the same reads as the RTB refresh
+   * re-decide in ready_to_buy_service.ts) and price the arm that fills at the price it pays. Every setting is read with
+   * getCachedNumberRequired (fail-hard). The at-queue DI / DBS / pool are the signal's carried snapshot.
+   */
+  private _fillEconomics(signal: any, assetClass: AssetClass, arm: 'taker' | 'maker', fillPrice: number): FillEconomics {
+    const fr = getFrictionForAssetClass(assetClass);
+    const gk = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+    const ck = { exchange: '*', assetClass, strategy: '*', regime: '*' };
+    const di = signal.diAtQueue != null && Number.isFinite(Number(signal.diAtQueue)) ? Number(signal.diAtQueue) : undefined;
+    const dbs = signal.dbsScoreAtQueue != null && Number.isFinite(Number(signal.dbsScoreAtQueue)) ? Number(signal.dbsScoreAtQueue) : undefined;
+    const base = getCachedNumberRequired('scoring_base', 'flat_pwin_base', ck);
+    return computeFillEconomics({
+      arm, fillPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
+      costs: getCachedCostMetrics(signal.symbol, assetClass),
+      feeRateMaker: fr.feeRateMaker, feeRateTaker: fr.feeRateTaker,
+      DI: di, sourcePool: signal.sourcePool ?? signal.metadata?.sourcePool, dbsScore: dbs,
+      minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', gk),
+      maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', gk),
+      diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', gk),
+      signalStrength: base,
+      urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
+      haircut: resolveMakerTakerHaircut(assetClass),
+      measuredBasePWin: base,
+    });
+  }
+
+  private _fillEconRecord(fe: FillEconomics, arm: 'taker' | 'maker', exploration: boolean): Record<string, unknown> {
+    return {
+      fillEconArm: arm, netEvAtFill: fe.netEvAtFill, pWinAtFill: fe.pWin, fillEconRefused: fe.refuse && !exploration,
+      fillEconExplorationShadow: fe.refuse && exploration,
+      // A-12 (Kyle's KD-11 decision owed): recorded, never decides.
+      pWinDefaulted: fe.pWinDefaulted, netEvAtMeasuredBase: fe.netEvAtMeasuredBase, netEvAtRealDi: fe.netEvAtRealDi, missingPWinWouldRefuse: fe.missingPWinWouldRefuse,
+    };
+  }
+
+  private async _refuseFillEconomics(signal: any, assetClass: AssetClass, arm: 'taker' | 'maker', price: number, fe: FillEconomics, rec: Record<string, unknown>): Promise<OpenOutcome> {
+    const reason = 'fill_economics';
+    console.error(`[B-ENTRY-GATE][FILL_ECONOMICS][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} class=${assetClass} arm=${arm} price=${price} net_ev=${fe.netEvAtFill.toFixed(6)} pwin=${fe.pWin.toFixed(3)} pwin_defaulted=${fe.pWinDefaulted} — not opened`);
+    rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'FILL_ECONOMICS', reason);
+    try {
+      const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+      archiveSignalEval({
+        mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass,
+        source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
+        gateDecision: { gate: 'entry_fill', accepted: false, reason, fillPrice: price, entryPrice: price, entryArm: arm,
+          stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...rec },
+      });
+    } catch (archErr) {
+      console.error(`[B-ENTRY-GATE][FILL_ECONOMICS][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
+    }
+    return { opened: false, stage: 'FILL_ECONOMICS', reason };
+  }
+
   /** B-ENTRY-GATE (#1224) P3: one line per resolved rest that ever sat outside the window — the would-cancel record. */
   private _reportMakerWouldCancel(position: any, outcome: 'fill' | 'drop'): void {
     const rec = this._makerWouldCancel.get(position.id);
@@ -6009,9 +6068,12 @@ export class ActiveExecutionEngine {
       const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
       if (_b72cBestAsk != null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _b72cBestAsk, limit: _b72cLimit })) {
         const _b72cStoredTakerEv = signal.takerNetEv;
-        if (_entryFillPolicy === 'maker_preferred' && _b72cStoredTakerEv != null && _b72cStoredTakerEv > 0) {
+        // B-ENTRY-GATE (#1224) P4: the gen-time stored taker EV no longer decides the conversion (pre-audit §2, the
+        // "documented approximation"). Under maker_preferred a marketable maker converts, and P4's test at the price the
+        // taker actually pays decides at the fill: ONE deciding number, never a stored one followed by a live one.
+        if (_entryFillPolicy === 'maker_preferred') {
           _b72cEffectiveMode = 'taker';
-          console.log(`[P19-B7.2c][MARKETABLE_TAKER_FALLBACK:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) — stored takerNetEv=${_b72cStoredTakerEv.toFixed(6)}>0 → opening as taker now`);
+          console.log(`[P19-B7.2c][MARKETABLE_TAKER_FALLBACK:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) — stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} (record only) → opening as taker; the fill-time economic test decides`);
         } else {
           console.log(`[P19-B7.2c][MAKER_MARKETABLE_DROPPED:${this.mode}] ${signal.symbol} (${_openClass}): maker limit ${_b72cLimit} already marketable (bestAsk=${_b72cBestAsk}) policy=${_entryFillPolicy} stored takerNetEv=${_b72cStoredTakerEv ?? 'null'} — dropped (non-trade)`);
           rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'MAKER_MARKETABLE_DROPPED', 'maker limit marketable at placement; policy forbids or taker EV not positive');
@@ -6120,10 +6182,19 @@ export class ActiveExecutionEngine {
     // record stays null, so the admitted row carries NO shadow keys — which is why that row also stamps `entryArm` (the
     // REALISED arm) outside the spread: a missing `rrFill` must never be read as "measured and uncomputable" (Langston r2).
     let _entryShadowRec: Record<string, unknown> | null = null;
+    // B-ENTRY-GATE (#1224) P4: the economic test at the price paid, recorded on the admitted row of BOTH arms.
+    let _fillEconRec: Record<string, unknown> | null = null;
+    const _fillExplo = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
     if (_b72cPendingMaker) {
       actualEntryPrice = _b72cLimit;
       entryFee = _b72cLimit * quantity * getFrictionForAssetClass(_openClass).feeRateMaker;
       totalSlippage = 0; // a maker fill at the resting limit pays no taker slippage
+      // B-ENTRY-GATE (#1224) P4: a resting maker pays its limit if it fills, so it is judged there, before it rests.
+      const _feM = this._fillEconomics(signal, _openClass, 'maker', _b72cLimit);
+      _fillEconRec = this._fillEconRecord(_feM, 'maker', _fillExplo);
+      if (_feM.refuse && !_fillExplo) {
+        return await this._refuseFillEconomics(signal, _openClass, 'maker', _b72cLimit, _feM, _fillEconRec);
+      }
     } else {
     // B-ENTRY-DISTANCE-GUARD OBJ-2 (shadow): the strategy's live `min_rr`, read ONCE per open and BEFORE the fill (Langston
     // Step-1 FINDING-1: `getPerClassTargetGate` throws on a missing class row, and a throw past the fill would leave an
@@ -6204,6 +6275,9 @@ export class ActiveExecutionEngine {
     const _ewCheaperFloor = getCachedNumberRequired('entry_gate', 'entry_cheaper_side_floor_frac', _ewKey);
     const _ewCheaper = cheaperSideRecord(_shadow.adverseR, _ewCheaperFloor);
     const _ewRefusal = entryWindowRefusal(_shadow.adverseR, _ewWorseSide);
+    // B-ENTRY-GATE (#1224) P4: the economic test at the price this taker actually paid (its walked average fill).
+    const _feT = this._fillEconomics(signal, _openClass, 'taker', actualEntryPrice);
+    _fillEconRec = this._fillEconRecord(_feT, 'taker', _fillExplo);
     _entryShadowRec = {
       intendedEntryPrice: signal.entryPrice, rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,
       rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',
@@ -6260,6 +6334,9 @@ export class ActiveExecutionEngine {
         console.error(`[B-ENTRY-GATE][ENTRY_WINDOW][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
       }
       return { opened: false, stage: 'ENTRY_WINDOW', reason: _ewRefusal };
+    }
+    if (_feT.refuse && !_fillExplo) {
+      return await this._refuseFillEconomics(signal, _openClass, 'taker', actualEntryPrice, _feT, { ...(_entryShadowRec ?? {}), ..._fillEconRec });
     }
     }
     const positionValue = actualEntryPrice * quantity;
@@ -6713,6 +6790,7 @@ export class ActiveExecutionEngine {
           confidenceModulated: signal.confidence,
           gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
             ...(_entryShadowRec ?? {}), // B-ENTRY-DISTANCE-GUARD CHANGE 1: the shadow measurement, same schema as the refused arm
+            ...(_fillEconRec ?? {}), // B-ENTRY-GATE (#1224) P4: the economic test at the price paid, both arms
             // Always present (r2 condition): the arm this open REALISED — not `chosenEntryMode`, since a maker that cannot rest
             // opens as a taker. Key absent ⇒ a row written before this deploy; 'maker' ⇒ no shadow keys by design.
             entryArm: _b72cPendingMaker ? 'maker' : 'taker',

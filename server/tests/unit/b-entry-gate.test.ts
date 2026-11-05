@@ -128,6 +128,31 @@ describe('P3v — the VTS applies the same window at its taker entries (no SQE o
   });
 });
 
+describe('P4 — the economic test at the price paid, wired at both arms', () => {
+  const src = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));
+  it('the maker is judged at its limit before it rests; the taker at its walked fill, after the window', () => {
+    expect(src).toMatch(/actualEntryPrice = _b72cLimit;[\s\S]{0,400}this\._fillEconomics\(signal, _openClass, 'maker', _b72cLimit\)/);
+    expect(src).toMatch(/this\._fillEconomics\(signal, _openClass, 'taker', actualEntryPrice\)/);
+    const win = src.indexOf("stage: 'ENTRY_WINDOW'");
+    const fe = src.indexOf("this._refuseFillEconomics(signal, _openClass, 'taker'");
+    const write = src.indexOf('const positionValue = actualEntryPrice * quantity');
+    expect(fe).toBeGreaterThan(win);
+    expect(write).toBeGreaterThan(fe);
+  });
+  it('exploration-stamped paper opens are never refused by it (recorded instead)', () => {
+    expect(src).toMatch(/const _fillExplo = this\.mode === 'paper' && \(signal\.metadata as any\)\?\.admissionBasis === 'exploration'/);
+    expect(src.split('.refuse && !_fillExplo').length - 1).toBe(2);
+  });
+  it('the marketable-maker conversion no longer decides on the stored gen-time taker EV', () => {
+    expect(src).not.toMatch(/_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0/);
+    expect(src).toMatch(/if \(_entryFillPolicy === 'maker_preferred'\) \{\s*_b72cEffectiveMode = 'taker';/);
+  });
+  it('both refusals and the admitted row carry the record; FILL_ECONOMICS is a counted stage', () => {
+    expect(src).toMatch(/\.\.\.\(_fillEconRec \?\? \{\}\), /);
+    expect(src).toMatch(/recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', reason\)/);
+  });
+});
+
 describe('P5 — the three 2 % target fallbacks are gone (Kyle decision 7)', () => {
   const rtb = stripComments(readFileSync(new URL('../../core/rtb/ready_to_buy_service.ts', import.meta.url), 'utf8'));
   const eng = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));

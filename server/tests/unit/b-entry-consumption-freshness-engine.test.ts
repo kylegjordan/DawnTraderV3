@@ -117,11 +117,18 @@ vi.mock('../../services/execution/venue-validate.js', async (orig) => ({
 vi.mock('../../core/math/cost-model.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   getFrictionForAssetClass: () => ({ feeRateMaker: 0.001, feeRateTaker: 0.002 }),
+  // B-ENTRY-GATE (#1224) P4: the fill-time economic test reads the birth decision's own per-symbol costs.
+  getCachedCostMetrics: () => ({ fee: 0.002, slippage: 0.0005, spread: 0.001 }),
 }));
 
 vi.mock('../../services/maker-taker-config.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   resolveMakerMaxPendingMs: () => 60_000,
+  // B-ENTRY-GATE (#1224) P4: the maker arm's adverse-selection haircut, read at the fill.
+  resolveMakerTakerHaircut: () => ({
+    makerFillProbability: 0.5, adverseSelectionBase: 0, adverseSelectionStrengthMult: 0, nonFillCostBase: 0,
+    nonFillContinuationPenalty: 0, nonFillReversalDiscount: 0, hardFloorContinuationStrength: 2,
+  }),
 }));
 
 vi.mock('../../services/guardrail-settings.js', async (orig) => ({
@@ -246,6 +253,11 @@ vi.mock('../../services/module-constants-service.js', async (orig) => {
     getCachedNumberRequired: (module: string, name: string, key: unknown) => {
       if (module === 'entry_gate' && name === 'entry_window_worse_side_frac') return 0.25;
       if (module === 'entry_gate' && name === 'entry_cheaper_side_floor_frac') return 0.40;
+      // B-ENTRY-GATE (#1224) P4: the kernel's pWin settings and the class base rate, at their live values.
+      if (module === 'expectancy_kernel' && name === 'pwin_floor') return 0.40;
+      if (module === 'expectancy_kernel' && name === 'pwin_ceiling') return 0.60;
+      if (module === 'directional_integrity' && name === 'di_pwin_factor') return 200;
+      if (module === 'scoring_base' && name === 'flat_pwin_base') return 0.307;
       return actual.getCachedNumberRequired(module, name, key);
     },
   };

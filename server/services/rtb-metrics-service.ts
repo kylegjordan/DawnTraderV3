@@ -58,6 +58,7 @@ export type OpenFailStage =
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
   | 'ENTRY_GEOMETRY'      // B-ENTRY-DISTANCE-GUARD (row 59): the taker fill sits at or through the signal's own stop or target (refuseTakerBooking)
   | 'ENTRY_WINDOW'        // B-ENTRY-GATE (#1224) P1: the taker fill sits more than the worse-side window above the planned entry (KD-10)
+  | 'FILL_ECONOMICS'      // B-ENTRY-GATE (#1224) P4: net EV at the price actually paid, for the arm that fills, is not positive (Reply A)
   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw
