@@ -266,18 +266,14 @@ describe('B-FEED-MISMATCH-FIX Step-4 blockers', () => {
     expect(String((h.addAlert.mock.calls[0][0] as { title: string }).title)).toMatch(/FLATTEN left BTC\/USD OPEN/);
   });
 
-  it('BLOCKER-1 (re-pointed by B-CLOSE-WRITER-COSTS P-10): the stranded clear writes NO record of its own — it closes through the one chain', () => {
-    // The writer this test pinned (its own createClosedTrade with `stranded_clear` and the quote's provenance) is DELETED:
-    // each position now closes through `closeOnePositionByOperator` → `closePosition`, which stamps the provenance itself.
+  it('BLOCKER-1 (re-pointed by B-CLOSE-WRITER-COSTS P-10, then KD-45): the stranded-clear writer and its route are GONE', () => {
+    // The writer this test pinned is deleted (P-10), and the route itself folded into close-all (Kyle KD-45, 2026-11-05):
+    // close-all closes every position through the one chain, which stamps the quote's provenance itself.
     const src = readFileSync(resolve(__dirname, '../../routes.ts'), 'utf-8');
-    const at = src.indexOf("apiRouter.post('/active-engine/force-clear-stranded'");
-    expect(at).toBeGreaterThan(-1);
-    const route = src.slice(at, src.indexOf('apiRouter.', at + 10));
-    expect(route).toContain("manager.closeOnePositionByOperator(position.id, 'stranded_clear')");
-    expect(route).not.toContain('createClosedTrade');
-    expect(route).not.toContain('deleteActiveOpenPosition');
-    expect(route).not.toMatch(/FALLBACK_TO_ENTRY/);
+    expect(src).not.toContain("apiRouter.post('/active-engine/force-clear-stranded'");
     expect(src).not.toContain("closeReason: 'stranded_clear'");
+    const at = src.indexOf("apiRouter.post('/active-engine/close-all'");
+    expect(src.slice(at, src.indexOf('apiRouter.', at + 10))).toContain('manager.closeAllPositions(');
   });
 });
 
