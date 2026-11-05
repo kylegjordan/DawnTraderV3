@@ -60,7 +60,7 @@ export interface LifecycleCloseEvent {
   // terms. Safe to extend: `close_reason` is varchar(40/50) — no pg enum, no CHECK constraint
   // — and no consumer switches exhaustively on this union (the AJ19B aggregation keys
   // dynamically at :410/:479).
-  closeReason: 'SL' | 'TP' | 'TRAILING_STOP' | 'MAX_HOLD' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN';
+  closeReason: AJ19BCloseBucket;
   closedValue: number;
   pnl: number;
   slotCountBefore: number;
@@ -70,6 +70,13 @@ export interface LifecycleCloseEvent {
   deleteError?: string;
   mode: 'live' | 'paper';
 }
+
+/**
+ * B-CLOSE-WRITER-COSTS P-15 (C-2): the lifecycle close buckets. Their one producer is the engine's `closeReasonMap`,
+ * a `Record<ExitConditionType, AJ19BCloseBucket>` — so every exit condition maps to a bucket by construction. `UNKNOWN`
+ * stays a member for rows logged before that map was made total.
+ */
+export type AJ19BCloseBucket = 'SL' | 'TP' | 'TRAILING_STOP' | 'MAX_HOLD' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN';
 
 export interface ReconciliationEvent {
   timestamp: Date;
