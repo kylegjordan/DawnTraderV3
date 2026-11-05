@@ -175,11 +175,16 @@ export interface XstockEvalCycleCounters {
   strategiesEvaluated: number;
   strategyNulls: number;
   // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-3): detect-input coverage. detectEvals = strategy detect
-  // calls; dbsCarriedEvals = those whose input carried a non-null dbsScore; dbsStrongEvals = those
-  // at >= 0.35. Reported per cycle, not thresholded: a coverage of zero means the hand-off is inert.
+  // calls; dbsCarriedEvals = those whose input carried a non-null dbsScore; dbsGe035Evals = those
+  // whose score is >= 0.35 — a FIXED DISTRIBUTION BUCKET, NOT the guard threshold (the guards read
+  // `strategy_dbs_routing_guards.dbs_min_threshold` / `counter_trend_long_dbs_floor` from the DB, and
+  // those can move by SQL; this bucket deliberately does not, so the series stays comparable). Counted
+  // per detect call (strategy-weighted: one pair's score counts once per strategy), so it is a
+  // different population from the archive-row coverage. Reported, not thresholded: a coverage of zero
+  // means the hand-off is inert.
   detectEvals: number;
   dbsCarriedEvals: number;
-  dbsStrongEvals: number;
+  dbsGe035Evals: number;
   signalsGenerated: number;
   signalsArchived: number;
   signalsRejectedBySQE: number;
@@ -260,7 +265,7 @@ export function makeEmptyXstockCycleCounters(): XstockEvalCycleCounters {
     strategyNulls: 0,
     detectEvals: 0,
     dbsCarriedEvals: 0,
-    dbsStrongEvals: 0,
+    dbsGe035Evals: 0,
     signalsGenerated: 0,
     signalsArchived: 0,
     signalsRejectedBySQE: 0,
@@ -584,7 +589,7 @@ export async function evaluateXstockPairForVTS(
         counters.detectEvals++;
         if (detectDbsScore !== null) {
           counters.dbsCarriedEvals++;
-          if (detectDbsScore >= 0.35) counters.dbsStrongEvals++;
+          if (detectDbsScore >= 0.35) counters.dbsGe035Evals++; // fixed bucket, not the guard threshold (see the counter's comment)
         }
         try {
           strategySignal = callStrategyDetect(

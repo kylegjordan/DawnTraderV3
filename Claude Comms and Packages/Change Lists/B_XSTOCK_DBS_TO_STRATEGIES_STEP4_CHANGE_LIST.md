@@ -7,7 +7,7 @@
 |---|---|---|
 | `server/asset_classes/xstock_spot/detect-indicators.ts` (NEW) | P1, P2 | `buildXstockDetectIndicators(mceIndicators, propagatedDbs)` returns a spread copy plus `dbsScore` / `dbsCategory` / `dbsSlope`; `detectDbsScoreOf()` returns a finite number or null |
 | `server/asset_classes/xstock_spot/eval-cycle.ts` | P1, P2, P3, C-2 | builds `detectIndicators` once per pair after the MCE; passes it to `callStrategyDetect`; provenance scalars are read from it; `detectDbsScore` at all 8 archive sites; 3 coverage counters |
-| `server/asset_classes/xstock_spot/scanner.ts` | P3 | `detect_evals` / `dbs_carried` / `dbs_strong` on the per-cycle summary line |
+| `server/asset_classes/xstock_spot/scanner.ts` | P3 | `detect_evals` / `dbs_carried` / `dbs_ge_035` on the per-cycle summary line |
 | `server/strategies/volatility-edge.ts` | P4 | `>= 0.35` becomes `>= getCachedNumberRequired('strategy_dbs_routing_guards','dbs_min_threshold',{exchange:'*',assetClass,strategy:STRATEGY_KEY,regime:'*'})`, with only the `>=` arm |
 | `server/services/strong-trend-geometry.ts` (NEW) | P5 | `readStrongTrendGeometryOverride(assetClass)`, two `getCachedNumberRequired` reads from `strategy.vwap_pullback` keyed to `vwap_pullback` + the class |
 | `server/services/vts-runner.ts` | P5 | `isStrongTrendLane ? readStrongTrendGeometryOverride(_assetClass) : undefined` (was the `{4.0, 3.0}` literal) |
@@ -22,7 +22,7 @@ const detectIndicators = buildXstockDetectIndicators(mceContext.indicators, prop
 const detectDbsScore = detectDbsScoreOf(detectIndicators);
 …
 counters.detectEvals++;
-if (detectDbsScore !== null) { counters.dbsCarriedEvals++; if (detectDbsScore >= 0.35) counters.dbsStrongEvals++; }
+if (detectDbsScore !== null) { counters.dbsCarriedEvals++; if (detectDbsScore >= 0.35) counters.dbsGe035Evals++; }
 strategySignal = callStrategyDetect(strategyKey, detectIndicators, ohlc as any, stratPatternInput as any, symbol, ASSET_CLASS, 'tag');
 ```
 BEFORE: `callStrategyDetect(strategyKey, mceContext.indicators, …)`.
@@ -40,6 +40,10 @@ if (((indicators as any).dbsScore ?? 0) >= dbsGuardThreshold) {
 // BEFORE: strongTrendGeometryOverride: isStrongTrendLane ? { stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0 } : undefined,
 strongTrendGeometryOverride: isStrongTrendLane ? readStrongTrendGeometryOverride(_assetClass) : undefined,
 ```
+
+## Step-4 condition (Langston PROCEED 2026-11-05 ~06:30Z)
+- **The coverage bucket is renamed, and it is NOT the guard's threshold.** `dbsStrongEvals` / `dbs_strong` become `dbsGe035Evals` / `dbs_ge_035`, a FIXED distribution bucket at 0.35. The guards read `dbs_min_threshold` / `counter_trend_long_dbs_floor` from the database, which can move by SQL; the bucket deliberately does not. The counter comment says so.
+- **Step-7 report line, restated:** `dbs_carried / detect_evals` is per-detect-call coverage, strategy-weighted (one pair's score is counted once per strategy evaluated). That is a DIFFERENT population from (a′)'s archive-row matchability (93.9 % floor), so the two are never set beside each other as one number.
 
 ## Evidence
 - **Unit:** `npx vitest run server/tests/unit/b-xstock-dbs-to-strategies.test.ts` → 16/16.
