@@ -19,6 +19,8 @@ def git(*a):
     return subprocess.run(["git", "-C", MIRROR, *a], check=True, capture_output=True).stdout
 
 
+# ⚠️ It reads the Helsinki MIRROR as it stands and does NOT pull it first (unlike dt-review): a sha the mirror has
+#    not fetched yet fails at --is-ancestor as SETUP-FAIL, never as a comparison against a stale manifest.
 def main():
     sha, group = sys.argv[1], sys.argv[2]
     try:
@@ -32,14 +34,28 @@ def main():
     if not block or set(var) != {"BRIDGE_DIR", "UNITS"}:
         print(f"SETUP-FAIL: manifest or variables not found (vars={var})")
         return 2
-    rows = [l.split("|") for l in block.group(1).splitlines() if l.startswith(group + "|")]
+    # the group is the FIRST FIELD exactly, so a future "bridges-x" group is not swept in (Langston r2, B)
+    rows = [l.split("|") for l in block.group(1).splitlines() if l.split("|")[0] == group]
     if not rows:
         print(f"SETUP-FAIL: no {group} rows at {sha}")
         return 2
-    bad = 0
-    for _, src, dst, _mode in rows:
+    # ⛔ A ROW THIS SCRIPT CANNOT RESOLVE IS A REACH FAILURE (exit 2), NEVER A "DIFFERS" (exit 1): an unknown
+    #    variable ($VENV, ${BRIDGE_DIR}, a quoted assignment) or a malformed row would otherwise surface as
+    #    MISSING -> DIFFERS and send the reader hunting drift that is not there (Langston r2, condition B).
+    resolved = []
+    for row in rows:
+        if len(row) != 4:
+            print(f"SETUP-FAIL: a {group} row does not have 4 fields: {'|'.join(row)}")
+            return 2
+        _, src, dst, _mode = row
         for k, v in var.items():
             dst = dst.replace("$" + k, v)
+        if not dst.startswith("/") or "$" in dst:
+            print(f"SETUP-FAIL: cannot resolve the install target {row[2]!r} (got {dst!r})")
+            return 2
+        resolved.append((src, dst))
+    bad = 0
+    for src, dst in resolved:
         blob = hashlib.sha256(git("show", f"{sha}:{src}")).hexdigest()[:8]
         try:
             live = hashlib.sha256(open(dst, "rb").read()).hexdigest()[:8]
