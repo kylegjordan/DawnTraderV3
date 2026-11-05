@@ -297,7 +297,10 @@ def t_eperm(env, a):
             ("temp-and-rename over MEMORY.md", "printf x > %s && mv -f %s %s" % (tmp, tmp, mem), "Operation not permitted"),
             ("mv MEMORY.md away", "mv %s %s.moved" % (mem, mem), "Operation not permitted"),
             ("rm MEMORY.md", "rm -f %s" % mem, "Operation not permitted"),
-            (">> on compose-state.json", "printf x >> %s" % cs, "Permission denied"),
+            # the kernel checks the immutable flag before the mode bits on a WRITE open (inode_permission), so a
+            # file that is both 0600 root-owned and +i refuses an append with EPERM, not EACCES; mv and rm below are
+            # decided by the root-owned directory first, hence EACCES there
+            (">> on compose-state.json", "printf x >> %s" % cs, "Operation not permitted"),
             ("mv compose-state.json", "mv %s %s.x" % (cs, cs), "Permission denied"),
             ("rm compose-state.json", "rm -f %s" % cs, "Permission denied"),
             (">> on index.jsonl", "printf x >> %s/index.jsonl" % arch, "Permission denied"),
