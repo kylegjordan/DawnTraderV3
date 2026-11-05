@@ -350,11 +350,23 @@ const cit = `slot-check: ${REC}`;
 }
 
 { // Langston Step-4 C2: the probe log has a named reader (reconcile prints its count and the wrap_up lines)
-  const d = fresh('probe'); const pl = join(d, 'probe.log');
-  const line = (tool) => JSON.stringify({ ts: 't', hook: 'guard-pm-slot', tool_name: tool, project: 'DawnTraderV3-pm' });
-  writeFileSync(pl, `${line('Bash')}\n${line('mcp__ccd_turn__wrap_up')}\n`);
-  const r = run(process.execPath, [RECONCILE, '--ref=HEAD'], { cwd: REPO, env: { ...process.env, PM_SLOT_PROBE_LOG: pl, PM_SLOT_MISS_LOG: join(d, 'none.log') } });
-  check('reconcile reads the probe log: 2 lines, 1 from mcp__ccd_turn__wrap_up (C2)', /P1d probe log .*: 2 line\(s\), 1 from mcp__ccd_turn__wrap_up/.test(r.stdout), r.stdout.slice(-400));
+  // Langston Step-4 condition 1: the fixture is written by the PRODUCER (Guard 1 itself), never by a copy of its format.
+  const e = g1env(); mkdirSync(e.proj, { recursive: true });
+  const env = { CLAUDE_PROJECT_DIR: e.proj, PM_SLOT_RECORD_DIR: e.recs, PM_SLOT_MISS_LOG: e.miss, PM_SLOT_PROBE_LOG: e.probe };
+  hook(G1, bash('git status'), env);                                   // invocation, Bash arm
+  hook(G1, wrap('Tests are green; nothing pending.'), env);             // invocation, wrap_up arm, not slotting
+  const refused = hook(G1, wrap(SLOTQ), env);                          // invocation + verdict refuse (no record)
+  writeRec(e.recs, 'CC-A');
+  hook(G1, wrap(SLOTQ), env);                                          // invocation + verdict allow
+  check('Guard 1 refusal path ran for the verdict fixture', refused.status === 2, `${refused.status}`);
+  const lines = readFileSync(e.probe, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const vs = lines.filter((o) => o.kind === 'verdict');
+  check('Guard 1 persists its verdicts: one refuse and one allow, each with owners, the matched word and the text (condition 2)',
+    vs.length === 2 && vs[0].verdict === 'refuse' && vs[1].verdict === 'allow' && vs[0].owners.includes('CC-A') && vs[0].missing.includes('CC-A') && !!vs[0].matched && /OLD Claude/.test(vs[0].text), JSON.stringify(vs));
+  const r = run(process.execPath, [RECONCILE, '--ref=HEAD'], { cwd: REPO, env: { ...process.env, PM_SLOT_PROBE_LOG: e.probe, PM_SLOT_MISS_LOG: join(e.dir, 'none.log') } });
+  check('reconcile reads the producer-written probe log: 4 invocations, 3 from wrap_up, 2 verdicts (1 refuse, 1 allow) (C2, condition 1)',
+    /P1d probe log .*: 4 invocation line\(s\), 3 from mcp__ccd_turn__wrap_up; 2 Guard-1 verdict\(s\) \(1 refuse, 1 allow\)/.test(r.stdout), r.stdout.slice(-500));
+  check('Guard 1 binds a bare lowercase "analyst" to no session (record item 1)', hook(G1, wrap('The analyst owns that queue.'), env).status === 0);
 }
 
 rmSync(root, { recursive: true, force: true });

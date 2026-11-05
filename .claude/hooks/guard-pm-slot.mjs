@@ -11,7 +11,7 @@
 // PROBE (P1d-1): every invocation appends one JSON line {ts, tool_name, project, ask} to the probe log, so the first run
 // proves whether the app runs PreToolUse hooks on its own MCP tool (the Bash line is the control).
 // Env overrides, for tests: PM_SLOT_RECORD_DIR, PM_SLOT_MISS_LOG, PM_SLOT_PROBE_LOG.
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
@@ -26,13 +26,26 @@ const PROBE_LOG = process.env.PM_SLOT_PROBE_LOG || join(HOME_CLAUDE, 'pm-slot-pr
 const MAX_AGE_MS = 6 * 3600e3;
 
 function append(file, line) { try { mkdirSync(dirname(file), { recursive: true }); appendFileSync(file, line + '\n'); } catch { /* logging must never break the hook */ } }
+// The probe log is capped, not unbounded (Langston Step-4 record item 2): past PROBE_CAP_BYTES it keeps its newest half.
+// Retirement condition, named: the invocation lines are a one-shot P1d-1 instrument; the verdict lines are kept for tuning
+// the wording net (judgement call 2) and are reviewed at B-PM-CLAUDE's close, where the cap is re-decided.
+const PROBE_CAP_BYTES = 256 * 1024;
+function probeAppend(line) {
+  try {
+    if (statSync(PROBE_LOG).size > PROBE_CAP_BYTES) {
+      const keep = readFileSync(PROBE_LOG, 'utf8').split('\n').filter(Boolean);
+      writeFileSync(PROBE_LOG, keep.slice(Math.floor(keep.length / 2)).join('\n') + '\n');
+    }
+  } catch { /* absent or unreadable: append creates it */ }
+  append(PROBE_LOG, line);
+}
 const miss = (why) => append(MISS_LOG, `${new Date().toISOString()} guard-pm-slot ${why}`);
 
 // Slotting wording: placement, ownership or order. Deliberately broad on the verbs, and it also needs a session name.
 const SLOT_WORDS = /\b(slot(?:s|ted|ting)?|placement|placed?\s+(?:after|before|at|in|first|next|straight)|owns?|owner(?:ship)?|assign(?:s|ed|ing)?|straight after|goes?\s+(?:after|before|next|first)|queue[sd]?|(?:the\s+)?order\s+(?:of|stands|is|:)|re-?order(?:ed|ing)?|move[sd]?\s+(?:up|down|to|ahead|after|before)|(?:comes?|come)\s+(?:after|before|first)|ahead of|pick(?:s|ed)? up|take(?:s)? over)\b/i;
 const SESSION_WORDS = [
   [/\b(?:OLD Claude|Claude Old|CC-A)\b/i, 'CC-A'], [/\b(?:NEW Claude|Claude New|CC-B)\b/i, 'CC-B'],
-  [/\b(?:ANALYST(?: Claude)?|Claude Analyst|CC-C)\b/i, 'CC-C'], [/\b(?:Infra Claude|CC-INFRA)\b/i, 'CC-INFRA'], // full form only, like the other three (Langston Step-4 call 3)
+  [/\b(?:ANALYST Claude|Claude Analyst|CC-C)\b/i, 'CC-C'], [/\b(?:Infra Claude|CC-INFRA)\b/i, 'CC-INFRA'], // full forms only, all four alike (Langston Step-4 call 3 and record item 1)
 ];
 export function namedOwners(text) { return SESSION_WORDS.filter(([re]) => re.test(text)).map(([, a]) => a); }
 export function isSlotting(text) { return SLOT_WORDS.test(text) && namedOwners(text).length > 0; }
@@ -60,7 +73,9 @@ process.stdin.on('end', () => {
   const tool = payload?.tool_name ?? payload?.toolName ?? '';
   const proj = basename(String(process.env.CLAUDE_PROJECT_DIR || ''));
   const input = payload?.tool_input ?? payload?.toolInput ?? {};
-  const probe = () => append(PROBE_LOG, JSON.stringify({ ts: new Date().toISOString(), hook: 'guard-pm-slot', tool_name: tool, project: proj, ask: typeof input.ask === 'string' ? input.ask.slice(0, 80) : undefined }));
+  const probe = () => probeAppend(JSON.stringify({ ts: new Date().toISOString(), hook: 'guard-pm-slot', tool_name: tool, project: proj, ask: typeof input.ask === 'string' ? input.ask.slice(0, 80) : undefined }));
+  // Every slotting VERDICT is persisted, refusals and allows alike, so the wording net can be tuned from data (Langston Step-4 C2).
+  const logVerdict = (v, owners, missing, text) => probeAppend(JSON.stringify({ ts: new Date().toISOString(), hook: 'guard-pm-slot', kind: 'verdict', tool_name: tool, verdict: v, owners, missing, matched: (SLOT_WORDS.exec(text) || [])[0], text: text.replace(/\s+/g, ' ').trim().slice(0, 240) }));
 
   let verdict = null; // { owners, text }
   try {
@@ -87,6 +102,7 @@ process.stdin.on('end', () => {
       catch (e) { if (e.code === 'ENOENT') ok = false; else throw e; }
       if (!ok) missing.push(o);
     }
+    logVerdict(missing.length ? 'refuse' : 'allow', owners, missing, text);
     if (missing.length) verdict = { missing, text };
   } catch (e) {
     miss(`fault: ${String(e && e.message).split('\n')[0]}`);

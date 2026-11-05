@@ -154,10 +154,17 @@ try {
 const probeLog = process.env.PM_SLOT_PROBE_LOG || join(homedir(), '.claude', 'pm-slot-probe.log');
 try {
   if (existsSync(probeLog)) {
+    // Parsed as JSON, never matched as a substring, so a key reorder in the producer cannot produce a silent zero (Langston Step-4 condition 1).
     const pl = readFileSync(probeLog, 'utf8').split(/\r?\n/).filter(Boolean);
-    const wrap = pl.filter((l) => l.includes('"tool_name":"mcp__ccd_turn__wrap_up"'));
-    console.log(`P1d probe log ${probeLog}: ${pl.length} line(s), ${wrap.length} from mcp__ccd_turn__wrap_up`);
-    for (const l of wrap.slice(-5)) console.log('  | ' + l);
+    const rows = pl.map((l) => { try { return { l, o: JSON.parse(l) }; } catch { return { l, o: null }; } });
+    const bad = rows.filter((r) => !r.o).length;
+    const inv = rows.filter((r) => r.o && r.o.kind !== 'verdict');
+    const wrap = inv.filter((r) => r.o.tool_name === 'mcp__ccd_turn__wrap_up');
+    const ver = rows.filter((r) => r.o && r.o.kind === 'verdict');
+    const refused = ver.filter((r) => r.o.verdict === 'refuse').length;
+    console.log(`P1d probe log ${probeLog}: ${inv.length} invocation line(s), ${wrap.length} from mcp__ccd_turn__wrap_up; ${ver.length} Guard-1 verdict(s) (${refused} refuse, ${ver.length - refused} allow)${bad ? `; ${bad} unparseable line(s)` : ''}`);
+    for (const r of wrap.slice(-5)) console.log('  | ' + r.l);
+    for (const r of ver.slice(-5)) console.log('  v ' + r.l);
   } else console.log(`P1d probe log ${probeLog}: absent (no PM-clone hook invocation recorded yet)`);
 } catch (e) { console.log(`  WARN: probe log unreadable: ${firstLine(e)}`); }
 process.exit(uniq.length ? 1 : 0);
