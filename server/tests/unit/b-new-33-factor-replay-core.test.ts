@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
+import { tradeIndexKey,
   findMatchingTrade,
   findNearestForDiagnostic,
   computeReplayOutcomeFromTrade,
@@ -43,7 +43,7 @@ function mkTrade(overrides: Record<string, any> = {}) {
 function mkIndex(entries: Array<{ symbol: string; strategy: string; entryTime: number; source: 'db' | 'jsonl'; trade?: any }>): VtsTradeIndex {
   const idx: VtsTradeIndex = new Map();
   for (const e of entries) {
-    const key = `${e.symbol}|${e.strategy}`;
+    const key = tradeIndexKey('crypto_spot', e.symbol, e.strategy);
     const list = idx.get(key) ?? [];
     list.push({ entryTime: e.entryTime, trade: e.trade ?? mkTrade({ entryTime: e.entryTime }), source: e.source });
     idx.set(key, list);
@@ -55,14 +55,14 @@ describe('findMatchingTrade', () => {
   it('returns null when no entries for (symbol, strategy)', () => {
     const dbIdx = mkIndex([]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', 1700000000000);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', 1700000000000);
     expect(result).toBeNull();
   });
 
   it('returns null for null strategy', () => {
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'any', entryTime: 1700000000000, source: 'db' }]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', null, 1700000000000);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', null, 1700000000000);
     expect(result).toBeNull();
   });
 
@@ -70,7 +70,7 @@ describe('findMatchingTrade', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 30_000, source: 'db' }]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result?.source).toBe('db');
     expect(result?.entryTime).toBe(target + 30_000);
   });
@@ -79,7 +79,7 @@ describe('findMatchingTrade', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 30_000, source: 'db' }]);
     const jsonlIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 10_000, source: 'jsonl' }]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result?.source).toBe('db');
     // Even though JSONL had a closer match (10s vs 30s), DB wins by priority.
   });
@@ -88,7 +88,7 @@ describe('findMatchingTrade', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([]);
     const jsonlIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 15_000, source: 'jsonl' }]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result?.source).toBe('jsonl');
   });
 
@@ -96,7 +96,7 @@ describe('findMatchingTrade', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 6 * 60 * 1000, source: 'db' }]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result).toBeNull();
   });
 
@@ -108,7 +108,7 @@ describe('findMatchingTrade', () => {
       { symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 100_000, source: 'db' },
     ]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result?.entryTime).toBe(target + 10_000); // closest, 10s delta
   });
 
@@ -116,14 +116,14 @@ describe('findMatchingTrade', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 5 * 60 * 1000, source: 'db' }]);
     const jsonlIdx = mkIndex([]);
-    const result = findMatchingTrade(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findMatchingTrade(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result).not.toBeNull();
   });
 });
 
 describe('findNearestForDiagnostic', () => {
   it('returns null when no entries for (symbol, strategy)', () => {
-    const result = findNearestForDiagnostic(mkIndex([]), mkIndex([]), 'BTC/USD', 'breakout', 1700000000000);
+    const result = findNearestForDiagnostic(mkIndex([]), mkIndex([]), 'crypto_spot', 'BTC/USD', 'breakout', 1700000000000);
     expect(result).toBeNull();
   });
 
@@ -131,7 +131,7 @@ describe('findNearestForDiagnostic', () => {
     const target = 1700000000000;
     const dbIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 10 * 60 * 1000, source: 'db' }]);
     const jsonlIdx = mkIndex([{ symbol: 'BTC/USD', strategy: 'breakout', entryTime: target + 2 * 60 * 1000, source: 'jsonl' }]);
-    const result = findNearestForDiagnostic(dbIdx, jsonlIdx, 'BTC/USD', 'breakout', target);
+    const result = findNearestForDiagnostic(dbIdx, jsonlIdx, 'crypto_spot', 'BTC/USD', 'breakout', target);
     expect(result?.source).toBe('jsonl');
     expect(result?.delta).toBe(2 * 60 * 1000);
   });

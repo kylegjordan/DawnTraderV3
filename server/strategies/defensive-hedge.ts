@@ -59,7 +59,10 @@ function computeReturns(candles: OHLCCandle[], count: number): number[] {
   const slice = candles.slice(-(count + 1));
   const returns: number[] = [];
   for (let i = 1; i < slice.length; i++) {
-    if (slice[i - 1].close > 0) {
+    // B-XSTOCK-CORRELATION-COLLECT (rule 23, Langston Step-4 C-2): the CURRENT close must be finite too — the same gap
+    // fixed in pair-correlation.ts. A NaN current close made a NaN return, which spearmanRankCorrelation used to hang
+    // on and, after its fix, would rank in an undefined order before the DH_MAX_CORRELATION gate. The return is dropped.
+    if (slice[i - 1].close > 0 && Number.isFinite(slice[i].close)) {
       returns.push((slice[i].close - slice[i - 1].close) / slice[i - 1].close);
     }
   }

@@ -36,3 +36,10 @@
 ## Not done yet in this batch
 - **P-9** US-hours repeat of A-2 with its pre-registered 90 % stop threshold — before Step 3 is called closed (US open 14:30Z).
 - Step 10 governance (listed above).
+
+## Step 4 — Langston PROCEED on `c74ff4dbf` (Discord `1567830296206901349`); re-land with his conditions
+- **Re-land:** the exact inverse of the revert `ca10b8534` (no intervening edits to the batch's files). Verified: every file equals `c74ff4dbf` except `vts-runner.ts`, whose change against head is exactly `c74ff4dbf`'s hunks — ANALYST's `da3415b3b` (`isXstockRailPagingTime`, `:106`, `:4035-4038`) is present in the re-landed file, read. Fresh CI 4/4 per job at the re-land sha is owed; the earlier 16/16 and 392 do not carry forward.
+- **C-2 (rule 23, folded):** `defensive-hedge.ts` `computeReturns` now also requires a finite CURRENT close — the same gap as `pair-correlation.ts`. Source fence added to the batch test.
+- **C-3:** `loadClosedVtsTradesFromDb` skips a row without `asset_class`, as the JSONL half does (the column is NOT NULL today — a fence).
+- **Record items:** (3) the P-7 fence is now bounded on both sides (after `computeFactorCalibration` starts, before the next `export`). (2) **A second reader of the confidence-with/without fields:** `scripts/b-new-37-inversion-forensics.ts:320-323` — a manual one-off; it would read record-only rows as applied. Not changed; any re-run filters `factor_applied`. (1) **P-5 has no counter**, so Step 7 needs a named positive read, pre-registered here: over the first 24 h after deploy, `regime_factor_alternates` rows with `factor_name='b68_3_pair_correlation'`, `asset_class='xstock_spot'`, `alternate_decision->'metadata'->>'factor_applied'='false'`; **expected magnitude: within a factor of two of the xStock VTS trades OPENED in the same window** (one row per opened trade; 7,895 xStock VTS trades closed in the 14 days to 2026-11-05 ≈ 560/day); control: crypto `b68_3` rows in the same window keep accruing. Fewer than a quarter of the opened trades ⇒ the emit is failing and the `[B-XSTOCK-CORRELATION-COLLECT][SKIP|ERROR]` lines are read before anything else.
+- Tests: batch file 17/17.

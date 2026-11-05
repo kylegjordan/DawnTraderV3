@@ -67,7 +67,7 @@ const mockExecute = vi.fn(async (q: any) => {
 
 vi.mock('../../db.js', () => ({ db: { execute: (q: any) => mockExecute(q) } }));
 
-import { loadClosedVtsTradesFromDb } from '../../services/factor-replay-core.js';
+import { loadClosedVtsTradesFromDb, tradeIndexKey } from '../../services/factor-replay-core.js';
 import { insertOpenTrade, rehydrateOpenTrades } from '../../services/vts-trade-persistence.js';
 import { shadowDedupeKey } from '../../services/vts-runner.js';
 
@@ -77,7 +77,7 @@ describe('reorg-B4 BEHAVIORAL — shadow rows absent from the ablation feed (Lan
   beforeEach(() => { dbCalls.length = 0; mockExecute.mockClear(); });
 
   it('a seeded shadow closed row does NOT appear in loadClosedVtsTradesFromDb output', async () => {
-    // The loader keys its index by `${symbol}|${strategy}` (the natural key), so the
+    // The loader keys its index by (asset class, symbol, strategy) — `tradeIndexKey`, B-XSTOCK-CORRELATION-COLLECT P-6 — so the
     // real + shadow rows must differ in symbol/strategy to be distinguishable.
     const realRow = {
       id: 'real-1', symbol: 'BTC/USD', strategy: 'breakout', regime: 'IMPULSE_EXPANSION',
@@ -89,8 +89,8 @@ describe('reorg-B4 BEHAVIORAL — shadow rows absent from the ablation feed (Lan
       ...realRow, id: 'shadow-1', symbol: 'ETH/USD', strategy: 'vwap_pullback',
       context: { shadow: true },
     };
-    const REAL_KEY = 'BTC/USD|breakout';
-    const SHADOW_KEY = 'ETH/USD|vwap_pullback';
+    const REAL_KEY = tradeIndexKey('crypto_spot', 'BTC/USD', 'breakout');
+    const SHADOW_KEY = tradeIndexKey('crypto_spot', 'ETH/USD', 'vwap_pullback');
 
     // The mock stands in for the DB: it applies the shadow filter IFF the emitted
     // query actually carries the exclusion predicate. So the test passes only
