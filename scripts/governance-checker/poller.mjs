@@ -892,7 +892,8 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // such path no longer blinds the check for every other file. Absent at ONE ref only is still a read
 // failure and still fails open (P29's named residual: a listed file deleted on the branch while the box
 // is behind). A listed file is therefore removed from this list one commit BEFORE the file itself is deleted
-// (B-STATUS-BOARD retirement, Langston r8 C-1: `status-board.mjs` left the list, a tick ran, then the file went).
+// (B-STATUS-BOARD retirement, Langston r8 C-1: `status-board.mjs` leaves this list in commit 1; the file itself is
+// deleted in commit 2, only after a tick has run commit 1).
 export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs'];
 // The blob id of one checker file at a ref, or null when the path is absent there. Throws on any other
 // failure (a bad ref, a non-blob at the path, unexpected output) — the caller fails open on a throw.
@@ -1048,7 +1049,6 @@ export function maybeRunWeekly(state, nowMs, liveIds, deps = {}) {
   }
   return out;
 }
-
 
 export function tick(nowMs = Date.now()) {
   const state = loadState();
