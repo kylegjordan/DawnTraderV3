@@ -147,10 +147,9 @@ describe("the job's own page (archival-health, O1)", () => {
   it('after the first good run, a missing log pages instead of passing silently', () => {
     expect(block).toMatch(/onMissing: 'alert'/);
   });
-  it('the grace can catch ONE missed night of a daily job checked daily (under 24 h)', () => {
-    const m = block.match(/graceMs:\s*(\d+)\s*\*\s*HOUR_MS/);
-    expect(m).not.toBeNull();
-    expect(Number(m![1])).toBeLessThan(24);
+  it('a missed night is caught at the next check: the check carries its cron, not a fixed grace (amendment 1, H-3)', () => {
+    expect(block).toMatch(/schedule: '45 2 \* \* \*'/);
+    expect(block).not.toMatch(/graceMs/);
   });
 });
 

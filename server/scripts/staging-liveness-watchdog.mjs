@@ -13,6 +13,9 @@
  *             silent-halt signature (#520). Only meaningful when http is OK.
  *   disk-warning / disk-critical — the SERVER's own `/` (B-DISK-FILE-TIERING #1233): nothing
  *             else on staging watches it; the database's disk-utilization-* alerts are Supabase.
+ *   archival-health-ran — the archive watchdog (b-storage-archival-health.ts, root cron 0 5 * * *) both
+ *             STARTED and FINISHED since its last scheduled 05:00Z (B-DISK-FILE-TIERING amendment 1, H-2):
+ *             it watches the archive crons and nothing watched it.
  *
  * CLEAR EDGE (B-DISK-FILE-TIERING P7, Langston Step 2 C4/B2): when a check passes and the
  * alerts file still holds an unresolved row for its key, the watchdog resolves it through the
@@ -282,6 +285,58 @@ async function checkEngine() {
   } catch { return null; }
 }
 
+// ── B-DISK-FILE-TIERING amendment 1 (H-2, AP-3): the watcher of the archive watchdog. ──────────────────
+// Its cron: `0 5 * * *` (root crontab; the Cron line at b-storage-archival-health.ts header — a test holds the two
+// equal). Plain arithmetic, not cron-parser: this file imports nothing from the app or its packages by design.
+// It reads the log's CONTENT, not its mtime (Langston C-1): the mtime advances on the start line, on a
+// top-level `fatal:` write, on partial output before a hang, and on a logrotate `create` — none of which is a
+// completed run. So: the LAST `started at <ISO>` line must be at or after the due fire, and a `DONE — all_ok=`
+// line must follow it. A missing log is a FAIL (it pages), never a skip: "the log I watch is gone" IS the
+// condition. The 30 min offset is slack around a ~0.4 s run, not a measurement; the DONE read is what detects.
+const ARCHIVAL_HEALTH_LOG = process.env.WATCHDOG_ARCHIVAL_HEALTH_LOG || '/var/log/dawntrader/archival-health.log';
+export const ARCHIVAL_HEALTH_FIRE_UTC = { hour: 5, minute: 0 };
+const ARCHIVAL_HEALTH_OFFSET_MS = 30 * 60 * 1000;
+
+/** The most recent daily HH:MM UTC fire at or before `atMs`. Pure. */
+export function prevDailyFireUtcMs(atMs, hour, minute) {
+  const d = new Date(atMs);
+  let fire = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, minute, 0, 0);
+  if (fire > atMs) fire -= 24 * 60 * 60 * 1000;
+  return fire;
+}
+
+/** Did the archive watchdog start at/after its due fire AND finish? Pure, for tests. */
+export function archivalHealthRan(text, nowMs) {
+  const dueMs = prevDailyFireUtcMs(nowMs - ARCHIVAL_HEALTH_OFFSET_MS, ARCHIVAL_HEALTH_FIRE_UTC.hour, ARCHIVAL_HEALTH_FIRE_UTC.minute);
+  const lines = String(text).split('\n');
+  let startIdx = -1;
+  let startMs = NaN;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /\[archival-health\] started at (\S+)/.exec(lines[i]);
+    if (m) { startIdx = i; startMs = Date.parse(m[1]); break; }
+  }
+  if (startIdx < 0 || !Number.isFinite(startMs)) return { ok: false, dueMs, why: 'no start line' };
+  if (startMs < dueMs) return { ok: false, dueMs, why: `last start ${new Date(startMs).toISOString()} is before the due run` };
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/\[archival-health\] DONE — all_ok=/.test(lines[i])) return { ok: true, dueMs, why: 'started and finished' };
+  }
+  return { ok: false, dueMs, why: `started ${new Date(startMs).toISOString()} with no DONE line after it (crash or hang)` };
+}
+
+let archivalReading = null;
+async function checkArchivalHealthRan() {
+  let text;
+  try {
+    text = fs.readFileSync(ARCHIVAL_HEALTH_LOG, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') { archivalReading = `${ARCHIVAL_HEALTH_LOG} is missing`; return false; }
+    throw err; // unreadable for another reason: the throw path pages after DEBOUNCE_TICKS
+  }
+  const r = archivalHealthRan(text, Date.now());
+  archivalReading = `${r.why}; due ${new Date(r.dueMs).toISOString()}`;
+  return r.ok;
+}
+
 const CHECKS = [
   {
     key: 'http', run: checkHttp,
@@ -316,6 +371,14 @@ const CHECKS = [
     reading: diskText, forced: DISK_FORCED,
     title: `${DISK_FORCED ? '[FORCED TEST] ' : ''}Server disk CRITICAL: staging ${DISK_PATH} over ${DISK_CRIT_PCT}% or under ${(DISK_CRIT_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free`,
     body: () => `The staging server's own disk is at ${diskText()}, ${DEBOUNCE_TICKS} consecutive ticks — at the measured write rate that is hours of runway, not days. If the disk fills, the app cannot log and the archive jobs cannot stage files. Where the space is: run du -sh on /var/log/dawntrader, /home/deploy/dawntrader/logs/* and /home/deploy/dawntrader/diagnostic-reports; the nightly disk-file tiering job (server/scripts/b-disk-file-tiering.ts, 02:45 UTC) moves old data files off this disk, and once it has run its log is /var/log/dawntrader/disk-file-tiering.log. Also /var/lib/token-watch (the token-launch study's store): du needs root there (as deploy it under-reads about 5x); its own token-watch store alert carries the true figure. Resolves itself when usage is back under ${DISK_CRIT_PCT - DISK_CLEAR_MARGIN_PCT}% with at least ${(DISK_CLEAR_FREE_BYTES / 1024 ** 3).toFixed(0)} GiB free.`,
+  },
+  {
+    // B-DISK-FILE-TIERING amendment 1 (H-2): see checkArchivalHealthRan above.
+    key: 'archival-health-ran', run: checkArchivalHealthRan,
+    dedupeKey: 'archival-health-not-run', category: 'health_check', severity: 'warning',
+    reading: () => archivalReading || 'not read yet',
+    title: 'Archive watchdog did not complete — nothing is watching the archive crons',
+    body: () => `The archive watchdog (server/scripts/b-storage-archival-health.ts, root cron 0 5 * * * UTC) has not both started and finished since its last scheduled run: ${archivalReading}. It is the only thing that pages when the archive sweeps, the cold rotator, the liveness canary or the disk-file tiering job stop running, so while it is down those failures are silent. Look at ${ARCHIVAL_HEALTH_LOG} and the root crontab. Resolves itself when a run starts and finishes.`,
   },
 ];
 

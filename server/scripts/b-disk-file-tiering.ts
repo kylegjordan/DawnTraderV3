@@ -295,6 +295,8 @@ async function main(): Promise<void> {
   if (!acquireLock()) {
     // A skipped run must READ as a failure: archival-health looks for the latest DONE line, and an
     // older run's DONE in its window would otherwise read green (Langston Step 4 part 1, change 2).
+    // It cannot latch: the lock self-breaks after LOCK_STALE_MS (12 h), so the next tick runs; and a holder
+    // that finishes writes its own later DONE, which wins (amendment 1, H-1: working as designed).
     log(`another run holds the lock (${LOCK_FILE}) — skipping this tick`);
     log('DONE moved=0 failed=1 lock_held=1');
     return;

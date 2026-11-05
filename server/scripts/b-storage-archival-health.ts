@@ -9,9 +9,11 @@
  * cron that never STARTS cannot alert on itself. This watchdog closes that gap.
  *
  * For each archival cron it checks:
- *   - STALE   — the log file's mtime is older than the cadence + grace (the cron
- *               didn't run when it should have), OR the tail has no completion
- *               line (a run started but never finished — crash/hang).
+ *   - STALE   — the log file was not written at or after the cron's most recent
+ *               scheduled fire (cadence-aware since B-DISK-FILE-TIERING amendment 1,
+ *               `server/services/archival-cadence.ts`; it was a fixed grace), OR the
+ *               tail has no completion line (a run started but never finished).
+ *   - MISCONFIGURED — a check's schedule does not parse: it pages, never skips.
  *   - FAILED  — the last completion line reports failed>0.
  * Either fires a §10.5 alert (warning), deduped per-cron-per-reason.
  *
@@ -33,6 +35,7 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
 import { addAlert } from '../services/system-alerts.js';
+import { cadenceVerdict } from '../services/archival-cadence.js';
 import {
   DAILY_PARTITION_CUTOVERS,
   cutoverForTable,
@@ -57,8 +60,15 @@ interface CheckSpec {
   label: string;
   /** log filename under LOG_DIR */
   logFile: string;
-  /** how stale (ms) before STALE fires — cadence + grace */
-  graceMs: number;
+  /**
+   * The subject cron's expression, UTC, copied from the `Cron line` in that script's header comment — a
+   * test holds the two equal. ⚠️ REACH OF THAT FENCE (Langston, amendment 1 (c)): it compares two in-repo
+   * strings, so it catches a typo in one copy and nothing else; the root crontab is unreadable as deploy, so
+   * no runtime self-read exists. Every box-side drift is LOUD (a job moved, loosened or dead reads STALE daily)
+   * except ONE silent direction: an expression here LOOSER than the box's (e.g. monthly here, daily on the box)
+   * lets a dead job pass for weeks. Edit this and the box together.
+   */
+  schedule: string;
   /** regex whose FIRST capture group is the `failed` count on the completion line; null = staleness-only */
   donePattern: RegExp | null;
   /** when the log file is absent: 'skip' (not scheduled yet / bootstrapping) or 'alert' */
@@ -72,7 +82,7 @@ const CHECKS: CheckSpec[] = [
     name: 'b75-retention',
     label: 'B75 hot→warm retention sweep (daily 02:15 UTC)',
     logFile: 'b75-retention.log',
-    graceMs: 26 * HOUR_MS,
+    schedule: '15 2 * * *',
     donePattern: /DONE .*\bfailed=(\d+)\b.*\bplain_failed=(\d+)\b/,
     onMissing: 'alert',
   },
@@ -80,7 +90,7 @@ const CHECKS: CheckSpec[] = [
     name: 'b75-cold-rotator',
     label: 'B75 warm→cold rotator (monthly, 1st 03:00 UTC)',
     logFile: 'b75-cold-rotator.log',
-    graceMs: 33 * DAY_MS,
+    schedule: '0 3 1 * *',
     donePattern: /DONE candidates=\d+ rotated=\d+ failed=(\d+)/,
     onMissing: 'skip', // first run is the OBJ-1 manual proof; monthly thereafter
   },
@@ -88,7 +98,7 @@ const CHECKS: CheckSpec[] = [
     name: 'b75-cold-liveness',
     label: 'B75 cold-path liveness canary (weekly, Mon 04:00 UTC)',
     logFile: 'b75-cold-liveness.log',
-    graceMs: 8 * DAY_MS,
+    schedule: '0 4 * * 1',
     donePattern: null, // the canary self-alerts on failure; watchdog only catches "didn't run"
     onMissing: 'skip',
   },
@@ -97,14 +107,11 @@ const CHECKS: CheckSpec[] = [
     // its first good run; that run is recorded (2026-11-05 02:45-03:03Z: `DONE moved=1709 failed=0`, all 1,709
     // manifest rows warm/active with checksums, one day restored byte-exact), so it is now 'alert' (O1): a
     // missing log means the job never ran. (Stale and failed runs already page whenever the log exists.)
-    // GRACE 20 h, NOT 26 h (Langston O1 CHANGE-1): this watchdog runs once a day (~05:00Z) and the job once a
-    // day (02:45Z). With 26 h a single missed night reads ~25h56m old at the next check and PASSES; any grace
-    // >= 24 h cannot catch one missed run of a daily job checked daily. 20 h: healthy age ~2 h, one miss ~26 h.
-    // The cadence-aware form (cron-fire-evidence-verifier.ts, B-NEW-51) is homed as its own item.
+    // Its old 20 h grace (O1 CHANGE-1) is superseded by the cadence test: a missed 02:45Z is caught at the next 05:00Z.
     name: 'disk-file-tiering',
     label: 'Disk-file tiering — dated app data files to warm storage (daily 02:45 UTC)',
     logFile: 'disk-file-tiering.log',
-    graceMs: 20 * HOUR_MS,
+    schedule: '45 2 * * *',
     donePattern: /DONE moved=\d+ failed=(\d+)/,
     onMissing: 'alert',
   },
@@ -112,7 +119,7 @@ const CHECKS: CheckSpec[] = [
 
 async function fire(
   spec: CheckSpec,
-  reason: 'stale' | 'failed' | 'missing' | 'incomplete',
+  reason: 'stale' | 'failed' | 'missing' | 'incomplete' | 'misconfigured' | 'errored',
   detail: string,
 ): Promise<void> {
   try {
@@ -159,11 +166,20 @@ async function runCheck(spec: CheckSpec, nowMs: number): Promise<boolean> {
   }
 
   const ageMs = nowMs - stat.mtimeMs;
-  if (ageMs > spec.graceMs) {
+  const cadence = cadenceVerdict(spec.schedule, stat.mtimeMs, nowMs);
+  if (cadence.kind === 'misconfigured') {
+    await fire(
+      spec,
+      'misconfigured',
+      `Its schedule "${spec.schedule}" does not parse, so this watchdog cannot tell whether the cron ran — fix the schedule in b-storage-archival-health.ts.`,
+    );
+    return false;
+  }
+  if (cadence.kind === 'stale') {
     await fire(
       spec,
       'stale',
-      `Its log has not been written for ${(ageMs / HOUR_MS).toFixed(1)}h (grace ${(spec.graceMs / HOUR_MS).toFixed(0)}h) — the cron likely did not run.`,
+      `Its log was last written ${(ageMs / HOUR_MS).toFixed(1)}h ago, before its scheduled run at ${new Date(cadence.dueMs).toISOString()} (cron "${spec.schedule}" UTC) — the cron did not run.`,
     );
     return false;
   }
@@ -307,7 +323,13 @@ async function main(): Promise<void> {
   console.log(`[archival-health] started at ${new Date(nowMs).toISOString()}`);
   let allOk = true;
   for (const spec of CHECKS) {
-    const ok = await runCheck(spec, nowMs);
+    // One check's throw must not end the run for the others (Langston C-2): it pages as its own reason.
+    let ok = false;
+    try {
+      ok = await runCheck(spec, nowMs);
+    } catch (err) {
+      await fire(spec, 'errored', `The check itself threw: ${String((err as Error)?.message ?? err).slice(0, 300)}.`);
+    }
     if (!ok) allOk = false;
   }
   // Wave D (OBJ-3): daily-partition forward-coverage check.
