@@ -195,7 +195,7 @@ import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } fro
 export type OpenTradeRecordLookup =
   | { status: 'one'; record: ClosedTrade }
   | { status: 'none' }
-  | { status: 'many'; ids: string[] };
+  | { status: 'many'; ids: string[]; more: boolean };
 
 export interface IStorage {
   // User methods
@@ -3630,22 +3630,13 @@ export class DatabaseStorage implements IStorage {
         eq(closedTradesTable.assetClass, assetClass),
         isNull(closedTradesTable.closedAt),
       ))
-      .limit(3);
+      .limit(4);
     if (rows.length === 1) return { status: 'one', record: rows[0] };
     if (rows.length === 0) return { status: 'none' };
-    return { status: 'many', ids: rows.map((r) => r.id) };
+    // Langston Step-4 C-2: a count under a cap states the cap. Four rows fetched ⇒ "more than 3", first 3 named.
+    return { status: 'many', ids: rows.slice(0, 3).map((r) => r.id), more: rows.length > 3 };
   }
 
-  /**
-   * B-SIZING-DEC-RESTORE increment 2b (#1093): WHEN DID THIS SYMBOL LAST CLOSE — for the symbol cooldown only.
-   * The cooldown used to ask getClosedTradesPaginated, whose symbol filter is a SUBSTRING match written for the
-   * Closed Trades search box (LOWER(symbol) LIKE '%sym%', 611ac7474): a check for C/USD also matched LTC/USD and
-   * INTC/USD, and DASH/USD exists in BOTH classes (the Dash coin and DoorDash, measured 2026-09-29), so a close on
-   * one could put another into cooldown. This reads the EXACT symbol, and the exact asset class when the caller
-   * knows it (null = any class: stricter, never looser). The closed-row rule is getClosedTradesPaginated's
-   * `closedOnly` rule, unchanged, so the only behaviour change is the match. The search box keeps its substring.
-   * #1094 (the LIVE cooldown reads the legacy trades table) swaps its call site to this method in increment 2d.
-   */
   /**
    * B-SIZING-DEC-RESTORE increment 3 (P1 step 5; PRE_AUDIT §13.4 C3): the ONE named writer of the dashboard epoch
    * (`module_constants` scoreboard / epoch_started_at) — until now no CODE path wrote it (F4; the reader is
@@ -3674,6 +3665,16 @@ export class DatabaseStorage implements IStorage {
     return { epochStartedAt: new Date(row.ts), updatedBy: row.updated_by ?? null };
   }
 
+  /**
+   * B-SIZING-DEC-RESTORE increment 2b (#1093): WHEN DID THIS SYMBOL LAST CLOSE — for the symbol cooldown only.
+   * The cooldown used to ask getClosedTradesPaginated, whose symbol filter is a SUBSTRING match written for the
+   * Closed Trades search box (LOWER(symbol) LIKE '%sym%', 611ac7474): a check for C/USD also matched LTC/USD and
+   * INTC/USD, and DASH/USD exists in BOTH classes (the Dash coin and DoorDash, measured 2026-09-29), so a close on
+   * one could put another into cooldown. This reads the EXACT symbol, and the exact asset class when the caller
+   * knows it (null = any class: stricter, never looser). The closed-row rule is getClosedTradesPaginated's
+   * `closedOnly` rule, unchanged, so the only behaviour change is the match. The search box keeps its substring.
+   * #1094 (the LIVE cooldown reads the legacy trades table) swaps its call site to this method in increment 2d.
+   */
   async getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null> {
     const conditions: any[] = [
       eq(closedTradesTable.mode, mode),

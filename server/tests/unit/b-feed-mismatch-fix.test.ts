@@ -7,8 +7,10 @@
 //   A-4 — the signed predicate is exercised on the measured rows: the three harmful stale walks refuse, the
 //        harmless ones and a deep crypto walk (−3.79 %) do not.
 //
-// THE PERSISTENCE MARKER: `closePosition`'s write block opens with `storage.findOpenTradeRecord` (the keyed open trade-record
-// lookup, B-CLOSE-WRITER-COSTS P-1), after the fill, the witness and the gate. A refused close must never reach it; an accepted one always does.
+// THE PASSED-THE-FILL-CONTRACT MARKER: `storage.findOpenTradeRecord` (the keyed open trade-record lookup, B-CLOSE-WRITER-COSTS
+// P-1) runs right after the fill, the witness and the gate — ABOVE the write block, not inside it (Langston Step-4 record
+// item i: R-none is the counterexample, marker called and nothing persisted). A refused close must never reach it; an
+// accepted one always does. The persistence leg is `h.updateClosedTrade`, asserted where the tests need it.
 // (The accepted path then runs far past this unit's mocks — learning capture, archives — so it is allowed to throw
 // AFTER the marker; the marker, not the delete, is what these tests assert.)
 //
@@ -148,8 +150,9 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
     expect(h.addAlert).not.toHaveBeenCalled();
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {}).catch(() => {});
-    // Exactly ONE refusal alert. (After the reset the lookup mock returns nothing, so the accepted close ALSO raises the
-    // separate CLOSE_RECORD_UNRESOLVED alert — correct behaviour, a different alert; count only the refusal one.)
+    // Exactly ONE refusal alert. (Langston Step-4 R-2: `mockReset` restores the `vi.fn(impl)` default, so the lookup returns
+    // `one` and no record-refusal alert is raised here; the filter on the refusal title is kept so a later change to the
+    // lookup's default cannot turn a different alert into a false pass.)
     const refusalAlerts = h.addAlert.mock.calls.filter((c) => String((c[0] as { title?: string }).title).includes('Close refused'));
     expect(refusalAlerts).toHaveLength(1);
     expect(h.findOpenTradeRecord).toHaveBeenCalled();                  // it yielded and proceeded to persist
@@ -325,6 +328,25 @@ describe('B-CLOSE-WRITER-COSTS — the close refuses when its trade record does 
     h.findOpenTradeRecord.mockResolvedValue({ status: 'none' } as never);
     await expect(proto.closePosition.call(eng, 'pos-WLD/USD', 100, { type: 'manual_stop', price: 100, reason: 't' }, 'test', { flatten: true })).resolves.toBeUndefined();
     expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
+    expect(unresolved()).toHaveLength(1);
+  });
+
+  it('R-cap: at the lookup cap the alert says "more than 3" and names the first 3 (Langston C-2)', async () => {
+    const eng = fakeEngine();
+    warm();
+    h.findOpenTradeRecord.mockResolvedValue({ status: 'many', ids: ['a', 'b', 'c'], more: true } as never);
+    await proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {});
+    const body = String(unresolved()[0].body);
+    expect(body).toContain('more than 3 open trade records match (first 3: a, b, c)');
+  });
+
+  it('R-streak: a close whose FILL passed clears the fill-refusal streak even when the record refuses (Langston C-1)', async () => {
+    const eng = fakeEngine();
+    warm();
+    eng._closeRefusalStreak.set('pos-WLD/USD', 2);
+    h.findOpenTradeRecord.mockResolvedValue({ status: 'none' } as never);
+    await proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {});
+    expect(eng._closeRefusalStreak.has('pos-WLD/USD')).toBe(false);
     expect(unresolved()).toHaveLength(1);
   });
 

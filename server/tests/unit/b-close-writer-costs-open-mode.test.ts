@@ -94,6 +94,15 @@ describe('B-CLOSE-WRITER-COSTS — open positions carry their mode (KD-24, KD-25
     expect(q.params).toEqual(['BTC/USD', 'paper']);
   });
 
+  it('M-4b findOpenTradeRecord fetches 4 so a count under its cap states the cap (Langston inc-1 C-2)', async () => {
+    cap.rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+    expect(await storage.findOpenTradeRecord('paper', 'BTC/USD', 'crypto_spot')).toEqual({ status: 'many', ids: ['a', 'b', 'c'], more: true });
+    cap.rows = [{ id: 'a' }, { id: 'b' }];
+    expect(await storage.findOpenTradeRecord('paper', 'BTC/USD', 'crypto_spot')).toEqual({ status: 'many', ids: ['a', 'b'], more: false });
+    const q = lastWhere();
+    expect(q.params).toEqual(['paper', 'BTC/USD', 'crypto_spot']);
+  });
+
   it('M-5 the schema declares exactly ONE uniqueness rule on the table: (symbol, mode)', () => {
     const src = SRC('../shared/schema.ts');
     const start = src.indexOf('export const activeOpenPositions = pgTable("active_open_positions"');

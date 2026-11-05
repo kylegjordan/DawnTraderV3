@@ -92,3 +92,12 @@ NEW `server/tests/unit/b-close-writer-costs-open-mode.test.ts` (8): **M-1..M-4 r
 
 ### Verification (local)
 tsc 328 (baseline 329; the one drop is the line above). Full unit suite: 4,606 passed, the same 8 local-environment failures in the same 4 files as increment 1. Increment 1's three files + the race-fix + audit tests green.
+
+---
+
+## INCREMENT 1 — Step-4 conditions (Langston PROCEED, Discord 2026-11-05T20:10:44Z)
+- **C-1:** `this._closeRefusalStreak.delete(positionId)` moved back ABOVE the record lookup — the fill contract passed, so the streak clears exactly where it did before; the record refusal is a separate rail, not counted into the streak. Test **R-streak** (streak 2 → cleared on a record refusal); mutation-proved (moving the clear below the refusal fails it).
+- **C-2:** `findOpenTradeRecord` fetches 4; `many` carries `more`; the alert reads "more than 3 open trade records match (first 3: …)" at the cap. Tests **R-cap** (engine) and **M-4b** (storage, rendered params).
+- **C-3:** the alert body no longer points at the unbuilt restore route: it says how to find the record, what to do for several vs none, and that the restore action is P-12 (bring it to OLD Claude).
+- **R-1:** `ifTradeBlock` anchors on CODE (`const _lsAcc = …` → its `try {` → the next `{`); the seeded control rebuilt to that shape. **R-2:** the test-2 comment corrected (`mockReset` restores the default `one`). **Record (i):** the feed test header now calls the lookup a passed-the-fill-contract marker. **(ii):** the seven `trade?.id || …` fallbacks → `trade.id` (unreachable arms). **(iii):** the LIVE-SWAP OBLIGATION note names the record refusal too. **(iv):** the `#1093` docblock moved onto `getLastClosedAtForSymbol`.
+- Local: the four suites 67/67; tsc 328 = 328.

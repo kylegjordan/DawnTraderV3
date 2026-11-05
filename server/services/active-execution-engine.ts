@@ -4545,7 +4545,9 @@ export class ActiveExecutionEngine {
     // rests on), so a refused fill is simply DISCARDED here, before any persistence.
     // ⛔⛔ LIVE-SWAP OBLIGATION: this ordering is valid ONLY while `closeOrder` is side-effect-free. A live
     // placer places a real order — at the live cut-over the gate must move AHEAD of `closeOrder`, grading
-    // a pure `closeFillFull` pre-walk (SIM "OrderPlacer").
+    // a pure `closeFillFull` pre-walk (SIM "OrderPlacer"). ⚠️ THE SAME HOLDS FOR EVERY POST-FILL REFUSAL BELOW — this
+    // warmth gate AND the trade-record refusal (B-CLOSE-WRITER-COSTS P-2, after the streak clear): at the cut-over all of
+    // them move ahead of a real order, or a refused close leaves a real order behind it (Langston Step-4 record item iii).
     // THE PREDICATE IS SIGNED (Langston r2): a close is a SELL and walks the BID, so a legitimate fill sits
     // AT OR BELOW the best bid — it can never fill ABOVE it. Refuse iff the walk lands above the witness
     // bid by more than `up_tol`. The downward side is the depth walk itself and is NOT bounded here.
@@ -4612,12 +4614,17 @@ export class ActiveExecutionEngine {
     // record this close finishes is found HERE, by exact symbol + mode + asset class, BEFORE the close is committed to.
     // Not exactly one ⇒ the position is KEPT (never deleted without its record) and a critical alert names it; the
     // operator repair is the restore route (P-12). This replaces the old close-anyway-and-log path (`CLOSE_NO_TRADE_ROW`).
+    // Langston Step-4 C-1: the fill contract passed, so the refusal streak clears HERE, exactly where it did before this
+    // batch. The record refusal below is a DIFFERENT rail and is deliberately not counted into it: that rail's cap means
+    // "walk the book anyway", which is meaningless for a missing record and would eventually book the close KD-17 forbids.
+    this._closeRefusalStreak.delete(positionId);
     const _recClass = asValidAssetClass((position as any).assetClass);
     const _rec = _recClass ? await storage.findOpenTradeRecord(this.mode, position.symbol, _recClass) : null;
     if (!_rec || _rec.status !== 'one') {
       const _why = !_recClass ? `the position has no valid asset class (${String((position as any).assetClass)})`
         : _rec!.status === 'none' ? 'no open trade record matches its symbol, mode and asset class'
-        : `${(_rec as { ids: string[] }).ids.length} open trade records match (${(_rec as { ids: string[] }).ids.join(', ')})`;
+        : (() => { const m = _rec as { ids: string[]; more: boolean };
+            return `${m.more ? 'more than 3' : m.ids.length} open trade records match (${m.more ? 'first 3: ' : ''}${m.ids.join(', ')})`; })();
       console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED:${this.mode}] ${position.symbol} pos=${positionId}: ${_why} — position KEPT, not closed`);
       try {
         const { addAlert } = await import('./system-alerts.js');
@@ -4627,8 +4634,11 @@ export class ActiveExecutionEngine {
           severity: 'critical',
           title: `Position ${position.symbol} cannot close: its trade record is not resolvable`,
           body: `The ${this.mode} position ${positionId} in ${position.symbol} was due to close, but ${_why}. The position is `
-            + `kept open (a close must never drop its trade record, KD-17). Repair the record (the restore route) or `
-            + `investigate the duplicate, then the next close completes. B-CLOSE-WRITER-COSTS P-2. DISPOSITION: RESOLVE, do not ACK.`,
+            + `kept open (a close must never drop its trade record, KD-17) and the close is retried every cycle. What to do: look for `
+            + `this position's open record in closed_trades (same mode, symbol and asset class, closed_at IS NULL). If there are `
+            + `SEVERAL, find how the duplicate was written and close or remove the wrong one by hand; if there is NONE, the record `
+            + `must be restored from the position — there is no restore action yet (it is B-CLOSE-WRITER-COSTS P-12), so bring it `
+            + `to OLD Claude. B-CLOSE-WRITER-COSTS P-2. DISPOSITION: RESOLVE, do not ACK.`,
           dedupe_key: `close-record-unresolved-${this.mode}-${position.symbol}`,
         });
       } catch (alertErr) {
@@ -4637,7 +4647,6 @@ export class ActiveExecutionEngine {
       return;
     }
     const trade = _rec.record;
-    this._closeRefusalStreak.delete(positionId);
 
     // Get entry costs from position (persisted at entry time)
     const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
@@ -5218,7 +5227,7 @@ export class ActiveExecutionEngine {
     // Log AJ19-B close event
     try {
       await aj19bDiagnostic.logClose({
-        tradeId: trade?.id,
+        tradeId: trade.id,
         positionId: positionId,
         symbol: position.symbol,
         closeReason: closeReasonMap[exitCondition.type] || 'UNKNOWN',
@@ -5236,7 +5245,7 @@ export class ActiveExecutionEngine {
 
     // [8.8.3-F][CLOSE] REB 8.8.3-F: Lifecycle log for trade closed
     console.log(`[8.8.3-F][CLOSE]`, JSON.stringify({
-      tradeId: trade?.id || null,
+      tradeId: trade.id,
       symbol: position.symbol,
       strategy: position.strategyName,
       direction: position.side,
@@ -5255,7 +5264,7 @@ export class ActiveExecutionEngine {
     const isForceClose = exitCondition.type === 'manual_stop' || exitCondition.type === 'guardrail' || exitCondition.type === 'reset';
     if (isForceClose) {
       i1TradeLifecycleDiagnostics.logForceClose(
-        trade?.id || positionId,
+        trade.id,
         position.symbol,
         position.strategyName || 'unknown',
         actualExitPrice,
@@ -5265,7 +5274,7 @@ export class ActiveExecutionEngine {
     } else {
       const closeReason = exitCondition.type as any;
       i1TradeLifecycleDiagnostics.logClose(
-        trade?.id || positionId,
+        trade.id,
         position.symbol,
         position.strategyName || 'unknown',
         closeReason,
@@ -5280,7 +5289,7 @@ export class ActiveExecutionEngine {
     // Phase 8.8.3-C5-3: P/L Sanity Check - verify P/L calculations match
     c5FinancialDiagnostics.logPnlReconciliation(
       this.mode,
-      trade?.id || positionId,
+      trade.id,
       position.symbol,
       grossPnl,
       entryFee,
@@ -5312,13 +5321,13 @@ export class ActiveExecutionEngine {
     // for operators to confirm assetClass populates correctly per class once
     // xstock active trading lights up at WIRE-IN (#14). Optional, no-cost.
     console.log(
-      `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode=${this.mode} class=${_tcAssetClass ?? 'undefined'} symbol=${position.symbol} tradeId=${trade?.id || positionId}`
+      `[B79.0n.EXECUTION][EMIT_TRADE_CLOSED] mode=${this.mode} class=${_tcAssetClass ?? 'undefined'} symbol=${position.symbol} tradeId=${trade.id}`
     );
     eventBus.emitTradeClosed({
       mode: this.mode,
       symbol: position.symbol,
       strategy: position.strategyName || 'unknown',
-      tradeId: trade?.id || positionId,
+      tradeId: trade.id,
       pnl: netPnl,
       timestamp: new Date().toISOString(),
       assetClass: _tcAssetClass,

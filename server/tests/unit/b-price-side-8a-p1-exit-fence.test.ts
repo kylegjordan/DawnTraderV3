@@ -245,12 +245,15 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
  *   BLOCK, not to a string.
  */
 // B-CLOSE-WRITER-COSTS P-3: the `if (trade)` guard became a bare block (the record is resolved before it, or the close
-// is refused), so the extraction anchors on that block's own marker comment. Same block, same brace walk.
-const PERSIST_BLOCK_ANCHOR = '    { // B-CLOSE-WRITER-COSTS P-3: was `if (trade)`';
+// is refused). Langston Step-4 R-1: anchored on CODE, as `finallyBlock` is — the `_lsAcc` read, then its `try {`, then the
+// next `{`, which opens the persist block. (A comment anchor survived `code()` only by sharing the brace's line.)
+const LS_ACC_READ = 'const _lsAcc = _ladderShadow.get(position.id);';
 function ifTradeBlock(src: string): string {
-  const at = src.indexOf(PERSIST_BLOCK_ANCHOR);
-  if (at === -1) throw new Error('persist block (was if (trade)) not found');
-  const braceStart = src.indexOf('{', at);
+  const read = src.indexOf(LS_ACC_READ);
+  if (read === -1) throw new Error('the _lsAcc read (persist-block anchor) not found');
+  const tryAt = src.indexOf('try {', read);
+  if (tryAt === -1) throw new Error('the try { after the _lsAcc read not found');
+  const braceStart = src.indexOf('{', tryAt + 'try {'.length);
   let depth = 0;
   for (let j = braceStart; j < src.length; j++) {
     if (src[j] === '{') depth++;
@@ -371,7 +374,7 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     expect(block.length).toBeGreaterThan(2000);            // it really is the big block
     expect(block.length).toBeLessThan(code(AEE).length);    // and not the whole file
     expect(block).toContain('_carry.ladderShadow');         // the CARRY is inside it
-    const seeded = ifTradeBlock([PERSIST_BLOCK_ANCHOR + ' x', '  _ladderShadow.delete(position.id);', '    }'].join(String.fromCharCode(10)));
+    const seeded = ifTradeBlock(['    ' + LS_ACC_READ, '    try {', '    {', '  _ladderShadow.delete(position.id);', '    }', '    } finally {}'].join(String.fromCharCode(10)));
     expect(seeded).toContain('_ladderShadow.delete');       // the matcher WOULD catch it
   });
 
