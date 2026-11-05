@@ -322,8 +322,8 @@ async function checkSymbolCooldown(
  * Guardrail: maxPositionPercentPct (number)
  * Prevents oversized positions as a percentage of portfolio
  * 
- * Phase 8.8.3-J7: Removed hardcoded $50k fallback - if portfolioValue is missing,
- * skip this check since paper-mode sizing is done at P2 using canonical portfolio source.
+ * Phase 8.8.3-J7: Removed hardcoded $50k fallback. (J7 also SKIPPED this check when portfolioValue was missing;
+ * B-BALANCE-SESSION-PAIRING replaced that skip: the value is the money held, and a missing one now REFUSES below.)
  * 
  * Phase 8.8.3-AJ10.1: TRUST PRE-SIZED SIGNALS
  * When trade.preComputedNotional is provided from P2 sizing, use it directly

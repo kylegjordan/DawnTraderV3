@@ -130,8 +130,9 @@ export class PreExecutionValidator {
         entryPrice: request.signal.entryPrice,
         stopPrice: request.signal.stopPrice,
         targetPrice: request.signal.targetPrice,
-        // B-BALANCE-SESSION-PAIRING (pre-audit P4): the exposure check refuses a candidate with no computed notional (the
-        // one-share default is gone), so this route passes the estimate it computed above.
+        // B-BALANCE-SESSION-PAIRING (pre-audit P4): the exposure check no longer counts an unsized candidate as one share; it
+        // sizes it with the fixed-notional rule (the position-size cap's rule). This route passes the estimate it computed
+        // above, which is that same figure, so both checks see one size.
         preComputedNotional: estimatedNotional,
       };
       

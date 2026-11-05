@@ -5,6 +5,8 @@
 - **(ii) Doc set for that class:** scope `Scope Files/B_BALANCE_SESSION_PAIRING_SCOPE.md` r3 — present (Langston PROCEED); pre-audit `Scope Files/B_BALANCE_SESSION_PAIRING_PRE_AUDIT.md` r3 — present (Langston PROCEED, stamped `549a1cd66`); completion report — absent (batch at Step 4); `BATCH_CATALOG` / `PHASE_HISTORY` / System Manual / System Impact Map — owed at Step 10 (pre-audit P9); `DELETED_COMPONENTS_LOG` — landed in this commit (P6).
 - **(iii) Step 2:** the pre-audit above.
 
+**r2 (2026-11-05 ~14:00Z):** the blocker fix landed at `e3bcb0364` (migration, schema sync, drift fence; CI `42030571303` 4/4 at `be7f85d0c`) and the two comment fixes after it; **Step-4 r2 is on the head that carries both**, named in the dispatch. The rows marked r2 below are those. 
+
 **Ref:** code `4b54a052bda5095c8d1a2dcfbc22d20e56540c7c` (one commit, `e05ce6666` before rebase). Line numbers below are at it. **Built off the branch head, not `0abfd710`** (your Step-2 note).
 
 | file | change |
@@ -19,6 +21,10 @@
 | `server/services/rtb-metrics-service.ts` | `MONEY_HELD_UNAVAILABLE` in the reason union and both lists |
 | `server/services/pre-execution-validator.ts` | passes its own estimate as the notional (`:135`) |
 | `server/scripts/b8-5-measurement-override.ts`, `b8-5-tune3-anchor.ts` | DELETED (P6); archived; logged |
+| `drizzle/migrations/2026-11-05-b-balance-session-pairing-block-reasons.sql` (+ `…-rollback.sql`, `MANIFEST.txt` +1 line) | **r2 (your Step-4 blocker):** `ALTER TYPE execution_block_reason ADD VALUE IF NOT EXISTS` for `ENGINE_STOPPING`, `CORRELATION_EXPOSURE`, `GUARDRAIL_READ_FAIL`, `MONEY_HELD_UNAVAILABLE` (precedent `b-pattern-enum-drift`). Rollback clears the ledger row only (Postgres cannot drop enum values). Dry-run on staging inside `BEGIN … ROLLBACK`: 14 values → 18 → back to 14. **The highest-blast-radius artifact in this diff: DDL on `execution_attempt_audit.block_reason`, additive, no row rewritten.** |
+| `shared/schema.ts` | **r2:** `executionBlockReasonEnum` synced — `MAX_TOTAL_EXPOSURE` added (live and the initial `CREATE TYPE` hold it; the declaration had drifted), plus the four |
+| `server/tests/unit/b-balance-session-pairing-block-reason-enum.test.ts` | **r2, NEW drift fence:** every `TradeSafetyResultCode` is declared; every declared value is storable (initial `CREATE TYPE`, or an `ADD VALUE` in a REGISTERED migration); the migration is registered and its rollback is not; exactly one writer passes `riskCheck.code`. Mutation: one value dropped from the migration fails it. **Limit, stated (your note): leg 2 proves the values are storable PER THE MIGRATION FILES — nothing in it proves the migration RAN on the target database; the deploy's `db:migrate` and the Step-7 positive control (`SELECT 'MONEY_HELD_UNAVAILABLE'::execution_block_reason`) are what show that.** |
+| `server/services/trade-safety.ts:325-326`, `server/services/pre-execution-validator.ts:133-135` | **r2:** two stale comments rewritten to the shipped behaviour (the J7 skip is gone; the unsized candidate is sized, not refused) |
 | tests | NEW `b-balance-session-pairing.test.ts` (28); `b-guardrail-fail-closed.test.ts` re-pointed + 3 behavioural cases; 8 more files' mocks re-pointed (P10) |
 
 ## P1 — `getMoneyHeld` (`guardrail-settings.ts:184-217`)
