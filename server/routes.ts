@@ -12510,8 +12510,9 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // record unclosed (an orphan). It now closes through the one close chain (`closeOnePositionByOperator` → `_flattenOne` →
   // `forceClosePosition` → `closePosition`), which finishes the open-time record with the real exit fees, refuses honestly
   // on a cold book or an unresolvable record, and CANCELS a pending maker rather than selling it. The request body's free
-  // `reason` is no longer read (r4 C-3). Engine not running ⇒ refused with the same 400 as close-all — there is no engine
-  // to close through, and the honest remedy is to start it and close from Active Trades (Langston C-2).
+  // `reason` is no longer read (r4 C-3). Engine not running ⇒ refused — there is no engine to close through, and the honest
+  // remedy is to start it and close from Active Trades (Langston C-2). Every refusal is HTTP 200 + `success:false` + the
+  // reason in `error` (Part B BLOCKER-1: the client throws on any non-2xx and discards the body), as close-all now does.
   apiRouter.post('/active-engine/close-trade/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       const status = await getActiveEngineStatus(req.user!.id);
