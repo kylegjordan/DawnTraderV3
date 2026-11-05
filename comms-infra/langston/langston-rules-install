@@ -37,8 +37,9 @@ What it does, in order, or refuses:
    object store is never trusted for content. A rule that must land now: he asks a CC session in the channel, which
    commits and installs it (the hotfix path if urgent) - never parked in his MEMORY.md.
 Exit codes: 0 installed / already installed / dry run · 2 bad input · 3 not root · 4 sha not on GitHub's branch,
-GitHub unreadable, or an object missing · 5 an object does not hash to its id · 6 write or protect failed (the
-message says whether the live file was replaced).
+GitHub unreadable, an object missing, or a mirror read that timed out or stopped mid-object · 5 an object does not
+hash to its id · 6 write or protect failed, including a flag command that timed out (the message says whether the
+live file was replaced).
 """
 import hashlib, json, os, re, stat, subprocess, sys, tempfile, time
 
@@ -53,6 +54,9 @@ USE_IMMUTABLE = os.environ.get("LRI_NO_IMMUTABLE") != "1"
 # The ancestry walk's bound. The branch held 13,670 commits on 2026-11-05; a reviewed sha is normally recent, so
 # the bound is generous - it exists so a forged parent cycle or a huge fan-out cannot run without end.
 WALK_LIMIT = int(os.environ.get("LRI_WALK_LIMIT", "20000"))
+# Every external command's time limit, in seconds. Settable only so the tests can make a stalled `chattr` time out
+# without a two-minute wait; the root operator has no reason to change it.
+TOOL_TIMEOUT = int(os.environ.get("LRI_TOOL_TIMEOUT", "120"))
 
 
 class Refused(Exception):
@@ -61,14 +65,27 @@ class Refused(Exception):
         self.code = code
 
 
-def run(cmd, binary=False, timeout=120, cwd=None, env=None):
-    r = subprocess.run(cmd, capture_output=True, timeout=timeout, cwd=cwd, env=env)
+class ToolTimeout(OSError):
+    """An external command ran past its limit. An OSError on purpose (Langston, part-1 r5 record item 1): a
+    `subprocess.TimeoutExpired` is NOT one, so a `chattr` that hung inside the install's `finally` escaped the
+    `except OSError` and the operator lost the 'WAS replaced - check its flag' message, exiting 1 (undocumented)."""
+
+
+def run(cmd, binary=False, timeout=None, cwd=None, env=None):
+    limit = TOOL_TIMEOUT if timeout is None else timeout
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=limit, cwd=cwd, env=env)
+    except subprocess.TimeoutExpired:
+        raise ToolTimeout("%s timed out after %d s" % (" ".join(cmd[:4]), limit))
     out = r.stdout if binary else r.stdout.decode("utf-8", "replace").strip()
     return r.returncode, out, r.stderr.decode("utf-8", "replace").strip()
 
 
 def git(mirror, *args, binary=False):
-    return run(["git", "-C", mirror] + list(args), binary=binary)
+    try:
+        return run(["git", "-C", mirror] + list(args), binary=binary)
+    except ToolTimeout as e:                       # a stalled mirror read is a documented refusal, never a traceback
+        raise Refused(4, "reading the mirror timed out (%s)" % e)
 
 
 def github_head(upstream=None):
@@ -81,7 +98,7 @@ def github_head(upstream=None):
     try:
         rc, out, err = run(["git", "ls-remote", upstream or UPSTREAM, "refs/heads/" + BRANCH], timeout=60, cwd="/",
                            env=env)
-    except subprocess.TimeoutExpired:
+    except ToolTimeout:
         raise Refused(4, "reading %s's head from %s timed out (60 s)" % (BRANCH, upstream or UPSTREAM))
     head = out.split()[0] if rc == 0 and out else ""
     if not re.fullmatch(r"[0-9a-f]{40}", head):
@@ -112,13 +129,18 @@ class BatchReader:
         try:
             self.p.stdin.write(oid.encode() + b"\n")
             self.p.stdin.flush()
-        except (BrokenPipeError, OSError) as e:      # git died: a documented refusal, never a traceback
+        except OSError as e:                         # git died (BrokenPipeError is an OSError): refuse, never trace
             raise Refused(4, "the mirror's object reader stopped (%s) while asking for %s" % (e, oid[:12]))
         header = self.p.stdout.readline().split()
         if len(header) != 3:
             raise Refused(4, "the mirror cannot serve %s %s (%s)" % (kind, oid[:12], b" ".join(header).decode()))
         typ, size = header[1].decode(), int(header[2])
         data = self.p.stdout.read(size)
+        if len(data) != size:
+            # Langston, part-1 r5 record item 2: a reader that died mid-object returns SHORT, and the re-hash below
+            # would then blame the mirror for a forgery (exit 5). A short read is the reader stopping: exit 4.
+            raise Refused(4, "the mirror's object reader stopped mid-object at %s (%d of %d bytes)" %
+                          (oid[:12], len(data), size))
         self.p.stdout.read(1)                                  # the newline after each object
         if typ != kind:
             raise Refused(5, "%s in the mirror is a %s, not a %s" % (oid[:12], typ, kind))
@@ -201,7 +223,10 @@ def verified_blob(mirror, commit, path=REPO_PATH):
 
 
 def immutable(path):
-    rc, out, _e = run(["lsattr", "-d", path])
+    try:
+        rc, out, _e = run(["lsattr", "-d", path])
+    except ToolTimeout:
+        return None                                            # unknown: never reported as protected
     if rc != 0 or not out:
         return None
     return "i" in out.split()[0]

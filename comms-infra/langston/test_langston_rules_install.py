@@ -4,7 +4,7 @@ Builds a throwaway "GitHub" repo, a separate mirror and a target; never touches 
 expectation first. Part B is Langston's protection test (r1 on 9384b919a): a NON-root account that owns the target's
 directory tries to write, unlink and rename-over a root:root 0644 file - first without the immutable flag, then with
 it - with the expected outcome of each stated before it runs."""
-import hashlib, os, pwd, shutil, stat, subprocess, sys, tempfile, zlib
+import hashlib, importlib.machinery, importlib.util, io, os, pwd, shutil, stat, subprocess, sys, tempfile, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INST = os.path.join(HERE, "langston-rules-install")
@@ -114,6 +114,18 @@ def part_a(top):
     check("A9 content, owner and flag right but the install RECORD missing is not a no-op - the record is rewritten",
           (rc, "already installed" in out, os.path.exists(os.path.join(top, "bak", "INSTALLED"))), (0, False, True))
     subprocess.run(["chattr", "-i", target], check=True)
+    # A15 - Langston part-1 r5 record item 1: the flag command hangs inside the install's `finally`. A `chattr` shim that
+    # sleeps past LRI_TOOL_TIMEOUT stands in for it. Expected: exit 6 (documented), the message says the live file WAS
+    # replaced, and the new bytes are in place - never a traceback with exit 1.
+    shim = os.path.join(top, "shimbin")
+    os.makedirs(shim)
+    open(os.path.join(shim, "chattr"), "w").write("#!/bin/sh\nsleep 5\n")
+    os.chmod(os.path.join(shim, "chattr"), 0o755)
+    rc, out = run([s2], dict(env, PATH=shim + ":" + os.environ["PATH"], LRI_TOOL_TIMEOUT="1"))
+    check("A15 a hung chattr in the finally is exit 6 and says the live file WAS replaced",
+          (rc, "WAS replaced" in out, "timed out" in out, "Traceback" in out, open(target, "rb").read()),
+          (6, True, True, False, v2))
+    subprocess.run(["chattr", "-i", target], check=True)
     # A13 - Langston r4 B-5: plant a repository ABOVE the cwd whose config re-points the upstream URL. Plain git run from
     # inside it is redirected (the control); the installer, run from the same cwd, must still read the REAL head (a dry
     # run that succeeds) because it runs ls-remote from "/".
@@ -127,6 +139,19 @@ def part_a(top):
           True)
     rc, out = run([s2, "--dry-run"], env, cwd=inner)
     check("A13 B-5: the installer run from the same cwd still reads the real head (dry run exits 0)", rc, 0)
+    # A14 - Langston part-1 r5, the open condition: the LIVE mirror is owned by langston, not root, and root reads it only
+    # because the system config names it in safe.directory. Hand the test mirror to that owner and read it both ways.
+    owner = pwd.getpwnam("langston").pw_uid if "langston" in [p.pw_name for p in pwd.getpwall()] else 65534
+    subprocess.run(["chown", "-R", "%d:%d" % (owner, owner), mirror], check=True)
+    ctl = subprocess.run(["git", "-C", mirror, "rev-parse", s2], capture_output=True, text=True)
+    check("A14 control: root's plain git refuses a mirror it does not own ('dubious ownership')",
+          (ctl.returncode != 0, "dubious ownership" in ctl.stderr), (True, True))
+    rc, out = run([s2, "--dry-run"], env)
+    check("A14 without safe.directory the installer refuses it (exit 4) and installs nothing", rc, 4)
+    safe = dict(env, GIT_CONFIG_COUNT="1", GIT_CONFIG_KEY_0="safe.directory", GIT_CONFIG_VALUE_0=mirror)
+    rc, out = run([s2, "--dry-run"], safe)
+    check("A14 with the mirror named in safe.directory (as the live system config does) the dry run exits 0", rc, 0)
+    subprocess.run(["chown", "-R", "0:0", mirror], check=True)
     # A12 - the ancestry walk is BOUNDED. s1 is the head s2's parent; with the bound at 0 the walk may visit only the
     # head, so it must refuse (exit 4, "walked") rather than run on. Control: A8 installed s1 with the default bound.
     rc, out = run([s1, "--dry-run"], dict(env, LRI_WALK_LIMIT="0"))
@@ -176,6 +201,33 @@ def part_a(top):
     check("A11 B-4: the installer refuses the forged head commit (exit 4 or 5) and installs nothing",
           (rc in (4, 5), open(target, "rb").read()), (True, before))
     return {"mirror": mirror, "upstream": upstream, "s2": s2}
+
+
+def part_c():
+    """A16 - Langston part-1 r5 record item 2, at UNIT level (stated: a reader that dies mid-object cannot be produced
+    through the entry point on demand). The installer is loaded as a module and its BatchReader fed a fake process."""
+    loader = importlib.machinery.SourceFileLoader("lri", INST)
+    spec = importlib.util.spec_from_loader("lri", loader)
+    lri = importlib.util.module_from_spec(spec)
+    loader.exec_module(lri)
+    body = b"abc"
+    oid = hashlib.sha1(b"blob 3\0" + body).hexdigest()
+
+    class Fake:
+        def __init__(self, out):
+            self.stdin, self.stdout = io.BytesIO(), io.BytesIO(out)
+
+    def read(out):
+        r = object.__new__(lri.BatchReader)
+        r.p = Fake(out)
+        try:
+            return r.read(oid, "blob")
+        except lri.Refused as e:
+            return e.code, str(e)
+    check("A16 control: a whole object reads back", read(b"%s blob 3\n" % oid.encode() + body + b"\n"), body)
+    got = read(b"%s blob 3\n" % oid.encode() + b"ab")
+    check("A16 a short read refuses 4 ('stopped mid-object'), never 5 ('re-hashes')",
+          (got[0], "mid-object" in got[1], "re-hashes" in got[1]), (4, True, False))
 
 
 def as_user(uid, code):
@@ -247,6 +299,7 @@ def main():
                 subprocess.run(["chattr", "-i", os.path.join(dp, x)], capture_output=True)
         shutil.rmtree(top, ignore_errors=True)
     part_b()
+    part_c()
     print("ALL PASS" if not fails else "%d FAIL" % fails)
     return 1 if fails else 0
 
