@@ -132,9 +132,12 @@ export function buildSections(owner, src, nowMs) {
     all.push(...plan.unparsed);
     for (const r of all) if (r.section === 4 && r.rowNo) s4ByNo.set(String(r.rowNo), r);
     const mine = all.filter((r) => owns(r.owner, owner) && !closedStatus(r.section === 4 ? r.status : r.closes)).sort((a, b) => a.lineNo - b.lineNo);
-    section('1. Open plan rows (plan order)', mine.map((r) => r.section === 4
+    const lines1 = mine.map((r) => r.section === 4
       ? `- section 4 row ${r.rowNo} (line ${r.lineNo}) [${mapStatus(r.status).state}] ${T(r.batch, 60)} — ${T(r.item)} — status: ${T(r.status, 80)}`
-      : `- section 5 (line ${r.lineNo}) ${T(r.item)} — closes: ${T(r.closes, 80)}`));
+      : `- section 5 (line ${r.lineNo}) ${T(r.item)} — closes: ${T(r.closes, 80)}`);
+    // Langston Step-4 note (a): a malformed section-4/5 row is never silently dropped from "everything open for this owner".
+    if (plan.malformed?.length) lines1.push(`- NOTE: ${plan.malformed.length} malformed section-4/5 line(s) the reader could not place: ${plan.malformed.map((m) => m?.lineNo ?? m).join(', ')}`);
+    section('1. Open plan rows (plan order)', lines1);
   }
   if (ps) {
     const mine = ps.items.filter((r) => {
@@ -242,7 +245,7 @@ export function main(argv = process.argv.slice(2)) {
   if (refSha && originSha && refSha !== originSha) {
     let ahead = false;
     try { git(['merge-base', '--is-ancestor', originSha, refSha], cwd); ahead = true; } catch { /* origin head is not an ancestor of the ref */ }
-    if (!ahead) reasons.push('ref is behind origin head');
+    if (!ahead) reasons.push('ref is not at or ahead of origin head (behind or diverged)');
   }
   const rd = (p) => { if (!refSha) return { error: 'ref unresolved' }; const r = readAt(cwd, refSha, p); return r.ok ? r.text : { error: r.err }; };
   const sections = buildSections(owner, { planText: rd(PLAN), ledgerText: rd(LEDGER), taskText: rd(TASKLISTS[owner]) }, now.getTime());

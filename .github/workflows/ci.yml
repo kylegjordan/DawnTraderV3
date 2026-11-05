@@ -200,6 +200,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: node scripts/analysis/test-alert-split.mjs
 
+      # B-PM-CLAUDE P1d (KD-28): the slot check's gatherer, both guards and the ledger's kind/citation rules.
+      # The replay case reads the ledger's history, so the shallow checkout is deepened first.
+      - name: PM slot check tests (gatherer, guards, ledger)
+        if: ${{ !cancelled() }}
+        run: |
+          git fetch --unshallow --quiet || true
+          node scripts/pm/test-slot-check.mjs
+
   build:
     name: Build
     runs-on: ubuntu-latest

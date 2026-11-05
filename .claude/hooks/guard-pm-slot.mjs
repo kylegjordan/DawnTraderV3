@@ -32,7 +32,7 @@ const miss = (why) => append(MISS_LOG, `${new Date().toISOString()} guard-pm-slo
 const SLOT_WORDS = /\b(slot(?:s|ted|ting)?|placement|placed?\s+(?:after|before|at|in|first|next|straight)|owns?|owner(?:ship)?|assign(?:s|ed|ing)?|straight after|goes?\s+(?:after|before|next|first)|queue[sd]?|(?:the\s+)?order\s+(?:of|stands|is|:)|re-?order(?:ed|ing)?|move[sd]?\s+(?:up|down|to|ahead|after|before)|(?:comes?|come)\s+(?:after|before|first)|ahead of|pick(?:s|ed)? up|take(?:s)? over)\b/i;
 const SESSION_WORDS = [
   [/\b(?:OLD Claude|Claude Old|CC-A)\b/i, 'CC-A'], [/\b(?:NEW Claude|Claude New|CC-B)\b/i, 'CC-B'],
-  [/\b(?:ANALYST(?: Claude)?|Claude Analyst|CC-C)\b/i, 'CC-C'], [/\b(?:Infra(?: Claude)?|CC-INFRA)\b/i, 'CC-INFRA'],
+  [/\b(?:ANALYST(?: Claude)?|Claude Analyst|CC-C)\b/i, 'CC-C'], [/\b(?:Infra Claude|CC-INFRA)\b/i, 'CC-INFRA'], // full form only, like the other three (Langston Step-4 call 3)
 ];
 export function namedOwners(text) { return SESSION_WORDS.filter(([re]) => re.test(text)).map(([, a]) => a); }
 export function isSlotting(text) { return SLOT_WORDS.test(text) && namedOwners(text).length > 0; }
@@ -42,8 +42,11 @@ function freshRecordFor(dir, alias) {
   for (const n of names) {
     if (!n.endsWith('.md') || !n.includes(`_${alias}_`)) continue;
     const full = join(dir, n);
-    if (Date.now() - statSync(full).mtimeMs > MAX_AGE_MS) continue;
     const head = readFileSync(full, 'utf8').slice(0, 2000);
+    // Age from the record's own `- generated:` header; mtime only as a fallback, since a checkout or stash rewrites mtime (Langston Step-4 C3).
+    const g = /^- generated:\s*(\S+)/m.exec(head);
+    const born = g && !Number.isNaN(Date.parse(g[1])) ? Date.parse(g[1]) : statSync(full).mtimeMs;
+    if (Date.now() - born > MAX_AGE_MS) continue;
     if (/^- freshness:\s*FRESH\b/m.test(head) && new RegExp(`^- owner:\\s*${alias}\\b`, 'm').test(head)) return true;
   }
   return false;

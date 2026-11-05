@@ -127,7 +127,7 @@ const sectionOf = (text, n) => { const m = new RegExp(`^## ${n}\\..*$([\\s\\S]*?
   writeFileSync(join(w, 'x.txt'), 'x'); sh(w, 'add', '-A'); sh(w, 'commit', '-q', '-m', 'c2'); sh(w, 'push', '-q', 'origin', 'main');
   const b = sc(['--owner', 'CC-A', '--item', 'x', '--ref', c1, '--origin-ref', 'origin/main', '--out-dir', out], w);
   const tb = readFileSync(recPath(b), 'utf8');
-  check('a ref behind origin head is stamped DEGRADED (ref is behind origin head)', /^- freshness: DEGRADED/m.test(tb) && /behind origin head/.test(tb), tb.slice(0, 500));
+  check('a ref behind origin head is stamped DEGRADED (not at or ahead of origin head)', /^- freshness: DEGRADED/m.test(tb) && /not at or ahead of origin head/.test(tb), tb.slice(0, 500));
 }
 
 // ── 3. GUARD 1 ───────────────────────────────────────────────────────────────────────────────────────────────
@@ -138,10 +138,11 @@ function hook(file, payload, env, raw) {
 const wrap = (ask, recap = '') => ({ tool_name: 'mcp__ccd_turn__wrap_up', tool_input: { ask, recap } });
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const SLOTQ = 'Should OLD Claude own rows 18 and 19, slotted straight after B-CLOSE-WRITER-COSTS?';
-const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0 } = {}) => {
+const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0, genAgeH = null } = {}) => {
   mkdirSync(dir, { recursive: true });
   const p = join(dir, `20261105T000000Z_${alias}_x.md`);
-  writeFileSync(p, `# PM slot check\n\n- ref-sha: abc1234\n- freshness: ${f}\n- owner: ${alias}\n- item: x\n`);
+  const gen = genAgeH === null ? '' : `- generated: ${new Date(Date.now() - genAgeH * 3600e3).toISOString()}\n`;
+  writeFileSync(p, `# PM slot check\n\n- ref-sha: abc1234\n- freshness: ${f}\n- owner: ${alias}\n- item: x\n${gen}`);
   if (ageH) { const t = new Date(Date.now() - ageH * 3600e3); utimesSync(p, t, t); }
   return p;
 };
@@ -167,6 +168,16 @@ const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0 } = {}) => {
   const env2 = { ...env, PM_SLOT_RECORD_DIR: e2.recs, PM_SLOT_MISS_LOG: e2.miss };
   writeRec(e2.recs, 'CC-A', { ageH: 7 });
   check('Guard 1 refuses a record older than 6 hours', hook(G1, wrap(SLOTQ), env2).status === 2);
+  // Langston Step-4 C3: age comes from the record's own generated header; mtime is only the fallback.
+  const eGen7 = g1env(); mkdirSync(eGen7.proj, { recursive: true });
+  writeRec(eGen7.recs, 'CC-A', { genAgeH: 7 }); // file mtime is now, header says 7 h old
+  check('Guard 1 refuses a record whose generated header is 7 h old although its mtime is fresh (C3)', hook(G1, wrap(SLOTQ), { ...env, PM_SLOT_RECORD_DIR: eGen7.recs, PM_SLOT_MISS_LOG: eGen7.miss }).status === 2);
+  const eGen1 = g1env(); mkdirSync(eGen1.proj, { recursive: true });
+  writeRec(eGen1.recs, 'CC-A', { genAgeH: 1, ageH: 9 }); // header 1 h old, mtime 9 h old (a checkout rewrote it)
+  check('Guard 1 allows a record whose generated header is 1 h old although its mtime is 9 h old (C3)', hook(G1, wrap(SLOTQ), { ...env, PM_SLOT_RECORD_DIR: eGen1.recs, PM_SLOT_MISS_LOG: eGen1.miss }).status === 0);
+  // Langston Step-4 call 3: a bare "infra" no longer names CC-INFRA.
+  check('Guard 1 treats a bare "infra" as no session (only Infra Claude / CC-INFRA bind)', hook(G1, wrap('The token-watch infra owns the storage queue now.'), env).status === 0);
+  check('Guard 1 still binds "Infra Claude"', /--owner CC-INFRA/.test(hook(G1, wrap('Should Infra Claude own the birth-gap batch, slotted after #1241?'), env).stderr));
   const e3 = g1env(); mkdirSync(e3.proj, { recursive: true });
   writeRec(e3.recs, 'CC-A', { fresh: 'DEGRADED' });
   check('Guard 1 refuses a DEGRADED record (treated as absent)', hook(G1, wrap(SLOTQ), { ...env, PM_SLOT_RECORD_DIR: e3.recs, PM_SLOT_MISS_LOG: e3.miss }).status === 2);
@@ -336,6 +347,14 @@ const cit = `slot-check: ${REC}`;
   const t = readFileSync(join(REPO, '.claude', 'skills', 'pm-slotting', 'SKILL.md'), 'utf8');
   const desc = /^description:\s*(.*)$/m.exec(t)?.[1] ?? '';
   check('pm-slotting SKILL.md: description leads with "PM SLOTTING ONLY", states what it is NOT for, and has no colon-space', desc.startsWith('PM SLOTTING ONLY') && /NOT for/.test(desc) && !desc.includes(': '), desc);
+}
+
+{ // Langston Step-4 C2: the probe log has a named reader (reconcile prints its count and the wrap_up lines)
+  const d = fresh('probe'); const pl = join(d, 'probe.log');
+  const line = (tool) => JSON.stringify({ ts: 't', hook: 'guard-pm-slot', tool_name: tool, project: 'DawnTraderV3-pm' });
+  writeFileSync(pl, `${line('Bash')}\n${line('mcp__ccd_turn__wrap_up')}\n`);
+  const r = run(process.execPath, [RECONCILE, '--ref=HEAD'], { cwd: REPO, env: { ...process.env, PM_SLOT_PROBE_LOG: pl, PM_SLOT_MISS_LOG: join(d, 'none.log') } });
+  check('reconcile reads the probe log: 2 lines, 1 from mcp__ccd_turn__wrap_up (C2)', /P1d probe log .*: 2 line\(s\), 1 from mcp__ccd_turn__wrap_up/.test(r.stdout), r.stdout.slice(-400));
 }
 
 rmSync(root, { recursive: true, force: true });

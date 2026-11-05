@@ -150,4 +150,14 @@ try {
     for (const l of ml.slice(-20)) console.log('  | ' + l);
   }
 } catch (e) { console.log(`  WARN: miss log unreadable: ${firstLine(e)}`); }
+// The P1d-1 probe log (does the app run PreToolUse on its own MCP tool?) has a named reader too: this one (Langston Step-4 C2).
+const probeLog = process.env.PM_SLOT_PROBE_LOG || join(homedir(), '.claude', 'pm-slot-probe.log');
+try {
+  if (existsSync(probeLog)) {
+    const pl = readFileSync(probeLog, 'utf8').split(/\r?\n/).filter(Boolean);
+    const wrap = pl.filter((l) => l.includes('"tool_name":"mcp__ccd_turn__wrap_up"'));
+    console.log(`P1d probe log ${probeLog}: ${pl.length} line(s), ${wrap.length} from mcp__ccd_turn__wrap_up`);
+    for (const l of wrap.slice(-5)) console.log('  | ' + l);
+  } else console.log(`P1d probe log ${probeLog}: absent (no PM-clone hook invocation recorded yet)`);
+} catch (e) { console.log(`  WARN: probe log unreadable: ${firstLine(e)}`); }
 process.exit(uniq.length ? 1 : 0);
