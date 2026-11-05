@@ -1,6 +1,9 @@
 [Unit]
 Description=Langston memory writes - the root side: answer every spooled request through the allowlist (B-LANGSTON-MEMORY-WRITE-FENCE P3)
 Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+# No start-rate limit (Langston Step-4 record item): a burst of legitimate writes must never trip systemd's default
+# 5-starts-per-10-s and freeze his write path until the daily check notices.
+StartLimitIntervalSec=0
 # A request the service could not answer leaves him waiting until his client times out: page it.
 OnFailure=agent-unit-failure@%N.service
 

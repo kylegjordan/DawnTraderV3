@@ -256,6 +256,38 @@ def open_nofollow(path, directory=False):
     return fd
 
 
+def read_nofollow(path):
+    """The bytes of the regular file AT path, never through a link; None when absent. A link or a non-regular object
+    REFUSES, naming it (Langston Step-4 C-1): the parts directory is his by design, so a part that is a link was put
+    there to make a root read follow it - through the spool that would be an on-demand root read of any file, with
+    the result composed into MEMORY.md, which he reads."""
+    fd = open_nofollow(path)
+    if fd is None:
+        return None
+    try:
+        chunks = []
+        while True:
+            b = os.read(fd, 1 << 20)
+            if not b:
+                return b"".join(chunks)
+            chunks.append(b)
+    finally:
+        os.close(fd)
+
+
+def _part_names():
+    """Every non-dot entry of PARTS_DIR that is a regular file or a link, by lstat (never followed). A link is listed
+    so that reading it REFUSES loudly instead of being skipped silently."""
+    out = []
+    for n in os.listdir(PARTS_DIR):
+        if n.startswith("."):
+            continue
+        st = os.lstat(os.path.join(PARTS_DIR, n))
+        if stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+            out.append(n)
+    return sorted(out)
+
+
 def fix_path(path, row):
     """Make ONE existing object equal its row, by fd. Returns what it changed (empty = already equal)."""
     fd = open_nofollow(path, row["kind"] == "dir")
@@ -988,15 +1020,15 @@ def read_parts():
     or a body that does not end in exactly one newline - never normalizes (Langston, 20:48Z)."""
     if not os.path.isdir(PARTS_DIR):
         raise Refused(2, "REFUSED: no parts directory at %s - nothing to compose" % PARTS_DIR)
-    names = sorted(n for n in os.listdir(PARTS_DIR)
-                   if not n.startswith(".") and os.path.isfile(os.path.join(PARTS_DIR, n)))
+    names = _part_names()
     if not names:
         raise Refused(2, "REFUSED: %s holds no parts - refusing to compose an empty memory file" % PARTS_DIR)
     parts = []
     for n in names:
         fp = os.path.join(PARTS_DIR, n)
-        with open(fp, "rb") as fh:
-            b = fh.read()
+        b = read_nofollow(fp)               # C-1: by fd, never through a link; a link or non-regular part refuses
+        if b is None:
+            raise Refused(4, "REFUSED: part %s vanished while the parts were being read - re-run." % fp)
         try:
             b.decode("utf-8")
         except UnicodeDecodeError:
@@ -1187,6 +1219,20 @@ def read_compose_state():
         return {}
 
 
+def state_lost(cur):
+    """True when compose-state is MISSING although the live MEMORY.md is a COMPOSED file (it ends in the composer's
+    stamp line) - so the state was LOST, not never written (Langston Step-4 C-3). read_compose_state() returns {} for
+    both, and without this the first-compose refusal told the caller to edit 00-legacy.md - advice to change his file
+    of record in answer to a missing directory, which a stateless reader would follow."""
+    return strip_stamp(cur) != cur
+
+
+LOST_STATE_ADVICE = ("REFUSED: %s is MISSING, but the live %s is a composed file (it carries the composer's stamp), so "
+                     "the state was LOST, not never written - most likely .memory-archive/ was moved or replaced. Do NOT "
+                     "edit 00-legacy.md or any part. Ask Infra Claude to restore .memory-archive/ (or compose-state.json "
+                     "from the backup) as root; the daily fence check pages on this too. Nothing was written.")
+
+
 def write_compose_state(d):
     """JSON, atomic, full sha256 values only - through replace_file, so it takes its FENCE row: root:root 0600 and the
     flag (C-1: its last_written_sha is what every out-of-band refusal and the daily check test; no langston reader)."""
@@ -1216,6 +1262,8 @@ def do_compose(opts):
         # ⛔ first-compose predicate (Langston point-3): composed-MINUS-STAMP == current MEMORY.md bytes, so the
         #    migration cannot silently clobber a hand-edited live file.
         if "last_written_sha" not in state:
+            if state_lost(cur):
+                raise Refused(6, LOST_STATE_ADVICE % (COMPOSE_STATE, TARGET))
             if body != cur:
                 raise Refused(4, "REFUSED: first compose, but the parts do NOT reproduce the live %s "
                                  "(part bodies %d B vs live %d B). Fix 00-legacy.md to equal the live file byte-for-byte "
@@ -1310,12 +1358,11 @@ def do_ledger_file_append(opts, content, n):
     os.stat(TARGET)                             # MEMORY.md must exist (ownership comes from the FENCE table now)
     lfd = open_lock()
     try:
-        if not os.path.isfile(LEDGER_FILE):
+        old = read_nofollow(LEDGER_FILE)        # C-1: his file, so never read through a link
+        if old is None:
             raise Refused(2, "REFUSED: %s is missing. After the split the ledger is NEVER recreated by an append (the "
                              "counters would restart at zero). Restore it from .memory-archive/ and tell Infra Claude."
                           % LEDGER_FILE)
-        with open(LEDGER_FILE, "rb") as fh:
-            old = fh.read()
         old_sha = sha(old)
         if old_sha != opts["--expect-sha"].strip().lower():
             raise Refused(4, "REFUSED: --expect-sha does not match LEDGER.md (current sha256 %s, you passed %s). Since "
@@ -1934,14 +1981,19 @@ def run(argv, stdin_bytes):
     #    migration (no parts dir) the legacy MEMORY.md path is unchanged, so the tool behaves exactly as today and the
     #    self-test (no parts) exercises the legacy path.
     try:
-        parts_present = os.path.isdir(PARTS_DIR) and any(
-            not n.startswith(".") and os.path.isfile(os.path.join(PARTS_DIR, n)) for n in os.listdir(PARTS_DIR))
+        parts_present = os.path.isdir(PARTS_DIR) and bool(_part_names())   # a link counts, then read_parts refuses it
     except OSError as e:
         raise Refused(6, "REFUSED: cannot read the parts directory %s (%s) - fix its permissions; nothing was "
                          "written." % (PARTS_DIR, type(e).__name__))
     state_live = bool(read_compose_state().get("last_written_sha"))
     if parts_present or state_live:
         if not state_live:
+            try:
+                with open(TARGET, "rb") as fh:
+                    if state_lost(fh.read()):
+                        raise Refused(6, LOST_STATE_ADVICE % (COMPOSE_STATE, TARGET))
+            except FileNotFoundError:
+                pass
             raise Refused(2, "REFUSED: %s holds parts but %s has no compose-state - the composed model is half-installed "
                              "or the state file was lost. Run --compose to reconcile before any direct write; refusing to "
                              "write MEMORY.md directly and strand the parts." % (PARTS_DIR, TARGET))
@@ -2086,15 +2138,14 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
         # --part with `--expect-sha new` CREATES a part (the retrofit's split); it must not already exist.
         is_new = (not append) and explicit_part is not None and expect == "new"
         if is_new:
-            if os.path.exists(part_path):
+            if os.path.lexists(part_path):      # a dangling link is "exists" too - never create through one
                 raise Refused(4, "REFUSED: --part %s exists - pass its current sha as --expect-sha, not 'new'." % target_name)
             part_old, part_old_sha = b"", None   # a new part takes the FENCE table's part row
         else:
-            if not os.path.isfile(part_path):
+            part_old = read_nofollow(part_path)   # C-1: never through a link
+            if part_old is None:
                 raise Refused(4, "REFUSED: part %s does not exist. Pass `--expect-sha new` to create it (with --part); "
                                  "a whole-file write never creates a part implicitly." % part_path)
-            with open(part_path, "rb") as fh:
-                part_old = fh.read()
             part_old_sha = sha(part_old)
             if part_old_sha != expect:
                 raise Refused(4, "REFUSED: --expect-sha does not match the part it names. Compared against %s: its current "

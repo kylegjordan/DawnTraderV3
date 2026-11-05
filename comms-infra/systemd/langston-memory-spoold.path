@@ -1,6 +1,9 @@
 [Unit]
 Description=Langston memory writes - wake the root spool service when a request arrives (B-LANGSTON-MEMORY-WRITE-FENCE P3)
 Documentation=https://github.com/kylegjordan/DawnTraderV3 comms-infra/langston-memory/
+# No start-rate limit (Langston Step-4 record item): a burst of legitimate writes must never trip systemd's default
+# 5-starts-per-10-s and freeze his write path until the daily check notices.
+StartLimitIntervalSec=0
 
 [Path]
 # in/ only: the client writes tmp/<id>.req and RENAMES it here complete, so a wake never meets half a request, and a

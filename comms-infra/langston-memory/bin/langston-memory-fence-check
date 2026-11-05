@@ -262,7 +262,7 @@ def reconcile(verdict, result, st, alerts, evidence):
             continue
         s = alert_state(alerts, st[key])
         if s == "gone":
-            notes.append("%s was resolved by hand" % st.pop(key))
+            notes.append("%s is no longer listed - presumably resolved by hand" % st.pop(key))
         elif s == "acked":
             delivered = False if key == wanted else delivered
             notes.append("%s is ACKNOWLEDGED - silenced; it must be resolved, not acked" % st[key])

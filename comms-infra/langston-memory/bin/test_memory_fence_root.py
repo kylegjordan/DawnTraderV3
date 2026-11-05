@@ -468,6 +468,42 @@ def t_gap(env, a):
     check("  ...restored by root -> the next call exit 0", rc, 0)
 
 
+def t_links_and_lost_state(env, a):
+    print("9. Step-4 C-1 and C-3: a part or the ledger that is a LINK refuses; a LOST state is named as lost")
+    target = "/etc/hostname"
+    secret = rd(target).strip()
+    mem_before = rd(a.mem)
+    link = os.path.join(os.path.dirname(a.part), "50-link.md")
+    r = env.as_user("ln -s %s %s" % (target, link))
+    check("(fixture) the account can put a link among its own parts", r.returncode, 0)
+    rc, out, err = a.via_spool(["--compose", "--by", "langston", "--reason", "link"], b"")
+    check("★ compose through the spool with a part that is a link -> REFUSED (exit 6), naming it",
+          (rc, b"50-link.md" in err and b"symbolic link" in err), (6, True))
+    check("  ...and the link target's bytes are NOT in MEMORY.md (Langston's measured control)",
+          (secret in rd(a.mem), rd(a.mem) == mem_before), (False, True))
+    os.unlink(link)
+    rc, out, err = a.root(["--compose", "--by", "t", "--reason", "link removed"])
+    check("  ...the link removed -> compose exits 0 again", rc, 0)
+    led_before = rd(a.ledger)
+    os.rename(a.ledger, a.ledger + ".real")
+    os.symlink(target, a.ledger)
+    rc, out, err = a.via_spool(["--expect-sha", sha(led_before), "--ledger-append", "--entries", "1",
+                                "--reason", "t"], b"- **one more**\n")
+    check("★ a ledger append when LEDGER.md is a link -> REFUSED (exit 6)", (rc, b"symbolic link" in err), (6, True))
+    os.unlink(a.ledger)
+    os.rename(a.ledger + ".real", a.ledger)
+    check("  ...the ledger is unchanged", rd(a.ledger), led_before)
+    held = a.state + ".held"
+    subprocess.run(["chattr", "-i", a.state], check=True, capture_output=True, timeout=60)
+    os.rename(a.state, held)
+    rc, out, err = a.root(["--compose", "--by", "t", "--reason", "lost state"])
+    check("★ compose with compose-state MISSING behind a composed MEMORY.md -> exit 6, 'LOST', never 'Fix 00-legacy'",
+          (rc, b"LOST" in err, b"Fix 00-legacy" in err), (6, True, False))
+    os.rename(held, a.state)
+    rc, out, err = a.root(["--compose", "--by", "t", "--reason", "state restored"])
+    check("  ...the state restored -> compose exits 0", rc, 0)
+
+
 def t_selftest(env):
     print("8. the self-test leaves nothing behind (C-8)")
     tmpd = os.path.join(env.run, "selftmp")
@@ -533,6 +569,7 @@ def main(argv):
         rearm_after_kill = t_kill(env, a)
         t_check(env, a, rearm_after_kill)
         t_gap(env, a)
+        t_links_and_lost_state(env, a)
         t_selftest(env)
     finally:
         try:

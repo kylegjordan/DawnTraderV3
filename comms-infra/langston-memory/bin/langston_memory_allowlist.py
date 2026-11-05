@@ -24,14 +24,16 @@ POSITIVE = re.compile(r"[1-9][0-9]{0,5}")
 
 # flag -> the kind of value it takes (None = a switch)
 FLAGS = {"--expect-sha": "sha", "--ledger-delta": "int", "--retractions-delta": "int", "--entries": "positive",
-         "--reason": "text", "--by": "text", "--part": "part", "--ledger-append": None, "--compose": None,
-         "--dry-run": None}
+         "--reason": "text", "--by": "text", "--part": "part", "--ledger-append": None, "--compose": None}
 
-# shape -> (required, optional). --dry-run is on A5's list; the writer itself refuses it outside --trim (exit 2).
+# shape -> (required, optional). ⛔ STRUCK (Langston Step-4 C-2): --dry-run (the writer accepts it only with --trim,
+# which is root-only, so it could only ever return exit 2 - a line that reads as a capability and is one coupling change
+# from becoming one nobody re-reviewed), and --part on "append" (after the ledger split the append writes LEDGER.md
+# and ignores --part, which parse_args does not refuse: an ignored flag answered exit 0).
 SHAPES = {
-    "append": ({"--expect-sha", "--ledger-append", "--entries", "--reason"}, {"--part", "--by", "--dry-run"}),
-    "whole": ({"--expect-sha", "--ledger-delta", "--retractions-delta", "--reason"}, {"--part", "--by", "--dry-run"}),
-    "compose": ({"--compose", "--reason"}, {"--by", "--dry-run"}),
+    "append": ({"--expect-sha", "--ledger-append", "--entries", "--reason"}, {"--by"}),
+    "whole": ({"--expect-sha", "--ledger-delta", "--retractions-delta", "--reason"}, {"--part", "--by"}),
+    "compose": ({"--compose", "--reason"}, {"--by"}),
 }
 
 

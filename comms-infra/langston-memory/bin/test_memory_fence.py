@@ -180,6 +180,13 @@ def t_allowlist():
     for flag in ("--rename-part", "--to"):
         check("%s is refused" % flag, refused(whole + [flag, "x.md"]), "Refusal")
     check("★ --allow-growth is refused (r2, DROPPED)", refused(whole + ["--allow-growth", "a reason"]), "Refusal")
+    # Step-4 C-2 (Langston): --dry-run struck everywhere; --part struck from the append shape
+    check("★ --dry-run is refused on a whole-part write (C-2)", refused(whole + ["--dry-run"]), "Refusal")
+    check("★ --dry-run is refused on an append (C-2)", refused(append + ["--dry-run"]), "Refusal")
+    check("★ --dry-run is refused on compose (C-2)",
+          refused(["--compose", "--by", "langston", "--reason", "r", "--dry-run"], b""), "Refusal")
+    check("★ --part on an append is refused - the append would ignore it (C-2)",
+          refused(append + ["--part", "00-legacy.md"]), "Refusal")
     for bad in ("../outside.md", os.path.join(HOME, "outside.md"), "sub/x", ".hidden", "nonexistent.md", "adir"):
         check("★ --part %r is refused" % bad, refused(whole + ["--part", bad]), "Refusal")
     if linked:
