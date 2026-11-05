@@ -93,15 +93,16 @@ const CHECKS: CheckSpec[] = [
     onMissing: 'skip',
   },
   {
-    // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). 'skip' until
-    // its first good run, exactly as the cold rotator's entry above; flipped to 'alert' in this batch
-    // once that run is recorded (Langston C3).
+    // B-DISK-FILE-TIERING (#1233, pre-audit P7): this IS the job's page (no second key). It was 'skip' until
+    // its first good run; that run is recorded (2026-11-05 02:45-03:03Z: `DONE moved=1709 failed=0`, all 1,709
+    // manifest rows warm/active with checksums, one day restored byte-exact), so it is now 'alert' (O1): a
+    // missing log means the job never ran. (Stale and failed runs already page whenever the log exists.)
     name: 'disk-file-tiering',
     label: 'Disk-file tiering — dated app data files to warm storage (daily 02:45 UTC)',
     logFile: 'disk-file-tiering.log',
     graceMs: 26 * HOUR_MS,
     donePattern: /DONE moved=\d+ failed=(\d+)/,
-    onMissing: 'skip',
+    onMissing: 'alert',
   },
 ];
 

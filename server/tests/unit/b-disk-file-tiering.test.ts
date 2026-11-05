@@ -130,6 +130,15 @@ describe('cron-run jobs load the app .env themselves', () => {
   });
 });
 
+describe("the job's own page (archival-health, O1)", () => {
+  it('after the first good run, a missing log pages instead of passing silently', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'b-storage-archival-health.ts'), 'utf8');
+    const block = src.slice(src.indexOf("name: 'disk-file-tiering'"), src.indexOf('];', src.indexOf("name: 'disk-file-tiering'")));
+    expect(block).toContain("logFile: 'disk-file-tiering.log'"); // the right block was read (control)
+    expect(block).toMatch(/onMissing: 'alert'/);
+  });
+});
+
 describe('warmObjectPath', () => {
   it('keeps the whole original name under the disk-files prefix', () => {
     expect(warmObjectPath('warm', spec('logs/data_aggregates/hourly'), 'passive_2026-10-01T05.json'))
