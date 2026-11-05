@@ -68,3 +68,11 @@ Positive controls are rows 1, 2 and 4: the same replay emits a wake where one is
 - **Condition 1, checked before install:** the three files `decide()` reads for CC-PM exist: `CC-PM.json` with `pos["/var/log/cc-wake.log"] = [1255, 106157]`, `CC-PM.lease` (taken 22:46:06Z), `CC-PM.json.alive`.
 - **Step 6 (install):** both files copied together from `b1a555649` to `~/.claude/scheduled-tasks/wake-watcher-heartbeat/`; sha256 installed = blob for both (`control_state.py` `2e5f7c4c…`, `SKILL.md` `a66805d0…`); previous files kept as `*.pre-b-pm-claude-p1b`.
 - **Step 7 (owed):** the next hourly heartbeat post names all five sessions and lists CC-PM in its watcher and control fields without a CHECK FAILED page.
+
+## P1b — Step 7 first-pass verification (PM Claude, 2026-11-05 ~00:50Z)
+**No staging UI surface:** P1b changes only the laptop's hourly heartbeat task (its alias list and post text); nothing on staging or the dashboard reads it, so the evidence is the live heartbeat posts themselves.
+**Evidence — two consecutive live heartbeat posts after the install (inbox `/var/log/cc-discord-inbox.jsonl` on Helsinki):**
+- `2026-11-04T23:15:01Z`: header names all five ("OLD Claude / NEW Claude / ANALYST Claude / Infra Claude / PM Claude — hourly heartbeat"); `watchers: all alive`; `control: issued CC-PM; … CC-PM answered.`
+- `2026-11-05T00:14:01Z`: same five-name header; `watchers: all alive`; `control: issued CC-A/CC-B/CC-C/CC-INFRA/CC-PM; … CC-PM answered.`
+- Neither post carries `CHECK FAILED`. Positive control for "PM is really in the liveness list": the 23:15 run issued its control probe to CC-PM alone and recorded PM's answer, which only happens when CC-PM is in `ALIASES`.
+**Verdict:** OBJ (P1b) met as written; ready for Langston's Step 8.
