@@ -288,6 +288,64 @@ def check(now: datetime = None) -> dict:
     return stats
 
 
+def probe_readable() -> list[str]:
+    """Prove the census is READABLE before `check()` is allowed to read silence as a gap-free feed.
+
+    ⛔ `check()` CANNOT FAIL ON AN UNREADABLE STORE, BY CONSTRUCTION
+       (B-TOKEN-WATCH-STORAGE amendment 1, A6 / C-3): `_read_new_rows` treats
+       `not os.path.exists(path)` as "nothing new", and `exists()` is also
+       false behind a permission wall. So a watch that lost its access would
+       report a healthy, quiet feed forever. This is the positive leg: it must
+       actually LIST the census and READ a byte, or it names what it could not.
+    Returns the problems found; an empty list means readable.
+      1. the census directory lists (EACCES/ENOENT named);
+      2. it holds at least one dated census file — the census is never
+         deleted, so an empty listing means the wrong place, not a quiet day;
+      3. the newest census file opens and yields a byte;
+      4. if a cursor exists, the file it points at opens and yields a byte.
+    ⚠️ It does NOT require today's file to exist: in a real outage there is
+       none, and that is `check()`'s prospective leg to report as a gap, not a
+       reason for this probe to fail the unit instead.
+    """
+    problems: list[str] = []
+    try:
+        names = sorted(n for n in os.listdir(BIRTHS_DIR) if n.endswith(".jsonl"))
+    except OSError as exc:
+        return ["cannot list %s: %s" % (BIRTHS_DIR, exc.strerror or exc)]
+    if not names:
+        return ["%s lists no census file; the census is never deleted, so this is the wrong place "
+                "or a lost store, not a quiet feed" % BIRTHS_DIR]
+    targets = [os.path.join(BIRTHS_DIR, names[-1])]
+    cursor = (load_state(STATE, {}).get("cursor") or {}).get("path")
+    if cursor and cursor not in targets:
+        targets.append(cursor)
+    for path in targets:
+        try:
+            with open(path, "rb") as fh:
+                if len(fh.read(1)) != 1:
+                    problems.append("%s opened but yielded no byte" % path)
+        except OSError as exc:
+            problems.append("cannot read %s: %s" % (path, exc.strerror or exc))
+    return problems
+
+
+FEED_RESULT_STATE = "feed_watch_result"
+
+
+def save_feed_result(result: dict) -> None:
+    """The feed watch's check step leaves its result here for the root mint step to read."""
+    save_state(FEED_RESULT_STATE, result)
+
+
+def load_feed_result() -> dict:
+    return load_state(FEED_RESULT_STATE, {})
+
+
+def open_gap() -> dict | None:
+    """The prospective gap `check()` left open, if any (read-only)."""
+    return load_state(STATE, {}).get("open_gap") or None
+
+
 def _store_size_check() -> dict:
     """The accept-side dual of the switch. See config's STORE_CAP_BYTES.
 

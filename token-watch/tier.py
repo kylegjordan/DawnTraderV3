@@ -41,10 +41,10 @@ import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 
-from config import BULKY_HOT_DAYS, COLD_DIR, WORKING_INDEX_HOT_DAYS
+from config import BULKY_HOT_DAYS, COLD_DIR, DUE_SPENT_HOT_DAYS
 from provenance import FOLLOW_UP_DIR as PROVENANCE_FOLLOW_UP_DIR
 from provenance import RAW_DIR as PROVENANCE_RAW_DIR
-from store import DUE_DIR, ensure_dirs, periodic_lock
+from store import DUE_DIR, ensure_dirs, load_state, periodic_lock
 
 UTC = timezone.utc
 LOG = logging.getLogger("token-watch.tier")
@@ -192,28 +192,118 @@ def tier_payloads(now: datetime | None = None) -> dict:
             "by_source": by_source}
 
 
-def prune_due_buckets(now: datetime | None = None) -> dict:
-    """Remove due buckets whose hour is older than the deepest grid age.
+HOUR_FMT = "%Y-%m-%dT%H"
+CURSOR_STATE = "follow_up_cursor"
 
-    These are pure scheduling artefacts: once an hour has passed and its
-    entries are observed, nothing reads the bucket again. They are NOT
-    observations, and they are NOT births.
+# The classes a due bucket can be in. Exactly one per bucket; the census tool
+# (tools/due_census.py) reports the same classes from the same function.
+DUE_CLASSES = ("removable", "kept_spent_window", "kept_after_cursor",
+               "kept_before_consumed_from", "kept_unparsed")
+
+
+def _hour(v: str) -> datetime:
+    return datetime.strptime(v, HOUR_FMT).replace(tzinfo=UTC)
+
+
+def classify_due_buckets(now: datetime, cursor: dict) -> dict:
+    """Sort every `due/` bucket into one of DUE_CLASSES. Reads nothing but names and sizes.
+
+    A bucket is REMOVABLE only if the follow-up has read it AND it is old:
+        consumed_from <= hour <= last_bucket   (the cursor has passed it), and
+        hour < now - DUE_SPENT_HOT_DAYS        (past the audit margin).
+    ⛔ `consumed_from` IS THE OTHER HALF OF "THE CURSOR HAS PASSED IT". The
+       cursor alone does not say so: a first run (no cursor) reads only its own
+       hour and stamps it (`follow_up._buckets_to_read`), so after a LOST cursor
+       one run would put every never-read bucket behind `last_bucket`.
+       `consumed_from` is where the cursor's lineage began; nothing before it
+       was ever read, so nothing before it is removable.
+    Returns {"ok", "reason", "classes": {class: {"count", "bytes"}}, "paths": {class: [path]}, ...}.
+    With no cursor, or no `consumed_from`, ok is False and every bucket is
+    counted as kept — the caller removes nothing.
+    """
+    out = {c: {"count": 0, "bytes": 0} for c in DUE_CLASSES}
+    paths = {c: [] for c in DUE_CLASSES}
+    last_v, from_v = cursor.get("last_bucket"), cursor.get("consumed_from")
+    ok, reason = True, ""
+    try:
+        last = _hour(last_v) if last_v else None
+        first = _hour(from_v) if from_v else None
+    except ValueError:
+        last = first = None
+    if last is None or first is None:
+        ok, reason = False, ("no follow-up cursor" if last is None
+                             else "the cursor has no consumed_from")
+    elif first > last:
+        ok, reason = False, "consumed_from %s is after last_bucket %s" % (from_v, last_v)
+    spent_before = now - timedelta(days=DUE_SPENT_HOT_DAYS)
+    names = sorted(os.listdir(DUE_DIR)) if os.path.isdir(DUE_DIR) else []
+    for name in names:
+        path = os.path.join(DUE_DIR, name)
+        if not os.path.isfile(path) or not _safe(path):
+            continue
+        size = os.path.getsize(path)
+        try:
+            h = _hour(name.replace(".jsonl", ""))
+        except ValueError:
+            cls = "kept_unparsed"
+        else:
+            if not ok:
+                cls = ("kept_after_cursor" if last is not None and h > last
+                       else "kept_before_consumed_from")
+            elif h < first:
+                cls = "kept_before_consumed_from"
+            elif h > last:
+                cls = "kept_after_cursor"
+            elif h < spent_before:
+                cls = "removable"
+            else:
+                cls = "kept_spent_window"
+        out[cls]["count"] += 1
+        out[cls]["bytes"] += size
+        paths[cls].append(path)
+    return {"ok": ok, "reason": reason, "classes": out, "paths": paths,
+            "consumed_from": from_v, "last_bucket": last_v,
+            "spent_before": spent_before.strftime(HOUR_FMT)}
+
+
+def prune_due_buckets(now: datetime | None = None) -> dict:
+    """Remove `due/` buckets the follow-up has already read, once they are old.
+
+    ⛔ THE PREVIOUS RULE WAS "an hour older than 91 days", ON THE PREMISE
+       "once an hour has passed and its entries are observed, nothing reads
+       the bucket again". REFUTED 2026-11-05 (B-TOKEN-WATCH-STORAGE amendment
+       1): the follow-up has been off since 2026-09-30, so every bucket since
+       its cursor is unread and still owed a read — and an hour-only rule
+       would have deleted them unread once they were 91 days old. The rule is
+       now the cursor's: see `classify_due_buckets`. With no cursor, or no
+       `consumed_from`, NOTHING is removed and the reason is logged.
+    Must run under `periodic_lock` (it does, inside `run`), the same lock the
+    follow-up holds while it advances the cursor — so the cursor cannot move
+    between this read and the removals.
+    These buckets are scheduling artefacts: NOT observations, NOT births.
     """
     now = now or datetime.now(UTC)
-    cutoff = now - timedelta(days=WORKING_INDEX_HOT_DAYS + 1)
-    removed = 0
-    for name in sorted(os.listdir(DUE_DIR)) if os.path.isdir(DUE_DIR) else []:
-        path = os.path.join(DUE_DIR, name)
-        if not _safe(path):
-            continue
-        try:
-            when = datetime.strptime(name.replace(".jsonl", ""), "%Y-%m-%dT%H").replace(tzinfo=UTC)
-        except ValueError:
-            continue
-        if when < cutoff:
-            os.unlink(path)
-            removed += 1
-    return {"due_buckets_removed": removed}
+    cur = load_state(CURSOR_STATE, {})
+    c = classify_due_buckets(now, cur)
+    removed = removed_bytes = 0
+    if not c["ok"]:
+        LOG.warning("due prune: NOTHING REMOVED — %s", c["reason"])
+    for path in c["paths"]["removable"] if c["ok"] else []:
+        size = os.path.getsize(path)
+        os.unlink(path)
+        removed += 1
+        removed_bytes += size
+    counts = c["classes"]
+    LOG.info("due prune: removed %d (%d B); kept spent-window %d (%d B), after cursor %d (%d B), "
+             "before consumed_from %d (%d B), unparsed %d; cursor %s..%s, spent before %s",
+             removed, removed_bytes,
+             counts["kept_spent_window"]["count"], counts["kept_spent_window"]["bytes"],
+             counts["kept_after_cursor"]["count"], counts["kept_after_cursor"]["bytes"],
+             counts["kept_before_consumed_from"]["count"], counts["kept_before_consumed_from"]["bytes"],
+             counts["kept_unparsed"]["count"], c["consumed_from"], c["last_bucket"], c["spent_before"])
+    return {"due_buckets_removed": removed, "due_bytes_removed": removed_bytes,
+            "due_prune_ok": c["ok"], "due_prune_reason": c["reason"],
+            "due_classes": counts}
 
 
 def run(now: datetime | None = None) -> dict:

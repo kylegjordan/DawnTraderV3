@@ -100,8 +100,9 @@ def foreign_hosts(texts):
 ops_texts = {f: open(os.path.join(OPS, f), encoding="utf-8").read() for f in os.listdir(OPS) if f.endswith(".py")}
 coll_texts = {f: open(os.path.join(PKG, f), encoding="utf-8").read() for f in os.listdir(PKG) if f.endswith(".py")}
 
-print("expect: ops/ holds the four jobs")
-check("ops/ modules", OPS_MODULES == ["alert_mint", "cold_offbox", "store_watch", "unit_failed"], repr(OPS_MODULES))
+print("expect: ops/ holds the five jobs")
+check("ops/ modules", OPS_MODULES == ["alert_mint", "cold_offbox", "feed_watch", "store_watch", "unit_failed"],
+      repr(OPS_MODULES))
 
 print("control: a planted `import providers` in an ops module IS detected")
 check("control 1", ops_violations({"x.py": "import providers\n"}) == ["x.py imports providers"])

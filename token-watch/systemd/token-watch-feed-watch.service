@@ -1,0 +1,30 @@
+[Unit]
+Description=token-watch feed watch: the dead-man's switch on its own timer, and an alert while the feed is silent
+# B-TOKEN-WATCH-STORAGE amendment 1, OBJ-8. TWO IDENTITIES IN ONE UNIT (pre-audit A7):
+#   ExecStart       as tokenwatch: probe the census is readable, run liveness.check() (it writes state/,
+#                   which is tokenwatch-only), leave the result in state/feed_watch_result.json.
+#   ExecStartPost=+ as root: read that result and mint token-watch-feed-gap while a gap is open (only root can
+#                   run the alert command as deploy). For Type=oneshot it runs only after ExecStart exits 0, so a
+#                   failed probe stops the unit before the mint, and OnFailure pages.
+# NoNewPrivileges is NOT in the documented "+" bypass set; it stays, and the mint step was drilled by hand
+# against a forced open gap before this timer was enabled (A7, Langston's condition).
+OnFailure=token-watch-failed@%n.service
+
+[Service]
+Type=oneshot
+User=tokenwatch
+Group=tokenwatch
+WorkingDirectory=/opt/token-watch
+Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 /opt/token-watch/ops/feed_watch.py --check
+ExecStartPost=+/usr/bin/python3 /opt/token-watch/ops/feed_watch.py --mint
+CPUQuota=25%
+MemoryMax=256M
+TasksMax=64
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/token-watch

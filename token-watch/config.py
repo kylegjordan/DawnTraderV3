@@ -233,6 +233,19 @@ LOCK_PATH = f"{STATE_DIR}/periodic.lock"
 BULKY_HOT_DAYS = 1
 WORKING_INDEX_HOT_DAYS = 90
 
+# ⛔ HOW LONG A SPENT `due/` BUCKET STAYS AFTER ITS HOUR (B-TOKEN-WATCH-STORAGE
+#    amendment 1, OBJ-7). A bucket is SPENT when the follow-up cursor has
+#    passed it: its one reader (`follow_up`, through `store.due_now`) never
+#    reads it again. `tier.prune_due_buckets` removes a spent bucket once its
+#    hour is this many days old; an unread bucket is never removed.
+# ⚠️ NOT `WORKING_INDEX_HOT_DAYS`. That is the BIRTH index's window, sized to
+#    the scheduler's 90-day lookback into births. The due buckets were pruned
+#    on it until 2026-11-05, on the premise that "once an hour has passed,
+#    nothing reads the bucket again" — false while the follow-up is behind,
+#    where the unread buckets are exactly the ones it still has to read.
+#    Seven days is only an audit margin on a scheduling artefact.
+DUE_SPENT_HOT_DAYS = 7
+
 # ─────────────────────────────────────────────────────────────────────────────
 # THE STAGING SUMMARY (OBJ-10, Phase 4 — built only after the collector is
 # proven). Size bound is DERIVED, not adjectival: ~4 KB of aggregates plus

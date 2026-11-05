@@ -21,7 +21,6 @@ import logging
 import sys
 from datetime import datetime, timedelta, timezone
 
-import liveness
 import promote
 import summary
 import budget
@@ -177,9 +176,28 @@ def _entries_across(buckets):
 
 
 def _advance_cursor(buckets):
-    if buckets:
-        save_state("follow_up_cursor",
-                   {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")})
+    """Stamp the last bucket read, and keep where this cursor's lineage began.
+
+    ⛔ `consumed_from` IS WRITTEN ONCE AND NEVER MOVES (B-TOKEN-WATCH-STORAGE
+       amendment 1, C-1). It is the first hour this cursor ever read, and
+       `tier.classify_due_buckets` removes nothing before it. When there is NO
+       cursor (a first run, or a lost cursor) it is set to the earliest bucket
+       of this run — which, by `_buckets_to_read`, is only the current hour —
+       so every bucket from before the loss stays, never-read and never removed.
+    ⚠️ A cursor that EXISTS without `consumed_from` keeps it absent: that is a
+       cursor written before the field existed, and its true start is set once,
+       by `tools/backfill_consumed_from.py`, from the observations record.
+       Inventing it here would date it to whenever the job next ran.
+    """
+    if not buckets:
+        return
+    prev = load_state("follow_up_cursor", {})
+    rec = {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")}
+    if prev.get("consumed_from"):
+        rec["consumed_from"] = prev["consumed_from"]
+    elif not prev.get("last_bucket"):
+        rec["consumed_from"] = min(buckets).strftime("%Y-%m-%dT%H")
+    save_state("follow_up_cursor", rec)
 
 
 def _append_next_bucket(entry: dict, now: datetime) -> None:
@@ -205,22 +223,14 @@ def run_hour(now: datetime | None = None) -> dict:
              "requeued_not_yet_due": 0, "buckets_read": 0,
              "buckets_skipped_too_old": 0}
 
-    # ⛔ THE DEAD-MAN'S SWITCH RUNS BEFORE THE LOCK, AND DELIBERATELY OUTSIDE
-    #    IT. A watchdog that a stuck lock can silence is not a watchdog — the
-    #    skip branch below returns early, so putting this inside would mean a
-    #    permanently-held lock disables the very check whose job is to notice
-    #    that nothing is happening. That is the failure this batch keeps
-    #    paying for, one layer up.
-    # ⚠️ THE TRADE, STATED: it reads the append-only census (safe to read
-    #    concurrently) and writes only its own state and gap files. Two
-    #    overlapping passes could at worst duplicate a gap record — VISIBLE,
-    #    and cheaply de-duplicated at analysis time on (started_at, ended_at).
-    #    A silenced watchdog is not visible at all. The asymmetry decides it.
-    try:
-        stats["liveness"] = liveness.check(now)
-    except Exception as exc:                       # never let it fail the hour
-        LOG.error("liveness check failed: %s", exc)
-        stats["liveness"] = {"error": str(exc)}
+    # 🗑 THE DEAD-MAN'S SWITCH NO LONGER RUNS HERE (B-TOKEN-WATCH-STORAGE
+    #    amendment 1, A9). It ran from this sweep until 2026-11-05, and that
+    #    is how it went silent: the sweep was switched off on 2026-09-30 and
+    #    the feed check went with it, so a nine-day feed outage (#1247) was
+    #    recorded by nothing. It now runs on its own timer,
+    #    `token-watch-feed-watch` (`ops/feed_watch.py`), which is ALSO the
+    #    one writer of `state/liveness.json` — two lock-free writers of one
+    #    read-modify-write state file lose updates (#1132 rider C-4).
 
     with periodic_lock("follow_up") as held:
         if not held:

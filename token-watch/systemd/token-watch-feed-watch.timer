@@ -1,0 +1,12 @@
+[Unit]
+Description=token-watch feed watch, hourly
+
+[Timer]
+# The interval is config.LIVENESS_CHECK_INTERVAL_SECONDS (3600 s at this writing); a test asserts the two agree.
+# The gap threshold it checks against is config.LIVENESS_GAP_SECONDS, and config asserts gap < interval.
+OnBootSec=10min
+OnUnitActiveSec=3600s
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

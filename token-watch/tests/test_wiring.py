@@ -213,33 +213,43 @@ check("POSITIVE CONTROL: the same shape WITH type=CREATE does record",
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-section("7. THE DEAD-MAN'S SWITCH IS ACTUALLY WIRED TO THE HOURLY JOB")
+section("7. THE DEAD-MAN'S SWITCH IS WIRED TO THE FEED WATCH — AND ONLY TO IT")
 # ⛔ THE WHOLE REASON THIS FILE EXISTS. `test_liveness.py` proves the switch
 #    works when called; NOTHING there proves anything calls it. That is exactly
 #    how `budget.charge("birth", …)` sat with zero production call sites while
-#    57 checks passed. This drives `follow_up.run_hour` — the production entry
-#    point the timer invokes — and asserts on state only the switch can write.
+#    57 checks passed.
+# ★ CHANGED 2026-11-05 (B-TOKEN-WATCH-STORAGE amendment 1, A9). This section
+#   used to drive `follow_up.run_hour` and prove IT ran the switch. That wiring
+#   is how the switch went silent: the sweep was switched off on 2026-09-30 and
+#   a nine-day feed outage (#1247) was recorded by nothing. The switch now runs
+#   from `ops/feed_watch.py --check` (its own hourly unit), which is also the
+#   ONE writer of `state/liveness.json`. So: drive THAT entry point and assert
+#   on state only the switch writes; and drive `run_hour` and assert it does
+#   NOT write that state (the second writer is gone, #1132 rider C-4).
 # ─────────────────────────────────────────────────────────────────────────────
 import follow_up as _fu  # noqa: E402
 import liveness as _lv  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ops"))
+import feed_watch as _fw  # noqa: E402
 
-_before = store.load_state("liveness", {})
-check("no liveness state exists before the hourly job has ever run",
-      not _before.get("checked_at"))
-_stats = _fu.run_hour(now=now)
-_after = store.load_state("liveness", {})
-check("★ run_hour REACHED the switch — it stamped its own state",
-      bool(_after.get("checked_at")), _after.get("checked_at"))
-check("and the hour's stats carry the switch's report",
-      isinstance(_stats.get("liveness"), dict) and "rows" in _stats["liveness"])
+store.save_state("liveness", {})
+_fu.run_hour(now=now)
+check("★ run_hour does NOT write the switch's state any more (one writer)",
+      store.load_state("liveness", {}) == {}, store.load_state("liveness", {}))
 
-# ★ AND IT MUST SURVIVE A SKIPPED CYCLE — a watchdog a stuck lock can silence
-#   is not a watchdog. Hold the lock, run the hour, confirm it STILL checked.
+check("POSITIVE CONTROL: the feed watch's check step reaches the switch",
+      _fw.run_check(now=now) == 0 and bool(store.load_state("liveness", {}).get("checked_at")),
+      store.load_state("liveness", {}).get("checked_at"))
+check("and it leaves a result for the mint step, stamped with this run",
+      _lv.load_feed_result().get("checked_at") == now.isoformat(), _lv.load_feed_result())
+
+# ★ A STUCK PERIODIC LOCK CANNOT SILENCE IT — the feed watch takes no
+#   periodic lock at all. Hold the lock, run the check, confirm it checked.
 store.save_state("liveness", {})
 with store.periodic_lock("tiering") as _held:
-    _skipped = _fu.run_hour(now=now + timedelta(hours=1))
-check("POSITIVE CONTROL: the cycle really was skipped", _skipped["skipped"] is True)
-check("★ the switch STILL ran on the skipped cycle",
+    check("POSITIVE CONTROL: the lock really is held", _held is True)
+    _fw.run_check(now=now + timedelta(hours=1))
+check("★ the switch STILL ran while the periodic lock was held",
       bool(store.load_state("liveness", {}).get("checked_at")))
 
 

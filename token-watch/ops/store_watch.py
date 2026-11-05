@@ -3,7 +3,9 @@ token-watch — the store-size watch, on its own schedule. (B-TOKEN-WATCH-STORAG
 
 ★ WHY THIS EXISTS. The 8 GiB cap (`config.STORE_CAP_BYTES`) was only ever
   measured inside the follow-up sweep's dead-man's switch
-  (`follow_up.py:220` → `liveness.check()` → `_store_size_check()`). When the
+  (then `follow_up.py:220` → `liveness.check()` → `_store_size_check()`; since
+  B-TOKEN-WATCH-STORAGE amendment 1 that switch runs on its own timer,
+  `ops/feed_watch.py`). When the
   sweep was switched off on 2026-09-30 for running out of memory (#1132), the
   size check went with it, and the store passed the cap with nobody told.
   This job measures it daily on its own and mints an alert.
@@ -93,8 +95,8 @@ def body_for(state: str, total: int, parts: dict[str, int]) -> str:
                      "(CC-INFRA). The study shares / with the live trading app." % gb(STORE_CAP_WARN_BYTES))
     else:
         lines.append("OVER THE CAP. The study shares / with the live trading app; a full disk stops the app writing. "
-                     "Owner: Infra Claude (CC-INFRA). Look first at due/ (it grows until pruning starts ~91 days after "
-                     "its oldest bucket) and at whether the daily off-box upload (token-watch-cold-offbox) is running.")
+                     "Owner: Infra Claude (CC-INFRA). Look first at due/ (spent buckets go 7 days after the follow-up "
+                     "reads them, unread ones never; tools/due_census.py splits them) and at whether the daily off-box upload (token-watch-cold-offbox) is running.")
     lines.append("Source: token-watch/store_watch.py, unit token-watch-store-watch (B-TOKEN-WATCH-STORAGE, #1132).")
     return "\n".join(lines)
 
