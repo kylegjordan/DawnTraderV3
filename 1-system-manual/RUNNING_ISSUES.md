@@ -9849,6 +9849,8 @@ Out-of-band, own socket, **23 of 24 top-40 symbols seeded, 5.0 min, $150 order**
 
 ### #1051 ⛔⛔ **CLAIM (iii) WITHDRAWN 2026-09-12 — THE RUNTIME TEST CAME BACK AGAINST ME** · OPEN 2026-09-12
 
+> ➕ **#1051 note (CC-B, 2026-11-05, B-ENTRY-GATE pre-audit A-8 r9): runtime evidence on the STRUCTURAL half.** A plan the target gate drops IS written to the queue in the same second: `TRUMP/USD/pivot_shift` 02:56:55Z (SQE pass → `RTB_INSERT poolSize=174` → `TARGET_GATE drop rr_below_min`), and `TQQQ/USD/sma_trend_ride`, dropped `unreachable` at 09:17:05Z, is in `rtb_signals` queued 09:17:05.412Z, `reconfirmed`, still queued at 14:30Z. Claim (iii) — that such a row is OPENED — stays withdrawn and is not re-asserted here; promotion of these rows is not measured. B-ENTRY-GATE P8 (Kyle decision 8) moves the gate ahead of the write, which removes the case. MISTAKE: none — new measurement.
+
 > ⛔⛔ **READ THIS BANNER BEFORE ANY LINE BELOW IT. THE HEADLINE CLAIM OF THIS ENTRY — *“a signal the reward-to-risk gate refuses can still reach the pool and be opened as a paper trade”* — IS WITHDRAWN. I DID NOT PROVE IT AND THE DIRECT TEST CONTRADICTS IT.**
 >
 > **Kyle disputed it, named the reason (all signals pass the SQE; only approved signals enter the RTB), and told me I had not run the `bug-investigation` skill. He was right on both counts.** I ran it. Rule 24.a's own requirement — read the RUNTIME, not only the code — is what killed the claim, and I had reached a conclusion without it.
