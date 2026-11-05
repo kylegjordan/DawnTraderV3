@@ -63,7 +63,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - 25-27 Profitable-signal PROFILE → reverse-engineer a scanner PRE-S (—) — profile of a profitable signal, reversed into a scanner pre-screen
 - 25-6 AMR posture-model M2 calibration (post-launch — Phase 17/18 (—) — AMR posture model calibration — its own row says post-launch
 
-### Break-even, trailing and moonbag exits — 6
+### Break-even, trailing and moonbag exits — 7
 
 - B-TEC-STATE-DURABILITY (?) — on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing pro
 - Break-even stop + moonbag exits ((none)) — 
@@ -71,6 +71,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - row:3n.c (CC-C) — trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
 - #551 (CC-B) — re-judge an OPEN trade's stop and target against the current regime and volatility, not only trail on price — a new exit behaviour; cross-reference B-EXIT-POLICY-EVALUATOR (added 2026-09-29)
+- Trailing-exit database sync keyed by symbol (CC-A) — `syncTradeModeToStorage` (`trailing-exit-controller.ts:661-679`) stamps `tradeMode` on the first paper (and live) row with the same SYMBOL, so a VTS trade entering moonbag would mark a real paper position `TRAILING_TAKE`; dormant today (0 `[9.2][MODE_SYNC]` writes in the retained logs, every paper row `TARGET`). Key it by the caller's own trade before trailing is switched on. Kyle KD-36 2026-11-05 (trailing/break-even stay OFF in paper and VTS until after live); findings `Scope Files/PRICING_MODE_ISOLATION_FINDINGS_2026-11-05.md` (B)
 
 ### Crew, reviewer, governance and alert tooling — 74 (+3 struck through)
 - B-CODEX-CONVERSATION-BACKUP (Infra Claude) — #1238: none of the five ChatGPT (Codex) stand-ins has its conversations backed up; decisions still land in git and Discord, only the working chat is at risk (Kyle 2026-11-04, KD-1: after live, on PM Claude's recommendation)
