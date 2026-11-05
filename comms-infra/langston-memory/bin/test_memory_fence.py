@@ -414,6 +414,24 @@ def t_root_flags():
     check("★ run()'s --compose refusal list carries --part", '"--part"' in block, True)
 
 
+def t_shrink():
+    print("6. the shrink gate (Step 7, Langston): a drastic part or body shrink refuses without a root override")
+    big, half, tiny = b"a" * 10000 + b"\n", b"a" * 6000 + b"\n", b"x\n"
+    e = raises(W.shrink_gate, big, tiny, {}, "part 00-legacy.md")
+    check("★ 10,001 B -> 2 B refuses with exit 8, naming the part and the sizes",
+          (type(e).__name__, getattr(e, "code", None), "00-legacy.md" in str(e) and "10001 B to 2 B" in str(e)),
+          ("Refused", 8, True))
+    check("an ordinary shrink (10,001 -> 6,001 B) passes", W.shrink_gate(big, half, {}, "p"), None)
+    check("a small file (under 4 KiB) is not gated, however it shrinks", W.shrink_gate(b"a" * 3000, tiny, {}, "p"), None)
+    ov = W.shrink_gate(big, tiny, {"--allow-shrink": "deliberate", "--by": "cc-infra"}, "p")
+    check("root's --allow-shrink records the override instead of refusing",
+          (ov or {}).get("reason"), "deliberate")
+    v = lambda argv, stdin=b"x": AL.validate(argv, stdin, os.path.join(HOME, "memory-parts"))
+    whole = ["--expect-sha", SHA0, "--ledger-delta", "0", "--retractions-delta", "0", "--reason", "r"]
+    check("★ --allow-shrink is refused through the spool (his account cannot pass it)",
+          type(raises(v, whole + ["--allow-shrink", "please"])).__name__, "Refusal")
+
+
 def main():
     try:
         t_table()
@@ -421,6 +439,7 @@ def main():
         t_spoold()
         t_client()
         t_root_flags()
+        t_shrink()
     finally:
         shutil.rmtree(TOP, ignore_errors=True)      # a plain temp dir: no flag is ever set in this suite
     print("ALL PASS" if ok else "FAILURES")

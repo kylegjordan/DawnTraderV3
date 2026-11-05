@@ -36,6 +36,9 @@ MUTATIONS = [
         (W, "    try:\n        ensure_archive_dir()\n",
          "    if client_mode():\n        raise ClientResult(0, b\"\", b\"\")\n    try:\n        ensure_archive_dir()\n")],
      "FAIL ★ C-9: as the owner, the hand-off comes before ANY stat, lock or state read"),
+    ("Step 7: the shrink gate disabled", [
+        (W, "    if old_n < SHRINK_MIN_OLD or new_n >= SHRINK_FLOOR * old_n:\n", "    if True:\n")],
+     "FAIL ★ 10,001 B -> 2 B refuses with exit 8"),
     ("C-7: owner_only restored (group bits cleared)", [
         (W, "    return fence_row(path)[\"mode\"]\n", "    return fence_row(path)[\"mode\"] & ~0o077\n")],
      "FAIL ★ C-7: owner_only() gives every written path its TABLE mode"),

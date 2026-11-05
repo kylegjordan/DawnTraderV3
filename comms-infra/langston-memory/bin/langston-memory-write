@@ -107,8 +107,8 @@ PART_FRONTMATTER_RE = re.compile(r"\A<!-- part\n.*?\n-->\n", re.DOTALL)   # opti
 READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/langston_memory.py")
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
-KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth")
-VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to", "--allow-growth")
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth", "--allow-shrink")
+VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to", "--allow-growth", "--allow-shrink")
 NL = chr(10)
 ARCHIVE_NAME_RE = re.compile(r"[0-9a-f]{64}\.md")
 PART_NAME_RE = re.compile(r"[^./][^/]*")      # a member of what read_parts() enumerates (valid_part_name, below)
@@ -837,6 +837,31 @@ GROWTH_ADVICE = " Shrink something in the same write, or pass --allow-growth \"<
 CLIENT_GROWTH_ADVICE = " Shrink in the same write, or ask Infra Claude to run it as root."
 
 
+# ⛔ THE SHRINK GATE (B-LANGSTON-MEMORY-WRITE-FENCE Step 7, Langston 2026-11-05, after the 16:14Z probe).
+#    A 74 KB part rewritten to 2 B was not a reconciliation, it was a wipe - and nothing refused it: the growth gate
+#    passes every non-increase, and compose RECONCILES a changed part. So a write that leaves a part (or the composed
+#    body) under SHRINK_FLOOR of its old size, from at least SHRINK_MIN_OLD bytes, REFUSES (exit 8) unless root passes
+#    --allow-shrink "<reason>" (not on the spool's allowlist: his account cannot pass it). --trim and --split-ledger,
+#    which shrink by design under their own superset-first invariants, do not pass through this gate.
+SHRINK_FLOOR = 0.5
+SHRINK_MIN_OLD = 4096
+
+
+def shrink_gate(old_bytes, new_bytes, opts, what):
+    """None, or the override record; Refused(8) on a drastic shrink without --allow-shrink. Records nothing itself:
+    the caller writes nothing on a refusal."""
+    old_n, new_n = len(old_bytes), len(new_bytes)
+    if old_n < SHRINK_MIN_OLD or new_n >= SHRINK_FLOOR * old_n:
+        return None
+    why = opts.get("--allow-shrink")
+    if why:
+        return {"by": opts.get("--by"), "reason": why, "old_bytes": old_n, "new_bytes": new_n}
+    raise Refused(8, "REFUSED: this write shrinks %s from %d B to %d B (under %d%% of its size) - a wipe, not an "
+                     "edit. Nothing was written. If the shrink is deliberate, ask Infra Claude to run it as root with "
+                     "--allow-shrink \"<reason>\"; --trim is the verb for moving closed sections out."
+                  % (what, old_n, new_n, int(SHRINK_FLOOR * 100)))
+
+
 def growth_gate(old_bytes, new_bytes, opts, mode):
     """What the gate saw (a dict for the index row), or Refused(7) after recording the refusal."""
     delta = len(new_bytes) - len(old_bytes)
@@ -1287,6 +1312,7 @@ def do_compose(opts):
                                                                         state.get("pending_sha")))
         composed = body + stamp_line(len(parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         new_sha = sha(composed)
+        shrink = shrink_gate(strip_stamp(cur), body, opts, "the composed memory body")
         growth = growth_gate(cur, composed, opts, "compose")
         arch_path, created = archive_old(cur, cur_sha)
         row = {"ts": utc(), "target": TARGET, "old_sha": cur_sha, "new_sha": new_sha, "old_bytes": len(cur),
@@ -1294,7 +1320,7 @@ def do_compose(opts):
                "prev_parts_sha": state.get("parts_sha"), "parts_reconciled": parts_reconciled,
                "body_sha": body_sha, "stamp_bytes": len(composed) - len(body), "by_claimed": opts["--by"],
                "via_uid": os.getuid(), "reason": opts["--reason"], "archived": os.path.basename(arch_path),
-               "ratchet": growth}
+               "ratchet": growth, "shrink_override": shrink}
         append_index(dict(row, outcome="attempted"))
         # pending_sha BEFORE the rename; a crash here leaves it recognisable next time.
         write_compose_state(dict(state, pending_sha=new_sha, ts=utc()))
@@ -2178,6 +2204,7 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
         body, parts_sha, body_sha = compose_body(new_parts)
         mem_new = body + stamp_line(len(new_parts), parts_sha, body_sha).encode("utf-8") + b"\n"
         mem_new_sha = sha(mem_new)
+        shrink = None if (append or is_new) else shrink_gate(part_old, part_new, opts, "part %s" % target_name)
         growth = growth_gate(mem_old, mem_new, opts, "part-ledger-append" if append else "part-whole-file")
         part_arch = None if is_new else archive_old(part_old, part_old_sha)[0]   # a create has no prior part to archive
         mem_arch, _ = archive_old(mem_old, mem_old_sha)
@@ -2187,7 +2214,8 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                "declared_ledger_delta": declared_ledger, "declared_retractions_delta": declared_retractions,
                "by_claimed": opts["--by"], "via_uid": os.getuid(), "reason": opts["--reason"],
                "part_archived": (os.path.basename(part_arch) if part_arch else None), "created": is_new,
-               "mem_archived": os.path.basename(mem_arch), "resolve_rule": resolve_rule, "ratchet": growth}
+               "mem_archived": os.path.basename(mem_arch), "resolve_rule": resolve_rule, "ratchet": growth,
+               "shrink_override": shrink}
         append_index(dict(row, outcome="attempted"))
         old_state = dict(state)
         write_compose_state(dict(state, pending_sha=mem_new_sha, ts=utc()))
