@@ -25,8 +25,23 @@ import type pg from 'pg';
 // LABEL (Langston C1, C3): the stack is CAPTURED on every checkout (V8 formats it lazily) and FORMATTED only when the
 // label is used: a new minute max (wait or hold) or a hold over 1 s (CHANGE 1). The label is the first TWO frames
 // outside node_modules, node internals and these two pool modules (callee<caller), so the six xStock
-// `boundedTransaction` callers are told apart. No frame resolves ⇒ `query` or `connect`.
+// `boundedTransaction` callers are told apart.
+// ⚠️ THE QUERY PATH HAS NO APP FRAME (Step 7, measured 2026-11-05: 95 of 95 minutes labelled the fallback `query`):
+// drizzle runs a query from `QueryPromise.then` (`drizzle-orm/query-promise.js`), which the `await` machinery calls
+// in a microtask, so the awaiting application frame is genuinely gone; no stack can recover it. Transactions keep
+// their frames (`session.js:138`, `await this.client.connect()`). So the label ORDER is: stack → statement
+// FINGERPRINT → `query`/`connect` (Langston, Step 9). A `sql:` label is a STATEMENT FAMILY, NOT A CALL SITE — many
+// callers collapse into one key; `sql:select:closed_trades=8115` is every select on that table, not one site.
+// FINGERPRINT SAFETY (Langston CHANGE 1): the repo inlines values into SQL text through `sql.raw(...)` in places, so
+// the label is safe by construction, not by trusting the caller: only the TEXT of `args[0]` is read (never `args[1]`,
+// the parameters), only the STRING REFERENCE is kept (not the config object), and at label time only a verb from a
+// closed set and a table name matching `[A-Za-z0-9_]{1,40}` are emitted — `sql:<verb>[:<table>]`, else `sql:other`.
+// That closed charset is also the bound on the number of distinct keys.
+// The two label kinds rank SEPARATELY in the minute line (CHANGE 2): `slow_hold_sites` = top 3 code labels,
+// `slow_hold_sql` = top 3 statement families, so fingerprints cannot push the labels that name code out of the line.
 // CARRIER (Langston C3 on r1): one line a minute per pool to console.error ⇒ `error.log`, 14 daily files kept.
+// Tag `[B-DB-POOL-GUARD][POOL_MINUTE_V2]` since the split into `slow_hold_sites` + `slow_hold_sql` (V1, 2026-11-05
+// 04:36Z → the next deploy, had one shared `slow_hold_sites` top-5 where the query path always read `query`).
 // Counts are in FIXED buckets so they SUM across minutes and restarts; `open`, `total`, `idle` and `waiting` are
 // INSTANTANEOUS gauges read at flush and do NOT sum across lines. NO DATABASE WRITES.
 // Staging runs ONE esbuild bundle (`dist/index.js`, not minified, no source map — measured 2026-11-05), so an app
@@ -35,12 +50,12 @@ import type pg from 'pg';
 export const WAIT_BUCKETS_MS = [100, 1_000, 5_000, 10_000] as const;
 export const HOLD_BUCKETS_MS = [1_000, 5_000, 10_000, 20_000, 25_000] as const;
 const SLOW_HOLD_MS = HOLD_BUCKETS_MS[0];
-const SITES_IN_LINE = 5;
+const SITES_PER_KIND = 3;
 const STACK_LIMIT = 30;
 const SELF = /(^|\/)db-pool-(instrument|guards)\.(ts|js|mjs)$/;
 
 const META = Symbol('dtPoolCheckout');
-interface Holder { stack?: string }
+interface Holder { stack?: string; sqlText?: string }
 interface CheckoutMeta { requestAt: number; handedAt: number; viaQuery: boolean; holder: Holder }
 type Stamped = { [META]?: CheckoutMeta };
 
@@ -51,6 +66,33 @@ function capture(cut: (...args: never[]) => unknown): Holder {
   Error.captureStackTrace(holder, cut);
   Error.stackTraceLimit = prevLimit;
   return holder;
+}
+
+const SQL_VERBS = new Set(['select', 'insert', 'update', 'delete', 'with', 'begin', 'commit', 'rollback', 'set', 'create',
+  'alter', 'drop', 'truncate', 'copy', 'show', 'explain', 'values', 'call', 'do', 'lock', 'refresh', 'vacuum', 'analyze',
+  'savepoint', 'release', 'prepare', 'execute', 'deallocate', 'listen', 'notify', 'discard', 'reset']);
+
+/** The SQL text of a `pool.query` first argument — string or `{ text }` config — never the parameters. Exported for the test. */
+export function sqlTextOf(arg0: unknown): string | undefined {
+  if (typeof arg0 === 'string') return arg0;
+  const t = (arg0 as { text?: unknown } | null | undefined)?.text;
+  return typeof t === 'string' ? t : undefined;
+}
+
+/** `sql:<verb>[:<table>]` from a closed vocabulary, or `sql:other`. Never emits anything outside `[a-z0-9_:]`. Exported for the test. */
+export function fingerprintSql(text: string | undefined): string | null {
+  if (typeof text !== 'string') return null;
+  const head = text.slice(0, 2_000);
+  const verb = head.match(/^\s*([A-Za-z]+)/)?.[1]?.toLowerCase();
+  if (!verb || !SQL_VERBS.has(verb)) return 'sql:other';
+  const kw = verb === 'insert' ? 'into' : verb === 'update' ? 'update' : 'from';
+  const m = head.match(new RegExp(`\\b${kw}\\s+(?:"?[A-Za-z0-9_]+"?\\.)?"?([A-Za-z0-9_]{1,40})"?(?![A-Za-z0-9_])`, 'i'));
+  return m ? `sql:${verb}:${m[1].toLowerCase()}` : `sql:${verb}`;
+}
+
+/** Label order (Langston, Step 9): stack → statement fingerprint → `query`/`connect`. Exported for the test. */
+export function labelFor(stackSite: string | null, sqlText: string | undefined, viaQuery: boolean): string {
+  return stackSite ?? fingerprintSql(sqlText) ?? (viaQuery ? 'query' : 'connect');
 }
 
 /** First two app frames as `fn@file:line<fn@file:line` (callee<caller), or null. Exported for the test. */
@@ -120,6 +162,7 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
 
   p.query = function instrumentedQuery(...args: unknown[]) {
     pendingQueryHolder = capture(instrumentedQuery);
+    pendingQueryHolder.sqlText = sqlTextOf(args[0]); // the string reference only — never args[1], never the config object
     try {
       return origQuery(...args);
     } finally {
@@ -149,7 +192,7 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
     });
   };
 
-  const siteOf = (m: CheckoutMeta) => siteFromStack(m.holder.stack) ?? (m.viaQuery ? 'query' : 'connect');
+  const siteOf = (m: CheckoutMeta) => labelFor(siteFromStack(m.holder.stack), m.holder.sqlText, m.viaQuery);
 
   pool.on('release', (_err: Error | undefined, client: unknown) => {
     const m = (client as Stamped)[META];
@@ -173,15 +216,17 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
   const flush = () => {
     const m = minute;
     minute = freshMinute();
-    const sites = [...m.siteMaxHold.entries()].sort((a, b) => b[1] - a[1]).slice(0, SITES_IN_LINE)
-      .map(([s, ms]) => `${s}=${Math.round(ms)}`).join('|') || '-';
+    const top = (keep: (s: string) => boolean) => [...m.siteMaxHold.entries()].filter(([s]) => keep(s))
+      .sort((a, b) => b[1] - a[1]).slice(0, SITES_PER_KIND).map(([s, ms]) => `${s}=${Math.round(ms)}`).join('|') || '-';
+    const sites = top((s) => !s.startsWith('sql:'));
+    const sqlSites = top((s) => s.startsWith('sql:'));
     log(
-      `[B-DB-POOL-GUARD][POOL_MINUTE_V1] pool=${label} checkouts=${m.checkouts} via_query=${m.viaQuery} ` +
+      `[B-DB-POOL-GUARD][POOL_MINUTE_V2] pool=${label} checkouts=${m.checkouts} via_query=${m.viaQuery} ` +
         `via_connect=${m.checkouts - m.viaQuery} ` +
         WAIT_BUCKETS_MS.map((b, i) => `wait_gt_${b}ms=${m.wait[i]}`).join(' ') + ' ' +
         HOLD_BUCKETS_MS.map((b, i) => `hold_gt_${b}ms=${m.hold[i]}`).join(' ') + ' ' +
         `max_wait_ms=${Math.round(m.maxWaitMs)} max_wait_site=${m.maxWaitSite} ` +
-        `max_hold_ms=${Math.round(m.maxHoldMs)} max_hold_site=${m.maxHoldSite} slow_hold_sites=${sites} ` +
+        `max_hold_ms=${Math.round(m.maxHoldMs)} max_hold_site=${m.maxHoldSite} slow_hold_sites=${sites} slow_hold_sql=${sqlSites} ` +
         // instantaneous gauges at flush — they do NOT sum across lines
         `open=${open} total=${p.totalCount ?? '-'} idle=${p.idleCount ?? '-'} waiting=${p.waitingCount ?? '-'}`,
     );

@@ -79,7 +79,7 @@ const POOL_CONFIG = {
 
 export const pool = new Pool(POOL_CONFIG);
 // B-DB-POOL-GUARD P2: one line a minute measuring how long callers wait for a connection and how long they hold
-// it, before any time limit is chosen (`server/db-pool-instrument.ts`; tag `[B-DB-POOL-GUARD][POOL_MINUTE_V1]`).
+// it, before any time limit is chosen (`server/db-pool-instrument.ts`; tag `[B-DB-POOL-GUARD][POOL_MINUTE_V2]`).
 // Attached BEFORE drizzle() so the wrappers are in place whatever drizzle does with the pool's methods.
 attachPoolInstrument(pool, POOL_CONFIG.application_name);
 export const db = drizzle({ client: pool, schema });
