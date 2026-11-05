@@ -7,7 +7,10 @@ const state = vi.hoisted(() => ({ addAlert: vi.fn() }));
 vi.mock('../../db.js', () => ({ db: {} }));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: state.addAlert }));
 
+import { readFileSync } from 'node:fs';
 import {
+  PM2_KILL_TIMEOUT_MS,
+  SHUTDOWN_BUDGET_MS,
   XSTOCK_BAR_WRITER_BOOT_ID,
   XSTOCK_LIFECYCLE_TRACE_CEILING_MS,
   recordXstockLifecycleFailure,
@@ -55,5 +58,34 @@ describe('R1 lifecycle trace', () => {
   it('keeps the ceiling above the store lock budget (5 s) and short of a stuck exit', () => {
     expect(XSTOCK_LIFECYCLE_TRACE_CEILING_MS).toBeGreaterThan(5_000);
     expect(XSTOCK_LIFECYCLE_TRACE_CEILING_MS).toBeLessThanOrEqual(10_000);
+  });
+
+  it('R1 r2: bounds the write by the deadline when less than the ceiling is left', async () => {
+    vi.useFakeTimers();
+    state.addAlert.mockReturnValue(new Promise(() => undefined));
+    let settled = false;
+    const run = recordXstockLifecycleFailure('shutdown-after-handoff', new Error('z'), { deadlineAt: Date.now() + 1_000 })
+      .then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(1_001);
+    await run;
+    expect(settled).toBe(true);
+  });
+
+  it('R1 r2: skips the write when the deadline has already passed', async () => {
+    await recordXstockLifecycleFailure('shutdown-after-handoff', new Error('late'), { deadlineAt: Date.now() - 1 });
+    expect(state.addAlert).not.toHaveBeenCalled();
+  });
+
+  it('R1 r2 fence: the budget constant matches PM2 kill_timeout in ecosystem.config.cjs, and both bounded waits fit inside it', async () => {
+    const cfg = readFileSync('ecosystem.config.cjs', 'utf8');
+    const m = cfg.match(/kill_timeout:\s*(\d+)/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBe(PM2_KILL_TIMEOUT_MS);
+    expect(SHUTDOWN_BUDGET_MS).toBeLessThan(PM2_KILL_TIMEOUT_MS);
+    const { RING_SHUTDOWN_FLUSH_TIMEOUT_MS } = await import('../../asset_classes/xstock_spot/book-state-ring-store.js');
+    // The ring flush (try arm) and the trace (catch arm) cannot both run in one shutdown (Langston r1 point 4),
+    // so each must fit on its own.
+    expect(RING_SHUTDOWN_FLUSH_TIMEOUT_MS).toBeLessThan(SHUTDOWN_BUDGET_MS);
+    expect(XSTOCK_LIFECYCLE_TRACE_CEILING_MS).toBeLessThan(SHUTDOWN_BUDGET_MS);
   });
 });

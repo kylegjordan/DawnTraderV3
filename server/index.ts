@@ -1613,6 +1613,7 @@ app.use((req, res, next) => {
     console.log(`[A4.R10R-4][SHUTDOWN] Received ${signal}, initiating graceful shutdown...`);
     // R1 (B-XSTOCK-BAR-AVAILABILITY): which step was running when shutdown failed.
     let shutdownStep: 'shutdown-archive-handoff' | 'shutdown-after-handoff' = 'shutdown-archive-handoff';
+    const shutdownStartedAt = Date.now();
     try {
       // B-XSTOCK-BAR-AVAILABILITY: this is the shutdown owner that reaches
       // process.exit. Stop intake, drain, and persist the writer handoff here
@@ -1668,12 +1669,14 @@ app.use((req, res, next) => {
       console.log('[A4.R10R-4][SHUTDOWN] Graceful shutdown complete');
       process.exit(0);
     } catch (error) {
-      console.error('[A4.R10R-4][SHUTDOWN] Shutdown error:', error);
-      // R1: a durable trace of WHICH step failed and why, bounded (6 s) and never throwing, so it
-      // cannot hold or replace the exit.
+      // R1 r2: the failing step is in the line that ALWAYS runs, so the log carries it even when the
+      // durable row below cannot be written.
+      console.error(`[A4.R10R-4][SHUTDOWN] Shutdown error (step=${shutdownStep}):`, error);
+      // R1: a durable trace of WHICH step failed and why, bounded by what is left of the shutdown
+      // budget (at most 6 s) and never throwing, so it cannot hold or replace the exit.
       try {
-        const { recordXstockLifecycleFailure } = await import('./services/passive-archive/xstock-bar-availability.js');
-        await recordXstockLifecycleFailure(shutdownStep, error);
+        const { recordXstockLifecycleFailure, SHUTDOWN_BUDGET_MS } = await import('./services/passive-archive/xstock-bar-availability.js');
+        await recordXstockLifecycleFailure(shutdownStep, error, { deadlineAt: shutdownStartedAt + SHUTDOWN_BUDGET_MS });
       } catch (traceError) {
         console.error('[A4.R10R-4][SHUTDOWN] lifecycle trace import failed:', traceError);
       }

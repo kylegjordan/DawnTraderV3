@@ -414,9 +414,30 @@ export function assertExactRevisionIdSet(expected: readonly string[], returned: 
  */
 export type XstockLifecycleStep = 'shutdown-archive-handoff' | 'shutdown-after-handoff' | 'boot-registration';
 export const XSTOCK_LIFECYCLE_TRACE_CEILING_MS = 6_000;
+/** PM2's `kill_timeout` for the app (`ecosystem.config.cjs`); a fence test keeps the two equal. */
+export const PM2_KILL_TIMEOUT_MS = 10_000;
+/** The shutdown's whole budget before SIGKILL, with a margin for the exit itself. */
+export const SHUTDOWN_BUDGET_MS = PM2_KILL_TIMEOUT_MS - 500;
 
-export async function recordXstockLifecycleFailure(step: XstockLifecycleStep, error: unknown): Promise<void> {
+/**
+ * R1 r2 (Langston, PROCEED follow-up): the trace is bounded by a DEADLINE, not only the ceiling.
+ * A shutdown that spent most of its budget before failing gets only what is left, so a late drain
+ * shows up as a skipped trace in the log rather than silently being SIGKILLed mid-write.
+ */
+export async function recordXstockLifecycleFailure(
+  step: XstockLifecycleStep,
+  error: unknown,
+  opts: { deadlineAt?: number } = {},
+): Promise<void> {
   const detail = (error instanceof Error ? error.message : String(error)).slice(0, 600);
+  const remaining = opts.deadlineAt === undefined
+    ? XSTOCK_LIFECYCLE_TRACE_CEILING_MS
+    : Math.min(XSTOCK_LIFECYCLE_TRACE_CEILING_MS, opts.deadlineAt - Date.now());
+  if (remaining <= 0) {
+    console.error(`[B-XSTOCK-BAR-AVAILABILITY][LIFECYCLE] no time left to record ${step} failure `
+      + `(deadline passed by ${-remaining} ms); not written`);
+    return;
+  }
   const write = (async () => {
     const { addAlert } = await import('../system-alerts.js');
     await addAlert({
@@ -440,13 +461,13 @@ export async function recordXstockLifecycleFailure(step: XstockLifecycleStep, er
   })();
   let timer: NodeJS.Timeout | undefined;
   const ceiling = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), XSTOCK_LIFECYCLE_TRACE_CEILING_MS);
+    timer = setTimeout(() => resolve('timeout'), remaining);
   });
   try {
     const outcome = await Promise.race([write.then(() => 'written' as const), ceiling]);
     if (outcome === 'timeout') {
       console.error(`[B-XSTOCK-BAR-AVAILABILITY][LIFECYCLE] trace for ${step} not written within `
-        + `${XSTOCK_LIFECYCLE_TRACE_CEILING_MS} ms; proceeding`);
+        + `${remaining} ms; proceeding`);
     }
   } catch (traceError) {
     console.error(`[B-XSTOCK-BAR-AVAILABILITY][LIFECYCLE] FAILED TO RECORD ${step} failure:`,

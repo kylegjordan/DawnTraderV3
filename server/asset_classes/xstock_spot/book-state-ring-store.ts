@@ -14,8 +14,10 @@
  *     UPSERTED in ONE statement. ⛔⛔ THE STORE NEVER DELETES (Step-4 r3, see below).
  *   - A SHUTDOWN FLUSH, attempted and bounded (5 s). ⚠️ It is NOT established as "the normal path": it runs LAST
  *     in the shutdown handler, after work with no timeout of its own, inside pm2's `kill_timeout` 10 s
- *     (`ecosystem.config.cjs`). **Until a real restart logs `SHUTDOWN_FLUSH written=`, the honest crash bound
- *     is the 30 s snapshot** (Langston Step-4 FINDING-1; verified at Step 7/8).
+ *     (`ecosystem.config.cjs`). ✅ **FINDING-1 DISCHARGED 2026-11-05 (Langston, measured):** real restarts have
+ *     logged `SHUTDOWN_FLUSH written=` on 4 of 4 graceful exits (written 228/249/251/249, durationMs
+ *     107/121/82/106, against the 5 s bound). On a graceful exit the flush is the normal path; on a crash or a
+ *     SIGKILL the honest bound is still the 30 s snapshot.
  *   - RESTORE at boot, BEFORE `resumeActiveEngines()` (`server/index.ts`), so no exit loop runs before the
  *     rings are back. Only S25b is restored; chains re-seed fresh and are judged.
  *
