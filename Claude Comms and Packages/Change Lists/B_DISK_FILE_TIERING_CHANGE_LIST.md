@@ -109,3 +109,9 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 - **The `missing` arm, exercised for the first time (Langston #661 leg 3):** `disk-file-tiering.log` moved aside, `archival-health` run by hand → `ALERT disk-file-tiering/missing` and row `eefabc37-c594-41a6-a62e-bc2b054c2414` ("Archival cron MISSING: Disk-file tiering …"); log moved back, **byte-identical** (sha256 prefix `64997356f41cf032` before and after, mtime 03:03:49.863 unchanged); the test row resolved with that evidence. The other checks in the same run: daily-runway rows all OK.
 - **No UI surface:** the watchdog's output is an alert row; the alert itself is the surface.
 - **Still owed for close:** OBJ-10 rotated-file PASS, Step 8, H-1..H-3, P9/P10, governance.
+
+## OBJ-10 Step 7 — the rotated-file PASS (scope r7 C2), read 2026-11-05 ~10:15Z
+- **Object:** `/var/log/dawntrader/out__2026-11-05_08-01-39.log`, the first rotated app log written ENTIRELY after the OBJ-10 deploy (`93cead7f2`, 23:13:58Z): first line 2026-11-05 00:00:03Z, last 08:01:42Z; 1,073,956,664 B by `stat`, 1,072,223,294 characters / 9,270,942 lines by awk.
+- **The six tag pairs: all 0** — `[I7-WS-RAW]` 0, `[8.8.3-I5][CACHE_UPDATE]` 0, `[I7-WS-D][CACHE_WRITE]` 0, `[I7-WS-A][CACHE_UPDATE]` 0, `[I7-WS-D][BROADCAST_THROTTLED]` 0, `[34.A][BROADCAST]` 0. **Controls in the same pass:** `[I7-WS-D][BROADCAST_SEND]` 568,936 and `[ContextBridge] Broadcasting` 773,687 (the kept lines), so the instrument can speak.
+- **Coverage:** 8.03 h per 1.07 GB file, against 2.90 h before the cut (`out__2026-11-04_20-56-08.log`, 18:02:08→20:56:08Z) and the predicted ~7.7 h (2.9 h ÷ (1 − 0.6219)). **PASS.**
+- Largest remaining tags in that file, for the record (no work implied): `[DIAG_PATTERN]` 78.1 MB, `[ContextBridge]` 71.3 MB, `[8.8.3-I6-FIX][Pricing-WS]` 68.7 MB, `[I7-WS-A][BROADCAST]` 62.9 MB, untagged 64.4 MB.
