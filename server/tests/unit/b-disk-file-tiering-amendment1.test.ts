@@ -96,6 +96,19 @@ describe('H-2 — the liveness watchdog reads archival-health by CONTENT (C-1)',
     expect(/^ \*\s+0 5 \* \* \* su - deploy/m.test(header)).toBe(true);
     expect(mod.ARCHIVAL_HEALTH_FIRE_UTC).toEqual({ hour: 5, minute: 0 });
   });
+  it('the two marker strings are a cross-file contract: the producer writes exactly what the watcher reads (Langston Step-4 condition)', () => {
+    const producer = read('server/scripts/b-storage-archival-health.ts');
+    // the producer's own log lines, as written in its source
+    expect(producer).toContain('console.log(`[archival-health] started at ${');
+    expect(producer).toContain('console.log(`[archival-health] DONE — all_ok=${');
+    // and the watcher's patterns, as written in its source, match lines built from exactly those templates
+    const start = '[archival-health] started at 2026-11-05T05:00:02.111Z';
+    const done = '[archival-health] DONE — all_ok=true checks=5';
+    expect(mod.archivalHealthRan(`${start}\n${done}\n`, now).ok).toBe(true);
+    const watcher = read('server/scripts/staging-liveness-watchdog.mjs');
+    expect(watcher).toContain('/\\[archival-health\\] started at (\\S+)/');
+    expect(watcher).toContain('/\\[archival-health\\] DONE — all_ok=/');
+  });
   it('a missing log is a FAIL, never a skip (returns false, not null)', () => {
     const src = read('server/scripts/staging-liveness-watchdog.mjs');
     expect(src).toMatch(/err\.code === 'ENOENT'\) \{ archivalReading = .*?; return false; \}/);
