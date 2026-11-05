@@ -330,6 +330,12 @@ if hasattr(os, "geteuid") and os.geteuid() != 0:
         os.chmod(births, 0o700)
 else:
     print("SKIP permission-wall case (needs a non-root POSIX account; the directory-as-file case covers open())")
+store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-04.jsonl"), "offset": 5}})
+check("★ a cursor file that is gone while NEWER files exist is a problem (deleted, not never-written)",
+      any("2026-11-04" in p for p in liveness.probe_readable()), liveness.probe_readable())
+store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-06.jsonl"), "offset": 0}})
+check("★ a cursor on a day AFTER every census file (never created: an outage) is NOT a problem",
+      liveness.probe_readable() == [], liveness.probe_readable())
 store.save_state("liveness", {})
 store.save_state(liveness.FEED_RESULT_STATE, {})
 shutil.rmtree(births)
@@ -384,6 +390,45 @@ feed_watch.run_check(now=NOW - timedelta(hours=1, minutes=55))
 feed_watch.run_check(now=NOW)
 check("a failed mint exits non-zero (the unit fails and pages)",
       feed_watch.run_mint(now=NOW, mint=lambda **kw: False) == 1)
+
+print("=== 9b. an outage ACROSS MIDNIGHT: no new census file, the watch keeps running and records the gap ===")
+# Langston's replay at Step 4 part 2: the cursor parks on the new day's path, which an outage never creates;
+# the probe then failed every run and recovery did not heal it, so gaps.jsonl held no record of the outage.
+shutil.rmtree(births)
+os.makedirs(births)
+store.save_state("liveness", {})
+store.save_state(liveness.FEED_RESULT_STATE, {})
+open(liveness.GAPS_PATH, "w").close()
+D0 = datetime(2026, 11, 3, tzinfo=UTC)
+open(os.path.join(births, "2026-11-03.jsonl"), "w", encoding="utf-8").write(
+    json.dumps({"first_seen_at": (D0 + timedelta(hours=9, minutes=59)).isoformat()}) + "\n"
+    + json.dumps({"first_seen_at": (D0 + timedelta(hours=10)).isoformat()}) + "\n")
+calls.clear()
+for label, at in (("same day, feed dead", D0 + timedelta(hours=11)),
+                  ("first run after midnight", D0 + timedelta(days=1, hours=1)),
+                  ("second run after midnight (the wedge)", D0 + timedelta(days=1, hours=2)),
+                  ("the next day", D0 + timedelta(days=2, hours=3))):
+    rc = feed_watch.run_check(now=at)
+    res = liveness.load_feed_result()
+    check("★ %s: run_check succeeds" % label, rc == 0, rc)
+    check("★ %s: check() ran this run" % label, res.get("checked_at") == at.isoformat(), res)
+    check("%s: the gap stays open from the last row" % label,
+          (res.get("open_gap") or {}).get("started_at") == (D0 + timedelta(hours=10)).isoformat(), res)
+    check("%s: the mint fires" % label,
+          feed_watch.run_mint(now=at + timedelta(seconds=30), mint=fake_mint) == 0 and len(calls) >= 1, calls)
+check("POSITIVE CONTROL: the cursor did park on a day file that was never created",
+      not os.path.exists(store.load_state("liveness", {})["cursor"]["path"]), store.load_state("liveness", {}))
+BACK = D0 + timedelta(days=2, hours=10)
+open(os.path.join(births, "2026-11-05.jsonl"), "w", encoding="utf-8").write(
+    json.dumps({"first_seen_at": (BACK - timedelta(minutes=5)).isoformat()}) + "\n")
+rc = feed_watch.run_check(now=BACK)
+check("★ the feed is back: run_check succeeds", rc == 0, rc)
+check("★ the feed is back: the gap is closed", liveness.load_feed_result().get("open_gap") is None,
+      liveness.load_feed_result())
+gaps = [json.loads(x) for x in open(liveness.GAPS_PATH, encoding="utf-8") if x.strip()]
+check("★ the outage is RECORDED: a prospective_closed gap starting at the last row before it",
+      any(g["detected"] == "prospective_closed" and g["started_at"] == (D0 + timedelta(hours=10)).isoformat()
+          for g in gaps), gaps)
 
 print("=== 10. the units and the installer carry the feed watch ===")
 timer = open(os.path.join(PKG, "systemd", "token-watch-feed-watch.timer"), encoding="utf-8").read()

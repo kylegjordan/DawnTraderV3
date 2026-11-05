@@ -288,6 +288,15 @@ def check(now: datetime = None) -> dict:
     return stats
 
 
+def _never_created(cursor: str, names: list[str]) -> bool:
+    """True when the cursor names a census day file that does not exist and is dated after every census file
+    in `names` (the listing of BIRTHS_DIR): a day the feed wrote nothing, not a lost file."""
+    if os.path.normpath(os.path.dirname(cursor)) != os.path.normpath(BIRTHS_DIR):
+        return False
+    base = os.path.basename(cursor)
+    return base not in names and base > names[-1] and not os.path.exists(cursor)
+
+
 def probe_readable() -> list[str]:
     """Prove the census is READABLE before `check()` is allowed to read silence as a gap-free feed.
 
@@ -302,10 +311,19 @@ def probe_readable() -> list[str]:
       2. it holds at least one dated census file — the census is never
          deleted, so an empty listing means the wrong place, not a quiet day;
       3. the newest census file opens and yields a byte;
-      4. if a cursor exists, the file it points at opens and yields a byte.
-    ⚠️ It does NOT require today's file to exist: in a real outage there is
-       none, and that is `check()`'s prospective leg to report as a gap, not a
-       reason for this probe to fail the unit instead.
+      4. if a cursor exists, the file it points at opens and yields a byte —
+         UNLESS that file is dated AFTER every census file present.
+    ⛔ THE CURSOR LEG DISCRIMINATES TWO CASES THAT BOTH READ AS ENOENT (Langston,
+       Step-4 part 2): `check()` parks the cursor on TODAY's path whether or not
+       that file exists. In an outage no file is written for the day, so the
+       cursor names a file that was NEVER CREATED — dated ahead of every census
+       file. That is `check()`'s prospective leg to report as a gap; failing the
+       unit there wedged the watch for the whole outage and lost its gap record
+       (measured against #1247's shape: six consecutive missing day files).
+       A cursor file that is gone while it is NOT ahead of the newest census
+       file means the census was deleted or moved: that is a real failure and
+       still fails. A cursor outside the census directory is opened as before.
+    So this probe never requires today's file to exist.
     """
     problems: list[str] = []
     try:
@@ -317,7 +335,8 @@ def probe_readable() -> list[str]:
                 "or a lost store, not a quiet feed" % BIRTHS_DIR]
     targets = [os.path.join(BIRTHS_DIR, names[-1])]
     cursor = (load_state(STATE, {}).get("cursor") or {}).get("path")
-    if cursor and cursor not in targets:
+    if cursor and not _never_created(cursor, names) and \
+            os.path.normpath(cursor) != os.path.normpath(targets[0]):
         targets.append(cursor)
     for path in targets:
         try:
