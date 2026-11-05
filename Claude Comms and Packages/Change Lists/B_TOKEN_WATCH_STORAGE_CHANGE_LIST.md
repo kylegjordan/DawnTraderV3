@@ -113,3 +113,112 @@ The mutations are applied **by exact line**: the runner refuses if the line is n
    - Is a directory boundary plus its own test the right answer? The alternative is an explicit, reasoned exemption list inside `test_pipeline.py`. Its author warns against name lists ("DERIVED, NEVER A NAME LIST"), which is why I did not choose it.
 2. **The key gate inside the uploader**, refusing the account-wide key, as well as the key's own restriction. Belt and braces, or noise?
 3. **`install_storage.sh` reads blobs through `deploy`'s app clone** (a fetch in the app's repo). The alternative is a separate bare clone just for token-watch.
+
+
+---
+
+# AMENDMENT 1 (OBJ-7 due prune, OBJ-8 feed watch) — Step 4 change list
+
+## Dispatch header
+- **(i) Declared change-class:** `non_architecture` (scope header, unchanged by the amendment).
+- **(ii) That class's doc set:** scope `B_TOKEN_WATCH_STORAGE_SCOPE.md` r3a **present** (OBJ-7, OBJ-8, C-1..C-5) · pre-audit `B_TOKEN_WATCH_STORAGE_PRE_AUDIT.md` §4 r2a **present** (Langston PROCEED, two in-commit conditions landed at `20803391b`) · this change list **present** · completion report **absent, not yet due** (Step 11) · SIM / `STORAGE_POLICY` / `SYSTEM_MANUAL` line / `BATCH_CATALOG` / `PHASE_HISTORY` **absent, not yet due** (Step 10, P10) · `DELETED_COMPONENTS_LOG` **N/A** — nothing is removed as a component; the 91-day due rule is replaced in place, and the `run_hour` → `liveness.check()` call moves, it is not deleted as a capability.
+- **(iii) Step-2 reference:** `Claude Comms and Packages/Scope Files/B_TOKEN_WATCH_STORAGE_PRE_AUDIT.md` §4, r2a at `20803391b`.
+- **Graded ref:** the commit that carries this section (it names its sha in the dispatch): `eebe1ed12` (15 files) plus the damaged-cursor fix found by the second reader below.
+
+## What changed, by plan item
+
+### P1 `config.py` — `DUE_SPENT_HOT_DAYS = 7`
+With a comment naming the reader (the follow-up, through the cursor) and why it is not `WORKING_INDEX_HOT_DAYS`.
+
+### P2 `follow_up.py` — the lineage start, and the switch call removed (A9)
+```python
+# BEFORE
+def _advance_cursor(buckets):
+    if buckets:
+        save_state("follow_up_cursor",
+                   {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")})
+# AFTER
+    if not buckets:
+        return
+    prev = load_state("follow_up_cursor", {})
+    rec = {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")}
+    if prev.get("consumed_from"):
+        rec["consumed_from"] = prev["consumed_from"]
+    elif not prev.get("last_bucket"):
+        rec["consumed_from"] = min(buckets).strftime("%Y-%m-%dT%H")
+    save_state("follow_up_cursor", rec)
+```
+**Fix after the second reader (below), in the follow-up commit:** the condition is not "a `last_bucket` key exists" but "`_last_consumed` can parse it". A cursor whose `last_bucket` is missing or unparsable while `consumed_from` survives is a DAMAGED cursor; `_last_consumed` already treats it as a first run, so it now starts a new lineage too (`prev_last_ok = _last_consumed(None) is not None`).
+**Judgement call:** a cursor that EXISTS without `consumed_from` keeps it ABSENT (the pre-field state of the live cursor). Starting it at the next run's hour would date it to whenever the job next ran; only the backfill (P4) sets it. The prune treats "absent" as "remove nothing".
+`run_hour`'s `liveness.check()` block and the `import liveness` are deleted (A9); a comment names where the switch now runs.
+
+### P3 `tier.py` — `classify_due_buckets` + `prune_due_buckets`
+```python
+# BEFORE (removed): cutoff = now - timedelta(days=WORKING_INDEX_HOT_DAYS + 1); unlink any bucket older
+# AFTER, the decision per bucket:
+            if not ok:            # no cursor, no consumed_from, or consumed_from > last_bucket
+                cls = ("kept_after_cursor" if last is not None and h > last
+                       else "kept_before_consumed_from")
+            elif h < first:
+                cls = "kept_before_consumed_from"
+            elif h > last:
+                cls = "kept_after_cursor"
+            elif h < spent_before:          # now - DUE_SPENT_HOT_DAYS
+                cls = "removable"
+            else:
+                cls = "kept_spent_window"
+```
+`prune_due_buckets` reads the cursor with `load_state` inside `run`'s `periodic_lock` (the follow-up's lock), removes only the `removable` paths, and returns and logs count + bytes for every class plus `due_prune_ok` / `due_prune_reason`. The docstring states the refuted premise. One classifier serves the prune and the census, so they cannot disagree.
+
+### P4 `tools/backfill_consumed_from.py` (new)
+Derives the hour from the FIRST observations file, excluding `reason == "scheduled_in_the_past"`; prints both minima and the three row counts; refuses (exit 2, nothing written) on a disagreement with the literal `"2026-08-31T11"`, a missing cursor file, an existing `consumed_from`, or `last_bucket` before the value. Dry run unless `--apply`; takes the periodic lock.
+
+### P5 `tools/due_census.py` (new)
+Read-only, the same classifier. ⚠️ **Deviation:** P5 said "written to `offbox/due-census.json`". `offbox/` is `tokenwatch-cold`'s (0750, measured today) and `tokenwatch` cannot write it, so it writes `<store>/due-census.json`, where the store root's default ACL gives `deploy` read.
+
+### P6 `liveness.probe_readable()` + `ops/feed_watch.py` (new)
+The probe: the census directory LISTS; it holds ≥1 dated file; the newest opens and yields a byte; the cursor's file (if any) opens and yields a byte. ⚠️ **Deviation:** P6 said "today's" file. In a real outage there is no today's file, and that is the prospective leg's gap to report, not a unit failure that would stop the gap being recorded — so the probe reads the NEWEST file instead. ENOENT on the cursor's file still fails.
+`--check` (tokenwatch): probe → exit 2 naming each path, no reading taken, no result written; else `check()`, then the result (`checked_at`, `open_gap`, stats, `maxrss_mb`) to `state/feed_watch_result.json`.
+`--mint` (root): refuses a missing result or one older than 15 min (exit 1); mints `token-watch-feed-gap` (warning) only on an open gap; the body states A8's consequence and says resolve, never ack. Imports `config` and `liveness` only.
+
+### P7 units (new) `token-watch-feed-watch.service` / `.timer`
+`User=tokenwatch`, `ExecStart … --check`, `ExecStartPost=+ … --mint`, `OnFailure=token-watch-failed@%n.service`, `NoNewPrivileges=true`, `ProtectSystem=strict`, `ReadWritePaths=/var/lib/token-watch`, `MemoryMax=256M`. Timer `OnUnitActiveSec=3600s` — a test asserts it equals `config.LIVENESS_CHECK_INTERVAL_SECONDS`.
+
+### P9 `deploy/install_storage.sh`
+```sh
+# BEFORE: each PINNED live file vs the NEW blob (would refuse this amendment)
+  tr -d '\r' < "$DEST/$f" | cmp -s - "$stage/$f"
+# AFTER: every live file vs its blob at the PREVIOUS reviewed install
+PREV=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sha"])' "$DEST/INSTALLED")
+...
+for f in $ALL; do
+  [ -f "$DEST/$f" ] || continue          # new in this install: nothing to guard
+  g cat-file blob "$PREV:token-watch/$f" > "$prev" … || fail "… live but has no blob at the previous install"
+  tr -d '\r' < "$DEST/$f" | cmp -s - "$prev" || fail "… edited on the box — stop and look"
+done
+```
+Plus: `OPS` gains `ops/feed_watch.py`; `CORE="follow_up.py"`; the four lists asserted disjoint; compile covers OPS, CORE and TOOLS; the feed-watch units installed and the service verified; `previous_sha` written into `INSTALLED`. ⚠️ **Deviations, both widenings:** (a) a fifth list, `TOOLS`, so P4/P5's tools are installed from the reviewed blob under `/opt/token-watch/tools` and run from there as `tokenwatch` (they import the collector from their parent directory; run from the app clone they would need tokenwatch to read `/home/deploy`); (b) the guard covers every live file in all four lists, not PINNED and CORE only — OPS were installed from blobs at the previous sha, so they must match it too.
+
+### Also
+- `ops/store_watch.py`: two stale sentences (the `follow_up.py:220` pointer and "pruning starts ~91 days") corrected.
+- `tests/test_ops_boundary.py`: the job list gains `feed_watch`.
+- `tests/test_wiring.py` §7 REWRITTEN: it proved `run_hour` ran the switch — the wiring this amendment removes. It now proves `run_hour` does NOT write `state/liveness.json`, the feed watch's check step DOES, and a held periodic lock cannot silence it.
+
+## Tests
+- `tests/test_due_storage.py` (new): **66 passed, 0 failed** — the classes by count and bytes; the live shape (a cursor 36 days behind with old unread buckets after it); no cursor / no `consumed_from` / inverted cursor remove nothing; C-1 cursor-loss-then-one-run; lineage never moves; census removes nothing; every backfill refusal + dry run + apply; the probe (missing dir, empty dir, unreadable newest, vanished cursor file; EACCES where a non-root POSIX account exists, else skipped and said so); open gap mints with the fixed key, closed gap does not, stale/missing result refused, failed mint exits 1; the units and installer carry the feed watch.
+- `tests/mutate_due_storage.py` (new): **6 of 6 caught**, each by exit code AND its named FAIL line, each patch verified applied: no cursor bound · no `consumed_from` in the classifier · no lineage start on a lost cursor · a damaged cursor keeping its old `consumed_from` · no probe · backfill counting the miss rows. (Round 1 had the cursor-bound mutation SURVIVE: the only after-cursor bucket was 2 days old, inside the margin. The live shape — old unread buckets after a stalled cursor — was added and it is now caught.)
+- Every other `tests/test_*.py` passes unchanged.
+
+## Second reader, before this dispatch
+`REVIEWER: object handed (the code at eebe1ed12) · "what other states of the world, consistent with this code, delete a due bucket that was not fully read?" · 5 candidates · re-derived as below`
+1. **A damaged cursor** (`consumed_from` kept, `last_bucket` unreadable) — **re-derived, real** (`follow_up.py:120-126` → first run → old `consumed_from` kept). **Fixed** (P2 above); test §4b + mutation.
+2. **A stolen periodic lock** lets a second follow-up run move the cursor while the first still re-queues into a passed bucket, and can move the cursor backward — mechanism read (`store.py:157-166`, `follow_up.py:209`). 3. **Read is not processed** — an observation that raises is dropped, not re-queued (`follow_up.py:315-318`). 5. **A birth appended into a bucket already read** (the receiver takes no lock). ⇒ **All three are the follow-up's own read guarantees, and the observation is lost whether or not the prune runs: the prune only removes the scheduling entry, which is derivable from the census** (an entry is `mint`, `age`, `due_at`, `created_at`, `store.py:355-357`). The follow-up timer is off. **HOME: `B-TOKEN-WATCH-FOLLOWUP-MEMORY` OBJ-4b (scope r1b), §9.4 disposition 2 — that batch re-enables the timer, so they are settled before it does.**
+4. **The backfill assumes the follow-up read every hour 08-31 → 09-30 without a reset** — hypothesis, not checkable from the journal (it starts 2026-10-11). Bounded the same way: a bucket behind the cursor is never read again by the follow-up whether or not it is removed, and its entries are derivable from the census. Stated as a residual, not fixed.
+
+## Not yet done (later steps)
+Install (P9) at a reviewed sha; the A7 mint drill ending in a read-back `resolve` before the timer is enabled; the backfill (P4, dry run then `--apply`); the census before and after the next 04:30Z tier run (P5); first live feed-watch run's `maxrss_mb` recorded (it reads 36 days of census the first time).
+
+## Judgement calls I want attacked
+1. P6's probe reading the NEWEST census file rather than today's.
+2. P2 leaving `consumed_from` absent on a pre-field cursor rather than starting it.
+3. The first live `--check` reads the census from the switch's 2026-09-30 cursor to now (~36 daily files, one at a time). I expect well under `MemoryMax=256M` and will record `maxrss_mb`; is that the right bound, or should the first run be done by hand outside the unit?

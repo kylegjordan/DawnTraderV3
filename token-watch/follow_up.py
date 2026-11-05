@@ -188,14 +188,21 @@ def _advance_cursor(buckets):
        cursor written before the field existed, and its true start is set once,
        by `tools/backfill_consumed_from.py`, from the observations record.
        Inventing it here would date it to whenever the job next ran.
+    ⛔ A DAMAGED cursor — `last_bucket` missing or unparsable while
+       `consumed_from` survives — IS A LOST CURSOR, and starts a new lineage
+       (a second reader's catch, Step 3). `_last_consumed` already treats it
+       as a first run and reads only this hour; keeping the old
+       `consumed_from` would then put every hour between the real position and
+       now inside the "read" range, and the prune would remove them unread.
     """
     if not buckets:
         return
     prev = load_state("follow_up_cursor", {})
     rec = {"last_bucket": max(buckets).strftime("%Y-%m-%dT%H")}
-    if prev.get("consumed_from"):
+    prev_last_ok = _last_consumed(None) is not None
+    if prev_last_ok and prev.get("consumed_from"):
         rec["consumed_from"] = prev["consumed_from"]
-    elif not prev.get("last_bucket"):
+    elif not prev_last_ok:
         rec["consumed_from"] = min(buckets).strftime("%Y-%m-%dT%H")
     save_state("follow_up_cursor", rec)
 

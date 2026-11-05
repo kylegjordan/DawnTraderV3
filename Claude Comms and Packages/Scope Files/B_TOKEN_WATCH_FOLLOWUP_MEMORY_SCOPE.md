@@ -1,4 +1,6 @@
-# B-TOKEN-WATCH-FOLLOWUP-MEMORY — SCOPE r1a
+# B-TOKEN-WATCH-FOLLOWUP-MEMORY — SCOPE r1b
+
+> **r1b (2026-11-05):** OBJ-4b added — three read guarantees of the follow-up, found by a second reader at `B-TOKEN-WATCH-STORAGE` Step 3, homed here because this batch re-enables the timer.
 
 > **r1a (2026-11-05):** OBJ-4 moved to `B-TOKEN-WATCH-STORAGE` amendment 1 (its pre-audit §4 r2, A9 and P2), which removes `follow_up.py`'s `liveness.check()` call in a file it already edits. Here it shrinks to a check at Step 7.
 
@@ -37,6 +39,12 @@ change-class: non_architecture
 **OBJ-3 — decide the 36-day backlog before the timer returns.** If the job is simply re-enabled it walks 851 never-read buckets at 48 an hour (~18 h), observing tokens a month after the checkpoint they were scheduled for, and recording them as that checkpoint. The study's question needs a measurement at the scheduled age, so a late observation is not that checkpoint. **Proposed:** do not catch up; move the cursor to the current hour in one recorded step, write the skipped window into the pre-registration as an append-only amendment (checkpoints scheduled 2026-09-30T13 → the restart hour are NOT OBSERVED), and let the storage batch's cursor-bounded prune clear the skipped buckets once spent. Langston to rule; Kyle only if the study's design is his to change.
 
 **OBJ-4 — one writer for `state/liveness.json`** (`#1132` rider C-4). **The change itself is made by `B-TOKEN-WATCH-STORAGE` amendment 1 (A9, P2).** This batch re-enables the timer, so before OBJ-8 it confirms the change holds. **Done when:** a repo-wide grep at the ref finds one production caller of `liveness.check()`, and a test drives `run_hour` and asserts it did not touch `liveness.json` (added here if the storage batch did not add one).
+
+**OBJ-4b — the follow-up's own read guarantees, before its timer returns** (found by a second reader of `B-TOKEN-WATCH-STORAGE` amendment 1 at Step 3, §9.4 disposition 2 — they are the follow-up's, and this batch is the one that switches it back on). Each is a hypothesis with a cited mechanism, to be re-derived here:
+- **(a) a stolen lock.** `periodic_lock` stamps the lock once (`store.py:157-159`) and lets another job take it after 30 minutes (`store.py:70`, `:162-166`); a catch-up run can exceed that. A second run then reads ahead and moves the cursor while the first is still re-queuing into `now + 1h` against its stale clock (`follow_up.py:209`) — so entries can land in a bucket the cursor has passed, and whichever run finishes last sets the cursor, which can move it BACKWARD.
+- **(b) read is not processed.** An entry whose observation raises is counted and dropped, not re-queued (`follow_up.py:315-318`), while the cursor advances.
+- **(c) a birth written into a bucket already read.** `schedule_grid` takes `now` once and the receiver holds no lock; an append landing after the follow-up read that bucket is never read.
+In all three the observation is lost whether or not the due prune runs; the prune only removes the scheduling entry, which is derivable from the census (mint, age, `due_at`, `created_at` — `store.py:355-357`). **Done when:** each is fixed or stated with its measured rate, before OBJ-8 re-enables the timer.
 
 **OBJ-5 — an uninstrumented checkpoint renders as NOT INSTRUMENTED, never as alive** (`#1132` rider, Langston). The summary's `alive/by_age` and `died/by_age_at_death` for a checkpoint with zero observations in the window publish "not instrumented"; `oldest_survivors` excludes tokens with `observed_at: null`. **Done when:** today's state renders the 30d and 90d checkpoints as not instrumented (they read 511,996 alive and 0 died today), with a test fixture that has observations rendering numbers.
 

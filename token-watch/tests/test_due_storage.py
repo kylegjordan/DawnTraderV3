@@ -143,6 +143,22 @@ r = tier.prune_due_buckets(NOW)
 check("★ after cursor loss + one run, NOTHING old is removed", r["due_buckets_removed"] == 0 and len(present()) == 5,
       (r, present()))
 
+print("=== 4b. a DAMAGED cursor (consumed_from kept, last_bucket unreadable) is a LOST cursor ===")
+# A second reader's catch at Step 3: `_last_consumed` treats an unparsable last_bucket as a first run and
+# reads only this hour; keeping the old consumed_from would put every hour between the real position and
+# now inside the "read" range.
+reset_due(LAYOUT)
+store.save_state("follow_up_cursor", {"consumed_from": H(FROM), "last_bucket": "garbage"})
+dmg_buckets = follow_up._buckets_to_read(NOW)
+check("POSITIVE CONTROL: a damaged cursor reads only this hour", [H(b) for b in dmg_buckets] == [H(NOW)],
+      [H(b) for b in dmg_buckets])
+follow_up._advance_cursor(dmg_buckets)
+cur = store.load_state("follow_up_cursor", {})
+check("★ a damaged cursor starts a NEW lineage at this hour", cur.get("consumed_from") == H(NOW), cur)
+r = tier.prune_due_buckets(NOW)
+check("★ after a damaged cursor + one run, NOTHING old is removed", r["due_buckets_removed"] == 0
+      and len(present()) == 5, (r, present()))
+
 print("=== 5. consumed_from never moves ===")
 store.save_state("follow_up_cursor", {"last_bucket": H(LAST), "consumed_from": H(FROM)})
 follow_up._advance_cursor([LAST + timedelta(hours=1), LAST + timedelta(hours=2)])
