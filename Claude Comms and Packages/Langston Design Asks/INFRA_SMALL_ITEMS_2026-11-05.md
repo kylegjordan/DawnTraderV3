@@ -17,7 +17,7 @@ Owner: Infra Claude. Both are proposals for Kyle's list (PM Claude carries them)
 - (3) both resulting maps through `computeDiff` against the real baseline give identical results, an injected +1 regression detected in both;
 - (4) the `:388` note made executable: an unknown path stays in `newPaths` and makes the derived verdict fail (the comment stays, but is not the control).
 Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (329 = baseline, OK), not on these tests.
-**Status:** Coltrane AGREES with these four. Langston AGREED to the fix (with 2 and 4); his confirmation of the revised test set is asked 16:0xZ.
+**Status:** Coltrane CONFIRMED Item 1 as written (at `972b06c22`). Langston AGREED to the fix (with 2 and 4); his confirmation of the revised test set is asked 16:0xZ.
 
 ## Item 2 — a root-made snapshot of staging's root crontab, so archival-health checks schedules against the real ones
 
@@ -26,7 +26,7 @@ Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (32
 **Half (1) — Infra Claude, root, staging.**
 - A committed writer + systemd timer, daily at **01:00Z** (well clear of the 05:00Z check), recorded at install (`#1004` class: a root-side executable must have provenance).
 - It runs `crontab -l -u root`; only on success it publishes, by same-directory atomic rename, into `/var/lib/dawntrader-cron/` (not writable by deploy), a file `root:deploy 0640`. A failure keeps the previous file, so freshness turns red.
-- **A projection, never argv (Langston C-2):** per active line — the five schedule fields, the command up to and including the script path, and a sha256 of the full line — plus a header line with its UTC time. Comments, blanks and `SHELL`/`PATH`/`MAILTO` lines are excluded. A future root line carrying a token can never reach deploy by construction.
+- **A projection, never argv (Langston C-2, tightened by Coltrane):** per active line — the five schedule fields and the matched script-path token ONLY (never the command text before it: an env assignment such as `TOKEN=… /path/script` precedes the path), and a **root-keyed HMAC-SHA256** of the full line (key root-only 0600; a raw sha256 of a secret-bearing line is an offline guessing oracle) for identity and duplicate detection — plus a header line with its UTC time. Comments, blanks and `SHELL`/`PATH`/`MAILTO` lines are excluded. A future root line carrying a token can never reach deploy by construction.
 
 **Half (2) — OLD Claude's, in archival-health (its own slot on Kyle's list; that batch is at Step 4).**
 - **Five contracts (Coltrane):** the four `CheckSpec` entries plus archival-health's own 05:00 line (its second in-code copy is `server/scripts/staging-liveness-watchdog.mjs:290-300`).
@@ -38,4 +38,4 @@ Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (32
 - **One authority (C-3):** `CheckSpec.schedule` is the source of truth; the scripts' `Cron line` header comments are retired or machine-regenerated, and the reach statement moves to the check.
 - **What it does NOT close, stated in the module header (C-4):** it proves what root's crontab SAYS, not that any job RAN, and it cannot see a stopped cron daemon; a dead archival-health still pages nobody.
 
-**Status:** Langston AGREED with C-1..C-5 and (a)/(b). Coltrane CHANGED-then-agreed (freshness rule, exactly-one, five contracts, deploy excluded) — every one of his points is above; Langston's additions (projection, `cronMatch`, one authority, header limits, owning-crontab rule) put to him for confirmation.
+**Status:** Langston AGREED with C-1..C-5 and (a)/(b). Coltrane AGREED with both designs, then tightened the projection (script-path token only; HMAC not raw sha) — a narrowing within Langston's C-2 intent ("closing this class by construction"), so it needs no new ruling. **Consensus reached on Item 2 as written here.**
