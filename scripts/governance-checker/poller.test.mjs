@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdi
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY, maybeRunWeekly, buildAddCommand, weekGateMs, weeklySeverity } from './poller.mjs';
+import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, driftAlertAction, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY, maybeRunWeekly, buildAddCommand, weekGateMs, weeklySeverity } from './poller.mjs';
 import { decideHeartbeat, CENSUS_SILENT_KEY } from './heartbeat-check.mjs';
 import { CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY } from './census.mjs';
 import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
@@ -842,6 +842,11 @@ const malFor = (res, bid) => res.malformed.filter((m) => m.batchId === bid);
 {
   const here = dirname(fileURLToPath(import.meta.url));
   ok('P29 heartbeat-check.mjs is in DRIFT_LOADED_FILES', DRIFT_LOADED_FILES.includes('heartbeat-check.mjs'));
+  // Re-homed from status-board.test.mjs SB30 (B-STATUS-BOARD retirement, Langston r7 CHANGE-2): an ERROR never
+  // resolves an open drift alert (the 404-reads-as-zero-drift shape); only a clean compare does.
+  ok('P29b drift: error never resolves; clean resolves; drifted opens once', driftAlertAction({ drifted: false, error: 'x' }, true) === 'none'
+    && driftAlertAction({ drifted: false }, true) === 'resolve' && driftAlertAction({ drifted: true }, false) === 'open' && driftAlertAction({ drifted: true }, true) === 'none');
+  ok('P29c status-board.mjs is NOT in DRIFT_LOADED_FILES (removed one commit before the file, r8 C-1)', !DRIFT_LOADED_FILES.includes('status-board.mjs'));
   const missing = DRIFT_LOADED_FILES.filter((f) => !existsSync(join(here, f)));
   ok('P29 every DRIFT_LOADED_FILES entry exists beside poller.mjs (a listed-but-absent file is caught here, in CI)',
     missing.length === 0, missing.join(', '));

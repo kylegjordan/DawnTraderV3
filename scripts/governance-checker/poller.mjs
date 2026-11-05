@@ -38,7 +38,6 @@ import {
   docPresent, completionReportCommitTime, scopeCommitTime, checkLedgerRows,
   resolveGovRefSha, showFileAt, lsTreeNamesAt, findGlobDoc, planRowsByBatch, checkPlanState,
 } from './checker.mjs';
-import { runStatusBoard } from './status-board.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
@@ -892,8 +891,9 @@ export function decideMalformedAlerts(malformed, openAlertKeys, refSha) {
 // path absent at BOTH refs is a NO-OP — skipped, COUNTED in `absentBoth` and LOGGED by the tick — so one
 // such path no longer blinds the check for every other file. Absent at ONE ref only is still a read
 // failure and still fails open (P29's named residual: a listed file deleted on the branch while the box
-// is behind; this batch deletes no listed file).
-export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs', 'status-board.mjs'];
+// is behind). A listed file is therefore removed from this list one commit BEFORE the file itself is deleted
+// (B-STATUS-BOARD retirement, Langston r8 C-1: `status-board.mjs` left the list, a tick ran, then the file went).
+export const DRIFT_LOADED_FILES = ['poller.mjs', 'checker.mjs', 'config.mjs', 'heartbeat-check.mjs', 'census.mjs'];
 // The blob id of one checker file at a ref, or null when the path is absent there. Throws on any other
 // failure (a bad ref, a non-blob at the path, unexpected output) — the caller fails open on a throw.
 function gitBlobAt(ref, file) {
@@ -1049,12 +1049,6 @@ export function maybeRunWeekly(state, nowMs, liveIds, deps = {}) {
   return out;
 }
 
-// B-STATUS-BOARD: runStatusBoard has its own catch and failure alert; this second catch keeps even a failing
-// failure-alert add from ending the tick (the maybeRunWeekly pattern). Never called on the fetch-fail return.
-export function runStatusBoardSafely(state, nowMs, openReason, deps = {}) {
-  try { return runStatusBoard(state, nowMs, gradedRefSha, openReason, { sink: alertSink, ...deps }); }
-  catch (e) { console.error(`[gov-checker] status board: could not raise its failure alert: ${String(e.message || e).slice(0, 300)}`); return { ok: false }; }
-}
 
 export function tick(nowMs = Date.now()) {
   const state = loadState();
@@ -1170,8 +1164,6 @@ export function tick(nowMs = Date.now()) {
     }
     // P40: the weekly legs still run with an unreadable rulebook — they read other files at the same sha.
     maybeRunWeekly(state, nowMs, liveIds);
-    // B-STATUS-BOARD: so does the board — written without the open reasons, and it says so (Langston pre-audit B1).
-    runStatusBoardSafely(state, nowMs, null);
     state.gradedRefSha = gradedRefSha; // #637: fetch succeeded, so the sha is real
     state.lastTick = nowMs; saveState(state);
     return { opened: 0, resolved: 0, untaggedCode: 0, fetchOk: true, rulebookUnreadable: true };
@@ -1286,8 +1278,6 @@ export function tick(nowMs = Date.now()) {
   // P40: the weekly census and mistake pass (gated by their config.mjs flags — read the values there), after every enforcement
   // decision of this tick, so a weekly fault can never change what the tick graded.
   maybeRunWeekly(state, nowMs, liveIds);
-  // B-STATUS-BOARD (#1227): the board, last, after every decision of the tick (it grades nothing).
-  runStatusBoardSafely(state, nowMs, exceptions.openReason ?? new Map());
   // #637: publish the graded sha so the SEPARATE heartbeat process can cite it.
   state.gradedRefSha = gradedRefSha;
   state.lastTick = nowMs;
