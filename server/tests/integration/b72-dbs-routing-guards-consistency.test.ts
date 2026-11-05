@@ -12,6 +12,11 @@
  * before). A SQL UPDATE that changes one row but not the others would silently
  * break the mutual-exclusion guarantee. This test catches that.
  *
+ * NOTE (Langston, B-XSTOCK-DBS-TO-STRATEGIES Step 4): the group shares ONE threshold value, not one
+ * guard shape. morning_star / reverse_impulse / defensive_hedge guard both sides (|DBS| >= threshold);
+ * volatility_edge guards only the strong side (>= threshold) — deliberately, because this batch was a
+ * value swap and a mirror arm would be a new refusal on crypto. Not a missing case.
+ *
  * Tests:
  *   1. All 5 rows seeded for `strategy_dbs_routing_guards.dbs_min_threshold`.
  *   2. All 5 rows have equal value (mutual consistency invariant).

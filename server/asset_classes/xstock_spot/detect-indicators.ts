@@ -8,8 +8,9 @@
  * Crypto has always built its detect object with the score (vts-runner.ts generatePhase10Signal).
  *
  * This is a SPREAD COPY of every MCE field plus the scanner's score. The caller's object is NOT
- * mutated: in eval-cycle.ts the provenance capture, the hybrid score, the reach gate and the paper
- * hand-off read `mceContext.indicators` directly. Do not narrow it to crypto's seven-field pick —
+ * mutated: in eval-cycle.ts the hybrid score, the reach gate and the paper hand-off read
+ * `mceContext.indicators` directly. (The provenance capture reads THIS object, the exact one detect
+ * consumed — same values for its six bar scalars, since this is a spread.) Do not narrow it to crypto's seven-field pick —
  * that pick drops volatility/momentum/adx, and a narrower object is how the score went missing.
  *
  * With `propagatedDbs` absent (the scanner lacked history, ATR or a sector) the three fields are

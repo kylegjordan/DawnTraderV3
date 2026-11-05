@@ -45,6 +45,15 @@ strongTrendGeometryOverride: isStrongTrendLane ? readStrongTrendGeometryOverride
 - **The coverage bucket is renamed, and it is NOT the guard's threshold.** `dbsStrongEvals` / `dbs_strong` become `dbsGe035Evals` / `dbs_ge_035`, a FIXED distribution bucket at 0.35. The guards read `dbs_min_threshold` / `counter_trend_long_dbs_floor` from the database, which can move by SQL; the bucket deliberately does not. The counter comment says so.
 - **Step-7 report line, restated:** `dbs_carried / detect_evals` is per-detect-call coverage, strategy-weighted (one pair's score is counted once per strategy evaluated). That is a DIFFERENT population from (a′)'s archive-row matchability (93.9 % floor), so the two are never set beside each other as one number.
 
+## Langston's second Step-4 ruling (stateless, on the original `e505232095`), folded 2026-11-05 ~06:00Z
+- **C-1(a):** satisfied by the rename at `da796affa`, from his first ruling: `dbsGe035Evals` / `dbs_ge_035` is a fixed observation bucket, not the DB threshold.
+- **C-1(b):** NOT a new counter, because that would mean another restart inside two live observation windows. **Stated instead: `dbs_ge_035` is the POSITIVE tail only. Evidence for the negative arm (the newly live counter-trend refusals on morning_star, vwap_pullback and sma_trend_ride) rests on Step-7 (a), the per-row bidirectional agreement test.** Early read 05:36-05:38Z: morning_star 19 `b63b` with 0 disagreements; sma_trend_ride 12 `b63b` with 0 disagreements.
+- **C-2:** the `detect-indicators.ts` header no longer lists the provenance capture among the readers of `mceContext.indicators` (it reads `detectIndicators`). The B72 test header now states the group shares ONE VALUE, not one shape: `volatility_edge` is deliberately one-sided. Both are comment-only, in a follow-up commit that rides the next deploy.
+- **R-1, re-land assertions, read at the DEPLOYED sha `8636040255`:**
+  - **(i)** `git diff e505232095db 8636040255 --` over the 11 paths = `eval-cycle.ts` +10/−5 and `scanner.ts` +1/−1, which is exactly the C-1 rename at `da796affa`. Nothing else.
+  - **(ii)** the fences ran AT THE HEAD: CI `41974716842` (sha `8636040255`) printed and passed the 4 `source fences` tests. `archiveSignalEval({` count at the sha = 8.
+  - **(iii)** `server/startup/b72-warmup.ts` at the sha lists `strategy_dbs_routing_guards` (`:31`) and `strategy.vwap_pullback` (`:89`).
+
 ## Evidence
 - **Unit:** `npx vitest run server/tests/unit/b-xstock-dbs-to-strategies.test.ts` → 16/16.
 - **Mutations, each RED (the suite compiled each time):**
