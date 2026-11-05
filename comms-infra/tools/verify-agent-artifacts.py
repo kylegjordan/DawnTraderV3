@@ -50,6 +50,11 @@ PAIRS = [
     # added with P-6b: the single writer, and the backup that must carry its archive.
     ("comms-infra/langston-memory/bin/langston-memory-write", "/usr/local/bin/langston-memory-write"),
     ("comms-infra/langston-memory/bin/langston-selfmemory-backup", "/usr/local/bin/langston-selfmemory-backup"),
+    # added 2026-11-06 (B-WAKE-OPENING-LIST P7, Langston P4 ruling): Coltrane's unit and its drop-in had no instrument
+    # comparing the INSTALLED copy with the ONE home (comms-infra/systemd/, README.md:11/:13) - the blindness that
+    # let a duplicate in as a "record item".
+    ("comms-infra/systemd/coltrane-bot.service", "/etc/systemd/system/coltrane-bot.service"),
+    ("comms-infra/systemd/coltrane-bot.service.d/onfailure.conf", "/etc/systemd/system/coltrane-bot.service.d/onfailure.conf"),
 ]
 
 
@@ -110,7 +115,10 @@ for src, dest in PAIRS:
     elif rs == ls:
         m = modes.get(dest, "?")
         runs = m != "?" and int(m[0]) % 2 == 1        # owner-execute bit
-        shebang = src.split("/")[-1] not in ("AGENTS.md", "AGENT_AUTHORING_GUIDE.md")
+        # Non-executables by design: the two prose files and systemd unit/drop-in files (.service, .timer, .conf),
+        # which systemd reads at 0644. Only a program needs the execute bit.
+        shebang = (src.split("/")[-1] not in ("AGENTS.md", "AGENT_AUTHORING_GUIDE.md")
+                   and not src.endswith((".service", ".timer", ".conf")))
         if shebang and not runs:
             print("  ⛔ NOT EXECUTABLE %-46s -> %s (mode %s) — content matches and it "
                   "CANNOT RUN" % (src, dest, m))
