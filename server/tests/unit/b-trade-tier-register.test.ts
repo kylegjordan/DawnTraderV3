@@ -27,7 +27,8 @@ const SRC = (rel: string) => readFileSync(path.resolve(__dirname, '../../..', re
 const READER_PREDICATE_LINES = [
   "metadata->>'admissionBasis' = 'exploration'",
   'closed_at IS NOT NULL',
-  "close_reason IS DISTINCT FROM 'never_filled'",
+  // B-CLOSE-WRITER-COSTS P-15: the shared non-outcome list (never_filled AND hard_reset), bound as one array parameter.
+  'close_reason IS NULL OR close_reason <> ALL(',
 ];
 
 describe('B-TRADE-TIER-REGISTER — source fences', () => {
@@ -38,6 +39,10 @@ describe('B-TRADE-TIER-REGISTER — source fences', () => {
       expect(sweep).toContain(line);
       expect(lane).toContain(line);
     }
+    // ...and both bind the SAME list, from the one vocabulary leaf (a literal in either would drift from the other).
+    expect(sweep).toContain('[cutoff, [...NON_OUTCOME_CLOSE_REASONS]]');
+    expect(lane).toContain('${sql.param([...NON_OUTCOME_CLOSE_REASONS])}');
+    expect(sweep + lane).not.toContain("close_reason IS DISTINCT FROM 'never_filled'");
   });
 
   it('2. registry: both trade tables archive:true with predicates; the exemption table has no archive flag', () => {

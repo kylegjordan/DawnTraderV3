@@ -31,6 +31,7 @@
 
 import { db } from '../../db.js';
 import { sql } from 'drizzle-orm';
+import { NON_OUTCOME_CLOSE_REASONS } from '../trade-close-reason.js';
 import { getCachedConstant } from '../module-constants-service.js';
 
 export interface ExplorationAdmitDecision {
@@ -131,7 +132,11 @@ async function closedExplorationCount(assetClass: string): Promise<number> {
       WHERE metadata->>'admissionBasis' = 'exploration'
         AND asset_class = ${assetClass}
         AND closed_at IS NOT NULL
-        AND close_reason IS DISTINCT FROM 'never_filled'`);
+        AND (close_reason IS NULL OR close_reason <> ALL(${sql.param([...NON_OUTCOME_CLOSE_REASONS])}::text[]))`);
+      // B-CLOSE-WRITER-COSTS P-15 (Langston Part A C-2): the shared non-outcome list (never_filled AND hard_reset), not a
+      // hand-written literal — a hard_reset close carries zero information about the trade's outcome, exactly as a
+      // never-filled one does, so it must not count as an informative close and tighten this ratchet. The sweep's archived
+      // tally (b75-retention-sweep.ts) carries the SAME predicate, bound from the same list.
     const live = Number((r as any).rows?.[0]?.n ?? 0);
     const t = await db.execute(sql`
       SELECT value FROM module_constants

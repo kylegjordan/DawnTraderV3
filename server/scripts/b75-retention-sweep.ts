@@ -59,6 +59,7 @@ import {
   isPartitionEligible,
 } from '../services/data-archive/sweep-slicing.js';
 import { addAlert, resolveAlertsByDedupeKey } from '../services/system-alerts.js';
+import { NON_OUTCOME_CLOSE_REASONS } from '../services/trade-close-reason.js';
 import {
   assertExactArchiveEquality,
   evidenceExistsForManifest,
@@ -1139,10 +1140,11 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
               `SELECT asset_class, count(*)::int AS n FROM ${spec.table}
                 WHERE metadata->>'admissionBasis' = 'exploration'
                   AND closed_at IS NOT NULL
-                  AND close_reason IS DISTINCT FROM 'never_filled'
+                  AND (close_reason IS NULL OR close_reason <> ALL($2::text[]))
                   AND ${spec.timestampColumn} < $1${extraAnd}
                 GROUP BY asset_class`,
-              [cutoff],
+              // B-CLOSE-WRITER-COSTS P-15 (Langston Part A C-2): the anneal reader's predicate, the shared non-outcome list.
+              [cutoff, [...NON_OUTCOME_CLOSE_REASONS]],
             );
             for (const row of tallyRes.rows) {
               const upd = await ctl.query(

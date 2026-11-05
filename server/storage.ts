@@ -543,8 +543,10 @@ export interface IStorage {
   // Paper trades
   // Step F (#618): the payload OMITS `mode` -- it comes from the explicit first argument,
   // so the mode is stated exactly once and no caller can pass one that contradicts it.
-  // B-CLOSE-WRITER-COSTS P-15 (r4 C-2/C-3): a written close reason is a TradeCloseReason — a new one is a compile error here
-  // until it is classed in trade-close-reason.ts. (Callers that cast their payload `as any` are outside this guarantee.)
+  // B-CLOSE-WRITER-COSTS P-15 (r4 C-2/C-3): a written close reason is typed TradeCloseReason. ⚠️ MAGNITUDE (Langston Part A
+  // record ii): of the four reason-writing paths ONE is inside this type (closePosition, already `ExitConditionType`);
+  // `_dropUnfilledMaker` and the engine-stop cleanup cast `as any`, and the hard reset's `.set()` is in this file. The real
+  // guarantee is the leaf's `Record<TradeCloseReason, …>`: a new REASON is a compile error until it is CLASSED.
   createClosedTrade(mode: TradingMode, trade: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: ClosedTradeWrite<Partial<ClosedTrade>>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
@@ -554,7 +556,7 @@ export interface IStorage {
   // is a page size, not an answer.
   getRealizedPnlTotal(mode: TradingMode): Promise<{ realizedPnl: number; tradeCount: number }>;
   getClosedTradesCount(mode: TradingMode, opts?: { closedOnly?: boolean }): Promise<number>;
-  getLifetimeScoreboard(mode: TradingMode): Promise<{
+  getLifetimeScoreboard(mode: TradingMode, asOf?: Date | null): Promise<{
     epochStartedAt: string | null; epochIsExplicit: boolean;
     netPnl: number; timeWeightedReturnPct: number | null; tradeCount: number;
   }>;
@@ -3373,9 +3375,12 @@ export class DatabaseStorage implements IStorage {
    * further back. `?days=7` was correct only by luck — 23 rows fit under the cap.
    *
    * PREDICATE PARITY IS DELIBERATE AND LOAD-BEARING: every method below uses the SAME three
-   * predicates as `getRealizedPnlSince` (`closed_at IS NOT NULL` + the window + `close_reason IS
-   * the shared non-outcome list, `notNonOutcomeReason()`), so a reader comparing any two of them sees ONE difference —
-   * the question asked — and never a population difference. Basis stays `pnl` throughout: the
+   * predicates as `getRealizedPnlSince` — `closed_at IS NOT NULL`, the window, and the shared non-outcome exclusion
+   * `notNonOutcomeReason()` (B-CLOSE-WRITER-COSTS P-15: never_filled AND hard_reset) — so a reader comparing any two of
+   * them sees ONE difference, the question asked, and never a population difference. ⚠️ ONE NAMED EXCEPTION:
+   * `getLifetimeScoreboard` takes the BOOKED allowlist + `exit_price > 0` (P-15 r4 item 4) and the epoch floor, so it
+   * differs from the others by more than its question (Langston Part A C-1). On today's data the allowlist selects the
+   * same rows (1,410 booked closed, Langston's read 2026-11-05) — but a reader must not assume parity there. Basis stays `pnl` throughout: the
    * kill-switch numerator and denominator both sum `pnl`, and B-COST-MATH-CONSOLIDATION's `netPnl`
    * migration must move EVERY site in ONE batch or the ratio becomes incoherent (Langston's
    * standing condition 2). `netPnl` is NOT introduced here.
@@ -3468,7 +3473,7 @@ export class DatabaseStorage implements IStorage {
    * kind rule 15 forbids -- it is the correct semantic (score-keeping began when trading began),
    * `epochIsExplicit` reports which of the two is in force, and the card states the date either way.
    */
-  async getLifetimeScoreboard(mode: TradingMode): Promise<{
+  async getLifetimeScoreboard(mode: TradingMode, asOf?: Date | null): Promise<{
     epochStartedAt: string | null; epochIsExplicit: boolean;
     netPnl: number; timeWeightedReturnPct: number | null; tradeCount: number;
   }> {
@@ -3491,6 +3496,8 @@ export class DatabaseStorage implements IStorage {
            AND exit_price > 0
            AND mode = ${mode}
            AND closed_at >= COALESCE((SELECT ts FROM epoch), '-infinity'::timestamptz)
+           -- B-CLOSE-WRITER-COSTS P-15 (Langston Part A C-3): the routes' optional asOf freezes this figure too.
+           ${asOf ? sql`AND closed_at < ${asOf}` : sql``}
            -- * BOTH-LEG KEYING (added 2026-08-24). This clause was MISSING, so the lifetime
            -- figure counted every trade that CLOSED after the epoch including those OPENED
            -- before it -- whose entry price came through the contaminated mini-book (#741).
