@@ -53,3 +53,9 @@
 - **Pre-registered threshold (pre-audit P-9, Langston's 90 % stop line):** ≥ 90 % of non-SPY symbols with ≥ 30 shared 15-minute timestamps with SPY. **Result: 461 of 472 = 97.7 %** (median shared 98) — **PASS** (overnight read: 98.5 %).
 - **Controls in the same run:** served ≥ 30 bars 469 of 472; non-finite or non-positive closes in the last 30: 0; **index-aligned 30/30 with SPY: 42 of 469 (9.0 %)** — positional pairing would still pair different hours for 91 % of symbols, so the time alignment is load-bearing in US hours too. 60 m for reference: 285 of 472 (60.4 %) aligned ≥ 30 — this batch uses 15 m for xStock.
 - ⇒ Step 3 closes; deploy at `0f4835b5a` follows.
+
+## Step 6 + first Step-7 look (2026-11-05)
+- **Deploy:** `0f4835b5a4fe3af461113b52f626017b01dbafa9` at 14:40:02Z by cc-a (`dt-deploy` OK, engine resumed, migration 14:39:49Z); range from the previous `0abfd7102` = this batch only. Rollback sha `0abfd7102`.
+- **Constants after the migration:** `b68_3_apply_factor` `*`=true, `xstock_spot`=false; `b68_3_compute_correlation_enabled` `*`=true, `xstock_spot`=true — as intended.
+- **First look, 14:55Z (15 min, NOT the pre-registered 24 h read):** `regime_factor_alternates`, `factor_name='b68_3_pair_correlation'`, `evaluated_at >= 14:40:02Z`: **xStock 55 rows, all `vts_trade`, `factor_applied=false`, `interval_minutes=15`, `aligned_by_timestamp=true`**; crypto 2 rows `vts_trade`, `factor_applied=true`, `interval_minutes=60`, `aligned_by_timestamp=false` (unchanged path — the control). `[B-XSTOCK-CORRELATION-COLLECT][SKIP|ERROR]` lines in `out.log` + `error.log`: 0 (a silence, not a proof — the tag has never fired, no positive control).
+- **Owed:** the pre-registered 24 h read (~2026-11-06 14:45Z): xStock rows within a factor of two of the xStock VTS trades OPENED in the window; crypto VTS rows keep accruing.
