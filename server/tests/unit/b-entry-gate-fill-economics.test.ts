@@ -61,6 +61,22 @@ describe('Step-4 C-1 — the taker friction composition is pinned: ask entry (al
   });
 });
 
+describe('Step-4 r3 — the A-12 shadow is fenced to the kernel, and the strong-trend default is a default', () => {
+  it('with measuredBasePWin equal to the leg pWin, netEvAtMeasuredBase equals netEvAtFill (taker and maker)', () => {
+    for (const arm of ['taker', 'maker'] as const) {
+      const r = computeFillEconomics({ ...base, arm });
+      const r2 = computeFillEconomics({ ...base, arm, measuredBasePWin: r.pWin });
+      expect(r2.netEvAtMeasuredBase).toBeCloseTo(r2.netEvAtFill, 10);
+    }
+  });
+  it('a strong-trend signal with no DBS is defaulted (pWin pinned at the floor); with a DBS it is not', () => {
+    const noDbs = computeFillEconomics({ ...base, DI: undefined, sourcePool: 'quant-strong_trend', dbsScore: undefined });
+    expect(noDbs.pWinDefaulted).toBe(true);
+    expect(noDbs.pWin).toBeCloseTo(base.minPWin, 12);
+    expect(computeFillEconomics({ ...base, DI: undefined, sourcePool: 'quant-strong_trend', dbsScore: 0.3 }).pWinDefaulted).toBe(false);
+  });
+});
+
 describe('A-12 — the missing-win-probability leg is RECORDED, never decides (Kyle KD-11 owed)', () => {
   it('no DI ⇒ the kernel default (0.60 cap) and pWinDefaulted; the decision still uses the defaulted EV', () => {
     const r = computeFillEconomics({ ...base, DI: undefined });

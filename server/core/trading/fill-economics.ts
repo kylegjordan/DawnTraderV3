@@ -70,7 +70,10 @@ export interface FillEconomics {
   /** THE deciding number: net EV per unit for the arm that fills, at the price it pays. */
   netEvAtFill: number;
   pWin: number;
-  /** True when the win probability came from the kernel's DI default (no DI, not the strong-trend DBS branch). */
+  /**
+   * True when the win probability came from a kernel DEFAULT: no DI on the DI branch (DI = 50 ⇒ the ceiling), or no DBS on
+   * the strong-trend branch (`dbsScore ?? 0` ⇒ the floor, `net-expectancy-kernel.ts:106-108` — fail-closed, still a default).
+   */
   pWinDefaulted: boolean;
   /** A-12 shadow: the same EV with pWin set to the measured per-class base rate. Never decides. */
   netEvAtMeasuredBase: number;
@@ -125,7 +128,7 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
   // Maker, conditional on filling: the adverse-selection cost applies; pFill and the non-fill cost do not.
   const adverseSelection = i.arm === 'maker' ? d.adverseSelectionPct * i.fillPrice : 0;
   const netEvAtFill = leg.netEV - adverseSelection;
-  const pWinDefaulted = i.DI === undefined && i.sourcePool !== 'quant-strong_trend';
+  const pWinDefaulted = i.sourcePool === 'quant-strong_trend' ? i.dbsScore === undefined : i.DI === undefined;
   const p = i.measuredBasePWin;
   const netEvAtMeasuredBase = p * leg.distTarget - (1 - p) * leg.distStop - leg.totalCost - adverseSelection;
   return {

@@ -10,7 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const fsCalls = vi.hoisted(() => ({ append: [] as Array<[string, string]>, failNext: false }));
-const isDiagLog = vi.hoisted(() => (p: unknown) => /[\\/]logs([\\/]|$)/.test(String(p)));
+// Step-4 r3 (Langston): the EXACT two targets and their two directories, nothing broader — a wider predicate could swallow
+// an unrelated logs/ write elsewhere in the import graph and still read green.
+const isDiagLog = vi.hoisted(() => (p: unknown) =>
+  /[\\/]logs([\\/]diagnostics)?$|[\\/]logs[\\/]rtb_refresh_trace_\d{8}\.log$|[\\/]logs[\\/]diagnostics[\\/]sqe_rejections\.log$/.test(String(p)));
 vi.mock('node:fs', async (orig) => {
   const actual = await orig<typeof import('node:fs')>();
   return {

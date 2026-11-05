@@ -1895,18 +1895,25 @@ export class ActiveExecutionEngine {
     // BUY would trade against sits more than the worse-side window above its limit (the plan's entry). A maker transacts at
     // its limit, so this measures "the market left the plan", not the price paid; the live predicate is decided from this
     // record (carrier: the deploy-time date row, owner CC-B). Spot classes only — they are the ones with an entry_gate row.
+    // Step-4 r3 C-2 (Langston): this is a WATCH-ONLY recorder, so its fail-hard settings read is guarded here — a missing
+    // row must never abort the resting order's fill/deadline handling below for the tick (the per-position catch's own
+    // invariant: a recorder may never break the exit loop). The open path's read of the same row stays fail-hard.
     if (side === 'buy' && (_isCryptoPending || _isXstockPending) && fillPrice !== null) {
-      const _mwcStop = position.stopLoss != null ? parseFloat(position.stopLoss) : Number.NaN;
-      if (Number.isFinite(_mwcStop) && limit > _mwcStop) {
-        const _mwcW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
-          { exchange: '*', assetClass: _isXstockPending ? 'xstock_spot' : 'crypto_spot', strategy: '*', regime: '*' });
-        const _mwcAdverse = (fillPrice - limit) / (limit - _mwcStop);
-        if (_mwcAdverse > _mwcW) {
-          const prev = this._makerWouldCancel.get(position.id);
-          this._makerWouldCancel.set(position.id, prev
-            ? { firstAtMs: prev.firstAtMs, ticks: prev.ticks + 1, maxAdverseR: Math.max(prev.maxAdverseR, _mwcAdverse) }
-            : { firstAtMs: Date.now(), ticks: 1, maxAdverseR: _mwcAdverse });
+      try {
+        const _mwcStop = position.stopLoss != null ? parseFloat(position.stopLoss) : Number.NaN;
+        if (Number.isFinite(_mwcStop) && limit > _mwcStop) {
+          const _mwcW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
+            { exchange: '*', assetClass: _isXstockPending ? 'xstock_spot' : 'crypto_spot', strategy: '*', regime: '*' });
+          const _mwcAdverse = (fillPrice - limit) / (limit - _mwcStop);
+          if (_mwcAdverse > _mwcW) {
+            const prev = this._makerWouldCancel.get(position.id);
+            this._makerWouldCancel.set(position.id, prev
+              ? { firstAtMs: prev.firstAtMs, ticks: prev.ticks + 1, maxAdverseR: Math.max(prev.maxAdverseR, _mwcAdverse) }
+              : { firstAtMs: Date.now(), ticks: 1, maxAdverseR: _mwcAdverse });
+          }
         }
+      } catch (mwcErr) {
+        console.error(`[B-ENTRY-GATE][MAKER_WOULD_CANCEL][RECORD_FAILED:${this.mode}] ${position.symbol}:`, mwcErr instanceof Error ? mwcErr.message : mwcErr);
       }
     }
     const _quoteArrivedAtMs = _isCryptoPending
@@ -2034,6 +2041,11 @@ export class ActiveExecutionEngine {
       fillEconExplorationShadow: fe.refuse && exploration,
       // A-12 (Kyle's KD-11 decision owed): recorded, never decides.
       pWinDefaulted: fe.pWinDefaulted, netEvAtMeasuredBase: fe.netEvAtMeasuredBase, netEvAtRealDi: fe.netEvAtRealDi, missingPWinWouldRefuse: fe.missingPWinWouldRefuse,
+      // Step-4 r3 C-3 (Langston): the comparator's provenance travels with every row, so the KD-11 pack cannot read it as
+      // "EV at the real win rate". `scoring_base.flat_pwin_base` (migration 2026-07-13-p19-b8-5a-scoring-base.sql) is a
+      // PINNED PLACEHOLDER, not a calibration: n=12,140 post-B62 VTS closes, carrying the VTS-era contamination (mode-scaled
+      // exits + the fake-DI kernel feed) — the same feed whose default A-12 is meant to look past.
+      measuredBaseSource: 'flat_pwin_base:p19-b8-5a:2026-07-13:pinned-placeholder:n12140-vts:vts-era-contaminated',
       spreadSource: fe.spreadSource, // Step-4 C-6: a refusal on a placeholder spread says so
     };
   }
@@ -2066,9 +2078,7 @@ export class ActiveExecutionEngine {
   }
 
   private async _dropUnfilledMaker(position: any, why: string): Promise<void> {
-    // Optional call: this drop is also invoked with a bare `this` (the engine-stop flatten's unit fixture); the report is
-    // telemetry and must never stand between a resting order and its drop.
-    this._reportMakerWouldCancel?.(position, 'drop');
+    this._reportMakerWouldCancel(position, 'drop');
     const tradeId = (position.metadata as any)?.tradeId;
     if (tradeId) {
       await storage.updateClosedTrade(this.mode, tradeId, {
@@ -5904,7 +5914,7 @@ export class ActiveExecutionEngine {
     // Routing is FENCED by resolveEvBlockDisposition (pure, unit-pinned) — the
     // shadow leg and both block labels flow from the one function, so a live
     // snapshot-present negative can never wear the snapshot-missing labels.
-    const _b72Disposition = resolveEvBlockDisposition(_b72ChosenNetEv, this.mode);
+    const _b72Disposition = resolveEvBlockDisposition(this.mode);
     const _exploOpen = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
     if (!_b72IsTradeable && _b72Disposition === 'SHADOW') {
       if (_exploOpen) {

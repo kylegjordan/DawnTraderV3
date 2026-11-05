@@ -20,18 +20,17 @@ beforeEach(() => {
 
 describe('[11.8B] disposition routing — label integrity FENCED (Langston delta-GO condition)', () => {
   it('paper + snapshot present → SHADOW (observe, never block)', () => {
-    expect(resolveEvBlockDisposition(-0.5, 'paper')).toBe('SHADOW');
-    expect(resolveEvBlockDisposition(0.5, 'paper')).toBe('SHADOW');
+    expect(resolveEvBlockDisposition('paper')).toBe('SHADOW');
   });
   it('LIVE + snapshot present → BLOCK_EV_REJECT (the real-money fail-safe retained; never the snapshot-missing labels)', () => {
-    expect(resolveEvBlockDisposition(-0.5, 'live')).toBe('BLOCK_EV_REJECT');
+    expect(resolveEvBlockDisposition('live')).toBe('BLOCK_EV_REJECT');
   });
   it('B-ENTRY-GATE (#1224) P4b: the snapshot-missing outcome is gone — a NULL snapshot never reaches the router', () => {
     // The engine refuses a non-finite snapshot as POLICY_SNAPSHOT_MISSING first, and the parameter is `number`, so a
     // null argument is a compile error. The router has exactly two outcomes, by mode.
-    // @ts-expect-error — null is not a valid snapshot any more (C-3: compiler-enforced, not caller-enforced)
+    // @ts-expect-error — the router takes the mode only; no EV value reaches it (Step-4 r3, the dead parameter removed)
     void resolveEvBlockDisposition(null, 'paper');
-    expect(['SHADOW', 'BLOCK_EV_REJECT']).toContain(resolveEvBlockDisposition(-1, 'live'));
+    expect(['SHADOW', 'BLOCK_EV_REJECT']).toContain(resolveEvBlockDisposition('live'));
     const src = readFileSync(new URL('../../services/ev-block-disposition.ts', import.meta.url), 'utf8');
     expect(src.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/BLOCK_SNAPSHOT_MISSING/);
     const eng = readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8')

@@ -217,7 +217,14 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
   const engineProto = ActiveExecutionEngine.prototype as unknown as {
     dropPendingMakerOnFlatten: (id: string) => Promise<{ success: boolean; error?: string }>;
     _dropUnfilledMaker: unknown;
+    _reportMakerWouldCancel: unknown;
   };
+  // The drop reports the B-ENTRY-GATE P3 would-cancel record, so the fake carries that method and its map (Step-4 r3:
+  // fix the fixture, never make the runtime call optional for it).
+  const engineFake = () => ({
+    mode: 'paper', _dropUnfilledMaker: engineProto._dropUnfilledMaker,
+    _reportMakerWouldCancel: engineProto._reportMakerWouldCancel, _makerWouldCancel: new Map(),
+  });
 
   // MUTATION: remove the pending branch from _flattenOne and the pending maker reaches forceClosePosition — a walked
   // sell and a booked P&L for a trade that never happened, the defect #1100 records.
@@ -250,7 +257,7 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
 
   it('the engine drop closes the trade row as never_filled — no price, no P&L — and frees the slot', async () => {
     h.positionById = { id: 'p-P', symbol: 'PPP/USD', state: 'pending', metadata: { tradeId: 't-9' } };
-    const res = await engineProto.dropPendingMakerOnFlatten.call({ mode: 'paper', _dropUnfilledMaker: engineProto._dropUnfilledMaker }, 'p-P');
+    const res = await engineProto.dropPendingMakerOnFlatten.call(engineFake(), 'p-P');
     expect(res.success).toBe(true);
     expect(h.updateClosedTrade).toHaveBeenCalledTimes(1);
     const [mode, tradeId, updates] = h.updateClosedTrade.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
@@ -266,7 +273,7 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
 
   it('the engine REFUSES to drop a position that is no longer pending (it filled meanwhile — it is a trade now)', async () => {
     h.positionById = { id: 'p-P', symbol: 'PPP/USD', state: 'open', metadata: { tradeId: 't-9' } };
-    const res = await engineProto.dropPendingMakerOnFlatten.call({ mode: 'paper', _dropUnfilledMaker: engineProto._dropUnfilledMaker }, 'p-P');
+    const res = await engineProto.dropPendingMakerOnFlatten.call(engineFake(), 'p-P');
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/not pending/);
     expect(h.updateClosedTrade).not.toHaveBeenCalled();

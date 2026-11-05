@@ -102,7 +102,12 @@ describe('P3 — the resting maker: would-cancel is RECORDED, never acted on (pr
   });
   it('the record is reported when the rest resolves, on BOTH outcomes', () => {
     expect(body).toMatch(/this\._reportMakerWouldCancel\(position, 'fill'\)/);
-    expect(src).toMatch(/this\._reportMakerWouldCancel\?\.\(position, 'drop'\)/);
+    expect(src).toMatch(/this\._reportMakerWouldCancel\(position, 'drop'\)/); // Step-4 r3: a plain call, never optional
+  });
+  it('Step-4 r3 C-2: the watch-only settings read is guarded, so a missing row cannot abort the tick', () => {
+    expect(body).toMatch(/try \{\s*const _mwcStop[\s\S]{0,900}getCachedNumberRequired\('entry_gate'[\s\S]{0,700}\} catch \(mwcErr\) \{[\s\S]{0,200}RECORD_FAILED/);
+    // and the guard ends before the fill decision, so it cannot swallow the order's own handling
+    expect(body.indexOf('catch (mwcErr)')).toBeLessThan(body.indexOf('const _quoteArrivedAtMs'));
   });
 });
 

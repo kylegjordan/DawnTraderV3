@@ -15,10 +15,8 @@
  */
 export type EvBlockDisposition = 'SHADOW' | 'BLOCK_EV_REJECT';
 
-export function resolveEvBlockDisposition(
-  chosenNetEv: number,
-  mode: 'paper' | 'live',
-): EvBlockDisposition {
-  void chosenNetEv; // the verdict is the caller's; this routes by mode only
+export function resolveEvBlockDisposition(mode: 'paper' | 'live'): EvBlockDisposition {
+  // Step-4 r3 (Langston, rule 15): the EV argument was dead once the snapshot-missing outcome went — the verdict is the
+  // caller's, and this routes by mode only. The parameter is removed rather than left `void`.
   return mode === 'paper' ? 'SHADOW' : 'BLOCK_EV_REJECT';
 }
