@@ -81,7 +81,13 @@ B_OLD_SPENT = FROM + timedelta(hours=1)       # read, 30 days old -> removable
 B_EDGE_SPENT = NOW - timedelta(days=config.DUE_SPENT_HOT_DAYS, hours=1)   # read, just past the margin -> removable
 B_RECENT = NOW - timedelta(days=3)            # read, inside the margin -> kept
 B_AFTER = LAST + timedelta(hours=1)           # not yet read -> kept
-LAYOUT = [(B_BEFORE, 11), (B_OLD_SPENT, 22), (B_EDGE_SPENT, 33), (B_RECENT, 44), (B_AFTER, 55)]
+# Both `<=` endpoints carry a bucket (Langston, Step-4 part 1 item 3): the hour AT consumed_from was read and
+# is old -> removable; the hour AT last_bucket was read and is inside the margin -> kept_spent_window.
+B_AT_FROM = FROM
+B_AT_LAST = LAST
+LAYOUT = [(B_BEFORE, 11), (B_OLD_SPENT, 22), (B_EDGE_SPENT, 33), (B_RECENT, 44), (B_AFTER, 55),
+          (B_AT_FROM, 66), (B_AT_LAST, 77)]
+N_LAYOUT = len(LAYOUT)
 
 print("=== 1. the four classes, by count and bytes ===")
 reset_due(LAYOUT)
@@ -89,8 +95,13 @@ open(os.path.join(store.DUE_DIR, "not-an-hour.jsonl"), "wb").write(b"z" * 7)
 c = tier.classify_due_buckets(NOW, {"consumed_from": H(FROM), "last_bucket": H(LAST)})
 cls = c["classes"]
 check("ok with a full cursor", c["ok"] is True, c["reason"])
-check("removable = the two read-and-old buckets", cls["removable"] == {"count": 2, "bytes": 55}, cls["removable"])
-check("kept inside the spent window", cls["kept_spent_window"] == {"count": 1, "bytes": 44}, cls["kept_spent_window"])
+check("removable = the three read-and-old buckets", cls["removable"] == {"count": 3, "bytes": 121}, cls["removable"])
+check("kept inside the spent window", cls["kept_spent_window"] == {"count": 2, "bytes": 121}, cls["kept_spent_window"])
+check("★ the bucket AT consumed_from is removable (lower bound inclusive)",
+      os.path.join(store.DUE_DIR, H(B_AT_FROM) + ".jsonl") in c["paths"]["removable"], c["paths"]["removable"])
+check("★ the bucket AT last_bucket is read, not after the cursor (upper bound inclusive)",
+      os.path.join(store.DUE_DIR, H(B_AT_LAST) + ".jsonl") in c["paths"]["kept_spent_window"],
+      c["paths"]["kept_spent_window"])
 check("★ kept after the cursor (unread)", cls["kept_after_cursor"] == {"count": 1, "bytes": 55}, cls["kept_after_cursor"])
 check("★ kept before consumed_from (never read)", cls["kept_before_consumed_from"] == {"count": 1, "bytes": 11},
       cls["kept_before_consumed_from"])
@@ -99,11 +110,13 @@ check("an unparsable name is kept and counted", cls["kept_unparsed"] == {"count"
 print("=== 2. the prune removes exactly the removable class ===")
 store.save_state("follow_up_cursor", {"consumed_from": H(FROM), "last_bucket": H(LAST)})
 r = tier.prune_due_buckets(NOW)
-check("POSITIVE CONTROL: it removed something", r["due_buckets_removed"] == 2, r)
-check("bytes removed are reported", r["due_bytes_removed"] == 55, r)
+check("POSITIVE CONTROL: it removed something", r["due_buckets_removed"] == 3, r)
+check("bytes removed are reported", r["due_bytes_removed"] == 121, r)
 check("★ every unread bucket survived", set(present()) >= {H(B_BEFORE), H(B_AFTER)}, present())
 check("the bucket inside the margin survived", H(B_RECENT) in present(), present())
-check("the two spent-and-old buckets are gone", not ({H(B_OLD_SPENT), H(B_EDGE_SPENT)} & set(present())), present())
+check("the three spent-and-old buckets are gone",
+      not ({H(B_OLD_SPENT), H(B_EDGE_SPENT), H(B_AT_FROM)} & set(present())), present())
+check("the bucket at last_bucket survived (inside the margin)", H(B_AT_LAST) in present(), present())
 
 print("=== 2b. THE LIVE SHAPE: a cursor weeks behind, with OLD unread buckets after it ===")
 # The follow-up stopped on 2026-09-30; every bucket since is unread AND more than 7 days old. Only the
@@ -128,6 +141,20 @@ for label, cur in (("no cursor", {}), ("cursor without consumed_from", {"last_bu
     check("★ %s: nothing removed" % label, r["due_buckets_removed"] == 0 and present() == before, r)
     check("%s: the reason is reported" % label, r["due_prune_ok"] is False and r["due_prune_reason"], r)
 
+print("=== 3b. a DAMAGED field is named as damage, each field on its own ===")
+for label, cur, needle in (
+        ("damaged consumed_from, intact last_bucket", {"consumed_from": "garbage", "last_bucket": H(LAST)},
+         "consumed_from 'garbage' is not an hour"),
+        ("damaged last_bucket, intact consumed_from", {"consumed_from": H(FROM), "last_bucket": "garbage"},
+         "last_bucket 'garbage' is not an hour")):
+    reset_due(LAYOUT)
+    store.save_state("follow_up_cursor", cur)
+    before = present()
+    r = tier.prune_due_buckets(NOW)
+    check("★ %s: nothing removed" % label, r["due_buckets_removed"] == 0 and present() == before, r)
+    check("★ %s: the reason says damaged cursor and names the field" % label,
+          str(r["due_prune_reason"]).startswith("damaged cursor") and needle in r["due_prune_reason"], r)
+
 print("=== 4. C-1: a LOST cursor followed by ONE follow-up run ===")
 # The follow-up's first run (no cursor) reads only its own hour and stamps it. Every older bucket was never
 # read; with consumed_from they all sit BEFORE the lineage and stay.
@@ -140,7 +167,8 @@ follow_up._advance_cursor(run_hour_buckets)
 cur = store.load_state("follow_up_cursor", {})
 check("★ the new lineage starts at this hour", cur == {"last_bucket": H(NOW), "consumed_from": H(NOW)}, cur)
 r = tier.prune_due_buckets(NOW)
-check("★ after cursor loss + one run, NOTHING old is removed", r["due_buckets_removed"] == 0 and len(present()) == 5,
+check("★ after cursor loss + one run, NOTHING old is removed", r["due_buckets_removed"] == 0
+      and len(present()) == N_LAYOUT,
       (r, present()))
 
 print("=== 4b. a DAMAGED cursor (consumed_from kept, last_bucket unreadable) is a LOST cursor ===")
@@ -157,7 +185,7 @@ cur = store.load_state("follow_up_cursor", {})
 check("★ a damaged cursor starts a NEW lineage at this hour", cur.get("consumed_from") == H(NOW), cur)
 r = tier.prune_due_buckets(NOW)
 check("★ after a damaged cursor + one run, NOTHING old is removed", r["due_buckets_removed"] == 0
-      and len(present()) == 5, (r, present()))
+      and len(present()) == N_LAYOUT, (r, present()))
 
 print("=== 5. consumed_from never moves ===")
 store.save_state("follow_up_cursor", {"last_bucket": H(LAST), "consumed_from": H(FROM)})
@@ -177,10 +205,48 @@ reset_due(LAYOUT)
 store.save_state("follow_up_cursor", {"consumed_from": H(FROM), "last_bucket": H(LAST)})
 before = present()
 cen = due_census.census(NOW)
-check("census classes equal the prune's", cen["classes"]["removable"]["count"] == 2
+check("census classes equal the prune's", cen["classes"]["removable"]["count"] == 3
       and cen["classes"]["kept_after_cursor"]["count"] == 1, cen["classes"])
-check("census totals cover every bucket", cen["total"]["count"] == 5, cen["total"])
+check("census totals cover every bucket", cen["total"]["count"] == N_LAYOUT, cen["total"])
 check("★ the census removed nothing", present() == before)
+
+print("=== 6b. the lineage check: a removable bucket with no observation row is a GAP ===")
+OBS = store.OBSERVATIONS_DIR
+shutil.rmtree(OBS, ignore_errors=True)
+os.makedirs(OBS)
+
+
+def write_bucket(h, entries):
+    with open(os.path.join(store.DUE_DIR, H(h) + ".jsonl"), "w", encoding="utf-8") as fh:
+        for mint, age in entries:
+            fh.write(json.dumps({"mint": mint, "age": age}) + "\n")
+
+
+def write_obs(day_dt, rows):
+    with open(os.path.join(OBS, day_dt.strftime("%Y-%m-%d") + ".jsonl"), "a", encoding="utf-8") as fh:
+        for mint, age in rows:
+            fh.write(json.dumps({"mint": mint, "age": age, "observed_at": day_dt.isoformat()}) + "\n")
+
+
+shutil.rmtree(store.DUE_DIR, ignore_errors=True)
+os.makedirs(store.DUE_DIR)
+READ_H = FROM + timedelta(hours=2)             # read: its entries were observed the next day
+GAP_H = FROM + timedelta(days=5)               # never read: no observation row anywhere near it
+write_bucket(READ_H, [("m1", "1h"), ("m2", "1h")])
+write_bucket(GAP_H, [("m3", "1h"), ("m4", "6h")])
+write_obs(READ_H + timedelta(days=1), [("m1", "1h"), ("m2", "1h")])
+write_obs(GAP_H + timedelta(days=4), [("m3", "1h")])           # outside the 3-day window: does not count
+store.save_state("follow_up_cursor", {"consumed_from": H(FROM), "last_bucket": H(LAST)})
+before = present()
+lin = due_census.lineage(NOW)
+check("POSITIVE CONTROL: both removable buckets were checked", lin["removable_buckets_checked"] == 2, lin)
+check("★ the bucket with no observation row is a gap", [g["bucket"] for g in lin["gaps"]] == [H(GAP_H)], lin)
+check("the observed bucket is not a gap", H(READ_H) not in [g["bucket"] for g in lin["gaps"]], lin)
+check("★ the verdict says do not prune", lin["verdict"].startswith("GAPS"), lin)
+check("★ the lineage check removed nothing", present() == before)
+write_obs(GAP_H, [("m3", "1h"), ("m4", "6h")])
+lin = due_census.lineage(NOW)
+check("once observed, no gap", lin["gaps"] == [] and lin["verdict"] == "no gap found", lin)
 
 print("=== 7. the one-time backfill ===")
 OBS = store.OBSERVATIONS_DIR

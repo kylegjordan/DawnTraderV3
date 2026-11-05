@@ -16,7 +16,14 @@ all — safe, and the reason this has to be set exactly once, correctly.
    buckets that were never read. A too-LATE value only keeps buckets longer.
 ⚠️ HONEST LIMIT (Langston): the agreement check catches drift and transcription,
    not a shared method error — the derivation and the literal came from the
-   same predicate. The residual is one-directional, as above.
+   same predicate. The residual is one-directional, as above — ⛔ BUT ONLY IF
+   THE CURSOR'S LINEAGE IS UNBROKEN back to the value (Langston, Step-4 part 1).
+   UNEVIDENCED PREMISE: if the cursor was ever lost and restarted between
+   2026-08-31 and 2026-09-30, the first lineage's start sits before a gap of
+   never-read hours, and those hours fall inside [consumed_from, last_bucket].
+   ⇒ Before the first real prune, `tools/due_census.py --lineage` checks every
+   REMOVABLE bucket for evidence it was read; a bucket with none is a gap and
+   the prune must not run until it is explained.
 
 REFUSES (exit 2, nothing written) if: the cursor file is missing; it already
 has `consumed_from`; its `last_bucket` is before the value; the derivation

@@ -217,6 +217,11 @@ def classify_due_buckets(now: datetime, cursor: dict) -> dict:
        one run would put every never-read bucket behind `last_bucket`.
        `consumed_from` is where the cursor's lineage began; nothing before it
        was ever read, so nothing before it is removable.
+    ⛔ THE LOWER BOUND IS LOAD-BEARING ON THE SCHEDULER'S SAME-HOUR PUSH (Langston part-1 record line):
+       every new due write lands strictly after `last_bucket` only because `store.schedule_grid` records a past
+       grid point as a miss row and pushes a same-hour point to the NEXT bucket, and the requeue writes now+1h.
+       If the write side ever wrote the current hour again, this prune would delete entries written after the
+       read, and nothing here would show it.
     Returns {"ok", "reason", "classes": {class: {"count", "bytes"}}, "paths": {class: [path]}, ...}.
     With no cursor, or no `consumed_from`, ok is False and every bucket is
     counted as kept — the caller removes nothing.
@@ -225,12 +230,21 @@ def classify_due_buckets(now: datetime, cursor: dict) -> dict:
     paths = {c: [] for c in DUE_CLASSES}
     last_v, from_v = cursor.get("last_bucket"), cursor.get("consumed_from")
     ok, reason = True, ""
+    # Each field parsed on its own (Langston part-1 item 2): a damaged consumed_from with an intact last_bucket
+    # must say so, not read as "no follow-up cursor".
+    last = first = None
+    bad = []
     try:
         last = _hour(last_v) if last_v else None
+    except ValueError:
+        bad.append("last_bucket %r is not an hour" % (last_v,))
+    try:
         first = _hour(from_v) if from_v else None
     except ValueError:
-        last = first = None
-    if last is None or first is None:
+        bad.append("consumed_from %r is not an hour" % (from_v,))
+    if bad:
+        ok, reason = False, "damaged cursor: " + "; ".join(bad)
+    elif last is None or first is None:
         ok, reason = False, ("no follow-up cursor" if last is None
                              else "the cursor has no consumed_from")
     elif first > last:

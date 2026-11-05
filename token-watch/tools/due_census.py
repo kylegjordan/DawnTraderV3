@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -39,7 +39,57 @@ def census(now: datetime | None = None) -> dict:
             "total": {"count": total_count, "bytes": total_bytes}}
 
 
+def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
+    """For each REMOVABLE bucket: the share of its entries (mint, age) that have ANY observation row on the bucket's
+    day or the two days after (a read observes, sheds, or records a death - each writes a row keyed by mint and age).
+    A bucket under `floor` is a GAP: evidence that the cursor's lineage may have skipped it, so the backfilled
+    consumed_from is not proven for it (Langston, Step-4 part 1). Read-only; one day's observation set in memory at
+    a time."""
+    import json as _json
+    from collections import defaultdict
+    from config import OBSERVATIONS_DIR
+    now = now or datetime.now(UTC)
+    c = tier.classify_due_buckets(now, load_state(tier.CURSOR_STATE, {}))
+    by_day = defaultdict(list)
+    for p in c["paths"]["removable"]:
+        by_day[os.path.basename(p)[:10]].append(p)
+    gaps, checked = [], 0
+    for day in sorted(by_day):
+        d0 = datetime.strptime(day, "%Y-%m-%d")
+        seen = set()
+        for k in range(3):
+            f = os.path.join(OBSERVATIONS_DIR, (d0 + timedelta(days=k)).strftime("%Y-%m-%d") + ".jsonl")
+            if not os.path.exists(f):
+                continue
+            with open(f, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        r = _json.loads(line)
+                    except ValueError:
+                        continue
+                    seen.add((r.get("mint"), r.get("age")))
+        for p in by_day[day]:
+            n = hit = 0
+            with open(p, encoding="utf-8") as fh:
+                for line in fh:
+                    try:
+                        e = _json.loads(line)
+                    except ValueError:
+                        continue
+                    n += 1
+                    hit += (e.get("mint"), e.get("age")) in seen
+            checked += 1
+            if n and hit / n < floor:
+                gaps.append({"bucket": os.path.basename(p)[:-6], "entries": n, "observed": hit})
+    return {"measured_at": now.isoformat(), "removable_buckets_checked": checked, "floor": floor,
+            "gaps": gaps, "verdict": "GAPS - do not prune" if gaps else "no gap found"}
+
+
 def main() -> int:
+    if sys.argv[1:] == ["--lineage"]:
+        out = lineage()
+        print(json.dumps(out, indent=2, sort_keys=True))
+        return 1 if out["gaps"] else 0
     out = census()
     text = json.dumps(out, indent=2, sort_keys=True)
     print(text)
