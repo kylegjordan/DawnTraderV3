@@ -2210,6 +2210,9 @@ export const rtbSignals = pgTable("rtb_signals", {
   expiresAt: timestamp("expires_at", { withTimezone: true }), // R9.3-C: Made optional - lifecycle governed by SQE, not TTL
   // Directive 8.8.4-A3.R7: Refresh tracking for Central Clock integration
   lastRefreshedAt: timestamp("last_refreshed_at", { withTimezone: true }), // Last successful refresh timestamp
+  // B-ENTRY-GATE (#1224) P7: written ONLY by the refresh, never by the queue upsert (a re-issue keeps the priced history).
+  lastPricedAt: timestamp("last_priced_at", { withTimezone: true }), // the last pass with an admissible live ask
+  consecutiveUnpricedPasses: integer("consecutive_unpriced_passes").notNull().default(0), // passes since, with none
   missedRefreshes: integer("missed_refreshes").default(0), // Count of failed refresh attempts
   blockReason: varchar("block_reason", { length: 50 }), // Original capacity block: MAX_TRADES, MAX_TOTAL_EXPOSURE, etc.
   metadata: jsonb("metadata"), // Original signal data for re-evaluation

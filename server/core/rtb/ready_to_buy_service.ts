@@ -484,7 +484,8 @@ interface SignalRefreshState {
 /** `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`): what `promoteSignal` did; the engine opens only on `'deleted'`. */
 // B-ENTRY-GATE (#1224) P11: 'stale_plan' (deleted, never opened) and 'plan_age_unresolved' (a bad limit row: not opened,
 // stays queued, loud). Every non-'deleted' outcome is already a refused claim at the engine (`CLAIM_REFUSED`).
-export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed' | 'stale_plan' | 'plan_age_unresolved';
+// P7: 'unpriced' — no admissible live ask within the class's promotion_price_max_age_ms; not opened, stays queued.
+export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed' | 'stale_plan' | 'plan_age_unresolved' | 'unpriced';
 /** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour, plus one on a verdict change no sooner than
  *  `RTB_PRICE_SHADOW_CHANGE_MIN_MS` after the last (Langston Step-4 CONDITION 3) — at most 7 rows per signal per hour. */
 const RTB_PRICE_SHADOW_SAMPLE_MS = 3_600_000;
@@ -1171,6 +1172,10 @@ class ReadyToBuyService {
                 updates: {
                   status: 'reconfirmed',
                   confidence: confidence.toString(),
+                  // B-ENTRY-GATE (#1224) P7: the priced-pass record — the refresh is its ONLY writer (the upsert never sets it).
+                  ...(_rpPriced?.ok
+                    ? { lastPricedAt: now, consecutiveUnpricedPasses: 0 }
+                    : { consecutiveUnpricedPasses: (Number((signal as any).consecutiveUnpricedPasses) || 0) + 1 }),
                   // ★ B-RETIRED-SCORE-REMOVAL (#558, A1): finalScore column write REMOVED (column
                   // is now nullable; dropped in Phase B). `refreshedFinalScore` still flows to the
                   // SQE input + logs — that consumer is the deferred SQE-contract slice.
@@ -1663,6 +1668,35 @@ class ReadyToBuyService {
         this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'stale_plan');
         console.log(`[B-ENTRY-GATE][P11][STALE_PLAN] symbol=${normalizedSymbol} id=${signalId} ageMs=${_p11AgeMs} limitMs=${String(_p11Limit)} removed=${removedStale} — not opened`);
         return 'stale_plan';
+      }
+      // ⭐ B-ENTRY-GATE (#1224) P7: promotion needs a PRICED pass recently — a plan the refresh could not price against an
+      // admissible ask is not promoted on old economics. Per class; NO xStock row yet (seeded after a week of its own
+      // record against a named prediction, r12 Q-4) ⇒ OFF for that class and logged once.
+      let _p7Limit: unknown;
+      try {
+        _p7Limit = getCachedConstant('entry_gate', 'promotion_price_max_age_ms', { exchange: '*', assetClass: _p11Class ?? '*', strategy: '*', regime: '*' });
+      } catch (err) {
+        console.error(`[B-ENTRY-GATE][P7][PRICE_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId}: ${err instanceof Error ? err.message : String(err)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      }
+      if (_p7Limit === undefined) {
+        const k = `p7:${mode}:${_p11Class ?? 'unresolved'}`;
+        if (!this._planAgeOffLogged.has(k)) {
+          this._planAgeOffLogged.add(k);
+          console.log(`[B-ENTRY-GATE][P7][PRICE_AGE_GATE_OFF] mode=${mode} class=${_p11Class ?? 'unresolved'} — no entry_gate.promotion_price_max_age_ms row; promotion does not require a recent priced pass for this class. Logged once per class per process.`);
+        }
+      } else {
+        const _p7Lim = Number(_p7Limit);
+        if (!(Number.isFinite(_p7Lim) && _p7Lim > 0)) {
+          console.error(`[B-ENTRY-GATE][P7][PRICE_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId} limit=${String(_p7Limit)} — not a positive number; not opened, stays queued`);
+          return 'plan_age_unresolved';
+        }
+        const _p7At = (signal as any).lastPricedAt ? new Date((signal as any).lastPricedAt).getTime() : Number.NaN;
+        const _p7AgeMs = Date.now() - _p7At;
+        if (!(Number.isFinite(_p7AgeMs) && _p7AgeMs <= _p7Lim)) {
+          console.log(`[B-ENTRY-GATE][P7][UNPRICED] symbol=${normalizedSymbol} id=${signalId} class=${_p11Class} lastPricedAt=${String((signal as any).lastPricedAt ?? 'never')} ageMs=${Number.isFinite(_p7AgeMs) ? _p7AgeMs : 'never'} limitMs=${_p7Lim} unpricedPasses=${String((signal as any).consecutiveUnpricedPasses ?? 0)} — not opened, stays queued`);
+          return 'unpriced';
+        }
       }
     }
     try {
