@@ -1480,3 +1480,10 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS:** `git grep getActiveOpenPositionBySymbol` before the edit: the interface and the implementation only — no caller in `server/`, `client/`, `shared/`, `scripts/` or the tests; after the edit: scope and measurement documents only. `tsc` baseline holds; `b-close-writer-costs-open-mode.test.ts` M-8 asserts its absence.
 **ARCHIVE:** not a file; git history at `b3583659e` is the archive.
 **COMMIT:** this entry's commit. **DEPLOY:** with increment 2, after Langston's Step 4 and CI 4/4, never before the joint deploy of the head after 2026-11-07T13:03:42Z.
+
+## 2026-11-05 — two duplicate Coltrane unit copies I added under `comms-infra/codex/` — B-WAKE-OPENING-LIST P4, Infra Claude
+| removed | where | what it was |
+|---|---|---|
+| `comms-infra/codex/coltrane-bot.service` | added `81fdfa24d`, removed here | a byte-copy of the live unit, added as a "record item" under the belief that the unit was untracked; it was **already tracked** at `comms-infra/systemd/coltrane-bot.service` (identical, sha `5f9c8d6c…`), which `comms-infra/systemd/README.md:13` names as the install source |
+| `comms-infra/codex/coltrane-bot.service.d/onfailure.conf` | added `81fdfa24d`, edited `3cf619b87` (P4), removed here | the same mistake for the drop-in; P4's start-limit fix landed in this copy, which nothing installs from (Langston, P4 ruling: "the fix landed in the copy nothing installs from") |
+**Blast radius:** never installed (the live files equal the `systemd/` copies, sha-compared by Langston); no test, script or manifest reads the `codex/` paths (`git grep` finds only the change list). **The fix moved to the ONE home,** `comms-infra/systemd/coltrane-bot.service.d/onfailure.conf`, in the same commit. Archive: `1-system-manual/_archive/deleted-code/coltrane-bot.service.20261105-B-WAKE-OPENING-LIST-codex-duplicate.removed` and `coltrane-bot-onfailure.conf.20261105-B-WAKE-OPENING-LIST-codex-duplicate.removed`.
