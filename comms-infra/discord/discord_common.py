@@ -260,6 +260,10 @@ def _post_json(url, headers, payload, log_file):
     return False, None
 
 
+DEGRADED_NOTICE = ("[sender degraded: this box could not load its address rule (address_list.py), so this post "
+                   "was sent without it. Re-install the bridges group.]")
+
+
 def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, extra_payload=None):
     """Chunk + deliver content via repeated _post_json. Returns first chunk's message id or None.
 
@@ -272,25 +276,33 @@ def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, ext
     degraded = ADDRESS_LIST is None
     if degraded:
         # Langston's ruling (pre-audit r2a P2a): post anyway, as if ADDRESSED - a long post is split at whitespace
-        # and marked, so it can never arrive truncated - and drop the mention rather than guess where it goes. The
-        # marker then shows on Kyle-facing traffic: the visible signal, carried by something that cannot fail with
-        # the module.
+        # and marked, so it can never arrive truncated - and never guess where the opening list ends.
+        # ⛔ CORRECTED AT STEP 4 PART 2 (Langston C-2): the marker reaches only a MULTI-chunk post, so a short one -
+        #    the 438-char start-limit page bridge-failed-notify.sh sends with --notify is one chunk - went out with
+        #    no signal and NO PHONE PUSH, in exactly the state this path exists for. Now a plain-English notice, and
+        #    the mention if one was asked for, are APPENDED to the LAST chunk, whole, after splitting (room is
+        #    reserved for them): they need nothing from the module, reach every post, push to Kyle's phone, and
+        #    cannot empty the opening list (a prefix would).
         addressed_langston = True
+        degraded_tail = "\n\n" + DEGRADED_NOTICE + (f" <@{mention_user_id}>" if mention_user_id else "")
         log("send: DEGRADED - %s; sending as Langston-addressed (split at whitespace + group marker if long), "
-            "--notify mention suppressed" % ADDRESS_LIST_ERROR, log_file)
+            "notice and any --notify mention appended at the END" % ADDRESS_LIST_ERROR, log_file)
     else:
         addressed_langston = "LANGSTON" in opening_list(content)[0]
-    chunks = chunk_text(content)
+    _tail_len = len(degraded_tail) if degraded else 0
+    chunks = chunk_text(content, MSG_LIMIT - _tail_len)
     multi_langston = addressed_langston and len(chunks) > 1
     if multi_langston:
         # Reserve headroom so chunk + marker can never exceed the 2000-char hard cap, and
         # split ONLY at whitespace (Finding B) so no file:line / sha / path is ever cut in
         # half across the seam.
-        _lim = MSG_LIMIT - GROUP_MARKER_RESERVE
+        _lim = MSG_LIMIT - GROUP_MARKER_RESERVE - _tail_len
         chunks, _hard_cuts = split_on_whitespace(content, _lim)
         if _hard_cuts:
             log('send: WARNING %d unbreakable run(s) >%d chars - a token WAS cut mid-word'
                 % (_hard_cuts, _lim), log_file)
+    if degraded:
+        chunks[-1] = chunks[-1].rstrip() + degraded_tail
     if mention_user_id and not degraded:
         # §2 FIX, widened: NEVER put the mention in front of an opening list - '<' is not markup, so a prepended
         # mention empties the list for EVERY reader (Langston, Coltrane, and since this batch the session filters).

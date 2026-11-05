@@ -258,8 +258,36 @@ for content, want, name in [
     got = capture(dc, content, KYLE)
     ok("--notify placement: " + name, got == [want], got)
 
+# ── C2. the INCOMPLETE flush (Langston C-3) ───────────────────────────────────────────────────────────────────
+print("C2. a timed-out group is invoked only if its part 1 addresses Langston")
+
+
+def flush_case(parts, total):
+    """Post the given parts of one marked group, then force the timeout sweep with an unaddressed tick."""
+    grp = "%08x" % next(_ids)
+    got = []
+    for k, text in parts:
+        got += post(text + "\n⟨grp=%s %d/%d⟩" % (grp, k, total), author_id=5000, webhook_id=WEBHOOK)
+    saved = b.GROUP_TIMEOUT_S
+    b.GROUP_TIMEOUT_S = -1
+    try:
+        got += post("NEW Claude — tick", author_id=5000, webhook_id=WEBHOOK)
+    finally:
+        b.GROUP_TIMEOUT_S = saved
+    return got
+
+
+got = flush_case([(1, "NEW Claude — a long CC-to-CC note, part one"), (3, "part three")], 3)
+ok("C-3: a timed-out group whose part 1 does NOT address Langston is dropped, no invoke", got == [], got)
+got = flush_case([(1, "Langston — a long dispatch, part one"), (3, "part three")], 3)
+ok("POSITIVE CONTROL: a timed-out group whose part 1 addresses Langston is still invoked, marked INCOMPLETE",
+   len(got) == 1 and "INCOMPLETE CHUNK GROUP" in got[0]["content"], got)
+got = flush_case([(2, "part two"), (3, "part three")], 3)
+ok("C-3: with part 1 missing nothing can decide, so the partial still goes, marked INCOMPLETE (fail loud)",
+   len(got) == 1 and "INCOMPLETE CHUNK GROUP" in got[0]["content"], got)
+
 # ── D. the degraded sender ─────────────────────────────────────────────────────────────────────────────────────
-print("D. the degraded sender (Langston's ruling: post anyway, as addressed, no mention, one log line)")
+print("D. the degraded sender (post anyway, as addressed, a notice + the mention at the END, one log line)")
 FILLER = "Kyle — a long notice. " + " ".join("line %d of a long body with path/to/x_%d.py:%d" % (i, i, i) for i in range(200))
 for kind in ("absent", "drift", "broken", "probe"):
     d = tempfile.mkdtemp(prefix="degrade-%s-" % kind, dir=SCRATCH)
@@ -286,13 +314,30 @@ for kind in ("absent", "drift", "broken", "probe"):
     marks = [MARK.search(c) for c in sent]
     ok("degraded (%s): a long post is still posted, split and marked" % kind,
        len(sent) >= 2 and all(marks) and all(len(c) <= 2000 for c in sent), "chunks=%d" % len(sent))
-    ok("degraded (%s): the --notify mention is suppressed" % kind, not any("<@" in c for c in sent))
+    ok("degraded (%s): the notice and the mention are in the LAST chunk only, once each" % kind,
+       sum(c.count("<@%d>" % KYLE) for c in sent) == 1 and "<@%d>" % KYLE in sent[-1]
+       and sum(c.count(m.DEGRADED_NOTICE) for c in sent) == 1 and m.DEGRADED_NOTICE in sent[-1], sent[-1][-300:])
+    ok("degraded (%s): the opening list is untouched (chunk 0 still opens 'Kyle —')" % kind,
+       sent[0].startswith("Kyle — a long notice."), sent[0][:40])
     lines = [ln for ln in open(logf, encoding="utf-8", errors="replace").read().splitlines() if "DEGRADED" in ln]
     ok("degraded (%s): exactly one log line, naming the cause" % kind, len(lines) == 1 and word in lines[0], lines)
     sent.clear()
     m.webhook_send(CFG["webhook_url"], "NEW Claude", "Kyle — short", logf, mention_user_id=KYLE)
-    ok("degraded (%s): a short post goes out as one message, unmarked, no mention" % kind,
-       sent == ["Kyle — short"], sent)
+    ok("degraded (%s): ★ a SHORT post carries the notice and the phone push (Langston C-2)" % kind,
+       sent == ["Kyle — short\n\n" + m.DEGRADED_NOTICE + " <@%d>" % KYLE], sent)
+    sent.clear()
+    m.webhook_send(CFG["webhook_url"], "NEW Claude", LONG, logf)
+    t3, _ = deliver(sent)
+    ok("degraded (%s): a long Langston dispatch still reaches him as ONE invoke, notice at the end" % kind,
+       len(t3) == 1 and t3[0]["content"].startswith("Coltrane, and Langston")
+       and t3[0]["content"].rstrip().endswith(m.DEGRADED_NOTICE), [t["content"][-120:] for t in t3])
+
+# ── E. the install path (Langston C-1) ────────────────────────────────────────────────────────────────────────
+print("E. deploy.sh installs the module the bridges refuse to start without")
+_dep = open(os.path.join(HERE, "deploy.sh"), encoding="utf-8").read()
+ok("POSITIVE CONTROL: the manifest row for discord_common.py is found", "bridges|comms-infra/discord/discord_common.py|" in _dep)
+ok("★ the bridges group installs address_list.py beside discord_common.py",
+   "bridges|comms-infra/discord/address_list.py|$BRIDGE_DIR/address_list.py|" in _dep)
 
 print("%d passed, %d failed" % (P, F))
 shutil.rmtree(SCRATCH, ignore_errors=True)

@@ -1163,6 +1163,13 @@ def build_client(task_q, recover_floor=None, alert_q=None):
                 if not _e:
                     continue
                 _missing = [i for i in range(1, _e['n'] + 1) if i not in _e['parts']]
+                # Langston C-3 (Step 4 part 2): a DEGRADED sender marks EVERY long post, so a group is no longer
+                # proof the post was for Langston. With part 1 present, its opening list decides, exactly as the
+                # gate below would; without it nothing can decide, so the partial still goes, marked INCOMPLETE.
+                if 1 in _e['parts'] and "LANGSTON" not in dc.opening_list(_e['parts'][1])[0]:
+                    log(f"chunk-group {_sg}: TIMEOUT, missing {_missing}; part 1 does not address Langston "
+                        f"-> dropped, no invoke")
+                    continue
                 _partial = "\n".join(_e['parts'][i] for i in sorted(_e['parts']))
                 _partial += (f"\n\n[INCOMPLETE CHUNK GROUP {_sg}: received "
                              f"{len(_e['parts'])}/{_e['n']}, missing {_missing}. "

@@ -64,6 +64,7 @@ MANIFEST="
 bridges|comms-infra/discord/discord-cc-bridge.py|$BRIDGE_DIR/discord-cc-bridge.py|0755
 bridges|comms-infra/discord/discord-langston-bridge.py|$BRIDGE_DIR/discord-langston-bridge.py|0755
 bridges|comms-infra/discord/discord_common.py|$BRIDGE_DIR/discord_common.py|0755
+bridges|comms-infra/discord/address_list.py|$BRIDGE_DIR/address_list.py|0644
 bridges|comms-infra/discord/gateway_watchdog.py|$BRIDGE_DIR/gateway_watchdog.py|0755
 bridges|comms-infra/discord/langston_queue.py|$BRIDGE_DIR/langston_queue.py|0755
 bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
