@@ -130,19 +130,16 @@ describe('[B-COST-ACCOUNTING-HONESTY] source fence — all three sites stay in l
     expect(ENGINE_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
   });
 
-  it('site 2 (manual close): delegates to the shared implementation', () => {
-    expect(ROUTES_SRC).toMatch(/computeRealizedPnl\(\{/);
-    expect(ROUTES_SRC).toMatch(/from '\.\/core\/math\/trade-pnl\.js'/);
+  it('site 2 (manual close) is GONE — the route closes through site 1, the engine close (B-CLOSE-WRITER-COSTS P-10)', () => {
+    // Site 2 was a copy of the engine close with its own record writer; it orphaned the open-time record. The manual close
+    // now goes through `closeOnePositionByOperator` → `closePosition`, so it computes nothing and writes nothing itself,
+    // and it books exactly what site 1 books (the benchmark fields included). Lockstep by construction, not by copy.
+    const at = ROUTES_SRC.indexOf("apiRouter.post('/active-engine/close-trade/:id'");
+    expect(at).toBeGreaterThan(-1);
+    const route = ROUTES_SRC.slice(at, ROUTES_SRC.indexOf('apiRouter.', at + 10));
+    expect(route).toContain("manager.closeOnePositionByOperator(req.params.id, 'manual_close')");
+    expect(route).not.toMatch(/computeRealizedPnl|createClosedTrade|deleteActiveOpenPosition/);
     expect(ROUTES_SRC).not.toMatch(/const totalCost = entryFee \+ exitFee \+ entrySlippage \+ exitSlippage/);
-  });
-
-  it('site 2 persists the benchmark fields (slippage telemetry must be auditable, not hollow)', () => {
-    // Langston Step-4: the manual-close payload wrote the DERIVED slippage but none of the five
-    // benchmarks the engine writes — signed numbers with nothing to audit them against, and any
-    // actual-fill verification would silently exclude these rows.
-    for (const key of ['intendedEntryPrice:', 'actualEntryPrice:', 'targetExitPrice:', 'actualExitPrice:', 'netPnlPercent:']) {
-      expect(ROUTES_SRC).toContain(key);
-    }
   });
 
   it('★ no cost line anywhere adds slippage back under ANY spelling', () => {
