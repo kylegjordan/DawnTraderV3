@@ -21,10 +21,13 @@
  * Pure: the caller resolves every setting (fail-hard) and passes it in.
  */
 import {
+  applyMakerTakerFillPolicy,
   decideMakerTaker,
   type EntryUrgencyClass,
+  type FillPolicy,
   type MakerTakerHaircutConfig,
 } from '../math/maker-taker-decision.js';
+import { entryWindowRefusalAt } from './entry-window.js';
 import type { CostComponents } from '../math/cost-model.js';
 import { computeNetExpectancyKernel } from '../calculations/net-expectancy-kernel.js';
 
@@ -141,5 +144,89 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
     missingPWinWouldRefuse: pWinDefaulted,
     // Step-4 C-6: a refusal can rest on a placeholder spread; say which one it used (#546).
     spreadSource: i.costs.spreadSource ?? null,
+  };
+}
+
+/**
+ * `B-ENTRY-GATE` (`#1224`) increment B, P6 (pre-audit A-4, scope OBJ-6) — THE QUEUE RE-PRICES THE PLAN AT THE LIVE ASK.
+ *
+ * Every priced refresh pass asks the question the open will ask, at today's price: the plan's prices never move; what
+ * moves is the price a taker would pay. So:
+ *   - the TAKER arm is the kernel at the live ask with the ask-entry / mid-exit friction (as at the fill, C-1), and it is
+ *     inadmissible outright when the ask sits outside the worse-side entry window (KD-10) — the open would refuse it;
+ *   - the MAKER arm is unchanged by the ask: it rests at the plan's entry, so it is the birth decision's own adjusted
+ *     maker leg at the plan (fill probability, non-fill cost and adverse selection included — ex ante, not on a fill);
+ *   - the class's DB fill policy then picks, exactly as at birth (`applyMakerTakerFillPolicy`, floor 0).
+ * No ask ⇒ the caller does not call this: no price is no decision, and never a retirement.
+ * The top-of-book ask stands in for the walked fill a taker would get; the open still judges the walked fill (P4).
+ * Pure: every setting is resolved by the caller (fail-hard) and passed in.
+ */
+export interface RepriceAtAskInput {
+  inputs: FillEconInputs;
+  /** The plan's entry — the maker's limit and the window's anchor. */
+  planEntry: number;
+  /** The live ask, read through the exit's own contract by the refresh. */
+  ask: number;
+  worseSideFrac: number;
+  policy: FillPolicy;
+}
+
+export interface RepriceAtAsk {
+  admitted: boolean;
+  chosenMode: 'maker' | 'taker' | null;
+  /** Admitted: the policy-selected EV. Not admitted: the best candidate the policy considered, clamped to ≤ 0 — so the
+   *  SQE's sign check refuses on a number, never on an absence. Non-finite only if every candidate was non-finite. */
+  chosenNetEV: number;
+  takerNetEvAtAsk: number;
+  makerNetEVAdjusted: number;
+  /** True when the ask sits more than the window above the plan entry: the taker arm was struck before the policy. */
+  windowRefused: boolean;
+  /** The policy's refusal reason when not admitted; null when admitted. */
+  reason: string | null;
+  policy: FillPolicy;
+}
+
+export function repriceAtAsk(r: RepriceAtAskInput): RepriceAtAsk {
+  for (const [k, v] of Object.entries({ planEntry: r.planEntry, ask: r.ask, stopPrice: r.inputs.stopPrice, targetPrice: r.inputs.targetPrice })) {
+    if (!(Number.isFinite(v) && v > 0)) throw new Error(`repriceAtAsk: ${k} must be a positive finite number, got ${String(v)}`);
+  }
+  const i = r.inputs;
+  const d = decideMakerTaker({
+    entryPrice: r.planEntry,
+    entryPriceMaker: r.planEntry,
+    levelGeometry: 'mid',
+    stopPrice: i.stopPrice,
+    targetPrice: i.targetPrice,
+    costs: i.costs,
+    feeRateMaker: i.feeRateMaker,
+    feeRateTaker: i.feeRateTaker,
+    DI: i.DI,
+    sourcePool: i.sourcePool,
+    dbsScore: i.dbsScore,
+    minPWin: i.minPWin,
+    maxPWin: i.maxPWin,
+    diPWinFactor: i.diPWinFactor,
+    signalStrength: i.signalStrength,
+    urgencyClass: i.urgencyClass,
+    haircut: i.haircut,
+  });
+  const takerNetEvAtAsk = computeFillEconomics({ ...i, arm: 'taker', fillPrice: r.ask }).netEvAtFill;
+  const windowRefused = entryWindowRefusalAt(r.ask, r.planEntry, i.stopPrice, r.worseSideFrac) !== null;
+  const pd = applyMakerTakerFillPolicy({ ...d, takerNetEV: windowRefused ? Number.NEGATIVE_INFINITY : takerNetEvAtAsk }, r.policy, 0);
+  if (pd.admitted) {
+    return { admitted: true, chosenMode: pd.chosenMode, chosenNetEV: pd.chosenNetEV, takerNetEvAtAsk, makerNetEVAdjusted: d.makerNetEVAdjusted, windowRefused, reason: null, policy: r.policy };
+  }
+  const candidates = r.policy === 'maker_only'
+    ? [d.makerNetEVAdjusted]
+    : [d.makerNetEVAdjusted, windowRefused ? Number.NaN : takerNetEvAtAsk];
+  const finite = candidates.filter((v) => Number.isFinite(v));
+  // A refusal must REFUSE downstream: the SQE's sign check is the refresh's delete, so a not-admitted result can never
+  // carry a positive EV. The one way the best candidate is positive here is the maker hard floor (a positive maker EV the
+  // policy still refuses); it is clamped to 0 and the reason says why.
+  const best = finite.length ? Math.max(...finite) : Number.NaN;
+  return {
+    admitted: false, chosenMode: null,
+    chosenNetEV: best > 0 ? 0 : best,
+    takerNetEvAtAsk, makerNetEVAdjusted: d.makerNetEVAdjusted, windowRefused, reason: pd.reason, policy: r.policy,
   };
 }
