@@ -15,7 +15,10 @@ This page. One place on Kyle's phone that shows the agreed pre-sprint and sprint
 A hotfix: staging server addresses that change something or run work answered without a login — among them the order-book monitor's start, stop and audit, the test routine's start and stop, the simulation-session flag, a conversation rename, a screener test, the recovery test and three audit runs. They now require one. Read-only addresses wait for the sprint row that covers them.
 
 ### B-DISK-FILE-TIERING
-Moves the trading app's own data files on the staging server (strategy telemetry, VTS evaluation history and data summaries) older than 30 days to warm and then cold storage, checked before anything is removed, so the disk stops filling up. Also removes a forgotten March diagnostic that has written 5.4 GB to the disk.
+Moves the trading app's own data files on the staging server (strategy telemetry, VTS evaluation history and data summaries) older than 35 days to warm and then cold storage, checked before anything is removed, so the disk stops filling up. Also archived a forgotten March diagnostic (5.4 GB) and cut the app's noisiest debug logging. Left: the archive watchdog's own safety checks, a memory-safe cold-storage mover, and compressing the app logs after November 18.
+
+### B-DB-POOL-GUARD
+The app shares 10 database connections between trading and everything else. When slow reports hold them, trading writes wait or get dropped. This first measures which work holds a connection too long, now named in a log line every minute; after 48 hours of readings it sets limits so trading always gets a connection and a stuck one raises an alert.
 
 ### B-B75-EXPORT-COMPLETENESS
 Makes the B75 trade-record export prove it is complete before anything is archived or deleted from it, so a short export can never be mistaken for a full one.
