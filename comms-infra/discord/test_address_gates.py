@@ -253,7 +253,8 @@ if _r1.returncode == 0:
 for content, want, name in [
     ("OLD Claude, Infra Claude — probe", "OLD Claude, Infra Claude <@42> — probe", "a session list keeps its wake"),
     ("Langston — short", "Langston <@42> — short", "Langston-first is unchanged"),
-    ("Kyle — the batch closed", "<@42> Kyle — the batch closed", "no list: the mention leads, as before"),
+    ("Kyle — the batch closed", "Kyle <@42> — the batch closed", "Kyle opens the list: the mention follows him"),
+    ("x — the batch closed", "<@42> x — the batch closed", "no list: the mention leads, as before"),
 ]:
     got = capture(dc, content, KYLE)
     ok("--notify placement: " + name, got == [want], got)

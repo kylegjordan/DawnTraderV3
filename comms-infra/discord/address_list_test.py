@@ -9,6 +9,11 @@ mutate_address_list.py judges by the exit code AND that named line.
   3. address_list.SESSION_NAMES equals the wake filter's NAMES (the authority), read from the filter's source."""
 import ast, hashlib, os, re, sys
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")   # a FAIL line carrying "★" must print, not crash (cp1252 consoles)
+except Exception:
+    pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
@@ -35,8 +40,10 @@ CASES = [
     ("OLD Claude / NEW Claude — x", ["CC-A", "CC-B"], "'OLD Claude / NEW Claude' -> both"),
     ("Infra Claude, ANALYST Claude - from PM Claude, …", ["CC-INFRA", "CC-C"],
      "'Infra Claude, ANALYST Claude - from PM Claude' -> CC-INFRA and CC-C, not CC-PM"),
-    ("at 3 PM Claude will post", [], "clock time 'at 3 PM Claude' -> nobody"),
-    ("Langston, 3 PM Claude will post", ["LANGSTON"], "clock time inside a list 'Langston, 3 PM Claude' -> Langston only"),
+    ("at 3 PM Claude will post", [], "anchored position: 'at 3 PM Claude' opens with no name -> nobody"),
+    ("Langston, 3 PM Claude will post", ["LANGSTON"],
+     "anchored position: after 'Langston, ' the list position holds '3', not a name -> Langston only"),
+    ("Langston, pm claude - x", ["LANGSTON"], "★ the CASE LOCK: lower-case 'pm claude' is not CC-PM -> Langston only"),
     ("Langston, PM Claude - x", ["LANGSTON", "CC-PM"], "'Langston, PM Claude' -> Langston and CC-PM"),
     ("Langston Coltrane x", ["LANGSTON"], "bare whitespace is not a separator: 'Langston Coltrane x' -> Langston only"),
     ("SWITCH TO CODEX", [], "'SWITCH TO CODEX' -> nobody (a name only later)"),
@@ -47,7 +54,12 @@ CASES = [
     ("Langston, Coltrane, OLD Claude, NEW Claude — all of you", ["LANGSTON", "COLTRANE", "CC-A", "CC-B"],
      "KD-21's own example -> all four"),
     ("Langston — and Coltrane may comment", ["LANGSTON"], "OBJ-5 live case: Coltrane only later -> Langston only"),
-    ("Kyle — the census is done; OLD Claude may want it.", [], "a later-only mention -> nobody"),
+    ("Kyle — the census is done; OLD Claude may want it.", ["KYLE"],
+     "a later-only mention -> only the list-only KYLE, so nobody wakes"),
+    ("Kyle, Langston, OLD Claude — ROOT CAUSE FOUND", ["KYLE", "LANGSTON", "CC-A"],
+     "★ a Kyle-led list continues past him -> Langston and CC-A (part 3 MUST-FIX)"),
+    ("Langston, Kyle and NEW Claude — x", ["LANGSTON", "KYLE", "CC-B"], "Kyle mid-list does not end it"),
+    ("Kyle's note: OLD Claude was right", ["KYLE"], "a possessive ends the list at Kyle"),
     ("Langstonish words", [], "a name must end at a word boundary: 'Langstonish' -> nobody"),
     ("CC-A & CC-INFRA + cc pm — x", ["CC-A", "CC-INFRA", "CC-PM"], "'&' and '+' separate; the CC-x forms -> three"),
     ("Langston, Langston — x", ["LANGSTON"], "a repeated name is listed once"),
@@ -64,7 +76,12 @@ for text, last in (("Coltrane, and Langston — x", "Langston"), ("**Langston**,
                    ("OLD Claude / NEW Claude — x", "NEW Claude")):
     end = al.opening_list(text, R)[1]
     ok("end offset sits just past %r in %r" % (last, text), text[:end].endswith(last), "end=%d" % end)
-ok("end offset is 0 for an empty list", al.opening_list("Kyle — x", R)[1] == 0)
+ok("end offset is 0 for an empty list", al.opening_list("x — nobody", R)[1] == 0)
+
+# F3 (Langston, Step 4 part 1): the LONGEST match wins. Unreachable with today's registry, so fenced on a probe one.
+_probe = {"X": [r"old"], "CC-A": [r"old[\s_-]*claude"]}
+ok("★ the LONGEST match wins at one position (probe registry: 'old claude' -> CC-A, not X)",
+   al.opening_list("old claude — x", _probe)[0] == ["CC-A"], "got %r" % (al.opening_list("old claude — x", _probe)[0],))
 _t = "Coltrane, and Langston — x"
 _e = al.opening_list(_t, R)[1]
 ok("a mention placed at the end offset keeps the whole list",
@@ -92,8 +109,9 @@ _names = [ast.literal_eval(n.value) for n in _ft.body
 ok("the filter defines NAMES exactly once at top level", len(_names) == 1, "found %d" % len(_names))
 ok("address_list.SESSION_NAMES equals the filter's NAMES (the authority)", _names[:1] == [al.SESSION_NAMES],
    "filter %r" % (_names[:1],))
-ok("the registry is the sessions plus the two reviewers, nothing else",
-   set(R) == set(al.SESSION_NAMES) | {"LANGSTON", "COLTRANE"})
+ok("the registry is the sessions, the two reviewers and the list-only KYLE, nothing else",
+   set(R) == set(al.SESSION_NAMES) | {"LANGSTON", "COLTRANE", "KYLE"})
+ok("no consumer can be woken as KYLE: it is in no session's NAMES", "KYLE" not in al.SESSION_NAMES)
 
 print("%d passed, %d failed" % (P, F))
 sys.exit(1 if F else 0)

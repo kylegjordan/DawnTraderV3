@@ -48,7 +48,7 @@ MSG_LIMIT = 2000
 #    ADDRESS_LIST_ERROR and REFUSES TO START (Langston's ruling, pre-audit r2a P2a).
 ADDRESS_LIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "address_list.py")
 # Computed by address_list_test.py from the committed file; it fails until this equals it. Never hand-typed.
-ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+ADDRESS_LIST_SHA256 = "e07d7b323e42fa0ab10d5b1841d2f51057b576b38cd718000987af088e3c3f69"
 
 
 def load_address_list(path=ADDRESS_LIST_FILE, expected=ADDRESS_LIST_SHA256):

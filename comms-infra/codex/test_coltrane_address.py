@@ -46,6 +46,7 @@ print("A. engage_reason")
 for text, author, is_dm, want, name in [
     ("Langston, and Coltrane — r2 is up", 5, False, "named", "KD-12 shape 'Langston, and Coltrane' now wakes Coltrane"),
     ("Coltrane, Langston — x", 5, False, "named", "'Coltrane, Langston' wakes Coltrane"),
+    ("Kyle, Coltrane — x", 5, False, "named", "★ a Kyle-led list wakes Coltrane (part 3 MUST-FIX)"),
     ("Coltrane and Langston: x", 5, False, "named", "'Coltrane and Langston:' wakes Coltrane"),
     ("**Codex**, OLD Claude — x", 5, False, "named", "the 'codex' form, with markup, in a list wakes Coltrane"),
     ("Langston — and Coltrane may comment", 5, False, None, "a later-only mention does NOT wake Coltrane"),

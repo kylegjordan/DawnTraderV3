@@ -244,7 +244,7 @@ _FILTER_DIR = os.path.dirname(os.path.abspath(__file__))
 ADDRESS_LIST_CANDIDATES = (os.path.join(_FILTER_DIR, "address_list.py"),
                            os.path.join(os.path.dirname(_FILTER_DIR), "discord", "address_list.py"))
 # Computed by comms-infra/discord/address_list_test.py from the committed file; never hand-typed.
-ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+ADDRESS_LIST_SHA256 = "e07d7b323e42fa0ab10d5b1841d2f51057b576b38cd718000987af088e3c3f69"
 _LATCH_TAIL = " — re-install it; until then a session post wakes you on your name ANYWHERE (the old rule)"
 
 
@@ -261,7 +261,7 @@ def _load_address_list():
         mod = types.ModuleType("address_list")
         mod.__file__ = path
         exec(compile(data, path, "exec"), mod.__dict__)    # the bytes hashed are the bytes run
-        registry = {**NAMES, **mod.REVIEWER_NAMES}          # the session names are THIS file's NAMES - one list
+        registry = {**NAMES, **mod.REVIEWER_NAMES, **mod.LIST_ONLY_NAMES}   # sessions = THIS file's NAMES
         if not registry.get(ALIAS):
             return None, None, ("registry:" + ALIAS, f"the name registry has no entry for {ALIAS}" + _LATCH_TAIL)
         # Langston C-1: the sha cannot see a parser whose keys use another convention - the list could then never

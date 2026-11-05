@@ -9,11 +9,12 @@ runs - #1004's class), so any edit here must be followed by updating those const
 the value and fails until they agree. Never hand-type it.
 
 THE ALGORITHM (scope OBJ-1, Langston B-2). It never tokenises: the registry entries are regexes that carry their own
-separator class (`old[\s_-]*claude`) and lookbehinds (CC-PM's clock-time guard), so splitting the text first would
-cut through them.
+separator class (`old[\s_-]*claude`), so splitting the text first would cut through them.
   1. Skip leading MARKUP.
-  2. Try every registry alternative ANCHORED at that position, against the FULL string (`pattern.match(text, pos)`,
-     so a lookbehind still sees the left context). The LONGEST match wins.
+  2. Try every registry alternative ANCHORED at that position, against the FULL string (`pattern.match(text, pos)`).
+     The LONGEST match wins. ⚠️ DEFENSIVE TODAY, NOT OPERATING (Langston, Step 4 part 1 F3): no two alternatives
+     in this registry match at the same position (measured over 7,476 realisations), so the rule only matters once
+     one is added; address_list_test.py fences it on a probe registry.
   3. Consume one SEPARATOR. Bare whitespace is NOT one ("Langston Coltrane x" names Langston only).
   4. Continue only if another registry name starts there; stop at the first position where none does.
 """
@@ -40,11 +41,23 @@ SESSION_NAMES = {
     "CC-INFRA": [r"infra[\s_-]*claude", r"claude[\s_-]*infra", r"cc[\s_-]*infra"],
     "CC-PM": [r"(?<![0-9])(?<![0-9][\s])(?-i:PM)[\s_-]*claude", r"cc[\s_-]*pm"],
 }
+# ⚠️ WHAT ACTUALLY GUARDS "3 PM Claude" (Langston, Step 4 part 1 F2): the ANCHORED position and the CASE LOCK
+#    `(?-i:PM)` - a list name must start exactly where the list is, and "at 3 PM" never puts "PM" there. The two
+#    digit lookbehinds above are UNREACHABLE from opening_list (no digit is MARKUP or a separator, so a match is
+#    never attempted right after one); they are kept because the filter's NAMES is the authority and carries them,
+#    and would matter only to a consumer that SEARCHES rather than anchors. The case lock is fenced by a test.
 REVIEWER_NAMES = {
     "LANGSTON": [r"langston"],
     "COLTRANE": [r"coltrane", r"codex"],
 }
-REGISTRY = {**SESSION_NAMES, **REVIEWER_NAMES}
+# LIST-ONLY members: names that may sit in an opening list but wake nobody (Langston, Step 4 part 3 MUST-FIX).
+# Without KYLE, "Kyle, Langston, OLD Claude - x" stopped at its first name and woke NOBODY - silence, which the
+# latch design rules out. No consumer has a KYLE alias, so listing him changes no wake by itself; it only lets the
+# list continue past him. (Kyle's OWN posts are decided elsewhere, by his name-anywhere rule - unchanged.)
+LIST_ONLY_NAMES = {
+    "KYLE": [r"kyle"],
+}
+REGISTRY = {**SESSION_NAMES, **REVIEWER_NAMES, **LIST_ONLY_NAMES}
 
 _COMPILED = {}
 

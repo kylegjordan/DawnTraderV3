@@ -52,7 +52,7 @@ CREW_ALL_RE = re.compile(r"@crew\b|\bALL SESSIONS\b", re.I)
 spec = importlib.util.spec_from_file_location("address_list", MODULE)
 AL = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(AL)
-REGISTRY = {**NAMES, **AL.REVIEWER_NAMES}
+REGISTRY = {**NAMES, **AL.REVIEWER_NAMES, **AL.LIST_ONLY_NAMES}   # exactly as the filter builds it
 
 
 def decide(text, sender):

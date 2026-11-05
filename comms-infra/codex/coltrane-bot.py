@@ -99,7 +99,7 @@ NAME_RE = re.compile(r"\b(coltrane|codex)\b", re.I)
 #    its rule must not guess.
 ADDRESS_LIST_PATH = os.environ.get("COLTRANE_ADDRESS_LIST", "/opt/discord-bridges/address_list.py")  # env: tests only
 # Computed by comms-infra/discord/address_list_test.py from the committed file; never hand-typed.
-ADDRESS_LIST_SHA256 = "edbf3b0fc95c93ec903f507ada2ed7bd9e281f4240bb70cf426ce734407c149b"
+ADDRESS_LIST_SHA256 = "e07d7b323e42fa0ab10d5b1841d2f51057b576b38cd718000987af088e3c3f69"
 
 
 def load_address_list(path=ADDRESS_LIST_PATH, expected=ADDRESS_LIST_SHA256):
