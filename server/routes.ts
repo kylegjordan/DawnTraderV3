@@ -3265,45 +3265,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
   
-  // AJ19-B.7: Force clear stale open positions (DANGEROUS - for debugging only)
-  apiRouter.post('/diagnostics/aj19b/force-clear-positions', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const mode = (req.query.mode as 'live' | 'paper') || 'paper';
-      const { confirm } = req.body;
-      
-      if (confirm !== 'CLEAR_ALL_POSITIONS') {
-        return res.status(400).json({ 
-          ok: false, 
-          error: 'Must confirm with body: { "confirm": "CLEAR_ALL_POSITIONS" }' 
-        });
-      }
-      
-      const positions = await storage.getActiveOpenPositions(mode);
-      const deleteCount = positions.length;
-      
-      for (const position of positions) {
-        try {
-          await storage.deleteActiveOpenPosition(mode, position.id);
-          console.log(`[AJ19B][FORCE_DELETE] Deleted position ${position.id} (${position.symbol})`);
-        } catch (err: any) {
-          console.error(`[AJ19B][FORCE_DELETE_ERROR] Failed to delete position ${position.id}:`, err.message);
-        }
-      }
-      
-      const remainingPositions = await storage.getActiveOpenPositions(mode);
-      
-      res.json({
-        ok: true,
-        message: `Force-cleared ${deleteCount} positions`,
-        deletedCount: deleteCount,
-        remainingCount: remainingPositions.length
-      });
-    } catch (error: any) {
-      console.error('[AJ19B] Error force-clearing positions:', error.message);
-      res.status(500).json({ ok: false, error: 'Failed to force-clear positions' });
-    }
-  });
-
   // ===== PHASE B4: DIAGNOSTIC FRAMEWORK =====
   // Observational diagnostics - NO modifications to core trading logic
   

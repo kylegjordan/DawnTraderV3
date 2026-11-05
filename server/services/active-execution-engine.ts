@@ -2084,10 +2084,60 @@ export class ActiveExecutionEngine {
       `outcome=${outcome} would_cancel_ticks=${rec.ticks} first_at=${new Date(rec.firstAtMs).toISOString()} max_adverse_r=${rec.maxAdverseR.toFixed(4)} — recorded, not cancelled`);
   }
 
+  /**
+   * B-CLOSE-WRITER-COSTS P-1/P-2/P-16 (KD-17, KD-24): the ONE open trade record a position finishes, by exact symbol +
+   * this engine's mode + the position's asset class. Never guesses: anything but exactly one comes back with the reason.
+   * An invalid class is refused without a lookup (a missing class would silently widen the match).
+   */
+  private async _resolveOpenTradeRecord(position: any): Promise<
+    { status: 'one'; record: Awaited<ReturnType<typeof storage.findOpenTradeRecord>> extends infer R ? R extends { status: 'one'; record: infer T } ? T : never : never }
+    | { status: 'unresolved'; why: string }> {
+    const cls = asValidAssetClass(position.assetClass);
+    if (!cls) return { status: 'unresolved', why: `the position has no valid asset class (${String(position.assetClass)})` };
+    const rec = await storage.findOpenTradeRecord(this.mode, position.symbol, cls);
+    if (rec.status === 'one') return { status: 'one', record: rec.record };
+    return {
+      status: 'unresolved',
+      why: rec.status === 'none' ? 'no open trade record matches its symbol, mode and asset class'
+        : `${rec.ids.length} open trade records match (${rec.ids.join(', ')})`,
+    };
+  }
+
+  /** The refusal: the position is KEPT (never deleted without its record, KD-17) and a critical alert names it. */
+  private async _refuseUnresolvedRecord(position: any, why: string, action: string): Promise<void> {
+    console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED:${this.mode}] ${position.symbol} pos=${position.id}: ${why} — position KEPT, not closed`);
+    try {
+      const { addAlert } = await import('./system-alerts.js');
+      await addAlert({
+        triggers_at: new Date(),
+        category: 'breakage',
+        severity: 'critical',
+        title: `Position ${position.symbol} cannot close: its trade record is not resolvable`,
+        body: `The ${this.mode} position ${position.id} in ${position.symbol} ${action}, but ${why}. The position is `
+          + `kept open (a close must never drop its trade record, KD-17). Repair the record (the restore route) or `
+          + `investigate the duplicate, then the next close completes. B-CLOSE-WRITER-COSTS P-2. DISPOSITION: RESOLVE, do not ACK.`,
+        dedupe_key: `close-record-unresolved-${this.mode}-${position.symbol}`,
+      });
+    } catch (alertErr) {
+      console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED] addAlert failed:`, alertErr);
+    }
+  }
+
   private async _dropUnfilledMaker(position: any, why: string): Promise<void> {
     this._reportMakerWouldCancel(position, 'drop');
-    const tradeId = (position.metadata as any)?.tradeId;
-    if (tradeId) {
+    let tradeId = (position.metadata as any)?.tradeId;
+    // ⛔ B-CLOSE-WRITER-COSTS P-16 (Langston BLOCKER-1, A-8): a position with no `tradeId` on its metadata used to be
+    // DELETED with its record left `closed_at IS NULL` for ever. Its record is now resolved by the close key; exactly
+    // one ⇒ it is closed `never_filled` as below; none or many ⇒ the position is KEPT and the refusal alert raised.
+    if (!tradeId) {
+      const rec = await this._resolveOpenTradeRecord(position);
+      if (rec.status !== 'one') {
+        await this._refuseUnresolvedRecord(position, rec.why, `was due to be dropped as never filled (${why})`);
+        return;
+      }
+      tradeId = rec.record.id;
+    }
+    {
       await storage.updateClosedTrade(this.mode, tradeId, {
         closedAt: new Date(),
         // ⛔ B-EXIT-PROVENANCE OBJ-1 EXEMPTION, NAMED HERE RATHER THAN DISCOVERED AT STEP 8.
@@ -2104,7 +2154,7 @@ export class ActiveExecutionEngine {
       } as any);
     }
     await storage.deleteActiveOpenPosition(this.mode, position.id);
-    console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record${tradeId ? '' : ' — no tradeId on metadata, position removed only'})`);
+    console.log(`[P19-B7.2c][MAKER_NEVER_FILLED:${this.mode}] ${position.symbol}: ${why} — dropped (slot freed, never-filled record ${tradeId})`);
   }
 
   /**
@@ -4621,6 +4671,7 @@ export class ActiveExecutionEngine {
     // record this close finishes is found HERE, by exact symbol + mode + asset class, BEFORE the close is committed to.
     // Not exactly one ⇒ the position is KEPT (never deleted without its record) and a critical alert names it; the
     // operator repair is the restore route (P-12). This replaces the old close-anyway-and-log path (`CLOSE_NO_TRADE_ROW`).
+<<<<<<< HEAD
     // Langston Step-4 C-1: the fill contract passed, so the refusal streak clears HERE, exactly where it did before this
     // batch. The record refusal below is a DIFFERENT rail and is deliberately not counted into it: that rail's cap means
     // "walk the book anyway", which is meaningless for a missing record and would eventually book the close KD-17 forbids.
@@ -4651,6 +4702,11 @@ export class ActiveExecutionEngine {
       } catch (alertErr) {
         console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED] addAlert failed:`, alertErr);
       }
+=======
+    const _rec = await this._resolveOpenTradeRecord(position);
+    if (_rec.status !== 'one') {
+      await this._refuseUnresolvedRecord(position, _rec.why, 'was due to close');
+>>>>>>> 35ab30226 (WIP (local only) B-CLOSE-WRITER-COSTS inc 3: P-16 never-filled drop resolves its record by the key or refuses; P-18 debug force-clear route deleted; shared resolve/refuse helpers)
       return;
     }
     const trade = _rec.record;
