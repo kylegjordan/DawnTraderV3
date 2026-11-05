@@ -25,6 +25,18 @@
 
 **Restart inside the observation window (recorded, not a confound for the session read):** OLD Claude deployed `c0214c9736ee86d7523fd33319ad4c935a929b80` at 2026-11-05T08:08:30Z (restart 675 → 676). This batch's runtime content in it vs `8636040255` is `686d62c9e` only (comments). It lands before the 14:30Z session, so the session read runs on one build.
 
+## THE PRE-REGISTERED SESSION READ — 2026-11-05, US regular session 14:30-21:00Z (read 21:20-21:35Z)
+| check | result | verdict |
+|---|---|---|
+| **(a)** disagreement, all xStock `mode='vts'` rows | morning_star 101,269 rows (100,641 detect; `b63_strong_dbs_exclusion` 62,013, `b63b` 7,836): **0 / 0** disagreements; sma_trend_ride 14,048 (13,728 detect; `b63b` 8,405): **0**; vwap_pullback 35,085 (33,138 detect; `b63b` 116): **0**; strong_bull_trend 32,410. **Null arm: 0 rows without `detectDbsScore` in 182,812.** Floors: every gate count is far above 1 % of its detect rows except vwap_pullback `b63b` (116 of 33,138 = 0.35 %), which sits BELOW the 1 % floor — reported, not a disagreement | **PASS** (agreement); vwap `b63b` under its 1 % floor flagged for Step 8 |
+| **(b-control)** SBT `dbs_below_threshold` | **12,138 of 31,530** detect rows (38.5 %), from 100 % (31,509 / 31,509, 11-04 session) | **PASS** |
+| **(b-observe)(i)** SBT xStock paper opens | **14** (`closed_trades`, opened in the session) — 2 `never_filled` rests, so **12 filled** | ⚠️ **INVESTIGATE — over the pre-registered 10 either way** |
+| **(b-observe)(ii)** SBT share of xStock paper opens | 14 of 31 (45 %) — vwap_pullback 15, morning_star 1, pivot_shift 1 | under 50 % |
+| **(b-observe)(iii)** geometry at open | **159 of 159** SBT xStock VTS admitted rows at span **9.0000** (min = max), 0 off by > 0.02; multipliers 3.0 / 6.0, unchanged since 2026-05-05T15:24:26Z | **PASS** |
+| VTS admitted, SBT share | 159 of 310 xStock VTS admitted rows (51 %) | recorded (the VTS is not the trigger's object) |
+
+**THE INVESTIGATE — the 14 trades (read 21:30Z):** 14:45 APP never_filled · 14:48 TPR stop 14:49 −0.41 · 14:49 BDX open · 14:52 WFC stop 14:56 −0.26 · 14:55 EPAM open · 14:56 TAP stop 17:24 −1.06 · 14:58 EIX stop 15:19 −0.32 · 14:59 ALB stop 16:06 −1.28 · 15:11 BTI stop 19:19 −0.47 · 15:24 XEL stop 15:43 −0.22 · 15:25 USB stop 15:26 −0.18 · 15:26 MCK never_filled · 15:45 D stop 15:49 −0.16 · 16:00 MSI stop 17:26 −1.41. **10 closed, 10 stop_hit, 0 wins, −$5.75** on ~$40 notionals; 2 open. Stop distance from entry ranges 0.21 % (D) to 3.9 % (MSI); the four tightest (D 0.21 %, USB 0.28 %, XEL 0.38 %, WFC 0.47 %) stopped in 1-19 minutes. Context, not a comparison: the whole session's closed xStock paper trades are 0 wins of 21 (vwap_pullback 8, −$2.67; pivot_shift 1). **What this is and is not:** an observation, reported as pre-registered. It is NOT a defect finding — no cause is claimed (the stop/spread relationship is unmeasured). Kyle's standing rule: strategies run until calibration; the structural verdict is alert `dd588f0d` (2026-11-06 10:47:40Z, C-1). DISPOSITION: decision required — no work, reported to Kyle with the trades (Discord + Desktop, 2026-11-05 ~21:35Z); the SBT verdict alert decides.
+
 ## Still to read (pre-registered)
 - **(a)** over the first full US regular session: zero disagreements on all `mode='vts'` rows, with the 1 % floors on the `strategy_detect` rows, plus the null arm.
 - **(a′)** per-row equality ≥ 99 % against `pair_scan_archive`, and coverage ≥ 93.9 % (baseline 96.89 %).
