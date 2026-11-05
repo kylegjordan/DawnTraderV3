@@ -49,3 +49,11 @@ describe('P7 — the migration', () => {
     expect(readFileSync('drizzle/migrations/2026-11-05-b-entry-gate-inc-b-rollback.sql', 'utf-8')).toMatch(/DROP COLUMN IF EXISTS last_priced_at/);
   });
 });
+
+describe('P7 — the per-symbol hourly record the xStock seed is read from', () => {
+  it('every priced/unpriced refresh outcome is tallied per (class, symbol) and emitted once per UTC hour', () => {
+    expect(rtb).toMatch(/this\._tallyPricedHour\(sqeAssetClass, normalizedSymbol, _rpAsk\.ok\);/);
+    expect(rtb).toMatch(/\[B-ENTRY-GATE\]\[P7\]\[PRICED_SHARE_HOUR\] hour=/);
+    expect(rtb).toMatch(/new Date\(\)\.toISOString\(\)\.slice\(0, 13\)/);
+  });
+});
