@@ -63,3 +63,19 @@ Langston r1: CHANGES, Discord `1567804765252100148`. **CI run `41989275257`: Typ
 - **Call 3** — Guard 1 binds CC-INFRA only on `Infra Claude` / `CC-INFRA`.
 - **Notes a, b** — malformed section-4/5 plan rows are listed in the record; the DEGRADED reason reads "not at or ahead of origin head (behind or diverged)".
 - **Tests 70/70 (5 new), mutation-checked by RUNNING:** age source reverted to mtime → both C3 cases FAIL (68/70); Infra pattern reverted → the bare-"infra" case FAILS (69/70); restored → 70/70.
+
+## r4 — Langston's post-PROCEED record items (Discord `1567841780173508732`)
+
+**Item 1 (interim, as ruled) + item 2 — Guard 1 judges the POSTED TEXT, not the command around it.** New `messageText(cmd)` in `.claude/hooks/guard-pm-slot.mjs`: takes the `--message` argument; each `$(cat REMOTE)` is replaced by the LOCAL file a same-command `scp LOCAL host:REMOTE` copied there (or REMOTE itself if readable here). Anything unresolvable falls back to the WHOLE command, so an unreadable body is still checked, never skipped. `matched` in the verdict line now comes from that text, so a path like `pm-slot-probe.log` no longer matches `slot`. Honest-limit comment at the top now reads "BY WORDING AND BY PATH" and names the full fix (checking inside `cc-send` on the resolved body, on Helsinki with Infra Claude) as still owed.
+```js
+// before
+if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\?["']?PM Claude\b/.test(cmd)) text = cmd;
+// after
+if (/\bcc-send\b/.test(cmd) && /--sender[\s=]+\?["']?PM Claude\b/.test(cmd)) text = messageText(cmd);
+```
+**Tests 78/78 (5 new), each one FAILS on the r3 code:** a path-only "slot" with a thank-you body now allows (r3: refused); control with slotting words in the message refuses; a `$(cat)` body resolved to its scp source refuses when slotting and allows when benign (r3: allowed both, since neither command contained the words); an unresolvable `$(cat)` falls back to the whole command and refuses.
+
+**Item 3 — Stop-hook fallback:** kept in the plan, not built in r4: it becomes its own P1d objective at Step 9 if the wrap_up and Bash arms prove insufficient, so it is not lost.
+**Item 4 — staging under home, 0600 (#979):** adopted as practice: Discord bodies are staged at `/root/pm-stage/` with `umask 077`, not `/tmp`.
+**Item 5 — carry to close:** zero live `allow` verdicts so far is recorded as zero, never cited as silence proving the guard works.
+**Record corrections:** the probe log spans two hook builds (`fd3af2c5c` had no verdict lines), and two probe lines predate `fd3af2c5c`.

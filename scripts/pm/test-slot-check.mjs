@@ -155,6 +155,20 @@ const writeRec = (dir, alias, { fresh: f = 'FRESH', ageH = 0, genAgeH = null } =
   check('Guard 1 refuses the same on a PM Discord order (cc-send --sender "PM Claude")', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
   r = hook(G1, bash(`ssh root@x 'cc-send --sender "OLD Claude" --message "OLD Claude: you own rows 18-19, slotted after row 72"'`), env);
   check('Guard 1 ignores cc-send under another sender (not PM)', r.status === 0, `${r.status} ${r.stderr}`);
+  // Langston Step-4 r4 items 1-2: the posted TEXT is judged, not the command around it.
+  r = hook(G1, bash(`scp ~/x/pm-slot-probe.log root@x:/tmp/a && ssh root@x 'cc-send --sender "PM Claude" --message "OLD Claude, thanks for the update"'`), env);
+  check('r4: a "slot" in a file PATH no longer makes a plain thank-you a slotting order (message text judged)', r.status === 0, `${r.status} ${r.stderr}`);
+  r = hook(G1, bash(`scp ~/x/pm-slot-probe.log root@x:/tmp/a && ssh root@x 'cc-send --sender "PM Claude" --message "OLD Claude, you own row 19, slotted after row 72"'`), env);
+  check('r4 control: the same command with slotting words in the MESSAGE is still refused', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
+  const body = join(e.dir, 'body.txt'); writeFileSync(body, 'OLD Claude: you own row 19, slotted after row 72');
+  const bodyF = body.replace(/\\/g, '/');
+  r = hook(G1, bash(`scp ${bodyF} root@x:/tmp/m.txt && ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /tmp/m.txt)"'`), env);
+  check('r4: a $(cat REMOTE) body is resolved to the scp LOCAL file and judged (slotting body refused)', r.status === 2 && /--owner CC-A/.test(r.stderr), `${r.status} ${r.stderr}`);
+  const benign = join(e.dir, 'benign.txt'); writeFileSync(benign, 'OLD Claude, thanks, noted.');
+  r = hook(G1, bash(`scp ${benign.replace(/\\/g, '/')} root@x:/tmp/n.txt && ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /tmp/n.txt)"'`), env);
+  check('r4 control: a benign $(cat) body is allowed (proves the file, not the command, was judged)', r.status === 0, `${r.status} ${r.stderr}`);
+  r = hook(G1, bash(`ssh root@x 'cc-send --sender "PM Claude" --message "$(cat /tmp/nope-zz)"' # OLD Claude slotted after row 72`), env);
+  check('r4: an UNRESOLVABLE $(cat) falls back to the whole command, so it is still checked (refused here)', r.status === 2, `${r.status} ${r.stderr}`);
   writeRec(e.recs, 'CC-A');
   r = hook(G1, wrap(SLOTQ), env);
   check('Guard 1 allows it with a FRESH record for that owner', r.status === 0, `${r.status} ${r.stderr}`);
