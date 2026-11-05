@@ -273,7 +273,7 @@ describe('4. fences on the wiring', () => {
   it('the refresh decides on price BEFORE the SQE evaluation, and retires through the delete path', () => {
     const s = src(RTB);
     const dec = s.indexOf('const _rp = decideRetirement(');
-    const sqe = s.indexOf('await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true })');
+    const sqe = s.indexOf("await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true, phase: 'refresh' })"); // B-ENTRY-GATE P2 adds the phase
     expect(dec).toBeGreaterThan(0);
     expect(sqe).toBeGreaterThan(dec);
   });

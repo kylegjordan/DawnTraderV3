@@ -26,6 +26,7 @@
  */
 
 import { StrategyEngine, StrategySignal, stampMaxHoldingMs } from './strategy-engine';
+import { readRetirementAsk } from './rtb-retirement-ask.js'; // B-ENTRY-GATE (#1224) P2 — the birth price
 // B-FILTER-DIAG-STANDARDIZE: read the decline reason the strategies already set (shared module).
 // ⚠️ MODULE GLOBAL — safe only while evaluation is SERIAL; verified zero Promise.all in this file.
 import { getNullReason, resetNullReason } from '../utils/null-reason-tracker.js';
@@ -341,6 +342,17 @@ export function resolveDbsScoreAtQueue(
 }
 
 export class SignalOrchestrator {
+  /** B-ENTRY-GATE (#1224) P2 (r12 Q-2): the birth's live price, through the refresh's own reader (the exit's contract,
+   *  dispatched on the stamped class). A refusal is no price, carried with its reason — never a fallback. */
+  private async _birthPriced(symbol: string, assetClass: string, stopPrice: number): Promise<{ ok: true; price: number; ageMs: number; source: string } | { ok: false; reason: string }> {
+    try {
+      const a = await readRetirementAsk({ symbol, assetClass, stopPrice });
+      return a.ok ? { ok: true, price: a.ask, ageMs: a.ageMs, source: a.basis } : { ok: false, reason: a.reason };
+    } catch (err) {
+      return { ok: false, reason: `ask_read_threw: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   private mode: 'live' | 'paper';
   private strategyEngine: StrategyEngine;
   // Phase 8.8.7: FilteredPairsService DEPRECATED - using activeFilterPool instead
@@ -1159,12 +1171,20 @@ export class SignalOrchestrator {
       // above stays the calc home per Kyle's P19-B7.2b placement).
       chosenNetEv: _mtPolicyDecision.chosenNetEV,
       chosenEntryMode: _mtPolicyDecision.chosenMode,
+      // B-ENTRY-GATE (#1224) P2: the plan under its own names (never entryPrice/targetPrice — r11) and the live price,
+      // read through the exit's own contract; a refusal travels with its reason (r12 Q-2).
+      planEntry: rawSignal.entryPrice,
+      planStop: rawSignal.stopPrice,
+      planTarget: rawSignal.targetPrice ?? null,
+      priced: await this._birthPriced(rawSignal.symbol, sqeAssetClass, rawSignal.stopPrice),
     };
 
     // P19-B8.5 OBJ-6 (Langston-approved): ACTIVE-path gen — the HF8 confidence floor +
     // HF9 governance gate run in SHADOW (evaluate + log, never block); their stability
     // input here is the cold-start default above. See SQEOptions.gateShadowMode + #514.
-    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
+    // B-ENTRY-GATE (#1224) P2: EntryWindow runs in its OWN shadow at birth (records, never refuses) until the birth
+    // magnitude is known (pre-audit A-2); InvalidTarget decides.
+    const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true, entryWindowShadow: true, phase: 'birth' });
     // P19-B8.4b: SQE-at-generation tally — per-gate reject breakdown + the pass/fail denominator. The SAME
     // signal is re-SQE'd during RTB refresh (phase='refresh' in ready_to_buy_service); those are two labelled
     // numbers, never summed (MUST-4). Records BOTH pass and fail (a pass feeds the honest denominator).

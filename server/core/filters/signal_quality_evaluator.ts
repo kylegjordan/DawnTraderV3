@@ -42,6 +42,7 @@ import { getPatternPoolGuardrailsForAssetClass } from '../../asset_classes/patte
 //      narrow case where module_constants warmup hasn't completed and a non-runtime
 //      consumer (test/audit script) imports the const for static reference.
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { entryWindowRefusalAt } from '../trading/entry-window.js'; // B-ENTRY-GATE (#1224) P2
 // B79: xstock_spot weekend-pause + per-asset-class strategy whitelist.
 // safeResolveAssetClass returns null on unknown — we treat null as
 // crypto_spot back-compat to keep existing behavior identical.
@@ -125,7 +126,19 @@ export interface SQEInput {
   // value and the queue write refuses a non-finite one (pre-audit A-3) — and its stated backstop no longer exists: the
   // [11.8B] open gate refuses a missing snapshot as POLICY_SNAPSHOT_MISSING rather than recomputing the taker leg.
   chosenNetEv?: number;
-  chosenEntryMode?: 'maker' | 'taker';  // logging/telemetry only — never gated on
+  // B-ENTRY-GATE (#1224) P2 (Langston r12 C-1): NOW GATED ON — `EntryWindow` judges only a TAKER-chosen plan, because a
+  // maker transacts at its own limit (the ask running up changes its fill chance, not its price; P3 made that leg
+  // record-only). It was "logging/telemetry only — never gated on" until this batch.
+  chosenEntryMode?: 'maker' | 'taker';
+  // B-ENTRY-GATE (#1224) P2: the PLAN, under its own names. ⛔ NEVER `entryPrice` / `targetPrice`: the dormant ROI gate
+  // below keys on those (truthiness of entryPrice && targetPrice && regime) and its future is a rebuild-time decision
+  // (`CONFIDENCE_SCORING_PROVENANCE_2026-10-02.md:52`); setting them here would wake it by accident (pre-audit r11).
+  planEntry?: number;
+  planStop?: number;
+  planTarget?: number | null;
+  /** The live price the plan is judged against, read through the exit's contract (`readRetirementAsk`); a refusal is
+   *  carried with its reason so a plan never judged is distinguishable from one that passed (r12 Q-2). */
+  priced?: { ok: true; price: number; ageMs: number; source: string } | { ok: false; reason: string };
 }
 
 export interface SQEOptions {
@@ -144,6 +157,11 @@ export interface SQEOptions {
   // decision homed at RUNNING_ISSUES #514 (precondition: real active-path drift/volZ
   // stability wiring). VTS callers keep their skip* flags — semantics unchanged.
   gateShadowMode?: boolean;
+  // B-ENTRY-GATE (#1224) P2 (pre-audit A-2): a PER-GATE shadow for `EntryWindow` only — it computes and records, never
+  // refuses. Births run it until the birth magnitude is known; `gateShadowMode` is not reused (it governs one other gate).
+  entryWindowShadow?: boolean;
+  /** Which pass is asking — keys the EntryWindow tally (birth vs refresh are two populations, never summed). */
+  phase?: 'birth' | 'refresh';
 }
 
 export interface SQEResult {
@@ -238,6 +256,73 @@ export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live', assetCl
  * @param options - Optional evaluation settings
  * @returns SQEResult with pass/fail status and any failures
  */
+
+// ══ B-ENTRY-GATE (#1224) increment B, P2 — the PLAN gates: InvalidTarget and EntryWindow ══════════════════════════
+// Both run only when the caller supplies the plan (`planEntry`). Every outcome of EntryWindow is COUNTED, including every
+// way it can decline to judge (r12 C-2: never a silent pass), so the Step-7 would-refuse share has its full denominator.
+export type EntryWindowOutcome =
+  | 'judged_pass' | 'judged_refuse' | 'shadow_would_refuse'
+  | 'skip_no_price' | 'skip_price_refused' | 'skip_mode_absent' | 'skip_maker' | 'settings_unresolved';
+const _entryWindowTally = new Map<string, number>();
+/** `${phase}:${class}:${outcome}` → count since process start. Read-only copy. */
+export function getEntryWindowTally(): Record<string, number> {
+  return Object.fromEntries(_entryWindowTally);
+}
+function _tallyEntryWindow(phase: string, assetClass: string, outcome: EntryWindowOutcome): void {
+  const k = `${phase}:${assetClass}:${outcome}`;
+  _entryWindowTally.set(k, (_entryWindowTally.get(k) ?? 0) + 1);
+}
+
+/** Pure apart from the tally and one settings read; pushes onto `failures` (never when shadowing). */
+export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: string[]): EntryWindowOutcome | null {
+  if (input.planEntry === undefined) return null;
+  const entry = input.planEntry;
+  const phase = options.phase ?? 'unspecified';
+  const cls = String(input.assetClass);
+
+  // InvalidTarget: a plan with no usable target is not a plan (P2, Q-3). After P8 a birth cannot queue without a gated
+  // target, so at refresh this judges a DRAINING population (rows written before P8) and is expected to decay to zero.
+  const t = input.planTarget;
+  if (!(typeof t === 'number' && Number.isFinite(t) && t > entry)) {
+    failures.push(`InvalidTarget: plan target ${String(t)} is absent, non-finite or not above plan entry ${entry}`);
+  }
+
+  // EntryWindow: judges only a TAKER-chosen plan, at the supplied live price.
+  let outcome: EntryWindowOutcome;
+  if (!input.priced) outcome = 'skip_no_price';
+  else if (!input.priced.ok) outcome = 'skip_price_refused';
+  else if (input.chosenEntryMode === undefined) outcome = 'skip_mode_absent';
+  else if (input.chosenEntryMode !== 'taker') outcome = 'skip_maker';
+  else {
+    let w: number | null = null;
+    try {
+      w = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', { exchange: '*', assetClass: input.assetClass, strategy: '*', regime: '*' });
+    } catch (err) {
+      console.error(`[B-ENTRY-GATE][P2][ENTRY_WINDOW][SETTINGS_UNRESOLVED:${phase}] ${input.symbol}/${input.strategy}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+    if (w === null) {
+      outcome = 'settings_unresolved';
+      if (!options.entryWindowShadow) failures.push('EntryWindow: settings_unresolved — refused, never assumed');
+    } else {
+      const r = entryWindowRefusalAt(input.priced.price, entry, input.planStop ?? Number.NaN, w);
+      if (r === null) outcome = 'judged_pass';
+      else if (options.entryWindowShadow) {
+        outcome = 'shadow_would_refuse';
+        console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_SHADOW:${phase}] ${input.symbol}/${input.strategy} class=${cls} price=${input.priced.price} source=${input.priced.source} ageMs=${input.priced.ageMs} planEntry=${entry} planStop=${input.planStop} window=${w} — would refuse, recorded only`);
+      } else {
+        outcome = 'judged_refuse';
+        failures.push(`EntryWindow: price ${input.priced.price} (${input.priced.source}, ${input.priced.ageMs} ms old) is more than ${w} of the planned risk above plan entry ${entry}`);
+      }
+    }
+  }
+  _tallyEntryWindow(phase, cls, outcome);
+  if (outcome === 'skip_mode_absent' || outcome === 'skip_price_refused') {
+    const why = outcome === 'skip_price_refused' && input.priced && !input.priced.ok ? input.priced.reason : 'chosen entry mode absent';
+    console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_SKIP:${phase}] ${input.symbol}/${input.strategy} class=${cls} outcome=${outcome} reason=${why} — not judged (counted)`);
+  }
+  return outcome;
+}
+
 export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions = {}): Promise<SQEResult> {
   const failures: string[] = [];
 
@@ -366,6 +451,7 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   } else if (!(input.chosenNetEv > 0)) {
     failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
   }
+  applyPlanGates(input, options, failures); // B-ENTRY-GATE (#1224) P2
 
   // Directive 11.0B: RegimeWeight check
   if (regimeWeight < thresholds.regimeWeightMin) {
@@ -584,6 +670,7 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   } else if (!(input.chosenNetEv > 0)) {
     failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
   }
+  applyPlanGates(input, {}, failures); // B-ENTRY-GATE (#1224) P2 (the sync variant has no options; dead, kept in parity)
   
   // Directive 11.7A Task 3: Regime-Aware ROI Gate (SQE parity with VTS) - Sync version
   if (input.entryPrice && input.targetPrice && input.regime) {
