@@ -15,7 +15,7 @@
 import {
   vtsXstockJoinsStandingRecord, stepMemberClock, railRowClear, clearEvidence, railRowTradeId, easternDate,
   railKey, memberField, RAIL_KEY_PREFIX, VTS_STANDING_KEY, VTS_RAIL_ACTOR, VTS_RAIL_REF, MEMBER_ESCALATE_AFTER_MS,
-  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, type MemberClock,
+  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, EXPECTED_OLD, type MemberClock,
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import fs from 'node:fs';
@@ -59,7 +59,7 @@ export interface VtsRailDeps {
 
 /** The six pre-registered counts (audit A3 / objective 11, r4), cumulative since start. `dedupeHits` = an `addAlert` that
  *  returned an EXISTING row; `escalations` = 30-min member pages. Joins are read against A3's attempted column, not zero. */
-export const railCounts = { crossings: 0, joins: 0, joinsTooWide: 0, joinsTooOldQuiet: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0, reasonExits: 0 };
+export const railCounts = { crossings: 0, joins: 0, joinsTooWide: 0, joinsTooOld: 0, joinsOther: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0, reasonExits: 0 };
 
 const state = {
   /** tradeId → id of its open `no-trigger-vts-*` row. */
@@ -215,9 +215,12 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
     }
     state.memberRecord.set(c.tradeId, rec.id);
     railCounts.joins++;
-    // Row 2 increment (4c) P2: the join's reason, split. Exactly two reasons can join (`vtsXstockJoinsStandingRecord`),
-    // so joinsTooWide + joinsTooOldQuiet === joins.
-    if (c.lastReason === EXPECTED_WIDE) railCounts.joinsTooWide++; else railCounts.joinsTooOldQuiet++;
+    // Row 2 increment (4c) P2: the join's reason, split. `vtsXstockJoinsStandingRecord` admits exactly two reasons —
+    // too_wide, and too_old on a quiet OR closed verdict — so `joinsOther` must stay 0 (a test holds it; Langston C-2),
+    // and joinsTooWide + joinsTooOld + joinsOther === joins.
+    if (c.lastReason === EXPECTED_WIDE) railCounts.joinsTooWide++;
+    else if (c.lastReason === EXPECTED_OLD) railCounts.joinsTooOld++;
+    else railCounts.joinsOther++;
     return 'joined';
   }
   await leaveStandingRecord(c.tradeId, deps);
@@ -338,7 +341,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     const stuckClosed = [...state.closedMemberSweeps.entries()].filter(([, n]) => n >= STUCK_CLOSED_MEMBER_SWEEPS).map(([t]) => t);
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
     console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
-      + `crossings=${railCounts.crossings} joins=${railCounts.joins} joinsTooWide=${railCounts.joinsTooWide} joinsTooOldQuiet=${railCounts.joinsTooOldQuiet} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
+      + `crossings=${railCounts.crossings} joins=${railCounts.joins} joinsTooWide=${railCounts.joinsTooWide} joinsTooOld=${railCounts.joinsTooOld} joinsOther=${railCounts.joinsOther} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
       + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMissedRowMarks=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
       + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
   } catch (err) {

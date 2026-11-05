@@ -104,8 +104,8 @@ export const XSTOCK_PAGE_OPEN_SETTLE_MS = 15 * 60_000;
  */
 export function isXstockRailPagingTime(now: Date): boolean {
   if (isInXstockWeekendClose(now)) return false;
-  const { hour, minute } = getETParts(now);
-  const m = (hour === 24 ? 0 : hour) * 60 + minute;
+  const { hour, minute } = getETParts(now); // getETParts already normalises an hour of 24 to 0
+  const m = hour * 60 + minute;
   const openPlusSettle = 9 * 60 + 30 + XSTOCK_PAGE_OPEN_SETTLE_MS / 60_000;
   return m >= openPlusSettle && m < 16 * 60;
 }

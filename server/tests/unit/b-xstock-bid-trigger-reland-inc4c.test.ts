@@ -17,8 +17,9 @@ const EDT = (hhmmss: string) => new Date(`2026-10-29T${hhmmss}Z`);
 const EST = (hhmmss: string) => new Date(`2026-11-03T${hhmmss}Z`);
 
 describe('P1 — the opening settle (paging time starts 09:45 ET)', () => {
-  it('is 15 minutes', () => {
+  it('is 15 minutes, a whole number of minutes (the predicate compares whole ET minutes)', () => {
     expect(XSTOCK_PAGE_OPEN_SETTLE_MS).toBe(15 * 60_000);
+    expect(XSTOCK_PAGE_OPEN_SETTLE_MS % 60_000).toBe(0);
   });
   it('EDT: 09:44:59 ET is not paging time, 09:45:00 is; 15:59 is, 16:00 is not', () => {
     expect(isXstockRailPagingTime(EDT('13:44:59'))).toBe(false);
@@ -84,6 +85,7 @@ describe('P3 — moonbag_timeout prints its basis in its siblings’ shape', () 
 
 describe('P2 — joins split by reason, and the parts sum to the whole', () => {
   beforeEach(() => _resetVtsRailState());
+  let verdict: 'quiet' | 'closed' | 'not_quiet' = 'quiet';
   function store(): VtsRailDeps {
     const rows: RailAlertRow[] = [];
     let seq = 0;
@@ -100,12 +102,13 @@ describe('P2 — joins split by reason, and the parts sum to the whole', () => {
       resolveAlert: async () => null,
       readAllAlerts: () => rows,
       closedTradeIds: async () => new Set<string>(),
-      xstockVerdict: () => 'quiet',
+      xstockVerdict: () => verdict,
       isRegularSession: () => true,
       isRailPagingTime: () => true,
     } as VtsRailDeps;
   }
-  it('too_wide and too_old-on-quiet each count once; a paging reason counts in neither', async () => {
+  it('too_wide and too_old (on a quiet OR a closed verdict) each count once; a paging reason counts in none (Langston C-1)', async () => {
+    verdict = 'quiet';
     const d = store();
     const now = Date.parse('2026-11-04T16:00:00Z');
     const c = (id: string, reason: string) => ({ tradeId: id, symbol: `${id}/USD`, assetClass: 'xstock_spot', lastReason: reason, pageSinceMs: now - 10 * 60_000, title: 't', body: 'b' });
@@ -113,12 +116,18 @@ describe('P2 — joins split by reason, and the parts sum to the whole', () => {
     expect(await onCrossing(c('w2', 'no_transactable_side (too_wide)'), now, d)).toBe('joined');
     expect(await onCrossing(c('o1', 'no_transactable_side (too_old)'), now, d)).toBe('joined');
     expect(await onCrossing(c('p1', 'no_usable_mark'), now, d)).toBe('paged');
-    expect(railCounts.joins).toBe(3);
+    verdict = 'closed';
+    expect(await onCrossing(c('o2', 'no_transactable_side (too_old)'), now, d)).toBe('joined');
+    verdict = 'not_quiet';
+    expect(await onCrossing(c('o3', 'no_transactable_side (too_old)'), now, d)).toBe('paged');
+    expect(railCounts.joins).toBe(4);
     expect(railCounts.joinsTooWide).toBe(2);
-    expect(railCounts.joinsTooOldQuiet).toBe(1);
-    expect(railCounts.joinsTooWide + railCounts.joinsTooOldQuiet).toBe(railCounts.joins);
+    expect(railCounts.joinsTooOld).toBe(2);
+    // Langston C-2: the join predicate admits exactly two reasons, so the catch-all bucket must stay empty.
+    expect(railCounts.joinsOther).toBe(0);
+    expect(railCounts.joinsTooWide + railCounts.joinsTooOld + railCounts.joinsOther).toBe(railCounts.joins);
   });
-  it('the sweep line names both parts', () => {
-    expect(src('services/vts-rail-reporting.ts')).toMatch(/joinsTooWide=\$\{railCounts\.joinsTooWide\} joinsTooOldQuiet=\$\{railCounts\.joinsTooOldQuiet\}/);
+  it('the sweep line names all three parts', () => {
+    expect(src('services/vts-rail-reporting.ts')).toMatch(/joinsTooWide=\$\{railCounts\.joinsTooWide\} joinsTooOld=\$\{railCounts\.joinsTooOld\} joinsOther=\$\{railCounts\.joinsOther\}/);
   });
 });
