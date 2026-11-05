@@ -12254,7 +12254,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // shape B-EPOCH-KEYING-PARITY fixed for the tiles. It is the FIFTH reader of this rule and
       // it calls the SHARED predicate rather than carrying a copy: copy-per-reader is exactly what
       // #900 exists to stop.
-      const _curveLifetime = await storage.getLifetimeScoreboard(mode);
+      const _curveLifetime = await storage.getLifetimeScoreboard(mode, asOf); // Langston Part A C-3: `asOf` freezes the lifetime figure too
       const _curveEpoch = _curveLifetime.epochStartedAt ? new Date(_curveLifetime.epochStartedAt) : null;
       const windowStart = clampWindowToEpoch(new Date((asOf ? asOf.getTime() : Date.now()) - days * 24 * 60 * 60 * 1000), _curveEpoch);
 
@@ -12686,7 +12686,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       // before the fix, all on ONE card at ONE moment: rolling -$4.91 over 6 trades (both-leg)
       // beside Lifetime +$5.76 over 13 (close-keyed) beside a 66.7% win rate over 9 (24h,
       // unscoped). Three answers to one question, each looking authoritative.
-      const _lifetime = await storage.getLifetimeScoreboard(mode);
+      const _lifetime = await storage.getLifetimeScoreboard(mode, asOf); // Langston Part A C-3: `asOf` freezes the lifetime figure too
       const _epoch = _lifetime.epochStartedAt ? new Date(_lifetime.epochStartedAt) : null;
 
       // ⛔ AND THE WINDOW FLOOR IS CLAMPED TOO, not just the membership test. Without this a "30d"
