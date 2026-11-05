@@ -164,7 +164,16 @@ export const executionBlockReasonEnum = pgEnum("execution_block_reason", [
   "MAX_EXPOSURE",
   // B-SIZING-DEC-RESTORE obj-4: MAX_TRADES is HISTORICAL ONLY — never emitted since the open-slots check was
   // retired. Kept because it is a database enum value that stored rows hold (Postgres cannot drop one in place).
-  "MAX_TRADES"
+  "MAX_TRADES",
+  // B-BALANCE-SESSION-PAIRING (Langston Step-4, 2026-11-05): this declaration had DRIFTED from the database — the live
+  // enum (and the initial-schema CREATE TYPE) carries MAX_TOTAL_EXPOSURE, which was missing here. The four after it are
+  // added by 2026-11-05-b-balance-session-pairing-block-reasons.sql so every TradeSafetyResultCode is storable; the
+  // drift test b-balance-session-pairing-block-reason-enum.test.ts holds both sides together.
+  "MAX_TOTAL_EXPOSURE",
+  "ENGINE_STOPPING",
+  "CORRELATION_EXPOSURE",
+  "GUARDRAIL_READ_FAIL",
+  "MONEY_HELD_UNAVAILABLE"
 ]);
 
 // Users table
