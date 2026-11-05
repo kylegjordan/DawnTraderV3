@@ -77,12 +77,32 @@ Also shipped inside the batch: the privacy check's repo-text exclusion and bound
 
 ## 5. Governance files changed (the Step-10 ledger; closing lines added 2026-11-05)
 
-**At close:**
-- `BATCH_CATALOG.md` and `PHASE_HISTORY.md`: their entries were marked closed, with this report's name.
-- `SPRINT_TO_LIVE_PLAN.md` §0a order 2: set to Step 11.
-- `1-system-manual/CC_INFRA_SESSION_TASK_LIST.md`: updated.
+CHANGE-CLASS: non_architecture
+
+> **Class re-declared at close, 2026-11-05** (scope header amended in the same commit): `architecture` → `non_architecture`. Under `architecture` the System Manual is REQUIRED, and nothing in this batch is trading architecture, strategy, regime, filter, signal pipeline or math — it is the reviewer's alert lane and his memory trim. A required row cannot take `N/A`, so the class was wrong (`workflow-10-governance`). Same correction and reason as `B-LANGSTON-CLAUDEMD-RESIDUAL` (Langston's Step-4 C-2, 2026-10-20). Raised by the governance checker at close (alerts `ec165426-98cf-4fca-ac29-092cc4a344af`, `6871be49-f704-45c9-b0e8-8a4c934537cd`).
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | entry marked closed, with this report's name |
+| T1 | `PHASE_HISTORY.md` | ✅ | entry marked closed, with this report's name |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` — §0a Infra order 2 | ✅ | status + this report's name |
+| T1 | `PHASE_19_PLAN.md` | ✅ | row 2.8b's read-site, earlier in the batch; not a `P19-*` batch |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ | shared: no change owed (no project-consensus fact changed at close); mine: position block, `20943897b` |
+| T1 | the batch `SCOPE` | ✅ | `Scope Files/B_LANGSTON_RELIEF_SCOPE.md` (class amended here) |
+| T1 | the batch `PRE_AUDIT` | ✅ | `Scope Files/B_LANGSTON_RELIEF_PRE_AUDIT.md`, collected after the fact and labelled so (`c60ccd36c`) |
+| T1 | the `COMPLETION_REPORT` | ✅ | this file, converted from the progress report |
+| T1 | the `Observation` column | ✅ | OBJ-2's pre-registered week, 2026-10-16 → 10-23, read in §3b; nothing left under observation |
+| T1 | session task lists — `CC_INFRA_SESSION_TASK_LIST.md` | ✅ mine / N/A — not mine ×3 | this batch moved to Step 11 with this report |
+| T1 | Langston's `/home/langston/MEMORY.md` | BLOCKED — his Step-11 confirm | his row is his to write through `langston-memory-write`; asked for in the confirm dispatch |
+| T2 | `SYSTEM_MANUAL.md` | N/A | no trading architecture, strategy, regime, filter, pipeline or math changed |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | the writer's three-file memory, trim, growth gate and root-only state dir (earlier in the batch) |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219` |
+| T2 | `LANGSTON_ARCHITECTURE.md` | ✅ | his memory files and the alert lane, with before/after |
+| T2 | `COMMS_BRIDGE_RUNBOOK.md` | ✅ | the clean-stop gate and the lane |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | no bug or risk entry opened or closed by this batch |
+| T2 | `STORAGE_POLICY.md` | N/A | the root-only state dir is local tool state, recorded in the map |
+
 - The two references to the old report name, in the catalog and the history, were updated in the same commit as the rename.
-- **Langston's `MEMORY.md` row is his to write at Step 11**, through `langston-memory-write`; it is asked for in the confirm dispatch.
 - **CI** for the branch head carrying every commit of this batch: run 41862993865 at `3add04f48`, all four jobs green, checked one by one on 2026-11-04.
 
 **Earlier in the batch:**

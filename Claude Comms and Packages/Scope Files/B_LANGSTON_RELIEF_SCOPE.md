@@ -1,6 +1,8 @@
 # B-LANGSTON-RELIEF — scope
 
-change-class: architecture
+change-class: non_architecture
+
+> **Class re-declared at close, 2026-11-05:** `architecture` → `non_architecture` — nothing here is trading architecture, so the System Manual (REQUIRED under `architecture`) does not apply; precedent `B-LANGSTON-CLAUDEMD-RESIDUAL` (Langston's Step-4 C-2). Reasoning in the completion report §5.
 
 **Owner:** Infra Claude (CC-INFRA) · **Directed by:** Kyle, 2026-10-16 (Desktop) · **Plan home:** `SPRINT_TO_LIVE_PLAN.md` §0 Infra Claude row (the 2026-10-08 alert lane + continuous trim), moved up ahead of `B-CREW-ACCESS-HARDEN` P3a by Kyle the same day.
 **Reviewer:** Coltrane for the increments that must land today (Kyle has routed reviews to him while Langston is the bottleneck); Langston second-pass once his queue is clear.
