@@ -1442,3 +1442,18 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS / STATE-WRITE CENSUS (§9.5(a-ii)):** `ENTRY_PREMIUM_BPS` — one occurrence under `server client shared scripts`, its declaration; no indirect read of `GLOBAL_CONSTANTS` (`[…]`, `Object.entries`, spread: none); control `MIN_STOP_DISTANCE_BPS` has readers in four files (Langston re-derived). The disposition — one caller (`:5804`), one `EV_SNAPSHOT_MISSING` writer (`:5843`), no surviving reader of either string in `server shared client scripts` (Langston re-derived); `server/tests/unit/ev-reject-shadow.test.ts:29-30` rewritten, not deleted. The fallbacks — no other `* 1.02` target in `server/` (the two in `server/routes.ts:5369`, `:5491` are 2 % STOP mocks, LEFT INTENTIONALLY). `tsc` baseline unchanged (329 = 329).
 **ARCHIVE:** none of the four is a file; git history at `59b47cdba` is the archive.
 **COMMIT:** the B-ENTRY-GATE Step-3 (inc A) commits `P1/P1b`, `P4b`, `P5`.
+
+## 2026-11-05 — the phone status board, APP HALF: the page, its route and the file reader — B-STATUS-BOARD OBJ-10 (Kyle KD-35, `#1227`), CC-A
+| removed | where (pre-removal) | what it was |
+|---|---|---|
+| `StatusBoardPage.tsx`, `unavailable.ts`, `unavailable.test.ts` | `client/src/pages/status-board/` | the `/status-board` page and its unavailable-state helper (B-STATUS-BOARD P8, 2026-10-21) |
+| the lazy import + `<Route path="/status-board">` | `client/src/App.tsx` | the page's registration |
+| `GET /api/status-board` | `server/routes.ts` (the block after the canonical-map routes) | served the checker's board file behind the login |
+| `status-board-file.ts` | `server/services/` | read `/var/lib/governance-checker/status-board.json` per request |
+| `b-status-board.test.ts` | `server/tests/unit/` | the reader's and route's tests (its subjects go) |
+
+**WHY:** Kyle KD-35 (2026-11-05, `1-system-manual/pm/DECISIONS.md:58`): the phone status board is not to be maintained; retire it cleanly (rule 18).
+**BLAST RADIUS (§9.5(a-ii)):** the app half READS only (`status-board.json`); it writes nothing. After the edit, `grep -rn "status-board|StatusBoard|readStatusBoard"` over `server/` and `client/` (`.ts`/`.tsx`) returns nothing; `tsc` baseline 329 = 329; `b-mutating-routes-auth.test.ts` 16/16. The writer (checker half) is removed separately in two commits (pre-audit r8 C-1), and the JSON is moved to the retired folder only after that.
+**LEFT INTENTIONALLY (other senses of "status board", so a later grep is not read as a missed sweep):** `PHASE_19_PLAN.md` §1 (a section titled STATUS BOARD); `scripts/inventory/draft.py`, `decisions.json`, `manual_extra.json`; `1-system-manual/pm/reviews/2026-11-04_sweep_data/*.txt` (two files) — plan-row metadata naming the old item.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/<name>.20261105-B-STATUS-BOARD-RETIRE.removed` for each of the five files (verbatim from the blob).
+**COMMIT:** this entry's commit. **DEPLOY:** with the joint deploy of the head after 2026-11-07T13:03:42Z (nothing above `0f4835b5a` deploys before it).
