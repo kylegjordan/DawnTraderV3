@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // statement, and the certificate repair must be single-flight.
 const state = vi.hoisted(() => ({
   statements: [] as string[][],
+  allLogs: [] as string[][],
   releaseRepairRead: null as null | (() => void),
   transactionCalls: 0,
 }));
@@ -19,6 +20,9 @@ vi.mock('../../db.js', () => ({
       // Only the REPAIR READ's transactions are counted and logged: R4 adds a separate global-count
       // transaction after a repair, which these single-flight tests do not measure.
       const log: string[] = [];
+      // EVERY transaction's statements are kept here, so the "first statement is SET LOCAL" property
+      // is asserted for all of them, including R4's count (Langston R4 PROCEED condition).
+      state.allLogs.push(log);
       const tx = {
         execute: async (query: unknown) => {
           const text = render(query);
@@ -46,6 +50,7 @@ import {
 
 beforeEach(() => {
   state.statements = [];
+  state.allLogs = [];
   state.releaseRepairRead = null;
   state.transactionCalls = 0;
 });
@@ -116,5 +121,18 @@ describe('bar-availability pool safety (2026-11-04 jam)', () => {
     expect(state.statements[1][1]).not.toContain('1000');
     state.releaseRepairRead!();
     await other;
+  });
+
+  it("every transaction a repair opens, including R4's global count, sets SET LOCAL first", async () => {
+    const run = repairPendingXstockCertificates();
+    await until(() => state.releaseRepairRead !== null);
+    state.releaseRepairRead!();
+    await run;
+    // The repair read plus R4's count transaction (the count runs while a certification row may be open).
+    expect(state.allLogs.length).toBeGreaterThanOrEqual(2);
+    expect(state.allLogs.some((log) => log.some((t) => t.includes('count(*)')))).toBe(true);
+    for (const log of state.allLogs) {
+      expect(log[0]).toContain(`SET LOCAL statement_timeout = ${XSTOCK_TX_STATEMENT_TIMEOUT_MS}`);
+    }
   });
 });
