@@ -103,3 +103,19 @@ Migration `2026-10-02-b-vts-no-decision-valve-shadow-arm.sql` (+ rollback, both 
 
 ## Tests
 New `server/tests/unit/b-vts-no-decision-valve.test.ts` (18 tests: the resolver; the counters; the shadow math with a priced positive control; `closeVtsTradeUnpriced` driven for real with the archiver and the soft-close mocked — one archive row with null price/P&L/R, the arm, the carried class for a MET xStock, the LEGACY cooldown key for crypto (C6), no archive row for a twin; source fences for what it never calls, the loop order, P4, P6's placement, P8). Updated: `b-price-side-8a-p3-crypto-finish`, `b65-tec-parity` (D7 inverted, as its own comment said it would be), `fg2-obj5-vts-cost-truth`, `b-price-side-8a-p4c-instrument`, `b79-0f-asset-class-collisions` (17 → 33), `b79-0g-vts-trade-persistence` (a valid carried class is kept). `tsc` 339 = baseline. Local full suite: the only failures are files I did not touch that need a database (ECONNREFUSED :5432) or fail to load on Windows — CI is the arbiter.
+
+## Step 7 — the pre-registered reads (CC-C, 2026-11-05)
+
+Deploy line: release deploy B `3576d39810fa7428501b68ce341ee46533c24935`, live 2026-10-06T15:45:04Z. Every read below is in `scripts/analysis/b_vts_no_decision_valve_step7.sql` (run on staging 2026-11-05 ~21:10Z, and re-runnable). The first xStock shut window after the deploy is **[2026-10-10 00:00Z, 2026-10-12 00:00Z)** — 10-10 is a Saturday.
+
+| read | criterion as pre-registered | result |
+|---|---|---|
+| (a) shadow | no new `shadow_max_hold` row | **PASS** — 0; since the deploy the shadow closes are `stop_hit` / `target_hit` / `timeout` (arm `bid`) and `timeout_unpriced` (arms `clamp_no_bid` 239, `clamp_no_mark` 189) |
+| (a) real lane | no plain `time_stop` archive row with a `clamp_*` arm | **PASS** — 141 `time_stop`, all arm `bid`; the clamp arms appear only as 5 `time_stop_unpriced` (xStock) |
+| (b) | every new shadow close carries `exit_booking_arm` | **PASS** — 0 NULL across 70,924 shadow closes |
+| (c) | 0 xStock shadow closes inside the first shut window — proves the SKIP, not that Class B is gone | **PASS** — **0**; control, the same window one week earlier (pre-deploy): **193** |
+| (d) | unpriced rows carry NULL outcomes and appear in no `virtual_trades` JSON | **PASS** — 428 shadow + 5 real unpriced rows, every one NULL price and NULL P&L; 9,438 records in the 31 JSON files since the deploy, none unpriced (positive control: every record's `exitReason` read — 6,336 `stop_hit`, 2,103 `target_hit`, 807 `never_filled`, 190 `timeout`, 2 `legacy_missing_fill_provenance`) |
+| (e) | the counter lines print per class | **PASS** — `[8a-P3][VTS_TOUCH] crypto_spot{… closedUnpriced=…} xstock_spot{… closedUnpriced=…}` (read 2026-11-05 20:28Z) |
+| (f) | the first reopen: the xStock shadows open at the window start whose 48 h cap fell inside it close in the first passes, predominantly UNPRICED; **expected ≈ 100-115**; *a count far outside the band is investigated* | **186**, all closed 2026-10-12 00:35:42-53Z (the reopen is 00:00Z) — **123 unpriced (66%: `clamp_no_bid` 70, `clamp_no_mark` 53), 63 priced at the bid.** Shape as predicted; **count above the band — investigated:** the same definition on five weekends gives 114 (09-19), 103 (09-26), **193 (10-03)**, 186 (10-10), 77 (10-17). The band was set from the first two; the weekend just before the deploy, unseen when the band was written (2026-10-01), already ran 193. 186 is in line with it, so the excess is the band's, not the valve's. ⚠️ The pre-registration named `clamp_no_mark` as the dominant arm; `clamp_no_bid` was larger. |
+
+**Not covered, stated:** (c) proves the skip on one weekend; Class B on a weekday (the SYK/USD 09-16 case, C4) is outside this read. The 33,445 xStock shadows opened in the five days before 10-10 (about 30× the earlier weeks) are row 59e's shadow-per-signal change, deployed 2026-10-12 after the window; it did not move the capped set.
