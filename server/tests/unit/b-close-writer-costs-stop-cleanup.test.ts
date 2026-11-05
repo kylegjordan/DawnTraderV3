@@ -107,3 +107,27 @@ describe('B-CLOSE-WRITER-COSTS P-11 — the engine-stop cleanup books real costs
     expect(parseFloat(w.exitSlippage)).toBe((f as any).slippageQuote);
   });
 });
+
+// P-17: the stop flow's orphan step lives inside the engine stop (not unit-constructible), so its ORDER is pinned on the
+// source — the delete is reachable only after the record is finished, and an unfinished one `continue`s past it.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+describe('B-CLOSE-WRITER-COSTS P-17 — the orphan step finishes the record before it deletes the position', () => {
+  const src = readFileSync(resolve(__dirname, '../../services/active-engine-service.ts'), 'utf8').split(String.fromCharCode(13)).join('');
+  const start = src.indexOf('for (const orphan of remainingOpen) {');
+  const del = src.indexOf("await storage.deleteActiveOpenPosition('paper', orphan.id);", start);
+  const block = src.slice(start, del);
+  it('O-1 the record is resolved by tradeId, else by the close key, and finished through the shared close', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(del).toBeGreaterThan(start);
+    expect(block).toContain("storage.getClosedTrade('paper', _tid)");
+    expect(block).toContain("storage.findOpenTradeRecord('paper', orphan.symbol, _ocls)");
+    expect(block).toContain("closeStaleRecordAtReference('paper', _orec)");
+  });
+  it('O-2 an unfinished record keeps the position: the `continue` sits between the finish check and the delete', () => {
+    const guard = block.indexOf('if (!_finished) {');
+    expect(guard).toBeGreaterThan(-1);
+    expect(block.indexOf('flattenReport.orphansKept.push(orphan.symbol);', guard)).toBeGreaterThan(guard);
+    expect(block.indexOf('continue;', guard)).toBeGreaterThan(guard);
+  });
+});
