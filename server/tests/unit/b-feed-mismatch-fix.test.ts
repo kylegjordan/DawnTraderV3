@@ -98,6 +98,9 @@ function fakeEngine() {
     orderPlacer: new PaperOrderPlacer(() => 0.1),
     _closeRefusalStreak: new Map<string, number>(),
     _countCloseRefusal: proto._countCloseRefusal,
+    // B-CLOSE-WRITER-COSTS P-16: the record resolve + refusal, shared by the close and the never-filled drop.
+    _resolveOpenTradeRecord: (proto as any)._resolveOpenTradeRecord,
+    _refuseUnresolvedRecord: (proto as any)._refuseUnresolvedRecord,
   };
 }
 function position(symbol: string, assetClass: string) {
