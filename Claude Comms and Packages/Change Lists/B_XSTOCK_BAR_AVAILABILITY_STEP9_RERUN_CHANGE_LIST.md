@@ -43,3 +43,9 @@ All bar-availability unit files, the writer fence, the p4c guard, the actor allo
 2. R4's "existing row" test (`created_at` before the call) and the flag's lifetime across a restart (true at boot ⇒ one count after each boot).
 3. R6a: snapshot rate limit (60 s) versus capturing a second distinct stall inside a minute; the reporter's 15-minute cadence against the 14-day `error__` retention.
 4. C5: the no-DROP `set_config` variant against your option (a) column.
+
+## Langston r5 PROCEED (2026-11-05 ~02:39Z) — conditions carried into this diff
+- **C5:** the no-DROP `set_config` variant is APPROVED; kept as built (every exit between `pre_lock` and `set_config` is a `RAISE EXCEPTION`, so no call returns rows without setting it; one certify call per transaction, so no stale carry).
+- **C10 — cites re-pinned at the dispatch head `d2c12c731`, with text:** certify `xstock-bar-availability.ts:630` `SELECT * FROM certify_xstock_bar_revision_events(` (guard read `:637-638`); admit `:756` `SELECT admit_xstock_bar_projection_flush(`; apply `:785` `SELECT * FROM apply_xstock_bar_revision_flush(`; `timedLeg` `:52`; R1 `recordXstockLifecycleFailure` `:454`; R4 `recordCertificationFailureDay` `:524` and `resolveCertificationAlertIfClear` `:562`.
+- **C11 — R6b's denominator is per leg.** Expected samples are counted per leg from that leg's own firing rule (certify per first-pass certify and per repair with ids; admit and apply per non-empty xStock flush), never from the 5.07 s cycle cadence; an idle leg is not a gap. `guardWait` starts at the guard-wait migration's deploy; its own `n` is stated and it is never pooled with certify's.
+- **C12:** `guardWaitMs` is integer milliseconds (`round(… * 1000)`), so a 0 means under 0.5 ms, not "no wait".
