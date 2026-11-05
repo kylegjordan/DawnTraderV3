@@ -29,7 +29,7 @@ import { appendFileSync, existsSync, mkdirSync } from 'node:fs'; // B-ENTRY-GATE
 import { join as joinPath } from 'node:path';
 // B72 (2026-05-05): MIN_QUEUE_CONFIDENCE migrated to module='queue_admission'.
 // Read via cached sync resolver. Module prefetched in b72-warmup.
-import { getCachedNumberRequired } from '../../services/module-constants-service.js';
+import { getCachedNumberRequired, getCachedConstant } from '../../services/module-constants-service.js';
 // P19-B7.1 (OBJ-1/2): rank-time R-multiple = reuse the gate's own friction+kernel via the
 // wrapper (sample-free; the EV-input sample is a SEPARATE open-path call). Reads .netRewardToRisk.
 import { evaluateTradeExpectancy } from '../calculations/expectancy.js';
@@ -75,6 +75,7 @@ import { getCachedCostMetrics, computeTotalRoundTripCost, computeNetGeometry, ge
 import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily, type FillPolicy } from '../math/maker-taker-decision.js';
 import { resolveFillPolicy, resolveMakerTakerHaircut } from '../../services/maker-taker-config.js';
 import { repriceAtAsk, type RepriceAtAsk } from '../trading/fill-economics.js'; // B-ENTRY-GATE (#1224) P6
+import { decidePlanAge } from './plan-age-limit.js'; // B-ENTRY-GATE (#1224) P11
 import { resolveFillEconInputs } from '../../services/fill-econ-inputs.js'; // B-ENTRY-GATE (#1224) P6 — the open's own resolver
 import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../../config/canonical-regime-strategy-map.js';
 import { getCachedSpread } from '../metrics/cost-metrics.js';
@@ -479,7 +480,9 @@ interface SignalRefreshState {
 }
 
 /** `B-RTB-REFRESH-LIVE-PRICE` ([C1](b), `#1189`): what `promoteSignal` did; the engine opens only on `'deleted'`. */
-export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed';
+// B-ENTRY-GATE (#1224) P11: 'stale_plan' (deleted, never opened) and 'plan_age_unresolved' (a bad limit row: not opened,
+// stays queued, loud). Every non-'deleted' outcome is already a refused claim at the engine (`CLAIM_REFUSED`).
+export type PromoteOutcome = 'deleted' | 'missing' | 'refreshing' | 'delete_failed' | 'stale_plan' | 'plan_age_unresolved';
 /** `B-RTB-REFRESH-LIVE-PRICE` OBJ-3: one shadow row per signal per hour, plus one on a verdict change no sooner than
  *  `RTB_PRICE_SHADOW_CHANGE_MIN_MS` after the last (Langston Step-4 CONDITION 3) — at most 7 rows per signal per hour. */
 const RTB_PRICE_SHADOW_SAMPLE_MS = 3_600_000;
@@ -489,6 +492,7 @@ class ReadyToBuyService {
   private initialized = false;
   // Directive R9.3-A: Per-signal refresh tracking (replaces global isRefreshing)
   private signalRefreshStates: Map<string, SignalRefreshState> = new Map(); // P19-B4b D5: key = `${mode}:${signalId}`
+  private readonly _planAgeOffLogged = new Set<string>(); // B-ENTRY-GATE (#1224) P11: the OFF line, once per mode:class
   private engineStartTimes: Map<TradingMode, number> = new Map(); // Phase 8.8.4-C.6: Track engine start for TCL failsafe
   private tclFailsafeTriggered: Map<TradingMode, boolean> = new Map(); // Phase 8.8.4-C.6: Track if failsafe was triggered
 
@@ -1623,6 +1627,36 @@ class ReadyToBuyService {
       return 'refreshing';
     }
     const promotionStartMs = Date.now();
+    // ⭐ B-ENTRY-GATE (#1224) P11: the stale-plan limit — shipped with NO seeded row, so it is OFF and logs that once per
+    // class per process (`server/core/rtb/plan-age-limit.ts` holds the reason of record).
+    {
+      const _p11Class = asValidAssetClass(signal.assetClass);
+      let _p11Limit: unknown;
+      try {
+        _p11Limit = getCachedConstant('entry_gate', 'rtb_plan_max_age_ms', { exchange: '*', assetClass: _p11Class ?? '*', strategy: '*', regime: '*' });
+      } catch (err) {
+        console.error(`[B-ENTRY-GATE][P11][PLAN_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId}: ${err instanceof Error ? err.message : String(err)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      }
+      const _p11AgeMs = signal.queuedAt ? Date.now() - new Date(signal.queuedAt).getTime() : Number.NaN;
+      const _p11 = decidePlanAge({ ageMs: _p11AgeMs, limitMs: _p11Limit });
+      if (_p11 === 'off') {
+        const k = `${mode}:${_p11Class ?? 'unresolved'}`;
+        if (!this._planAgeOffLogged.has(k)) {
+          this._planAgeOffLogged.add(k);
+          console.log(`[B-ENTRY-GATE][P11][PLAN_AGE_LIMIT_OFF] mode=${mode} class=${_p11Class ?? 'unresolved'} — no entry_gate.rtb_plan_max_age_ms row; the stale-plan limit is OFF (value withdrawn: age does not separate outcome). Logged once per class per process.`);
+        }
+      } else if (_p11 === 'invalid_limit' || _p11 === 'age_unknown') {
+        console.error(`[B-ENTRY-GATE][P11][PLAN_AGE_UNRESOLVED] symbol=${normalizedSymbol} id=${signalId} decision=${_p11} limit=${String(_p11Limit)} queuedAt=${String(signal.queuedAt)} — not opened, stays queued`);
+        return 'plan_age_unresolved';
+      } else if (_p11 === 'stale') {
+        const removedStale = await storage.deleteRtbSignals({ mode, id: signal.id });
+        this.signalRefreshStates.delete(this._refreshKey(mode, signal.signalId));
+        this.logRtbTrace(mode, normalizedSymbol, signal.strategy, oldStatus, 'deleted', 'stale_plan');
+        console.log(`[B-ENTRY-GATE][P11][STALE_PLAN] symbol=${normalizedSymbol} id=${signalId} ageMs=${_p11AgeMs} limitMs=${String(_p11Limit)} removed=${removedStale} — not opened`);
+        return 'stale_plan';
+      }
+    }
     try {
       // ⛔ Langston Step-4 CONDITION 2: the outcome is MEASURED — `deleteRtbSignals` returns the rows it removed and does not
       // throw on a no-match. Zero rows means another path deleted it after the read above: `'missing'`, not `'deleted'`.
