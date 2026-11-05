@@ -84,6 +84,8 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - #1026 (Infra Claude) — chunked Langston dispatch leaks parts into the channel — comms
 - #1035 (Infra Claude) — Langston's alert prompt lists only three owners
 - B-REVIEW-REF-READ (Infra Claude, #1131) — Langston's review tool can read only `migration/aws-supabase`, so a throwaway `migration/<name>` review branch has no supported read path (Langston, 2026-09-30)
+- B-PUSH-GUARD-ROOT (Infra Claude, KD-42) — the push guard's type-check runs and keys every error from the repo root, so a push from a subfolder is no longer falsely refused; four fast tests (Langston + Coltrane agreed, `Claude Comms and Packages/Langston Design Asks/INFRA_SMALL_ITEMS_2026-11-05.md`) — crew tooling, after live per KD-15
+- B-CRONTAB-SNAPSHOT (Infra Claude half 1; OLD Claude half 2, KD-42) — a daily root job on staging publishes only each job's schedule and script name, and archival-health checks its schedules against it (same record) — crew tooling, after live per KD-15
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
 - #169 (Infra Claude) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
 - #219 (CC-A) — dormant flip-rate governance input
