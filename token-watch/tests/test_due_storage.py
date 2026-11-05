@@ -389,6 +389,14 @@ store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-0
 check("★ a stray backup.jsonl: a never-created day is still NOT a problem",
       liveness.probe_readable() == [], liveness.probe_readable())
 os.remove(os.path.join(births, "backup.jsonl"))
+# check() itself must not raise on a cursor naming a non-census file: it falls back to now (record item 2)
+store.save_state("liveness", {"cursor": {"path": os.path.join(births, "backup.jsonl"), "offset": 0}})
+try:
+    liveness.check(NOW)
+    _raised = None
+except Exception as e:  # noqa: BLE001
+    _raised = e
+check("★ check() does not raise on a cursor naming a non-census file", _raised is None, repr(_raised))
 store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-04.jsonl"), "offset": 5}})
 check("★ a cursor file that is gone while NEWER files exist is a problem (deleted, not never-written)",
       any("2026-11-04" in p for p in liveness.probe_readable()), liveness.probe_readable())

@@ -193,8 +193,10 @@ def check(now: datetime = None) -> dict:
     # Walk the cursor's day forward to today. A day roll leaves the previous
     # file closed, so its tail MUST be drained before the cursor moves on —
     # otherwise midnight silently eats every row written after the last check.
-    day = datetime.fromisoformat(cursor["path"].rsplit("/", 1)[-1][:-6]).replace(tzinfo=UTC) \
-        if cursor["path"].endswith(".jsonl") else now
+    # The same census-name predicate the probe uses (Langston, storage Step-4 confirm, record item 2): a cursor
+    # whose basename is not a census day (e.g. a stray backup.jsonl) falls back to now instead of raising.
+    _base = os.path.basename(cursor["path"])
+    day = datetime.strptime(_base[:10], "%Y-%m-%d").replace(tzinfo=UTC) if _is_census_name(_base) else now
     offset = cursor["offset"]
     stamps = []
     guard = 0
