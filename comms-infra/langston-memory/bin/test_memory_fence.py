@@ -400,12 +400,27 @@ def t_client():
           ("Refused", 2))
 
 
+def t_root_flags():
+    print("5. the ROOT path refuses an ignored --part too (Langston Step-4 fold-in, parse_args' own class)")
+    e = raises(W.parse_args, ["--expect-sha", SHA0, "--ledger-append", "--entries", "1", "--part", "00-legacy.md",
+                              "--by", "x", "--reason", "r"])
+    check("★ --ledger-append with --part is refused by parse_args (exit 2), naming --part",
+          (type(e).__name__, getattr(e, "code", None), "--part" in str(e)), ("Refused", 2, True))
+    e = raises(W.parse_args, ["--expect-sha", SHA0, "--ledger-append", "--entries", "1", "--by", "x", "--reason", "r"])
+    check("POSITIVE CONTROL: the same append without --part parses", e, None)
+    src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "langston-memory-write"), encoding="utf-8").read()
+    i = src.index('if opts.get("--compose"):')
+    block = src[i:src.index("raise Refused(2, \"REFUSED: %s does not apply to --compose\"", i)]
+    check("★ run()'s --compose refusal list carries --part", '"--part"' in block, True)
+
+
 def main():
     try:
         t_table()
         t_allowlist()
         t_spoold()
         t_client()
+        t_root_flags()
     finally:
         shutil.rmtree(TOP, ignore_errors=True)      # a plain temp dir: no flag is ever set in this suite
     print("ALL PASS" if ok else "FAILURES")

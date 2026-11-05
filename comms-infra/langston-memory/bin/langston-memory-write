@@ -282,7 +282,10 @@ def _part_names():
     for n in os.listdir(PARTS_DIR):
         if n.startswith("."):
             continue
-        st = os.lstat(os.path.join(PARTS_DIR, n))
+        try:
+            st = os.lstat(os.path.join(PARTS_DIR, n))
+        except FileNotFoundError:                    # removed between listdir and lstat: not a part any more
+            continue
         if stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
             out.append(n)
     return sorted(out)
@@ -372,6 +375,11 @@ def parse_args(argv):
         for bad in ("--ledger-delta", "--retractions-delta"):
             if bad in out:
                 raise Refused(2, "REFUSED: %s does not apply to --ledger-append (both counters move by --entries)" % bad)
+        # Step-4 fold-in (Langston): after the ledger split an append writes LEDGER.md and never reads --part, so a
+        # --part here would be IGNORED and answered exit 0 - the class this docstring commits to refusing (91ec9a543).
+        if "--part" in out:
+            raise Refused(2, "REFUSED: --part does not apply to --ledger-append - after the split the append writes "
+                             "LEDGER.md, never a part")
     elif "--entries" in out:
         raise Refused(2, "REFUSED: --entries applies only to --ledger-append; a whole-file write declares "
                          "--ledger-delta and --retractions-delta")
@@ -1931,7 +1939,7 @@ def run(argv, stdin_bytes):
         for req in ("--by", "--reason"):
             if req not in opts or not str(opts[req]).strip():
                 raise Refused(2, "REFUSED: %s is required" % req)
-        for bad in ("--expect-sha", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries"):
+        for bad in ("--expect-sha", "--ledger-append", "--ledger-delta", "--retractions-delta", "--entries", "--part"):
             if bad in opts:
                 raise Refused(2, "REFUSED: %s does not apply to --compose" % bad)
         if euid() not in (0, owner_uid()):
