@@ -70,3 +70,66 @@ Total 1,552 closed rows = 182 + 1,370 + 0 + 0 + 0 + 0 (measured ~08:30Z). ⇒ Pa
 
 ## D. Plain-language summary
 The plan was built around one place that finishes a trade's record. The audit found six; one is the harmless "order never filled" case. Three others can book a trade without its fees, and one can leave the original record orphaned. None has happened yet. The plan sends the two admin buttons through the normal close, makes the engine-stop cleanup book real costs, keeps the account reset as a deliberate "not a trade" case, and adds an admin repair that restores a missing opening record without inventing any exit values.
+
+---
+
+## r2 AMENDMENT (2026-11-05, CC-A) — Langston's Step-2 CHANGES on r1 (Discord `1567834671784402955`) folded
+
+Read at `736388ce2` (staging runs `0abfd7102`). Line numbers drift; implementation locates by content.
+
+**PREVIOUSLY STATED → NOW:**
+- **PREVIOUSLY STATED (A-3):** six paths finish a record, and that is the census. **NOW: six code sites END a position** (`deleteActiveOpenPosition`), and three of them can end one without finishing its record (A-8). **REASON:** Langston BLOCKER-1.
+- **PREVIOUSLY STATED (A-4, P-7):** 11 readers want every mode; they get an all-modes read. **NOW: none of the 11 wants every mode by intent**, so there is no all-modes method (A-9). **REASON:** BLOCKER-2 — "keeps today's behaviour" is equally true of all 68 while the argument is ignored.
+- **PREVIOUSLY STATED (P-13, P-15):** the money readers exclude `never_filled` and `hard_reset` by name. **NOW: an allowlist of booked reasons, one seam per route; unknown reasons are excluded and alerted** (A-10). **REASON:** BLOCKER-3, BLOCKER-4.
+- **PREVIOUSLY STATED (A-7):** "no views exist" (scope OBJ-6). **NOW:** repo — six view definitions, none reads `closed_trades`; live catalog — 2 public views, none reads `closed_trades`, 0 materialized views (control: the same `ilike` finds `v_goals_learning_summary` on `%goals%`). **REASON:** condition (h).
+
+### A-8 — what ENDS a position (BLOCKER-1)
+`git grep -n deleteActiveOpenPosition` at `736388ce2`, tests excluded: **six production call sites** (the System Impact Map says seven — corrected at Step 10).
+
+| site | finishes the record? | disposition |
+|---|---|---|
+| `active-execution-engine.ts:5084` (`closePosition`) | yes — path 1 | kept; P-2's refusal sits before it |
+| `routes.ts:12701` (manual close) | writes its OWN new record, orphans the open one (path 4) | P-10 — through `closePosition` |
+| `routes.ts:12825` (force-clear-stranded) | writes its OWN record with zero fees (path 5) | P-10 — through `closePosition`, after P-12 if the record is missing |
+| `active-execution-engine.ts:1997` (`_dropUnfilledMaker`) | only `if (tradeId)` — no `else`; a position without `metadata.tradeId` is deleted and its record left `closed_at IS NULL` for ever (`:1998` logs it) | **P-16 (new)** |
+| `active-engine-service.ts:1060` (stop flow's orphan delete) | writes nothing; relies on the reconciler (path 2) running later; nothing enforces it | **P-17 (new)** |
+| `routes.ts:3299` (`POST /diagnostics/aj19b/force-clear-positions`) | deletes every open position of a mode, writes NOTHING to `closed_trades` — drops the trades by design | **P-18 (new)** |
+
+Populations today: 0 of 19 open positions lack a `tradeId` (Langston, `88c35cab9`); `[AJ19B][FORCE_DELETE]` lines in the current `out.log`: 0. So P-16..P-18 are fences, not repairs. P-18's route: introduced `53a5cbce9` (2025-12-03, *"Add comprehensive diagnostics for trade lifecycle and guardrail integrity"*, Replit), labelled in code *"DANGEROUS - for debugging only"*; callers in `client/`, `scripts/`, `server/` outside its own definition: none (`git grep` for `force-clear-positions` and `aj19b/force-clear`).
+
+### A-9 — intent of the 11 (BLOCKER-2)
+| site(s) | intent | disposition |
+|---|---|---|
+| the eight diagnostics routes (each pairs `getActiveOpenPositions('paper')` with `getActiveTrades('live')`, whose live half reads the OLD `trades` table) | the active table — `'paper'` is a no-op argument today | keep `'paper'`; after P-5 it returns the identical set (all rows backfill to paper) and stays correct forward. An all-modes read would double-count the first live row (the live half already comes from `trades`). |
+| `active-execution-engine.ts:~1330` (I8C open-positions provider for the shared Kraken WS adapter) | this engine's positions | keep `this.mode`. ⚠️ **The adapter has ONE provider slot and the last engine to start overwrites it** — with paper and live both running, the adapter would see only one mode's symbols. That is a pre-existing live-mode defect, not this batch's; **proposed to Kyle via PM Claude** (no row placed by me). |
+| `active-engine-service.ts:~772` (tick-health symbol provider, `'paper'` literal) | the paper engine's tick health | keep `'paper'` |
+| `index.ts:~566` (boot symbol-map audit: `'paper'` + `getActiveTrades('live')`) | as the diagnostics | keep `'paper'` |
+
+⇒ **No `getActiveOpenPositionsAllModes()`.** P-7 becomes: all 68 sites keep a mode-scoped read, the eleven with the intent recorded above; the unit test asserts no call site passes anything but a `TradingMode`.
+
+### A-10 — the non-outcome rule (BLOCKER-3, BLOCKER-4)
+- **Close reasons in the data** (`closed_trades`, all rows, 2026-11-05): `stop_hit`, `target_hit`, `trailing_stop_hit`, `max_holding_period`, `reset`, `manual_stop`, `never_filled` — 7 values. **Written by the code:** `closePosition` takes `exitCondition.type` (`ExitCondition`, `active-execution-engine.ts:4200`); `forceClosePosition` (`:1611`) passes the condition with `reset` / `manual_stop`; `_dropUnfilledMaker` writes `never_filled`; `reconcileIncompleteTrades` `engine_stop_cleanup`; the hard reset `hard_reset`; the two operator routes their own (`stranded_clear`, a computed manual reason).
+- **The two money routes and the scoreboard:** `GET /active-engine/balance-curve` (`routes.ts:12280`; filter `t.closeReason !== 'never_filled'` at `:12312`) and `GET /active-engine/trades/analytics` (`routes.ts:12853`; `never_filled` excluded at `:12921`, rows without an exit price excluded at `:12922`), plus `storage.getLifetimeScoreboard` (`storage.ts:3419`, SQL). `honestNetPnl` is a predicate (`:13025-13026`), a reducer (`:13030`, `:13044`, `:13097`) and a curve map (`:12317`); `computeFeeDrag` / `computeByAssetClass` read the same `trades` array (`:13146`, `:13161`).
+- ⚠️ **Kyle's 2026-10-19 rule puts the main Dashboard off-limits; both routes feed `mode-dashboard-tab.tsx:110-121`.** This change is inside it only as KD-17's fence (OBJ-6, Kyle-agreed): **on today's data it must change no number** — the only non-booked rows today are the 182 `never_filled`, which both routes already drop. That is pre-registered as a Step-7 equality check, and a difference is a stop, not a finding.
+
+### PLAN — changes to r1
+| # | item | from |
+|---|---|---|
+| **P-1** (amended, condition (a)) | the `close_reason IS DISTINCT FROM 'never_filled'` arm is **dropped**: `_dropUnfilledMaker` writes `closed_at` and `close_reason` in one update (`active-execution-engine.ts:~1982-1990`), so under `closed_at IS NULL` it can never discriminate. | A-1 |
+| **P-2** (amended, condition (f)) | the refusal mints under its own key, body ending `DISPOSITION: RESOLVE, do not ACK`. The old `close-no-trade-row-*` emit site goes with P-3: **0 rows** on that key across the alert queue (Langston's read, 2,816 rows / 960 keys, control 16 active rows on other keys) — nothing orphaned. | A-1 |
+| **P-5** (amended, condition (e)) | **the deploy window, made empty:** `dt-deploy` runs `db:migrate` BEFORE `pm2 restart`, so between them the OLD process still inserts without `mode`. Migration 1 therefore adds `mode` as `NOT NULL DEFAULT 'paper'` (only the paper engine runs — the default is correct for every insert the old process can make) together with the backfill check and the constraint swap, in ONE transaction; the code writes `mode` explicitly from the same deploy; **migration 2, in the NEXT deploy, drops the default** after a read that every row inserted in between carries `mode='paper'` and the new code's inserts name it. The default lives one deploy and is stated as such — it is a window bridge, not a fallback (KD-17). | A-2 |
+| **P-7** (rewritten) | per A-9: no all-modes method; the eleven keep a mode-scoped read with their intent stated in the diff; the I8C single-slot race recorded and proposed to Kyle. | A-9 |
+| **P-8** (amended, condition (d)) | the pinning test also pins `side: 'buy'` at the engine's open insert (`active-execution-engine.ts:~6493`): side has left the key, so a sell-side position would collide on `(symbol, mode)` and take the `#508` dedup-return. The key itself is Kyle's (KD-24/25), unchanged. | scope |
+| **P-12** (amended, condition (c); Q3) | the restore stamps `restored_at` and `restored_by_claimed` (the authenticated caller, recorded as a CLAIM per `#447`), beside `record_restored_from_position=true`. An admin route behind the guard the stranded-clear button uses; idempotent; refuses when a record exists. | A-3 |
+| **P-13** (Q1) | the hard reset stays economics-free — a named non-outcome under A-10's rule. | A-3 |
+| **P-14** (amended, condition (b)) | also drops `DEFAULT '0'` on `active_open_positions.entry_fee` / `entry_slippage` (`shared/schema.ts:~2005`, `:~2045`): the one writer sets both (`active-execution-engine.ts:~6490`), and P-12 restores the open record FROM the position, so a defaulted zero there would become a booked zero entry fee. | A-6 |
+| **P-15** (rewritten) | **one classifier, `closeOutcomeClass(t)` → `'booked' \| 'non_outcome' \| 'unknown'`**, beside `honestNetPnl` in `dashboard-metrics.ts`, from two typed lists: BOOKED = every `ExitCondition['type']` + `reset`, `manual_stop`, `engine_stop_cleanup` and whatever reasons P-10's operator closes pass; NON_OUTCOME = `never_filled`, `hard_reset`. A compile-time exhaustiveness check over the union makes a new reason a type error until it is classed. **Each route filters ONCE**, on its fetched set, and every metric in that route — win rate, profit factor, net, by-strategy, fee drag, by-class, the curve — reads that one filtered set; the counts excluded per class are returned. The scoreboard SQL takes the same BOOKED list as a parameter. **`unknown` ⇒ excluded and alerted** (`close-reason-unknown-<reason>`, resolve-only). The old per-route `never_filled` filters are replaced, not added to. | A-10 |
+| **P-16** (new) | `_dropUnfilledMaker` without a `tradeId`: resolve the record by P-1's key (symbol, mode, class); exactly one ⇒ close it `never_filled` as today; none or many ⇒ keep the position and raise P-2's refusal alert. Never delete a position whose record is unresolved. | A-8 |
+| **P-17** (new) | the stop flow's orphan delete finishes the record FIRST, through P-11's shared engine-stop close (the record's own entry costs + the exit cost model at the reference price), resolved by `tradeId` else P-1's key; unresolved ⇒ keep the position, alert, do not delete. The "reconciler later" dependency goes. | A-8 |
+| **P-18** (new) | `POST /diagnostics/aj19b/force-clear-positions` is **deleted** (rule 18): a debug route that drops trades, no caller; the sanctioned erase is the hard reset. `DELETED_COMPONENTS_LOG.md` entry with the census. | A-8 |
+
+**Step-7 additions (pre-registered):** (g) the new refusal and P-16/P-17's unresolved arms **cannot fire** in a 24 h window — paths 2-5 have 0 rows in all retained history — so they are **fence-verified only** (their tests and mutations), and no live silence is cited for them (#661 leg 3). **P-15 equality:** for one fixed window, `/active-engine/trades/analytics` and `/active-engine/balance-curve` return identical win rate, profit factor, net P&L, fee drag, by-class and curve points before and after the deploy; any difference stops the batch. P-5: after migration 1, every row inserted until migration 2 has `mode='paper'`.
+
+**Langston's three answers, recorded:** (1) hard reset economics-free — P-13. (2) manual close through `closePosition`, refusable — P-10; ⚠️ **consequence surfaced to Kyle (via PM Claude, 2026-11-05):** with the entry-price fallback gone, a position on a cold book has NO operator close (the flatten is price-gated too) — his to accept or fund; no row placed by me. (3) admin route — P-12.
+
+**In plain language:** Langston found that the plan counted the places that finish a trade's record but not the places that delete a position. Three of those six can delete one and leave its record hanging. The revision makes each finish the record first, or keep the position and raise an alert, and deletes an old debugging button that throws trades away. The "which closes count as real trades" rule becomes one shared list: anything unrecognised is left out and flagged. And the database change is ordered so that no trade can fail to save while the new code is starting up.
