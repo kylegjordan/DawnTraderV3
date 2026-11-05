@@ -269,6 +269,16 @@ finally:
     sys.argv = saved_argv
 persisted = json.load(open(due_census.LINEAGE_OUT, encoding="utf-8"))
 check("★ --lineage exits 1 on a gap", rc == 1, rc)
+for bad in (["--lineag"], ["--lineage", "--json"]):
+    sys.argv = ["due_census.py"] + bad
+    _err = io.StringIO()
+    try:
+        with redirect_stdout(io.StringIO()), redirect_stderr(_err):
+            rc_bad = due_census.main()
+    finally:
+        sys.argv = saved_argv
+    check("★ an unknown argument %r refuses (exit 2, usage), never runs the census and exits 0" % (bad,),
+          rc_bad == 2 and "usage" in _err.getvalue(), (rc_bad, _err.getvalue()))
 check("★ --lineage persists its verdict", persisted["verdict"].startswith("GAPS")
       and persisted["gaps"][0]["bucket"] == H(THIRD_H), persisted)
 

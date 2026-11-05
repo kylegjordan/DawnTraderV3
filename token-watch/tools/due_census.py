@@ -94,6 +94,12 @@ def lineage(now: datetime | None = None, floor: float = 0.5) -> dict:
 
 
 def main() -> int:
+    # Langston, part-3 re-land: any OTHER argument used to fall through to the census and exit 0 - and on the tool
+    # whose verdict gates the first prune, exit 0 reads as "no gap found". Unknown arguments refuse, as the
+    # backfill tool's do.
+    if sys.argv[1:] not in ([], ["--lineage"]):
+        print("usage: due_census.py [--lineage]", file=sys.stderr)
+        return 2
     if sys.argv[1:] == ["--lineage"]:
         out = lineage()
         text = json.dumps(out, indent=2, sort_keys=True)
