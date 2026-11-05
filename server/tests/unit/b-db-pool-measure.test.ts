@@ -82,6 +82,25 @@ describe('the pool measurement (P2)', () => {
     expect(field(lines[1], 'checkouts')).toBe('0');
   });
 
+  it('a plain query is labelled by ITS caller, not by pg-pool or the wrapper (Langston record item i)', async () => {
+    const { pool, lines, flush } = setup();
+    async function slowQuerySite() { await pool.query('select pg_sleep(2)', 2_000); }
+    await slowQuerySite();
+    flush();
+    expect(field(lines[0], 'via_query')).toBe('1');
+    expect(field(lines[0], 'max_hold_site')).toMatch(/^slowQuerySite@b-db-pool-measure\.test\.ts:\d+/);
+  });
+
+  it('a checkout still held at flush shows in OPEN, not in checkouts (Langston CHANGE 2)', async () => {
+    const { pool, lines, flush } = setup();
+    const client = (await (pool as unknown as { connect: () => Promise<FakeClient> }).connect()) as FakeClient;
+    flush();
+    expect([field(lines[0], 'open'), field(lines[0], 'checkouts')]).toEqual(['1', '0']);
+    client.release();
+    flush();
+    expect([field(lines[1], 'open'), field(lines[1], 'checkouts')]).toEqual(['0', '1']);
+  });
+
   it('attaching twice wraps once', () => {
     const pool = new FakePool();
     attachPoolInstrument(pool as unknown as pg.Pool, 'x', { intervalMs: 3_600_000 }).stop();
@@ -93,10 +112,9 @@ describe('the pool measurement (P2)', () => {
 });
 
 describe('siteFromStack — what a label looks like on staging (one bundle, no source map)', () => {
-  it('skips the wrappers and node_modules, keeps the first two app frames with function names', () => {
+  it('skips node_modules and keeps the first two app frames with function names (wrappers are cut at capture)', () => {
     const stack = [
       'Error',
-      '    at instrumentedQuery (file:///home/deploy/dawntrader/dist/index.js:100:5)',
       '    at NodePgPreparedQuery.execute (file:///home/deploy/dawntrader/node_modules/drizzle-orm/node-postgres/session.js:80:3)',
       '    at async boundedTransaction (file:///home/deploy/dawntrader/dist/index.js:5000:7)',
       '    at async registerXstockWriterBootStart (file:///home/deploy/dawntrader/dist/index.js:5100:3)',
