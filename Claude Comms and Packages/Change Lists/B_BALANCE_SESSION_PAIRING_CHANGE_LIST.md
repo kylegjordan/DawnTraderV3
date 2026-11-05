@@ -7,6 +7,8 @@
 
 **r2 (2026-11-05 ~14:00Z):** the blocker fix landed at `e3bcb0364` (migration, schema sync, drift fence; CI `42030571303` 4/4 at `be7f85d0c`) and the two comment fixes after it; **Step-4 r2 is on the head that carries both**, named in the dispatch. The rows marked r2 below are those. 
 
+**r3 (2026-11-05 ~17:00Z, after Langston's Step-4 PROCEED on `d4de1d733`):** condition (b) folded — `readClosedTradesHotRetentionDays` reads up to two rows and refuses when more than one matches (`MoneyHeldUnavailable`), with a test (mutation: the guard disabled fails it). (c) the `as any` cast on `blockReason` is DECLINED for this batch: removing it moves drift detection to tsc, which is worth having but touches a line B-ENTRY-GATE also edits inside the joint deploy; offered to `#618` as a follow-up. (a), (d), (e) are on the record as stated; (f) is owed at Step 7 (a `MONEY_HELD` figure, a stored `MONEY_HELD_UNAVAILABLE` audit row after `db:migrate`, and what pages if the refusal persists).
+
 **Ref:** code `4b54a052bda5095c8d1a2dcfbc22d20e56540c7c` (one commit, `e05ce6666` before rebase). Line numbers below are at it. **Built off the branch head, not `0abfd710`** (your Step-2 note).
 
 | file | change |

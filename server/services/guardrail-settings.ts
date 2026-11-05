@@ -159,9 +159,15 @@ async function readClosedTradesHotRetentionDays(): Promise<number> {
   const { db } = await import('../db.js');
   const { moduleConstants } = await import('@shared/schema');
   const { and, eq } = await import('drizzle-orm');
-  const [row] = await db.select({ value: moduleConstants.value }).from(moduleConstants)
+  // Two rows read, not one (Langston Step-4 condition (b)): the table's key is wider than these two columns, so more than
+  // one match would make the value depend on row order. Refuse instead of picking one.
+  const rows = await db.select({ value: moduleConstants.value }).from(moduleConstants)
     .where(and(eq(moduleConstants.moduleName, 'data_lifecycle'), eq(moduleConstants.constantName, 'closed_trades.hot_retention_days')))
-    .limit(1);
+    .limit(2);
+  if (rows.length > 1) {
+    throw new MoneyHeldUnavailable('data_lifecycle/closed_trades.hot_retention_days matches more than one row');
+  }
+  const row = rows[0];
   const days = Number(row?.value);
   if (!Number.isFinite(days) || days <= 0) {
     throw new MoneyHeldUnavailable(`data_lifecycle/closed_trades.hot_retention_days unreadable (${JSON.stringify(row?.value ?? null)})`);

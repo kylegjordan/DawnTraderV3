@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   straddle: { entryCost: 0, count: 0, invalidCount: 0 },
   realized: { realizedPnl: -211.49, tradeCount: 529 },
   retention: 365 as unknown,
+  retentionRows: 1,
   straddleAt: [] as Date[],
   realizedSince: [] as Date[],
   readThrows: null as Error | null,
@@ -31,7 +32,7 @@ vi.mock('../../storage', () => ({
   },
 }));
 vi.mock('../../db.js', () => ({
-  db: { select: () => ({ from: () => ({ where: () => ({ limit: async () => (h.retention === undefined ? [] : [{ value: h.retention }]) }) }) }) },
+  db: { select: () => ({ from: () => ({ where: () => ({ limit: async (n: number) => (h.retention === undefined ? [] : Array.from({ length: Math.min(n, h.retentionRows) }, () => ({ value: h.retention }))) }) }) }) },
 }));
 
 import { getMoneyHeld, MoneyHeldUnavailable } from '../../services/guardrail-settings';
@@ -43,6 +44,7 @@ beforeEach(() => {
   h.straddle = { entryCost: 0, count: 0, invalidCount: 0 };
   h.realized = { realizedPnl: -211.49, tradeCount: 529 };
   h.retention = 365;
+  h.retentionRows = 1;
   h.straddleAt = [];
   h.realizedSince = [];
   h.readThrows = null;
@@ -115,6 +117,10 @@ describe('OBJ-1 / OBJ-3 — refusals THROW MoneyHeldUnavailable; nothing returns
   it('a missing or non-positive retention constant refuses (no fallback)', async () => {
     h.retention = undefined; await refuses(/hot_retention_days unreadable/);
     h.retention = 0; await refuses(/hot_retention_days unreadable/);
+  });
+  it('a retention constant matching more than one row refuses instead of picking one (Langston Step-4 (b))', async () => {
+    h.retentionRows = 2; await refuses(/matches more than one row/);
+    h.retentionRows = 1; await expect(getMoneyHeld('paper')).resolves.toBeGreaterThan(0);
   });
   it('a straddler with a non-positive quantity or price refuses (never summed as 0)', async () => {
     h.straddle = { entryCost: 100, count: 2, invalidCount: 1 };
