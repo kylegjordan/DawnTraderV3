@@ -78,13 +78,16 @@ describe('R1 lifecycle trace', () => {
 
   it('R1 r2 fence: the budget constant matches PM2 kill_timeout in ecosystem.config.cjs, and both bounded waits fit inside it', async () => {
     const cfg = readFileSync('ecosystem.config.cjs', 'utf8');
-    const m = cfg.match(/kill_timeout:\s*(\d+)/);
-    expect(m).not.toBeNull();
-    expect(Number(m![1])).toBe(PM2_KILL_TIMEOUT_MS);
+    // Exactly ONE kill_timeout in the file (Langston R1 r2 note a): a second app above `dawntrader` would make a
+    // first-match read grade the wrong block and still pass.
+    const all = [...cfg.matchAll(/kill_timeout:\s*(\d+)/g)];
+    expect(all).toHaveLength(1);
+    expect(Number(all[0][1])).toBe(PM2_KILL_TIMEOUT_MS);
     expect(SHUTDOWN_BUDGET_MS).toBeLessThan(PM2_KILL_TIMEOUT_MS);
     const { RING_SHUTDOWN_FLUSH_TIMEOUT_MS } = await import('../../asset_classes/xstock_spot/book-state-ring-store.js');
-    // The ring flush (try arm) and the trace (catch arm) cannot both run in one shutdown (Langston r1 point 4),
-    // so each must fit on its own.
+    // Each bounded wait fits inside the budget on its own. This is not what guarantees the exit: the trace's
+    // DEADLINE does (min of its ceiling and what is left), so a late failure gets only the time remaining
+    // (Langston R1 r2 note b).
     expect(RING_SHUTDOWN_FLUSH_TIMEOUT_MS).toBeLessThan(SHUTDOWN_BUDGET_MS);
     expect(XSTOCK_LIFECYCLE_TRACE_CEILING_MS).toBeLessThan(SHUTDOWN_BUDGET_MS);
   });
