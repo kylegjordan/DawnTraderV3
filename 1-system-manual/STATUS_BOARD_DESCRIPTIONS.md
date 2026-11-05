@@ -38,7 +38,13 @@ Stopped sessions being woken every 30 minutes for nothing: each session's wake w
 ## CC-B (New Claude)
 
 ### B-ENTRY-GATE
-Refuses a trade entry whose price has drifted more than 25% of the stop distance from its plan, checks the trade is still worth taking at the price actually paid, and makes the RTB refresh re-price the plan it holds. Carries the entry re-check and the crypto birth-feed items folded into it.
+Refuses a buy that pays more than a quarter of the planned risk above the plan's price (a cheaper price is never refused, only recorded), and refuses a buy that no longer makes money on average at the price actually paid. Then the RTB refresh re-prices every queued plan at today's price, not the price it was born at. Carries the entry re-check and the crypto birth-feed items folded into it.
+
+### B-CRYPTO-FEED-WATCHDOG
+Watches each crypto price connection and restarts one that has gone silent while still looking connected, so the system never trades on prices that quietly stopped updating. It also raises an alert when the share of live crypto prices drops, and filled in the missing source on 255 older price records. It is in its 48-hour watch, which ends November 6.
+
+### B-XSTOCK-DBS-TO-STRATEGIES
+xStock strategies were never told the market's direction score (DBS): it was worked out and then dropped before the strategies saw it, so every direction rule on xStock read zero. Now they receive it, which means the strong-uptrend strategy can fire on xStock for the first time and the counter-trend guards work. Live since this morning; tonight's US session is the first full check.
 
 ### B-BOOK-CHECKSUM-CIRCUIT-BREAKER
 Detects an order book that no longer matches the venue's, by the venue's own checksum, and switches that coin's book off until it is rebuilt, so no decision is made on a corrupted book.
