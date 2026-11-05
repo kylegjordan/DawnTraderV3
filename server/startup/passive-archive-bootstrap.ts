@@ -34,7 +34,8 @@ import { getConstant, prefetchModule } from '../services/module-constants-servic
 import { cutoverForTable } from '../services/data-archive/daily-partition-cutover.js';
 import { db } from '../db.js';
 import { sql } from 'drizzle-orm';
-import { recordXstockLifecycleFailure, registerXstockWriterBootStart } from '../services/passive-archive/xstock-bar-availability.js';
+import { XSTOCK_BAR_WRITER_BOOT_ID, recordXstockLifecycleFailure, registerXstockWriterBootStart } from '../services/passive-archive/xstock-bar-availability.js';
+import { startXstockTimingReporter } from '../services/passive-archive/xstock-bar-timing.js';
 
 // P19-B-PERPFEED OBJ-2-ii (renamed from SIX_TABLES — a constant named "six"
 // holding eight entries is the next reader's trap): the archive tables whose
@@ -238,6 +239,8 @@ export async function passiveArchiveBootstrap(): Promise<void> {
   }
   startBatchWriter();
   startTickerWriter();
+  // R6a: one aggregate timing line on stderr every 15 minutes for the writer's three transactions.
+  startXstockTimingReporter(XSTOCK_BAR_WRITER_BOOT_ID);
 
   // F-G-1 (OBJ-3): warm the derived xStock price grids. Runs once now, then on its own
   // cadence. Deliberately AFTER the writers so the archive it reads is being fed, and

@@ -12,6 +12,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { db } from '../../db.js';
+import {
+  recordXstockBarStatementTimeout,
+  recordXstockBarTiming,
+  type XstockTimingLeg,
+} from './xstock-bar-timing.js';
 import type { InsertEquitySpotOhlc1m } from '../../../shared/schema.js';
 
 export const XSTOCK_BAR_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1' as const;
@@ -40,6 +45,21 @@ export const XSTOCK_BAR_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1' as 
 export const XSTOCK_TX_STATEMENT_TIMEOUT_MS = 20_000;
 
 type XstockTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** R6a: time one of the writer's three transactions; a success records its duration, a statement
+ *  timeout is counted (its failure line is written where it is handled). */
+async function timedLeg<T>(leg: XstockTimingLeg, run: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  try {
+    const value = await run();
+    recordXstockBarTiming(leg, Date.now() - startedAt);
+    return value;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('canceling statement due to statement timeout')) recordXstockBarStatementTimeout(leg);
+    throw error;
+  }
+}
 
 function boundedTransaction<T>(work: (tx: XstockTx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
@@ -598,7 +618,7 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
   // database as a UUID, and the exact-set checks below still reject duplicates
   // or substitutions on either side of the certificate boundary.
   const revisionIdArrayLiteral = `{${revisionIds.join(',')}}`;
-  const certificates = await boundedTransaction(async (tx) => {
+  const certificates = await timedLeg('certify', () => boundedTransaction(async (tx) => {
     const result = await tx.execute(sql`
       SELECT * FROM certify_xstock_bar_revision_events(
         ${revisionIdArrayLiteral}::uuid[],
@@ -611,7 +631,7 @@ async function certifyRevisionIds(revisionIds: string[]): Promise<XstockVisibili
       visibleSeq: Number(row.visible_seq),
       certificatePrimaryIdentity: row.certificate_primary_identity,
     }));
-  });
+  }));
   assertExactRevisionIdSet(revisionIds, certificates.map((row) => row.revisionId));
   return certificates;
 }
@@ -719,7 +739,7 @@ export async function writeXstockProjectionAttempts(
   // fails permanently or its COMMIT acknowledgement is ambiguous, the
   // accepted population remains durable and the retry reuses this flush ID.
   try {
-    await boundedTransaction(async (tx) => {
+    await timedLeg('admit', () => boundedTransaction(async (tx) => {
       await tx.execute(sql`
         SELECT admit_xstock_bar_projection_flush(
           ${flushId}::uuid,
@@ -732,7 +752,7 @@ export async function writeXstockProjectionAttempts(
           ${payloadJson}::jsonb
         )
       `);
-    });
+    }));
   } catch (error) {
     // The admission COMMIT may have succeeded even when its acknowledgement
     // was lost. Mark the phase so the buffer writer always retains this exact
@@ -748,7 +768,7 @@ export async function writeXstockProjectionAttempts(
 
   // Awaiting this Drizzle transaction includes its COMMIT acknowledgement. The certificate call
   // below therefore cannot observe an uncommitted event from this transaction.
-  const attempts = await boundedTransaction(async (tx) => {
+  const attempts = await timedLeg('apply', () => boundedTransaction(async (tx) => {
     const result = await tx.execute(sql`
       SELECT * FROM apply_xstock_bar_revision_flush(
         ${payloadJson}::jsonb,
@@ -768,7 +788,7 @@ export async function writeXstockProjectionAttempts(
       payloadHash: row.payload_hash,
       payloadRepeatedFromWinner: row.payload_repeated_from_winner,
     }));
-  });
+  }));
   if (attempts.length !== rows.length) {
     throw new Error(
       `[B-XSTOCK-BAR-AVAILABILITY] projection transaction returned ${attempts.length} `
