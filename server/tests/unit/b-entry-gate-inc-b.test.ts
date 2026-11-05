@@ -83,3 +83,16 @@ describe('P4s + P12 — an absent net EV is refused by name, and the exploration
     expect(isNetEvOnlyFailure(negative.failures)).toBe(true);
   });
 });
+
+describe('P10 — each freshness checkpoint records the age and source it judged', () => {
+  it('the xStock birth checkpoint stamps what it passed, and the queue allow-list carries it', () => {
+    const disp = stripComments(readFileSync('server/asset_classes/xstock_spot/active-dispatch.ts', 'utf-8'));
+    expect(disp).toMatch(/birthFreshness: \{ ageMs: _tickJudge\.ageMs, ceilingMs: safety\.activeFillMaxAgeMs, source: 'equity_tick_memory' \}/);
+    const orch = stripComments(readFileSync('server/services/signal-orchestrator.ts', 'utf-8'));
+    expect(orch).toMatch(/birthFreshness: rawSignal\.metadata\?\.birthFreshness,/);
+  });
+  it('the refresh re-price line carries the ask age and basis it judged', () => {
+    const rtb = readFileSync('server/core/rtb/ready_to_buy_service.ts', 'utf-8');
+    expect(rtb).toMatch(/askAgeMs=\$\{_rpAsk\.ageMs\} basis=\$\{_rpAsk\.basis\}/);
+  });
+});
