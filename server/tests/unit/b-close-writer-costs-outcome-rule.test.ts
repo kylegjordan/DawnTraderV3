@@ -5,6 +5,8 @@
 //   F-1..F-3  the SQL fence over `storage.ts` (C-14 scope, record item 1): it PARSES the `sql` template literals —
 //             comments (`//`, `/* */` outside templates, `--` inside them) can neither trip it nor be why it passes —
 //             and finds NO literal close reason in a read predicate except the two named, Kyle-decided arms.
+//             ⚠️ SCOPE (Langston Part A record i): a reason literal inside `sql.raw("...")` is NOT seen — the parser reads
+//             template text, and `sql.raw`'s argument is a quoted JS string. Do not write reason literals through sql.raw.
 //   Q-1..Q-12 the twelve query methods, run against a recording stand-in for the database; each query is rendered by
 //             drizzle's own dialect, so the test reads the SQL that would be sent: at the ten, a `hard_reset` row is
 //             excluded (bound in the list); the scoreboard binds the BOOKED allowlist + `exit_price > 0`; the two named
@@ -194,6 +196,17 @@ describe('Q — at the ten sites a hard_reset row is excluded; the two named arm
     expect(q.params).not.toContain('hard_reset');
     expect(q.params).not.toContain('never_filled');
   });
+  it('Q-10b with asOf, the scoreboard is bounded closed_at < asOf (Langston Part A C-3); without it, unbounded', async () => {
+    const at = new Date('2026-11-05T12:00:00Z');
+    await storage.getLifetimeScoreboard('paper', at);
+    const q = rendered().find((x) => x.sql.includes('close_reason IN ('))!;
+    expect(q.sql).toMatch(/AND closed_at < \$\d+/);
+    expect(q.params).toContainEqual(at);
+    rec.queries.length = 0;
+    await storage.getLifetimeScoreboard('paper');
+    expect(rendered().find((x) => x.sql.includes('close_reason IN ('))!.sql).not.toMatch(/AND closed_at < \$\d+/);
+  });
+
   it('Q-11 getLastClosedAtForSymbol still lets a never_filled maker START the cooldown (Kyle 2026-09-30)', async () => {
     await storage.getLastClosedAtForSymbol('paper', 'BTC/USD', 'crypto_spot');
     expect(rendered().some((q) => /"closed_trades"\."close_reason" = 'never_filled'/.test(q.sql))).toBe(true);
