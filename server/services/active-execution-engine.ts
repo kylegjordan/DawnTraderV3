@@ -4079,9 +4079,7 @@ export class ActiveExecutionEngine {
               reason: `Trailing stop at ${decision.newStopPrice?.toFixed(2)} hit after moonbag ratchet`,
             };
           case 'moonbag_timeout':
-            // Row 2 increment (4c) P3: the siblings' shape (`trigger=… mark=…${_xsTag}`) so a basis read keyed on `mark=`
-            // reaches it; a timeout has no trigger level, so `trigger=none` (echoing the mark would read as a real level).
-            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=moonbag_timeout trigger=none mark=${currentPrice}${_xsTag}`);
+            console.log(`[B65.2][EXIT_TRIGGER] symbol=${position.symbol} type=moonbag_timeout price=${currentPrice}`);
             return {
               // Reuse the existing trailing_stop_hit exit bucket on the DB
               // side so we don't need a new enum — the close reason will

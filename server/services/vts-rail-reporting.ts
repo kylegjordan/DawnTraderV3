@@ -15,7 +15,7 @@
 import {
   vtsXstockJoinsStandingRecord, stepMemberClock, railRowClear, clearEvidence, railRowTradeId, easternDate,
   railKey, memberField, RAIL_KEY_PREFIX, VTS_STANDING_KEY, VTS_RAIL_ACTOR, VTS_RAIL_REF, MEMBER_ESCALATE_AFTER_MS,
-  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, EXPECTED_WIDE, type MemberClock,
+  unpricedCloseKey, shadowUnpricedKey, VTS_STUCK_KEY, STUCK_SWEEP_FAILURES, STUCK_CLOSED_MEMBER_SWEEPS, type MemberClock,
 } from '../core/trading/vts-rail.js';
 import type { ClassVerdict } from './venue-quiet-alerting.js';
 import fs from 'node:fs';
@@ -48,18 +48,15 @@ export interface VtsRailDeps {
   closedTradeIds: (ids: string[]) => Promise<Set<string>>;
   /** The paper cohort verdict for xStock (`venue-quiet-alerting.ts`); `null` when unreadable. */
   xstockVerdict: (nowMs: number) => ClassVerdict | null;
-  /** Is `nowMs` inside the US regular session on a trading day? The session LABEL (an unpriced close's `session`). */
+  /** Is `nowMs` inside the US regular session on a trading day? */
   isRegularSession: (nowMs: number) => boolean;
-  /** Row 2 increment (4c) P1: is `nowMs` PAGING time — the regular session from 15 min after the open
-   *  (`isXstockRailPagingTime`)? Read by the member clock only; never by the session label. */
-  isRailPagingTime: (nowMs: number) => boolean;
   /** r5 (Langston condition 4): the alert file's size in bytes — every write rewrites it whole; null when unreadable. */
   alertFileBytes?: () => number | null;
 }
 
 /** The six pre-registered counts (audit A3 / objective 11, r4), cumulative since start. `dedupeHits` = an `addAlert` that
  *  returned an EXISTING row; `escalations` = 30-min member pages. Joins are read against A3's attempted column, not zero. */
-export const railCounts = { crossings: 0, joins: 0, joinsTooWide: 0, joinsTooOldQuiet: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0, reasonExits: 0 };
+export const railCounts = { crossings: 0, joins: 0, pagesAttempted: 0, minted: 0, dedupeHits: 0, escalations: 0, markMisses: 0, reasonExits: 0 };
 
 const state = {
   /** tradeId → id of its open `no-trigger-vts-*` row. */
@@ -215,9 +212,6 @@ export async function onCrossing(c: Crossing, nowMs: number, deps: VtsRailDeps):
     }
     state.memberRecord.set(c.tradeId, rec.id);
     railCounts.joins++;
-    // Row 2 increment (4c) P2: the join's reason, split. Exactly two reasons can join (`vtsXstockJoinsStandingRecord`),
-    // so joinsTooWide + joinsTooOldQuiet === joins.
-    if (c.lastReason === EXPECTED_WIDE) railCounts.joinsTooWide++; else railCounts.joinsTooOldQuiet++;
     return 'joined';
   }
   await leaveStandingRecord(c.tradeId, deps);
@@ -278,8 +272,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     }
     let escalated = 0;
     if (record) {
-      // Row 2 increment (4c) P1: the member clock counts PAGING time (from 09:45 ET at the open), not the session label.
-      const regular = deps.isRailPagingTime(nowMs);
+      const regular = deps.isRegularSession(nowMs);
       const etDate = easternDate(nowMs);
       const patch: Record<string, unknown> = {};
       let remaining = 0;
@@ -296,10 +289,9 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
           await pageOwnKey({
             tradeId: tid, symbol: m.symbol, assetClass: 'xstock_spot', lastReason: m.reason, pageSinceMs: clock.sessionClockStartMs ?? nowMs,
             title: `VTS exit decisions unavailable — ${mins} min with no decision for ${m.symbol}`,
-            body: `VTS has made NO exit decision for ${mins} minutes of US regular-session paging time (counted from 09:45 ET at the `
-              + `open, row 2 increment (4c)) on open virtual trade ${tid} in `
+            body: `VTS has made NO exit decision for ${mins} minutes of US regular-session time on open virtual trade ${tid} in `
               + `${m.symbol} (most recent reason: ${m.reason}) — past the ${MEMBER_ESCALATE_AFTER_MS / 60_000}-minute norm for an expected wide `
-              + `book (row 2 increment (4a), audit A5: 421 of 423 such streaks ended within 30 min, measured on a clock that started at 09:30). While this lasts its stop and `
+              + `book (row 2 increment (4a), audit A5: 421 of 423 such streaks ended within 30 min). While this lasts its stop and `
               + `target are NOT evaluated. This row clears itself when the trade decides or closes (${VTS_RAIL_REF}).`,
           }, nowMs, deps);
           patch[memberField(tid)] = null; patch[decidedField(tid)] = null; escalated++; railCounts.escalations++; continue;
@@ -338,7 +330,7 @@ export async function runVtsRailSweep(nowMs: number, deps: VtsRailDeps): Promise
     const stuckClosed = [...state.closedMemberSweeps.entries()].filter(([, n]) => n >= STUCK_CLOSED_MEMBER_SWEEPS).map(([t]) => t);
     await reportStuck(stuckClosed.length ? `closed members still listed after ${STUCK_CLOSED_MEMBER_SWEEPS} sweeps: ${stuckClosed.join(', ')}` : null, nowMs, deps);
     console.log(`[VTS_RAIL][SWEEP] railRowsOpen=${railRows.length} resolved=${resolved} members=${members.length} escalated=${escalated} `
-      + `crossings=${railCounts.crossings} joins=${railCounts.joins} joinsTooWide=${railCounts.joinsTooWide} joinsTooOldQuiet=${railCounts.joinsTooOldQuiet} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
+      + `crossings=${railCounts.crossings} joins=${railCounts.joins} pagesAttempted=${railCounts.pagesAttempted} minted=${railCounts.minted} `
       + `dedupeHits=${railCounts.dedupeHits} escalations=${railCounts.escalations} markMissedRowMarks=${railCounts.markMisses} reasonExits=${railCounts.reasonExits} sinceStart `
       + `alertFileBytes=${deps.alertFileBytes?.() ?? 'unread'}`);
   } catch (err) {
@@ -427,7 +419,7 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
   const alerts = await import('./system-alerts.js');
   const vq = await import('./venue-quiet-alerting.js');
   const { getXstockSession } = await import('../asset_classes/xstock_spot/time-of-day.js');
-  const { isInXstockWeekendClose, isXstockRailPagingTime } = await import('../asset_classes/xstock_spot/market-hours.js');
+  const { isInXstockWeekendClose } = await import('../asset_classes/xstock_spot/market-hours.js');
   const { db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
   return {
@@ -447,7 +439,6 @@ export async function productionVtsRailDeps(): Promise<VtsRailDeps> {
     },
     xstockVerdict: (nowMs) => vq.classVerdict(vq.measureXstockTicking(nowMs), vq.readVenueQuietConfig(), nowMs),
     isRegularSession: (nowMs) => !isInXstockWeekendClose(new Date(nowMs)) && getXstockSession(nowMs) === 'regular',
-    isRailPagingTime: (nowMs) => isXstockRailPagingTime(new Date(nowMs)),
     alertFileBytes: () => { try { return fs.statSync(alerts.ALERTS_FILE).size; } catch { return null; } },
   };
 }
