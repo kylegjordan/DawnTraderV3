@@ -86,6 +86,26 @@ describe('the wiring, proved at the source', () => {
   });
 });
 
+describe('P3 — the resting maker: would-cancel is RECORDED, never acted on (pre-audit A-5)', () => {
+  const src = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));
+  const start = src.indexOf('private async _processPendingMaker(');
+  const body = src.slice(start, src.indexOf('private _reportMakerWouldCancel(', start));
+  it('reads the same per-class window setting, spot classes only, buy side only', () => {
+    expect(body).toMatch(/if \(side === 'buy' && \(_isCryptoPending \|\| _isXstockPending\) && fillPrice !== null\)/);
+    expect(body).toMatch(/getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac'/);
+  });
+  it('the record never feeds a cancel, a drop or the fill decision', () => {
+    const seg = body.slice(body.indexOf('_mwcStop'), body.indexOf('const _quoteArrivedAtMs'));
+    expect(seg).toContain('this._makerWouldCancel.set(');
+    expect(seg).not.toMatch(/_dropUnfilledMaker|return|evaluatePendingMaker/);
+    expect(body).not.toMatch(/_makerWouldCancel\.get\([^)]*\)[^;]*\?[^;]*drop/);
+  });
+  it('the record is reported when the rest resolves, on BOTH outcomes', () => {
+    expect(body).toMatch(/this\._reportMakerWouldCancel\(position, 'fill'\)/);
+    expect(src).toMatch(/this\._reportMakerWouldCancel\?\.\(position, 'drop'\)/);
+  });
+});
+
 describe('P5 — the three 2 % target fallbacks are gone (Kyle decision 7)', () => {
   const rtb = stripComments(readFileSync(new URL('../../core/rtb/ready_to_buy_service.ts', import.meta.url), 'utf8'));
   const eng = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));

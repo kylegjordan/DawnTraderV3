@@ -1886,6 +1886,24 @@ export class ActiveExecutionEngine {
         console.error(`[8a-P3][ENTRY_FILL_RECORD_FAILED:${this.mode}] ${position.symbol}:`, err instanceof Error ? err.message : err);
       }
     }
+    // B-ENTRY-GATE (#1224) increment A, P3 — WATCH-ONLY (pre-audit A-5): record, never cancel, when the live ask a resting
+    // BUY would trade against sits more than the worse-side window above its limit (the plan's entry). A maker transacts at
+    // its limit, so this measures "the market left the plan", not the price paid; the live predicate is decided from this
+    // record (carrier: the deploy-time date row, owner CC-B). Spot classes only — they are the ones with an entry_gate row.
+    if (side === 'buy' && (_isCryptoPending || _isXstockPending) && fillPrice !== null) {
+      const _mwcStop = position.stopLoss != null ? parseFloat(position.stopLoss) : Number.NaN;
+      if (Number.isFinite(_mwcStop) && limit > _mwcStop) {
+        const _mwcW = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac',
+          { exchange: '*', assetClass: _isXstockPending ? 'xstock_spot' : 'crypto_spot', strategy: '*', regime: '*' });
+        const _mwcAdverse = (fillPrice - limit) / (limit - _mwcStop);
+        if (_mwcAdverse > _mwcW) {
+          const prev = this._makerWouldCancel.get(position.id);
+          this._makerWouldCancel.set(position.id, prev
+            ? { firstAtMs: prev.firstAtMs, ticks: prev.ticks + 1, maxAdverseR: Math.max(prev.maxAdverseR, _mwcAdverse) }
+            : { firstAtMs: Date.now(), ticks: 1, maxAdverseR: _mwcAdverse });
+        }
+      }
+    }
     const _quoteArrivedAtMs = _isCryptoPending
       ? (_fillTouch !== null && _fillTouch.ok ? _fillTouch.quote.quoteArrivedAtMs : null)
       : (_isXstockPending ? xstockSides.arrivedAtMs : null);
@@ -1959,6 +1977,7 @@ export class ActiveExecutionEngine {
         // own no-tradeId case for exactly this reason; the fill branch now matches it.
         console.warn(`[P19-B7.2c][MAKER_FILL_UNSTAMPED:${this.mode}] ${position.symbol}: filled at ${makerFillPrice(limit)} but metadata carries no tradeId — entry provenance left NULL rather than fabricated (position opened normally)`);
       }
+      this._reportMakerWouldCancel(position, 'fill');
       console.log(`[P19-B7.2c][MAKER_FILLED:${this.mode}] ${position.symbol}: ${_isCryptoPending || _isXstockPending ? (side === 'buy' ? 'ask' : 'bid') : 'mark'} ${fillPrice} (mark ${currentPrice}) traded through limit ${limit} — pending→open at ${makerFillPrice(limit)} + maker fee (reserved at placement)`);
       return;
     }
@@ -1977,7 +1996,19 @@ export class ActiveExecutionEngine {
    * engine stop's flatten uses it too): a resting maker order that did not fill is DROPPED — the position is deleted
    * (slot freed) and its closed_trades row is closed as `never_filled`, with no exit price and no P&L.
    */
+  /** B-ENTRY-GATE (#1224) P3: one line per resolved rest that ever sat outside the window — the would-cancel record. */
+  private _reportMakerWouldCancel(position: any, outcome: 'fill' | 'drop'): void {
+    const rec = this._makerWouldCancel.get(position.id);
+    this._makerWouldCancel.delete(position.id);
+    if (!rec) return;
+    console.log(`[B-ENTRY-GATE][MAKER_WOULD_CANCEL][SHADOW:${this.mode}] ${position.symbol} strategy=${position.strategy} class=${position.assetClass ?? 'crypto_spot'} ` +
+      `outcome=${outcome} would_cancel_ticks=${rec.ticks} first_at=${new Date(rec.firstAtMs).toISOString()} max_adverse_r=${rec.maxAdverseR.toFixed(4)} — recorded, not cancelled`);
+  }
+
   private async _dropUnfilledMaker(position: any, why: string): Promise<void> {
+    // Optional call: this drop is also invoked with a bare `this` (the engine-stop flatten's unit fixture); the report is
+    // telemetry and must never stand between a resting order and its drop.
+    this._reportMakerWouldCancel?.(position, 'drop');
     const tradeId = (position.metadata as any)?.tradeId;
     if (tradeId) {
       await storage.updateClosedTrade(this.mode, tradeId, {
@@ -3499,6 +3530,9 @@ export class ActiveExecutionEngine {
   private _entryFillRefusedFirstLook = 0;
   private _entryFillRefusedSteady = 0;
   private readonly _entryFillLooked = new Set<string>();
+  // B-ENTRY-GATE (#1224) increment A, P3 — WATCH-ONLY. Per resting maker: did the live ask ever sit above the entry window,
+  // how many ticks, how far. Reported when the rest resolves (fill or drop), then forgotten. Never cancels anything.
+  private readonly _makerWouldCancel = new Map<string, { firstAtMs: number; ticks: number; maxAdverseR: number }>();
   private _noTriggerRefusals = 0;
   // ⭐⭐ `8a-P2` — THE INVOCATION COUNT AT THE EVALUATOR'S CALL SITE, AND THE NO-HIT ARM BESIDE IT.
   // ⛔⛔ WHY: `slHits=0 tpHits=0` IS A CONJUNCTION THAT RENDERS TWO STRUCTURALLY DIFFERENT STATES
