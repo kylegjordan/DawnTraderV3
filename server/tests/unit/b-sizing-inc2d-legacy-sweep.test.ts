@@ -190,12 +190,14 @@ describe('fresh-reader round 1 folds — the cap counts real positions; manual c
     expect(call).toContain('openPositions.map((p) => ({ symbol: p.symbol, assetClass: p.assetClass }))');
   });
 
-  it('both manual close writers carry the asset class of the position (was the crypto_spot column default)', () => {
+  it('the manual close and the stranded clear no longer write a record — the class comes from the open-time record', () => {
+    // B-CLOSE-WRITER-COSTS P-10: both writers this test pinned (each set `assetClass: position.assetClass`) are DELETED;
+    // both routes close through the engine's one close, which finishes the record minted at open with the right class.
+    // The one route that still INSERTS a record from a position — the P-12 restore — carries the resolved class.
     const src = code('server/routes.ts');
-    const manual = src.slice(src.indexOf('const closedTradePayload = {'), src.indexOf('const closedTradePayload = {') + 400);
-    expect(manual).toContain('assetClass: position.assetClass,');
-    const strandedAt = src.indexOf("closeReason: 'stranded_clear'");
-    const stranded = src.slice(src.lastIndexOf("await storage.createClosedTrade('paper', {", strandedAt), strandedAt);
-    expect(stranded).toContain('assetClass: position.assetClass,');
+    expect(src).not.toContain('const closedTradePayload = {');
+    expect(src).not.toContain("closeReason: 'stranded_clear'");
+    const restore = code('server/services/trade-record-restore.ts');
+    expect(restore).toContain('assetClass: cls,');
   });
 });

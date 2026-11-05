@@ -272,7 +272,9 @@ describe('P1 — the straddle query', () => {
     const body = st.slice(i, st.indexOf('\n  }\n', i));
     expect(body).toContain('${closedTradesTable.openedAt} < ${at}');
     expect(body).toContain('(${closedTradesTable.closedAt} IS NULL OR ${closedTradesTable.closedAt} > ${at})');
-    expect(body).toContain("IS DISTINCT FROM 'never_filled'");
+    // B-CLOSE-WRITER-COSTS P-15: the hand-written `never_filled` literal became the shared non-outcome list (never_filled
+    // AND hard_reset), bound from trade-close-reason.ts; the exclusion is pinned per site there (outcome-rule test Q-3).
+    expect(body).toContain('notNonOutcomeReason()');
     expect(body).toContain('eq(closedTradesTable.mode, mode)');
     expect(body).toContain('SUM(${closedTradesTable.quantity} * ${closedTradesTable.entryPrice})');
   });

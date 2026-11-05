@@ -402,7 +402,7 @@ export class ActivePortfolioManager {
     const stillOpen = await storage.getActiveOpenPosition(this.mode, position.id);
     if (stillOpen) {
       // The close seam refused (C3) — e.g. a cold book with no reference. Report it honestly.
-      return { status: 'left_open', reason: 'close refused by the fill contract (position still open)' };
+      return { status: 'left_open', reason: 'close refused by the fill contract or the trade-record check (position still open)' };
     }
     return { status: 'closed' };
   }
@@ -705,6 +705,22 @@ export class ActivePortfolioManager {
    * is KEPT — rule 18 applies to the implementation, not the affordance. `reason` is logged; the row's
    * `close_reason` is `manual_stop`, as every flatten's is.
    */
+  /**
+   * B-CLOSE-WRITER-COSTS P-10 (Kyle KD-17; Langston's P-10 ruling 2026-11-05T20:38Z): ONE position, operator-initiated,
+   * through the ONE close chain — `_flattenOne` → `forceClosePosition` → `closePosition` — so the open-time record is
+   * finished with real exit fees (never a second writer, KD-40 item 2). A PENDING maker is CANCELLED (dropped as never
+   * filled), not sold. A close the fill contract or the trade-record check refuses leaves the position OPEN (`left_open`).
+   * The mode is this manager's (chosen at the API boundary by the route).
+   */
+  async closeOnePositionByOperator(positionId: string, tag: 'manual_close' | 'stranded_clear'): Promise<{
+    status: 'closed' | 'left_open' | 'failed' | 'not_found'; reason?: string; symbol?: string;
+  }> {
+    const position = await storage.getActiveOpenPosition(this.mode, positionId);
+    if (!position) return { status: 'not_found' };
+    const outcome = await this._flattenOne(position as any, tag, 'manual_stop');
+    return { ...outcome, symbol: position.symbol };
+  }
+
   async closeAllPositions(reason: string = 'manual_close'): Promise<{ closed: number; leftOpen: number; failed: number }> {
     const openPositions = await storage.getActiveOpenPositions(this.mode);
     console.log(`[PaperPortfolio:${this.userId}] Closing all ${openPositions.length} positions - ${reason}`);

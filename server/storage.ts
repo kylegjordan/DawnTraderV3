@@ -192,6 +192,9 @@ import { db } from "./db";
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { NON_OUTCOME_CLOSE_REASONS, BOOKED_CLOSE_REASONS } from "./services/trade-close-reason";
+import type { TradeCloseReason } from "./services/trade-close-reason";
+/** A closed_trades write payload whose `closeReason`, when present, is a TradeCloseReason (B-CLOSE-WRITER-COSTS P-15). */
+type ClosedTradeWrite<T> = Omit<T, 'closeReason'> & { closeReason?: TradeCloseReason | null };
 
 // B-CLOSE-WRITER-COSTS P-15 (C-4, C-10, C-13): the "not a trade outcome" rule, ONE source. Every SQL reader that
 // excluded `never_filled` by a hand-written literal now binds the list DERIVED from `TRADE_CLOSE_REASON_CLASS`, so
@@ -540,8 +543,10 @@ export interface IStorage {
   // Paper trades
   // Step F (#618): the payload OMITS `mode` -- it comes from the explicit first argument,
   // so the mode is stated exactly once and no caller can pass one that contradicts it.
-  createClosedTrade(mode: TradingMode, trade: Omit<InsertClosedTrade, 'mode'>): Promise<ClosedTrade>;
-  updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade>;
+  // B-CLOSE-WRITER-COSTS P-15 (r4 C-2/C-3): a written close reason is a TradeCloseReason — a new one is a compile error here
+  // until it is classed in trade-close-reason.ts. (Callers that cast their payload `as any` are outside this guarantee.)
+  createClosedTrade(mode: TradingMode, trade: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<ClosedTrade>;
+  updateClosedTrade(mode: TradingMode, id: string, updates: ClosedTradeWrite<Partial<ClosedTrade>>): Promise<ClosedTrade>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
   getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
   // B-BALANCE-TRUTH Step C (#618): whole-history / whole-window aggregates. Use THESE for any
@@ -3141,7 +3146,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Paper simulation methods (Milestone 18)
-  async createClosedTrade(mode: TradingMode, trade: Omit<InsertClosedTrade, 'mode'>): Promise<ClosedTrade> {
+  async createClosedTrade(mode: TradingMode, trade: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<ClosedTrade> {
     // [I8C-SYMBOL-NORM] Normalize symbol to canonical BASE/QUOTE format
     const canonicalSymbol = normalizeToInternalSymbol(trade.symbol);
     if (trade.symbol !== canonicalSymbol) {
@@ -3157,7 +3162,7 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateClosedTrade(mode: TradingMode, id: string, updates: Partial<ClosedTrade>): Promise<ClosedTrade> {
+  async updateClosedTrade(mode: TradingMode, id: string, updates: ClosedTradeWrite<Partial<ClosedTrade>>): Promise<ClosedTrade> {
     const [result] = await db.update(closedTradesTable)
       .set(updates)
       .where(eq(closedTradesTable.id, id))

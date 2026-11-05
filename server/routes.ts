@@ -12505,202 +12505,32 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   });
 
   // Phase 8.8.3-B1: Close single trade endpoint
+  // ⛔ B-CLOSE-WRITER-COSTS P-10 (Kyle KD-17; Langston's P-10 ruling 2026-11-05T20:38Z): the MANUAL CLOSE no longer writes its
+  // own record. It used to INSERT a new closed_trades row with computed fees and delete the position, leaving the OPEN-time
+  // record unclosed (an orphan). It now closes through the one close chain (`closeOnePositionByOperator` → `_flattenOne` →
+  // `forceClosePosition` → `closePosition`), which finishes the open-time record with the real exit fees, refuses honestly
+  // on a cold book or an unresolvable record, and CANCELS a pending maker rather than selling it. The request body's free
+  // `reason` is no longer read (r4 C-3). Engine not running ⇒ refused with the same 400 as close-all — there is no engine
+  // to close through, and the honest remedy is to start it and close from Active Trades (Langston C-2).
   apiRouter.post('/active-engine/close-trade/:id', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
-      const { id } = req.params;
-      const { reason } = req.body;
-      
-      // Get the position to close
-      const positions = await storage.getActiveOpenPositions('paper');
-      const position = positions.find(p => p.id === id);
-      
-      if (!position) {
-        return res.status(404).json({ success: false, error: 'Position not found' });
+      const status = await getActiveEngineStatus(req.user!.id);
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper');
+      if (!status.isRunning || !manager) {
+        return res.status(400).json({ success: false, error: 'Paper trading simulation not running — start the engine, then close the position from Active Trades.' });
       }
-      
-      const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
-      const quantity = parseFloat(position.quantity?.toString() || '0');
-      
-      // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
-      let currentPrice = entryPrice;
-      let priceSource = 'entry_fallback';
-      let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
-      const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-      if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
-        currentPrice = liveQuote.price;
-        priceSource = liveQuote.source;
-        // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
-        fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
-      } else {
-        fallbackType = 'entry_fallback';
-        console.log(`[8.8.3-I6][FALLBACK_TO_ENTRY] symbol=${position.symbol} reason=no_reliable_price`);
+      const r = await manager.closeOnePositionByOperator(req.params.id, 'manual_close');
+      if (r.status === 'not_found') return res.status(404).json({ success: false, error: 'Position not found' });
+      if (r.status !== 'closed') {
+        return res.status(409).json({ success: false, error: `${r.symbol ?? 'Position'} not closed: ${r.reason ?? r.status}` });
       }
-      console.log(`[8.8.3-I6][CLOSE_TRADE_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
-      
-      // Phase 8.8.3-C7-FIX: Calculate exit slippage and fees mirroring engine's closePosition method
-      // Batch 18J: Canonical fee/slippage from exchange-defaults.ts
-      const SLIPPAGE_PERCENT = CANONICAL_SLIPPAGE * 100; // 0.05% from exchange-defaults
-      // P19-B6.5d: prefer the carried position stamp (collision-correct); safe-resolve
-      // fallback so a bad symbol can't throw and 500 the close-trade route.
-      let _exitPosClass = asValidAssetClass((position as { assetClass?: unknown }).assetClass) ?? safeResolveAssetClass(position.symbol, 'kraken');
-      if (!_exitPosClass) {
-        console.warn(`[P19-B6.5d][EXIT_FEE] position ${position.symbol} has no resolvable asset class; using crypto_spot friction for display only`);
-        _exitPosClass = 'crypto_spot';
-      }
-      const FEE_PERCENT = getFrictionForAssetClass(_exitPosClass).feeRateTaker * 100; // B-4.5: DB-governed per-class
-      
-      // Calculate exit slippage (same formula as active-execution-engine.ts line 772-780)
-      const exitSlippagePerUnit = currentPrice * (SLIPPAGE_PERCENT / 100);
-      const actualExitPrice = currentPrice - exitSlippagePerUnit; // Worse price due to slippage
-      const exitValue = actualExitPrice * quantity;
-      const exitFee = exitValue * (FEE_PERCENT / 100);
-      const exitSlippage = exitSlippagePerUnit * quantity;
-      
-      // Get entry costs from the position (persisted at entry time)
-      const entryFee = parseFloat(position.entryFee?.toString() || '0');
-      const entrySlippage = parseFloat(position.entrySlippage?.toString() || '0');
-      
-      // Get intended entry price for gross P/L calculation (same as engine line 766-768)
-      const intendedEntryPrice = position.intendedEntryPrice 
-        ? parseFloat(position.intendedEntryPrice.toString()) 
-        : entryPrice; // Fallback for old positions
-      // B-COST-ACCOUNTING-HONESTY (§15): `intendedEntryValue` deleted (the % denominator is now
-      // actualEntryValue). `intendedEntryPrice` is RETAINED — it is now PERSISTED on the row below
-      // as the slippage benchmark, closing the asymmetry Langston found at Step-4.
-      
-      // B-COST-ACCOUNTING-HONESTY (Kyle 2026-07-28) — SITE 2 of 3 (manual close). MUST stay in
-      // lockstep with the engine close path (active-execution-engine.ts) or an operator-closed
-      // trade would report different gross/cost than an engine-closed one for identical economics.
-      // Gross on ACTUAL fills; cost line = EXPLICIT costs only (slippage is already inside the
-      // actual prices — subtracting it too would double-count). Net is algebraically UNCHANGED.
-      // B-COST-MATH-CONSOLIDATION — SITE 2 of 3, now a CALL rather than a copy of site 1.
-      // This path was born as a deliberate copy of the engine close (`2807c2360`, 2025-12-12) so
-      // the two would agree. That intent is still right; hand-synchronisation was the wrong way to
-      // hold it. Verified bit-identical to the retired inline form before the re-point.
-      const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
-        actualEntryPrice: entryPrice,
-        actualExitPrice,
-        quantity,
-        entryFee,
-        exitFee,
-      });
-      // Same quantity under its persistence-payload name.
-      const totalFees = totalCost;
-      // Retained as signed execution-quality telemetry (positive = cost) — reported, not deducted.
-      const totalSlippage = entrySlippage + exitSlippage;
-      
-      console.log(`[8.8.3-C7-FIX][MANUAL_CLOSE_COSTS] symbol=${position.symbol} exitPrice=${currentPrice.toFixed(4)} actualExitPrice=${actualExitPrice.toFixed(4)} entryFee=${entryFee.toFixed(4)} exitFee=${exitFee.toFixed(4)} entrySlip=${entrySlippage.toFixed(4)} exitSlip=${exitSlippage.toFixed(4)} totalCost=${totalCost.toFixed(4)} grossPnl=${grossPnl.toFixed(4)} netPnl=${netPnl.toFixed(4)}`);
-      
-      // Build closed trade payload with all cost fields
-      // B65.1-HF2 (2026-04-23): baseCurrency is NOT NULL on closed_trades. Derive from symbol.
-      const closedTradePayload = {
-        symbol: position.symbol,
-        // B-SIZING-DEC-RESTORE 2d (fresh-reader round 1, folded): carry the position's class. Unset, the row took the
-        // column default `crypto_spot`, so a manual close of an xStock would be booked as crypto — and the class-exact
-        // cooldown (2b, #1093) would then miss the xStock's own close. Latent: 0 manual closes on staging to date.
-        assetClass: position.assetClass,
-        baseCurrency: position.symbol.split('/')[0] || position.symbol,
-        strategyName: position.strategyName,
-        side: position.side,
-        quantity: position.quantity?.toString() || '0',
-        entryPrice: position.avgPrice?.toString() || '0',
-        exitPrice: actualExitPrice.toString(), // Use actual exit price (after slippage)
-        stopLoss: position.stopLoss?.toString(),
-        takeProfit: position.takeProfit?.toString(),
-        pnl: netPnl.toString(), // Net P/L for backward compatibility
-        pnlPercent: netPnlPercent.toString(),
-        fees: totalFees.toString(),
-        entryFee: entryFee.toString(),
-        exitFee: exitFee.toString(),
-        totalFee: totalFees.toString(),
-        slippage: totalSlippage.toString(),
-        entrySlippage: entrySlippage.toString(),
-        exitSlippage: exitSlippage.toString(),
-        // B-COST-ACCOUNTING-HONESTY (Langston Step-4): the manual-close path persisted the DERIVED
-        // slippage but NONE of the five benchmark fields the engine path writes — so the retained
-        // slippage telemetry was hollow here (signed numbers with no persisted benchmark to audit
-        // them against), and any actual-fill verification silently EXCLUDED manual-closed rows.
-        // Latent, not live: measured at this head, 0 rows are manual closes (all 71 rows lacking
-        // benchmarks are `never_filled`, which have no fill price BY CONSTRUCTION). Fixed at the
-        // find (rule 23) so the two close paths are symmetric in what they record, not just in
-        // what they compute.
-        intendedEntryPrice: intendedEntryPrice.toString(),
-        actualEntryPrice: entryPrice.toString(),
-        targetExitPrice: currentPrice.toString(),
-        actualExitPrice: actualExitPrice.toString(),
-        netPnlPercent: netPnlPercent.toString(),
-        totalCost: totalCost.toString(),
-        grossPnl: grossPnl.toString(),
-        netPnl: netPnl.toString(),
-        openedAt: position.openedAt || new Date(),
-        closedAt: new Date(),
-        closeReason: reason || 'manual_close',
-        confidence: position.confidence?.toString(),
-        // P19-B8.2 (OBJ-4): carry the at-open ratio stamp from the position row
-        // (stamped once at open, never recomputed; NULL stays NULL).
-        balanceRatioAtOpen: (position as any).balanceRatioAtOpen ?? null,
-        anchorBalanceAtOpen: (position as any).anchorBalanceAtOpen ?? null,
-        anchorVersionAtOpen: (position as any).anchorVersionAtOpen ?? null,
-        metadata: position.metadata
-      };
-      // B-XSTOCK-FEED-SANITY P4: the book-state LABEL at a manual close (no walk, no withholding).
-      // `unknown` for crypto or when the guard has no verdict; basis `guard` = the live frame now.
-      // Assigned AFTER the payload literal so its inferred type (and the pre-existing baseline
-      // diagnostic keyed on it) is unchanged — the columns exist on closed_trades either way.
-      // Written ONLY when the guard actually assessed a live frame (basis `guard` asserts exactly
-      // that); crypto, a guard that did not run, or no tick ⇒ NULL, re-cuttable (Langston Step-4 B2).
-      if ((position as any).assetClass === 'xstock_spot') {
-        const { assessBookStateNow } = await import('./asset_classes/xstock_spot/book-state-tracker.js');
-        const _bs = assessBookStateNow(position.symbol);
-        if (_bs.ok) {
-          Object.assign(closedTradePayload as Record<string, unknown>, {
-            exitBookState: _bs.result.state,
-            exitBookStateBasis: 'guard',
-          });
-        }
-      }
-      
-      console.log('[8.8.3-B1][CLOSE_TRADE_PAYLOAD]', JSON.stringify(closedTradePayload, null, 2));
-      
-      // Move to closed trades
-      try {
-        await storage.createClosedTrade('paper', closedTradePayload);
-      } catch (insertError) {
-        const insertErrorMsg = insertError instanceof Error ? insertError.message : String(insertError);
-        console.error('[8.8.3-B1][INSERT_ERROR]', insertErrorMsg, insertError);
-        throw insertError;
-      }
-      
-      // Delete from open positions
-      await storage.deleteActiveOpenPosition('paper', id);
-      
-      // Broadcast update via WebSocket
-      contextBridge.broadcast({
-        type: 'active_trade_closed',
-        payload: {
-          id,
-          symbol: position.symbol,
-          pnl: netPnl,
-          pnlPercent: netPnlPercent,
-          reason: reason || 'manual_close'
-        }
-      });
-      
-      // Phase 8.8.3-A1: Standardized success response
-      res.json({ 
-        success: true, 
-        closedTradeId: id,
-        message: `Closed ${position.symbol} position`,
-        pnl: netPnl, 
-        pnlPercent: netPnlPercent,
-        grossPnl,
-        totalCost
-      });
+      contextBridge.broadcast({ type: 'active_trade_closed', payload: { id: req.params.id, symbol: r.symbol, reason: 'manual_stop' } });
+      return res.json({ success: true, closedTradeId: req.params.id, message: `Closed ${r.symbol} position${r.reason ? ` (${r.reason})` : ''}` });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[8.8.3-B1][CLOSE_TRADE_ERROR]', errorMessage, error);
-      res.status(500).json({ success: false, error: 'Failed to close trade', details: errorMessage });
+      console.error('[B-CLOSE-WRITER-COSTS][CLOSE_TRADE_ERROR]', errorMessage, error);
+      return res.status(500).json({ success: false, error: 'Failed to close trade', details: errorMessage });
     }
   });
 
@@ -12726,122 +12556,44 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // Phase 8.8.3-B2: Force clear all stranded trades endpoint
+  // ⛔ B-CLOSE-WRITER-COSTS P-10 (Kyle KD-17; Langston's P-10 ruling, C-3): the STRANDED CLEAR no longer writes its own
+  // record (it inserted a new row with `fees: '0'`, `slippage: '0'`). Each open position closes through the one close chain,
+  // like the manual close. A position whose open-time record is MISSING is refused by that chain (P-2) — its remedy is the
+  // restore route (P-12, `POST /active-engine/positions/:id/restore-record`), which ships in the same increment, then this
+  // clear again. Engine not running ⇒ refused with close-all's 400: start the engine, then clear (Langston C-2).
   apiRouter.post('/active-engine/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
-      const userId = req.user!.id;
-      
-      // Get all open positions
+      const status = await getActiveEngineStatus(req.user!.id);
+      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
+      const manager = getGlobalActiveEngineManager('paper');
+      if (!status.isRunning || !manager) {
+        return res.status(400).json({ success: false, error: 'Paper trading simulation not running — start the engine, then clear stranded positions from Active Trades.' });
+      }
       const positions = await storage.getActiveOpenPositions('paper');
-      
       if (positions.length === 0) {
-        // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
         return res.json({ success: true, strandedClosed: 0, clearedCount: 0, message: 'No stranded trades to clear' });
       }
-      
-      console.log(`[B2-ClearStranded] Clearing ${positions.length} stranded positions for user ${userId}`);
-      
-      // Close each position and move to trade history
       let clearedCount = 0;
-      const skippedNoPrice: string[] = []; // B-FEED-MISMATCH-FIX P3
+      const notCleared: Array<{ symbol: string; reason: string }> = [];
       for (const position of positions) {
-        try {
-          const entryPrice = parseFloat(position.avgPrice?.toString() || '0');
-          const quantity = parseFloat(position.quantity?.toString() || '0');
-          
-          // Phase 8.8.3-I6: Use getPriceWithFallback (includes 5s staleness guard + REST fallback)
-          let currentPrice = entryPrice;
-          let priceSource = 'entry_fallback';
-          let fallbackType: 'none' | 'rest_fallback' | 'entry_fallback' = 'entry_fallback';
-          const liveQuote = await livePricingAdapter.getPriceWithFallback(position.symbol, 5000);
-          if (liveQuote && liveQuote.price !== null && liveQuote.source !== 'no_reliable_price') {
-            currentPrice = liveQuote.price;
-            priceSource = liveQuote.source;
-            // P19-B8.9: one shared membership + predicate (was 5 drifted inline copies).
-            fallbackType = isRestFallbackSource(liveQuote.source) ? 'rest_fallback' : 'none';
-          } else {
-            // ⛔ B-FEED-MISMATCH-FIX P3 — NEVER THE ENTRY PRICE. With no observed price this route used to book the
-            // stranded position at its own entry (P&L 0 by construction, fees 0). It now SKIPS the position and says
-            // so; it is cleared on a later call once a price exists. (It keeps its own row-writer rather than routing
-            // through `closePosition`: a STRANDED position is one whose open trade row may be missing, and
-            // `closePosition` books P&L only onto an existing row.)
-            console.error(`[B-FEED-MISMATCH-FIX][STRANDED_CLEAR_SKIPPED] ${position.symbol} (${position.id}): no observed price — NOT cleared, not booked at entry`);
-            skippedNoPrice.push(position.symbol);
-            continue;
-          }
-          console.log(`[8.8.3-I6][STRANDED_CLEAR_LIVE_PRICE] symbol=${position.symbol} price=${currentPrice} source=${priceSource} fallbackType=${fallbackType}`);
-          
-          const pnl = (currentPrice - entryPrice) * quantity;
-          const pnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
-          
-          // Create closed trade record
-          await storage.createClosedTrade('paper', {
-            id: position.id,
-            symbol: position.symbol,
-            assetClass: position.assetClass, // B-SIZING-DEC-RESTORE 2d: as the manual close above (was the crypto_spot default)
-            strategyName: position.strategyName,
-            side: position.side,
-            quantity: position.quantity?.toString() || '0',
-            entryPrice: position.avgPrice?.toString() || '0',
-            exitPrice: currentPrice.toString(),
-            stopLoss: position.stopLoss?.toString(),
-            takeProfit: position.takeProfit?.toString(),
-            pnl: pnl.toString(),
-            pnlPercent: pnlPercent.toString(),
-            fees: '0',
-            slippage: '0',
-            openedAt: position.openedAt,
-            closedAt: new Date(),
-            closeReason: 'stranded_clear',
-            // ⛔ B-FEED-MISMATCH-FIX Step-4 BLOCKER-1 (Langston): this writer KEEPS its own row (a stranded position
-            // may have no open trade row to book onto), so it must stamp the provenance `closePosition` would have —
-            // every row it writes now has a real observed quote behind it (the entry-price arm is gone). #546 / P9.
-            exitDecisionPrice: currentPrice.toString(),
-            exitPriceProducer: liveQuote!.producer,
-            exitPriceSource: liveQuote!.source,
-            exitObservedAtMs: liveQuote!.observedAt,
-            // B-XSTOCK-FEED-SANITY P4: the book-state LABEL at the stranded clear (label only). Written
-            // ONLY when a live frame was assessed: crypto, the entry-price fallback (no frame behind the
-            // number), or a guard that did not run ⇒ NULL, re-cuttable (Langston Step-4 B2).
-            ...(await (async () => {
-              if ((position as any).assetClass !== 'xstock_spot') return {};
-              // (the entry-price fallback arm is gone — B-FEED-MISMATCH-FIX P3 skips a no-price position above)
-              const { assessBookStateNow } = await import('./asset_classes/xstock_spot/book-state-tracker.js');
-              const _bs = assessBookStateNow(position.symbol);
-              return _bs.ok ? { exitBookState: _bs.result.state, exitBookStateBasis: 'guard' } : {};
-            })()),
-            confidence: position.confidence?.toString(),
-            // P19-B8.2 (OBJ-4): carry the at-open ratio stamp (NULL stays NULL).
-            balanceRatioAtOpen: (position as any).balanceRatioAtOpen ?? null,
-            anchorBalanceAtOpen: (position as any).anchorBalanceAtOpen ?? null,
-            anchorVersionAtOpen: (position as any).anchorVersionAtOpen ?? null,
-            metadata: position.metadata
-          });
-          
-          // Delete from open positions
-          await storage.deleteActiveOpenPosition('paper', position.id);
-          clearedCount++;
-          
-          console.log(`[B2-ClearStranded] Cleared position ${position.symbol} (${position.id})`);
-        } catch (posError) {
-          console.error(`[B2-ClearStranded] Error clearing position ${position.id}:`, posError);
-        }
+        const r = await manager.closeOnePositionByOperator(position.id, 'stranded_clear');
+        if (r.status === 'closed') clearedCount++;
+        else notCleared.push({ symbol: position.symbol, reason: r.reason ?? r.status });
       }
-      
-      // Broadcast update
-      contextBridge.broadcast({
-        type: 'stranded_trades_cleared',
-        payload: { clearedCount, userId }
-      });
-      
-      // Phase 8.8.3-A3: Standardized success response (includes clearedCount for backward compatibility)
-      res.json({
-        success: true, strandedClosed: clearedCount, clearedCount, skippedNoPrice,
-        message: `Cleared ${clearedCount} stranded trades${skippedNoPrice.length ? `; ${skippedNoPrice.length} left open (no observed price): ${skippedNoPrice.join(', ')}` : ''}`,
+      contextBridge.broadcast({ type: 'stranded_trades_cleared', payload: { clearedCount, userId: req.user!.id } }); // the type it always sent
+      return res.json({
+        success: notCleared.length === 0,
+        strandedClosed: clearedCount,
+        clearedCount,
+        notCleared,
+        message: notCleared.length === 0
+          ? `Cleared ${clearedCount} stranded position(s)`
+          : `Cleared ${clearedCount}; ${notCleared.length} not cleared (${notCleared.map((n) => `${n.symbol}: ${n.reason}`).join('; ')})`,
       });
     } catch (error) {
-      console.error('[B2-ClearStranded] Error clearing stranded trades:', error);
-      res.status(500).json({ success: false, error: 'Failed to clear stranded trades' });
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[B-CLOSE-WRITER-COSTS][STRANDED_CLEAR_ERROR]', errorMessage, error);
+      return res.status(500).json({ success: false, error: 'Failed to clear stranded trades', details: errorMessage });
     }
   });
 

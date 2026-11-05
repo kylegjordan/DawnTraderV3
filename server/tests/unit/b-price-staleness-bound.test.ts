@@ -243,7 +243,10 @@ describe('P4 (8g-bis) — the stored-row tripwire on rate-limited re-serve rows'
     const force = src.match(/const isForceClose = ([^;]+);/)![1].match(/'([a-z_]+)'/g)!.map((q) => q.slice(1, -1));
     expect(force.sort()).toEqual(['guardrail', 'manual_stop', 'reset']);
     for (const f of force) expect(OPERATOR_CLOSE_REASONS.has(f)).toBe(true);
-    const union = src.match(/interface ExitCondition \{\s*type: ([^;]+);/)![1].match(/'([a-z_]+)'/g)!.map((q) => q.slice(1, -1));
+    // B-CLOSE-WRITER-COSTS P-15: the ExitCondition member list lives ONCE, in trade-close-reason.ts (EXIT_CONDITION_TYPES).
+    expect(src).toMatch(/interface ExitCondition \{[\s\S]*?type: ExitConditionType;/);
+    const { EXIT_CONDITION_TYPES } = await import('../../services/trade-close-reason');
+    const union: string[] = [...EXIT_CONDITION_TYPES];
     const decided = union.filter((t) => !force.includes(t));
     expect(decided.sort()).toEqual(['max_holding_period', 'stop_hit', 'target_hit', 'trailing_stop_hit']);
     for (const d of decided) expect(OPERATOR_CLOSE_REASONS.has(d)).toBe(false);
