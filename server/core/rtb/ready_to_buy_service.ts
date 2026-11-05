@@ -1071,6 +1071,7 @@ class ReadyToBuyService {
                 }
                 if (_rpAsk.ok) this._maybeArchivePriceShadow(mode, signal, sqeAssetClass, _rpAsk, _rpStop, _rpTarget, _refreshState, _rp.decision);
                 _rpPriced = _rpAsk.ok ? { ok: true, price: _rpAsk.ask, ageMs: _rpAsk.ageMs, source: _rpAsk.basis } : { ok: false, reason: _rpAsk.reason };
+                this._tallyPricedHour(sqeAssetClass, normalizedSymbol, _rpAsk.ok); // P7: the per-symbol record the xStock seed is read from
 
                 // ⭐ B-ENTRY-GATE (#1224) increment B, P6 (pre-audit A-4): RE-PRICE THE PLAN AT THE LIVE ASK, every priced pass.
                 // Net EV, the maker/taker choice and the worse-side window are asked AT TODAY'S PRICE, as the open will ask them;
@@ -1342,6 +1343,33 @@ class ReadyToBuyService {
    * which IS the instrument. (A cumulative since-boot counter and its accessor stood here with no reader while the accessor's
    * comment called it the Step-7 read; removed after Langston's Step-11 finding, 2026-10-12.)
    */
+  /**
+   * B-ENTRY-GATE (#1224) P7 — priced vs unpriced refresh passes per (class, symbol), emitted ONCE per UTC hour as one line
+   * per class (`[B-ENTRY-GATE][P7][PRICED_SHARE_HOUR]`), then reset. This is the object the xStock promotion-age seed is
+   * read from (`Langston Design Asks/B_ENTRY_GATE_P7_XSTOCK_PREDICTION.md`): the row columns hold only the latest state,
+   * not a share. One line per class per hour, so it cannot become a flood.
+   */
+  private _pricedHour: { hourKey: string; counts: Map<string, { priced: number; unpriced: number }> } = { hourKey: '', counts: new Map() };
+  private _tallyPricedHour(cls: string, symbol: string, priced: boolean): void {
+    const hourKey = new Date().toISOString().slice(0, 13);
+    if (this._pricedHour.hourKey !== hourKey) {
+      if (this._pricedHour.hourKey) {
+        const byClass = new Map<string, string[]>();
+        for (const [k, v] of this._pricedHour.counts) {
+          const [c, sym] = k.split('|');
+          if (!byClass.has(c)) byClass.set(c, []);
+          byClass.get(c)!.push(`${sym}=${v.priced}/${v.unpriced}`);
+        }
+        for (const [c, parts] of byClass) console.log(`[B-ENTRY-GATE][P7][PRICED_SHARE_HOUR] hour=${this._pricedHour.hourKey}Z class=${c} priced/unpriced ${parts.join(' ')}`);
+      }
+      this._pricedHour = { hourKey, counts: new Map() };
+    }
+    const k = `${cls}|${symbol}`;
+    const v = this._pricedHour.counts.get(k) ?? { priced: 0, unpriced: 0 };
+    if (priced) v.priced++; else v.unpriced++;
+    this._pricedHour.counts.set(k, v);
+  }
+
   private _tallyPriceOutcome(pass: Map<string, number>, cls: string, d: RetirementDecision): void {
     const key = d.action === 'inside' ? `${cls}:inside` : `${cls}:${d.action}:${d.reason}`;
     pass.set(key, (pass.get(key) ?? 0) + 1);
