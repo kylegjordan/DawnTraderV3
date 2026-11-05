@@ -21,6 +21,8 @@
 
 **⚠️ Rows 5-6 are a first look over ~90 seconds, NOT the pre-registered first-full-US-session read** (14:30-21:00Z today). PASS or FAIL is decided only on that session.
 
+**Pre-session look, 2026-11-05 14:20Z (NOT the pre-registered session read):** (b-observe) xStock PAPER opens since 05:36:13Z = **7** (`closed_trades.strategy_name`): vwap_pullback 3, strong_bull_trend **2** (11:48Z, 12:44Z), sma_trend_ride 1, morning_star 1 — below both INVESTIGATE lines (> 10 paper opens; > 50 % of xStock paper opens). xStock VTS admitted rows over the same window: strong_bull_trend **88 of 111** (79 %); the VTS is not the trigger's object, but the share is recorded for the session read.
+
 **Restart inside the observation window (recorded, not a confound for the session read):** OLD Claude deployed `c0214c9736ee86d7523fd33319ad4c935a929b80` at 2026-11-05T08:08:30Z (restart 675 → 676). This batch's runtime content in it vs `8636040255` is `686d62c9e` only (comments). It lands before the 14:30Z session, so the session read runs on one build.
 
 ## Still to read (pre-registered)
