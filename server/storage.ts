@@ -191,6 +191,12 @@ import {
 import { db } from "./db";
 import { eq, desc, asc, and, gte, gt, lte, inArray, sql, isNotNull, isNull } from "drizzle-orm";
 
+/** B-CLOSE-WRITER-COSTS P-1: the result of the keyed open-record lookup (exactly one, none, or several by id). */
+export type OpenTradeRecordLookup =
+  | { status: 'one'; record: ClosedTrade }
+  | { status: 'none' }
+  | { status: 'many'; ids: string[] };
+
 export interface IStorage {
   // User methods
   getUser(id: string): Promise<User | undefined>;
@@ -560,7 +566,7 @@ export interface IStorage {
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ trades: ClosedTrade[]; totalCount: number }>;
-  getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]>;
+  findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup>;
   getClosedTradesGlobal(mode: TradingMode, filters?: { limit?: number; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>; // Phase 27.F.14.B: Global-per-mode query for LATTI
   deleteClosedTrade(mode: TradingMode, id: string): Promise<void>; // B-PROMOTION-RACE-FIX (#508): single-row delete for the dup-race orphan compensation
 
@@ -3607,16 +3613,28 @@ export class DatabaseStorage implements IStorage {
     return rows.map(r => parseFloat(String(r.pnl ?? '0')) || 0);
   }
 
-  async getClosedTradesBySymbol(mode: TradingMode, symbol: string): Promise<ClosedTrade[]> {
-    // Phase 27.F.15.B.2: Global query, mode-based only
-    // P19-B7.2c: never_filled rows excluded by default (typed guard — see getClosedTrades).
-    return await db.select()
+  /**
+   * B-CLOSE-WRITER-COSTS P-1 (KD-17, KD-24): the ONE open trade record a closing position finishes, found by exact
+   * symbol + MODE + asset class with `closed_at IS NULL`. Replaces `getClosedTradesBySymbol` (its comment said
+   * "mode-based" while the query was global; the caller then took `find(openedAt && !closedAt)`, which picks the
+   * newest of several and can cross modes and classes). Never guesses: exactly one ⇒ `one`; zero ⇒ `none`; two or
+   * more ⇒ `many` with their ids. The class is REQUIRED (a nullable class would silently widen the match).
+   * (`closed_trades.opened_at` is NOT NULL, so `closed_at IS NULL` alone is the faithful translation of the old
+   * predicate; a `never_filled` row always carries `closed_at`, so it can never match here.)
+   */
+  async findOpenTradeRecord(mode: TradingMode, symbol: string, assetClass: string): Promise<OpenTradeRecordLookup> {
+    const rows = await db.select()
       .from(closedTradesTable)
       .where(and(
+        eq(closedTradesTable.mode, mode),
         eq(closedTradesTable.symbol, symbol),
-        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'`
+        eq(closedTradesTable.assetClass, assetClass),
+        isNull(closedTradesTable.closedAt),
       ))
-      .orderBy(desc(closedTradesTable.openedAt));
+      .limit(3);
+    if (rows.length === 1) return { status: 'one', record: rows[0] };
+    if (rows.length === 0) return { status: 'none' };
+    return { status: 'many', ids: rows.map((r) => r.id) };
   }
 
   /**

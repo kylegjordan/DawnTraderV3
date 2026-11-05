@@ -4605,6 +4605,35 @@ export class ActiveExecutionEngine {
       // after the walk it reports on, so the instrument never sits inside the interval it measures.
       console.log(`[B-EXIT-BOOK-AGE-STAMP][FILL_DEPTH_AGE] symbol=${position.symbol} class=${_closeClass ?? 'none'} ageMs=${_fillDepthAgeMs ?? 'null'} warmth=${_fillBookWarmth ?? 'null'} arm=${_fillArm}`);
     }
+    // ⛔ B-CLOSE-WRITER-COSTS P-1/P-2 (KD-17 "never drop a trade", KD-24 "modes are independent"): the open trade
+    // record this close finishes is found HERE, by exact symbol + mode + asset class, BEFORE the close is committed to.
+    // Not exactly one ⇒ the position is KEPT (never deleted without its record) and a critical alert names it; the
+    // operator repair is the restore route (P-12). This replaces the old close-anyway-and-log path (`CLOSE_NO_TRADE_ROW`).
+    const _recClass = asValidAssetClass((position as any).assetClass);
+    const _rec = _recClass ? await storage.findOpenTradeRecord(this.mode, position.symbol, _recClass) : null;
+    if (!_rec || _rec.status !== 'one') {
+      const _why = !_recClass ? `the position has no valid asset class (${String((position as any).assetClass)})`
+        : _rec!.status === 'none' ? 'no open trade record matches its symbol, mode and asset class'
+        : `${(_rec as { ids: string[] }).ids.length} open trade records match (${(_rec as { ids: string[] }).ids.join(', ')})`;
+      console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED:${this.mode}] ${position.symbol} pos=${positionId}: ${_why} — position KEPT, not closed`);
+      try {
+        const { addAlert } = await import('./system-alerts.js');
+        await addAlert({
+          triggers_at: new Date(),
+          category: 'breakage',
+          severity: 'critical',
+          title: `Position ${position.symbol} cannot close: its trade record is not resolvable`,
+          body: `The ${this.mode} position ${positionId} in ${position.symbol} was due to close, but ${_why}. The position is `
+            + `kept open (a close must never drop its trade record, KD-17). Repair the record (the restore route) or `
+            + `investigate the duplicate, then the next close completes. B-CLOSE-WRITER-COSTS P-2. DISPOSITION: RESOLVE, do not ACK.`,
+          dedupe_key: `close-record-unresolved-${this.mode}-${position.symbol}`,
+        });
+      } catch (alertErr) {
+        console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED] addAlert failed:`, alertErr);
+      }
+      return;
+    }
+    const trade = _rec.record;
     this._closeRefusalStreak.delete(positionId);
 
     // Get entry costs from position (persisted at entry time)
@@ -4781,24 +4810,15 @@ export class ActiveExecutionEngine {
       );
     }
 
-    // Find the corresponding trade record
-    const trades = await storage.getClosedTradesBySymbol(this.mode,  position.symbol);
-    const trade = trades.find(t => t.openedAt && !t.closedAt);
-
-    // ★ #620: the PERSISTED net, hoisted to this scope on purpose. The write below lives inside
-    // `if (trade)` while the reconciliation call sits OUTSIDE it, so a const declared in the block
-    // is NOT in scope at the call — measured, tsc +2 on the first attempt. Stays `undefined` when
-    // no trade row was found, which the diagnostic reports as "not checked" rather than as a pass.
+    // ★ #620: the PERSISTED net, hoisted to this scope on purpose. The write below lives inside a block
+    // while the reconciliation call sits OUTSIDE it, so a const declared in the block is NOT in scope at
+    // the call — measured, tsc +2 on the first attempt. Stays `undefined` when the write returns a null net,
+    // which the diagnostic reports as "not checked" rather than as a pass.
     let _persistedNetPnl: number | undefined;
 
-    // ⛔⛔ row `8a-P1` BLOCKER-2 (Langston, Step 4): HOISTED ABOVE `if (trade)` FOR THE SAME REASON
-    // `_persistedNetPnl` IS. `trade` is `trades.find(t => t.openedAt && !t.closedAt)` — with TWO
-    // concurrent positions on one symbol the second close finds NO open trade row, and inside the
-    // block the accumulator would be neither carried nor evicted: the census silently dropped AND
-    // the entry surviving for ever, which the eviction comment three lines down says can never
-    // happen. ⇒ **read here, evict AFTER the write resolves, and SAY SO when there was no row** —
-    // because a closed crypto row with no `ladderShadow` is otherwise indistinguishable from one
-    // that never accumulated, which is `#546` inside the batch whose only product is the census.
+    // row `8a-P1`: the accumulator is read here and evicted in the `finally` below, after the write resolves (or
+    // throws). Since B-CLOSE-WRITER-COSTS the record is always resolved before this point (the close refuses
+    // otherwise), so the old "no trade row" arm of the eviction is gone; the eviction still runs on a throw.
     const _lsAcc = _ladderShadow.get(position.id);
 
     // ⛔⛔ `try/finally` AROUND THE WHOLE BLOCK, NOT `try/catch` — THE THROW STILL PROPAGATES.
@@ -4808,7 +4828,7 @@ export class ActiveExecutionEngine {
     // unchanged exposure rather than a regression, but the comment said "WHETHER OR NOT" and the
     // throw path falsified it. ⇒ MADE TRUE STRUCTURALLY rather than narrowed in prose.
     try {
-    if (trade) {
+    { // B-CLOSE-WRITER-COSTS P-3: was `if (trade)` — the record is now always resolved above, so the guard was tautological.
       // B65.2: read the final trailing-engine state for this symbol so the
       // closed-trade row preserves whether the trade ended in moonbag mode.
       // If no state exists (trade opened before the engine started tracking
@@ -5036,22 +5056,16 @@ export class ActiveExecutionEngine {
       }
     }
     } finally {
-    // ── row `8a-P1`: EVICT THE ACCUMULATOR — AFTER the write above has resolved, and WHETHER OR
-    // NOT a trade row was found (BLOCKER-2). A surviving entry is a SOURCE, which this row's rule
-    // forbids; and the no-trade-row case is LOGGED rather than silent, because a closed row with
-    // no `ladderShadow` must be tellable from one that never accumulated.
+    // ── row `8a-P1`: EVICT THE ACCUMULATOR — AFTER the write above has resolved, or thrown (BLOCKER-2). A surviving
+    // entry is a SOURCE, which this row's rule forbids. (Since B-CLOSE-WRITER-COSTS a close reaches this point only
+    // with its one trade record resolved — otherwise it is refused and the position kept — so the old no-trade-row
+    // log had no case left and was removed.)
     if (_lsAcc) {
-      if (!trade) {
-        console.warn(
-          `[8a-P1][LADDER_NO_TRADE_ROW] ${position.symbol}: accumulator present (walks=${_lsAcc.walks}) ` +
-          `but no open trade row to carry it onto — census DROPPED for this close, entry evicted.`,
-        );
-      }
       _ladderShadow.delete(position.id);
     }
     // ── row 2 increment A, P5 (Langston Step 4 gate 2 C-1): evict the refusal tally, the near-miss signature and its
-    // accumulator HERE, in the same `finally` as the ladder accumulator and for the same reason — whether or not a trade
-    // row was found and whether or not the write threw. C-2: a non-empty accumulator is FLUSHED to the log first.
+    // accumulator HERE, in the same `finally` as the ladder accumulator and for the same reason — whether or not the
+    // write threw. C-2: a non-empty accumulator is FLUSHED to the log first.
     {
       const _accC = this._riMissAcc.get(position.id);
       if (_accC && _accC.n > 0) {
@@ -5159,29 +5173,6 @@ export class ActiveExecutionEngine {
       clearTrailingState(`${position.id}:fg2bid`);
     } catch (err) {
       console.error(`[B65.2][TEC] Failed to clear trailing state for positionId=${position.id} symbol=${position.symbol}:`, err);
-    }
-
-    // ⛔ B-FEED-MISMATCH-FIX P3 (Langston Step-2 finding on close-all): a position whose open trade row
-    // cannot be found is still closed and deleted here — but NOT SILENTLY. With close-all now routed through
-    // this method, this is the only place such a deletion can happen, so it is made loud: a log line AND an
-    // alert naming the position, since no `closed_trades` row will carry its P&L.
-    if (!trade) {
-      console.error(`[B-FEED-MISMATCH-FIX][CLOSE_NO_TRADE_ROW] ${position.symbol} pos=${positionId}: no open trade row — position deleted with NO closed_trades row (exit ${actualExitPrice})`);
-      try {
-        const { addAlert } = await import('./system-alerts.js');
-        await addAlert({
-          triggers_at: new Date(),
-          category: 'breakage',
-          severity: 'warning',
-          title: `Position ${position.symbol} closed with no trade row — no P&L recorded`,
-          body: `The ${this.mode} position ${positionId} in ${position.symbol} was closed at ${actualExitPrice}, but no open `
-            + `closed_trades row matched it, so its P&L is recorded nowhere. Investigate how the position and its trade row `
-            + `diverged. B-FEED-MISMATCH-FIX P3. DISPOSITION: RESOLVE, do not ACK.`,
-          dedupe_key: `close-no-trade-row-${this.mode}-${position.symbol}`,
-        });
-      } catch (alertErr) {
-        console.error(`[B-FEED-MISMATCH-FIX][CLOSE_NO_TRADE_ROW] addAlert failed:`, alertErr);
-      }
     }
 
     // Delete open position with error handling for AJ19-B

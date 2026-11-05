@@ -34,7 +34,7 @@ vi.mock('../../storage', async (orig) => {
         if (prop === 'getActiveOpenPositions') return vi.fn(async () => h.position ? [h.position] : []);
         if (prop === 'getActiveOpenPosition') return vi.fn(async (_mode: string, id: string) => h.position?.id === id ? h.position : null);
         if (prop === 'updateActiveOpenPosition') return h.updateActiveOpenPosition;
-        if (prop === 'getClosedTradesBySymbol') return vi.fn(async () => [{ id: 'trade-policy', openedAt: new Date(), closedAt: null, metadata: {} }]);
+        if (prop === 'findOpenTradeRecord') return vi.fn(async () => ({ status: 'one', record: { id: 'trade-policy', openedAt: new Date(), closedAt: null, metadata: {} } }));
         if (prop === 'updateClosedTrade') return h.updateClosedTrade;
         if (prop === 'deleteActiveOpenPosition') return h.deleteActiveOpenPosition;
         if (prop === 'createActiveTradeLog') return h.createActiveTradeLog;

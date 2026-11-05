@@ -1457,3 +1457,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **LEFT INTENTIONALLY (other senses of "status board", so a later grep is not read as a missed sweep):** `PHASE_19_PLAN.md` §1 (a section titled STATUS BOARD); `scripts/inventory/draft.py`, `decisions.json`, `manual_extra.json`; `1-system-manual/pm/reviews/2026-11-04_sweep_data/*.txt` (two files) — plan-row metadata naming the old item.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/<name>.20261105-B-STATUS-BOARD-RETIRE.removed` for each of the five files (verbatim from the blob).
 **COMMIT:** this entry's commit. **DEPLOY:** with the joint deploy of the head after 2026-11-07T13:03:42Z (nothing above `0f4835b5a` deploys before it).
+
+## 2026-11-05 — the guessing trade-record lookup and the close-anyway path — B-CLOSE-WRITER-COSTS P-1/P-3 (KD-17, KD-24), CC-A
+| removed | where (pre-removal, at `665daf3f1`) | what it was |
+|---|---|---|
+| `getClosedTradesBySymbol(mode, symbol)` + its `IStorage` entry | `server/storage.ts:3610` | every non-`never_filled` row for a symbol across ALL modes and classes (its comment said "mode-based"; the query never filtered `mode`); the close then took `find(openedAt && !closedAt)` — the newest of several, possibly another mode's or class's |
+| the `if (!trade)` close-anyway block (`CLOSE_NO_TRADE_ROW` log + `close-no-trade-row-<mode>-<symbol>` warning alert) | `server/services/active-execution-engine.ts:5164-5185` | deleted the position with NO trade record carrying its P&L, and said so |
+| the `LADDER_NO_TRADE_ROW` log arm in the `finally` | `active-execution-engine.ts:5044-5049` | logged the ladder census dropped when no trade row was found |
+| the `if (trade)` guard on the persist block | `active-execution-engine.ts` (the persist block) | became a bare block: the record is now always resolved before it |
+
+**WHY:** KD-17 (never drop a trade) and KD-24 (modes are independent). The close now finds its ONE record by symbol + mode + asset class (`findOpenTradeRecord`) BEFORE it commits, and refuses — keeping the position and raising a critical alert (`close-record-unresolved-<mode>-<symbol>`) — when there is none or more than one. Every case the removed code handled is now that refusal. Pre-audit P-1/P-2/P-3 (Langston PROCEED r7).
+**BLAST RADIUS (§9.5(a-ii)):** `getClosedTradesBySymbol` had ONE caller (the close, replaced). The removed block WROTE one alert key; `close-no-trade-row` has 0 code readers (`git grep` at the commit: scope/measurement documents only) and **0 alert rows** on that key across the paper queue 2026-09-19 → 2026-11-04 (`B_CLOSE_WRITER_COSTS_KD17_MEASUREMENT_2026-11-04.md`; Langston's read 2,816 rows / 960 keys, control 16 active rows on other keys). One TEST READER was found by the census and not by the plan: `b-price-side-8a-p1-exit-fence.test.ts` asserted `LADDER_NO_TRADE_ROW` present and anchored its block extraction on `if (trade) {` — re-pointed (the extraction anchors on the bare block's marker; the finally's identity marker is the close's refusal-tally eviction; the arm's absence is asserted). `tsc` baseline 329 = 329.
+**ARCHIVE:** none of these is a file; git history at `665daf3f1` is the archive.
+**COMMIT:** this entry's commit. **DEPLOY:** after Langston's Step 4, CI 4/4, and never before the joint deploy of the head after 2026-11-07T13:03:42Z.

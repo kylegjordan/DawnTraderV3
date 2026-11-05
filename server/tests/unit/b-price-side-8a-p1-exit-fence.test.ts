@@ -244,9 +244,12 @@ describe('row 8a-P1 — the ladder DECIDES NOTHING', () => {
  * ⇒ FOURTH instance of presence-is-not-position in this file, one level up: position relative to a
  *   BLOCK, not to a string.
  */
+// B-CLOSE-WRITER-COSTS P-3: the `if (trade)` guard became a bare block (the record is resolved before it, or the close
+// is refused), so the extraction anchors on that block's own marker comment. Same block, same brace walk.
+const PERSIST_BLOCK_ANCHOR = '    { // B-CLOSE-WRITER-COSTS P-3: was `if (trade)`';
 function ifTradeBlock(src: string): string {
-  const at = src.indexOf('    if (trade) {');
-  if (at === -1) throw new Error('if (trade) block not found');
+  const at = src.indexOf(PERSIST_BLOCK_ANCHOR);
+  if (at === -1) throw new Error('persist block (was if (trade)) not found');
   const braceStart = src.indexOf('{', at);
   let depth = 0;
   for (let j = braceStart; j < src.length; j++) {
@@ -331,20 +334,22 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     expect(src).toContain('_ladderShadow.delete(position.id)');
     // ⛔ THE ASSERTION THAT CARRIES THE BLOCKER: not in the block at all.
     expect(block).not.toContain('_ladderShadow.delete');
-    // And the no-trade-row case is SAID, not silent — asserted in the eviction's own scope rather
-    // than anywhere in 5,500 lines, which is what `closeBody`-as-whole-file used to mean.
-    expect(src).toContain('LADDER_NO_TRADE_ROW');
+    // (The no-trade-row log, `LADDER_NO_TRADE_ROW`, was removed by B-CLOSE-WRITER-COSTS: a close without its one record
+    // is now refused before this point and the position kept, so the case it logged no longer reaches here.)
+    expect(src).not.toContain('LADDER_NO_TRADE_ROW');
     // ⛔ AND IT RUNS EVEN IF THE PERSIST THROWS (Langston §13): the block sits in a `try` whose
     // `finally` holds the eviction, so "WHETHER OR NOT a trade row was found" is now structurally
     // true rather than a claim the throw path falsified.
     const fin = finallyBlock(src, 'const _lsAcc = _ladderShadow.get(position.id);');
     expect(fin).toContain('_ladderShadow.delete(position.id)');
-    // ⭐ AND THAT IT IS **THIS** FINALLY — the unanchored version grabbed `monitoringCycle`'s.
-    expect(fin).toContain('LADDER_NO_TRADE_ROW');
+    // ⭐ AND THAT IT IS **THIS** FINALLY — the unanchored version grabbed `monitoringCycle`'s. (Identity marker moved
+    // from the removed `LADDER_NO_TRADE_ROW` to the close's refusal-tally eviction, which shares this `finally` — code,
+    // because `code()` strips comments. B-CLOSE-WRITER-COSTS.)
+    expect(fin).toContain('this._riMissAcc.get(position.id)');
     // ⛔ AND AN **UPPER** BOUND, because the identity assertion alone cannot see an OVER-RUN
     // (Langston, at approval). `finallyBlock`'s brace counter is naive about braces inside string
     // and template literals — correct for THIS block today, but a swallowed extension would still
-    // contain `LADDER_NO_TRADE_ROW`, and a delete moved BELOW the block would then read as inside.
+    // contain the identity marker, and a delete moved BELOW the block would then read as inside.
     // `regimeAtOpen` (`:3438`) is the first declaration past the block: directional, no budget.
     expect(fin).not.toContain('regimeAtOpen');
   });
@@ -366,7 +371,7 @@ describe('row 8a-P1 — the record actually rides onto the closed row', () => {
     expect(block.length).toBeGreaterThan(2000);            // it really is the big block
     expect(block.length).toBeLessThan(code(AEE).length);    // and not the whole file
     expect(block).toContain('_carry.ladderShadow');         // the CARRY is inside it
-    const seeded = ifTradeBlock(['    if (trade) {', '  _ladderShadow.delete(position.id);', '    }'].join(String.fromCharCode(10)));
+    const seeded = ifTradeBlock([PERSIST_BLOCK_ANCHOR + ' x', '  _ladderShadow.delete(position.id);', '    }'].join(String.fromCharCode(10)));
     expect(seeded).toContain('_ladderShadow.delete');       // the matcher WOULD catch it
   });
 

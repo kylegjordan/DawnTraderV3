@@ -7,8 +7,8 @@
 //   A-4 — the signed predicate is exercised on the measured rows: the three harmful stale walks refuse, the
 //        harmless ones and a deep crypto walk (−3.79 %) do not.
 //
-// THE PERSISTENCE MARKER: `closePosition`'s write block opens with `storage.getClosedTradesBySymbol` (the open trade-row
-// lookup), after the fill, the witness and the gate. A refused close must never reach it; an accepted one always does.
+// THE PERSISTENCE MARKER: `closePosition`'s write block opens with `storage.findOpenTradeRecord` (the keyed open trade-record
+// lookup, B-CLOSE-WRITER-COSTS P-1), after the fill, the witness and the gate. A refused close must never reach it; an accepted one always does.
 // (The accepted path then runs far past this unit's mocks — learning capture, archives — so it is allowed to throw
 // AFTER the marker; the marker, not the delete, is what these tests assert.)
 //
@@ -25,7 +25,7 @@ const h = vi.hoisted(() => ({
   getActiveOpenPosition: vi.fn(),
   updateClosedTrade: vi.fn(async () => ({})),
   deleteActiveOpenPosition: vi.fn(async () => undefined),
-  getClosedTradesBySymbol: vi.fn(async () => []),
+  findOpenTradeRecord: vi.fn(async () => ({ status: 'one', record: { id: 't-1', openedAt: new Date(), closedAt: null, metadata: {} } })),
   getDepthSnapshot: vi.fn(),
   getTickerWitness: vi.fn(),
   resolveFillDepthGateConfig: vi.fn(),
@@ -45,7 +45,7 @@ vi.mock('../../storage', async (orig) => {
         if (prop === 'getActiveOpenPosition') return h.getActiveOpenPosition;
         if (prop === 'updateClosedTrade') return h.updateClosedTrade;
         if (prop === 'deleteActiveOpenPosition') return h.deleteActiveOpenPosition;
-        if (prop === 'getClosedTradesBySymbol') return h.getClosedTradesBySymbol;
+        if (prop === 'findOpenTradeRecord') return h.findOpenTradeRecord;
         return (target as any)[prop];
       },
     }),
@@ -133,7 +133,7 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));          // 19.7 s > 15 s warmth
     h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 94.88, capturedAtMs: Date.now() });
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {});
-    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
     expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
     expect(eng._closeRefusalStreak.get('pos-CTVA/USD')).toBe(1);
@@ -145,14 +145,14 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));
     h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 94.88, capturedAtMs: Date.now() });
     for (let i = 0; i < 2; i++) await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {});
-    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
     expect(h.addAlert).not.toHaveBeenCalled();
     await proto.closePosition.call(eng, 'pos-CTVA/USD', 90, STOP, 'test', {}).catch(() => {});
-    // Exactly ONE refusal alert. (The mock returns no trade row, so the accepted close ALSO raises the separate
-    // CLOSE_NO_TRADE_ROW alert — correct behaviour, a different alert; count only the refusal one.)
+    // Exactly ONE refusal alert. (After the reset the lookup mock returns nothing, so the accepted close ALSO raises the
+    // separate CLOSE_RECORD_UNRESOLVED alert — correct behaviour, a different alert; count only the refusal one.)
     const refusalAlerts = h.addAlert.mock.calls.filter((c) => String((c[0] as { title?: string }).title).includes('Close refused'));
     expect(refusalAlerts).toHaveLength(1);
-    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();                  // it yielded and proceeded to persist
+    expect(h.findOpenTradeRecord).toHaveBeenCalled();                  // it yielded and proceeded to persist
     expect(eng._closeRefusalStreak.has('pos-CTVA/USD')).toBe(false);       // cleared once the gate passed
   });
 
@@ -163,7 +163,7 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getTickerWitness.mockResolvedValue({ bid: 100, ask: 100.1, capturedAtMs: Date.now() });
     await proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {}).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-WLD/USD')).toBe(false);
-    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).toHaveBeenCalled();
   });
 
   it('4. ★ the MAKER leg still reads the witness — branch reachability, not text order (C4, BLOCKER-4)', async () => {
@@ -181,7 +181,7 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getDepthSnapshot.mockResolvedValue(null);
     h.getTickerWitness.mockResolvedValue(null);
     await proto.closePosition.call(eng, 'pos-BTC/USD', 100, STOP, 'test', {});
-    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
     expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
     expect(eng._closeRefusalStreak.get('pos-BTC/USD')).toBe(1);
@@ -194,7 +194,7 @@ describe('B-FEED-MISMATCH-FIX — closePosition at runtime', () => {
     h.getTickerWitness.mockResolvedValue(null);
     await proto.closePosition.call(eng, 'pos-BTC/USD', 95, { type: 'manual_stop', price: 95, reason: 't' }, 'test', { flatten: true }).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-BTC/USD')).toBe(false);
-    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).toHaveBeenCalled();
   });
 });
 
@@ -214,7 +214,7 @@ describe('B-CRYPTO-FEED-WATCHDOG (#1232, P7) — the not-warm gate grades a cryp
     h.getTickerWitness.mockResolvedValue(frozenWitness());
     await proto.closePosition.call(eng, 'pos-DOS/USD', 90, STOP, 'test', {}).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-DOS/USD')).toBe(false);
-    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();                 // proceeded to persist
+    expect(h.findOpenTradeRecord).toHaveBeenCalled();                 // proceeded to persist
     const warned = (console.warn as any).mock.calls.map((c: unknown[]) => String(c[0]));
     expect(warned.some((w: string) => w.includes('[WITNESS_UNVOUCHED]') && w.includes('reason=connection_not_live'))).toBe(true);
   });
@@ -228,7 +228,7 @@ describe('B-CRYPTO-FEED-WATCHDOG (#1232, P7) — the not-warm gate grades a cryp
     h.getDepthSnapshot.mockResolvedValue(snap(89.59, 19_700));
     h.getTickerWitness.mockResolvedValue(freshWitness());
     await proto.closePosition.call(eng, 'pos-DOS/USD', 90, STOP, 'test', {});
-    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
     expect(eng._closeRefusalStreak.get('pos-DOS/USD')).toBe(1);
   });
@@ -243,7 +243,7 @@ describe('B-CRYPTO-FEED-WATCHDOG (#1232, P7) — the not-warm gate grades a cryp
     h.getTickerWitness.mockResolvedValue({ bid: 81.26, ask: 81.5, capturedAtMs: Date.now() - 40 * 3_600_000 });
     await proto.closePosition.call(eng, 'pos-GLMR/USD', 90, STOP, 'test', {}).catch(() => {});
     expect(eng._closeRefusalStreak.has('pos-GLMR/USD')).toBe(false);
-    expect(h.getClosedTradesBySymbol).toHaveBeenCalled();
+    expect(h.findOpenTradeRecord).toHaveBeenCalled();
   });
 });
 
@@ -255,7 +255,7 @@ describe('B-FEED-MISMATCH-FIX Step-4 blockers', () => {
     h.getDepthSnapshot.mockResolvedValue(snap(95, 100));
     h.getTickerWitness.mockResolvedValue(null);
     await proto.closePosition.call(eng, 'pos-BTC/USD', 95, { type: 'manual_stop', price: 95, reason: 't' }, 'test', { flatten: true });
-    expect(h.getClosedTradesBySymbol).not.toHaveBeenCalled();             // refused, nothing persisted
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();             // refused, nothing persisted
     expect(h.addAlert).toHaveBeenCalledTimes(1);                           // ...and NOT silent at streak 1
     expect(String((h.addAlert.mock.calls[0][0] as { title: string }).title)).toMatch(/FLATTEN left BTC\/USD OPEN/);
   });
@@ -288,5 +288,62 @@ describe('B-FEED-MISMATCH-FIX — PaperOrderPlacer.closeOrder cold arms', () => 
   it('no depth config → rejected no_depth_config (never a zero-slippage exit)', async () => {
     const r = await placer.closeOrder({ ...base, bookBids: [{ price: 99, qty: 5 }] });
     expect(r).toMatchObject({ status: 'rejected', code: 'no_depth_config' });
+  });
+});
+
+// B-CLOSE-WRITER-COSTS P-1/P-2 (KD-17, KD-24): the close finds its ONE open trade record by symbol + mode + asset class,
+// and refuses rather than guesses. POSITIVE CONTROLS (mutation-proved while writing): removing the refusal's `return`
+// makes R-none, R-many and R-class THROW (the write block dereferences a missing record), failing `resolves`; dropping the
+// asset-class argument from the lookup fails the `toHaveBeenCalledWith` in R-one.
+describe('B-CLOSE-WRITER-COSTS — the close refuses when its trade record does not resolve', () => {
+  const warm = () => {
+    h.getActiveOpenPosition.mockResolvedValue(position('WLD/USD', 'crypto_spot'));
+    h.getDepthSnapshot.mockResolvedValue(snap(100, 0));
+    h.getTickerWitness.mockResolvedValue({ bid: 100, ask: 100.1, capturedAtMs: Date.now() });
+  };
+  const unresolved = () => h.addAlert.mock.calls.map((c) => c[0] as Record<string, unknown>).filter((a) => String(a.title).includes('cannot close'));
+
+  for (const [label, result] of [['none', { status: 'none' }], ['many', { status: 'many', ids: ['t-1', 't-2'] }]] as const) {
+    it(`R-${label}: the position is KEPT, nothing is written, one critical alert names it`, async () => {
+      const eng = fakeEngine();
+      warm();
+      h.findOpenTradeRecord.mockResolvedValue(result as never);
+      await expect(proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {})).resolves.toBeUndefined();
+      expect(h.updateClosedTrade).not.toHaveBeenCalled();
+      expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
+      const a = unresolved();
+      expect(a).toHaveLength(1);
+      expect(a[0].severity).toBe('critical');
+      expect(a[0].dedupe_key).toBe('close-record-unresolved-paper-WLD/USD');
+      if (label === 'many') expect(String(a[0].body)).toContain('t-1, t-2');
+    });
+  }
+
+  it('R-flatten: a stopped-engine FLATTEN is refused the same way — the flatten exemption does not reach the record (P-2)', async () => {
+    const eng = fakeEngine();
+    warm();
+    h.findOpenTradeRecord.mockResolvedValue({ status: 'none' } as never);
+    await expect(proto.closePosition.call(eng, 'pos-WLD/USD', 100, { type: 'manual_stop', price: 100, reason: 't' }, 'test', { flatten: true })).resolves.toBeUndefined();
+    expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
+    expect(unresolved()).toHaveLength(1);
+  });
+
+  it('R-class: a position with no valid asset class is refused WITHOUT a lookup (a missing class never widens the match)', async () => {
+    const eng = fakeEngine();
+    warm();
+    h.getActiveOpenPosition.mockResolvedValue(position('WLD/USD', 'not_a_class'));
+    await expect(proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {})).resolves.toBeUndefined();
+    expect(h.findOpenTradeRecord).not.toHaveBeenCalled();
+    expect(h.deleteActiveOpenPosition).not.toHaveBeenCalled();
+    expect(unresolved()).toHaveLength(1);
+  });
+
+  it('R-one: exactly one record ⇒ looked up by mode + symbol + class, and no refusal alert', async () => {
+    const eng = fakeEngine();
+    warm();
+    h.findOpenTradeRecord.mockResolvedValue({ status: 'one', record: { id: 't-1', openedAt: new Date(), closedAt: null, metadata: {} } } as never);
+    await proto.closePosition.call(eng, 'pos-WLD/USD', 100, STOP, 'test', {}).catch(() => {});
+    expect(h.findOpenTradeRecord).toHaveBeenCalledWith('paper', 'WLD/USD', 'crypto_spot');
+    expect(unresolved()).toHaveLength(0);
   });
 });
