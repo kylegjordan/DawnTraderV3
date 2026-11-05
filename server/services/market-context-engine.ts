@@ -274,9 +274,10 @@ export class MarketContextEngine {
   // Pure function over OHLC + BTC reference. BTC reference fetched at emit
   // hook from ohlcCache (cache read, not network — microsecond latency per
   // Langston cc-inbox #884 D.1). No prefetch into MCE state at v1.
-  // Per-class map populated by refreshPairCorrelationConfig, read via getPairCorrelationConfigForClass(assetClass).
-  // (The legacy crypto-only field + getCurrentPairCorrelationConfig() were removed by B-XSTOCK-CORRELATION-COLLECT:
-  // their only callers were the two `?? getCurrentPairCorrelationConfig()` fallbacks that batch removed.)
+  // B79.0n.CONFIDENCE-CHAIN: legacy field = crypto_spot config; per-class
+  // map populated by refreshPairCorrelationConfig + read via
+  // getPairCorrelationConfigForClass(assetClass).
+  private pairCorrelationConfig: PairCorrelationConfig | null = null;
   private pairCorrelationConfigByClass: ReadonlyMap<AssetClass, PairCorrelationConfig> = new Map();
 
   // ─── B68.1: multi-TF agreement config block ──────────────────────────────
@@ -331,6 +332,7 @@ export class MarketContextEngine {
     this.regimeAgeConfig = null;
     this.pathBSustainabilityConfig = null;
     this.volumeRegimeConfig = null;
+    this.pairCorrelationConfig = null;
     this.multiTfAgreementConfig = null;
     this.firstRefreshPending = true;
     console.log('[Phase14][MCE] Stopped, cache cleared');
@@ -799,7 +801,7 @@ export class MarketContextEngine {
       const RES_KEY = { exchange: '*', assetClass: ac, strategy: '*', regime: '*' } as any;
       const [
         lookbackBars, btcRefSymbol, factorMin, factorMax, sensitivity,
-        minSamples, driftingThr, idiosyncraticThr, computeEnabled, applyFactor,
+        minSamples, driftingThr, idiosyncraticThr, computeEnabled,
       ] = await Promise.all([
         getConstant<number>('pair_correlation', 'b68_3_lookback_bars', RES_KEY),
         getConstant<string>('pair_correlation', 'b68_3_btc_reference_symbol', RES_KEY),
@@ -810,7 +812,6 @@ export class MarketContextEngine {
         getConstant<number>('pair_correlation', 'b68_3_drifting_threshold', RES_KEY),
         getConstant<number>('pair_correlation', 'b68_3_idiosyncratic_threshold', RES_KEY),
         getConstant<boolean>('pair_correlation', 'b68_3_compute_correlation_enabled', RES_KEY),
-        getConstant<boolean>('pair_correlation', 'b68_3_apply_factor', RES_KEY), // B-XSTOCK-CORRELATION-COLLECT
       ]);
       const missing: string[] = [];
       if (lookbackBars === undefined)    missing.push('b68_3_lookback_bars');
@@ -822,7 +823,6 @@ export class MarketContextEngine {
       if (driftingThr === undefined)     missing.push('b68_3_drifting_threshold');
       if (idiosyncraticThr === undefined) missing.push('b68_3_idiosyncratic_threshold');
       if (computeEnabled === undefined)  missing.push('b68_3_compute_correlation_enabled');
-      if (applyFactor === undefined)     missing.push('b68_3_apply_factor');
       if (missing.length > 0) {
         throw new Error(
           `[B68.3][asset_class=${ac}] missing module_constants in pair_correlation module: ${missing.join(', ')}. ` +
@@ -839,14 +839,16 @@ export class MarketContextEngine {
         driftingThreshold: driftingThr as number,
         idiosyncraticThreshold: idiosyncraticThr as number,
         computeCorrelationEnabled: computeEnabled as boolean,
-        applyFactor: applyFactor as boolean,
       });
     }
     // Atomic Map-replace (R-11).
     this.pairCorrelationConfigByClass = nextMap;
-    if (!nextMap.get('crypto_spot')) {
+    // Legacy global accessor returns crypto_spot for back-compat.
+    const cryptoCfg = nextMap.get('crypto_spot');
+    if (!cryptoCfg) {
       throw new Error(`[B68.3] crypto_spot config missing post-refresh — unexpected.`);
     }
+    this.pairCorrelationConfig = cryptoCfg;
   }
 
   /**
@@ -1195,6 +1197,10 @@ export class MarketContextEngine {
     return this.volumeRegimeConfig;
   }
 
+  /** B68.3 — Pair correlation config accessor. Null only during cold start. */
+  getCurrentPairCorrelationConfig(): PairCorrelationConfig | null {
+    return this.pairCorrelationConfig;
+  }
 
   /** B68.1 — Multi-TF agreement config accessor. Null only during cold start. */
   getCurrentMultiTfAgreementConfig(): MultiTfAgreementConfig | null {

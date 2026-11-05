@@ -81,108 +81,6 @@ export interface PairCorrelationConfig {
    * Resolved from `module_constants.pair_correlation.<assetClass>.b68_3_compute_correlation_enabled`.
    */
   computeCorrelationEnabled: boolean;
-  /**
-   * B-XSTOCK-CORRELATION-COLLECT (row 105, Kyle KD-14): whether the factor is MULTIPLIED into confidence. Separate from
-   * computing: xStock computes and records (`false`), crypto applies (`true`, the wildcard row). Resolved from
-   * `module_constants.pair_correlation.<assetClass>.b68_3_apply_factor`; a missing key fails the per-class load.
-   */
-  applyFactor: boolean;
-}
-
-/**
- * B-XSTOCK-CORRELATION-COLLECT P-1: the two series the correlation is computed over, from the store that holds the
- * reference's class. Crypto: Kraken 60-minute bars, pair unchanged — byte-identical to the pre-batch call sites, and
- * already time-aligned because Kraken returns one continuous hourly series per pair (P-11, measured 12/12).
- * xStock: the xStock bar store at the PAIR series' own interval, and BOTH series reduced to the timestamps they share,
- * because xStock bars have gaps and this function pairs bars by POSITION (A-2: by position, 38 of 469 symbols lined
- * up in time; by timestamp, 465 of 472 had a full 30-bar window at 15 minutes).
- */
-export interface CorrelationInputs {
-  pair: OHLCData[];
-  ref: OHLCData[] | null;
-  intervalMinutes: number;
-  alignedByTimestamp: boolean;
-}
-
-/** Where reference bars come from. Injected so the routing is testable without a database or a network. */
-export interface CorrelationReferenceSources {
-  crypto(symbol: string): Promise<OHLCData[]>;
-  xstock(symbol: string, intervalMinutes: 15 | 60): Promise<OHLCData[]>;
-}
-
-const defaultReferenceSources: CorrelationReferenceSources = {
-  async crypto(symbol) {
-    const { ohlcCache } = await import('../../services/ohlc-cache.js');
-    const raw = await ohlcCache.getOHLCData(symbol, 60);
-    // The mapper the two call sites carried inline before this batch, moved here verbatim (byte-identical crypto).
-    return (raw?.ohlc ?? []).map((c: any) => ({
-      open: parseFloat(c.open || c[1]),
-      high: parseFloat(c.high || c[2]),
-      low: parseFloat(c.low || c[3]),
-      close: parseFloat(c.close || c[4]),
-      volume: parseFloat(c.volume || c[6] || 0),
-      timestamp: c.timestamp || c[0] * 1000,
-    })) as OHLCData[];
-  },
-  async xstock(symbol, intervalMinutes) {
-    const { xstockOhlcCache } = await import('../../services/xstock-ohlc-cache.js');
-    return (await xstockOhlcCache.getOHLCData(symbol, intervalMinutes)).bars;
-  },
-};
-
-/** The bar interval of a series, in minutes, from the median spacing of its timestamps; null when it cannot be read. */
-export function inferIntervalMinutes(bars: OHLCData[]): number | null {
-  const ts = bars.map((b) => Number(b.timestamp)).filter((t) => Number.isFinite(t));
-  if (ts.length < 2) return null;
-  const gaps: number[] = [];
-  for (let i = 1; i < ts.length; i++) if (ts[i] > ts[i - 1]) gaps.push(ts[i] - ts[i - 1]);
-  if (gaps.length === 0) return null;
-  gaps.sort((a, b) => a - b);
-  return Math.round(gaps[Math.floor(gaps.length / 2)] / 60_000);
-}
-
-/** Both series reduced to the timestamps present in both, ascending. Bars without a finite timestamp are dropped. */
-export function alignByTimestamp(pair: OHLCData[], ref: OHLCData[]): { pair: OHLCData[]; ref: OHLCData[] } {
-  const refByTs = new Map<number, OHLCData>();
-  for (const b of ref) { const t = Number(b.timestamp); if (Number.isFinite(t)) refByTs.set(t, b); }
-  const out = { pair: [] as OHLCData[], ref: [] as OHLCData[] };
-  const sorted = [...pair].filter((b) => Number.isFinite(Number(b.timestamp))).sort((a, b) => Number(a.timestamp) - Number(b.timestamp));
-  for (const b of sorted) {
-    const r = refByTs.get(Number(b.timestamp));
-    if (r) { out.pair.push(b); out.ref.push(r); }
-  }
-  return out;
-}
-
-/**
- * P-1: the one function every call site uses (signal orchestrator, crypto VTS runner, xStock VTS eval cycle), so the
- * three cannot drift. Returns `{ skip }` when an xStock pair series has no readable 15- or 60-minute interval.
- */
-export async function resolveCorrelationInputs(
-  assetClass: AssetClass,
-  pairOhlc: OHLCData[],
-  config: PairCorrelationConfig,
-  sources: CorrelationReferenceSources = defaultReferenceSources,
-): Promise<CorrelationInputs | { skip: string }> {
-  if (assetClass === 'xstock_spot') {
-    const interval = inferIntervalMinutes(pairOhlc);
-    if (interval !== 15 && interval !== 60) return { skip: `xStock pair series interval ${interval ?? 'unreadable'} is not 15 or 60 minutes` };
-    const refBars = await sources.xstock(config.btcReferenceSymbol, interval);
-    const aligned = alignByTimestamp(pairOhlc, refBars);
-    return {
-      pair: aligned.pair,
-      ref: aligned.ref.length >= config.minSamples ? aligned.ref : null,
-      intervalMinutes: interval,
-      alignedByTimestamp: true,
-    };
-  }
-  const refBars = await sources.crypto(config.btcReferenceSymbol);
-  return {
-    pair: pairOhlc,
-    ref: refBars.length >= config.minSamples ? refBars : null,
-    intervalMinutes: 60,
-    alignedByTimestamp: false,
-  };
 }
 
 /** Computation result — score + factor + diagnostic flags. */
@@ -293,10 +191,7 @@ export function computePairCorrelation(
   for (let i = 1; i < N; i++) {
     const pairPrev = pairSlice[i - 1].close;
     const btcPrev = btcSlice[i - 1].close;
-    // B-XSTOCK-CORRELATION-COLLECT: the CURRENT closes must be finite too. `prev > 0` already drops a NaN previous
-    // close (`NaN > 0` is false) but a NaN current close produced a NaN return, which hung spearmanRankCorrelation
-    // (fixed there as well). A dropped return lowers sample_count below 29 — the visible signature Langston named.
-    if (pairPrev > 0 && btcPrev > 0 && Number.isFinite(pairSlice[i].close) && Number.isFinite(btcSlice[i].close)) {
+    if (pairPrev > 0 && btcPrev > 0) {
       pairReturns.push((pairSlice[i].close - pairPrev) / pairPrev);
       btcReturns.push((btcSlice[i].close - btcPrev) / btcPrev);
     }
@@ -356,17 +251,9 @@ export function buildB68_3Alternate(
   result: PairCorrelationResult,
   config: PairCorrelationConfig,
   assetClass: AssetClass,
-  // B-XSTOCK-CORRELATION-COLLECT P-4: REQUIRED, so every caller states whether the factor entered the real confidence.
-  opts: { applied: boolean; intervalMinutes: number; alignedByTimestamp: boolean },
 ): FactorAlternate {
-  // Applied (crypto): the factor is IN the real confidence, so the counterfactual divides it out — unchanged.
-  // Record-only (xStock): the factor never entered the real confidence, so the counterfactual IS the real confidence;
-  // dividing it out would manufacture a shift of real·(1 − 1/factor) that never happened (Langston's binding
-  // condition, Step 2). The would-be applied value lives in metadata.confidence_with_factor only.
-  const confidenceWithoutFactor = !opts.applied
-    ? realConfidence
-    : result.factor > 0 ? realConfidence / result.factor : realConfidence;
-  const confidenceWithFactor = opts.applied ? realConfidence : realConfidence * result.factor;
+  const confidenceWithoutFactor =
+    result.factor > 0 ? realConfidence / result.factor : realConfidence;
 
   const alternate: RegimeDecision = {
     regimeLabel: realRegimeLabel,
@@ -376,7 +263,7 @@ export function buildB68_3Alternate(
       correlation_to_btc: result.correlationToBtc,
       decorrelation_score: result.decorrelationScore,
       pair_correlation_factor: result.factor,
-      confidence_with_factor: confidenceWithFactor,
+      confidence_with_factor: realConfidence,
       confidence_without_factor: confidenceWithoutFactor,
       lookback_bars: config.lookbackBars,
       sample_count: result.sampleCount,
@@ -389,13 +276,6 @@ export function buildB68_3Alternate(
       asset_class: assetClass,
       reference_symbol: config.btcReferenceSymbol,
       compute_disabled: result.computeDisabled,
-      // B-XSTOCK-CORRELATION-COLLECT: `factor_applied=false` marks a record-only row — every applied-factor reader filters
-      // `alternate_decision->'metadata'->>'factor_applied' IS DISTINCT FROM 'false'` (pre-batch rows lack the key and
-      // are all applied). `factorState` below stays 'alternate_disabled' for every row; it has no code reader and
-      // `factor_applied` is the discriminator.
-      factor_applied: opts.applied,
-      interval_minutes: opts.intervalMinutes,
-      aligned_by_timestamp: opts.alignedByTimestamp,
     },
   };
 

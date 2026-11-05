@@ -38,8 +38,6 @@
  */
 
 import { getMarketContextEngine } from '../../services/market-context-engine.js';
-import { buildB68_3Alternate, computePairCorrelation, resolveCorrelationInputs } from '../../core/metrics/pair-correlation.js';
-import { emitAblationRecord } from '../../services/factor-ablation-emitter.js';
 import { recordNormalizerAtr } from '../../strategies/guard-eval-tracker.js'; // #371
 // B-XSTOCK-GLOBALS (Kyle-raised 2026-06-18): the per-class GLOBAL market-structure
 // cache getters. getMarketIndicators('xstock_spot') populates these every cycle; the
@@ -1343,40 +1341,6 @@ export async function evaluateXstockPairForVTS(
         } catch { counters.archiveFailures++; /* hot path; counter increment only — no log spam */ }
 
         const tradeId = await registerOpenVtsTrade(xOpenTrade);
-
-        // B-XSTOCK-CORRELATION-COLLECT (row 105, Kyle KD-14) P-5: RECORD this trade's correlation to the xStock reference
-        // (SPY/USD), never apply it — this path has no confidence chain (`chain_modulated_confidence: null` below), so
-        // the chain-final confidence IS the regime confidence and the factor never enters it (factor_applied=false).
-        // The record names its strategy and a real decision with a confidence, or the nightly replay can never match it
-        // to its trade (factor-replay-core.ts returns null for a null strategy) and calibration never sees it.
-        // Best-effort: a failure here is logged and never touches the trade.
-        if (tradeId) {
-          try {
-            const pcCfg = getMarketContextEngine().getPairCorrelationConfigForClass(ASSET_CLASS);
-            if (pcCfg !== null && pcCfg.computeCorrelationEnabled) {
-              const inputs = await resolveCorrelationInputs(ASSET_CLASS, ohlc, pcCfg);
-              if ('skip' in inputs) {
-                console.warn(`[B-XSTOCK-CORRELATION-COLLECT][SKIP] ${symbol}: ${inputs.skip}`);
-              } else {
-                const pcResult = computePairCorrelation(symbol, inputs.pair, inputs.ref, pcCfg, ASSET_CLASS);
-                const realConfidence = mceContext.regime.confidence;
-                const regimeLabel = regime ?? 'UNKNOWN';
-                emitAblationRecord(
-                  { kind: 'vts_trade', vtsTradeId: tradeId },
-                  symbol,
-                  { regimeLabel, confidence: realConfidence, admissionPossible: true, metadata: { sourcePool: lane.sourcePool } },
-                  [buildB68_3Alternate(realConfidence, regimeLabel, pcResult, pcCfg, ASSET_CLASS, {
-                    applied: false, intervalMinutes: inputs.intervalMinutes, alignedByTimestamp: inputs.alignedByTimestamp,
-                  })],
-                  ASSET_CLASS,
-                  strategyKey,
-                );
-              }
-            }
-          } catch (pcErr) {
-            console.warn(`[B-XSTOCK-CORRELATION-COLLECT][ERROR] ${symbol}: ${pcErr instanceof Error ? pcErr.message : pcErr}`);
-          }
-        }
 
         // P19-B4a (C2): ALSO route this signal onto the active paper pipeline when active
         // trading is authoritatively ON (gated inside the helper on system_context.isEngineActive,

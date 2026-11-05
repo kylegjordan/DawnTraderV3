@@ -1160,10 +1160,6 @@ export async function computeFactorCalibration(
     WHERE evaluated_at >= ${windowStart}
       AND replay_completed_at IS NOT NULL
       AND asset_class = ${assetClass}
-      -- B-XSTOCK-CORRELATION-COLLECT P-7: record-only rows (the factor computed but never applied) are a different
-      -- population; their confidence-with equals confidence-without by construction. Pre-batch rows lack the key and
-      -- are all applied, hence IS DISTINCT FROM. The replay-STATUS query in computeAblationComparison is unchanged.
-      AND alternate_decision->'metadata'->>'factor_applied' IS DISTINCT FROM 'false'
       -- B76 (2026-05-06): legacy frozen-factor filter REMOVED. Per Langston
       -- review revision: for b67_1 per-input rows and b67_2 phase rows
       -- (legacy b67_2_phase_dimension and current b67_2_phase_preference) we

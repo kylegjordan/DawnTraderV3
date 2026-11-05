@@ -33,7 +33,7 @@
  *   - `loadClosedVtsTradesFromDb(since)` — NEW: load closed trades from
  *     `vts_open_trades` for trades opened ≥ `since`. Returns an index in the
  *     same shape as `buildVtsTradeIndex` for ergonomic dual-source lookup.
- *   - `findMatchingTrade(dbIndex, jsonlIndex, assetClass, symbol, strategy, evaluatedAtMs)`
+ *   - `findMatchingTrade(dbIndex, jsonlIndex, symbol, strategy, evaluatedAtMs)`
  *     — checks DB first (faster, canonical), JSONL fallback if no DB hit.
  *   - `classifyTradeOutcome(pnl)` — re-export of the existing classifier.
  *   - `computeReplayOutcomeFromTrade(trade, vtsTradeId)` — extracted from the
@@ -77,20 +77,11 @@ export type VtsTradeIndexEntry = {
 export type VtsTradeIndex = Map<string, VtsTradeIndexEntry[]>;
 
 /**
- * B-XSTOCK-CORRELATION-COLLECT P-6 (fold under rule 23): the index key is (asset class, symbol, strategy). It was
- * (symbol, strategy), so an xStock and a crypto coin sharing a ticker (DASH, MET, CVX and others — 33 xStock-universe
- * names are also Kraken pairs) could have one class's trade outcome attached to the other class's factor record.
- */
-export function tradeIndexKey(assetClass: string, symbol: string, strategy: string): string {
-  return `${assetClass}|${symbol}|${strategy}`;
-}
-
-/**
  * Build an index of closed VTS trades from JSONL files (`logs/virtual_trades/
  * YYYY-MM-DD.json`). Used as the FALLBACK source for trades opened before
  * the B79.0g-tx canonical-cutoff date.
  *
- * Keyed by `tradeIndexKey(assetClass, symbol, strategy)` → sorted-by-entryTime list of entries.
+ * Keyed by `${symbol}|${strategy}` → sorted-by-entryTime list of entries.
  * `daysBack` is from today; default 14 matches the cron's existing window.
  */
 export async function buildVtsTradeIndex(
@@ -118,11 +109,8 @@ export async function buildVtsTradeIndex(
           const symbol: string | undefined = trade?.signal?.symbol ?? trade?.symbol;
           const strategy: string | undefined = trade?.strategy ?? trade?.signal?.strategy;
           const entryTime: number | undefined = trade?.entryTime ?? trade?.signal?.createdAt;
-          // Every closed record in the retained window carries a top-level assetClass (measured 2026-11-05: 4,160 of
-          // 4,160 over 15 files). A record without one is skipped, never guessed into a class.
-          const assetClass: string | undefined = trade?.assetClass;
-          if (!symbol || !strategy || !entryTime || !assetClass) continue;
-          const key = tradeIndexKey(assetClass, symbol, strategy);
+          if (!symbol || !strategy || !entryTime) continue;
+          const key = `${symbol}|${strategy}`;
           const list = index.get(key) ?? [];
           list.push({ entryTime, trade, source: 'jsonl' });
           index.set(key, list);
@@ -208,7 +196,7 @@ export async function loadClosedVtsTradesFromDb(
       regimeConfidenceModulated: ctx.regimeConfidenceModulated ?? null,
       macroModifierValue: ctx.macroModifierValue ?? null,
     };
-    const key = tradeIndexKey(row.asset_class, row.symbol, row.strategy);
+    const key = `${row.symbol}|${row.strategy}`;
     const list = index.get(key) ?? [];
     list.push({ entryTime: openedAtMs, trade, source: 'db' });
     index.set(key, list);
@@ -233,14 +221,13 @@ export async function loadClosedVtsTradesFromDb(
 export function findMatchingTrade(
   dbIndex: VtsTradeIndex,
   jsonlIndex: VtsTradeIndex,
-  assetClass: string,
   symbol: string,
   strategy: string | null,
   evaluatedAtMs: number,
   toleranceMs: number = 5 * 60 * 1000, // ±5min per Langston Q5
 ): VtsTradeIndexEntry | null {
   if (!strategy) return null;
-  const key = tradeIndexKey(assetClass, symbol, strategy);
+  const key = `${symbol}|${strategy}`;
 
   // Primary: DB index
   const dbHit = pickClosest(dbIndex.get(key), evaluatedAtMs, toleranceMs);
@@ -348,13 +335,12 @@ export function buildUnmatchedReplayOutcome(
 export function findNearestForDiagnostic(
   dbIndex: VtsTradeIndex,
   jsonlIndex: VtsTradeIndex,
-  assetClass: string,
   symbol: string,
   strategy: string | null,
   evaluatedAtMs: number,
 ): { delta: number; source: 'db' | 'jsonl' } | null {
   if (!strategy) return null;
-  const key = tradeIndexKey(assetClass, symbol, strategy);
+  const key = `${symbol}|${strategy}`;
   let best: { delta: number; source: 'db' | 'jsonl' } | null = null;
   for (const [source, idx] of [['db', dbIndex] as const, ['jsonl', jsonlIndex] as const]) {
     const list = idx.get(key);

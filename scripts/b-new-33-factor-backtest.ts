@@ -107,7 +107,6 @@ async function drainPendingRows(): Promise<{ matched: number; unmatched: number;
     const entry = findMatchingTrade(
       dbIndex,
       jsonlIndex,
-      assetClass,
       row.pair_symbol,
       row.strategy,
       evaluatedAtMs,
@@ -124,7 +123,6 @@ async function drainPendingRows(): Promise<{ matched: number; unmatched: number;
       const nearest = findNearestForDiagnostic(
         dbIndex,
         jsonlIndex,
-        assetClass,
         row.pair_symbol,
         row.strategy,
         evaluatedAtMs,

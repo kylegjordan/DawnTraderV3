@@ -125,7 +125,7 @@ describe('B76 — B68.1/B68.2/B68.3 divide-out parity', () => {
       correlationToBtc: 0.5, decorrelationScore: 0.5, factor: 1.025, label: 'ORTHOGONAL',
       sampleCount: 50, coldStart: false, btcReferenceAvailable: true, isBtcSelfReference: false,
       computeDisabled: false,
-    } as any, { lookbackBars: 50 } as any, 'crypto_spot', { applied: true, intervalMinutes: 60, alignedByTimestamp: false });
+    } as any, { lookbackBars: 50 } as any, 'crypto_spot');
     expect(alt.alternateDecision.confidence).toBeCloseTo(0.7 / 1.025, 6);
   });
 });

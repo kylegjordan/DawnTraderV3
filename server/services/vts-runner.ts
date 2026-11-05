@@ -305,7 +305,6 @@ import {
 // B68.3 (2026-05-02): pair correlation as third orthogonal confidence dimension
 import {
   computePairCorrelation,
-  resolveCorrelationInputs,
 } from '../core/metrics/pair-correlation.js';
 // B68.1 (2026-05-03): multi-TF agreement as 7th and final B68.x chain modulator.
 import {
@@ -2931,31 +2930,30 @@ async function generatePhase10Signal(
     // ── B68.3 pair correlation (6th chain modulator, 2026-05-02) ──────
     // Spearman correlation pair vs BTC over rolling N bars. Decorrelation
     // = 1 - |corr|; factor = clamp(1 + decorr × sensitivity). Asymmetric
-    // [0.95, 1.05] — boost only. Reference bars via resolveCorrelationInputs (class-routed; crypto = ohlcCache
+    // [0.95, 1.05] — boost only. BTC OHLC fetched from ohlcCache (cache
     // read; microsecond latency). Self-reference handled inside
     // computePairCorrelation (factor=1.0 + SELF_REFERENCE flag).
-    // B-XSTOCK-CORRELATION-COLLECT (P-1, P-3): no fallback to another class's config; class-routed reference; the
-    // factor multiplies in only when the class applies it (crypto: the wildcard row, apply on — unchanged).
-    const _pairCorrelationConfig = _mce.getPairCorrelationConfigForClass(_assetClass);
-    if (_pairCorrelationConfig === null) {
-      console.warn(`[B68.3][vts-runner] pair correlation config null for class=${_assetClass} — factor skipped (cold start or class not loaded; no fallback)`);
-    }
+    const _pairCorrelationConfig = _mce.getPairCorrelationConfigForClass(_assetClass) ?? _mce.getCurrentPairCorrelationConfig();
     if (_pairCorrelationConfig !== null && ohlcData && ohlcData.length >= _pairCorrelationConfig.minSamples) {
       try {
-        const inputs = await resolveCorrelationInputs(_assetClass, ohlcData, _pairCorrelationConfig);
-        if ('skip' in inputs) throw new Error(inputs.skip);
+        const btcRaw = await ohlcCache.getOHLCData(_pairCorrelationConfig.btcReferenceSymbol, 60);
+        const btcOhlc = (btcRaw?.ohlc ?? []).map((c: any) => ({
+          open: parseFloat(c.open || c[1]),
+          high: parseFloat(c.high || c[2]),
+          low: parseFloat(c.low || c[3]),
+          close: parseFloat(c.close || c[4]),
+          volume: parseFloat(c.volume || c[6] || 0),
+          timestamp: c.timestamp || c[0] * 1000,
+        }));
         const result = computePairCorrelation(
           symbol,
-          inputs.pair,
-          inputs.ref,
+          ohlcData,
+          btcOhlc.length >= _pairCorrelationConfig.minSamples ? btcOhlc : null,
           _pairCorrelationConfig,
           _assetClass,
         );
-        if (_pairCorrelationConfig.applyFactor) _modulatedConfChain *= result.factor;
-        _alternateInputs.push({
-          kind: 'b68_3', result, config: _pairCorrelationConfig, assetClass: _assetClass,
-          applied: _pairCorrelationConfig.applyFactor, intervalMinutes: inputs.intervalMinutes, alignedByTimestamp: inputs.alignedByTimestamp,
-        });
+        _modulatedConfChain *= result.factor;
+        _alternateInputs.push({ kind: 'b68_3', result, config: _pairCorrelationConfig, assetClass: _assetClass });
         console.log(
           `[B68.3][correlation] pair=${symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
             `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +

@@ -35,7 +35,6 @@ const CFG: PairCorrelationConfig = {
   idiosyncraticThreshold: 0.30,
   // B79.0n.CONFIDENCE-CHAIN: enable compute for existing crypto-side tests.
   computeCorrelationEnabled: true,
-  applyFactor: true,
 };
 
 /** Build OHLC where close moves linearly upward (each bar +1 from previous). */
@@ -252,7 +251,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: false,
       label: 'IDIOSYNCRATIC' as const,
     };
-    const alt = buildB68_3Alternate(0.6, 'TFS', result, CFG, 'crypto_spot', { applied: true, intervalMinutes: 60, alignedByTimestamp: false });
+    const alt = buildB68_3Alternate(0.6, 'TFS', result, CFG, 'crypto_spot');
     expect(alt.factorName).toBe('b68_3_pair_correlation');
     expect(alt.factorState).toBe('alternate_disabled');
     const meta = alt.alternateDecision.metadata as any;
@@ -274,7 +273,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: false,
       label: 'NEUTRAL' as const,
     };
-    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot', { applied: true, intervalMinutes: 60, alignedByTimestamp: false });
+    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot');
     const meta = alt.alternateDecision.metadata as any;
     expect(Number.isFinite(meta.confidence_without_factor)).toBe(true);
   });
@@ -290,7 +289,7 @@ describe('B68.3 — buildB68_3Alternate', () => {
       isBtcSelfReference: true,
       label: 'SELF_REFERENCE' as const,
     };
-    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot', { applied: true, intervalMinutes: 60, alignedByTimestamp: false });
+    const alt = buildB68_3Alternate(0.5, 'TFS', result, CFG, 'crypto_spot');
     const meta = alt.alternateDecision.metadata as any;
     expect(meta.is_btc_self_reference).toBe(true);
     expect(meta.label).toBe('SELF_REFERENCE');
