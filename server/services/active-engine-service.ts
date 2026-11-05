@@ -1151,7 +1151,9 @@ export async function stopActiveEngine(
                             title: `Position ${orphan.symbol} cannot close: its trade record is not resolvable`,
                             body: `During an engine stop, the paper position ${orphan.id} in ${orphan.symbol} remained after the flatten and no open `
                               + `trade record resolves for it (no tradeId, and none or several by symbol, mode and class). It is KEPT rather than `
-                              + `deleted without its record (KD-17). B-CLOSE-WRITER-COSTS P-17. DISPOSITION: RESOLVE, do not ACK.`,
+                              + `deleted without its record (KD-17). If NONE exists, restore it from the position on staging: \`npx tsx `
+                              + `server/scripts/restore-trade-record.ts ${orphan.id} --by <actor>\`; if SEVERAL, find how the duplicate was `
+                              + `written and fix it by hand. The engine then closes it. B-CLOSE-WRITER-COSTS P-17/P-12. DISPOSITION: RESOLVE, do not ACK.`,
                             dedupe_key: `close-record-unresolved-paper-${orphan.symbol}`,
                           });
                         } catch (alertErr) {
