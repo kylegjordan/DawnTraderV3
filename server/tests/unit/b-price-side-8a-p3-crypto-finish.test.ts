@@ -194,7 +194,9 @@ describe('8a-P3 Step-4 r2 — the refusal rail and the per-event rest record', (
     expect(VTS).toMatch(/await onCrossing\(\{\s*tradeId, symbol: trade\.symbol, assetClass: trade\.assetClass, lastReason: _nt\.lastReason,/);
     // r3 + P10: the streak runs over EVERY no-decision reason, BOTH classes, every session; only the PAGE is session-gated.
     expect(VTS).toMatch(/const _ntPages = trade\.assetClass === 'crypto_spot' \|\| \(trade\.assetClass === 'xstock_spot' && !_ntXsOffHours\);/);
-    expect(VTS).toMatch(/const _ntXsOffHours = trade\.assetClass === 'xstock_spot'\s*&& \(isInXstockWeekendClose\(new Date\(\)\) \|\| getXstockSession\(Date\.now\(\)\) !== 'regular'\);/);
+    // Row 2 increment (4c) P1 (re-pointed, same subject — the xStock PAGE is gated to paging time, the weekend close and every
+    // non-regular session included): paging time now starts 15 min after the open (`isXstockRailPagingTime`, market-hours.ts).
+    expect(VTS).toMatch(/const _ntXsOffHours = trade\.assetClass === 'xstock_spot' && !isXstockRailPagingTime\(new Date\(\)\);/);
     expect(VTS).toMatch(/if \(_ntStep\.next\) _vtsNoTriggerStreak\.set\(tradeId, _ntStep\.next\);\s*else _vtsNoTriggerStreak\.delete\(tradeId\);/);
     expect(VTS).not.toMatch(/if \(decision\.noDecisionReason === 'no_transactable_side'\) \{\s*_vtsTouch\.exitNoTransactableSide\+\+;\s*const _ntNow/);
     expect(VTS).not.toMatch(/_vtsNoTriggerStreak\.get\(trade\.symbol\)/);

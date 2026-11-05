@@ -19,7 +19,7 @@ function makeStore() {
   const rows: RailAlertRow[] = [];
   let seq = 0;
   let clock = 0;
-  const deps: VtsRailDeps & { rows: RailAlertRow[]; setClock: (ms: number) => void; closed: Set<string>; verdict: any; regular: boolean } = {
+  const deps: VtsRailDeps & { rows: RailAlertRow[]; setClock: (ms: number) => void; closed: Set<string>; verdict: any; regular: boolean; paging?: boolean } = {
     rows, closed: new Set<string>(), verdict: 'not_quiet', regular: true,
     setClock: (ms) => { clock = ms; },
     addAlert: async (a: Record<string, unknown>) => {
@@ -48,6 +48,8 @@ function makeStore() {
     closedTradeIds: async (ids) => new Set(ids.filter((i) => deps.closed.has(i))),
     xstockVerdict: () => deps.verdict,
     isRegularSession: () => deps.regular,
+    // (4c): paging time defaults to the session stub; a test sets `paging` to separate the two meanings.
+    isRailPagingTime: () => deps.paging ?? deps.regular,
   };
   return deps;
 }
@@ -484,5 +486,27 @@ describe('Coltrane Step 4 BLOCKER-2/3 — the runner wiring (source fence; the b
     expect(src).toContain("lastRefusal: _lastRefusal }, now, d))");
     expect(src).toContain('hold: _sHold, lastRefusal: _sLastRefusal }, now, d))');
     expect(src).toContain('if (_ntReason !== undefined) _vtsLastRefusal.set(tradeId, _ntReason);');
+  });
+});
+
+describe('increment (4c) P1 — a member carried over the open starts its 30-min clock at 09:45 ET, not 09:30', () => {
+  beforeEach(() => _resetVtsRailState());
+  it('09:30-09:45 is regular-session time but NOT paging time: the clock waits, then escalates at 10:15, not 10:00', async () => {
+    const d = makeStore(); d.setClock(WED);
+    await onCrossing(crossing('c1', 'ORCL/USD', WIDE, WED - 10 * 60_000), WED, d); // joined Wed 11:00 ET
+    const rec = () => d.rows.find((r) => r.dedupe_key === VTS_STANDING_KEY)!;
+    // Thu 2026-10-15 (EDT): 09:35 ET = 13:35Z — the session label says regular, paging time says no
+    const T = (hhmm: string) => Date.parse(`2026-10-15T${hhmm}:00Z`);
+    d.regular = true; d.paging = false;
+    await runVtsRailSweep(T('13:35'), d);
+    expect((rec().metadata?.[memberField('c1')] as any).sessionClockStartMs).toBeNull();
+    d.paging = true;
+    await runVtsRailSweep(T('13:45'), d);                       // 09:45 ET: the clock starts here
+    expect((rec().metadata?.[memberField('c1')] as any).sessionClockStartMs).toBe(T('13:45'));
+    await runVtsRailSweep(T('14:05'), d);                       // 10:05 ET: a 09:30 clock would have escalated
+    expect(railCounts.escalations).toBe(0);
+    await runVtsRailSweep(T('14:15'), d);                       // 10:15 ET = 09:45 + 30 min
+    expect(railCounts.escalations).toBe(1);
+    expect(d.rows.some((r) => r.dedupe_key === railKey('ORCL/USD', 'c1'))).toBe(true);
   });
 });
