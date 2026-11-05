@@ -1,0 +1,71 @@
+# B-CLOSE-WRITER-COSTS — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (Step 2 r1, 2026-11-05)
+
+change-class: architecture · Scope r3 + amendment at `e83fad625` (Langston PROCEED, Discord `1567810312579842129`). Read at the working tree after `9e5c40a7d`; staging runs `c0214c973`. Board card `PVTI_lAHODmulEM4BfQP4zhGKiI4`. **Line numbers below are at that tree and drift; implementation locates by content** (Langston record item 1).
+
+## PREVIOUSLY STATED vs NOW (read this first)
+- **PREVIOUSLY STATED (scope §1, OBJ-2):** a trade record is finished by `closePosition`, and the batch's refusal lives there. **NOW: FIVE code paths finish a trade record**, and three of them write no fee: the engine-stop cleanup, the hard reset, and two operator routes that write their own record. **REASON:** the OBJ-6 reader census found closed rows that hold no fee by construction, and the OBJ-7 writer census found two more inserts (A-3).
+- **PREVIOUSLY STATED (scope §1):** `getActiveOpenPositions` is called on 68 production lines in 16 files. **NOW: confirmed 68 / 16** (three counting methods), **57 want only their own mode's rows and 11 want every mode's** (A-4).
+- **PREVIOUSLY STATED (scope OBJ-7):** the `crypto_spot` default on `asset_class` — writer census, then drop or justify. **NOW: every writer sets the class explicitly** (2 inserts, 4 callers), so the default goes (A-6).
+
+## A. AUDIT
+**Sources read:** (1) code — `active-execution-engine.ts` (`closePosition`, `executeSimulatedTrade`, the dup guard), `storage.ts` (the close lookup, `createClosedTrade`, `createActiveOpenPosition`, `getActiveOpenPositions`, `closeOpenTradesForHardReset`, `deleteClosedTrade`), `active-engine-service.ts` (`reconcileIncompleteTrades`, stop flow), `active-portfolio-manager.ts` (`_flattenOne`, close-all), `routes.ts` (manual close, force-clear-stranded), `shared/schema.ts`; (2) staging database (constraint set, row counts by close reason, unclosed records vs open positions); (3) System Impact Map (`:342` exit-decision archive targets `closed_trades` only; `active_open_positions` deleted from seven sites); (4) System Manual §19.1 (`:5863` open-path atomicity — the sentence OBJ-3 corrects); (5) ledger — `RUNNING_ISSUES` `#508`, `#618`, `#1006`, `#1093`, `#1154`, `B-FEED-MISMATCH-FIX` and `B-PROMOTION-RACE-FIX` completion reports; (6) provenance below. Three wide censuses (A-4, A-5, A-6) were run by a helper reading the tree and spot-checked by me against the code (three sites each for A-4 and A-6; the two most consequential A-5 writers re-read).
+
+**A-1 — The lookup and its refusal (OBJ-1, OBJ-2, OBJ-2b) are as the scope states.** Lookup by symbol only (`getClosedTradesBySymbol`), `trades.find(t => t.openedAt && !t.closedAt)`; `closed_trades.opened_at` is `notNull()` so the predicate is `closed_at IS NULL` (Langston, settled). The fill contract's last refusal is followed by `this._closeRefusalStreak.delete(positionId)`, then the side effects (learning aggregate, B70 archive, outcome-feedback update), then the lookup, then the `finally` with the ladder census, the trailing clear, the no-record block and the delete.
+
+**A-2 — Today's population is clean** (staging, ~03:55Z and ~08:30Z): 20 open positions, all `buy`, 3 crypto / 17 xStock, 20 distinct symbols; 20 unclosed records 1:1 with matching class; 0 duplicate (symbol, opened_at) record pairs; all `closed_trades` rows `mode=paper`; live constraint set `paper_sim_open_positions_pkey` + `unique_symbol_side UNIQUE (symbol, side)` only.
+
+**A-3 — Five paths finish a trade record (KD-17 binds all five).**
+| # | path | what it writes | rows in history (since 2026-07-15) | origin |
+|---|---|---|---|---|
+| 1 | `closePosition` (engine) | the full close: exit price, fees, slippage, P&L, provenance — UPDATE of the open-time record | all but 10 of 1,552 closed rows | the canonical close |
+| 2 | `reconcileIncompleteTrades` → `engine_stop_cleanup` (`active-engine-service.ts:~480`) | UPDATE with exit price + **gross `pnl` only — no fee, no net**, arm `synthetic_reference` | 0 | `0dcc22b2e` (2025-12-07): *"Improve trade status consistency and metrics accuracy after engine stop"* |
+| 3 | `closeOpenTradesForHardReset` (`storage.ts:~704`) | `closed_at` + `close_reason='hard_reset'` only, **no economics** | 0 (`reset` = 9 on 2026-10-06 is a different writer, recorded by its own reason) | `4355d3cfc` (2025-12-06) *"a comprehensive hard reset for paper trading sessions"*; mode fence `#1154` |
+| 4 | POST `/active-engine/close-trade/:id` (`routes.ts:~12540-12700`) | **INSERTS A NEW record** with computed fees, then deletes the position — **the open-time record is left unclosed (an orphan)** | 0 | `511cb1974` (2025-12-10) |
+| 5 | POST `/active-engine/force-clear-stranded` (`routes.ts:~12738-12800`) | **INSERTS A NEW record with `fees: '0'`, `slippage: '0'`** | 0 | `9bc5bcb3f` (2025-12-04) *"Adds a new endpoint for clearing stranded trades"* |
+⇒ Paths 2, 4 and 5 break KD-17 as written (no fee / an invented zero fee / a dropped record). None has fired in the retained history, so these are fences, not repairs.
+
+**A-4 — `getActiveOpenPositions` readers (OBJ-4): 68 / 16 files, 57 mode-scoped, 11 want every mode.** The 11: the I8C open-positions provider for the shared Kraken WS adapter (`active-execution-engine.ts:~1330`; one callback slot, the last engine to start overwrites it), the tick-health symbol provider (`active-engine-service.ts:~772`, a `'paper'` literal on a shared object), the boot symbol-map audit (`index.ts:~566`), and eight diagnostics routes that join `getActiveOpenPositions('paper')` with `getActiveTrades('live')` — the live half still reads the OLD `trades` table. Three mode-scoped sites DELETE or BOOK rows and today act on every mode because the argument is ignored: force-clear (`routes.ts:~3294`), the stop flow's orphan delete (`active-engine-service.ts:~1041`), force-clear-stranded. `deleteActiveOpenPosition` (`storage.ts:~3854`) also ignores its mode. Separate: `trailing-exit-controller.ts:~661` finds rows by symbol and would update a paper and a live row on the same symbol.
+
+**A-5 — Readers of the fee / cost / P&L columns (OBJ-6): 36** (21 server, 7 in `scripts/analysis/b_xstock_fee_contract_verify.sql`, 8 in the client adapter). Money-bearing: `getLifetimeScoreboard` (`net_pnl` → `pnl`, SUM skips NULL), `honestNetPnl` (reconstructed → net → pnl → 0), `computeFeeDrag` (`totalFee` → `fees` → 0; **`grossPnl` NULL → 0 silently**), `computeByAssetClass`. All of these read only rows with `closed_at` set — but per A-3, "closed" does not mean "written". Readers that can see OPEN rows: two log-only diagnostics, the analysis script, `getClosedTradesPaginated` sort keys if `closedOnly` is omitted, and the legacy `/active-engine/trades` route (no caller). The client renders a NULL net/gross as "—".
+
+**A-6 — `asset_class` writers (OBJ-7): 2 physical inserts, 4 callers, all explicit** (the engine's open: `_tradeClass`, refused `UNCLASSIFIABLE` if it cannot resolve; both operator routes: `position.assetClass`). No migration inserts, no UPDATE sets the class. Dropping `DEFAULT 'crypto_spot'` on both tables changes no behaviour and makes the insert type require the class.
+
+**A-7 — Governance and ledger.** System Manual `:5863` names `UNIQUE (symbol)` and calls `unique_symbol_side` the paper table's — wrong against the database (OBJ-3 corrects it in its deploy). `#1006`: the checked-in schema can describe objects the database lacks; there is no `drizzle/meta` snapshot in the repo, so the sweep is the declared index in `shared/schema.ts`. `#508`'s compensation delete is pinned by OBJ-5. `bridge/canonical/`: no coverage of the close writers.
+
+## B. PLAN (each item points at its finding)
+**Increment 1 — the key and its net (OBJ-1, OBJ-2, OBJ-2b, OBJ-8 for the lookup).**
+| # | item | from |
+|---|---|---|
+| P-1 | New storage method: exact symbol, mode and NON-nullable class, `closed_at IS NULL`, `close_reason IS DISTINCT FROM 'never_filled'`; returns `{ status: 'one', record } | { status: 'none' } | { status: 'many', ids }`. `getClosedTradesBySymbol` deleted (rule 18). | A-1 |
+| P-2 | `closePosition`: the lookup + refusal sit directly after the fill contract's last refusal, before `_closeRefusalStreak.delete`. `none`/`many`/unresolvable class ⇒ critical alert (dedupe per mode+symbol), position kept, return. The `flatten` exemption does not apply. | A-1 |
+| P-3 | OBJ-2b deletions (the `LADDER_NO_TRADE_ROW` arm, the `if (!trade)` block, the `if (trade)` wrapper; the `#620` comment clause narrowed; the `_lsAcc` hoist comment rewritten), with the state-write census. | A-1 |
+| P-4 | Re-point `b-feed-mismatch-fix.test.ts` and `b-class-leg-fill-mode-engine.test.ts` to the new method with a positive control. | A-1 |
+
+**Increment 2 — mode on open positions (OBJ-3, OBJ-4, OBJ-5).**
+| # | item | from |
+|---|---|---|
+| P-5 | Migration, ONE transaction: read the unique set, refuse unless exactly `unique_symbol_side (symbol, side)`; `ADD COLUMN mode` nullable → backfill `paper` → `SET NOT NULL`; `DROP CONSTRAINT unique_symbol_side` (no `IF EXISTS`); `ADD CONSTRAINT unique_symbol_mode UNIQUE (symbol, mode)`. Rollback in git. Declared schema: the symbol-only index replaced by the `(symbol, mode)` unique (`#1006` sweep). System Manual `:5863` corrected in this deploy. | A-2, A-7 |
+| P-6 | `createActiveOpenPosition` stamps `mode`; its dedup-return reads the winner by `(symbol, mode)`. `getActiveOpenPositions(mode)` and `deleteActiveOpenPosition(mode, id)` filter on mode. | A-4 |
+| P-7 | The 11 every-mode readers get an explicit all-modes read (`getActiveOpenPositionsAllModes()`), so they keep today's behaviour and say so; the 57 keep `getActiveOpenPositions(mode)`. The eight diagnostics routes' `getActiveTrades('live')` half (old `trades` table) is left as is and noted — not this batch. | A-4 |
+| P-8 | OBJ-5 pinning test (guard per mode; the unique set is exactly one rule on `(symbol, mode)`; `#508` eviction) with its three mutations. | scope |
+| P-9 | `trailing-exit-controller.ts:~661` symbol match: **recorded, not fixed here** — it needs live rows in this table to bite; proposed to Kyle via PM Claude as an item for row 19 or the live-mode work. | A-4 |
+
+**Increment 3 — every close writes its record and its real fee (OBJ-6, OBJ-7, the A-3 writers).**
+| # | item | from |
+|---|---|---|
+| P-10 | **The two operator routes stop writing their own record.** Manual close → `closePosition` (the canonical close books real exit fees through the fill contract and finishes the open-time record — no orphan). Force-clear-stranded → for a position whose record EXISTS, `closePosition`; for one whose record is MISSING, the restore remedy (P-12) first, then `closePosition`. Their own row writers deleted. | A-3 |
+| P-11 | **`engine_stop_cleanup` books real costs.** The record's own entry fee + the exit fee and slippage from the SAME cost model `closePosition` uses at that price, net P&L, `exitFillArm='synthetic_reference'` kept (it is learning-fenced already). One shared function computes the close economics for both paths, so they cannot drift. | A-3 |
+| P-12 | **The operator remedy for a refused close (scope §5's owed item).** A guarded admin action, per position: if no record exists, insert the OPEN-time record from the position's own open-time fields (symbol, class, mode, side, quantity, entry price, entry fee and slippage, strategy, opened_at — all present on the position), stamped `record_restored_from_position=true`. Nothing about the exit is written; the next close books the real exit. Refuses if a record exists. | A-3, scope §5 |
+| P-13 | **Hard reset stays an economics-free close, as a named population.** A reset abandons positions; it is not a trade outcome (`#1154`). `close_reason='hard_reset'` joins `never_filled` as an explicit "not a trade outcome" population: the money readers exclude it by name, not by an incidental `exitPrice > 0` filter. **Question for Langston (§C).** | A-3, A-5 |
+| P-14 | Drop `DEFAULT 0` on the eleven fee/cost/P&L columns; `never_filled` writes an explicit 0; the open-time insert writes the entry values; a filled close with a NULL fee is refused with an alert. Drop `DEFAULT 'crypto_spot'` on both tables. | A-5, A-6 |
+| P-15 | Readers: every money reader that coerces NULL to 0 (`computeFeeDrag` `grossPnl`, `honestNetPnl`'s last fallback, `getLifetimeScoreboard`) instead excludes the row and counts it in a log line; the two log-only diagnostics and the analysis script read closed rows only; the legacy `/active-engine/trades` route (no caller) is deleted with the log. | A-5 |
+
+**Step-7 verification (pre-registered):** OBJ-1 — over 24 h, N closes and N records stamped by the new method, 0 refusals, N stated (0 ⇒ unread). OBJ-3 — the unique set is exactly `(symbol, mode)`. OBJ-6 — every newly closed filled record has non-NULL `entry_fee`, `exit_fee`, `total_fee`, `net_pnl`. UI — Active Trades and Trade History render the same as before the deploy (Claude-in-Chrome).
+
+## C. Questions for Langston
+1. **P-13 hard reset:** keep it economics-free as a named non-outcome population (my recommendation — a reset is an erase, not a trade), or make it book the abandoned positions at a reference price like `engine_stop_cleanup`?
+2. **P-10 manual close via `closePosition`:** the manual close today books at the live quote with a fallback to the entry price; through `closePosition` it takes the fill contract (it can be REFUSED on a cold book, like every other close). I recommend accepting that — a manual close that cannot be filled honestly should not be booked.
+3. **P-12 restore remedy:** an admin route, or a script run by hand? I recommend a route behind the existing admin guard, since the stranded-clear button already lives there.
+
+## D. Plain-language summary
+The plan was built around one place that finishes a trade's record. The audit found five. Three of them can book a trade without its fees, and one can leave the original record orphaned. None has happened yet. The plan sends the two admin buttons through the normal close, makes the engine-stop cleanup book real costs, keeps the account reset as a deliberate "not a trade" case, and adds an admin repair that restores a missing opening record without inventing any exit values.
