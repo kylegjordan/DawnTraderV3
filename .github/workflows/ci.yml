@@ -133,6 +133,13 @@ jobs:
           bash -n comms-infra/security/fail2ban/emit-invalid-ssh-attempts.sh
           bash -n comms-infra/security/fail2ban/verify-live-ban.sh
           bash comms-infra/security/fail2ban/verify-live-ban.sh self-test
+
+      - name: Token-watch storage tests
+        # B-TOKEN-WATCH-STORAGE (Langston, Step 4 part 2 re-review): the due prune, the feed-watch probe and the
+        # installer's fences had no CI carrier. Stdlib only; the suite makes its own store root under tempfile.
+        run: |
+          python3 token-watch/tests/test_due_storage.py
+          python3 token-watch/tests/mutate_due_storage.py
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/install.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/capture_caller_processes.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'
           pwsh -NoProfile -Command '$e=$null;[Management.Automation.Language.Parser]::ParseFile("comms-infra/laptop/ssh-keyholder/rollback.ps1",[ref]$null,[ref]$e)>$null;if($e){$e|% Message;exit 1}'

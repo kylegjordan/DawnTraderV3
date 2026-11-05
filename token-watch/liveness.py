@@ -288,13 +288,28 @@ def check(now: datetime = None) -> dict:
     return stats
 
 
+def _is_census_name(name: str) -> bool:
+    """The inverse of `_birth_path`: exactly `YYYY-MM-DD.jsonl`, and the date parses. (Langston, Step 4 part 2
+    re-review: any letter-initial `.jsonl` - a stray `backup.jsonl` - sorts after every date, so an unfiltered
+    listing made it the "newest census file" for every leg of the probe, and a probe failure takes no reading.)"""
+    if len(name) != 16 or not name.endswith(".jsonl"):
+        return False
+    try:
+        datetime.strptime(name[:10], "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
+
+
 def _never_created(cursor: str, names: list[str]) -> bool:
     """True when the cursor names a census day file that does not exist and is dated after every census file
-    in `names` (the listing of BIRTHS_DIR): a day the feed wrote nothing, not a lost file."""
+    in `names` (the census-shaped listing of BIRTHS_DIR): a day the feed wrote nothing, not a lost file. Both
+    operands of the comparison are date-shaped: `names` by the filter, `base` tested here."""
     if os.path.normpath(os.path.dirname(cursor)) != os.path.normpath(BIRTHS_DIR):
         return False
     base = os.path.basename(cursor)
-    return base not in names and base > names[-1] and not os.path.exists(cursor)
+    return (_is_census_name(base) and base not in names and base > names[-1]
+            and not os.path.exists(cursor))
 
 
 def probe_readable() -> list[str]:
@@ -327,7 +342,7 @@ def probe_readable() -> list[str]:
     """
     problems: list[str] = []
     try:
-        names = sorted(n for n in os.listdir(BIRTHS_DIR) if n.endswith(".jsonl"))
+        names = sorted(n for n in os.listdir(BIRTHS_DIR) if _is_census_name(n))
     except OSError as exc:
         return ["cannot list %s: %s" % (BIRTHS_DIR, exc.strerror or exc)]
     if not names:

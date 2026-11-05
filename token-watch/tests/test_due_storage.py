@@ -370,6 +370,15 @@ if hasattr(os, "geteuid") and os.geteuid() != 0:
         os.chmod(births, 0o700)
 else:
     print("SKIP permission-wall case (needs a non-root POSIX account; the directory-as-file case covers open())")
+# a stray, letter-initial .jsonl beside a real census changes NO verdict (Langston, part-2 re-review)
+open(os.path.join(births, "backup.jsonl"), "w", encoding="utf-8").write("not a census file\n")
+store.save_state("liveness", {})
+check("★ a stray backup.jsonl beside a real census: the readable census still passes the probe",
+      liveness.probe_readable() == [], liveness.probe_readable())
+store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-06.jsonl"), "offset": 0}})
+check("★ a stray backup.jsonl: a never-created day is still NOT a problem",
+      liveness.probe_readable() == [], liveness.probe_readable())
+os.remove(os.path.join(births, "backup.jsonl"))
 store.save_state("liveness", {"cursor": {"path": os.path.join(births, "2026-11-04.jsonl"), "offset": 5}})
 check("★ a cursor file that is gone while NEWER files exist is a problem (deleted, not never-written)",
       any("2026-11-04" in p for p in liveness.probe_readable()), liveness.probe_readable())
