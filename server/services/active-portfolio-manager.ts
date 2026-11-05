@@ -712,7 +712,7 @@ export class ActivePortfolioManager {
    * filled), not sold. A close the fill contract or the trade-record check refuses leaves the position OPEN (`left_open`).
    * The mode is this manager's (chosen at the API boundary by the route).
    */
-  async closeOnePositionByOperator(positionId: string, tag: 'manual_close' | 'stranded_clear'): Promise<{
+  async closeOnePositionByOperator(positionId: string, tag: 'manual_close'): Promise<{
     status: 'closed' | 'left_open' | 'failed' | 'not_found'; reason?: string; symbol?: string;
   }> {
     const position = await storage.getActiveOpenPosition(this.mode, positionId);
