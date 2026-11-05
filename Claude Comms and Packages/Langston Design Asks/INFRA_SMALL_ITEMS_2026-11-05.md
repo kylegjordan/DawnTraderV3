@@ -17,7 +17,7 @@ Owner: Infra Claude. Both are proposals for Kyle's list (PM Claude carries them)
 - (3) both resulting maps through `computeDiff` against the real baseline give identical results, an injected +1 regression detected in both;
 - (4) the `:388` note made executable: an unknown path stays in `newPaths` and makes the derived verdict fail (the comment stays, but is not the control).
 Real tsc's behaviour under `cwd: REPO_ROOT` rests on my root-run measurement (329 = baseline, OK), not on these tests.
-**Status:** Coltrane CONFIRMED Item 1 as written (at `972b06c22`). Langston AGREED to the fix (with 2 and 4); his confirmation of the revised test set is asked 16:0xZ.
+**Status:** Coltrane CONFIRMED Item 1 as written (at `972b06c22`). Langston AGREED to the fix (with 2 and 4) and to all four revised tests (re-derived at `38cfec121`). **Consensus reached on Item 1 as written here.**
 
 ## Item 2 — a root-made snapshot of staging's root crontab, so archival-health checks schedules against the real ones
 
