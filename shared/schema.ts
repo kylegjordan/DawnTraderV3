@@ -1723,8 +1723,10 @@ export const closedTradesTable = pgTable("closed_trades", {
   phantomFillSuspect: boolean("phantom_fill_suspect").notNull().default(false),
   // B-CLOSE-WRITER-COSTS P-12 (scope §5; Langston condition (c)): the operator remedy for a refused close. A record
   // RESTORED from its position's own open-time fields (nothing about the exit is written — the next close books it)
-  // says so: the flag, when, and who asked — `restored_by_claimed` is the authenticated caller recorded as a CLAIM
-  // (`#447`: an identity the server was told, not one it verified independently).
+  // says so: the flag, when, and who asked — `restored_by_claimed` is recorded as a CLAIM (`#447`: an identity the
+  // server was told, not one it verified independently). ⚠️ IT HOLDS ONE OF TWO KINDS, by invoker (Langston Part B):
+  // the operator script (the documented remedy) writes a canonical actor from `ALERT_ACTORS` (`cc-a`, `kyle`, …); the
+  // logged-in route writes the authenticated user's id. Read the value with its invoker in mind.
   recordRestoredFromPosition: boolean("record_restored_from_position").notNull().default(false),
   restoredAt: timestamp("restored_at", { withTimezone: true }),
   restoredByClaimed: text("restored_by_claimed"),

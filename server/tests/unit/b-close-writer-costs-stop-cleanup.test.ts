@@ -150,8 +150,10 @@ describe('B-CLOSE-WRITER-COSTS P-11 — the open record carries its entry fee in
     const payload = engine.slice(at, engine.indexOf('});', at));
     expect(payload).toMatch(/\n\s+fees: entryFee\.toString\(\),/);
     const restore = readFileSync(resolve(__dirname, '../../services/trade-record-restore.ts'), 'utf8');
-    expect(restore).toContain("fees: String(position.entryFee ?? '0'),");
-    expect(restore).toContain("entryFee: String(position.entryFee ?? '0'),");
+    expect(restore).toContain("fees: String(position.entryFee),");
+    expect(restore).toContain("entryFee: String(position.entryFee),");
+    // Langston Part B condition 2: no invented zero — a null entry cost is refused, never defaulted.
+    expect(restore).not.toContain("?? '0'");
   });
   it("F-2 a record whose fees is '0' books a zero entry fee — the guard does NOT refuse a zero (a zero-fee class must work); the fence above is the protection", async () => {
     h.getClosedTrades.mockResolvedValue([{ ...RECORD, fees: '0' }]);

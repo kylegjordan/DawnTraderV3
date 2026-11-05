@@ -8,13 +8,22 @@
  * CLAIM, `#447`: an identity the server was told, not one it verified).
  *
  * WHAT A RESTORED RECORD CARRIES (copied from the position): symbol, class, exchange, mode, strategy, side, quantity, entry
- * price, intended entry price, stop, target, the entry fee (into BOTH `fees` and `entry_fee`, as an open record holds it),
- * entry slippage, confidence, opened_at, signal/pattern type and strength, source pool, the at-open balance stamps, the
- * maker/taker entry stamps (`chosen_entry_mode`, `entry_fill_policy`, `entry_fee_rate`), `trade_mode`, and the metadata.
- * ⚠️ WHAT IT CANNOT RECOVER (Langston Part B C-1 — so nobody reads a restored record as a full one): the entry-price
- * provenance set (`entry_price_producer`, `entry_price_source`, `entry_book_age_ms`, `entry_book_consumption_age_ms`,
- * `entry_decision_price`, `entry_observed_at_ms`), the regime stamps (`regime_confidence_raw`, `macro_modifier_value`,
- * `phase`) and `pair_id_hash` — none of them lives on the position. They stay NULL, and the restored flag says why.
+ * price, intended entry price, stop, target, the entry fee (into `fees`, where the organic open record holds it, AND into
+ * `entry_fee` — which the organic record leaves at its column default until the close update overwrites it from `fees`,
+ * so writing it here is harmless), entry slippage, confidence, opened_at, signal/pattern type and strength, source pool,
+ * the at-open balance stamps, the maker/taker entry stamps (`chosen_entry_mode`, `entry_fill_policy`, `entry_fee_rate`),
+ * `trade_mode`, and the metadata.
+ * THE SIX REGIME STAMPS ARE PROMOTED FROM THE POSITION'S METADATA (Langston Part B condition 1): the open path writes the
+ * SAME six values (`regimeConfidenceRaw`, `macroModifierValue`, `phase`, `phaseAgeSeconds`, `strategyPhaseWeight`,
+ * `regimeConfidenceModulated`) to the record's typed columns AND into the position's metadata, so a restore copies them
+ * into their columns — same values, same vintage. A value absent from metadata (null when the MCE context was unavailable
+ * at open — measured 2026-11-05: present 19/19, non-null 7/19 for five of them) stays NULL, as it would on the organic row.
+ * ⚠️ WHAT IT CANNOT RECOVER (so nobody reads a restored record as a full one): the entry-price provenance set
+ * (`entry_price_producer`, `entry_price_source`, `entry_book_age_ms`, `entry_book_consumption_age_ms`,
+ * `entry_decision_price`, `entry_observed_at_ms`) and `pair_id_hash` — none of them is on the position, in a column or in
+ * its metadata (0/19 measured by Langston, 2026-11-05). They stay NULL, and the restored flag says why.
+ * A POSITION WITH NO ENTRY FEE OR SLIPPAGE IS REFUSED (Langston Part B condition 2): a restore copies costs, it never
+ * invents them, so a null is a refusal to investigate, not a zero. A fence — 0/19 open positions carried either null.
  *
  * A PENDING maker (`state='pending'`, Langston Part B C-2) is decided EXPLICITLY, not by a column default: the open path
  * writes a pending maker's open record at PLACEMENT, exactly as for a taker, so a restore for a pending position mirrors the
@@ -54,8 +63,19 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     return { ok: false, code: 409, error: `the position's own record ${tid} exists and is not open — investigate, do not restore`, recordId: tid };
   }
 
+  // Part B condition 2: copy the entry costs or refuse — never a fabricated zero (the batch's origin, PHASE_19_PLAN:116).
+  if (position.entryFee == null || position.entrySlippage == null) {
+    return { ok: false, code: 409, error: 'the position carries no entry fee or slippage — a restore would invent a cost; investigate, do not restore' };
+  }
+
   const pending = position.state === 'pending';
   const str = (v: unknown) => (v == null ? null : String(v));
+  // Part B condition 1: the six regime stamps, promoted from the position's metadata (the open path writes the same values
+  // to both). Only well-formed values travel; anything else stays NULL, as on an organic row with no MCE context.
+  const meta: Record<string, unknown> = position.metadata ?? {};
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const int = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+  const phase = meta.phase === 'EARLY' || meta.phase === 'PRIME' || meta.phase === 'LATE' ? meta.phase : null;
   const restoredAt = new Date();
   const result = await storage.insertOpenTradeRecordIfNoneOpen(mode, position.symbol, cls, {
     symbol: position.symbol,
@@ -71,10 +91,16 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     stopLoss: str(position.stopLoss),
     takeProfit: str(position.takeProfit),
     // the entry fee the open path computed and wrote to the position (and to the record's `fees` at placement)
-    fees: String(position.entryFee ?? '0'),
-    entryFee: String(position.entryFee ?? '0'),
-    slippage: String(position.entrySlippage ?? '0'),
-    entrySlippage: String(position.entrySlippage ?? '0'),
+    fees: String(position.entryFee),
+    entryFee: String(position.entryFee),
+    slippage: String(position.entrySlippage),
+    entrySlippage: String(position.entrySlippage),
+    regimeConfidenceRaw: num(meta.regimeConfidenceRaw),
+    macroModifierValue: num(meta.macroModifierValue),
+    phase,
+    phaseAgeSeconds: int(meta.phaseAgeSeconds),
+    strategyPhaseWeight: num(meta.strategyPhaseWeight),
+    regimeConfidenceModulated: num(meta.regimeConfidenceModulated),
     confidence: str(position.confidence),
     openedAt: position.openedAt ?? restoredAt,
     signalType: position.signalType ?? undefined,

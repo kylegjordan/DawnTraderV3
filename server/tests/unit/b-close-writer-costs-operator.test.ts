@@ -6,6 +6,8 @@
 //   S-1..S-9  the restore service against a stand-in storage: its four refusals, the success path (fields copied, both fee
 //             columns, the restore stamps, the position pointed at its record), the explicit pending-maker branch, and the
 //             atomic insert losing a race.
+//   S-10..S-12 Langston Part B conditions: a null entry fee or slippage is REFUSED, never a fabricated zero (S-10, S-11);
+//             the six regime stamps are promoted from the position's metadata, malformed values staying NULL (S-12).
 //   O-1..O-2  closeOnePositionByOperator: not found, and the one chain with the operator's tag and 'manual_stop'.
 // POSITIVE CONTROLS (mutation-proved while writing): returning 409 for a refusal fails R-2; dropping `error` from the
 // partial-clear body fails R-4; omitting chosenEntryMode from the restore fails S-6; the pending branch refusing fails S-8.
@@ -148,6 +150,41 @@ describe('S — the restore service', () => {
     st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'exists', ids: ['raced-1'] });
     expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordIds: ['raced-1'] });
     expect(st.updateActiveOpenPosition).not.toHaveBeenCalled();
+  });
+  it('S-10 a position with no entry fee → 409, nothing inserted (no invented zero)', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, entryFee: null });
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue(undefined);
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409 });
+    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+  });
+  it('S-11 a position with no entry slippage → 409, nothing inserted', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, entrySlippage: undefined });
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue(undefined);
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409 });
+    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
+  });
+  it('S-12 the six regime stamps are promoted from metadata; malformed or absent values stay NULL', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, metadata: {
+      regimeConfidenceRaw: 0.71, macroModifierValue: 1.05, phase: 'PRIME', phaseAgeSeconds: 420,
+      strategyPhaseWeight: 0.9, regimeConfidenceModulated: 0.64,
+    } });
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue(undefined);
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-3' } });
+    await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3]).toMatchObject({
+      regimeConfidenceRaw: 0.71, macroModifierValue: 1.05, phase: 'PRIME', phaseAgeSeconds: 420,
+      strategyPhaseWeight: 0.9, regimeConfidenceModulated: 0.64,
+    });
+    st.insertOpenTradeRecordIfNoneOpen.mockClear();
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, metadata: { macroModifierValue: 1.0, phase: 'BOGUS', phaseAgeSeconds: 1.5 } });
+    await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(st.insertOpenTradeRecordIfNoneOpen.mock.calls[0][3]).toMatchObject({
+      regimeConfidenceRaw: null, macroModifierValue: 1.0, phase: null, phaseAgeSeconds: null,
+      strategyPhaseWeight: null, regimeConfidenceModulated: null,
+    });
   });
 });
 
