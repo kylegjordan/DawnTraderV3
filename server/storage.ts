@@ -3381,7 +3381,7 @@ export class DatabaseStorage implements IStorage {
    * them sees ONE difference, the question asked, and never a population difference. ⚠️ ONE NAMED EXCEPTION:
    * `getLifetimeScoreboard` takes the BOOKED allowlist + `exit_price > 0` (P-15 r4 item 4) and the epoch floor, so it
    * differs from the others by more than its question (Langston Part A C-1). On today's data the allowlist selects the
-   * same rows (1,410 booked closed, Langston's read 2026-11-05) — but a reader must not assume parity there. Basis stays `pnl` throughout: the
+   * same rows (1,410 booked closed — Langston's live-DB read in his Part A review, Discord message 1568027617523802263, 2026-11-05T22:21:58Z: `WHERE closed_at IS NOT NULL AND exit_price > 0` = 1,410 = the booked closed total) — but a reader must not assume parity there. Basis stays `pnl` throughout: the
    * kill-switch numerator and denominator both sum `pnl`, and B-COST-MATH-CONSOLIDATION's `netPnl`
    * migration must move EVERY site in ONE batch or the ratio becomes incoherent (Langston's
    * standing condition 2). `netPnl` is NOT introduced here.
