@@ -46,6 +46,7 @@ import { recordSyncSpan, syncSpanStart } from './scan-stall-instrument.js';
 import { ScanYielder } from './scan-yield.js';
 // B72 (2026-05-05): VTS runner caps + cooldowns from module='vts_runner'.
 import { getCachedNumberRequired, getCachedConstant, GLOBAL_KEY } from './module-constants-service.js';
+import { readStrongTrendGeometryOverride } from './strong-trend-geometry.js';
 // Directive 11.8B-A2: Import canonical Net EV kernel for VTS profitability decisions
 // Note: isSignalProfitable is retained as a regime-aware ROI pre-filter (not EV math)
 import { isSignalProfitable, getROIDetails, getDynamicROIThreshold, getPerClassTargetGate } from '../core/calculations/expectancy.js';
@@ -1832,8 +1833,13 @@ async function generatePhase10Signal(
     dbsScore: propagatedDbs?.score,
     dbsCategory: propagatedDbs?.category,
     dbsSlope: propagatedDbs?.slope,
+    // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-1c): the B63 Item-12 Variant-E numbers (4×ATR stop, 3R
+    // target) are settings, not literals. Read ONLY inside the strong-trend arm (Langston r4-1): the
+    // rows are seeded for crypto_spot alone, so an unconditional read would throw for any class
+    // without a row. This function already refuses a non-crypto class at its top (8a-P4c P13), so the
+    // gate is a second fence, not the only one.
     strongTrendGeometryOverride: isStrongTrendLane
-      ? { stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0 }
+      ? readStrongTrendGeometryOverride(_assetClass)
       : undefined,
   };
 
