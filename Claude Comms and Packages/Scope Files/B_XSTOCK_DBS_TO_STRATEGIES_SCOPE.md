@@ -1,11 +1,19 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r1a (`#1235`) — r1c: F1 folded as OBJ-1b (seeds its missing row); F2's crypto hardcode folded as OBJ-1c; F2's xStock half is Kyle's
+# B-XSTOCK-DBS-TO-STRATEGIES — SCOPE r2 (`#1235`)
 
-change-class: non_architecture
+> **r2 (2026-11-05): Langston's CHANGES on r1 folded.** He ruled r1, not r1a-r1c. His four points:
+> 1. **The verification test.** OBJ-4 is now a per-row agreement test with a stated denominator, not "at least one of each kind". OBJ-3b records the score detect received on every archived xStock evaluation, so the test is exact. Old (b) is relabelled as a positive control.
+> 2. **F1's premise, corrected.** `volatility_edge` is DISABLED for xStock, so this batch does not make it live there; KD-7 does. It is ENABLED for crypto, so its fixed 0.35 is live today. Its fold is a code change plus a new settings row, not one line. Kept folded; the reason is in §5.
+> 3. **F2** is ESTABLISHED, and the lane is populated at runtime (measured).
+> 4. **Class → architecture.**
+>
+> Build note taken: OBJ-1 keeps the spread of all ten MCE fields, never crypto's seven-field pick.
+
+change-class: architecture
 
 **Owner:** CC-B (NEW Claude) · **Placed:** `SPRINT_TO_LIVE_PLAN` pre-sprint table, stage "00 — data truth first", order 4 (Kyle KD-2, 2026-11-04) · **Written:** 2026-11-05 · **Read at:** `origin/migration/aws-supabase` `86caf3040`
 
 ## 0. What this batch is for, in one paragraph
-The xStock evaluation loop computes a real directional score (DBS) for every xStock with enough history, but never hands it to the strategies. Every strategy reads `dbsScore ?? 0`, so on xStock the score is always zero. Two kinds of damage follow. `strong_bull_trend` can never fire, because it needs a score of at least 0.35. And the guards that refuse counter-trend and strong-trend entries never fire either. **Measured on `#1235`: 95 of 521 xStock paper trades since the 2026-10-06 reset are trades those guards exist to refuse.** This batch hands the score through, so the xStock VTS and xStock paper trading run on the same input that crypto does.
+The xStock evaluation loop computes a real directional score (DBS) for every xStock with enough history, but never hands it to the strategies. Every strategy reads `dbsScore ?? 0`, so on xStock the score is always zero. Two kinds of damage follow. `strong_bull_trend` can never fire, because it needs a score of at least 0.35. And the guards that refuse counter-trend and strong-trend entries never fire either. **Measured on `#1235`: 95 of 521 xStock paper trades since the 2026-10-06 reset are trades those guards exist to refuse.** ⚠️ Langston re-derived the denominator (548 at his read) but not the numerator. Step 2 states the object, the population and the method, and §7's "one in five" rides on it. This batch hands the score through, so the xStock VTS and xStock paper trading run on the same input that crypto does.
 
 ## 1. The defect, re-read at the ref (`86caf3040`)
 - **The loop hands the MCE's object to detect as is:** `server/asset_classes/xstock_spot/eval-cycle.ts:571` passes `mceContext.indicators` to `callStrategyDetect`.
@@ -43,7 +51,7 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 **Disposition (of the five): (3) disconnected, should be RECONNECTED.** The intent is clear (crypto parity), and the guards were written for exactly these cases. **Bug taxonomy outcome (1), real defect.**
 
 ## 4. Objectives and how each is verified
-**OBJ-1 — the xStock detect input carries the DBS.** The loop hands detect a new object: the MCE indicators plus `dbsScore`, `dbsCategory` and `dbsSlope` from `propagatedDbs`, exactly the three fields `vts-runner.ts:1832-1834` sets. **`mceContext.indicators` itself is not mutated**, because the provenance capture (`:592-599`), the hybrid score (`:672`), the reach gate (`:739`) and the paper hand-off (`:1327-1329`) read it.
+**OBJ-1 — the xStock detect input carries the DBS.** The loop hands detect a new object, `{ ...mceContext.indicators, dbsScore, dbsCategory, dbsSlope }`. It keeps ALL ten MCE fields. Crypto's object at `vts-runner.ts:1824-1838` is a seven-field pick that drops `volatility`, `momentum` and `adx`; copying it would narrow xStock's input, which is how `:571` came to drop the score in the first place. The new fields are `dbsScore`, `dbsCategory` and `dbsSlope` from `propagatedDbs`, exactly the three fields `vts-runner.ts:1832-1834` sets. **`mceContext.indicators` itself is not mutated**, because the provenance capture (`:592-599`), the hybrid score (`:672`), the reach gate (`:739`) and the paper hand-off (`:1327-1329`) read it.
 - **When `propagatedDbs` is undefined** (the scanner lacked history, ATR or sector), the three fields are undefined and the strategies' `?? 0` neutral applies, the same as crypto. No new fallback.
 - *Verify:* a unit test drives the detect call and asserts that the object detect receives carries the three values; a mutation removing them turns it red; a test with `propagatedDbs` undefined asserts the fields are absent, not 0.
 
@@ -57,27 +65,52 @@ The xStock evaluation loop computes a real directional score (DBS) for every xSt
 
 **OBJ-2 — paper xStock inherits it with no second change.** *Verify:* trace at Step 2 that `dispatchXstockActiveSignal` carries the detect result built from the OBJ-1 object, with no path that re-runs detect with the old object.
 
+**OBJ-3b — every archived xStock evaluation records the score detect received** (`features.detectDbsScore`). It is read from the OBJ-1 object itself, and is `null` when absent. It is an additive key in the existing `features` jsonb, so there is no schema change. It is what makes OBJ-4 exact, and it is the evidence calibration needs for the xStock guards (F3).
+- *Verify:* a unit test that the archived row carries the value detect received. Step 2 censuses the readers of `signal_eval_archive.features` for any that would break on a new key.
+
 **OBJ-3 — a count the reader can see: how many xStock evaluations carried a DBS this cycle.** One field in the existing xStock cycle summary (evaluations with `propagatedDbs` defined / total). **Positive control for OBJ-4:** zero would mean the hand-off is inert.
 - *Verify:* the field appears in the staging cycle summary and is above 0 during market hours.
 
 **OBJ-4 — staging verification, PRE-REGISTERED here, before any data:**
-- **(a)** xStock strategy null reasons that were 0 before the deploy appear after it: `b63_strong_dbs_exclusion` and the counter-trend guard reasons, on the xStock VTS. **PASS:** at least one of each kind within the first US regular session after the deploy. **FAIL:** none in a full session while OBJ-3 reads above 0.
-- **(b)** `strong_bull_trend` on xStock: its refusals stop being 100% below the DBS floor. **PASS:** any xStock evaluation that clears the DBS floor in the first session. Whether it then opens a trade depends on its other gates (reach, reward-to-risk) and is NOT a criterion.
+- **(a) PER-ROW AGREEMENT — the guards fire exactly where the score says they must.**
+  - **Population:** every xStock `signal_eval_archive` row for `morning_star` in the first full US regular session after the deploy (14:30-21:00Z).
+  - **Why the test can be exact:** `morning_star`'s guards are its FIRST check (`morning-star.ts:103`, `:112`), before every data and pattern check. And `morning_star` is the only ENABLED xStock strategy that emits `b63_strong_dbs_exclusion`; Langston confirmed `volatility_edge`, `reverse_impulse` and `defensive_hedge` are disabled on xStock.
+  - **The rule, for every row:** `detectDbsScore ≥ 0.35` ⇔ `detailReason = b63_strong_dbs_exclusion`, and `detectDbsScore ≤ −0.35` ⇔ `b63b_counter_trend_long_exclusion`.
+  - **PASS:** zero disagreeing rows, AND each side holds at least 1% of the population.
+  - **FAIL:** any disagreeing row, or either side under 1%.
+  - **Same test for `vwap_pullback` and `sma_trend_ride`**, against their floor (`counter_trend_long_dbs_floor`, −0.35): `detectDbsScore ≤` the floor ⇔ `b63b_counter_trend_long_exclusion`. vwap_pullback's guard is its first check (`strategy-engine.ts:171`). sma_trend_ride's (`:473`) is confirmed first at Step 2; if it is not, its test becomes one-directional: every b63b row has a score at or below the floor.
+- **(a′) THE SHARE, AGAINST AN INDEPENDENT INSTRUMENT.** Compare the share of xStock `morning_star` rows with `detectDbsScore ≥ 0.35` against the share of `pair_scan_archive` xStock rows at ≥ 0.35 in the same session (Langston measured 45.8% on 11-04). **PASS = within 10 percentage points**, a band set here, before the deploy. This catches a hand-off that works for some symbols or lanes and not others, which (a) alone cannot.
+- **(b) positive control on the hand-off (relabelled from r1):** `strong_bull_trend` on xStock has at least one evaluation that clears its DBS floor in the session. Whether it then opens a trade depends on its other gates, and is not a criterion.
 - **(c)** crypto is unchanged: the same null-reason counts on crypto in comparable windows, and no code path on crypto touched.
 - **(d)** UI: the Filter Diagnostics page for paper xStock shows the new refusal reasons (Claude-in-Chrome). ⛔ **The Drift Dashboard is NOT opened** (`#1037` am.4).
 
 **OBJ-5 — NOT in this batch, carried so it is not lost:** Kyle's KD-7 (2026-11-04) switches on adaptive_flow, reverse_impulse, volatility_edge and support_bounce for xStock right after this deploys, each after a target-reachability check. That runs under `B-SILENT-STRATEGY-CENSUS` O3, which is already homed. This batch only removes the reason to wait.
 
 ## 5. Findings outside the scope (§9.4)
-- **F1 — `volatility_edge`'s strong-DBS exclusion is a fixed 0.35 in code** (`volatility-edge.ts:94`). Its siblings read `strategy_dbs_routing_guards.dbs_min_threshold` from the database (`morning-star.ts:98-102`, documented class-invariant at 0.35). The value is the same today, so behavior is identical. But it is a hardcoded copy of a DB-governed setting, and **this batch makes it live on xStock for the first time.**
-  **DISPOSITION: folded into this batch (§9.4 #1) as OBJ-1b.** PM Claude ruled 2026-11-05 that Kyle's standing rules already decide it (rule 23 fix-on-find, and no hard-coded values for DB-governed settings); Kyle is told as information, not asked.
-- **F2 — xStock's strong-trend lane does not attach crypto's strong-trend stop/target override** (`vts-runner.ts:1835` attaches `strongTrendGeometryOverride` for the `quant-strong_trend` lane; `eval-cycle.ts` has an `xstock-strong_trend` lane and no override). **NOT ESTABLISHED:** whether any strategy that reads the override (`vwap_pullback`, `strategy-engine.ts:243`) runs in xStock's strong-trend lane.
+- **F1 — `volatility_edge`'s strong-DBS exclusion is a fixed 0.35 in code** (`volatility-edge.ts:94`). Its siblings read `strategy_dbs_routing_guards.dbs_min_threshold` from the database (`morning-star.ts:98-102`, documented class-invariant at 0.35). The value is the same today, so behavior is identical. But it is a hardcoded copy of a DB-governed setting. ~~This batch makes it live on xStock for the first time~~ — **CORRECTED r2 (Langston):** `volatility_edge` is DISABLED for xStock, so this batch does not make it live there; KD-7's switch-on does. It is ENABLED for crypto, so the fixed 0.35 is live today and unchanged by this batch.
+  **DISPOSITION: folded into this batch (§9.4 #1) as OBJ-1b. Kept folded in r2; Langston may overrule.**
+  - PM Claude ruled 2026-11-05 that Kyle's standing rules decide it: rule 23 (fix on find), and no hard-coded values for DB-governed settings.
+  - Langston proposed an own item, placed ahead of KD-7, because the fold needs a new setting, which contradicted the declared class.
+  - **Under the r2 class (architecture) it no longer does, and OBJ-1c already ships a settings migration in this batch**, so the row rides that same migration.
+  - It must land before KD-7 switches `volatility_edge` on for xStock either way, and in this batch it does.
+  - The urgency I gave PM Claude was wrong; I corrected it to them in the same turn.
+- **F2 — xStock's strong-trend lane does not attach crypto's strong-trend stop/target override** (`vts-runner.ts:1835` attaches `strongTrendGeometryOverride` for the `quant-strong_trend` lane; `eval-cycle.ts` has an `xstock-strong_trend` lane and no override). **ESTABLISHED (Langston's r1 ruling):**
+  - `MULTI_FAMILY_ELIGIBILITY` has exactly one entry, `vwap_pullback: ['strong_trend']` (`canonical-regime-strategy-map.ts:1167`).
+  - The live test asserts vwap_pullback is eligible for `xstock-strong_trend` (`b79-0m-b2-lane-eligibility.test.ts:89`).
+  - `eval-cycle.ts` declares that lane (`:132`, `:137`) and contains `strongTrendGeometryOverride` zero times.
+  - **It touches this batch:** that lane is where `vwap_pullback`'s counter-trend guard starts firing.
   **MEASURED 2026-11-05 ~00:20Z — IT BITES:** `vwap_pullback` is multi-family eligible for `strong_trend` (`canonical-regime-strategy-map.ts:1168`), and `signal_eval_archive` for xStock, 2026-11-04 14:30-21:00Z, shows **20,949** `vwap_pullback` evaluations in `xstock-strong_trend` (control: 20,492 in `xstock-trend`; `strong_bull_trend` 31,509 in `xstock-strong_trend`). On crypto that lane gets `{stopAtrMultiplier: 4.0, targetAsRMultiple: 3.0}` (`vts-runner.ts:1835-1837`); on xStock it gets vwap_pullback's default geometry. ⚠️ **And the crypto values are fixed numbers in code, not settings** — a second hardcode, on crypto.
   **DISPOSITION: SPLIT (PM Claude 2026-11-05).** The crypto hardcode is folded as OBJ-1c (required under every option). **The xStock behavior is decision required — NOT folded.** Unlike F1, the intent for xStock is not established: the override was built for crypto's lane (B63 Item 12), and xStock trades on 15-minute bars with its own calibration, so giving xStock crypto's numbers may be wrong. Put to Kyle through PM Claude 2026-11-05 with options. The crypto hardcode is recorded on `#1235` for the same decision.
 - **F3 — the guard thresholds (±0.35) were set on crypto's DBS scale.** xStock's DBS uses its own lookbacks (System Manual `:12821`), so whether 0.35 suits xStock is a calibration question. **DISPOSITION: no work in this batch.** Calibration reads it once the guards are live; this batch only makes them live.
 
 ## 6. Governance this batch expects to touch
-System Manual (the xStock detect input), System Impact Map (the eval-cycle entry and its DBS hand-off), `RUNNING_ISSUES` `#1235`, `CHANGES_AND_FIXES`, `BATCH_CATALOG`, `PHASE_HISTORY`, the task lists, memory, and the plan's pre-sprint line. A progress report only if OBJ-4 needs a second session.
+**REQUIRED under architecture:**
+- System Manual: the xStock detect input.
+- System Impact Map: the eval-cycle entry, its DBS hand-off, and the new settings.
+- The scope, the pre-audit and the completion report.
+- `BATCH_CATALOG` and `PHASE_HISTORY`.
+
+**Also:** `RUNNING_ISSUES` `#1235`, `CHANGES_AND_FIXES`, `BATCH_CATALOG`, `PHASE_HISTORY`, the task lists, memory, and the plan's pre-sprint line. A progress report only if OBJ-4 needs a second session.
 
 ## 7. Risk
 Small code change, real trading change. About one xStock open in five is expected to be refused, and `strong_bull_trend` may start opening xStock trades. Both are the intended behavior that has been silently missing since 2026-05-18. Three new settings rows (OBJ-1b's `volatility_edge` threshold and OBJ-1c's two crypto strong-trend geometry values, each at the value the code already uses), no schema change.
