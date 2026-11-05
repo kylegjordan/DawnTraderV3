@@ -1333,6 +1333,9 @@ export class ActiveExecutionEngine {
       // Phase 8.8.3-I8C: Set up open positions provider for reconnect and audit
       const mode = this.mode;
       krakenWebSocketAdapter.setI8COpenPositionsProvider(async () => {
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): THIS engine's positions, by intent. ⚠️ The adapter holds ONE provider slot and the last
+        // engine to start overwrites it — with paper and live both running it would see one mode only. Pre-existing,
+        // live-mode work (PRICING_MODE_ISOLATION_FINDINGS_2026-11-05; KD-37 placed it in row 179's co-run gate).
         const positions = await storage.getActiveOpenPositions(mode);
         // ★ B-WS-SUBSCRIBE-CLASS-FILTER OBJ-2 (#559): the CRYPTO Kraken WS feed serves ONLY
         // crypto_spot. This provider is the ONE confirmed source of the 5s subscription storm —
@@ -6663,7 +6666,11 @@ export class ActiveExecutionEngine {
       // Directive 10.3: Include signal type fields
       const { position: openPosition, created: _posCreated } = await storage.createActiveOpenPosition(this.mode, {
         symbol: signal.symbol,
+        // B-CLOSE-WRITER-COSTS P-6 / rider (ii): named here, not left to the column's one-deploy default.
+        mode: this.mode,
         strategyName: signal.strategy,
+        // ⛔ P-8 (d): side is NOT in the key any more — one position per (symbol, mode). A 'sell' open would
+        // collide with a 'buy' on the same symbol and take the #508 dedup-return. Pinned by test.
         side: 'buy',
         quantity: quantity.toString(),
         avgPrice: actualEntryPrice.toString(),

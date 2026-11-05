@@ -1990,6 +1990,11 @@ export const closedTradesTable = pgTable("closed_trades", {
 export const activeOpenPositions = pgTable("active_open_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   symbol: varchar("symbol", { length: 20 }).notNull(),
+  // B-CLOSE-WRITER-COSTS P-5/P-6 (KD-24 "modes are independent"): which mode owns this position. Written explicitly
+  // by `storage.createActiveOpenPosition` from its `mode` argument. ⚠️ The DEFAULT is a ONE-DEPLOY WINDOW BRIDGE,
+  // not a fallback: `dt-deploy` migrates before it restarts, so the old process can still insert without `mode`
+  // in between, and only the paper engine runs. Migration 2 in the NEXT deploy drops it (pre-audit P-5 (e)).
+  mode: tradingModeEnum("mode").notNull().default("paper"),
   // B69 (2026-05-03): asset class + exchange for cross-cutting analysis.
   // New rows are populated via `safeResolveAssetClass(symbol, exchange)` at
   // active-execution-engine open. Defaults match pre-B69 reality.
@@ -2066,7 +2071,10 @@ export const activeOpenPositions = pgTable("active_open_positions", {
   // duplicate declarations here were a copy-paste from another active-engine
   // table and never caught because tsc was running with continue-on-error.
 }, (table) => ({
-  symbolIdx: uniqueIndex("active_open_positions_symbol_idx").on(table.symbol),
+  // B-CLOSE-WRITER-COSTS P-5: ONE position per (symbol, mode) — Kyle KD-24/25. This replaces a declared
+  // `active_open_positions_symbol_idx` (symbol alone) that the database never had (#1006): the database's rule was
+  // `unique_symbol_side (symbol, side)`, which the migration drops.
+  symbolModeUnique: unique("unique_symbol_mode").on(table.symbol, table.mode),
   strategyIdx: index("active_open_positions_strategy_idx").on(table.strategyName),
 }));
 

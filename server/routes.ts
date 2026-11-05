@@ -3255,7 +3255,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
           stopLoss: p.stopLoss,
           takeProfit: p.takeProfit,
           unrealizedPnl: p.unrealizedPnl,
-          createdAt: p.createdAt
+          createdAt: p.openedAt // the table has no createdAt (a pre-existing tsc error, always undefined); openedAt is the row's creation time. B-CLOSE-WRITER-COSTS
         }))
       });
     } catch (error: any) {
@@ -9611,6 +9611,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9654,6 +9655,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9685,6 +9687,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9715,6 +9718,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // I7-PERSIST-FIX: Get active symbols from active_open_positions (actual data) + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9796,6 +9800,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get open positions from both paper and live
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9835,6 +9840,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get open positions to audit
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -9900,6 +9906,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/diagnostics/i7-persist/status', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
       // Get positions from active_open_positions (what the engine uses)
+      // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half below reads the OLD `trades` table.
       const activeEnginePositions = await storage.getActiveOpenPositions('paper');
       
       // Get positions from paper_trades table (legacy/unused)
@@ -9948,6 +9955,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get active symbols from paper positions + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);
@@ -10165,6 +10173,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       
       // Get active symbols from paper positions + live trades
       const [paperPositions, liveTrades] = await Promise.all([
+        // B-CLOSE-WRITER-COSTS P-7 (A-9): paper rows by intent; the live half reads the OLD `trades` table (an all-modes read would double-count).
         storage.getActiveOpenPositions('paper'),
         storage.getActiveTrades('live')
       ]);

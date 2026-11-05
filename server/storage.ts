@@ -574,7 +574,6 @@ export interface IStorage {
   createActiveOpenPosition(mode: TradingMode, position: InsertActiveOpenPosition): Promise<{ position: ActiveOpenPosition; created: boolean }>; // B-PROMOTION-RACE-FIX (#508): created=false = I8E dedup-return; caller must compensate its orphaned record
   updateActiveOpenPosition(mode: TradingMode, id: string, updates: Partial<ActiveOpenPosition>): Promise<ActiveOpenPosition>;
   getActiveOpenPosition(mode: TradingMode, id: string): Promise<ActiveOpenPosition | undefined>;
-  getActiveOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<ActiveOpenPosition | undefined>;
   getActiveOpenPositions(mode: TradingMode): Promise<ActiveOpenPosition[]>;
   deleteActiveOpenPosition(mode: TradingMode, id: string): Promise<void>;
   deleteAllActiveOpenPositions(mode: TradingMode): Promise<void>; // Phase 27.F.13.C: Reset simulation
@@ -3838,24 +3837,25 @@ export class DatabaseStorage implements IStorage {
     if (position.symbol !== canonicalSymbol) {
       console.log(`[I8C-SYMBOL-NORM] raw=${position.symbol} canonical=${canonicalSymbol}`);
     }
-    const normalizedPosition = { ...position, symbol: canonicalSymbol };
+    // B-CLOSE-WRITER-COSTS P-6: the row carries the mode of the engine that opened it — this method's `mode`
+    // argument is the authority, so a caller's own `mode` field can never disagree with it.
+    const normalizedPosition = { ...position, symbol: canonicalSymbol, mode };
 
     // Phase 8.8.3-I8E: Handle unique constraint violations gracefully
     try {
       const [result] = await db.insert(activeOpenPositions).values(normalizedPosition).returning();
       return { position: result, created: true };
     } catch (error: any) {
-      // The active table's unique index is `active_open_positions_symbol_idx` (symbol ALONE);
-      // 23505 is the reliable signal. (Was 'unique_symbol_side' — the PAPER table's constraint
-      // name; dead/misleading on this path since code===23505 already covers it. Corrected per
-      // B-PROMOTION-RACE-FIX / §15 no-legacy-lingering.)
-      if (error?.code === '23505' || error?.message?.includes('active_open_positions_symbol_idx') || error?.message?.includes('duplicate key')) {
-        console.log(`[I8E-DB-DEDUP] Duplicate position blocked: ${canonicalSymbol}/${position.side} - constraint prevented insert`);
-        // A concurrent open won this symbol's single position slot. Return it with created=false
+      // The table's one uniqueness rule is `unique_symbol_mode (symbol, mode)` (B-CLOSE-WRITER-COSTS P-5; before it
+      // the database held `unique_symbol_side (symbol, side)` while the schema declared a symbol-only index it never
+      // had, #1006). 23505 is the reliable signal.
+      if (error?.code === '23505' || error?.message?.includes('unique_symbol_mode') || error?.message?.includes('duplicate key')) {
+        console.log(`[I8E-DB-DEDUP] Duplicate position blocked: ${canonicalSymbol}/${mode} - constraint prevented insert`);
+        // A concurrent open won this symbol's single position slot IN THIS MODE. Return it with created=false
         // so the caller compensates its own orphaned record (B-PROMOTION-RACE-FIX #508).
         const existing = await db.select()
           .from(activeOpenPositions)
-          .where(eq(activeOpenPositions.symbol, canonicalSymbol));
+          .where(and(eq(activeOpenPositions.symbol, canonicalSymbol), eq(activeOpenPositions.mode, mode)));
         if (existing.length > 0) {
           console.log(`[I8E-DB-DEDUP] Returning winner position ${existing[0].id} with created=false — caller compensates its orphaned trade record`);
           return { position: existing[0], created: false };
@@ -3883,23 +3883,18 @@ export class DatabaseStorage implements IStorage {
     return position || undefined;
   }
 
-  async getActiveOpenPositionBySymbol(mode: TradingMode, symbol: string): Promise<ActiveOpenPosition | undefined> {
-    // Phase 27.F.15.B.2: Global query, mode-based only
-    const [position] = await db.select()
-      .from(activeOpenPositions)
-      .where(eq(activeOpenPositions.symbol, symbol));
-    return position || undefined;
-  }
-
   async getActiveOpenPositions(mode: TradingMode): Promise<ActiveOpenPosition[]> {
-    // Phase 27.F.15.B.2: Global query, mode-based only
+    // B-CLOSE-WRITER-COSTS P-6 (KD-24): this mode's positions only. (Was a global read that ignored `mode` —
+    // "Phase 27.F.15.B.2: Global query, mode-based only" — because the table had no mode column.)
     return await db.select()
       .from(activeOpenPositions)
+      .where(eq(activeOpenPositions.mode, mode))
       .orderBy(desc(activeOpenPositions.openedAt));
   }
 
   async deleteActiveOpenPosition(mode: TradingMode, id: string): Promise<void> {
-    await db.delete(activeOpenPositions).where(eq(activeOpenPositions.id, id));
+    // B-CLOSE-WRITER-COSTS P-6 (KD-24): one mode can never delete another mode's position.
+    await db.delete(activeOpenPositions).where(and(eq(activeOpenPositions.id, id), eq(activeOpenPositions.mode, mode)));
   }
 
   // Phase 27.F.13.C: Reset simulation methods - Phase 27.F.15.B.2: Mode-based only

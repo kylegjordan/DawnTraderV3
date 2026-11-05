@@ -563,6 +563,8 @@ app.use((req, res, next) => {
     
     // Audit active positions for mapping coverage
     const [paperPositions, liveTrades] = await Promise.all([
+      // B-CLOSE-WRITER-COSTS P-7 (A-9): the active table's paper rows; the live half comes from the OLD `trades` table, so an
+      // all-modes read here would double-count the first live position. 'paper' stays.
       storage.getActiveOpenPositions('paper'),
       storage.getActiveTrades('live')
     ]);

@@ -1470,3 +1470,13 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **BLAST RADIUS (§9.5(a-ii)):** `getClosedTradesBySymbol` had ONE caller (the close, replaced). The removed block WROTE one alert key; `close-no-trade-row` has 0 code readers (`git grep` at the commit: scope/measurement documents only) and **0 alert rows** on that key across the paper queue 2026-09-19 → 2026-11-04 (`B_CLOSE_WRITER_COSTS_KD17_MEASUREMENT_2026-11-04.md`; Langston's read 2,816 rows / 960 keys, control 16 active rows on other keys). One TEST READER was found by the census and not by the plan: `b-price-side-8a-p1-exit-fence.test.ts` asserted `LADDER_NO_TRADE_ROW` present and anchored its block extraction on `if (trade) {` — re-pointed (the extraction anchors on the bare block's marker; the finally's identity marker is the close's refusal-tally eviction; the arm's absence is asserted). `tsc` baseline 329 = 329.
 **ARCHIVE:** none of these is a file; git history at `665daf3f1` is the archive.
 **COMMIT:** this entry's commit. **DEPLOY:** after Langston's Step 4, CI 4/4, and never before the joint deploy of the head after 2026-11-07T13:03:42Z.
+
+## 2026-11-05 — the unused by-symbol open-position read — B-CLOSE-WRITER-COSTS OBJ-8 (increment 2), CC-A
+| removed | where (pre-removal, at `b3583659e`) | what it was |
+|---|---|---|
+| `getActiveOpenPositionBySymbol(mode, symbol)` + its `IStorage` entry | `server/storage.ts:3886`, interface `:577` | a symbol-keyed read of `active_open_positions` that ignored `mode`; 0 callers |
+
+**WHY:** scope OBJ-8 (rule 18). Once the table is keyed by (symbol, mode) a symbol-only read is wrong by construction, and nothing called it. (Increment 1's pre-audit plan carried only the other half of OBJ-8; this half was folded into increment 2, where the table it reads changes.)
+**BLAST RADIUS:** `git grep getActiveOpenPositionBySymbol` before the edit: the interface and the implementation only — no caller in `server/`, `client/`, `shared/`, `scripts/` or the tests; after the edit: scope and measurement documents only. `tsc` baseline holds; `b-close-writer-costs-open-mode.test.ts` M-8 asserts its absence.
+**ARCHIVE:** not a file; git history at `b3583659e` is the archive.
+**COMMIT:** this entry's commit. **DEPLOY:** with increment 2, after Langston's Step 4 and CI 4/4, never before the joint deploy of the head after 2026-11-07T13:03:42Z.

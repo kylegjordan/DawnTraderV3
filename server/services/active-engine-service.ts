@@ -769,6 +769,7 @@ export async function startActiveEngine(
           // Phase 8.8.3-I4 B4: Start periodic price tick health logging
           krakenWebSocketAdapter.startPriceTickHealthLogging(async () => {
             try {
+              // B-CLOSE-WRITER-COSTS P-7 (A-9): the PAPER engine's tick health, by intent — 'paper' stays.
               const positions = await storage.getActiveOpenPositions('paper');
               return positions.map(p => p.symbol);
             } catch {
