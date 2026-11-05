@@ -131,13 +131,13 @@ describe('B79.0n.CONFIDENCE-CHAIN type-lock — REQUIRED-assetClass on modulator
 
   it('computePairCorrelation + buildB68_3Alternate reject calls without assetClass', () => {
     const cfg: PairCorrelationConfig = { lookbackBars: 30, btcReferenceSymbol: 'XBT/USD', factorMin: 0.95, factorMax: 1.05,
-      sensitivity: 0.05, minSamples: 30, driftingThreshold: 0.70, idiosyncraticThreshold: 0.30, computeCorrelationEnabled: true };
+      sensitivity: 0.05, minSamples: 30, driftingThreshold: 0.70, idiosyncraticThreshold: 0.30, computeCorrelationEnabled: true, applyFactor: true };
     // @ts-expect-error — assetClass REQUIRED
     const _bad1 = () => computePairCorrelation('SOL/USD', [], null, cfg);
     const r = computePairCorrelation('SOL/USD', [], null, cfg, 'crypto_spot');
     // @ts-expect-error — assetClass REQUIRED
     const _bad2 = () => buildB68_3Alternate(0.5, 'TFS', r, cfg);
-    const ok = buildB68_3Alternate(0.5, 'TFS', r, cfg, 'crypto_spot');
+    const ok = buildB68_3Alternate(0.5, 'TFS', r, cfg, 'crypto_spot', { applied: true, intervalMinutes: 60, alignedByTimestamp: false });
     expect(ok.factorName).toBe('b68_3_pair_correlation');
   });
 

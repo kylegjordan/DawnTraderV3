@@ -1,0 +1,105 @@
+// Removed from server/scripts/replay-ablation.ts by B-XSTOCK-CORRELATION-COLLECT, 2026-11-05. Not compilable by design.
+// VTS JSONL log directory — same constant pattern as vts-service.ts:153.
+// Files are date-partitioned: YYYY-MM-DD.json containing a JSON ARRAY (not
+// line-delimited despite the .jsonl-style usage elsewhere in the codebase).
+const VTS_LOGS_DIR = path.join(process.cwd(), 'logs', 'virtual_trades');
+
+/**
+ * B67.0.1 (2026-04-30): VTS trade index keyed by `(symbol|strategy)` →
+ * sorted-by-entryTime list of trades. Replaces the previous id-based index
+ * which broke because two emit paths produced different ID formats
+ * (vts-runner emits `vsig_p10_*`; vts-service writes JSONL with
+ * `vts_<sym>_<strat>_<ts>`). Per Langston cc-inbox #864 Q1, the natural-key
+ * tuple `(pair_symbol, evaluated_at, strategy)` is generated identically on
+ * both sides from source data, immune to ID-format drift.
+ *
+ * Lookup: see `findVtsTradeByNaturalKey` — matches the closest trade by
+ * entryTime within ±60s tolerance.
+ */
+type VtsTradeIndexEntry = { entryTime: number; trade: any };
+
+async function buildVtsTradeIndex(
+  daysBack: number = 14,
+): Promise<Map<string, VtsTradeIndexEntry[]>> {
+  const index = new Map<string, VtsTradeIndexEntry[]>();
+  try {
+    const files = await fs.readdir(VTS_LOGS_DIR);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysBack);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+    for (const filename of files) {
+      if (!filename.endsWith('.json')) continue;
+      const datePart = filename.replace('.json', '');
+      if (datePart < cutoffStr) continue;
+
+      try {
+        const fullPath = path.join(VTS_LOGS_DIR, filename);
+        const raw = await fs.readFile(fullPath, 'utf-8');
+        const trades = JSON.parse(raw) as any[];
+        for (const trade of trades) {
+          if (trade?.status !== 'closed') continue;
+          const symbol: string | undefined = trade?.signal?.symbol ?? trade?.symbol;
+          const strategy: string | undefined = trade?.strategy ?? trade?.signal?.strategy;
+          const entryTime: number | undefined = trade?.entryTime ?? trade?.signal?.createdAt;
+          if (!symbol || !strategy || !entryTime) continue;
+          const key = `${symbol}|${strategy}`;
+          const list = index.get(key) ?? [];
+          list.push({ entryTime, trade });
+          index.set(key, list);
+        }
+      } catch (err) {
+        console.warn(
+          `[B67.0][replay-ablation] Failed to parse ${filename}:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
+    // Sort each bucket so the binary-search-style match is fast.
+    for (const list of index.values()) {
+      list.sort((a, b) => a.entryTime - b.entryTime);
+    }
+  } catch (err) {
+    console.warn(
+      '[B67.0][replay-ablation] VTS logs directory unreadable (cold cluster?):',
+      err instanceof Error ? err.message : err,
+    );
+  }
+  return index;
+}
+
+/**
+ * B67.0.1 (2026-04-30): Find the JSONL trade matching an ablation row by
+ * (symbol, strategy, evaluated_at±toleranceMs). Returns null if no match.
+ *
+ * The ablation row's `evaluatedAt` is stamped at signal-eval time (which is
+ * trade-open time — emit fires inside vts-runner / signal-orchestrator just
+ * before the trade is registered). The JSONL `entryTime` is also the
+ * trade-open epoch. They should be within milliseconds of each other under
+ * normal flow; the 60s tolerance covers any insert latency or clock drift.
+ *
+ * Ambiguity policy: if two trades on the same (symbol, strategy) opened
+ * within tolerance, take the closest. At realistic VTS scale (10s of trades
+ * per pair per day max) this collision is vanishingly rare.
+ */
+function findVtsTradeByNaturalKey(
+  index: Map<string, VtsTradeIndexEntry[]>,
+  symbol: string,
+  strategy: string | null,
+  evaluatedAtMs: number,
+  toleranceMs: number = 60_000,
+): any | null {
+  if (!strategy) return null;
+  const list = index.get(`${symbol}|${strategy}`);
+  if (!list || list.length === 0) return null;
+  let best: VtsTradeIndexEntry | null = null;
+  let bestDelta = Infinity;
+  for (const entry of list) {
+    const delta = Math.abs(entry.entryTime - evaluatedAtMs);
+    if (delta <= toleranceMs && delta < bestDelta) {
+      best = entry;
+      bestDelta = delta;
+    }
+  }
+  return best?.trade ?? null;
+}

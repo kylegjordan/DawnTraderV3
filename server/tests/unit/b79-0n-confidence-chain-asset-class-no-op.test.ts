@@ -91,11 +91,13 @@ describe('B79.0n.CONFIDENCE-CHAIN — b68_3 pair-correlation compute-disabled', 
     factorMin: 0.95, factorMax: 1.05, sensitivity: 0.05, minSamples: 30,
     driftingThreshold: 0.70, idiosyncraticThreshold: 0.30,
     computeCorrelationEnabled: true,
+    applyFactor: true,
   };
   const xstockCorrCfg: PairCorrelationConfig = {
     ...cryptoCorrCfg,
     btcReferenceSymbol: 'SPY/USD',
     computeCorrelationEnabled: false, // xstock v1 disposition per D-2
+    applyFactor: false,
   };
 
   it('xstock_spot with compute_disabled short-circuits to factor=1.0 + label=COMPUTE_DISABLED', () => {

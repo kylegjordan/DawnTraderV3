@@ -231,6 +231,7 @@ import {
 // B68.3 (2026-05-02): pair correlation as third orthogonal confidence dimension
 import {
   computePairCorrelation,
+  resolveCorrelationInputs,
 } from '../core/metrics/pair-correlation.js';
 // B68.1 (2026-05-03): multi-TF agreement as 7th and final B68.x chain modulator.
 // Higher-TF (240-min / 4h) regime classification reuses calculatePairRegime
@@ -1692,30 +1693,29 @@ export class SignalOrchestrator {
       // BTC OHLC fetched on-demand from ohlcCache (cache read; microsecond
       // latency per Langston cc-inbox #884 D.1). Self-reference handled
       // inside computePairCorrelation (factor=1.0 + SELF_REFERENCE flag).
-      const pairCorrelationConfig = mce.getPairCorrelationConfigForClass(_pairAssetClass) ?? mce.getCurrentPairCorrelationConfig();
+      // B-XSTOCK-CORRELATION-COLLECT (P-1, P-3): NO fallback to another class's config — a class missing from the
+      // per-class map skips the factor (factor 1.0, nothing pushed) instead of borrowing crypto's apply-on config.
+      // The reference comes from the store that holds the reference's class (resolveCorrelationInputs); the factor is
+      // multiplied in only when the class applies it.
+      const pairCorrelationConfig = mce.getPairCorrelationConfigForClass(_pairAssetClass);
       if (pairCorrelationConfig !== null && symbolCtx !== null) {
         const ohlc = (rawSignal as any).ohlcData ?? (symbolCtx as any).ohlcData;
         if (ohlc && Array.isArray(ohlc) && ohlc.length >= pairCorrelationConfig.minSamples) {
           try {
-            const { ohlcCache } = await import('./ohlc-cache.js');
-            const btcRaw = await ohlcCache.getOHLCData(pairCorrelationConfig.btcReferenceSymbol, 60);
-            const btcOhlc = (btcRaw?.ohlc ?? []).map((c: any) => ({
-              open: parseFloat(c.open || c[1]),
-              high: parseFloat(c.high || c[2]),
-              low: parseFloat(c.low || c[3]),
-              close: parseFloat(c.close || c[4]),
-              volume: parseFloat(c.volume || c[6] || 0),
-              timestamp: c.timestamp || c[0] * 1000,
-            }));
+            const inputs = await resolveCorrelationInputs(_pairAssetClass, ohlc, pairCorrelationConfig);
+            if ('skip' in inputs) throw new Error(inputs.skip);
             const result = computePairCorrelation(
               rawSignal.symbol,
-              ohlc,
-              btcOhlc.length >= pairCorrelationConfig.minSamples ? btcOhlc : null,
+              inputs.pair,
+              inputs.ref,
               pairCorrelationConfig,
               _pairAssetClass,
             );
-            modulatedConfChain *= result.factor;
-            alternateInputs.push({ kind: 'b68_3', result, config: pairCorrelationConfig, assetClass: _pairAssetClass });
+            if (pairCorrelationConfig.applyFactor) modulatedConfChain *= result.factor;
+            alternateInputs.push({
+              kind: 'b68_3', result, config: pairCorrelationConfig, assetClass: _pairAssetClass,
+              applied: pairCorrelationConfig.applyFactor, intervalMinutes: inputs.intervalMinutes, alignedByTimestamp: inputs.alignedByTimestamp,
+            });
             console.log(
               `[B68.3][correlation] pair=${rawSignal.symbol} corr=${result.correlationToBtc.toFixed(3)} ` +
                 `decorr=${result.decorrelationScore.toFixed(3)} factor=${result.factor.toFixed(4)} ` +
@@ -1729,7 +1729,7 @@ export class SignalOrchestrator {
           }
         }
       } else if (pairCorrelationConfig === null) {
-        console.warn('[B68.3][orchestrator] pair correlation config null at ablation hook — cold-start race');
+        console.warn(`[B68.3][orchestrator] pair correlation config null for class=${_pairAssetClass} — factor skipped (cold start or class not loaded; no fallback)`);
       }
 
       // ── B68.1 multi-TF agreement (7th chain modulator, 2026-05-03) ────

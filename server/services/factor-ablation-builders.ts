@@ -101,6 +101,10 @@ export type FactorAlternateInput =
       result: PairCorrelationResult;
       config: PairCorrelationConfig;
       assetClass: AssetClass;
+      // B-XSTOCK-CORRELATION-COLLECT: required — whether the factor entered the real confidence, and how the series met.
+      applied: boolean;
+      intervalMinutes: number;
+      alignedByTimestamp: boolean;
     }
   | {
       kind: 'b68_4';
@@ -187,6 +191,7 @@ function buildOneAlternate(
         input.result,
         input.config,
         input.assetClass,
+        { applied: input.applied, intervalMinutes: input.intervalMinutes, alignedByTimestamp: input.alignedByTimestamp },
       );
     case 'b68_4':
       return buildB68_4Alternate(

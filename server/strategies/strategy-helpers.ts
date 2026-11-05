@@ -279,7 +279,10 @@ export function spearmanRankCorrelation(seriesA: number[], seriesB: number[]): n
     const ranks = new Array(arr.length);
     let i = 0;
     while (i < sorted.length) {
-      let j = i;
+      // B-XSTOCK-CORRELATION-COLLECT (fix on find, rule 23): start at i + 1 so the outer loop ALWAYS advances. With
+      // `j = i`, a NaN at sorted[i] fails `NaN === NaN`, j stays at i, i = j, and the loop never ends — one NaN in
+      // either series froze the event loop. For every finite input the ranks are identical (sorted[i] equals itself).
+      let j = i + 1;
       while (j < sorted.length && sorted[j].v === sorted[i].v) j++;
       const avgRank = (i + j - 1) / 2 + 1; // 1-based average rank for ties
       for (let k = i; k < j; k++) ranks[sorted[k].i] = avgRank;
