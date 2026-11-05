@@ -54,10 +54,7 @@ import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: type
 import { refuseTakerBooking, entryFillShadow } from '../core/trading/entry-booking.js'; // B-ENTRY-DISTANCE-GUARD (row 59)
 import { entryWindowRefusal, cheaperSideRecord } from '../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P1/P1b
 import { computeFillEconomics, type FillEconomics, type FillEconInputs } from '../core/trading/fill-economics.js'; // B-ENTRY-GATE (#1224) P4
-import { getCachedCostMetrics } from '../core/math/cost-model.js'; // B-ENTRY-GATE (#1224) P4 — the birth decision's own cost read
-import { entryUrgencyClassForFamily } from '../core/math/maker-taker-decision.js'; // B-ENTRY-GATE (#1224) P4
-import { resolveMakerTakerHaircut } from './maker-taker-config.js'; // B-ENTRY-GATE (#1224) P4
-import { STRATEGY_FAMILY_MAP, normalizeStrategy } from '../config/canonical-regime-strategy-map.js'; // B-ENTRY-GATE (#1224) P4
+import { resolveFillEconInputs } from './fill-econ-inputs.js'; // B-ENTRY-GATE (#1224) inc B — shared with the refresh (P6)
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js'; // B-ENTRY-DISTANCE-GUARD OBJ-2 shadow floor
 import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -2043,30 +2040,10 @@ export class ActiveExecutionEngine {
    * re-decide in ready_to_buy_service.ts) and price the arm that fills at the price it pays. Every setting is read with
    * getCachedNumberRequired (fail-hard). The at-queue DI / DBS / pool are the signal's carried snapshot.
    */
+  // B-ENTRY-GATE (#1224) inc B: the resolver moved to `server/services/fill-econ-inputs.ts`, shared with the queue
+  // refresh's re-pricing (P6) so the open and the queue read the same rows the same way.
   private _resolveFillEconInputs(signal: any, assetClass: AssetClass): FillEconInputs {
-    const fr = getFrictionForAssetClass(assetClass);
-    const gk = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
-    const ck = { exchange: '*', assetClass, strategy: '*', regime: '*' };
-    const di = signal.diAtQueue != null && Number.isFinite(Number(signal.diAtQueue)) ? Number(signal.diAtQueue) : undefined;
-    const dbs = signal.dbsScoreAtQueue != null && Number.isFinite(Number(signal.dbsScoreAtQueue)) ? Number(signal.dbsScoreAtQueue) : undefined;
-    const base = getCachedNumberRequired('scoring_base', 'flat_pwin_base', ck);
-    const frictionCoverageK = getCachedNumberRequired('entry_gate', 'entry_friction_coverage_k', ck);
-    if (frictionCoverageK < 0) throw new Error(`entry_gate.entry_friction_coverage_k must be non-negative, got ${frictionCoverageK}`);
-    return {
-      stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
-      costs: getCachedCostMetrics(signal.symbol, assetClass),
-      feeRateMaker: fr.feeRateMaker, feeRateTaker: fr.feeRateTaker,
-      DI: di, sourcePool: signal.sourcePool ?? signal.metadata?.sourcePool, dbsScore: dbs,
-      minPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_floor', gk),
-      maxPWin: getCachedNumberRequired('expectancy_kernel', 'pwin_ceiling', gk),
-      diPWinFactor: getCachedNumberRequired('directional_integrity', 'di_pwin_factor', gk),
-      signalStrength: base,
-      urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
-      haircut: resolveMakerTakerHaircut(assetClass),
-      measuredBasePWin: base,
-      frictionCoverageK,
-      levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)
-    };
+    return resolveFillEconInputs(signal, assetClass);
   }
 
   private _fillEconRecord(fe: FillEconomics, arm: 'taker' | 'maker', exploration: boolean): Record<string, unknown> {
