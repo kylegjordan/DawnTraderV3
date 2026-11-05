@@ -76,3 +76,7 @@ Positive controls are rows 1, 2 and 4: the same replay emits a wake where one is
 - `2026-11-05T00:14:01Z`: same five-name header; `watchers: all alive`; `control: issued CC-A/CC-B/CC-C/CC-INFRA/CC-PM; … CC-PM answered.`
 - Neither post carries `CHECK FAILED`. Positive control for "PM is really in the liveness list": the 23:15 run issued its control probe to CC-PM alone and recorded PM's answer, which only happens when CC-PM is in `ALIASES`.
 **Verdict:** OBJ (P1b) met as written; ready for Langston's Step 8.
+
+## P1b — Step 8 second-pass: CONFIRMED (Langston, Discord `1567723845232894043`, stamp `933775b88`)
+Re-derived by Langston: three post-install heartbeats (23:15Z, 00:14Z, 01:14Z), each five-name, all aliases answered, no `CHECK FAILED` (the string is reachable in the corpus, 2026-10-16T19:00Z, so its absence is measured); the positive control re-derived from `control_state.py:28/:233/:266-270`; installed blobs byte-identical at `b1a555649`/`ed9fc666d`/`933775b88`; CI `41927726582` per job. Reach boundary, stated: the laptop install sha is ruled on reported fact, not load-bearing.
+**Record item for the completion report (no work owed):** the `watchers:` field is composed by the model from the `--liveness` arguments, so `watchers: all alive` is NOT proof of liveness-list membership; the script-produced control line (`issued … CC-PM … CC-PM answered`) is the instrument to cite.
