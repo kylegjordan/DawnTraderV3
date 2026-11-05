@@ -1,0 +1,34 @@
+# B-ENTRY-GATE (#1224) — STEP 4 CHANGE LIST, INCREMENT B (the SQE, the refresh, the queue)
+
+> **Status: DRAFT, written 2026-11-05 ~18:10Z, while increment B sits on CC-B's LOCAL branch `cc-b/entry-gate-inc-b` by agreement (nothing of it rides the joint head deploy after 2026-11-07T13:03:42Z).** After that deploy: rebase onto the head, re-run the full suite, push, read CI 4/4 per job at the pushed sha, then dispatch this file. **The shas below are the local ones and WILL change at the rebase; the dispatch names the pushed ones.**
+> Scope r4 (Langston PROCEED) · pre-audit r9 (plan) + r10-r13 (increment B Step-2 addendum; Langston PROCEED with conditions, msg 1567937981027852422). Every item names the plan row and the finding it falls out of.
+
+## The commits (local, in order)
+| # | item | what it does | finding |
+|---|---|---|---|
+| 1 | **P8** + **P9 siblings** | the RR/reach target gate (`normalizeAndGateTarget`) moves ahead of the RTB queue write in `signal-orchestrator.ts`; the queue stores the gated target. `require()` of a node built-in (which throws in the ESM bundle) replaced with imports in `event-bus.ts` (TCL trace), `singleTenantGuard.ts` (violation log, now an absolute path) and `routes.ts` (config-snapshot hash); a server-wide fence bans any non-relative `require(` | A-8 (TQQQ queued in the same second it was dropped); Langston Step-4 r3 §13 |
+| 2 | **P4s + P12** | an absent or non-finite `chosenNetEv` is refused as `NetEVMissing` in both SQE copies; the dead fail-open and its stale comments go; the exploration lane cannot admit on it (no `NetEV ` prefix) | A-3 |
+| 3 | **P6** | `repriceAtAsk` (`fill-economics.ts`): every priced refresh pass re-asks the open's question at the live ask — the taker arm is the fill test at the ask (C-1 composition), struck outside the window; the maker arm is the birth's adjusted maker leg at the plan; the class fill policy picks (floor 0). The result feeds the SQE's sign check and, when admitted, the stored snapshot. A refusal never carries a positive EV (maker hard floor clamped to 0). No ask ⇒ no decision; a missing setting ⇒ loud, no decision. The input resolver moved to `server/services/fill-econ-inputs.ts`, shared by the open and the refresh | A-4 |
+| 4 | gate ids | `NetEVMissing`, `EntryWindow`, `InvalidTarget` join `SQE_GATE_IDS` and `SQE_CANONICAL_GATES` (with labels) so Filter Diagnostics files them by name, not `uncategorized` | P2/P4s |
+| 5 | **P2** | `SQEInput` gains `planEntry`/`planStop`/`planTarget` (never `entryPrice`/`targetPrice` — r11) and `priced`. `applyPlanGates` (both copies): `InvalidTarget`; `EntryWindow` judges only a TAKER-chosen plan, every decline a named, counted outcome (`getEntryWindowTally`, phase:class:outcome). Birth reads its price through `readRetirementAsk` and runs EntryWindow in its own shadow; refresh enforces it as a fence on P6. `chosenEntryMode`'s "never gated on" declaration changed | r11, r12 Q-1/Q-2/Q-3, C-1/C-2 |
+| 6 | **P11** | the stale-plan limit at promotion: reader `entry_gate.rtb_plan_max_age_ms`, NO row seeded ⇒ off and logged once per class; a bad row refuses loudly. Reason of record: age does not separate outcome | r10, r13 |
+| 7 | **P7** | `rtb_signals.last_priced_at` + `consecutive_unpriced_passes`, written only by the refresh (never the upsert); promotion requires a priced pass within `entry_gate.promotion_price_max_age_ms` (crypto 300000 ms seeded; xStock unseeded ⇒ off) ⇒ `unpriced`, stays queued. Migration `2026-11-05-b-entry-gate-inc-b.sql` + rollback + MANIFEST | r12 Q-4 |
+| 8 | **P10** | the xStock birth freshness checkpoint stamps `birthFreshness {ageMs, ceilingMs, source}`, carried through the queue metadata allow-list; the P6 line carries the ask age and basis | A-11 |
+| 9 | **P7 instrument** | one `[B-ENTRY-GATE][P7][PRICED_SHARE_HOUR]` line per class per UTC hour (`SYMBOL=priced/unpriced`) — the object the xStock seed's named prediction (`Langston Design Asks/B_ENTRY_GATE_P7_XSTOCK_PREDICTION.md`, `c28739dbc`) is read from | r12 Q-4 |
+
+## The questions to put to the reviewer
+1. **P6 replaces the plan-price re-decide whenever there is an ask.** That creates a NEW eviction stream (net EV at the live ask), pre-registered as A-4's Step-7 magnitude. Is the precedence right: at-ask, then the throttled plan-price re-decide, then the stored value?
+2. **P2 `InvalidTarget` at birth** turns a target-less signal into an SQE refusal, where it used to reach the post-SQE target gate as `invalid_geometry`. Filter Diagnostics attribution moves; the trade outcome does not.
+3. **P7 `unpriced` leaves the row queued.** A crypto row that cannot be priced for longer than 300 s cannot be promoted until it is priced again or retired. Is "stay queued" right, or should a long unpriced streak retire it (its own decision, not in scope)?
+4. **The hourly instrument loses the hour in progress at a restart.** Is that acceptable for a one-week read?
+
+## Verification so far (local, before the rebase)
+`tsc` 329 = 329 baseline. Suites run green: every SQE / RTB / orchestrator test file (48 files, 637 tests at the P2 commit); the RTB-table suites (34 files, 451); the migration and manifest suites (23 files, 408); the xStock dispatch suites (6 files, 151); the new increment-B files `b-entry-gate-inc-b` (10), `-reprice` (11), `-plan-gates` (11), `-plan-age` (6), `-priced-pass` (7). `server/tests/integration/net_expectancy.test.ts` needs a local Postgres and fails identically on the base.
+**Owed before dispatch:** the full suite at the rebased sha; CI 4/4 per job at the pushed sha; this table's shas replaced with the pushed ones.
+
+## Step 7 (pre-registered here, measured after deploy)
+- **P6 eviction stream:** count of refresh deletions whose only failure is `NetEV ` at the ask, per class, first 24 h, set against the 41 RegimeWeight deletions of record (A-4).
+- **P2 EntryWindow:** the birth shadow's would-refuse share **with its full denominator** (every skip outcome, from `getEntryWindowTally`), per class.
+- **P2 InvalidTarget at refresh:** expected to decay to 0 (rows written before P8 drain) — P5's pre-registered 0 under a second name.
+- **P7:** crypto `unpriced` refusals per day; the xStock week read against the named prediction.
+- **P9:** `logs/tcl_event_trace_<date>.log` exists and grows; the B-DISK-FILE-TIERING owner (OLD Claude) is told it now exists.
