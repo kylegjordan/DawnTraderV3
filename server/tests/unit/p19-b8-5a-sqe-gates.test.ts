@@ -26,9 +26,13 @@ describe('[P19-B8.5a] SQE gate restructure', () => {
     expect(r.failures.some((f) => f.startsWith('NetEV'))).toBe(true);
   });
 
-  it('OBJ-3: ABSENT chosenNetEv SKIPS the net-EV check (fail-open, Langston-ratified — the [11.8B] taker-leg fallback nets legacy rows)', () => {
-    const r = evaluateSignalQualitySync({ ...base, finalScore: 0.9 } as any);
-    expect(r.passed).toBe(true);
+  it('B-ENTRY-GATE P4s: ABSENT chosenNetEv is REFUSED as NetEVMissing (the old fail-open is gone), and never wears the NetEV prefix', () => {
+    for (const v of [undefined, null, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const r = evaluateSignalQualitySync({ ...base, finalScore: 0.9, chosenNetEv: v } as any);
+      expect(r.passed).toBe(false);
+      expect(r.failures.some((f) => f.startsWith('NetEVMissing'))).toBe(true);
+      expect(r.failures.some((f) => f.startsWith('NetEV '))).toBe(false); // the exploration lane cannot admit on it
+    }
   });
 
   it('OBJ-5 + OBJ-3 interplay: below-floor finalScore with POSITIVE netEV now ADMITS (the finalScore gate is retired; the number we rank on is the number that admits)', () => {
@@ -37,7 +41,7 @@ describe('[P19-B8.5a] SQE gate restructure', () => {
   });
 
   it('OBJ-5: below-floor finalScore alone no longer rejects (shadow-log only)', () => {
-    const r = evaluateSignalQualitySync({ ...base, finalScore: 0.10 } as any);
+    const r = evaluateSignalQualitySync({ ...base, finalScore: 0.10, chosenNetEv: 0.004 } as any);
     expect(r.passed).toBe(true);
     expect(r.failures.some((f) => f.startsWith('FinalScore'))).toBe(false);
   });

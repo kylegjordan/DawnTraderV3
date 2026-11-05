@@ -120,10 +120,10 @@ export interface SQEInput {
   // decideMakerTaker (signal-orchestrator.ts — runs just BEFORE the SQE per Kyle's P19-B7.2b
   // calc-free placement) and passed in for a pure SIGN CHECK. The SQE performs NO EV math here
   // (gate-inside, calculation-outside — same pattern as gating on the pre-computed finalScore).
-  // ABSENT (legacy queued rows at deploy / a caller without a snapshot) → the check SKIPS
-  // (fail-open, Langston Step-2 ratified) — the [11.8B] open-gate still nets every lifecycle:
-  // it falls back to the taker-leg recompute when chosen_net_ev is null (active-execution-
-  // engine.ts:2230), so no ungated path exists.
+  // B-ENTRY-GATE (#1224) P4s: ABSENT is now its own refusal, `NetEVMissing` (never the `NetEV ` prefix, so the paper
+  // exploration lane cannot admit on it). The old fail-open was dead by construction — both live callers always pass a
+  // value and the queue write refuses a non-finite one (pre-audit A-3) — and its stated backstop no longer exists: the
+  // [11.8B] open gate refuses a missing snapshot as POLICY_SNAPSHOT_MISSING rather than recomputing the taker leg.
   chosenNetEv?: number;
   chosenEntryMode?: 'maker' | 'taker';  // logging/telemetry only — never gated on
 }
@@ -360,9 +360,10 @@ export async function evaluateSignalQuality(input: SQEInput, options: SQEOptions
   // UPSTREAM-computed best-of-both chosenNetEv (calc-free preserved — see SQEInput.chosenNetEv).
   // SQE = the admission AUTHORITY; the [11.8B] open-gate remains STILL-BLOCKS as the drift
   // backstop (Kyle default — its reject counter is the GATES-DRIFTED alarm, expected ~0).
-  // ABSENT chosenNetEv → skip (fail-open, Langston-ratified; [11.8B]'s taker-leg fallback still
-  // nets legacy rows — no ungated lifecycle).
-  if (input.chosenNetEv != null && !(input.chosenNetEv > 0)) {
+  // B-ENTRY-GATE (#1224) P4s: an ABSENT or non-finite chosenNetEv is refused as `NetEVMissing` (see SQEInput.chosenNetEv).
+  if (input.chosenNetEv == null || !Number.isFinite(input.chosenNetEv)) {
+    failures.push(`NetEVMissing: no finite net expectancy supplied (${input.chosenNetEv}) — refused, never assumed`);
+  } else if (!(input.chosenNetEv > 0)) {
     failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
   }
 
@@ -577,8 +578,10 @@ export function evaluateSignalQualitySync(input: SQEInput, thresholds?: { finalS
   }
 
   // P19-B8.5a (OBJ-3): net-expectancy admission gate — sync-variant parity (pure sign check on the
-  // upstream-computed chosenNetEv; absent → skip, fail-open per Langston Step-2).
-  if (input.chosenNetEv != null && !(input.chosenNetEv > 0)) {
+  // upstream-computed chosenNetEv). B-ENTRY-GATE (#1224) P4s: absent → `NetEVMissing`, as in the async variant.
+  if (input.chosenNetEv == null || !Number.isFinite(input.chosenNetEv)) {
+    failures.push(`NetEVMissing: no finite net expectancy supplied (${input.chosenNetEv}) — refused, never assumed`);
+  } else if (!(input.chosenNetEv > 0)) {
     failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0 (chosen ${input.chosenEntryMode ?? 'taker'} mode — non-positive net expectancy after friction)`);
   }
   
