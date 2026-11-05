@@ -131,4 +131,33 @@ describe('B-CLOSE-WRITER-COSTS P-17 — the orphan step finishes the record befo
     expect(block.indexOf('flattenReport.orphansKept.push(orphan.symbol);', guard)).toBeGreaterThan(guard);
     expect(block.indexOf('continue;', guard)).toBeGreaterThan(guard);
   });
+  it('O-3 a delete that FAILS after the record was finished is reported in orphansKept (Langston Part C C-2)', () => {
+    const after = src.slice(del, src.indexOf('} else {', del));
+    const catchAt = after.indexOf('} catch (cleanupErr) {');
+    expect(catchAt).toBeGreaterThan(-1);
+    expect(after.indexOf('flattenReport.orphansKept.push(orphan.symbol);', catchAt)).toBeGreaterThan(catchAt);
+  });
+});
+
+// P-11 (Langston Part C C-3): the cleanup reads an open record's entry fee from `fees`. That is right only while the open
+// path writes the entry fee into `fees` — `fees` has the same DEFAULT '0' as `entry_fee`, so a writer that stopped setting it
+// would make the cleanup book a zero entry fee silently. Pinned on the source, in class with O-1..O-3.
+describe('B-CLOSE-WRITER-COSTS P-11 — the open record carries its entry fee in `fees`', () => {
+  it('F-1 the open path writes fees: entryFee into its createClosedTrade payload, and the restore writes both columns', () => {
+    const engine = readFileSync(resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf8').split(String.fromCharCode(13)).join('');
+    const at = engine.indexOf('const trade = await storage.createClosedTrade(this.mode, {');
+    expect(at).toBeGreaterThan(-1);
+    const payload = engine.slice(at, engine.indexOf('});', at));
+    expect(payload).toMatch(/\n\s+fees: entryFee\.toString\(\),/);
+    const restore = readFileSync(resolve(__dirname, '../../services/trade-record-restore.ts'), 'utf8');
+    expect(restore).toContain("fees: String(position.entryFee ?? '0'),");
+    expect(restore).toContain("entryFee: String(position.entryFee ?? '0'),");
+  });
+  it("F-2 a record whose fees is '0' books a zero entry fee — the guard does NOT refuse a zero (a zero-fee class must work); the fence above is the protection", async () => {
+    h.getClosedTrades.mockResolvedValue([{ ...RECORD, fees: '0' }]);
+    await reconcileIncompleteTrades('paper', 'sess-1');
+    const w = (h.updateClosedTrade.mock.calls[0] as unknown as unknown[])[2] as Record<string, string>;
+    const fill = 2100 * (1 - 50 / 10_000);
+    expect(parseFloat(w.totalFee)).toBeCloseTo(fill * 0.5 * 0.004, 10);
+  });
 });
