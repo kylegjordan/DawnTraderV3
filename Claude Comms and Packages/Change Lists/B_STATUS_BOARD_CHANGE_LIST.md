@@ -70,3 +70,11 @@ for (const it of presprintRows(text).items) {
 3. **The descriptions are mine, drafted for owners.** Every one comes from the item's own plan row, scope heading or issue heading; ten I first wrote from the batch name alone were replaced with sourced text before commit, and at least one was plainly wrong (`B-TOKEN-WATCH` is the Solana-launch observation, not token use). They are a starting set, and LIVE5 only checks each heading names something.
 4. **`MOVED` and `WITHDRAWN` read live to the census** (`cellClosed` sees only ✅ / CLOSED / DONE). None of them carries a completion report today, so list (f) is unaffected; a moved item that later gains a report under its own name would land on (f).
 5. **The page and the checker ship on two clocks** (the checker on merge, the page on `dt-deploy`); the page shows the data's age and ref and its own build separately, and marks the data stale after an hour.
+
+## Step 7 — the absent-file and stale-banner renders, done WITHOUT a restart (2026-11-05 ~10:00Z, CC-A, Claude-in-Chrome)
+The page reads the board file on every request (`readStatusBoard`, `server/services/status-board-file.ts`), so the two owed renders did not need a restart with `GOV_BOARD_FILE` — the real file was moved and swapped for one minute, between checker runs (timer 09:40:20Z → next 10:10:20Z).
+- **Baseline:** board rendered, "Data from the plan at 986566804, built 19 minutes ago", page build `0abfd7102`.
+- **Absent file** (file moved aside): the page shows **"No board to show — the governance checker has not written the board yet — Shown as missing on purpose: an empty board and an unwritten one are different things."** with the page build. PASS.
+- **Stale file** (a copy with `generated_at` set two hours back, 07:40:22Z): the page shows **"built 2 hours ago"** and the banner **"Stale — the board has not been rebuilt for over an hour. The governance checker may have stopped updating."** above the full board. PASS.
+- **Restored:** the original file back, sha256 prefix `43d1058cddb07f55` before and after, mtime 09:40:33 unchanged; no test files left in `/var/lib/governance-checker/`; the page re-read normal ("built 20 minutes ago", no banner).
+- **Phone width: NOT done by me** — the browser window would not narrow below desktop width, so the check stays Kyle's on his own phone. It is the only Step-7 item left.
