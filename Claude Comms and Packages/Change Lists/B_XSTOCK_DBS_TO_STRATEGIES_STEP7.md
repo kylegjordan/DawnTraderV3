@@ -21,6 +21,8 @@
 
 **⚠️ Rows 5-6 are a first look over ~90 seconds, NOT the pre-registered first-full-US-session read** (14:30-21:00Z today). PASS or FAIL is decided only on that session.
 
+**Restart inside the observation window (recorded, not a confound for the session read):** OLD Claude deployed `c0214c9736ee86d7523fd33319ad4c935a929b80` at 2026-11-05T08:08:30Z (restart 675 → 676). This batch's runtime content in it vs `8636040255` is `686d62c9e` only (comments). It lands before the 14:30Z session, so the session read runs on one build.
+
 ## Still to read (pre-registered)
 - **(a)** over the first full US regular session: zero disagreements on all `mode='vts'` rows, with the 1 % floors on the `strategy_detect` rows, plus the null arm.
 - **(a′)** per-row equality ≥ 99 % against `pair_scan_archive`, and coverage ≥ 93.9 % (baseline 96.89 %).
