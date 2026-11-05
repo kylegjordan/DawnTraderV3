@@ -4,7 +4,7 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 329,
+  "total_errors": 328,
   "file_count": 43,
   "files": [
     {
@@ -113,8 +113,11 @@
         "TS2820": {
           "Type '\"config_updated\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guardrail.overr": 1
         },
+        "TS2552": {
+          "Cannot find name 'tradingEngines'. Did you mean 'TradingEngine'?": 2,
+          "Cannot find name 'OpenAI'. Did you mean 'openai'?": 2
+        },
         "TS2339": {
-          "Property 'createdAt' does not exist on type '{ symbol: string; metadata: unknown; id: string; state: string | null; side: string; lastUpdated: Date | null; assetClass: string; exchange: string; volume24h: string | null; currentPrice: string | null; confidence: string | null; quantity: string; entryF": 1,
           "Property 'cryptoValue' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
           "Property 'cash' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 2,
           "Property 'unrealizedPnl' does not exist on type '{ id: string; mode: \"live\" | \"paper\"; globalContextId: string; createdAt: Date | null; balance: string; anchorVersion: number; lastUpdate: Date | null; }'.": 1,
@@ -146,10 +149,6 @@
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | \"rejected\" |": 1,
           "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string; tradesPerDayEst: string; targetD": 1,
           "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1
-        },
-        "TS2552": {
-          "Cannot find name 'tradingEngines'. Did you mean 'TradingEngine'?": 2,
-          "Cannot find name 'OpenAI'. Did you mean 'openai'?": 2
         },
         "TS2769": {
           "No overload matches this call.": 4
@@ -666,6 +665,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-10-17T16:34:59.000Z",
-  "last_synced_by_batch": "B-ORCHESTRATOR-ROUTES-REMOVAL"
+  "last_synced_at_iso": "2026-11-05T19:30:30.877Z",
+  "last_synced_by_batch": "B-CLOSE-WRITER-COSTS"
 }
