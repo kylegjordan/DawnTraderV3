@@ -126,6 +126,19 @@ def part_a(top):
           (rc, "WAS replaced" in out, "timed out" in out, "Traceback" in out, open(target, "rb").read()),
           (6, True, True, False, v2))
     subprocess.run(["chattr", "-i", target], check=True)
+    # A17 - Langston part 2a, item 1 CHANGES: lsattr is MISSING (a PATH holding only git and chattr). immutable() must
+    # report "unknown", never raise: expected exit 6 (the protection cannot be confirmed), the INSTALLED line printed,
+    # no traceback, the new bytes in place. Control: the same PATH resolves chattr but not lsattr.
+    bare = os.path.join(top, "barebin")
+    os.makedirs(bare)
+    for tool in ("git", "chattr"):
+        os.symlink(shutil.which(tool), os.path.join(bare, tool))
+    check("A17 control: on that PATH chattr resolves and lsattr does not",
+          (shutil.which("chattr", path=bare) is not None, shutil.which("lsattr", path=bare)), (True, None))
+    rc, out = run([s1], dict(env, PATH=bare))
+    check("A17 lsattr missing: exit 6 with INSTALLED printed and no traceback, the new bytes in place",
+          (rc, "INSTALLED" in out, "Traceback" in out, open(target, "rb").read()), (6, True, False, v1))
+    subprocess.run(["chattr", "-i", target], check=True)
     # A13 - Langston r4 B-5: plant a repository ABOVE the cwd whose config re-points the upstream URL. Plain git run from
     # inside it is redirected (the control); the installer, run from the same cwd, must still read the REAL head (a dry
     # run that succeeds) because it runs ls-remote from "/".

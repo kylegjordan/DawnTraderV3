@@ -37,7 +37,9 @@ What it does, in order, or refuses:
    object store is never trusted for content. A rule that must land now: he asks a CC session in the channel, which
    commits and installs it (the hotfix path if urgent) - never parked in his MEMORY.md.
 Exit codes: 0 installed / already installed / dry run · 2 bad input · 3 not root · 4 sha not on GitHub's branch,
-GitHub unreadable, an object missing, or a mirror read that timed out or stopped mid-object · 5 an object does not
+GitHub unreadable, an object missing, a single-object mirror read (`git -C <mirror> ...`) that timed out, or the
+batch reader stopping mid-object (its reads carry NO time limit - the walk is bounded by WALK_LIMIT objects, not
+by time) · 5 an object does not
 hash to its id · 6 write or protect failed, including a flag command that timed out (the message says whether the
 live file was replaced).
 """
@@ -225,8 +227,11 @@ def verified_blob(mirror, commit, path=REPO_PATH):
 def immutable(path):
     try:
         rc, out, _e = run(["lsattr", "-d", path])
-    except ToolTimeout:
-        return None                                            # unknown: never reported as protected
+    except OSError:
+        # unknown: never reported as protected. OSError, not only ToolTimeout (Langston part 2a, item 1): a missing or
+        # non-executable lsattr raises FileNotFoundError / PermissionError, and live_state() calls this OUTSIDE the
+        # install's try, so the operator got a traceback and exit 1 instead of INSTALLED and a documented code.
+        return None
     if rc != 0 or not out:
         return None
     return "i" in out.split()[0]
