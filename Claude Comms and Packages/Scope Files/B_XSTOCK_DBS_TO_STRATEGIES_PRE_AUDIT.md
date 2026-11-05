@@ -1,4 +1,6 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (`#1235`) — r3
+# B-XSTOCK-DBS-TO-STRATEGIES — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN (`#1235`) — r4
+
+> **r4 (2026-11-05 ~05:10Z): Langston PROCEED on r2 (`4a738f4bd`, ruled at `9e3d4636b`) with three binding conditions, folded here (§1.9). His CHANGES-1 on r2 is folded in r3, still above.**
 
 > **r3 (2026-11-05 ~04:45Z): Langston's CHANGES-1 on r2 (ruled at `2952bbe8c`) folded.** The audit had listed what the change REFUSES but not what it ADMITS. `strong_bull_trend` on xStock opens for the first time:
 > - §1.8 states the three-vs-one asymmetry;
@@ -39,7 +41,7 @@ change-class: architecture · **Scope:** `B_XSTOCK_DBS_TO_STRATEGIES_SCOPE.md` r
    - `:12533` onward (the xStock eval pipeline), which is silent on the detect input — the gap this batch closes;
    - `:12821` (the xStock DBS configuration);
    - `:11628` (the B63 geometry override).
-5. **Ledger and reports:** `#1235`, `#560`, `#549`, `#550`, `#1037` (am.4: the Drift Dashboard is not opened at Step 7), and `#661` leg 3 (a skipped suite is not a pass).
+5. **Ledger and reports:** `#1235`, `#560`, `#549`, `#550`, **`#1070`** (the `strong_bull_trend` xStock switch-on and its pre-registered day-21 verdict; C-1), `#1037` (am.4: the Drift Dashboard is not opened at Step 7), and `#661` leg 3 (a skipped suite is not a pass).
 6. **`bridge/canonical/`:** consulted for intent; no coverage. The xStock loop and its DBS postdate the governance change.
 
 ### 1.1 Entry points, enumerated first (repo-wide, tests excluded)
@@ -148,6 +150,28 @@ All three are bidirectional-testable (Langston re-derived the same).
 
   It is the strategy that dominates crypto's paper opens.
 
+### 1.9 Langston's three binding conditions on the PROCEED
+**C-1 (time-critical) — a collision with my own in-flight window.**
+- **What bites:** alert `dd588f0d` (*strong_bull_trend xStock switch-on: day-21 verdict due*, owner CC-B, `#1070`) fires **2026-11-06T10:47:40Z**. Its pre-registered branch reads "ZERO closes = insufficient evidence, one more 21-day window".
+- **The cause:** at the ref `strong_bull_trend` returns null at Gate 1 on EVERY xStock evaluation (`strong-bull-trend.ts:77` `dbsScore ?? 0`; `:106` `if (dbs < sbtDbsMin) return null`; floor 0.35). So it was structurally unable to produce an xStock signal for the whole first window.
+- **⇒ The day-21 verdict records that cause with those two line cites, and the replacement window starts AT THIS BATCH'S DEPLOY, not before it.** That is inside the pre-registered branch, not an override of it. Kyle's 2026-11-04 "skip the second 21-day window" was about the strategy's evidence, not this mechanism; the verdict will quote both.
+- **Reporting:** Step 7 publishes HOW MANY xStock `strong_bull_trend` evaluations clear the floor (a magnitude). P10's (b-control) is the control, not the magnitude.
+
+**C-2 — the one reader whose contract is object identity.** `buildBarProvenance`'s comment said it captures "the EXACT `mceContext.indicators` object the detect call above consumed". After P1 that stopped being true. **Decided in the diff:**
+- the six bar scalars are now read FROM `detectIndicators`, the exact object detect consumed (same values; it is a spread);
+- the comment states that the directional score is deliberately NOT in the provenance block; its one home is `features.detectDbsScore` at all eight sites.
+
+**C-3 — (a′)'s matchability leg has causes other than P1.** `archivePairScan` runs fire-and-forget, with a silent catch (`market-context-engine.ts:1578-1580`) and an early return on an unclassifiable symbol (`:1542-1543`).
+- **Pre-deploy baseline, PRE-REGISTERED, measured 2026-11-05 ~05:05Z:** all xStock `mode='vts'` rows, 2026-11-04 15:00-16:00Z, n = 43,764.
+- **The join:** same symbol, with a `pair_scan_archive` row in the same minute OR the minute before.
+- **Matched:** 42,402 = **96.89 %** (same-minute only: 41,730 = 95.35 %).
+- ⇒ **(a′) coverage:** PASS ≥ 93.9 % (baseline − 3 points), using that exact join. A result below that is diagnosed against this baseline before it is read as a batch FAIL.
+- **What tests P1 is the equality leg:** ≥ 99 % of matched rows have |`detectDbsScore` − `dbs_score`| < 1e-9, taking the nearest scan row in the join window.
+
+**Record items, folded:**
+- (1) P2 witnesses one of the three fields P1 carries. `pair_scan_archive` already carries `dbs_category` and `modulators.dbs_slope`, but P9(a) is their only fence in this batch, and that is stated rather than added. `strong-bull-trend.ts:78` reads `dbsSlope` for its log and metadata only (the slope gate was removed in B63.1), so that metadata value moves from 0 to real on xStock at this deploy.
+- (2) The null arm tests against a literal 0, which a genuine 0.0 also satisfies (`pair_scan_archive` carries no `sentinelZero`): sound as written, weak as evidence; P9(b) is the real fence.
+
 ## 2. THE PLAN — every item names the audit finding it falls out of
 | # | item | falls out of |
 |---|---|---|
@@ -165,6 +189,7 @@ All three are bidirectional-testable (Langston re-derived the same).
 | **UNAUDITED** | — none. Every item above has a finding. | |
 
 ## 3. Risks that remain, stated
+- **⚠️ NAMED COLLISION — `strong_bull_trend`'s pre-registered day-21 verdict (`dd588f0d`, 2026-11-06T10:47:40Z, `#1070`) falls inside this batch.** It records the structural cause and restarts its window at this deploy (§1.9 C-1).
 - **⚠️ NAMED RISK — `strong_bull_trend` goes live on xStock for the first time (§1.8).** It has never produced an xStock trade. On crypto it accounts for most paper opens (58 of 81 since the reset). Its downstream gates and geometry have never run on xStock's 15-minute bars. Mitigation: P10 (b-observe) pre-registers an "investigate" threshold for the first session, and the geometry check in (iii) catches a mis-sized trade on its first occurrence. Not a switch-off (Kyle, 2026-10-19).
 - **A step change in xStock behavior is the point, and it lands in live paper trading at once.** Mitigation: (a) is exact, so a wiring error shows on the first session. Rollback is the code plus the migration rollback.
 - **Module-constant completeness tests** may expect every `strategy.vwap_pullback` constant to exist for both classes. P5's two constants are crypto-only by design. **Checked in Step 3 by running the full suite before the push**; if a per-class completeness test exists, the xStock absence is declared there rather than seeded with a guessed value (F2's xStock half is Kyle's).
