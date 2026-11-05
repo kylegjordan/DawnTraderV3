@@ -12557,41 +12557,6 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
-  // ⛔ B-CLOSE-WRITER-COSTS P-10 (Kyle KD-17; Langston's P-10 ruling, C-3): the STRANDED CLEAR no longer writes its own
-  // record (it inserted a new row with `fees: '0'`, `slippage: '0'`). Each open position closes through the one close chain,
-  // like the manual close. A position whose open-time record is MISSING is refused by that chain (P-2) — its remedy is the
-  // restore route (P-12, `POST /active-engine/positions/:id/restore-record`), which ships in the same increment, then this
-  // clear again. Engine not running ⇒ refused with close-all's 400: start the engine, then clear (Langston C-2).
-  apiRouter.post('/active-engine/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
-    try {
-      const status = await getActiveEngineStatus(req.user!.id);
-      const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
-      const manager = getGlobalActiveEngineManager('paper');
-      const { engineNotRunningResponse, strandedClearResponse } = await import('./services/operator-close-response.js');
-      if (!status.isRunning || !manager) {
-        const nr = engineNotRunningResponse('clear stranded positions');
-        return res.status(nr.http).json(nr.body);
-      }
-      const positions = await storage.getActiveOpenPositions('paper');
-      if (positions.length === 0) {
-        return res.json({ success: true, strandedClosed: 0, clearedCount: 0, message: 'No stranded trades to clear' });
-      }
-      let clearedCount = 0;
-      const notCleared: Array<{ symbol: string; reason: string }> = [];
-      for (const position of positions) {
-        const r = await manager.closeOnePositionByOperator(position.id, 'stranded_clear');
-        if (r.status === 'closed') clearedCount++;
-        else notCleared.push({ symbol: position.symbol, reason: r.reason ?? r.status });
-      }
-      contextBridge.broadcast({ type: 'stranded_trades_cleared', payload: { clearedCount, userId: req.user!.id } }); // the type it always sent
-      const out = strandedClearResponse(clearedCount, notCleared);
-      return res.status(out.http).json(out.body);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[B-CLOSE-WRITER-COSTS][STRANDED_CLEAR_ERROR]', errorMessage, error);
-      return res.status(500).json({ success: false, error: 'Failed to clear stranded trades', details: errorMessage });
-    }
-  });
 
   // Phase 8.8.3-B1/B2: Trade History Analytics endpoint with new metrics
   // Phase 8.8.3-C6: Current Simulation = trades opened since engine was last started
@@ -13093,21 +13058,21 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
       const { getGlobalActiveEngineManager } = await import('./services/active-engine-service.js');
       const manager = getGlobalActiveEngineManager('paper'); // P19-B4b D5: per-mode accessor
       
+      // B-CLOSE-WRITER-COSTS (Kyle KD-45: the Active Trades "Clear Stranded" button is folded into this action; Langston
+      // Part B BLOCKER-1): refusals and partial results come back 200 + success:false + `error`, which the client shows —
+      // a non-2xx is thrown by apiFetch and its reason discarded.
+      const { engineNotRunningResponse, closeAllResponse } = await import('./services/operator-close-response.js');
       if (!status.isRunning || !manager) {
-        return res.status(400).json({ error: 'Paper trading simulation not running' });
+        const nr = engineNotRunningResponse('close all positions');
+        return res.status(nr.http).json(nr.body);
       }
 
       const { reason } = req.body;
       // B-FEED-MISMATCH-FIX P3: close-all now reports what it actually did — a position with no observed price
       // is LEFT OPEN (and alerted), so "all positions closed" is no longer assumed.
       const result = await manager.closeAllPositions(reason || 'Manual close requested');
-      res.json({
-        success: result.failed === 0,
-        ...result,
-        message: result.leftOpen || result.failed
-          ? `Closed ${result.closed}; ${result.leftOpen} left open (no observed price), ${result.failed} failed`
-          : 'All positions closed',
-      });
+      const out = closeAllResponse(result);
+      res.status(out.http).json(out.body);
     } catch (error) {
       console.error('Error closing all positions:', error);
       res.status(500).json({ error: 'Failed to close positions' });

@@ -4,7 +4,7 @@
   "frozen_at_commit": "d3e643032",
   "frozen_at_iso": "2026-09-02T08:15:35.574Z",
   "frozen_by_batch": "B-TSC-BASELINE-FIX (#579 — message-identity gate)",
-  "total_errors": 325,
+  "total_errors": 324,
   "file_count": 43,
   "files": [
     {
@@ -86,8 +86,7 @@
           "Type '\"system:killswitch_cleared\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guar": 1,
           "Type 'number' is not assignable to type 'string'.": 8,
           "Type '\"active_engine_reset\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guardrail.": 1,
-          "Type '\"active_trade_closed\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guardrail.": 1,
-          "Type '\"stranded_trades_cleared\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guardr": 1
+          "Type '\"active_trade_closed\"' is not assignable to type '\"trading_state_changed\" | \"background_jobs_complete\" | \"trade_update\" | \"alerts_updated\" | \"trading_data_updated\" | \"price_updated\" | \"scan_tick\" | \"rtb:cleared\" | \"health_engine\" | \"state_update\" | \"config_update\" | \"chat_update\" | \"guardrail.": 1
         },
         "TS2345": {
           "Argument of type 'string | null' is not assignable to parameter of type 'string'.": 6,
@@ -662,6 +661,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-11-05T20:54:41.890Z",
+  "last_synced_at_iso": "2026-11-05T22:47:58.432Z",
   "last_synced_by_batch": "B-CLOSE-WRITER-COSTS"
 }

@@ -4,7 +4,7 @@
  *
  * What this keeps from the old tab (the SHELL): the count header, WS-connection
  * + mode badges, the IntegrityBanner (system-vs-UI count, guardrail cap, slots,
- * Clear Stranded / Clear & Reset All actions), the 10s active-trades query, and
+ * Close All / Clear & Reset All actions), the 10s active-trades query, and
  * WS-driven refresh.
  *
  * What changed (and why):
@@ -85,8 +85,8 @@ function IntegrityBanner({
   uiCount,
   portfolio,
   openTradesNetPnlSum,
-  onClearStranded,
-  isClearing,
+  onCloseAll,
+  isClosingAll,
   onResetAll,
   isResetting,
 }: {
@@ -94,8 +94,8 @@ function IntegrityBanner({
   uiCount: number;
   portfolio: PortfolioSummaryLite;
   openTradesNetPnlSum: number;
-  onClearStranded: () => void;
-  isClearing: boolean;
+  onCloseAll: () => void;
+  isClosingAll: boolean;
   onResetAll: () => void;
   isResetting: boolean;
 }) {
@@ -156,16 +156,33 @@ function IntegrityBanner({
             </div>
           )}
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onClearStranded}
-            disabled={isClearing}
-            className="text-xs border-red-200 text-red-600 hover:bg-red-50"
-          >
-            {isClearing ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
-            Clear Stranded
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isClosingAll}
+                className="text-xs border-red-200 text-red-600 hover:bg-red-50"
+                data-testid="button-close-all"
+              >
+                {isClosingAll ? <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> : <Trash2 className="w-3 h-3 mr-1" />}
+                Close All
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Close every open position?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Each position is closed through the engine at the market, with its real fees. A position with no observed
+                  price, or whose close is refused, stays open and is named in an alert. Pending orders are cancelled.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onCloseAll}>Close All</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -271,24 +288,27 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
     },
   });
 
-  const clearStrandedMutation = useMutation({
+  // B-CLOSE-WRITER-COSTS (Kyle KD-45, 2026-11-05): "Clear Stranded" is FOLDED into Close All — after this batch both closed
+  // every open position through the engine's one close. A refusal or a partial close comes back success:false with `error`.
+  const closeAllMutation = useMutation({
     mutationFn: async () => {
-      return await apiFetch('/api/active-engine/force-clear-stranded', {
+      return await apiFetch('/api/active-engine/close-all', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: 'Close All (Active Trades)' }),
       });
     },
     onSuccess: (result: any) => {
       const isSuccess = result?.success === true || result?.ok === true;
       if (isSuccess) {
-        toast({ title: "Stranded Trades Cleared", description: result.message || `Cleared ${result.strandedClosed || result.clearedCount || 0} stranded trades` });
+        toast({ title: "Positions Closed", description: result.message || 'All positions closed' });
       } else {
-        toast({ title: "Error", description: result?.error || "Failed to clear stranded trades", variant: "destructive" });
+        toast({ title: "Not all positions closed", description: result?.error || "Failed to close positions", variant: "destructive" });
       }
       queryClient.invalidateQueries({ queryKey: ['/api/active-engine/active-trades'] });
     },
     onError: () => {
-      toast({ title: "Error", description: "Failed to clear stranded trades", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to close positions", variant: "destructive" });
     },
   });
 
@@ -382,8 +402,8 @@ export default function PaperOpenTradesTab({ mode }: { mode?: 'paper' | 'live' }
         uiCount={rows.length}
         portfolio={portfolio}
         openTradesNetPnlSum={openTradesNetPnlSum}
-        onClearStranded={() => clearStrandedMutation.mutate()}
-        isClearing={clearStrandedMutation.isPending}
+        onCloseAll={() => closeAllMutation.mutate()}
+        isClosingAll={closeAllMutation.isPending}
         onResetAll={() => resetSessionMutation.mutate()}
         isResetting={resetSessionMutation.isPending}
       />

@@ -22,7 +22,7 @@ const st = vi.hoisted(() => ({
 }));
 vi.mock('../../storage', () => ({ storage: st }));
 
-import { engineNotRunningResponse, manualCloseResponse, strandedClearResponse } from '../../services/operator-close-response';
+import { engineNotRunningResponse, manualCloseResponse, closeAllResponse } from '../../services/operator-close-response';
 import { restoreOpenTradeRecord } from '../../services/trade-record-restore';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager';
 
@@ -48,20 +48,22 @@ describe('R — what the operator routes send back', () => {
   it('R-3 a close: 200, success true, a message', () => {
     expect(manualCloseResponse('p1', { status: 'closed', symbol: 'BTC/USD' }).body).toEqual({ success: true, closedTradeId: 'p1', message: 'Closed BTC/USD position' });
   });
-  it('R-4 a partial stranded clear carries the message in `error` (the client failure branch reads `error`)', () => {
-    const r = strandedClearResponse(4, [{ symbol: 'NEM/USD', reason: 'no observed price' }]);
+  it('R-4 a partial close-all carries the message in `error` (KD-45 fold; the client failure branch reads `error`)', () => {
+    const r = closeAllResponse({ closed: 4, leftOpen: 1, failed: 0 });
     expect(r.http).toBe(200);
     expect(r.body.success).toBe(false);
-    expect(r.body.error).toBe('Cleared 4; 1 not cleared (NEM/USD: no observed price)');
-    expect(strandedClearResponse(3, []).body).not.toHaveProperty('error');
+    expect(r.body.error).toBe('Closed 4; 1 left open (no observed price, or the close was refused — each one is alerted), 0 failed');
+    expect(closeAllResponse({ closed: 3, leftOpen: 0, failed: 0 }).body).toEqual({ success: true, closed: 3, leftOpen: 0, failed: 0, message: 'All positions closed (3)' });
   });
 });
 
 describe('C — the client premise', () => {
   it('C-1 both Active Trades success handlers show result.error on success:false', () => {
     const src = readFileSync(resolve(__dirname, '../../../client/src/components/trading/paper-open-trades-tab.tsx'), 'utf8');
-    const close = src.slice(src.indexOf('const closeTradeMutation'), src.indexOf('const clearStrandedMutation'));
-    const clear = src.slice(src.indexOf('const clearStrandedMutation'), src.indexOf('const resetSessionMutation'));
+    const close = src.slice(src.indexOf('const closeTradeMutation'), src.indexOf('const closeAllMutation'));
+    const clear = src.slice(src.indexOf('const closeAllMutation'), src.indexOf('const resetSessionMutation'));
+    expect(clear).toContain("apiFetch('/api/active-engine/close-all'");   // KD-45: the banner button calls close-all
+    expect(src).not.toContain('force-clear-stranded');
     for (const block of [close, clear]) {
       expect(block).toMatch(/onSuccess: \(result: any\) =>/);
       expect(block).toMatch(/description: result\?\.error \|\|/);
@@ -161,7 +163,7 @@ describe('O — closeOnePositionByOperator', () => {
   it('O-2 the one chain: _flattenOne(position, tag, manual_stop), its outcome returned with the symbol', async () => {
     const fake = { mode: 'paper', _flattenOne: vi.fn(async () => ({ status: 'left_open', reason: 'r' })) };
     st.getActiveOpenPosition.mockResolvedValue(POSITION);
-    expect(await proto.closeOnePositionByOperator.call(fake, 'pos-1', 'stranded_clear')).toEqual({ status: 'left_open', reason: 'r', symbol: 'ETH/USD' });
-    expect(fake._flattenOne).toHaveBeenCalledWith(POSITION, 'stranded_clear', 'manual_stop');
+    expect(await proto.closeOnePositionByOperator.call(fake, 'pos-1', 'manual_close')).toEqual({ status: 'left_open', reason: 'r', symbol: 'ETH/USD' });
+    expect(fake._flattenOne).toHaveBeenCalledWith(POSITION, 'manual_close', 'manual_stop');
   });
 });
