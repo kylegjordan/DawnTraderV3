@@ -663,6 +663,11 @@ function frameResurface(alert, d, nowMs) {
   ok('PS10 `B-TOKEN-WATCH` is its own id, not a prefix of `B-TOKEN-WATCH-AUTH`',
     JSON.stringify(idsInCell('B-TOKEN-WATCH')) === '["B-TOKEN-WATCH"]' && !idsInCell('B-TOKEN-WATCH-AUTH').includes('B-TOKEN-WATCH'));
   ok('PS11 F-G ids are seen (the config grammar cannot, config.mjs:30-31)', idsInCell('F-G-1 and F-G-2').length === 2);
+  // Re-homed from status-board.test.mjs SB28 (B-STATUS-BOARD retirement, Langston Step-4 C-1): idsInCell is a checker.mjs
+  // export the census and scripts/pm/slot-check.mjs still read. Every config id form is read in a table cell (B79.0n was
+  // the form once missing, Langston Step-2 r5), plus F-G-* and PAPER-RESET-*.
+  ok('PS11b idsInCell reads every config id form, plus F-G-* and PAPER-RESET-*', ['P19-B6.5a', 'B-NEW-53a', 'B79.0n', 'B-RULES-1e', 'B-TEC-SELFHEAL', 'T-W20C-SCALAR-LEG', 'F-G-1', 'PAPER-RESET-3000']
+    .every((id) => idsInCell(`see ${id} here`).join() === id), JSON.stringify(['B79.0n', 'P19-B6.5a'].map((id) => idsInCell(`see ${id} here`))));
   // Langston's pre-audit condition 4: a broken §0a must not freeze the §4/§5 rule.
   const broken = PLAN.replace('| stage | order | item |', '| stage | ordr | item |');
   let p4ok = true; try { planRowsByBatch(broken); } catch { p4ok = false; }
