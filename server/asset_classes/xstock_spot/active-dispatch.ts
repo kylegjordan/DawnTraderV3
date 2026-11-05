@@ -212,6 +212,9 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
         // (crypto stamps its own off fx5Data; xStock is not in the FX5 pool). Absent stays absent.
         entryLiquidityValue: input.entryLiquidityValue,
         entryLiquidityKind: input.entryLiquidityKind,
+        // B-ENTRY-GATE (#1224) P10 (pre-audit A-11): the birth freshness checkpoint records WHAT IT JUDGED — the tick age
+        // it passed, against which ceiling, from which source — so a signal's provenance carries its own freshness.
+        birthFreshness: { ageMs, ceilingMs: safety.activeFillMaxAgeMs, source: 'equity_tick' },
       },
     };
 
