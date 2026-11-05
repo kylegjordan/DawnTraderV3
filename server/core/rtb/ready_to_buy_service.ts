@@ -1093,7 +1093,7 @@ class ReadyToBuyService {
                     // row per pass would be the same flood P9 just stopped in the refresh trace.
                     if (!_rpx.admitted || _rpx.chosenMode !== (signal as any).chosenEntryMode) console.log(`[B-ENTRY-GATE][P6][REPRICE:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass} ask=${_rpAsk.ask} entry=${signal.entryPrice} ` +
                       `policy=${_rpx.policy} admitted=${_rpx.admitted} mode=${_rpx.chosenMode ?? 'none'} chosenNetEV=${_rpx.chosenNetEV} takerAtAsk=${_rpx.takerNetEvAtAsk} ` +
-                      `maker=${_rpx.makerNetEVAdjusted} windowRefused=${_rpx.windowRefused}${_rpx.reason ? ` reason=${_rpx.reason}` : ''}`);
+                      `maker=${_rpx.makerNetEVAdjusted} windowRefused=${_rpx.windowRefused} askAgeMs=${_rpAsk.ageMs} basis=${_rpAsk.basis}${_rpx.reason ? ` reason=${_rpx.reason}` : ''}`); // P10: the age + source judged
                   } catch (rpxErr) {
                     console.error(`[B-ENTRY-GATE][P6][REPRICE_UNRESOLVED:${mode}] ${normalizedSymbol}/${signal.strategy} class=${sqeAssetClass}: ` +
                       `${rpxErr instanceof Error ? rpxErr.message : String(rpxErr)} — no decision on price this pass`);

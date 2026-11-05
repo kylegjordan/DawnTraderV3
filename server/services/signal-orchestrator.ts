@@ -1678,6 +1678,8 @@ export class SignalOrchestrator {
         // `levelBasisAtBirth`) must survive this allow-list, or the RTB refresh, the open gate and the engine's maker limit
         // all read a sided triple as mid-priced. Carried by the one picker the HYBRID re-size uses; fenced by a hop test.
         ...pickLevelStamps(rawSignal.metadata),
+        // B-ENTRY-GATE (#1224) P10: the xStock birth freshness record (A-11) — named here or it dies at this allow-list.
+        birthFreshness: rawSignal.metadata?.birthFreshness,
         // P19-B8.5l (#581, unblocks #556): carry the entry-time ATR forward. RE-ENABLED after
         // the source fix in THIS batch — the B8.5k carry was reverted because `sizingContext.atr`
         // was a SINGLE SHARED value per scan cycle (the pattern pass at :1846 never re-stamped it,
