@@ -109,12 +109,22 @@ describe('the app pool survives an ended idle connection', () => {
     expect(unguarded).toEqual([]);
   });
 
+  it('no whole-transaction time limit is written into the xStock bar writer (scope r3: OBJ-3b withdrawn; R5d retries only the statement-timeout text)', () => {
+    const root = path.join(__dirname, '..', '..', '..');
+    for (const f of ['server/services/passive-archive/xstock-bar-availability.ts', 'server/services/passive-archive/ohlc-batch-writer.ts']) {
+      const src = fs.readFileSync(path.join(root, f), 'utf8');
+      expect(src.length).toBeGreaterThan(1000); // the file was read (control)
+      expect(src).not.toMatch(/transaction_timeout/);
+    }
+  });
+
   it('exactly one listener is registered on the app pool (a second import does not add another)', async () => {
     const { pool } = await import('../../db.js');
     await import('../../db.js');
     expect(pool.listenerCount('error')).toBe(1);
     expect(pool.listenerCount('connect')).toBe(1);
     expect(pool.listenerCount('acquire')).toBe(1);
-    expect(pool.listenerCount('release')).toBe(1);
+    // two 'release' listeners by design: the guard's checked-out flag and the P2 measurement (db-pool-instrument.ts)
+    expect(pool.listenerCount('release')).toBe(2);
   });
 });

@@ -25,7 +25,7 @@ change-class: architecture · **Owner:** CC-A (OLD Claude) · **Issues:** `#1239
 
 ## 2. Census
 
-**Entry points that create database connections in the app process (repo-wide, tests excluded):** exactly **three** `Pool` builders — `server/db.ts:78` (the app pool, `dawntrader_main`, max 10), `server/services/crew-coordination.ts:92` (crew board, max 2, already bounded and listened), `scripts/b-new-34b-prewarm-snapshot.ts:259` (weekend prewarm, max 1, run in-process by the session-lifecycle controller). Pinned by the census test in `b-db-pool-guard.test.ts` (the list is its own positive control). `server/scripts/*` jobs use their own `Client` and run from cron, outside the app process.
+**Entry points that create database connections in the app process (repo-wide, tests excluded):** exactly **three** `Pool` builders — `server/db.ts:79` (the app pool, `dawntrader_main`, max 10), `server/services/crew-coordination.ts:92` (crew board, max 2, already bounded and listened), `scripts/b-new-34b-prewarm-snapshot.ts:259` (weekend prewarm, max 1, run in-process by the session-lifecycle controller). Pinned by the census test in `b-db-pool-guard.test.ts` (the list is its own positive control). `server/scripts/*` jobs use their own `Client` and run from cron, outside the app process.
 
 **Other `Pool` builders outside the app process:** `scripts/*` one-off tools (`b-1-5-universe-audit`, `b-phase-a2-backfill`, `b4-dbs-15m-recompute`) build a `Pool` and nothing in `server/` imports them; `server/scripts/*` cron jobs build `Client`s and none of those files is imported by app code (Langston's second-route census). The prewarm builder is `scripts/b-new-34b-prewarm-snapshot.ts:260` at the ref.
 

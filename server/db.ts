@@ -2,6 +2,7 @@ import pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 import { attachPoolGuards, getPoolGuardCounts } from './db-pool-guards.js';
+import { attachPoolInstrument } from './db-pool-instrument.js';
 
 const { Pool } = pg;
 
@@ -83,6 +84,9 @@ export const db = drizzle({ client: pool, schema });
 // Both listeners (idle clients and checked-out clients) live in ONE module shared by every in-process pool;
 // the mechanism and the staging measurements are in `server/db-pool-guards.ts`. OBJ-5 reads the counts.
 attachPoolGuards(pool, POOL_CONFIG.application_name);
+// B-DB-POOL-GUARD P2: one line a minute measuring how long callers wait for a connection and how long they hold
+// it, before any time limit is chosen (`server/db-pool-instrument.ts`; tag `[B-DB-POOL-GUARD][POOL_MINUTE_V1]`).
+attachPoolInstrument(pool, POOL_CONFIG.application_name);
 export function getPoolIdleClientErrorCount(): number {
   return getPoolGuardCounts(POOL_CONFIG.application_name).idleClientErrors;
 }
