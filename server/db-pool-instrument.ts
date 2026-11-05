@@ -3,9 +3,9 @@ import type pg from 'pg';
 // ─── B-DB-POOL-GUARD P2 (#1239, 2026-11-05): measure the pool before any time limit is set ─────────────────
 // Pre-audit r2 P2 + Langston's Step-2 conditions and his Step-4 changes. What it measures, per checkout:
 //   WAIT = hand-over − request. Stamped at the REQUEST, inside our wrapper around `pool.connect`, because pg-pool
-//          emits nothing when a request joins its queue (`index.js:188/:208`) and its `acquire` event fires only
-//          at hand-over, after the wait.
-//   HOLD = release − hand-over (pg-pool's `release` event, emitted unconditionally at `:338`).
+//          emits nothing when a request joins its queue (pg-pool 3.7.0 `index.js:188`/`:208`, the two
+//          `this._pendingQueue.push(...)` sites) and its `acquire` event (`:289`) fires only at hand-over, after the wait.
+//   HOLD = release − hand-over (pg-pool 3.7.0 `:338` `this.emit('release', err, client)`, unconditional).
 //   OPEN = checkouts handed over and not yet released, at flush (Langston CHANGE 2): the minute line is otherwise
 //          release-keyed, so ten connections pinned across a minute (the 2026-11-04 incident shape) would read as the
 //          quietest line, and a leaked checkout (never released) has no hold at all. The database side cannot tell a
@@ -14,8 +14,10 @@ import type pg from 'pg';
 // BEFORE this attaches, and it still sees the wrappers because drizzle 0.39.1 reaches the pool by DYNAMIC property
 // lookup — `this.client.query` (`drizzle-orm/node-postgres/session.js:106`), `await this.client.connect()` (`:138`).
 // If a drizzle upgrade ever binds those at construction, this instrument goes blind to almost all traffic and the
-// stand-in-pool unit tests cannot catch it; attach before `drizzle()` in that case.
-// ONE stamp per checkout (Langston C2): pg-pool's `query()` calls `this.connect(cb)` synchronously (`index.js:398`),
+// stand-in-pool unit tests cannot catch it. `db.ts` therefore attaches BEFORE `drizzle()` (Langston, Step 4 r2),
+// so the instrument does not depend on that lookup staying dynamic.
+// ONE stamp per checkout (Langston C2): pg-pool 3.7.0's `query()` calls `this.connect(cb)` synchronously at
+// `index.js:399` — `    this.connect((err, client) => {` —
 // so a `pool.query` passes BOTH wrappers. The query wrapper captures the caller's stack with ITSELF as the cut and
 // hands that holder to the connect wrapper (which then does not capture again); the stamp is taken once, in connect.
 // Because each wrapper cuts at itself, no wrapper frame is ever in a captured stack, so nothing is filtered by name
