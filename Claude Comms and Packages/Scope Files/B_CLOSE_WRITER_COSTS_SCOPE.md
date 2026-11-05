@@ -69,7 +69,7 @@ change-class: architecture
 - A position-id column on the open position — not needed while the lookup key equals the constraint key in the same deploy (Langston).
 
 ## 5. Risks
-- **A refused position no operator path can clear.** Since `51e35b195` the kill switch, close-all and stranded-clear all route through `closePosition`, so an unconditional refusal leaves a position that nothing in the app can close. That is right under KD-17 (never drop a trade); **Step 2 owes the remedy** — the operator path that finds or repairs the record so the close can proceed, designed there, not improvised.
+- **A refused position no operator path can clear.** Since `51e35b195` the kill switch and close-all route through `closePosition` *(corrected 2026-11-05, Langston: stranded-clear did NOT — it kept its own `createClosedTrade` writer until this batch's P-10, so today an operator CAN clear a record-less stranded position, dishonestly; P-10 removes that, which is why P-12 ships with it)*, so an unconditional refusal leaves a position that nothing in the app can close. That is right under KD-17 (never drop a trade); **Step 2 owes the remedy** — the operator path that finds or repairs the record so the close can proceed, designed there, not improvised.
 - **The migration changes the rule that stops duplicate positions.** Between dropping `unique_symbol_side` and creating `UNIQUE (symbol, mode)` there must be no window; one transaction.
 - **OBJ-4 touches 68 read sites.** With paper the only mode, adding the filter changes no result today; the census proves that per site rather than assuming it.
 - **OBJ-6 changes what readers see for open trades** (NULL exit fee where they used to see 0). The census is the control.
