@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-04-A — `B-XSTOCK-BID-TRIGGER-RELAND` increment (4b) (row 2, objective 8's shared trigger, CC-C) — three exit-decision sites each chose their own trigger price
+
+**CLASS: `architecture`. SYMPTOM:** the paper engine and the VTS real and shadow lanes each chose the price compared against a position's stop and target. They agreed, but by coincidence of three separate expressions; nothing failed if one drifted, and a fourth caller could inline any price.
+
+**FIX:** `selectExitTrigger` in `exit-trigger.ts` is the one rule (the gated bid when armed, the class policy otherwise, with the reason printed); all three call sites take their `triggerPrice` from it, and a decision-site fence fails on a fourth `evaluateTECExit(` caller or an inline price (its reach, stated: an exit path that bypasses TEC is not caught). The pinned test assertions were re-pointed to the selector, never deleted; a stale comment and a dead `?? 'unset'` label were removed.
+
+**Verified:** deployed `e1becf801` 2026-11-04 12:13Z; the 11-04 US regular session: 19 of 19 paper xStock `EXIT_TRIGGER` lines `basis=bid`; T2/T3 xStock no-transactable-side shares 2.33% / 1.84% against 2.08% / 2.01% the day before; closes in range; Langston CONFIRMED Step 8 re-deriving every number. **NOT IN THIS FIX:** a per-decision basis record for the VTS lanes (inspection and fence only); `moonbag_timeout`'s basis line (increment (4c)). Record `Claude Comms and Packages/Batch Completion/B_XSTOCK_BID_TRIGGER_RELAND_PROGRESS_REPORT.md` §3e.
+
 ## FIX-2026-10-17-A — `B-B75-EXPORT-COMPLETENESS` (`#1195`, CC-A) — archive copies could be reused, or re-proven, without proof; the rehydrate CLI crashed on rotated copies and mis-added its totals
 
 **CLASS: `architecture`.** Scope `Claude Comms and Packages/Scope Files/B_B75_EXPORT_COMPLETENESS_SCOPE.md`, plan `…_PRE_AUDIT.md`.

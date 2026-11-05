@@ -361,7 +361,7 @@ If step 2 fails, the signal has **already left the queue** and is **deliberately
 **OPEN, AND EACH HAS A HOME:**
 | open question | home |
 |---|---|
-| Should a stop trigger on a midpoint? | ✅ **ANSWERED — no: on the side a counterparty fills (Kyle delegated the rule 2026-09-03; row `3n`).** Built for crypto (`8a-P2`, `8a-P3`); paper xStock re-landed 2026-10-17 (row 2 increment B, gated — `SYSTEM_MANUAL` §3.5.1b). *(`F-G-2`'s `OBJ-0` shadow instrument was removed by `8a-P2`.)* |
+| Should a stop trigger on a midpoint? | ✅ **ANSWERED — no: on the side a counterparty fills (Kyle delegated the rule 2026-09-03; row `3n`).** Built for crypto (`8a-P2`, `8a-P3`); paper xStock re-landed 2026-10-17 (row 2 increment B, gated — `SYSTEM_MANUAL` §3.5.1b). Since 2026-11-04 (row 2 increment (4b)) paper and both VTS lanes take the trigger from one shared rule, `selectExitTrigger` (`exit-trigger.ts`), fenced at the call sites. *(`F-G-2`'s `OBJ-0` shadow instrument was removed by `8a-P2`.)* |
 | Three xStock price definitions from one frame — intended? | ✅ **`#957` — a SCHEDULED REVIEW (§9.4 disposition 4), placed as the FIRST QUESTION of `B-DECIDED-INTENT-INDEX` (3b.g).** ★ *Filed as a review and not a defect on purpose: calling it a defect would commit the exact error `#956` records — asserting behaviour is unintended from a corpus that cannot answer it.* |
 | Should two crypto producers share one cache slot? | write-side reformulation of rule 1b — **unowned** |
 | The ladder half of the ratified depth decision | `B-XSTOCK-BOOK-LADDER` (3b.d) |

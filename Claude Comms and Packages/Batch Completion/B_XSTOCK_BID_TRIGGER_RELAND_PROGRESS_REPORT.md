@@ -142,6 +142,47 @@ Row 2 makes xStock trades open and close only where a real trade could (Kyle 202
 
 - **(4b) T2/T3 basis is evidenced by inspection and the fence test only** (Langston Step 8, 2026-11-04): the only per-decision `basis=` line (`EXIT_TRIGGER`) is on the paper lane, so 455+ VTS xStock closes went through the new selector with no per-decision basis record. Nobody cites 19/19 for T2/T3.
 
+## 6c. Governance files changed — increment (4b) (Step 10, 2026-11-04 → 11-05)
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | row 2 entry: status line current (A/C PASS, (4a) PASS, (4b) Step 7 PASS + Step 8 CONFIRMED, (4c) at Step 2); WHAT IT DOES gains (4b); OPEN ON rewritten ((4c), C-P5 to 11-16, `#961`/`#962`/`#1087`) |
+| T1 | PHASE_HISTORY.md | ✅ | 2026-11-04 entry for increment (4b), batch OPEN |
+| T1 | SPRINT_TO_LIVE_PLAN.md (row 2) | ✅ | both row-2 cells: (4b) Step 7 PASS, Step 8 CONFIRMED, Step 10; (4c) Step 2 r2 (status-board 47/47 and census 228/228 tests pass) |
+| T1 | PHASE_19_PLAN.md | N/A — no row there | row 2 has no row of its own there |
+| T1 | shared MEMORY.md + MEMORY_CC_C.md | ✅ mine / N/A shared | own: row 2 position; shared: no new consensus truth ((4b) is behaviour-preserving) |
+| T1 | the batch SCOPE | N/A | no scope change |
+| T1 | the batch PRE_AUDIT | ✅ | `INC4B_PRE_AUDIT` r4 (landed at Step 2); §3e reads against its Step-7 pre-registration |
+| T1 | COMPLETION_REPORT | ✅ | this PROGRESS report — §3e Step 7 with Step 8's corrections, §5 (T2/T3 basis fence-only), this ledger |
+| T1 | the Observation column | ✅ | card stays in Observation (blocked on (4c) and the C-P5 read) |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC_C row 2: (4b) done through Step 10; next (4c), then C-P5 and the crontab removal |
+| T1 | Langston's MEMORY.md | ✅ | row 2 line updated via `langston-memory-write` (part `00-legacy.md` `d8ec7b2a9e4f` → `c7312d6395c0`); 505 → 386 B, the sum goes down |
+| T2 | SYSTEM_MANUAL.md | ✅ | §3.5.1b: one rule at three sites (`selectExitTrigger`), the venue-transition pause (decide at resume, no latch, `bidWouldFire` as an artifact rate); §18.0.1 VTS xStock column corrected (`cf9f6ddcd`) |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | NEW `exit-trigger.ts` entry (three callers, the vocabulary, the fence and its reach, the VTS basis caveat) (`cf9f6ddcd`) |
+| T2 | RUNNING_ISSUES.md | N/A | no new issue: the `moonbag_timeout` basis gap was homed into increment (4c) (§3e), `#1231` closed at Step 2 |
+| T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-11-04-A |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no phase-level change |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | behaviour-preserving: no calibration epoch boundary (the read showed no change in what fires) |
+| T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
+| T2 | STORAGE_POLICY.md | N/A | no table or retention change |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | ✅ reviewed, N/A | working-list review: no item A–F change (the VTS lanes' trigger is unified, not changed) |
+| T2 | ACTIVE_PATH_FLOW.md | ✅ | the midpoint question's answer row: paper and both VTS lanes on one shared rule since 2026-11-04 |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no onboarding learning surfaced |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | no role, gate or method changed |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | his build unchanged |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md change |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | a stale comment and a dead `?? 'unset'` label removed — not components |
+| T2 | MISTAKE_PATTERNS.md | N/A | the Step-7 slip (three boots named, four real) is in the Step-8 commit body for the weekly pass |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | no open-age alert on this batch is due this turn |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | no new alert class |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | not this batch's |
+
+**Carried to the C-P5 four-week read (content to 2026-11-16), not done here, and why:** (1) the staging crontab entry `ccc_cp5_once.sh` is the read's carrier and comes off only after it (inert after 2026-11-18 02:00Z); (2) the pre-audit's condition I — a retirement records its forward dependency on objective 6 in `RUNNING_ISSUES` `#943` and the System Manual's `spread_blown` section — fires only if that read proposes retiring the pause.
+
 ## 6b. Governance files changed — increment B (Step 10, 2026-10-20)
 
 CHANGE-CLASS: architecture
