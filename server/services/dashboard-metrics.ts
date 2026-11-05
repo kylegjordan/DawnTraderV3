@@ -10,6 +10,8 @@
  * null as "—" (or an explained label like "∞ (no losses)").
  */
 
+import { closeOutcomeClass } from './trade-close-reason';
+
 /**
  * B-PHANTOM-FILL-RECONSTRUCT (#507 follow-on): THE honest realized P&L for one closed trade.
  *
@@ -118,6 +120,45 @@ export function isInObservationEpoch(t: ClosedTradeLike, epochStartedAt: Date | 
   // `openedAt` is a declared field on ClosedTradeLike — NOT cast through `any`. The cast that used
   // to sit here would have let a renamed field compile silently and exclude every row.
   return !!t.openedAt && new Date(t.openedAt) >= epochStartedAt;
+}
+
+/**
+ * B-CLOSE-WRITER-COSTS P-15 (pre-audit r3-r7; Kyle KD-17): THE ONE OUTCOME RULE for the money routes.
+ *
+ * Each route runs this ONCE on its fetched set; every metric then reads `counted` (windows are applied AFTER it, by
+ * the route, by name — they are not outcome rules). A row leaves at the FIRST leg it fails, in this order (C-9):
+ *   1. closed       — `closedAt` set; else `notClosed` (an open record is not an anomaly, so never alerted);
+ *   2. outcome      — `closeOutcomeClass(closeReason)`: `non_outcome` ⇒ `nonOutcome`; `unknown` ⇒ `unknownReason`;
+ *   3. exit price   — `exitPrice > 0`, a DATA-VALIDITY predicate, not an outcome rule; else `bookedWithoutExitPrice`.
+ * Leg 1 before leg 2 keeps open (blank-reason) records out of `unknownReason`; leg 2 before leg 3 keeps the
+ * `never_filled` rows (no exit price by construction) out of `bookedWithoutExitPrice`. The last two are writer
+ * defects under KD-17 and the caller alerts on them; `unknownReasons` names the distinct strings for that alert.
+ * Pure: no I/O — this module imports only the vocabulary leaf.
+ */
+export interface CountedTrades<T> {
+  counted: T[];
+  notClosed: number;
+  nonOutcome: number;
+  unknownReason: number;
+  bookedWithoutExitPrice: number;
+  unknownReasons: string[];
+}
+
+export function countedTrades<T extends { closedAt?: Date | string | null; closeReason?: string | null; exitPrice?: unknown }>(
+  rows: readonly T[],
+): CountedTrades<T> {
+  const out: CountedTrades<T> = { counted: [], notClosed: 0, nonOutcome: 0, unknownReason: 0, bookedWithoutExitPrice: 0, unknownReasons: [] };
+  const unknown = new Set<string>();
+  for (const r of rows) {
+    if (!r.closedAt) { out.notClosed++; continue; }
+    const cls = closeOutcomeClass(r.closeReason);
+    if (cls === 'non_outcome') { out.nonOutcome++; continue; }
+    if (cls === 'unknown') { out.unknownReason++; unknown.add(String(r.closeReason ?? '')); continue; }
+    if (!(num(r.exitPrice) > 0)) { out.bookedWithoutExitPrice++; continue; }
+    out.counted.push(r);
+  }
+  out.unknownReasons = [...unknown].sort();
+  return out;
 }
 
 /** A rolling window can never reach back past the epoch. Returns the later of the two bounds. */

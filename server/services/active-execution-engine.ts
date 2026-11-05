@@ -305,6 +305,8 @@ import { b4Diagnostics } from './b4-diagnostics.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { i1RtbDiagnostics } from './i1-rtb-diagnostics-service.js';
 import { i1TradeLifecycleDiagnostics } from './i1-trade-lifecycle-diagnostics.js';
+import type { ExitConditionType } from './trade-close-reason';
+import type { AJ19BCloseBucket } from './aj19b-lifecycle-diagnostic';
 import { rtbMetricsService, type OpenFailStage } from './rtb-metrics-service.js';
 // [11.8B] shadow conversion: pure disposition routing, unit-fenced label integrity.
 import { resolveEvBlockDisposition } from './ev-block-disposition.js';
@@ -523,7 +525,9 @@ import { getStrategyDependency, type RegimeStability } from '../config/strategy-
 import { INTERIM_NO_POSTURE_MODE, type StrategyMode, type StrategyModeOverlay } from '../core/governance/strategy-modes.js';
 
 interface ExitCondition {
-  type: 'target_hit' | 'stop_hit' | 'trailing_stop_hit' | 'max_holding_period' | 'guardrail' | 'manual_stop' | 'reset';
+  // B-CLOSE-WRITER-COSTS P-15 (C-2): the member list lives ONCE, in `trade-close-reason.ts` (`EXIT_CONDITION_TYPES`),
+  // which also classes every close reason as a trade outcome or not.
+  type: ExitConditionType;
   price?: number;
   reason: string;
 }
@@ -5217,7 +5221,10 @@ export class ActiveExecutionEngine {
     const slotCountAfter = (await storage.getActiveOpenPositions(this.mode)).length;
     
     // Map exit condition to close reason enum
-    const closeReasonMap: Record<string, 'SL' | 'TP' | 'TRAILING_STOP' | 'MAX_HOLD' | 'MANUAL' | 'KILL_SWITCH' | 'ENGINE_STOP' | 'UNKNOWN'> = {
+    // B-CLOSE-WRITER-COSTS P-15 (C-2): keyed by EVERY exit condition, so a new condition is a compile error here until it
+    // is labelled; the `|| 'UNKNOWN'` fallback below is gone. ⚠️ DECLARED CHANGE: `manual_stop` was absent, so its close
+    // was labelled UNKNOWN; it is now MANUAL (1 row in history; no money reader reads this label).
+    const closeReasonMap: Record<ExitConditionType, AJ19BCloseBucket> = {
       'stop_hit': 'SL',
       'target_hit': 'TP',
       'trailing_stop_hit': 'TRAILING_STOP',
@@ -5226,7 +5233,8 @@ export class ActiveExecutionEngine {
       'max_holding_period': 'MAX_HOLD',
       'guardrail': 'KILL_SWITCH',
       // B-SIZING-DEC-RESTORE increment 3: the reset's flatten runs inside the engine stop.
-      'reset': 'ENGINE_STOP'
+      'reset': 'ENGINE_STOP',
+      'manual_stop': 'MANUAL',
     };
     
     // Log AJ19-B close event
@@ -5235,7 +5243,7 @@ export class ActiveExecutionEngine {
         tradeId: trade.id,
         positionId: positionId,
         symbol: position.symbol,
-        closeReason: closeReasonMap[exitCondition.type] || 'UNKNOWN',
+        closeReason: closeReasonMap[exitCondition.type],
         closedValue: actualExitPrice * quantity,
         pnl: netPnl,
         slotCountBefore,
@@ -5277,7 +5285,7 @@ export class ActiveExecutionEngine {
         exitCondition.type === 'reset' ? 'reset' : 'manual_stop'
       );
     } else {
-      const closeReason = exitCondition.type as any;
+      const closeReason = exitCondition.type;
       i1TradeLifecycleDiagnostics.logClose(
         trade.id,
         position.symbol,
