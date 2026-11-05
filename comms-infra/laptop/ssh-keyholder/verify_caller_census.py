@@ -71,6 +71,8 @@ REQUIRED_CLIENTS = {
     "direct:powershell": {"ssh"},
     "direct:git-bash": {"ssh"},
 }
+if set(REQUIRED_CLIENTS) != EVIDENCE_NAMES:  # two hand-kept lists of the same literals must agree
+    raise RuntimeError(f"REQUIRED_CLIENTS keys differ from EVIDENCE_NAMES: {sorted(set(REQUIRED_CLIENTS) ^ EVIDENCE_NAMES)}")
 CAPTURE_BINDINGS = Path(__file__).with_name("caller_capture_bindings.json")
 EXPECTED_SOURCES = {name: name for name in EVIDENCE_NAMES if not name.startswith("direct:")}
 

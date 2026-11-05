@@ -120,7 +120,7 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 
 | Store | Location | Bound | Tier path |
 |---|---|---|---|
-| Crew-status snapshots | laptop `~/.claude/crew-status-archive/` + Helsinki mirror | ~10 KB per CHANGE (not per cycle); measured basis ~50 changes/day ⇒ ~180 MB/yr raw, ~18 MB/yr gzipped | HOT: current month, uncompressed · WARM: monthly `.jsonl.gz`, verified by content-conservation before the source is unlinked · COLD: **owed — routes into the EXISTING archive system, see below** |
+| Crew-status snapshots | laptop `~/.claude/crew-status-archive/` (the "+ Helsinki mirror" this cell named does not exist: Langston searched `/srv /opt /var/lib /var/log /home /root /mnt` to depth 3 on 2026-11-05 and found none; corrected at the retirement) | ~10 KB per CHANGE (not per cycle); measured basis ~50 changes/day ⇒ ~180 MB/yr raw, ~18 MB/yr gzipped | HOT: current month, uncompressed · WARM: monthly `.jsonl.gz`, verified by content-conservation before the source is unlinked · COLD: **owed — routes into the EXISTING archive system, see below** |
 
 **Why this is business data and not an operational log (§5.5).** The obvious reading — "derived,
 so its inputs are the record" — is **false, and was refuted by the batch's own source census**:

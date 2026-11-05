@@ -146,12 +146,17 @@ run "$T/deploy.sh" --sha "$OLD" --only readers
 [ $RC -eq 2 ] && grep -q "PRE-FLIGHT FAILED — nothing has been changed" "$T/out" && grep -q "comms-infra/helsinki/dt-review" "$T/out" && cmp -s "$T/bin/dt-review" "$T/before.dtr" && ok "D4 pre-flight names the missing files and changes nothing" || bad D4 "rc=$RC $(tail -3 "$T/out")"
 
 # ---- bridges and notices ----
+# D5r: plant the retired poster where an OLD installer would have put it (B-STATUS-BOARD OBJ-6, Langston C-3);
+# the bridges run must move it to the retired folder, not leave it and not delete it.
+echo stale > "$T/opt/crew-status-post.py"
 run "$T/deploy.sh" --sha "$TC" --only bridges
-# The expected count is DERIVED from the manifest at $SHA, never written as a literal: a literal
-# here read 11 while the manifest had grown to 15 (B-LANGSTON-RELIEF), stale and unnoticed.
+# D5's expected count is DERIVED from the manifest at $SHA: its literal read 11 while the manifest had grown
+# to 15 (B-LANGSTON-RELIEF), stale and unnoticed. (D1, D6 and F3-D4 still carry literals - correct today.)
+# A derived count moves with the manifest, so it cannot catch a DROPPED row; D5r fences the one this commit drops.
 N5=$(awk '/^MANIFEST="/{p=1;next} p&&/^"/{p=0} p&&/^bridges\|/' "$T/deploy.orig" | wc -l)
 [ "$N5" -gt 0 ] || bad D5n "no bridges rows read from the manifest at $SHA"
 [ $RC -eq 0 ] && grep -q "install-verify: all $N5 installed files equal their verified blobs" "$T/out" && [ -f "$T/units/discord-langston-bridge.service.d/self-advance.conf" ] && ok "D5 bridges: $N5 files installed + verified (count read from the manifest at the sha)" || bad D5 "rc=$RC N5=$N5 $(tail -5 "$T/out")"
+[ $RC -eq 0 ] && [ ! -e "$T/opt/crew-status-post.py" ] && ls "$T"/retired/*/crew-status-post.py >/dev/null 2>&1 && ok "D5r: the planted retired poster is moved to the retired folder" || bad D5r "rc=$RC $(ls "$T/opt" | tr '\n' ' ')"
 grep -q "^COMMS_BACKEND=discord" "$T/etc/comms-active.env" && ok "D5 a fresh host is seeded with COMMS_BACKEND=discord" || bad D5s "$(grep COMMS_BACKEND "$T/etc/comms-active.env")"
 grep -q "NOT RESTARTED: discord-langston-bridge.service" "$T/out" && ! grep -q "stub systemctl restart" "$T/out" && ok "D5 the running bridges are named NOT RESTARTED; no restart issued" || bad D5b x
 run "$T/deploy.sh" --sha "$TC" --only notices

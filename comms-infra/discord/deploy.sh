@@ -394,7 +394,7 @@ INSTALLED=1
 # retire them (moved, not deleted — recorded in DELETED_COMPONENTS_LOG).
 RETIRE=""
 if want notices; then RETIRE="$RETIRE cc-send dt-push-notice.sh dt-deploy-drift.sh"; fi
-if want bridges; then RETIRE="$RETIRE discord-cc-bridge.service discord-langston-bridge.service discord-bridge-failed-notify@.service discord-langston-bridge.service.d comms-active.env deploy.sh"; fi
+if want bridges; then RETIRE="$RETIRE discord-cc-bridge.service discord-langston-bridge.service discord-bridge-failed-notify@.service discord-langston-bridge.service.d comms-active.env deploy.sh crew-status-post.py"; fi  # crew-status-post.py: retired 2026-11-05 (B-STATUS-BOARD OBJ-6) — an old installer re-installs it
 RDIR=/root/deploy-retired/$(date -u +%Y%m%dT%H%M%SZ)
 for f in $RETIRE; do
   if [ -e "$BRIDGE_DIR/$f" ] || [ -L "$BRIDGE_DIR/$f" ]; then
