@@ -86,6 +86,20 @@ describe('the wiring, proved at the source', () => {
   });
 });
 
+describe('P5 — the three 2 % target fallbacks are gone (Kyle decision 7)', () => {
+  const rtb = stripComments(readFileSync(new URL('../../core/rtb/ready_to_buy_service.ts', import.meta.url), 'utf8'));
+  const eng = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));
+  it('no `entry × 1.02` target is fabricated in the ranker, the shadow pool or the promoted open', () => {
+    expect(rtb).not.toMatch(/\* 1\.02/);
+    expect(eng).not.toMatch(/\* 1\.02/);
+  });
+  it('the ranker ranks a target-less plan last, the shadow pool skips it, the promoted open refuses it', () => {
+    expect(rtb).toMatch(/if \(p\.target == null \|\| !Number\.isFinite\(p\.target\)\) return \{ r: -Infinity, pwinFloored: false \}/);
+    expect(rtb).toMatch(/const targetPrice = num\(s\.targetPrice\);\s*if \(targetPrice === null\) continue;/);
+    expect(eng).toMatch(/if \(!Number\.isFinite\(targetPrice\) \|\| targetPrice <= 0\) \{[\s\S]{0,300}return \{ success: false, error: 'invalid_target' \}/);
+  });
+});
+
 describe('the stage is counted, so attempts still reconcile (P19-B6.5e)', () => {
   it('ENTRY_WINDOW is a recorded open-fail stage', () => {
     const before = rtbMetricsService.getStats().openFailedByStage.ENTRY_WINDOW ?? 0;

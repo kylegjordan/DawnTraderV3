@@ -5457,7 +5457,13 @@ export class ActiveExecutionEngine {
     try {
       const entryPrice = parseFloat(signal.entryPrice);
       const stopPrice = parseFloat(signal.stopPrice);
-      const targetPrice = signal.targetPrice ? parseFloat(signal.targetPrice) : entryPrice * 1.02; // Default 2% target
+      // B-ENTRY-GATE (#1224) P5 (Kyle decision 7): no fabricated 2 % target. A promoted plan with no valid target is
+      // refused here; it is never opened against a target nobody planned.
+      const targetPrice = signal.targetPrice != null ? parseFloat(signal.targetPrice) : Number.NaN;
+      if (!Number.isFinite(targetPrice) || targetPrice <= 0) {
+        console.error(`[B-ENTRY-GATE][INVALID_TARGET] ${signal.symbol}/${signal.strategy}: promoted with no valid target (${String(signal.targetPrice)}) — refused, not opened`);
+        return { success: false, error: 'invalid_target' };
+      }
       const quantity = signal.quantity ? parseFloat(signal.quantity) : undefined;
       const notional = signal.notional ? parseFloat(signal.notional) : undefined;
 

@@ -1775,7 +1775,10 @@ class ReadyToBuyService {
     assetClass?: AssetClass;
   }): { r: number; pwinFloored: boolean } {
     if (!Number.isFinite(p.entry) || !Number.isFinite(p.stop)) return { r: -Infinity, pwinFloored: false };
-    const target = (p.target != null && Number.isFinite(p.target)) ? p.target : p.entry * 1.02; // mirror executePromotedSignal default
+    // B-ENTRY-GATE (#1224) P5 (Kyle decision 7, "we shouldn't be doing anything with fallbacks"): a plan with no valid
+    // target cannot be ranked. It ranks last, like a plan with no entry or stop; the 2 % target it used to be given is gone.
+    if (p.target == null || !Number.isFinite(p.target)) return { r: -Infinity, pwinFloored: false };
+    const target = p.target;
     const result = evaluateTradeExpectancy(p.symbol, {
       entryPrice: p.entry,
       targetPrice: target,
@@ -1930,7 +1933,8 @@ class ReadyToBuyService {
       const entryPrice = num(s.entryPrice);
       const stopPrice = num(s.stopPrice);
       if (entryPrice === null || stopPrice === null) continue; // a pool member with no geometry can't be shadow-simmed
-      const targetPrice = num(s.targetPrice) ?? entryPrice * 1.02; // mirror executePromotedSignal's default
+      const targetPrice = num(s.targetPrice);
+      if (targetPrice === null) continue; // B-ENTRY-GATE (#1224) P5: no fabricated 2 % target; a member with no target can't be shadow-simmed
       const promoted = i < limit;
       const regime = meta.regime ?? meta.pairRegime ?? null;
       const finalScore = num(s.finalScore);
