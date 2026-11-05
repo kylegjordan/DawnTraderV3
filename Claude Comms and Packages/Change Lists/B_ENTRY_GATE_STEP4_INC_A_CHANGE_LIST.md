@@ -1,5 +1,15 @@
 # B-ENTRY-GATE (#1224) — STEP 4 CHANGE LIST, INCREMENT A (at the fill)
 
+> **r2 (2026-11-05 ~15:30Z): Langston's CHANGES on r1 (msg 1567907580712583189, graded `21c614a0a`) folded.**
+> - **C-1** the taker arm's friction is now `composeAskEntryMidExitFriction = 2·fee + 1·slippage + ½·spread` (the walked ask fill already holds the entry half-spread and walk), computed with the kernel directly; the maker arm keeps the decision's maker leg. Pinned: at fill 100, DI 20, costs 0.004 / 0.0005 / 0.001 ⇒ `netEvAtFill` = 1.1 exactly (the mid-to-mid composition would give 1.0). Mutation M5 (revert the composer) → 3 red.
+> - **C-2** every fail-hard read (`entry_gate` ×2 and the five P4 inputs) is resolved by `_resolveFillEconInputs` BEFORE `openOrder` and before either arm; a failure is a COUNTED `FILL_ECONOMICS` refusal (`entry_gate_settings_unresolved`), so I3 still reconciles. Fence: no `getCachedNumberRequired(` between the fill and the window decision.
+> - **C-3** the maker arm refuses an inverted triple (`refuseTakerBooking(limit, stop, target)`) before it is priced, stage `ENTRY_GEOMETRY`.
+> - **C-4** re-dispatched at a sha containing `5a3d1bbd4`, CI read there.
+> - **C-5** the window-refused row carries `..._fillEconRec`. **C-6** `spreadSource` is on the record.
+> - **Deviation 1 rider, corrected:** r1 said *"Same non-trade, a different label and one book walk"* — **wrong.** A marketable maker whose stored taker EV was ≤ 0 **or null** now converts and **OPENS** whenever P4 clears at the price paid: a NEW trade path, not only a relabel. Its exposure is bounded by P4 itself (now with the corrected composition).
+> - **Governance owed now:** `DELETED_COMPONENTS_LOG.md` entry for the four removals; `LEVER_INVENTORY.md:184` no longer names `ENTRY_PREMIUM_BPS`; migration header cites pre-audit r9. The `entry_gate`-row coupling (a future class needs a seed row or its taker entries refuse as `settings_unresolved`) is a SIM line at Step 10.
+> - **P9 log growth** (append-forever `sqe_rejections.log`, unswept dated traces): proposed to OLD Claude as an item on B-DISK-FILE-TIERING, his agreement required; no new row placed.
+
 | field | value |
 |---|---|
 | **(i) declared change-class** | `architecture` (scope header) |
@@ -51,7 +61,7 @@ if (_b72cPendingMaker) {
 **The conversion** — BEFORE: `if (_entryFillPolicy === 'maker_preferred' && _b72cStoredTakerEv != null && _b72cStoredTakerEv > 0)`. AFTER: `if (_entryFillPolicy === 'maker_preferred')` — it converts and P4 decides at the price paid.
 
 ## Deviations from the plan — attack these
-1. **The conversion (pre-audit §2 row).** The plan said "the conversion decision becomes OBJ-4's taker test at the live ask". Built: the stored-EV condition is removed and the decision moves to P4 at the WALKED fill price — the price actually paid — so there is ONE deciding number, not a live-ask estimate followed by a fill check. Effect: a marketable maker whose stored taker EV was ≤ 0 used to be `MAKER_MARKETABLE_DROPPED` (no book walk); now it walks the book and is refused `FILL_ECONOMICS` if its EV at the paid price is ≤ 0. Same non-trade, a different label and one book walk.
+1. **The conversion (pre-audit §2 row).** The plan said "the conversion decision becomes OBJ-4's taker test at the live ask". Built: the stored-EV condition is removed and the decision moves to P4 at the WALKED fill price — the price actually paid — so there is ONE deciding number, not a live-ask estimate followed by a fill check. Effect (corrected in r2): a marketable maker whose stored taker EV was ≤ 0 or null used to be `MAKER_MARKETABLE_DROPPED`; now it converts, walks the book, and OPENS if P4 clears at the paid price, or is refused `FILL_ECONOMICS` if not. ~~Same non-trade, a different label and one book walk.~~
 2. **P5's SQE `InvalidTarget` rule moves to increment B.** It needs the plan in `SQEInput`, which is P2. Increment A deletes the fallbacks at their three sites.
 3. **P7a withdrawn** (pre-audit r6: every trade already carries `metadata.queuedAt`).
 4. **P9 writes transitions only.** Directive 8.8.4-A3.R8's intent is status transitions; `reconfirmed → reconfirmed` every 120 s per row would be ~14 MB a day of non-events.

@@ -4,7 +4,7 @@
  * (pWin = clamp(minPWin + DI/diPWinFactor); rawEV = pWin·distTarget − pLoss·distStop; netEV = rawEV − friction).
  */
 import { describe, it, expect } from 'vitest';
-import { computeFillEconomics, type FillEconomicsInput } from '../../core/trading/fill-economics';
+import { computeFillEconomics, composeAskEntryMidExitFriction, type FillEconomicsInput } from '../../core/trading/fill-economics';
 
 const haircut = {
   makerFillProbability: 0.5, adverseSelectionBase: 0.001, adverseSelectionStrengthMult: 0, nonFillCostBase: 0.002,
@@ -42,6 +42,22 @@ describe('P4 — the deciding number is net EV at the PRICE PAID for the ARM THA
     const taker = computeFillEconomics(base);
     // maker pays the maker fee on entry (cheaper) but bears adverse selection 0.001·100 = 0.1; no pFill halving.
     expect(maker.netEvAtFill).toBeGreaterThan(taker.netEvAtFill * 0.5 + 0.5); // would be ~half if pFill-weighted
+  });
+});
+
+describe('Step-4 C-1 — the taker friction composition is pinned: ask entry (already in the fill) against mid exits', () => {
+  it('composeAskEntryMidExitFriction = 2·fee + 1·slippage + ½·spread', () => {
+    expect(composeAskEntryMidExitFriction(0.004, 0.0005, 0.001)).toBeCloseTo(0.009, 12);
+  });
+  it('taker at 100, DI 20: rawEV = 0.5·8 − 0.5·4 = 2.0; friction = 0.009·100 = 0.9 ⇒ netEvAtFill = 1.1 exactly', () => {
+    expect(computeFillEconomics(base).netEvAtFill).toBeCloseTo(1.1, 10);
+  });
+  it('the mid-to-mid composition (2·fee + 2·slip + spread = 0.01) would have charged 1.0 — not what is used', () => {
+    expect(computeFillEconomics(base).netEvAtFill).not.toBeCloseTo(1.0, 6);
+  });
+  it('C-6: the record states whether the spread was measured or a placeholder', () => {
+    expect(computeFillEconomics({ ...base, costs: { ...base.costs, spreadSource: 'static_fallback' } as any }).spreadSource).toBe('static_fallback');
+    expect(computeFillEconomics(base).spreadSource).toBeNull();
   });
 });
 

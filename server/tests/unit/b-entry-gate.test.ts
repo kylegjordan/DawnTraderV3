@@ -131,8 +131,8 @@ describe('P3v — the VTS applies the same window at its taker entries (no SQE o
 describe('P4 — the economic test at the price paid, wired at both arms', () => {
   const src = stripComments(readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8'));
   it('the maker is judged at its limit before it rests; the taker at its walked fill, after the window', () => {
-    expect(src).toMatch(/actualEntryPrice = _b72cLimit;[\s\S]{0,400}this\._fillEconomics\(signal, _openClass, 'maker', _b72cLimit\)/);
-    expect(src).toMatch(/this\._fillEconomics\(signal, _openClass, 'taker', actualEntryPrice\)/);
+    expect(src).toMatch(/actualEntryPrice = _b72cLimit;[\s\S]{0,1600}computeFillEconomics\(\{ \.\.\._feInputs, arm: 'maker', fillPrice: _b72cLimit \}\)/);
+    expect(src).toMatch(/computeFillEconomics\(\{ \.\.\._feInputs, arm: 'taker', fillPrice: actualEntryPrice \}\)/);
     const win = src.indexOf("stage: 'ENTRY_WINDOW'");
     const fe = src.indexOf("this._refuseFillEconomics(signal, _openClass, 'taker'");
     const write = src.indexOf('const positionValue = actualEntryPrice * quantity');
@@ -146,6 +146,27 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
   it('the marketable-maker conversion no longer decides on the stored gen-time taker EV', () => {
     expect(src).not.toMatch(/_b72cStoredTakerEv != null && _b72cStoredTakerEv > 0/);
     expect(src).toMatch(/if \(_entryFillPolicy === 'maker_preferred'\) \{\s*_b72cEffectiveMode = 'taker';/);
+  });
+  it('Step-4 C-2: every fail-hard read is resolved BEFORE the fill, and a failure is a COUNTED refusal', () => {
+    const resolve = src.indexOf('_feInputs = this._resolveFillEconInputs(signal, _openClass)');
+    const fill = src.indexOf('this.orderPlacer.openOrder(');
+    expect(resolve).toBeGreaterThan(0);
+    expect(fill).toBeGreaterThan(resolve);
+    expect(src).toMatch(/_ewWorseSide = getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac', _ewKey\)/);
+    expect(src).toMatch(/catch \(settingsErr\) \{[\s\S]{0,400}recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', why\)[\s\S]{0,120}return \{ opened: false/);
+    // no settings read left between the fill and the window decision
+    const seg = src.slice(fill, src.indexOf("stage: 'ENTRY_WINDOW'"));
+    expect(seg).not.toMatch(/getCachedNumberRequired\(/);
+  });
+  it('Step-4 C-3: a maker whose limit sits at or through the stop or target is refused before it is priced', () => {
+    const g = src.indexOf('const _mg = refuseTakerBooking(_b72cLimit, signal.stopPrice, signal.targetPrice)');
+    const e = src.indexOf("arm: 'maker', fillPrice: _b72cLimit");
+    expect(g).toBeGreaterThan(0);
+    expect(e).toBeGreaterThan(g);
+    expect(src).toMatch(/if \(_mg !== null\) \{[\s\S]{0,400}return \{ opened: false, stage: 'ENTRY_GEOMETRY', reason: _mg \}/);
+  });
+  it('Step-4 C-5: a window-refused row carries the EV legs too', () => {
+    expect(src).toMatch(/reason: _ewRefusal,[\s\S]{0,300}\.\.\.\(_entryShadowRec \?\? \{\}\), \.\.\.\(_fillEconRec \?\? \{\}\)/);
   });
   it('both refusals and the admitted row carry the record; FILL_ECONOMICS is a counted stage', () => {
     expect(src).toMatch(/\.\.\.\(_fillEconRec \?\? \{\}\), /);

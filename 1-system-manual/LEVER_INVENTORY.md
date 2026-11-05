@@ -181,7 +181,7 @@ PROMOTE risk profile: LOW 20, MEDIUM 18, HIGH 3.
 
 ## §3. `server/strategies/` tier — 101 levers audited (9 strategy files)
 
-> **Note on count:** 9 strategy files found in `server/strategies/` (strong_bull_trend, adaptive_flow, volatility_edge, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, support_bounce). The 17-canonical-strategy figure in CLAUDE.md may include strategies defined elsewhere (e.g. quant-side in `core/` or services). Verify in Step 2 final pass that no strategies live in unaudited locations. `strategy-helpers.ts` GLOBAL_CONSTANTS (MIN_RR_RATIO, ATR_PERIOD, VOLUME_BASELINE_PERIOD, MIN_PATTERN_STRENGTH, ENTRY_PREMIUM_BPS, MIN_STOP_DISTANCE_BPS, ATR_MIN_RATIO, ATR_MAX_RATIO) are imported by all 9 — catalog separately as `B72-HELPER-NNN` rows during dedup.
+> **Note on count:** 9 strategy files found in `server/strategies/` (strong_bull_trend, adaptive_flow, volatility_edge, defensive_hedge, inside_bar_reversal, morning_star, pivot_shift, reverse_impulse, support_bounce). The 17-canonical-strategy figure in CLAUDE.md may include strategies defined elsewhere (e.g. quant-side in `core/` or services). Verify in Step 2 final pass that no strategies live in unaudited locations. `strategy-helpers.ts` GLOBAL_CONSTANTS (MIN_RR_RATIO, ATR_PERIOD, VOLUME_BASELINE_PERIOD, MIN_PATTERN_STRENGTH, MIN_STOP_DISTANCE_BPS, ATR_MIN_RATIO, ATR_MAX_RATIO) are imported by all 9 — catalog separately as `B72-HELPER-NNN` rows during dedup. *(2026-11-05: `ENTRY_PREMIUM_BPS` removed by B-ENTRY-GATE — it had no reader; see `DELETED_COMPONENTS_LOG.md`.)*
 
 ### §3.1 Summary
 

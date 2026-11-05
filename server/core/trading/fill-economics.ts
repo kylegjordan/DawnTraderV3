@@ -26,6 +26,22 @@ import {
   type MakerTakerHaircutConfig,
 } from '../math/maker-taker-decision.js';
 import type { CostComponents } from '../math/cost-model.js';
+import { computeNetExpectancyKernel } from '../calculations/net-expectancy-kernel.js';
+
+/**
+ * Step-4 C-1 (Langston): the friction of a TAKER entry booked at its WALKED ASK fill, against MID-priced exits.
+ * The walked fill already contains the entry half-spread and the entry walk, so they must not be charged again
+ * ("SPREAD IS EITHER GEOMETRY OR FRICTION — NEVER BOTH", `cost-model.ts`). What remains: both fees, the EXIT leg's
+ * slippage, and the exit half-spread (the exit is mid-priced): `2·fee + 1·slippage + ½·spread`. Neither existing
+ * composer fits: `computeTotalRoundTripCost` is mid-to-mid (`2·fee + 2·slip + spread`) and `composeSidedFriction` is for
+ * sided EXITS as well. Fraction of the entry price.
+ */
+export function composeAskEntryMidExitFriction(fee: number, slippage: number, spread: number): number {
+  return 2 * fee + slippage + 0.5 * spread;
+}
+
+/** Everything the test needs except the arm and the price: resolved BEFORE the fill (Step-4 C-2). */
+export type FillEconInputs = Omit<FillEconomicsInput, 'arm' | 'fillPrice'>;
 
 export interface FillEconomicsInput {
   arm: 'taker' | 'maker';
@@ -65,6 +81,8 @@ export interface FillEconomics {
    * here", never "zero".
    */
   netEvAtRealDi: number | null;
+  /** The cost model's own provenance for the spread used: 'measured' or 'static_fallback'; null when not stated. */
+  spreadSource: 'measured' | 'static_fallback' | null;
   /** Reply A at the fill: net EV ≤ 0 refuses. */
   refuse: boolean;
   /** A-12 shadow: what the missing-win-probability leg WOULD refuse. Never decides in this batch. */
@@ -94,7 +112,16 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
     urgencyClass: i.urgencyClass,
     haircut: i.haircut,
   });
-  const leg = i.arm === 'taker' ? d.taker : d.maker;
+  // TAKER (C-1): the kernel at the walked fill with the ask-entry / mid-exit friction, never the mid-to-mid one.
+  // MAKER: the decision's own maker leg — its limit is the price it pays and the mid premise holds there.
+  const leg = i.arm === 'taker'
+    ? computeNetExpectancyKernel({
+        entryPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice,
+        totalFriction: composeAskEntryMidExitFriction(i.costs.fee, i.costs.slippage, i.costs.spread) * i.fillPrice,
+        DI: i.DI, sourcePool: i.sourcePool, dbsScore: i.dbsScore,
+        minPWin: i.minPWin, maxPWin: i.maxPWin, diPWinFactor: i.diPWinFactor,
+      })
+    : d.maker;
   // Maker, conditional on filling: the adverse-selection cost applies; pFill and the non-fill cost do not.
   const adverseSelection = i.arm === 'maker' ? d.adverseSelectionPct * i.fillPrice : 0;
   const netEvAtFill = leg.netEV - adverseSelection;
@@ -109,5 +136,7 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
     netEvAtRealDi: i.DI === undefined ? null : netEvAtFill,
     refuse: !(netEvAtFill > 0),
     missingPWinWouldRefuse: pWinDefaulted,
+    // Step-4 C-6: a refusal can rest on a placeholder spread; say which one it used (#546).
+    spreadSource: i.costs.spreadSource ?? null,
   };
 }
