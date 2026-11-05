@@ -1,5 +1,11 @@
 # Open batch register — 2026-11-05 09:40 UTC, built by PM Claude
 
+> **How this register is used (Kyle 2026-11-05, KD-29).** PM Claude re-reads it at EVERY crew check (the scheduled check and any slotting decision) and updates it the same turn.
+> - Every open batch carries ONE of three states: **ACTIVE** (being worked now) · **OBSERVATION** (deployed, waiting on a dated read or window; the date is written) · **STALLED** (no recorded activity for 7 days, or an OBSERVATION read whose date has passed with no result).
+> - A session may hold several batches at once, but only because the others are in OBSERVATION. A session that opens a new batch while one of its own is STALLED is flagged to Kyle the same day.
+> - An OBSERVATION read is chased ON its date: if the read is not posted within a day of its date, the owner is nudged; a second miss goes to Kyle.
+> - Deployed batches that only need their final verification and write-up are the first thing a session is pointed back to.
+
 Built from the review branch at `5a14ac786` plus the pull at 09:27Z (working-tree reads; CRLF caveat applies to byte counts only, not to this register).
 Sources, in order: `SPRINT_TO_LIVE_PLAN.md` (§0a table and §4 rows), the four session task lists, the five memory files (`.claude/memory/`), `GOVERNANCE_EXCEPTIONS.md` open rows, and the seven governance-checker "OPEN > 7d" ids you named.
 Rule used: CLOSED = a `*_COMPLETION_REPORT.md` exists in `Claude Comms and Packages/Batch Completion/` or the plan/task list says CLOSED. Everything else started = OPEN. A `_PROGRESS_REPORT.md` is NOT a completion report.
