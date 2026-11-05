@@ -1451,3 +1451,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **WHAT WAS BROKEN.** Thirteen staging server addresses that change something answered with no login: anyone could stop the order-book integrity monitor, start or stop a test routine, set the simulation-session flag, rename AI conversations, run Kraken lookups or audits, or push back an automatic recovery. None could open, move or close a trade or touch a balance.
 
 **THE FIX.** All thirteen now require a login; the read-only addresses stay with Infra Claude at the end of the sprint (row 197a).
+
+## B-STATUS-BOARD (CC-A, Kyle-directed 2026-10-19/20; `#1227`, closes `#1200`) — change-class `non_architecture` — ⏳ **OPEN at Step 10** (Langston Step 8 PROCEED 2026-11-05; page live on staging since 2026-11-04; waits on Kyle's phone-width check)
+
+**WHAT IT IS.** One page on Kyle's phone that shows the agreed pre-sprint and sprint plan: every item, who holds it, where it has got to and what it is waiting on — derived from the plan every 30 minutes by the governance checker, never typed into a second place.
+
+**WHAT CHANGED.** The plan's two pre-sprint tables became ONE table in §0a (both old tables kept verbatim under a history heading); the governance checker writes the board file each tick and its weekly census reads the same table (the `#1200` fix: issues placed there no longer read as unplaced); a logged-in route and the `/status-board` page show it; a QUEUED line whose batch has fresh Step commits reads in progress (OBJ-9, Kyle 2026-11-04); the old laptop crew-status page and its Discord poster were retired (six scripts archived; the server and laptop state moved, not deleted; the standing Discord message held for Kyle).
+
+**VERIFIED.** Board rebuilt independently by Langston from the checker's own code at the ref — identical counts; absent-file and stale-banner renders in Claude-in-Chrome without a restart; the installer test 61/0 at the retirement sha. **Not yet:** the phone-width check (Kyle). Records: scope, pre-audit and change list under `Claude Comms and Packages/`.

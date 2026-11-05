@@ -1136,6 +1136,18 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 | **wake routing** | a `verification` alert reaches Discord through the dispatcher's alerts webhook; Langston triages and routes to CC-A. |
 | **state** | **Read `WEEKLY_CENSUS_ENABLED` and `MISTAKE_PASS_ENABLED` in `config.mjs` — this row deliberately states no value** (P62 condition 1: a value quoted here went stale at the census flip). History: the census was switched on at `13fa6bbce` and the mistake pass by the P62 mistake-pass commit, 2026-09-30; before them no weekly pass was scheduled by anything (`MISTAKE_PATTERNS.md` run log, 2026-09-30 gap row). Each leg's liveness: the heartbeat raises `gov-census-silent` / `gov-mistakepass-silent` at `warning` when an enabled leg has not run for more than `CENSUS_STALE_DAYS`. |
 
+### The status board — the checker's board writer, its file, the route and the page — added B-STATUS-BOARD 2026-11-05 (`#1227`)
+
+| aspect | what is true |
+|---|---|
+| **what** | Kyle's phone page `/status-board`: every pre-sprint and sprint item, its owner, its derived status and what it waits on. **It replaces the laptop crew-status page** (retired 2026-11-05, `DELETED_COMPONENTS_LOG.md`). |
+| **writer** | the governance checker's 30-minute tick on staging (`scripts/governance-checker/poller.mjs`, `runStatusBoardSafely` at BOTH `maybeRunWeekly` sites) calls `status-board.mjs` `runStatusBoard`: `buildBoard` is pure; the write is atomic (temp + rename) to **`/var/lib/governance-checker/status-board.json`** at the graded sha. A failure raises `gov-board-failed` and the rest of the tick carries on (fenced). |
+| **reads (upstream)** | at the graded ref: `SPRINT_TO_LIVE_PLAN.md` §0a — ONE table, `presprintRows` (`checker.mjs`) — and §4 rows; `STATUS_BOARD_DESCRIPTIONS.md` (one `### <batch id>` per item); `GOVERNANCE_EXCEPTIONS.md` open rows (`parseExceptionsLegacy` with `openReason`); commit subjects for OBJ-9's work record (a QUEUED line whose batch has a Step commit within `WORK_RECORD_RECENT_MS`, 14 d, reads in progress). Status words and waiting words are declared in `config.mjs` (`STATUS_PREFIXES`, `WAITING_WORDS`); anything else shows `unrecognised`. |
+| **second reader of §0a** | `census.mjs` reads the same table for the weekly plan census (`placement()`), so an issue placed in the pre-sprint table no longer reads as unplaced (`#1200`). Two readers, one table: a §0a format change must keep both. |
+| **route + page (downstream)** | `GET /api/status-board` (`server/routes.ts`, `server/services/status-board-file.ts`, behind `authenticateToken`; 401 unauthenticated) reads the file **per request** — no restart to pick up a new board; 503 with a reason when the file is missing or unreadable; returns two ages and `stale` (> `BOARD_STALE_MS`, 1 h). Page `client/src/pages/status-board/StatusBoardPage.tsx` inside `RequireAuth`: NOW / NEXT / THE REST, a stale banner, a "no board yet" state. |
+| **does NOT touch** | the GitHub delivery board (Kyle kept it, 2026-10-20) — neither the writer nor the page reads or writes a card. |
+| **known limits** | an unrecognised `waiting on` is shown but NOT counted (`status-board.mjs` counts status states only); a blank `waiting on` renders as "nothing" (`checker.mjs` `mapWaiting`). 0 live instances of either at 2026-11-05 — recorded deviations from scope OBJ-1, not fixed in this batch. |
+
 ## Layer 10: Frontend & Communication
 
 ### 10.1 WebSocket Broadcast Layer

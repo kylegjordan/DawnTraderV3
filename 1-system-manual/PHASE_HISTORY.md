@@ -1420,3 +1420,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-04 — B-XSTOCK-BID-TRIGGER-RELAND increment (4b) (CC-C, sprint plan row 2) — ⏳ batch OPEN, (4b) deployed and confirmed
 
 **Paper trading and both VTS lanes now decide xStock stops and targets with one shared rule.** Before, each of the three places that decide an exit picked its own price to compare against the stop and target. They agreed, but nothing kept them agreeing. One rule now does it for all three, and a test fails if a fourth place appears or one of them computes its own price. Nothing was meant to change in what fires, and the first US session after the deploy showed exactly that: every paper xStock exit decided on the bid (19 of 19), refusal counts kept their shape, and close counts stayed in their normal range; Langston re-derived every number. Still open in the batch: the opening-bell VTS pages (increment (4c)) and the venue-transition pause's four-week read to 11-16.
+
+### 2026-11-05 — B-STATUS-BOARD (CC-A, pre-sprint) — ⏳ batch OPEN at Step 10, waiting on Kyle's phone check
+
+**Kyle has one page that shows the whole agreed plan and who is doing what.** The governance checker rebuilds it from the plan every 30 minutes, so it cannot drift from the plan; the plan's two pre-sprint tables became one. The old laptop crew-status page, which had not updated since August, is retired. Langston's second pass rebuilt the board himself and got the same numbers. Open: Kyle's check on his phone.
