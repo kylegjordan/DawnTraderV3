@@ -1108,6 +1108,10 @@ class XstockSpotScannerService {
           `family_fanout_sum=${cycleCounters.familyFanOutSum} ` +
           `strats_evaled=${cycleCounters.strategiesEvaluated} ` +
           `strategy_nulls=${cycleCounters.strategyNulls} ` +
+          // B-XSTOCK-DBS-TO-STRATEGIES (#1235, OBJ-3): detect-input DBS coverage, reported not thresholded.
+          `detect_evals=${cycleCounters.detectEvals} ` +
+          `dbs_carried=${cycleCounters.dbsCarriedEvals} ` +
+          `dbs_strong=${cycleCounters.dbsStrongEvals} ` +
           `signals=${cycleCounters.signalsGenerated} ` +
           `archived=${cycleCounters.signalsArchived} ` +
           `archive_failures=${cycleCounters.archiveFailures} ` +
