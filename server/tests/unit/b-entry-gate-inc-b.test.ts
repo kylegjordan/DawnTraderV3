@@ -9,6 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { evaluateSignalQualitySync } from '../../core/filters/signal_quality_evaluator';
+import { isNetEvOnlyFailure } from '../../services/execution/exploration-lane';
 
 const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 const src = stripComments(readFileSync('server/services/signal-orchestrator.ts', 'utf-8'));
@@ -63,5 +65,21 @@ describe("P9 (inc B, Langston Step-4 r3 §13) — no require() of a node built-i
   });
   it('no require() of a non-relative specifier remains', () => {
     expect(hits(/\brequire\(\s*['"](?!\.{1,2}\/)[^'"]+['"]\s*\)/g)).toEqual([]);
+  });
+});
+
+describe('P4s + P12 — an absent net EV is refused by name, and the exploration lane cannot admit on it', () => {
+  const sqeSrc = stripComments(readFileSync('server/core/filters/signal_quality_evaluator.ts', 'utf-8'));
+  it('both SQE copies refuse an absent EV as NetEVMissing and keep the `NetEV ` prefix for a non-positive one', () => {
+    expect(sqeSrc.split('NetEVMissing: no finite net expectancy supplied').length - 1).toBe(2);
+    expect(sqeSrc.split('failures.push(`NetEV ${input.chosenNetEv.toFixed(6)} <= 0').length - 1).toBe(2);
+    expect(sqeSrc).not.toMatch(/input\.chosenNetEv != null && !\(input\.chosenNetEv > 0\)/); // the old fail-open
+  });
+  it('the lane admits on a NetEV-only failure, never on NetEVMissing', () => {
+    const missing = evaluateSignalQualitySync({ signalId: 's', symbol: 'BTC/USD', strategy: 'x', mode: 'paper', assetClass: 'crypto_spot', finalScore: 0.9, regimeWeight: 0.9 } as any);
+    expect(missing.failures).toHaveLength(1);
+    expect(isNetEvOnlyFailure(missing.failures)).toBe(false);
+    const negative = evaluateSignalQualitySync({ signalId: 's', symbol: 'BTC/USD', strategy: 'x', mode: 'paper', assetClass: 'crypto_spot', finalScore: 0.9, regimeWeight: 0.9, chosenNetEv: -0.001 } as any);
+    expect(isNetEvOnlyFailure(negative.failures)).toBe(true);
   });
 });
