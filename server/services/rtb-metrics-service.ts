@@ -57,6 +57,7 @@ export type OpenFailStage =
   | 'VALIDATE_REJECTED'   // P19-B8.5 (OBJ-8): Kraken validate=true returned a DEFINITIVE order-level rejection — the venue would refuse this order, so paper refuses it too (paper-only leg)
   | 'FILL_REJECTED'       // depth-walked fill rejected / non-filled / zero qty
   | 'ENTRY_GEOMETRY'      // B-ENTRY-DISTANCE-GUARD (row 59): the taker fill sits at or through the signal's own stop or target (refuseTakerBooking)
+  | 'ENTRY_WINDOW'        // B-ENTRY-GATE (#1224) P1: the taker fill sits more than the worse-side window above the planned entry (KD-10)
   | 'MAKER_MARKETABLE_DROPPED' // P19-B7.2c: maker limit already marketable at placement + stored taker EV not positive → dropped (non-trade)
   | 'DUP_POSITION'        // duplicate-position guard
   | 'TRADE_INSERT_ERROR'  // DB trade/position insert threw

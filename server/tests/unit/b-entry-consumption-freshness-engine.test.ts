@@ -236,6 +236,21 @@ vi.mock('../../services/i1-trade-lifecycle-diagnostics.js', async (orig) => ({
   i1TradeLifecycleDiagnostics: { logOpen: h.lifecycleOpen },
 }));
 
+// B-ENTRY-GATE (#1224) P1/P1b: the taker fill now reads the per-class entry window and cheaper-side floor with
+// getCachedNumberRequired (fail-hard). This fixture runs with a cold settings cache, so it supplies those two rows at the
+// seeded values (0.25 / 0.40); every other key still goes to the real reader.
+vi.mock('../../services/module-constants-service.js', async (orig) => {
+  const actual = await orig<Record<string, any>>();
+  return {
+    ...actual,
+    getCachedNumberRequired: (module: string, name: string, key: unknown) => {
+      if (module === 'entry_gate' && name === 'entry_window_worse_side_frac') return 0.25;
+      if (module === 'entry_gate' && name === 'entry_cheaper_side_floor_frac') return 0.40;
+      return actual.getCachedNumberRequired(module, name, key);
+    },
+  };
+});
+
 import { ActiveExecutionEngine } from '../../services/active-execution-engine.js';
 
 type Stub = Record<string, any>;

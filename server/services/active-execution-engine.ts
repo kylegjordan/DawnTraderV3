@@ -51,6 +51,7 @@ import { storage } from '../storage';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
 import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
 import { refuseTakerBooking, entryFillShadow } from '../core/trading/entry-booking.js'; // B-ENTRY-DISTANCE-GUARD (row 59)
+import { entryWindowRefusal, cheaperSideRecord } from '../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P1/P1b
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js'; // B-ENTRY-DISTANCE-GUARD OBJ-2 shadow floor
 import type { OrderPlacer } from './execution/types.js'; // P19-B3a: FillResult/port contract
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -6159,6 +6160,16 @@ export class ActiveExecutionEngine {
     // judging it here, before any write, leaves nothing behind. A fourth sibling of the three FILL_REJECTED returns above.
     // OBJ-2 SHADOW first, on EVERY taker open, so the refused ones are in the same population as the admitted ones.
     const _shadow = entryFillShadow({ fill: actualEntryPrice, intended: signal.entryPrice, stop: signal.stopPrice, target: signal.targetPrice, floor: _entryFloor });
+    // B-ENTRY-GATE (#1224) increment A, P1 + P1b (Kyle KD-10). The WORSE-side window: a taker fill more than
+    // `entry_window_worse_side_frac` × the planned risk ABOVE the planned entry is refused (after the geometry refusal,
+    // below). A fill below plan is never refused; it is recorded against the cheaper-side floor, WATCH-ONLY. Both are
+    // per-class DB settings read with getCachedNumberRequired (throws on an absent row — no default). Computed HERE so the
+    // record below stays the ONE `_entryShadowRec` assignment and reaches both archive arms.
+    const _ewKey = { exchange: '*', assetClass: _openClass, strategy: '*', regime: '*' };
+    const _ewWorseSide = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', _ewKey);
+    const _ewCheaperFloor = getCachedNumberRequired('entry_gate', 'entry_cheaper_side_floor_frac', _ewKey);
+    const _ewCheaper = cheaperSideRecord(_shadow.adverseR, _ewCheaperFloor);
+    const _ewRefusal = entryWindowRefusal(_shadow.adverseR, _ewWorseSide);
     _entryShadowRec = {
       intendedEntryPrice: signal.entryPrice, rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,
       rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',
@@ -6170,6 +6181,9 @@ export class ActiveExecutionEngine {
       // BOTH archive rows (admitted and the `entry_fill` refusal) and never a maker row. Present ⇒ the row is a taker
       // (`entryArm='taker'` is entailed); absent on a taker row ⇒ written before this deploy, never "direct" (#546).
       consumptionArm: _consumptionArm,
+      // B-ENTRY-GATE (#1224) P1/P1b: the window and the cheaper-side record, on every taker open.
+      entryWindowFrac: _ewWorseSide, entryWindowRefused: _ewRefusal !== null,
+      cheaperSideFloorFrac: _ewCheaperFloor, remainingRiskFrac: _ewCheaper.remainingRiskFrac, belowCheaperFloor: _ewCheaper.belowFloor,
     };
     console.log(`[ENTRY_GEOMETRY][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} arm=${_consumptionArm} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} target=${signal.targetPrice} ` +
       `rr_fill=${_shadow.rrFill === null ? 'n/a' : _shadow.rrFill.toFixed(4)} floor=${_entryFloor ?? 'n/a'} adverse_r=${_shadow.adverseR === null ? 'n/a' : _shadow.adverseR.toFixed(4)} would_refuse=${_shadow.wouldRefuse ?? 'n/a'}${_entryFloorNote}`);
@@ -6192,6 +6206,26 @@ export class ActiveExecutionEngine {
         console.error(`[ENTRY_GEOMETRY][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
       }
       return { opened: false, stage: 'ENTRY_GEOMETRY', reason: _geom };
+    }
+    // B-ENTRY-GATE (#1224) increment A, P1 + P1b (Kyle KD-10): act on the window computed with the shadow above.
+    if (_ewCheaper.belowFloor === true) {
+      console.log(`[B-ENTRY-GATE][CHEAPER_FLOOR][SHADOW] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} remaining_risk=${_ewCheaper.remainingRiskFrac?.toFixed(4)} floor=${_ewCheaperFloor} — recorded, not refused`);
+    }
+    if (_ewRefusal !== null) {
+      console.error(`[B-ENTRY-GATE][ENTRY_WINDOW][REFUSED] ${signal.symbol} strategy=${signal.strategy} class=${_openClass} fill=${actualEntryPrice} intended=${signal.entryPrice} stop=${signal.stopPrice} adverse_r=${_shadow.adverseR?.toFixed(4)} window=${_ewWorseSide} — not opened`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'ENTRY_WINDOW', _ewRefusal);
+      try {
+        const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+        archiveSignalEval({
+          mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass: _openClass,
+          source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
+          gateDecision: { gate: 'entry_fill', accepted: false, reason: _ewRefusal, fillPrice: actualEntryPrice, entryPrice: actualEntryPrice, entryArm: 'taker',
+            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...(_entryShadowRec ?? {}) },
+        });
+      } catch (archErr) {
+        console.error(`[B-ENTRY-GATE][ENTRY_WINDOW][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
+      }
+      return { opened: false, stage: 'ENTRY_WINDOW', reason: _ewRefusal };
     }
     }
     const positionValue = actualEntryPrice * quantity;

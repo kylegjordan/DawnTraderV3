@@ -21,7 +21,6 @@ export const GLOBAL_CONSTANTS = {
   ATR_PERIOD: 14,
   VOLUME_BASELINE_PERIOD: 20,
   MIN_PATTERN_STRENGTH: 0.55,
-  ENTRY_PREMIUM_BPS: 10,       // 0.1% above current price
   MAX_CONFIDENCE: 1.0,
   MIN_CONFIDENCE: 0.0,
   MIN_STOP_DISTANCE_BPS: 30,   // 0.3% minimum stop distance (GUARD-1, Batch 18J: 20 → 30 per 4-LLM consensus)
