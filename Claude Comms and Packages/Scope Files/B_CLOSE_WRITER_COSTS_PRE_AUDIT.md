@@ -220,3 +220,52 @@ A-8, A-9, (a)-(d), (f)-(h), the P-5 riders and P-18 stand as accepted. P-15 belo
 - **Per route and window, stated with n:** the counted set (row ids), win rate, profit factor, net P&L, fee drag, by-class and curve points identical before and after the deploy; `nonOutcome` = the window's `never_filled` count, **which must be ≥ 1** in the `all` window (else the window cannot discriminate and is replaced); ≥ 1 booked row in every window; `unknownReason` = 0; `bookedWithoutExitPrice` = 0. Any difference stops the batch.
 
 **In plain language:** Langston found that the database query feeding both dashboard routes already throws away the "never filled" trades before my new filter sees them. So one of my checks could never have failed. The revision lets those trades through, so the one shared rule does the filtering and its count means something. It also gives the different lists of close reasons one source the build can check, and ships the admin-button changes with it. Today's dashboard numbers still don't change, and the check that proves that now uses windows that actually contain trades.
+
+---
+
+## r5 AMENDMENT (2026-11-05, CC-A) — Langston's CHANGES on r4 P-15 (Discord `1567925117634216007`): C-7..C-11 folded
+
+C-1..C-6 stand as he confirmed them. Citations below carry the line TEXT beside the number (C-11).
+
+**PREVIOUSLY STATED → NOW:**
+- **PREVIOUSLY (r4 Step 7):** counted sets "identical before and after" at `range='all'` / `24h`. **NOW:** every figure is bounded `closed_at < T0`, the pre-deploy read instant, and "24 h" is the FIXED window `[T0 − 24 h, T0)` on both reads. **REASON:** C-7 — 41 booked closes in 24 h (Langston, 15:32Z); a rolling window differs by arrival, not by the fix.
+- **PREVIOUSLY (r4):** `nonOutcome` = "the window's `never_filled` count". **NOW:** `nonOutcome` is a count over the FETCHED set (pre-epoch, pre-window) and is compared against SQL carrying only the fetch predicates; the seam runs ONCE. **REASON:** C-8 — 183 fetched vs 86 inside analytics' epoch-clamped `all` window (epoch `2026-10-06T15:52:57.213Z`), two populations.
+- **PREVIOUSLY:** `getLifetimeScoreboard` has two CTEs. **NOW:** it has ONE exclusion (`:3465`); the other (`:3514`) is in `getPortfolioMetricComponents` (`:3507`), and there are **13 hardcoded `never_filled` SQL sites in 12 methods**. **REASON:** C-10.
+- `never_filled` row counts: **182 at CC-A's read ~12:00Z; 183 at Langston's 15:32Z** (the 183rd closed 12:48:45Z) — both right, time-stamped (C-11).
+
+### The seam, its leg order stated (C-9)
+`countedTrades(rows)`, legs in this order, each row leaving at the first leg it fails:
+1. **closed** — `closedAt` set; else `notClosed` (a fourth count, never alerted — an open trade is not an anomaly);
+2. **outcome class** — `closeOutcomeClass(reason)`: `non_outcome` → `nonOutcome`; `unknown` → `unknownReason` (alert);
+3. **exit price** — `exitPrice > 0`; else `bookedWithoutExitPrice` (alert).
+Leg 1 before leg 2 keeps the 20 open, blank-reason rows out of `unknownReason`; leg 2 before leg 3 keeps the 183 `never_filled` out of `bookedWithoutExitPrice`. **And analytics' fetch also takes `closedOnly: true`** (`allTrades` has one consumer, `validTrades`), so `notClosed` is 0 on both routes and leg 1 stands as a guard. Analytics' own `!trade.closedAt` check (`routes.ts:12920`, `if (!trade.closedAt) return false;`) is replaced by leg 1.
+
+### The SQL copies — every site, a disposition each (C-10)
+**Rule:** every `storage.ts` SQL site that excludes non-outcomes stops carrying the literal `'never_filled'` and takes the NON_OUTCOME list as a bound parameter **derived from the TS constant** — so P-13's `hard_reset` (and any later non-outcome) is excluded everywhere at once, not only in the TS seam. A fence test asserts no literal reason string remains in `storage.ts` SQL.
+
+| site (line at `8f07c5361`) | method | disposition |
+|---|---|---|
+| `:3223-3224` | `getClosedTrades` default | derived list; both money routes pass `includeNeverFilled: true` (r4 item 1) |
+| `:3302` | `getRealizedPnlSince` | derived list (money) |
+| `:3329` | `getStraddleEntryCostAt` | derived list |
+| `:3382` | `getClosedTradesCount` | derived list (count) |
+| `:3465` | `getLifetimeScoreboard` | derived BOOKED list + `exit_price > 0` (r4 item 4) |
+| `:3514` | `getPortfolioMetricComponents` (`:3507`) | derived list (money) |
+| `:3551` | `getRealizedPnlTotal` | derived list (money) |
+| `:3583` | `getDailyRealizedPnlSince` | derived list (money) |
+| `:3602` | `getRecentClosedPnls` | derived list (money) |
+| `:3617` | `getClosedTradesBySymbol` | **deleted** by P-1 (rule 18) |
+| `:3668` | `getLastClosedAtForSymbol` | derived list (a time read; same rule, no reason literal) |
+| `:3716` | `getClosedTradesPaginated` | derived list (the history list's existing exclusion, same rule) |
+| `:3797` | `getClosedTradesGlobal` | derived list |
+**Consequence named:** after P-13, a `hard_reset` row is excluded by all of these; today there are 0 `hard_reset` rows, so no figure moves (Step-7 equality covers the two money routes; the others are covered by the fence + a unit test per method that a `hard_reset` row is excluded).
+
+### Citations corrected, with the line text (C-11)
+- `closeReasonMap` — `server/services/active-execution-engine.ts:5212` (`const closeReasonMap: Record<string, 'SL' | 'TP' | … | 'UNKNOWN'> = {`); fallback `:5230` (`closeReason: closeReasonMap[exitCondition.type] || 'UNKNOWN',`). (`:5205` was a `console.error` on a delete failure.)
+- `clampWindowToEpoch` — `routes.ts:12939` (`const windowFloor = clampWindowToEpoch(startTime, _epoch);`); `isInObservationEpoch` (balance-curve) — `routes.ts:12316` (`.filter(t => isInObservationEpoch(t as any, _curveEpoch))`).
+- ⚠️ **Langston's find under it:** the map covers 6 of the 7 `ExitCondition` members — **`manual_stop` is absent** (`:5212-5222`), so the `UNKNOWN` fallback is LIVE (1 `manual_stop` row exists). Keying the map to `ExitCondition['type']` forces `'manual_stop': 'MANUAL'`: **a declared change** — that close's AJ19-B lifecycle label goes `UNKNOWN` → `MANUAL`. No money reader reads it; it is outside "no number moves", stated here.
+
+### Step-7 equality (r5, replacing r4's)
+`T0` = the pre-deploy read instant, recorded. Per route: analytics at `range='all'` (epoch-clamped) and the FIXED `[T0 − 24 h, T0)`; balance-curve over its series; **every figure bounded `closed_at < T0`**, read before the deploy and again after it with the same `T0`. Identical: counted row ids, win rate, profit factor, net P&L, fee drag, by-class, curve points. `nonOutcome` (fetched set) equals the SQL count over the fetch predicates alone (`mode`, `closed_at < T0`) of the non-outcome reasons, and is ≥ 1; ≥ 1 booked row in every window; `unknownReason` = 0, `bookedWithoutExitPrice` = 0, `notClosed` = 0. Any difference stops the batch.
+
+**In plain language:** Langston found that the before/after check had to freeze the clock, because new trades arrive all day. Two counts I had treated as the same are different numbers, and the still-open trades would have tripped the new alert. The revision freezes the comparison at one moment and spells out the order the filter's steps run in. It also brings the database's ten other copies of the "never filled" rule under one shared list, so a future reset is never counted as a real trade anywhere.
