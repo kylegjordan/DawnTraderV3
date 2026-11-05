@@ -1,4 +1,6 @@
-# B-TOKEN-WATCH-FOLLOWUP-MEMORY — SCOPE r1
+# B-TOKEN-WATCH-FOLLOWUP-MEMORY — SCOPE r1a
+
+> **r1a (2026-11-05):** OBJ-4 moved to `B-TOKEN-WATCH-STORAGE` amendment 1 (its pre-audit §4 r2, A9 and P2), which removes `follow_up.py`'s `liveness.check()` call in a file it already edits. Here it shrinks to a check at Step 7.
 
 change-class: non_architecture
 
@@ -18,7 +20,7 @@ change-class: non_architecture
 - 851 due buckets since the cursor that were never read (1.016 GiB);
 - the outcome record stopped on 2026-09-30, so every checkpoint published since then carries no evidence, and the summary still shows those tokens as survivors (`#1132` rider, 2026-11-05);
 - the feed gap of 2026-10-18 → 10-27 (`#1247`);
-- `state/liveness.json` gains a second writer once the storage batch's feed watch is live (`#1132` rider C-4).
+- `state/liveness.json` would gain a second writer once the storage batch's feed watch is live (`#1132` rider C-4) — removed by that batch (A9), before this one runs.
 
 ## 1. Provenance read
 
@@ -34,7 +36,7 @@ change-class: non_architecture
 
 **OBJ-3 — decide the 36-day backlog before the timer returns.** If the job is simply re-enabled it walks 851 never-read buckets at 48 an hour (~18 h), observing tokens a month after the checkpoint they were scheduled for, and recording them as that checkpoint. The study's question needs a measurement at the scheduled age, so a late observation is not that checkpoint. **Proposed:** do not catch up; move the cursor to the current hour in one recorded step, write the skipped window into the pre-registration as an append-only amendment (checkpoints scheduled 2026-09-30T13 → the restart hour are NOT OBSERVED), and let the storage batch's cursor-bounded prune clear the skipped buckets once spent. Langston to rule; Kyle only if the study's design is his to change.
 
-**OBJ-4 — one writer for `state/liveness.json`** (`#1132` rider C-4). Once the storage batch's feed watch runs, `follow_up` stops calling `liveness.check()`: the feed watch is the dead-man's switch. **Done when:** a repo-wide grep finds one production caller of `liveness.check()`, and a test drives `run_hour` and asserts it did not touch `liveness.json`.
+**OBJ-4 — one writer for `state/liveness.json`** (`#1132` rider C-4). **The change itself is made by `B-TOKEN-WATCH-STORAGE` amendment 1 (A9, P2).** This batch re-enables the timer, so before OBJ-8 it confirms the change holds. **Done when:** a repo-wide grep at the ref finds one production caller of `liveness.check()`, and a test drives `run_hour` and asserts it did not touch `liveness.json` (added here if the storage batch did not add one).
 
 **OBJ-5 — an uninstrumented checkpoint renders as NOT INSTRUMENTED, never as alive** (`#1132` rider, Langston). The summary's `alive/by_age` and `died/by_age_at_death` for a checkpoint with zero observations in the window publish "not instrumented"; `oldest_survivors` excludes tokens with `observed_at: null`. **Done when:** today's state renders the 30d and 90d checkpoints as not instrumented (they read 511,996 alive and 0 died today), with a test fixture that has observations rendering numbers.
 
