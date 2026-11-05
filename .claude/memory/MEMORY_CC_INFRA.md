@@ -109,7 +109,6 @@ Registered in `cc-wake-filter.py` as **"Infra Claude"** — the `--sender` value
 - **★ PLAN-CENSUS 2026-W40 (OLD Claude handover, in-my-own-time; scope `B_PLAN_CURRENCY_CHECK_CENSUS_2026-W40_HANDOVER.md` `ea4b971d9`):** MY 5 items — PLACE #924, #1027; STRIKE dates keep placed home #681, #682; CLOSE §0 plan line `B-WAKE-LEAD-NAME` (#1040, report exists + Langston confirmed — no Kyle ack needed). Re-reported weekly; do with B-CREDENTIALS.
 
 - **#1181 B-DTREVIEW-ABSENCE-PROVENANCE (mine, row 1w1):** dt-review refused 2bfe98d4d "not in the mirror" 10-08 07:14Z while the mirror held it since 07:00; obj 1 = reproduce or record why not.
-- **B-CREW-STATUS-2 remainder — PARKED (Kyle, 2026-08-26).** ⛔ **The unbuilt item with real cost: persist derived facts AT OBSERVATION — compaction and reflog expiry destroy provenance for good.**
 - **#651 B-RULES-1E-LANGSTON-SLIM** (mine, from CC-A): NOT STARTED, no go from Kyle.
 - **Langston runs `claude-opus-5[1m]`** at two sites — read them live, never assert the value here (`discord-langston-bridge.py:69`, `langston-call:38`). Change BOTH or he runs split.
 
