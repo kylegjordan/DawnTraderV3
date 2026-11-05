@@ -1721,6 +1721,13 @@ export const closedTradesTable = pgTable("closed_trades", {
   // need un-rewriting. `reconstructedNetPnl` is NULL when no contemporaneous market data exists --
   // that row stays flagged and uncorrected, which is the truthful answer.
   phantomFillSuspect: boolean("phantom_fill_suspect").notNull().default(false),
+  // B-CLOSE-WRITER-COSTS P-12 (scope §5; Langston condition (c)): the operator remedy for a refused close. A record
+  // RESTORED from its position's own open-time fields (nothing about the exit is written — the next close books it)
+  // says so: the flag, when, and who asked — `restored_by_claimed` is the authenticated caller recorded as a CLAIM
+  // (`#447`: an identity the server was told, not one it verified independently).
+  recordRestoredFromPosition: boolean("record_restored_from_position").notNull().default(false),
+  restoredAt: timestamp("restored_at", { withTimezone: true }),
+  restoredByClaimed: text("restored_by_claimed"),
   reconstructedExitPrice: decimal("reconstructed_exit_price", { precision: 20, scale: 8 }),
   reconstructedNetPnl: decimal("reconstructed_net_pnl", { precision: 20, scale: 8 }),
   reconstructedPnlPercent: decimal("reconstructed_pnl_percent", { precision: 20, scale: 8 }),

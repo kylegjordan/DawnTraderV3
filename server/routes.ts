@@ -12704,6 +12704,28 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // ⛔ B-CLOSE-WRITER-COSTS P-12 (scope §5; pre-audit P-12 + condition (c); Kyle KD-17): THE OPERATOR REMEDY FOR A
+  // REFUSED CLOSE. A close refuses (and keeps the position) when its open trade record does not resolve (P-2). When the
+  // record is MISSING, this restores it from the position's OWN open-time fields — symbol, class, mode, side, quantity,
+  // entry price, entry fee and slippage, strategy, opened_at — and nothing about the exit: the next close books the real
+  // exit onto it. Stamped `record_restored_from_position`, `restored_at`, `restored_by_claimed` (the caller, a CLAIM —
+  // #447). Behind the same guard as the stranded clear. IDEMPOTENT: it REFUSES when a record exists (one or several),
+  // and when the position's own `tradeId` names a record that exists. The mode is chosen HERE, at the API boundary
+  // (KD-37: the mode-scoped engine at the boundary); only the paper engine exists today.
+  apiRouter.post('/active-engine/positions/:id/restore-record', authenticateToken, async (req: AuthenticatedRequest, res) => {
+    const mode = 'paper' as const;
+    try {
+      const { restoreOpenTradeRecord } = await import('./services/trade-record-restore.js');
+      const r = await restoreOpenTradeRecord(mode, req.params.id, String(req.user?.id ?? 'unknown'));
+      if (!r.ok) { const { code, ...body } = r; return res.status(code).json(body); }
+      return res.json(r);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error('[B-CLOSE-WRITER-COSTS][RECORD_RESTORE_ERROR]', msg);
+      return res.status(500).json({ ok: false, error: 'restore failed', details: msg });
+    }
+  });
+
   // Phase 8.8.3-B2: Force clear all stranded trades endpoint
   apiRouter.post('/active-engine/force-clear-stranded', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
