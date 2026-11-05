@@ -106,7 +106,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-CANONICAL-CORPUS-ACCURACY (CC-C) — accuracy of the pre-governance reference corpus
 - B-CANONICAL-FREEZE (CC-C) — its own row says governance hygiene, not on the trading path
 - B-CHANGE-CLASS-DOCSET-FIT (CC-B) — governance checker doc-set matrix — governance
-- B-CHANGE-CLASS-PARSER (CC-C) — governance-checker parser
+- B-CHANGE-CLASS-PARSER (CC-C) — governance-checker parser · carries `#1245` (a missing-doc alert is never resolved when a class re-declaration takes the doc out of the required set; Infra Claude, 2026-11-05)
 - B-CHECKER-CORE-PATHS (CC-A) — governance-checker core paths
 - B-CHUNK-ADDRESSING (CC-A) — comms outage cause
 - B-CLAIM-REDERIVE (CC-A) — re-derive a load-bearing number at the Stop boundary — crew tooling
