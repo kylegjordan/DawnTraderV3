@@ -266,16 +266,18 @@ describe('B-FEED-MISMATCH-FIX Step-4 blockers', () => {
     expect(String((h.addAlert.mock.calls[0][0] as { title: string }).title)).toMatch(/FLATTEN left BTC\/USD OPEN/);
   });
 
-  it('BLOCKER-1: the stranded-clear writer stamps the provenance of the quote it booked (routes.ts is in no other fence)', () => {
+  it('BLOCKER-1 (re-pointed by B-CLOSE-WRITER-COSTS P-10): the stranded clear writes NO record of its own — it closes through the one chain', () => {
+    // The writer this test pinned (its own createClosedTrade with `stranded_clear` and the quote's provenance) is DELETED:
+    // each position now closes through `closeOnePositionByOperator` → `closePosition`, which stamps the provenance itself.
     const src = readFileSync(resolve(__dirname, '../../routes.ts'), 'utf-8');
-    const at = src.indexOf("closeReason: 'stranded_clear',");
+    const at = src.indexOf("apiRouter.post('/active-engine/force-clear-stranded'");
     expect(at).toBeGreaterThan(-1);
-    const block = src.slice(at, at + 900);
-    expect(block).toMatch(/exitPriceProducer:\s*liveQuote!?\.producer/);
-    expect(block).toMatch(/exitPriceSource:\s*liveQuote!?\.source/);
-    expect(block).toMatch(/exitObservedAtMs:\s*liveQuote!?\.observedAt/);
-    // and the entry-price arm is gone from this route
-    expect(src.slice(src.indexOf("'/active-engine/force-clear-stranded'"), at)).not.toMatch(/FALLBACK_TO_ENTRY/);
+    const route = src.slice(at, src.indexOf('apiRouter.', at + 10));
+    expect(route).toContain("manager.closeOnePositionByOperator(position.id, 'stranded_clear')");
+    expect(route).not.toContain('createClosedTrade');
+    expect(route).not.toContain('deleteActiveOpenPosition');
+    expect(route).not.toMatch(/FALLBACK_TO_ENTRY/);
+    expect(src).not.toContain("closeReason: 'stranded_clear'");
   });
 });
 
