@@ -83,7 +83,7 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 - `df /` after: 81% (15.18 GB free), from 84% before the run.
 
 ## Increment 5 — O1: the job's never-ran page goes live
-- `server/scripts/b-storage-archival-health.ts`: the `disk-file-tiering` check's `onMissing` flipped `skip` → `alert` now that the first good run is recorded (comment cites it). Scope of the change, stated: `onMissing` only governs a MISSING log file; stale (26 h) and failed runs already paged whenever the log exists. No logrotate entry touches this log.
+- `server/scripts/b-storage-archival-health.ts`: the `disk-file-tiering` check's `onMissing` flipped `skip` → `alert` now that the first good run is recorded (comment cites it). Scope of the change, stated: `onMissing` only governs a MISSING log file; stale (26 h — superseded: 20 h in r2 below) and failed runs already paged whenever the log exists. No logrotate entry touches this log.
 - Test (+1, `b-disk-file-tiering.test.ts`): the check's block (control: it names `disk-file-tiering.log`) has `onMissing: 'alert'`. 23/23.
 
 ## Increment 5 r2 — O1 re-landed with Langston's two CHANGES (Discord `1567762650446823505`, ruled at `7d8832518`)
@@ -95,3 +95,10 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
   - **H-2** no watchman for the watchman: `archival-health` is a root crontab job with no fire-evidence (0 `scheduled_tasks_audit` rows for it; control 91,104 rows over 9 in-app tasks), so tiering's only page sits behind a cron nothing checks.
   - **H-3** cadence-aware grace for every daily check in `archival-health` (the `cron-fire-evidence-verifier.ts:181` form, B-NEW-51) — `b75-retention` carries the same 26 h literal and catches one miss only by ~31 min today.
 - **Recorded, no work:** the tiering log is unrotated by design, ~231 KB per capped run (~84 MB/yr); `onMissing: 'alert'` is safe because nothing rotates it — a future rotate entry needs `create`. Dedupe key `archival-health-disk-file-tiering-missing`: resolve, never ack.
+
+## Increment 5 r3 — Langston PROCEED on r2 (`dc766f721`, Discord `1567785061938372619`) with one in-commit condition
+- **Re-land:** the code half was reverted out of staging deploys twice (`10df95fb0`, `863604025`) while unreviewed; it comes back here exactly as reviewed at `dc766f721`, plus the condition.
+- **Condition (his mutation C):** `disk-file-tiering` is the LAST element of `CHECKS`, so dropping its trailing comma made the slice bound return -1 and every assertion still passed. The control now asserts the bound exists (`src.indexOf('
+  },', start) > start`). **Mutation C run:** comma dropped → the control fails; restored → 25/25.
+- **H-3, sharpened:** `b75-retention` does catch one missed night, by ~31 min today; the margin is set by that sweep's own runtime, which nothing bounds, so it is one slow run away from H-3's live case.
+- **#661 leg 3 (stated, not cited as proof):** the `missing` arm has never fired for ANY check in this watchdog — all 3 `archival-health-*` rows ever are `-failed` (2 `b75-retention`, 1 the O5 test row). `fire()` is proven by those; the `statSync` throw branch is not. Log silence is not evidence the never-ran page works.
