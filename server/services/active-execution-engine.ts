@@ -5872,18 +5872,12 @@ export class ActiveExecutionEngine {
     }
 
     if (!_b72IsTradeable) {
-      // Two distinct blocking cases land here — label integrity fenced by
-      // resolveEvBlockDisposition (Langston delta-GO condition, 2026-07-16):
-      //   BLOCK_SNAPSHOT_MISSING — chosen_net_ev NULL: a DATA-INTEGRITY fault (a
-      //     queued row missing its stored decision), legitimately outside the SQE.
-      //   BLOCK_EV_REJECT — LIVE mode, snapshot present + non-positive: the live
-      //     block retained byte-equivalent pending Kyle's #522 pre-live ratification;
-      //     the reject names the chosen netEV, never the snapshot-missing labels.
-      const _snapshotMissing = _b72Disposition === 'BLOCK_SNAPSHOT_MISSING';
-      const _b72RejReason = _snapshotMissing
-        ? `chosen_net_ev SNAPSHOT MISSING on the queued row; open-time taker recompute non-positive (${expectancyResult.rejectionReason ?? 'negative net expectancy'})`
-        : `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut; LIVE block retained pending #522 ratification)`;
-      const _b72Code = _snapshotMissing ? 'EV_SNAPSHOT_MISSING' : 'EV_REJECT';
+      // ONE blocking case lands here: BLOCK_EV_REJECT — LIVE mode, snapshot present + non-positive, the live block
+      // retained byte-equivalent pending Kyle's #522 pre-live ratification (B-ENTRY-GATE P4b keeps it: Kyle's §6.2).
+      // B-ENTRY-GATE (#1224) P4b: the BLOCK_SNAPSHOT_MISSING / EV_SNAPSHOT_MISSING arm is DELETED as unreachable — a
+      // non-finite snapshot already returned POLICY_SNAPSHOT_MISSING above (DELETED_COMPONENTS_LOG).
+      const _b72RejReason = `chosen ${_b72ChosenMode} NetEV=${_b72EffectiveNetEv.toFixed(6)} (best-of-both non-positive after friction + haircut; LIVE block retained pending #522 ratification)`;
+      const _b72Code = 'EV_REJECT';
       b4Diagnostics.logFunnelEvent({
         symbol: signal.symbol,
         strategy: signal.strategy,

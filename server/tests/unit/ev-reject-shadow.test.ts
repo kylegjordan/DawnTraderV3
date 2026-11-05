@@ -4,6 +4,7 @@
  * the rail: counter increments per fire, exactly ONE dedupe-keyed alert latches.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 vi.mock('../../services/system-alerts.js', () => ({
   addAlert: vi.fn(async () => ({ id: 'test-alert' })),
@@ -25,9 +26,17 @@ describe('[11.8B] disposition routing — label integrity FENCED (Langston delta
   it('LIVE + snapshot present → BLOCK_EV_REJECT (the real-money fail-safe retained; never the snapshot-missing labels)', () => {
     expect(resolveEvBlockDisposition(-0.5, 'live')).toBe('BLOCK_EV_REJECT');
   });
-  it('snapshot NULL → BLOCK_SNAPSHOT_MISSING in BOTH modes (data-integrity refusal)', () => {
-    expect(resolveEvBlockDisposition(null, 'paper')).toBe('BLOCK_SNAPSHOT_MISSING');
-    expect(resolveEvBlockDisposition(null, 'live')).toBe('BLOCK_SNAPSHOT_MISSING');
+  it('B-ENTRY-GATE (#1224) P4b: the snapshot-missing outcome is gone — a NULL snapshot never reaches the router', () => {
+    // The engine refuses a non-finite snapshot as POLICY_SNAPSHOT_MISSING first, and the parameter is `number`, so a
+    // null argument is a compile error. The router has exactly two outcomes, by mode.
+    // @ts-expect-error — null is not a valid snapshot any more (C-3: compiler-enforced, not caller-enforced)
+    void resolveEvBlockDisposition(null, 'paper');
+    expect(['SHADOW', 'BLOCK_EV_REJECT']).toContain(resolveEvBlockDisposition(-1, 'live'));
+    const src = readFileSync(new URL('../../services/ev-block-disposition.ts', import.meta.url), 'utf8');
+    expect(src.replace(/\/\*[\s\S]*?\*\//g, '')).not.toMatch(/BLOCK_SNAPSHOT_MISSING/);
+    const eng = readFileSync(new URL('../../services/active-execution-engine.ts', import.meta.url), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    expect(eng).not.toMatch(/EV_SNAPSHOT_MISSING|BLOCK_SNAPSHOT_MISSING/);
   });
 });
 
