@@ -201,3 +201,33 @@ The audit read everything the board will touch. The checker that will keep the b
 **Prediction** (commit `49768e971`, written before the run): against F.3, `#1117` leaves `number` (its only placement was a struck WITHDRAWN after-live line) for unplaced or HOME-batch; **no other OPEN issue goes placed → unplaced**; any other change is a category move among issues named on a struck line; (a)(d)(e)(f)(g) unchanged.
 **Run** (e8eb7143e vs `49768e971`, same prevRef): `#1117` number → HOME batch ✅ · (a)(d)(e)(f)(g) unchanged ✅ · **`#237` HOME batch → unplaced (U2) ✗ — the prediction missed it.** Mechanism, read at the ref: `#237`'s HOME line is *"B7b pre-flight (post-first-real-RTB-writes)"*, which no grammar reads; the census took its home ids from the same line's other tokens, `P19-B4a` and the log tag `B79.0n`, and `B79.0n` matched the struck line *"~~25-1 B79.0n.ML-CALIBRATION T2 …~~ WITHDRAWN 2026-10-02"*. So `#237` was placed by a withdrawn item through a log tag — a false placement the fold removes. It now reads unplaced, which is true (its real home is a sequence step the census cannot see), and it reaches the weekly worklist for its owner to place. My prediction scoped "named on a struck line" to issue numbers and missed a match through a HOME id.
 **Totals:** placed 516 (number 327, HOME batch 179, parked 1, roadmap 9), unplaced 11 (F.3 read 517 / 10).
+
+---
+
+## AMENDMENT r5 (2026-11-05, CC-A) — RETIRE the phone status board (Kyle KD-35, relayed by PM Claude ~14:10Z): scope OBJ-10 + its audit and plan
+
+**Kyle's decision (KD-35, `1-system-manual/pm/DECISIONS.md`):** the phone status board is NOT to be maintained; close `B-STATUS-BOARD` by retiring it cleanly per rule 18 — the page, the 30-minute rebuild, `STATUS_BOARD_DESCRIPTIONS.md`. **No phone check.** Session task lists are being replaced by PM Claude's master task list through `B-PM-CLAUDE`; CC-A keeps its list until that lands.
+
+**PREVIOUSLY STATED → NOW:** **PREVIOUSLY:** the batch closes after Kyle's phone check (Step 7) and Step 10/11. **NOW:** the board is retired inside this batch as OBJ-10; the batch closes on the retirement's verification. **REASON:** KD-35.
+
+### OBJ-10 (new) — retire the board; keep what the census needs
+**What STAYS (it is the `#1200` fix, which the weekly plan census reads, and it is not the board):** §0a as the ONE pre-sprint table; `presprintRows` (`checker.mjs`); `mapStatus` + `STATUS_PREFIXES` (read by `census.mjs:403` `s0Closed`); the census changes (`census.mjs` `placement()` reading §0a). The plan file's `waiting on` column stays as plan text (no reader enforces its words after this).
+**What GOES (rule 18 — census by `git grep` at `ede238ef8`, every non-`.md` file naming the board):**
+
+| piece | files | state it writes / reads |
+|---|---|---|
+| the page | `client/src/pages/status-board/StatusBoardPage.tsx`, `unavailable.ts`, `unavailable.test.ts`; the lazy import + `<Route path="/status-board">` in `client/src/App.tsx` (`:43`, `:254`) | reads the route |
+| the route + reader | `GET /api/status-board` (`server/routes.ts:1983-1990`); `server/services/status-board-file.ts`; `server/tests/unit/b-status-board.test.ts` | reads `/var/lib/governance-checker/status-board.json` |
+| the writer | `scripts/governance-checker/status-board.mjs` + `status-board.test.mjs`; in `poller.mjs` the import (`:41`), `runStatusBoardSafely` (`:1052-1056`) and its two calls (`:1174`, `:1290`), `status-board.mjs` in `DRIFT_LOADED_FILES` (`:896`); the CI step `ci.yml:172` | writes the board file; raises `gov-board-failed` |
+| board-only config + helpers | `config.mjs` `BOARD_FILE`, `BOARD_DESCRIPTIONS_PATH`, `WAITING_WORDS`, `STATE_LABELS`, `BOARD_STALE_MS`, `WORK_RECORD_RECENT_MS`, `DESCRIPTION_MAX_CHARS`; `checker.mjs` `mapWaiting` (`:434`); the `openReason` addition to `parseExceptionsLegacy` in `poller.mjs` — **each removed only after a reader census shows the board was its only consumer** (`census.test.mjs` references three of these names; that file's uses are read in the diff, and anything the census still needs stays) | — |
+| the descriptions | `1-system-manual/STATUS_BOARD_DESCRIPTIONS.md` | read by the writer |
+
+**State-write census (§9.5(a-ii)):** the writer's ONLY output is `status-board.json` (+ its temp in the same folder) and the `gov-board-failed` alert key (0 rows ever, Langston's read). Its only reader is the route. After the deploy: the JSON is moved to the deploy-retired folder on staging (not deleted), and a `git grep` + a staging `grep -r` over `/home/deploy/dawntrader/dist` show no reader left. OBJ-9's work-record override lived in `status-board.mjs` and goes with it (it had no other reader).
+
+**Two deploy paths, two reviews:** (1) the APP half (page, route, reader) rides a normal `dt-deploy` after Step 4 + CI; (2) the CHECKER half deploys the moment it reaches the branch (the box fast-forwards before each tick), so it goes on a review branch first and Langston reviews at that sha before it is merged — the same rule the batch used for its checker code. Order: app half first (the route stops reading), then the checker half (the writer stops writing), so no window has a page with no data or a writer with no page that matters.
+
+**Records:** `DELETED_COMPONENTS_LOG.md` entry with every file archived `.removed`; the SIM section "The status board — …" (added `f36185549`) marked RETIRED with a pointer; `GOVERNANCE_EXCEPTIONS.md` open row closed at the completion report; the delivery board untouched (OBJ-7 holds). The scope's OBJ-4 (the page) and its Step-7 phone-width item are WITHDRAWN by KD-35, not failed.
+
+**Verification (Step 7):** `/status-board` returns the app's not-found page in Claude-in-Chrome; `GET /api/status-board` 404 (control: `/api/health` 200); the checker's tick log shows no board write after the merge; the board file gone from `/var/lib/governance-checker/`; the census still reads §0a (the census PS test pair green; next Monday's census lists §0a placements).
+
+**In plain language:** Kyle has decided not to keep the phone page, so it comes out cleanly: the page, the address it reads from, the job that rebuilt it every 30 minutes, and the descriptions file. What stays is the one change that fixed a real bug: the weekly plan check reading the pre-sprint table. The page and its address come out first, then the rebuild job, each reviewed by Langston.
