@@ -85,3 +85,13 @@ Plus, not in the class matrix but owed: STORAGE_POLICY (incl. the `:100`/`:191` 
 ## Increment 5 — O1: the job's never-ran page goes live
 - `server/scripts/b-storage-archival-health.ts`: the `disk-file-tiering` check's `onMissing` flipped `skip` → `alert` now that the first good run is recorded (comment cites it). Scope of the change, stated: `onMissing` only governs a MISSING log file; stale (26 h) and failed runs already paged whenever the log exists. No logrotate entry touches this log.
 - Test (+1, `b-disk-file-tiering.test.ts`): the check's block (control: it names `disk-file-tiering.log`) has `onMissing: 'alert'`. 23/23.
+
+## Increment 5 r2 — O1 re-landed with Langston's two CHANGES (Discord `1567762650446823505`, ruled at `7d8832518`)
+- **Re-land:** the code half of `7d8832518` was held out of the joint deploy at `10df95fb0` (unreviewed); it comes back here with the changes.
+- **CHANGE-1 — grace 26 h → 20 h** for `disk-file-tiering`. A daily job checked once a day (~05:00Z) can only be caught after ONE missed night if the grace is under 24 h: with 26 h a missed night reads 25h56m at the next check and passes. 20 h: healthy ~2 h, one miss ~26 h.
+- **CHANGE-2 — the test is a fence now:** the block is cut at its own close (`\n  },`), not at the array's `];`, with a control that the slice holds exactly one check. Mutations RUN: (A) this check back to `'skip'` + a later block appended with `'alert'` (Langston's case) — fails; (B) grace back to 26 h — fails. 25/25 otherwise.
+- **Homed (Langston's record items), all on THIS batch, owner CC-A, after O1:**
+  - **H-1** a lock-held no-op tick books `DONE moved=0 failed=1 lock_held=1`, which `donePattern` reads as a failure — benign today (a later good DONE wins the reverse scan; a daily cron cannot overlap itself), live the moment a second invocation path exists. Outcome (2): decide whether a lock-held tick books `failed`.
+  - **H-2** no watchman for the watchman: `archival-health` is a root crontab job with no fire-evidence (0 `scheduled_tasks_audit` rows for it; control 91,104 rows over 9 in-app tasks), so tiering's only page sits behind a cron nothing checks.
+  - **H-3** cadence-aware grace for every daily check in `archival-health` (the `cron-fire-evidence-verifier.ts:181` form, B-NEW-51) — `b75-retention` carries the same 26 h literal and catches one miss only by ~31 min today.
+- **Recorded, no work:** the tiering log is unrotated by design, ~231 KB per capped run (~84 MB/yr); `onMissing: 'alert'` is safe because nothing rotates it — a future rotate entry needs `create`. Dedupe key `archival-health-disk-file-tiering-missing`: resolve, never ack.

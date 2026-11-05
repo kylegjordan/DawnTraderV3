@@ -130,6 +130,27 @@ describe('cron-run jobs load the app .env themselves', () => {
   });
 });
 
+describe("the job's own page (archival-health, O1)", () => {
+  // The block is bounded at ITS OWN close (the next `\n  },` after its name), not at the array's `];` — so a
+  // later check appended after it cannot satisfy these assertions (Langston O1 CHANGE-2, mutation he ran).
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'b-storage-archival-health.ts'), 'utf8');
+  const start = src.indexOf("name: 'disk-file-tiering'");
+  const block = src.slice(start, src.indexOf('\n  },', start));
+  it('reads the right block (control)', () => {
+    expect(start).toBeGreaterThan(0);
+    expect(block).toContain("logFile: 'disk-file-tiering.log'");
+    expect(block.split('name:').length - 1).toBe(1); // exactly one check in the slice
+  });
+  it('after the first good run, a missing log pages instead of passing silently', () => {
+    expect(block).toMatch(/onMissing: 'alert'/);
+  });
+  it('the grace can catch ONE missed night of a daily job checked daily (under 24 h)', () => {
+    const m = block.match(/graceMs:\s*(\d+)\s*\*\s*HOUR_MS/);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBeLessThan(24);
+  });
+});
+
 describe('warmObjectPath', () => {
   it('keeps the whole original name under the disk-files prefix', () => {
     expect(warmObjectPath('warm', spec('logs/data_aggregates/hourly'), 'passive_2026-10-01T05.json'))
