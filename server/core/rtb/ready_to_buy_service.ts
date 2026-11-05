@@ -1038,6 +1038,7 @@ class ReadyToBuyService {
               // (`rtb-price-retirement.ts`) — through the refresh's own delete path, counted and archived. This is queue
               // hygiene; the open still refuses a bad fill on its own (row 59 increment 1).
               let _rpx: RepriceAtAsk | null = null; // B-ENTRY-GATE (#1224) P6 — set inside the price block below
+              let _rpPriced: SQEInput['priced']; // B-ENTRY-GATE (#1224) P2 — the same ask, handed to the SQE's EntryWindow
               {
                 const _rpAsk: RetirementAsk = asks?.get(`${mode}:${signal.symbol}:${signal.strategy}`) ?? { ok: false, reason: 'ask_not_supplied' };
                 const _rpStop = parseFloat(String(signal.stopPrice));
@@ -1064,6 +1065,7 @@ class ReadyToBuyService {
                   return;
                 }
                 if (_rpAsk.ok) this._maybeArchivePriceShadow(mode, signal, sqeAssetClass, _rpAsk, _rpStop, _rpTarget, _refreshState, _rp.decision);
+                _rpPriced = _rpAsk.ok ? { ok: true, price: _rpAsk.ask, ageMs: _rpAsk.ageMs, source: _rpAsk.basis } : { ok: false, reason: _rpAsk.reason };
 
                 // ⭐ B-ENTRY-GATE (#1224) increment B, P6 (pre-audit A-4): RE-PRICE THE PLAN AT THE LIVE ASK, every priced pass.
                 // Net EV, the maker/taker choice and the worse-side window are asked AT TODAY'S PRICE, as the open will ask them;
@@ -1129,10 +1131,15 @@ class ReadyToBuyService {
                   ?? ((signal as any).chosenNetEv != null ? Number((signal as any).chosenNetEv) : undefined)),
                 chosenEntryMode: (_rpx ? (_rpx.chosenMode ?? undefined) : (_acq.refreshedMT?.chosenMode
                   ?? ((signal as any).chosenEntryMode as 'maker' | 'taker' | undefined))) ?? undefined,
+                // B-ENTRY-GATE (#1224) P2: the plan under its own names (never entryPrice/targetPrice — r11) and the ask.
+                planEntry: Number(signal.entryPrice),
+                planStop: parseFloat(String(signal.stopPrice)),
+                planTarget: signal.targetPrice != null ? parseFloat(String(signal.targetPrice)) : null,
+                priced: _rpPriced,
               };
               
               // P19-B8.5 OBJ-6: same shadow treatment as the single-refresh site above (#514).
-              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true });
+              const sqeResult = await signalQualityEvaluator.evaluate(sqeInput, { gateShadowMode: true, phase: 'refresh' }); // B-ENTRY-GATE P2
               // P19-B8.4b: SQE-during-refresh tally (phase='refresh') — per-gate breakdown + pass/fail
               // denominator, kept as TWO labelled numbers vs SQE-at-generation, never summed (MUST-4).
               if (_fCls) recordActiveSqeEvaluation(mode, _fCls, sqeResult.passed, sqeResult.failures, 'refresh');
