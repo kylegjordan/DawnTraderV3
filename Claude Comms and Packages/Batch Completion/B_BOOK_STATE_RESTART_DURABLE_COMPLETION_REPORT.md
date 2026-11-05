@@ -21,11 +21,11 @@ The xStock book-state guard judges each new reference chain's first frame agains
 | # | objective | result | evidence |
 |---|---|---|---|
 | 1 | The store holds, per symbol, the ring a clear would leave behind now, through ONE predicate | **YES** | `retainsRing` used by `clearBookStateComparator` and `snapshotRetainableRings`; tests on the real tracker; bypassing the predicate in the snapshot fails a test (change list, Step 4) |
-| 2 | Restored at boot before the first xStock exit frame; never worse than today | **YES** | restore wired before `resumeActiveEngines()` (`server/index.ts`); boot test reads `retainedMedianNow` ≠ `none`; corrupt-store test falls back and alerts; live `RING_RESTORED` line every boot |
+| 2 | Restored at boot before the first xStock exit frame; never worse than today | **YES** | restore wired before `resumeActiveEngines()` (`server/index.ts`); boot test reads `retainedMedianNow` ≠ `none`; corrupt-store test falls back and alerts; live `RING_RESTORED` line every boot. ⚠️ Both failure alerts (`book-state-ring-restore-failed`, `book-state-ring-snapshot-failing`) have **never minted a row** — 0 of 2,862 queue rows (Langston, Step 11) — so those arms are verified by tests only; no live silence is citable for them |
 | 3 | Provenance recorded, not gated | **YES** | every boot line splits `judged`/`vacuous` (2026-11-05 14:39Z: `judged=138 vacuous=115`); test asserts the bit follows the seed basis |
 | 4 | Net effect on the r6 hole stated, not assumed | **YES** | Step 2 measured both sides (pre-audit A12); Step 7 recorded ring age at the deploy-B boot (p90 1557.8 min) — and age is not capped, by design |
 | 5 | Durable store chosen and its loss bound stated | **YES** | option (a), a table, migration + rollback in git; cadence 30 s; shutdown flush measured on 4 of 4 graceful exits (`369d66633`, FINDING-1 discharged) |
-| 6 | Verified on a real restart; operator rule replaced in the System Manual | **YES** | P9 on the deploy-B restart: `RING_RESTORED n=3`, `RESTORED_RING_CONSUMED` 2 of 2 `verdict=plausible`, `verdict=not_judged ringDeleted=true` = 0 (`Change Lists/RELEASE_DEPLOY_B_STEP7_CCC.md`); Langston CONFIRMED the restart leg (Step 8). Since then: all 12 restarts in the retained `error.log` files (2026-10-23 → 11-05) restored with 0 invalid and 0 not-loaded rows. System Manual §3.5.1a: the "do not restart in a blowout" caution retired (this close) |
+| 6 | Verified on a real restart; operator rule replaced in the System Manual | **YES** | P9 on the deploy-B restart: `RING_RESTORED n=3`, `RESTORED_RING_CONSUMED` 2 of 2 `verdict=plausible`, `verdict=not_judged ringDeleted=true` = 0 (`Change Lists/RELEASE_DEPLOY_B_STEP7_CCC.md`); Langston CONFIRMED the restart leg (Step 8). Since then: the 12 boots of 2026-11-04 12:13Z → 11-05 14:39Z — eleven deploys of eleven different builds plus one unplanned restart (11-04 18:16Z, 11 min down, 251 rings restored) — all restored with 0 invalid and 0 not-loaded rows; there was no restart between 2026-10-20 and 11-04, so the evidence is two clusters, the deploy-B restart and this 26-hour run. System Manual §3.5.1a: the "do not restart in a blowout" caution retired (this close) |
 | 7 | Calibration line | **YES** | **impact NAMED, not epoch-bumped** (Langston, Step-2 C2): refusing a seed changes when a stop fires, so "no calibration impact" was withdrawn as false; no bump, because a bump resets every xStock aggregate, would have been a second reset inside `B-XSTOCK-FEE-CONTRACT`'s window, and the contamination removed was measured small. Recorded as a precedent under `ADJUSTMENT_FRAMEWORK` epoch rule 2 |
 
 ## 4. Reviews
@@ -36,6 +36,7 @@ None to this batch's own numbers. Two Step-7 statements were corrected at Step 8
 
 ## 6. New findings / dispositions
 - **The absorbing state has no duration report** (`#1066` amendment, HUT/USD and ALB/USD, 2026-10-06/07). `DISPOSITION: added to B-XSTOCK-BID-TRIGGER-RELAND — SPRINT_TO_LIVE_PLAN row 2` (re-homed 2026-10-09, Kyle: one batch).
+- **The r6 residual — persistence lengthens a contaminated ring's life** (§8). `DISPOSITION: added to B-XSTOCK-BID-TRIGGER-RELAND — SPRINT_TO_LIVE_PLAN row 2 increment (1)`: its refusal-duration report also carries the restored-ring age and provenance counts (Langston's Step-11 recommendation; folded into agreed work, no new slot).
 - **Trailing-exit state loads after the engines resume** (pre-audit §2b, a hypothesis). `DISPOSITION: added to 3n.c B-TRAILING-STATE-DURABILITY, Step 1 item` (unchanged).
 
 ## 7. Governance ledger
@@ -53,7 +54,7 @@ CHANGE-CLASS: `architecture`
 | T1 | COMPLETION_REPORT | ✅ | this file |
 | T1 | Observation column | N/A | the scope's one observation (P9's restart read) was read at Step 7 and confirmed at Step 8; nothing waits |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-C: rows 14 · 15 brought current, row 15 at Step 11 |
-| T1 | Langston's MEMORY.md | ✅ | closure line added; the valve section's heads/CI and its now-stale board-drift line removed — loaded set 143,104 → 143,043 B (ceiling 143,856), part `1a0c6bc90616`→`d13ee79f2909` |
+| T1 | Langston's MEMORY.md | ✅ | closure line added; the valve section's heads/CI and its now-stale board-drift line removed — part `1a0c6bc90616`→`d13ee79f2909`, −61 B (`MEMORY.md` 74,835 → 74,774 B); `langston-size-watch --status` at 2026-11-05 ~21:30Z, after later writes by others: **143,779 B** against the 143,856 ceiling |
 | T2 | SYSTEM_MANUAL.md | ✅ | §3.5.1a: the restart caution retired; the persistence mechanism, its failure modes and the measured restarts written in |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | S25b's restart hole marked closed; new row S25c for the table, its writers, reader and bounds |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1066` closed, residual pointed at row 2 |
@@ -67,6 +68,6 @@ CHANGE-CLASS: `architecture`
 ⚠️ **STORAGE_POLICY judged, not skipped:** the new table is upsert-only, one row per symbol (253 rows at 2026-11-05), bounded by the xStock universe — no retention tier is needed.
 
 ## 8. Honest residual
-- **Rings carry no age cap, by design** (S25b: staleness is not the hazard, provenance is). At the 2026-11-05 14:39Z boot the restored rings' last feed frames were p50 ≈ 8.5 days old. A stale healthy ring fails refusing; a contaminated one fails open, and persistence lengthens a contaminated ring's life — that is the r6 hole, made countable here, not closed.
+- **Rings carry no age cap, by design** (S25b: staleness is not the hazard, provenance is). At the 2026-11-05 14:39Z boot the restored rings' last feed frames were p50 ≈ 8.5 days old. A stale healthy ring fails refusing; a contaminated one fails open, and persistence lengthens a contaminated ring's life — the r6 hole, made countable here and homed in row 2 increment (1) (§6). The shape is already visible: at that boot `live=17 retained=236`, so 93% of what the store re-persists is an old ring rather than a live chain's.
 - **`RING_RESTORED n` is a census, not coverage** — with no delete, it includes symbols no longer traded.
-- **The retained logs reach back only to 2026-10-23**, so "12 of 12 restarts clean" covers 10-23 → 11-05, not the whole period since 10-06.
+- **The restart evidence is two clusters 29 days apart:** the deploy-B restart (10-06) and twelve boots in one 26-hour run (11-04 12:13Z → 11-05 14:39Z). There was no restart between 2026-10-20 and 11-04 (staging reflog), so nothing in between was exercised.
