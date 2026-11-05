@@ -1,4 +1,6 @@
 import { EventEmitter } from 'events';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { join as joinPath } from 'node:path';
 
 /**
  * Global Event Bus for inter-service communication
@@ -152,28 +154,25 @@ class EventBus extends EventEmitter {
   /**
    * Directive 8.8.4-A3.R8: Log TCL trace event to persistent file
    */
+  // B-ENTRY-GATE (#1224) P9, increment B (Langston Step-4 r3 §13): this was `require('fs')` / `require('path')` into an
+  // empty catch. The server is bundled as ESM (`esbuild --format=esm`), where a `require` of a node built-in throws, so the
+  // trace never wrote (measured 2026-11-05: no `logs/tcl_event_trace_*.log` on staging while `logs/` was live). ESM imports
+  // now, and a failed write is logged ONCE per process instead of vanishing. Never thrown into event processing.
+  private tclTraceWriteFailedWarned = false;
+
   private logTclTrace(eventType: string, payload: any): void {
     try {
-      const fs = require('fs');
-      const path = require('path');
-      const logDir = path.join(process.cwd(), 'logs');
-      
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-      
+      const logDir = joinPath(process.cwd(), 'logs');
+      if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true });
       const timestamp = new Date().toISOString();
       const dateStr = timestamp.split('T')[0].replace(/-/g, '');
-      const logEntry = {
-        timestamp,
-        eventType,
-        ...payload
-      };
-      
-      const logPath = path.join(logDir, `tcl_event_trace_${dateStr}.log`);
-      fs.appendFileSync(logPath, JSON.stringify(logEntry) + '\n');
+      appendFileSync(joinPath(logDir, `tcl_event_trace_${dateStr}.log`),
+        JSON.stringify({ timestamp, eventType, ...payload }) + '\n');
     } catch (err) {
-      // Silent fail - diagnostic logging should not break event processing
+      if (!this.tclTraceWriteFailedWarned) {
+        this.tclTraceWriteFailedWarned = true;
+        console.warn(`[A3.R8][TCL_TRACE][WRITE_FAILED] tcl_event_trace not written (logged once per process):`, err instanceof Error ? err.message : err);
+      }
     }
   }
 

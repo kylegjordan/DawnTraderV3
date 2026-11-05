@@ -56,7 +56,7 @@ import { UnsafePathError } from "./services/safe-path";
 import { memoryLifecycle } from "./services/memory-lifecycle";
 import { getPermissionsForRole, Permission } from './config/permissions.js';
 import type { UserRole } from './config/permissions.js';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { getActiveEngineStatus } from './services/active-engine-service';
 import { numericNormalizationMiddleware } from './utils/numeric-normalizer.js';
 import { contextBridge } from './services/context-bridge.js';
@@ -20790,8 +20790,8 @@ Please:
         },
         legacyReads: 0, // Phase 27.G: Confirm no legacy field access
         legacyFields: [], // Empty array confirms no legacy data sourced
-        schemaHash: require('crypto')
-          .createHash('md5')
+        // B-ENTRY-GATE (#1224) P9 inc B: was `require('crypto')`, which throws in the ESM bundle (esbuild --format=esm), so the hash could never compute.
+        schemaHash: createHash('md5')
           .update(JSON.stringify({ guardrails, filters, goals }))
           .digest('hex')
       };
