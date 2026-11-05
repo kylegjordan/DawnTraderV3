@@ -54,7 +54,9 @@ strongTrendGeometryOverride: isStrongTrendLane ? readStrongTrendGeometryOverride
 - **Full local suite:** 381 of 392 files pass. The 10 failing files are environmental:
   - 8 need a database that this laptop cannot reach (`pg-pool AggregateError`), including the B72 file, which runs in CI because CI sets `DATABASE_URL`;
   - 2 never load on Windows (`b-staging-liveness-watch`, `b-tsc-baseline-fix`, a SyntaxError on load, untouched by this batch).
-- **Not verifiable before deploy:** the B72 suite against staging, which needs the migration applied. Step 7 runs it.
+- **CI 41963837291 at `e3a295e93`: 4/4 green** (Test Suite, Build, TypeScript Check (baseline gate), Docker Build). The run at `e50523209` was cancelled when the next push superseded it; it was not a failure.
+  - **The B72 suite EXECUTED in CI and was not skipped** (Langston's record item): all five tests printed timings (3 / 2 / 2 / 0 / 1 ms) and passed against CI's fresh Postgres, including the fifth group row. The log shows `db-migrate` applying `2026-11-05-b-xstock-dbs-to-strategies.sql` (✓) and `2026-05-05-b72-dbs-routing-guards.sql` as a skip-marker ledger-only entry, as Langston noted.
+  - Step 7 still runs the suite against STAGING.
 
 ## Pre-registered Step 7 (from pre-audit P10, §1.6, §1.8, §1.9)
 - **(a) agreement test.** All xStock `mode='vts'` rows must agree with the guards; the 1 % floors apply to `gate='strategy_detect'` rows, bidirectional for morning_star, vwap_pullback and sma_trend_ride; plus the null arm.
