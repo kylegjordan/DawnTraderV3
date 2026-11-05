@@ -44,7 +44,8 @@ import { referenceFillPrice, closeFillCosts } from '../../core/math/trade-pnl';
 import { PaperOrderPlacer } from '../../services/execution/order-placer';
 
 const RECORD = { id: 't-9', symbol: 'ETH/USD', assetClass: 'crypto_spot', strategyName: 'test', closedAt: null,
-  entryPrice: '2000', actualEntryPrice: '2000', quantity: '0.5', entryFee: '4', entrySlippage: '0.2' };
+  // the LEGACY open-record shape: the open path writes `fees` (the entry fee) and leaves `entry_fee` at its '0' default
+  entryPrice: '2000', actualEntryPrice: '2000', quantity: '0.5', fees: '4', entryFee: '0', entrySlippage: '0.2' };
 const QUOTE = { price: 2100, source: 'kraken_ws', producer: 'kraken-ws', observedAt: 1_700_000_000_000 };
 
 beforeEach(() => {
@@ -85,8 +86,8 @@ describe('B-CLOSE-WRITER-COSTS P-11 — the engine-stop cleanup books real costs
     expect(w.exitDecisionPrice).toBe('2100');
   });
 
-  it('C-3 a record with no entry fee is LEFT OPEN and alerted, never booked with a zero', async () => {
-    h.getClosedTrades.mockResolvedValue([{ ...RECORD, entryFee: null }]);
+  it('C-3 a record with no entry fee (fees) is LEFT OPEN and alerted, never booked with a zero', async () => {
+    h.getClosedTrades.mockResolvedValue([{ ...RECORD, fees: null }]);
     const r = await reconcileIncompleteTrades('paper', 'sess-1');
     expect(r).toEqual({ reconciled: 0, stillOpen: 1, errors: 0 });
     expect(h.updateClosedTrade).not.toHaveBeenCalled();
