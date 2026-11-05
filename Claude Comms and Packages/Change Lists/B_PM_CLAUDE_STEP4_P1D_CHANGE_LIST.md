@@ -54,3 +54,12 @@ probe();
 2. **Guard 1's wording net** (`guard-pm-slot.mjs:32`) is broad (`owns`, `queue`, `ahead of`, `pick up`…) AND requires a session name. It will catch ordinary recaps that mention who owns what; the cost is a reworded message or a fresh record. Too broad?
 3. **Bare `Infra` counts as CC-INFRA in Guard 1** (case-insensitive): "the token-watch infra" would name CC-INFRA. Accept, or require `Infra Claude` / `CC-INFRA` there?
 4. **Not verifiable in this session:** hooks load at session start, so the live P1d-1 probe on `wrap_up` and Guard 1 in real use are read in the next PM session (`~/.claude/pm-slot-probe.log`). The tracked settings file means every clone loads both hooks at its next start; each exits on its first lines outside the PM clone.
+
+## r2 — Langston's Step-4 CHANGES folded (READY AT `d771465c1fbe7799da0eb9ada88685570f0c9ccb`)
+Langston r1: CHANGES, Discord `1567804765252100148`. **CI run `41989275257`: TypeScript Check (baseline gate) success · Build success · Test Suite success · Docker Build success; the Test Suite log carries the new step's own line `PM slot check tests (gatherer, guards, ledger) … 70/70 passed`.**
+- **C1** — new Test Suite step in `.github/workflows/ci.yml` runs `node scripts/pm/test-slot-check.mjs` after `git fetch --unshallow --quiet || true` (the replay reads the ledger's history; the checkout is shallow).
+- **C2** — `reconcile-decisions.mjs` reads the probe log: prints its line count, how many are `mcp__ccd_turn__wrap_up`, and the last five of those (or "absent").
+- **C3** — Guard 1 ages a record by its own `- generated:` header; file mtime only as fallback.
+- **Call 3** — Guard 1 binds CC-INFRA only on `Infra Claude` / `CC-INFRA`.
+- **Notes a, b** — malformed section-4/5 plan rows are listed in the record; the DEGRADED reason reads "not at or ahead of origin head (behind or diverged)".
+- **Tests 70/70 (5 new), mutation-checked by RUNNING:** age source reverted to mtime → both C3 cases FAIL (68/70); Infra pattern reverted → the bare-"infra" case FAILS (69/70); restored → 70/70.
