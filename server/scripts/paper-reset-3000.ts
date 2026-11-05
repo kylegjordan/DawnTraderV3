@@ -236,8 +236,8 @@ async function main() {
   const f = stop.json.flatten;
   log(`stop returned in ${stopReturnedAt.getTime() - resetInstant.getTime()} ms; flatten report: ${JSON.stringify(f)}`);
   if (stop.json.idempotent || !f) refuse('the stop ran no flatten (it took the already-stopped path) — nothing was closed as reset');
-  if (!f.ran || f.threw || f.failedCount > 0 || f.leftOpen?.length > 0 || f.orphansDeleted?.length > 0) {
-    refuse(`the stop's flatten was not clean (ran=${f.ran} threw=${f.threw} failed=${f.failedCount} leftOpen=[${f.leftOpen}] deletedByCleanup=[${f.orphansDeleted}])`);
+  if (!f.ran || f.threw || f.failedCount > 0 || f.leftOpen?.length > 0 || f.orphansDeleted?.length > 0 || f.orphansKept?.length > 0) {
+    refuse(`the stop's flatten was not clean (ran=${f.ran} threw=${f.threw} failed=${f.failedCount} leftOpen=[${f.leftOpen}] deletedByCleanup=[${f.orphansDeleted}] keptByCleanup=[${f.orphansKept ?? []}])`);
   }
   const stillOpen = await storage.getActiveOpenPositions('paper');
   if (stillOpen.length > 0) refuse(`${stillOpen.length} position(s) still open (${stillOpen.map((p) => p.symbol).join(', ')})`);
