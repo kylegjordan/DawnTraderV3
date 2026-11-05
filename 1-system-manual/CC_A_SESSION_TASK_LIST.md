@@ -15,15 +15,15 @@
 
 | # | item | status | decision |
 |---|---|---|---|
-| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 1 (scope r1 with Langston) | KD-2 order 3 |
-| 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 7 (deployed 2026-11-04; trim not yet scoped) | KD-2 order 5 |
-| 3 | `B-STATUS-BOARD` (`#1227`) — remaining Step 7 checks, then Steps 8-11 | IN FLIGHT, Step 7 | already agreed |
+| 1 | `B-DB-POOL-GUARD` (`#1239`, absorbs `#1062`) — guard the app's 10 shared database connections | IN FLIGHT, Step 9 (measurement live 2026-11-05; 48 h readings to ~11-07 08:10Z, then increment 3 — the limits) | KD-2 order 3 |
+| 2 | `B-DISK-FILE-TIERING` (`#1233`) with the price-feed debug-log trim (`#1240`) folded in | IN FLIGHT, Step 9 (trim deployed + verified; trace archived; cold-path memory fix + H-1..H-3 in Step-2 amendment 1 with Langston; log compression held until after 2026-11-18) | KD-2 order 5 |
+| 3 | `B-STATUS-BOARD` (`#1227`) — Kyle's phone check, then Steps 10-11 | IN FLIGHT, Step 8 (old crew-status page retired 2026-11-05; Langston's second pass sent) | already agreed |
 | 4 | `#527` — the xStock VTS records carry their cost split (fee, slippage, spread) | ✅ CLOSED 2026-11-05: already done 2026-07-17, measured complete since 2026-09-03 | KD-13 |
 | 5 | Roadmap `25-9` — start collecting xStock pair-correlation data (collection only) | QUEUED, before live, after items 1-2 | KD-14 |
 | 6 | Dead or one-time code removals (sprint rows 79, 82, 84, 84a) | after live ONLY if the reachability census (row 78, Infra Claude) shows each cannot affect paper or live trading; anything it cannot isolate comes out before live | KD-16 |
 | — | Crew-tooling and governance-checker improvements | after live | KD-15 |
 | 7 | End-to-end pipeline audit, split (`#522`, `#235`): row 101m mechanics — BEFORE row 100's learning-record restart, once row 100's other prerequisites are done; row 101 observation legs — after the restart, before live; row 101r re-confirmation — Wave B4 | QUEUED | KD-22 |
-| 8 | `B-CLOSE-WRITER-COSTS` (row 72): the close finds its record by symbol + asset class + mode; the open-side duplicate guard per mode (paper never affects live); fees required, readers made honest | QUEUED, after items 4-5 (KD-27: Kyle kept this order 2026-11-05) | KD-17, KD-24, KD-27 |
+| 8 | `B-CLOSE-WRITER-COSTS` (row 72): the close finds its record by symbol + asset class + mode; the open-side duplicate guard per mode (paper never affects live); fees required, readers made honest | IN FLIGHT, Step 2 (r2 amendment with Langston, 2026-11-05; order after items 4-5 kept for implementation, KD-27) | KD-17, KD-24, KD-27 |
 | 9 | `B-UNIVERSE-REFRESH-ACTS` (row 18, `#1018`): the daily coin-list re-check acts on what it finds | QUEUED, straight after item 8 | KD-26 |
 | 10 | `B-SYMBOL-CLASS-IDENTITY` (row 19, `#1024`): a ticker shared by a coin and an xStock becomes two instruments; closes with KD-25 (both may be open at once in one mode) | QUEUED, after item 9 | KD-26, KD-25 |
 | ? | `#914` (row 126) | open with Kyle via PM Claude | pending |
@@ -130,7 +130,7 @@
 - **`B-WAKE-HEARTBEAT-CONTROL-DATE`** (`#1162`, sprint row 1q) — CLOSED 2026-10-16. The heartbeat's daily check-in is decided from files and pages only for a real miss; proven live over three runs. Spawned `#1202` (row 1qa, the wake log's bound) and three filter items on row 1z.
 - **`B-B75-COUNT-GATE`** (hotfix, `#1195`) — CLOSED 2026-10-17. Verified by the 02:15Z sweep (the one-minute bars at their true 264,960 after 27 nights at 240,000); Langston confirmed 02:37Z. The parent `B-B75-EXPORT-COMPLETENESS` follows.
 - **`B-MUTATING-ROUTES-AUTH`** (`#1228`, hotfix, Kyle 2026-10-21 option 2) — ✅ VERIFIED 2026-10-21, deployed `d307debe5`: the thirteen server addresses that change something now require a login. Note `Claude Comms and Packages/Batch Completion/B_MUTATING_ROUTES_AUTH_COMPLETION_NOTE.md`. The read-only remainder is Infra Claude's (row 197a).
-- **`B-STATUS-BOARD`** (`#1227`) — **IN FLIGHT, Step 2, Kyle-assigned 2026-10-20 at the front of my queue:** the phone status board on staging. My agreed pre-sprint list is this one item.
+- **`B-STATUS-BOARD`** (`#1227`) — **IN FLIGHT, Step 8 (2026-11-05), Kyle-assigned 2026-10-20 at the front of my queue:** the phone status board on staging. My agreed pre-sprint list is this one item.
 - **`B-B75-EXPORT-COMPLETENESS`** (architecture, `#1195`) — ✅ CLOSED 2026-10-18 (Langston Step-11 CONFIRMED at `4cf4439de`). Forward-only by Kyle's decision: every new archive copy carries its proof (4 of 576 proven on 10-18). Report: `Claude Comms and Packages/Batch Completion/B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md`. Follow-up `B-B75-SCRIPT-TEST-HARNESS` (`#1208`) is CC-B's.
 - **`B-TASK-LIST-SLOT`** (`#1009`, row 4.57) — CLOSED 2026-09-18. P5 passed 3 of 3 at close (1 caught by the check, 2 unprompted); Langston confirmed. Slot-time half is row 4.8.
 - **`B-DEPLOY-DRIFT-LINE`** (`#1002`, row 4.55) — CLOSED 2026-09-09. All four criteria met; `#1021` folded in.
