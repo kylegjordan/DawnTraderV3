@@ -1,5 +1,7 @@
 # B-LANGSTON-RELIEF — COMPLETION REPORT — OBJ-2 PASSED its pre-registered week; OBJ-3's ceiling carried to B-LANGSTON-CLAUDEMD-RESIDUAL (Kyle 2026-10-20)
 
+> ✅ **CLOSED 2026-11-05 — Langston CONFIRMED 2026-11-05T03:04:32Z** (OBJ-2 re-derived by him from the inbox and the bridge log file; the System Manual `na-skip` row confirmed; his `MEMORY.md` row written). OBJ-3's ceiling stays open at `B-LANGSTON-CLAUDEMD-RESIDUAL`: loaded set 151,830 B vs 143,856 at his read.
+
 > **Converted from `B_LANGSTON_RELIEF_PROGRESS_REPORT.md` on 2026-11-05** (`workflow-11-completion`: convert, never rewrite). Sections 1-4 below are the progress report as it stood, with the evidence it captured at the time. §2b and §3b are the close.
 >
 > **⛔ LEFT OPEN, stated at the top:**
@@ -52,7 +54,7 @@ Also shipped inside the batch: the privacy check's repo-text exclusion and bound
 |---|---|---|
 | alert posts that reached the bridge | `langston_alert_inbound` records in the window | **283** distinct message ids (384 raw rows: 101 ids appear twice); an alert id was read from 273 of them, and all 10 without one are in the escalated set |
 | lane routing posts | `langston_outbound` with `lane == "alert"` | 121 |
-| **(a)** routed by a lane post that names the alert's id | of the 283 | **181** |
+| **(a)** routed and NOT escalated (a lane post names the alert's id; exclusive count) | of the 283 | **181** — 273 have a lane post naming their id; 92 were both routed and escalated (Langston's record item, 03:04Z) |
 | **(a)** escalated to Langston | bridge log `escalated msg <id> to Langston` | **102** |
 | **(a)** NEITHER | of the 283 | **0** |
 | **(b)** Langston alert-task starts | bridge log `handling msg … kind=alert:` | **101** |
@@ -93,8 +95,8 @@ CHANGE-CLASS: architecture
 | T1 | the `COMPLETION_REPORT` | REQUIRED | ✅ | this file, converted from the progress report |
 | T1 | the `Observation` column | REQUIRED | ✅ | OBJ-2's pre-registered week, 2026-10-16 → 10-23, read in §3b; nothing left under observation |
 | T1 | session task lists — `CC_INFRA_SESSION_TASK_LIST.md` | REQUIRED | ✅ mine / N/A — not mine ×3 | this batch moved to Step 11 with this report |
-| T1 | Langston's `/home/langston/MEMORY.md` | REQUIRED | BLOCKED — his Step-11 confirm | his row, through `langston-memory-write`, at confirm |
-| T2 | `SYSTEM_MANUAL.md` | REQUIRED | N/A — `na-skip` row in `GOVERNANCE_EXCEPTIONS.md`, his to confirm | no strategy, regime, filter, signal pipeline or math changed |
+| T1 | Langston's `/home/langston/MEMORY.md` | REQUIRED | ✅ | written by him at confirm through `langston-memory-write`: 73,594 → 73,534 B (net −60), ledger bullets 36 → 36, read back (Langston CONFIRMED 2026-11-05T03:04:32Z) |
+| T2 | `SYSTEM_MANUAL.md` | REQUIRED | N/A — `na-skip` row in `GOVERNANCE_EXCEPTIONS.md`, confirmed by Langston at Step 11 | no strategy, regime, filter, signal pipeline or math changed |
 | T2 | `SYSTEM_IMPACT_MAP.md` | REQUIRED | ✅ | the writer's three-file memory, trim, growth gate and root-only state dir |
 | T2 | `RUNNING_ISSUES.md` | judged | ✅ | `#1197`, `#1198`, `#1205`→`#979`, `#1206`, `#1207`, `#1215`, `#1216`, `#1219` |
 | T2 | `LANGSTON_ARCHITECTURE.md` | judged | ✅ | his memory files and the alert lane, with before/after |
