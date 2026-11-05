@@ -159,6 +159,28 @@
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-ci-cited.mjs\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pm-slot.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pm-decisions.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__ccd_turn__wrap_up",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-pm-slot.mjs\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
