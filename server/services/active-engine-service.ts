@@ -41,6 +41,8 @@ export interface StopFlattenReport {
   leftOpen: string[];
   /** symbols the orphan cleanup DELETED after the flatten — a position that should have closed and did not */
   orphansDeleted: string[];
+  /** B-CLOSE-WRITER-COSTS P-17: symbols the orphan step KEPT because their record could not be resolved or finished */
+  orphansKept: string[];
   /** the stop-time reconciler's result, as it returned it */
   reconcile: unknown;
 }
@@ -383,6 +385,134 @@ export function getOrchestratorByMode(mode: 'paper' | 'live'): any | null {
  * @param mode Trading mode ('paper' or 'live')
  * @param sessionId Current session ID for logging
  */
+/**
+ * B-CLOSE-WRITER-COSTS P-11/P-17 (Kyle KD-17): close ONE open trade record whose position is gone, at an observed
+ * reference price, with the no-bids close economics (penalty fill, taker fee, the record's entry fee, net P&L).
+ * Shared by the stop-time reconciler and the stop flow's orphan step, so a position is never deleted before its record
+ * is finished. Anything it cannot price honestly is LEFT OPEN with an alert. Returns which happened.
+ */
+async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): Promise<'closed' | 'left_open'> {
+        // ⛔ B-FEED-MISMATCH-FIX P4 — NEVER THE ENTRY PRICE. This used to fall back to `trade.entryPrice` when no
+        // quote existed and book the row with no fee, no walk and no provenance — the sixth close path the
+        // Step-2 audit found. There is no position left to walk here (that is why the row is stale), so the
+        // row is booked at an OBSERVED quote of any age WITH its provenance and age, stamped
+        // `synthetic_reference` (and so outside every learning capture, which never reads this path). With no
+        // observed price at all the row is LEFT OPEN and an alert names it — never booked at its own entry.
+        let quote: Awaited<ReturnType<typeof livePricingAdapter.getPriceWithFallback>> = null;
+        try {
+          quote = await livePricingAdapter.getPriceWithFallback(trade.symbol, 5000);
+        } catch (priceErr) {
+          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE] price lookup threw for ${trade.symbol}:`, priceErr);
+        }
+        if (!quote || !quote.price || quote.source === 'no_reliable_price') {
+          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: no observed price — row LEFT OPEN, not booked at entry`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — no observed price`,
+              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position and no `
+                + `observed price of any age, so it was LEFT OPEN rather than booked at its entry price `
+                + `(B-FEED-MISMATCH-FIX P4). Close it once a price exists. DISPOSITION: RESOLVE, do not ACK.`,
+              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
+          }
+          return 'left_open';
+        }
+        const exitPrice = quote.price;
+
+        // ⛔ B-CLOSE-WRITER-COSTS P-11 (Kyle KD-17; A-3 path 2): this row used to be booked with GROSS `pnl` only — no
+        // fee, no net. It now books the same economics `closePosition` books for a no-bids close at an observed
+        // reference: the per-class beyond-depth penalty on the reference, the per-class taker fee on that fill, the
+        // RECORD's own entry fee, and net P&L — through the SAME functions the paper order placer uses
+        // (`referenceFillPrice`, `closeFillCosts`, `computeRealizedPnl`), so the two cannot drift.
+        // Anything it cannot price honestly (no valid class, no depth config, no entry fee on the record) is LEFT OPEN
+        // with an alert — never booked with an invented zero.
+        const _num = (v: unknown) => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : NaN; };
+        const _cls = asValidAssetClass((trade as any).assetClass);
+        const _cfg = _cls ? await resolveFillDepthGateConfig(_cls) : null;
+        const entryFee = _num((trade as any).entryFee);
+        const entryPrice = _num((trade as any).actualEntryPrice ?? trade.entryPrice);
+        const quantity = _num(trade.quantity);
+        const _cantPrice = !_cls ? `no valid asset class (${String((trade as any).assetClass)})`
+          : !_cfg ? 'no fill-depth config for its class (the penalty)'
+          : !Number.isFinite(entryFee) ? 'no entry fee on its record'
+          : !(entryPrice > 0) || !(quantity > 0) ? 'no usable entry price or quantity on its record'
+          : null;
+        if (_cantPrice) {
+          console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: ${_cantPrice} — row LEFT OPEN, not booked`);
+          try {
+            const { addAlert } = await import('./system-alerts.js');
+            await addAlert({
+              triggers_at: new Date(),
+              category: 'breakage',
+              severity: 'warning',
+              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — its costs cannot be priced`,
+              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position, but ${_cantPrice}, `
+                + `so it was LEFT OPEN rather than booked without its fees (B-CLOSE-WRITER-COSTS P-11). DISPOSITION: RESOLVE, do not ACK.`,
+              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
+            });
+          } catch (alertErr) {
+            console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
+          }
+          return 'left_open';
+        }
+        const fillPrice = referenceFillPrice(exitPrice, _cfg!.beyondDepthPenaltyBps);
+        const { exitFee, exitSlippage } = closeFillCosts({
+          fillPrice, quantity, requestedPrice: exitPrice, feePercent: getFrictionForAssetClass(_cls!).feeRateTaker * 100,
+        });
+        const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
+          actualEntryPrice: entryPrice, actualExitPrice: fillPrice, quantity, entryFee, exitFee,
+        });
+        const entrySlippage = Number.isFinite(_num((trade as any).entrySlippage)) ? _num((trade as any).entrySlippage) : 0;
+        const pnl = netPnl;
+
+        // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
+        await storage.updateClosedTrade(mode, trade.id, {
+          closedAt: new Date(),
+          exitPrice: fillPrice.toString(),
+          actualExitPrice: fillPrice.toString(),
+          targetExitPrice: exitPrice.toString(),
+          pnl: netPnl.toString(),
+          pnlPercent: netPnlPercent.toString(),
+          netPnl: netPnl.toString(),
+          netPnlPercent: netPnlPercent.toString(),
+          grossPnl: grossPnl.toString(),
+          totalCost: totalCost.toString(),
+          fees: totalCost.toString(),
+          totalFee: totalCost.toString(),
+          exitFee: exitFee.toString(),
+          exitFeeMode: 'taker',
+          exitSlippage: exitSlippage.toString(),
+          slippage: (entrySlippage + exitSlippage).toString(),
+          closeReason: 'engine_stop_cleanup',
+          exitDecisionPrice: exitPrice.toString(),
+          exitPriceProducer: quote.producer,
+          exitPriceSource: quote.source,
+          exitObservedAtMs: quote.observedAt,
+          exitFillArm: 'synthetic_reference',
+        } as any);
+
+        // Emit trade lifecycle event for diagnostics
+        const strategy = trade.strategyName || 'unknown';
+        i1TradeLifecycleDiagnostics.logClose(
+          trade.id,
+          trade.symbol,
+          strategy,
+          'engine_stop_cleanup',
+          fillPrice,
+          pnl,
+          'cleanup'
+        );
+        
+        console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} ref=$${exitPrice.toFixed(4)} fill=$${fillPrice.toFixed(4)} exitFee=$${exitFee.toFixed(4)} net=$${netPnl.toFixed(2)}`);
+        return 'closed';
+}
+
 // Exported for its unit test (B-CLOSE-WRITER-COSTS P-11); called only from the stop flow below.
 export async function reconcileIncompleteTrades(
   mode: 'paper' | 'live',
@@ -441,127 +571,8 @@ export async function reconcileIncompleteTrades(
         // No matching open position - this trade should be closed
         console.log(`[8.8.3-I3][STOP_FLOW] Closing stale trade ${trade.id} for ${trade.symbol} (no matching open position)`);
         
-        // ⛔ B-FEED-MISMATCH-FIX P4 — NEVER THE ENTRY PRICE. This used to fall back to `trade.entryPrice` when no
-        // quote existed and book the row with no fee, no walk and no provenance — the sixth close path the
-        // Step-2 audit found. There is no position left to walk here (that is why the row is stale), so the
-        // row is booked at an OBSERVED quote of any age WITH its provenance and age, stamped
-        // `synthetic_reference` (and so outside every learning capture, which never reads this path). With no
-        // observed price at all the row is LEFT OPEN and an alert names it — never booked at its own entry.
-        let quote: Awaited<ReturnType<typeof livePricingAdapter.getPriceWithFallback>> = null;
-        try {
-          quote = await livePricingAdapter.getPriceWithFallback(trade.symbol, 5000);
-        } catch (priceErr) {
-          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE] price lookup threw for ${trade.symbol}:`, priceErr);
-        }
-        if (!quote || !quote.price || quote.source === 'no_reliable_price') {
-          console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: no observed price — row LEFT OPEN, not booked at entry`);
-          try {
-            const { addAlert } = await import('./system-alerts.js');
-            await addAlert({
-              triggers_at: new Date(),
-              category: 'breakage',
-              severity: 'warning',
-              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — no observed price`,
-              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position and no `
-                + `observed price of any age, so it was LEFT OPEN rather than booked at its entry price `
-                + `(B-FEED-MISMATCH-FIX P4). Close it once a price exists. DISPOSITION: RESOLVE, do not ACK.`,
-              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
-            });
-          } catch (alertErr) {
-            console.error(`[B-FEED-MISMATCH-FIX][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
-          }
-          stillOpen++;
-          continue;
-        }
-        const exitPrice = quote.price;
-
-        // ⛔ B-CLOSE-WRITER-COSTS P-11 (Kyle KD-17; A-3 path 2): this row used to be booked with GROSS `pnl` only — no
-        // fee, no net. It now books the same economics `closePosition` books for a no-bids close at an observed
-        // reference: the per-class beyond-depth penalty on the reference, the per-class taker fee on that fill, the
-        // RECORD's own entry fee, and net P&L — through the SAME functions the paper order placer uses
-        // (`referenceFillPrice`, `closeFillCosts`, `computeRealizedPnl`), so the two cannot drift.
-        // Anything it cannot price honestly (no valid class, no depth config, no entry fee on the record) is LEFT OPEN
-        // with an alert — never booked with an invented zero.
-        const _num = (v: unknown) => { const n = parseFloat(String(v ?? '')); return Number.isFinite(n) ? n : NaN; };
-        const _cls = asValidAssetClass((trade as any).assetClass);
-        const _cfg = _cls ? await resolveFillDepthGateConfig(_cls) : null;
-        const entryFee = _num((trade as any).entryFee);
-        const entryPrice = _num((trade as any).actualEntryPrice ?? trade.entryPrice);
-        const quantity = _num(trade.quantity);
-        const _cantPrice = !_cls ? `no valid asset class (${String((trade as any).assetClass)})`
-          : !_cfg ? 'no fill-depth config for its class (the penalty)'
-          : !Number.isFinite(entryFee) ? 'no entry fee on its record'
-          : !(entryPrice > 0) || !(quantity > 0) ? 'no usable entry price or quantity on its record'
-          : null;
-        if (_cantPrice) {
-          console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] trade ${trade.id} ${trade.symbol}: ${_cantPrice} — row LEFT OPEN, not booked`);
-          try {
-            const { addAlert } = await import('./system-alerts.js');
-            await addAlert({
-              triggers_at: new Date(),
-              category: 'breakage',
-              severity: 'warning',
-              title: `Stop-time cleanup left trade ${trade.symbol} unclosed — its costs cannot be priced`,
-              body: `During an engine stop, the ${mode} trade ${trade.id} in ${trade.symbol} had no open position, but ${_cantPrice}, `
-                + `so it was LEFT OPEN rather than booked without its fees (B-CLOSE-WRITER-COSTS P-11). DISPOSITION: RESOLVE, do not ACK.`,
-              dedupe_key: `reconcile-left-open-${mode}-${trade.symbol}`,
-            });
-          } catch (alertErr) {
-            console.error(`[B-CLOSE-WRITER-COSTS][RECONCILE_LEFT_OPEN] addAlert failed:`, alertErr);
-          }
-          stillOpen++;
-          continue;
-        }
-        const fillPrice = referenceFillPrice(exitPrice, _cfg!.beyondDepthPenaltyBps);
-        const { exitFee, exitSlippage } = closeFillCosts({
-          fillPrice, quantity, requestedPrice: exitPrice, feePercent: getFrictionForAssetClass(_cls!).feeRateTaker * 100,
-        });
-        const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
-          actualEntryPrice: entryPrice, actualExitPrice: fillPrice, quantity, entryFee, exitFee,
-        });
-        const entrySlippage = Number.isFinite(_num((trade as any).entrySlippage)) ? _num((trade as any).entrySlippage) : 0;
-        const pnl = netPnl;
-
-        // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
-        await storage.updateClosedTrade(mode, trade.id, {
-          closedAt: new Date(),
-          exitPrice: fillPrice.toString(),
-          actualExitPrice: fillPrice.toString(),
-          targetExitPrice: exitPrice.toString(),
-          pnl: netPnl.toString(),
-          pnlPercent: netPnlPercent.toString(),
-          netPnl: netPnl.toString(),
-          netPnlPercent: netPnlPercent.toString(),
-          grossPnl: grossPnl.toString(),
-          totalCost: totalCost.toString(),
-          fees: totalCost.toString(),
-          totalFee: totalCost.toString(),
-          exitFee: exitFee.toString(),
-          exitFeeMode: 'taker',
-          exitSlippage: exitSlippage.toString(),
-          slippage: (entrySlippage + exitSlippage).toString(),
-          closeReason: 'engine_stop_cleanup',
-          exitDecisionPrice: exitPrice.toString(),
-          exitPriceProducer: quote.producer,
-          exitPriceSource: quote.source,
-          exitObservedAtMs: quote.observedAt,
-          exitFillArm: 'synthetic_reference',
-        } as any);
-
-        // Emit trade lifecycle event for diagnostics
-        const strategy = trade.strategyName || 'unknown';
-        i1TradeLifecycleDiagnostics.logClose(
-          trade.id,
-          trade.symbol,
-          strategy,
-          'engine_stop_cleanup',
-          fillPrice,
-          pnl,
-          'cleanup'
-        );
-        
-        console.log(`[8.8.3-I3][STOP_FLOW] Cleanup closed trade ${trade.id}: ${trade.symbol} ref=$${exitPrice.toFixed(4)} fill=$${fillPrice.toFixed(4)} exitFee=$${exitFee.toFixed(4)} net=$${netPnl.toFixed(2)}`);
-        reconciled++;
+        const _outcome = await closeStaleRecordAtReference(mode, trade);
+        if (_outcome === 'closed') reconciled++; else stillOpen++;
         
       } catch (tradeErr) {
         console.error(`[8.8.3-I3][STOP_FLOW] Error reconciling trade ${trade.id}:`, tradeErr);
@@ -1044,7 +1055,7 @@ export async function stopActiveEngine(
         // and a failed close reached the caller as a plain success after the orphan cleanup below deleted it.
         const flattenReport: StopFlattenReport = {
           ran: false, threw: false, closedCount: 0, failedCount: 0, skippedCount: 0,
-          leftOpen: [], orphansDeleted: [], reconcile: null,
+          leftOpen: [], orphansDeleted: [], orphansKept: [], reconcile: null,
         };
         
         if (currentManager) {
@@ -1113,6 +1124,40 @@ export async function stopActiveEngine(
                   if (_deliberatelyOpen.has(orphan.id)) {
                     console.error(`[B-FEED-MISMATCH-FIX][STOP_FLOW] ${orphan.symbol} (${orphan.id}) left OPEN deliberately (no observed price) — NOT deleted; alert raised by the flatten`);
                     continue;
+                  }
+                  // ⛔ B-CLOSE-WRITER-COSTS P-17 (Langston BLOCKER-1, A-8): FINISH THE RECORD FIRST. This step used to delete the
+                  // position and rely on the reconciler running later to close its record — nothing enforced that. The record is
+                  // resolved by the position's `tradeId`, else by the close key (symbol, mode, class); an open one is closed at the
+                  // observed reference through the shared engine-stop close. Unresolved, or not priceable ⇒ the position is KEPT.
+                  {
+                    const _tid = (orphan.metadata as any)?.tradeId as string | undefined;
+                    let _orec: any = _tid ? await storage.getClosedTrade('paper', _tid) : undefined;
+                    if (!_orec) {
+                      const _ocls = asValidAssetClass((orphan as any).assetClass);
+                      const _ok = _ocls ? await storage.findOpenTradeRecord('paper', orphan.symbol, _ocls) : null;
+                      if (_ok?.status === 'one') _orec = _ok.record;
+                    }
+                    const _finished = !!_orec && (_orec.closedAt != null || (await closeStaleRecordAtReference('paper', _orec)) === 'closed');
+                    if (!_finished) {
+                      console.error(`[B-CLOSE-WRITER-COSTS][STOP_FLOW] orphan ${orphan.symbol} (${orphan.id}): ${_orec ? 'its record could not be finished' : 'no trade record resolves'} — position KEPT, not deleted`);
+                      if (!_orec) {
+                        try {
+                          const { addAlert } = await import('./system-alerts.js');
+                          await addAlert({
+                            triggers_at: new Date(), category: 'breakage', severity: 'critical',
+                            title: `Position ${orphan.symbol} cannot close: its trade record is not resolvable`,
+                            body: `During an engine stop, the paper position ${orphan.id} in ${orphan.symbol} remained after the flatten and no open `
+                              + `trade record resolves for it (no tradeId, and none or several by symbol, mode and class). It is KEPT rather than `
+                              + `deleted without its record (KD-17). B-CLOSE-WRITER-COSTS P-17. DISPOSITION: RESOLVE, do not ACK.`,
+                            dedupe_key: `close-record-unresolved-paper-${orphan.symbol}`,
+                          });
+                        } catch (alertErr) {
+                          console.error('[B-CLOSE-WRITER-COSTS][STOP_FLOW] addAlert failed:', alertErr);
+                        }
+                      }
+                      flattenReport.orphansKept.push(orphan.symbol);
+                      continue;
+                    }
                   }
                   console.log(`[8.8.3-I2][STOP_FLOW][CLEANUP] Force-removing orphan position: ${orphan.symbol} (${orphan.id})`);
                   try {
