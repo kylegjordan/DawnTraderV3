@@ -541,6 +541,8 @@ export interface IStorage {
   getDailyRealizedPnlSince(mode: TradingMode, since: Date): Promise<Array<{ date: string; pl: number }>>;
   getRecentClosedPnls(mode: TradingMode, n: number): Promise<number[]>;
   getRealizedPnlSince(mode: TradingMode, since: Date): Promise<{ realizedPnl: number; tradeCount: number }>;
+  // B-BALANCE-SESSION-PAIRING (#618 leg 1): positions OPEN at an anchor event (opened before it, closed after it or still open).
+  getStraddleEntryCostAt(mode: TradingMode, at: Date): Promise<{ entryCost: number; count: number; invalidCount: number }>;
   // B-SIZING-DEC-RESTORE 2b (#1093): the symbol cooldown's own read — EXACT symbol (+ asset class when known).
   getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null>;
   // B-SIZING-DEC-RESTORE inc 3 (P1 step 5): the ONE named writer of the dashboard epoch; returns the read-back.
@@ -3303,6 +3305,33 @@ export class DatabaseStorage implements IStorage {
     return {
       realizedPnl: parseFloat(String(row?.realizedPnl ?? '0')) || 0,
       tradeCount: parseInt(String(row?.tradeCount ?? '0'), 10) || 0,
+    };
+  }
+
+  /**
+   * B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P1): the entry cost of every position that was OPEN at an anchor
+   * event — opened before `at`, and closed after it or still open (`closed_at` NULL), `never_filled` excluded (the same
+   * predicate as `getRealizedPnlSince`). An anchor value is cash NOT committed to paper positions at the event, so these
+   * positions' committed cash is added back (A4). Basis: quantity x entry_price, the exposure numerator's basis.
+   * `invalidCount` counts rows whose quantity or entry price is not positive: the caller REFUSES on any (never sums a 0).
+   */
+  async getStraddleEntryCostAt(mode: TradingMode, at: Date): Promise<{ entryCost: number; count: number; invalidCount: number }> {
+    const [row] = await db.select({
+      entryCost: sql<string>`COALESCE(SUM(${closedTradesTable.quantity} * ${closedTradesTable.entryPrice}), 0)`,
+      count: sql<string>`COUNT(*)`,
+      invalidCount: sql<string>`COUNT(*) FILTER (WHERE ${closedTradesTable.quantity} <= 0 OR ${closedTradesTable.entryPrice} <= 0)`,
+    })
+      .from(closedTradesTable)
+      .where(and(
+        eq(closedTradesTable.mode, mode),
+        sql`${closedTradesTable.openedAt} < ${at}` as any,
+        sql`(${closedTradesTable.closedAt} IS NULL OR ${closedTradesTable.closedAt} > ${at})` as any,
+        sql`${closedTradesTable.closeReason} IS DISTINCT FROM 'never_filled'` as any,
+      ));
+    return {
+      entryCost: parseFloat(String(row?.entryCost ?? '0')),
+      count: parseInt(String(row?.count ?? '0'), 10),
+      invalidCount: parseInt(String(row?.invalidCount ?? '0'), 10),
     };
   }
 

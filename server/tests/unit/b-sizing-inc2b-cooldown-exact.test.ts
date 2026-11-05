@@ -30,7 +30,10 @@ vi.mock('../../services/guardrail-settings', () => ({
   buildSettingsFromGuardrails: async () => ({
     killSwitchTripped: false, portfolioValue: 1000, maxPositionPercent: 20, maxOpenTrades: 20, maxTotalExposurePct: 100,
   }),
+  // B-BALANCE-SESSION-PAIRING (pre-audit P10): sizing, the exposure cap and the audit row read getMoneyHeld now.
   getPortfolioBalanceV2: async () => 1000,
+  getMoneyHeld: async () => 1000,
+  MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } },
 }));
 vi.mock('../../services/aj16-rtb-diagnostic', () => ({
   aj16Diagnostic: {

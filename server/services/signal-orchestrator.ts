@@ -49,7 +49,7 @@ import { ActiveScanDiagnosticService } from './active-scan-diagnostic.js';
 import { b5SizingAudit } from './b5-sizing-audit.js';
 import { sizeActivePositionForSignal, type StrategyType } from './active-position-sizing.js';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site TradingMode->RunMode map
-import { getPortfolioBalanceV2 } from './guardrail-settings.js';
+import { getMoneyHeld, MoneyHeldUnavailable } from './guardrail-settings.js';
 import { c5FinancialDiagnostics } from './c5-financial-diagnostics.js';
 // P19-B8.10 (OBJ-2): SLAL purged with its sole reader (the Ready-tab panel);
 // the load-bearing signal-ID mint lives on as a pure util, format unchanged.
@@ -2103,10 +2103,15 @@ export class SignalOrchestrator {
       } as any;
 
       const guardrails = await storage.getGuardrailsV2({ mode: this.mode });
-      const portfolioValue = await getPortfolioBalanceV2(this.mode);
-      
-      if (portfolioValue <= 0) {
-        console.error(`[B6][SIZING_ERROR] Invalid portfolio value: ${portfolioValue}`);
+      // B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P3): crypto entries are sized against the MONEY HELD. A refusal is
+      // caught by name and refuses the sizing with its reason; `getMoneyHeld` never returns a non-positive value, so the old
+      // `<= 0` test is replaced by this catch rather than left unreachable. The sizer never sees a refused value (P12).
+      let portfolioValue: number;
+      try {
+        portfolioValue = await getMoneyHeld(this.mode);
+      } catch (e) {
+        if (!(e instanceof MoneyHeldUnavailable)) throw e;
+        console.error(`[B6][SIZING_ERROR] money held unavailable: ${e.reason}`);
         return;
       }
 

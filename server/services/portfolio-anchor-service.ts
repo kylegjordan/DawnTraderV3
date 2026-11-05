@@ -123,6 +123,25 @@ export async function getLastAnchorAt(
 }
 
 /**
+ * B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P1): the ledger row that WROTE a given anchor version — the event
+ * whose value `portfolio_state.balance` holds. `executeReanchor` writes the ledger row and the state row in one
+ * transaction with one version (unique index `portfolio_anchor_events_mode_version_idx`), so `(mode, anchorVersion)`
+ * names exactly one event, whatever its reason. Returns null when no such row exists — the caller refuses.
+ */
+export async function getAnchorEventByVersion(
+  mode: 'paper' | 'live',
+  anchorVersion: number,
+): Promise<{ occurredAt: Date; newBalance: number; reason: AnchorReason } | null> {
+  const [row] = await db
+    .select({ occurredAt: portfolioAnchorEvents.occurredAt, newBalance: portfolioAnchorEvents.newBalance, reason: portfolioAnchorEvents.reason })
+    .from(portfolioAnchorEvents)
+    .where(and(eq(portfolioAnchorEvents.mode, mode), eq(portfolioAnchorEvents.anchorVersion, anchorVersion)))
+    .limit(1);
+  if (!row) return null;
+  return { occurredAt: row.occurredAt, newBalance: Number.parseFloat(String(row.newBalance)), reason: row.reason as AnchorReason };
+}
+
+/**
  * Execute a re-anchor: append the ledger row and set balance + anchor_version
  * atomically. THROWS on invalid input — never writes a partial anchor.
  *

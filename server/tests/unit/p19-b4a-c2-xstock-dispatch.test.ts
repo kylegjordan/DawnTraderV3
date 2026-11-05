@@ -41,7 +41,9 @@ vi.mock('../../storage.js', () => ({
   },
 }));
 vi.mock('../../services/guardrail-settings.js', () => ({
-  getPortfolioBalanceV2: async () => 1000,
+  // B-BALANCE-SESSION-PAIRING (pre-audit P10): sizing, the exposure cap and the audit row read getMoneyHeld now.
+  getMoneyHeld: async () => 1000,
+  MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } },
 }));
 // P19-B4a C3: the active-fill safety gate now runs before the C2 confidence/
 // strategy checks. Stub it OPEN (config present, in-window, fresh tick) so these

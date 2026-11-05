@@ -142,6 +142,83 @@ export async function getPortfolioBalanceV2(
 }
 
 /**
+ * B-BALANCE-SESSION-PAIRING (#618 leg 1) — a refusal of the money-held figure. THROWN, never returned as 0: a 0 reads as
+ * "skip this check" at `trade-safety.ts` (the position-size cap) and as "no money" elsewhere, both the permissive or the
+ * wrong direction (pre-audit A2). Every caller catches it by name and refuses what it was about to do.
+ */
+export class MoneyHeldUnavailable extends Error {
+  constructor(public readonly reason: string) {
+    super(`[B-BALANCE-SESSION-PAIRING][MONEY_HELD_UNAVAILABLE] ${reason}`);
+    this.name = 'MoneyHeldUnavailable';
+  }
+}
+
+/** The retention of `closed_trades` in hot storage (`data_lifecycle` / `closed_trades.hot_retention_days`, the key the
+ *  B75 sweep reads at `server/scripts/b75-retention-sweep.ts:203`). No fallback: a missing or non-positive value refuses. */
+async function readClosedTradesHotRetentionDays(): Promise<number> {
+  const { db } = await import('../db.js');
+  const { moduleConstants } = await import('@shared/schema');
+  const { and, eq } = await import('drizzle-orm');
+  const [row] = await db.select({ value: moduleConstants.value }).from(moduleConstants)
+    .where(and(eq(moduleConstants.moduleName, 'data_lifecycle'), eq(moduleConstants.constantName, 'closed_trades.hot_retention_days')))
+    .limit(1);
+  const days = Number(row?.value);
+  if (!Number.isFinite(days) || days <= 0) {
+    throw new MoneyHeldUnavailable(`data_lifecycle/closed_trades.hot_retention_days unreadable (${JSON.stringify(row?.value ?? null)})`);
+  }
+  return days;
+}
+
+/**
+ * B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P1) — the MONEY HELD: the account's capital at cost.
+ *   money held = the anchor value + the entry cost of every paper position OPEN at the anchor event + realized P&L since it.
+ * The anchor value and its time come from ONE event: `portfolio_state.anchor_version` -> the ledger row with that version.
+ * An anchor value is cash NOT committed to paper positions at the event (pre-audit A4), so positions open then are added
+ * back at entry cost (the exposure numerator's basis); realized P&L since the event is the kill switch's own aggregate.
+ * This is INVARIANT T3 as written (`bridge/canonical/DawnTrader_System_Invariants_Design_Guarantees.md` §1.3): starting
+ * balance plus realized, no engine session. The kill switch keeps `getPortfolioBalanceV2` (session-paired, Kyle, #632).
+ * THROWS `MoneyHeldUnavailable` (never returns 0) on: live mode; no state row; no ledger row for the version; a ledger
+ * value that disagrees with the state row; anchor age at or past the hot retention of `closed_trades` (the sweep would
+ * drop realized rows out of the figure); a straddler with a non-positive quantity or price; any read that throws.
+ */
+export async function getMoneyHeld(mode: 'live' | 'paper'): Promise<number> {
+  if (mode !== 'paper') {
+    throw new MoneyHeldUnavailable(`mode=${mode}: live money held is the exchange balance (Phase 21), not defined from the paper ledger`);
+  }
+  try {
+    const { getAnchorState, getAnchorEventByVersion } = await import('./portfolio-anchor-service.js');
+    const state = await getAnchorState(mode);
+    if (!state) throw new MoneyHeldUnavailable(`mode=${mode}: no readable portfolio_state row`);
+    const ev = await getAnchorEventByVersion(mode, state.anchorVersion);
+    if (!ev) throw new MoneyHeldUnavailable(`mode=${mode}: no anchor ledger row for anchor_version=${state.anchorVersion}`);
+    if (!Number.isFinite(ev.newBalance) || Math.abs(ev.newBalance - state.balance) > 0.005) {
+      throw new MoneyHeldUnavailable(`mode=${mode}: anchor v${state.anchorVersion} ledger new_balance=${ev.newBalance} disagrees with portfolio_state.balance=${state.balance}`);
+    }
+    const retentionDays = await readClosedTradesHotRetentionDays();
+    const ageDays = (Date.now() - ev.occurredAt.getTime()) / 86_400_000;
+    if (ageDays >= retentionDays) {
+      throw new MoneyHeldUnavailable(`mode=${mode}: anchor v${state.anchorVersion} is ${ageDays.toFixed(1)} days old, at or past closed_trades hot retention (${retentionDays} days)`);
+    }
+    const straddle = await storage.getStraddleEntryCostAt(mode, ev.occurredAt);
+    if (straddle.invalidCount > 0 || !Number.isFinite(straddle.entryCost)) {
+      throw new MoneyHeldUnavailable(`mode=${mode}: ${straddle.invalidCount} of ${straddle.count} positions open at anchor v${state.anchorVersion} have a non-positive quantity or price`);
+    }
+    const { realizedPnl, tradeCount } = await storage.getRealizedPnlSince(mode, ev.occurredAt);
+    const moneyHeld = state.balance + straddle.entryCost + realizedPnl;
+    if (!Number.isFinite(moneyHeld) || moneyHeld <= 0) {
+      throw new MoneyHeldUnavailable(`mode=${mode}: money held is not positive (${moneyHeld})`);
+    }
+    console.log(`[B-BALANCE-SESSION-PAIRING][MONEY_HELD] mode=${mode} anchorVersion=${state.anchorVersion} reason=${ev.reason} `
+      + `anchorAt=${ev.occurredAt.toISOString()} anchor=${state.balance.toFixed(2)} straddlers=${straddle.count} `
+      + `straddleEntryCost=${straddle.entryCost.toFixed(2)} realizedPnl=${realizedPnl.toFixed(2)} closes=${tradeCount} moneyHeld=${moneyHeld.toFixed(2)}`);
+    return moneyHeld;
+  } catch (error) {
+    if (error instanceof MoneyHeldUnavailable) throw error;
+    throw new MoneyHeldUnavailable(`mode=${mode}: read failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+/**
  * Phase 8.8.3-H4: Build settings-compatible object from mode-level data
  * Fetches guardrails_v2 + portfolio_state and builds a TradingSettings-like object
  * 
@@ -179,8 +256,18 @@ export async function buildSettingsFromGuardrails(
     throw new Error(`[8.8.3-H4] No guardrails_v2 configured for mode=${mode}`);
   }
 
-  // [9.7] getPortfolioBalanceV2 now only takes mode (mode-based architecture)
-  const portfolioValue = await getPortfolioBalanceV2(mode);
+  // B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P2): the settings' portfolioValue is the MONEY HELD. A refusal
+  // invalidates ONE field, not the builder: it becomes null (the field's native "unavailable"), so the callers that read
+  // other fields (maxOpenTrades, the caps) keep working, and every portfolioValue reader refuses on null (pre-audit P3, the
+  // value-provenance fence P11). A missing guardrails_v2 row, which invalidates every field, still throws above.
+  let portfolioValue: number | null;
+  try {
+    portfolioValue = await getMoneyHeld(mode);
+  } catch (e) {
+    if (!(e instanceof MoneyHeldUnavailable)) throw e;
+    console.warn(`[B-BALANCE-SESSION-PAIRING][SETTINGS_MONEY_HELD_NULL] mode=${mode}: ${e.reason}`);
+    portfolioValue = null;
+  }
 
   const guardrailsAny = guardrails as any;
   
@@ -197,7 +284,7 @@ export async function buildSettingsFromGuardrails(
   const maxTotalExposurePct = String(guardrailsAny.maxTotalExposurePct);
   
   return {
-    portfolioValue: portfolioValue.toString(),
+    portfolioValue: portfolioValue === null ? null : portfolioValue.toString(),
     killSwitchTripped: guardrails.killSwitchTripped || false,
     // B-SIZING-DEC-RESTORE obj-4 (PRE_AUDIT §14): the `max_open_positions` SETTING is retired. How many
     // can be open is DERIVED from the per-trade share through the sizer's own resolver, so the slot count

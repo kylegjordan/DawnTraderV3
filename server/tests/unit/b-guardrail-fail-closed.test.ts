@@ -12,6 +12,16 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const _faults = { guardrailsRead: null as Error | null, balanceRead: null as Error | null };
+// B-BALANCE-SESSION-PAIRING (pre-audit P3/P4): per-test overrides for the settings' money-held value and the open rows.
+const _fx = vi.hoisted(() => ({ portfolioValue: 1000 as number | null, positions: [] as Array<Record<string, unknown>> }));
+// B-BALANCE-SESSION-PAIRING (pre-audit P10, Langston C-2): the exposure check reads `getMoneyHeld` now, not
+// `getPortfolioBalanceV2`, so the balance fault is injected THERE — on the live path. A raw Error still reaches the check's
+// catch (CHECK_THREW, #1081's subject); a named `MoneyHeldUnavailable` gets its own code (the case added below).
+// MUTATION (Langston): if the exposure check stopped calling getMoneyHeld, the fault below would never fire and the
+// refusal cases would turn red.
+const _mh = vi.hoisted(() => ({
+  Cls: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } },
+}));
 
 vi.mock('../../storage', () => ({
   storage: {
@@ -19,7 +29,7 @@ vi.mock('../../storage', () => ({
       if (_faults.guardrailsRead) throw _faults.guardrailsRead;
       return { symbolCooldownMinutes: 0 };
     },
-    getActiveOpenPositions: async () => [],
+    getActiveOpenPositions: async () => _fx.positions,
     getActiveTrades: async () => [],
     getClosedTradesPaginated: async () => ({ trades: [], total: 0 }),
     getTrades: async () => [],
@@ -27,12 +37,13 @@ vi.mock('../../storage', () => ({
 }));
 vi.mock('../../services/guardrail-settings', () => ({
   buildSettingsFromGuardrails: async () => ({
-    killSwitchTripped: false, portfolioValue: 1000, maxPositionPercent: 20, maxOpenTrades: 20, maxTotalExposurePct: 100,
+    killSwitchTripped: false, portfolioValue: _fx.portfolioValue, maxPositionPercent: 20, maxOpenTrades: 20, maxTotalExposurePct: 100,
   }),
-  getPortfolioBalanceV2: async () => {
+  getMoneyHeld: async () => {
     if (_faults.balanceRead) throw _faults.balanceRead;
     return 1000;
   },
+  MoneyHeldUnavailable: _mh.Cls,
 }));
 vi.mock('../../services/aj16-rtb-diagnostic', () => ({
   aj16Diagnostic: { getCycleId: () => 'c1', logCooldownCheck: () => {}, logGuardrailBlock: () => {} },
@@ -60,6 +71,8 @@ const trade = { symbol: 'ETH/USD', entryPrice: 2000, stopPrice: 1950, targetPric
 beforeEach(() => {
   _faults.guardrailsRead = null;
   _faults.balanceRead = null;
+  _fx.portfolioValue = 1000;
+  _fx.positions = [];
   rtbMetricsService.reset();
 });
 
@@ -94,6 +107,16 @@ describe('#1081 — a check that throws refuses, with the fail-closed code', () 
     warn.mockRestore();
   });
 
+  // B-BALANCE-SESSION-PAIRING: a NAMED money-held refusal blocks with its own code, not the generic CHECK_THREW.
+  it('the total-exposure check refuses with MONEY_HELD_UNAVAILABLE when the money-held figure refuses', async () => {
+    _faults.balanceRead = new _mh.Cls('anchor ledger row missing');
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await checkGuardrailRisk('paper', trade);
+    warn.mockRestore();
+    expect(r.ok).toBe(false);
+    expect((r as any).code).toBe('MONEY_HELD_UNAVAILABLE');
+  });
+
   // MUTATION: drop the metrics list entry and this fails — the refusal would be counted as OTHER.
   it('the refusal is counted under its own name in the RTB metrics', async () => {
     _faults.balanceRead = new Error('statement timeout');
@@ -116,8 +139,9 @@ describe('#1081 — the class, not the instance: every TradeSafetyResultCode is 
   const codes = [...block.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
 
   // B-SIZING-DEC-RESTORE obj-4: 17 -> 16, MAX_TRADES left the union with the retired open-slots check.
+  // B-BALANCE-SESSION-PAIRING: 16 -> 17, MONEY_HELD_UNAVAILABLE joined (the money-held figure refused).
   it('the type declares the expected number of members (the parser is not reading nothing)', () => {
-    expect(codes.length).toBe(16);
+    expect(codes.length).toBe(17);
     expect(codes).not.toContain('MAX_TRADES');
   });
 
@@ -136,5 +160,31 @@ describe('#1081 — the class, not the instance: every TradeSafetyResultCode is 
     const s = rtbMetricsService.getStats();
     expect(s.blockedByReason[code as keyof typeof s.blockedByReason]).toBe(1);
     expect(s.blockedByReason.OTHER).toBe(0);
+  });
+});
+
+describe('B-BALANCE-SESSION-PAIRING — the checks that used to pass on a missing input now refuse (pre-audit P3, P4)', () => {
+  // MUTATION: put the J7 `return { ok: true }` skip back and this fails.
+  it('the position-size cap refuses when the money-held value in the settings is null (a getMoneyHeld refusal)', async () => {
+    _fx.portfolioValue = null;
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await checkGuardrailRisk('paper', trade);
+    err.mockRestore();
+    expect(r.ok).toBe(false);
+    expect((r as any).code).toBe('MONEY_HELD_UNAVAILABLE');
+  });
+  // MUTATION: restore `|| '0'` and the broken row counts as zero exposure, so the check passes.
+  it('the exposure check refuses an open position with no readable price', async () => {
+    _fx.positions = [{ symbol: 'BTC/USD', quantity: '0.01', avgPrice: null }];
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await checkGuardrailRisk('paper', trade);
+    err.mockRestore();
+    expect(r.ok).toBe(false);
+    expect((r as any).code).toBe('GUARDRAIL_READ_FAIL');
+  });
+  it('CONTROL — readable positions within the cap pass', async () => {
+    _fx.positions = [{ symbol: 'BTC/USD', quantity: '0.01', avgPrice: '30000' }];
+    const r = await checkGuardrailRisk('paper', trade);
+    expect(r.ok).toBe(true);
   });
 });

@@ -130,6 +130,9 @@ export class PreExecutionValidator {
         entryPrice: request.signal.entryPrice,
         stopPrice: request.signal.stopPrice,
         targetPrice: request.signal.targetPrice,
+        // B-BALANCE-SESSION-PAIRING (pre-audit P4): the exposure check refuses a candidate with no computed notional (the
+        // one-share default is gone), so this route passes the estimate it computed above.
+        preComputedNotional: estimatedNotional,
       };
       
       const riskCheckResult = await checkGuardrailRisk(request.mode, tradeCandidate);

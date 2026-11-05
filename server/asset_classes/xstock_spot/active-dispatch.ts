@@ -28,7 +28,7 @@
  */
 
 import { getOrchestratorByMode } from '../../services/active-engine-service.js';
-import { getPortfolioBalanceV2 } from '../../services/guardrail-settings.js';
+import { getMoneyHeld, MoneyHeldUnavailable } from '../../services/guardrail-settings.js';
 import { storage } from '../../storage.js';
 import { tradingStateSync, isAssetClassActiveInContext } from '../../services/trading-state-sync.js';
 import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-map.js';
@@ -218,8 +218,19 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
     // SizingContext stamped at the pipe chokepoint (stamp-at-source single source of truth).
     // Structural match to the orchestrator's SizingContext (not exported); getOrchestratorByMode
     // returns `any`, so include ALL four fields explicitly.
+    // B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P3): xStock entries are sized against the MONEY HELD (capital at
+    // cost), read HERE, above the literal, so a refusal is named and refuses this dispatch rather than landing in the
+    // catch below as a CRITICAL dispatch error. The sizer never sees a refused value (pre-audit P12).
+    let moneyHeld: number;
+    try {
+      moneyHeld = await getMoneyHeld('paper');
+    } catch (e) {
+      if (!(e instanceof MoneyHeldUnavailable)) throw e;
+      console.warn(`[B-BALANCE-SESSION-PAIRING][XSTOCK_DISPATCH_REFUSED] ${input.symbol}/${input.strategyKey}: ${e.reason}`);
+      return;
+    }
     const sizingContext = {
-      portfolioValue: await getPortfolioBalanceV2('paper'),
+      portfolioValue: moneyHeld,
       guardrails: await storage.getGuardrailsV2({ mode: 'paper' }),
       mode: 'paper' as const,
       assetClass: 'xstock_spot' as AssetClass, // 🔒 one sizingContext = one class = one pipe

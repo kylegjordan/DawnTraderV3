@@ -276,7 +276,7 @@ const NO_TRIGGER_STREAK_ALERT_AT = 20;
 import { recordActiveRtbRefresh } from '../core/observability/active-funnel-tracker.js';
 import { StrategyEngine, type StrategySignal, type TechnicalIndicators } from './strategy-engine';
 import { checkGuardrailRisk, type TradeCandidate, type TradeSafetyResultCode } from './trade-safety';
-import { buildSettingsFromGuardrails, getPortfolioBalanceV2 } from './guardrail-settings';
+import { buildSettingsFromGuardrails, getMoneyHeld, MoneyHeldUnavailable } from './guardrail-settings';
 import type { TradingSettings, PriceData, InsertExecutionAttemptAudit } from '@shared/schema';
 import { contextBridge } from './context-bridge';
 import { activeFilterPool, type ActiveFilteredPair } from './active-filter-pool';
@@ -5583,7 +5583,9 @@ export class ActiveExecutionEngine {
         confidence: signal.confidence,
         estimatedValue: signal.estimatedValue,
         quantity: signal.quantity,
-        portfolioValue: Number(settings.portfolioValue),
+        // B-BALANCE-SESSION-PAIRING (pre-audit P3, Langston C-3): Number(null) is 0, which would render a refusal as a $0
+        // portfolio; an unavailable money-held figure stays absent here.
+        portfolioValue: settings.portfolioValue == null ? undefined : Number(settings.portfolioValue),
         mode: this.mode,
         reason: 'Signal passed filters and strategies - would open trade in normal mode'
       });
@@ -6757,8 +6759,18 @@ export class ActiveExecutionEngine {
       
       // §17 P-2: the working balance, recorded on the audit row (it was cycleContext's, never passed ⇒ 0). Read HERE,
       // after the open, so a refused attempt pays no DB round-trips and the balance is contemporaneous with the write
-      // (Langston Step-4 nit b). getPortfolioBalanceV2 cannot throw (its catch returns 0).
-      const portfolioValue = await getPortfolioBalanceV2(this.mode);
+      // (Langston Step-4 nit b). B-BALANCE-SESSION-PAIRING (pre-audit P3, Langston C-1): it is the MONEY HELD now, and
+      // `getMoneyHeld` THROWS on a refusal. This read runs AFTER the insert, `trade_insert_ok` and the broadcast, inside the
+      // try whose catch records TRADE_INSERT_ERROR — so it gets its OWN catch: a refusal records NULL on the audit row
+      // (`execution_attempt_audit.portfolio_value` is nullable) and the open still returns success.
+      let portfolioValue: number | null;
+      try {
+        portfolioValue = await getMoneyHeld(this.mode);
+      } catch (e) {
+        if (!(e instanceof MoneyHeldUnavailable)) throw e;
+        console.warn(`[B-BALANCE-SESSION-PAIRING][AUDIT_MONEY_HELD_NULL] ${signal.symbol}: ${e.reason}`);
+        portfolioValue = null;
+      }
       // Phase 8.8.3-J: Execution Attempt Audit - OPENED decision (non-blocking)
       this.logExecutionAttempt({
         mode: this.mode,
@@ -6769,7 +6781,7 @@ export class ActiveExecutionEngine {
         stopPrice: signal.stopPrice.toString(),
         targetPrice: signal.targetPrice.toString(),
         confidence: (signal.confidence * 100).toString(),
-        portfolioValue: portfolioValue.toString(),
+        portfolioValue: portfolioValue === null ? null : portfolioValue.toString(),
         // §17 P-2 / §17.4 C3: the dollars this position risks, a measurement, not a setting. TAKER open: the FILLED
         // quantity (`quantity` is re-set to the fill's quantity after the depth-walk, so a partial fill is not
         // overstated) × |fill price − stop|. MAKER left resting at its limit: nothing has filled yet, so it is the

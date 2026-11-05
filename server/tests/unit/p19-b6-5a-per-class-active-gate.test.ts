@@ -35,7 +35,8 @@ vi.mock('../../services/context-bridge.js', () => ({ contextBridge: { broadcast:
 vi.mock('../../services/active-engine-service.js', () => ({
   getOrchestratorByMode: () => { orchSpy(); return { dispatchExternalSignal: async () => null }; },
 }));
-vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));
+// B-BALANCE-SESSION-PAIRING (pre-audit P10): the xStock dispatch sizes against getMoneyHeld now.
+vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000, getMoneyHeld: async () => 1000, MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } } }));
 vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
 // P19-B8.5 (gate-12): the activation refusal counts strategy_gates rows — mock

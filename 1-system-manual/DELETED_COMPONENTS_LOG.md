@@ -6,6 +6,14 @@
 
 ---
 
+## `server/scripts/b8-5-measurement-override.ts` and `b8-5-tune3-anchor.ts` — the two one-off paper re-anchor scripts — DELETED 2026-11-05 (B-BALANCE-SESSION-PAIRING, `#618` leg 1, CC-C; pre-audit P6, Langston Step-2: "delete, don't flat-check")
+
+**What:** the two 43-line one-off scripts that minted the paper `measurement_override` anchors v2 (2026-07-15, $2,400) and v3 (2026-07-16, $2,250) through `executeReanchor`.
+**Why:** B-BALANCE-SESSION-PAIRING's money-held figure treats an anchor value as cash NOT committed to paper positions at the event, adding back the entry cost of positions open then (pre-audit A4). Measured: v2 was minted with 7 positions open ($399.30 at entry) and v3 with 10 ($2,089.18), so these scripts never required a flat book. They could still mint an anchor with positions open; the one live operator path, `server/scripts/paper-reset-3000.ts`, refuses unless every paper position is flat (`:33-37`). Deleting them leaves `measurement_override` with that one writer.
+**Blast radius:** census at the ref, tests excluded: no code imports or runs either file — the only mentions are governance documents (`BATCH_CATALOG.md`, the `P19-B8.5d` scope and completion report, the `B-LOSS-WINDOW-OPERATOR-CLOSES`, `B-SIZING-DEC-RESTORE` and this batch's pre-audits), the 2026-07-15 migration `2026-07-15-p19-b8-5-measurement-override-sizing.sql` (a comment) and `MANIFEST.txt` (that migration's name). Re-derived by Langston at Step 2 ("no code importer"). Neither is in `package.json`.
+**Archive:** `1-system-manual/_archive/deleted-code/b8-5-measurement-override.20261105-B-BALANCE-SESSION-PAIRING.ts.removed` and `b8-5-tune3-anchor.20261105-B-BALANCE-SESSION-PAIRING.ts.removed` (written from the ref).
+**Left intentionally:** the v2/v3 ledger rows (history; the money-held figure reads only the anchor in force, v5); the 2026-07-15 migration and its `MANIFEST.txt` line (applied history, forward-only).
+
 ## Three alert-transport values, the sweep's `reused` field and its whole-path `already-active` short-circuit — DELETED 2026-10-17 (B-B75-EXPORT-COMPLETENESS, `#1195`, CC-A)
 
 | removed | file | why, and the blast-radius proof |

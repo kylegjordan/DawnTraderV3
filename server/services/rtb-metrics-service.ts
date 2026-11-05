@@ -32,6 +32,8 @@ export type RtbBlockReason =
   // `TradeSafetyResultCode` member is counted under its own name (array literals are not exhaustiveness-checked).
   | 'CORRELATION_EXPOSURE'
   | 'GUARDRAIL_READ_FAIL'
+  // B-BALANCE-SESSION-PAIRING: a check whose money-held figure refused (`getMoneyHeld`), counted under its own name.
+  | 'MONEY_HELD_UNAVAILABLE'
   | 'OTHER';
 
 /**
@@ -151,7 +153,7 @@ class RtbMetricsService {
       'COOLDOWN', 'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL',
       'FX_CONVERSION_FAILED', 'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE',
       'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'ENGINE_STOPPING',
-      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL', 'OTHER'
+      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL', 'MONEY_HELD_UNAVAILABLE', 'OTHER'
     ];
     for (const reason of reasons) {
       this.stats.blockedByReason[reason] = 0;
@@ -464,7 +466,7 @@ class RtbMetricsService {
       'COOLDOWN', 'MAX_POSITION', 'LPCP_LOW_PRICE', 'LPCP_MIN_NOTIONAL',
       'FX_CONVERSION_FAILED', 'PORTFOLIO_RISK', 'INSUFFICIENT_BALANCE',
       'MAX_EXPOSURE', 'MAX_TOTAL_EXPOSURE', 'ENGINE_STOPPING',
-      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL',
+      'CORRELATION_EXPOSURE', 'GUARDRAIL_READ_FAIL', 'MONEY_HELD_UNAVAILABLE',
     ];
     
     if (knownReasons.includes(reason as RtbBlockReason)) {

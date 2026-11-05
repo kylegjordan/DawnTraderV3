@@ -109,7 +109,10 @@ describe('4 — the execution audit records the truth (P-2, C3)', () => {
 
   it('risk_amount = the FILLED quantity × |fill price − stop|; the balance is the working balance', () => {
     expect(engine).toContain('riskAmount: (quantity * Math.abs(actualEntryPrice - signal.stopPrice)).toFixed(2)');
-    expect(engine).toContain('const portfolioValue = await getPortfolioBalanceV2(this.mode);');
+    // B-BALANCE-SESSION-PAIRING (pre-audit P10, Langston C-2): RE-POINTED, same subject — the audit row records the working
+    // balance, read once after the open. It is the money held now, null on a refusal (pre-audit P3).
+    expect(engine).toContain('portfolioValue = await getMoneyHeld(this.mode);');
+    expect(engine).toContain('portfolioValue: portfolioValue === null ? null : portfolioValue.toString(),');
     // the quantity at the audit write IS the fill's: it is re-set from the depth-walk before the write
     const refill = engine.indexOf('quantity = _openFill.fillQty;');
     const audit = engine.indexOf('riskAmount: (quantity * Math.abs(actualEntryPrice - signal.stopPrice))');

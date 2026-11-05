@@ -13,7 +13,8 @@ import { TradingSettings, ActiveOpenPosition, Trade } from '@shared/schema';
 import type { AssetClass } from '../../shared/asset-classes.js';
 import { 
   buildSettingsFromGuardrails as _buildSettingsFromGuardrails, 
-  getPortfolioBalanceV2 
+  getMoneyHeld,
+  MoneyHeldUnavailable,
 } from './guardrail-settings';
 import { bufferedTradeNotional } from './active-position-sizing.js';
 import { fxConversionService } from './fx-conversion-service.js';
@@ -74,7 +75,8 @@ export type TradeSafetyResultCode =
   | 'MAX_TOTAL_EXPOSURE'
   | 'ENGINE_STOPPING' // Phase 8.8.3-I2: Block during hard stop
   | 'CORRELATION_EXPOSURE' // Directive 9.4: Covariance Guard
-  | 'GUARDRAIL_READ_FAIL'; // P19-B8.8: blocking check refused — guardrail input unreadable (fail-closed, no substitution)
+  | 'GUARDRAIL_READ_FAIL' // P19-B8.8: blocking check refused — guardrail input unreadable (fail-closed, no substitution)
+  | 'MONEY_HELD_UNAVAILABLE'; // B-BALANCE-SESSION-PAIRING: the money-held figure refused (getMoneyHeld), so the check cannot be computed
 
 export type TradeSafetyResult = 
   | { ok: true }
@@ -336,13 +338,18 @@ async function checkPositionSizeCap(
   settings: TradingSettings,
   cycleId?: string
 ): Promise<TradeSafetyResult> {
-  // J7: Parse portfolio value - no hardcoded fallback
-  const rawPortfolioValue = parseFloat(settings.portfolioValue?.toString() || '0');
-  
-  // J7: If no valid portfolio value, skip this check (sizing already done at P2 for paper mode)
+  // B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit A2/P3): this check used to SKIP (`ok: true`) on a missing or
+  // non-positive portfolioValue (J7, "sizing already done at P2"), so a DB fault passed the position-size cap. The value is
+  // the MONEY HELD now, and it is null exactly when `getMoneyHeld` refused (it never returns a non-positive number) —
+  // a BLOCKING check refuses on it instead of passing. No `|| '0'` coercion: null stays null.
+  const rawPortfolioValue = settings.portfolioValue == null ? Number.NaN : parseFloat(String(settings.portfolioValue));
   if (!Number.isFinite(rawPortfolioValue) || rawPortfolioValue <= 0) {
-    console.log(`[J7][GUARDRAIL_SKIP] No valid portfolioValue in settings - skipping position size cap check (mode: ${mode})`);
-    return { ok: true };
+    console.error(`[B-BALANCE-SESSION-PAIRING][GUARDRAIL_BLOCK check=MAX_POSITION mode=${mode}] money held unavailable (portfolioValue=${String(settings.portfolioValue)}) — refusing, the position-size cap cannot be computed`);
+    return {
+      ok: false,
+      code: 'MONEY_HELD_UNAVAILABLE',
+      reason: 'money held unavailable — the position-size cap cannot be computed, refusing',
+    };
   }
   
   const portfolioValue = rawPortfolioValue;
@@ -610,7 +617,17 @@ async function checkMaxTotalExposure(
   settings: TradingSettings
 ): Promise<TradeSafetyResult> {
   try {
-    const portfolioBalance = await getPortfolioBalanceV2(mode);
+    // B-BALANCE-SESSION-PAIRING (#618 leg 1, pre-audit P3): the cap is measured against the MONEY HELD (capital at cost),
+    // the same basis as the numerator below (committed cash at entry). A refusal blocks with its own code; the catch at the
+    // end already refuses any other throw (B-GUARDRAIL-FAIL-CLOSED), so this is the named arm, not the safety net.
+    let portfolioBalance: number;
+    try {
+      portfolioBalance = await getMoneyHeld(mode);
+    } catch (e) {
+      if (!(e instanceof MoneyHeldUnavailable)) throw e;
+      console.error(`[B-BALANCE-SESSION-PAIRING][GUARDRAIL_BLOCK check=MAX_TOTAL_EXPOSURE mode=${mode}] ${trade.symbol}: ${e.reason} — refusing`);
+      return { ok: false, code: 'MONEY_HELD_UNAVAILABLE', reason: 'money held unavailable — total exposure cannot be verified, refusing' };
+    }
     // P19-B8.8: the B72.1 guardrail_defaults fallback leg is retired — post-B8.8
     // buildSettingsFromGuardrails throws on a missing row and passes the exposure
     // cap raw, so a missing/unreadable field here is a fault. A BLOCKING exposure
@@ -628,14 +645,37 @@ async function checkMaxTotalExposure(
     
     const activePositions = await getActivePositions(mode);
     
+    // B-BALANCE-SESSION-PAIRING (pre-audit P4, Langston notes 2-3): the two silent defaults are gone. A position with a
+    // missing or non-positive quantity or price used to count as ZERO exposure (`|| '0'`) — it now REFUSES. A trade with no
+    // computed notional used to count as ONE share (`* 1`); it is now checked at the size the sizer WOULD give it, the
+    // fixed-notional formula — the SAME rule the position-size cap above already applies to an unsized candidate
+    // (B-SIZING-DEC-RESTORE increment 2c), so the two checks no longer disagree about one candidate's size.
+    // Reachability (measured at Step 3): the paper entry path always passes `preComputedNotional`; an unsized candidate
+    // arrives only from the manual `/trading/validate` route (which now passes its own estimate) and the Phase-21-gated
+    // legacy TradingEngine (live only, never started in paper).
     let currentExposure = 0;
     for (const pos of activePositions) {
-      const quantity = parseFloat(pos.quantity?.toString() || '0');
-      const entryPrice = parseFloat(pos.entryPrice?.toString() || pos.avgPrice?.toString() || '0');
+      const quantity = pos.quantity == null ? Number.NaN : parseFloat(String(pos.quantity));
+      const priceRaw = pos.entryPrice ?? pos.avgPrice;
+      const entryPrice = priceRaw == null ? Number.NaN : parseFloat(String(priceRaw));
+      if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(entryPrice) || entryPrice <= 0) {
+        console.error(`[B-BALANCE-SESSION-PAIRING][GUARDRAIL_READ_FAIL check=MAX_TOTAL_EXPOSURE mode=${mode}] open position ${pos.symbol} has quantity=${String(pos.quantity)} price=${String(priceRaw)} — refusing, exposure cannot be summed`);
+        return { ok: false, code: 'GUARDRAIL_READ_FAIL', reason: `open position ${pos.symbol} has an unreadable quantity or price — total exposure cannot be verified` };
+      }
       currentExposure += quantity * entryPrice;
     }
-    
-    const tradeNotional = trade.preComputedNotional || (trade.entryPrice * 1);
+
+    let tradeNotional: number;
+    if (trade.preComputedNotional !== undefined && Number.isFinite(trade.preComputedNotional) && trade.preComputedNotional > 0) {
+      tradeNotional = trade.preComputedNotional;
+    } else {
+      const maxPositionPercent = parseFloat(String((settings as any).maxPositionPercent));
+      if (!Number.isFinite(maxPositionPercent) || maxPositionPercent <= 0) {
+        console.error(`[B-BALANCE-SESSION-PAIRING][GUARDRAIL_READ_FAIL check=MAX_TOTAL_EXPOSURE mode=${mode}] ${trade.symbol}: unsized candidate and maxPositionPercent unreadable (raw=${String((settings as any).maxPositionPercent)}) — refusing`);
+        return { ok: false, code: 'GUARDRAIL_READ_FAIL', reason: 'trade notional unknown — total exposure cannot be verified' };
+      }
+      tradeNotional = bufferedTradeNotional(portfolioBalance, maxTotalExposurePct, maxPositionPercent);
+    }
     const projectedExposure = currentExposure + tradeNotional;
     
     if (projectedExposure > maxTotalExposureUSD) {

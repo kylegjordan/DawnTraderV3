@@ -42,7 +42,8 @@ vi.mock('../../storage.js', () => ({
     getGuardrailsV2: async () => null,
   },
 }));
-vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000 }));
+// B-BALANCE-SESSION-PAIRING (pre-audit P10): the xStock dispatch sizes against getMoneyHeld now.
+vi.mock('../../services/guardrail-settings.js', () => ({ getMoneyHeld: async () => 1000, MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } } }));
 vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: tickAgeMs }] }) } }));
 vi.mock('../../services/system-alerts.js', () => ({
   addAlert: (...a: any[]) => { alertSpy(...a); return Promise.resolve({}); },

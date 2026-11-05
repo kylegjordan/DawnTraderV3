@@ -126,7 +126,9 @@ vi.mock('../../services/maker-taker-config.js', async (orig) => ({
 
 vi.mock('../../services/guardrail-settings.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
+  // B-BALANCE-SESSION-PAIRING (pre-audit P10): sizing, the exposure cap and the audit row read getMoneyHeld now.
   getPortfolioBalanceV2: async () => 10_000,
+  getMoneyHeld: async () => 10_000,
 }));
 
 vi.mock('../../services/market-context-engine.js', async (orig) => ({

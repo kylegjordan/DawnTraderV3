@@ -40,7 +40,9 @@ vi.mock('../../services/module-constants-service.js', async (orig) => ({
 }));
 vi.mock('../../services/guardrail-settings.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
+  // B-BALANCE-SESSION-PAIRING (pre-audit P10): sizing, the exposure cap and the audit row read getMoneyHeld now.
   getPortfolioBalanceV2: async () => h.balance,
+  getMoneyHeld: async () => h.balance,
 }));
 vi.mock('../../services/portfolio-anchor-service.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
