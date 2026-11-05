@@ -42,7 +42,7 @@ CHANGE-CLASS: non_architecture
 | T1 | the batch PRE_AUDIT | ✅ | audit and plan §1-§6, Step-7 record §7 |
 | T1 | COMPLETION_REPORT | ✅ | written; open at close first (legacy tail, comments riding the next deploy, open path unexercised, #1204, #378) |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B row 59f set to Step 11; CC-A, CC-C, CC-INFRA lists not mine to touch |
-| T1 | Langston's MEMORY.md | BLOCKED — Langston's own write | asked in the Step-11 dispatch |
+| T1 | Langston's MEMORY.md | ✅ (confirmed 2026-11-05) | **WRITTEN 2026-10-17** at close; section evicted verbatim by `--trim` 2026-10-18T03:50:19Z to `MEMORY-ARCHIVE.md` (batch-named eviction comment + declared `STATE: closed`), three `keep:` lines hoisted into the loaded set. Not blocked. — Langston, 2026-11-05 (verbatim, Discord). This row read "BLOCKED — Langston's own write" until the KD-43 audit; it was never blocked, only unconfirmed. |
 | T2 | SYSTEM_MANUAL.md | ✅ | §19.0 queue admission — one row per setup, a re-issue replaces it in full (written at Step 3, 737ed92b9) |
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | upsertRtbSignal's SET is the re-issue contract, its readers and the structural guard (Step 3) |
 | T2 | RUNNING_ISSUES.md | ✅ | #1190 closed with the disposition; #558 annotated; #1204 filed (Step 9); #378 annotated |
