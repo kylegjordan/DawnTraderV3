@@ -260,8 +260,9 @@ def _post_json(url, headers, payload, log_file):
     return False, None
 
 
-DEGRADED_NOTICE = ("[sender degraded: this box could not load its address rule (address_list.py), so this post "
-                   "was sent without it. Re-install the bridges group.]")
+# Kyle-facing, with a phone push, so plain English and no file names (Langston, wake part-2 re-review, record (ii)).
+DEGRADED_NOTICE = ("[This message was sent while the Discord bridge could not load its addressing rule, so it may be "
+                   "going to the wrong people. Ask a Claude to re-install the Discord bridges.]")
 
 
 def _send_chunks(url, base_headers, content, log_file, mention_user_id=None, extra_payload=None):
