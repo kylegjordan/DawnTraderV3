@@ -16,14 +16,16 @@ function render(query: unknown): string {
 vi.mock('../../db.js', () => ({
   db: {
     transaction: async (work: (tx: unknown) => Promise<unknown>) => {
-      state.transactionCalls += 1;
+      // Only the REPAIR READ's transactions are counted and logged: R4 adds a separate global-count
+      // transaction after a repair, which these single-flight tests do not measure.
       const log: string[] = [];
-      state.statements.push(log);
       const tx = {
         execute: async (query: unknown) => {
           const text = render(query);
           log.push(text);
-          if (text.includes('visible_by IS NULL')) {
+          if (text.includes('SELECT revision_id')) {
+            state.transactionCalls += 1;
+            state.statements.push(log);
             // Hold the repair's read open until the test releases it.
             await new Promise<void>((resolve) => { state.releaseRepairRead = resolve; });
             return { rows: [] };

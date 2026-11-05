@@ -457,7 +457,88 @@ export async function recordXstockLifecycleFailure(step: XstockLifecycleStep, er
   }
 }
 
+export const XSTOCK_CERTIFICATION_PENDING_KEY = 'xstock-bar-availability-certification-pending';
+export const XSTOCK_BAR_REPAIR_ACTOR = 'xstock-bar-repair';
+
+/** R4 (C3): the daily failure tally's key. It is never resolved by the repair; owner CC-C closes it. */
+export function xstockCertificationFailureDayKey(at: Date = new Date()): string {
+  return `xstock-bar-availability-certification-failures-day:${at.toISOString().slice(0, 10)}`;
+}
+
+/** R4: true while a certification-pending row may be open, so the repair checks only when it can matter.
+ *  Starts true so the first repair after a boot checks once for a row left by an earlier process. */
+let certificationAlertMayBeOpen = true;
+
+/**
+ * R4 (C3): one warning row per UTC day counting certification failures. The per-event critical is
+ * the page; this row is the recurrence record that survives the auto-resolve. Never resolved here.
+ */
+async function recordCertificationFailureDay(revisionCount: number): Promise<void> {
+  try {
+    const { addAlert, mergeAlertMetadata } = await import('../system-alerts.js');
+    const key = xstockCertificationFailureDayKey();
+    const before = Date.now();
+    const row = await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'warning',
+      title: `xStock bar certification failures on ${key.slice(-10)}`,
+      body: 'Daily tally of first-pass and repair certification failures for xStock bars. The per-event '
+        + 'critical alert clears itself once every revision is certified; this row keeps the count so a '
+        + 'recurrence stays visible. Owner CC-C resolves it at the R6b read or the window close, with the '
+        + "day's count as evidence. Never ack.",
+      metadata: { source: 'xstock-bar-availability', batch: 'B-XSTOCK-BAR-AVAILABILITY', failures: 1, lastRevisionCount: revisionCount },
+      dedupe_key: key,
+    });
+    // addAlert returns the EXISTING open row on a dedupe hit; a row created before this call is that
+    // case, so its count goes up by one. A row created by this call already carries failures: 1.
+    if (Date.parse(row.created_at) < before) {
+      const prior = Number((row.metadata as Record<string, unknown> | undefined)?.failures ?? 1);
+      await mergeAlertMetadata(row.id, { failures: prior + 1, lastRevisionCount: revisionCount });
+    }
+  } catch (error) {
+    console.error('[B-XSTOCK-BAR-AVAILABILITY] FAILED TO RECORD certification failure day:',
+      error instanceof Error ? error.message : error);
+  }
+}
+
+/**
+ * R4 (C2): resolve the certification-pending alert only on a MEASURED GLOBAL ZERO. The alert keeps
+ * only its first 20 revision ids and the repair reads at most `limit`, so neither can say that
+ * nothing is pending; the count over the whole table can.
+ */
+async function resolveCertificationAlertIfClear(): Promise<void> {
+  if (!certificationAlertMayBeOpen) return;
+  try {
+    const pending = await boundedTransaction(async (tx) => {
+      const result = await tx.execute(sql`
+        SELECT count(*)::bigint AS pending FROM xstock_bar_revision_event WHERE visible_by IS NULL
+      `);
+      return Number(resultRows<{ pending: string | number }>(result)[0]?.pending);
+    });
+    if (!Number.isInteger(pending) || pending !== 0) return;
+    const { resolveAlertsByDedupeKey } = await import('../system-alerts.js');
+    const checkId = randomUUID();
+    const resolved = await resolveAlertsByDedupeKey(
+      XSTOCK_CERTIFICATION_PENDING_KEY,
+      XSTOCK_BAR_REPAIR_ACTOR,
+      `certificate repair check ${checkId}: xstock_bar_revision_event visible_by IS NULL = 0 at ${new Date().toISOString()} (#707)`,
+      'engine',
+    );
+    certificationAlertMayBeOpen = false;
+    if (resolved.length > 0) {
+      console.log(`[B-XSTOCK-BAR-AVAILABILITY] certification alert resolved by ${checkId}: ${resolved.join(', ')}`);
+    }
+  } catch (error) {
+    // Leave the flag set: the next repair tries again.
+    console.error('[B-XSTOCK-BAR-AVAILABILITY] certification auto-resolve check failed:',
+      error instanceof Error ? error.message : error);
+  }
+}
+
 async function raiseCertificationAlert(detail: string, revisionIds: readonly string[]): Promise<void> {
+  certificationAlertMayBeOpen = true;
+  await recordCertificationFailureDay(revisionIds.length);
   try {
     const { addAlert } = await import('../system-alerts.js');
     await addAlert({
@@ -475,7 +556,7 @@ async function raiseCertificationAlert(detail: string, revisionIds: readonly str
         revisionCount: revisionIds.length,
         revisionIds: revisionIds.slice(0, 20),
       },
-      dedupe_key: 'xstock-bar-availability-certification-pending',
+      dedupe_key: XSTOCK_CERTIFICATION_PENDING_KEY,
     });
   } catch (alertError) {
     console.error(
@@ -561,10 +642,14 @@ async function runPendingCertificateRepair(limit: number): Promise<number> {
       `);
       return resultRows<{ revision_id: string }>(result).map((row) => row.revision_id);
     });
-    if (revisionIds.length === 0) return 0;
+    if (revisionIds.length === 0) {
+      await resolveCertificationAlertIfClear();
+      return 0;
+    }
     repairCertifyStartedAt = Date.now();
     await certifyRevisionIds(revisionIds);
     console.log(`[B-XSTOCK-BAR-AVAILABILITY] repaired ${revisionIds.length} pending visibility certificates`);
+    await resolveCertificationAlertIfClear();
     return revisionIds.length;
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
