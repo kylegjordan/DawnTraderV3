@@ -2,7 +2,7 @@
 # deploy.sh — install the Helsinki comms estate (204.168.141.77) FROM A REVIEWED SHA. Root.
 #
 #   deploy.sh --sha <40-hex reviewed sha> [--only <group>[,<group>...]]
-#   groups: bridges  the two Discord bridges, their modules, units, drop-in, crew-status-post
+#   groups: bridges  the two Discord bridges, their modules, units, drop-ins
 #           notices  cc-send, dt-push-notice.sh, dt-deploy-drift.sh (+ its log, state, cron)
 #           readers  dt-review, dt-backup-sync.sh (+ their log, cron; the mirror's refspec)
 #   default: all three.
@@ -68,7 +68,6 @@ bridges|comms-infra/discord/gateway_watchdog.py|$BRIDGE_DIR/gateway_watchdog.py|
 bridges|comms-infra/discord/langston_queue.py|$BRIDGE_DIR/langston_queue.py|0755
 bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
 bridges|comms-infra/discord/alert-lane/CLAUDE.md|/srv/alert-lane/CLAUDE.md|0644
-bridges|comms-infra/discord/crew-status-post.py|$BRIDGE_DIR/crew-status-post.py|0755
 bridges|comms-infra/discord/bridge-failed-notify.sh|$BRIDGE_DIR/bridge-failed-notify.sh|0755
 bridges|comms-infra/discord/langston-bridge-restart|/usr/local/sbin/langston-bridge-restart|0755
 bridges|comms-infra/discord/discord-cc-bridge.service|$UNITS/discord-cc-bridge.service|0644

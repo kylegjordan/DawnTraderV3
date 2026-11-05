@@ -9,7 +9,6 @@ $expectedNames = @(
     '.claude\hooks\inject-due-alerts.mjs',
     'comms-infra\codex-channel-mirror.py',
     'comms-infra\codex-discord-outbox.py',
-    'comms-infra\laptop\crew-status.py',
     'comms-infra\tools\verify-agent-artifacts.py',
     'comms-infra\laptop\dt-media-get',
     'comms-infra\laptop\dt-media-post',

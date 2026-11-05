@@ -29,7 +29,6 @@ SELECTORS = [
     Path(r".claude\hooks\inject-due-alerts.mjs"),
     Path(r"comms-infra\codex-channel-mirror.py"),
     Path(r"comms-infra\codex-discord-outbox.py"),
-    Path(r"comms-infra\laptop\crew-status.py"),
     Path(r"comms-infra\tools\verify-agent-artifacts.py"),
     Path(r"comms-infra\laptop\dt-media-get"),
     Path(r"comms-infra\laptop\dt-media-post"),
@@ -51,11 +50,6 @@ TASKS = {
         "argument_fragment": r"C:\DawnTraderV3-infra\comms-infra\codex-discord-outbox.py",
         "working_directory": "",
     },
-    r"\DawnTrader Crew Status": {
-        "command": r"C:\Python313\pythonw.exe",
-        "argument_fragment": r"C:\DawnTraderV3-infra\comms-infra\laptop\crew-status.py",
-        "working_directory": r"C:\Users\kyleg\.claude\crew-status-work",
-    },
 }
 KEYHOLDER = r"C:\Users\kyleg\.claude\ssh-keyholder\dt-ssh-keyholder.py"
 WINDOWS_CLIENTS = {
@@ -64,15 +58,16 @@ WINDOWS_CLIENTS = {
     "sftp": r"C:\Windows\System32\OpenSSH\sftp.exe",
 }
 EVIDENCE_NAMES = {str(path) for path in SELECTORS} | {"direct:powershell", "direct:git-bash"}
+# Keyed by PATH, not by SELECTORS index: an index key silently moves every later entry onto
+# the wrong client set when one selector is removed (crew-status.py, B-STATUS-BOARD OBJ-6).
 REQUIRED_CLIENTS = {
-    str(SELECTORS[0]): {"ssh"},
-    str(SELECTORS[1]): {"ssh"},
-    str(SELECTORS[2]): {"ssh"},
-    str(SELECTORS[3]): {"ssh", "scp"},
-    str(SELECTORS[4]): {"ssh"},
-    str(SELECTORS[5]): {"ssh"},
-    str(SELECTORS[6]): {"scp"},
-    str(SELECTORS[7]): {"ssh", "scp"},
+    str(Path(r".claude\memory\MEMORY.md")): {"ssh"},
+    str(Path(r".claude\hooks\inject-due-alerts.mjs")): {"ssh"},
+    str(Path(r"comms-infra\codex-channel-mirror.py")): {"ssh"},
+    str(Path(r"comms-infra\codex-discord-outbox.py")): {"ssh", "scp"},
+    str(Path(r"comms-infra\tools\verify-agent-artifacts.py")): {"ssh"},
+    str(Path(r"comms-infra\laptop\dt-media-get")): {"scp"},
+    str(Path(r"comms-infra\laptop\dt-media-post")): {"ssh", "scp"},
     "direct:powershell": {"ssh"},
     "direct:git-bash": {"ssh"},
 }

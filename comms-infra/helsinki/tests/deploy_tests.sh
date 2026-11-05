@@ -147,7 +147,11 @@ run "$T/deploy.sh" --sha "$OLD" --only readers
 
 # ---- bridges and notices ----
 run "$T/deploy.sh" --sha "$TC" --only bridges
-[ $RC -eq 0 ] && grep -q "install-verify: all 11 installed files equal their verified blobs" "$T/out" && [ -f "$T/units/discord-langston-bridge.service.d/self-advance.conf" ] && [ -f "$T/opt/crew-status-post.py" ] && ok "D5 bridges: 11 files installed + verified (crew-status-post.py included)" || bad D5 "rc=$RC $(tail -5 "$T/out")"
+# The expected count is DERIVED from the manifest at $SHA, never written as a literal: a literal
+# here read 11 while the manifest had grown to 15 (B-LANGSTON-RELIEF), stale and unnoticed.
+N5=$(awk '/^MANIFEST="/{p=1;next} p&&/^"/{p=0} p&&/^bridges\|/' "$T/deploy.orig" | wc -l)
+[ "$N5" -gt 0 ] || bad D5n "no bridges rows read from the manifest at $SHA"
+[ $RC -eq 0 ] && grep -q "install-verify: all $N5 installed files equal their verified blobs" "$T/out" && [ -f "$T/units/discord-langston-bridge.service.d/self-advance.conf" ] && ok "D5 bridges: $N5 files installed + verified (count read from the manifest at the sha)" || bad D5 "rc=$RC N5=$N5 $(tail -5 "$T/out")"
 grep -q "^COMMS_BACKEND=discord" "$T/etc/comms-active.env" && ok "D5 a fresh host is seeded with COMMS_BACKEND=discord" || bad D5s "$(grep COMMS_BACKEND "$T/etc/comms-active.env")"
 grep -q "NOT RESTARTED: discord-langston-bridge.service" "$T/out" && ! grep -q "stub systemctl restart" "$T/out" && ok "D5 the running bridges are named NOT RESTARTED; no restart issued" || bad D5b x
 run "$T/deploy.sh" --sha "$TC" --only notices

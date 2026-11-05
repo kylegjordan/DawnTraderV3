@@ -116,6 +116,8 @@ Operationally: **30-day rolling hot is the DEFAULT for every table.** A hot wind
 
 ## 7.5 Crew-status snapshots (B-CREW-STATUS, 2026-08-07) — business data, NON-DB substrate
 
+> **RETIRED 2026-11-05 (B-STATUS-BOARD OBJ-6, CC-A; rule 18).** The writer is deleted (six files, `DELETED_COMPONENTS_LOG.md` 2026-11-05 entry); its scheduled task had been disabled since 2026-08-26, so the last snapshot month is `2026-08`. **Fate of the snapshots: KEPT AS HISTORY, never deleted** — the classification below still holds (they are the only time-series of two sources that mutate in place), and the store no longer grows: 18 MB on the laptop (`du -sh`, 2026-11-05). The page that replaces it, the status board, derives its state from the plan on every checker run and keeps no snapshots. **The cold hand-off below is now a ONE-TIME copy of a closed store, not a growing tier; it stays with `#670`, owner Infra Claude.**
+
 | Store | Location | Bound | Tier path |
 |---|---|---|---|
 | Crew-status snapshots | laptop `~/.claude/crew-status-archive/` + Helsinki mirror | ~10 KB per CHANGE (not per cycle); measured basis ~50 changes/day ⇒ ~180 MB/yr raw, ~18 MB/yr gzipped | HOT: current month, uncompressed · WARM: monthly `.jsonl.gz`, verified by content-conservation before the source is unlinked · COLD: **owed — routes into the EXISTING archive system, see below** |
@@ -142,6 +144,7 @@ Claude. **Until that lands, warm-on-disk grows unbounded — acknowledged here r
 becoming an unowned monotonic store, which is the F.2 failure class this policy documents.**
 
 ## 8. Change log (policy-level)
+- **2026-11-05 (B-STATUS-BOARD OBJ-6):** §7.5 marked retired — the crew-status writer is deleted; its 18 MB of snapshots are kept as history and stop growing; `#670` becomes a one-time cold copy.
 - **2026-08-07 (B-CREW-STATUS):** §7.5 added — crew-status snapshots classified as business data (Langston ruling) on a deliberately non-DB substrate; cold hand-off into the existing archive owed and homed.
 - **2026-05-06 (B75):** tiered hot/warm/cold + the never-drop directive established.
 - **2026-07-08 (B-STORAGE-HARDEN Wave A):** cold tier activated + archival-health/disk alarms wired.
