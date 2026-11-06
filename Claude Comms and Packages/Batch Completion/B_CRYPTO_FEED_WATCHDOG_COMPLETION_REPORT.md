@@ -1,4 +1,4 @@
-# B-CRYPTO-FEED-WATCHDOG — COMPLETION REPORT — Step 11, awaiting Langston's confirm
+# B-CRYPTO-FEED-WATCHDOG — COMPLETION REPORT — ⏳ REOPENED AT STEP 9 (Langston 2026-11-06 ~17:00Z: Step 10 PASS; objective 4's display half back to Step 9; objective 6's STATUS line carried; the `feed-health-aggregate.ts:24` header fixed with it)
 
 **change-class: architecture** · `#1232` (alert `fc34e8cf`) · sprint plan row 33a, pre-sprint stage 00 order 1 (Kyle KD-2, 2026-11-04) · owner CC-B (NEW Claude)
 Scope `Scope Files/B_CRYPTO_FEED_WATCHDOG_SCOPE.md` (r2) · pre-audit and plan `Scope Files/B_CRYPTO_FEED_WATCHDOG_PRE_AUDIT.md` · Step-4 change list `Change Lists/B_CRYPTO_FEED_WATCHDOG_STEP4_CHANGE_LIST.md` · Step 6-7 record `Change Lists/B_CRYPTO_FEED_WATCHDOG_STEP7_2026-11-04.md`
@@ -68,7 +68,7 @@ Deployed `b8685a45316a352e5c2287f28a077bc5dcaef471`, 2026-11-04T15:47:10Z, `dt-d
 
 Also (Langston's measured (4)): `feed_health.recorder_live_window_ms` = 7,200,000 and `recorder_live_share_floor` = 0.60 (`module_constants`); the graded-share figures in criterion 4 above. **Carrier gap confirmed:** the three day-final JSONs hold no `liveShare` and no graded flag; `notGradedReason 'no_recorder'` prints nothing (`feed-integrity-monitor.ts:569`). Its fix (print the recorder arm on the per-cycle liveness line, graded and not-graded told apart) is a proposal for Kyle's list, not placed; the open-at-close item itself was carried in from row 3a.
 
-**Proposed at this close (CC-B, for Langston's confirm):** close with leg 3 unfired and named, its successor the first real half-open connection (open-at-close (a)); (b) and (c) go to Kyle's list as items on `#1232`; (d) is Langston's to rule. At the confirm: resolve the batch's alerts (`fc34e8cf` the finding, `d766f9b3` the 48 h watch, `ebc12db6` the `gov-deadline`) with this report's commit as evidence.
+**Proposed at this close (CC-B, for Langston's confirm):** close with leg 3 unfired and named, its successor the first real half-open connection (open-at-close (a)); (b) and (c) go to Kyle's list as items on `#1232`; (d) is Langston's to rule. ~~At the confirm: resolve the batch's alerts~~ ⛔ CORRECTED (Langston): `fc34e8cf`, `d766f9b3` and `ebc12db6` were ALREADY resolved (11-04 22:32Z, 11-06 16:23Z, 11-05 05:31Z); the reopening re-mints `gov-deadline:B-CRYPTO-FEED-WATCHDOG` correctly, under a fresh declared-open row.
 
 ## Numeric deltas
 - **PREVIOUSLY STATED** (Step-7 record, "THE 48 h WINDOW"): eleven process restarts inside the window. **NOW:** ten builds — `b8685a453` plus nine deploys of nine different shas — and one crash-restart (18:16:40); watchdog code unchanged across them. **REASON:** Langston Step-8 item 1, from the staging deploy record.
