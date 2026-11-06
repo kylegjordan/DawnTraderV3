@@ -317,7 +317,7 @@ def invoke_claude(prompt, session_id, scratch=None):
         "--session-id", session_id, "--model", CLAUDE_MODEL,
         "--permission-mode", "acceptEdits",
     ]
-    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry=0)")
+    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}...)")
     t0 = time.time()
     try:
         result = run_agent(args, env, WORK_DIR, CLAUDE_TIMEOUT)
@@ -457,7 +457,7 @@ def extract_attachments(text):
     return text, files
 
 
-def process_task(task, state, breaker, task_q=None):
+def process_task(task, breaker, task_q=None):
     """Handle one queued task (text or voice): invoke claude, post reply unless [SILENT].
 
     breaker (review 1b): {"bot_turns": int} — reset by a Kyle message, incremented by a
@@ -895,7 +895,7 @@ def record_task(task, worker, started, ended):
         log(f"task log: write failed ({type(e).__name__}: {e})")
 
 
-def task_worker(task_q, state):
+def task_worker(task_q):
     """One of WORKER_NAMES (#1248). Takes the highest-priority task whose lane is free, holds the lane while the
     invoke runs, then releases it. The breaker and runaway cap are shared (_SHARED)."""
     me = threading.current_thread().name
@@ -916,7 +916,7 @@ def task_worker(task_q, state):
             started = time.time()
             try:
                 log(f"{me} took msg {task.get('message_id')} lane={task.get('_lane')}")
-                process_task(task, state, BREAKER, task_q)
+                process_task(task, BREAKER, task_q)
             except Exception as e:
                 task["_outcome"] = "worker_error"
                 log(f"{me} error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
@@ -1450,7 +1450,7 @@ def main():
     elif why != "absent":
         log(f"recovery: floor file ignored ({why}); nothing from before this start will be recovered")
     for _name in WORKER_NAMES:
-        threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name=_name).start()
+        threading.Thread(target=task_worker, args=(task_q,), daemon=True, name=_name).start()
     log(f"task workers started: {', '.join(WORKER_NAMES)} (drain flag {DRAIN_FLAG}, one-worker flag "
         f"{ONE_WORKER_FLAG}: {'SET' if _flag_set(ONE_WORKER_FLAG) else 'clear'})")
     sweep_scratch()

@@ -21,11 +21,18 @@ REAL_INBOX_IDS, REAL_INBOX_EVIDENCE = gw.inbox_message_ids, b.al.inbox_evidence 
 # Every path the bridge writes is pointed into a scratch dir BEFORE any scenario, and the end of the run checks the
 # live log and inbox did not grow.
 _SCRATCH = tempfile.mkdtemp(prefix="probe-bridge-")
-LIVE = [b.LOG_FILE, b.dc.INBOX_LOG]
+LIVE = [b.LOG_FILE, b.dc.INBOX_LOG, b.TASK_LOG]
 _live_size = {p: (os.path.getsize(p) if os.path.exists(p) else None) for p in LIVE}
 b.LOG_FILE = os.path.join(_SCRATCH, "bridge.log")
 b.dc.INBOX_LOG = os.path.join(_SCRATCH, "inbox.jsonl")
 b.QUEUE_FILE = os.path.join(_SCRATCH, "queue.json")
+# #1248: the two-worker paths too - the live flags would refuse the probe's worker, and the scratch root and task log
+# are live files (2026-11-06: an unredirected run left two root-owned inv-* dirs in Langston's scratch root).
+b.DRAIN_FLAG = os.path.join(_SCRATCH, "drain")
+b.ONE_WORKER_FLAG = os.path.join(_SCRATCH, "one-worker")
+b.SCRATCH_ROOT = os.path.join(_SCRATCH, "scratch")
+b.TASK_LOG = os.path.join(_SCRATCH, "tasks.jsonl")
+os.makedirs(b.SCRATCH_ROOT)
 
 fails = 0
 def check(name, cond):
@@ -49,7 +56,7 @@ ALERTS_WH = CFG.get("alerts_webhook_id")
 check("config has an alerts webhook id (else the alert cases prove nothing)", ALERTS_WH is not None)
 
 def fresh_client(floor):
-    q = lq.TaskPriorityQueue()
+    q = lq.LaneTaskQueue(alert_key=b.al.alert_key)
     c = b.build_client(q, floor)
     c._connection.user = types.SimpleNamespace(id=999999)     # the loop guard compares against client.user.id
     return q, c
@@ -220,7 +227,7 @@ async def delivery_scenario():
         for m, sent in ((posted, "7777"), (failed, None)):
             await c.on_message(m, _recover=True)
             b.dc.rest_send = lambda *a, _s=sent, **k: _s
-            b.process_task(q.get(), {}, {"bot_turns": 0})
+            b.process_task(q.get(), {"bot_turns": 0})
         import json as _j
         rows = [_j.loads(l) for l in open(b.dc.INBOX_LOG, encoding="utf-8")]
         outs = [r for r in rows if r.get("kind") == "langston_outbound"]

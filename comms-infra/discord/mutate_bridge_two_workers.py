@@ -19,8 +19,8 @@ MUTATIONS = {
     "self-advance does not mark the picked item in flight": (
         BRIDGE, "    nxt[\"advance_in_flight_ts\"] = time.time()", "    pass"),
     "each worker keeps its own breaker": (
-        BRIDGE, "                process_task(task, state, BREAKER, task_q)",
-        "                process_task(task, state, {\"bot_turns\": 0} if False else dict(BREAKER), task_q)"),
+        BRIDGE, "                process_task(task, BREAKER, task_q)",
+        "                process_task(task, {\"bot_turns\": 0} if False else dict(BREAKER), task_q)"),
     "the breaker count is copied, not shared": (
         BRIDGE, "        with _SHARED:\n            breaker[\"bot_turns\"] += 1\n            _turns = breaker[\"bot_turns\"]\n",
         "        _turns = breaker[\"bot_turns\"] + 1\n"),

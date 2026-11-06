@@ -87,7 +87,7 @@ def slow_apply(items, marker):          # widen the read-modify-write window so 
 
 lq.apply_marker = slow_apply
 b.SELF_ADVANCE_ENABLED = False
-ths = [threading.Thread(target=b.process_task, args=(task(f"9{i}", f"OLD Claude, ack REPLY-MARKER:Q{i}"), {}, b.BREAKER, None))
+ths = [threading.Thread(target=b.process_task, args=(task(f"9{i}", f"OLD Claude, ack REPLY-MARKER:Q{i}"), b.BREAKER, None))
        for i in (1, 2)]
 [t.start() for t in ths]
 [t.join(10) for t in ths]
@@ -120,7 +120,7 @@ b.BREAKER["bot_turns"] = 0
 INVOKES.clear()
 SENT.clear()
 seed([])
-ths = [threading.Thread(target=b.process_task, args=(task(f"7{i}", "OLD Claude, chatter"), {}, b.BREAKER, None))
+ths = [threading.Thread(target=b.process_task, args=(task(f"7{i}", "OLD Claude, chatter"), b.BREAKER, None))
        for i in range(6)]
 [t.start() for t in ths]
 [t.join(10) for t in ths]
@@ -131,7 +131,7 @@ b.BREAKER["bot_turns"] = 0
 
 print("4. each invoke gets its own scratch directory, passed as TMPDIR and named in the prompt (OBJ-3, D-6)")
 INVOKES.clear()
-ths = [threading.Thread(target=b.process_task, args=(task(f"5{i}", "OLD Claude, look"), {}, b.BREAKER, None),
+ths = [threading.Thread(target=b.process_task, args=(task(f"5{i}", "OLD Claude, look"), b.BREAKER, None),
                         name=f"task-worker-{i}") for i in (1, 2)]
 [t.start() for t in ths]
 [t.join(10) for t in ths]
@@ -181,7 +181,7 @@ open(b.TASK_LOG, "w").close()
 INVOKE_SLEEP["s"] = 0.6
 q = lq.LaneTaskQueue()
 for name in b.WORKER_NAMES:
-    threading.Thread(target=b.task_worker, args=(q, {}), daemon=True, name=name).start()
+    threading.Thread(target=b.task_worker, args=(q,), daemon=True, name=name).start()
 q.put(task("6001", "OLD Claude, B-AAA-ONE r1"))
 q.put(task("6002", "OLD Claude, B-AAA-ONE r2"))
 q.put(task("6003", "OLD Claude, B-BBB-TWO r1"))

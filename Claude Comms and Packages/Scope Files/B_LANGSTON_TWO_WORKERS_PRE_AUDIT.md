@@ -64,7 +64,9 @@ Threads started by the bridge: the Discord client's event loop (`on_ready :1024`
 | **P9** | **Review:** Langston at Step 4 in two parts (P1-P3; P4-P6), each one gate; **Coltrane second-passes P1, P2, P4 and P5** at Step 4, and his verdict is recorded in the change list. | scope OBJ-8 |
 | **P10** | **Governance:** SIM `:2975` (the MUST, rewritten: one task per lane; queue writes through `locked_update`; memory part writes refused-then-re-applied (no lease)) and `:3021` (two workers, the flags, the task log; the model named by WHERE to read it, `CLAUDE_MODEL`); `LANGSTON_ARCHITECTURE` §9 limit 2 and a change-log row; `DELETED_COMPONENTS_LOG` (the backstop); a declared-`open` row in `GOVERNANCE_EXCEPTIONS` for the observation; his rules file and memory; the class doc set. | scope OBJ-9, A6 |
 
-**`UNAUDITED`:** none.
+**P2b (added 2026-11-06, Langston's review of the D-2 deletion, msg `1568167450158178386`; §9.4 disposition 2, an item on this agreed batch):** with the dead `state` parameter gone, the bridge's state file only prints a UUID nothing reads. Remove `STATE_FILE`, `load_state`, `save_state`, the startup line's `session_id=` quote, and unlink `/home/langston/.discord-langston-bridge-state.json` on disk (archived first, rule 18). **Not** in the restart that carries the two-worker flip — its own install window, after the switch-on. Audit at its own Step-2 amendment (A6 covers the writer side only).
+
+**`UNAUDITED`:** P2b (above), added after Step 2.
 
 ## 3. What I want attacked
 1. **P4 (r2):** is a 3-attempt re-read/re-apply on `--part`, done by him and written into his rules, enough — or should the tool itself hold his delta?

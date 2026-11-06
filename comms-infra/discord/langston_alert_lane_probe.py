@@ -30,6 +30,14 @@ import json as _json, tempfile as _tempfile
 _TMP = _tempfile.mkdtemp(prefix="lane-probe-")
 al.SPOOL_DIR = os.path.join(_TMP, "spool")              # never the live spool
 b.dc.INBOX_LOG = os.path.join(_TMP, "inbox.jsonl")      # never the live inbox
+# ⛔ #1248: never the live bridge log, flags, scratch root or task log (2026-11-06: a run without these wrote 624
+#    lines into /var/log/discord-langston-bridge.log and was refused by the LIVE one-worker flag, so it hung).
+b.LOG_FILE = os.path.join(_TMP, "bridge.log")
+b.DRAIN_FLAG = os.path.join(_TMP, "drain")
+b.ONE_WORKER_FLAG = os.path.join(_TMP, "one-worker")
+b.SCRATCH_ROOT = os.path.join(_TMP, "scratch")
+b.TASK_LOG = os.path.join(_TMP, "tasks.jsonl")
+os.makedirs(b.SCRATCH_ROOT)
 def fake_append(entry):
     if APPEND["fail"]:
         raise OSError("disk full")
@@ -56,7 +64,7 @@ def reset():
     posts.clear(); mirrors.clear(); invokes.clear()
 
 # (1) the lane routes both: one post, markers mirrored as langston_outbound, nothing to Langston
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text='Two alerts.\n[[ALERT id=%s owner=CC-B action="a"]]\n[[ALERT id=%s owner=CC-C action="b"]]' % (A, B), why=None)
 b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
 check("routed batch: one invocation", len(invokes) == 1)
@@ -66,13 +74,13 @@ check("routed batch: the post is mirrored as langston_outbound (the wake filter'
 check("routed batch: nothing goes to Langston", tq.qsize() == 0)
 
 # (2) a Kyle-owned row mentions Kyle
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text='[[ALERT id=%s owner=Kyle action="decide"]]' % A, why=None)
 b.run_alert_batch([alert_task(A, 1)], tq)
 check("Kyle-owned: the post mentions Kyle", posts and posts[0][1] == CFG["kyle_id"])
 
 # (3) the lane fails: every alert in the batch goes to Langston, as people-class, marked escalated
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text=None, why="exit 1: boom")
 b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
 check("lane failure: nothing posted", posts == [])
@@ -82,7 +90,7 @@ check("lane failure: the escalated task keeps is_alert (triage prompt) and says 
       t["is_alert"] and t["escalated"] and "alert lane failed" in t["content"])
 
 # (4) an alert with no id never reaches the lane and goes to Langston; the lane's own escalation is honoured
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text='[[ALERT id=%s owner=CC-B action="a"]]\n[[ESCALATE id=%s reason="critical"]]' % (A, A), why=None)
 b.run_alert_batch([alert_task(A, 1), alert_task(None, 2)], tq)
 contents = [tq.get()["content"] for _ in range(tq.qsize())]
@@ -92,7 +100,7 @@ check("only the id'd alert was sent to the lane", len(invokes) == 1 and A in inv
 
 # (5) with the lane on, on_message sends alerts to alert_q and people to task_q
 reset()
-tq, aq = lq.TaskPriorityQueue(), queue.Queue()
+tq, aq = lq.LaneTaskQueue(alert_key=b.al.alert_key), queue.Queue()
 c = b.build_client(tq, None, aq)
 c._connection.user = types.SimpleNamespace(id=999999)
 now = dt.datetime.now(dt.timezone.utc) + dt.timedelta(seconds=5)
@@ -112,7 +120,7 @@ check("lane on: Kyle's message went to Langston's queue", tq.qsize() == 1 and tq
 reset()
 al.BATCH_SETTLE_S, al.BATCH_MAX = 1.0, 15
 LANE_ANSWER.update(text="\n".join('[[ALERT id=%s owner=CC-B action="a"]]' % x for x in (A, B)), why=None)
-aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+aq, tq = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
 threading.Thread(target=b.alert_worker, args=(aq, tq), daemon=True).start()
 aq.put(alert_task(A, 1)); time.sleep(0.2); aq.put(alert_task(B, 2))
 time.sleep(2.0)
@@ -121,7 +129,7 @@ check("burst: two alerts, one lane invocation", len(invokes) == 1 and A in invok
 # (7) Coltrane send-back 1: a hallucinated out-of-batch marker is never published
 C = "f41812ab-c0fe-4406-8d38-d549470a8f89"
 NL = chr(10)
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text=NL.join(["ok", '[[ALERT id=%s owner=CC-B action="a"]]' % A,
                                  '[[ALERT id=%s owner=Kyle action="hijack"]]' % C]), why=None)
 b.run_alert_batch([alert_task(A, 1)], tq)
@@ -131,7 +139,7 @@ check("out-of-batch marker absent from the post and the record",
 check("the valid marker is published in canonical form", '[[ALERT id=%s owner=CC-B action="a"]]' % A in posts[0][0])
 
 # (8) conflicting markers for one id: no marker for it is published; it goes to Langston
-reset(); tq = lq.TaskPriorityQueue()
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key)
 LANE_ANSWER.update(text=NL.join(['[[ALERT id=%s owner=CC-B action="a"]]' % A,
                                  '[[ALERT id=%s owner=CC-C action="b"]]' % A]), why=None)
 b.run_alert_batch([alert_task(A, 1)], tq)
@@ -139,7 +147,7 @@ check("conflicting markers: no [[ALERT for that id in the post", bool(posts) and
 check("conflicting markers: escalated to Langston", tq.qsize() == 1)
 
 # (9) Coltrane send-back 2: a failed Discord post hands the whole batch to Langston, nothing recorded
-reset(); tq = lq.TaskPriorityQueue(); SEND["fail"] = True
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key); SEND["fail"] = True
 LANE_ANSWER.update(text=NL.join(['[[ALERT id=%s owner=Kyle action="a"]]' % A,
                                  '[[ALERT id=%s owner=CC-B action="b"]]' % B]), why=None)
 b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
@@ -148,7 +156,7 @@ check("post failure: both alerts escalated to Langston", tq.qsize() == 2 and tq.
 check("post failure: no langston_outbound recorded", not any(k == "langston_outbound" for k, _ in mirrors))
 
 # (10) a failed inbox record also hands the whole batch to Langston
-reset(); tq = lq.TaskPriorityQueue(); APPEND["fail"] = True
+reset(); tq = lq.LaneTaskQueue(alert_key=b.al.alert_key); APPEND["fail"] = True
 b.run_alert_batch([alert_task(A, 1), alert_task(B, 2)], tq)
 APPEND["fail"] = False
 check("record failure: both alerts escalated to Langston", tq.qsize() == 2)
@@ -160,20 +168,20 @@ check("record failure: the reason names the inbox record",
 for f in spooled():
     os.remove(os.path.join(al.SPOOL_DIR, f))
 reset()
-tq1, aq1 = lq.TaskPriorityQueue(), queue.Queue()
+tq1, aq1 = lq.LaneTaskQueue(alert_key=b.al.alert_key), queue.Queue()
 c1 = b.build_client(tq1, None, aq1)
 c1._connection.user = types.SimpleNamespace(id=999999)
 info_alert = m(1, "info breakage alert\n_Category:_ breakage  ·  _Alert ID:_ `%s`" % A, webhook_id=CFG["alerts_webhook_id"])
 asyncio.run(c1.on_message(info_alert))
 check("restart: the alert is on disk before the lane touches it", spooled() == ["%d.json" % info_alert.id] and aq1.qsize() == 1)
 # --- the process dies here: aq1 and tq1 are gone ---
-aq2, tq2 = queue.Queue(), lq.TaskPriorityQueue()
+aq2, tq2 = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
 b.restore_alert_spool(aq2, tq2)
 check("restart: the alert is back in the lane queue exactly once", aq2.qsize() == 1 and tq2.qsize() == 0)
 LANE_ANSWER.update(text='[[ALERT id=%s owner=CC-B action="a"]]' % A, why=None)
 b.run_alert_batch([aq2.get_nowait()], tq2)
 check("restart: routed once, recorded, spool cleared", len(posts) == 1 and spooled() == [] and tq2.qsize() == 0)
-aq3, tq3 = queue.Queue(), lq.TaskPriorityQueue()
+aq3, tq3 = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
 b.restore_alert_spool(aq3, tq3)
 check("restart: a second restart does not route it again", aq3.qsize() == 0 and tq3.qsize() == 0 and len(posts) == 1)
 
@@ -183,32 +191,31 @@ t12 = alert_task(B, 12)
 al.spool_write(al.SPOOL_DIR, t12, "posting", aid=B)
 fake_append({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-C action="x"]]' % B,
              "reply_to": t12["message_id"], "channel_id": CFG["channel_id"], "message_id": 1})
-aq4, tq4 = queue.Queue(), lq.TaskPriorityQueue()
+aq4, tq4 = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
 b.restore_alert_spool(aq4, tq4)
 check("posting + recorded: cleared, not triaged again", aq4.qsize() == 0 and tq4.qsize() == 0 and spooled() == [])
 
 # (13) Coltrane r3: an escalated alert is cleared ONLY when Langston's answer is posted AND recorded. The REAL
 #      process_task runs; only the model call and the outside world are stubbed.
-b.invoke_claude = lambda prompt, sid, state=None, **k: "Triage: real answer."
-STATE13 = {"session_id": "probe"}
+b.invoke_claude = lambda prompt, sid, **k: "Triage: real answer."
 def escalated_once(tag):
     reset()
     for f in spooled():
         os.remove(os.path.join(al.SPOOL_DIR, f))
     t = alert_task(A, 13)
     al.spool_write(al.SPOOL_DIR, t, "escalated", reason="critical")
-    aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+    aq, tq = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
     b.restore_alert_spool(aq, tq)
     return tq.get_nowait(), t
 def run_task(task):
     """Through the REAL task_worker loop (so a dequeue-time cleanup would show), then wait for it to finish."""
-    q = lq.TaskPriorityQueue()
+    q = lq.LaneTaskQueue(alert_key=b.al.alert_key)
     q.put(task)
-    threading.Thread(target=b.task_worker, args=(q, STATE13), daemon=True).start()
+    threading.Thread(target=b.task_worker, args=(q,), daemon=True).start()
     q.join()
     time.sleep(0.2)
 def restored_once():
-    aq, tq = queue.Queue(), lq.TaskPriorityQueue()
+    aq, tq = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
     b.restore_alert_spool(aq, tq)
     return tq.qsize() + aq.qsize()
 
@@ -243,7 +250,7 @@ t14 = alert_task(B, 14)
 al.spool_write(al.SPOOL_DIR, t14, "posting", aid=B, escalate="critical severity")
 fake_append({"kind": "langston_outbound", "lane": "alert", "text": '[[ALERT id=%s owner=CC-B action="x"]]' % B,
              "reply_to": t14["message_id"], "channel_id": CFG["channel_id"], "message_id": 2})
-aq6, tq6 = queue.Queue(), lq.TaskPriorityQueue()
+aq6, tq6 = queue.Queue(), lq.LaneTaskQueue(alert_key=b.al.alert_key)
 b.restore_alert_spool(aq6, tq6)
 check("posting + recorded + owed escalation: handed to Langston, not cleared",
       tq6.qsize() == 1 and "critical severity" in tq6.get_nowait()["content"] and spooled() == ["%d.json" % t14["message_id"]])
@@ -252,7 +259,7 @@ check("posting + recorded + owed escalation: handed to Langston, not cleared",
 reset()
 _orig_sw = al.spool_write
 al.spool_write = lambda *a, **k: (_ for _ in ()).throw(OSError("read-only file system"))
-tq7, aq7 = lq.TaskPriorityQueue(), queue.Queue()
+tq7, aq7 = lq.LaneTaskQueue(alert_key=b.al.alert_key), queue.Queue()
 c7 = b.build_client(tq7, None, aq7)
 c7._connection.user = types.SimpleNamespace(id=999999)
 asyncio.run(c7.on_message(m(1, "alert\n_Alert ID:_ `%s`" % A, webhook_id=CFG["alerts_webhook_id"])))
