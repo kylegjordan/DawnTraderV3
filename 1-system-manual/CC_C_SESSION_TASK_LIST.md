@@ -16,7 +16,7 @@
 | plan row | batch | where it stands (2026-09-30) |
 |---|---|---|
 | 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | r6 Step 5 done (`21d7e84a2`, CI `36475941280`); Step 6 in the held deploy (≥ 2026-10-02T20:10Z), then Step 7; declared OPEN in `GOVERNANCE_EXCEPTIONS` |
-| 16 | `F-G-1` reopened (`#1031`) | Step 5 done; deploy with the held window; conversion to a completion report owed |
+| 16 | `F-G-1` reopened (`#1031`) = `B-OHLC-WRITE-ORDER` | ✅ CLOSED 2026-11-06 — `Batch Completion/F_G_1_COMPLETION_REPORT.md` |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | both deployed in release deploy B 2026-10-06. Row 14: at its plan-row status. Row 15: ✅ CLOSED 2026-11-06 (Step 11 confirmed by Langston) |
 | 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |

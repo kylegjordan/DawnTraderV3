@@ -249,7 +249,7 @@ Owner CC-C, **after `3b.h-6` and after `F-G-1`'s OBJ-9 ② fix** (a re-read woul
 - **Host–venue clock skew** in either direction; **a candle with no partition** re-fails its whole chunk every poll if it is re-read.
 
 ### P11 — ⛔ MOVED (r4): `#1031` → `F-G-1` OBJ-9 ② · → **A17**
-**`F-G-1` reopens at Step 3 for OBJ-9's ORDERING guarantee only; its owed conversion grades ① AND ② FAIL** (`F_G_1_PROGRESS_REPORT.md` §7; J9 bounded, C2). **Only the first bullet below is `F-G-1`'s; the rest go to `3b.h-8` `B-ARCHIVE-WRITER-LIFECYCLE` (`#1034`, `#1032`).**
+**`F-G-1` reopens at Step 3 for OBJ-9's ORDERING guarantee only; its owed conversion grades ① AND ② FAIL** (`F_G_1_COMPLETION_REPORT.md` §7; J9 bounded, C2). **Only the first bullet below is `F-G-1`'s; the rest go to `3b.h-8` `B-ARCHIVE-WRITER-LIFECYCLE` (`#1034`, `#1032`).**
 **Design inputs carried — none of them decided here:**
 - **The ordering guard must hold across flushes,** not only inside one: a newer bar may already be written when an older batch is retried. Max-by-arrival within a flush (② as written) does not cover that.
 - **If exclusion is used, it needs a settle handle, not a boolean,** covering the whole flush including the empty-buffer return (`:239`) and the de-duplication (`:251-258`, where `toISOString()` throws on an Invalid Date); the drain awaits it.

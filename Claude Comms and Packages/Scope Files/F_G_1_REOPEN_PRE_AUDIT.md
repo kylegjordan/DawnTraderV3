@@ -6,7 +6,7 @@
 
 change-class: sub_batch
 
-> **Owner:** CC-C · **Opened:** 2026-09-28 · **Parent:** `F-G-1` / `B-GRID-REPRESENTABILITY` (plan row 3; progress report `Batch Completion/F_G_1_PROGRESS_REPORT.md` §7 and its amendment) · **Plan:** `PUSH_TO_LIVE_PLAN.md` section 0, CC-C's plate: "F-G-1-REOPEN" · **Issue:** `#1031`
+> **Owner:** CC-C · **Opened:** 2026-09-28 · **Parent:** `F-G-1` / `B-GRID-REPRESENTABILITY` (plan row 3; progress report `Batch Completion/F_G_1_COMPLETION_REPORT.md` §7 and its amendment) · **Plan:** `PUSH_TO_LIVE_PLAN.md` section 0, CC-C's plate: "F-G-1-REOPEN" · **Issue:** `#1031`
 > **Bounded by Langston (J9, 2026-09-11 09:28Z):** the reopen is limited to OBJ-9's ORDERING GUARANTEE. The unbounded database checkout, the in-flight buffer cap and the shutdown drain (`#1034`), and the ticker chunk double-insert (`#1032`) are **not** in it; they are homed at `PHASE_19_PLAN` `3b.h-8`.
 > **Not a hotfix:** nothing is broken now. The failure needs a transient write error while two flushes of one class overlap, and none has been observed on a bar that mattered.
 
@@ -62,6 +62,6 @@ change-class: sub_batch
 **Deploy:** it rides CC-C's second deploy (after the 2026-10-02 held deploy), with its migration.
 
 ## 5. DOCUMENT SET — class `sub_batch`
-scope = this document (a reopen of an approved batch; no new Step 1) · this pre-audit · change list at Step 4 · the conversion of `F_G_1_PROGRESS_REPORT.md` to its completion report, grading OBJ-9 ① and ② from this work · `BATCH_CATALOG`, `PHASE_HISTORY`, `RUNNING_ISSUES` (`#1031`), `PUSH_TO_LIVE_PLAN` section 0 · `SYSTEM_IMPACT_MAP` (writer contract and, under option A, the new column) — judged applicable · `SYSTEM_MANUAL` — judged N/A (writer mechanics, not trading math) · `STORAGE_POLICY` — applicable (a column added to hot tables, ≈ 0.8 GB at steady state).
+scope = this document (a reopen of an approved batch; no new Step 1) · this pre-audit · change list at Step 4 · the conversion of `F_G_1_COMPLETION_REPORT.md` to its completion report, grading OBJ-9 ① and ② from this work · `BATCH_CATALOG`, `PHASE_HISTORY`, `RUNNING_ISSUES` (`#1031`), `PUSH_TO_LIVE_PLAN` section 0 · `SYSTEM_IMPACT_MAP` (writer contract and, under option A, the new column) — judged applicable · `SYSTEM_MANUAL` — judged N/A (writer mechanics, not trading math) · `STORAGE_POLICY` — applicable (a column added to hot tables, ≈ 0.8 GB at steady state).
 
 **CROSS-REFERENCE, not a new home (§9.5(b-ii)):** Langston's proposed `B-PERP-OHLC-BAR-FINALITY` (`kraken-futures-archiver.ts:100`, `time <= lastSeen` skips the in-progress minute after its first poll) is **already homed** as `3b.h-7` `B-FUTURES-BAR-FINAL` (`#1030`, opened 2026-09-11). His zero-volume shares (96.8% `xstock_perp`, 82.7% `crypto_perp`, spot 0% as the control) are recorded on `#1030` as amendment evidence.

@@ -496,7 +496,7 @@
   "owner": "CC-C",
   "bucket": "MUST",
   "flag": "",
-  "src": "CC-C lane reply §5; F_G_1_PROGRESS_REPORT §7; #1031",
+  "src": "CC-C lane reply §5; F_G_1_COMPLETION_REPORT §7; #1031",
   "issues": [
    "1031"
   ],

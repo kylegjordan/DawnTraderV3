@@ -1,4 +1,73 @@
-# F-G-1 / B-GRID-REPRESENTABILITY — BATCH PROGRESS REPORT
+# F-G-1 / B-GRID-REPRESENTABILITY — COMPLETION REPORT
+
+## ✅ CONVERTED 2026-11-06 FROM THE PROGRESS REPORT — the observation window's data and decision, AND the OBJ-9 reopen (`B-OHLC-WRITE-ORDER`, `#1031`, sprint row 16), which closes with it
+
+> **Owner:** CC-C (Claude Analyst) · Phase 19, Part F · `PHASE_19_PLAN` row 3 (the batch) · `SPRINT_TO_LIVE_PLAN` row 16 (the reopen) · issues `#916`–`#930`, `#933`, `#1031`
+> **Original deploy:** `ca909072490786e414caade527ac9ff61f7745ab`, live `2026-08-28T16:08:02Z`; durability ref `56ac8067a` at 18:05:22Z; rollback sha `ed86a758e69136434aad98d777d184dfebec3a62`.
+> **The reopen:** pre-audit `Scope Files/F_G_1_REOPEN_PRE_AUDIT.md` r3 (Step 2 cleared by Langston, `b912c0790`) · code `4f9df55e1` (CI `36493264716` 4/4) · Step 4 approved by Langston 2026-09-29 (`e9d01f1fe`; change list `Change Lists/F_G_1_REOPEN_CHANGE_LIST.md`) · deployed in release deploy A `ea456ad40936b1fbde463e43e473d3ff11432ba0`, live 2026-10-02T20:38:00Z (`dt-deploy --by cc-b`) · Step 7 PASS (`Change Lists/RELEASE_DEPLOY_A_STEP7_CCC.md`) · **Step 8 PASS, Langston, 2026-10-02 ~21:45Z** (`1bb8d34b7`). Still in what staging runs: the deployed head `0f4835b5a` (2026-11-05T14:40:02Z) descends from `4f9df55e1`, checked 2026-11-06.
+> **Change-class:** the parent is `architecture` (scope header); the reopen is `sub_batch` (its pre-audit header). The parent's Step 10 landed 2026-08-29 (§5 below); this conversion carries the reopen's Step 10 (the ledger in C5).
+
+### ⛔ OPEN ITEMS AND LIMITS — STATED FIRST
+1. **xStock grid leg: UNDERPOWERED (n=19), not a pass.** Zero off-grid legs on 19 rows is recorded; §3f RIDER-1 forbids reading it as tested. No further window is booked; nothing in this batch claims the xStock leg is proven.
+2. **The rounding has one seam on the signal-birth path; three entry points bypass it, named:** `#927`, `#928`, `#929`, plus `#933` (the venue map is fetched once at boot; recovery is `B-VENUE-PAIRS-REINIT`). Each is homed in `RUNNING_ISSUES`. Langston approved shipping with them named, not under a "one seam" headline.
+3. **The OBJ-9 ordering guard across PROCESSES (P3, the database-side `setWhere`) has no live instrument.** It is proved by its mutation test (`server/tests/integration/f-g-1-ohlc-arrival-guard.test.ts`), not by a reading (Langston F2). OBJ-9 ① and ② are graded on code and tests; a transient write failure cannot be induced on staging.
+4. **Writer edges deliberately NOT in this batch (Langston J9, bounded):** the unbounded checkout, the in-flight buffer cap and the shutdown drain (`#1034`) and the ticker writer's re-insert of committed chunks (`#1032`) → `PHASE_19_PLAN` `3b.h-8`; retry backoff (`#1082`) → `3b.h-9`; perp bar finality (`#1030`) → `3b.h-7`; the write-timeout ordering from `#705`'s 2026-10-17 update → `B-WRITE-TIMEOUT-ORDERING`, sprint row 16a, which waits for Kyle's agreed list.
+5. **`#705`:** its three requirements (transient vs permanent, a bounded buffer, a loud alert) were built by `98640f00a`, and ① (splice after success) by this reopen. What remains of it is the ticker instance (`#1032`) and the timeout ordering (row 16a). **Whether `#705` closes or is re-homed onto those two is Langston's disposition** (its own entry says so); asked in the Step-11 dispatch.
+6. **Langston's F4, answered (one measured line, as he asked):** `server/scripts/b75-rehydrate.ts` cannot reach the new guard: its only database call is a `SELECT` on `data_archive_manifest` (`:125`), and it writes restored objects to local files only. Census of writers into the four `*_ohlc_1m` tables at `origin/migration/aws-supabase` (tests excluded): `ohlc-batch-writer.ts:545` (guarded at `:565`) and the xStock revision function in `drizzle/migrations/2026-10-14-b-xstock-bar-availability-capture.sql` (`:296`), which applies the same rule (`prior_arrived_at IS NULL OR prior_arrived_at <= in_arrived_at`). ⇒ **no restore path is blocked by the guard; no batch is owed.**
+
+### C1. WHAT DATA CAME IN — against the criterion as written (§3)
+**The criterion:** *"the first 30 crypto positions opened after `2026-08-28T16:08:02Z`, or 7 days, whichever comes first. If 7 days elapse with fewer than 30, that is reported as an underpowered read, not as a pass."* PASS for crypto: *"100% of entry, stop and target on their published grid. No tolerance."*; for xStock: *"on-grid OR the symbol absent from the derived map at open time."* The 30-count arm for CRYPTO was replaced by a discharge set (§3n, Langston, 2026-08-30); the bar and the 7-day cap were not touched.
+**The outcome:** the 7-day arm fired (alert `2093a98a`, read 2026-09-04T17:17Z). **`crypto_spot` n=24: zero off-grid entry, stop or target legs** (72 of 72 legs on grid, 70 read off the position row and 2 recovered from a second source, §3q(b)), on a control that flips every scoreable row to off-grid, with the §3n discharge set complete (item 1 in §3p). **`xstock_spot` n=19: zero off-grid legs; three rows are the designed passthrough, stamped as such** — but the leg stays UNDERPOWERED (§3o).
+
+### C2. WHAT DECISIONS WERE TAKEN, AND BY WHOM
+- **Langston, 2026-09-04, re-derived at `2f0c968f6`:** `crypto_spot` **PASS (n=24)**, `xstock_spot` **UNDERPOWERED (n=19)**; `F-E` unblocked (§3q, with his three attached points measured there).
+- **Langston, 2026-09-11 (J9):** OBJ-9 ① and ② are NOT met in production (`#1031`, §7). The batch reopened at Step 3, bounded to OBJ-9's ordering guarantee.
+- **CC-C + Langston, 2026-09-28/29:** option A — a new `arrived_at` stamp at the single chokepoint, a database-side "only a newer or equal arrival overwrites" guard, splice after a successful write, and one flush in flight per class. Built, reviewed, deployed, verified (header).
+- **CC-C, 2026-11-06:** F4 answered (item 6 above); this conversion. The batch closes on Langston's Step-11 confirmation.
+
+### C3. OBJECTIVES
+| objective | result | evidence |
+|---|---|---|
+| **OBJ-7** crypto — every entry, stop and target the venue can express | **YES** | C1; §3m–§3q |
+| **OBJ-7** xStock | **PARTIAL — underpowered** | C1; §3o |
+| **OBJ-7b** — a rounded signal that no longer clears its gates is rejected, never re-rounded | **YES** | 14,652 refusal events from 2026-08-28 (14,649 `stop_distance_after_rounding`, 3 `unorderable_triple`) across 88 symbol/strategy pairs (§3o); the first 3 post-deploy refusals matched the funnel counter exactly (§2) |
+| **OBJ-9 ①** splice AFTER a successful write | **YES — after the reopen** (FAIL at the original deploy) | `4f9df55e1` P1; the drain-before-write and front re-add are gone; Step 7/8 above |
+| **OBJ-9 ②** an older bar never overwrites a newer one | **YES — after the reopen** (FAIL at the original deploy) | P2 per-class in-flight + `coalesced=` counter seen non-zero (crypto_perp 3 → 11); P3 guard at `ohlc-batch-writer.ts:565`, mutation-proved; P5 stamping 5,771/5,771 crypto_spot and 751/751 xstock_spot at Step 7, 12,551/12,551 and 2,171/2,171 in Langston's own read; re-read 2026-11-06 10:10Z: 2,915/2,915 and 1,717/1,717 bars touched in the prior 30 min carry the stamp (a residency snapshot, F1) |
+| **OBJ-9 ③** bounded retry and buffer, loud on persistent failure | **PARTIAL** | shipped in `98640f00a`; the cap is enforced only in the retry branch and there is no backoff ⇒ `#1034` (`3b.h-8`), `#1082` (`3b.h-9`) |
+| **OBJ-9 ④** all classes in one fix | **YES** | one shared writer; the `arrived_at` column is on all four `*_ohlc_1m` parents (`2026-09-29-f-g-1-ohlc-arrived-at.sql:31-34`) |
+| **OBJ-9 ⑤** say which `#705` instance this closes | **YES** | this batch fixes the OHLC writer; the ticker writer's instance is `#1032`, open at `3b.h-8`; the permanent-failure latch clears on both legs (change list r5); item 5 above |
+| **OBJ-9 ⑥** the honest note on concentration of dropped bars | **YES** | stated in the scope and carried here: dropped bars plausibly cluster in volatile minutes; no measurement was owed |
+
+### C4. NEW FINDINGS
+None owed. F4's census (item 6) found a second writer into the xStock bar table, the bar-availability revision function, and it already carries the same arrival rule — a cross-reference, not a defect.
+
+### C5. GOVERNANCE — THE STEP-10 LEDGER FOR THE REOPEN
+CHANGE-CLASS: sub_batch (the parent `architecture` batch's own Step-10 ledger is §5 below)
+
+| tier | document | verdict | line |
+|---|---|---|---|
+| R | completion report | ✅ | this file, converted from `F_G_1_PROGRESS_REPORT.md` (live references to the old name updated in the same commit; the frozen Codex audit export keeps the old path) |
+| R | `BATCH_CATALOG.md` | ✅ | the F-G-1 entry: CLOSED, with the reopen and its result |
+| R | `PHASE_HISTORY.md` | ✅ | the F-G-1 entry: CLOSED |
+| judged | scope | N/A | no new Step 1 for a reopen (pre-audit §5); the parent scope `B_EXIT_GRID_REPRESENTABILITY_SCOPE.md` governs |
+| judged | pre-audit | ✅ | `F_G_1_REOPEN_PRE_AUDIT.md` r3 (written at Step 2) |
+| judged | `SYSTEM_IMPACT_MAP.md` | ✅ | the OHLC batch writer's ordering contract: the `arrived_at` stamp, splice after success, one flush in flight per class, the database guard, the second (xStock revision) writer, and Langston's Step-4 C1 (the non-buffer `upsertOhlcRows` path) |
+| judged | `SYSTEM_MANUAL.md` | N/A | writer mechanics, not trading logic or math (judged at Step 2, cleared by Langston) |
+| judged | `CHANGES_AND_FIXES.md` | N/A | not a hotfix |
+| judged | `RUNNING_ISSUES.md` | ✅ | `#1031` closed with this record; `#705` annotated (item 5) |
+| judged | `POST_AUDIT_ROADMAP.md` | N/A | no roadmap item moves |
+| judged | `DELETED_COMPONENTS_LOG.md` | N/A | the front re-add was a branch inside one function, replaced in place, not a component |
+| judged | `ADJUSTMENT_FRAMEWORK.md` | N/A | no tunable, no epoch |
+| judged | `STORAGE_POLICY.md` | ✅ | the `arrived_at` column's cost on the hot bar tables (judged applicable at Step 2) |
+| plan | `PHASE_19_PLAN.md` row 3 | ✅ | the batch's in-flight row there, finished |
+| plan | `SPRINT_TO_LIVE_PLAN.md` | ✅ | row 16 and its §0 lines: CLOSED, report linked |
+| — | shared `MEMORY.md` | N/A | no new consensus truth (the VPG line already stands) |
+| — | `MEMORY_CC_C.md` | ✅ | position updated |
+| — | Langston's `MEMORY.md` | ✅ | the F-G-1 block shortened to its closed state |
+| T1 | session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 16 closed |
+
+
+## (HISTORY) THE PROGRESS REPORT'S OWN STATUS BLOCK, KEPT AS WRITTEN
 
 ## ✅ **WINDOW CLOSED 2026-09-04T16:08:02Z · DECISION TAKEN · CONVERSION NOW OWED**
 
