@@ -1,4 +1,4 @@
-# B-XSTOCK-DBS-TO-STRATEGIES — COMPLETION REPORT — Step 11, awaiting Langston's confirm
+# B-XSTOCK-DBS-TO-STRATEGIES — COMPLETION REPORT — ✅ CLOSED 2026-11-06 (Langston confirmed Steps 10-11, 12:21Z)
 
 **change-class: architecture** · `#1235` · sprint plan pre-sprint stage 00, order 4 (Kyle KD-2, 2026-11-04) · owner CC-B (NEW Claude)
 Scope `Scope Files/B_XSTOCK_DBS_TO_STRATEGIES_SCOPE.md` · pre-audit and plan `Scope Files/B_XSTOCK_DBS_TO_STRATEGIES_PRE_AUDIT.md` · Step 6-8 record `Change Lists/B_XSTOCK_DBS_TO_STRATEGIES_STEP7.md`
@@ -37,7 +37,7 @@ Deployed `8636040255b9ffb0a83edf6bf189d97e6e227763`, 2026-11-05T05:36:24Z, `dt-d
 
 ## Numeric deltas
 - **PREVIOUSLY STATED:** (a′) equality tolerance |Δ| < 1e-9 (pre-audit). **NOW:** |Δ| < 1e-6, the column's own scale. **REASON:** `pair_scan_archive.dbs_score` is `numeric(10,6)`; 1e-9 was unsatisfiable by construction (max observed 4.998e-7, inside the 5e-7 half-unit).
-- **PREVIOUSLY STATED:** (a′) matchable ≥ 90 %. **NOW:** ≥ 93.9 %. **REASON:** C-3's pre-registered baseline minus 3 points superseded it; both copies swept.
+- **PREVIOUSLY STATED:** (a′) matchable ≥ 90 %. **NOW:** ≥ 93.9 %. **REASON:** C-3's pre-registered baseline minus 3 points superseded it; all three copies corrected (`:123`, `:175`, and P10 at `:194` — the third found by Langston at Step 11).
 - **PREVIOUSLY STATED:** (a) "all xStock VTS rows" = 182,812. **NOW:** 182,812 = the four guarded strategies; all xStock VTS rows = 276,740. **REASON:** population label corrected at Step 8.
 - **PREVIOUSLY STATED:** the session read ran on one build. **NOW:** three restarts after the deploy, one inside the session (14:40:03Z). **REASON:** staging reflog; the diff to that build has zero changes on the hand-off identifiers, so no result moves.
 - **PREVIOUSLY STATED (pre-audit):** the B72 suite is skipped in CI. **NOW:** it runs and passes 5 of 5. **REASON:** `vitest.config.ts:10` always sets `DATABASE_URL`.
@@ -64,7 +64,7 @@ CHANGE-CLASS: architecture
 | T1 | the batch `PRE_AUDIT` | ✅ | (a′) tolerance and coverage swept at both copies (Langston Step-8 fold-in 1) |
 | T1 | this completion report | ✅ | this file |
 | T1 | the four session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | CC-B item 2 closed, KD-7 follow-on kept; the other three not mine |
-| T1 | Langston's `MEMORY.md` | ✅ | asked of Langston with this close (his file is fenced; he writes it) |
+| T1 | Langston's `MEMORY.md` | ✅ | written by Langston at the close (read back at his line 136) |
 | T2 | `SYSTEM_MANUAL.md` | ✅ | xStock DBS chapter: the hand-off correction after invariant 6, the new settings, the F3 calibration caveat |
 | T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | strong-trend override row corrected (scope r4-5) and now settings-backed; new row for the xStock detect-input hand-off |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#1235` annotated (defect closed, F2 open); `#1249` filed |

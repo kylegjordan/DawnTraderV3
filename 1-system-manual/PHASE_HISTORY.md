@@ -1319,7 +1319,7 @@ Kyle asked every session to bring its task list up to date at every batch close.
 
 **Every paper and live trade is now sized by one plain rule, and the old competing rules are gone.** A trade is a fixed share of the balance (5% in paper today, about $40), and the number of positions that can be open follows from that share (20), so nothing else can quietly shrink or cap a trade. The old rules that did, including the one that shrank the practice trades the system learns from, are deleted and guarded against coming back. Paper was reset to $820 without deleting any history.
 
-### 2026-11-05 — B-XSTOCK-DBS-TO-STRATEGIES (CC-B, pre-sprint stage 00 order 4, `#1235`) — ✅ CLOSED 2026-11-06 (Step 11 pending Langston's confirm)
+### 2026-11-05 — B-XSTOCK-DBS-TO-STRATEGIES (CC-B, pre-sprint stage 00 order 4, `#1235`) — ✅ CLOSED 2026-11-06
 
 **xStock strategies now see the direction score they were built around.** Since May the score was computed for xStock but never handed to the strategies, so they all saw zero: strong_bull_trend could never trade xStock, and the guards that refuse counter-trend entries never fired. The fix went out 2026-11-05; on its first full session every guard fired exactly where the score said it should (0 disagreements on 182,812 checks), and strong_bull_trend placed its first xStock trades. Two fixed numbers in code became database settings in the same batch. Report: `Batch Completion/B_XSTOCK_DBS_TO_STRATEGIES_COMPLETION_REPORT.md`.
 
