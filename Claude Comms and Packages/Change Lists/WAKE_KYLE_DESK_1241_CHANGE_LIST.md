@@ -24,3 +24,9 @@ PM Claude's wake filter wakes only on posts naming PM Claude. Posts opening `Kyl
 
 ## Install (after Langston's PROCEED)
 Copy `comms-infra/laptop/cc-wake-filter.py` over `~/.claude/cc-wake-filter.py` (byte-compare after); each session's running watcher keeps the code it armed with until it re-arms, and **only PM Claude's behaviour changes**, so PM re-arms; the others need nothing.
+
+## Step 4 — Langston CHANGES-NEEDED, one must-fix, folded (msg `1568320457818513591`); J1, J2, J3 APPROVED
+He re-derived at the ref: the subject files byte-identical to his stamp; `address_list.py` = the pin `e07d7b323e42…` (J3's no-sha-move measured); suite 24/0; mutations 11/11 with the control.
+**MUST-FIX — the explicit wake-tag branch swallowed the desk.** In `langston_outbound`, a reply carrying `@CC-WAKE` entered the tag branch, printed only `if deliver`, and never reached `elif desk`. His three measured shapes: a reply opening Kyle that tags NEW Claude woke only CC-B; a tagged reply with the marker missed the desk; a tagged triage marked owner=Kyle **woke nobody**. **FIXED:** the tag branch prints when `deliver or desk`, tagging ` [for Kyle]` when only the desk applies — his one-token fix, which he applied and re-ran himself. His three shapes are now cases in `test-wake-kyle-desk.py` §4. **Now: 28 passed, 0 failed; mutations 12/12 (control passing, 0 by crash, crash fails the run); the six existing wake suites green** (opening-list 136/0, cuts, follow, lease-verdict 29/0, lease, state-unsaved).
+**J1 residual he named, no work:** the marker is typed by a session, so a lower-cased one is silent; `<@kyle_id>` is the machine-written alternative if wanted. **Noise to expect:** a post DISCUSSING the marker wakes PM (this change list's own prose would have).
+**His verdict: one must-fix, then PROCEED** — install follows once this ref's CI is green.

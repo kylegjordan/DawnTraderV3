@@ -1266,8 +1266,12 @@ for raw in sys.stdin:
                 if re.search(r"@?CC[- ]?WAKE|wake\s+(up\s+)?(cc|claude\s*code)", full, re.I):
                     deliver, _ = addressed_to_me(full)
                     body = text
-                    if deliver:
-                        print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {body}{media_suffix(d)}", flush=True)
+                    # Kyle's desk too: the tag is the route for a SECOND addressee, so a reply to Kyle that also tags
+                    # a session must still reach the desk - before this, the tag branch swallowed it (Langston Step-4
+                    # must-fix: three real shapes, one of them woke nobody at all).
+                    if deliver or desk:
+                        tag = " [for Kyle]" if desk and not deliver else ""
+                        print(f"WAKE[LANGSTON->{ALIAS}]{tag}{routed}: {body}{media_suffix(d)}", flush=True)
                 # ⛔ B-TOKEN-BURN-CUT amendment 1, OBJ-5 (Kyle 2026-09-30; Langston approved): a reply wakes this
                 # session only when it is ADDRESSED here — it OPENS with this session's name (his bridge prefixes the
                 # addressee, langston_queue.py lead_with_addressee) — or carries the explicit wake tag above. It used to

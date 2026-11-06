@@ -36,6 +36,8 @@ MUTATIONS = [
         '                elif False:\n                    print(f"WAKE[LANGSTON->{ALIAS}] [for Kyle]')),
     ("owner=Kyle still suppressed", replace("                        if not OPEN_RE.match(full) and not desk:",
                                             "                        if not OPEN_RE.match(full):")),
+    ("tag branch swallows the desk again", replace("                    if deliver or desk:\n                        tag = \" [for Kyle]\" if desk and not deliver else \"\"",
+                                                   "                    if deliver:\n                        tag = \"\"")),
     ("crew desk wake removed", replace("                    desk = (not deliver) and for_kyles_desk(full)",
                                        "                    desk = False")),
     ("Kyle tag dropped", replace('                        tag = " [for Kyle]" if desk else ""', '                        tag = ""')),

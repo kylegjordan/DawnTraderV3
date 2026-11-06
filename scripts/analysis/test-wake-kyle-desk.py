@@ -99,6 +99,15 @@ ok("a triage owned by CC-A, opening with OLD Claude, does not wake CC-PM", who(t
 ok("a reply to a session that only mentions Kyle later does not wake CC-PM",
    "CC-PM" not in who(lo("NEW Claude — Kyle approved this earlier")))
 ok("a Langston reply carrying the marker wakes CC-PM", "CC-PM" in who(lo("NEW Claude — STILL NEED YOU: Kyle's call")))
+# Langston Step-4 must-fix: the @CC-WAKE tag branch swallowed the desk (his three measured shapes)
+g = who(lo("Kyle — my ruling. @CC-WAKE NEW Claude please re-land it."))
+ok("a reply opening Kyle that TAGS another session wakes the desk too", g == {"CC-PM", "CC-B"}, g)
+g = who(lo("NEW Claude — STILL NEED YOU: Kyle's call. @CC-WAKE OLD Claude"))
+ok("the marker in a tagged reply still wakes the desk", "CC-PM" in g, g)
+g = who(lo('Kyle — triage. @CC-WAKE NEW Claude\n[[ALERT id=5e760b86 owner=Kyle action="decide"]]'))
+ok("a tagged triage marked owner=Kyle wakes the desk (it woke NOBODY before)", "CC-PM" in g, g)
+w = wakes("CC-PM", lo("Kyle — my ruling. @CC-WAKE NEW Claude please re-land it."))
+ok("...and that wake line says for Kyle", len(w) == 1 and "[for Kyle]" in w[0], w)
 
 print("5. Kyle's own posts are unchanged")
 ok("a Kyle post naming nobody still wakes every session", who(row("hello all", sender=None, kind="")) == set(SESSIONS))
