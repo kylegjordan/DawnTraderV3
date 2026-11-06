@@ -55,6 +55,22 @@ for form in ["KRAKEN_API_SECRET=%s", 'KRAKEN_API_SECRET: %s', '"KRAKEN_API_SECRE
 red = dt.Redactor()
 ok("a key name with no value is left alone", red("set KRAKEN_API_SECRET in the env file") == "set KRAKEN_API_SECRET in the env file")
 
+print("2b. names - the forms that leaked at r1 (Langston C-1, C-4)")
+v = "aB3dE6" + "gH9jK2mN5pQ8"
+for form in ["KRAKEN_API_SECRET='%s'", "KRAKEN_API_SECRET: '%s'", "kraken_api_secret=%s", "KRAKEN_API_SECRET -> %s",
+             "export KRAKEN_API_SECRET=\"%s\" && run"]:
+    red = dt.Redactor()
+    out = red(form % v)
+    ok("leaked form %r hides the value" % form, v not in out and red.counts.get("named:KRAKEN_API_SECRET") == 1)
+red = dt.Redactor()
+out = red("PASSWORD=p@ss,w0rd" + "TAILLEAK done")
+ok("a comma inside an unquoted value does not leave a tail", "TAILLEAK" not in out and "w0rd" not in out and out.endswith(" done"))
+red = dt.Redactor()
+db = "DATABASE_URL=postgres://dtuser:" + "s3cretpw" + "@db.internal.example:5432/dawntrader"
+out = red(db)
+ok("DATABASE_URL: the whole value goes, host and db name included", "s3cretpw" not in out and "db.internal" not in out and "dawntrader" not in out)
+ok("DATABASE_URL: the marker is intact (names run before shapes)", out == "DATABASE_URL=[REDACTED named:DATABASE_URL]")
+
 # ---- 3. values by hash (layer c): the value is never in the hash file -------------------------------------------------
 print("3. values")
 shapeless = "zx" + "9CQ4u7Lm2Rt8Pw"  # no shape, no name
@@ -67,6 +83,20 @@ red = dt.Redactor(h)
 ok("a different token of the same length is left alone", red("zx9CQ4u7Lm2Rt8PX") == "zx9CQ4u7Lm2Rt8PX")
 red = dt.Redactor()
 ok("with no hash file the shapeless value is NOT caught (the stated residual)", shapeless in red(shapeless))
+ok("layer (c) state says OFF in plain words when nothing loaded", "OFF" in dt.Redactor().layer_c_state() and "not switched on" in dt.Redactor().layer_c_state())
+ok("layer (c) state counts what loaded", "ON, 1 value(s)" in dt.Redactor(h).layer_c_state())
+short = [{"name": "SHORTKEY", "length": 11, "sha256": "a" * 64}]
+ok("a value under 12 characters is named as out of reach", "OUT OF REACH" in dt.Redactor(short).layer_c_state() and "SHORTKEY" in dt.Redactor(short).layer_c_state())
+ok("a malformed hash entry is not counted as loaded", dt.Redactor([{"name": "X"}, {"name": "Y", "length": 20, "sha256": "short"}]).layer_c_names == 0)
+import tempfile as _tf
+_d = _tf.mkdtemp(prefix="dt-test-")
+_raw = os.path.join(_d, "raw.jsonl"); open(_raw, "w").write("")
+_empty = os.path.join(_d, "empty.json"); open(_empty, "w").write("[]")
+import io, contextlib
+_err = io.StringIO()
+with contextlib.redirect_stderr(_err), contextlib.redirect_stdout(io.StringIO()):
+    rc = dt.main(["dt", _raw, "--hashes", _empty])
+ok("--hashes with zero usable entries is REFUSED (exit 3), never silently off", rc == 3 and "REFUSED" in _err.getvalue())
 
 # ---- 4. the distiller: what is kept and what is dropped ------------------------------------------------------------
 print("4. distiller")
@@ -103,6 +133,15 @@ ok("a queued message is kept", "User (queued):** also do Y" in text)
 ok("a compaction summary is kept whole", "compaction summary" in text and "Summary line one" in text)
 ok("a type with no uuid is dropped", "NO-UUID-TYPE" not in text)
 ok("every yielded line has its entry's uuid", all(x[0] for x in dt.distill([json.dumps(e) for e in raw], dt.Redactor())))
+extra = [{"type": "system", "uuid": "s1", "timestamp": T % 9, "subtype": "informational", "content": "safeguards stopped the response above"},
+         {"type": "system", "uuid": "s2", "timestamp": T % 9, "subtype": "brand_new_kind", "content": "X"},
+         {"type": "attachment", "uuid": "x3", "timestamp": T % 9, "attachment": {"type": "never_seen"}}]
+dropped = {}
+text2 = chr(10).join(x[2] for x in dt.distill([json.dumps(e) for e in raw + extra], dt.Redactor(), dropped=dropped))
+ok("system:informational is kept as one line (it explains a gap)", "[informational] safeguards stopped" in text2)
+ok("an unknown system subtype is COUNTED as dropped, not silently lost", dropped.get("system:brand_new_kind") == 1)
+ok("an unknown attachment type is counted", dropped.get("attachment:never_seen") == 1)
+ok("known injected attachments are counted too", dropped.get("attachment:hook_additional_context") == 1)
 
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

@@ -29,6 +29,17 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     "private-key-block", "anthropic-token", "openai-key", "github-token", "discord-webhook", "discord-bot-token",
     "telegram-bot-token", "jwt", "b2-application-key", "bearer-token", "url-credentials")] + [
     ("names layer off", replace("        text = NAMES.sub(", "        text = text if True else NAMES.sub(")),
+    ("names after shapes (r1 order)", replace(
+        "        text = NAMES.sub(self._named, text)          # names FIRST (C-4): the whole named value goes, markers stay intact\n"
+        "        for kind, rx in SHAPES:\n"
+        "            text = rx.sub(lambda m, k=kind: self._hit(k), text)\n",
+        "        for kind, rx in SHAPES:\n"
+        "            text = rx.sub(lambda m, k=kind: self._hit(k), text)\n"
+        "        text = NAMES.sub(self._named, text)\n")),
+    ("single quote not a value delimiter", replace("(?:(?P<q>[\\\"'])", "(?:(?P<q>[\\\"])")),
+    ("names case-sensitive again", replace("% \"|\".join(SECRET_NAMES), re.IGNORECASE)", "% \"|\".join(SECRET_NAMES))")),
+    ("empty --hashes not refused", replace('    if "--hashes" in opts and not red.layer_c_names:', '    if False:')),
+    ("drop counter off", replace("        dropped[key] = dropped.get(key, 0) + 1", "        pass")),
     ("value layer off", replace("        if self.by_len:\n", "        if False:\n")),
     ("thinking kept", replace('if b.get("type") == "text" and b.get("text", "").strip():\n                    yield uid, ts, "\\n**[%s] Session:**',
                               'if b.get("type") in ("text", "thinking") and (b.get("text") or b.get("thinking", "")).strip():\n                    b = dict(b, text=b.get("text") or b.get("thinking")); yield uid, ts, "\\n**[%s] Session:**')),

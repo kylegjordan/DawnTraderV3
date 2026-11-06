@@ -56,7 +56,9 @@ SECRET_NAMES = [
     "DISCORD_COLTRANE_BOT_TOKEN", "GH_TOKEN", "TELEGRAM_BOT_TOKEN", "CC_WEBHOOK_URL", "HELIUS_API_KEY",
     "ALCHEMY_API_KEY", "TOKENWATCH_WEBHOOK_SECRET", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "PASSWORD", "PASSWD",
 ]
-NAMES = re.compile(r"(?P<name>\b(?:%s)\b)(?P<sep>\"?\s*[:=]\s*\"?)(?P<val>[^\s\"',;]{4,})" % "|".join(SECRET_NAMES))
+NAMES = re.compile(r"(?P<name>\b(?:%s)\b)(?P<sep>[\"']?[ \t]*(?::|=|->)[ \t]*)"
+                   r"(?:(?P<q>[\"'])(?P<qval>[^\"'\n]+)(?P=q)|(?P<val>[^\s\"']{4,}))"
+                   % "|".join(SECRET_NAMES), re.IGNORECASE)
 
 TOKEN = re.compile(r"[A-Za-z0-9_\-+/=.]{12,}")
 IMAGE_B64 = re.compile(r"data:image/[a-z]+;base64,[A-Za-z0-9+/=]{40,}")
@@ -66,8 +68,33 @@ class Redactor:
     def __init__(self, hashes=None):
         self.counts = {}
         self.by_len = {}
+        self.layer_c_names = 0       # usable {name,length,sha256} entries loaded (C-2: the header is derived from this)
+        self.layer_c_short = []      # names shorter than TOKEN's 12-char floor: listed, but out of layer (c)'s reach (C-3)
         for h in hashes or []:
-            self.by_len.setdefault(int(h["length"]), {})[h["sha256"]] = h["name"]
+            try:
+                n, ln, sh = str(h["name"]), int(h["length"]), str(h["sha256"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if len(sh) != 64:
+                continue
+            self.by_len.setdefault(ln, {})[sh] = n
+            self.layer_c_names += 1
+            if ln < 12:
+                self.layer_c_short.append(n)
+
+    def layer_c_state(self):
+        if not self.layer_c_names:
+            return "> redaction layer (c), shapeless values: OFF — the part that catches passwords which do not look like passwords is not switched on"
+        line = "> redaction layer (c), shapeless values: ON, %d value(s) loaded" % self.layer_c_names
+        if self.layer_c_short:
+            line += "; OUT OF REACH (under 12 characters): %s" % ", ".join(sorted(self.layer_c_short))
+        return line
+
+    def _named(self, m):
+        kind = self._hit("named:" + m.group("name").upper())
+        if m.group("q"):
+            return m.group("name") + m.group("sep") + m.group("q") + kind + m.group("q")
+        return m.group("name") + m.group("sep") + kind
 
     def _hit(self, kind):
         self.counts[kind] = self.counts.get(kind, 0) + 1
@@ -77,9 +104,9 @@ class Redactor:
         if not text:
             return text
         text = IMAGE_B64.sub(lambda m: self._hit("base64-image"), text)
+        text = NAMES.sub(self._named, text)          # names FIRST (C-4): the whole named value goes, markers stay intact
         for kind, rx in SHAPES:
             text = rx.sub(lambda m, k=kind: self._hit(k), text)
-        text = NAMES.sub(lambda m: m.group("name") + m.group("sep") + self._hit("named:" + m.group("name")), text)
         if self.by_len:
             def val(m):
                 t = m.group(0)
@@ -118,10 +145,15 @@ def _blocks(content):
     return [b for b in content or [] if isinstance(b, dict)]
 
 
-def distill(lines, redact, since=None, until=None):
+def distill(lines, redact, since=None, until=None, dropped=None):
     """lines: an iterable of raw .jsonl lines. Yields (uuid, timestamp, markdown_line); every yielded line comes from
     an entry that has a uuid (A1). Action lines are yielded at the end, once their results (and any ERROR) are known;
-    the caller orders by timestamp."""
+    the caller orders by timestamp. `dropped` (a dict) counts every uuid-bearing entry that matched no keep rule,
+    keyed type[:subtype], so a format change shows up as a number instead of a silent loss (Langston C-5)."""
+    dropped = {} if dropped is None else dropped
+
+    def drop(key):
+        dropped[key] = dropped.get(key, 0) + 1
     pending = {}   # tool_use_id -> (uuid, ts, text) awaiting its result, so an ERROR can be appended
     order = []
     for raw in lines:
@@ -132,21 +164,26 @@ def distill(lines, redact, since=None, until=None):
         uid, ts, typ = e.get("uuid"), e.get("timestamp") or "", e.get("type")
         if not uid:
             continue
-        # api-request-blob (copies of the conversation, A1) needs no rule of its own: only the four types below
-        # ever emit a line, so every other type - that one included - is dropped by construction.
+        # The uuid gate above is what drops api-request-blob (copies of the conversation, A1): Langston measured three
+        # real ones across 7,375 transcripts and none carries a uuid. "Only the types below emit" is the backstop.
         if (since and ts < since) or (until and ts >= until):
             continue
         hhmm = ts[11:19] if len(ts) >= 19 else ts
         msg = e.get("message") if isinstance(e.get("message"), dict) else {}
         if typ == "user" and e.get("isCompactSummary"):
             text = "".join(b.get("text", "") for b in _blocks(msg.get("content")) if b.get("type") == "text")
+            if not text.strip():
+                drop("user:compact-summary-empty")
             yield uid, ts, "\n> **[%s] compaction summary**\n>\n> %s\n" % (hhmm, redact(text).replace("\n", "\n> "))
             continue
         if typ == "user":
+            emitted = False
             for b in _blocks(msg.get("content")):
                 if b.get("type") == "text" and b.get("text", "").strip():
+                    emitted = True
                     yield uid, ts, "\n**[%s] User:** %s\n" % (hhmm, redact(b["text"]).strip())
                 elif b.get("type") == "image":
+                    emitted = True
                     yield uid, ts, "**[%s] User:** [image]" % hhmm
                 elif b.get("type") == "tool_result" and b.get("is_error"):
                     p = pending.get(b.get("tool_use_id"))
@@ -155,6 +192,8 @@ def distill(lines, redact, since=None, until=None):
                         body = " ".join(x.get("text", "") for x in body if isinstance(x, dict))
                     if p:
                         p[2] += " ERROR: " + one_line(redact(str(body)), 160)
+            if not emitted and not any(b.get("type") == "tool_result" for b in _blocks(msg.get("content"))):
+                drop("user:other")
             continue
         if typ == "assistant":
             for b in _blocks(msg.get("content")):
@@ -166,7 +205,7 @@ def distill(lines, redact, since=None, until=None):
                     pending[b.get("id")] = [uid, ts, line[0]]
                     order.append(b.get("id"))
             continue
-        if typ == "system" and e.get("subtype") in ("api_error", "model_refusal_fallback"):
+        if typ == "system" and e.get("subtype") in ("api_error", "model_refusal_fallback", "informational"):
             yield uid, ts, "- `%s` [%s] %s" % (hhmm, e.get("subtype"), one_line(redact(str(e.get("content", ""))), 160))
             continue
         if typ == "attachment":
@@ -175,8 +214,10 @@ def distill(lines, redact, since=None, until=None):
                 yield uid, ts, "\n**[%s] User (queued):** %s\n" % (hhmm, redact(str(a.get("prompt") or a.get("content") or "")).strip())
             elif a.get("type") == "hook_non_blocking_error":
                 yield uid, ts, "- `%s` [hook error] %s" % (hhmm, one_line(redact(str(a.get("content") or a.get("stderr") or "")), 160))
+            else:
+                drop("attachment:%s" % a.get("type"))
             continue
-        # every other type: dropped (A1, A1b)
+        drop("%s:%s" % (typ, e.get("subtype")) if e.get("subtype") else str(typ))   # every other type (A1, A1b)
     for tid in order:
         p = pending.get(tid)
         if p:
@@ -194,14 +235,24 @@ def main(argv):
     args = argv[1:]
     path = args[0]
     opts = dict(zip(args[1::2], args[2::2]))
-    hashes = json.load(open(opts["--hashes"], encoding="utf-8")) if "--hashes" in opts else None
-    red = Redactor(hashes)
-    if hashes is None:
-        print("> redaction layer (c), shapeless values: OFF (no --hashes file)")
+    hashes = None
+    if "--hashes" in opts:
+        try:
+            hashes = json.load(open(opts["--hashes"], encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            sys.stderr.write("REFUSED: --hashes %s could not be read (%s)\n" % (opts["--hashes"], e))
+            return 3
+    red = Redactor(hashes if isinstance(hashes, list) else [])
+    if "--hashes" in opts and not red.layer_c_names:
+        sys.stderr.write("REFUSED: --hashes %s loaded 0 usable entries - layer (c) would be silently off\n" % opts["--hashes"])
+        return 3
+    print(red.layer_c_state())
+    dropped = {}
     with open(path, encoding="utf-8", errors="replace") as fh:
-        for _uid, _ts, line in sorted(distill(fh, red, opts.get("--since"), opts.get("--until")), key=lambda x: x[1]):
+        for _uid, _ts, line in sorted(distill(fh, red, opts.get("--since"), opts.get("--until"), dropped), key=lambda x: x[1]):
             print(line)
     sys.stderr.write("redactions: %s\n" % json.dumps(red.counts, sort_keys=True))
+    sys.stderr.write("dropped (uuid-bearing, no keep rule): %s\n" % json.dumps(dropped, sort_keys=True))
     return 0
 
 
