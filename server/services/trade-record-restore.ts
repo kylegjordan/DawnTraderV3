@@ -41,6 +41,29 @@ import { storage } from '../storage';
 import { asValidAssetClass } from '../../shared/asset-classes.js';
 import type { TradingMode } from '../lib/event-bus';
 
+/**
+ * STAMP THE RESOLVED RECORD BACK ONTO THE POSITION (Langston Part C NEW-1, folded into Part C). Called wherever a position's
+ * open record is resolved BY KEY (symbol, mode, class) — the engine's `_resolveOpenTradeRecord` (close, maker drop) and the
+ * stop flow's orphan step. WHY: if that record is then FINISHED and the position's delete fails, the position is left on a
+ * finished record; the next cycle finds no OPEN record and the alert points at the restore. The restore's only guard against
+ * a finished record is the position's own `tradeId` — so without this stamp it would insert a SECOND record for a trade
+ * already booked, and the next close would book a second exit. With it, the restore refuses (409) as designed.
+ * Best-effort: a failed write is logged, never thrown — it must not block the close it precedes. Updates the in-memory
+ * position too, so the rest of the cycle sees the id.
+ */
+export async function stampPositionTradeId(mode: TradingMode, position: any, recordId: string): Promise<boolean> {
+  const meta = position?.metadata ?? {};
+  if (meta.tradeId === recordId) return true;
+  try {
+    await storage.updateActiveOpenPosition(mode, position.id, { metadata: { ...meta, tradeId: recordId } } as any);
+    position.metadata = { ...meta, tradeId: recordId };
+    return true;
+  } catch (err) {
+    console.error(`[B-CLOSE-WRITER-COSTS][TRADEID_STAMP_FAILED:${mode}] ${position?.symbol} pos=${position?.id} record=${recordId}:`, err);
+    return false;
+  }
+}
+
 export type RestoreResult =
   | { ok: true; recordId: string; positionId: string; symbol: string; pending: boolean }
   | { ok: false; code: 404 | 409; error: string; recordId?: string; recordIds?: string[]; more?: boolean };
