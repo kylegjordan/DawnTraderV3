@@ -47,6 +47,8 @@
 
 **★ LANGSTON = STATELESS per-invoke (fresh `claude -p` each message): multi-turn context goes IN the prompt or a staged file, always (CLAUDE.md §6.5).**
 
+**★ TOKEN-WATCH SHARES THE STAGING DISK WITH THE LIVE APP (`#1132`):** its store (`/var/lib/token-watch`, 8 GiB cap, warn `7b19347d` standing) grows ~96 MB/day, part with no prune path; on staging disk pressure check it first — `SYSTEM_IMPACT_MAP.md` Layer 9.
+
 **★ LANGSTON'S MEMORY IS FENCED (`B-LANGSTON-MEMORY-WRITE-FENCE`, 2026-11-05):** his memory files are root-owned and immutable — only `langston-memory-write` writes them (recipe: `workflow-10-governance` §10.b). ⛔ **Its exit-7 refusal offers `--allow-growth`; that is NOT a session's to pass without a ruling from Langston or Kyle.**
 
 **★ CLAUDE.md size:** NO-TRIM (#339) still holds — nothing deleted or made unfindable; the PLACEMENT rule (#564) moves depth and evidence to a named runbook behind a short pointer (CLAUDE.md §4).
@@ -72,7 +74,7 @@
 
 **★ WHO-HOLDS-THE-WRENCH (B-LANGSTON-QUEUE piece 3, Langston 2026-06-22 — standing rule):** Langston **REVIEWS/VERIFIES and NEVER pushes**; the **IMPLEMENTER (a CC) pushes**; and **before any session edits a SHARED piece** (a governance doc, a shared module) it **CALLS IT IN THE CHANNEL** ("I've got `<X>`") so two sessions don't silently edit the same thing — out-of-order/colliding pushes come from two people grabbing the same wrench at once. Complements pull-before-push + the #340-369/#370-399 number-reservation + check-CI-before-push. **★ #540 (2026-07-19): the staged INDEX is part of the wrench — EXPLICIT-PATHS-ONLY commits (`git commit -- <paths>`) after a `git status` index check; sweeps happened once each direction (d090178d6, 5f291a17e). Enforced by `.claude/hooks/guard-bare-commit.mjs` from next session start. EOL policy homed #539.**
 
-**★ SYSTEM-ALERT HANDLING PROTOCOL — SOLVED (CORRECTED 2026-07-25; the old "not solved yet, future batch" was stale).** Shipped as B-ALERT-PROTOCOL (#340): the definitive post-diagnosis process is `1-system-manual/ALERT_HANDLING_PROTOCOL.md` (ack=owned / resolve=fixed, per-class action table, no-silent-drop re-surface), and CLAUDE.md rule 26 (call-outs demand an immediate public response) + §10.5 carry the operative rules. Langston triages → `[[ALERT id=.. owner=<CC-A|CC-B|Kyle> action=..]]` → wake routes to owner → `ack --by` → work → `resolve --by`.
+**★ SYSTEM-ALERT HANDLING (B-ALERT-PROTOCOL #340):** `1-system-manual/ALERT_HANDLING_PROTOCOL.md` (ack=owned, resolve=fixed, no silent drop) + CLAUDE.md rule 26 and §10.5. Langston triages → `[[ALERT … owner=…]]` → the owner works it → `resolve --by`.
 
 **Settled Kyle decisions (authoritative homes in roadmap/RUNNING_ISSUES — not repeated here):** #94→25-7 · #226→20.3.1 · #5→leave · #80→Phase-25. New CLAUDE.md rules (surfaced-issue-scheduling §9.4, temp Phase-19-doc-upkeep §3 Tier-1, never-leave-legacy rule 18) live in CLAUDE.md — read there, not here.
 

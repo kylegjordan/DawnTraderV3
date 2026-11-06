@@ -3,7 +3,7 @@
 **Batch:** `B-TOKEN-WATCH-STORAGE` · **owner:** Infra Claude (CC-INFRA) · **issue:** `#1132` (the storage half) · **plan:** `SPRINT_TO_LIVE_PLAN.md` §0a row 5b, Infra order 1 · **Kyle:** D-2, 2026-11-04 (split from the follow-up's memory fix and put ahead of it)
 **change-class:** `architecture` (re-declared from `sub_batch` at Step 2, Langston condition 2)
 **Scope:** `Claude Comms and Packages/Scope Files/B_TOKEN_WATCH_STORAGE_SCOPE.md` (with amendment 1) · **pre-audit and plan:** `…/B_TOKEN_WATCH_STORAGE_PRE_AUDIT.md` r2a · **change list (every step's record):** `Claude Comms and Packages/Change Lists/B_TOKEN_WATCH_STORAGE_CHANGE_LIST.md`
-**Installed on staging (not by `dt-deploy`; `token-watch/deploy/install_storage.sh` from git blobs, record `/opt/token-watch/INSTALLED`):** `41b538165` 2026-11-04 · amendment 1 `c428153655a` 2026-11-05 22:04Z · the alert-line fix `5e6f1cec8` 2026-11-06 06:34Z. **CI:** run `42117437480`, 4/4 per job, at `c428153655a`.
+**Installed on staging (not by `dt-deploy`; `token-watch/deploy/install_storage.sh` from git blobs, record `/opt/token-watch/INSTALLED`):** `41b538165` 2026-11-04 · amendment 1 `c428153655a` 2026-11-05 22:04Z · the alert-line fix `5e6f1cec8` 2026-11-06 06:34Z. **CI:** run `42117437480`, 4/4 per job, at `c428153655a`; green descendants per job `42175332483` (`afd2e3da6`) and `42178305136` (`f6ea3f3d3`, the close).
 
 ## ⚠️ OPEN AT CLOSE — stated first
 | item | owner | home | closes when |
@@ -35,11 +35,11 @@ The token-watch study shares the staging box's disk with the live trading app. O
 | 2 | Langston PROCEED on r2 (r2a), re-declared `architecture` |
 | 3 | `f02f3cfe7`, `310132582`, `372bee3ed`; amendment 1 `eebe1ed12`, `3a68e4fd0` |
 | 4 | Langston r1-r4 to PROCEED (v4 auth blocker and conditions folded, `2227755e2` → `3add04f48`); amendment 1 parts 1-3 (`55c3adfca` → `dd729465a`); Coltrane not involved |
-| 5 | CI `42117437480` 4/4 at `c428153655a` |
+| 5 | CI `42117437480` 4/4 at `c428153655a`; the later code commits (`86adb2ab3`, `5e6f1cec8`) had their own runs cancelled, so they are covered by green descendants, per job: `42175332483` at `afd2e3da6` 4/4, and `42178305136` at `f6ea3f3d3` 4/4 (the close commit) |
 | 6 | installed 11-04 and 11-05; the first backlog run hit B2's account download cap and the abort was made to say so (`e27301cc7` → `41b538165`); the lineage gate fired at amendment 1's install and the prune was held until it was explained (Langston PROCEED, msg `1568044465074217033`) |
 | 7 | prune, census, re-download, the nothing-to-move pair, the feed watch — all PASS (`5f1016c4e`) |
 | 8 | Langston CONFIRMED (msg `1568144949201993871`) with three non-blocking conditions |
-| 11 | Langston CONFIRMED (msg `1568158267375484991`); OBJ-3 and OBJ-4 re-derived by him (4 rows ever; 7 of 7 units carry `OnFailure=`); two forward items on `B-TOKEN-WATCH-FOLLOWUP-MEMORY` |
+| 11 | Langston CONFIRMED (msg `1568158267375484991`), then SENT BACK on the correction (msg `1568160077263667204`): the ratchet, the shared-memory row, the CI citation, and a red Test Suite — my plan-row status word `CLOSING` is not one the status-board test maps (`status-board.test.mjs:194`, LIVE2), failing every run from `33aeafd9d`; cleared by the CLOSED flip, green 4/4 at `f6ea3f3d3`. Earlier: OBJ-3 and OBJ-4 re-derived by him (4 rows ever; 7 of 7 units carry `OnFailure=`); two forward items on `B-TOKEN-WATCH-FOLLOWUP-MEMORY` |
 | 9 | C-3: from the next row this key mints, the warn body says its figures are mint-time and how to read the live size as root (the open row `7b19347d` predates the fix and carries neither) (`5e6f1cec8`, installed 06:34Z; Langston discharged, msg `1568151343321849867`) |
 
 ## Governance files changed — the Step 10 ledger
@@ -55,8 +55,8 @@ CHANGE-CLASS: architecture
 | T1 | `SYSTEM_IMPACT_MAP.md` | REQUIRED | ✅ | new token-watch entry at the end of Layer 9: host, users, store, caps, every unit, the off-box leg, the alert keys, the measured ACL and the shared-disk blast radius (a gap since the parent batch) |
 | T1 | `SPRINT_TO_LIVE_PLAN.md` row 5b | REQUIRED | ✅ | closing, report linked |
 | T1 | `PHASE_19_PLAN.md` | REQUIRED if P19 | N/A | not a `P19-*` batch, no row there |
-| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ / N/A | mine at each step; shared: nothing every session must know |
-| T1 | Langston's `MEMORY.md` | REQUIRED | ✅ | one STANDING NOTES line through `langston-memory-write` (part `e6360704` → `8988f8bf`): `7b19347d` is a standing condition, its body frozen at mint (7.18 GiB), read the live size as root, never ack, owner the follow-up batch; loaded set 142,797 / 143,856 B |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ / ✅ | shared: one line — token-watch shares the staging disk with the live app, 8 GiB cap, warn `7b19347d` standing, ~96 MB/day partly unprunable; check it first on disk pressure (the alert-protocol line compressed to stay under the cap); mine at each step |
+| T1 | Langston's `MEMORY.md` | REQUIRED | ✅ | two writes through `langston-memory-write`, net −70 B on his loaded set (row 2.8b, the sum may only go down): (1) a STANDING NOTES line — `7b19347d` is a standing condition, its body frozen at mint (7.18 GiB), read the live size as root, never ack, owner the follow-up batch — 142,329 → 142,797 (+468, which alone broke the ratchet); (2) the `B-RR-FLOOR-HEADROOM` section's non-`keep:` header prose moved to its progress report (Langston's named candidate) — 142,797 → 142,259 (−538). Before/after from the tool's own ratchet record |
 | T1 | session task list (mine) | REQUIRED | ✅ | row → Step 11; CC_A / CC_B / CC_C: N/A — not mine |
 | T1 | Observation column | judged | N/A | the open warn row is a standing condition owned by the follow-up batch, not an observation window |
 | T2 | `RUNNING_ISSUES.md` | judged | ✅ | `#1132` annotated: the storage half closes, the rest stays open |
