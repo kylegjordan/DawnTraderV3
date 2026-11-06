@@ -94,6 +94,8 @@ describe('D — the Close All button sits behind its confirm (Langston KD-45 fol
     expect(btn).toBeGreaterThan(open);
     expect(close).toBeGreaterThan(btn);
     expect(src.match(/onClick=\{onCloseAll\}/g)?.length).toBe(1);
+    // Langston: cover the mutation CLASS, not one spelling — no onClick of any form on the trigger child.
+    expect(src.slice(open, close)).not.toContain('onClick');
     expect(src).toContain('<AlertDialogAction onClick={onCloseAll}>');
   });
 });
