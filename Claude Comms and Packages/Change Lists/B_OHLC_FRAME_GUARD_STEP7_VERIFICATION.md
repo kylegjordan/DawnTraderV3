@@ -40,3 +40,18 @@ The archivers' in-process counters (the panel's "since PID" columns) and the fra
 
 ## 7. Out-of-scope finding surfaced by this step
 **`#1037`** — the signal-evaluation archive writer dropped 1,015 rows while the Drift Dashboard loaded. Candidate mechanism: the Data Archive panel's untimed full-table counts on the shared pool (`drift-dashboard-aggregator.ts:794-802`). A hypothesis, not established. Home: a review at `3b.h-8` Step 1, owner CC-C.
+
+
+## 8. r6 (OBJ-3 + OBJ-10) — WHY THE ON-SCREEN CHECK HAS NOT RUN, AND A BOUNDED READ OF THE SAME DATA (2026-11-06, CC-C)
+**Why not the tab.** The r6 code is live (it rode release deploy A, 2026-10-02; staging head `0f4835b5a` today). The pre-registered Step-7 claim is a RENDERING claim taken with the tab open and an abort at 7 of 10 pool connections. On 2026-10-02 the abort fired 10 s after opening (`RELEASE_DEPLOY_A_STEP7_CCC.md`), and on 2026-11-04 the same tab tipped the xStock bar-availability transactions into a pool lock-up that needed a restart (`#1037` am.4). The pressure comes from the OTHER panels on that tab (the Data Archive panel's untimed counts), not from this card. ⇒ **I have not opened the tab again.**
+
+**A bounded read of the card's own data, 2026-11-06 10:21Z.** `GET /api/analytics/passive-archive-status?window=rolling_24h` through `dt-api` (HTTP 200), with `pg_stat_activity` for `application_name='dawntrader_main'` sampled before, during and after: **0, 0 → 3, 6, 5, 6, 3 → 3, 3 in use of 10** (peak 6, under the abort line; the in-use count includes normal app work, so it bounds the card's load from above).
+| universe | OHLC rows in 24 h | status | `ohlcFramesSkipped` |
+|---|---|---|---|
+| `xstock_spot` | 233,794 | `COUNT_UNKNOWN` (`timeout`) — the ticker count did not finish | 0 |
+| `xstock_perp` | 14,390 | `OK` | 0 |
+| `crypto_spot` | `null` | `COUNT_UNKNOWN` (`timeout`) | 0 |
+| `crypto_perp` | 264,783 | `COUNT_UNKNOWN` (`timeout`) | 0 |
+⇒ **OBJ-10's data contract holds live:** finished counts are real numbers (not the old constant 0), unfinished ones are `null` with reason `timeout`, and the status says `COUNT_UNKNOWN` rather than a false drift. **OBJ-3's field reaches the API on all four classes** (`ohlcFramesSkipped`, 0 each: no malformed bar since the 2026-11-05T14:39:52Z start — zero opportunity, not proof the counter fires; its firing is proved by the unit test).
+**The labels at the deployed sha** (`client/src/pages/analytics.tsx` at `0f4835b5a`): the four row labels (`:1892-1895`), the `skipped (since PID)` header (`:1968`), `null` rendered as "—" (`:1912-1913`), and a `COUNT_UNKNOWN` badge (`:1906`).
+**What this does NOT establish:** that the card RENDERS — the pre-registered claim. That needs the tab, and the tab is unsafe until `#1037`'s cause (the Data Archive panel's unbounded counts) is fixed at its home. **Open question for Langston: does this bounded read discharge Step 7, or does the on-screen check wait on `#1037`?**
