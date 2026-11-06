@@ -51,6 +51,7 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("LF not pinned on stdout", replace('        sys.stdout.reconfigure(encoding="utf-8", newline="\\n")', '        sys.stdout.reconfigure(encoding="utf-8")')),
     ("P5 link: the nested transcript not named", replace(
         '                        p[2] += " → nested transcript `sub/%s/subagents__agent-%s.md`" % (sid[:8], aid)', '                        pass')),
     ("P5 link: any agent id written into a path", replace(

@@ -380,7 +380,9 @@ def distill(lines, redact, since=None, until=None, dropped=None, ledger=None):
     # A QUEUED NOTICE THAT NEVER ARRIVED ON A uuid-BEARING ENTRY (Langston P4 finding: 1 of 16 that day, the only
     # failure notice). Matched as a multiset on the stripped text against deliveries anywhere in the file read.
     # Limit, stated: a delivery that lies OUTSIDE the lines handed in (a later file, bytes not yet read) is unseen,
-    # so such a notice shows as queued-only here and as delivered where its copy is.
+    # so such a notice shows as queued-only here and as delivered where its copy is. And the match is on the TEXT
+    # alone: an unrelated user entry whose stripped text is identical would count as the delivery (Langston nit) -
+    # for a task notice, whose text carries its own task id, that needs a word-for-word repeat.
     for ts, li, content in queued:
         k = content.strip()
         if delivered.get(k, 0) > 0:
@@ -408,7 +410,9 @@ def distill(lines, redact, since=None, until=None, dropped=None, ledger=None):
 
 def main(argv):
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        # LF on every machine (Langston P4 item 4): Windows text mode turned each "\n" into "\r\n", which is how the
+        # P4 sample came out CRLF - so a sha or byte offset of a distiller run disagreed across machines
+        sys.stdout.reconfigure(encoding="utf-8", newline="\n")
     except (AttributeError, ValueError):
         pass
     if len(argv) < 2 or argv[1] in ("-h", "--help"):

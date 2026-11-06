@@ -365,6 +365,16 @@ ok("...and the same pair with NO delivery does emit it (the control)",
    len([x for x in dt.distill([json.dumps(raw6[4])], dt.Redactor(), since="2026-11-06T10:00:02.500Z")
         if str(x[0]).startswith("queue:")]) == 1)
 
+print("4e. the command line writes LF on every machine (Langston P4 item 4)")
+import subprocess
+_lf = os.path.join(_d, "lf.jsonl")
+open(_lf, "w", encoding="utf-8", newline="\n").write(json.dumps({"type": "user", "uuid": "l1", "timestamp": "2026-11-06T12:00:00Z",
+                                                                  "message": {"content": "line one\nline two"}}) + "\n")
+_p = subprocess.run([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "dt_transcript.py"), _lf],
+                    capture_output=True)
+ok("the distiller's stdout carries no CRLF, only LF", _p.returncode == 0 and b"\r\n" not in _p.stdout and b"line two" in _p.stdout,
+   _p.stdout[:200])
+
 print("4d. P5: an agent call names the nested transcript it ran in (pre-audit A2b)")
 SIDX = "644fc5fe-3be9-4b77-8317-91cba9fe8f43"
 raw7 = [
