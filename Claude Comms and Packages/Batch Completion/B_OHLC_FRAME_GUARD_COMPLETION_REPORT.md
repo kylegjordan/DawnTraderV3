@@ -1,7 +1,7 @@
 # B-OHLC-FRAME-GUARD — COMPLETION REPORT
 
 **Batch:** `B-OHLC-FRAME-GUARD` · owner CC-C · sprint row 13 · Phase-19 row `3b.h-6` · issues `#1028`, `#1029` (and item 46) · **change-class `non_architecture`** (scope header).
-**State:** Steps 1-10 done; closes on Langston's Step-11 confirmation. Written 2026-11-06.
+**State:** ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (Langston, Discord `1568262167302770764`; Step 8 stands, its premise re-derived by him at the close ref against the live deployed `0f4835b5a`). Written 2026-11-06.
 
 ## OPEN ITEMS AND LIMITS — STATED FIRST
 1. **The reject path has never fired in production.** `ohlcFramesSkipped` was 0 on all four classes at every read (2026-09-11, 2026-11-06) — zero opportunity. The guard's firing is proved by its 38 unit cases and the 29-mutation proof, not by traffic; the panel's amber `> 0` branch (`analytics.tsx:1985`) has never rendered. **No live silence may be cited for it** (`#661` leg 3).
@@ -9,7 +9,7 @@
 3. **Moved out, not in this batch:** OBJ-8 (`#1030`, the futures poller storing a minute as first polled) → `3b.h-7` `B-FUTURES-BAR-FINAL`; OBJ-9 (`#1031`, write order) → the F-G-1 reopen, closed 2026-11-06. The 7-day and 30-day panel windows will mostly read UNKNOWN (exact counts cannot finish in 4 s on these tables) — a cheaper measure is design work, homed with the diagnostic screens.
 
 ## 1. WHAT THE BATCH IS FOR, AND WHAT SHIPPED
-Alert `b48a743f` (2026-09-11): a one-minute price bar arriving with no price became the text "undefined", and the archive writer threw away the whole batch with it (`#1028`). The 1-minute xStock table feeds the higher-timeframe bars the scanner builds signals from (`ohlc-aggregator.ts`), so a dropped batch is a gap in signal input.
+Alert `b48a743f` (2026-09-11): a one-minute price bar arriving with no price became the text "undefined", and the archive writer threw away the whole batch with it (`#1028`). ⚠️ **What this close does NOT say: "the writer stopped failing."** Of all 7 writer-failure alerts with `source=ohlc-batch-writer` ever minted, only the pre-fix `b48a743f` carries `invalid input syntax for type numeric: "undefined"`; the 6 after the deploy (2026-10-17 ×2, 2026-11-04 ×4) are database timeouts and the retry-buffer bound — a different cause, homed on `#705` / `#1037` / `#1078` / `3b.h-8` (Langston's measurement at Step 11). Those are mints under a dedupe key, so a lower bound on failures; `ohlcFramesSkipped` 0 remains the only statement about bars actually skipped. The 1-minute xStock table feeds the higher-timeframe bars the scanner builds signals from (`ohlc-aggregator.ts`), so a dropped batch is a gap in signal input.
 - **One validator** (`server/services/passive-archive/ohlc-frame-validator.ts` `validateOhlcFrame`, pure) over all eight bar fields — OBJ-1. ⛔ It does not use `Number.isFinite(Number(v))`, which accepts `""`, `null`, `" "`, `[]` and `false`.
 - **All three producers call it and skip a failing bar BEFORE `bufferOhlcBar`** (`equity-spot-archiver.ts`, `crypto-spot-archiver.ts`, `kraken-futures-archiver.ts`), so a bad bar never takes good rows down with it — OBJ-2.
 - **A skipped bar is counted and logged, never silent** (`ohlc-frame-skip-tracker.ts`: a rate-limited stderr line naming symbol, field and reason; a sustained-skip alert at `passive_archive.ohlc_frame_skip_alert_streak = 10`); the counter is carried end to end to the Passive Archive panel's `skipped (since PID)` column — OBJ-3.
