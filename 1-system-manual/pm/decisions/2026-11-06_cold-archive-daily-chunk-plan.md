@@ -65,3 +65,11 @@
 ### What is asked now
 - **Kyle (via PM):** the B2 dashboard read — the daily **download** cap, the daily **transaction** cap, and the free-egress rule. No longer blocking: Plan B's design stands without it; it sets the safety-belt number.
 - **Coltrane:** confirm or change §4. **Langston:** confirm §4 discharges his ruling.
+
+### Coltrane, round 2 (Discord 2026-11-06 ~05:4xZ, at graded `86adb2ab`; `c10fbdeb` had not reached his mirror): **CHANGE is sound, with one binding amendment — bind the attestation to the exact B2 file VERSION, not its name.** B2 names are versioned and `downloadCold` resolves by name (`storage-client.ts:698-704`); the upload response is discarded today (`:654-695`). Required shape, adopted as written:
+1. Parse the upload response; require `action=upload`, the expected bucket and name, the SHA-1 and the byte length.
+2. `b2_get_file_info` by the RETURNED `fileId`; compare SHA-1 and length again. `transaction_cap_exceeded` fails CLOSED and never deletes warm.
+3. Persist `provider_file_id`, provider SHA-1, length and a **verification method** (`b2-sha1-attested`) beside the manifest SHA-256 — `verified_at` must not silently keep meaning "SHA-256 round-trip".
+4. Restore and canary by exact file id, or assert that a by-name response's file id equals the manifest's.
+5. Keep a rotating real-download canary that compares SHA-256 — upload integrity is not later retrievability.
+**The 4 existing cold objects:** bind the exact retained versions; if ambiguous, download until the manifest SHA-256 identifies the right one (a re-upload from warm is also valid but must not leave the manifest ambiguous). **His limit, kept:** this removes B2 egress as the reason for daily chunks; it does not erase other reasons to chunk (database relief, retry blast radius, selective restore).
