@@ -198,7 +198,10 @@ export async function updateRegimePerformanceFromVTS(): Promise<{
       // B-VTS-TELEMETRY-AGGREGATES P2: the store is the 7-day window — an empty window leaves an empty store, never the
       // previous run's cells (a value outside its own population, #546). Below the cross-source guard: a clear is a write.
       // No snapshot, so `version` advances with no manifest entry — the manifest records SNAPSHOTS, `version` counts
-      // STORE CHANGES; a gap in the manifest's versions is an empty-window run, by this convention.
+      // STORE CHANGES. ⚠️ `version` is in-memory and restarts at every process start, so a gap in the manifest's
+      // versions is NOT a readable record of an empty-window run (717 entries span versions 1→59 across restarts;
+      // Langston, row 4a Step 8, 2026-11-06). The only trace of this path is the log line below; a snapshot corpus
+      // cannot evidence it either way.
       await telemetryLock.runExclusive(() => {
         vtsTelemetry.regimePerformance = {};
         vtsTelemetry.version = (vtsTelemetry.version ?? 0) + 1;

@@ -1514,3 +1514,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **NOT IN IT.** I1 (an age bound on re-served prices) shipped as `B-PRICE-STALENESS-BOUND`; I4 (the xStock recorder's daily list) moved to sprint row 31. `#1146`'s second gap — no instrument for REST overwriting a newer WebSocket price — stays at sprint row 14a.
 
 **GOVERNANCE FILES CHANGED:** scope · pre-audit · two change lists · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_MANUAL.md` (§16) · `SYSTEM_IMPACT_MAP.md` (§2.1, §2.2) · `RUNNING_ISSUES.md` · `DELETED_COMPONENTS_LOG.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.
+
+## B-VTS-TELEMETRY-AGGREGATES (CC-C, sprint plan row 4a; `#1141`) — change-class `non_architecture` — ✅ **CLOSED 2026-11-06** (Step 4 APPROVED by Langston 2026-10-07 01:05Z at `c8a35d6d9`; deployed `0c8ef5da2` 2026-10-07T15:56Z, CI `37566679783`; Step 8 CONFIRMED by Langston 2026-11-06 on the absent arm; report `Batch Completion/B_VTS_TELEMETRY_AGGREGATES_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** The VTS's 7-day win-rate store, which the SQE's predictive confidence reads, answered wrongly in two ways: a strategy with no data of its own was given another strategy's numbers, and a pair that stopped trading kept its old win rate until the next restart (224 such cells in 170 of 926 snapshots). Now each lookup is the strategy's own cell or nothing, and each run rebuilds the store from the window. Six dead functions deleted (rule 18).
+
+**RESULT.** A pair present on 10-07 dropped out by 10-10 within one process lifetime (manifest version 1 → 11, no restart). The "trade count fell" evidence was withdrawn at Step 8 because the old code could also produce it. The empty-window clear path has never run. No live decision reads these values yet.
+
+**GOVERNANCE FILES CHANGED:** scope · pre-audit · change list · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_IMPACT_MAP.md` (§8.3b) · `SYSTEM_MANUAL.md` · `DELETED_COMPONENTS_LOG.md` · `RUNNING_ISSUES.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.

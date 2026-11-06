@@ -860,6 +860,14 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **B59 Fix**: `vts-telemetry.ts:148` field name mismatch fixed (netProfit → netProfitPercent conversion). Pre-existing pnl double-scaling at line 158 also fixed (Langston catch). Archive now receives real VTS win rates and P&L.
 - **Blast Radius**: **LOW** — memory and audit, not action
 
+### 8.3b VTS Telemetry Store — the 7-day regime × strategy win-rate store (`B-VTS-TELEMETRY-AGGREGATES`, row 4a, live 2026-10-07)
+- **File**: `server/core/logging/vts-telemetry.ts` (in-memory store + snapshots `logs/telemetry/regime_performance_<date>_VTS_<n>.json` + `regime_performance_manifest.json`).
+- **What**: every 6 hours the VTS's closed trades in the last 7 days are aggregated per regime × strategy (win rate, average P&L, trade count, a regime-level skip ratio). **Each run REPLACES the store** — a pair with no trade in the window has no cell and reads neutral (0.5); it used to merge, so a pair kept its last win rate until the next restart. **`getRegimePerformance` answers only with the strategy's own cell, or null** — the `SKIPPED` fallback that answered with another strategy's metrics is deleted.
+- **Downstream**: `getPredictiveConfidence` (`score-calculator.ts`) → the SQE's predictive confidence and what is built from it. No live decision reads them today (pre-audit r3 §B1: shadow, log-only, manual or unreachable).
+- **Shared state**: the store and its `version` counter are IN MEMORY. ⚠️ **`version` restarts with the process**, so the manifest's versions are only comparable within one process lifetime (717 entries span versions 1→59; Langston, 2026-11-06). The empty-window branch clears the store and writes NO snapshot — its only trace is the log line `No entries in the 7-day window — store cleared, no snapshot`; it had never run as of 2026-11-06.
+- **Execution**: 6-hourly timer plus a boot aggregation.
+- **Blast Radius**: **LOW today** (no live reader) — MEDIUM once confidence feeds a live decision. Record: `Batch Completion/B_VTS_TELEMETRY_AGGREGATES_COMPLETION_REPORT.md`.
+
 ### 8.4 Canonical Weights (Bridge Artifact)
 - **File**: `bridge/canonical/phase9_predictive-learning.json`
 - **What**: Authoritative snapshot of learned knowledge across patterns, regimes, confidence modifiers.
