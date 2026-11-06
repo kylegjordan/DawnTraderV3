@@ -318,3 +318,38 @@ Per the Step-8 F2 amendment, which is binding and was written before this window
 - ⛔ **The 99.944% is a recovery of *a basis being nameable*, not of *the basis being right*.** Whether the named side is the correct side for the job is `3n`'s question, not this one.
 - ⚠️ **One lifetime, one instrument, in-memory.** A restart ends it.
 
+---
+
+## 5. ⭐ STEP-2 AMENDMENT 1 (CC-C, 2026-11-06) — CONDITION 3: THE AGE OF THE SIDES AT LEVEL BUILD, AND THE RUNG MIX
+
+**Why now:** the 09-28 re-ruling lifts the hold on four conditions and anchors condition 3 *after* the 2026-10-02 deploy. This read is the first since that anchor. Conditions 2 and 4 follow as amendments 2 and 3; nothing here starts Step 3.
+
+**Object and population.** The level-basis funnel (`getLevelBasisFunnel`, `server/routes.ts:7902`, read via `/api/xstocks/filter-diagnostics` → `vtsEvaluation.levelBasisFunnel`), the cell `active:crypto_spot:active_signal_birth` — every crypto level-build ATTEMPT in the active lane (attempts, not distinct signals), over ONE process lifetime: boot `2026-11-05T14:39:52Z`, read `2026-11-06 ~15:15Z` (~24.6 h). After the 10-02 deploy and after release deploys A and B (rest-sides-to-cache). In-memory: a restart ends it.
+
+**Rung mix.** 144,884 attempts. The book rung accepted **5,147 (3.6 %)**; it refused 139,737, of which **126,994 `no_book`** (the symbol has no book subscription — A3's cause, unchanged) and 12,743 `stale_book`. The ladder accepted **144,772 (99.92 %)**: 5,147 from the book, **139,625 from ticker sides** — `rest_poller` 134,373, `rest_adapter` 5,035, `rest_batch` 89, `ws_ticker` 128. Refused 112, all `stale_ticker`. ⇒ **condition 1's refuse-by-construction costs almost nothing in COUNT; the ladder is nearly always nameable.**
+
+**The age of what was accepted (the new fact).** Ticker-side ages, bucket edges in seconds:
+
+| ≤1 | 1-2 | 2-5 | 5-10 | 10-15 | 15-30 | 30-45 | 45-60 | >60 |
+|---|---|---|---|---|---|---|---|---|
+| 5,219 | 4,510 | 11,142 | 19,141 | 19,772 | 27,357 | 27,727 | 24,756 | 1 |
+
+Book-side ages (5,147): 4,191 ≤1 s, 4,751 ≤5 s, 38 in 45-60 s.
+⇒ **Of all 144,772 accepted builds: 25,622 (17.7 %) rest on a side ≤5 s old; 64,693 (44.7 %) ≤15 s; 52,484 (36.3 %) are older than 30 s.** The near-uniform spread to 60 s is the REST poll cadence — the transport, not the market.
+
+**What an old side costs, measured.** One-minute open→close move, `crypto_spot_ohlc_1m`, bars with `interval_begin >= 2026-11-05T14:40Z`: 167,410 bars, 430 symbols — **p50 0.010 %, p90 0.263 %, p99 1.44 %** (thin symbols with flat bars pull the median down; the tail is the point). Against a crypto median spread of 0.199 % (half-spread ≈ 0.10 %), **a 60-s-old side is inside the half-spread in a typical minute and outside it in about one minute in ten.** In those minutes a level built "on the transactable side" is off by more than the error the switch-on exists to remove.
+
+**The inconsistency it exposes.** At the exit trigger the same lane accepts a book side at most **2,000 ms** old (`active:crypto_spot:exit_trigger`, ageMax 2,000 / 1,999 ms). Under switch-on a stop would be BUILT on a side up to 60 s old and FIRED against one at most 2 s old.
+
+**Re-justification of `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60 s, `level-basis.ts:719`) — my reading:** the 60-s ceiling was set for an OBSERVATION (A8) and is **not re-justifiable** for an operative level. The candidate ceilings and what each costs today:
+
+| ceiling | builds accepted | refused vs today |
+|---|---|---|
+| 60 s (today) | 144,772 | — |
+| 15 s | ~64,693 (44.7 %) | ~55 % of crypto level builds refused |
+| 5 s | ~25,622 (17.7 %) | ~82 % refused |
+
+⇒ **A tighter ceiling is honest and halves (or worse) crypto signal birth at the current transport.** That is an admission change of the same size class as condition 2's, and it compounds with it. **QUESTION FOR LANGSTON (the one gate of this amendment):** keep 60 s with the age stamped on every built level and stratified at Step 7, or tighten — and if tighten, does the switch-on wait for fresher sides? My recommendation: **tighten to 15 s, state the admission cost to Kyle before Step 6, and do not wait** — a refused build is a missed trade, a stale build is a wrong stop.
+
+`NOT RE-READ`: the drift-vs-spread comparison (a mechanism claim about what a stale side costs) was not routed to a fresh reader; Langston is the first second pass.
+
