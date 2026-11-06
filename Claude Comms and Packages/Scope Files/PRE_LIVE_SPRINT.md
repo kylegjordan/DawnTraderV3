@@ -86,6 +86,13 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 - B-REVIEW-REF-READ (Infra Claude, #1131) — Langston's review tool can read only `migration/aws-supabase`, so a throwaway `migration/<name>` review branch has no supported read path (Langston, 2026-09-30)
 - B-PUSH-GUARD-ROOT (Infra Claude, KD-42) — the push guard's type-check runs and keys every error from the repo root, so a push from a subfolder is no longer falsely refused; four fast tests (Langston + Coltrane agreed, `Claude Comms and Packages/Langston Design Asks/INFRA_SMALL_ITEMS_2026-11-05.md`) — crew tooling, after live per KD-15
 - B-CRONTAB-SNAPSHOT (Infra Claude half 1; OLD Claude half 2, KD-42) — a daily root job on staging publishes only each job's schedule and script name, and archival-health checks its schedules against it (same record) — crew tooling, after live per KD-15
+- B-LANGSTON-MEMORY-NOTICES (Infra Claude) — #1216: a damaged Langston memory index is noticed only if someone reads it; give it an alert, and name the act not a session in the tools' recovery text (Kyle 2026-11-06, KD-51: after live)
+- B-AGENT-PRIVATE-TMP (Infra Claude) — #979, #1205: a Langston run wrote his memory to shared /tmp readable by other accounts on the agent box (not the internet); private /tmp for both agents, and publish his privacy-check result to him (Kyle 2026-11-06, KD-51: after live, since the exposure is to crew accounts only)
+- B-LANGSTON-REPOST-FAILED (Infra Claude) — #1207: re-post a kept Langston reply after a failed post instead of re-running the review (Kyle 2026-11-06, KD-51: after live)
+- B-ALERT-LANE-LEDGER-OWNER (Infra Claude) — #1201: the alert lane reads an alert's owner from the plan, not from Langston's past markers; carries the alert-id-first fix (162 of 3,529 posts lost their id at the 1,900-char cut) (Kyle 2026-11-06, KD-51: after live)
+- B-LANGSTON-RECONCILE-VERB (Infra Claude) — #1057: a reviewed one-command recovery for Langston's memory tool after a hand edit, plus a daily drift check (Kyle 2026-11-06, KD-51: after live)
+- B-CHAPLET-DELETE (Infra Claude) — #1101: delete the old /chaplet code; the route is already blocked at the gateway since 2026-09-29 (Kyle 2026-11-06, KD-51: after live)
+- B-TOKEN-WATCH-BIRTH-GAP (Infra Claude) — #1247: find why the new-token feed stopped 2026-10-18 to 10-27 unnoticed; the feed's dead-man alarm now pages, so a repeat is caught (Kyle 2026-11-06, KD-52: after live, with the token study)
 - #1043 (CC-INFRA) — a pinned GitHub read served the wrong file — reviewer tooling
 - #169 (Infra Claude) — the context-bridge-log retention job: a latent out-of-memory and (per Langston's archive) never installed
 - #219 (CC-A) — dormant flip-rate governance input
