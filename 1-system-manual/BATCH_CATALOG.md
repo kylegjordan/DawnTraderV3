@@ -1504,3 +1504,13 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **HOW.** A daily off-box leg (upload to B2, read back by file id, manifest, then delete the local copy) under its own user and a key that cannot delete; a daily size check with warn and over-cap alerts; failure pages on every unit; a prune of spent schedule buckets bounded by the follow-up's cursor; an hourly feed watch.
 
 **RESULT.** 13.00 → 6.02 GiB; 88 archives off the box, re-downloaded and verified; the first scheduled prune removed 723 buckets. The store still sits just over its 6 GiB warn line and grows ~96 MB a day, part of it with no prune path — the follow-up batch carries that.
+
+## B-PRICE-FEED-TRUTH (CC-C, pre-sprint Stage 1; `#1047`, `#1076`, `#1146`, `#1173`) — change-class `architecture` — ✅ **CLOSED 2026-11-06** (Step 4 APPROVED by Langston per increment 2026-10-07; deployed in CC-C's release `ad01f5339` 2026-10-10, CI `38049753797` 4/4; Step 7 PASS and Coltrane's second pass APPROVED 2026-10-15; report `Batch Completion/B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** Two ways prices reaching the engine were wrong. **I3:** the Kraken WebSocket adapter threw away whole messages (~11 a day) when the venue acknowledged the `instrument` channel with no symbol; it now handles a symbol-less acknowledgement and counts bad pair inputs instead of throwing. **I2:** REST prices were requested and filed under guessed pair names, which put prices under keys nothing reads ("phantoms") and let one xStock symbol void a whole Kraken REST batch; requests and answers now go through Kraken's own pair list, and the readyToBuy refresh sends REST only crypto.
+
+**RESULT.** I3: 21 instrument acknowledgements and 0 parse errors after the deploy, against 6 the day before. I2: 14 of 14 one-minute readings with no phantom and the write identity exact; 56 readyToBuy refreshes, 0 batch errors.
+
+**NOT IN IT.** I1 (an age bound on re-served prices) shipped as `B-PRICE-STALENESS-BOUND`; I4 (the xStock recorder's daily list) moved to sprint row 31. `#1146`'s second gap — no instrument for REST overwriting a newer WebSocket price — stays at sprint row 14a.
+
+**GOVERNANCE FILES CHANGED:** scope · pre-audit · two change lists · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_MANUAL.md` (§16) · `SYSTEM_IMPACT_MAP.md` (§2.1, §2.2) · `RUNNING_ISSUES.md` · `DELETED_COMPONENTS_LOG.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.

@@ -5710,10 +5710,14 @@ Dispatched NLAI actions through the ExecutionPolicyController for approval, then
 
 - `subscribe(symbol, bucketType)` — add symbol to a bucket
 - `unsubscribe(symbol)` — remove from all buckets
-- `getPrice(symbol, bucketType)` — get cached or fetch fresh
-- `getBatch(bucketType, symbols)` — batch retrieval for FX5
+- `getBatch(bucketType, symbols, { restEligible })` — batch retrieval; only a stale symbol IN `restEligible` is fetched from REST and re-injected, any other is counted `ineligible` and served from cache or reported missing (`B-PRICE-FEED-TRUTH` I2, 2026-10-10)
+- ~~`getPrice(symbol, bucketType)`~~ — **deleted 2026-10-07** (`B-PRICE-FEED-TRUTH` I2, rule 18; `DELETED_COMPONENTS_LOG`)
 - `updateFromWebSocket(symbol, price)` — inject WS prices
 - `updateFromRest(symbol, price)` — inject REST prices
+
+### 16.4 REST requests and answers go through the venue's own pair list (`B-PRICE-FEED-TRUTH` I2, live 2026-10-10)
+
+A REST request carries only pairs Kraken lists (`krakenAssetPairsService.toKrakenRest`); an unlisted symbol is not sent and is counted `unlisted`. Each answer is filed by the venue's own key (`resolveByKrakenKey`); a key it cannot place is not filed and is counted `unresolved` — never filed under a guessed normalisation, which is how a price used to land under a key no reader asks for (a "phantom", `#1146`). Until the pair list has loaded, nothing is sent. The readyToBuy refresh sends Kraken REST only its crypto symbols: one xStock symbol in a REST ticker batch made Kraken reject the whole batch (`#1173`). Record: `Batch Completion/B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md`.
 
 ---
 
@@ -12515,7 +12519,7 @@ These are the architectural truths a new PM needs to understand HOW the multi-as
 
 2. **Telemetry partitioning via separate-instance triad.** `getAssetClassInstances(class)` factory returns `{telemetry, ratioManager, failureTracker, scanManager}` — each asset class with materially different signal distributions gets its own instance set. Crypto path returns existing module-scoped globals (back-compat); xstock_spot lazy-instantiates fresh triad with in-memory-only persistence (Day 1 hazard documented in B79 PIA).
 
-3. **Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated.** `resolveAssetClass(symbol, exchange)` in `shared/asset-classes.ts` keys on the exchange tag (`kraken` vs `kraken-equities` vs `kraken-futures`) PLUS a collision-set gate. The data-ingestion path is the authoritative signal — which WS endpoint or REST domain delivered the data. Downstream consumers READ `asset_class` from the persisted row, never re-resolve from canonical form (post-canonicalization is fundamentally ambiguous for the 9 USD ticker collisions in `XSTOCK_SPOT_KRAKEN_COLLISIONS`).
+3. **Asset-class resolution is exchange-disambiguated, never canonical-form-disambiguated.** `resolveAssetClass(symbol, exchange)` in `shared/asset-classes.ts` keys on the exchange tag (`kraken` vs `kraken-equities` vs `kraken-futures`) PLUS a collision-set gate. The data-ingestion path is the authoritative signal — which WS endpoint or REST domain delivered the data. Downstream consumers READ `asset_class` from the persisted row, never re-resolve from canonical form (post-canonicalization is fundamentally ambiguous for the ticker collisions in `XSTOCK_SPOT_KRAKEN_COLLISIONS` — **16 USD and 16 EUR pairs** as of 2026-11-06; this line said 9 until `B-PRICE-FEED-TRUTH`'s Step 10).
 
 4. **Persistence-at-trade-open via `vts_open_trades` table.** Open VTS trades are durable rows (hybrid 14 explicit cols + jsonb context for ~20 optional fields); rehydrated on PM2 restart in `server/index.ts` boot sequence after `loadTrailingStates`. Trade-open path AWAITS the INSERT before adding to in-memory `openVirtualTrades` Map (no observer-divergence half-state). Trade-close DELETE is currently fire-and-log async — atomic single-transaction close-time DELETE+INSERT through `persistRealPriceTrade` is RUNNING_ISSUES #91 follow-up (B79.0g-tx).
 
