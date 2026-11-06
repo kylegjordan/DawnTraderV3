@@ -95,6 +95,21 @@ check("S2 key token-watch-store-warn", m.get("dedupe_key") == "token-watch-store
 check("S2 body names the standing condition", "STANDING CONDITION" in m.get("body", ""))
 check("S2 body says its figures are mint-time and do not update (Langston Step 8 C-3)",
       "AS OF THIS ROW'S MINT" in m.get("body", "") and "DO NOT UPDATE" in m.get("body", ""))
+import datetime as _dt, re as _re
+_st = _re.search(r"MINT \((\d{4}-\d\d-\d\d \d\d:\d\dZ) UTC\)", m.get("body", ""))
+_now = _dt.datetime.now(_dt.timezone.utc)
+check("S2 the mint stamp is rendered YYYY-MM-DD HH:MMZ", _st is not None, m.get("body", "")[:200])
+check("S2 the mint stamp is UTC (within 2 min of an aware UTC now; a naive local now() fails here off-UTC)",
+      _st is not None and abs((_now.replace(tzinfo=None) - _dt.datetime.strptime(_st.group(1), "%Y-%m-%d %H:%MZ")).total_seconds()) < 120)
+_orig_stamp = store_watch.utc_stamp
+store_watch.utc_stamp = lambda: (_now + _dt.timedelta(hours=3)).strftime("%Y-%m-%d %H:%MZ")   # a +3 h zone, simulated
+_b = store_watch.body_for("warn", 7 * 2 ** 30, {"due": 1})
+_s2 = _re.search(r"MINT \((\d{4}-\d\d-\d\d \d\d:\d\dZ) UTC\)", _b)
+check("S2 positive control: a stamp 3 h off UTC is caught by the same comparison",
+      abs((_now.replace(tzinfo=None) - _dt.datetime.strptime(_s2.group(1), "%Y-%m-%d %H:%MZ")).total_seconds()) >= 120)
+store_watch.utc_stamp = _orig_stamp
+check("S2 body names root and the silent partial total", "AS ROOT" in m.get("body", "") and "silently small" in m.get("body", ""))
+check("S2 body's source path exists in the repo", "token-watch/ops/store_watch.py" in m.get("body", ""))
 check("S2 body carries the split", "due:" in m.get("body", "") and "births:" in m.get("body", ""))
 check("S2 the run wrote nothing in the store", census() == before)
 

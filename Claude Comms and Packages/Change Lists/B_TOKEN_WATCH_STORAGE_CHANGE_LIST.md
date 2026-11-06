@@ -279,3 +279,9 @@ Install (P9) at a reviewed sha; the A7 mint drill ending in a read-back `resolve
 - `tests/test_store_watch.py`: S2 asserts the line; **32 passed, 0 failed** (Windows; the suite is pure).
 - ⚠️ **The open row `7b19347d` keeps its old body** — a body is written at mint; the new line reaches the next row this key mints. Stated, not fixed: re-minting it would need a resolve, which the row's own criterion forbids while the store is over the line.
 
+## Step 9 r2 — Langston CHANGES on the C-3 line (msg `1568148902463545384`), folded
+- **C-3a:** the feed watch's `store=` is the band (ok/warn/over_cap), not the size. `ops/feed_watch.py` now logs `store_bytes=` beside it, and the alert line points there.
+- **C-3b:** both live routes are root-only (journal and store), and an unprivileged `du` is denied parts of the store and prints a partial, silently small total (he measured `96,560` as `deploy`). The line now says AS ROOT on both and says so.
+- **Source path** corrected to `token-watch/ops/store_watch.py`.
+- **The stamp is fenced:** `utc_stamp()` (aware UTC); S2 asserts the rendered `YYYY-MM-DD HH:MMZ` is within 2 min of an aware UTC now, with a positive control (a +3 h stamp is caught by the same comparison), and asserts the root note and the source path. **37 passed, 0 failed.**
+- **7b19347d, the consequence recorded:** the fix is forward-only, and the only row that exists carries no as-of line; it clears only when the store drops under 6 GiB, which may be the condition's whole life. **The alert CLI has no body-edit verb** (`scripts/system-alerts.ts` commands: `add`, `fire-due`, `list`, `ack`, `resolve`, `resolve-key`), so there is no honest route to amend it in place.

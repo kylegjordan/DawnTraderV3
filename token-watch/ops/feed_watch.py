@@ -76,8 +76,11 @@ def run_check(now: datetime | None = None) -> int:
     gap = liveness.open_gap()
     result = {"checked_at": now.isoformat(), "open_gap": gap, "stats": stats, "maxrss_mb": _maxrss_mb()}
     liveness.save_feed_result(result)
-    LOG.info("feed watch: rows=%s gaps_recorded=%s open_gap=%s store=%s maxrss_mb=%s",
-             stats.get("rows"), stats.get("gaps"), gap, stats.get("store_state"), result["maxrss_mb"])
+    # store_bytes beside store= (Langston, storage Step 9 C-3a): store= is the band (ok/warn/over_cap), and the store
+    # alert's body points readers here for the live SIZE.
+    LOG.info("feed watch: rows=%s gaps_recorded=%s open_gap=%s store=%s store_bytes=%s maxrss_mb=%s",
+             stats.get("rows"), stats.get("gaps"), gap, stats.get("store_state"), stats.get("store_bytes"),
+             result["maxrss_mb"])
     return 0
 
 

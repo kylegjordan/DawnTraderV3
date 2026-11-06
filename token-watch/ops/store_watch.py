@@ -80,6 +80,11 @@ def gb(n: int) -> str:
     return "%s B (%.2f GiB)" % (format(n, ","), n / 2**30)
 
 
+def utc_stamp() -> str:
+    """The mint time, in UTC (an aware now(), never a naive local one - the box's local zone is not UTC)."""
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+
+
 def body_for(state: str, total: int, parts: dict[str, int]) -> str:
     lines = [
         "Store: %s — measured by liveness._store_size_check(), a whole-store walk summing file sizes only." % gb(total),
@@ -101,9 +106,10 @@ def body_for(state: str, total: int, parts: dict[str, int]) -> str:
     # Langston, Step 8 C-3: a standing row is never re-minted while it stays open (dedupe), so this body is frozen at
     # mint time - and the live figure is root-only (journal and store), so a non-root reader sees ONLY this body.
     lines.append("THESE FIGURES ARE AS OF THIS ROW'S MINT (%s UTC) AND DO NOT UPDATE: the row is not re-minted while it "
-                 "stays open. Live size: `du -sb /var/lib/token-watch` as root, or the hourly token-watch-feed-watch "
-                 "log line (store=...)." % datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%MZ"))
-    lines.append("Source: token-watch/store_watch.py, unit token-watch-store-watch (B-TOKEN-WATCH-STORAGE, #1132).")
+                 "stays open. Live size, AS ROOT on the staging box: `du -sb /var/lib/token-watch`, or the hourly "
+                 "`journalctl -u token-watch-feed-watch` line's store_bytes= field. Run without root, `du` is denied "
+                 "parts of the store and prints a partial, silently small total." % utc_stamp())
+    lines.append("Source: token-watch/ops/store_watch.py, unit token-watch-store-watch (B-TOKEN-WATCH-STORAGE, #1132).")
     return "\n".join(lines)
 
 
