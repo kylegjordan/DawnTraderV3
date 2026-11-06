@@ -48,6 +48,7 @@
  */
 
 import { storage } from '../storage';
+import { stampPositionTradeId } from './trade-record-restore';
 import { tradingModeToRunMode } from './run-mode-controller.js'; // ITEM-4 step 2: single-site mode map
 import { PaperOrderPlacer } from './execution/order-placer.js'; // P19-B3a: typed order-placement port
 import { refuseTakerBooking, entryFillShadow } from '../core/trading/entry-booking.js'; // B-ENTRY-DISTANCE-GUARD (row 59)
@@ -2095,7 +2096,12 @@ export class ActiveExecutionEngine {
     const cls = asValidAssetClass(position.assetClass);
     if (!cls) return { status: 'unresolved', why: `the position has no valid asset class (${String(position.assetClass)})` };
     const rec = await storage.findOpenTradeRecord(this.mode, position.symbol, cls);
-    if (rec.status === 'one') return { status: 'one', record: rec.record };
+    if (rec.status === 'one') {
+      // Langston Part C NEW-1: resolved BY KEY ⇒ stamp the record's id onto the position, so a later restore cannot
+      // insert a second record for a trade this close is about to finish (see `stampPositionTradeId`).
+      await stampPositionTradeId(this.mode, position, rec.record.id);
+      return { status: 'one', record: rec.record };
+    }
     return {
       status: 'unresolved',
       why: rec.status === 'none' ? 'no open trade record matches its symbol, mode and asset class'
