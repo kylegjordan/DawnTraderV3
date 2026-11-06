@@ -28,4 +28,4 @@ Each has its rollback file in git beside it.
 1. Each owner's PROCEED sha filled in the table above (an owner who has not confirmed = that batch does not ride; if its commits are already on the head, that is a STOP for the whole deploy).
 2. Final push; then the ancestry print and CI per job at the deploy sha.
 3. `dt-deploy <full-40-char sha> --by cc-c`; first read: the three migrations applied, in this order; then ENGINE RESUMED.
-4. Name OLD and NEW in channel; the deploy-drift rungs clear on their own.
+4. Name OLD and NEW in channel; the deploy-drift rungs clear on their own. **Audit them BY ID at the clear (Langston 2026-11-06):** rung 1 `e4b0d52a-bd6e-41a9-92e7-4ef15ea07481`, rung 2 `d911da3d-44c9-417e-8e17-e4fd159b53c8`, rung 3 `5e760b86-0a29-4d32-b49c-453c93bac97f` (rung 4 added here if it mints before the deploy) — each must read `resolved` after the deploy. *(Line added by NEW Claude.)*
