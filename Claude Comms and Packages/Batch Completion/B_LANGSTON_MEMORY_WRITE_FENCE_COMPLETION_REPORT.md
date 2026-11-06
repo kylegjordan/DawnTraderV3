@@ -49,7 +49,7 @@ CHANGE-CLASS: non_architecture
 | T1 | `PHASE_HISTORY.md` | REQUIRED | ✅ | plain-language entry |
 | T1 | `SPRINT_TO_LIVE_PLAN.md` row 4 | REQUIRED | ✅ | closing, report linked |
 | T1 | `PHASE_19_PLAN.md` | judged | N/A | not a `P19-*` batch, no row there |
-| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ / N/A | mine updated each step; shared: nothing every session must know beyond what `workflow-10` already says (write his memory only through the tool) |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ / ✅ | shared: one line — his memory files are root-owned, only the tool writes them, and `--allow-growth` (exit 7) is not a session's to pass; mine updated each step |
 | T1 | scope / pre-audit | REQUIRED | ✅ | r2 / r2a present |
 | T1 | completion report | REQUIRED | ✅ | this file |
 | T1 | Observation column | judged | N/A | nothing deferred to an observation window |
@@ -67,6 +67,7 @@ CHANGE-CLASS: non_architecture
 | T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | judged | N/A | no asset-class learning |
 | T2 | `BUILD_METHOD_PLAYBOOK.md` | judged | N/A | the method did not change (a loaded rule replaced by an impossibility is already its "prefer impossible over intercepted") |
 | T2 | `LANGSTON_ARCHITECTURE.md` | judged | ✅ | change-log row 2026-11-05 with BEFORE / AFTER / why |
+| T2 | `.claude/skills/workflow-10-governance/SKILL.md` | judged | ✅ | the memory recipe (§10.b) names the fence and exits 6, 7 and 8; `--allow-growth` needs a ruling from Langston or Kyle (Langston Step 11, msg `1568154513188327525`: it carried the claim and documented exit 4 only) |
 | T2 | `CLAUDE.md` / `CONDUCT.md` | judged | N/A | no stable rule changed |
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | judged | N/A | no `CLAUDE.md` change |
 | T2 | `DELETED_COMPONENTS_LOG.md` | judged | ✅ | the old lock in his home |

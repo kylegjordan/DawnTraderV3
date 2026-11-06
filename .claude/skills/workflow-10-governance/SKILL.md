@@ -240,6 +240,10 @@ ssh root@204.168.141.77 "langston-memory-write --compose --by '<session>' --reas
 - ⛔⛔ **NEVER take the sha at write time (Langston Step-4 BLOCKER-1).** A fresh sha matches whoever wrote while you were editing, so the compare-and-swap passes and their write is silently lost — the exact defect this tool exists to stop. **The sha must be of the bytes you started from.**
 - **Exit 4 means the file changed since you fetched it.** The message says whether that was another session writing through the tool (re-fetch, redo) or a hand edit outside the tool (tell Infra Claude first). Never force.
 - **Exit 5 means a declared count was wrong:** the file was restored byte-for-byte. Re-count the change you intended; do not just try other numbers.
+- **Since `B-LANGSTON-MEMORY-WRITE-FENCE` (2026-11-05) his memory files are root-owned and immutable: a direct `Write`/`Edit` to `MEMORY.md`, its archive or compose-state is refused (EPERM). Only this tool writes them.**
+- **Exit 6 is a refusal about the environment** (a fenced path in the wrong state, the lock, the archive) — nothing written; tell Infra Claude.
+- **Exit 7 means the write grows his loaded set past its ceiling** (row 2.8b). Shrink something in the same write. ⛔ **The refusal text offers `--allow-growth "<reason>"`; that flag is NOT a session's to pass — it relaxes Langston's ceiling, which only a ruling from Langston or Kyle may do.** Ask, and cite the ruling in the reason.
+- **Exit 8 means the write would cut the part below half its size** — a wipe, not an edit. If it is a deliberate cleanup, Infra Claude runs it as root with `--allow-shrink`.
 - ⛔ **If `command -v langston-memory-write` prints nothing on the box, the writer is not installed yet. STOP and ask Infra Claude. Do NOT fall back to `/tmp`.**
 
 ## ⛔⛔ IF A DOCUMENT STATES A NUMBER, CHECK IT AGAINST THE LIVE VALUE
