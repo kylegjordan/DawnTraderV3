@@ -30,6 +30,7 @@
 ## ★★ STAGE 00 — DATA TRUTH FIRST (Kyle decision D-2, 2026-11-04, `1-system-manual/pm/DECISIONS.md`) — AHEAD of everything below
 1. `B-CRYPTO-FEED-WATCHDOG` (`#1232`, row 33a) — finish it: Step 7 watch to 2026-11-06, then Steps 8-11.
 2. ~~**The xStock direction-score fix (`#1235`)**~~ ✅ **`B-XSTOCK-DBS-TO-STRATEGIES` CLOSED 2026-11-06** (Langston confirmed Steps 10-11) (report `Batch Completion/B_XSTOCK_DBS_TO_STRATEGIES_COMPLETION_REPORT.md`). Carried: F2's xStock half (decision pending, `#1235`); `#1249` surfaced for Kyle. **Still to do (KD-7, Kyle 2026-11-04): switch on adaptive_flow, reverse_impulse, volatility_edge and support_bounce for xStock, each after a target-reachability check** — this is `B-SILENT-STRATEGY-CENSUS` O3, gated on strong_bull_trend's replacement window (row 52).
+2a. **KD-56 (Kyle 2026-11-06), my part of `B-DEPLOY-WINDOW-GUARD` (`#1249`, owner Infra Claude, Infra order 10a):** supply the first entries of the open-observation-window register when Infra starts it (row 52's replacement window; any window then open). Until it ships: off-cycle deploys are announced to every open window's owner before they run.
 3. Then `B-ENTRY-GATE` and the locked list below resume. Row 119 `B-ARCHIVE-WRITER-LIFECYCLE` gives up `#1062` to OLD Claude's `B-DB-POOL-GUARD` (`#1239`, D-2 order 3).
 
 ## ★ MY PRE-SPRINT LIST — Kyle-assigned 2026-10-20, re-ordered and LOCKED by Kyle the same evening (Desktop). Nothing else starts until these are done; anything new is asked first. The plan's §0a row is the authority.
