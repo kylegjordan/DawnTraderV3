@@ -86,8 +86,10 @@ export function getCryptoSpotStats(nowMs: number = Date.now()): {
   /** B-CRYPTO-FEED-WATCHDOG objective 4: per shard, the socket state beside the DATA liveness (precedence in
    *  `RecorderConnection.dataLiveness`). The failure was one shard of two, so it is per shard, never one aggregate. */
   connections: RecorderConnectionLiveness[];
-  /** Shards whose data liveness is anything but 'live' (silent, unknown or starting). */
-  nonLiveConnections: number;
+  /** Connections reading 'silent' or 'unknown' — 'starting' is EXCLUDED, so a healthy process does not report
+   *  non-zero for the first ~120 s after every restart. ⚠️ NOT an alarm numerator on its own: the panel's DATA_SILENT
+   *  counts 'silent' alone, and 'unknown' is a config fault, not a dead feed (Langston Step-9 Step-4 fold-in 2). */
+  silentOrUnknownConnections: number;
 } {
   const totalSymbols = state.shards.reduce((s, sh) => s + sh.symbols.length, 0);
   const totalOhlc = state.shards.reduce((s, sh) => s + sh.cumulativeOhlcRows, 0);
@@ -105,7 +107,7 @@ export function getCryptoSpotStats(nowMs: number = Date.now()): {
     ohlcFramesSkipped: totalSkipped,
     shardCount: state.shards.length,
     connections,
-    nonLiveConnections: connections.filter((c) => c.dataLive !== 'live').length,
+    silentOrUnknownConnections: connections.filter((c) => c.dataLive === 'silent' || c.dataLive === 'unknown').length,
   };
 }
 

@@ -59,8 +59,10 @@ export interface KrakenFuturesArchiverStats {
   /** B-CRYPTO-FEED-WATCHDOG objective 4: the ticker socket's state beside its DATA liveness (precedence in
    *  `RecorderConnection.dataLiveness`). Empty while the leg is not started (no connection). */
   connections: RecorderConnectionLiveness[];
-  /** Connections whose data liveness is anything but 'live' (silent, unknown or starting). */
-  nonLiveConnections: number;
+  /** Connections reading 'silent' or 'unknown' — 'starting' is EXCLUDED, so a healthy process does not report
+   *  non-zero for the first ~120 s after every restart. ⚠️ NOT an alarm numerator on its own: the panel's DATA_SILENT
+   *  counts 'silent' alone, and 'unknown' is a config fault, not a dead feed (Langston Step-9 Step-4 fold-in 2). */
+  silentOrUnknownConnections: number;
 }
 
 export class KrakenFuturesArchiver {
@@ -93,7 +95,7 @@ export class KrakenFuturesArchiver {
       cumulativeTickerSnaps: this.cumulativeTickerSnaps,
       ohlcFramesSkipped: this.ohlcFramesSkipped,
       connections,
-      nonLiveConnections: connections.filter((c) => c.dataLive !== 'live').length,
+      silentOrUnknownConnections: connections.filter((c) => c.dataLive === 'silent' || c.dataLive === 'unknown').length,
     };
   }
 
