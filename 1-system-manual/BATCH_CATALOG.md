@@ -1081,6 +1081,8 @@ Plus: **zero `XBT/USD` history rejections post-deploy, zero history rejections f
 
 ---
 
+
+➕ **`8a-P4c` increments 2-3 (sprint row 3, `B-VTS-MARK-SIDE`) — CLOSED 2026-11-06 at Step 10 (Step 11 with Langston).** Live in release deploy B (2026-10-06). xStock VTS exits trigger on the guarded bid and entries book on the guarded ask; booked friction became per leg, ending the crypto VTS exit half-spread charged twice since 2026-09-15 (`#1118`). Step 8 (Langston, on live rows): 720 of 720 real-lane closes on the new rule, 0 on the old. Epochs `crypto_spot/vts` 6 → 7, `xstock_spot/vts` 8 → 9. Not exercised live: the half-spread add-back arms and the refusal arm. The parent stays open for `8c`, `8d` and KD-19 (b)/(c). Record: `Batch Completion/B_PRICE_SIDE_BY_JOB_8A_P3_PROGRESS_REPORT.md` §9.10.
 ## `B-FEED-MISMATCH-FIX` (`PHASE_19_PLAN` row `3n.u`) — ⏳ OPEN, OBSERVATION. Owner CC-B. change-class `architecture`.
 **Kyle 2026-09-19:** *"fix the incorrect feeds that are not going to be fixed by analyst"* — the price-feed defects from the `3n.t` per-situation audit that were NOT in CC-C's `B-PRICE-SIDE-BY-JOB` lane.
 **Deployed `323ae277641368acb057e8ffa7643894aa1c2799` 2026-09-19 00:02:43Z**, jointly with CC-C `8a-P4a`/`8a-P4b` (they are ancestors; `dt-deploy` cannot exclude an ancestor). Langston: Step-1 approved, Step-2 cleared r5 after four rounds (BLOCKER-3/4/5 on where the reference bid comes from), Step-4 r2 APPROVED, **Step-8 CONFIRMED 00:13:29Z**.
