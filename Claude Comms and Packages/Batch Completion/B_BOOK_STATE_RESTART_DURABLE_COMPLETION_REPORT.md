@@ -1,6 +1,6 @@
 # B-BOOK-STATE-RESTART-DURABLE — Completion Report
 
-change-class: `architecture` · sprint plan row 15 · Phase-19 row `3n.q8` · `#1066` · owner CC-C (Analyst Claude) · ⏳ **STEP 11 — closes on Langston's confirm**
+change-class: `architecture` · sprint plan row 15 · Phase-19 row `3n.q8` · `#1066` · owner CC-C (Analyst Claude) · ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston 01:05:39Z, at `ecca2878f`)
 
 **Scope items left open:** none in this batch. **One related item is homed elsewhere and is NOT claimed here:** how long a seed-implausible chain stays absorbing is reported by nothing — the `#1066` amendment of 2026-10-06, re-homed 2026-10-09 to `SPRINT_TO_LIVE_PLAN` row 2 (`B-XSTOCK-BID-TRIGGER-RELAND`, owner CC-C).
 ⚠️ **Late close, stated:** deployed 2026-10-06 and Step-8-confirmed then; Steps 10-11 sat owed through the crew's two-week break and were written 2026-11-05 under KD-43 (Kyle: complete governance at every batch end).
@@ -61,7 +61,7 @@ CHANGE-CLASS: `architecture`
 | T2 | RUNNING_ISSUES.md | ✅ | `#1066` closed, residual pointed at row 2 |
 | T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-11-05-B |
 | T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | epoch rule 2 gains the "impact named, not epoch-bumped" form, with this batch as its precedent |
-| T2 | GOVERNANCE_EXCEPTIONS.md | BLOCKED — Langston's Step-11 confirm | the 2026-09-29 `open` row flips to closed when the confirm lands, as the `B-SIZING-DEC-RESTORE` rows did |
+| T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | the 2026-09-29 `open` row flipped to closed at the confirm (2026-11-06) |
 | T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed — the diff adds two files and a table and deletes no code path |
 | T2 | MISTAKE_PATTERNS.md | N/A | the batch's two `wrong-object` trailers fall in the W42 pass window (`be41f85..780a206`) and were counted there |
 | T2 | POST_AUDIT_ROADMAP.md · AUTHORITY_BASELINE.md · STORAGE_POLICY.md · MULTI_ASSET_VTS_EXPANSION_PLAN.md · ASSET_CLASS_ONBOARDING_WORKFLOW.md · BUILD_METHOD_PLAYBOOK.md · LANGSTON_ARCHITECTURE.md · CLAUDE.md / CONDUCT.md · rule history · ALERT_HANDLING_PROTOCOL.md · DELIVERY_BOARD_PROTOCOL.md · CLAUDE_CODE_FEATURE_WATCH.md | N/A | no phase-level, constitutional, retention-policy, method, reviewer-build, rule or process change — one xStock exit-guard store |

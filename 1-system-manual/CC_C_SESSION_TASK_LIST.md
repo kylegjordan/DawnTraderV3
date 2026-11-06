@@ -18,7 +18,7 @@
 | 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | r6 Step 5 done (`21d7e84a2`, CI `36475941280`); Step 6 in the held deploy (≥ 2026-10-02T20:10Z), then Step 7; declared OPEN in `GOVERNANCE_EXCEPTIONS` |
 | 16 | `F-G-1` reopened (`#1031`) | Step 5 done; deploy with the held window; conversion to a completion report owed |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` increment 2 at Step 5 (deploy with the held window); increment 3 at Step 2 with Langston (plan §C3, `#1118` folded as P14); then `B-XSTOCK-BID-TRIGGER-RELAND` (row 2, after row 15), `B-VTS-NO-DECISION-VALVE`, and `8c` per-leg levels (held) |
-| 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | both deployed in release deploy B 2026-10-06. Row 14: at its plan-row status. Row 15: STEP 11 — governance landed 2026-11-05, report written, closes on Langston's confirm |
+| 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | both deployed in release deploy B 2026-10-06. Row 14: at its plan-row status. Row 15: ✅ CLOSED 2026-11-06 (Step 11 confirmed by Langston) |
 | 9 | `B-SIZING-DEC-RESTORE` | ✅ CLOSED 2026-10-09 (Step 11 CONFIRMED by Langston 2026-10-09 07:42Z) |
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15: deployed `3a2cd4ee5`, Coltrane Step 11 confirmed at `c3c8d7ce1`. Umbrella residual alert/exit/dedupe work remains separately placed. |
 | P1c | `B-CLASS-LEG-FILL-MODE` (`#1170` + `[C3]`) | ✅ CLOSED 2026-10-15; final runtime `30af855f2`, Coltrane Step-11 confirmed at `c8c185e63`, CI `38778491511` four of four; no observation or deployment hold. Next sequence: `B-PRICE-FEED-TRUTH` Step 7's pre-registered October 19 read while xStock availability continues independently. |

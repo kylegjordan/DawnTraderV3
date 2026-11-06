@@ -1460,7 +1460,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **VERIFIED.** Board rebuilt independently by Langston from the checker's own code at the ref — identical counts; absent-file and stale-banner renders in Claude-in-Chrome without a restart; the installer test 61/0 at the retirement sha. **Not yet:** the phone-width check (Kyle). Records: scope, pre-audit and change list under `Claude Comms and Packages/`.
 
-## B-BOOK-STATE-RESTART-DURABLE (CC-C, sprint plan row 15 · Phase-19 row `3n.q8`; `#1066`) — change-class `architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED at `d7d8d509d`, recorded `94b80463f`, CI `36016582885` 4/4 on `d7d8d509d`; deployed in release deploy B `3576d3981` 2026-10-06T15:45Z; Step 8 CONFIRMED by Langston; report `Batch Completion/B_BOOK_STATE_RESTART_DURABLE_COMPLETION_REPORT.md`)
+## B-BOOK-STATE-RESTART-DURABLE (CC-C, sprint plan row 15 · Phase-19 row `3n.q8`; `#1066`) — change-class `architecture` — ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston 01:05:39Z; Step 4 APPROVED at `d7d8d509d`, recorded `94b80463f`, CI `36016582885` 4/4 on `d7d8d509d`; deployed in release deploy B `3576d3981` 2026-10-06T15:45Z; Step 8 CONFIRMED by Langston; report `Batch Completion/B_BOOK_STATE_RESTART_DURABLE_COMPLETION_REPORT.md`)
 
 **WHAT IT FIXED.** The xStock book-state guard judges a new reference chain's first frame against a retained spread ring (SIM S25b). The ring lived in memory only, so a restart emptied it and the next seed was judged against nothing — on 2026-09-19 a restart during the post-close blowout validated ANET's 32%-wide book and stopped it out 12 s later (`#1066`).
 
