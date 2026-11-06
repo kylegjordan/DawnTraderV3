@@ -71,6 +71,29 @@ out = red(db)
 ok("DATABASE_URL: the whole value goes, host and db name included", "s3cretpw" not in out and "db.internal" not in out and "dawntrader" not in out)
 ok("DATABASE_URL: the marker is intact (names run before shapes)", out == "DATABASE_URL=[REDACTED named:DATABASE_URL]")
 
+print("2c. names - a value holding a quote, and short values (Langston C-7, C-8)")
+canary = "LEAK" + "CANARY" + "x9"
+BS = chr(92); Q = chr(34)
+forms = ["PASSWORD=" + Q + "ab'cd" + canary + Q,
+         "PASSWORD: " + Q + "a" + BS + Q + "b" + canary + Q,
+         "PASSWORD: " + Q + "a" + Q + "b" + canary + Q,
+         "PASSWORD=" + Q + "p@s'c" + canary + Q]
+for f in forms:
+    red = dt.Redactor()
+    out = red(f)
+    ok("quote inside the value: nothing of it survives %r" % f, canary not in out and red.counts.get("named:PASSWORD") == 1)
+for f in ["PASSWORD=" + Q + "abc" + canary + " more text", "PASSWORD=abc" + Q + "def" + canary]:
+    red = dt.Redactor()
+    out = red(f)
+    ok("an unterminated or embedded quote: the value is taken whole %r" % f, canary not in out and red.counts.get("named:PASSWORD") == 1)
+for f in ["PASSWORD=ab1", "PASSWORD: ab1", "PASSWORD=x"]:
+    red = dt.Redactor()
+    out = red(f)
+    ok("a short value is caught, no length floor: %r" % f, "ab1" not in out and out.split("=")[-1].split(": ")[-1].startswith("[REDACTED") and red.counts.get("named:PASSWORD") == 1)
+red = dt.Redactor()
+out = red('{"PASSWORD":"v1","next":1}')
+ok("a JSON object keeps its next key", out == '{"PASSWORD":"[REDACTED named:PASSWORD]","next":1}')
+
 # ---- 3. values by hash (layer c): the value is never in the hash file -------------------------------------------------
 print("3. values")
 shapeless = "zx" + "9CQ4u7Lm2Rt8Pw"  # no shape, no name
@@ -142,6 +165,14 @@ ok("system:informational is kept as one line (it explains a gap)", "[information
 ok("an unknown system subtype is COUNTED as dropped, not silently lost", dropped.get("system:brand_new_kind") == 1)
 ok("an unknown attachment type is counted", dropped.get("attachment:never_seen") == 1)
 ok("known injected attachments are counted too", dropped.get("attachment:hook_additional_context") == 1)
+empty = [{"type": "user", "uuid": "c9", "timestamp": T % 9, "isCompactSummary": True, "message": {"content": [{"type": "text", "text": "  "}]}}]
+d2 = {}
+got = list(dt.distill([json.dumps(e) for e in empty], dt.Redactor(), dropped=d2))
+ok("an empty compaction summary is counted OR emitted, never both", got == [] and d2.get("user:compact-summary-empty") == 1)
+_err2 = io.StringIO()
+with contextlib.redirect_stderr(_err2), contextlib.redirect_stdout(io.StringIO()):
+    rc2 = dt.main(["dt", _raw, "--verbose", "--hashes", _empty])
+ok("an unknown argument is REFUSED, not allowed to shift --hashes", rc2 == 2 and "REFUSED" in _err2.getvalue())
 
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

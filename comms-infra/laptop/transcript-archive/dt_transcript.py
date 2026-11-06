@@ -56,8 +56,15 @@ SECRET_NAMES = [
     "DISCORD_COLTRANE_BOT_TOKEN", "GH_TOKEN", "TELEGRAM_BOT_TOKEN", "CC_WEBHOOK_URL", "HELIUS_API_KEY",
     "ALCHEMY_API_KEY", "TOKENWATCH_WEBHOOK_SECRET", "ANTHROPIC_API_KEY", "GITHUB_TOKEN", "PASSWORD", "PASSWD",
 ]
+# The value, in order (Langston C-1, C-4, C-7, C-8): (1) a quoted value that may hold escapes, accepted ONLY when its
+# closing quote is followed by a boundary - otherwise a quote inside the value would end it early and leave the rest
+# visible under a clean marker; (2) otherwise the WHOLE non-space run, any length (no length floor to state), so an
+# unquoted value, or one with an unpaired or embedded quote (`abc"def`, `"abc` never closed), is taken whole.
+# (r3 first had a middle "unquoted, stop at a quote" alternative: the mutation runner showed it redundant, and it
+# would have hidden only `abc` of `PASSWORD=abc"def` - removed.)
 NAMES = re.compile(r"(?P<name>\b(?:%s)\b)(?P<sep>[\"']?[ \t]*(?::|=|->)[ \t]*)"
-                   r"(?:(?P<q>[\"'])(?P<qval>[^\"'\n]+)(?P=q)|(?P<val>[^\s\"']{4,}))"
+                   r"(?:(?P<q>[\"'])(?P<qval>(?:\\.|[^\\\n])*?)(?P=q)(?=[\s,;})\]]|$)"
+                   r"|(?P<raw>\S+))"
                    % "|".join(SECRET_NAMES), re.IGNORECASE)
 
 TOKEN = re.compile(r"[A-Za-z0-9_\-+/=.]{12,}")
@@ -173,7 +180,8 @@ def distill(lines, redact, since=None, until=None, dropped=None):
         if typ == "user" and e.get("isCompactSummary"):
             text = "".join(b.get("text", "") for b in _blocks(msg.get("content")) if b.get("type") == "text")
             if not text.strip():
-                drop("user:compact-summary-empty")
+                drop("user:compact-summary-empty")       # counted OR emitted, never both (Langston r2 nit)
+                continue
             yield uid, ts, "\n> **[%s] compaction summary**\n>\n> %s\n" % (hhmm, redact(text).replace("\n", "\n> "))
             continue
         if typ == "user":
@@ -234,7 +242,12 @@ def main(argv):
         return 0 if len(argv) >= 2 else 2
     args = argv[1:]
     path = args[0]
-    opts = dict(zip(args[1::2], args[2::2]))
+    rest = args[1:]
+    known = ("--hashes", "--since", "--until")
+    if len(rest) % 2 or any(rest[i] not in known for i in range(0, len(rest), 2)):
+        sys.stderr.write("REFUSED: arguments must be pairs from %s; got %r\n" % (", ".join(known), rest))
+        return 2                  # an unknown token would shift the pairing and silently drop --hashes (Langston r2 nit)
+    opts = dict(zip(rest[0::2], rest[1::2]))
     hashes = None
     if "--hashes" in opts:
         try:
