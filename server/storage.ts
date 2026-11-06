@@ -571,6 +571,7 @@ export interface IStorage {
   getStraddleEntryCostAt(mode: TradingMode, at: Date): Promise<{ entryCost: number; count: number; invalidCount: number }>;
   // B-SIZING-DEC-RESTORE 2b (#1093): the symbol cooldown's own read — EXACT symbol (+ asset class when known).
   getLastClosedAtForSymbol(mode: TradingMode, symbol: string, assetClass: AssetClass | null): Promise<Date | null>;
+  getLatestClosedTradeForKey(mode: TradingMode, symbol: string, assetClass: string): Promise<{ id: string; closedAt: Date; closeReason: string | null } | null>;
   // B-SIZING-DEC-RESTORE inc 3 (P1 step 5): the ONE named writer of the dashboard epoch; returns the read-back.
   setScoreboardEpoch(startedAt: Date, updatedBy: string): Promise<{ epochStartedAt: Date; updatedBy: string | null }>;
   // Phase 8.8.3-C5: Paginated trades with sorting support
@@ -3757,6 +3758,25 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(closedTradesTable.closedAt))
       .limit(1);
     return row?.closedAt ? new Date(row.closedAt) : null;
+  }
+
+  /**
+   * B-CLOSE-WRITER-COSTS P-14 (Langston Part C record 1) — INFORMATION for the operator running a restore: the most recent
+   * CLOSED record for the key (any close reason — the operator should see a never-filled or a reset too), so a trade booked
+   * seconds ago is visible before a second record is inserted for it. Not a gate.
+   */
+  async getLatestClosedTradeForKey(mode: TradingMode, symbol: string, assetClass: string): Promise<{ id: string; closedAt: Date; closeReason: string | null } | null> {
+    const [row] = await db.select({ id: closedTradesTable.id, closedAt: closedTradesTable.closedAt, closeReason: closedTradesTable.closeReason })
+      .from(closedTradesTable)
+      .where(and(
+        eq(closedTradesTable.mode, mode),
+        eq(closedTradesTable.symbol, normalizeToInternalSymbol(symbol)),
+        eq(closedTradesTable.assetClass, assetClass),
+        sql`${closedTradesTable.closedAt} IS NOT NULL`,
+      ))
+      .orderBy(desc(closedTradesTable.closedAt))
+      .limit(1);
+    return row?.closedAt ? { id: row.id, closedAt: new Date(row.closedAt), closeReason: row.closeReason ?? null } : null;
   }
 
   // Phase 8.8.3-C5: Paginated trades with sorting and filtering support

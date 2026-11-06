@@ -68,7 +68,9 @@ export async function stampPositionTradeId(mode: TradingMode, position: any, rec
 }
 
 export type RestoreResult =
-  | { ok: true; recordId: string; positionId: string; symbol: string; pending: boolean }
+  | { ok: true; recordId: string; positionId: string; symbol: string; pending: boolean;
+      /** P-14 (Langston Part C record 1): the most recent CLOSED record for the key, so the operator sees a trade booked moments ago. Information, not a gate. */
+      latestClosed: { id: string; closedAt: string; closeReason: string | null } | null }
   | { ok: false; code: 404 | 409; error: string; recordId?: string; recordIds?: string[]; more?: boolean };
 
 export async function restoreOpenTradeRecord(mode: TradingMode, positionId: string, claimedBy: string): Promise<RestoreResult> {
@@ -150,8 +152,20 @@ export async function restoreOpenTradeRecord(mode: TradingMode, positionId: stri
     return { ok: false, code: 409, error: 'an open trade record appeared for this position while restoring — not restored', recordIds: result.ids };
   }
   const record = result.record;
+  // P-14 (Langston Part C record 1): name the most recent CLOSED record for the key — best-effort information; a failed
+  // read never undoes or blocks the restore that has already happened.
+  let latestClosed: { id: string; closedAt: string; closeReason: string | null } | null = null;
+  try {
+    const lc = await storage.getLatestClosedTradeForKey(mode, position.symbol, cls);
+    latestClosed = lc ? { id: lc.id, closedAt: lc.closedAt.toISOString(), closeReason: lc.closeReason } : null;
+  } catch (err) {
+    console.error(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] latest-closed read failed (information only):`, err);
+  }
   // The position now points at its record, so the next close (and P-16 / P-17) resolve it by `tradeId` as well as by key.
   await storage.updateActiveOpenPosition(mode, position.id, { metadata: { ...(position.metadata ?? {}), tradeId: record.id } } as any);
   console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol} pos=${position.id}${pending ? ' (pending maker)' : ''} -> record ${record.id} (claimed by ${claimedBy})`);
-  return { ok: true, recordId: record.id, positionId: position.id, symbol: position.symbol, pending };
+  if (latestClosed) {
+    console.log(`[B-CLOSE-WRITER-COSTS][RECORD_RESTORED:${mode}] ${position.symbol}: the latest CLOSED record for this key is ${latestClosed.id} (${latestClosed.closeReason ?? 'no reason'}, closed ${latestClosed.closedAt}) — check it is not this same trade`);
+  }
+  return { ok: true, recordId: record.id, positionId: position.id, symbol: position.symbol, pending, latestClosed };
 }

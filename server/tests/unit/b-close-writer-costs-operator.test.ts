@@ -23,6 +23,7 @@ const st = vi.hoisted(() => ({
   getClosedTrade: vi.fn(),
   insertOpenTradeRecordIfNoneOpen: vi.fn(),
   updateActiveOpenPosition: vi.fn(async () => ({})),
+  getLatestClosedTradeForKey: vi.fn(),
 }));
 vi.mock('../../storage', () => ({ storage: st }));
 
@@ -203,6 +204,30 @@ describe('S — the restore service', () => {
       regimeConfidenceRaw: null, macroModifierValue: 1.0, phase: null, phaseAgeSeconds: null,
       strategyPhaseWeight: null, regimeConfidenceModulated: null,
     });
+  });
+});
+
+describe('L — the restore names the latest CLOSED record for the key (P-14, Langston Part C record 1)', () => {
+  const ready = () => {
+    st.getActiveOpenPosition.mockResolvedValue(POSITION);
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue(undefined);
+    st.insertOpenTradeRecordIfNoneOpen.mockResolvedValue({ status: 'inserted', record: { id: 'new-1' } });
+  };
+  it('L-1 the success result carries the latest closed record, read by mode, symbol and class', async () => {
+    ready();
+    st.getLatestClosedTradeForKey.mockResolvedValue({ id: 'old-7', closedAt: new Date('2026-11-06T01:00:00Z'), closeReason: 'stop_hit' });
+    const r = await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a');
+    expect(st.getLatestClosedTradeForKey).toHaveBeenCalledWith('paper', 'ETH/USD', 'crypto_spot');
+    expect(r).toMatchObject({ ok: true, latestClosed: { id: 'old-7', closedAt: '2026-11-06T01:00:00.000Z', closeReason: 'stop_hit' } });
+  });
+  it('L-2 none, or a failed read: latestClosed is null and the restore still succeeds (information, not a gate)', async () => {
+    ready();
+    st.getLatestClosedTradeForKey.mockResolvedValue(null);
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: true, latestClosed: null });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    st.getLatestClosedTradeForKey.mockRejectedValue(new Error('db down'));
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: true, latestClosed: null });
   });
 });
 
