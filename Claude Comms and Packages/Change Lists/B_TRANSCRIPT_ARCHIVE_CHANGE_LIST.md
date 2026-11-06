@@ -48,3 +48,9 @@ Tool: `comms-infra/laptop/transcript-archive/p1_restore_proof.py` (stdlib, `pyth
 He re-derived all six prefixed forms (each counted under its own name), `PASSWORD_HASH_ALGO=` and `DB_PASSWORD_FILE=` left alone, the docstring limits, and the `\b` inside `(?!NOPASSWD\b)` (so `NOPASSWD_DB_PASSWORD=` is still redacted — measured). **Residuals:**
 1. `NOPASSWD=x` / `NOPASSWD -> x` also pass — **disposition 5, no work**: sudoers' only form is `NOPASSWD:` and nothing writes a secret under that name.
 2. **The counts key is transcript-derived and unbounded** (`hunter2PASSWORD=x` → `named:HUNTER2PASSWORD`). **An item on P5** (this batch, mine): the writer assumes no bounded key set, and any per-kind counts published where Kyle reads are folded to the LISTED name, not the matched one.
+
+## P4 — the one-day sample to Kyle (2026-11-06 ~16:10Z) — STOP until he answers
+- **Sample:** NEW Claude (CC-B), 2026-10-21, `C:\Users\kyleg\.claude\transcript-archive\sample\CC-B_2026-10-21_0fe1c46a.md` (outside every repo), 278 lines, from the raw `0fe1c46a…jsonl` with `--since/--until` that day; the code at `3f5243e66`. **Read in full by me before sending.** Layer (c) OFF, stated in plain words on its first line; `redactions: {}` (no secret that day).
+- **Chosen for size:** a real working day small enough to read; busier days run to thousands of entries. **That day holds no message typed by Kyle** — every user turn is a machine wake notice — stated to him.
+- **Question put with it:** each wake notice is a 7-line block repeated all day; recommended collapsing each to one line. (Index location already decided: KD-49, option (iii).)
+- Sent to Kyle in the Desktop chat (file) and on Discord; a 10-minute phone notice is armed. **Nothing in P5 onward runs before his answer.**
