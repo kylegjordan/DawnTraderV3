@@ -54,3 +54,9 @@ change-class: non_architecture · scope `Scope Files/B_TRANSCRIPT_ARCHIVE_SCOPE.
 
 ## 3. Order of work
 P1 → P2 + P3 → **P4 (stop for Kyle)** → P5 → P6 → P7 → P8 with its drill (eighteen cases, listed in P8) → P9 → P10 → P11. **Sequencing (my own order, not Kyle's — KD-47 is a placement):** code and tests are written now; the Step-4 dispatch, and P3(c)'s root-side hashing on each server, wait until after `B-LANGSTON-TWO-WORKERS`' restart (Langston msg `1568198976115580969`). Index location: KD-49, option (iii) — P6 writes the topic-free index into the shared memory folder.
+
+## 4. Step 2 CLOSED — Langston PROCEED on P8 (msg `1568231645830713367`, stamp `c5c95396`, byte-identical to `1cecff517`); P1-P7 and P9-P11 PROCEED earlier (msg `1568191145933144075`)
+He re-derived both allowlists as total (21 `cc_outbound.sender`, 12 `sender_username`, 11 kinds), Coltrane's discriminator (0 of 249 rows with `message_id` vs 17,843 of 17,843 for every other sender), `post_failed` 0 all-time. **Carried into Step 3, none blocking:**
+1. **Counts on a live rail are read-sites, not figures** — Coltrane's 245 was 249 by 11:51Z. Every count in the code's comments and banners is printed with its read time, never frozen.
+2. **Four 2026-06-19 rows have no `sender` key at all** (distinct from the two `sender: null`): the table is read with `.get()`, and drill case (8) plants a key-absent row so a `row["sender"]` lookup can never raise instead of printing GUARD FAILED.
+3. **The `sender_username`-rail `GUARD FAILED — Coltrane dispatches not checked` is unreachable at the ref** (Coltrane is on no inbound row anywhere): a fence only — no green run may be cited as proof it fires (#661 leg 3).
