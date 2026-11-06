@@ -1,7 +1,7 @@
 # B-VTS-TELEMETRY-AGGREGATES — COMPLETION REPORT
 
 **Batch:** `B-VTS-TELEMETRY-AGGREGATES` · owner CC-C · sprint row 4a · `#1141` · **change-class `non_architecture`** (scope header).
-**State:** Steps 1-10 done; closes on Langston's Step-11 confirmation. Written 2026-11-06.
+**State:** ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (Discord `1568233493538934946`, re-read at `0ca665c8e`). Written 2026-11-06. ⚠️ His note 1: the Step-10 ledger marked `SPRINT_TO_LIVE_PLAN` ✅ at `9b0e047ba` while row 4a still read IN FLIGHT with a dash report cell and cited the withdrawn decrease arm; `75aeb7fad` fixed it after the checker's alert `712203c4` (resolved with that sha).
 
 ## OPEN ITEMS AND LIMITS — STATED FIRST
 1. **The eviction is evidenced on ONE arm, not two (Langston, Step 8).** The "a cell's tradeCount fell" arm is WITHDRAWN as non-discriminating: the old code also reassigned cells that had trades in the window, so their counts could fall before the fix too. The 13 decreases of 2026-10-08 are real and prove nothing about this batch. The discharging evidence is the ABSENT arm (below).
