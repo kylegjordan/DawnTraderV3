@@ -12541,7 +12541,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   // record is MISSING, this restores it from the position's OWN open-time fields — symbol, class, mode, side, quantity,
   // entry price, entry fee and slippage, strategy, opened_at — and nothing about the exit: the next close books the real
   // exit onto it. Stamped `record_restored_from_position`, `restored_at`, `restored_by_claimed` (the caller, a CLAIM —
-  // #447). Behind the same guard as the stranded clear. IDEMPOTENT: it REFUSES when a record exists (one or several),
+  // #447). Behind the same guard as the manual close (authenticateToken). IDEMPOTENT: it REFUSES when a record exists (one or several),
   // and when the position's own `tradeId` names a record that exists. The mode is chosen HERE, at the API boundary
   // (KD-37: the mode-scoped engine at the boundary); only the paper engine exists today.
   apiRouter.post('/active-engine/positions/:id/restore-record', authenticateToken, async (req: AuthenticatedRequest, res) => {
