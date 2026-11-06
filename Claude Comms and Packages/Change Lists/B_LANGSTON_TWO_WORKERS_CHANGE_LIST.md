@@ -120,3 +120,4 @@ content = merged                                          # then the normal writ
 - **Docstring:** `test_bridge_two_workers.py` runs as root OR as `langston` (his correction) — re-derivable at Step 8.
 - **His measurement, recorded in the pre-registration as A-1:** 46.4 % of 347 arrivals key to the shared lane; 190 of 283 close-together arrivals could overlap. A wait miss is read against the shared-lane share.
 - **Carried to Step 10:** the tier ledger carries `SPRINT_TO_LIVE_PLAN.md` (row 4a) as a REQUIRED row; the declared-`open` `GOVERNANCE_EXCEPTIONS` row lands at Step 6, when the batch enters observation, not at close.
+- **Coltrane re-check of (4): PROCEED at `dd6238954`** (~05:40Z): `_flag_set` fails closed for every `OSError` except positive absence; both `_may_take` checks and the startup read use it; the operator tool applies the same rule to `status` and its before-state. **Coltrane's concurrency pass is complete: (1)-(4) PROCEED.**
