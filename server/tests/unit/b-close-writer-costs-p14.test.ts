@@ -29,18 +29,27 @@ describe('B-CLOSE-WRITER-COSTS P-14', () => {
     for (const col of MONEY) expect(block).toMatch(new RegExp(`\\b${col}: '0'`));
   });
 
-  it('P14-3 a close with no entry fee or slippage is refused with its own alert, before any P&L is computed', () => {
+  it('P14-3 a missing entry cost on the position falls back to the open RECORD (loudly); refused only when BOTH lack it', () => {
     expect(ENGINE).not.toContain('(entryValue * (_b45FeePct / 100))');
     expect(ENGINE).not.toContain("position.entrySlippage ? parseFloat(position.entrySlippage) : 0");
-    const guard = ENGINE.indexOf('if (!Number.isFinite(_entryFeeNum) || !Number.isFinite(_entrySlipNum)) {');
-    const refuse = ENGINE.indexOf('await this._refuseMissingEntryCost(position, trade.id,', guard);
-    const pnl = ENGINE.indexOf('const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({', guard);
-    expect(guard).toBeGreaterThan(0);
-    expect(refuse).toBeGreaterThan(guard);
-    expect(pnl).toBeGreaterThan(refuse);
-    // its own alert — not the restore remedy, which is for an unresolvable RECORD
+    const start = ENGINE.indexOf('let entryFee = _num(position.entryFee);');
+    const feeFb = ENGINE.indexOf("entryFee = _num((trade as any).fees); _fromRecord.push('entry fee');", start);
+    const slipFb = ENGINE.indexOf("entrySlippage = _num((trade as any).slippage); _fromRecord.push('entry slippage');", start);
+    const refuse = ENGINE.indexOf('await this._refuseMissingEntryCost(position, trade.id,', start);
+    const warn = ENGINE.indexOf('if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);', start);
+    const pnl = ENGINE.indexOf('const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({', start);
+    expect(start).toBeGreaterThan(0);
+    // the fallback runs BEFORE the refusal, so a refusal means neither source had it; the warning before the P&L
+    expect(feeFb).toBeGreaterThan(start);
+    expect(slipFb).toBeGreaterThan(start);
+    expect(refuse).toBeGreaterThan(Math.max(feeFb, slipFb));
+    expect(warn).toBeGreaterThan(refuse);
+    expect(pnl).toBeGreaterThan(warn);
+    // the refusal's own alert — not the restore remedy, which is for an unresolvable RECORD
     const fn = ENGINE.slice(ENGINE.indexOf('private async _refuseMissingEntryCost('), ENGINE.indexOf('private async _refuseUnresolvedRecord('));
     expect(fn).toContain('dedupe_key: `close-entry-cost-missing-${this.mode}-${position.symbol}`');
     expect(fn).toContain('do NOT restore it');
+    const w = ENGINE.slice(ENGINE.indexOf('private async _warnEntryCostFromRecord('), ENGINE.indexOf('private async _refuseMissingEntryCost('));
+    expect(w).toContain('dedupe_key: `close-entry-cost-from-record-${this.mode}-${position.symbol}`');
   });
 });
