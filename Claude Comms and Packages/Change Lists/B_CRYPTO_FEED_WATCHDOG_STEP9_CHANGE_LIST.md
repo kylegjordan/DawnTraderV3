@@ -24,9 +24,16 @@
 ## For the reviewer to rule on
 1. At process start, a recorder universe reads STARTING (not NO_OHLC/NO_TICKER) for up to the silence threshold (120 s) after its socket opens — follows from condition 4's precedence.
 2. Socket down reads `silent`, not `unknown`, even with an unreadable threshold (a closed socket delivers nothing); DISCONNECTED outranks it on the panel either way.
-3. `starting` covers process start only; after a reconnect `lastDataAtMs` carries over, so a reconnected socket reads `live` for up to the threshold before `silent` — the same connection-scoped notion `isDataLive` already uses.
+3. ~~`starting` covers process start only; after a reconnect `lastDataAtMs` carries over, so a reconnected socket reads `live` for up to the threshold before `silent`.~~ ⛔ **CORRECTED r2 (Langston): half-true.** `starting` is process start only, and `lastDataAtMs` carries over a reconnect — so on the CLOSE-driven and subscribe-timeout paths a reconnected socket reads `live` while the carried value is inside the threshold. On the SILENCE-driven path (`forceReconnect` because data stopped) the carried value is already past it, so the new socket reads `silent` until its first data frame — correctly. The class's "notions of live" block is now THREE, naming `decideSilence`'s fresh-socket window beside it.
 4. Reading the panel calls `resolveConfig()`, which can raise the existing one-time `passive-archive-config-missing` alert, as the witness-vouch path already can.
 5. The 60 s health line is unchanged (it already prints `connected=` beside `data_age_ms`).
 
 ## Step 7 plan (after the deploy) — never by opening the Drift Dashboard (`#1037`)
 The unit test is the panel evidence; on staging, the stats function's new fields read through a lightweight route or a one-off node read, every connection `live` on a healthy feed.
+
+## r2 — Langston's Step-4 fold-ins (CHANGES-NEEDED, narrow), at `5742ffe5db075ce51771e20fdab4eb2a383ea139` on `review/b-crypto-feed-watchdog-step9`
+1. Behaviour point 3 corrected (above), and the code's "notions of live" block in `recorder-connection.ts` now names the third (`decideSilence` grants a fresh socket a whole window; `dataLiveness` does not).
+2. `nonLiveConnections` → **`silentOrUnknownConnections`**: excludes `starting` (a healthy restart no longer reports non-zero for ~120 s) and states at the field that it is not an alarm numerator on its own. Its only reader is still the test.
+3. The panel grades a universe only when `stats.connections` is an ARRAY (`Array.isArray`), not on a presence test.
+Re-run at the ref: tsc baseline 328/328; tests 6/6 + 29/29 + 12/12. **Carried on `#1232`, beside the recorder-live-share STATUS line:** xStock spot stays ungraded on this panel by choice — it has its own data clock (`state.lastDataMsgAt`, `#594`) — bug-taxonomy outcome (2), a scope decision, not this batch's.
+**Land conditions (Langston):** the files that land on `migration/aws-supabase` must be byte-identical to this ref, then fresh CI 4/4 per job on the branch before the deploy.
