@@ -538,10 +538,15 @@ sp = da.state_path(root, da.raw_files(proj)[0])
 legacy = st_of(root, proj)
 legacy.pop("tail", None)
 da.write_state(sp, legacy)
-put(proj, [user("r01", D1 % 1, "ORIGINAL 1 rewritten " + "z" * 900)] + ORIG[1:3], "w")
+put(proj, [user("r01", D1 % 1, "ORIGINAL 1 rewritten " + "z" * 900)] + ORIG[1:3] + NEW[:1], "w")
 res, ref = da.archive_all(root, proj, dt.Redactor())
-ok("a legacy state cannot see a LONGER rewrite (stated limit), and a new run records the fingerprint",
-   res and res[0].get("reread") is None and st_of(root, proj).get("tail"), res)
+t = all_text(root)
+ok("a legacy state (no fingerprint) is RE-READ once, even after a LONGER rewrite a size check cannot see (Langston P5 r7)",
+   res and "no fingerprint yet" in (res[0].get("reread") or ""), res)
+ok("...its new line is archived, nothing is doubled, the rewritten copy is not added",
+   "NEW 1 after" in t and all(t.count("ORIGINAL %d " % i) == 1 for i in (1, 2, 3)) and "rewritten" not in t, t[-500:])
+ok("...and the fingerprint it stamps is the one the next run checks: that run is ordinary",
+   st_of(root, proj).get("tail") and not da.archive_all(root, proj, dt.Redactor())[0][0].get("reread"), st_of(root, proj))
 legacy = st_of(root, proj)
 legacy.pop("tail", None)
 da.write_state(sp, legacy)
@@ -645,6 +650,23 @@ ok("a DRY run stamps no fingerprint on a legacy state", "tail" not in st_of(root
 res, ref = da.archive_all(root, proj, dt.Redactor())
 ok("one REAL run with nothing new stamps it, offset unchanged", st_of(root, proj).get("tail") and st_of(root, proj)["offset"] == off0
    and res and res[0]["lines"] == 0, (res, st_of(root, proj)))
+shutil.rmtree(base)
+
+print("14. Langston P5 r7: the one-time legacy re-read keeps a held notice ONE notice")
+base, proj, root = tree()
+put(proj, FIRST[:2] + [QQ] + ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+sp = da.state_path(root, da.raw_files(proj)[0])
+legacy = st_of(root, proj)
+legacy.pop("tail", None)
+da.write_state(sp, legacy)
+ok("(setup) a legacy state holding one notice", len(legacy["held"]) == 1 and "tail" not in legacy, legacy)
+res, ref = da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+ok("its first run is the one-time re-read", res and "no fingerprint yet" in (res[0].get("reread") or ""), res)
+ok("...the notice is still ONE held notice, and nothing new was written", len(st_of(root, proj)["held"]) == 1 and res[0]["lines"] == 0,
+   (st_of(root, proj)["held"], res))
+da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 3 * da.HOLD_S)
+ok("...and it is written exactly once on release", all_text(root).count("Probe") == 1, all_text(root).count("Probe"))
 shutil.rmtree(base)
 
 print("\n%d failed" % len(FAILS))

@@ -224,11 +224,14 @@ def read_raw(raw, st):
 
     Why a re-read: the transcript tools (trim, dedup, distill - pre-audit A3) rewrite a raw file IN PLACE, and resuming
     at the old offset then reads from the middle of other content (measured: 19 of 20 new lines lost, 0 refused).
-    Detected when the file is SHORTER than the offset, or the bytes just before it no longer match the fingerprint
-    (a state written before the fingerprint existed can show only the first). The fingerprint is POSITIONAL: any length
-    change before the offset shifts the window's content and is caught; only a byte-length-preserving edit of the early
-    prefix escapes it, which none of those tools makes, and then the archived lines keep their earlier text - a
-    fidelity residual, never a loss."""
+    Detected when the file is SHORTER than the offset, or the bytes just before it no longer match the fingerprint; a
+    state with an offset but NO fingerprint (written before fingerprints existed) is re-read once, so its first
+    fingerprint is stamped at an offset that re-read established, never at an unvouched one. The fingerprint is
+    POSITIONAL: any length change before the offset shifts the window's content and is caught. Only an edit of the
+    early prefix that preserves its byte length escapes it - and if such an edit SUBSTITUTES content, the substituted-in
+    lines are lost to the archive, since the read resumes at the old offset. None of trim, dedup or distill can make
+    that edit (all three change length), so for the reachable set the residual is fidelity (archived lines keep their
+    earlier text), not loss."""
     off = st["offset"]
     base = max(0, off - TAIL)
     reread = None
@@ -238,7 +241,12 @@ def read_raw(raw, st):
         if off:
             if base + len(data) < off:
                 reread = "now %d bytes, shorter than the %d already read" % (base + len(data), off)
-            elif st.get("tail") and hashlib.sha256(data[:off - base]).hexdigest() != st["tail"]:
+            elif not st.get("tail"):
+                # Langston P5 r7: a state written before fingerprints has NOTHING vouching for its offset, and the first run
+                # that stamps one would make a wrong offset look healthy forever. So it is re-read once (ids already
+                # archived are skipped), and the fingerprint is stamped at an offset the re-read itself established.
+                reread = "no fingerprint yet (a state written before fingerprints existed): re-read once to vouch for the offset"
+            elif hashlib.sha256(data[:off - base]).hexdigest() != st["tail"]:
                 reread = "the %d bytes before the stored offset changed" % (off - base)
         if reread:
             fh.seek(0)

@@ -80,14 +80,19 @@ MUTATIONS = [
     ("REREAD: a rewritten raw file resumed at the old offset (the defect)", replace(
         "    start = 0 if reread else off\n", "    start = off\n")),
     ("REREAD: only a SHORTER rewrite detected (the fingerprint ignored)", replace(
-        "            elif st.get(\"tail\") and hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:", "            elif False:")),
+        "            elif hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:", "            elif False:")),
     ("REREAD: the fingerprint never stored", replace("        st[\"tail\"] = tail          # from the bytes this run read, never a second open\n", "")),
     ("REREAD: a re-read cancels held notices with deliveries already weighed", replace(
         "left = {} if reread else dict(ledger.get(\"delivered_key\", {}))", "left = dict(ledger.get(\"delivered_key\", {}))")),
-    ("REREAD: a file's FIRST run reported as a re-read", replace("    reread = None\n    with open(raw, \"rb\") as fh:", "    reread = \"first\"\n    with open(raw, \"rb\") as fh:")),
+    ("REREAD: EVERY run labelled a re-read", replace("    reread = None\n    with open(raw, \"rb\") as fh:", "    reread = \"first\"\n    with open(raw, \"rb\") as fh:")),
+    ("REREAD: only a file's FIRST run labelled a re-read (restored, Langston r7: the r6 form was caught, not equivalent)",
+        replace("    reread = None\n    with open(raw, \"rb\") as fh:", "    reread = None if off else \"always\"\n    with open(raw, \"rb\") as fh:")),
+    ("REREAD r8: a legacy state (no fingerprint) not re-read", replace(
+        "                reread = \"no fingerprint yet (a state written before fingerprints existed): re-read once to vouch for the offset\"",
+        "                reread = None")),
     ("REREAD: an untouched file re-read every run", replace(
-        "            elif st.get(\"tail\") and hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:",
-        "            elif st.get(\"tail\"):")),
+        "            elif hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:",
+        "            elif True:")),
     ("P5 r6 FINDING-1: a held notice taken again from re-read bytes", replace(
         "            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in done or (uid, line) in seen_run:")),
     ("P5 r6 FINDING-2: the fingerprint from a SECOND open after the write", replace(
