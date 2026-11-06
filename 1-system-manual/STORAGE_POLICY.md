@@ -143,6 +143,15 @@ credentials live on **staging**, not Helsinki. Home: `RUNNING_ISSUES` **#670**. 
 Claude. **Until that lands, warm-on-disk grows unbounded — acknowledged here rather than
 becoming an unowned monotonic store, which is the F.2 failure class this policy documents.**
 
+## 7.6 token-watch — the study's own file store, NON-DB (B-TOKEN-WATCH-STORAGE, 2026-11-06, `#1132`)
+token-watch keeps files on the staging box, not database rows, so none of §3's table rules apply. Its tiers:
+| tier | where | what | how long |
+|---|---|---|---|
+| hot | `/var/lib/token-watch` | births (never deleted), observations, dead, state, study, the `due/` schedule | births forever; bulky raw payload 1 day (`BULKY_HOT_DAYS`); the working index 90 days; a spent `due/` bucket 7 days after the follow-up reads past it (`DUE_SPENT_HOT_DAYS`) |
+| cold (on box, transit) | `/var/lib/token-watch/cold/` | each day's raw payload, gzip-compressed by the 04:37Z tier run | until the next 05:30Z off-box run, once over an hour old |
+| cold (off box) | B2 `dt-archive-cold/token-watch/cold/` | the same archives, uploaded, read back by file id and sha-checked before the local copy is removed | kept, all versions; the key cannot delete |
+**Caps:** 8 GiB hard cap, 6 GiB warn line, checked daily (store-watch) and hourly (feed-watch). **Move, never drop:** nothing leaves the box until its off-box copy is verified. Details: `SYSTEM_IMPACT_MAP.md` Layer 9 "token-watch".
+
 ## 8. Change log (policy-level)
 - **2026-11-05 (B-STATUS-BOARD OBJ-6):** §7.5 marked retired — the crew-status writer is deleted; its 18 MB of snapshots are kept as history and stop growing; `#670` becomes a one-time cold copy.
 - **2026-08-07 (B-CREW-STATUS):** §7.5 added — crew-status snapshots classified as business data (Langston ruling) on a deliberately non-DB substrate; cold hand-off into the existing archive owed and homed.

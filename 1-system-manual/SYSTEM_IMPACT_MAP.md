@@ -1150,6 +1150,21 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 | **does NOT touch** | the GitHub delivery board (Kyle kept it, 2026-10-20) — neither the writer nor the page reads or writes a card. |
 | **known limits** | an unrecognised `waiting on` is shown but NOT counted (`status-board.mjs` counts status states only); a blank `waiting on` renders as "nothing" (`checker.mjs` `mapWaiting`). 0 live instances of either at 2026-11-05 — recorded deviations from scope OBJ-1, not fixed in this batch. |
 
+### ⭐ token-watch — the launch-and-survival study, a CO-TENANT on the staging box — Added B-TOKEN-WATCH-STORAGE (`#1132`, 2026-11-06)
+
+**WHY IT IS HERE:** token-watch is not part of the trading app, but it shares the staging box's CPU, memory and **disk** with the live app — a full `/` stops the app writing. It had no entry in this map until this batch (the parent `B-TOKEN-WATCH` never reached its Step 10), which is how a 13 GiB store and an OOM-killed hourly job (`#1132`) went unnoticed.
+
+| field | value |
+|---|---|
+| **HOST / CODE** | staging `188.245.193.8`; code `/opt/token-watch` (installed from git blobs at a reviewed sha by `token-watch/deploy/install_storage.sh`, record `/opt/token-watch/INSTALLED`) — **NOT `dt-deploy`, never restarted by an app deploy** |
+| **USERS** | `tokenwatch` (996, the study) · `tokenwatch-cold` (993, the off-box leg only, so the run-time B2 key is not readable by `tokenwatch`) · `deploy` has an `r-x` ACL entry on the store, effective only where the directory's mask allows it — measured 2026-11-06: readable on the root, `cold/`, `public/` and `offbox/`; `births/` mask `---`, so effective `---` |
+| **STORE** | `/var/lib/token-watch` — `births/` (never deleted, `NEVER_TOUCH`), `observations/`, `dead/`, `due/` (follow-up schedule buckets), `state/`, `study/`, `provenance/` (raw), `cold/` (compressed, waiting to leave), `offbox/` (the manifest), `public/` (the tracking page's JSON) |
+| **CAPS** | `STORE_CAP_BYTES` 8 GiB (~22 % of `/` free), warn line 6 GiB (`token-watch/config.py`) |
+| **UNITS** | `token-watch-receiver` (the webhook, always on) · `-tier` (04:37Z: raw → `cold/`, and the spent-`due` prune, 7 days after the follow-up cursor passes a bucket) · `-cold-offbox` (05:30Z, as `tokenwatch-cold`: upload each `cold/*.gz` over an hour old to B2 `dt-archive-cold/token-watch/cold/`, read back by file id, manifest line, then unlink) · `-store-watch` (06:00Z: the size check; mints the warn / over-cap rows) · `-feed-watch` (hourly: the feed's dead-man's switch; logs `store=` band and `store_bytes=`) · `-summary` (hourly :12) · `-followup` (**timer DISABLED** — `B-TOKEN-WATCH-FOLLOWUP-MEMORY`) · every unit's failure → `token-watch-failed@` mints an alert |
+| **OFF-BOX** | B2 bucket `dt-archive-cold`, keep-all-versions; a restricted key (`/etc/token-watch/b2-cold.key`, 0600 root, via `LoadCredential`) with exactly `listFiles`, `readFiles`, `writeFiles` on prefix `token-watch/` — **no delete**; the manifest (`offbox/cold-offbox-manifest.jsonl`) is the authority on which uploads were verified |
+| **ALERTS** | `token-watch-store-warn` (standing condition — never ack; body figures frozen at mint) · `token-watch-store-over_cap` (critical, separate key) · `token-watch-feed-gap` (an open feed gap) · unit failures |
+| **BLAST RADIUS** | the disk it shares with the trading app. Growth ~96 MB/day (one measured window, 11-04/05: due 50, births 32, state 13); `births/` and `state/` have no prune path (`B-TOKEN-WATCH-FOLLOWUP-MEMORY` P15, decision `#1246`). |
+
 ## Layer 10: Frontend & Communication
 
 ### 10.1 WebSocket Broadcast Layer

@@ -684,3 +684,9 @@ Instruction mix across every transaction examined: `Sell` 50, `SellV2` 21, `Buy`
 ### ⇒ THE SWITCH IS NOT CLEARED, AND NOTHING HAS BEEN SWITCHED
 
 ⛔ **The decision to move providers remains sound — the cost arithmetic is right and Langston did not block it. What is withdrawn is the claim that it has been VERIFIED.** The acceptance test may not be cited as clearance for it. **Both reviewers were run in parallel and reconciled rather than picking the flattering one**, and each found what the other did not.
+
+## AMENDMENT 16 — THE RAW PAYLOAD NOW LIVES OFF THE BOX; NOTHING THE CRITERIA READ WAS REMOVED (CC-INFRA, 2026-11-06, B-TOKEN-WATCH-STORAGE)
+- Each day's raw provenance payload (`provenance/`, kept hot one day) is compressed by the tier and, since 2026-11-04, moved to B2 `dt-archive-cold/token-watch/cold/` after a verified read-back; the manifest (`/var/lib/token-watch/offbox/cold-offbox-manifest.jsonl`) names each object and its file id. A study read of old raw payload reads it back from there (`token-watch/README.md`, "Reading the off-box archive back").
+- **`births/`, `observations/` and `dead/` — what the criteria read — are not tiered and were not moved** (`tier.py` `NEVER_TOUCH`).
+- Spent `due/` buckets (the follow-up's schedule, not study data) are removed 7 days after the follow-up's cursor passes them.
+- **Seven days have no birth file (10-19, 10-21 → 10-26):** the known birth gap, `#1247` — every per-day rate must exclude or flag them.

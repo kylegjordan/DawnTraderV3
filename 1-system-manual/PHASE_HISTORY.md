@@ -1440,3 +1440,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-05 — B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4) — ⏳ CLOSING (Langston confirmed Step 8)
 
 **Langston's memory can now only be changed through its proper tool.** Before, anyone editing his memory file directly — him included — jammed the tool for every session until someone fixed it by hand, which happened five times in under three weeks. The file is now locked so a direct edit is simply refused, his own saves go through a small service that checks them, and a daily check raises an alert if the lock is ever switched off. His own instructions were corrected to match.
+
+### 2026-11-04 — B-TOKEN-WATCH-STORAGE (Infra Claude, sprint row 5b) — ⏳ CLOSING (Langston confirmed Step 8)
+
+**The token-watch study no longer fills the trading server's disk unseen.** It had quietly grown to 13 GiB, because its daily archives were compressed but never moved off the server and nothing was watching the size. Archives now go to off-site storage every day, each one checked by downloading it back before the local copy is deleted; the size is checked daily with an alert; and old scheduling files are cleared once they are used. The store is down to about 6 GiB, still just over its warning line, because part of what it keeps has no clean-up yet — that sits with the follow-up batch.

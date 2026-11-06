@@ -1491,3 +1491,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **HOW.** A per-path FENCE table (owner, group, mode, immutable flag) read by every write site; his calls go to a root spool service that checks them against an allowlist; a daily fence check pages if it is switched off; a shrink gate refuses cutting a part below half. His write recipe corrected to match (2026-11-06).
 
 **RESULT.** A direct write is refused (EPERM) — six probes by Langston from his own account; the scheduled fence check passes; every reader of his memory still reads (recall index, backup 509/509, privacy check, load canary LOADED after an unmarked section was fixed). The fence's page has never fired, so its alert path is unproven (#661 leg 3).
+
+## B-TOKEN-WATCH-STORAGE (Infra Claude, sprint row 5b; `#1132`, Kyle D-2 2026-11-04) — change-class `architecture` — ⏳ **CLOSING — Step 11 report with Langston** (installed `41b538165` 2026-11-04, amendment 1 `c428153655a` 2026-11-05, the alert-line fix `5e6f1cec8` 2026-11-06; Step 8 CONFIRMED by Langston, msg `1568144949201993871`; report `Batch Completion/B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** The token-watch study's store on the staging box had grown to 13 GiB on the disk the live trading app writes to: its compressed archives never left the box, its size check had gone, and its follow-up schedule was never pruned.
+
+**HOW.** A daily off-box leg (upload to B2, read back by file id, manifest, then delete the local copy) under its own user and a key that cannot delete; a daily size check with warn and over-cap alerts; failure pages on every unit; a prune of spent schedule buckets bounded by the follow-up's cursor; an hourly feed watch.
+
+**RESULT.** 13.00 → 6.02 GiB; 88 archives off the box, re-downloaded and verified; the first scheduled prune removed 723 buckets. The store still sits just over its 6 GiB warn line and grows ~96 MB a day, part of it with no prune path — the follow-up batch carries that.
