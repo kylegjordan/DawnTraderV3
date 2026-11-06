@@ -119,8 +119,8 @@ All three are bidirectional-testable (Langston re-derived the same).
   - and P1 hands detect that same `propagatedDbs`.
 
   ⇒ **(a′) NEW:**
-  - **The test:** every xStock VTS row carrying a non-null `detectDbsScore` is matched to the `pair_scan_archive` row for the same symbol within the same minute, and the two scores must be equal (|Δ| < 1e-9).
-  - **PASS:** at least 99 % of matched rows are equal, AND at least 90 % of rows are matchable.
+  - **The test:** every xStock VTS row carrying a non-null `detectDbsScore` is matched to the `pair_scan_archive` row for the same symbol within the same minute, and the two scores must be equal (~~|Δ| < 1e-9~~ ⛔ **STRUCK at Step 8 (Langston, 2026-11-06): unsatisfiable by construction — `pair_scan_archive.dbs_score` is `numeric(10,6)`. The comparator is the column's own scale, |Δ| < 1e-6; max observed 4.998e-7, inside the 5e-7 half-unit. See the Step-7 record.**).
+  - **PASS:** at least 99 % of matched rows are equal, AND at least ~~90 %~~ **93.9 %** of rows are matchable (⛔ **superseded by C-3's pre-registered baseline − 3 points; the read used 93.9 %**).
   - **FAIL:** anything less.
   - A row with a null `detectDbsScore` must match a scan row whose score is the neutral fallback. That is (D)'s arm, seen from the other side.
   - **Instrument check (Step 3):** confirm the scan row and the eval row come from the same call. If the archive's `capturedAt` is not shared, define the join window from the code, not from this sample.
@@ -173,7 +173,7 @@ All three are bidirectional-testable (Langston re-derived the same).
 - **The join:** same symbol, with a `pair_scan_archive` row in the same minute OR the minute before.
 - **Matched:** 42,402 = **96.89 %** (same-minute only: 41,730 = 95.35 %).
 - ⇒ **(a′) coverage:** PASS ≥ 93.9 % (baseline − 3 points), using that exact join. A result below that is diagnosed against this baseline before it is read as a batch FAIL.
-- **What tests P1 is the equality leg:** ≥ 99 % of matched rows have |`detectDbsScore` − `dbs_score`| < 1e-9, taking the nearest scan row in the join window.
+- **What tests P1 is the equality leg:** ≥ 99 % of matched rows have |`detectDbsScore` − `dbs_score`| < ~~1e-9~~ **1e-6** (⛔ **1e-9 STRUCK at Step 8 — see (a′) above**), taking the nearest scan row in the join window.
 
 **Record items, folded:**
 - (1) P2 witnesses one of the three fields P1 carries. `pair_scan_archive` already carries `dbs_category` and `modulators.dbs_slope`, but P9(a) is their only fence in this batch, and that is stated rather than added. `strong-bull-trend.ts:78` reads `dbsSlope` for its log and metadata only (the slope gate was removed in B63.1), so that metadata value moves from 0 to real on xStock at this deploy.
