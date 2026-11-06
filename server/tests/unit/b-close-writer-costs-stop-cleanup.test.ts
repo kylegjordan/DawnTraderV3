@@ -44,8 +44,9 @@ import { referenceFillPrice, closeFillCosts } from '../../core/math/trade-pnl';
 import { PaperOrderPlacer } from '../../services/execution/order-placer';
 
 const RECORD = { id: 't-9', symbol: 'ETH/USD', assetClass: 'crypto_spot', strategyName: 'test', closedAt: null,
-  // the LEGACY open-record shape: the open path writes `fees` (the entry fee) and leaves `entry_fee` at its '0' default
-  entryPrice: '2000', actualEntryPrice: '2000', quantity: '0.5', fees: '4', entryFee: '0', entrySlippage: '0.2' };
+  // the LEGACY open-record shape: the open path writes `fees` (the entry fee) and `slippage` (the entry slippage) and leaves
+  // `entry_fee` / `entry_slippage` at their '0' defaults (P-14 writes them explicitly from the following increment)
+  entryPrice: '2000', actualEntryPrice: '2000', quantity: '0.5', fees: '4', slippage: '0.2', entryFee: '0', entrySlippage: '0' };
 const QUOTE = { price: 2100, source: 'kraken_ws', producer: 'kraken-ws', observedAt: 1_700_000_000_000 };
 
 beforeEach(() => {
@@ -84,6 +85,18 @@ describe('B-CLOSE-WRITER-COSTS P-11 — the engine-stop cleanup books real costs
     expect(parseFloat(w.netPnl)).toBeCloseTo(gross - 4 - exitFee, 10);
     expect(w.pnl).toBe(w.netPnl);                            // `pnl` carries net, as the canonical close writes it
     expect(w.exitDecisionPrice).toBe('2100');
+    // P-14: the entry values come from `fees` / `slippage` (where the open record holds them) and are WRITTEN — not the
+    // record's defaulted `entry_fee` / `entry_slippage` zeros.
+    expect(parseFloat(w.entryFee)).toBe(4);
+    expect(parseFloat(w.entrySlippage)).toBe(0.2);
+  });
+
+  it('C-5 a record with no entry slippage (slippage) is LEFT OPEN and alerted, never booked with a zero (P-14)', async () => {
+    h.getClosedTrades.mockResolvedValue([{ ...RECORD, slippage: null }]);
+    const r = await reconcileIncompleteTrades('paper', 'sess-1');
+    expect(r).toEqual({ reconciled: 0, stillOpen: 1, errors: 0 });
+    expect(h.updateClosedTrade).not.toHaveBeenCalled();
+    expect(String((h.addAlert.mock.calls[0] as any)[0].body)).toContain('no entry slippage on its record');
   });
 
   it('C-3 a record with no entry fee (fees) is LEFT OPEN and alerted, never booked with a zero', async () => {

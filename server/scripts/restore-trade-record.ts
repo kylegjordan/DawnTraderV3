@@ -41,6 +41,10 @@ async function main(): Promise<number> {
     return 2;
   }
   console.log(`[restore-trade-record] RESTORED ${r.symbol} position ${r.positionId} -> record ${r.recordId}${r.pending ? ' (pending maker)' : ''}`);
+  // P-14 (Langston Part C record 1): a trade booked moments ago would show up here — check it is not this same trade.
+  console.log(r.latestClosed
+    ? `[restore-trade-record] latest CLOSED record for ${r.symbol}: ${r.latestClosed.id} (${r.latestClosed.closeReason ?? 'no reason'}, closed ${r.latestClosed.closedAt}) — if it closed moments ago, check it is not this same trade`
+    : `[restore-trade-record] no CLOSED record exists for ${r.symbol} in this mode and class`);
   return 0;
 }
 
