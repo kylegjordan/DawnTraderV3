@@ -100,6 +100,12 @@ ok("a lock OLDER than one interval -> exit 6, naming it and what a human must do
    and "confirm no run is alive" in line, line)
 shutil.rmtree(base)
 base, proj, root, shared, machines = tree()
+os.makedirs(os.path.join(proj, "C--DawnTraderV3-old"))           # present, but no conversations in it
+code, line = ar.run(proj, root, shared, machines=machines)
+ok("a session folder present but EMPTY -> exit 7, naming it, nothing archived", code == 7 and "C--DawnTraderV3-old" in line
+   and not os.path.exists(os.path.join(root, "CC-B")), line)
+shutil.rmtree(base)
+base, proj, root, shared, machines = tree()
 code, line = ar.run(proj, root, shared, dry=True, machines=machines)
 ok("a dry run -> OK, and the archive and shared folders stay empty", code == 0 and "dry run" in line
    and os.listdir(root) == [] and os.listdir(shared) == [], (line, os.listdir(root)))

@@ -41,6 +41,15 @@ MUTATIONS = [
     ("R2-MF1: a real recovery cut not reported", replace('                "cut": would_cut}', '                "cut": []}')),
     ("R2-MF2: --key-file without --hashes accepted", replace('    if opts.get("--key-file") and not opts.get("--hashes"):', "    if False:")),
     ("R2-MF3: an unreadable folder read as empty", replace("os.walk(p, onerror=unreadable)", "os.walk(p)")),
+    ("R3-MF1: an unstattable entry read as neither (isdir/isfile silence)", replace(
+        "        try:\n            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here\n        except OSError as e:\n            unreadable(e)",
+        "        try:\n            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here\n        except OSError as e:\n            return \"other\"")),
+    ("R3-MF1: a present but unstattable slug read as absent", replace(
+        "        except OSError as e:\n            unreadable(e)               # present but unstattable: refuse, never read as absent",
+        "        except OSError as e:\n            continue               # present but unstattable: refuse, never read as absent")),
+    ("R3-MF1: a dangling slug link read as absent", replace(
+        "            if os.path.lexists(base):   # the name is there but points nowhere: a dangling junction, never \"absent\"",
+        "            if False:   # the name is there but points nowhere: a dangling junction, never \"absent\"")),
     ("C-5 injectivity not checked", replace("    check_injective(rfs)                    # BEFORE any write (C-5)\n", "")),
     ("recovery does not cut back", replace("            if not dry:\n                with open(p, \"r+b\") as fh:\n                    fh.truncate(n)", "            pass")),
     ("no intent commit before writing", replace("        write_state(sp, st)\n        for rel, items in sorted(by_file.items()):",
@@ -59,8 +68,8 @@ MUTATIONS = [
     ("the state line written only once ever", replace("            if st[\"layer_c\"].get(rel) != state_line:", "            if rel not in st[\"layer_c\"]:")),
     ("CRLF written", replace('                fh.write(chunk.encode("utf-8"))', '                fh.write(chunk.replace("\\n", "\\r\\n").encode("utf-8"))')),
     ("dry run writes", replace("        if dry:\n            return", "        if False:\n            return")),
-    ("folders outside the five read", replace("        if not os.path.isdir(base):\n            continue",
-                                              "        if not os.path.isdir(base):\n            continue\n    for slug in sorted(os.listdir(projects)):\n        alias, base = SLUG_ALIAS.get(slug, 'X'), os.path.join(projects, slug)\n        if not os.path.isdir(base):\n            continue")),
+    ("folders outside the five read", replace("    for slug in sorted(SLUG_ALIAS):\n        alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)",
+                                              "    for slug in sorted(os.listdir(projects)):\n        alias, base = SLUG_ALIAS.get(slug, 'X'), os.path.join(projects, slug)")),
     ("the raw text kept in the state", replace(
         '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order)})',
         '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order), "raw": lines})')),

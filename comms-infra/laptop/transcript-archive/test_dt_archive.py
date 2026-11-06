@@ -381,5 +381,67 @@ try:
 finally:
     da.time.mktime = real_mktime
 
+print("10. Langston P5 r3 must-fix: the dir-vs-file decision checks its reach")
+real_stat = os.stat
+
+
+def stat_failing(bad, exc):
+    def f(path, *a, **kw):
+        if os.path.normcase(str(path)) == os.path.normcase(bad):
+            raise exc
+        return real_stat(path, *a, **kw)
+    return f
+
+
+for shape, mk in (("a session folder that cannot be stat'd (dangling junction, parent present)",
+                   lambda proj: (os.path.join(proj, SLUG, SID), FileNotFoundError(2, "dangling", os.path.join(proj, SLUG, SID)))),
+                  ("a slug folder that is present but unstattable",
+                   lambda proj: (os.path.join(proj, SLUG), PermissionError(13, "denied", os.path.join(proj, SLUG)))),
+                  ("a slug folder that is a dangling link (present name, no target)",
+                   lambda proj: (os.path.join(proj, SLUG), FileNotFoundError(2, "dangling", os.path.join(proj, SLUG))))):
+    base, proj, root = tree()
+    put(proj, FIRST, "w")
+    nd = os.path.join(proj, SLUG, SID, "subagents")
+    os.makedirs(nd)
+    open(os.path.join(nd, "agent-abc.jsonl"), "w").write(json.dumps(reply("n1", D1 % 8, "nested work")) + "\n")
+    bad, exc = mk(proj)
+    da.os.stat = stat_failing(bad, exc)
+    try:
+        try:
+            da.archive_all(root, proj, dt.Redactor())
+            ok("R3-MF1: %s REFUSES the run" % shape, False)
+        except da.Refused as e:
+            ok("R3-MF1: %s REFUSES the run" % shape, "cannot read" in str(e), str(e))
+    finally:
+        da.os.stat = real_stat
+    ok("R3-MF1: ...with nothing written (no false 'not on disk' stamped)", os.listdir(root) == [], os.listdir(root))
+    shutil.rmtree(base)
+base, proj, root = tree()
+put(proj, FIRST, "w")
+ok("a session folder that is genuinely ABSENT is skipped, not refused (four of five slugs are absent here)",
+   da.archive_all(root, proj, dt.Redactor())[1] == [])
+shutil.rmtree(base)
+# the real Windows shape: a junction whose target is gone
+base, proj, root = tree()
+put(proj, FIRST, "w")
+tgt = os.path.join(base, "target-session")
+os.makedirs(os.path.join(tgt, "subagents"))
+link = os.path.join(proj, SLUG, SID)
+made = False
+if os.name == "nt":
+    made = _sp.run(["cmd", "/c", "mklink", "/J", link, tgt], capture_output=True).returncode == 0
+if made:
+    shutil.rmtree(tgt)
+    try:
+        da.archive_all(root, proj, dt.Redactor())
+        ok("R3-MF1 on a REAL dangling junction (Windows): refused", False)
+    except da.Refused as e:
+        ok("R3-MF1 on a REAL dangling junction (Windows): refused", "cannot read" in str(e), str(e))
+    ok("R3-MF1 on a REAL dangling junction: nothing written", os.listdir(root) == [], os.listdir(root))
+    os.rmdir(link)
+else:
+    print("skip R3-MF1 real junction: mklink /J not available here (the simulated cases above stand)")
+shutil.rmtree(base, ignore_errors=True)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

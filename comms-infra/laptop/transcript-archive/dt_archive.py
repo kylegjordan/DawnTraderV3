@@ -38,6 +38,7 @@ with a written operator procedure (Langston P5 (b)). A dry run takes no lock and
 import calendar
 import hashlib
 import json
+import stat
 import os
 import re
 import sys
@@ -68,24 +69,50 @@ def raw_files(projects):
         raise Refused("cannot read %s (%s) - the raw set would be incomplete; nothing written" % (
             getattr(err, "filename", "?"), type(err).__name__))
 
+    def kind_of(path):
+        """The dir-vs-file decision WITH its reach checked (Langston P5 r3 must-fix): os.path.isdir/isfile swallow
+        OSError by design, so a dangling junction or an unstattable entry read as 'neither' and vanished silently -
+        and a missing nested file then stamped a false 'not on disk'. One os.stat per entry; any error refuses."""
+        try:
+            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here
+        except OSError as e:
+            unreadable(e)
+        if stat.S_ISDIR(st.st_mode):
+            return "dir"
+        if stat.S_ISREG(st.st_mode):
+            return "file"
+        return "other"
+
     for slug in sorted(SLUG_ALIAS):
         alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)
-        if not os.path.isdir(base):
-            continue
+        try:
+            os.stat(base)
+        except FileNotFoundError:
+            if os.path.lexists(base):   # the name is there but points nowhere: a dangling junction, never "absent"
+                unreadable(FileNotFoundError(2, "dangling link", base))
+            continue                    # genuinely absent: this session has no folder yet
+        except OSError as e:
+            unreadable(e)               # present but unstattable: refuse, never read as absent
+        if kind_of(base) != "dir":
+            unreadable(NotADirectoryError(20, "not a folder", base))
         try:
             names = sorted(os.listdir(base))
         except OSError as e:
             unreadable(e)
         for name in names:
             p = os.path.join(base, name)
-            if name.endswith(".jsonl") and os.path.isfile(p):
+            k = kind_of(p)
+            if name.endswith(".jsonl") and k == "file":
                 out.append((alias, "top", p, name[:-6], None, None))
-            elif os.path.isdir(p):
+            elif k == "dir":
                 for root, _dirs, files in sorted(os.walk(p, onerror=unreadable)):
                     for f in sorted(files):
                         if f.endswith(".jsonl"):
-                            rel = os.path.relpath(os.path.join(root, f), p)[:-6]
-                            out.append((alias, "sub", os.path.join(root, f), None, name, SAFE.sub("_", rel.replace(os.sep, "__"))))
+                            fp = os.path.join(root, f)
+                            if kind_of(fp) != "file":
+                                continue
+                            rel = os.path.relpath(fp, p)[:-6]
+                            out.append((alias, "sub", fp, None, name, SAFE.sub("_", rel.replace(os.sep, "__"))))
     return out
 
 

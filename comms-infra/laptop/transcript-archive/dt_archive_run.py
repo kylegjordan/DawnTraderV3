@@ -11,7 +11,8 @@ hook, the restart handoff). It owns the key handoff P3(c) promised and the stale
 3. dt_archive.archive_all with the redactor built from those fingerprints; then dt_index.build.
 4. A LOUD RESULT: exit 0 clean · 3 fingerprints incomplete · 4 a name collision (C-5) · 5 a file refused (a held lock, a
    shorter-than-committed file) · 6 a LOCK OLDER THAN ONE INTERVAL (25 h) - a run that died and left it; the writer
-   never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it.
+   never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it ·
+   7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero).
    The last line printed is always one of: `ARCHIVE RUN OK`, `ARCHIVE RUN FAILED — <why>`.
 5. OPERATOR NOTE (Langston P5 r2 obs 2): if the projects folder MOVES or is re-junctioned, every raw file's identity
    changes and EVERY file is refused (`state ... belongs to <old>, not <new>`, exit 5). Do NOT delete or empty `.state`:
@@ -99,6 +100,17 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
     if stale:
         return 6, ("ARCHIVE RUN FAILED — %d lock(s) older than %d h: %s - a run died and left it; confirm no run is "
                    "alive (pid and stamp are inside), then delete it" % (len(stale), LOCK_MAX_S // 3600, ", ".join(stale)))
+    # A session folder that is PRESENT but yields ZERO raw files is loud, never a silent empty (Langston P5 r3 §13 item,
+    # folded here because the unattended nightly run is where it earns its keep; the real dry run measured all five
+    # non-empty, 1,090 files). Read failures inside raw_files already refuse (exit 4).
+    try:
+        rfs = da.raw_files(projects)
+    except da.Refused as e:
+        return 4, "ARCHIVE RUN FAILED — %s" % e
+    empty = [slug for slug, alias in sorted(da.SLUG_ALIAS.items())
+             if os.path.isdir(os.path.join(projects, slug)) and not any(r[0] == alias for r in rfs)]
+    if empty:
+        return 7, "ARCHIVE RUN FAILED — session folder(s) present but holding no conversations: %s" % ", ".join(empty)
     key = os.urandom(32)
     try:
         hs, failed = fingerprints(key, machines, runner)

@@ -19,6 +19,7 @@ def replace(a, b):
 
 
 MUTATIONS = [
+    ("an empty session folder passes quietly", replace("    if empty:\n        return 7,", "    if False:\n        return 7,")),
     ("a missing machine tolerated (partial fingerprints)", replace("        if failed:\n            return 3,", "        if False:\n            return 3,")),
     ("an old lock not checked", replace("    if stale:\n        return 6,", "    if False:\n        return 6,")),
     ("a fresh lock treated as old", replace("                if now - os.path.getmtime(p) > LOCK_MAX_S:", "                if True:")),
