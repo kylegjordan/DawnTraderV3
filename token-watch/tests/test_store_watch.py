@@ -93,6 +93,8 @@ m = minted[0] if minted else {}
 check("S2 severity warning", m.get("severity") == "warning")
 check("S2 key token-watch-store-warn", m.get("dedupe_key") == "token-watch-store-warn")
 check("S2 body names the standing condition", "STANDING CONDITION" in m.get("body", ""))
+check("S2 body says its figures are mint-time and do not update (Langston Step 8 C-3)",
+      "AS OF THIS ROW'S MINT" in m.get("body", "") and "DO NOT UPDATE" in m.get("body", ""))
 check("S2 body carries the split", "due:" in m.get("body", "") and "births:" in m.get("body", ""))
 check("S2 the run wrote nothing in the store", census() == before)
 

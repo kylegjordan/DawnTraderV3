@@ -42,6 +42,7 @@ import sys as _sys
 # (why ops/ is separate: the header of ops/cold_offbox.py).
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 
+import datetime
 import logging
 import os
 import sys
@@ -97,6 +98,11 @@ def body_for(state: str, total: int, parts: dict[str, int]) -> str:
         lines.append("OVER THE CAP. The study shares / with the live trading app; a full disk stops the app writing. "
                      "Owner: Infra Claude (CC-INFRA). Look first at due/ (spent buckets go 7 days after the follow-up "
                      "reads them, unread ones never; tools/due_census.py splits them) and at whether the daily off-box upload (token-watch-cold-offbox) is running.")
+    # Langston, Step 8 C-3: a standing row is never re-minted while it stays open (dedupe), so this body is frozen at
+    # mint time - and the live figure is root-only (journal and store), so a non-root reader sees ONLY this body.
+    lines.append("THESE FIGURES ARE AS OF THIS ROW'S MINT (%s UTC) AND DO NOT UPDATE: the row is not re-minted while it "
+                 "stays open. Live size: `du -sb /var/lib/token-watch` as root, or the hourly token-watch-feed-watch "
+                 "log line (store=...)." % datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%MZ"))
     lines.append("Source: token-watch/store_watch.py, unit token-watch-store-watch (B-TOKEN-WATCH-STORAGE, #1132).")
     return "\n".join(lines)
 
