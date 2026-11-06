@@ -1,4 +1,4 @@
-# B-TRANSCRIPT-ARCHIVE — design r1a (KD-34, design only; KD-46 gate for the shorter-conversation trial)
+# B-TRANSCRIPT-ARCHIVE — design r1b (KD-34, design only; KD-46 gate for the shorter-conversation trial)
 
 > Owner: Infra Claude. Deciders: Infra Claude + Langston + Coltrane; PM Claude records. **Design only, nothing is built.** Placement is Kyle's (PM is taking it to him). Inputs: `SPRINT_TO_LIVE_PLAN.md:145` (Kyle 2026-09-29, the archive as asked), `1-system-manual/pm/decisions/2026-11-05_cheaper-helpers-and-short-conversations.md` (the trial and the three positions), and KD-46's condition, in Kyle's words: *"everything a session works on, decides, implements, etc., when it gets removed by a restart, it gets stored somewhere where it can be searched and referenced when needed."*
 
@@ -37,7 +37,7 @@ One command, `dt-recall`, read-only:
 Before any break, the session writes `handoff\<alias>\<UTC>.md`. **Its fields are Langston's three plus Coltrane's list:**
 1. **position**: the `STEP: N of 11 · NEXT STEP` line, per batch;
 2. **the job's brief**: what Kyle or PM asked, in their words, with the message id;
-3. **the exact ref**: branch, `HEAD`, and `origin/<branch>` at the moment of writing;
+3. **the exact ref, in §5's format** (Langston r1b): *"ref: read `git rev-parse origin/<branch>` and `git rev-parse HEAD` (was `<sha>` / `<sha>` at `<UTC>`)"*, the pointer plus a stamped reading, never a bare value;
 4. the next gate and who holds it;
 5. dirty state (`git status --porcelain`, any `??` named);
 6. the open dispatches, with message ids;
@@ -46,7 +46,9 @@ Before any break, the session writes `handoff\<alias>\<UTC>.md`. **Its fields ar
 9. the dead ends;
 10. pending commitments ("I said I would …");
 11. **the archive link**: the archived file and its line range for the conversation just ended;
-12. **the active pack** (Coltrane r1): the scope, pre-audit, design or review pack in hand — its **path, the section or gate, and the exact ref** — or an explicit `none`. The brief (item 2) is the ask; the pack is the artifact the work is graded against, and the two are not the same thing.
+12. **withdrawn claims** (Langston r1b), a REQUIRED field, explicit `none` if there are none: anything the session PUBLISHED and then withdrew, with the original and the correction. Dead ends (item 9) are approaches that failed; a retraction is a published claim that was overturned. Without it, a recall hits the published version and the next session re-asserts an overturned figure;
+13. **open observation windows and pre-registered triggers the session owns**, each with the instrument that fires it, written as "the owner remembers" where that is the truth, or explicit `none`. A restart is exactly the event that kills a trigger whose only carrier was memory (Langston: on B-SILENT-STRATEGY-CENSUS, one of three pre-registered triggers had a carrier that fires);
+14. **the active pack** (Coltrane r1): the scope, pre-audit, design or review pack in hand — its **path, the section or gate, and the exact ref** — or an explicit `none`. The brief (item 2) is the ask; the pack is the artifact the work is graded against, and the two are not the same thing.
 **The new conversation's `SessionStart` hook injects the latest handoff** (the `load-own-memory.mjs` pattern), and the session's own `MEMORY_CC_<X>.md` position block points at it. **Break points (both reviewers): a finished step, never mid-diff, mid-test, mid-deploy or with an unresolved decision.**
 
 ## 5. Staleness of written state — the guard
@@ -58,11 +60,16 @@ Langston named the real cost: *"stale written state that sounds certain."* So:
   - `git status --porcelain` against the recorded dirty state;
   - each open dispatch, checked in the inbox for a reply since the handoff;
   - the due alerts, from the existing hook.
-  - A handoff **older than 12 h**, or with any DRIFT line, is printed as **STALE — re-derive before acting**.
+  - **STALE is EVENT-driven** (Langston r1b): any DRIFT leg (the ref moved, the dirty state differs, a new reply arrived on an open dispatch, a new due alert) prints **`STALE (drift) — <the leg>`**. A handoff **older than 12 h with no drift** prints a separate, quieter **`AGED (backstop, no drift found)`**. The two are never printed the same way, so the age arm cannot train people to skip the banner the real drift lines share.
+  - **The guard says when it could not look** (Langston r1b): if a leg cannot be read (`git fetch` fails, the inbox is unreachable, the alert read fails), it prints **`GUARD FAILED — <leg> not checked`**. **A missing guard banner is itself treated as STALE**, so a dead hook never renders as all-clear (the 404-as-zero-drift shape).
+  - **Discharge** (Langston r1b): `STALE` clears only when the drifted field is re-derived and corrected in a new handoff, **never because the session read the banner**. A self-clear on acknowledgement would be an ack silencing an alarm.
 - **The hook also VALIDATES** that the pack path and ref (item 12) and the archive link (item 11) exist and resolve, rather than trusting them.
 - **The pilot test (Coltrane's drill, corrected at r1a — the r1 version was circular).** The hook checked only the dispatches the handoff listed, so it could never discover one the handoff OMITTED. The drill therefore plants an **action-changing omission in an independently enumerated population**:
   - **Omission run:** the authoritative source holds **2 open dispatches**, and the handoff records **1 of 2**. The one omitted is the dispatch **holding the next gate** (for example, an unanswered review request that blocks a deploy), with a unique message id; the listed one is the positive control. The hook must derive the 2-message population **independently** (from the inbox log's `cc_outbound` rows for this session since its start, with no later reply addressed to it), report **`MISSING_OPEN_DISPATCH <exact id>`**, and mark the handoff **`STALE/BLOCKED`**.
   - **Stale-ref run, separately:** `origin/<branch>` advances after the handoff is written, and the hook must print the exact old and new shas. **One mutation per run**, so catching the ref cannot hide a failure to catch the omission.
+  - **Guard-failure run** (Langston r1b): `git fetch` is made to fail (an unreachable remote in a scratch clone), and the hook must print `GUARD FAILED — ref not checked` and treat the handoff as STALE.
+  - **Aged-backstop run** (Langston r1b): a handoff backdated past 12 h with no drift must print `AGED (backstop, no drift found)` and NOT `STALE (drift)`. The pilot's restarts will be hours apart, so the age arm is exercised by this planted handoff or it is dropped, never shipped untested.
+  - **A positive control for EVERY leg** (Langston r1b): the alert leg and the dirty-state leg are each shown returning a known-present item (a planted due alert, a planted untracked file), not merely running. The dispatch and ref legs have theirs above.
   - **Each run goes green → planted mutation red for the RIGHT reason → restored green.** Printing some DRIFT line is not a pass. If any leg fails, the trial does not proceed.
 - **What a passing hook means (Coltrane):** **"safe to resume and re-derive"**, never "every inherited claim is true". It proves the machine-re-derivable fields only; it cannot prove that judgements, dead ends or promises are complete.
 - **Honest limit:** the hook proves the facts it CAN re-derive (git, inbox, alerts). A written judgement ("this approach failed because…") cannot be re-derived, and stays labelled as the earlier session's claim.
@@ -82,7 +89,8 @@ Langston named the real cost: *"stale written state that sounds certain."* So:
 
 ## 8. Positions
 - **Infra Claude (owner), r1:** as written above.
-- **Langston:**
+- **Langston, r1 position (msg `1568067564578279485`, ruled on r1a at `aeb7b8902`): CONFIRMED, subject to five changes, all folded at r1b.** §7.1's split is right because a REDACTED archive can never be the record, so the raw `.jsonl` must be. §4: withdrawn claims (item 12) and owned observation windows and triggers with their instruments (item 13) added; item 3 put in §5's pointer-plus-reading format. §5: `GUARD FAILED` with a missing banner treated as STALE; STALE event-driven, with the 12 h age arm printed separately as `AGED` and exercised by a planted backdated handoff; a positive control for the alert and dirty-state legs; `STALE` discharged only by a corrected re-derived field, never by reading it. **§7.4: his transcripts are a LATER phase, named, not folded:** his side has no conversation and no restart, so §4 has no subject there; `langston-recall` covers his capture; and his real gap, LEDGER.md not being auto-loaded, belongs with `B-LANGSTON-CLAUDEMD-RESIDUAL`. The unconfirmed Drive backup in §0 is the right form.
 - **Coltrane, r1 (cc_outbound 2026-11-05T23:23:44Z, read at `64560d72e`): CONFIRMS the design with one field and the drill changed.** §4 carried 9 of his 10 items; the missing one is the active pack (now item 12). The r1 planted-omission test was circular, because the hook checks only the dispatches the handoff names. His replacement drill (independently enumerated population, 2 dispatches with 1 omitted, the omitted one gate-holding; a separate stale-ref run; one mutation per run; green → red for the right reason → green) is now §5. Also adopted: the hook validates that the pack and archive links resolve, and a pass means "safe to resume and re-derive". **Folded at r1a.**
 
 ## 9. Consensus
+**REACHED, 2026-11-06 ~01:15Z (r1b): Infra Claude, Coltrane (confirmed r1, his two changes folded at r1a) and Langston (confirmed r1a, his five changes folded at r1b).** The raw `.jsonl` is the record and the archive is a derived, redacted, searchable copy. Capture at restart, at compaction and nightly; it lives outside the repo, backed up to Drive (never the private folder). `dt-recall`: a hit is a lead, a miss is not evidence. The handoff carries 14 fields: Langston's three in pointer form, Coltrane's list, withdrawn claims, owned triggers with their instruments, and the active pack. A `SessionStart` drift guard is event-driven, says `GUARD FAILED` when it cannot look, discharges only on a corrected field, and is proven by a five-run drill (omitted gate-holding dispatch, stale ref, guard failure, aged backstop, and a positive control per leg), each run green, then red for the right reason, then green. **A pass means "safe to resume and re-derive".** Langston's and Coltrane's own transcripts are a later phase. **This consensus is the starting point for the B-TRANSCRIPT-ARCHIVE scope (order 4b, KD-47), with Kyle's 09-29 terms: a one-day sample to him before the full run, and all history kept.**
