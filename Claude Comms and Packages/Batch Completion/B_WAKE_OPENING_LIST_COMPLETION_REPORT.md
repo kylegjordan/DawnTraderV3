@@ -86,7 +86,7 @@ CHANGE-CLASS: non_architecture
 | T2 | `MISTAKE_PATTERNS.md` | judged | N/A | one `MISTAKE: wrong-object [B-WAKE-OPENING-LIST]` trailer is in commit `aa0ce9eb5`; the weekly pass harvests trailers, and no per-instance row is written at close |
 | T2 | `GOVERNANCE_EXCEPTIONS.md` | judged | N/A | no exception granted |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | judged | N/A | its five wake lines (:26 :30 :32 :33 :37) describe the Langston-reply rail, which this batch did not touch: the filter still decides his replies on `OPEN_RE` (`cc-wake-filter.py:215`), and `opening_list` is reached only on the crew branch (Langston, Step 11) |
-| T2 | `DELIVERY_BOARD_PROTOCOL.md` | judged | N/A | board retired by KD-35; no field changed |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | judged | N/A | the board's columns, fields and ownership did not change (corrected 2026-11-06, Langston: KD-35 retired the PHONE status board, `/status-board`, not the GitHub Projects delivery board, which is live); the card was moved to Complete at close |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | judged | N/A | the daily check did not run in this batch |
 | — | other rule files | — | ✅ | Langston's rules file (`3f6c38510`, net −46 B, installed); Coltrane's `AGENTS.md`, `CODEX_DISCORD_RULES.md` and `COMMS_BRIDGE_RUNBOOK.md` (`790d8ed78`) |
 
