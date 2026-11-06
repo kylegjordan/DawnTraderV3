@@ -1533,3 +1533,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **RESULT.** GBP/USD written under its own key on every pass that asked for it; the REST poller named as its writer on all 399 open-trade passes; no false escalation across four WebSocket silences. Not measured: how often a REST write replaces a newer WebSocket price (V4/V9) — the stamps exist, a counter does not; carried to row 14a.
 
 **GOVERNANCE FILES CHANGED:** scope · pre-audit · two change lists · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_MANUAL.md` · `SYSTEM_IMPACT_MAP.md` (§2.2, §2.3) · `CHANGES_AND_FIXES.md` · `RUNNING_ISSUES.md` · `DELETED_COMPONENTS_LOG.md` · `PHASE_19_PLAN.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.
+
+## B-OHLC-FRAME-GUARD (CC-C, sprint plan row 13 · Phase-19 row `3b.h-6`; `#1028`, `#1029`) — change-class `non_architecture` — ✅ **CLOSED 2026-11-06** (deployed `29cce1076` 2026-09-11; r6 live in release deploy A `ea456ad40` 2026-10-02; Step 7 discharged on a bounded read and Step 8 by Langston 2026-11-06; report `Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** A one-minute price bar arriving with no price became the text "undefined" and the archive writer threw away the whole batch with it. Now every producer checks each bar before buffering it and skips a bad one, counting and logging it. The archive panel also stopped reading a count it could not finish as zero.
+
+**RESULT.** All four bar tables kept writing at their normal rates after the deploy; the panel's data shows real counts and "unknown" where a count times out. The skip path has never fired live (proved by tests only), and the on-screen panel check could not run safely — it moved to `B-DB-POOL-GUARD`.
+
+**GOVERNANCE FILES CHANGED:** scope · pre-audit · change lists · Step-7 record · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_IMPACT_MAP.md` (§2.6c) · `SYSTEM_MANUAL.md` · `CHANGES_AND_FIXES.md` · `RUNNING_ISSUES.md` · `GOVERNANCE_EXCEPTIONS.md` · `PHASE_19_PLAN.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.

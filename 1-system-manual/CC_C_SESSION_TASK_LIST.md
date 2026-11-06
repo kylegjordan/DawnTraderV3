@@ -15,7 +15,7 @@
 
 | plan row | batch | where it stands (2026-09-30) |
 |---|---|---|
-| 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | Step 7 DISCHARGED 2026-11-06 (Langston, bounded read; the on-screen leg moved to `B-DB-POOL-GUARD` inc 3, CC-A); Step 8 confirm, then Steps 10-11 |
+| 13 | `B-OHLC-FRAME-GUARD` (`#1028`) | ✅ CLOSED 2026-11-06 at Step 10 (`Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`), Step 11 with Langston |
 | 16 | `F-G-1` reopened (`#1031`) = `B-OHLC-WRITE-ORDER` | ✅ CLOSED 2026-11-06 — `Batch Completion/F_G_1_COMPLETION_REPORT.md` |
 | 17 · 3 · 2 | `B-PRICE-SIDE-BY-JOB` | `8a-P4c` incs 2-3 (row 3) at Step 8; `8c` at Step 2 (hold lifted 09-28, re-read the plan at the ref before Step 3); `8d` and KD-19 (b)/(c) at Step 1, not started; the xStock half is row 2 |
 | 14 · 15 | `B-REST-SIDES-TO-CACHE`, `B-BOOK-STATE-RESTART-DURABLE` | Row 14: ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (`Batch Completion/B_REST_SIDES_TO_CACHE_COMPLETION_REPORT.md`). Row 15: ✅ CLOSED 2026-11-06 (Step 11 confirmed by Langston) |

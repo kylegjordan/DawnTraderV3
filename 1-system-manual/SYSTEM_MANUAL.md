@@ -12724,6 +12724,8 @@ The 240-minute (4-hour) aggregation infrastructure ships in B-NEW-34 (in `ohlc-a
 
 The PK `(interval_begin, symbol, id)` includes the `id` bigserial, which allows many rows per `(symbol, interval_begin)` — no UNIQUE constraint exists. The May 2026 partition holds 13.5M rows in 3.4GB on disk.
 
+**What reaches the 1-minute table is guarded (`B-OHLC-FRAME-GUARD`, 2026-09-11).** Every producer validates a bar's eight fields before it is buffered; a malformed bar is skipped, counted and logged, so the aggregator sees a counted gap for that minute rather than a missing batch of good bars. The aggregation below is unchanged.
+
 **The aggregator workaround (B-NEW-34 hotfix 3).** `ohlc-aggregator.ts` applies `DISTINCT ON (symbol, interval_begin) ORDER BY symbol, interval_begin, captured_at DESC, id DESC` as a CTE before the bucketing CTE. This picks the latest-tick (closed-bar) snapshot per minute, then rolls up 60 of those into one 60-minute bar via the standard `array_agg(... ORDER BY)` pattern. Without the dedup, the rollup's MAX/MIN/SUM would over-count the same minute's high/low/volume dozens of times.
 
 **The structural fix (B-NEW-35, SHIPPED 2026-05-20).** See the dedicated chapter "Source-side dedup architecture (B-NEW-35)" below for the full structural-correctness model that replaced this DISTINCT ON workaround. The aggregator's DISTINCT ON CTE is preserved for now as defense-in-depth even though the UNIQUE constraint at the DB level now guarantees no duplicates can land.

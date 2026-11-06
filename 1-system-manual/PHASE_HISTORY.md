@@ -1460,3 +1460,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-06 — B-REST-SIDES-TO-CACHE (CC-C, sprint plan row 14) — ✅ CLOSED 2026-11-06 (Langston confirmed Step 11)
 
 **Exchange prices fetched over the slower REST route now carry their buy and sell sides into the shared price cache.** Before, the bid and ask were read and then thrown away one line before saving, and two currency pairs (GBP/USD, ETC/USD) were saved under names nothing looked up. Every cached price now also says which feed set its sides. Live since the 2026-10-02 release; Langston confirmed the checks on 2026-11-06. One question is left for row 14a: how often a REST price overwrites a newer live one. Record: `Batch Completion/B_REST_SIDES_TO_CACHE_COMPLETION_REPORT.md`.
+
+### 2026-11-06 — B-OHLC-FRAME-GUARD (CC-C, sprint plan row 13) — ✅ CLOSED 2026-11-06 (Step 10; Step 11 with Langston)
+
+**One bad price bar can no longer wipe out a batch of good ones.** A minute bar arriving with no price used to make the archive throw away every bar saved alongside it; now each bar is checked first and a bad one is skipped and counted. The archive's monitoring panel also stopped showing zero for counts it could not finish. Live since 2026-09-11 (panel fix 2026-10-02). The skip has never actually triggered in live data, and the on-screen panel check moved to the connection-pool batch, which has to open that page anyway. Record: `Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`.
