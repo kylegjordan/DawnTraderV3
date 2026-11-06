@@ -47,13 +47,16 @@ def main(argv):
     arch = argv[argv.index("--archive") + 1] if "--archive" in argv else ARCHIVE
     bak = argv[argv.index("--backup") + 1] if "--backup" in argv else BACKUP
     now, total = owners(arch)
-    pre, _t = owners(bak)
+    pre, total_pre = owners(bak)
+    if total_pre == 0 or not pre:
+        print("REFUSED - the backup at %s holds no archived ids: an unmounted or empty backup is not a clean result" % bak)
+        return 2
     m_now = {k for k, v in now.items() if len(v) > 1}
     m_pre = {k for k, v in pre.items() if len(v) > 1}
     print("LEG 1  archived ids across all states: %d | distinct: %d | in more than one state: %d (queue: ids among them: %d)"
           % (total, len(now), len(m_now), sum(1 for k in m_now if str(k).startswith("queue:"))))
-    print("       same count in the backup's .state: %d | new since the backup: %d | gone since: %d"
-          % (len(m_pre), len(m_now - m_pre), len(m_pre - m_now)))
+    print("       the backup's .state: %d archived ids, %d distinct | in more than one state: %d | new since: %d | gone since: %d"
+          % (total_pre, len(pre), len(m_pre), len(m_now - m_pre), len(m_pre - m_now)))
     groups = collections.Counter(tuple(sorted(now[k])) for k in m_now)
     print("       attributed, every group (%d groups, %d ids):" % (len(groups), sum(groups.values())))
     for g, n in groups.most_common():
@@ -79,6 +82,9 @@ def main(argv):
                 grew += len(cur) > len(old)
             else:
                 other.append(("rebuilt by design" if rel == "INDEX.md" else "NOT A PREFIX", rel))
+    if n == 0:
+        print("REFUSED - leg 2 found no backed-up .md files under %s: an empty denominator is not a pass" % bak)
+        return 2
     print("LEG 2  backed-up .md files (population = the BACKUP side): %d | exact byte prefix of today's: %d (grew %d) | "
           "rebuilt by design (INDEX.md): %d | missing today: %d | NOT a prefix: %d"
           % (n, prefix, grew, sum(1 for k, _r in other if k == "rebuilt by design"), missing,
