@@ -1143,7 +1143,14 @@ export async function stopActiveEngine(
                         _orec = _ok.record;
                         // Langston Part C NEW-1: resolved BY KEY ⇒ stamp the id back BEFORE the record is finished, so a failed
                         // delete below leaves a position the restore will refuse (409) rather than double-book.
-                        await stampPositionTradeId('paper', orphan, _orec.id);
+                        // FAIL-CLOSED HERE (Langston's NEW-1 condition): this branch is already a keep-and-report exit, so a
+                        // failed stamp DEFERS one orphan cleanup instead of refusing a close — the record is left OPEN and the
+                        // stamp-fail-AND-delete-fail conjunction cannot arise. (The engine site stays best-effort.)
+                        if (!(await stampPositionTradeId('paper', orphan, _orec.id))) {
+                          console.error(`[B-CLOSE-WRITER-COSTS][STOP_FLOW] orphan ${orphan.symbol} (${orphan.id}): its record ${_orec.id} resolved by key but the tradeId stamp FAILED — record left open, position KEPT; reported in orphansKept`);
+                          flattenReport.orphansKept.push(orphan.symbol);
+                          continue;
+                        }
                       }
                     }
                     const _finished = !!_orec && (_orec.closedAt != null || (await closeStaleRecordAtReference('paper', _orec)) === 'closed');

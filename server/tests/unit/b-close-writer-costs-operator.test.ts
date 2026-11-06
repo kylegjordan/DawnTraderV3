@@ -225,7 +225,7 @@ describe('K — the record id is stamped back when a record resolves by key (Lan
     const resolver = eng.slice(eng.indexOf('private async _resolveOpenTradeRecord'), eng.indexOf('private async _refuseUnresolvedRecord'));
     expect(resolver).toContain('await stampPositionTradeId(this.mode, position, rec.record.id);');
     const svc = readFileSync(resolve(__dirname, '../../services/active-engine-service.ts'), 'utf8');
-    const stamp = svc.indexOf("await stampPositionTradeId('paper', orphan, _orec.id);");
+    const stamp = svc.indexOf("await stampPositionTradeId('paper', orphan, _orec.id))");
     const finish = svc.indexOf("closeStaleRecordAtReference('paper', _orec)");
     expect(stamp).toBeGreaterThan(0);
     expect(finish).toBeGreaterThan(stamp);
