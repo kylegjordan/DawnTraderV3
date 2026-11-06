@@ -99,23 +99,23 @@ for dcl in sorted(dc.DECLINE):
     ok("the exact decline %r ENDS the dispatch" % dcl[:30], run([inb(1), sil(1, dcl)])["ended"] == 1)
 print("(15) a sent dispatch with no inbound row")
 r = run([cco(1, "Langston — review the writer please")])
-ok("NOT RECEIVED, listed by id", r["not_received"] == [str(sid(1))], r)
-ok("a post that names Langston only LATER is not checked", run([cco(1, "OLD Claude — Langston said yes")])["not_received"] == [])
-ok("a post received under its own id is fine", run([cco(1, "Langston — x"), inb(1, text="Langston — x")])["not_received"] == [])
+ok("NOT HANDLED, listed by id", r["not_handled"] == [str(sid(1))], r)
+ok("a post that names Langston only LATER is not checked", run([cco(1, "OLD Claude — Langston said yes")])["not_handled"] == [])
+ok("a post received under its own id is fine", run([cco(1, "Langston — x"), inb(1, text="Langston — x")])["not_handled"] == [])
 print("(16) a two-piece dispatch")
 p1 = "Langston — first piece of a long review request\n\nwith  a blank line and a double space"   # the PIECE itself has
 p2 = "second piece continues the request"                                                     # runs of whitespace
 r = run([cco(1, p1), cco(1, p2), inb(3, text=p1.replace(" with ", "\nwith ") + "\n" + p2)])
-ok("both pieces matched on whitespace-normalised text: nothing NOT RECEIVED", r["not_received"] == [] and r["guard_failed"] == [], r)
+ok("both pieces matched on whitespace-normalised text: nothing NOT HANDLED", r["not_handled"] == [] and r["guard_failed"] == [], r)
 r = run([cco(1, p1), inb(3, text="something else entirely")])
-ok("...and a piece with no matching inbound text IS listed (the matcher's negative)", r["not_received"] == [str(sid(1))], r)
+ok("...and a piece with no matching inbound text IS listed (the matcher's negative)", r["not_handled"] == [str(sid(1))], r)
 print("(17) the address registry swapped for SESSION_NAMES")
 r = run([inb(1)], registry=addr.SESSION_NAMES)
 ok("GUARD FAILED before any row is read", r["guard_failed"] and "LANGSTON" in r["guard_failed"][0] and r["open"] == [], r)
 print("(18) a Coltrane row in the window")
 r = run([{"kind": "cc_outbound", "sender": "Coltrane", "text": "Langston — hello", "ts": "2026-11-06T18:00:00Z"}])
-ok("the named excluded path: NOT CHECKED, neither GUARD FAILED nor NOT RECEIVED",
-   r["guard_failed"] == [] and r["not_received"] == [] and "NOT CHECKED" in r["not_checked"][0], r)
+ok("the named excluded path: NOT CHECKED, neither GUARD FAILED nor NOT HANDLED",
+   r["guard_failed"] == [] and r["not_handled"] == [] and "NOT CHECKED" in r["not_checked"][0], r)
 
 print("window and other alias")
 ok("a dispatch before the window is not counted", run([{"kind": "langston_inbound", "message_id": BASE - (1 << 22), "sender_username": "Infra Claude#0000", "text": "x"}])["open"] == [])

@@ -16,7 +16,13 @@ GUARD — run by the SessionStart hook before the session acts. It finds the lat
   dirty     `git status --porcelain` against the stamped state
   dispatch  the census, INDEPENDENTLY, since the handoff was written: a dispatch open now but NOT listed in the handoff
             -> `MISSING_OPEN_DISPATCH <id>` (STALE/BLOCKED); a listed one now answered -> `DRIFT dispatch: reply on <id>`;
-            NOT RECEIVED posts are listed
+            a post naming Langston with no handled row -> `NOT HANDLED — no inbound row for <id>`, and the banner rises
+            (Langston P8 C-2). BLIND SPOT, stated with its measured bound: the bridge writes `langston_inbound` when a
+            WORKER handles a message (discord-langston-bridge.py:527/:1421), not at enqueue, so between enqueue and
+            handling a dispatch is invisible on the dispatch rail and reads NOT HANDLED on the cross-check. Measured
+            over the 31 `took` lines in the bridge log (2026-11-06): median 682 s, p90 1,372 s, max 2,032 s from
+            enqueue to handling. The fix is a bridge-written enqueue row (proposed: B-LANGSTON-ENQUEUE-ROW, Kyle's list),
+            never a parser over the bridge's debug log.
   alerts    the due alerts now against the ids stamped in the handoff: a NEW one -> `DRIFT alert: <id>`
   validate  the pack path (field 14) exists and its ref resolves; the archive link (field 11) exists
 The FIRST line is always exactly one banner: `HANDOFF GUARD: CLEAN` · `STALE (drift) — <legs>` · `AGED (backstop, no
@@ -58,22 +64,49 @@ def git(repo, *args, timeout=60):
     return p.stdout.decode("utf-8", "replace").strip()
 
 
+CENSUS_RAN = "NOT CHECKED — Coltrane's posts"   # the census prints this on EVERY completed run: its positive control
+
+
+def parse_census(returncode, stdout):
+    """The census's answer, or a guard failure - NEVER an empty "no open dispatches" from a run that did not happen
+    (Langston P8 C-1: an unreachable host gave `{}`, which read as zero open and printed CLEAN - the 404-as-zero-drift
+    shape). It counts as run only on exit 0 AND the census's own Coltrane line, which every completed run carries."""
+    try:
+        c = json.loads((stdout or b"").decode("utf-8") or "null")
+    except ValueError:
+        c = None
+    if not isinstance(c, dict):
+        return {"guard_failed": ["the census did not answer (exit %s, no JSON)" % returncode]}
+    if c.get("guard_failed"):
+        return c
+    if returncode != 0 or not any(str(x).startswith(CENSUS_RAN) for x in c.get("not_checked", [])):
+        return {"guard_failed": ["the census did not complete (exit %s, no completion line)" % returncode]}
+    return c
+
+
 def real_census(alias, since_ms):
     src = open(os.path.join(HERE, "dt_dispatch_census.py"), "rb").read()
-    p = subprocess.run(["ssh", "-o", "ConnectTimeout=15", "-o", "BatchMode=yes", HELSINKI,
-                        "python3 -I - --alias %s --since-ms %d" % (alias, since_ms)], input=src, capture_output=True,
-                       timeout=120)
-    return json.loads(p.stdout.decode("utf-8") or "{}")
+    try:
+        p = subprocess.run(["ssh", "-o", "ConnectTimeout=15", "-o", "BatchMode=yes", HELSINKI,
+                            "python3 -I - --alias %s --since-ms %d" % (alias, since_ms)], input=src, capture_output=True,
+                           timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return {"guard_failed": ["the census transport failed (%s)" % type(e).__name__]}
+    return parse_census(p.returncode, p.stdout)
+
+
+def parse_due(returncode, stdout):
+    out = (stdout or b"").decode("utf-8", "replace")
+    if returncode != 0 or "COUNT" not in out:
+        raise RuntimeError("the due-alert read did not complete")
+    return sorted(set(UUID.findall(out)))
 
 
 def real_due_alerts():
     src = open(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(HERE))), "scripts", "due-alerts.py"), "rb").read()
     p = subprocess.run(["ssh", "-o", "ConnectTimeout=15", "-o", "BatchMode=yes", STAGING, "python3 -"], input=src,
                        capture_output=True, timeout=120)
-    out = p.stdout.decode("utf-8", "replace")
-    if p.returncode != 0 or "COUNT" not in out:
-        raise RuntimeError("the due-alert read did not complete")
-    return sorted(set(UUID.findall(out)))
+    return parse_due(p.returncode, p.stdout)
 
 
 def now_utc():
@@ -175,7 +208,8 @@ def guard(alias, repo, root, census=real_census, alerts=real_due_alerts, clock=n
                 lines.append("DRIFT dirty: gone %s" % x)
     except Exception:      # noqa: BLE001
         failed.append("head/dirty")
-    # dispatch (independent population, since the handoff was written minus a day for the ones it inherited)
+    # dispatch (independent population: the census over the 7 DAYS before the handoff was written, so the dispatches it
+    # inherited are in it too - the same window the writer used)
     try:
         w = datetime.datetime.strptime(mach["written_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
         c = census(alias, int(w.timestamp() * 1000) - 7 * 24 * 3600 * 1000)
@@ -192,8 +226,11 @@ def guard(alias, repo, root, census=real_census, alerts=real_due_alerts, clock=n
             for i in sorted(set(mach.get("open_dispatches", [])) - set(now_open)):
                 drift.append("dispatch")
                 lines.append("DRIFT dispatch: reply on %s since the handoff" % i)
-            for i in c.get("not_received", []):
-                lines.append("NOT RECEIVED — %s" % i)
+            for i in c.get("not_handled", []):
+                # unanswered work: "safe to resume" would be a false claim over it (Langston P8 C-2 - this overrules
+                # design §5's "listed"; the banner rises)
+                drift.append("dispatch")
+                lines.append("NOT HANDLED — no inbound row for %s" % i)
             lines += c.get("not_checked", [])
     except Exception:      # noqa: BLE001
         failed.append("open-dispatch")

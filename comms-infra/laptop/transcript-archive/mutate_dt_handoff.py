@@ -21,6 +21,14 @@ def replace(a, b):
 MUTATIONS = [
     ("a blank required field accepted", replace("        if not f.get(n):", "        if False:")),
     ("a handoff omitting an open dispatch accepted", replace("    if missing:\n        raise Refused(", "    if False:\n        raise Refused(")),
+    ("C-1: an empty or incomplete census reply taken as zero open", replace(
+        "    if returncode != 0 or not any(str(x).startswith(CENSUS_RAN) for x in c.get(\"not_checked\", [])):", "    if False:")),
+    ("C-1: a non-JSON reply taken as zero open", replace(
+        '        return {"guard_failed": ["the census did not answer (exit %s, no JSON)" % returncode]}', "        return {}")),
+    ("C-2: NOT HANDLED leaves the banner CLEAN", replace(
+        "                drift.append(\"dispatch\")\n                lines.append(\"NOT HANDLED — no inbound row for %s\" % i)",
+        "                lines.append(\"NOT HANDLED — no inbound row for %s\" % i)")),
+    ("the alert parser accepts a read with no COUNT line", replace('    if returncode != 0 or "COUNT" not in out:', "    if returncode != 0:")),
     ("the writer stamps without fetching", replace("    if fetch:   # stamp the CURRENT remote", "    if False:   # stamp the CURRENT remote")),
     ("the guard never fetches", replace("        if fetch:\n            git(repo, \"fetch\"", "        if False:\n            git(repo, \"fetch\"")),
     ("ref drift not reported", replace("        if o != mach.get(\"origin\"):", "        if False:")),
@@ -50,7 +58,8 @@ def suite(src):
     d = tempfile.mkdtemp(prefix="dt-hmut-")
     try:
         open(os.path.join(d, "dt_handoff.py"), "w", encoding="utf-8").write(src)
-        shutil.copy(os.path.join(HERE, "test_dt_handoff.py"), d)
+        for f in ("test_dt_handoff.py", "dt_dispatch_census.py"):   # the real-transport test reads the census source
+            shutil.copy(os.path.join(HERE, f), d)
         p = subprocess.run([sys.executable, "-I", os.path.join(d, "test_dt_handoff.py")], capture_output=True, cwd=d, timeout=600)
         tail = [l for l in p.stdout.decode("utf-8", "replace").splitlines() if l.endswith(" failed")]
         return p.returncode, (tail[-1] if tail else None)

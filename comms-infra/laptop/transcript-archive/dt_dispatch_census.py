@@ -4,7 +4,7 @@ log ALONE (scope OBJ-5, Langston C-4: never from the handoff it grades). Runs on
 
     ssh root@204.168.141.77 'python3 -I - --alias CC-B --since-ms <ms>' < dt_dispatch_census.py
 
-Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_received": [ids], "guard_failed": [...],
+Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_handled": [ids], "guard_failed": [...],
 "not_checked": [...], "counts": {...}}. Any guard_failed entry means the leg could not be trusted: the guard prints
 `GUARD FAILED — open-dispatch leg: <reason>` and never a green. The rules (pre-audit P8, each a drill case):
   * DISPATCH RAIL: `langston_inbound` rows in the window whose `sender_username` maps to this alias (exact strings).
@@ -15,7 +15,7 @@ Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_rec
     leave it OPEN, with the reason. Any other silent reason in the window -> GUARD FAILED.
   * Every kind in the window is one of the ELEVEN named; any other -> GUARD FAILED. Unmapped senders -> GUARD FAILED.
   * CROSS-CHECK (C-8): every `cc_outbound` row of this alias whose OPENING LIST names Langston must have an inbound
-    row (same id, or each piece matched on whitespace-normalised text); else NOT RECEIVED. Coltrane's posts carry no
+    row (same id, or each piece matched on whitespace-normalised text); else NOT HANDLED (no inbound row yet - the bridge writes it when a worker handles the message, so this also covers a dispatch still queued). Coltrane's posts carry no
     message id and are NOT CHECKED - said every run.
   * The address rule and the piece matcher are each controlled before a row is read; a failed control -> GUARD FAILED.
 Ids are compared as STRINGS (the log holds both int and str eras).
@@ -95,7 +95,7 @@ def piece_received(text, inbound, at_ms):
 
 
 def census(rows, alias, since_ms, until_ms, addr, registry):
-    out = {"open": [], "ended": 0, "not_received": [], "guard_failed": [], "not_checked": [], "counts": {}}
+    out = {"open": [], "ended": 0, "not_handled": [], "guard_failed": [], "not_checked": [], "counts": {}}
     gf = out["guard_failed"]
     # CONTROLS FIRST (CHANGES-3, CHANGES-2): the address rule and the piece matcher must each find a known positive
     if "LANGSTON" not in registry:
@@ -193,7 +193,7 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
             continue
         if i in inbound_ids or piece_received(text, inbound_text, ms):
             continue
-        out["not_received"].append(i)
+        out["not_handled"].append(i)
     out["counts"] = {"dispatches": len(dispatches), "cc_posts_checked": len(cc)}
     return out
 

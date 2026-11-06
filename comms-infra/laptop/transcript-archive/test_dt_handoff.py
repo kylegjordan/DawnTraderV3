@@ -4,6 +4,7 @@ each run starts green, plants ONE mutation and must go red FOR THE RIGHT REASON,
 with a local bare remote makes the ref and fetch legs real; the census and alert sources are planted.
 `python3 -I test_dt_handoff.py` - exit 0 = all pass."""
 import datetime
+import json
 import os
 import shutil
 import subprocess
@@ -52,7 +53,7 @@ STATE = {"open": [{"id": "1568300000000000001"}], "alerts": ["aaaaaaaa-1111-2222
 
 
 def census(alias, since_ms):
-    return {"open": list(STATE["open"]), "not_received": [], "guard_failed": list(STATE["gf"]),
+    return {"open": list(STATE["open"]), "not_handled": list(STATE.get("nh", [])), "guard_failed": list(STATE["gf"]),
             "not_checked": ["NOT CHECKED — Coltrane's posts"]}
 
 
@@ -200,6 +201,40 @@ os.remove(os.path.join(root, "CC-B", "2026-11-06_0fe1c46a.md"))
 b, lines, _ = guard(T0 + datetime.timedelta(minutes=20))
 ok("the archive link is validated, not trusted", "archive link" in b, (b, lines))
 open(os.path.join(root, "CC-B", "2026-11-06_0fe1c46a.md"), "w").write("archived\n")
+
+print("Langston P8 C-1/C-2/C-3")
+STATE["nh"] = ["1568330334603321411"]
+b, lines, _ = guard(T0 + datetime.timedelta(minutes=20))
+ok("C-2: a NOT HANDLED post raises the banner (never CLEAN over unanswered work)",
+   b.startswith("STALE (drift) — dispatch") and "NOT HANDLED — no inbound row for 1568330334603321411" in lines, (b, lines))
+STATE["nh"] = []
+ok("restored: green", guard(T0 + datetime.timedelta(minutes=20))[0].startswith("HANDOFF GUARD: CLEAN"))
+GOODC = json.dumps({"open": [{"id": "1"}], "not_handled": [], "guard_failed": [],
+                    "not_checked": ["NOT CHECKED — Coltrane's posts (no message id; this leg cannot witness their absence)"]}).encode()
+ok("C-1: a completed census (exit 0 + its Coltrane line) is taken as is", dh.parse_census(0, GOODC).get("open") == [{"id": "1"}])
+for rc, out, why in ((255, b"", "an unreachable host (exit 255, empty stdout)"), (0, b"", "exit 0 with empty stdout"),
+                     (0, b"{}", "an empty object"), (0, b"not json", "non-JSON"),
+                     (0, json.dumps({"open": [], "not_handled": [], "guard_failed": [], "not_checked": []}).encode(), "no completion line"),
+                     (1, GOODC, "a non-zero exit even with a good body")):
+    r = dh.parse_census(rc, out)
+    ok("C-1: %s -> guard_failed, never zero open" % why, bool(r.get("guard_failed")) and not r.get("open"), r)
+ok("C-1: a census that itself reports guard_failed passes it through",
+   dh.parse_census(3, json.dumps({"guard_failed": ["x"]}).encode()) == {"guard_failed": ["x"]})
+ok("the alert parser takes a completed read", dh.parse_due(0, b"aaaaaaaa-1111-2222-3333-444444444444 x\nCOUNT 1 host staging\n") == ["aaaaaaaa-1111-2222-3333-444444444444"])
+for rc, out, why in ((255, b"", "an unreachable host"), (0, b"aaaaaaaa-1111-2222-3333-444444444444\n", "no COUNT line")):
+    try:
+        dh.parse_due(rc, out)
+        ok("the alert parser refuses %s" % why, False)
+    except RuntimeError:
+        ok("the alert parser refuses %s" % why, True)
+import dt_handoff as _dh2
+_saved = _dh2.HELSINKI
+_dh2.HELSINKI = "nobody@unresolvable.invalid"
+try:
+    r = _dh2.real_census("CC-B", 0)
+    ok("C-1 end to end: the REAL transport to an unresolvable host -> guard_failed, never {}", bool(r.get("guard_failed")) and "open" not in r, r)
+finally:
+    _dh2.HELSINKI = _saved
 
 print("the banner")
 open(dh.latest(root, "CC-B"), "a").write("")

@@ -37,7 +37,7 @@ MUTATIONS = [
                                        "        return True")),
     ("the registry control off", replace('    if "LANGSTON" not in registry:', "    if False:")),
     ("pieces matched byte-for-byte, not normalised", replace("    t = norm(text)", "    t = str(text or \"\")")),
-    ("NOT RECEIVED never listed", replace("        out[\"not_received\"].append(i)", "        pass")),
+    ("NOT HANDLED never listed", replace("        out[\"not_handled\"].append(i)", "        pass")),
     ("Coltrane's NOT CHECKED line dropped", replace(
         "    if NOT_CHECKED_LINE not in out[\"not_checked\"]:\n        out[\"not_checked\"].append(NOT_CHECKED_LINE)      # said every run",
         "    if False:\n        out[\"not_checked\"].append(NOT_CHECKED_LINE)      # said every run")),
