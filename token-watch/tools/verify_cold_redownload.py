@@ -13,10 +13,10 @@ uncompressed byte count match the manifest line.
 
 READ-ONLY: it lists nothing, writes nothing to B2, and keeps the download only in a private temporary directory that
 is removed at exit. It reads the key exactly as the off-box job does (systemd `LoadCredential=`), so run it as:
-  systemd-run --wait --pipe -p User=tokenwatch-cold -p PrivateTmp=yes \
-      -p LoadCredential=b2-cold:/etc/token-watch/b2-cold.key \
-      -p Environment=PYTHONPATH=/opt/token-watch \
-      python3 /opt/token-watch/tools/verify_cold_redownload.py
+  ssh root@<staging> 'systemd-run --quiet --wait --pipe -p User=tokenwatch-cold -p PrivateTmp=yes \
+      -p LoadCredential=b2-cold:/etc/token-watch/b2-cold.key -p Environment=PYTHONPATH=/opt/token-watch \
+      -p Environment=TOKEN_WATCH_ROOT=/var/lib/token-watch /usr/bin/python3 -' < token-watch/tools/verify_cold_redownload.py
+  (the script on stdin, so nothing is added to the installed tree)
 Exit 0 = all three match; 1 = any mismatch or failure (named).
 """
 import gzip
