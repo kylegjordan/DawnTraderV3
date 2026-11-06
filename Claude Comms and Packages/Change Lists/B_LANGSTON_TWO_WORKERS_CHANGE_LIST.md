@@ -139,3 +139,14 @@ content = merged                                          # then the normal writ
 ## Folded from the fence batch's Step 8 (Langston, 2026-11-06)
 - **`--help`** (carry 4): `langston-memory-write --help` (sole argument) prints the tool's MODES and EXIT text and exits 0, before `run()` and its client branch — touching no file, lock or spool; MODES now describes `--retry-part`. Tested in `test_memory_retry.py` section 2.
 - **`run_memory_suites.sh`** (carry 3) now runs `mutate_memory_fence.py` too: **six PASS lines** on Helsinki 06:18Z (ledger split, fence, fence mutations 14/14, trim, retry, retry mutations 7/7).
+
+## Step 5 — CI
+- `42178305136` at `f6ea3f3d3`, 4/4 per job (TypeScript Check, Test Suite, Build, Docker Build). It contains every reviewed two-workers change; the commits after `58e46376a` touching `comms-infra/` are the fence batch's carries (`38cc23ebc`) and records.
+
+## Step 6 — install, part 1 (2026-11-06 ~07:10-07:20Z), no restart yet
+1. `live-vs-sha.py f38220b83 bridges`: ROWS=15 DIFFER=0 — no box edit since the last install.
+   `deploy.sh` brought from blob `58ff0e77…` (hash-object equal on the box), `--sha f6ea3f3d3099bd6e389252b7ca1683e650c94637 --only bridges`: 17 files installed, every one equal to its re-hashed blob (new: `langston-bridge-flag`, `langston-concurrency-smoke`). Neither bridge restarted. `discord-cc-bridge.py`, `discord_common.py`, `address_list.py` are unchanged since `f38220b83` (empty `git diff --stat`), so the CC bridge needs no restart.
+2. `langston-bridge-flag one-worker on --by cc-infra` → `{"drain": false, "one-worker": true}`, before any restart.
+3. `/var/log/langston-tasks.jsonl` created root:langston 0660, empty.
+4. Writer and allowlist from the mirror's blobs, each re-hashed before install: `langston-memory-write` blob `e375c70e…` root:langston 0750 (188,984 B), `langston_memory_allowlist.py` blob `8127f1b3…` root:root 0644 (6,608 B); `git hash-object` of the installed files equals both blobs. **`run_memory_suites.sh` from the 24 blobs of `comms-infra/langston-memory/bin/` at `f6ea3f3d3`, in a root-owned 0700 dir, re-hashed: six PASS lines** — `test_ledger_split.py ALL PASS` · `test_memory_fence.py ALL PASS` · `mutate_memory_fence.py 14 of 14 mutations caught` · `test_memory_trim.py ALL PASS` · `test_memory_retry.py ALL PASS` · `mutate_memory_retry.py 7/7 caught`; rc 0.
+- **Held:** the restart (step 5) waits for a window with no Langston review in flight; steps 6-8 follow it.
