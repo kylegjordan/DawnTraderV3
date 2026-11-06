@@ -26,6 +26,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
+import type { RecorderConnectionLiveness } from './passive-archive/recorder-connection.js';
 // B64a: regime names imported from the canonical SSOT to satisfy the
 // regime_mapping_integrity test ("no hardcoded regime strings outside config/tests").
 import { CANONICAL_REGIMES, REGIMES, type CanonicalRegimeType } from '../config/canonical-regime-strategy-map.js';
@@ -721,8 +722,16 @@ export interface PassiveArchiveUniverseStats {
   cumulativeTickerScanned: number;
   // *skipped* = OHLC bars the frame guard rejected since the process started (#1028). Never rate-limited.
   ohlcFramesSkipped: number;
-  // Connection state
+  // Connection state — SOCKET state (readyState OPEN on every connection). Not liveness: read it beside
+  // `connectionLiveness`, never instead of it (B-CRYPTO-FEED-WATCHDOG objective 4).
   wsConnected: boolean;
+  // B-CRYPTO-FEED-WATCHDOG objective 4: per connection, the socket state beside the DATA liveness
+  // ('live' | 'silent' | 'unknown' | 'starting'). `null` = this universe is NOT graded by the data-liveness check
+  // (xstock_spot is not a RecorderConnection) — absence is "not graded", never "silent".
+  connectionLiveness: RecorderConnectionLiveness[] | null;
+  // How many connections read 'silent' (no data frame inside the threshold; a closed socket counts, it delivers
+  // nothing). `null` when not graded.
+  dataSilentConnections: number | null;
   // Store fraction = stored rows in the window / scanned since PID, clamped to 1 (its complement is the
   // scanned-but-not-stored share).
   // ⚠️ Step-2 C7: on a futures leg a rejected candle is re-scanned every poll, so a mass rejection INFLATES
@@ -733,7 +742,11 @@ export interface PassiveArchiveUniverseStats {
   // started (the in-process scanned counter, which is never unknown) while its window count is 0 OR unknown.
   // COUNT_UNKNOWN = connected, neither side is known dead, and a window count is unknown, so OK cannot be decided.
   // Nothing unknown is ever reported as OK (B-OHLC-FRAME-GUARD r6, Langston Step 4 C1 and its follow-up).
-  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN';
+  // DATA_SILENT = every socket is open but at least one connection has had no DATA frame inside its threshold (the
+  // 2026-10-21 half-open shard0 shape); `dataSilentConnections` says how many. LIVENESS_UNKNOWN = sockets open, none
+  // known silent, but a connection's threshold is unreadable, so liveness cannot be decided — never OK.
+  // STARTING now also covers an open connection still inside its opening window before its first data frame.
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN' | 'DATA_SILENT' | 'LIVENESS_UNKNOWN';
   // Why a window count is unknown, the worst of the two: `timeout` = load (the 4 s limit), `error` = the query
   // failed, `shape` = the reply was not one row of two counts. `null` when both counts were read.
   countUnknownReason: CountUnknownReason | null;
@@ -1043,9 +1056,23 @@ export async function computePassiveArchiveStatus(
     // Order (Langston, Step 4 C1): connection states; then a side KNOWN to be dead — nothing scanned since the process
     // started, with a window count of 0 or unknown (an unknown count cannot contradict the in-process zero, so it
     // must not mask the alarm, Langston's follow-up) — then COUNT_UNKNOWN; OK only when every count was read.
+    // B-CRYPTO-FEED-WATCHDOG objective 4 (Langston Step-9 conditions): an OPEN socket is not a live feed. After the
+    // socket-down arm, the data-liveness arms run BEFORE every count arm: DATA_SILENT (any connection silent — names
+    // how many), then LIVENESS_UNKNOWN (a threshold unreadable — never OK), then STARTING (an open connection still
+    // inside its opening window before its first data frame; outranks NO_OHLC/NO_TICKER, which would otherwise fire on
+    // every fresh process). A universe with no `connections` (xstock_spot: not a RecorderConnection) is NOT graded by
+    // these arms — absence is never read as silent.
+    const liveness: RecorderConnectionLiveness[] | null = 'connections' in cfg.stats ? cfg.stats.connections : null;
+    const dataSilentConnections = liveness ? liveness.filter((c) => c.dataLive === 'silent').length : null;
     let status: PassiveArchiveUniverseStats['status'] = 'OK';
     if (!cfg.stats.connected) {
       status = cfg.stats.configuredSymbols === 0 ? 'STARTING' : 'DISCONNECTED';
+    } else if (dataSilentConnections != null && dataSilentConnections > 0) {
+      status = 'DATA_SILENT';
+    } else if (liveness?.some((c) => c.dataLive === 'unknown')) {
+      status = 'LIVENESS_UNKNOWN';
+    } else if (liveness?.some((c) => c.dataLive === 'starting')) {
+      status = 'STARTING';
     } else if ((ohlcCount === 0 || ohlcCount == null) && cfg.stats.cumulativeOhlcRows === 0) {
       status = 'NO_OHLC_DATA';
     } else if ((tickerCount === 0 || tickerCount == null) && cfg.stats.cumulativeTickerSnaps === 0) {
@@ -1072,6 +1099,8 @@ export async function computePassiveArchiveStatus(
       cumulativeTickerScanned: cfg.stats.cumulativeTickerSnaps,
       ohlcFramesSkipped: cfg.stats.ohlcFramesSkipped,
       wsConnected: cfg.stats.connected,
+      connectionLiveness: liveness,
+      dataSilentConnections,
       ohlcStoreFraction,
       tickerStoreFraction,
       status,
