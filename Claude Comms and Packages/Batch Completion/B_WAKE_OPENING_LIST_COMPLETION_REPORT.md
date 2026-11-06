@@ -1,5 +1,7 @@
 # B-WAKE-OPENING-LIST — COMPLETION REPORT
 
+**✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (msg `1568094991685918786`), on the condition below, which this closing commit lands: the System Impact Map's "If I Change X, Check Y" lines for the Langston gate and for a session rename still described the retired rule; both now name `address_list.py`.**
+
 **Batch:** `B-WAKE-OPENING-LIST` · **owner:** Infra Claude (CC-INFRA) · **issue:** `#1241` · **plan:** `SPRINT_TO_LIVE_PLAN.md` row 1a · **Kyle:** KD-20, widened by KD-21 (2026-11-04)
 **change-class:** `non_architecture`
 **Scope:** `Claude Comms and Packages/Scope Files/B_WAKE_OPENING_LIST_SCOPE.md` (r4a) · **pre-audit and plan:** `…/B_WAKE_OPENING_LIST_PRE_AUDIT.md` (r2a) · **change list (every step's record):** `Claude Comms and Packages/Change Lists/B_WAKE_OPENING_LIST_CHANGE_LIST.md`
@@ -55,7 +57,7 @@ CHANGE-CLASS: non_architecture
 
 | tier | document | required/judged | verdict | one line |
 |---|---|---|---|---|
-| T1 | `BATCH_CATALOG.md` | REQUIRED | ✅ | entry added (CLOSING until Step 11 confirms) |
+| T1 | `BATCH_CATALOG.md` | REQUIRED | ✅ | entry added, flipped to CLOSED at Step 11 |
 | T1 | `PHASE_HISTORY.md` | REQUIRED | ✅ | plain-language entry added |
 | T1 | `SPRINT_TO_LIVE_PLAN.md` row 1a | REQUIRED | ✅ | status → closing, report linked, A6 and the finding named |
 | T1 | `PHASE_19_PLAN.md` | judged | N/A | not a `P19-*` batch and it has no row there |
@@ -67,7 +69,7 @@ CHANGE-CLASS: non_architecture
 | T1 | session task lists | REQUIRED (mine) | ✅ | `CC_INFRA_SESSION_TASK_LIST.md` row → Step 11; CC_A / CC_B / CC_C: N/A — not mine |
 | T1 | Langston's `MEMORY.md` | REQUIRED | ✅ | section added via `langston-memory-write`, part `00-legacy.md`, net −35 B (`a9a35791` → `a576cc94`) |
 | T2 | `SYSTEM_MANUAL.md` | judged | N/A | comms only — no trading architecture, strategy, regime, filter or maths changed |
-| T2 | `SYSTEM_IMPACT_MAP.md` | judged | ✅ | `address_list.py` row: the one rule, its four consumers, blast radius (`be4101ec8`) |
+| T2 | `SYSTEM_IMPACT_MAP.md` | judged | ✅ | `address_list.py` row: the one rule, its four consumers, blast radius (`be4101ec8`); and its "If I Change X, Check Y" lines for the Langston gate and a session rename (the closing commit, Langston's Step-11 condition) |
 | T2 | `RUNNING_ISSUES.md` | judged | ✅ | `#1241` annotated installed; `#979` amended (99 world-readable `/tmp` drafts → B-SHARED-TMP-ISOLATION) |
 | T2 | `CHANGES_AND_FIXES.md` | judged | ✅ | FIX-2026-11-06-A |
 | T2 | `POST_AUDIT_ROADMAP.md` | judged | N/A | no phase-level change |
@@ -83,7 +85,7 @@ CHANGE-CLASS: non_architecture
 | T2 | `DELETED_COMPONENTS_LOG.md` | judged | ✅ | `ADDRESS_START_RE`, `CC_NAME_RE`, `NAME_START_RE`, and the duplicated codex/ unit copies |
 | T2 | `MISTAKE_PATTERNS.md` | judged | N/A | one `MISTAKE: wrong-object [B-WAKE-OPENING-LIST]` trailer is in commit `aa0ce9eb5`; the weekly pass harvests trailers, and no per-instance row is written at close |
 | T2 | `GOVERNANCE_EXCEPTIONS.md` | judged | N/A | no exception granted |
-| T2 | `ALERT_HANDLING_PROTOCOL.md` | judged | N/A | its wake lines (:27, :33) are about the bridge auto-leading replies, which is unchanged |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | judged | N/A | its five wake lines (:26 :30 :32 :33 :37) describe the Langston-reply rail, which this batch did not touch: the filter still decides his replies on `OPEN_RE` (`cc-wake-filter.py:215`), and `opening_list` is reached only on the crew branch (Langston, Step 11) |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | judged | N/A | board retired by KD-35; no field changed |
 | T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | judged | N/A | the daily check did not run in this batch |
 | — | other rule files | — | ✅ | Langston's rules file (`3f6c38510`, net −46 B, installed); Coltrane's `AGENTS.md`, `CODEX_DISCORD_RULES.md` and `COMMS_BRIDGE_RUNBOOK.md` (`790d8ed78`) |
