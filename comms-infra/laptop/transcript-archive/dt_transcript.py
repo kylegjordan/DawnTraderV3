@@ -12,6 +12,9 @@ WHAT IS KEPT (pre-audit A1, A1b, P2):
     label never claims a human wrote it) — a `user` entry whose content is a string, or its `text` blocks; and `attachment`
     `queued_command` (a message typed while the session was busy);
   * the session's replies — `assistant` `text` blocks;
+  * a user turn that is NOTHING BUT automatic task notices (`<task-notification>`) as ONE `Wake — task notice` line:
+    its time, that it was a wake, and each notice's summary (Kyle via PM Claude, 2026-11-06 — the readable copy only;
+    a turn that also holds anything else is written in full, so a person's words are never folded into a wake);
   * compaction summaries whole (`isCompactSummary`);
   * ONE LINE PER ACTION — each `tool_use`: time · tool · its own description (Bash `description`), else the file path,
     else the first line of the command or prompt, cut to one line; plus ` ERROR: <first line>` when the matching
@@ -223,6 +226,28 @@ def _blocks(content):
     return [b for b in content or [] if isinstance(b, dict)]
 
 
+TASK_NOTICE = re.compile(r"<task-notification>(.*?)</task-notification>", re.S)
+
+
+def _tag(body, name):
+    m = re.search(r"<%s>(.*?)</%s>" % (name, name), body, re.S)
+    return " ".join(m.group(1).split()) if m else ""
+
+
+def wake_line(text, redact):
+    """A user turn that is NOTHING BUT automatic task notices becomes ONE line (Kyle via PM Claude, 2026-11-06: keep
+    that a wake happened, when, and what kind). Returns the line after the time stamp, or None when the turn holds
+    anything else - then it is written in full, so a person's words are never folded into a wake line."""
+    blocks = TASK_NOTICE.findall(text)
+    if not blocks or TASK_NOTICE.sub("", text).strip():
+        return None
+    parts = []
+    for body in blocks:
+        what = _tag(body, "summary") or ("background task %s" % (_tag(body, "status") or "notice"))
+        parts.append(one_line(redact(what), 200))
+    return "task notice:** " + " | ".join(parts)
+
+
 def distill(lines, redact, since=None, until=None, dropped=None):
     """lines: an iterable of raw .jsonl lines. Yields (uuid, timestamp, markdown_line); every yielded line comes from
     an entry that has a uuid (A1). Action lines are yielded at the end, once their results (and any ERROR) are known;
@@ -260,7 +285,11 @@ def distill(lines, redact, since=None, until=None, dropped=None):
             for b in _blocks(msg.get("content")):
                 if b.get("type") == "text" and b.get("text", "").strip():
                     emitted = True
-                    yield uid, ts, "\n**[%s] User:** %s\n" % (hhmm, redact(b["text"]).strip())
+                    wake = wake_line(b["text"], redact)
+                    if wake:
+                        yield uid, ts, "\n**[%s] Wake — %s\n" % (hhmm, wake)
+                    else:
+                        yield uid, ts, "\n**[%s] User:** %s\n" % (hhmm, redact(b["text"]).strip())
                 elif b.get("type") == "image":
                     emitted = True
                     yield uid, ts, "**[%s] User:** [image]" % hhmm

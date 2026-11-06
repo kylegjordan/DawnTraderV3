@@ -51,6 +51,12 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("P5: wake notices never folded", replace("    if not blocks or TASK_NOTICE.sub(\"\", text).strip():", "    if True:")),
+    ("P5: a person's words folded into a wake", replace("    if not blocks or TASK_NOTICE.sub(\"\", text).strip():", "    if not blocks:")),
+    ("P5: only the first of two notices kept", replace('    return "task notice:** " + " | ".join(parts)', '    return "task notice:** " + parts[0]')),
+    ("P5: summary not redacted", replace("        parts.append(one_line(redact(what), 200))", "        parts.append(one_line(what, 200))")),
+    ("P5: no-summary fallback dropped", replace('        what = _tag(body, "summary") or ("background task %s" % (_tag(body, "status") or "notice"))',
+                                                '        what = _tag(body, "summary")')),
     ("J3: only the FIRST '=' tried", replace('                    if ch == "=":', '                    if ch == "=" and "=" not in t[:i]:')),
     ("F1: plain SHA-256 matching instead of the HMAC", replace(
         'names.get(hmac.new(key, t.encode("utf-8"), hashlib.sha256).hexdigest())',

@@ -13,8 +13,8 @@ import dt_transcript as dt  # noqa: E402
 FAILS = []
 
 
-def ok(name, cond):
-    print(("ok   " if cond else "FAIL ") + name)
+def ok(name, cond, detail=None):
+    print(("ok   " if cond else "FAIL ") + name + ("" if cond or detail is None else "   [%r]" % (detail,)))
     if not cond:
         FAILS.append(name)
 
@@ -250,6 +250,46 @@ _err2 = io.StringIO()
 with contextlib.redirect_stderr(_err2), contextlib.redirect_stdout(io.StringIO()):
     rc2 = dt.main(["dt", _raw, "--verbose", "--hashes", _empty])
 ok("an unknown argument is REFUSED, not allowed to shift --hashes", rc2 == 2 and "REFUSED" in _err2.getvalue())
+
+print("4b. P5: a wake notice is ONE line; a person's words never fold into one; two text blocks in one entry")
+TN = ("<task-notification>\n<task-id>bx1</task-id>\n<tool-use-id>toolu_01AbCdEfGhIjKlMnOpQrStUv</tool-use-id>\n"
+      "<output-file>C:\\x\\tasks\\bx1.output</output-file>\n<status>completed</status>\n"
+      "<summary>Background command \"Re-arm the wake watcher\" completed (exit code 0)</summary>\n</task-notification>")
+TN2 = TN.replace("bx1", "bx2").replace("Re-arm the wake watcher", "Notify Kyle")
+TNS = TN.replace("<summary>Background command \"Re-arm the wake watcher\" completed (exit code 0)</summary>\n", "")
+raw4 = [
+    {"type": "user", "uuid": "w1", "timestamp": T % 1, "message": {"content": TN}},
+    {"type": "user", "uuid": "w2", "timestamp": T % 2, "message": {"content": [{"type": "text", "text": TN + "\n" + TN2}]}},
+    {"type": "user", "uuid": "w3", "timestamp": T % 3, "message": {"content": TN + "\nAlso, Kyle here: please stop."}},
+    {"type": "user", "uuid": "w4", "timestamp": T % 4, "message": {"content": TNS}},
+    {"type": "user", "uuid": "w5", "timestamp": T % 5, "message": {"content": TN.replace("Re-arm the wake watcher", "leak " + PLANTED["github-token"])}},
+    {"type": "assistant", "uuid": "m1", "timestamp": T % 6, "message": {"content": [
+        {"type": "text", "text": "First piece of the reply."},
+        {"type": "tool_use", "id": "t9", "name": "Bash", "input": {"command": "ls", "description": "List files"}},
+        {"type": "text", "text": "Second piece of the reply."}]}},
+]
+red = dt.Redactor()
+out4 = [x[2] for x in sorted(dt.distill([json.dumps(e) for e in raw4], red), key=lambda x: x[1])]
+t4 = "\n".join(out4)
+w1 = [l for l in out4 if "[09:00:01]" in l]
+ok("a lone task notice becomes ONE line, with its time, the word Wake and its kind",
+   len(w1) == 1 and w1[0].strip() == '**[09:00:01] Wake — task notice:** Background command "Re-arm the wake watcher" completed (exit code 0)', w1)
+_folded = "\n".join(l for l in out4 if "Wake — task notice" in l)
+ok("a folded wake line carries none of the notice's raw tags",
+   _folded.count("Wake — task notice") == 4 and "<task-id>" not in _folded and "toolu_01AbCdEf" not in _folded
+   and "bx1.output" not in _folded, _folded)
+w2 = [l for l in out4 if "[09:00:02]" in l]
+ok("two notices in one turn are one line naming both", len(w2) == 1 and "Re-arm the wake watcher" in w2[0] and "Notify Kyle" in w2[0] and w2[0].count("\n") <= 2, w2)
+w3 = [l for l in out4 if "[09:00:03]" in l]
+ok("a notice WITH a person's words is written in full, never folded", len(w3) == 1 and "User:**" in w3[0] and "please stop" in w3[0], w3)
+w4 = [l for l in out4 if "[09:00:04]" in l]
+ok("a notice with no summary still says it was a wake and its status", len(w4) == 1 and "Wake — task notice:** background task completed" in w4[0], w4)
+w5 = [l for l in out4 if "[09:00:05]" in l]
+ok("a secret inside a notice's summary is redacted", len(w5) == 1 and PLANTED["github-token"] not in w5[0] and "[REDACTED github-token]" in w5[0], w5)
+m1 = [l for l in out4 if "[09:00:06]" in l]
+ok("two text blocks in ONE assistant entry: both present, verbatim, in order, as separate Session sections",
+   [l.strip() for l in m1 if "Session:" in l] == ["**[09:00:06] Session:** First piece of the reply.",
+                                                  "**[09:00:06] Session:** Second piece of the reply."], m1)
 
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)
