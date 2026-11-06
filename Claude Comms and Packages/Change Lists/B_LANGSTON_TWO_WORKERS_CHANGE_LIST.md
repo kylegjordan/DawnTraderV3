@@ -5,7 +5,7 @@
 - **(ii) That class's doc set:** scope `Scope Files/B_LANGSTON_TWO_WORKERS_SCOPE.md` r2 **present** (Step 1 APPROVED, seven conditions folded) · pre-audit `Scope Files/B_LANGSTON_TWO_WORKERS_PRE_AUDIT.md` r2a **present** (Step 2 PROCEED, AM-1..AM-4 and two attack rulings folded) · this change list **present** · completion_report **absent**, owed at Step 11 (the batch first sits in its observation window; a declared-`open` row in `GOVERNANCE_EXCEPTIONS.md` is owed at Step 10, C-4) · batch_catalog, phase_history **absent**, owed at Step 10 · SYSTEM_IMPACT_MAP **owed at Step 10** (`:2975`, `:3021`, the task log, the flags) · SYSTEM_MANUAL **judged N/A** — comms only, no strategy, regime, filter, signal pipeline or math; recorded as an `na-skip` row for Langston to confirm at Step 11, the B-LANGSTON-RELIEF precedent.
 - **(iii) Step 2:** `Scope Files/B_LANGSTON_TWO_WORKERS_PRE_AUDIT.md` r2a at `1e29bdb38`.
 - **Pre-registration:** `Scope Files/B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md`, committed at `661e15289` **before any baseline measure was read** (only daily arrival counts, the selection variable, and the pack's 11-05 figure had been read; it says so).
-- **Graded ref:** `82c03b2c3` (CI run below). Issue `#1248`.
+- **Graded ref:** `82c03b2c3`. **CI:** run `42166547375` at `6e0e98c4a` (a descendant: `git diff 82c03b2c3 6e0e98c4a -- comms-infra .github` is empty), **4/4 per job success** (TypeScript Check, Test Suite, Build, Docker Build); in its log, `lane tests: 27 passed, 0 failed`, `9/9 caught`, `langston_queue tests: 102 passed`. (The runs at `82c03b2c3` and `79236ec56` were cancelled by later pushes.) Issue `#1248`.
 
 ## The commits
 | commit | what |
