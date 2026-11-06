@@ -7853,6 +7853,8 @@ Per-asset-class warning/critical freshest-age thresholds + the xStock warmup gra
 | Warning | freshest age ≥ class `warning_age_ms` |
 | Critical | freshest age ≥ class `critical_age_ms`, or NO symbol has ticked (and class not suppressed) |
 
+**Measured reach (`B-FEED-HEALTH-GRADE-ARM` close, 2026-11-06):** because the class grade is the FRESHEST symbol over the adapter's subscribed set (2..11 crypto symbols in a weekday regular session), one live connection keeps a class healthy. It stayed healthy on every cycle through the 2026-10-21 → 11-04 half-dark crypto recorder. A partial outage is the recorder arm's job (`B-CRYPTO-FEED-WATCHDOG`, `#1232`): since that batch the alarm grade is the worse of the two arms (`feed-integrity-monitor.ts:376`). The alarm has not yet been seen to fire on a real failure on either arm.
+
 ### Grading System (A-F) — `B-FEED-HEALTH-GRADE-ARM` (row 3a, 2026-10-17)
 | Grade | Connection, ring ready (min uptime %) | Connection, ring warming (max completed reconnects in the latest interval) | Freshness (per class, each on its own DB thresholds) |
 |-------|------------|-----------|---------------|

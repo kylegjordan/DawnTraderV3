@@ -1,4 +1,91 @@
-# B-FEED-HEALTH-GRADE-ARM — PROGRESS REPORT · OPEN — read of record RUN 2026-11-06 (§2c); close proposed to Langston
+# B-FEED-HEALTH-GRADE-ARM — COMPLETION REPORT — Step 11, awaiting Langston's confirm
+
+**Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` · **Sprint plan row:** 3a · **Issue:** `#1123` (the `feed_health` leg) · converted from the progress report below, which is kept as written.
+**Close ruled:** Langston, Discord `1568102498978504715` (2026-11-06 ~03:25Z): *"PROCEED to Steps 10-11 with four amendments. I re-derived the read of record myself rather than ruling on reported fact."* — all four are applied below.
+
+## 0. ⚠️ OPEN AT CLOSE — stated first
+| item | owner | home | closes when | fails when |
+|---|---|---|---|---|
+| **Leg 3 — the class alarm seen to fire on a REAL non-healthy cycle**: UNPROVEN | CC-B | a named open-at-close item in `B-CRYPTO-FEED-WATCHDOG`'s (`#1232`, row 33a) completion report, with its carrier named (Langston amendment 2; §9.4 disposition 2, a Kyle-agreed batch, no new slot) | a real non-healthy cycle prints on a carrier that survives | #1232 closes with it still unfired and does not name its successor |
+| **The recorder arm has no per-cycle carrier**: since #1232 the alarm grade is the worse of the recorder grade and the class grade (`feed-integrity-monitor.ts:376`), but the liveness line prints only the class arm (`feed-integrity-auto-check.ts:31-34`); the recorder arm's only durable carrier is `/tmp/feed_health_<date>.json`, rewritten every cycle, and its not-graded states return `healthy` (the `#546` shape) | CC-B | same #1232 item (Langston amendment 2) | the recorder arm prints on the liveness line, graded and not-graded told apart | — |
+| **The unset reconnect page thresholds** (`#1209` gate row) | CC-B | folded into row 3a2 `B-WS-RECONNECT-BACKOFF-RESET` (`#1209`, QUEUED) — §1(b) 3 | the thresholds move into `feed_health` per class | — |
+| **5 `feed_health` rows that can never clear** (a deleted user, 2025-10-24/25) | — | §9.4 disposition 5, a permanent floor | — | — |
+
+## 1. (a) WHAT DATA CAME IN — against the criteria as pre-registered (quoted in §3 below)
+- **Objective 1 (armed at boot): PASS** — `feed_health` prefetched, rows=5, at every restart read (§2).
+- **Objective 2 (the clear): DISCHARGED** — the first cycle after the 2026-10-17 13:03:42Z deploy acknowledged **1,093** of 1,098; the remaining 5 are the floor above.
+- **Objective 3 (the distribution): PASS on the distribution**, on Thursday 2026-11-05 (the Monday 10-19 read was never run and its logs are rotated — §2c). **The quantity, stated as Langston amended it (1a):** the maximum over cycles of each class's **freshest**-symbol age over the trading adapter's subscribed set — on crypto regular that set was **2..11 symbols**. So the 3,636 ms crypto margin is a margin on a minimum over at most 11 symbols, **not a claim about the freshness of the whole crypto feed.** Per-segment table: §2c. **Re-derived independently by Langston** over the same logs (1,048 lines to 03:15Z, every cell matching).
+- **The census scope (1b):** the 1,042 / 1,048 healthy lines are the **per-class arm only**. Since #1232 deployed (2026-11-04 15:47Z) the alarm grade is the worse of the class arm and the recorder arm, and the recorder arm never appears on the line counted. Langston's control: zero `Info:` / `Critical:` lines in `out.log`, so the report's `issues` have no stdout carrier; the daily `/tmp` file does carry them (11-04: *"crypto recorder live share NOT GRADED (warming)"*; 11-05: `issues: []`). ⇒ **leg 3 is unfired on the class arm across 1,048 cycles, and on the recorder arm at one surviving snapshot per day.**
+- **Code generation, stamped (1c):** the non-firing through the 2026-10-21 → 11-04 half-dark recorder was graded by the **pre-#1232** code (class arm only); the 11-05 distribution came out of the worse-of-two (post-#1232).
+- **Leg 1 (capability): PROVEN** — the unit test drives the liveness line to `warning` and `critical` for both classes. **Leg 3 (invocation): UNPROVEN** (§0).
+- **Crypto `symbols`:** 2..11 in the 11-05 regular session, 6-12.5 h after the last restart ⇒ not a restart artifact by the pre-registered test. The count is the adapter's **subscribed set** — `getI8EWsHealth()` iterates `this.subscribedSymbols` (`server/exchanges/kraken/kraken-websocket-adapter.ts:2321`). **That the set follows what is queued or open is a HYPOTHESIS — the subscribe callers were not traced.** The reach bound from (1a) is the argument for #1232's coverage grade.
+
+## 1. (b) WHAT DECISION OR ACTION WAS TAKEN ON IT, AND BY WHOM
+1. **Close** (Langston, msg `1568102498978504715`): objective 2 DISCHARGED, objective 3 PASS on the distribution, leg 1 PROVEN, leg 3 UNPROVEN. **Leg 3 re-homed to #1232** — the ruling of 2026-10-10 homed it beside 3a1's liveness consumer, but 3a1 CLOSED 2026-10-17; #1232's recorder grade is the instrument that can see a partial outage. **Placement condition:** #1232's watch ends 2026-11-06 ~15:47Z, so leg 3 and the carrier gap go in as a named open-at-close item in its completion report; if #1232 closes with leg 3 still unfired it says so and names its successor.
+2. **Crypto `symbols`:** §9.4 disposition 5 on the count — no work.
+3. **`#1209` gate row — not now, folded into row 3a2.** Corrected wording (Langston amendment 4): the reconnect page thresholds are not "env-only", they are **unset** — staging's `.env` and pm2 config carry neither, so the live thresholds are the code defaults, **3 warning / 5 critical completed reconnects per 1-hour ring** (`feed-integrity-monitor.ts:195` / `:198`). Sizing datum: 11-05's daily report read uptime 91.67 %, 1 ring reconnect, grade **C**; 11-04: 100 %, 0, grade A — an ordinary day sits two reconnects below the warning rung. Moving them into `feed_health` per class is `B-WS-RECONNECT-BACKOFF-RESET`'s work, since that batch changes how many reconnects happen.
+4. **`ee1fd666-d05d-4ebc-aef4-e3ef7d92741b`** (the open-max-age nag): hand-resolved at Langston's Step-11 confirm with this report's commit as evidence (the Step-11 gate row below; its key has no resolve edge, `#1074`).
+
+## 2. Objectives (scope r2)
+| # | objective | verdict | evidence |
+|---|---|---|---|
+| 1 | arm the grade at boot | **YES** | §2 Step-7 table |
+| 2 | the clear on recovery | **YES** | 1,093 acknowledged 2026-10-17 13:04:07Z; 5-row floor |
+| 3 | the distribution across a weekday | **YES on the distribution; leg 3 UNPROVEN** | §2c, re-derived by Langston |
+| 4 | the accessor for 3a1 | **YES** | `getLastLiveness()` shipped; 3a1 closed without consuming it |
+| 5 | the recorder pairs | **YES** | the 8 pairs recording from 10 s after the 10-10 restart |
+
+## 3. CI
+`3a549e3a9` (first build): run `37571522019`, success. `162ae0537` (Step-9 rework, deployed 2026-10-17): run `39034690051`, success — TypeScript Check, Test Suite, Build, Docker Build. No code changed at this close.
+
+## 4. Governance files changed — the Step-10 ledger
+CHANGE-CLASS: non_architecture
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | BATCH_CATALOG.md | ✅ | entry set to Step 11, result and open-at-close items |
+| T1 | PHASE_HISTORY.md | ✅ | 2026-10-10 entry given its plain-language outcome |
+| T1 | PHASE_19_PLAN.md | N/A | row 3a is a sprint row; PHASE_19_PLAN takes nothing new since 2026-09-30 and has no 3a row |
+| T1 | shared MEMORY.md + MEMORY_CC_B.md | ✅ mine / N/A shared | own position updated; no project-consensus truth changed |
+| T1 | the batch SCOPE | ✅ | written at Step 1 (r2) with the 10-10 dated amendment; unchanged at close |
+| T1 | the batch PRE_AUDIT | ✅ | written at Step 2; unchanged at close |
+| T1 | COMPLETION_REPORT | ✅ | this file, converted from the progress report |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B row 3a set to Step 11; CC-A, CC-C, CC-INFRA lists not mine |
+| T1 | Langston's MEMORY.md | BLOCKED — Langston's own write | asked in the Step-11 dispatch |
+| T2 | SYSTEM_MANUAL.md | ✅ | the freshest-age alarm section: measured reach — the class arm stayed healthy through a half-dark recorder; partial outage is the recorder arm's job |
+| T2 | SYSTEM_IMPACT_MAP.md | ✅ | the feed-integrity monitor entry: the liveness line carries the class arm only; the recorder arm's only carrier is the `/tmp` daily file |
+| T2 | RUNNING_ISSUES.md | ✅ | `#1123` `feed_health` leg closed; `#1209` annotated with the unset thresholds and the fold into row 3a2 |
+| T2 | SPRINT_TO_LIVE_PLAN.md | ✅ | row 3a status and report link |
+| T2 | CHANGES_AND_FIXES.md | N/A | no new fix at this close |
+| T2 | POST_AUDIT_ROADMAP.md | N/A | no roadmap change |
+| T2 | ADJUSTMENT_FRAMEWORK.md | N/A | no tunable added or changed |
+| T2 | AUTHORITY_BASELINE.md | N/A | no constitutional rule touched |
+| T2 | STORAGE_POLICY.md | N/A | no table or retention changed |
+| T2 | MULTI_ASSET_VTS_EXPANSION_PLAN.md | N/A | the 15-minute-bar working list is unaffected |
+| T2 | ASSET_CLASS_ONBOARDING_WORKFLOW.md | N/A | no onboarding learning |
+| T2 | BUILD_METHOD_PLAYBOOK.md | N/A | the method did not change |
+| T2 | LANGSTON_ARCHITECTURE.md | N/A | the reviewer's build did not change |
+| T2 | CLAUDE.md / CONDUCT.md | N/A | no stable rule changed |
+| T2 | _archive/CLAUDE_MD_RULE_HISTORY.md | N/A | no CLAUDE.md rule changed |
+| T2 | DELETED_COMPONENTS_LOG.md | N/A | nothing removed |
+| T2 | MISTAKE_PATTERNS.md | N/A | no new pattern instance at this close |
+| T2 | GOVERNANCE_EXCEPTIONS.md | N/A | the 2026-10-17 declared-open row stands as history; the close is this report |
+| T2 | ALERT_HANDLING_PROTOCOL.md | N/A | unchanged |
+| T2 | DELIVERY_BOARD_PROTOCOL.md | N/A | unchanged |
+| T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A | the daily check did not run in this batch |
+| — | `B-CRYPTO-FEED-WATCHDOG` Step-7 record | ✅ | leg 3 + the recorder-arm carrier gap carried in as an open-at-close item (§0) |
+
+## 5. New findings in passing
+None beyond §0.
+
+## 6. Honest residual
+- The alarm has **never been seen to fire on a real failure** on either arm. Its capability is unit-tested; its invocation is not established.
+- Objective 3 was read 18 days late, on a Thursday rather than the pre-registered Monday, with the DST-aware session labels (record item (a), fixed before the 11-01 change).
+- The class arm measures the freshest symbol over at most ~11 crypto symbols; it says nothing about the rest of the crypto feed.
+
+---
+
+# (was) B-FEED-HEALTH-GRADE-ARM — PROGRESS REPORT · read of record RUN 2026-11-06 (§2c)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `non_architecture` · **Sprint plan row:** 3a (paired with 3a1) · **Issue:** `#1123` (+ `#439`, carried as pre-audit §D)
 **Scope / pre-audit / change list:** `Scope Files/B_FEED_HEALTH_GRADE_ARM_SCOPE.md` (r2), `…_PRE_AUDIT.md`, `Change Lists/B_FEED_HEALTH_GRADE_ARM_STEP4_CHANGE_LIST.md`

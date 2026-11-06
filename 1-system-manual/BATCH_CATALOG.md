@@ -1280,11 +1280,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **OPEN BEYOND IT.** obj-5's posture term lands inside `resolveEffectivePositionPct` only when the AMR activates (`#616`, condition C-5).
 
-## B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a — paired with 3a1; `#1123`) — change-class `non_architecture` — ⏳ **OPEN — Step 7 partial** (Step 4 APPROVED at `3a549e3a9`; deployed in CC-C's 10-10 release `ad01f5339`; progress report `Batch Completion/B_FEED_HEALTH_GRADE_ARM_PROGRESS_REPORT.md`)
+## B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a — paired with 3a1; `#1123`) — change-class `non_architecture` — ⏳ **STEP 11 — close ruled by Langston 2026-11-06, awaiting his confirm** (Step 4 APPROVED at `3a549e3a9`; deployed `ad01f5339` 2026-10-10; Step-9 rework deployed `162ae0537` 2026-10-17; report `Batch Completion/B_FEED_HEALTH_GRADE_ARM_COMPLETION_REPORT.md`)
 
 **WHAT IT DOES.** Loads the feed-health settings at boot, so the per-class liveness grade actually runs. Clears what the grade raises, by acknowledging the dashboard alerts on a recovery; the old clear path tested an alert id that was never set. Prints a per-cycle per-class liveness line. Exposes the liveness to 3a1. Fixes the crypto recorder's subscription naming, which had dropped 8 pairs.
 
-**SO FAR.** Armed at both 10-10 restarts; the 8 pairs record from 10 s after the restart (0 rows each in the 24 h before). **Waiting on:** the first real non-healthy → healthy transition (the acknowledge path; backlog 1,088) and one full weekday of liveness lines (the pre-registered distribution).
+**RESULT.** Armed at every restart; the 8 pairs record; the clear acknowledged 1,093 of 1,098 old alerts (5 belong to a deleted user, a permanent floor); on Thursday 2026-11-05 every trading-day segment stayed under its warning line (crypto worst 1,827 ms vs 5,000; xStock 8,223 ms vs 60,000), re-derived by Langston. **Open at close:** the alarm has never fired on a real failure — it stayed healthy through the 10-21 → 11-04 half-dark crypto recorder because it grades the freshest symbol — so that question, and printing the recorder arm on the per-cycle line, move to `B-CRYPTO-FEED-WATCHDOG` (`#1232`); the unset reconnect page thresholds fold into row 3a2 (`#1209`).
 
 ## B-ATR-BAD-PRINT (CC-B, sprint plan row 2a — after row 2; `#1153`) — change-class `architecture` — ✅ **CLOSED 2026-10-10** (Step 11 CONFIRMED by Langston 2026-10-10; Step 4 APPROVED at `66530fc48`; deployed `0c8ef5da2` 2026-10-07T15:56:00Z; Step 8 CONFIRMED by Langston 2026-10-10 with one condition, met at `cf881d302`; report `Batch Completion/B_ATR_BAD_PRINT_COMPLETION_REPORT.md`)
 
