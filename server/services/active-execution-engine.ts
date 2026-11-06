@@ -2110,9 +2110,34 @@ export class ActiveExecutionEngine {
   }
 
   /**
-   * B-CLOSE-WRITER-COSTS P-14 — the refusal for a position with no entry cost. Its RECORD resolves, so the restore is NOT
-   * the remedy (that is `_refuseUnresolvedRecord`'s): the position is kept and a critical alert says what is missing and
-   * where the open path put the value. Fires on every close attempt; the alert dedupes on the key.
+   * B-CLOSE-WRITER-COSTS P-14 (Langston's ruling) — the close took an entry cost from the open RECORD because the position
+   * lacked it. Same writer, same instant, same number — but the position should never lack it, so it is said out loud.
+   */
+  private async _warnEntryCostFromRecord(position: any, tradeId: string, which: string[]): Promise<void> {
+    console.warn(`[B-CLOSE-WRITER-COSTS][CLOSE_ENTRY_COST_FROM_RECORD:${this.mode}] ${position.symbol} pos=${position.id}: ${which.join(' and ')} taken from record ${tradeId}`);
+    try {
+      const { addAlert } = await import('./system-alerts.js');
+      await addAlert({
+        triggers_at: new Date(),
+        category: 'breakage',
+        severity: 'warning',
+        title: `Position ${position.symbol} closed with its ${which.join(' and ')} taken from its trade record`,
+        body: `The ${this.mode} position ${position.id} in ${position.symbol} carried no ${which.join(' and ')}, so the close used `
+          + `the value its open trade record ${tradeId} holds (fees / slippage on an open record are its entry values — written `
+          + `by the same open, from the same numbers). The close is correct; the defect is the position written without them — `
+          + `find why. B-CLOSE-WRITER-COSTS P-14. DISPOSITION: RESOLVE, do not ACK.`,
+        dedupe_key: `close-entry-cost-from-record-${this.mode}-${position.symbol}`,
+      });
+    } catch (alertErr) {
+      console.error('[B-CLOSE-WRITER-COSTS][CLOSE_ENTRY_COST_FROM_RECORD] addAlert failed:', alertErr);
+    }
+  }
+
+  /**
+   * B-CLOSE-WRITER-COSTS P-14 — the refusal when NEITHER the position NOR its resolved open record carries the entry cost
+   * (both non-finite: garbage at open). The RECORD resolves, so the restore is NOT the remedy (that is
+   * `_refuseUnresolvedRecord`'s): the position is kept and a critical alert says so. Fires on every close attempt; the alert
+   * dedupes on the key.
    */
   private async _refuseMissingEntryCost(position: any, tradeId: string, missing: 'entry fee' | 'entry slippage'): Promise<void> {
     console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_ENTRY_COST_MISSING:${this.mode}] ${position.symbol} pos=${position.id}: no ${missing} — position KEPT, not closed`);
@@ -2123,11 +2148,11 @@ export class ActiveExecutionEngine {
         category: 'breakage',
         severity: 'critical',
         title: `Position ${position.symbol} cannot close: its ${missing} is missing`,
-        body: `The ${this.mode} position ${position.id} in ${position.symbol} was due to close, but it carries no ${missing}, `
-          + `and a close never invents a cost (KD-17). The position is kept open and the close is retried every cycle. `
-          + `Its trade record ${tradeId} resolves, so do NOT restore it. What to do: find why the position was written without `
-          + `its ${missing} (the open path sets both entry_fee and entry_slippage on the position, and the same values in the `
-          + `record's fees / slippage at open), then set the position's value from that record by hand. `
+        body: `The ${this.mode} position ${position.id} in ${position.symbol} was due to close, but neither it nor its open trade `
+          + `record ${tradeId} carries a usable ${missing} (the open path writes it to both, from the same number), and a close `
+          + `never invents a cost (KD-17). The position is kept open and the close is retried every cycle. The record resolves, `
+          + `so do NOT restore it. What to do: find what the open wrote — both copies are unusable, so the open itself computed `
+          + `a non-finite value — and set the correct value on the position by hand. `
           + `B-CLOSE-WRITER-COSTS P-14. DISPOSITION: RESOLVE, do not ACK.`,
         dedupe_key: `close-entry-cost-missing-${this.mode}-${position.symbol}`,
       });
@@ -4722,17 +4747,23 @@ export class ActiveExecutionEngine {
     const trade = _rec.record;
 
     // Get entry costs from position (persisted at entry time).
-    // ⛔ B-CLOSE-WRITER-COSTS P-14: a filled close with NO entry fee or slippage on its position is REFUSED, not filled in.
-    // This used to RECOMPUTE a fee from the taker rate and treat a missing slippage as 0 — a cost claim no fill produced
-    // (KD-17). The one position writer sets both; a null is a defect to investigate, so the position is kept and alerted.
-    const _entryFeeNum = position.entryFee == null ? NaN : parseFloat(position.entryFee);
-    const _entrySlipNum = position.entrySlippage == null ? NaN : parseFloat(position.entrySlippage);
-    if (!Number.isFinite(_entryFeeNum) || !Number.isFinite(_entrySlipNum)) {
-      await this._refuseMissingEntryCost(position, trade.id, !Number.isFinite(_entryFeeNum) ? 'entry fee' : 'entry slippage');
+    // ⛔ B-CLOSE-WRITER-COSTS P-14: a cost is never INVENTED. This used to RECOMPUTE a fee from the taker rate when the
+    // position had none, and treat a missing slippage as 0 — a cost claim no fill produced (KD-17).
+    // ★ Langston's P-14 ruling: the open path writes the RECORD first and the position second, from the SAME locals, so a
+    // position missing its value has a resolved open record that HOLDS it (`fees` / `slippage` on an open record are its
+    // entry values). Prefer the position; fall back to the record, LOUDLY (a warning alert names the source); refuse only
+    // when NEITHER carries it — refusing with the answer in hand would leave the position with no exit path at all.
+    const _num = (v: unknown) => (v == null ? NaN : parseFloat(String(v)));
+    let entryFee = _num(position.entryFee);
+    let entrySlippage = _num(position.entrySlippage);
+    const _fromRecord: string[] = [];
+    if (!Number.isFinite(entryFee) && Number.isFinite(_num((trade as any).fees))) { entryFee = _num((trade as any).fees); _fromRecord.push('entry fee'); }
+    if (!Number.isFinite(entrySlippage) && Number.isFinite(_num((trade as any).slippage))) { entrySlippage = _num((trade as any).slippage); _fromRecord.push('entry slippage'); }
+    if (!Number.isFinite(entryFee) || !Number.isFinite(entrySlippage)) {
+      await this._refuseMissingEntryCost(position, trade.id, !Number.isFinite(entryFee) ? 'entry fee' : 'entry slippage');
       return;
     }
-    const entryFee = _entryFeeNum;
-    const entrySlippage = _entrySlipNum;
+    if (_fromRecord.length) await this._warnEntryCostFromRecord(position, trade.id, _fromRecord);
     // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity); P19-B8.6:
     // a maker exit-fill overrides to 0 by construction (filled at the resting limit).
     const exitSlippage = _exitSlippageOverride ?? _takerCloseSlippage;
