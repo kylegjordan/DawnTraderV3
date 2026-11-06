@@ -64,7 +64,7 @@
 
 ### What is asked now
 - **Kyle (via PM):** the B2 dashboard read — the daily **download** cap, the daily **transaction** cap, and the free-egress rule. No longer blocking: Plan B's design stands without it; it sets the safety-belt number.
-- **Coltrane:** confirm or change §4. **Langston:** confirm §4 discharges his ruling.
+- **Coltrane:** confirm or change §4 (his round-2 amendment is folded below; his formal ruling waits on his review mirror reaching the pack). **Langston:** confirmed — see below.
 
 ### Coltrane, round 2 (Discord 2026-11-06 ~05:4xZ, at graded `86adb2ab`; `c10fbdeb` had not reached his mirror): **CHANGE is sound, with one binding amendment — bind the attestation to the exact B2 file VERSION, not its name.** B2 names are versioned and `downloadCold` resolves by name (`storage-client.ts:698-704`); the upload response is discarded today (`:654-695`). Required shape, adopted as written:
 1. Parse the upload response; require `action=upload`, the expected bucket and name, the SHA-1 and the byte length.
@@ -73,3 +73,9 @@
 4. Restore and canary by exact file id, or assert that a by-name response's file id equals the manifest's.
 5. Keep a rotating real-download canary that compares SHA-256 — upload integrity is not later retrievability.
 **The 4 existing cold objects:** bind the exact retained versions; if ambiguous, download until the manifest SHA-256 identifies the right one (a re-upload from warm is also valid but must not leave the manifest ambiguous). **His limit, kept:** this removes B2 egress as the reason for daily chunks; it does not erase other reasons to chunk (database relief, retry blast radius, selective restore).
+
+### Langston, round 2 (Discord 2026-11-06 ~05:5xZ, re-derived at graded `3a9221fed`): **§4 CONFIRMED; it discharges his ruling.** Re-read: `storage-client.ts:654/680` the SHA-1 is computed from the same buffer and sent (an accepted upload is a genuine server-side attestation); `:690-694` discards `fileId` / `contentSha1` / `contentLength` (Coltrane's version binding stands on fact); `downloadCold` `:697-706` resolves by NAME; the rotator holds exactly one `downloadCold` (`:290`) and no other B2 read (≈100 % of rotation egress, confirmed mechanically); `:350` deletes warm, so cold is the last copy of record. **Two binding amendments, adopted:**
+- **L-1 — the real read-back needs a stated coverage period.** The canary (`b75-cold-liveness.ts:107`) uploads its own 104-byte payload and can never read an ARCHIVED object. Coltrane's rotating SHA-256 read-back is the instrument; it must state **N — every cold object read back and compared at least once per N days** — derived from the daily budget and the measured mean object size (52.3 GB / 5,879 ≈ 9 MB), in the design and in the pre-registration.
+- **L-2 — rewrite the basis comment in the same commit.** Rotator `:324-331` says the cold row inherits warm's `source-count-matched` basis BECAUSE the round-trip proved byte-identity (B-B75-EXPORT-COMPLETENESS Step 2, B-3). With the round-trip gone it must cite the attestation instead, beside the `verified_at` relabel — or it points at a deleted instrument.
+- **Plan A:** A1 then A3 confirmed, bar census first. **The Nov-30 decider has a carrier:** scheduled alert `0cb9cb7d-5265-403b-8f9e-786656b82562` (key `kd32-nov-peak-decider-2026-12`, fires 2026-12-01T09:00Z, owner CC-A) holding the ~170,000 MB threshold and both branches. **Stated plainly:** the 51 GB attribution, the ~4 GB/month bars and the +6.8 (n=1) are `RULED ON REPORTED FACT` — adequate for the ordering, disqualifying for a PROCEED on A1 itself; he re-derives them at A1's Step 1.
+- **Disposition:** Plan B folds into B-DISK-FILE-TIERING OBJ-3 — no new batch, no Kyle slot. `c0a0b00d` stays active and unacked.
