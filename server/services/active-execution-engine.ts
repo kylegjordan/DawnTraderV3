@@ -2109,6 +2109,33 @@ export class ActiveExecutionEngine {
     };
   }
 
+  /**
+   * B-CLOSE-WRITER-COSTS P-14 — the refusal for a position with no entry cost. Its RECORD resolves, so the restore is NOT
+   * the remedy (that is `_refuseUnresolvedRecord`'s): the position is kept and a critical alert says what is missing and
+   * where the open path put the value. Fires on every close attempt; the alert dedupes on the key.
+   */
+  private async _refuseMissingEntryCost(position: any, tradeId: string, missing: 'entry fee' | 'entry slippage'): Promise<void> {
+    console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_ENTRY_COST_MISSING:${this.mode}] ${position.symbol} pos=${position.id}: no ${missing} — position KEPT, not closed`);
+    try {
+      const { addAlert } = await import('./system-alerts.js');
+      await addAlert({
+        triggers_at: new Date(),
+        category: 'breakage',
+        severity: 'critical',
+        title: `Position ${position.symbol} cannot close: its ${missing} is missing`,
+        body: `The ${this.mode} position ${position.id} in ${position.symbol} was due to close, but it carries no ${missing}, `
+          + `and a close never invents a cost (KD-17). The position is kept open and the close is retried every cycle. `
+          + `Its trade record ${tradeId} resolves, so do NOT restore it. What to do: find why the position was written without `
+          + `its ${missing} (the open path sets both entry_fee and entry_slippage on the position, and the same values in the `
+          + `record's fees / slippage at open), then set the position's value from that record by hand. `
+          + `B-CLOSE-WRITER-COSTS P-14. DISPOSITION: RESOLVE, do not ACK.`,
+        dedupe_key: `close-entry-cost-missing-${this.mode}-${position.symbol}`,
+      });
+    } catch (alertErr) {
+      console.error('[B-CLOSE-WRITER-COSTS][CLOSE_ENTRY_COST_MISSING] addAlert failed:', alertErr);
+    }
+  }
+
   /** The refusal: the position is KEPT (never deleted without its record, KD-17) and a critical alert names it. */
   private async _refuseUnresolvedRecord(position: any, why: string, action: string): Promise<void> {
     console.error(`[B-CLOSE-WRITER-COSTS][CLOSE_RECORD_UNRESOLVED:${this.mode}] ${position.symbol} pos=${position.id}: ${why} — position KEPT, not closed`);
@@ -2158,6 +2185,11 @@ export class ActiveExecutionEngine {
         // false failure, and the obvious "fix" is to stamp a price that never existed — which
         // is worse than the gap it would be closing.
         closeReason: 'never_filled', // TYPED discriminator — visible, excluded from aggregates/learning
+        // B-CLOSE-WRITER-COSTS P-14: an order that never filled paid NOTHING — every cost and P&L column is an explicit 0,
+        // not a column default and not the placement-time fee estimate the open record carried in `fees` (measured
+        // 2026-11-06: 186/186 never-filled rows held a non-zero `fees`, all excluded from the money readers by name).
+        fees: '0', slippage: '0', entryFee: '0', exitFee: '0', totalFee: '0', entrySlippage: '0', exitSlippage: '0',
+        totalCost: '0', grossPnl: '0', netPnl: '0', netPnlPercent: '0',
         // Keep the aggregate discriminator stable while preserving the exact
         // disposition (including the pre-cutover provenance cut) durably.
         metadata: { ...(position.metadata ?? {}), neverFilledReason: why },
@@ -4689,9 +4721,18 @@ export class ActiveExecutionEngine {
     }
     const trade = _rec.record;
 
-    // Get entry costs from position (persisted at entry time)
-    const entryFee = position.entryFee ? parseFloat(position.entryFee) : (entryValue * (_b45FeePct / 100));
-    const entrySlippage = position.entrySlippage ? parseFloat(position.entrySlippage) : 0;
+    // Get entry costs from position (persisted at entry time).
+    // ⛔ B-CLOSE-WRITER-COSTS P-14: a filled close with NO entry fee or slippage on its position is REFUSED, not filled in.
+    // This used to RECOMPUTE a fee from the taker rate and treat a missing slippage as 0 — a cost claim no fill produced
+    // (KD-17). The one position writer sets both; a null is a defect to investigate, so the position is kept and alerted.
+    const _entryFeeNum = position.entryFee == null ? NaN : parseFloat(position.entryFee);
+    const _entrySlipNum = position.entrySlippage == null ? NaN : parseFloat(position.entrySlippage);
+    if (!Number.isFinite(_entryFeeNum) || !Number.isFinite(_entrySlipNum)) {
+      await this._refuseMissingEntryCost(position, trade.id, !Number.isFinite(_entryFeeNum) ? 'entry fee' : 'entry slippage');
+      return;
+    }
+    const entryFee = _entryFeeNum;
+    const entrySlippage = _entrySlipNum;
     // P19-B3a: from the close FillResult (== exitSlippagePerUnit * quantity); P19-B8.6:
     // a maker exit-fill overrides to 0 by construction (filled at the resting limit).
     const exitSlippage = _exitSlippageOverride ?? _takerCloseSlippage;
@@ -6616,6 +6657,10 @@ export class ActiveExecutionEngine {
         takeProfit: signal.targetPrice.toString(),
         fees: entryFee.toString(),
         slippage: totalSlippage.toString(),
+        // B-CLOSE-WRITER-COSTS P-14: the entry values are WRITTEN, not left to a column default — the `DEFAULT 0`s on the
+        // money columns go in the following deploy, and a defaulted zero entry fee would read as a booked one.
+        entryFee: entryFee.toString(),
+        entrySlippage: totalSlippage.toString(),
         confidence: (signal.confidence * 100).toString(),
         openedAt: new Date(),
         signalType: signalType as 'QUANT' | 'PATTERN' | 'HYBRID',

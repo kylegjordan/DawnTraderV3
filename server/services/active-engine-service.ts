@@ -440,11 +440,16 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
         // open-time createClosedTrade) and does NOT write `entry_fee`, whose column DEFAULT is '0' — so `entryFee` reads a
         // silent zero on every open record. `fees` is overwritten with the total only AT close, and this record is open.
         const entryFee = _num((trade as any).fees);
+        // P-14: the open record holds its entry SLIPPAGE in `slippage` too (the open-time insert writes `slippage:
+        // totalSlippage`), so it is read from there — `entry_slippage` held only its column default on every open
+        // record written before P-14. Unknown ⇒ not priced, as for the fee.
+        const entrySlippage = _num((trade as any).slippage);
         const entryPrice = _num((trade as any).actualEntryPrice ?? trade.entryPrice);
         const quantity = _num(trade.quantity);
         const _cantPrice = !_cls ? `no valid asset class (${String((trade as any).assetClass)})`
           : !_cfg ? 'no fill-depth config for its class (the penalty)'
           : !Number.isFinite(entryFee) ? 'no entry fee on its record (fees)'
+          : !Number.isFinite(entrySlippage) ? 'no entry slippage on its record (slippage)'
           : !(entryPrice > 0) || !(quantity > 0) ? 'no usable entry price or quantity on its record'
           : null;
         if (_cantPrice) {
@@ -472,7 +477,6 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
         const { grossPnl, totalCost, netPnl, netPnlPercent } = computeRealizedPnl({
           actualEntryPrice: entryPrice, actualExitPrice: fillPrice, quantity, entryFee, exitFee,
         });
-        const entrySlippage = Number.isFinite(_num((trade as any).entrySlippage)) ? _num((trade as any).entrySlippage) : 0;
         const pnl = netPnl;
 
         // Update trade with close info — now WITH provenance, so the row says what the number is and how old.
@@ -493,6 +497,9 @@ async function closeStaleRecordAtReference(mode: 'paper' | 'live', trade: any): 
           exitFeeMode: 'taker',
           exitSlippage: exitSlippage.toString(),
           slippage: (entrySlippage + exitSlippage).toString(),
+          // P-14: the entry values written explicitly (they read their column defaults before).
+          entryFee: entryFee.toString(),
+          entrySlippage: entrySlippage.toString(),
           closeReason: 'engine_stop_cleanup',
           exitDecisionPrice: exitPrice.toString(),
           exitPriceProducer: quote.producer,
