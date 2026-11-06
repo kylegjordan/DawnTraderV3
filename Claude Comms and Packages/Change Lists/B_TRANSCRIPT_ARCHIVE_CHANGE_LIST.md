@@ -1,0 +1,15 @@
+# B-TRANSCRIPT-ARCHIVE — change list (every step's record)
+
+## Step 3, P1 — both Drive backups proven by reproduction (2026-11-06 ~09:20Z, laptop, read-only)
+Tool: `comms-infra/laptop/transcript-archive/p1_restore_proof.py` (stdlib, `python3 -I`, writes nothing but stdout). Judged per Langston C-1: backup size; laptop size + mtime; SHA-256 of the laptop file's first N bytes (N = backup size) against the backup copy's SHA-256. RULED ON REPORTED FACT for Langston (laptop-side); the tool is committed so the method is checkable.
+
+| backup | pick | file | laptop size / mtime | backup size | prefix SHA-256 | state |
+|---|---|---|---|---|---|---|
+| additive (`G:\My Drive\Claude Code Backup Folders\Session Transcripts`, 107 top-level `.jsonl` in both places) | oldest | `C--DawnTraderV3-new\cf843de4….jsonl` | 318,067 / 2026-07-28T01:55:17Z | 318,067 | `36b1cd31c12b50e4` = | closed (sizes equal) |
+| additive | largest = newest (same file) | `C--DawnTraderV3-analyst\4dfcc10e….jsonl` | 306,811,448 / 2026-11-06T08:38:53Z | 284,946,592 | `6f476cf5518337d3` = | live |
+| additive | third, distinct: Infra's newest | `C--DawnTraderV3-infra\644fc5fe….jsonl` | 137,497,469 / 2026-11-06T09:17:46Z | 99,095,653 (backup mtime 2026-11-05T10:26:51Z) | `46fd8d489a7bda2b` = | live |
+| zip (`G:\My Drive\Dawn Trader\claude-conversations-backup.zip`, 1,452,178,657 B, 2026-11-06T02:29:01Z; 2,934 entries; folders analyst/new/old/DT-SHARED-MEMORY; 95 top-level session `.jsonl` also on the laptop) | oldest | `C--DawnTraderV3-new/cf843de4….jsonl` | 318,067 / 2026-07-28T01:55:17Z | 318,067 | `36b1cd31c12b50e4` = | closed |
+| zip | largest | `C--DawnTraderV3-analyst/4dfcc10e….jsonl` | 306,811,448 | 299,084,220 | `a64eb6091b34a5a8` = | live |
+| zip | newest | `C--DawnTraderV3-old/66dbb030….jsonl` | 214,247,231 / 2026-11-06T06:02:02Z | 211,851,210 | `9d3d6ca9a3222900` = | live |
+
+**Result: 7 of 7 match.** Both backups hold correct, readable copies; the zip is read by streaming its entries (no extraction to disk). **The Infra row proves `#1237`'s correction** (Infra's conversation is in the additive backup, its bytes a true prefix of the live file). The zip's folder list confirms it has no Infra or PM folder (that fix is `B-PM-CLAUDE` OBJ-4(d)). The additive copy of a live file lags by up to a day (copied at the last 11:30-local run) — expected for a daily job, and why the archive's own capture (P7) does not depend on it.
