@@ -45,7 +45,7 @@ Generated from the plan's owner column. The state is the plan's own; the descrip
 | 8a | B-OPEN-REFUSAL-DURABLE-ROW (`#1083`) | QUEUED | after row 8, before the paper run |
 | 8b | B-STALE-BOOK-DEPTH-REFUSAL (`#1085`) | QUEUED | after row 8a |
 | 14a | B-KRAKEN-PRIMARY-KEY-RESOLUTION (`#1076`, `#1146`) | QUEUED | after row 14 |
-| 4b | B-VTS-NO-DECISION-VALVE increment 2 (`#1073`) | QUEUED | after row 4a: measure whether a paper maker rest fills after its deadline while a price is refused |
+| 4b | B-VTS-REST-DEADLINE (`#1073`; was the valve's increment 2) | QUEUED | after row 4a: measure whether a paper maker rest fills after its deadline while a price is refused |
 | 4c | B-SHADOW-HOLD-CLOCK (`#1144`) | QUEUED | after row 4b: decide whether the shadow lane's 48 h hold pauses while xStock is shut |
 | 9a | B-TRADE-LOSS-BOUND-DECISION (`#1105`) | DONE — decided (Kyle 2026-09-30: NO bound) | Kyle: no buffer and no limit on the max position % tied to the kill switch; if a large position fails and the kill switch trips past its limit, so… |
 | 9b | B-SETTINGS-REAL-TYPE (`#1106`) | QUEUED | after row 9a: the builder returns the legacy table's type, so 24 fields read at ~50 sites are always undefined (engine blacklist/whitelist, AI-prom… |
