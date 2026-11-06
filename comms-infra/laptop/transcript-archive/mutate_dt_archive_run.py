@@ -28,6 +28,12 @@ MUTATIONS = [
     ("a dry run builds the index", replace("        if not dry:\n            di.build(root, shared)", "        if True:\n            di.build(root, shared)")),
     ("refused files reported as OK", replace("        if refused:\n            return 5,", "        if False:\n            return 5,")),
     ("a collision reported as OK", replace('            return 4, "ARCHIVE RUN FAILED — %s" % e', '            return 0, "ARCHIVE RUN OK — %s" % e')),
+    ("P5 r4: an unreadable lock folder reads as no stale lock", replace(
+        "os.walk(top, onerror=unreadable)", "os.walk(top)")),
+    ("P5 r4: an absent .state raises (first run dies)", replace(
+        "    if not os.path.lexists(top):", "    if False:")),
+    ("P5 r4: an unexpected failure escapes main as a traceback", replace(
+        "    except Exception as e:     # noqa: BLE001", "    except KeyboardInterrupt as e:     # noqa: BLE001")),
 ]
 
 

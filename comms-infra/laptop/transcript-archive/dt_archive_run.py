@@ -12,7 +12,8 @@ hook, the restart handoff). It owns the key handoff P3(c) promised and the stale
 4. A LOUD RESULT: exit 0 clean · 3 fingerprints incomplete · 4 a name collision (C-5) · 5 a file refused (a held lock, a
    shorter-than-committed file) · 6 a LOCK OLDER THAN ONE INTERVAL (25 h) - a run that died and left it; the writer
    never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it ·
-   7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero).
+   7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero) ·
+   8 anything unexpected (an unreadable lock folder, a missing shared folder) - still printed as ARCHIVE RUN FAILED.
    The last line printed is always one of: `ARCHIVE RUN OK`, `ARCHIVE RUN FAILED — <why>`.
 5. OPERATOR NOTE (Langston P5 r2 obs 2): if the projects folder MOVES or is re-junctioned, every raw file's identity
    changes and EVERY file is refused (`state ... belongs to <old>, not <new>`, exit 5). Do NOT delete or empty `.state`:
@@ -83,8 +84,17 @@ def fingerprints(key, machines=None, runner=run_machine):
 
 
 def old_locks(root, now):
+    """Locks older than one interval. Its OWN reach is checked (Langston P5 r4): an unreadable .state subtree raises,
+    never reads as 'no stale lock'."""
     hits = []
-    for dirpath, _d, files in os.walk(os.path.join(root, ".state")):
+
+    def unreadable(err):
+        raise OSError(getattr(err, "errno", 0), "cannot read the lock folder %s" % getattr(err, "filename", "?"))
+
+    top = os.path.join(root, ".state")
+    if not os.path.lexists(top):    # no archive yet: genuinely no locks (a present-but-unreadable one still raises)
+        return hits
+    for dirpath, _d, files in os.walk(top, onerror=unreadable):
         for f in files:
             if f.endswith(".lock"):
                 p = os.path.join(dirpath, f)
@@ -156,7 +166,10 @@ def main(argv):
     projects = opts.get("--projects") or os.path.join(HOME, ".claude", "projects")
     root = opts.get("--root") or os.path.join(HOME, ".claude", "transcript-archive")
     shared = opts.get("--shared") or os.path.join(HOME, ".claude", "projects", "DT-SHARED-MEMORY")
-    code, line = run(projects, root, shared, dry=bool(opts.get("--dry-run")))
+    try:
+        code, line = run(projects, root, shared, dry=bool(opts.get("--dry-run")))
+    except Exception as e:     # noqa: BLE001 - the last line is ALWAYS one of the two, even on a failure nobody named
+        code, line = 8, "ARCHIVE RUN FAILED — unexpected %s: %s" % (type(e).__name__, str(e)[:300])
     print(line)
     return code
 

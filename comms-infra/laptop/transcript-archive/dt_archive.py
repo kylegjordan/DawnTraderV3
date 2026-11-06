@@ -66,8 +66,9 @@ def raw_files(projects):
         # Langston P5 r2 must-fix 3: os.walk's default is SILENCE on a folder it cannot read, which made a nested
         # transcript vanish and its parent's link read "not on disk" - an absence asserted by an instrument that never
         # checked its reach, stamped into an append-only file. Any read failure refuses the WHOLE run before a write.
-        raise Refused("cannot read %s (%s) - the raw set would be incomplete; nothing written" % (
-            getattr(err, "filename", "?"), type(err).__name__))
+        why = getattr(err, "strerror", None)
+        raise Refused("cannot read %s (%s%s) - the raw set would be incomplete; nothing written" % (
+            getattr(err, "filename", "?"), type(err).__name__, ": " + why if why else ""))
 
     def kind_of(path):
         """The dir-vs-file decision WITH its reach checked (Langston P5 r3 must-fix): os.path.isdir/isfile swallow
@@ -102,6 +103,8 @@ def raw_files(projects):
         for name in names:
             p = os.path.join(base, name)
             k = kind_of(p)
+            if name.endswith(".jsonl") and k == "other":   # a FIFO, a device... named like a conversation: never
+                unreadable(OSError(0, "neither a file nor a folder", p))   # dropped silently (Langston P5 r4)
             if name.endswith(".jsonl") and k == "file":
                 out.append((alias, "top", p, name[:-6], None, None))
             elif k == "dir":
@@ -110,7 +113,7 @@ def raw_files(projects):
                         if f.endswith(".jsonl"):
                             fp = os.path.join(root, f)
                             if kind_of(fp) != "file":
-                                continue
+                                unreadable(OSError(0, "neither a file nor a folder", fp))
                             rel = os.path.relpath(fp, p)[:-6]
                             out.append((alias, "sub", fp, None, name, SAFE.sub("_", rel.replace(os.sep, "__"))))
     return out

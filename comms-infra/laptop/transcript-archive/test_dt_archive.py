@@ -443,5 +443,35 @@ else:
     print("skip R3-MF1 real junction: mklink /J not available here (the simulated cases above stand)")
 shutil.rmtree(base, ignore_errors=True)
 
+print("11. Langston P5 r4: a .jsonl that is neither a file nor a folder is refused, never dropped")
+import stat as _st
+for where in ("top", "nested"):
+    base, proj, root = tree()
+    put(proj, FIRST, "w")
+    if where == "top":
+        odd = os.path.join(proj, SLUG, "odd-session.jsonl")
+    else:
+        os.makedirs(os.path.join(proj, SLUG, SID, "subagents"))
+        odd = os.path.join(proj, SLUG, SID, "subagents", "agent-fifo.jsonl")
+    open(odd, "w").write("")
+    real_stat2 = os.stat
+
+    def fifo_stat(path, *a, **kw):
+        if os.path.normcase(str(path)) == os.path.normcase(odd):
+            return os.stat_result((_st.S_IFIFO | 0o644, 0, 0, 0, 0, 0, 0, 0, 0, 0))
+        return real_stat2(path, *a, **kw)
+
+    da.os.stat = fifo_stat
+    try:
+        try:
+            da.archive_all(root, proj, dt.Redactor())
+            ok("a %s .jsonl that is a FIFO (neither file nor folder) REFUSES the run" % where, False)
+        except da.Refused as e:
+            ok("a %s .jsonl that is a FIFO (neither file nor folder) REFUSES the run" % where, "neither a file nor a folder" in str(e), str(e))
+    finally:
+        da.os.stat = real_stat2
+    ok("...with nothing written", os.listdir(root) == [], os.listdir(root))
+    shutil.rmtree(base)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

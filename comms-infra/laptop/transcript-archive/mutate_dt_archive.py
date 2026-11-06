@@ -73,6 +73,10 @@ MUTATIONS = [
     ("the raw text kept in the state", replace(
         '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order)})',
         '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order), "raw": lines})')),
+    ("P5 r4: a top .jsonl that is neither file nor folder dropped silently", replace(
+        "            if name.endswith(\".jsonl\") and k == \"other\":", "            if False:")),
+    ("P5 r4: a nested .jsonl that is neither file nor folder dropped silently", replace(
+        "                                unreadable(OSError(0, \"neither a file nor a folder\", fp))", "                                continue")),
 ]
 
 
