@@ -35,7 +35,7 @@ import { bufferOhlcBar } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
-import { RecorderConnection, startRecorderWatch } from './recorder-connection.js';
+import { RecorderConnection, startRecorderWatch, type RecorderConnectionLiveness } from './recorder-connection.js';
 
 const WS_URL = 'wss://ws.kraken.com/v2';
 // B69: unchanged value (crypto_spot was already correct), renamed var for consistency
@@ -75,19 +75,28 @@ const lastTickerUpdateAt = new Map<string, number>();
 /** When THIS process received its first ticker update — the warmth clock (C2: warm once a full live-share window has passed). */
 let firstTickerUpdateAtMs: number | null = null;
 
-export function getCryptoSpotStats(): {
+export function getCryptoSpotStats(nowMs: number = Date.now()): {
+  /** SOCKET state: every shard's readyState is OPEN. Not a liveness signal — `connections` carries that, beside it. */
   connected: boolean;
   configuredSymbols: number;
   cumulativeOhlcRows: number;
   cumulativeTickerSnaps: number;
   ohlcFramesSkipped: number;
   shardCount: number;
+  /** B-CRYPTO-FEED-WATCHDOG objective 4: per shard, the socket state beside the DATA liveness (precedence in
+   *  `RecorderConnection.dataLiveness`). The failure was one shard of two, so it is per shard, never one aggregate. */
+  connections: RecorderConnectionLiveness[];
+  /** Shards whose data liveness is anything but 'live' (silent, unknown or starting). */
+  nonLiveConnections: number;
 } {
   const totalSymbols = state.shards.reduce((s, sh) => s + sh.symbols.length, 0);
   const totalOhlc = state.shards.reduce((s, sh) => s + sh.cumulativeOhlcRows, 0);
   const totalTicker = state.shards.reduce((s, sh) => s + sh.cumulativeTickerSnaps, 0);
   const totalSkipped = state.shards.reduce((s, sh) => s + sh.ohlcFramesSkipped, 0);
   const allConnected = state.shards.length > 0 && state.shards.every(sh => sh.conn?.ws?.readyState === WebSocket.OPEN);
+  // A shard with no connection (detached test shards only) has no socket, so no data can be arriving: silent.
+  const connections = state.shards.map((sh): RecorderConnectionLiveness =>
+    sh.conn ? sh.conn.dataLiveness(nowMs) : { key: `crypto-spot:shard${sh.id}`, socketOpen: false, dataLive: 'silent' });
   return {
     connected: allConnected,
     configuredSymbols: totalSymbols,
@@ -95,6 +104,8 @@ export function getCryptoSpotStats(): {
     cumulativeTickerSnaps: totalTicker,
     ohlcFramesSkipped: totalSkipped,
     shardCount: state.shards.length,
+    connections,
+    nonLiveConnections: connections.filter((c) => c.dataLive !== 'live').length,
   };
 }
 

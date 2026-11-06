@@ -1856,10 +1856,14 @@ interface PassiveArchiveUniverseStatsUI {
   cumulativeOhlcScanned: number;
   cumulativeTickerScanned: number;
   ohlcFramesSkipped: number;
+  // SOCKET state. Shown beside the per-connection data liveness, never instead of it (B-CRYPTO-FEED-WATCHDOG obj 4).
   wsConnected: boolean;
+  // `null` = this universe is not graded by the data-liveness check (xstock_spot).
+  connectionLiveness: { key: string; socketOpen: boolean; dataLive: 'live' | 'silent' | 'unknown' | 'starting' }[] | null;
+  dataSilentConnections: number | null;
   ohlcStoreFraction: number | null;
   tickerStoreFraction: number | null;
-  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN';
+  status: 'OK' | 'NO_OHLC_DATA' | 'NO_TICKER_DATA' | 'DISCONNECTED' | 'STARTING' | 'COUNT_UNKNOWN' | 'DATA_SILENT' | 'LIVENESS_UNKNOWN';
   // Why a count is unknown: timeout = load, error = the query failed, shape = an unexpected reply.
   countUnknownReason: 'timeout' | 'error' | 'shape' | null;
   diskBytes: number;
@@ -1896,7 +1900,7 @@ function PassiveArchiveSection() {
     return u;
   };
 
-  const statusBadge = (status: PassiveArchiveUniverseStatsUI['status'], reason: PassiveArchiveUniverseStatsUI['countUnknownReason']) => {
+  const statusBadge = (status: PassiveArchiveUniverseStatsUI['status'], reason: PassiveArchiveUniverseStatsUI['countUnknownReason'], silent: number | null = null, total = 0) => {
     switch (status) {
       case 'OK': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">OK</span>;
       case 'NO_OHLC_DATA': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">NO OHLC</span>;
@@ -1904,6 +1908,8 @@ function PassiveArchiveSection() {
       case 'DISCONNECTED': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">DISCONNECTED</span>;
       case 'STARTING': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">STARTING</span>;
       case 'COUNT_UNKNOWN': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">COUNT UNKNOWN{reason ? ` · ${reason}` : ''}</span>;
+      case 'DATA_SILENT': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400">DATA SILENT{silent != null ? ` · ${silent} of ${total}` : ''}</span>;
+      case 'LIVENESS_UNKNOWN': return <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-500">LIVENESS UNKNOWN</span>;
       // A status this build does not know must still show, never render as a blank cell.
       default: return <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{String(status)}</span>;
     }
@@ -1987,7 +1993,15 @@ function PassiveArchiveSection() {
                       <td className="px-2 py-2 text-right font-mono text-muted-foreground">{fmtN(u.cumulativeTickerScanned)}</td>
                       <td className="px-2 py-2 text-right font-mono text-[10px]">{fmtPct(u.tickerStoreFraction)}</td>
                       <td className="px-2 py-2 text-right font-mono">{u.diskPretty}</td>
-                      <td className="px-2 py-2">{statusBadge(u.status, u.countUnknownReason)}</td>
+                      <td className="px-2 py-2">
+                        {statusBadge(u.status, u.countUnknownReason, u.dataSilentConnections, u.connectionLiveness?.length ?? 0)}
+                        {/* Socket state BESIDE data liveness, per connection (B-CRYPTO-FEED-WATCHDOG objective 4). */}
+                        {u.connectionLiveness && u.connectionLiveness.length > 0 && (
+                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5 whitespace-nowrap">
+                            {u.connectionLiveness.map((c) => `${c.key.split(':').pop()}: socket ${c.socketOpen ? 'open' : 'down'} · data ${c.dataLive}`).join(' | ')}
+                          </div>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1998,7 +2012,7 @@ function PassiveArchiveSection() {
                 <strong>Reading:</strong> "Configured" = symbols in archiver universe at startup. "Active in window" = distinct symbols with ≥1 row in the selected time window. "Stored (window)" = rows persisted to DB in the window — the canonical capture metric. "Scanned (since PID)" = in-process cumulative counter incremented on every WS message received since the current PM2 process started — useful for spotting silent drops between WS receive and DB write. "Store %" = stored ÷ scanned, ideally close to 100% (drift below indicates insert errors, partition-routing failures, or batch drops). "Skipped (since PID)" = one-minute bars the frame guard refused because a price, volume or time was missing or malformed; they are counted here and not stored. On the perp rows a refused bar is looked at again every minute until a newer one is accepted, so a burst of refusals inflates "scanned" and drags "store %" down: check "skipped" before reading a low store % as a feed collapse.
               </div>
               <div>
-                <strong>Status:</strong> OK = data flowing. NO OHLC = WS connected but no OHLC bars received (e.g., feed-name mismatch). NO TICKER = WS connected but no ticker updates. DISCONNECTED = WS down. STARTING = archiver still initializing. COUNT UNKNOWN = WS connected, but a stored-rows count for the window could not be read, so the counts show "—" (unknown), not 0. The suffix says why: timeout = the count took longer than its 4-second limit (load), error = the query failed, shape = the database answered in an unexpected form.
+                <strong>Status:</strong> OK = data flowing. NO OHLC = WS connected but no OHLC bars received (e.g., feed-name mismatch). NO TICKER = WS connected but no ticker updates. DISCONNECTED = WS down. DATA SILENT = every WS is open but a connection has had no data inside its silence threshold (the suffix says how many of how many) — an open socket is not a live feed. LIVENESS UNKNOWN = a connection's silence threshold could not be read, so live cannot be decided. STARTING = archiver still initializing, or a connection is open and still waiting for its first data. Under each badge: every connection's socket state beside its data liveness (xStock spot is not graded by this check). COUNT UNKNOWN = WS connected, but a stored-rows count for the window could not be read, so the counts show "—" (unknown), not 0. The suffix says why: timeout = the count took longer than its 4-second limit (load), error = the query failed, shape = the database answered in an unexpected form.
               </div>
               <div>
                 <strong>Reset note:</strong> "Scanned" counters are in-process and reset on PM2 restart. "Stored" counts come from DB queries and persist across restarts.

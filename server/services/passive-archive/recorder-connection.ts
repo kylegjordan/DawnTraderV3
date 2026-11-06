@@ -67,6 +67,17 @@ export interface RecorderWatchConfig {
 
 export type WatchDecision = 'skip' | 'ok' | 'force';
 
+/** Data liveness of one recorder connection (objective 4). 'unknown' = threshold unreadable — never live, never silent. */
+export type RecorderDataLiveness = 'live' | 'silent' | 'unknown' | 'starting';
+/** One connection as the stats report it: the socket state BESIDE the data liveness, never one for the other. */
+export interface RecorderConnectionLiveness {
+  /** The connection's recorderKey, e.g. `crypto-spot:shard0`. */
+  key: string;
+  /** Socket readyState === OPEN (what `connected` has always meant). */
+  socketOpen: boolean;
+  dataLive: RecorderDataLiveness;
+}
+
 /**
  * The silence decision, pure. `skip` while not open or a reconnect is pending (the timer
  * owns the shard then); `force` when the data age — measured from the later of the last
@@ -299,6 +310,32 @@ export class RecorderConnection {
   isDataLive(nowMs: number, silenceMs: number): boolean {
     const open = this.ws?.readyState === WebSocket.OPEN;
     return open && this.lastDataAtMs > 0 && nowMs - this.lastDataAtMs <= silenceMs;
+  }
+
+  /**
+   * B-CRYPTO-FEED-WATCHDOG objective 4: this connection's data liveness for the stats and the Passive Archive panel,
+   * reported BESIDE the socket state, never instead of it (Langston Step-9 conditions 1-4). Sync, in memory.
+   * PRECEDENCE, in this order — the first arm that matches wins:
+   *   1. socket not OPEN            ⇒ 'silent'   no data can be arriving; `socketOpen:false` beside it says why, and the
+   *                                              panel's socket-down arm (DISCONNECTED) outranks every data arm anyway.
+   *                                              Needs no threshold, so it is a fact, not an unknown defaulted to false.
+   *   2. threshold unreadable       ⇒ 'unknown'  `resolveConfig()` returned null: never graded live, never graded silent.
+   *   3. OPEN, no data frame yet in ⇒ 'starting' the opening window before the first data frame (lastDataAtMs === 0),
+   *      this process, still within                bounded by the same threshold the silence check uses — past it the
+   *      `silenceMs` of the open                   connection reads 'silent', so a socket that opens dark at process start
+   *                                                cannot read 'starting' forever.
+   *   4. otherwise                  ⇒ `isDataLive` ? 'live' : 'silent' (the connection-scoped notion; see isDataLive).
+   */
+  dataLiveness(nowMs: number): RecorderConnectionLiveness {
+    const socketOpen = this.ws?.readyState === WebSocket.OPEN;
+    const key = this.opts.recorderKey;
+    if (!socketOpen) return { key, socketOpen, dataLive: 'silent' };
+    const cfg = this.resolveConfig();
+    if (!cfg) return { key, socketOpen, dataLive: 'unknown' };
+    if (this.lastDataAtMs === 0 && this.openedAtMs > 0 && nowMs - this.openedAtMs <= cfg.silenceMs) {
+      return { key, socketOpen, dataLive: 'starting' };
+    }
+    return { key, socketOpen, dataLive: this.isDataLive(nowMs, cfg.silenceMs) ? 'live' : 'silent' };
   }
 
   /** Resolve this connection's config from the DB; null (and a loud alert) when any row is missing. */

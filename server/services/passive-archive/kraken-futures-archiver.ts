@@ -33,7 +33,7 @@ import { bufferOhlcBar, type ArchiveAssetClass } from './ohlc-batch-writer.js';
 import { bufferTickerSnap } from './ticker-batch-writer.js';
 import { validateOhlcFrame } from './ohlc-frame-validator.js';
 import { noteOhlcFrameAccepted, noteOhlcFrameRejected } from './ohlc-frame-skip-tracker.js';
-import { RecorderConnection, startRecorderWatch } from './recorder-connection.js';
+import { RecorderConnection, startRecorderWatch, type RecorderConnectionLiveness } from './recorder-connection.js';
 
 const WS_URL = 'wss://futures.kraken.com/ws/v1';
 const REST_BASE = 'https://futures.kraken.com/api/charts/v1/trade';
@@ -49,12 +49,18 @@ export interface KrakenFuturesArchiverConfig {
 }
 
 export interface KrakenFuturesArchiverStats {
+  /** SOCKET state: readyState is OPEN. Not a liveness signal — `connections` carries that, beside it. */
   connected: boolean;
   configuredSymbols: number;
   cumulativeOhlcRows: number;
   cumulativeTickerSnaps: number;
   /** OHLC candles the frame guard REJECTED (#1028). */
   ohlcFramesSkipped: number;
+  /** B-CRYPTO-FEED-WATCHDOG objective 4: the ticker socket's state beside its DATA liveness (precedence in
+   *  `RecorderConnection.dataLiveness`). Empty while the leg is not started (no connection). */
+  connections: RecorderConnectionLiveness[];
+  /** Connections whose data liveness is anything but 'live' (silent, unknown or starting). */
+  nonLiveConnections: number;
 }
 
 export class KrakenFuturesArchiver {
@@ -78,13 +84,16 @@ export class KrakenFuturesArchiver {
 
   constructor(private readonly cfg: KrakenFuturesArchiverConfig) {}
 
-  getStats(): KrakenFuturesArchiverStats {
+  getStats(nowMs: number = Date.now()): KrakenFuturesArchiverStats {
+    const connections = this.conn ? [this.conn.dataLiveness(nowMs)] : [];
     return {
       connected: this.conn?.ws?.readyState === WebSocket.OPEN,
       configuredSymbols: this.symbols.length,
       cumulativeOhlcRows: this.cumulativeOhlcRows,
       cumulativeTickerSnaps: this.cumulativeTickerSnaps,
       ohlcFramesSkipped: this.ohlcFramesSkipped,
+      connections,
+      nonLiveConnections: connections.filter((c) => c.dataLive !== 'live').length,
     };
   }
 
