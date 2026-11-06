@@ -1,4 +1,4 @@
-# B-PATTERN-ENUM-DRIFT — HOTFIX COMPLETION NOTE — confirmed 2026-11-06, close sent to Langston
+# B-PATTERN-ENUM-DRIFT — HOTFIX COMPLETION NOTE — ✅ CLOSED 2026-11-06 (Langston confirmed the close 2026-11-06 (Discord `1568207436995760219`))
 
 **change-class: hotfix** · `#1063` · sprint plan row 51 (Phase-19 row 3m-ENUM) · owner CC-B · scope `Scope Files/B_PATTERN_ENUM_DRIFT_SCOPE.md` (r4)
 
@@ -8,16 +8,16 @@
 The code declared six `pattern_type` values; the database held five. `ABCD` was missing, so every pattern-confirmed `volatility_edge` signal failed at the trade insert (22,368 failure lines 2026-09-19 → 10-02). After deploy A's restart it was the only thing reaching promotion.
 
 ## What was done
-One migration, `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD'` (irreversible; inert if left), plus `server/tests/unit/b-pattern-enum-drift.test.ts`: every declared value must be created by a registered migration, and every label the detector emits must be declared. Mutation-proved. Langston Step-4 r1-r4 approved 2026-10-02 (conditions met at r4; TRI_STAR left out on his sink argument, Kyle agreed). Rode deploy B (2026-10-06).
+One migration, `ALTER TYPE pattern_type ADD VALUE IF NOT EXISTS 'ABCD'` (irreversible; inert if left), plus `server/tests/unit/b-pattern-enum-drift.test.ts`: every declared value must be created by a registered migration, and every label the detector emits must be declared. Mutation-proved. Langston Step-4 r1-r4 approved 2026-10-02 (CI: r2 `37067770854`, r4 `37070136961` at `9bea440d7` and `37070555513` at `b0e285cd4`, all 4/4 per job; conditions met at r4; TRI_STAR left out on his sink argument, Kyle agreed). Rode deploy B (2026-10-06).
 
 ## How it was verified (the scope's criteria, quoted, then the outcome)
 | criterion (scope, as written) | outcome |
 |---|---|
 | "The first pattern-confirmed `volatility_edge` open after B appears in `active_open_positions` / `closed_trades` with `pattern_type = 'ABCD'` (until one is promoted, "no failures" is unexercised, not a pass)." | ✅ `closed_trades`: first `volatility_edge` paper trade with `pattern_type='ABCD'` opened **2026-10-12T11:47:28Z**; **4** such closes 10-12 → 10-30; **0** ABCD rows open now. Measured 2026-11-06 ~10:15Z on staging. |
 | "`pg_enum` for `pattern_type` reads exactly `PINBAR, ENGULFING, INSIDE_BAR, MORNING_STAR, THREE_SOLDIERS, ABCD` (and NOT `TRI_STAR`)." | ✅ exactly those six, in that order. |
-| "`error.log`: `trade_insert_err … pattern_type: "ABCD"` count after B's restart = 0" | ⚠️ **not re-measured at close** — today's `error.log` starts 2026-11-06 00:00, so it cannot speak for 10-06 → 11-05. The open above is the stronger evidence: a failing insert could not have produced it. |
+| "`error.log`: `trade_insert_err … pattern_type: "ABCD"` count after B's restart = 0" | ✅ **discharged by construction** (Langston): a stored ABCD row proves the insert path accepted the label, so no log count can add to it. The earliest ABCD write anywhere is `strong_bull_trend` at **2026-10-07T02:39:01Z**, one day after deploy B. |
 
-Population note: the `ABCD` label also lands on `strong_bull_trend` (11 closes) and `reverse_impulse` (1). Consistent with the scope's mechanism (the sinks write the raw detector label); not investigated further here.
+Population note: the `ABCD` label also lands on `strong_bull_trend` (11 closes) and `reverse_impulse` (1). This is the sinks writing the raw detector label, which is row 51's remainder (Langston) — already homed; do not re-file it. Pre/post on `volatility_edge` (Langston re-derived): 11 closes before deploy B all NULL, 4 after all ABCD.
 
 ## Why it was unwatched for a month
 The plan row kept saying "rides deploy B" after deploy B shipped, and no alert was minted for the confirming open. Flagged by PM Claude's 2026-11-06 open-work list (KD-43).
@@ -35,7 +35,7 @@ CHANGE-CLASS: hotfix
 | T1 | the batch `PRE_AUDIT` | N/A | judged for a hotfix; the scope carries the blast-radius audit |
 | T1 | this completion note | ✅ | this file |
 | T1 | the four session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | CC-B row updated to confirmed; the other three not mine |
-| T1 | Langston's `MEMORY.md` | ✅ | asked of Langston with the close (his file is fenced; he writes it) |
+| T1 | Langston's `MEMORY.md` | ✅ | written by Langston (part `00-legacy.md`, `f4246e46648a → b13a931dcdea`) |
 | T2 | `SYSTEM_MANUAL.md` | N/A | no architecture or logic change |
 | T2 | `SYSTEM_IMPACT_MAP.md` | N/A | no component added or re-keyed |
 | T2 | `RUNNING_ISSUES.md` | ✅ | `#1063` annotated; stays open for row 51's remainder |
