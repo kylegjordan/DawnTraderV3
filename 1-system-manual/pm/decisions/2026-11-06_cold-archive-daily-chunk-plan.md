@@ -90,3 +90,35 @@
 | `scripts/b5-w20c-provenance-replay.ts:135-181` | by hand | open-ended `>= $3` | ⚠️ joins `signal_eval_provenance` (30 d, MONTHLY partitions) to the archive on `id` + `captured_at`: with A1, provenance rows older than the archive's window lose their partner hot. A1's Step 1 decides: align the provenance window, or read older days from warm |
 | `scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`, `scripts/b-xstock-calib-*.ts` (7 d), `scripts/b79-0f-collision-*.sql`, the batch-evidence `.sql` files | one-off / historical | deploy epochs, 7 d, or past | none — the epoch reads already reach past 30 days, the rest are ≤ 7 d |
 **Verdict:** no live decision path (signal generation, SQE, RTB, TEC, sizing, exits) reads this table at all — only a 24 h observability cache and one dashboard panel. **A1 is safe at ≥ 15 days with two folds:** the Drift-Dashboard 30-day panel, and the provenance-join alignment. Revised A1 estimate at 15 days: ≈ 15 × 1.4 ≈ **21 GB** freed (the per-day figure is `RULED ON REPORTED FACT` until A1's Step 1). Future readers named in other packs stay inside 14 days (`#441`'s weekly computation reads 7 days).
+
+## 6. Backblaze account facts (Kyle's dashboard, read by PM Claude 2026-11-06 ~10:4xZ) + the bucket and key measured (CC-A, ~11:0xZ, staging, with the app's own key)
+
+**From Kyle's dashboard (PM Claude, relayed):** no payment method, so every cap is at $0. **Download cap = 1 GB/day** (531 MB used that day) — the 1 GB/day rule, not "3× stored", which settles §1's documentation conflict. Class B and C transactions 2,500/day each, free. **Storage cap = 10 GB**, and the bucket lifecycle is "Keep all versions", so hidden or replaced versions count toward it. Uploads stop at the cap.
+
+**The bucket, measured** (`b2_list_file_versions` over `dt-archive-cold`, every version, summed by top-level prefix; it agrees with the dashboard's 6.7 GB / 101 files):
+
+| prefix | versions | GB (decimal) | uploaded |
+|---|---|---|---|
+| `token-watch/` (Infra Claude's off-box copy) | 94 uploads + 1 hide | **6.432** | 11-04 3.663 · 11-05 2.544 · 11-06 0.226 (day in progress) |
+| `context_bridge_log/` | 4 | 0.130 | 2026-05-06, 07-07 |
+| `disk_file.diagnostic_reports/` | 1 | 0.171 | 2026-11-05 |
+| `exit_decision_archive/` | 1 | 0.001 | 2026-07-08 |
+| **total** | **101** | **6.735** | headroom to the cap **3.26 GB** |
+
+**PREVIOUSLY STATED (§1):** cold tier = 4 objects, 0.12 GB. **NOW:** DawnTrader's own share of the bucket is 6 objects, 0.30 GB, and the bucket holds 6.74 GB in all. **REASON:** §1 counted `data_archive_manifest` rows (`tier=cold`), which cover the table archive only; the bucket also holds the disk-file tier's object and Infra Claude's token-watch copy, which that count could not see.
+
+### 6a. What the storage cap does to Plan B
+⛔ **At $0 the May 2027 cold move cannot run at all.** Warm holds 52.3 GB (§1) and the first months due to rotate were archived at 6.7 GB (June 2026) and 8.0 GB (July 2026). Rotating June alone is more than double the 3.26 GB headroom. Plan B's daily-chunk design still stands for the *download* cap; it does nothing for the *storage* cap. **The two caps are separate settings: KD-32 keeps the download cap at $0, and that is unaffected.**
+⚠️ **token-watch reaches the cap first, and it is Infra Claude's to size, not this pack's.** 6.2 GB of its 6.43 GB landed on 11-04/11-05, which reads as a first backfill; the steady rate is not yet measurable from three days (n=1 partial day). If the steady rate is near 0.2 GB/day the headroom lasts weeks, not months. Routed to Infra through PM Claude.
+
+**The options for Kyle (a money call, his):**
+- **(a) Add a payment method to Backblaze and set a small daily storage cap; keep the download cap at $0.** Backblaze's published storage price is about $7 per TB per month (≈ $0.007 per GB per month; confirm on his billing page). The whole warm tier moved cold (52 GB today) would cost ≈ $0.35/month above the free 10 GB; ~150 GB (late 2027 at the measured inflow) ≈ $1/month. A storage cap of a few cents a day bounds it hard.
+- **(b) Stay at $0 and never rotate:** set the cold rotation off and keep everything in Supabase Storage (warm). That spends Supabase's included storage instead, loses the off-provider copy (the reason the cold tier exists — STORAGE_POLICY "we never drop data"), and does not help token-watch, which already uses Backblaze.
+- **Recommendation: (a), decided before token-watch fills the bucket, not before May 2027.** The amounts are cents to a dollar a month and the cap stays as a hard limit.
+
+### 6b. The cold-archive key — a finding, with its disposition
+**Measured** (`b2_authorize_account` with the staging app's `B2_KEY_ID`, the key named `dt-cold-archive` per `B_STORAGE_HARDEN_SCOPE.md:25`): **not restricted to any bucket (`bucketName` null), no name prefix**, capabilities include `deleteBuckets`, `deleteKeys`, `writeKeys`, `deleteFiles`, `bypassGovernance`, `writeBuckets` — 29 in all. It sits in the live app's environment file on staging, so anything that can read that file can delete every bucket and key on Kyle's Backblaze account, token-watch's copy included. Infra Claude's `token-watch/tools/mint_cold_key.py:47,62` minted the least-privilege token-watch key *with* this key, which is how its `writeKeys` right is known to work.
+**What the app actually calls** (`server/services/data-archive/storage-client.ts`): upload (`writeFiles`), `b2_list_file_names` (`listFiles`), download (`readFiles`), `b2_delete_file_version` (`deleteFiles`) — and the only caller of the delete is the liveness canary cleaning up its own 104-byte object (`server/scripts/b75-cold-liveness.ts:117`). `b2_list_buckets` is skipped because `B2_BUCKET_ID` is set (`storage-client.ts:615-621`).
+**The fix:** a key restricted to `dt-archive-cold` with `listFiles`, `readFiles`, `writeFiles` only — **no delete right at all.** The canary changes from delete to hide, and a lifecycle rule on `_liveness/` removes hidden canaries after a day (setting that rule needs `writeBucketLifecycleRules`, so it is done once with the wide key or by Kyle). Then the wide key comes off the server. **Residual, stated:** a bucket-wide key can still add versions over `token-watch/` objects (it cannot delete them); a per-prefix key is not possible because the archive writes under several top-level prefixes.
+**Retiring the wide key and adding the `_liveness/` rule are changes to Kyle's account, so they need his yes**; after that, minting any future key goes through his dashboard, which is intended.
+DISPOSITION: added to `B-DISK-FILE-TIERING` OBJ-3 (the cold-path rewrite in §4 already changes this code and this bucket). `B-STORAGE-HARDEN`, where the key was set up, closed 2026-07-08.

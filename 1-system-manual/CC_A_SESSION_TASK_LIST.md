@@ -26,6 +26,8 @@
 | 8 | `B-CLOSE-WRITER-COSTS` (row 72): the close finds its record by symbol + asset class + mode; the open-side duplicate guard per mode (paper never affects live); fees required, readers made honest | IN FLIGHT, Step 2 (r2 amendment with Langston, 2026-11-05; order after items 4-5 kept for implementation, KD-27) | KD-17, KD-24, KD-27 |
 | 9 | `B-UNIVERSE-REFRESH-ACTS` (row 18, `#1018`): the daily coin-list re-check acts on what it finds | QUEUED, straight after item 8 | KD-26 |
 | 10 | `B-SYMBOL-CLASS-IDENTITY` (row 19, `#1024`): a ticker shared by a coin and an xStock becomes two instruments; closes with KD-25 (both may be open at once in one mode) | QUEUED, after item 9 | KD-26, KD-25 |
+| 11 | `#441` — the weekly xStock opportunity-loss watch, built by me as an item of ANALYST's `B-XSTOCK-SESSION-FRESHNESS` (row 3b.f-c); `B-XSTOCK-FRESHNESS-MONITOR` closes into it | ACKED 2026-11-06; build order is CC-C's batch, to the round-4 consensus in `pm/decisions/2026-11-05_xstock-freshness-condition.md` | KD-48 |
+| 12 | The cold-archive key: the staging app holds an account-wide Backblaze key; replace it with a bucket-restricted key that cannot delete, and take the wide key off the server | folded into `B-DISK-FILE-TIERING` OBJ-3 (the cold-path rewrite), per `pm/decisions/2026-11-06_cold-archive-daily-chunk-plan.md` §6 | KD-32 |
 | ? | `#914` (row 126) | open with Kyle via PM Claude | pending |
 
 ---
