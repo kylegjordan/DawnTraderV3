@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- B-TRANSCRIPT-ARCHIVE P7(a): the nightly archive. Runs the INSTALLED copy (~\.claude\transcript-archive-bin, copied
-     from a reviewed sha), never a working clone. 02:30 local, so the 03:15 conversations backup that P9 extends sees
-     the night's archive. StartWhenAvailable: a laptop asleep at 02:30 runs it on waking; a whole day off fires the
+     from a reviewed sha), never a working clone. 02:30 local; P9 adds the archive to the 11:30 additive backup
+     (backup-claude-sessions.ps1), which then carries the night's archive the same day. StartWhenAvailable: a laptop asleep at 02:30 runs it on waking; a whole day off fires the
      staging never-ran check (dt_archive_trigger.py docstring). Interactive token: it needs the user's ssh keys.
      Install: schtasks /create /tn "\DawnTrader-Transcript-Archive" /xml <this file> -->
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
