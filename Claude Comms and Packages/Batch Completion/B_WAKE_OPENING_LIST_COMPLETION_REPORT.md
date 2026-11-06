@@ -11,7 +11,7 @@
 |---|---|---|---|---|
 | **A6 — Coltrane cannot wake Langston by any wording** (his bridge accepts non-Kyle posts only from the CC bot or webhook) | Kyle decides | with Kyle via PM Claude (recorded in pre-audit §A6 and `#1241`) — not a slot until Kyle agrees one | Kyle rules: allow it, or keep it closed | — (a decision, not a defect) |
 | **Q1 / Q2** (Kyle's own posts; accepting the session-side narrowing) | Kyle | with Kyle via PM Claude; the batch built the recommended defaults: Q1(b) Kyle keeps name-anywhere, Q2 accept | Kyle confirms or picks the other option | — |
-| **B-BRIDGE-ERROR-VISIBLE** — a Langston invoke that ends in a bridge error posts nothing (Langston's Step-8 finding; 61 rows 2026-06-22 → 11-06, `discord-langston-bridge.py:658`) | Infra Claude | **proposed, not placed:** to PM Claude 2026-11-06 as an item on my existing `B-AGENT-INVOKE-FAILURE-NOTICE` (plan row 12, `#1198`/`#1206`), or a new slot — Kyle's call | Kyle slots it | — |
+| **B-BRIDGE-ERROR-VISIBLE** — a Langston invoke that ends in a bridge error posts nothing (Langston's Step-8 finding; 61 rows 2026-06-22 → 11-06, `discord-langston-bridge.py:658`) | Infra Claude | **added to `B-AGENT-INVOKE-FAILURE-NOTICE`** as an explicit objective (`#1198` note + plan row 137, PM Claude 2026-11-06; a separate batch would duplicate it) | that batch closes | — |
 | Coltrane's stop-path gap (no process-group kill) | Infra Claude | `B-AGENT-INVOKE-FAILURE-NOTICE` (`#1206`), placed at Step 1 | that batch closes | — |
 | `§6.9` roster table lists only CC-A/CC-B; `CLAUDE.md:261` named a form CC-C never posts under | Kyle slots | `RUNNING_ISSUES` entry passed to PM at Step 1 (scope "Out of scope") | Kyle slots it | — |
 
@@ -90,7 +90,7 @@ CHANGE-CLASS: non_architecture
 
 ## New findings
 
-- **B-BRIDGE-ERROR-VISIBLE** (Langston, Step 8) — in the open-items table above.
+- **Langston's bridge-error finding** (Step 8) — folded into `B-AGENT-INVOKE-FAILURE-NOTICE`; see the open-items table.
 - **A6** — Coltrane cannot wake Langston; in the open-items table.
 
 ## Honest residual
