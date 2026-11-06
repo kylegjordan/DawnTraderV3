@@ -45,4 +45,6 @@ npm run system-alerts -- add --triggers-at <T+21d> ... --title "B-LANGSTON-TWO-W
 The exact commands run, with their returned ids, are recorded in the progress report.
 
 ## AMENDMENTS
-*(none)*
+- **A-1 (2026-11-06, Step 4 part 1, Langston; written BEFORE any baseline figure — the install has not happened):**
+  - the outcome vocabulary gains **`voice_failed`** (a voice transcription that failed; that exit had recorded `unknown`);
+  - **the wait test is read against the shared-lane share.** Langston measured, over the 347 text arrivals of the 14 days to 11-06 (inbox log; his per-day counts reproduce §2's 90 and 201): **46.4 % key to the shared lane**; of 283 consecutive arrivals ≤ 10 min apart, 190 (67.1 %) were in different lanes, and 69 of the 93 that would serialise were shared-lane. So a miss on W is reported beside the after-window's measured shared-lane share and must not be read as "two workers do not help"; the shared lane is the residual bottleneck. (`alert_key` returned None on 0 of 630 alert arrivals, so the per-message alert fallback is a fence, not a live path.)

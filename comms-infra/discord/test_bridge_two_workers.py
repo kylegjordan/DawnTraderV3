@@ -1,5 +1,6 @@
 """B-LANGSTON-TWO-WORKERS (#1248): the bridge's two task workers and the state they share. Run on Helsinki with the
-bridge venv, from a dir holding the bridge and its modules (as root - the bridge reads its tokens at import):
+bridge venv, from a dir holding the bridge and its modules, as root or as langston (the bridge reads its tokens at
+import; /etc/langston/*.env is group-readable, so Langston can re-derive this at Step 8 - his correction, part 1):
     /opt/discord-bridges/venv/bin/python3 test_bridge_two_workers.py      (exit 0 = all pass)
 ⛔ A HAND-RUN GATE, like test_bridge_clean_stop.py: it cannot join CI (the bridge loads tokens and shared config at
 import), so the report that cites it states the host and the ref. Drives the REAL process_task, task_worker,

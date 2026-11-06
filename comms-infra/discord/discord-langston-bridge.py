@@ -519,6 +519,7 @@ def process_task(task, state, breaker, task_q=None):
             mirror_event("langston_inbound_voice_failed",
                          channel_id=channel_id, message_id=msg_id,
                          failure_reason=error[:500], silent_in_channel=not is_dm)
+            task["_outcome"] = "voice_failed"     # Langston part 1, amendment 2: every exit records its outcome
             return
         if is_dm:
             preview = prompt[:dc.ACK_PREVIEW_CHARS] + ("..." if len(prompt) > dc.ACK_PREVIEW_CHARS else "")
@@ -776,10 +777,12 @@ def process_task(task, state, breaker, task_q=None):
             return None
 
         next_task = lq.locked_update(QUEUE_FILE, _settle)
-        for note in notices:
-            dc.rest_send(BOT_TOKEN, channel_id, note, LOG_FILE)
+        # put BEFORE the posts (Langston part 1, nit): an exception in a post must not strand the picked item's
+        # advance_in_flight_ts for 2x the invoke ceiling with nothing queued to clear it.
         if next_task is not None:
             task_q.put(next_task)
+        for note in notices:
+            dc.rest_send(BOT_TOKEN, channel_id, note, LOG_FILE)
     except Exception as e:
         log(f"queue: post-response handling failed (non-fatal): {e}")
 
