@@ -245,6 +245,14 @@ ok("a nested transcript lands under sub/<parent8>/, labelled linked by folder",
 pt = open(os.path.join(root, f1), encoding="utf-8").read()
 import re as _re
 lk = _re.findall(r"nested transcript `([^`]+)`", pt)
+put(proj, [{"type": "assistant", "uuid": "c3", "timestamp": "2026-10-21T10:00:30Z", "sessionId": SID, "message": {"content": [
+              {"type": "tool_use", "id": "tB", "name": "Agent", "input": {"description": "Trimmed work"}}]}},
+           {"type": "user", "uuid": "c4", "timestamp": "2026-10-21T10:00:31Z", "sessionId": SID, "toolUseResult": {"agentId": "gone"},
+            "message": {"content": [{"type": "tool_result", "tool_use_id": "tB", "content": "done"}]}}])
+da.archive_all(root, proj, dt.Redactor())
+pt2 = open(os.path.join(root, f1), encoding="utf-8").read()
+ok("a link to a nested transcript NOT on disk says so, never a pointer nobody can follow",
+   "Trimmed work → nested transcript for agent `gone` is not on disk" in pt2 and "subagents__agent-gone.md" not in pt2, pt2[-300:])
 ok("the parent's agent-call line names EXACTLY the nested file the writer made",
    lk == ["sub/%s/subagents__agent-abc.md" % SID[:8]] and os.path.exists(os.path.join(root, "CC-B", *lk[0].split("/"))), (lk, pt[-400:]))
 before = snapshot(root)
@@ -260,6 +268,62 @@ open(os.path.join(proj, "G--My-Drive-Kasia-Projects", "x.jsonl"), "w").write(jso
 put(proj, FIRST[:1], "w")
 da.archive_all(root, proj, dt.Redactor())
 ok("a folder outside the five is never read", all("private" not in v.decode() for v in snapshot(root).values()))
+shutil.rmtree(base)
+
+print("8. Langston P5 must-fixes")
+import subprocess as _sp
+base, proj, root = tree()
+put(proj, FIRST, "w")
+da.archive_all(root, proj, dt.Redactor())
+cwd = os.getcwd()
+os.chdir(base)
+try:
+    _r1, ref1 = da.archive_all(root, "projects", dt.Redactor())               # the SAME tree, spelled relative
+    _r2, ref2 = da.archive_all(root, os.path.join(base, ".", "projects"), dt.Redactor())
+finally:
+    os.chdir(cwd)
+t1 = open(os.path.join(root, f1), encoding="utf-8").read()
+ok("MF1: two spellings of one raw file are ONE offset owner - nothing archived twice",
+   t1.count("hello on day one") == 1 and len(os.listdir(os.path.join(root, ".state", "CC-B"))) == 1,
+   (t1.count("hello on day one"), os.listdir(os.path.join(root, ".state", "CC-B"))))
+st = json.load(open(da.state_path(root, da.raw_files(proj)[0]), encoding="utf-8"))
+ok("MF1: the state records the file's identity, not a spelling", st["raw"] == da.identity(raw_path(proj)))
+ok("MF1: ...and neither other spelling is REFUSED", ref1 == [] and ref2 == [], (ref1, ref2))
+open(os.path.join(root, f2), "ab").write(b"uncommitted tail from a crashed run\n")
+before = open(os.path.join(root, f2), "rb").read()
+res, ref = da.archive_all(root, proj, dt.Redactor(), dry=True)
+ok("MF2: a dry run leaves an uncommitted tail in place", open(os.path.join(root, f2), "rb").read() == before)
+_b2, _p2, _r2 = tree()
+put(_p2, FIRST, "w")
+da.archive_all(_r2, _p2, dt.Redactor(), dry=True)
+ok("a dry run on a fresh archive creates NOTHING - not even the .state folder a lock would make", os.listdir(_r2) == [], os.listdir(_r2))
+shutil.rmtree(_b2)
+ok("MF2: ...and REPORTS what recovery would cut", any(r.get("would_cut") and r["would_cut"][0][0] == f2 for r in res), res)
+da.archive_all(root, proj, dt.Redactor())
+ok("MF2: a real run then cuts it", b"uncommitted tail" not in open(os.path.join(root, f2), "rb").read())
+for args in (["--hashes"], ["--key-file"], ["--hashes", "--key-file", "k"]):
+    p = _sp.run([sys.executable, "-I", os.path.join(HERE, "dt_archive.py"), "--root", root, "--projects", proj] + args, capture_output=True)
+    ok("MF3: %s with its value missing is REFUSED (exit 2), never run with layer (c) silently off" % " ".join(args),
+       p.returncode == 2 and b"needs a value" in p.stderr, p.stderr[-200:])
+shutil.rmtree(base)
+ok("MF4: a UTC stamp is read as UTC (2000-01-01T00:00:00Z is 946684800 on any machine)", da._secs("2000-01-01T00:00:00Z") == 946684800)
+ok("MF4: across a daylight-saving fold one hour is 3600 s", da._secs("2026-03-08T02:30:00Z") - da._secs("2026-03-08T01:30:00Z") == 3600)
+ok("MF4: an unreadable stamp is None, not 0", da._secs("not a time") is None)
+base, proj, root = tree()
+Qbad = dict(Q, timestamp="garbled")
+put(proj, FIRST[:2] + [Qbad, reply("a9", "2026-10-21T15:00:00Z", "much later")], "w")
+mt = os.path.getmtime(raw_path(proj))
+da.archive_all(root, proj, dt.Redactor(), now=mt + 60)
+st = json.load(open(da.state_path(root, da.raw_files(proj)[0]), encoding="utf-8"))
+ok("MF4: a held notice with an unreadable stamp is HELD on the session clock (only file quiet releases it)",
+   len(st["held"]) == 1, st["held"])
+shutil.rmtree(base)
+base, proj, root = tree()
+put(proj, [{"type": "user", "uuid": "nd", "message": {"content": "no timestamp at all"}}], "w")
+da.archive_all(root, proj, dt.Redactor())
+uf = os.path.join(root, "CC-B", "undated_0fe1c46a.md")
+ok("an undated entry's file header says undated, not a cut filename",
+   os.path.exists(uf) and open(uf, encoding="utf-8").read().startswith("# CC-B — undated — session"), open(uf, encoding="utf-8").read()[:80] if os.path.exists(uf) else None)
 shutil.rmtree(base)
 
 print("\n%d failed" % len(FAILS))

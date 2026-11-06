@@ -27,8 +27,15 @@ THE GUARANTEES:
     session's own clock or of file quiet, because its delivery may land in the next run's bytes; a later delivery
     cancels it, otherwise it is written labelled `queued; no delivered copy in this file` (Langston P4 finding).
 KNOWN LIMITS, stated: an action whose tool result (and so its ERROR) lands in a LATER run is written without the ERROR;
-a held notice's delivery that never reaches this raw file (another file) does not cancel it.
+a held notice's delivery that never reaches this raw file (another file) does not cancel it; a held notice released
+late is appended at the END of its day file, so a day file is not strictly chronological; for an abandoned session
+only the file-quiet arm can release a hold (no new lines, so the session clock never advances). The state's file keys
+are os.sep paths, so a state folder is not portable between Windows and Linux (a move fails LOUD, via the
+shorter-than-committed refusal) - the LF guarantee is about archive bytes, not state. A lock left by a killed run is
+never broken here: the trigger wiring (P7) must raise a loud condition on exit 5 or a lock older than one interval,
+with a written operator procedure (Langston P5 (b)). A dry run takes no lock and writes nothing at all.
 """
+import calendar
 import hashlib
 import json
 import os
@@ -93,19 +100,28 @@ def target(rf, day):
     return os.path.join(alias, "sub", parent[:8], nested + ".md")
 
 
+def identity(path):
+    """The raw file's identity: its real path, case-folded where the filesystem folds case. Two spellings of one file
+    (absolute and relative, a symlink, a case difference on Windows) are ONE identity (Langston P5 must-fix 1)."""
+    return os.path.normcase(os.path.realpath(os.path.abspath(path)))
+
+
 def state_path(root, rf):
+    """Keyed on file_key ALONE - already proven injective over the whole set by check_injective (C-5). It used to carry a
+    sha of the path as spelled, so two spellings of one file got two offset owners: the session re-archived from offset
+    0 (duplicated), or one spelling cut the other's committed bytes and that one then refused forever."""
     alias = rf[0]
     k = "_".join(file_key(rf)[1:])
-    return os.path.join(root, ".state", alias, hashlib.sha256(rf[2].encode("utf-8")).hexdigest()[:12] + "_" + k + ".json")
+    return os.path.join(root, ".state", alias, k + ".json")
 
 
 def load_state(path, raw):
     try:
         st = json.load(open(path, encoding="utf-8"))
     except FileNotFoundError:
-        return {"raw": raw, "offset": 0, "ids": [], "lengths": {}, "held": [], "layer_c": {}}
-    if st.get("raw") != raw:
-        raise Refused("state %s belongs to %s, not %s" % (path, st.get("raw"), raw))
+        return {"raw": identity(raw), "offset": 0, "ids": [], "lengths": {}, "held": [], "layer_c": {}}
+    if st.get("raw") != identity(raw):     # a GENUINE rename or a different file under one key: loud, never re-archived
+        raise Refused("state %s belongs to %s, not %s" % (path, st.get("raw"), identity(raw)))
     return st
 
 
@@ -136,16 +152,22 @@ def unlock(path):
         pass
 
 
-def recover(root, st):
-    """Cut each archive file back to its committed length: bytes past it were written by a run that never committed."""
+def recover(root, st, dry=False):
+    """Cut each archive file back to its committed length: bytes past it were written by a run that never committed.
+    With dry=True NOTHING is cut - it returns what WOULD be cut (Langston P5 must-fix 2: a dry run that mutates the
+    archive destroys exactly the evidence an operator inspects after a crash)."""
+    would = []
     for rel, n in st["lengths"].items():
         p = os.path.join(root, rel)
         size = os.path.getsize(p) if os.path.exists(p) else 0
         if size < n:
             raise Refused("%s is %d bytes, shorter than its committed %d - something else changed it; not repairing" % (p, size, n))
         if size > n:
-            with open(p, "r+b") as fh:
-                fh.truncate(n)
+            would.append((rel, size - n))
+            if not dry:
+                with open(p, "r+b") as fh:
+                    fh.truncate(n)
+    return would
 
 
 def read_new(raw, offset):
@@ -167,15 +189,29 @@ def header(rf, day):
             % (alias, nested, parent[:8], os.path.relpath(p, os.path.dirname(os.path.dirname(p)))))
 
 
-def archive_file(root, rf, red, now=None, dry=False):
+LINK = re.compile(r" → nested transcript `sub/([0-9A-Za-z-]{8})/(subagents__agent-[A-Za-z0-9_-]+)\.md`")
+
+
+def check_links(line, alias, nested):
+    """A link to a nested transcript is written only when that transcript is ON DISK (measured 2026-11-06: 20 of 266 agent
+    calls name an agent whose file is gone - trimmed). Otherwise the line says so, never a pointer nobody can follow."""
+    def sub(m):
+        if (alias, m.group(1), m.group(2)) in nested:
+            return m.group(0)
+        return " → nested transcript for agent `%s` is not on disk" % m.group(2)[len("subagents__agent-"):]
+    return LINK.sub(sub, line)
+
+
+def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
     """Archive the new bytes of one raw file. Returns a dict of what happened."""
     now = time.time() if now is None else now
     raw = rf[2]
     sp = state_path(root, rf)
-    lock(sp)
+    if not dry:          # a dry run writes NOTHING - not even a lock file or the .state folder
+        lock(sp)
     try:
         st = load_state(sp, raw)
-        recover(root, st)
+        would_cut = recover(root, st, dry=dry)
         lines, new_off = read_new(raw, st["offset"])
         ledger = {}
         ylds = list(dt.distill(lines, red, ledger=ledger))
@@ -197,21 +233,23 @@ def archive_file(root, rf, red, now=None, dry=False):
             if str(uid).startswith("queue:"):       # (2) a queued-only notice is HELD, not written yet
                 held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order)})
                 continue
-            out.append((ts, tuple(order), uid, line))
+            out.append((ts, tuple(order), uid, check_links(line, rf[0], nested)))
         # (3) release held notices whose hour has passed - on the session's clock, or of file quiet
         quiet = now - os.path.getmtime(raw) >= HOLD_S
         keep = []
         for h in held:
-            if quiet or (newest and _secs(newest) - _secs(h["ts"]) >= HOLD_S):
+            a, b = _secs(newest), _secs(h["ts"])
+            if quiet or (a is not None and b is not None and a - b >= HOLD_S):
                 out.append((h["ts"], tuple(h["order"]), h["id"], h["line"]))
             else:
                 keep.append(h)
         out.sort(key=lambda x: (x[0], x[1]))
-        by_file = {}
+        by_file, day_of = {}, {}
         for ts, _o, uid, line in out:
             by_file.setdefault(target(rf, ts[:10] or "undated"), []).append((uid, line))
+            day_of[target(rf, ts[:10] or "undated")] = ts[:10] or "undated"
         if dry:
-            return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep)}
+            return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "would_cut": would_cut}
         state_line = red.layer_c_state()
         # INTENT FIRST: record every target's length BEFORE this run writes to it, under the OLD offset. A run that
         # dies mid-write then leaves a state whose lengths cover even a file it had just created (length 0), so the
@@ -225,7 +263,7 @@ def archive_file(root, rf, red, now=None, dry=False):
             os.makedirs(os.path.dirname(p), exist_ok=True)
             chunk = ""
             if not os.path.exists(p) or os.path.getsize(p) == 0:
-                chunk += header(rf, rel.split(os.sep)[-1][:10])
+                chunk += header(rf, day_of.get(rel, "undated"))
             if st["layer_c"].get(rel) != state_line:          # C-9: the state wherever it changes
                 chunk += state_line + "\n"
                 st["layer_c"][rel] = state_line
@@ -240,23 +278,27 @@ def archive_file(root, rf, red, now=None, dry=False):
         write_state(sp, st)
         return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "offset": new_off}
     finally:
-        unlock(sp)
+        if not dry:
+            unlock(sp)
 
 
 def _secs(ts):
+    """Seconds since the epoch for a UTC stamp - calendar.timegm, never time.mktime, which reads it as LOCAL time and
+    collapses a daylight-saving fold (Langston P5 must-fix 4). None when unreadable, so the caller HOLDS."""
     try:
-        return time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))
-    except ValueError:
-        return 0.0
+        return calendar.timegm(time.strptime(str(ts)[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, TypeError):
+        return None
 
 
 def archive_all(root, projects, red, now=None, dry=False):
     rfs = raw_files(projects)
     check_injective(rfs)                    # BEFORE any write (C-5)
+    nested = frozenset((rf[0], rf[4][:8], rf[5]) for rf in rfs if rf[1] == "sub")
     results, refused = [], []
     for rf in rfs:
         try:
-            results.append(archive_file(root, rf, red, now=now, dry=dry))
+            results.append(archive_file(root, rf, red, now=now, dry=dry, nested=nested))
         except Refused as e:
             refused.append(str(e))
     return results, refused
@@ -270,7 +312,11 @@ def main(argv):
     opts, it = {}, iter(argv[1:])
     for a in it:
         if a in ("--root", "--projects", "--hashes", "--key-file"):
-            opts[a] = next(it, None)
+            v = next(it, None)
+            if v is None or v.startswith("--"):     # never degrade a privacy control on a missing value (must-fix 3)
+                sys.stderr.write("REFUSED: %s needs a value\n" % a)
+                return 2
+            opts[a] = v
         elif a == "--dry-run":
             opts[a] = True
         else:
