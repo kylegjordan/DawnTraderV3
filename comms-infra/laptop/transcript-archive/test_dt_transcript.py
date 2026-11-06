@@ -291,5 +291,47 @@ ok("two text blocks in ONE assistant entry: both present, verbatim, in order, as
    [l.strip() for l in m1 if "Session:" in l] == ["**[09:00:06] Session:** First piece of the reply.",
                                                   "**[09:00:06] Session:** Second piece of the reply."], m1)
 
+print("4c. P5: an exact-millisecond tie keeps raw order; a queued notice with no delivered copy is kept (Langston P4)")
+TT = "2026-11-06T10:00:00.000Z"
+raw5 = [
+    {"type": "assistant", "uuid": "k1", "timestamp": TT, "message": {"content": [
+        {"type": "tool_use", "id": "t7", "name": "Bash", "input": {"command": "ls", "description": "Action that came first"}}]}},
+    {"type": "assistant", "uuid": "k2", "timestamp": TT, "message": {"content": [{"type": "text", "text": "Reply that came second."}]}},
+]
+red = dt.Redactor()
+o5 = [x[2] for x in sorted(dt.distill([json.dumps(e) for e in raw5], red), key=lambda x: (x[1], x[3]))]
+ok("on an exact-millisecond tie the action that came first stays first",
+   len(o5) == 2 and "Action that came first" in o5[0] and "Reply that came second" in o5[1], o5)
+ok("every yielded tuple carries an order key", all(len(x) == 4 for x in dt.distill([json.dumps(e) for e in raw5], dt.Redactor())))
+QN = TN.replace("Re-arm the wake watcher\" completed (exit code 0)", "Re-arm the wake watcher\" failed with exit code 4")
+raw6 = [
+    {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-11-06T10:00:01.000Z", "content": TN},
+    {"type": "queue-operation", "operation": "dequeue", "timestamp": "2026-11-06T10:00:01.050Z"},
+    {"type": "user", "uuid": "d1", "timestamp": "2026-11-06T10:00:01.100Z", "message": {"content": TN}},
+    {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-11-06T10:00:02.000Z", "content": QN},
+    {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-11-06T10:00:03.000Z", "content": TN},
+    {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-11-06T10:00:04.000Z", "content": "typed while busy"},
+]
+y6 = list(dt.distill([json.dumps(e) for e in raw6], dt.Redactor()))
+o6 = [x[2] for x in sorted(y6, key=lambda x: (x[1], x[3]))]
+q = [l for l in o6 if "queued; no delivered copy" in l]
+ok("a queued notice whose copy WAS delivered is not repeated", not any("10:00:01" in l and "queued" in l for l in o6), o6)
+ok("a queued notice with NO delivered copy is kept, labelled, with its summary",
+   any("[10:00:02] Wake — task notice (queued; no delivered copy in this file):** Background command \"Re-arm the wake watcher\" failed with exit code 4" in l for l in q), q)
+ok("delivery is a MULTISET: the same notice queued twice and delivered once shows once as queued-only",
+   sum("[10:00:03]" in l for l in q) == 1, q)
+ok("a queued non-notice is kept as a queued user line", any("[10:00:04] User (queued; no delivered copy in this file):** typed while busy" in l for l in q), q)
+ids = [x[0] for x in y6 if str(x[0]).startswith("queue:")]
+ok("a queued-only line carries a stable synthetic id", len(ids) == 3 and
+   ids == [x[0] for x in dt.distill([json.dumps(e) for e in raw6], dt.Redactor()) if str(x[0]).startswith("queue:")], ids)
+ok("a queued-only line outside the window is not emitted",
+   not [x for x in dt.distill([json.dumps(e) for e in raw6], dt.Redactor(), since="2026-11-06T10:00:05") if str(x[0]).startswith("queue:")])
+ok("a delivery OUTSIDE the window still counts as delivered",
+   not [x for x in dt.distill([json.dumps(e) for e in (raw6[2], raw6[4])], dt.Redactor(), since="2026-11-06T10:00:02.500Z")
+        if str(x[0]).startswith("queue:")])
+ok("...and the same pair with NO delivery does emit it (the control)",
+   len([x for x in dt.distill([json.dumps(raw6[4])], dt.Redactor(), since="2026-11-06T10:00:02.500Z")
+        if str(x[0]).startswith("queue:")]) == 1)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

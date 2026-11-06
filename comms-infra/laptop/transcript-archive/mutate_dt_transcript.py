@@ -51,6 +51,17 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("P5: tie order key dropped (actions back to last)", replace("pending[b.get(\"id\")] = [uid, ts, line[0], (li, bi)]",
+                                                                 "pending[b.get(\"id\")] = [uid, ts, line[0], (10 ** 9, 0)]")),
+    ("P5: queued notices never kept", replace("            queued.append((ts, li, e[\"content\"]))\n", "")),
+    ("P5: queued notice kept even when delivered", replace("        if delivered.get(k, 0) > 0:\n            delivered[k] -= 1\n            continue\n", "")),
+    ("P5: delivery a set, not a multiset", replace("            delivered[k] -= 1\n", "")),
+    ("P5: queued notice ignores the window", replace(
+        "        if (since and ts < since) or (until and ts >= until):\n            continue\n        hhmm = ts[11:19] if len(ts) >= 19 else ts\n        qid",
+        "        hhmm = ts[11:19] if len(ts) >= 19 else ts\n        qid")),
+    ("P5: deliveries counted only inside the window", replace(
+        "        if typ == \"user\" and not e.get(\"isCompactSummary\"):\n            for b in _blocks(",
+        "        if typ == \"user\" and not e.get(\"isCompactSummary\") and not ((since and ts < since) or (until and ts >= until)):\n            for b in _blocks(")),
     ("P5: wake notices never folded", replace("    if not blocks or TASK_NOTICE.sub(\"\", text).strip():", "    if True:")),
     ("P5: a person's words folded into a wake", replace("    if not blocks or TASK_NOTICE.sub(\"\", text).strip():", "    if not blocks:")),
     ("P5: only the first of two notices kept", replace('    return "task notice:** " + " | ".join(parts)', '    return "task notice:** " + parts[0]')),

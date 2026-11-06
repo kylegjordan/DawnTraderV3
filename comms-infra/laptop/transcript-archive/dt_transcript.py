@@ -15,12 +15,17 @@ WHAT IS KEPT (pre-audit A1, A1b, P2):
   * a user turn that is NOTHING BUT automatic task notices (`<task-notification>`) as ONE `Wake — task notice` line:
     its time, that it was a wake, and each notice's summary (Kyle via PM Claude, 2026-11-06 — the readable copy only;
     a turn that also holds anything else is written in full, so a person's words are never folded into a wake);
+  * a QUEUED notice (`queue-operation` `enqueue`) whose text never arrives on a uuid-bearing user entry in the lines
+    read, labelled `queued; no delivered copy in this file`, under a stable synthetic id (Langston P4: 1 of 16 that
+    day, the only failure notice, had no other carrier);
   * compaction summaries whole (`isCompactSummary`);
   * ONE LINE PER ACTION — each `tool_use`: time · tool · its own description (Bash `description`), else the file path,
     else the first line of the command or prompt, cut to one line; plus ` ERROR: <first line>` when the matching
     `tool_result` has `is_error`;
   * `system` `api_error` / `model_refusal_fallback` and `attachment` `hook_non_blocking_error` as one line.
-WHAT IS DROPPED: `thinking`, tool output, every entry type without a `uuid`, `api-request-blob` (copies of the
+ONE REPLY IN TWO TEXT BLOCKS (around a tool call, or in one entry) is written as two `Session:` paragraphs at their own
+times, each verbatim — by choice, not joined (Langston P4: works as designed; the archive owner keeps it).
+WHAT IS DROPPED: `thinking`, tool output, every entry type without a `uuid` (except the queued notice above), `api-request-blob` (copies of the
 conversation), every other `attachment` type (harness-injected context). Images become `[image]`.
 
 REDACTION (P3), applied to every string before it is written, in this order:
@@ -249,24 +254,37 @@ def wake_line(text, redact):
 
 
 def distill(lines, redact, since=None, until=None, dropped=None):
-    """lines: an iterable of raw .jsonl lines. Yields (uuid, timestamp, markdown_line); every yielded line comes from
-    an entry that has a uuid (A1). Action lines are yielded at the end, once their results (and any ERROR) are known;
+    """lines: an iterable of raw .jsonl lines. Yields (uuid, timestamp, markdown_line, order); every yielded line
+    comes from an entry that has a uuid (A1) - except a QUEUED notice with no delivered copy, which gets a stable
+    synthetic id `queue:<sha256[:16]>` (Langston P4 finding). `order` is (raw line index, block index): sort by
+    (timestamp, order) so an exact-millisecond tie keeps the raw order (Langston P4 latent). Action lines are yielded at the end, once their results (and any ERROR) are known;
     the caller orders by timestamp. `dropped` (a dict) counts every uuid-bearing entry that matched no keep rule,
     keyed type[:subtype], so a format change shows up as a number instead of a silent loss (Langston C-5)."""
     dropped = {} if dropped is None else dropped
 
     def drop(key):
         dropped[key] = dropped.get(key, 0) + 1
-    pending = {}   # tool_use_id -> (uuid, ts, text) awaiting its result, so an ERROR can be appended
+    pending = {}
+    queued = []                 # (ts, li, content) of every queue-operation enqueue
+    delivered = {}              # stripped user text -> times it arrived on a uuid-bearing entry (ANY time, not only the window)   # tool_use_id -> (uuid, ts, text) awaiting its result, so an ERROR can be appended
     order = []
-    for raw in lines:
+    for li, raw in enumerate(lines):
         try:
             e = json.loads(raw)
         except ValueError:
             continue
         uid, ts, typ = e.get("uuid"), e.get("timestamp") or "", e.get("type")
+        if typ == "queue-operation" and e.get("operation") == "enqueue" and isinstance(e.get("content"), str) \
+                and e["content"].strip():
+            queued.append((ts, li, e["content"]))
+            continue
         if not uid:
             continue
+        if typ == "user" and not e.get("isCompactSummary"):
+            for b in _blocks((e.get("message") or {}).get("content") if isinstance(e.get("message"), dict) else None):
+                if b.get("type") == "text" and b.get("text", "").strip():
+                    k = b["text"].strip()
+                    delivered[k] = delivered.get(k, 0) + 1
         # The uuid gate above is what drops api-request-blob (copies of the conversation, A1): Langston measured three
         # real ones across 7,375 transcripts and none carries a uuid. "Only the types below emit" is the backstop.
         if (since and ts < since) or (until and ts >= until):
@@ -278,21 +296,21 @@ def distill(lines, redact, since=None, until=None, dropped=None):
             if not text.strip():
                 drop("user:compact-summary-empty")       # counted OR emitted, never both (Langston r2 nit)
                 continue
-            yield uid, ts, "\n> **[%s] compaction summary**\n>\n> %s\n" % (hhmm, redact(text).replace("\n", "\n> "))
+            yield uid, ts, "\n> **[%s] compaction summary**\n>\n> %s\n" % (hhmm, redact(text).replace("\n", "\n> ")), (li, 0)
             continue
         if typ == "user":
             emitted = False
-            for b in _blocks(msg.get("content")):
+            for bi, b in enumerate(_blocks(msg.get("content"))):
                 if b.get("type") == "text" and b.get("text", "").strip():
                     emitted = True
                     wake = wake_line(b["text"], redact)
                     if wake:
-                        yield uid, ts, "\n**[%s] Wake — %s\n" % (hhmm, wake)
+                        yield uid, ts, "\n**[%s] Wake — %s\n" % (hhmm, wake), (li, bi)
                     else:
-                        yield uid, ts, "\n**[%s] User:** %s\n" % (hhmm, redact(b["text"]).strip())
+                        yield uid, ts, "\n**[%s] User:** %s\n" % (hhmm, redact(b["text"]).strip()), (li, bi)
                 elif b.get("type") == "image":
                     emitted = True
-                    yield uid, ts, "**[%s] User:** [image]" % hhmm
+                    yield uid, ts, "**[%s] User:** [image]" % hhmm, (li, bi)
                 elif b.get("type") == "tool_result" and b.get("is_error"):
                     p = pending.get(b.get("tool_use_id"))
                     body = b.get("content")
@@ -304,24 +322,24 @@ def distill(lines, redact, since=None, until=None, dropped=None):
                 drop("user:other")
             continue
         if typ == "assistant":
-            for b in _blocks(msg.get("content")):
+            for bi, b in enumerate(_blocks(msg.get("content"))):
                 if b.get("type") == "text" and b.get("text", "").strip():
-                    yield uid, ts, "\n**[%s] Session:** %s\n" % (hhmm, redact(b["text"]).strip())
+                    yield uid, ts, "\n**[%s] Session:** %s\n" % (hhmm, redact(b["text"]).strip()), (li, bi)
                 elif b.get("type") == "tool_use":
                     line = ["- `%s` %s — %s" % (hhmm, b.get("name", "?"),
                                                  one_line(redact(action_summary(b.get("name"), b.get("input")))))]
-                    pending[b.get("id")] = [uid, ts, line[0]]
+                    pending[b.get("id")] = [uid, ts, line[0], (li, bi)]
                     order.append(b.get("id"))
             continue
         if typ == "system" and e.get("subtype") in ("api_error", "model_refusal_fallback", "informational"):
-            yield uid, ts, "- `%s` [%s] %s" % (hhmm, e.get("subtype"), one_line(redact(str(e.get("content", ""))), 160))
+            yield uid, ts, "- `%s` [%s] %s" % (hhmm, e.get("subtype"), one_line(redact(str(e.get("content", ""))), 160)), (li, 0)
             continue
         if typ == "attachment":
             a = e.get("attachment") if isinstance(e.get("attachment"), dict) else {}
             if a.get("type") == "queued_command":
-                yield uid, ts, "\n**[%s] User (queued):** %s\n" % (hhmm, redact(str(a.get("prompt") or a.get("content") or "")).strip())
+                yield uid, ts, "\n**[%s] User (queued):** %s\n" % (hhmm, redact(str(a.get("prompt") or a.get("content") or "")).strip()), (li, 0)
             elif a.get("type") == "hook_non_blocking_error":
-                yield uid, ts, "- `%s` [hook error] %s" % (hhmm, one_line(redact(str(a.get("content") or a.get("stderr") or "")), 160))
+                yield uid, ts, "- `%s` [hook error] %s" % (hhmm, one_line(redact(str(a.get("content") or a.get("stderr") or "")), 160)), (li, 0)
             else:
                 drop("attachment:%s" % a.get("type"))
             continue
@@ -329,7 +347,26 @@ def distill(lines, redact, since=None, until=None, dropped=None):
     for tid in order:
         p = pending.get(tid)
         if p:
-            yield p[0], p[1], p[2]
+            yield p[0], p[1], p[2], p[3]
+    # A QUEUED NOTICE THAT NEVER ARRIVED ON A uuid-BEARING ENTRY (Langston P4 finding: 1 of 16 that day, the only
+    # failure notice). Matched as a multiset on the stripped text against deliveries anywhere in the file read.
+    # Limit, stated: a delivery that lies OUTSIDE the lines handed in (a later file, bytes not yet read) is unseen,
+    # so such a notice shows as queued-only here and as delivered where its copy is.
+    for ts, li, content in queued:
+        k = content.strip()
+        if delivered.get(k, 0) > 0:
+            delivered[k] -= 1
+            continue
+        if (since and ts < since) or (until and ts >= until):
+            continue
+        hhmm = ts[11:19] if len(ts) >= 19 else ts
+        qid = "queue:" + hashlib.sha256((ts + "\0" + content).encode("utf-8")).hexdigest()[:16]
+        w = wake_line(content, redact)
+        if w:
+            line = "\n**[%s] Wake — %s\n" % (hhmm, w.replace("task notice:**", "task notice (queued; no delivered copy in this file):**", 1))
+        else:
+            line = "\n**[%s] User (queued; no delivered copy in this file):** %s\n" % (hhmm, redact(content).strip())
+        yield qid, ts, line, (li, 0)
 
 
 def main(argv):
@@ -373,7 +410,8 @@ def main(argv):
     print(red.layer_c_state())
     dropped = {}
     with open(path, encoding="utf-8", errors="replace") as fh:
-        for _uid, _ts, line in sorted(distill(fh, red, opts.get("--since"), opts.get("--until"), dropped), key=lambda x: x[1]):
+        for _uid, _ts, line, _o in sorted(distill(fh, red, opts.get("--since"), opts.get("--until"), dropped),
+                                          key=lambda x: (x[1], x[3])):
             print(line)
     sys.stderr.write("redactions: %s\n" % json.dumps(red.counts, sort_keys=True))
     sys.stderr.write("dropped (uuid-bearing, no keep rule): %s\n" % json.dumps(dropped, sort_keys=True))
