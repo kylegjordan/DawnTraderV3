@@ -38,7 +38,7 @@ Step 1 scope r2 APPROVED · Step 2 APPROVED 2026-10-01T22:12Z (C4-C7) · Step 4 
 ## 6. New findings / dispositions
 - **The `clamp_no_bid` arm has no age term** — `DISPOSITION: added to B-SHADOW-HOLD-CLOCK (row 4c, #1144)`.
 - **A 60× burst in xStock shadow minting on 10-07..10-09, cause unestablished** — surfaced by Langston to Kyle; not this batch's to place.
-- **An open STRK/USD VTS trade has had no transactable side for ~30 h** — the batch's subject arriving live; its 7-day max-hold falls 2026-11-11 17:24Z (change list observation datum). `DISPOSITION: folded into this batch's record — read at its max-hold.`
+- **An open STRK/USD VTS trade has had no transactable side for ~30 h** — the batch's subject arriving live; its 7-day max-hold falls 2026-11-11 17:24Z (change list observation datum). `DISPOSITION: folded into this batch's record — read at its max-hold`, carried by scheduled alert `00b727aa-e1b6-4277-902f-4c6f628c167f` (Langston's Step-8 condition).
 - **The collision re-audit alert never existed** — `DISPOSITION: folded into this batch`; armed 2026-11-06 (`53ec89a7-b481-47e8-841e-c8fcadfb825a`, 2027-01-01, dedupe `collision-set-reaudit`).
 
 ## 7. Governance ledger
@@ -54,7 +54,7 @@ CHANGE-CLASS: `architecture`
 | T1 | the batch SCOPE | ✅ | written at Step 1 |
 | T1 | the batch PRE_AUDIT | ✅ | written at Step 2 |
 | T1 | COMPLETION_REPORT | ✅ | this file |
-| T1 | Observation column | ✅ | the pre-registered first-weekend reads (c) and (f), read 2026-11-05; the STRK max-hold 2026-11-11 is a datum, not a gate |
+| T1 | Observation column | ✅ | the pre-registered first-weekend reads (c) and (f), read 2026-11-05; the STRK max-hold 2026-11-11 is a datum, not a gate, carried by scheduled alert `00b727aa-e1b6-4277-902f-4c6f628c167f` (2026-11-11T17:30Z) |
 | T1 | the four session task lists | ✅ mine / N/A ×3 | CC-C: row 4 at Step 11 |
 | T1 | Langston's MEMORY.md | ✅ | the valve section collapsed to a pointer at Step 11 — part `37721052e210`→`95fcbfdffd24`, −3,291 B; loaded set 140,415 B against the 143,856 ceiling |
 | T2 | SYSTEM_MANUAL.md | ✅ | §18.0.1: the VTS crypto booking cell corrected, and a paragraph on unpriced closes, the weekend skip, the carried class and the re-audit |
