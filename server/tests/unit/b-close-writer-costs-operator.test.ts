@@ -8,6 +8,8 @@
 //             atomic insert losing a race.
 //   S-10..S-12 Langston Part B conditions: a null entry fee or slippage is REFUSED, never a fabricated zero (S-10, S-11);
 //             the six regime stamps are promoted from the position's metadata, malformed values staying NULL (S-12).
+//   K-1..K-5  Langston Part C NEW-1: a record resolved BY KEY has its id stamped back onto the position (K-1..K-3), at both
+//             resolve sites and before the record is finished (K-4), so a later restore refuses instead of double-booking (K-5).
 //   O-1..O-2  closeOnePositionByOperator: not found, and the one chain with the operator's tag and 'manual_stop'.
 // POSITIVE CONTROLS (mutation-proved while writing): returning 409 for a refusal fails R-2; dropping `error` from the
 // partial-clear body fails R-4; omitting chosenEntryMode from the restore fails S-6; the pending branch refusing fails S-8.
@@ -25,7 +27,7 @@ const st = vi.hoisted(() => ({
 vi.mock('../../storage', () => ({ storage: st }));
 
 import { engineNotRunningResponse, manualCloseResponse, closeAllResponse } from '../../services/operator-close-response';
-import { restoreOpenTradeRecord } from '../../services/trade-record-restore';
+import { restoreOpenTradeRecord, stampPositionTradeId } from '../../services/trade-record-restore';
 import { ActivePortfolioManager } from '../../services/active-portfolio-manager';
 
 beforeEach(() => {
@@ -185,6 +187,41 @@ describe('S — the restore service', () => {
       regimeConfidenceRaw: null, macroModifierValue: 1.0, phase: null, phaseAgeSeconds: null,
       strategyPhaseWeight: null, regimeConfidenceModulated: null,
     });
+  });
+});
+
+describe('K — the record id is stamped back when a record resolves by key (Langston Part C NEW-1)', () => {
+  it('K-1 a position without the id: written to storage and to the in-memory position', async () => {
+    const pos: any = { id: 'pos-1', symbol: 'ETH/USD', metadata: { origin: 'x' } };
+    expect(await stampPositionTradeId('paper', pos, 'rec-9')).toBe(true);
+    expect(st.updateActiveOpenPosition).toHaveBeenCalledWith('paper', 'pos-1', { metadata: { origin: 'x', tradeId: 'rec-9' } });
+    expect(pos.metadata.tradeId).toBe('rec-9');
+  });
+  it('K-2 already stamped with the same id: no write', async () => {
+    expect(await stampPositionTradeId('paper', { id: 'pos-1', metadata: { tradeId: 'rec-9' } }, 'rec-9')).toBe(true);
+    expect(st.updateActiveOpenPosition).not.toHaveBeenCalled();
+  });
+  it('K-3 a failed write is logged and returns false — it never throws into the close', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    st.updateActiveOpenPosition.mockRejectedValue(new Error('db down'));
+    await expect(stampPositionTradeId('paper', { id: 'pos-1', metadata: {} }, 'rec-9')).resolves.toBe(false);
+  });
+  it('K-4 both key-resolve sites stamp, and the stop flow stamps BEFORE finishing the record', () => {
+    const eng = readFileSync(resolve(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
+    const resolver = eng.slice(eng.indexOf('private async _resolveOpenTradeRecord'), eng.indexOf('private async _refuseUnresolvedRecord'));
+    expect(resolver).toContain('await stampPositionTradeId(this.mode, position, rec.record.id);');
+    const svc = readFileSync(resolve(__dirname, '../../services/active-engine-service.ts'), 'utf8');
+    const stamp = svc.indexOf("await stampPositionTradeId('paper', orphan, _orec.id);");
+    const finish = svc.indexOf("closeStaleRecordAtReference('paper', _orec)");
+    expect(stamp).toBeGreaterThan(0);
+    expect(finish).toBeGreaterThan(stamp);
+  });
+  it('K-5 the composed path: a stamped position whose record was finished is REFUSED by the restore, nothing inserted', async () => {
+    st.getActiveOpenPosition.mockResolvedValue({ ...POSITION, metadata: { tradeId: 'rec-9' } });
+    st.findOpenTradeRecord.mockResolvedValue({ status: 'none' });
+    st.getClosedTrade.mockResolvedValue({ id: 'rec-9', closedAt: new Date() });
+    expect(await restoreOpenTradeRecord('paper', 'pos-1', 'cc-a')).toMatchObject({ ok: false, code: 409, recordId: 'rec-9' });
+    expect(st.insertOpenTradeRecordIfNoneOpen).not.toHaveBeenCalled();
   });
 });
 
