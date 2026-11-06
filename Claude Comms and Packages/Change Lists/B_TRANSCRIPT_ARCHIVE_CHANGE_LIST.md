@@ -43,3 +43,8 @@ Tool: `comms-infra/laptop/transcript-archive/p1_restore_proof.py` (stdlib, `pyth
 - **Residuals, disclosed in the module docstring (no code):** flags (`--password x`, `-p x`) are not caught by name; a value with a space inside an unclosed or odd quote leaves the tail; an unquoted JSON value is over-redacted.
 - **C-7/C-8 accepted by him** (each fenced form walked by hand); **C-9 agreed as the P5 gate**; nits confirmed.
 - **Tests 0 failed; mutations 25/25** (two new: prefix tolerance removed, `NOPASSWD` exception removed). Code at `3f5243e66`.
+
+## Step 4 on P2/P3 — PROCEED (Langston msg `1568295346638028882`, at `3f5243e66` / `aa82eec5f`; his runs 0 failed, 25/25)
+He re-derived all six prefixed forms (each counted under its own name), `PASSWORD_HASH_ALGO=` and `DB_PASSWORD_FILE=` left alone, the docstring limits, and the `\b` inside `(?!NOPASSWD\b)` (so `NOPASSWD_DB_PASSWORD=` is still redacted — measured). **Residuals:**
+1. `NOPASSWD=x` / `NOPASSWD -> x` also pass — **disposition 5, no work**: sudoers' only form is `NOPASSWD:` and nothing writes a secret under that name.
+2. **The counts key is transcript-derived and unbounded** (`hunter2PASSWORD=x` → `named:HUNTER2PASSWORD`). **An item on P5** (this batch, mine): the writer assumes no bounded key set, and any per-kind counts published where Kyle reads are folded to the LISTED name, not the matched one.
