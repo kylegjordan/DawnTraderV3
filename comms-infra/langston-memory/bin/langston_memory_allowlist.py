@@ -24,7 +24,8 @@ POSITIVE = re.compile(r"[1-9][0-9]{0,5}")
 
 # flag -> the kind of value it takes (None = a switch)
 FLAGS = {"--expect-sha": "sha", "--ledger-delta": "int", "--retractions-delta": "int", "--entries": "positive",
-         "--reason": "text", "--by": "text", "--part": "part", "--ledger-append": None, "--compose": None}
+         "--reason": "text", "--by": "text", "--part": "part", "--ledger-append": None, "--compose": None,
+         "--retry-part": None}     # B-LANGSTON-TWO-WORKERS P4: a whole-part write that merges a disjoint intervening write
 
 # shape -> (required, optional). ⛔ STRUCK (Langston Step-4 C-2): --dry-run (the writer accepts it only with --trim,
 # which is root-only, so it could only ever return exit 2 - a line that reads as a capability and is one coupling change
@@ -32,7 +33,7 @@ FLAGS = {"--expect-sha": "sha", "--ledger-delta": "int", "--retractions-delta": 
 # and ignores --part, which parse_args does not refuse: an ignored flag answered exit 0).
 SHAPES = {
     "append": ({"--expect-sha", "--ledger-append", "--entries", "--reason"}, {"--by"}),
-    "whole": ({"--expect-sha", "--ledger-delta", "--retractions-delta", "--reason"}, {"--part", "--by"}),
+    "whole": ({"--expect-sha", "--ledger-delta", "--retractions-delta", "--reason"}, {"--part", "--by", "--retry-part"}),
     "compose": ({"--compose", "--reason"}, {"--by"}),
 }
 

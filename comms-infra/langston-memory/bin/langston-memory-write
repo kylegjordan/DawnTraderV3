@@ -107,7 +107,7 @@ PART_FRONTMATTER_RE = re.compile(r"\A<!-- part\n.*?\n-->\n", re.DOTALL)   # opti
 READER = os.environ.get("LANGSTON_MEMORY_READER", "/opt/langston-memory/bin/langston_memory.py")
 ANCHOR = "### Rulings of mine that GENERALISE"
 LEDGER_HEADING = re.compile(r"^## .*REVIEWER LEDGER")
-KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth", "--allow-shrink")
+KNOWN_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--ledger-append", "--entries", "--by", "--reason", "--compose", "--part", "--rename-part", "--to", "--split-ledger", "--trim", "--dry-run", "--allow-growth", "--allow-shrink", "--retry-part")
 VALUE_FLAGS = ("--expect-sha", "--ledger-delta", "--retractions-delta", "--entries", "--by", "--reason", "--part", "--rename-part", "--to", "--allow-growth", "--allow-shrink")
 NL = chr(10)
 ARCHIVE_NAME_RE = re.compile(r"[0-9a-f]{64}\.md")
@@ -397,6 +397,13 @@ def parse_args(argv):
             if bad in out:
                 raise Refused(2, "REFUSED: %s does not apply to --split-ledger (a one-time move of the Retractions block "
                                  "to LEDGER.md; the stub arrives on stdin)" % bad)
+    if out.get("--retry-part"):
+        for bad in ("--ledger-append", "--compose", "--trim", "--split-ledger", "--rename-part", "--to", "--entries"):
+            if bad in out:
+                raise Refused(2, "REFUSED: --retry-part applies only to a whole-part write (--expect-sha with "
+                                 "--ledger-delta and --retractions-delta), not with %s" % bad)
+        if str(out.get("--expect-sha", "")).strip().lower() == "new":
+            raise Refused(2, "REFUSED: --retry-part does not apply to creating a part (--expect-sha new)")
     if "--rename-part" in out or "--to" in out:
         if ("--rename-part" in out) != ("--to" in out):
             raise Refused(2, "REFUSED: --rename-part and --to must be given together (rename OLD --to NEW)")
@@ -616,6 +623,52 @@ def open_lock():
         os.close(fd)
         raise
     return fd
+
+
+def archived_version(want_sha):
+    """The archived bytes whose sha256 is want_sha, or None. Verified by re-hashing, never trusted by name."""
+    if not re.fullmatch(r"[0-9a-f]{64}", want_sha or ""):
+        return None
+    path = os.path.join(ARCHIVE_DIR, want_sha + ".md")
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return None
+    return data if sha(data) == want_sha else None
+
+
+def unified(a_bytes, b_bytes, a_name, b_name, limit=4000):
+    import difflib
+    if a_bytes is None:
+        return "(the version you read is not in the archive, so the change cannot be shown)"
+    d = "".join(difflib.unified_diff(a_bytes.decode("utf-8").splitlines(True), b_bytes.decode("utf-8").splitlines(True),
+                                     a_name, b_name, n=1))
+    return d if len(d) <= limit else d[:limit] + "\n... (%d more chars)" % (len(d) - limit)
+
+
+def merge3(base, ours, theirs):
+    """Three-way merge of whole lines: apply ours' and theirs' changes to base when they touch DIFFERENT base lines.
+    Returns (merged_text, None) or (None, 'a description of the overlap'). An insertion at the same point counts as an
+    overlap. Pure, no subprocess - the one writer must never be the one corrupting the file."""
+    import difflib
+    b = base.splitlines(True)
+    edits = []
+    for who, other in (("yours", ours.splitlines(True)), ("theirs", theirs.splitlines(True))):
+        for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, b, other, autojunk=False).get_opcodes():
+            if tag != "equal":
+                edits.append((i1, i2, other[j1:j2], who))
+    edits.sort(key=lambda e: (e[0], e[1]))
+    for x, y in zip(edits, edits[1:]):
+        if x[3] != y[3] and (y[0] < x[1] or (x[0] == y[0])):
+            return None, "base lines %d-%d (%s) and %d-%d (%s)" % (x[0] + 1, x[1], x[3], y[0] + 1, y[1], y[3])
+    out, pos = [], 0
+    for i1, i2, repl, _who in edits:
+        out.extend(b[pos:i1])
+        out.extend(repl)
+        pos = i2
+    out.extend(b[pos:])
+    return "".join(out), None
 
 
 def archive_old(old_bytes, old_sha):
@@ -1403,9 +1456,22 @@ def do_ledger_file_append(opts, content, n):
                              "counters would restart at zero). Restore it from .memory-archive/ and tell Infra Claude."
                           % LEDGER_FILE)
         old_sha = sha(old)
-        if old_sha != opts["--expect-sha"].strip().lower():
-            raise Refused(4, "REFUSED: --expect-sha does not match LEDGER.md (current sha256 %s, you passed %s). Since "
-                             "the split, --ledger-append takes LEDGER.md's sha, not the part's." % (old_sha, opts["--expect-sha"]))
+        expect = opts["--expect-sha"].strip().lower()
+        if old_sha != expect:
+            # B-LANGSTON-TWO-WORKERS AM-2 (Langston): the append is a TAIL append under this lock, so an intervening
+            #   append is absorbed by ONE deterministic re-read - but only when the file you read is an exact PREFIX of
+            #   the file now (nothing but appends landed), and it is said out loud, naming what arrived, so another
+            #   session's retraction is never buried silently. Anything else still refuses.
+            base = archived_version(expect)
+            if base is None or not old.startswith(base):
+                raise Refused(4, "REFUSED: --expect-sha does not match LEDGER.md (current sha256 %s, you passed %s). Since "
+                                 "the split, --ledger-append takes LEDGER.md's sha, not the part's. %s"
+                              % (old_sha, opts["--expect-sha"],
+                                 "The version you read is not in the archive." if base is None else
+                                 "LEDGER.md changed other than by an append since you read it - re-read it."))
+            arrived = old[len(base):].decode("utf-8")
+            sys.stderr.write("--ledger-append: absorbed %d B appended since your read (%s -> %s). What arrived:\n%s\n"
+                             % (len(arrived.encode("utf-8")), expect[:12], old_sha[:12], arrived[:4000]))
         reader = load_reader()
         s0, e0 = reader._parse_ledger(LEDGER_FILE)
         if s0 != "ok":
@@ -2187,9 +2253,28 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                                  "a whole-file write never creates a part implicitly." % part_path)
             part_old_sha = sha(part_old)
             if part_old_sha != expect:
-                raise Refused(4, "REFUSED: --expect-sha does not match the part it names. Compared against %s: its current "
-                                 "sha256 is %s, you passed %s. (Since P-2, --expect-sha is the PART's sha, not MEMORY.md's.)"
-                              % (part_path, part_old_sha, expect))
+                # B-LANGSTON-TWO-WORKERS P4 (Langston D-1, attack 1): another write landed between your read and this one.
+                #   Without --retry-part: refuse, and SHOW what landed (base = the archived version you read).
+                #   With --retry-part: merge your change and theirs when they touch different lines; refuse on overlap.
+                base = archived_version(expect)
+                landed = unified(base, part_old, "the part you read (%s)" % expect[:12], "the part now (%s)" % part_old_sha[:12])
+                if not opts.get("--retry-part") or append:
+                    raise Refused(4, "REFUSED: --expect-sha does not match the part it names. Compared against %s: its current "
+                                     "sha256 is %s, you passed %s. (Since P-2, --expect-sha is the PART's sha, not MEMORY.md's.) "
+                                     "Another write landed after you read it; what it changed:\n%s\nRe-run the SAME command "
+                                     "with --retry-part added: it keeps both changes when they touch different lines."
+                                  % (part_path, part_old_sha, expect, landed))
+                if base is None:
+                    raise Refused(4, "REFUSED: --retry-part cannot merge: the version you read (%s) is not in the archive, so "
+                                     "your change cannot be told apart from theirs. Re-read the part and re-apply." % expect)
+                merged, conflict = merge3(base.decode("utf-8"), content, part_old.decode("utf-8"))
+                if conflict:
+                    raise Refused(4, "REFUSED: --retry-part: your change and the intervening write touch the same lines (%s). "
+                                     "Nothing was written. What landed:\n%s\nRe-read the part (sha %s) and re-apply by hand."
+                                  % (conflict, landed, part_old_sha))
+                sys.stderr.write("--retry-part: absorbed an intervening write to %s (%s -> %s); kept both changes. "
+                                 "What it changed:\n%s\n" % (part_path, expect[:12], part_old_sha[:12], landed))
+                content = merged
         r_before = retraction_count(reader, TARGET)
         l_before = ledger_block_count(mem_old.decode("utf-8"))
         # FINDING-1 (Langston 21:22Z): a whole-file write that carries a stamp line is the composed file pasted where
