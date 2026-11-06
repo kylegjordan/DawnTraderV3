@@ -84,6 +84,20 @@ const POSITION = {
   metadata: { tradeId: 'gone-1', origin: 'x' },
 };
 
+describe('D — the Close All button sits behind its confirm (Langston KD-45 fold, condition 2)', () => {
+  it('D-1 the button is the dialog trigger, and onCloseAll is wired ONLY to the dialog action', () => {
+    const src = readFileSync(resolve(__dirname, '../../../client/src/components/trading/paper-open-trades-tab.tsx'), 'utf8');
+    const open = src.indexOf('<AlertDialogTrigger asChild>');
+    const close = src.indexOf('</AlertDialogTrigger>', open);
+    const btn = src.indexOf('data-testid="button-close-all"');
+    expect(open).toBeGreaterThan(0);
+    expect(btn).toBeGreaterThan(open);
+    expect(close).toBeGreaterThan(btn);
+    expect(src.match(/onClick=\{onCloseAll\}/g)?.length).toBe(1);
+    expect(src).toContain('<AlertDialogAction onClick={onCloseAll}>');
+  });
+});
+
 describe('S — the restore service', () => {
   it('S-1 position not found → 404', async () => {
     st.getActiveOpenPosition.mockResolvedValue(undefined);
