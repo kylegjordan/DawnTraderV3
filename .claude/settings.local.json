@@ -252,6 +252,11 @@
           },
           {
             "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/load-handoff.mjs\"",
+            "timeout": 180
+          },
+          {
+            "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/log-instructions-loaded.mjs\""
           }
         ]
