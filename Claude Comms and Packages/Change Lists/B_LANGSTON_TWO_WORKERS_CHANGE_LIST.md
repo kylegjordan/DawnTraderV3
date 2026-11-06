@@ -136,3 +136,6 @@ content = merged                                          # then the normal writ
 - **Install step 6 corrected** (the board is live, above).
 - **Step 4 is complete:** Langston part 1 PROCEED, part 2 PROCEED; Coltrane (1)-(4) PROCEED.
 
+## Folded from the fence batch's Step 8 (Langston, 2026-11-06)
+- **`--help`** (carry 4): `langston-memory-write --help` (sole argument) prints the tool's MODES and EXIT text and exits 0, before `run()` and its client branch — touching no file, lock or spool; MODES now describes `--retry-part`. Tested in `test_memory_retry.py` section 2.
+- **`run_memory_suites.sh`** (carry 3) now runs `mutate_memory_fence.py` too: **six PASS lines** on Helsinki 06:18Z (ledger split, fence, fence mutations 14/14, trim, retry, retry mutations 7/7).

@@ -41,6 +41,9 @@
 MODES
    whole file:     langston-memory-write --expect-sha SHA --ledger-delta L --retractions-delta R --by WHO --reason WHY < file
                    L = change in bullets across the whole REVIEWER LEDGER block; R = change in retraction entries.
+                   Refused with exit 4 because another write landed after you read the part? The refusal shows what
+                   landed. Re-run the SAME command with --retry-part added: it keeps both changes when they touch
+                   different lines, and refuses (writing nothing) when they touch the same lines or break a section.
    ledger append:  langston-memory-write --expect-sha SHA --ledger-append --entries N --by WHO --reason WHY < entries
                    both counters must move by exactly N. Rules for an appended entry (r7):
        (1) one entry = one '- ' at column 0; continuation lines indented, or led by '·';
@@ -2992,6 +2995,11 @@ def self_test():
 def main():
     if sys.argv[1:] == ["--self-test"]:          # FINDING-1: only as the sole argument, never a value elsewhere
         return self_test()
+    if sys.argv[1:] == ["--help"]:                # Langston, fence Step 8 carry 4: 4 of his 12 requests in one cycle were
+        # --help, refused (rc 2) through the spool. Answered HERE, before run() and its client branch, touching no file,
+        # lock or spool: it prints this tool's own MODES and EXIT text and exits 0. Only as the sole argument.
+        print(__doc__[__doc__.index("MODES"):].rstrip())
+        return 0
     argv = sys.argv[1:]
     # ⛔ --compose and --rename-part read NO stdin: they act on the parts, not on new content. Reading stdin here
     #    blocked a `--compose` invoked over ssh with no redirection (the channel never sends EOF) - a live hang the

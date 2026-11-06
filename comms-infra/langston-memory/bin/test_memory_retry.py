@@ -78,6 +78,11 @@ def main():
     except W.Refused as e:
         check("the writer refuses --retry-part on a create", "Refused %d" % e.code, "Refused 2")
 
+    import subprocess as _sp
+    p = _sp.run([sys.executable, os.path.join(HERE, "langston-memory-write"), "--help"], capture_output=True, timeout=60)
+    check("--help answers (exit 0) with the MODES text and --retry-part, touching nothing (fence Step 8 carry 4)",
+          (p.returncode, b"MODES" in p.stdout, b"--retry-part" in p.stdout), (0, True, True))
+
     print("3. a whole-part write that loses the race")
     h = T.Home()
     s0 = sha(rd(h.part))

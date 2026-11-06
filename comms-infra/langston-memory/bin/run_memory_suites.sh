@@ -12,7 +12,9 @@ set -u
 cd "$(dirname "$0")" || exit 2
 chmod 700 langston-memory-write 2>/dev/null
 fail=0
-for t in test_ledger_split.py test_memory_fence.py test_memory_trim.py test_memory_retry.py mutate_memory_retry.py; do
+# mutate_memory_fence.py added at the fence batch's Step 8 (Langston carry 3): it is the evidence that batch rests on.
+# test_memory_fence_root.py is NOT here: it needs a scratch filesystem and a stand-in account (its own header).
+for t in test_ledger_split.py test_memory_fence.py mutate_memory_fence.py test_memory_trim.py test_memory_retry.py mutate_memory_retry.py; do
   out=$(timeout 1800 python3 "$t" 2>&1); rc=$?
   last=$(printf '%s\n' "$out" | grep -v '^\s*$' | tail -1)
   if [ "$rc" = 0 ]; then echo "PASS $t  | $last"; else echo "FAIL $t (exit $rc) | $last"; fail=1; fi
