@@ -41,3 +41,8 @@ P5 install (chown of the live `.memory-archive/` first; old lock deleted; no two
 1. The ioctl-on-fd flag mechanism instead of `chattr` on a path.
 2. `--dry-run` is in A5's allowlist but the writer accepts it only with `--trim` (disallowed), so through the spool it can only ever return exit 2 — strike it from the allowlist, or leave it as harmless?
 3. A10 said `hand_to_owner()` "walks" a path chain; it does not — the check walks the writer, service and allowlist chains instead.
+
+## Step 7 — a test this batch broke and did not run (found 2026-11-06 at B-LANGSTON-TWO-WORKERS Step 3; §9.4 disposition 1, folded here)
+- **`test_memory_trim.py` has failed since `2a336946a` (this batch's Step 3).** That commit dropped `growth_gate`'s `st` argument and moved index writes behind the FENCE table, and the trim suite's LIVE-gate section was not updated: it called `growth_gate(..., st_, "test")` (a `TypeError`), and once that call was fixed its four LIVE checks still refused with exit 6, *"index.jsonl has no row in the FENCE table"*, because the table is built at import from the live home and the test re-points the module afterwards. The change list's line 30 recorded this file as "teardown only", and the suite is not in CI, so nothing caught it.
+- **Fix:** the call drops `st_`; after re-pointing the module the test rebuilds `g.FENCE = g.fence_table(h.top, g.OWNER)`. **Result: 62 PASS, 0 FAIL**, on the writer at HEAD and on the two-workers writer (Helsinki, as root).
+

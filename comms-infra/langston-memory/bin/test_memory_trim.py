@@ -273,7 +273,11 @@ def main():
     g.TARGET = h.mem
     g.ARCHIVE_INDEX = idx
     g.RATCHET_STATE = rs
-    st_ = os.stat(h.mem)
+    # B-LANGSTON-MEMORY-WRITE-FENCE: the FENCE table is built at import from LANGSTON_HOME, so after re-pointing the
+    # module at the test home the table must be rebuilt for it - else every index write refuses as "no row in the
+    # FENCE table" (exit 6) and the four LIVE checks below test that refusal instead of the gate (found at
+    # B-LANGSTON-TWO-WORKERS Step 3, 2026-11-06; failing since 2a336946a changed the gate's signature and this path).
+    g.FENCE = g.fence_table(h.top, g.OWNER)
     def live_gate(state):
         if state is None:
             if os.path.exists(rs):
@@ -281,7 +285,7 @@ def main():
         else:
             set_state(**state)
         try:
-            return ("PASSED", 0, "", g.growth_gate(b"a", b"ab", {"--by": "t", "--reason": "x"}, st_, "test"))
+            return ("PASSED", 0, "", g.growth_gate(b"a", b"ab", {"--by": "t", "--reason": "x"}, "test"))
         except g.Refused as e:
             return ("REFUSED", e.code, str(e), None)
     mine = g.watched_paths()
