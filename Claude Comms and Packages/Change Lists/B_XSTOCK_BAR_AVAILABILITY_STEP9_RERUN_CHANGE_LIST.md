@@ -49,3 +49,12 @@ All bar-availability unit files, the writer fence, the p4c guard, the actor allo
 - **C10 — cites re-pinned at the dispatch head `d2c12c731`, with text:** certify `xstock-bar-availability.ts:630` `SELECT * FROM certify_xstock_bar_revision_events(` (guard read `:637-638`); admit `:756` `SELECT admit_xstock_bar_projection_flush(`; apply `:785` `SELECT * FROM apply_xstock_bar_revision_flush(`; `timedLeg` `:52`; R1 `recordXstockLifecycleFailure` `:454`; R4 `recordCertificationFailureDay` `:524` and `resolveCertificationAlertIfClear` `:562`.
 - **C11 — R6b's denominator is per leg.** Expected samples are counted per leg from that leg's own firing rule (certify per first-pass certify and per repair with ids; admit and apply per non-empty xStock flush), never from the 5.07 s cycle cadence; an idle leg is not a gap. `guardWait` starts at the guard-wait migration's deploy; its own `n` is stated and it is never pooled with certify's.
 - **C12:** `guardWaitMs` is integer milliseconds (`round(… * 1000)`), so a 0 means under 0.5 ms, not "no wait".
+
+## R2 — re-register the graded window (CC-C, 2026-11-06; Step-4 PROCEED at `7acff9be6`, Langston `1568374387269435422`)
+- **Why:** the R6b read discharged (two sessions, every leg's p99 1.0-2.5 s, zero timeouts; stall basis UNESTABLISHED, carried) and the plan order opens the window next. Langston's C-2 moved the start to a Monday for two spare sessions.
+- `drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun.sql` (+ rollback, not in the MANIFEST): the one governed row `module_constants` `xstock_bar_availability/*/*/*/*/graded_window_start` → `"2026-11-09T00:05:00Z"`, `updated_by = 'b-xstock-bar-availability-r2-rerun'`; RAISES unless exactly one row changed. MANIFEST: last line.
+- `server/scripts/b-xstock-bar-availability-capacity-gate.ts:31` → `'2026-11-09T00:05:00.000Z'` (canonical — the gate compares it to the row's `toISOString()`), comment at `:28-30`; usage line `:8` moved.
+- `server/tests/unit/b-xstock-bar-availability-observation.test.ts`: the R2 case fences all three places (row, literal, usage line), the one-row guard, `updated_by`, the rollback value and the MANIFEST entry.
+- **Window:** start 2026-11-09T00:05Z; eight complete UTC days 11-10..11-17; seven sessions for the five required; read carrier event-wait alert `3306c5c3-70d7-44c8-8e6f-44bb728417e8` at 2026-11-18T00:15Z, before that day's 02:15Z retention sweep.
+- **Deploy:** in the 2026-11-07 joint deploy, migration 4 of 4 in MANIFEST order.
+

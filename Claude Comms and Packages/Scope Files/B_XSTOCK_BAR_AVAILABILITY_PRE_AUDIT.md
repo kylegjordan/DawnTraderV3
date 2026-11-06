@@ -482,9 +482,16 @@ At 18:05:26Z the TICKER archive writer (×2) and the OHLC archive writer logged 
 - **C-1 — the window start lives in THREE places:** the governed row `module_constants` `xstock_bar_availability/graded_window_start` (what the gate reads), the code literal `EXPECTED_GRADED_WINDOW_START` (compared against the row's `toISOString()`, so it must be canonical `…00:05:00.000Z`), and the `--window-start` argument (compared by `getTime()`). R2 moves the row AND the literal together.
 - **C-2 — start MONDAY, not Saturday.** From a Saturday start both legs have zero slack (8 complete UTC days and 5 sessions exactly), and one lost session is a FAIL needing a fresh window, not a delay. **R2 window: 2026-11-09T00:05:00Z; 8 complete UTC days 11-10..11-17; 7 sessions available for the 5 required; read at start + 9 d + 10 min = 2026-11-18T00:15Z (event-wait alert).** `584c0b2e` is already resolved with no dedupe key — nothing to supersede.
 
-### R2 BUILT (CC-C, 2026-11-06 ~22:10Z) — for Step 4
+### R2 BUILT (CC-C, 2026-11-06 ~21:10Z) — for Step 4
 - `drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun.sql` (+ rollback, not in the MANIFEST): updates exactly the one governed row to `"2026-11-09T00:05:00Z"`, `updated_by = 'b-xstock-bar-availability-r2-rerun'`, and RAISES unless exactly one row changed. MANIFEST entry added.
-- `server/scripts/b-xstock-bar-availability-capacity-gate.ts:28` → `'2026-11-09T00:05:00.000Z'` (canonical), with the move-together comment; the usage example moved too.
+- `server/scripts/b-xstock-bar-availability-capacity-gate.ts:31` (the literal; `:28-30` is the comment) → `'2026-11-09T00:05:00.000Z'` (canonical), with the move-together comment; the usage example moved too.
 - `server/tests/unit/b-xstock-bar-availability-observation.test.ts`: a new case asserts the literal, the row, and `new Date(row).toISOString() === literal`, the one-row guard, the distinct `updated_by`, the rollback value, and that the MANIFEST lists the forward file and not the rollback. 8/8 in the file; no `tsc` errors in the changed files.
-- **Deploy:** after the 11-07 joint deploy and before 2026-11-09T00:05Z; inside no window of its own (the row is read only by the gate at the read). R3's reviewed-build list starts with the joint deploy.
+- ~~**Deploy:** after the 11-07 joint deploy~~ **Deploy: IN the 2026-11-07 joint deploy (census row added) — registration must precede the window, and that is the only deploy before 11-09T00:05Z.** The row is read only by the manual gate (zero runtime readers, Langston's grep). R3's reviewed-build list starts with that build.
+
+### ✅ R2 STEP-4 PROCEED (Langston, Discord `1568374387269435422`, 2026-11-06)
+- **CI:** `7acff9be6`'s own four runs were CANCELLED by the next push; rule 19 is satisfied at head `10ecbc0b8` (4/4), all five files byte-identical (`cmp`).
+- **Condition 1 — the read carrier, DONE:** event-wait alert `3306c5c3-70d7-44c8-8e6f-44bb728417e8` minted 2026-11-06T21:20:42Z, `triggers_at` 2026-11-18T00:15:00Z, dedupe key `xstock-bar-availability-capacity-gate`, metadata naming the window, the read and `anchor_ref` `7acff9be6`; never acked.
+- **Condition 2 — `GOVERNANCE_EXCEPTIONS` declared-open row, DONE:** amended to the R2 window and the new carrier.
+- **Carried:** (a) the gate's own row read keys two columns with `LIMIT 1` and no `ORDER BY` (`capacity-gate.ts:411-414`) — unambiguous today (count 1); add the four scope predicates at the C6 rehearsal increment, which already touches the script for the `57014` timeout (owner CC-C). (b) the `--window-start` usage line `:8` is now fenced in the R2 test case. (c)-(e) line cite, deploy placement and timestamp corrected above. (f) the batch change list gains its R2 section.
+- **R3, the reviewed-build list:** (1) the 2026-11-07 joint deploy — its census names every PROCEED sha (`Change Lists/JOINT_DEPLOY_2026-11-07_CENSUS.md`).
 

@@ -281,6 +281,9 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     // The gate compares new Date(row).toISOString() against the literal (capacity-gate.ts, gradedWindowStartMatches):
     // the literal must be the canonical form of the row, or the gate can never pass.
     expect(new Date(row as string).toISOString()).toBe(constant);
+    // C-1's third place: the documented --window-start usage line moves with the row and the literal.
+    expect(gate).toMatch(/--window-start 2026-11-09T00:05:00Z --graded-ref/);
+    expect(gate).not.toContain('--window-start 2026-10-16');
     expect(rerun).toContain("constant_name = 'graded_window_start'");
     expect(rerun).toContain("RAISE EXCEPTION 'graded_window_start: expected exactly 1 row, updated %', n;");
     expect(rerun).toContain("updated_by = 'b-xstock-bar-availability-r2-rerun'");
