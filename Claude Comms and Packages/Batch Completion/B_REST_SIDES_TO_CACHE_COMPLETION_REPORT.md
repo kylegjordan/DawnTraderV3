@@ -1,7 +1,7 @@
 # B-REST-SIDES-TO-CACHE — COMPLETION REPORT
 
 **Batch:** `B-REST-SIDES-TO-CACHE` · owner CC-C · sprint row 14 · Phase-19 row `3n.l` (a piece of `B-PRICE-SIDE-BY-JOB`) · issues `#1056`, `#1060`, `#1076` · **change-class `architecture`** (scope header, re-declared r4).
-**State:** Steps 1-10 done; closes on Langston's Step-11 confirmation. Written 2026-11-06.
+**State:** ✅ CLOSED 2026-11-06 — Step 11 CONFIRMED by Langston (Discord `1568249931809030237`), after the sprint plan's wave-table line still saying deploy B was corrected. Written 2026-11-06.
 
 ## OPEN ITEMS AND LIMITS — STATED FIRST
 1. **V4 and V9 — how often a REST write replaces a newer WebSocket price — were NOT measured.** The millisecond stamps exist at both REST writers (`live-pricing-adapter.ts:961`, `price-cache.ts:428`) and `updateFromRest` holds both sides' stamps at the overwrite (`:847-860`); what is missing is a counter that emits the comparison. **Carried to sprint row 14a** (`#1146` gap 2), Langston-ruled at Step 8. ⚠️ V9 has a second, separate blocker the counter will not lift: 11 of its 12 both-writer symbols had no writes in the window.
@@ -63,5 +63,5 @@ CHANGE-CLASS: architecture
 | plan | `SPRINT_TO_LIVE_PLAN.md` | ✅ | row 14 closed, report linked; row 14a carries V4/V9's counter and V6's funnel keying |
 | — | shared `MEMORY.md` | N/A | no new consensus truth |
 | — | `MEMORY_CC_C.md` | ✅ | position |
-| — | Langston's `MEMORY.md` | N/A | no line on this batch (checked 2026-11-06) |
+| — | Langston's `MEMORY.md` | ✅ | written by Langston himself at Step 11 through the memory service: FINDING-3 binds future staleness rulings on both-writer symbols, and V4/V9 unmeasured, V7 not run and V1 not re-runnable are the limits not to re-assert as "the fix works" (my N/A was wrong) |
 | T1 | session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 14 |
