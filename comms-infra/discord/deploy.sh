@@ -71,6 +71,8 @@ bridges|comms-infra/discord/alert_lane.py|$BRIDGE_DIR/alert_lane.py|0755
 bridges|comms-infra/discord/alert-lane/CLAUDE.md|/srv/alert-lane/CLAUDE.md|0644
 bridges|comms-infra/discord/bridge-failed-notify.sh|$BRIDGE_DIR/bridge-failed-notify.sh|0755
 bridges|comms-infra/discord/langston-bridge-restart|/usr/local/sbin/langston-bridge-restart|0755
+bridges|comms-infra/discord/langston-bridge-flag|/usr/local/sbin/langston-bridge-flag|0755
+bridges|comms-infra/discord/langston-concurrency-smoke|/usr/local/sbin/langston-concurrency-smoke|0755
 bridges|comms-infra/discord/discord-cc-bridge.service|$UNITS/discord-cc-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service|$UNITS/discord-langston-bridge.service|0644
 bridges|comms-infra/discord/discord-langston-bridge.service.d/self-advance.conf|$UNITS/discord-langston-bridge.service.d/self-advance.conf|0644

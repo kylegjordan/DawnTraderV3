@@ -1,0 +1,39 @@
+#!/bin/bash
+# langston-concurrency-smoke — B-LANGSTON-TWO-WORKERS (#1248) P6: two trivial invocations on Langston's account AT
+# THE SAME TIME, before the second worker is switched on. Root only; run on the agent box.
+#   * the token reaches each invoke from /etc/langston/oauth.env inside `sh -c` (never argv - every local account can
+#     read argv), the prompt arrives on stdin, and the process starts in /home/langston (the invoke rule);
+#   * the model is read from the INSTALLED bridge's CLAUDE_MODEL line, never typed here;
+#   * both invokes' stdout, stderr, exit code and start/end times are kept (0700 dir under /root), and stderr is searched
+#     for "already in use" - the positive control for deleting the bridge's session-rotation backstop (Step 2 D-2).
+# Exit 0 = both returned "ok" and overlapped in time; 1 = anything else (named). Any refusal is a STOP for the batch.
+set -u
+[ "$(id -u)" = 0 ] || { echo "REFUSED: run as root"; exit 2; }
+BRIDGE=/opt/discord-bridges/discord-langston-bridge.py
+MODEL=$(sed -n 's/^CLAUDE_MODEL = "\(.*\)"$/\1/p' "$BRIDGE")
+[ -n "$MODEL" ] || { echo "REFUSED: could not read CLAUDE_MODEL from $BRIDGE"; exit 2; }
+OUT=/root/langston-smoke-$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -m 700 "$OUT"
+one() {
+  local n=$1
+  date -u +%s.%N > "$OUT/$n.start"
+  (cd /home/langston && printf 'Reply with exactly the two letters ok and nothing else.' | \
+     sudo -u langston HOME=/home/langston sh -c "set -a; . /etc/langston/oauth.env; set +a; exec /usr/bin/claude -p --model '$MODEL' --session-id \$(cat /proc/sys/kernel/random/uuid)" \
+     > "$OUT/$n.out" 2> "$OUT/$n.err")
+  echo $? > "$OUT/$n.rc"
+  date -u +%s.%N > "$OUT/$n.end"
+}
+one a & one b & wait
+python3 - "$OUT" "$MODEL" <<'PY'
+import json, os, sys
+d, model = sys.argv[1], sys.argv[2]
+r = {}
+for n in ("a", "b"):
+    rd = lambda s: open(os.path.join(d, n + "." + s)).read().strip()
+    r[n] = {"rc": int(rd("rc")), "out": rd("out")[:80], "start": float(rd("start")), "end": float(rd("end")),
+            "already_in_use": "already in use" in rd("err").lower(), "stderr_bytes": len(rd("err"))}
+overlap = r["a"]["start"] < r["b"]["end"] and r["b"]["start"] < r["a"]["end"]
+good = all(x["rc"] == 0 and x["out"].lower().strip(" .") == "ok" for x in r.values()) and overlap
+print(json.dumps({"model": model, "overlap": overlap, "invokes": r, "evidence_dir": d, "pass": good}, indent=1))
+sys.exit(0 if good else 1)
+PY
