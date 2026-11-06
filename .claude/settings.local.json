@@ -198,6 +198,18 @@
         ]
       }
     ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -I \"$USERPROFILE/.claude/transcript-archive-bin/dt_archive_trigger.py\" precompact",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup|resume|compact",
