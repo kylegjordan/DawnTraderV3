@@ -267,7 +267,13 @@ def wake_line(text, redact):
     return "task notice:** " + " | ".join(parts)
 
 
-def distill(lines, redact, since=None, until=None, dropped=None):
+def text_key(text):
+    """The matching key for a queued notice and a delivery: sha256 of the stripped text. Never the text itself, so a
+    writer can carry it across runs without storing message content."""
+    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+
+def distill(lines, redact, since=None, until=None, dropped=None, ledger=None):
     """lines: an iterable of raw .jsonl lines. Yields (uuid, timestamp, markdown_line, order); every yielded line
     comes from an entry that has a uuid (A1) - except a QUEUED notice with no delivered copy, which gets a stable
     synthetic id `queue:<sha256[:16]>` (Langston P4 finding). `order` is (raw line index, block index): sort by
@@ -332,6 +338,15 @@ def distill(lines, redact, since=None, until=None, dropped=None):
                         body = " ".join(x.get("text", "") for x in body if isinstance(x, dict))
                     if p:
                         p[2] += " ERROR: " + one_line(redact(str(body)), 160)
+                if b.get("type") == "tool_result":
+                    # P5 / pre-audit A2b: an agent call's result names the nested transcript it ran in
+                    # (toolUseResult.agentId -> <session>/subagents/agent-<id>.jsonl); the action line names the
+                    # archive file the writer gives it, so a reader can follow the call into the work.
+                    tur = e.get("toolUseResult") if isinstance(e.get("toolUseResult"), dict) else {}
+                    aid, sid = tur.get("agentId"), str(e.get("sessionId") or "")
+                    p = pending.get(b.get("tool_use_id"))
+                    if p and aid and sid and re.fullmatch(r"[A-Za-z0-9_-]+", str(aid)):
+                        p[2] += " → nested transcript `sub/%s/subagents__agent-%s.md`" % (sid[:8], aid)
             if not emitted and not any(b.get("type") == "tool_result" for b in _blocks(msg.get("content"))):
                 drop("user:other")
             continue
@@ -375,12 +390,20 @@ def distill(lines, redact, since=None, until=None, dropped=None):
             continue
         hhmm = ts[11:19] if len(ts) >= 19 else ts
         qid = "queue:" + hashlib.sha256((ts + "\0" + content).encode("utf-8")).hexdigest()[:16]
+        if ledger is not None:
+            ledger.setdefault("queued_key", {})[qid] = text_key(content)
         w = wake_line(content, redact)
         if w:
             line = "\n**[%s] Wake — %s\n" % (hhmm, w.replace("task notice:**", "task notice (queued; no delivered copy in this file):**", 1))
         else:
             line = "\n**[%s] User (queued; no delivered copy in this file):** %s\n" % (hhmm, redact(content).strip())
         yield qid, ts, line, (li, 0)
+    if ledger is not None:                # deliveries NOT matched to a queued notice in these lines, by key: a writer
+        left = {}                         # spends them on notices it held over from an earlier run
+        for k, c in delivered.items():
+            if c > 0:
+                left[text_key(k)] = left.get(text_key(k), 0) + c
+        ledger["delivered_key"] = left
 
 
 def main(argv):

@@ -10,6 +10,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dt_transcript as dt  # noqa: E402
 
+try:   # a FAIL line can carry "→" or "—"; on a cp1252 console that crashed the run instead of reporting the failure
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
 FAILS = []
 
 
@@ -359,6 +364,22 @@ ok("a delivery OUTSIDE the window still counts as delivered",
 ok("...and the same pair with NO delivery does emit it (the control)",
    len([x for x in dt.distill([json.dumps(raw6[4])], dt.Redactor(), since="2026-11-06T10:00:02.500Z")
         if str(x[0]).startswith("queue:")]) == 1)
+
+print("4d. P5: an agent call names the nested transcript it ran in (pre-audit A2b)")
+SIDX = "644fc5fe-3be9-4b77-8317-91cba9fe8f43"
+raw7 = [
+    {"type": "assistant", "uuid": "g1", "timestamp": "2026-11-06T11:00:00Z", "sessionId": SIDX, "message": {"content": [
+        {"type": "tool_use", "id": "tg", "name": "Agent", "input": {"description": "Find the thing"}},
+        {"type": "tool_use", "id": "th", "name": "Agent", "input": {"description": "Evil id"}}]}},
+    {"type": "user", "uuid": "g2", "timestamp": "2026-11-06T11:00:09Z", "sessionId": SIDX, "toolUseResult": {"agentId": "a33683a349dc1de18"},
+     "message": {"content": [{"type": "tool_result", "tool_use_id": "tg", "content": "found"}]}},
+    {"type": "user", "uuid": "g3", "timestamp": "2026-11-06T11:00:10Z", "sessionId": SIDX, "toolUseResult": {"agentId": "../../etc/x"},
+     "message": {"content": [{"type": "tool_result", "tool_use_id": "th", "content": "x"}]}},
+]
+o7 = [x[2] for x in dt.distill([json.dumps(e) for e in raw7], dt.Redactor())]
+ok("the agent call's line names sub/<session8>/subagents__agent-<id>.md",
+   any("Find the thing → nested transcript `sub/644fc5fe/subagents__agent-a33683a349dc1de18.md`" in l for l in o7), o7)
+ok("an agent id that is not a plain name is never written into a path", not any("etc" in l for l in o7), o7)
 
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

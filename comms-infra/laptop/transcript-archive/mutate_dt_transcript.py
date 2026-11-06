@@ -51,6 +51,11 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("P5 link: the nested transcript not named", replace(
+        '                        p[2] += " → nested transcript `sub/%s/subagents__agent-%s.md`" % (sid[:8], aid)', '                        pass')),
+    ("P5 link: any agent id written into a path", replace(
+        '                    if p and aid and sid and re.fullmatch(r"[A-Za-z0-9_-]+", str(aid)):', '                    if p and aid and sid:')),
+    ("P5 link: the whole session id, not its 8-char prefix", replace("(sid[:8], aid)", "(sid, aid)")),
     ("r2 f1: a malformed entry dropped silently", replace('    if "--hashes" in opts and red.layer_c_malformed:', '    if False:')),
     ("r2 f1: a short mac not counted as malformed", replace(
         "            if len(mac) != 64:\n                self.layer_c_malformed += 1\n                continue",

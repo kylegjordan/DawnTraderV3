@@ -15,6 +15,10 @@ SCRIPT = os.path.join(HERE, "dt_secret_hashes.py")
 sys.path.insert(0, HERE)
 import dt_transcript as dt  # noqa: E402
 
+try:   # a FAIL line can carry non-ASCII; on a cp1252 console that crashed the run instead of reporting the failure
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
 FAILS = []
 
 
