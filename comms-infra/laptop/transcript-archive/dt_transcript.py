@@ -2,7 +2,7 @@
 """dt_transcript — B-TRANSCRIPT-ARCHIVE P2 + P3: turn one raw Claude Code conversation (.jsonl) into a readable,
 redacted markdown text. READ-ONLY on the raw file; stdlib only; run with `python3 -I`.
 
-    python3 -I dt_transcript.py <raw.jsonl> [--hashes <value-hashes.json>] [--since <ISO>] [--until <ISO>]
+    python3 -I dt_transcript.py <raw.jsonl> [--hashes <value-hashes.json> --key-file <key>] [--since <ISO>] [--until <ISO>]
 
 Writes the readable text to stdout. Nothing else is written. The archive writer (P5) calls distill() and owns every
 file, offset and lock; this module never touches the archive.
@@ -23,10 +23,13 @@ conversation), every other `attachment` type (harness-injected context). Images 
 REDACTION (P3), applied to every string before it is written, in this order:
   (a) SHAPES — tokens whose form identifies them;
   (b) NAMES — `NAME=value`, `NAME: value`, `"NAME": "value"` for every secret key NAME the project holds (pre-audit A7);
-  (c) VALUES — for secrets with no shape: a JSON file of {name, length, sha256} produced ON EACH SERVER (P3), never the
-      values; every text token of a listed length is hashed, and a hit is replaced. With no --hashes file, layer (c)
-      is OFF and the output's first line says so. The producer is dt_secret_hashes.py, which owns the CONTRACT: a
-      value is caught as a whole token, behind the token's first `=`, or with one trailing `.`; a value the producer
+  (c) VALUES — for secrets with no shape: a JSON file of {name, length, hmac, key_id} produced ON EACH SERVER (P3),
+      never the values; HMAC-SHA256 under a key held APART from that file (Langston F1), so the file alone is
+      worthless to a guesser. Every text token of a listed length is MAC'd with the same key, and a hit is replaced.
+      --hashes needs --key-file; entries made with a different key are REFUSED, not silently unmatched. With no
+      --hashes file, layer (c) is OFF and the output's first line says so. The producer is dt_secret_hashes.py,
+      which owns the CONTRACT: a value is caught as a whole token, behind ANY `=` of the token, or with one trailing
+      `.`; a value the producer
       reports `reachable: false` (too short, or holding a character outside the token set) is NAMED in that first
       line instead of silently missing.
 Each hit becomes `[REDACTED <kind>]`. The counters are returned so the caller can publish counts per kind (P3, C-3).
@@ -38,6 +41,7 @@ over-redacted to the end of the run. Layer (c) is off without --hashes and blind
 value glued to anything other than `<prefix>=` before it or one `.` after it (`-p<value>`, `<value>-old`).
 """
 import hashlib
+import hmac
 import json
 import re
 import sys
@@ -83,24 +87,54 @@ TOKEN = re.compile(r"[A-Za-z0-9_\-+/=.]{12,}")
 IMAGE_B64 = re.compile(r"data:image/[a-z]+;base64,[A-Za-z0-9+/=]{40,}")
 
 
+KEY_ID_MSG = b"dt-transcript value-hash key id v1"        # must equal dt_secret_hashes.KEY_ID_MSG
+
+
+def key_id(key):
+    return hmac.new(key, KEY_ID_MSG, hashlib.sha256).hexdigest()[:16]
+
+
+def load_key(path):
+    """The HMAC key, same rule as dt_secret_hashes.load_key: 64 hex characters, or 32+ raw bytes; else None."""
+    if not path:
+        return None
+    try:
+        raw = open(path, "rb").read()
+    except OSError:
+        return None
+    raw = raw[:-1] if raw.endswith(b"\n") else raw
+    raw = raw[:-1] if raw.endswith(b"\r") else raw
+    try:
+        k = bytes.fromhex(raw.decode("ascii"))
+    except (UnicodeDecodeError, ValueError):
+        k = raw
+    return k if len(k) >= 32 else None
+
+
 class Redactor:
-    def __init__(self, hashes=None):
+    def __init__(self, hashes=None, key=None):
         self.counts = {}
         self.by_len = {}
-        self.layer_c_names = 0       # usable {name,length,sha256} entries loaded (C-2: the header is derived from this)
+        self.key = key               # HMAC key the producer used (Langston F1); layer (c) loads nothing without it
+        self.layer_c_names = 0       # usable {name,length,hmac,key_id} entries loaded (C-2: the header is derived from this)
         self.layer_c_short = []      # names shorter than TOKEN's 12-char floor: listed, but out of layer (c)'s reach (C-3)
         self.layer_c_unreachable = []  # producer said reachable:false (P3(c) contract): "<name> (<reason>)", no hash
+        self.layer_c_wrong_key = 0   # entries made with a DIFFERENT key: would match nothing, so refused, not loaded
+        kid = key_id(key) if key else None
         for h in hashes or []:
             if isinstance(h, dict) and h.get("reachable") is False and h.get("name"):
                 self.layer_c_unreachable.append("%s (%s)" % (h["name"], h.get("reason", "no reason given")))
                 continue
             try:
-                n, ln, sh = str(h["name"]), int(h["length"]), str(h["sha256"])
+                n, ln, mac, hk = str(h["name"]), int(h["length"]), str(h["hmac"]), str(h["key_id"])
             except (KeyError, TypeError, ValueError):
                 continue
-            if len(sh) != 64:
+            if len(mac) != 64:
                 continue
-            self.by_len.setdefault(ln, {})[sh] = n
+            if hk != kid:
+                self.layer_c_wrong_key += 1
+                continue
+            self.by_len.setdefault(ln, {})[mac] = n
             self.layer_c_names += 1
             if ln < 12:
                 self.layer_c_short.append(n)
@@ -111,6 +145,8 @@ class Redactor:
         line = "> redaction layer (c), shapeless values: ON, %d value(s) loaded" % self.layer_c_names
         if self.layer_c_short:
             line += "; OUT OF REACH (under 12 characters): %s" % ", ".join(sorted(self.layer_c_short))
+        if self.layer_c_wrong_key:
+            line += "; %d entr(ies) made with a DIFFERENT key were NOT loaded" % self.layer_c_wrong_key
         if self.layer_c_unreachable:
             line += "; NOT REACHABLE (named by the producer): %s" % ", ".join(sorted(set(self.layer_c_unreachable)))
         return line
@@ -133,22 +169,26 @@ class Redactor:
         for kind, rx in SHAPES:
             text = rx.sub(lambda m, k=kind: self._hit(k), text)
         if self.by_len:
+            key = self.key
+
             def look(t):
-                names = self.by_len.get(len(t))
-                return names.get(hashlib.sha256(t.encode("utf-8")).hexdigest()) if names else None
+                names = self.by_len.get(len(t))     # the length check first: a MAC is computed only on a length hit
+                return names.get(hmac.new(key, t.encode("utf-8"), hashlib.sha256).hexdigest()) if names else None
 
             def val(m):
-                # P3(c) contract: the whole run; the run less one trailing "."; the part after the run's first "="
-                # (token=<v>, --key=<v>), with and without one trailing ".". Nothing else glued is caught.
+                # P3(c) contract: the whole run; the run less one trailing "."; then the part after EACH "=" of the
+                # run, left to right (token=<v>, --key=<v>, X=Y=<v> — Langston J3), with and without one trailing ".".
+                # Nothing else glued is caught.
                 t = m.group(0)
-                head, eq, tail = t.partition("=")
                 cands = [("", t, "")]
                 if t.endswith("."):
                     cands.append(("", t[:-1], "."))
-                if eq:
-                    cands.append((head + eq, tail, ""))
-                    if tail.endswith("."):
-                        cands.append((head + eq, tail[:-1], "."))
+                for i, ch in enumerate(t):
+                    if ch == "=":
+                        pre, tail = t[:i + 1], t[i + 1:]
+                        cands.append((pre, tail, ""))
+                        if tail.endswith("."):
+                            cands.append((pre, tail[:-1], "."))
                 for pre, cand, post in cands:
                     n = look(cand)
                     if n:
@@ -274,7 +314,7 @@ def main(argv):
     args = argv[1:]
     path = args[0]
     rest = args[1:]
-    known = ("--hashes", "--since", "--until")
+    known = ("--hashes", "--key-file", "--since", "--until")
     if len(rest) % 2 or any(rest[i] not in known for i in range(0, len(rest), 2)):
         sys.stderr.write("REFUSED: arguments must be pairs from %s; got %r\n" % (", ".join(known), rest))
         return 2                  # an unknown token would shift the pairing and silently drop --hashes (Langston r2 nit)
@@ -286,7 +326,18 @@ def main(argv):
         except (OSError, ValueError) as e:
             sys.stderr.write("REFUSED: --hashes %s could not be read (%s)\n" % (opts["--hashes"], e))
             return 3
-    red = Redactor(hashes if isinstance(hashes, list) else [])
+    key = None
+    if "--hashes" in opts:
+        key = load_key(opts.get("--key-file"))
+        if key is None:
+            sys.stderr.write("REFUSED: --hashes needs --key-file with the key they were made with "
+                             "(64 hex characters or 32+ bytes)\n")
+            return 3
+    red = Redactor(hashes if isinstance(hashes, list) else [], key=key)
+    if "--hashes" in opts and red.layer_c_wrong_key:
+        sys.stderr.write("REFUSED: --hashes %s holds %d entr(ies) made with a different key - they would match nothing\n"
+                         % (opts["--hashes"], red.layer_c_wrong_key))
+        return 3
     if "--hashes" in opts and not red.layer_c_names:
         sys.stderr.write("REFUSED: --hashes %s loaded 0 usable entries - layer (c) would be silently off\n" % opts["--hashes"])
         return 3

@@ -49,8 +49,17 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
         '            if isinstance(h, dict) and h.get("reachable") is False and h.get("name"):', '            if False:')),
     ("P3(c): unreachable not named in the state line", replace("        if self.layer_c_unreachable:", "        if False:")),
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
-    ("P3(c): no after-'=' candidate", replace('cands.append((head + eq, tail, ""))', 'pass')),
-    ("P3(c): no after-'=' with full stop candidate", replace('cands.append((head + eq, tail[:-1], "."))', 'pass')),
+    ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
+    ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("J3: only the FIRST '=' tried", replace('                    if ch == "=":', '                    if ch == "=" and "=" not in t[:i]:')),
+    ("F1: plain SHA-256 matching instead of the HMAC", replace(
+        'names.get(hmac.new(key, t.encode("utf-8"), hashlib.sha256).hexdigest())',
+        'names.get(hashlib.sha256(t.encode("utf-8")).hexdigest())')),
+    ("F1: different-key entries loaded", replace("            if hk != kid:", "            if False:")),
+    ("F1: --hashes accepted without --key-file", replace(
+        '        if key is None:\n            sys.stderr.write("REFUSED: --hashes needs', '        if False:\n            sys.stderr.write("REFUSED: --hashes needs')),
+    ("F1: a different-key file not refused", replace('    if "--hashes" in opts and red.layer_c_wrong_key:', '    if False:')),
+    ("F1: a short key accepted", replace("    return k if len(k) >= 32 else None", "    return k if k else None")),
     ("P3(c): prefix and stop dropped on a hit", replace('return pre + self._hit("value:" + n) + post', 'return self._hit("value:" + n)')),
     ("thinking kept", replace('if b.get("type") == "text" and b.get("text", "").strip():\n                    yield uid, ts, "\\n**[%s] Session:**',
                               'if b.get("type") in ("text", "thinking") and (b.get("text") or b.get("thinking", "")).strip():\n                    b = dict(b, text=b.get("text") or b.get("thinking")); yield uid, ts, "\\n**[%s] Session:**')),
@@ -58,24 +67,46 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("user turn not redacted", replace('"\\n**[%s] User:** %s\\n" % (hhmm, redact(b["text"]).strip())', '"\\n**[%s] User:** %s\\n" % (hhmm, b["text"].strip())')),
 ]
 
-caught = 0
-for name, mut in MUTATIONS:
+COPIED = ("test_dt_transcript.py", "dt_secret_hashes.py")   # everything the suite imports besides the module under test
+
+
+def suite(src):
+    """Run the suite against `src` in a scratch copy of EXACTLY the layout every mutant gets. Returns (rc, failed-line)."""
     d = tempfile.mkdtemp(prefix="dt-mut-")
     try:
-        try:
-            m = mut(SRC)
-        except AssertionError as e:
-            print("ERROR  %s: %s" % (name, e)); continue
-        if m == SRC:
-            print("ERROR  %s: the mutation changed nothing" % name); continue
-        open(os.path.join(d, "dt_transcript.py"), "w", encoding="utf-8").write(m)
-        shutil.copy(os.path.join(HERE, "test_dt_transcript.py"), d)
-        rc = subprocess.run([sys.executable, "-I", os.path.join(d, "test_dt_transcript.py")],
-                            capture_output=True, cwd=d).returncode
-        verdict = "caught" if rc != 0 else "SURVIVED"
-        caught += rc != 0
-        print("%-8s %s" % (verdict, name))
+        open(os.path.join(d, "dt_transcript.py"), "w", encoding="utf-8").write(src)
+        for f in COPIED:
+            shutil.copy(os.path.join(HERE, f), d)
+        p = subprocess.run([sys.executable, "-I", os.path.join(d, "test_dt_transcript.py")], capture_output=True, cwd=d)
+        tail = [l for l in p.stdout.decode("utf-8", "replace").splitlines() if l.endswith(" failed")]
+        return p.returncode, (tail[-1] if tail else None)
     finally:
         shutil.rmtree(d, ignore_errors=True)
-print("\n%d/%d caught" % (caught, len(MUTATIONS)))
+
+
+# CONTROL: the UNMUTATED module must pass in the same layout, or every mutant "is caught" by a broken harness.
+# (Measured 2026-11-06: the suite began importing dt_secret_hashes, this runner did not copy it, and 37/37 "caught"
+# was 37 import crashes.)
+rc0, line0 = suite(SRC)
+if rc0 != 0 or line0 != "0 failed":
+    print("HARNESS BROKEN: the unmutated module does not pass in the scratch layout (rc=%s, %r)" % (rc0, line0))
+    sys.exit(2)
+caught = crashed = 0
+for name, mut in MUTATIONS:
+    try:
+        m = mut(SRC)
+    except AssertionError as e:
+        print("ERROR  %s: %s" % (name, e)); continue
+    if m == SRC:
+        print("ERROR  %s: the mutation changed nothing" % name); continue
+    rc, line = suite(m)
+    if rc == 0:
+        verdict = "SURVIVED"
+    elif line is None:
+        verdict, crashed = "crashed", crashed + 1     # detected, but by a crash, not by an assertion: said apart
+    else:
+        verdict = "caught"
+    caught += rc != 0
+    print("%-8s %s" % (verdict, name))
+print("\n%d/%d caught (%d of them by a crash rather than an assertion)" % (caught, len(MUTATIONS), crashed))
 sys.exit(0 if caught == len(MUTATIONS) else 1)

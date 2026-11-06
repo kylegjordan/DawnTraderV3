@@ -107,58 +107,95 @@ ok("the sudoers literal NOPASSWD is not a secret", red("deploy ALL=(ALL) NOPASSW
 red = dt.Redactor()
 ok("a name that only CONTAINS a secret name in the middle is left alone", red("PASSWORD_HASH_ALGO=bcrypt") == "PASSWORD_HASH_ALGO=bcrypt")
 
-# ---- 3. values by hash (layer c): the value is never in the hash file -------------------------------------------------
+# ---- 3. values by keyed hash (layer c): the value is never in the hash file, and the file is useless without the key --
 print("3. values")
+import hmac as _hmac
+KEY = bytes(range(32))                      # a fixed test key, 32 bytes
+KEY2 = bytes(range(1, 33))                  # a different one
+
+
+def ent(name, v, key=KEY):
+    return {"name": name, "length": len(v), "hmac": _hmac.new(key, v.encode(), hashlib.sha256).hexdigest(),
+            "key_id": dt.key_id(key)}
+
+
 shapeless = "zx" + "9CQ4u7Lm2Rt8Pw"  # no shape, no name
-h = [{"name": "FINNHUB_API_KEY", "length": len(shapeless), "sha256": hashlib.sha256(shapeless.encode()).hexdigest()}]
-red = dt.Redactor(h)
+h = [ent("FINNHUB_API_KEY", shapeless)]
+red = dt.Redactor(h, key=KEY)
 out = red("curl -H 'X-Finnhub-Token: %s' https://x" % shapeless)
-ok("a bare shapeless value is hidden by its hash", shapeless not in out and red.counts.get("value:FINNHUB_API_KEY") == 1)
+ok("a bare shapeless value is hidden by its keyed hash", shapeless not in out and red.counts.get("value:FINNHUB_API_KEY") == 1)
 ok("the hash file holds no value", shapeless not in json.dumps(h))
-red = dt.Redactor(h)
+ok("the hash file is not a plain SHA-256 of the value (useless without the key)",
+   hashlib.sha256(shapeless.encode()).hexdigest() not in json.dumps(h))
+red = dt.Redactor(h, key=KEY)
 ok("a different token of the same length is left alone", red("zx9CQ4u7Lm2Rt8PX") == "zx9CQ4u7Lm2Rt8PX")
 red = dt.Redactor()
 ok("with no hash file the shapeless value is NOT caught (the stated residual)", shapeless in red(shapeless))
 ok("layer (c) state says OFF in plain words when nothing loaded", "OFF" in dt.Redactor().layer_c_state() and "not switched on" in dt.Redactor().layer_c_state())
-ok("layer (c) state counts what loaded", "ON, 1 value(s)" in dt.Redactor(h).layer_c_state())
-short = [{"name": "SHORTKEY", "length": 11, "sha256": "a" * 64}]
-ok("a value under 12 characters is named as out of reach", "OUT OF REACH" in dt.Redactor(short).layer_c_state() and "SHORTKEY" in dt.Redactor(short).layer_c_state())
-ok("a malformed hash entry is not counted as loaded", dt.Redactor([{"name": "X"}, {"name": "Y", "length": 20, "sha256": "short"}]).layer_c_names == 0)
+ok("layer (c) state counts what loaded", "ON, 1 value(s)" in dt.Redactor(h, key=KEY).layer_c_state())
+ok("with NO key nothing loads", dt.Redactor(h).layer_c_names == 0)
+red = dt.Redactor(h, key=KEY2)
+ok("entries made with a DIFFERENT key are not loaded, and are counted and named", red.layer_c_names == 0
+   and red.layer_c_wrong_key == 1)
+ok("...and a different-key file does not catch the value", shapeless in red(shapeless))
+short = [dict(ent("SHORTKEY", "a" * 11))]
+ok("a value under 12 characters is named as out of reach", "OUT OF REACH" in dt.Redactor(short, key=KEY).layer_c_state() and "SHORTKEY" in dt.Redactor(short, key=KEY).layer_c_state())
+ok("a malformed hash entry is not counted as loaded", dt.Redactor([{"name": "X"}, dict(ent("Y", "y" * 20), hmac="short")], key=KEY).layer_c_names == 0)
 import tempfile as _tf
 _d = _tf.mkdtemp(prefix="dt-test-")
 _raw = os.path.join(_d, "raw.jsonl"); open(_raw, "w").write("")
 _empty = os.path.join(_d, "empty.json"); open(_empty, "w").write("[]")
+_keyf = os.path.join(_d, "key"); open(_keyf, "w").write(KEY.hex() + "\n")
+_keyf2 = os.path.join(_d, "key2"); open(_keyf2, "w").write(KEY2.hex() + "\n")
+_good = os.path.join(_d, "good.json"); open(_good, "w").write(json.dumps(h))
 import io, contextlib
-_err = io.StringIO()
-with contextlib.redirect_stderr(_err), contextlib.redirect_stdout(io.StringIO()):
-    rc = dt.main(["dt", _raw, "--hashes", _empty])
-ok("--hashes with zero usable entries is REFUSED (exit 3), never silently off", rc == 3 and "REFUSED" in _err.getvalue())
 
-print("3b. values - the P3(c) contract: glued behind '=', a trailing full stop, unreachable entries named")
+
+def _main(*a):
+    _e = io.StringIO()
+    with contextlib.redirect_stderr(_e), contextlib.redirect_stdout(io.StringIO()):
+        r = dt.main(["dt", _raw] + list(a))
+    return r, _e.getvalue()
+
+
+rc, err = _main("--hashes", _empty, "--key-file", _keyf)
+ok("--hashes with zero usable entries is REFUSED (exit 3), never silently off", rc == 3 and "0 usable" in err)
+rc, err = _main("--hashes", _good)
+ok("--hashes WITHOUT --key-file is REFUSED (exit 3)", rc == 3 and "--key-file" in err)
+rc, err = _main("--hashes", _good, "--key-file", _keyf2)
+ok("--hashes with the WRONG key is REFUSED (exit 3), not silently unmatched", rc == 3 and "different key" in err)
+rc, err = _main("--hashes", _good, "--key-file", _keyf)
+ok("--hashes with the right key runs (exit 0)", rc == 0)
+_keys = os.path.join(_d, "key-short"); open(_keys, "w").write(KEY[:31].hex() + "\n")
+rc, err = _main("--hashes", _good, "--key-file", _keys)
+ok("a key under 32 bytes is REFUSED (exit 3)", rc == 3 and "--key-file" in err)
+ok("the redactor's key id is the producer's", dt.KEY_ID_MSG == __import__("dt_secret_hashes").KEY_ID_MSG)
+
+print("3b. values - the P3(c) contract: glued behind any '=', a trailing full stop, unreachable entries named")
 sv = "Qm" + "7Vx2Lp9Rt4Wz8Kc"
-hv = [{"name": "FRED_API_KEY", "length": len(sv), "sha256": hashlib.sha256(sv.encode()).hexdigest()}]
-for form in ("token=%s", "--api-key=%s", "see %s.", "api_key=%s.", "x=%s"):
-    red = dt.Redactor(hv)
+hv = [ent("FRED_API_KEY", sv)]
+for form in ("token=%s", "--api-key=%s", "see %s.", "api_key=%s.", "x=%s", "X=Y=%s", "a=b=c=%s."):
+    red = dt.Redactor(hv, key=KEY)
     out = red(form % sv)
     ok("value caught in the form %r" % form, sv not in out and red.counts.get("value:FRED_API_KEY") == 1)
-red = dt.Redactor(hv)
+red = dt.Redactor(hv, key=KEY)
 ok("the prefix before '=' is kept", red("--api-key=" + sv) == "--api-key=[REDACTED value:FRED_API_KEY]")
-red = dt.Redactor(hv)
+red = dt.Redactor(hv, key=KEY)
+ok("the whole prefix before a SECOND '=' is kept", red("X=Y=" + sv) == "X=Y=[REDACTED value:FRED_API_KEY]")
+red = dt.Redactor(hv, key=KEY)
 ok("the trailing full stop is kept", red("see " + sv + ".") == "see [REDACTED value:FRED_API_KEY].")
-red = dt.Redactor(hv)
+red = dt.Redactor(hv, key=KEY)
 ok("a value glued to another prefix is NOT caught (the stated residual)", sv in red("-p" + sv))
-red = dt.Redactor(hv)
+red = dt.Redactor(hv, key=KEY)
 ok("a value with a suffix glued on is NOT caught (the stated residual)", sv in red(sv + "-old"))
 un = hv + [{"name": "DATABASE_URL", "reachable": False, "reason": "contains characters outside the token set"},
            {"name": "JWT_SECRET", "reachable": False, "reason": "under 12 characters"}]
-st = dt.Redactor(un).layer_c_state()
+st = dt.Redactor(un, key=KEY).layer_c_state()
 ok("an unreachable entry is named in the state line with its reason",
    "NOT REACHABLE" in st and "DATABASE_URL (contains characters outside the token set)" in st and "JWT_SECRET (under 12 characters)" in st)
-ok("an unreachable entry is not counted as loaded", dt.Redactor(un).layer_c_names == 1)
+ok("an unreachable entry is not counted as loaded", dt.Redactor(un, key=KEY).layer_c_names == 1)
 _only = os.path.join(_d, "only-unreachable.json"); open(_only, "w").write(json.dumps(un[1:]))
-_err = io.StringIO()
-with contextlib.redirect_stderr(_err), contextlib.redirect_stdout(io.StringIO()):
-    rc = dt.main(["dt", _raw, "--hashes", _only])
+rc, err = _main("--hashes", _only, "--key-file", _keyf)
 ok("a hash file holding ONLY unreachable entries is REFUSED (exit 3)", rc == 3)
 
 # ---- 4. the distiller: what is kept and what is dropped ------------------------------------------------------------
