@@ -65,6 +65,25 @@ BOT_TOKEN_FILE = "/etc/langston/discord-langston-bot.env"
 OAUTH_TOKEN_FILE = "/etc/langston/oauth.env"
 WORK_DIR = "/home/langston"
 STATE_FILE = "/home/langston/.discord-langston-bridge-state.json"
+# ── B-LANGSTON-TWO-WORKERS (#1248, KD-44): two task workers, one lane per batch ──────────────────────
+# The single worker was inherited from B-NEW-41's same-session-id rule; every invoke has used a fresh session
+# id since bb415a1d8 (2026-06-21), so two invokes no longer share a session. What two workers DO share is
+# guarded here: one breaker and one runaway cap under _SHARED, every review-queue read-modify-write through
+# lq.locked_update, and each task's lane held by LaneTaskQueue so a batch's rounds stay in arrival order.
+WORKER_NAMES = ("task-worker-1", "task-worker-2")
+# Root-owned flags (the bridge runs as langston and cannot write /etc/langston, so it cannot raise its own
+# capacity): DRAIN = take nothing new, finish the task in hand; ONE_WORKER = worker 2 takes nothing new.
+DRAIN_FLAG = os.environ.get("LANGSTON_DRAIN_FLAG", "/etc/langston/bridge-drain")
+ONE_WORKER_FLAG = os.environ.get("LANGSTON_ONE_WORKER_FLAG", "/etc/langston/bridge-one-worker")
+# One line per handled task, for the KD-44 observation (wait AND quality, before vs after). Pre-created at
+# install (root:langston 0660); no content, only ids, times, the lane and the outcome.
+TASK_LOG = os.environ.get("LANGSTON_TASK_LOG", "/var/log/langston-tasks.jsonl")
+SCRATCH_ROOT = "/home/langston/scratch"
+SCRATCH_KEEP_S = 7 * 24 * 3600
+_SHARED = threading.Lock()
+BREAKER = {"bot_turns": 0}
+_RESURFACE = {"last": 0.0}
+_SWEEP = {"last": 0.0}
 LOG_FILE = "/var/log/discord-langston-bridge.log"
 VOICE_ARCHIVE_ROOT = "/var/log/cc-bridge-voice-archive/discord-langston"
 CLAUDE_TIMEOUT = 900
@@ -268,7 +287,7 @@ def stop_cleanly(signum=None, _frame=None):
     os._exit(0)
 
 
-def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
+def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False, scratch=None):
     """Identical contract to the Telegram bridge: claude -p with a stable session-id,
     Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
     try:
@@ -291,6 +310,8 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
     env["HOME"] = WORK_DIR
     env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
+    if scratch:
+        env["TMPDIR"] = scratch
     args = [
         "/usr/bin/claude", "-p", prompt,
         "--session-id", session_id, "--model", CLAUDE_MODEL,
@@ -307,9 +328,11 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False):
             if "already in use" in stderr_lc and state is not None and _retry_count == 0:
                 new_uuid = str(uuid.uuid4())
                 log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
-                state["session_id"] = new_uuid
-                save_state(state)
-                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1, _noted=True)
+                with _SHARED:
+                    state["session_id"] = new_uuid
+                    save_state(state)
+                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1, _noted=True,
+                                     scratch=scratch)
             return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
         log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
         return result.stdout.strip()
@@ -346,53 +369,59 @@ def process_voice(task):
     return text, None
 
 
-def _self_advance(task_q, channel_id, items, prev_task):
-    """B-LANGSTON-QUEUE: re-invoke Langston for the next READY queue item, guarded by the two-tier
-    cap (LOUD on trip — silence must always mean *done*, never *stuck*). Only called when
-    SELF_ADVANCE_ENABLED. Queue clear → no-op (Langston's own 'queue clear, standing by' announces)."""
-    if task_q is None:
-        return
-    nxt = lq.pick_next_ready(items)
+SELF_ADVANCE_IN_FLIGHT_S = 2 * CLAUDE_TIMEOUT   # a picked item is skipped by the other worker this long
+
+
+def _advance_in_flight(it, now=None):
+    ts = it.get("advance_in_flight_ts")
+    return bool(ts) and ((now or time.time()) - ts) < SELF_ADVANCE_IN_FLIGHT_S
+
+
+def _self_advance_pick(items, channel_id, prev_task):
+    """B-LANGSTON-QUEUE + #1248 A4: choose the next READY item and MARK it in flight, inside the caller's
+    locked_update, so the other worker finishing at the same moment cannot pick the same item. Returns
+    (task_to_enqueue_or_None, [notices to post after the lock is released]). Guarded by the two-tier cap
+    (LOUD on trip - silence must always mean *done*, never *stuck*). Only called when SELF_ADVANCE_ENABLED."""
+    notices = []
+    nxt = lq.pick_next_ready([it for it in items if not _advance_in_flight(it)])
     if nxt is None:
-        return  # queue genuinely clear
+        return None, notices  # queue genuinely clear (or the only ready item is in flight on the other worker)
     # C2 (#345): per-ITEM re-fire guard that SURVIVES _cap.reset() (a real inbound resets the CapTracker's
-    # same-id tier, which under sustained chatter let a stuck `ready` item re-fire forever — the churn that
+    # same-id tier, which under sustained chatter let a stuck `ready` item re-fire forever - the churn that
     # disabled self-advance). If this item already re-fired SAME_ID_CAP times without settling, PARK it
-    # (LOUD) instead of re-invoking; a re-mark clears it. Checked BEFORE the CapTracker (which stays as the
-    # distinct-advance backstop).
+    # (LOUD) instead of re-invoking; a re-mark clears it. Checked BEFORE the CapTracker.
     if lq.item_refire_halt(nxt):
-        if lq.park_unmarked(items, nxt["id"]) is not None:
-            lq.save_queue(QUEUE_FILE, items)
-        dc.rest_send(BOT_TOKEN, channel_id,
-                     f"Kyle — Langston self-advance PARKED queue item {nxt['id']}: it re-fired "
-                     f"{nxt.get('self_advance_refires', lq.SAME_ID_CAP)}x without a settle marker (per-item "
-                     f"runaway guard, survives inbound chatter). Re-mark [[QUEUE id={nxt['id']} status=ready]] "
-                     f"to retry once its blocker clears.", LOG_FILE)
+        lq.park_unmarked(items, nxt["id"])
+        notices.append(f"Kyle — Langston self-advance PARKED queue item {nxt['id']}: it re-fired "
+                       f"{nxt.get('self_advance_refires', lq.SAME_ID_CAP)}x without a settle marker (per-item "
+                       f"runaway guard, survives inbound chatter). Re-mark [[QUEUE id={nxt['id']} status=ready]] "
+                       f"to retry once its blocker clears.")
         log(f"self-advance per-item PARK: id={nxt['id']} refires>={lq.SAME_ID_CAP}")
-        return
-    halt, reason = _cap.should_halt()
+        return None, notices
+    with _SHARED:
+        halt, reason = _cap.should_halt()
+        if not halt:
+            _cap.register_advance(nxt["id"])
     if halt:
-        dc.rest_send(BOT_TOKEN, channel_id, f"Langston self-advance PAUSED — {reason}", LOG_FILE)
+        notices.append(f"Langston self-advance PAUSED — {reason}")
         log(f"self-advance halted: {reason}")
-        return
-    lq.register_item_refire(nxt)   # C2: bump the per-item re-fire count BEFORE re-invoking
-    lq.save_queue(QUEUE_FILE, items)  # ...and PERSIST it (Langston Step-4 fix): _self_advance runs after
-    # process_task's own save_queue, and the next cycle is a SEPARATE task that reloads from disk — without
-    # this write the increment is discarded every cycle, the counter stays 0, and item_refire_halt never trips.
-    _cap.register_advance(nxt["id"])
+        return None, notices
+    lq.register_item_refire(nxt)   # C2: bump the per-item re-fire count BEFORE re-invoking (persisted by the caller's save)
+    nxt["advance_in_flight_ts"] = time.time()   # #1248 A4: the other worker skips it while this invoke runs
     prompt = (f"[Discord SELF-ADVANCE — your previous review is done; work your NEXT queued item NOW. "
               f"id={nxt['id']} gate={nxt['gate_type']} from {nxt['requester']}: {nxt['summary']} "
               f"pointer={nxt.get('pointer')}. End your reply with a queue marker on the LAST line: "
               f"[[QUEUE id={nxt['id']} status=done]]  (or  status=blocked on=<CC-A|CC-B|Kyle> want=\"..\"  "
               f"or  status=error reason=\"..\"). If nothing else is ready, reply 'queue clear, standing by'.]")
-    task_q.put({"channel_id": channel_id, "message_id": f"adv-{nxt['id']}", "author_id": None,
-                "author_name": "self-advance", "author_display": "self-advance",
-                "is_dm": prev_task.get("is_dm", False), "kind": "text", "content": prompt,
-                "self_advance": True, "is_alert": False,
-                # #1177: whom the reply is addressed to. "self-advance" above is a LABEL (the breaker and
-                # the prompt key on it); without this the reply led with the label and woke nobody.
-                "addressee": nxt.get("requester")})
+    task = {"channel_id": channel_id, "message_id": f"adv-{nxt['id']}", "author_id": None,
+            "author_name": "self-advance", "author_display": "self-advance",
+            "is_dm": prev_task.get("is_dm", False), "kind": "text", "content": prompt,
+            "self_advance": True, "is_alert": False,
+            # #1177: whom the reply is addressed to. "self-advance" above is a LABEL (the breaker and
+            # the prompt key on it); without this the reply led with the label and woke nobody.
+            "addressee": nxt.get("requester")}
     log(f"self-advance: re-invoking Langston for queue item {nxt['id']} (gate={nxt['gate_type']})")
+    return task, notices
 
 
 # ── B-COMMS-IMAGES: Langston-authored attachments (his invocation-7 condition (d), binding) ──
@@ -452,25 +481,33 @@ def process_task(task, state, breaker, task_q=None):
     # B-LANGSTON-QUEUE: a REAL inbound (not a self-advance re-invoke) resets the runaway cap —
     # any Kyle/CC post means we're not in an unattended loop. (No-op while the loop is disabled.)
     if not task.get("self_advance"):
-        try: _cap.reset()
+        try:
+            with _SHARED:
+                _cap.reset()
         except Exception as e: log(f"queue: cap reset failed (non-fatal): {e}")
 
     # ── Circuit breaker: a hard floor under the soft [SILENT] discipline ──────
     # System alerts + self-advance re-invokes bypass it: neither is the CC↔Langston ping-pong the
     # breaker guards (the self-advance loop has its OWN two-tier cap in langston_queue).
+    # #1248: ONE breaker for both workers, read and written under _SHARED (a per-worker breaker counted half).
+    _turns = None
     if task.get("is_alert") or task.get("self_advance"):
         pass
     elif task["author_id"] == CFG["kyle_id"]:
-        breaker["bot_turns"] = 0
+        with _SHARED:
+            breaker["bot_turns"] = 0
     else:
-        breaker["bot_turns"] += 1
-        if breaker["bot_turns"] > BOT_TURN_LIMIT:
-            if breaker["bot_turns"] == BOT_TURN_LIMIT + 1:  # alert exactly once
+        with _SHARED:
+            breaker["bot_turns"] += 1
+            _turns = breaker["bot_turns"]
+        if _turns > BOT_TURN_LIMIT:
+            task["_outcome"] = "circuit_breaker"
+            if _turns == BOT_TURN_LIMIT + 1:  # alert exactly once
                 dc.rest_send(BOT_TOKEN, channel_id,
                              "⚠️ CC↔Langston circuit breaker tripped: too many consecutive automated turns "
                              "with no message from Kyle. Pausing Langston auto-replies until Kyle posts.", LOG_FILE)
             mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="circuit_breaker")
-            log(f"circuit breaker: skipping msg {msg_id} (bot_turns={breaker['bot_turns']})")
+            log(f"circuit breaker: skipping msg {msg_id} (bot_turns={_turns})")
             return
 
     if kind == "voice":
@@ -510,15 +547,18 @@ def process_task(task, state, breaker, task_q=None):
         if (not task.get("is_alert") and not task.get("self_advance")
                 and lq.is_review_request(prompt) and not lq.marker_attempted(prompt)):
             try:
-                items = lq.load_queue(QUEUE_FILE)
-                if not any(it.get("id") == str(msg_id) for it in items):
+                def _enqueue(items):
+                    if any(it.get("id") == str(msg_id) for it in items):
+                        return False
                     # OBJ-B (#345): capture a re-fetchable pointer at enqueue (inbox path / repo file / sha).
                     # #1177: the requester is the RESOLVED addressee (a Kyle item stores "Kyle", not his
                     # username) - a self-advance on this item leads its reply with it.
                     items.append(lq.new_item(msg_id, resolve_recipient_name(task) or "?",
                                              prompt, pointer=lq.extract_pointer(prompt),
                                              gate_type=lq.infer_gate_type(prompt)))
-                    lq.save_queue(QUEUE_FILE, items)
+                    return True
+                # #1248 A3: one locked read-modify-write, so the other worker cannot erase this item.
+                if lq.locked_update(QUEUE_FILE, _enqueue):
                     enqueued_id = str(msg_id)  # OBJ-A: this inbound created an item → auto-settle after the reply
             except Exception as e:
                 log(f"queue: enqueue failed (non-fatal): {e}")
@@ -531,10 +571,8 @@ def process_task(task, state, breaker, task_q=None):
             try:
                 inbound_marker = lq.parse_marker(prompt)
                 if inbound_marker:
-                    items = lq.load_queue(QUEUE_FILE)
-                    it2, act2 = lq.apply_marker(items, inbound_marker)
+                    it2, act2 = lq.locked_update(QUEUE_FILE, lambda items: lq.apply_marker(items, inbound_marker))
                     if it2 is not None:
-                        lq.save_queue(QUEUE_FILE, items)
                         log(f"queue: inbound marker applied id={inbound_marker['id']} -> {act2}")
             except Exception as e:
                 log(f"queue: inbound marker apply failed (non-fatal): {e}")
@@ -545,6 +583,7 @@ def process_task(task, state, breaker, task_q=None):
         mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id,
                      reason="voice not addressed to Langston")
         log(f"voice msg {msg_id} not addressed to Langston — silent")
+        task["_outcome"] = "silent_voice"
         return
 
     # Langston is ONLY ever invoked when directly addressed (the bridge gates on his name), so tell
@@ -603,9 +642,16 @@ def process_task(task, state, breaker, task_q=None):
     # The bridge already had no real cross-turn continuity (it rotated every turn), so a fresh
     # UUID per call is the clean fix: first-attempt success, no rotation, no latency. The
     # rotation logic in invoke_claude stays as a backstop (now effectively never triggered).
-    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), state=state)
+    scratch = make_scratch_dir(task)
+    if scratch:
+        addressed_prompt += (f"\n\n[Your scratch directory for THIS review is {scratch} - run `cd {scratch}` first and do "
+                             f"all your work in it. Do NOT write into {SCRATCH_ROOT} itself: another review may be "
+                             f"running at the same time and would overwrite files with the same names.]")
+    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), state=state, scratch=scratch)
     resp_stripped = (response or "").strip()
     is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
+    if is_bridge_error:
+        task["_outcome"] = "timeout" if "timed out" in resp_stripped.lower() else "bridge_error"
     if is_bridge_error and not is_dm:
         # infra error, not a real reply — mirror only, don't spam the channel
         mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="bridge_error_suppressed")
@@ -626,6 +672,8 @@ def process_task(task, state, breaker, task_q=None):
     if not task.get("is_alert"):
         cleaned = lq.lead_with_addressee(cleaned, task, CFG.get("kyle_id"))
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, cleaned, LOG_FILE)
+    task.setdefault("_outcome", "reply" if sent_id is not None else "post_failed")
+    task["_reply_len"] = len(cleaned)
     if task.get("is_alert"):
         # B-LANGSTON-RELIEF OBJ-2 (Coltrane r3): an alert's spooled work is done ONLY when his answer is durably
         # out - a real Discord message id AND a successful direct inbox record of it (mirror_event swallows its
@@ -672,54 +720,66 @@ def process_task(task, state, breaker, task_q=None):
     log(f"responded to msg {msg_id}")
 
     # ── B-LANGSTON-QUEUE: apply Langston's done/blocked/error marker (PASSIVE, always-on), then
-    #    SELF-ADVANCE only if enabled. Whole block try/except → a queue bug never breaks the reply. ──
+    #    SELF-ADVANCE only if enabled. Whole block try/except → a queue bug never breaks the reply.
+    #    #1248 A3/A4: the whole read-modify-write is ONE lq.locked_update, so the other worker cannot erase a
+    #    marker or pick the same next item; channel posts wait until the lock is released. ──
     try:
-        items = lq.load_queue(QUEUE_FILE)
         marker = lq.parse_marker(response)
-        if marker:
-            item, action = lq.apply_marker(items, marker)
-            if action == "error" and item is not None:
-                # error PARKS + must be flagged to Kyle (a wedged read must never silently vanish).
-                dc.rest_send(BOT_TOKEN, channel_id,
-                             f"Kyle — Langston hit an ERROR on queue item {marker['id']}: "
-                             f"{marker.get('reason', '?')} — parked, needs a look.", LOG_FILE)
-        # FINDING-2 (Langston Step-4): a self-advance re-invoke whose reply carried NO marker for the
-        # item it was working would leave it `ready` → the next advance re-picks the SAME id → trips
-        # the Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park that
-        # item (LOUD) so the loop continues to other ready items; a re-mark clears it.
-        if task.get("self_advance"):
-            mid = str(task.get("message_id", ""))
-            advanced_id = mid[4:] if mid.startswith("adv-") else None
-            if advanced_id and (not marker or marker.get("id") != advanced_id):
-                # #343 (Langston Step-4): distinguish a MALFORMED-but-present marker (he signaled, the
-                # grammar dropped it → worse, park LOUDER) from a genuinely absent one.
-                malformed = (marker is None) and lq.marker_attempted(response)
-                if lq.park_unmarked(items, advanced_id, malformed=malformed) is not None:
-                    if malformed:
-                        dc.rest_send(BOT_TOKEN, channel_id,
-                                     f"⚠️ Kyle — Langston emitted a MALFORMED status marker on queue item "
-                                     f"{advanced_id} (a [[QUEUE ...]] was present but the grammar failed, so it "
-                                     f"was DROPPED — worse than a forgotten one). Parked it; his verdict is in "
-                                     f"the prose above. Re-emit a valid marker to clear.", LOG_FILE)
-                    else:
-                        dc.rest_send(BOT_TOKEN, channel_id,
-                                     f"Kyle — Langston replied on queue item {advanced_id} without a status "
-                                     f"marker; parked it so the self-advance loop keeps moving (its verdict is "
-                                     f"in the Discord prose above). Re-mark done/blocked/error to clear.", LOG_FILE)
-        # OBJ-A (#345): a REAL inbound that enqueued an item must not leave it `ready` (the old degraded
-        # re-pass that re-fed Langston the truncated summary). If his reply already settled it (a marker
-        # targeting enqueued_id), nothing to do; otherwise AUTO-SETTLE to `noop` — it passed the heuristic
-        # gate but produced no review marker, so it is terminally cleared WITHOUT being falsely marked
-        # "done". This makes the settle robust to the model forgetting the marker (Langston Step-1 R1).
-        if enqueued_id and not task.get("self_advance"):
-            already_settled = (marker is not None and marker.get("id") == enqueued_id)
-            if not already_settled:
-                it_a, _ = lq.apply_marker(items, {"id": enqueued_id, "status": "noop"})
-                if it_a is not None:
-                    log(f"queue: OBJ-A auto-settled real-inbound item {enqueued_id} -> noop (no review marker emitted)")
-        lq.save_queue(QUEUE_FILE, items)
-        if SELF_ADVANCE_ENABLED and not task.get("is_alert"):
-            _self_advance(task_q, channel_id, items, task)
+        notices = []
+
+        def _settle(items):
+            if marker:
+                item, action = lq.apply_marker(items, marker)
+                if action == "error" and item is not None:
+                    # error PARKS + must be flagged to Kyle (a wedged read must never silently vanish).
+                    notices.append(f"Kyle — Langston hit an ERROR on queue item {marker['id']}: "
+                                   f"{marker.get('reason', '?')} — parked, needs a look.")
+            # FINDING-2 (Langston Step-4): a self-advance re-invoke whose reply carried NO marker for the
+            # item it was working would leave it `ready` → the next advance re-picks the SAME id → trips
+            # the Tier-1 same-id HALT and pauses the WHOLE loop over a merely-missing marker. Park that
+            # item (LOUD) so the loop continues to other ready items; a re-mark clears it.
+            if task.get("self_advance"):
+                mid = str(task.get("message_id", ""))
+                advanced_id = mid[4:] if mid.startswith("adv-") else None
+                for it in items:            # #1248 A4: this invoke is over, so its item is no longer in flight
+                    if advanced_id and it.get("id") == advanced_id:
+                        it.pop("advance_in_flight_ts", None)
+                if advanced_id and (not marker or marker.get("id") != advanced_id):
+                    # #343 (Langston Step-4): distinguish a MALFORMED-but-present marker (he signaled, the
+                    # grammar dropped it → worse, park LOUDER) from a genuinely absent one.
+                    malformed = (marker is None) and lq.marker_attempted(response)
+                    if lq.park_unmarked(items, advanced_id, malformed=malformed) is not None:
+                        if malformed:
+                            notices.append(f"⚠️ Kyle — Langston emitted a MALFORMED status marker on queue item "
+                                           f"{advanced_id} (a [[QUEUE ...]] was present but the grammar failed, so it "
+                                           f"was DROPPED — worse than a forgotten one). Parked it; his verdict is in "
+                                           f"the prose above. Re-emit a valid marker to clear.")
+                        else:
+                            notices.append(f"Kyle — Langston replied on queue item {advanced_id} without a status "
+                                           f"marker; parked it so the self-advance loop keeps moving (its verdict is "
+                                           f"in the Discord prose above). Re-mark done/blocked/error to clear.")
+            # OBJ-A (#345): a REAL inbound that enqueued an item must not leave it `ready` (the old degraded
+            # re-pass that re-fed Langston the truncated summary). If his reply already settled it (a marker
+            # targeting enqueued_id), nothing to do; otherwise AUTO-SETTLE to `noop` — it passed the heuristic
+            # gate but produced no review marker, so it is terminally cleared WITHOUT being falsely marked
+            # "done". This makes the settle robust to the model forgetting the marker (Langston Step-1 R1).
+            if enqueued_id and not task.get("self_advance"):
+                already_settled = (marker is not None and marker.get("id") == enqueued_id)
+                if not already_settled:
+                    it_a, _ = lq.apply_marker(items, {"id": enqueued_id, "status": "noop"})
+                    if it_a is not None:
+                        log(f"queue: OBJ-A auto-settled real-inbound item {enqueued_id} -> noop (no review marker emitted)")
+            if SELF_ADVANCE_ENABLED and not task.get("is_alert") and task_q is not None:
+                nxt_task, more = _self_advance_pick(items, channel_id, task)
+                notices.extend(more)
+                return nxt_task
+            return None
+
+        next_task = lq.locked_update(QUEUE_FILE, _settle)
+        for note in notices:
+            dc.rest_send(BOT_TOKEN, channel_id, note, LOG_FILE)
+        if next_task is not None:
+            task_q.put(next_task)
     except Exception as e:
         log(f"queue: post-response handling failed (non-fatal): {e}")
 
@@ -728,64 +788,147 @@ def _resurface_stale_blocked():
     """#342 (Langston Step-4): re-surface blocked items whose `want` hasn't landed within the TTL so
     they don't silently rot. Re-surface only (never auto-resolve) — only the real dependency landing
     (a `ready` marker) un-parks. Gated on SELF_ADVANCE_ENABLED (part of the loop's lifecycle); fully
-    try/except so it can never break the worker."""
-    try:
-        items = lq.load_queue(QUEUE_FILE)
-        stale = lq.stale_blocked(items)
-        if not stale:
+    try/except so it can never break the worker. #1248 A5: both workers' idle heartbeats call this, so it
+    runs at most once per heartbeat period, and its read-mark-save is one locked_update."""
+    with _SHARED:
+        if time.time() - _RESURFACE["last"] < 60:
             return
+        _RESURFACE["last"] = time.time()
+    try:
         WHO_NAME = {"CC-A": "OLD Claude", "CC-B": "NEW Claude", "Langston": "Langston", "Kyle": "Kyle"}
-        for it in stale:
-            bo = it.get("blocked_on") or {}
-            owner = WHO_NAME.get(bo.get("who", ""), bo.get("who") or "one of the Claudes")
-            # Plain-language, addressed to the session that OWES the dependency (its name wakes it) --
-            # never a raw-id dump at Kyle (Kyle directive 2026-07-03). Kyle gets FYI framing only.
-            about = (it.get("summary") or "").replace("Langston \u2014 ", "")[:160]
-            waiting_for = (bo.get("want") or "the promised follow-up")[:160]
-            dc.rest_send(BOT_TOKEN, CFG["channel_id"],
-                         f"{owner} \u2014 one of Langston's review items is still parked waiting on you. "
-                         f"What it is: {about}... What it needs: {waiting_for}. "
-                         f"If this already happened in a later exchange, clear the old entry with "
-                         f"`[[QUEUE id={it.get('id')} status=done]]`; if it is still owed, land it. "
-                         f"(Kyle: FYI only \u2014 {owner} owns this; no action needed from you.)",
-                         LOG_FILE)
-            lq.mark_stale_surfaced(it)
-        lq.save_queue(QUEUE_FILE, items)
+        posts = []
+
+        def _mark(items):
+            for it in lq.stale_blocked(items):
+                bo = it.get("blocked_on") or {}
+                owner = WHO_NAME.get(bo.get("who", ""), bo.get("who") or "one of the Claudes")
+                # Plain-language, addressed to the session that OWES the dependency (its name wakes it) --
+                # never a raw-id dump at Kyle (Kyle directive 2026-07-03). Kyle gets FYI framing only.
+                about = (it.get("summary") or "").replace("Langston \u2014 ", "")[:160]
+                waiting_for = (bo.get("want") or "the promised follow-up")[:160]
+                posts.append(f"{owner} \u2014 one of Langston's review items is still parked waiting on you. "
+                             f"What it is: {about}... What it needs: {waiting_for}. "
+                             f"If this already happened in a later exchange, clear the old entry with "
+                             f"`[[QUEUE id={it.get('id')} status=done]]`; if it is still owed, land it. "
+                             f"(Kyle: FYI only \u2014 {owner} owns this; no action needed from you.)")
+                lq.mark_stale_surfaced(it)
+
+        lq.locked_update(QUEUE_FILE, _mark)
+        for text in posts:
+            dc.rest_send(BOT_TOKEN, CFG["channel_id"], text, LOG_FILE)
     except Exception as e:
         log(f"queue: stale re-surface failed (non-fatal): {e}")
 
 
+def _may_take(worker):
+    """#1248 OBJ-5: read before every take. Drain stops both workers taking new tasks; one-worker stops
+    worker 2. A flag that cannot be read is treated as SET (fail toward less capacity, never more)."""
+    try:
+        if os.path.exists(DRAIN_FLAG):
+            return False
+        if worker != WORKER_NAMES[0] and os.path.exists(ONE_WORKER_FLAG):
+            return False
+        return True
+    except OSError:
+        return False
+
+
+def make_scratch_dir(task):
+    """#1248 OBJ-3: one directory per invoke under the scratch root, 0700, so two concurrent reviews never write
+    the same file name. Returns None (and the invoke runs without one) if it cannot be made."""
+    try:
+        name = "inv-%s-%s" % (re.sub(r"[^A-Za-z0-9_-]", "_", str(task.get("message_id")))[:40],
+                              threading.current_thread().name)
+        path = os.path.join(SCRATCH_ROOT, name)
+        os.makedirs(path, mode=0o700, exist_ok=True)
+        return path
+    except OSError as e:
+        log(f"scratch: could not make a per-invoke directory ({e}); this invoke runs without one")
+        return None
+
+
+def sweep_scratch(now=None):
+    """Remove scratch/inv-* directories older than SCRATCH_KEEP_S. Only the inv-* glob: the files that were
+    in scratch/ before #1248 are never touched. At most once a day, from either worker's idle heartbeat."""
+    now = now or time.time()
+    with _SHARED:
+        if now - _SWEEP["last"] < 24 * 3600:
+            return
+        _SWEEP["last"] = now
+    import glob
+    import shutil
+    n = 0
+    for d in glob.glob(os.path.join(SCRATCH_ROOT, "inv-*")):
+        try:
+            if os.path.isdir(d) and not os.path.islink(d) and now - os.path.getmtime(d) > SCRATCH_KEEP_S:
+                shutil.rmtree(d)
+                n += 1
+        except OSError as e:
+            log(f"scratch sweep: {d}: {e}")
+    log(f"scratch sweep: removed {n} per-invoke directories older than 7 days")
+
+
+def _post_time_from_id(mid):
+    """Discord snowflake -> UTC seconds; None for a synthetic id (adv-..., a voice task)."""
+    try:
+        return ((int(mid) >> 22) + 1420070400000) / 1000.0
+    except (TypeError, ValueError):
+        return None
+
+
+def record_task(task, worker, started, ended):
+    """#1248 OBJ-7: one line per handled task - the observation's instrument. No message content."""
+    try:
+        line = {"message_id": str(task.get("message_id")), "posted": _post_time_from_id(task.get("message_id")),
+                "started": round(started, 3), "ended": round(ended, 3), "worker": worker,
+                "lane": task.get("_lane"), "class": lq.task_priority(task),
+                "kind": "escalated" if task.get("escalated") else ("alert" if task.get("is_alert") else
+                        ("self_advance" if task.get("self_advance") else task.get("kind"))),
+                "outcome": task.get("_outcome", "unknown"), "reply_len": task.get("_reply_len")}
+        with open(TASK_LOG, "a") as f:
+            f.write(json.dumps(line) + "\n")
+    except Exception as e:
+        log(f"task log: write failed ({type(e).__name__}: {e})")
+
+
 def task_worker(task_q, state):
-    """Single worker thread: serial claude invocation (one at a time)."""
+    """One of WORKER_NAMES (#1248). Takes the highest-priority task whose lane is free, holds the lane while the
+    invoke runs, then releases it. The breaker and runaway cap are shared (_SHARED)."""
+    me = threading.current_thread().name
     HEARTBEAT = 60
     last_heartbeat = time.time()
-    breaker = {"bot_turns": 0}
     while True:
         try:
             try:
-                task = task_q.get(timeout=HEARTBEAT)
+                task = task_q.take(me, HEARTBEAT, may_take=_may_take)
             except queue.Empty:
                 if time.time() - last_heartbeat >= HEARTBEAT:
-                    log("task worker alive, queue depth=0")
+                    log(f"{me} alive, queue depth={task_q.qsize()} running={task_q.running_lanes()}")
                     last_heartbeat = time.time()
                     if SELF_ADVANCE_ENABLED:
                         _resurface_stale_blocked()
+                    sweep_scratch()
                 continue
+            started = time.time()
             try:
-                process_task(task, state, breaker, task_q)
+                log(f"{me} took msg {task.get('message_id')} lane={task.get('_lane')}")
+                process_task(task, state, BREAKER, task_q)
             except Exception as e:
-                log(f"task worker error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
+                task["_outcome"] = "worker_error"
+                log(f"{me} error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
             finally:
+                task_q.release(task)
                 task_q.task_done()
+                record_task(task, me, started, time.time())
                 # (Coltrane r3: an alert's spool record is removed in process_task only after his reply is posted AND
                 #  recorded - never here, where "dequeued" would be mistaken for "answered".)
             if time.time() - last_heartbeat >= HEARTBEAT:
                 _people, _adv, _alerts = task_q.depth_by_class()
-                log(f"task worker alive, queue depth={task_q.qsize()} "
+                log(f"{me} alive, queue depth={task_q.qsize()} "
                     f"(people={_people} self-advance={_adv} alerts={_alerts})")
                 last_heartbeat = time.time()
         except Exception as e:
-            log(f"task worker outer error (resuming): {type(e).__name__}: {e}")
+            log(f"{me} outer error (resuming): {type(e).__name__}: {e}")
             time.sleep(1)
 
 
@@ -1295,15 +1438,18 @@ def main():
     save_state(state)
     log(f"Discord Langston bridge starting. session_id={state['session_id']} channel={CFG['channel_id']}")
     # B-LANGSTON-RELIEF OBJ-1: people's messages are served before system alerts (lq.TaskPriorityQueue).
-    task_q = lq.TaskPriorityQueue()
+    # #1248: lanes on top of the priority order; an escalation keys by the alert lane's (template, symbol).
+    task_q = lq.LaneTaskQueue(alert_key=al.alert_key)
     recover_floor, why = lq.read_recover_floor()
     if recover_floor is not None:
         log(f"recovery: will re-read people's messages since {recover_floor.isoformat()} once the gateway is ready")
     elif why != "absent":
         log(f"recovery: floor file ignored ({why}); nothing from before this start will be recovered")
-    worker = threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name="task-worker")
-    worker.start()
-    log("task worker thread started")
+    for _name in WORKER_NAMES:
+        threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name=_name).start()
+    log(f"task workers started: {', '.join(WORKER_NAMES)} (drain flag {DRAIN_FLAG}, one-worker flag "
+        f"{ONE_WORKER_FLAG}: {'SET' if os.path.exists(ONE_WORKER_FLAG) else 'clear'})")
+    sweep_scratch()
     alert_q = None
     if ALERT_LANE_ENABLED:
         alert_q = queue.Queue()
