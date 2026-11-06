@@ -326,5 +326,60 @@ ok("an undated entry's file header says undated, not a cut filename",
    os.path.exists(uf) and open(uf, encoding="utf-8").read().startswith("# CC-B — undated — session"), open(uf, encoding="utf-8").read()[:80] if os.path.exists(uf) else None)
 shutil.rmtree(base)
 
+print("9. Langston P5 r2 must-fixes")
+import calendar as _cal
+base, proj, root = tree()
+put(proj, FIRST, "w")
+da.archive_all(root, proj, dt.Redactor())
+open(os.path.join(root, f2), "ab").write(b"uncommitted tail from a crashed run\n")
+p = _sp.run([sys.executable, "-I", os.path.join(HERE, "dt_archive.py"), "--root", root, "--projects", proj, "--dry-run"], capture_output=True)
+ok("R2-MF1: a dry run PRINTS what recovery would cut, even with no new lines",
+   p.returncode == 0 and b"WOULD CUT 36 uncommitted byte(s) from " in p.stdout, (p.stdout[-300:], p.stderr[-200:]))
+p = _sp.run([sys.executable, "-I", os.path.join(HERE, "dt_archive.py"), "--root", root, "--projects", proj], capture_output=True)
+ok("R2-MF1: a real run PRINTS the cut it made - a repair is an event, never silent",
+   p.returncode == 0 and b"RECOVERED: cut 36 uncommitted byte(s) from " in p.stdout, (p.stdout[-300:], p.stderr[-200:]))
+p = _sp.run([sys.executable, "-I", os.path.join(HERE, "dt_archive.py"), "--root", root, "--projects", proj,
+             "--key-file", os.path.join(base, "nonexistent-key.bin")], capture_output=True)
+ok("R2-MF2: --key-file without --hashes is REFUSED (exit 3), never run with layer (c) OFF",
+   p.returncode == 3 and b"would run with layer (c) OFF" in p.stderr, p.stderr[-200:])
+shutil.rmtree(base)
+base, proj, root = tree()
+put(proj, FIRST, "w")
+nd = os.path.join(proj, SLUG, SID, "subagents")
+os.makedirs(nd)
+open(os.path.join(nd, "agent-abc.jsonl"), "w").write(json.dumps(reply("n1", D1 % 8, "nested work")) + "\n")
+real_walk = os.walk
+
+
+def blind_walk(top, onerror=None, **kw):
+    for r, ds, fs in real_walk(top, **kw):
+        if r.endswith("subagents"):
+            if onerror:
+                onerror(PermissionError(13, "Permission denied", r))
+            continue
+        yield r, ds, fs
+
+
+da.os.walk = blind_walk
+try:
+    try:
+        da.archive_all(root, proj, dt.Redactor())
+        ok("R2-MF3: a nested folder that cannot be read REFUSES the run", False)
+    except da.Refused as e:
+        ok("R2-MF3: a nested folder that cannot be read REFUSES the run", "cannot read" in str(e) and "subagents" in str(e), str(e))
+finally:
+    da.os.walk = real_walk
+ok("R2-MF3: ...before anything is written (no false 'not on disk' stamped)", os.listdir(root) == [], os.listdir(root))
+da.archive_all(root, proj, dt.Redactor())
+ok("R2-MF3: with the folder readable the nested transcript is archived", os.path.exists(os.path.join(root, "CC-B", "sub", SID[:8], "subagents__agent-abc.md")))
+shutil.rmtree(base)
+real_mktime = da.time.mktime
+da.time.mktime = lambda t: _cal.timegm(t) - 3600         # a machine one hour off UTC, whatever zone this box is in
+try:
+    ok("R2-obs1: the UTC check does not depend on this machine's zone (mktime is never used)",
+       da._secs("2000-01-01T00:00:00Z") == 946684800)
+finally:
+    da.time.mktime = real_mktime
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

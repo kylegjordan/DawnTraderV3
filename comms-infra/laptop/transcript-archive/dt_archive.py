@@ -60,16 +60,28 @@ def raw_files(projects):
     """[(alias, kind, raw_path, session_id, parent_id, nested_name)] for the five session folders, sorted. kind is 'top'
     (<slug>/<session>.jsonl) or 'sub' (any .jsonl below <slug>/<session>/)."""
     out = []
+
+    def unreadable(err):
+        # Langston P5 r2 must-fix 3: os.walk's default is SILENCE on a folder it cannot read, which made a nested
+        # transcript vanish and its parent's link read "not on disk" - an absence asserted by an instrument that never
+        # checked its reach, stamped into an append-only file. Any read failure refuses the WHOLE run before a write.
+        raise Refused("cannot read %s (%s) - the raw set would be incomplete; nothing written" % (
+            getattr(err, "filename", "?"), type(err).__name__))
+
     for slug in sorted(SLUG_ALIAS):
         alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)
         if not os.path.isdir(base):
             continue
-        for name in sorted(os.listdir(base)):
+        try:
+            names = sorted(os.listdir(base))
+        except OSError as e:
+            unreadable(e)
+        for name in names:
             p = os.path.join(base, name)
             if name.endswith(".jsonl") and os.path.isfile(p):
                 out.append((alias, "top", p, name[:-6], None, None))
             elif os.path.isdir(p):
-                for root, _dirs, files in sorted(os.walk(p)):
+                for root, _dirs, files in sorted(os.walk(p, onerror=unreadable)):
                     for f in sorted(files):
                         if f.endswith(".jsonl"):
                             rel = os.path.relpath(os.path.join(root, f), p)[:-6]
@@ -276,7 +288,8 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             done.update(u for u, _l in items)
         st["offset"], st["ids"], st["held"] = new_off, sorted(done), keep
         write_state(sp, st)
-        return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "offset": new_off}
+        return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "offset": new_off,
+                "cut": would_cut}
     finally:
         if not dry:
             unlock(sp)
@@ -326,6 +339,9 @@ def main(argv):
         sys.stderr.write("REFUSED: --root and --projects are required\n")
         return 2
     hashes, key = [], None
+    if opts.get("--key-file") and not opts.get("--hashes"):
+        sys.stderr.write("REFUSED: --key-file without --hashes would run with layer (c) OFF\n")
+        return 3
     if opts.get("--hashes"):
         key = dt.load_key(opts.get("--key-file"))
         if key is None:
@@ -343,6 +359,10 @@ def main(argv):
         sys.stderr.write("REFUSED: %s\n" % e)
         return 4
     for r in results:
+        for rel, n in r.get("would_cut") or []:     # a repair is an EVENT, said on both paths (Langston P5 r2 must-fix 1)
+            print("WOULD CUT %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))
+        for rel, n in r.get("cut") or []:
+            print("RECOVERED: cut %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))
         if r["lines"] or r["held"]:
             print("%s: %d line(s) into %d file(s), %d held" % (r["raw"], r["lines"], len(r["files"]), r["held"]))
     for e in refused:

@@ -36,6 +36,11 @@ MUTATIONS = [
     ("a dry run takes the lock", replace("    if not dry:          # a dry run writes NOTHING", "    if True:          # a dry run writes NOTHING")),
     ("a dead nested link written as if it resolved", replace("        if (alias, m.group(1), m.group(2)) in nested:", "        if True:")),
     ("every nested link called missing", replace('    nested = frozenset((rf[0], rf[4][:8], rf[5]) for rf in rfs if rf[1] == "sub")', "    nested = frozenset()")),
+    ("R2-MF1: a dry run's would-cut not printed", replace(
+        '            print("WOULD CUT %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))', "            pass")),
+    ("R2-MF1: a real recovery cut not reported", replace('                "cut": would_cut}', '                "cut": []}')),
+    ("R2-MF2: --key-file without --hashes accepted", replace('    if opts.get("--key-file") and not opts.get("--hashes"):', "    if False:")),
+    ("R2-MF3: an unreadable folder read as empty", replace("os.walk(p, onerror=unreadable)", "os.walk(p)")),
     ("C-5 injectivity not checked", replace("    check_injective(rfs)                    # BEFORE any write (C-5)\n", "")),
     ("recovery does not cut back", replace("            if not dry:\n                with open(p, \"r+b\") as fh:\n                    fh.truncate(n)", "            pass")),
     ("no intent commit before writing", replace("        write_state(sp, st)\n        for rel, items in sorted(by_file.items()):",

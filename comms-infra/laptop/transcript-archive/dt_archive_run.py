@@ -13,6 +13,11 @@ hook, the restart handoff). It owns the key handoff P3(c) promised and the stale
    shorter-than-committed file) · 6 a LOCK OLDER THAN ONE INTERVAL (25 h) - a run that died and left it; the writer
    never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it.
    The last line printed is always one of: `ARCHIVE RUN OK`, `ARCHIVE RUN FAILED — <why>`.
+5. OPERATOR NOTE (Langston P5 r2 obs 2): if the projects folder MOVES or is re-junctioned, every raw file's identity
+   changes and EVERY file is refused (`state ... belongs to <old>, not <new>`, exit 5). Do NOT delete or empty `.state`:
+   that restarts every file from offset 0 and appends the whole history again. Recovery is to confirm the bytes are the
+   same files (sha256 of old path vs new) and re-point each state's `raw` to the new identity; no tool exists for it
+   yet, because it has not happened - build it the first time it does, under review.
 """
 import json
 import os
