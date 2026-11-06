@@ -293,6 +293,37 @@ def crew_post_names_me(full):
         return bool(MY_RE.search(full))
 
 
+# ── KYLE'S DESK (Kyle 2026-11-06, relayed by PM Claude; #1241 follow-up, disposition 1) ─────────────────────────────
+# Kyle: "you need to monitor Discord ... when there are questions or requests, I'm not really monitoring Discord ...
+# So you need to pick it up." PM Claude triages every post meant for Kyle, so the sessions listed here ALSO wake on
+# (1) any crew or reviewer post whose OPENING LIST names Kyle, (2) any post carrying the fixed "STILL NEED YOU" marker
+# the blocked-on-Kyle timers send, and (3) a Langston triage whose alert marker names owner=Kyle. Nothing else changes:
+# no other session gets these wakes, and a post that only MENTIONS Kyle later wakes nobody (the #1241 rule).
+# The marker match is CASE-SENSITIVE on purpose: it is a fixed string the timers write, and "still need you" in prose
+# is a sentence, not a summons.
+KYLE_DESK = {"CC-PM"}
+STILL_NEED_RE = re.compile(r"\bSTILL NEED YOU\b")
+_KYLE_OPEN_RE = re.compile(r"^[\s*_~`>#:\".\-]*kyle\b", re.I)   # the fallback when the opening-list parser is unusable
+
+
+def kyle_addressed(full):
+    """Does the post's opening list name Kyle? Latched or failing parser: Kyle at the very start (wider is noise, never
+    silence - the latch's own direction)."""
+    if ADDRESS_LATCH is not None:
+        return bool(_KYLE_OPEN_RE.match(full))
+    try:
+        return "KYLE" in _ADDRESS_LIST.opening_addressees(full, ADDRESS_REGISTRY)
+    except Exception:
+        return bool(_KYLE_OPEN_RE.match(full))
+
+
+def for_kyles_desk(full, owner=None):
+    """True when THIS session watches Kyle's desk and the post is for Kyle (opening list, the marker, or owner=Kyle)."""
+    if ALIAS not in KYLE_DESK:
+        return False
+    return bool(kyle_addressed(full) or STILL_NEED_RE.search(full) or owner == "Kyle")
+
+
 # ── B-COMMS-IMAGES-2: make images VISIBLE to the desktop sessions ───────────────
 # B-COMMS-IMAGES (#657) taught the bridges to SAVE inbound images and record their
 # paths, and Langston reads them natively because he lives on that box. The desktop
@@ -1201,13 +1232,16 @@ for raw in sys.stdin:
                     if o.upper() != ALIAS and o not in others:
                         others.append(o)
                 routed = f" [alert routed to {', '.join(others)}]" if others else ""
+                # KYLE'S DESK: decided once, here, from the stripped body and the LAST marker's owner.
+                desk = for_kyles_desk(full, OWNER_CANON[mo.group(1).upper()] if mo else None)
                 if mo:
                     owner = OWNER_CANON[mo.group(1).upper()]
                     if owner.upper() != ALIAS:
                         # (3)+(4) Another owner's marker still SUPPRESSES (the #995 cut, untouched) -
                         # UNLESS the reply OPENS with my name: then it was addressed to me and the
                         # marker is a note for someone else riding along. The wake line says so.
-                        if not OPEN_RE.match(full):
+                        # Kyle's desk: a reply for Kyle is not suppressed for the session that watches it.
+                        if not OPEN_RE.match(full) and not desk:
                             continue
                     # The owner == ME case falls through; the #995 note below is about it.
                     # 2026-09-03 #995 (B-WAKE-QUIET OBJ-11, KYLE-DIRECTED) — THE MARKER IS NOW
@@ -1244,6 +1278,8 @@ for raw in sys.stdin:
                 # most of the passing mentions.
                 elif OPEN_RE.match(full):
                     print(f"WAKE[LANGSTON->{ALIAS}]{routed}: {text}{media_suffix(d)}", flush=True)
+                elif desk:
+                    print(f"WAKE[LANGSTON->{ALIAS}] [for Kyle]{routed}: {text}{media_suffix(d)}", flush=True)
             elif kind == "langston_outbound_media":
                 # Langston uploaded a file with his reply. That upload is mirrored as its OWN
                 # entry whose text is "[uploaded <path>]" and which carries no addressee, so it
@@ -1298,9 +1334,11 @@ for raw in sys.stdin:
                     # anywhere — a passing mention later no longer wakes. @crew / ALL SESSIONS still reach all, anywhere.
                     # The wake file and Kyle's and Langston's branches keep their own rules (scope §0).
                     deliver = bool(crew_post_names_me(full) or CREW_ALL_RE.search(full))
+                    desk = (not deliver) and for_kyles_desk(full)
                     body = text
-                    if deliver:
-                        print(f"WAKE[{sender} via {tp}->{ALIAS}]: {body}{media_suffix(d)}", flush=True)
+                    if deliver or desk:
+                        tag = " [for Kyle]" if desk else ""
+                        print(f"WAKE[{sender} via {tp}->{ALIAS}]{tag}: {body}{media_suffix(d)}", flush=True)
         else:
             # ── THE HARNESS THAT IMPERSONATED A CLEAN PASS (Langston rider, 2026-08-20) ──
             # `cur` is set ONLY by tail's "==> file <==" header. A line arriving without one
