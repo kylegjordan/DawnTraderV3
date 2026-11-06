@@ -19,23 +19,43 @@ def replace(a, b):
 
 
 MUTATIONS = [
-    ("a success schedules no never-ran check", replace("        if code == 0:\n            remote([\"add\"", "        if False:\n            remote([\"add\"")),
+    ("BLOCKER-1: resolve before arming (the r1 order)", replace(
+        "    pending = armed + [new_key]\n    write_state(root, pending)\n    for k in armed:                        # RESOLVE LAST",
+        "    pending = armed + [new_key]\n    write_state(root, pending)\n    for k in []:                        # RESOLVE LAST")),
+    ("BLOCKER-1: one key for every never-ran check (the new one swallowed by dedupe)", replace(
+        'new_key = DEADMAN_PREFIX + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(now))', 'new_key = DEADMAN_PREFIX + "x"')),
+    ("BLOCKER-1: an alert-leg failure exits 0", replace("(code if code != 0 else (10 if why else 0))", "code")),
+    ("a failed add still resolves the older checks", replace(
+        "    except Exception as e:  # noqa: BLE001 - the older check still stands, which is the correct alarm\n        return",
+        "    except Exception as e:  # noqa: BLE001 - the older check still stands, which is the correct alarm\n        _ =")),
+    ("a failed night resolves the never-ran check", replace(
+        "            return \"failure alert not raised: %s: %s\" % (type(e).__name__, str(e)[:300])\n        return None",
+        "            return \"failure alert not raised: %s: %s\" % (type(e).__name__, str(e)[:300])\n        code = 0")),
+    ("a success never resolves the failure alert", replace(
+        '        remote(["resolve-key", FAIL_KEY, "--by", ACTOR, "--evidence", evidence(n, stamp, code)])', "        pass")),
+    ("a resolved key kept in the state (resolved again forever)", replace("            pending.remove(k)\n", "")),
     ("the never-ran check scheduled for NOW (fires every night)", replace("utc(now + DEADMAN_H * 3600)", "utc(now)")),
-    ("the failure alert not cleared first (deduped away behind the scheduled check)", replace(
-        "        remote([\"resolve-key\", KEY,", "        (lambda *a: None)([\"resolve-key\", KEY,")),
+    ("evidence without the host (reads as a repo path)", replace('"laptop:~/.claude/transcript-archive/RUNS.log:%d', '"transcript-archive/RUNS.log:%d')),
     ("free-text resolve evidence (REFUSED by the staging gate)", replace(
-        "\"%s (nightly %s, exit %s)\" % (ref, stamp, code)", "\"nightly %s, exit %s\" % (stamp, code)")),
-    ("the evidence cites the wrong RUNS.log line", replace("            n = sum(1 for _ in fh) + 1", "            n = sum(1 for _ in fh)")),
-    ("the failure's own line left out of the alert", replace("Nothing new was archived. \"\n                               \"Owner: Infra Claude.\" % (stamp, line)",
-                                                            "Nothing new was archived. \"\n                               \"Owner: Infra Claude.\" % (stamp, \"\")")),
-    ("an alert-leg failure swallowed silently", replace("        return \"%s: %s\" % (type(e).__name__, str(e)[:300])\n    return None", "        return None\n    return None")),
-    ("the lock released before the log is written (the cited line can move)", replace(
-        "    try:          # the lock is held through the log write", "    if held:\n        drop_lock(root)\n    try:          # the lock is held through the log write")),
+        'return "laptop:~/.claude/transcript-archive/RUNS.log:%d (nightly %s, exit %s)" % (n, stamp, code)',
+        'return "nightly run %d at %s, exit %s" % (n, stamp, code)')),
+    ("CONDITION-1: the r1 order - count the line, run the alert leg, THEN write it", replace(
+        "        n = log_line(root, \"nightly\", code, line)\n        why = alert_leg(code, line, clock(), n, root, remote)",
+        "        n = (sum(1 for _ in open(os.path.join(root, \"RUNS.log\"), \"rb\")) + 1) if os.path.exists(os.path.join(root, \"RUNS.log\")) else 1\n        why = alert_leg(code, line, clock(), n, root, remote)\n        log_line(root, \"nightly\", code, line)")),
+    ("log_line returns the wrong number", replace("            n = sum(1 for _ in fh) + 1", "            n = sum(1 for _ in fh)")),
+    ("an alert-leg failure not written to RUNS.log", replace('            log_line(root, "nightly-alert", code, "ALERT LEG FAILED: %s" % why)', "            pass")),
+    ("a corrupt state read as empty", replace('        raise ValueError("unreadable .alert-state.json")', "        return []")),
+    ("a corrupt state overwritten, not kept aside", replace(
+        '            os.replace(os.path.join(root, ".alert-state.json"), kept)   # kept for the human, never overwritten', "            pass")),
+    ("the failure's own line left out of the alert", replace("% (stamp, line))[:1500]", "% (stamp, \"\"))[:1500]")),
     ("the lock never released", replace("    finally:\n        if held:\n            drop_lock(root)", "    finally:\n        pass")),
     ("a held lock broken instead of waited on", replace("    except FileExistsError:\n        return False", "    except FileExistsError:\n        os.remove(os.path.join(root, \".run.lock\"))\n        return take_lock(root)")),
     ("nightly never gives up on a held lock", replace("        if waited >= wait_s:\n            break", "        if False:\n            break")),
-    ("a held lock's failure not alerted", replace("        why = alert_leg(code, line, clock(), ref, remote)", "        why = alert_leg(code, line, clock(), ref, remote) if held else None")),
-    ("precompact runs over a held lock", replace("    if not take_lock(root):\n        log_line(root, \"precompact\"", "    if not take_lock(root) and False:\n        log_line(root, \"precompact\"")),
+    ("precompact runs over a held lock", replace("    if not take_lock(root):\n        log_line(root, \"precompact\", \"-\", \"SKIPPED — a run is already", "    if not take_lock(root) and False:\n        log_line(root, \"precompact\", \"-\", \"SKIPPED — a run is already")),
+    ("no PreCompact floor", replace("    if last is not None and clock() - last < PRECOMPACT_FLOOR_S:", "    if False:")),
+    ("a failed run counts as a success for the floor", replace('f[1] in ("nightly", "precompact") and f[2] == "0"', 'f[1] in ("nightly", "precompact")')),
+    ("the hook spawns a fixed path, not its own file", replace('args = [sys.executable, "-I", os.path.abspath(__file__), "precompact-run"]',
+                                                                 'args = [sys.executable, "-I", "dt_archive_trigger.py", "precompact-run"]')),
     ("the hook's spawn failure not written down", replace("            log_line(root, \"precompact-hook\", \"-\", \"COULD NOT START THE RUN", "            (lambda *a: None)(root, \"precompact-hook\", \"-\", \"COULD NOT START THE RUN")),
     ("the hook does not record its inputs", replace("\"fired; input keys: %s\" % \",\".join(keys)", "\"fired\"")),
     ("a run that raises escapes the trigger", replace("    except Exception as e:  # noqa: BLE001 - every attempt ends on a result, never a traceback", "    except KeyboardInterrupt as e:  # noqa: BLE001 - every attempt ends on a result, never a traceback")),
