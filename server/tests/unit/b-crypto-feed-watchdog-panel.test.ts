@@ -122,8 +122,8 @@ beforeEach(() => {
   h.rows = { ...FULL_CFG };
   const ok = { configuredSymbols: 10, cumulativeOhlcRows: 1000, cumulativeTickerSnaps: 4000, ohlcFramesSkipped: 0, connected: true };
   h.stats.xstock_spot = { ...ok }; // NOT a RecorderConnection: no `connections` field, so not graded by the check
-  h.stats.xstock_perp = { ...ok, connections: [{ key: 'equity-perp', socketOpen: true, dataLive: 'live' }], nonLiveConnections: 0 };
-  h.stats.crypto_perp = { ...ok, connections: [{ key: 'crypto-perp', socketOpen: true, dataLive: 'live' }], nonLiveConnections: 0 };
+  h.stats.xstock_perp = { ...ok, connections: [{ key: 'equity-perp', socketOpen: true, dataLive: 'live' }], silentOrUnknownConnections: 0 };
+  h.stats.crypto_perp = { ...ok, connections: [{ key: 'crypto-perp', socketOpen: true, dataLive: 'live' }], silentOrUnknownConnections: 0 };
   _setRecorderAlertDepsForTests(async () => ({ addAlert: async (o: any) => o, resolveByKey: async (k: string) => [k], hasOpen: async () => false }));
   _resetRecorderRegistryForTests();
   _resetCryptoRecorderClockForTests();
@@ -153,7 +153,7 @@ describe('objective 4: an OPEN socket is not a live feed, at the Passive Archive
     ]);
     expect(row.dataSilentConnections).toBe(1);
     expect(row.status).toBe('DATA_SILENT');
-    expect(getCryptoSpotStats().nonLiveConnections).toBe(1);
+    expect(getCryptoSpotStats().silentOrUnknownConnections).toBe(1);
   });
 
   it('2. control: both shards delivering => OK', async () => {

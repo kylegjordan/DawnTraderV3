@@ -1062,7 +1062,10 @@ export async function computePassiveArchiveStatus(
     // inside its opening window before its first data frame; outranks NO_OHLC/NO_TICKER, which would otherwise fire on
     // every fresh process). A universe with no `connections` (xstock_spot: not a RecorderConnection) is NOT graded by
     // these arms — absence is never read as silent.
-    const liveness: RecorderConnectionLiveness[] | null = 'connections' in cfg.stats ? cfg.stats.connections : null;
+    // Array.isArray, not a presence test (Langston Step-9 fold-in 3): an unrelated non-array `connections` key on a
+    // future stats type must neither grade that universe nor throw inside the panel path.
+    const rawConnections = (cfg.stats as { connections?: unknown }).connections;
+    const liveness: RecorderConnectionLiveness[] | null = Array.isArray(rawConnections) ? (rawConnections as RecorderConnectionLiveness[]) : null;
     const dataSilentConnections = liveness ? liveness.filter((c) => c.dataLive === 'silent').length : null;
     let status: PassiveArchiveUniverseStats['status'] = 'OK';
     if (!cfg.stats.connected) {
