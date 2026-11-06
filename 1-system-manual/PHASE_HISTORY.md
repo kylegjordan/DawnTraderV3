@@ -1437,7 +1437,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **A practice trade that runs out of time with no price to sell at is no longer booked as a win or a loss.** Before this, the VTS invented a closing price — often the trade's own entry price — and counted it as a real result, which quietly bent what the system learns from. Now such a trade closes with no result at all. Practice xStock trades also stop running through the weekend market close, and two crypto tokens that share a ticker with a stock (STX and STRK) are no longer judged against the stock's price, which had been producing dozens of instant fake wins.
 
-### 2026-11-05 — B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4) — ⏳ CLOSING (Langston confirmed Step 8)
+### 2026-11-05 — B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4) — ✅ CLOSED 2026-11-06 (Langston confirmed Step 11)
 
 **Langston's memory can now only be changed through its proper tool.** Before, anyone editing his memory file directly — him included — jammed the tool for every session until someone fixed it by hand, which happened five times in under three weeks. The file is now locked so a direct edit is simply refused, his own saves go through a small service that checks them, and a daily check raises an alert if the lock is ever switched off. His own instructions were corrected to match.
 

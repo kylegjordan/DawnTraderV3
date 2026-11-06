@@ -1484,7 +1484,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** 0 entry-priced shadow closes after the deploy; 0 xStock shadow closes inside the first shut window against 193 the week before; every unpriced close NULL and out of the learning files; xStock and crypto archive rows now carry their real class. **Closed:** `#1075`, `#1145`. **Left:** `#1144` (the no-bid arm has no age term, row 4c), `#1143` (weekday Class B, row 40), `#1073` (increment 2, row 4b).
 
-## B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4; `#1234`, Kyle 2026-11-04) — change-class `non_architecture` — ⏳ **CLOSING — Step 11 report with Langston** (installed `fe3c4ad1f`, shrink gate `fe3c4ad1f`; Step 8 CONFIRMED by Langston, msg `1568147175651803219`; report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`)
+## B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4; `#1234`, Kyle 2026-11-04) — change-class `non_architecture` — ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston at `990cdee1d`, msg `1568156826846109757`; installed `fe3c4ad1f`, shrink gate `fe3c4ad1f`; Step 8 CONFIRMED by Langston, msg `1568147175651803219`; report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`)
 
 **WHAT IT FIXED.** Langston's composed memory file could be written directly by his own account or any session; each such write locked the memory tool for everyone until a hand reconcile (five in 19 days).
 
