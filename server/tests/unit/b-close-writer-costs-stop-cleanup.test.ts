@@ -131,6 +131,16 @@ describe('B-CLOSE-WRITER-COSTS P-17 — the orphan step finishes the record befo
     expect(block.indexOf('flattenReport.orphansKept.push(orphan.symbol);', guard)).toBeGreaterThan(guard);
     expect(block.indexOf('continue;', guard)).toBeGreaterThan(guard);
   });
+  it('O-4 a FAILED tradeId stamp fails CLOSED here: kept, reported, and never reaches the finish (Langston NEW-1 condition)', () => {
+    const stampAt = block.indexOf("if (!(await stampPositionTradeId('paper', orphan, _orec.id))) {");
+    const finishAt = block.indexOf("closeStaleRecordAtReference('paper', _orec)");
+    expect(stampAt).toBeGreaterThan(0);
+    expect(finishAt).toBeGreaterThan(stampAt);
+    const arm = block.slice(stampAt, finishAt);
+    expect(arm).toContain('flattenReport.orphansKept.push(orphan.symbol);');
+    expect(arm).toContain('continue;');
+    expect(arm).toContain('tradeId stamp FAILED');
+  });
   it('O-3 a delete that FAILS after the record was finished is reported in orphansKept (Langston Part C C-2)', () => {
     const after = src.slice(del, src.indexOf('} else {', del));
     const catchAt = after.indexOf('} catch (cleanupErr) {');
