@@ -65,7 +65,7 @@ Ten of nineteen strategies had been switched off for xStock since May, and three
 - **Four verdicts:** PASS on the current rows · PASS with one necessary placeholder · FAIL, demonstrated structural infeasibility · UNDERPOWERED, cannot decide (stays off). Missing evidence never becomes "infeasible".
 - **Settings:** RR floors unchanged pending row 59a; native stop/target geometry unchanged (25-14 / 25-17). A reach placeholder only for a measured guard-vs-declared-geometry contradiction, with blast radius, falsifier and ordered rollback (`ADJUSTMENT_FRAMEWORK.md:18-21`). More than one lever needed ⇒ a Phase-25 refit, and that cell HOLDS. (The `#1052` ratchet binds only the four refused ceilings — `SYSTEM_MANUAL.md:445`/`:450` — which are disjoint from these four.)
 - **Order:** one clean population after the B-ENTRY-GATE inc-A deploy and its Step 7. Then O3 switches on one strategy at a time, each requiring proof inside its first session that it actually evaluated on xStock (F1 being live on crypto does not prove that). strong_bull_trend's window is a pre-inc-A observation, not a control.
-- **Needs Kyle's nod (timing only):** KD-7's *"right after the direction-score fix"* becomes *"after increment A is live and verified."*
+- **Needs Kyle's nod (timing only):** KD-7's *"right after the direction-score fix"* becomes *"after increment A is live and verified."* ✅ **APPROVED — Kyle, *"Approve as proposed"*, recorded as KD-57 at `3a05c2f87` (PM Claude, 2026-11-06); ACKed by NEW Claude.**
 
 ## 4. Unproven, stated as unproven
 - Whether strong_bull_trend fires on xStock at all inside 21 days (it was feasible only after the 09-20 seed; first-week opens not yet read).
