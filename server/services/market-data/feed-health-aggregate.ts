@@ -20,8 +20,12 @@
  *      that happened to tick), against a floor, warmth-gated on the same window. A fifth consumer
  *      with a different aggregate ON PURPOSE: freshest-symbol is the reason the alarm could not see
  *      half the recorder dark for 14 days (2026-10-21 → 11-04) — one live connection kept the
- *      freshest symbol fresh. The trading classes above keep their aggregates unchanged; the alarm
- *      takes the worse of the two, so the dashboard and the alarm read the same numbers.
+ *      freshest symbol fresh. The trading classes above keep their aggregates unchanged, and the ALARM
+ *      takes the worse of the two. ⚠️ The STATUS / DISPLAY consumers (health-monitor.ts,
+ *      system-health-monitor.ts) do NOT: they still read the freshest symbol only and do not show the
+ *      recorder's live share, so the dashboard and the alarm can read DIFFERENT numbers for the same
+ *      recorder. A STATUS line showing the recorder live share is a carried follow-up, not built
+ *      (corrected at B-CRYPTO-FEED-WATCHDOG Step 9 — this line previously said they read the same).
  *
  * These are pure functions over a minimal shape so they unit-test without a live
  * adapter. Asset-class partitioning + the xStock market-hours gate + warmup grace
