@@ -750,7 +750,7 @@ export function resolveAssetClass(symbol: string, exchange: string): AssetClass 
     // intact. This branch is ALWAYS xstock_spot regardless of collision set.
     if (XSTOCK_SPOT_DISPLAY.test(symbol)) return ASSET_CLASSES.XSTOCK_SPOT;
 
-    // B79.0f — collision gate. The 9 USD-quote (+ 8 EUR pre-emptive) tickers
+    // B79.0f — collision gate. The 16 USD-quote (+ 16 EUR) tickers
     // in XSTOCK_SPOT_KRAKEN_COLLISIONS exist BOTH as xStock equities AND as
     // Kraken-spot cryptos with identical canonical form. When such a ticker
     // arrives via the regular `kraken` exchange WITHOUT the disambiguating

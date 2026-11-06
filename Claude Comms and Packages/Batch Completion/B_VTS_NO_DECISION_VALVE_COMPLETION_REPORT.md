@@ -24,7 +24,7 @@ When a VTS trade reached its time limit with no usable sell price, the booking r
 | 2 | The arm is on every closed row, both lanes | **YES** | 0 NULL `exit_booking_arm` across 70,924 post-deploy shadow closes; real-lane archive rows carry `exitBookingArm` (141 `time_stop` all `bid`) |
 | 3 | The `clamp_no_mark` arm is counted | **YES** | `[8a-P3][VTS_TOUCH]` (real) and `[8a-P3][VTS_SHADOW_TOUCH]` (shadow, stdout) print `unpricedNoBid` / `unpricedNoMark` / `closedUnpriced` per class (read 2026-11-06 01:55Z) |
 | 4 | The refusal alert carries the real refusal reason | **YES** | `no-trigger-vts-*` bodies name it, e.g. `most recent reason: no_transactable_side (too_old)` (STRK/USD, 2026-11-05) |
-| 5 | The VTS close writes the carried class; collision intersection re-run | **YES** | archive rows with a `vts_xstock_spot_` trade id: 5,556 post-deploy, all `xstock_spot` (4 `crypto_spot` before); 23 post-deploy crypto STX/STRK closes all `crypto_spot`, median holds 1,138-1,868 min against STX's 1.0 min before |
+| 5 | The VTS close writes the carried class; collision intersection re-run | **YES** | archive rows with a `vts_xstock_spot_` trade id: 5,556 post-deploy, all `xstock_spot` (4 `crypto_spot` before); 23 post-deploy crypto STX/STRK closes all `crypto_spot`, median holds 1,138-1,868 min against STX's 1.0 min before; the archive's 1,477 post-deploy crypto-lane closes all `crypto_spot`; in the `virtual_trades` JSON, every post-deploy crypto-lane record on the 8 collision tickers is `crypto_spot` (A 5, STX 21, STRK 13) and every `xstock_spot` one is a genuine xStock-lane trade (read by `signal.id`, since the record id is the same shape in both lanes) |
 | 6 | (P6, Langston C5) The shadow lane honours the weekend shutdown | **YES** | 0 xStock shadow closes inside the first shut window [10-10 00Z, 10-12 00Z) against 193 in the same window a week earlier, all at entry price; 186 closed at the reopen, 66% unpriced — a floor, the build live then (`620b1b6b5`) held the first pass to 00:35Z |
 
 **Calibration line (epoch rule 2):** impact NAMED, not epoch-bumped. The change removes made-up outcomes from VTS learning rather than shifting a scale; the rows it would have made are now absent, and the ones already made are excluded by id or selector in the rule-8 register (Classes A and B, and the STX/STRK selector).
@@ -61,7 +61,7 @@ CHANGE-CLASS: `architecture`
 | T2 | SYSTEM_IMPACT_MAP.md | ✅ | the exit-booking entry and S19 (the shadow lane's weekend skip and arm column) |
 | T2 | RUNNING_ISSUES.md | ✅ | `#1075` and `#1145` closed; `#1144` gained the arm item (Step 8) |
 | T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-11-06-B |
-| T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | rule 8: the landing enumeration (late), the register closed to new A/B members, the STX/STRK selector |
+| T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | rule 8: the landing enumeration (late) with its directions, the register closed to new A/B members and the `exit = entry` predicate retired, the collision selector (lane vs stamp, all 8 tickers) |
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ | the `stale_timeout → shadow_max_hold` relabel |
 | T2 | GOVERNANCE_EXCEPTIONS.md | BLOCKED — Langston's Step-11 confirm | the two `open` rows (2026-10-07, 2026-11-05) flip to closed when the confirm lands |
 | T2 | STORAGE_POLICY.md | N/A | the new column sits on an existing table; no retention change |
