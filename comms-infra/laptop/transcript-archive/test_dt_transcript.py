@@ -96,12 +96,23 @@ ok("a JSON object keeps its next key", out == '{"PASSWORD":"[REDACTED named:PASS
 
 print("2d. names - a prefixed name is the same secret kind (Langston r3 blocker)")
 sv = "hunter" + "2zz"
-for form, nm in [("DB_PASSWORD=%s", "DB_PASSWORD"), ("PGPASSWORD=%s psql -c x", "PGPASSWORD"),
-                 ('MYSQL_PASSWORD: "%s"', "MYSQL_PASSWORD"), ("APP_JWT_SECRET=%s", "APP_JWT_SECRET"),
-                 ("MY_GH_TOKEN=%s", "MY_GH_TOKEN"), ("TEST_USER_PASSWORD = %s", "TEST_USER_PASSWORD")]:
+for form, nm in [("DB_PASSWORD=%s", "PASSWORD"), ("PGPASSWORD=%s psql -c x", "PASSWORD"),
+                 ('MYSQL_PASSWORD: "%s"', "PASSWORD"), ("APP_JWT_SECRET=%s", "JWT_SECRET"),
+                 ("MY_GH_TOKEN=%s", "GH_TOKEN"), ("TEST_USER_PASSWORD = %s", "PASSWORD")]:
     red = dt.Redactor()
     out = red(form % sv)
-    ok("prefixed name %r hides the value" % form, sv not in out and red.counts.get("named:" + nm) == 1)
+    ok("prefixed name %r hides the value, counted under its LISTED name %s" % (form, nm),
+       sv not in out and red.counts == {"named:" + nm: 1}, red.counts)
+    ok("...and the text still shows the name as written", form.split("=")[0].split(":")[0].strip() in out)
+red = dt.Redactor()
+red("hunter2PASSWORD=x1 xPASSWORD=y2 DB_PASSWORD=z3")
+ok("the counter keys are bounded by the list: three written names, one key", red.counts == {"named:PASSWORD": 3}, red.counts)
+_saved = list(dt.SECRET_NAMES)
+dt.SECRET_NAMES.append("TOKEN")        # a future list where one listed name ends another: the LONGEST must win
+red = dt.Redactor()
+red("MY_GH_TOKEN=abc123")
+dt.SECRET_NAMES[:] = _saved
+ok("when two listed names fit, the counter takes the LONGEST (GH_TOKEN, not TOKEN)", red.counts == {"named:GH_TOKEN": 1}, red.counts)
 red = dt.Redactor()
 ok("the sudoers literal NOPASSWD is not a secret", red("deploy ALL=(ALL) NOPASSWD: ALL") == "deploy ALL=(ALL) NOPASSWD: ALL" and red.counts == {})
 red = dt.Redactor()

@@ -160,7 +160,11 @@ class Redactor:
         return line
 
     def _named(self, m):
-        kind = self._hit("named:" + m.group("name").upper())
+        # The counter key is the LISTED name the match ends with (longest), never the name as written - a key taken
+        # from the transcript is unbounded (`hunter2PASSWORD=x` -> `named:HUNTER2PASSWORD`; Langston r4 PROCEED item).
+        written = m.group("name").upper()
+        listed = max((n for n in SECRET_NAMES if written.endswith(n)), key=len, default=written)
+        kind = self._hit("named:" + listed)
         if m.group("q"):
             return m.group("name") + m.group("sep") + m.group("q") + kind + m.group("q")
         return m.group("name") + m.group("sep") + kind

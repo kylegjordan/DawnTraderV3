@@ -51,6 +51,12 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("counts key not folded to the listed name", replace(
+        "        listed = max((n for n in SECRET_NAMES if written.endswith(n)), key=len, default=written)",
+        "        listed = written")),
+    ("counts key folded to the SHORTEST listed name", replace(
+        "        listed = max((n for n in SECRET_NAMES if written.endswith(n)), key=len, default=written)",
+        "        listed = min((n for n in SECRET_NAMES if written.endswith(n)), key=len, default=written)")),
     ("P5: tie order key dropped (actions back to last)", replace("pending[b.get(\"id\")] = [uid, ts, line[0], (li, bi)]",
                                                                  "pending[b.get(\"id\")] = [uid, ts, line[0], (10 ** 9, 0)]")),
     ("P5: queued notices never kept", replace("            queued.append((ts, li, e[\"content\"]))\n", "")),
