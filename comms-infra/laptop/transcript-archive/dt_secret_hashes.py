@@ -6,7 +6,11 @@ ONLY {name, length, hmac, key_id} per named secret. The values never leave the m
 written or put in an error message. Stdlib only; run with `python3 -I`.
 
 THE KEY (Langston F1): every value is fingerprinted with HMAC-SHA256 under a key held APART from the output, so the
-output alone is worthless to a guesser — even for a 12-character part. On the laptop: `--key-file`. On a server the
+output alone is worthless to a guesser — even for a 12-character part. "Apart" is true IN TRANSIT AND AT REST, not at
+render: the key and the fingerprints necessarily meet in the archive runner's memory (Langston r2 (a)). The runner
+makes a THROWAWAY key per run, keeps it and the fingerprints in memory only, builds the server copy in memory and pipes
+it (never a file in /tmp, never tee'd), and persists neither — so there is no standing secret to home or rotate.
+Core dumps are switched off before any key is read (no_core_dumps). On the laptop: `--key-file`. On a server the
 archive runner streams a copy of this script with the RUN_KEY_HEX line set, so the key touches neither the server's
 disk nor any command line (`ps` shows command lines to every local account):
 
@@ -95,7 +99,10 @@ def parse_env(text):
         if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
             v = v[1:-1]
         else:
-            cut = v.split(" #", 1)[0].strip()
+            # `KEY= # only a comment` and `KEY=#text`: .strip() above leaves the value STARTING with "#", which the
+            # " #" cut cannot see - so a leading "#" is a comment and the value is EMPTY (Langston r2 finding 2; else
+            # it would publish as a 'reachable:false' secret and count as found - an absence in a value's clothes).
+            cut = "" if v.startswith("#") else v.split(" #", 1)[0].strip()
             if cut != v:
                 unstripped = v
             v = cut
@@ -125,7 +132,19 @@ def entries(name, value, source, key):
             + [_hashed("%s#%d" % (name, i), p, source, key) for i, p in enumerate(parts, 1)])
 
 
+def no_core_dumps():
+    """The key lives in this process's memory; a crash dump would write it to disk. Turned off before any key is
+    read (Langston r2 (a): cheaper than settling whether a 0 soft limit stops a piped dump). Absent on Windows."""
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+        return True
+    except (ImportError, ValueError, OSError):
+        return False
+
+
 def main(argv):
+    no_core_dumps()
     envs, files, jsons, names, key_file = [], [], [], None, None
     it = iter(argv)
     for a in it:
@@ -141,7 +160,9 @@ def main(argv):
             elif a == "--names":
                 names = [n.strip() for n in next(it).split(",") if n.strip()]
             else:
-                sys.stderr.write("REFUSED: unknown argument %r\n" % a)
+                # the argument is NOT echoed: a runner typo could put the key there, and stderr is captured
+                # (Langston r2 (a)); its position and length are enough to find it
+                sys.stderr.write("REFUSED: unknown argument at position %d (%d characters)\n" % (argv.index(a) + 1, len(a)))
                 return 2
         except StopIteration:
             sys.stderr.write("REFUSED: %s needs a value\n" % a)
@@ -186,8 +207,12 @@ def main(argv):
             if unstripped is not None:      # Langston F2: the cut is SAID, and the uncut reading is emitted too
                 for e in got:
                     e["note"] = "inline comment stripped; the uncut reading is also listed"
+                # ... but never a second entry for a value already listed: the uncut reading's run is often the cut
+                # value itself, which re-emitted as `A#1` would double-count and rename one secret (Langston r2 f3).
+                seen = {(e.get("length"), e.get("hmac")) for e in got if "hmac" in e}
                 got += [dict(e, note="read WITHOUT the inline-comment strip (systemd files have none)")
-                        for e in entries(n, unstripped, src, key)]
+                        for e in entries(n, unstripped, src, key)
+                        if "hmac" not in e or (e["length"], e["hmac"]) not in seen]
             out.extend(got)
             found.add(n)
     for spec in files:

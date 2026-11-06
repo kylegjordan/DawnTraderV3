@@ -180,6 +180,22 @@ ok("--hashes with the right key runs (exit 0)", rc == 0)
 _keys = os.path.join(_d, "key-short"); open(_keys, "w").write(KEY[:31].hex() + "\n")
 rc, err = _main("--hashes", _good, "--key-file", _keys)
 ok("a key under 32 bytes is REFUSED (exit 3)", rc == 3 and "--key-file" in err)
+_mixed = os.path.join(_d, "mixed.json"); open(_mixed, "w").write(json.dumps(h + [ent("OTHER", "o" * 20, KEY2), ent("OTHER2", "p" * 20, KEY2)]))
+rc, err = _main("--hashes", _mixed, "--key-file", _keyf)
+ok("a mixed-key file is refused NAMING both key ids and the other key's count (Langston r2 (b))",
+   rc == 3 and dt.key_id(KEY) in err and ("%s x2" % dt.key_id(KEY2)) in err, err)
+for bad, why in (([dict(ent("NOKID", "n" * 20), key_id=None)][0:0] + [{k: v for k, v in ent("NOKID", "n" * 20).items() if k != "key_id"}], "no key_id"),
+                 ([dict(ent("SHORTMAC", "s" * 20), hmac="ab12")], "a short mac"),
+                 ([{"name": "NOLEN", "hmac": "a" * 64, "key_id": dt.key_id(KEY)}], "no length")):
+    _bf = os.path.join(_d, "bad.json"); open(_bf, "w").write(json.dumps(h + bad))
+    rc, err = _main("--hashes", _bf, "--key-file", _keyf)
+    ok("a good file plus one entry with %s is REFUSED, not silently partial (Langston r2 f1)" % why, rc == 3 and "malformed" in err, err)
+dup = [ent("A", "Ss" + "9Tt8Uu7Vv6Ww5"), ent("A#1", "Ss" + "9Tt8Uu7Vv6Ww5")]
+red = dt.Redactor(dup, key=KEY)
+ok("one secret listed twice loads ONCE, under its plainest name (Langston r2 f3)",
+   red.layer_c_names == 1 and red("x Ss9Tt8Uu7Vv6Ww5 y") == "x [REDACTED value:A] y", (red.layer_c_names, red.counts))
+red = dt.Redactor(list(reversed(dup)), key=KEY)
+ok("...whichever order it arrives in", red("Ss9Tt8Uu7Vv6Ww5") == "[REDACTED value:A]")
 ok("the redactor's key id is the producer's", dt.KEY_ID_MSG == __import__("dt_secret_hashes").KEY_ID_MSG)
 
 print("3b. values - the P3(c) contract: glued behind any '=', a trailing full stop, unreachable entries named")

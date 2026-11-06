@@ -76,4 +76,5 @@ for name, mut in MUTATIONS:
     caught += rc != 0
     print("%-8s %s   %s" % (verdict, name, line or ""))
 print("\n%d/%d caught (%d of them by a crash rather than an assertion)" % (caught, len(MUTATIONS), crashed))
-sys.exit(0 if caught == len(MUTATIONS) else 1)
+# A CRASH IS NOT A CATCH for the gate (Langston r2 nit): it is printed apart, and it fails the run.
+sys.exit(0 if caught == len(MUTATIONS) and crashed == 0 else 1)

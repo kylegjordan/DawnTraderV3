@@ -49,6 +49,16 @@ MUTATIONS = [
         '                got += [dict(e, note="read WITHOUT the inline-comment strip (systemd files have none)")',
         '                got += [] and [dict(e, note="read WITHOUT the inline-comment strip (systemd files have none)")')),
     ("F2: the cut never reported", replace("            if cut != v:\n                unstripped = v", "            if False:\n                unstripped = v")),
+    # r2 findings
+    ("r2 f2: a comment-only value is a value again", replace(
+        '            cut = "" if v.startswith("#") else v.split(" #", 1)[0].strip()',
+        '            cut = v.split(" #", 1)[0].strip()')),
+    ("r2 f3: the uncut reading re-lists the cut value", replace(
+        '                        if "hmac" not in e or (e["length"], e["hmac"]) not in seen]',
+        '                        if True]')),
+    ("r2 (a): an unknown argument is echoed", replace(
+        '"REFUSED: unknown argument at position %d (%d characters)\\n" % (argv.index(a) + 1, len(a))',
+        '"REFUSED: unknown argument %r at position %d (%d characters)\\n" % (a, argv.index(a) + 1, len(a))')),
     # F3 — empty is not found
     ("F3: empty value counted as found", replace('            if v == "":', '            if False:')),
     ("--json missing key skipped", replace(
@@ -71,13 +81,14 @@ MUTATIONS = [
         '            return 4\n        if v.endswith',
         '            continue\n        if v.endswith')),
     ("quotes kept", replace('            v = v[1:-1]', '            v = v')),
-    ("inline comment kept", replace('            cut = v.split(" #", 1)[0].strip()', '            cut = v.strip()')),
+    ("inline comment kept", replace('            cut = "" if v.startswith("#") else v.split(" #", 1)[0].strip()',
+                                      '            cut = "" if v.startswith("#") else v.strip()')),
     ("export prefix not understood", replace(r'(?:export\s+)?', '')),
     ("key-file newline kept", replace('        if v.endswith("\\n"):', '        if False:')),
     ("malformed --file accepted", replace("        if not sep or not n or not path:", "        if False:")),
     ("--env without --names allowed", replace("    if envs and not names:", "    if False:")),
     ("unknown argument ignored", replace(
-        '                sys.stderr.write("REFUSED: unknown argument %r\\n" % a)\n                return 2',
+        '                sys.stderr.write("REFUSED: unknown argument at position %d (%d characters)' + chr(92) + 'n" % (argv.index(a) + 1, len(a)))' + chr(10) + '                return 2',
         '                continue')),
     ("value echoed in the summary", replace(
         '    reach = sum(1 for e in out if "hmac" in e)',
@@ -128,4 +139,5 @@ for name, mut in MUTATIONS:
     caught += rc != 0
     print("%-8s %s" % (verdict, name))
 print("\n%d/%d caught (%d of them by a crash rather than an assertion)" % (caught, len(MUTATIONS), crashed))
-sys.exit(0 if caught == len(MUTATIONS) else 1)
+# A CRASH IS NOT A CATCH for the gate (Langston r2 nit): it is printed apart, and it fails the run.
+sys.exit(0 if caught == len(MUTATIONS) and crashed == 0 else 1)

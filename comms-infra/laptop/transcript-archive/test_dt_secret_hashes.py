@@ -18,8 +18,8 @@ import dt_transcript as dt  # noqa: E402
 FAILS = []
 
 
-def ok(name, cond):
-    print(("ok   " if cond else "FAIL ") + name)
+def ok(name, cond, detail=None):
+    print(("ok   " if cond else "FAIL ") + name + ("" if cond or detail is None else "   [%r]" % (detail,)))
     if not cond:
         FAILS.append(name)
 
@@ -108,7 +108,7 @@ ok("a separator value with no run of 12+ says so and emits no part", "no part of
 ok("a key not in --names is never emitted", "PUBLIC_BASE_PATH" not in by and mac(V6) not in out)
 ok("every entry names its source file", all(e.get("source", "").endswith(env) or e.get("source", "").endswith(env2)
                                             or e.get("source", "").endswith(keyf) or e.get("source", "").endswith(keyf_crlf) for e in H))
-ok("the summary line counts reachable and not", "13 entries, 9 reachable, 4 not reachable" in err)
+ok("the summary line counts reachable and not", "12 entries, 8 reachable, 4 not reachable" in err)
 
 print("2. the producer's output drives the redactor (the connection, not just each half)")
 red = dt.Redactor(H, key=HK)
@@ -172,6 +172,8 @@ print("3c. an inline comment that was cut is SAID, and the uncut reading listed 
 cg = by.get("COINGECKO_API_KEY", [])
 ok("the cut reading carries a note", any(e.get("hmac") == mac(V7) and "inline comment stripped" in e.get("note", "") for e in cg))
 ok("the uncut reading is listed as NOT reachable, with a note", any(e.get("reachable") is False and "WITHOUT the inline-comment strip" in e.get("note", "") for e in cg))
+ok("...and its run that EQUALS the cut value is not listed again as NAME#1 (Langston r2 f3)",
+   "COINGECKO_API_KEY#1" not in by and sum(1 for e in H if e.get("hmac") == mac(V7)) == 1, sorted(by))
 red = dt.Redactor(H, key=HK)
 ok("the state line names the uncut reading", "COINGECKO_API_KEY (contains characters outside the token set" in red.layer_c_state())
 ok("a value with no comment carries no note", all("note" not in e for e in by.get("FINNHUB_API_KEY", [])))
@@ -205,6 +207,14 @@ rc, out, err = run()
 ok("nothing to hash: exit 2", rc == 2 and out == "")
 rc, out, err = run("--env", env, "--names", "FINNHUB_API_KEY", "--bogus")
 ok("an unknown argument beside a valid run: exit 2, nothing on stdout", rc == 2 and out == "" and "unknown argument" in err)
+SECRETLIKE = "Zz" + "9Yy8Xx7Ww6Vv5Uu4"
+rc, out, err = run("--env", env, "--names", "FINNHUB_API_KEY", SECRETLIKE)
+ok("an unknown argument is NOT echoed (a typo could put the key there)", rc == 2 and SECRETLIKE not in err and "position" in err, err)
+cm = os.path.join(d, "comment-only.env")
+open(cm, "w").write("C= # only a comment\nG=#text\nOK_KEY=%s\n" % V1)
+rc, out, err = run("--env", cm, "--names", "C,G,OK_KEY")
+ok("a value that is only a comment counts as EMPTY, not found (Langston r2 f2)", rc == 4 and out == "" and "EMPTY" in err and "C (in" in err and "G (in" in err, err)
+ok("the core-dump guard is callable and reports what it could do", __import__("dt_secret_hashes").no_core_dumps() in (True, False))
 rc, out, err = run("--env")
 ok("a flag with no value: exit 2", rc == 2 and out == "")
 

@@ -51,6 +51,16 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
     ("P3(c): no after-'=' candidate", replace('cands.append((pre, tail, ""))', 'pass')),
     ("P3(c): no after-'=' with full stop candidate", replace('cands.append((pre, tail[:-1], "."))', 'pass')),
+    ("r2 f1: a malformed entry dropped silently", replace('    if "--hashes" in opts and red.layer_c_malformed:', '    if False:')),
+    ("r2 f1: a short mac not counted as malformed", replace(
+        "            if len(mac) != 64:\n                self.layer_c_malformed += 1\n                continue",
+        "            if len(mac) != 64:\n                continue")),
+    ("r2 f3: one secret counted twice", replace(
+        "            if mac in have:", "            if False:")),
+    ("r2 f3: a part's name kept over the plain name", replace(
+        '                if "#" in have[mac] and "#" not in n:', '                if False:')),
+    ("r2 (b): the refusal does not name the other keys", replace(
+        '", ".join("%s x%d" % kv for kv in sorted(red.layer_c_wrong_keys.items()))', '"(not named)"')),
     ("counts key not folded to the listed name", replace(
         "        listed = max((n for n in SECRET_NAMES if written.endswith(n)), key=len, default=written)",
         "        listed = written")),
@@ -132,4 +142,5 @@ for name, mut in MUTATIONS:
     caught += rc != 0
     print("%-8s %s" % (verdict, name))
 print("\n%d/%d caught (%d of them by a crash rather than an assertion)" % (caught, len(MUTATIONS), crashed))
-sys.exit(0 if caught == len(MUTATIONS) else 1)
+# A CRASH IS NOT A CATCH for the gate (Langston r2 nit): it is printed apart, and it fails the run.
+sys.exit(0 if caught == len(MUTATIONS) and crashed == 0 else 1)

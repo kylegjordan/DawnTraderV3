@@ -128,7 +128,9 @@ class Redactor:
         self.layer_c_short = []      # names shorter than TOKEN's 12-char floor: listed, but out of layer (c)'s reach (C-3)
         self.layer_c_unreachable = []  # producer said reachable:false (P3(c) contract): "<name> (<reason>)", no hash
         self.layer_c_wrong_key = 0   # entries made with a DIFFERENT key: would match nothing, so refused, not loaded
-        kid = key_id(key) if key else None
+        self.layer_c_wrong_keys = {}  # key_id -> count, so a refusal names which run to redo (Langston r2 (b))
+        self.layer_c_malformed = 0   # entries missing a field or with a short mac: a SILENT drop is a partial list
+        kid = key_id(key) if key else None   # reading as full coverage (Langston r2 finding 1) - counted, refused
         for h in hashes or []:
             if isinstance(h, dict) and h.get("reachable") is False and h.get("name"):
                 self.layer_c_unreachable.append("%s (%s)" % (h["name"], h.get("reason", "no reason given")))
@@ -136,13 +138,21 @@ class Redactor:
             try:
                 n, ln, mac, hk = str(h["name"]), int(h["length"]), str(h["hmac"]), str(h["key_id"])
             except (KeyError, TypeError, ValueError):
+                self.layer_c_malformed += 1
                 continue
             if len(mac) != 64:
+                self.layer_c_malformed += 1
                 continue
             if hk != kid:
                 self.layer_c_wrong_key += 1
+                self.layer_c_wrong_keys[hk] = self.layer_c_wrong_keys.get(hk, 0) + 1
                 continue
-            self.by_len.setdefault(ln, {})[mac] = n
+            have = self.by_len.setdefault(ln, {})
+            if mac in have:              # one secret listed twice (Langston r2 finding 3): count it ONCE, under the
+                if "#" in have[mac] and "#" not in n:      # plainest name (`A`, not its part `A#1`)
+                    have[mac] = n
+                continue
+            have[mac] = n
             self.layer_c_names += 1
             if ln < 12:
                 self.layer_c_short.append(n)
@@ -405,8 +415,14 @@ def main(argv):
             return 3
     red = Redactor(hashes if isinstance(hashes, list) else [], key=key)
     if "--hashes" in opts and red.layer_c_wrong_key:
-        sys.stderr.write("REFUSED: --hashes %s holds %d entr(ies) made with a different key - they would match nothing\n"
-                         % (opts["--hashes"], red.layer_c_wrong_key))
+        sys.stderr.write("REFUSED: --hashes %s holds %d entr(ies) made with a different key - they would match nothing"
+                         " (this key is %s; the others: %s)\n"
+                         % (opts["--hashes"], red.layer_c_wrong_key, key_id(key) if key else "none",
+                            ", ".join("%s x%d" % kv for kv in sorted(red.layer_c_wrong_keys.items()))))
+        return 3
+    if "--hashes" in opts and red.layer_c_malformed:
+        sys.stderr.write("REFUSED: --hashes %s holds %d malformed entr(ies) (a missing field or a short mac) - loading the"
+                         " rest would read as full coverage\n" % (opts["--hashes"], red.layer_c_malformed))
         return 3
     if "--hashes" in opts and not red.layer_c_names:
         sys.stderr.write("REFUSED: --hashes %s loaded 0 usable entries - layer (c) would be silently off\n" % opts["--hashes"])
