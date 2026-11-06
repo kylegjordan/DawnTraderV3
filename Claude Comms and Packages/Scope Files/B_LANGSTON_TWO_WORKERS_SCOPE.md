@@ -1,10 +1,12 @@
-# B-LANGSTON-TWO-WORKERS — SCOPE r1
+# B-LANGSTON-TWO-WORKERS — SCOPE r2
+
+> **r2 (2026-11-06) — Langston APPROVED r1 at Step 1 (msg `1568112998042697909`) with seven binding conditions, all folded here:** C-1 §0's false absence about his scratch rule corrected · C-2 OBJ-2's retry option kept only for `--ledger-append`; whole-file part writes are serialised · C-3 a mid-window read for OBJ-7's early stop · C-4 OBJ-9 declares an `open` row in `GOVERNANCE_EXCEPTIONS` · C-5 who writes the two flags; `:3021` is disposition (2) and names where to read the model · C-6 the lane key normalised, exact-token, multi-id and quoted-line cases, and the people-class split · C-7 OBJ-7 rebuilt on overlap, with (q5) a stop, (q2)/(q3) descriptive, (q4) a +21-day tail read and a new (q6). Attack 3: install with the one-worker flag set; baseline three working days or 400 text posts. Issue `#1248` opened.
 
 change-class: architecture
 
 > **Class:** `architecture`, on the precedent of `B-LANGSTON-RELIEF` (which changed this same queue and declared `architecture`). It removes a MUST-level invariant from the System Impact Map (`:2975`, "single-claude-at-a-time") and changes how every review in the crew is scheduled. No trading architecture, strategy, regime, filter, pipeline or math changes, so the System Manual is judged at Step 10, not assumed.
 
-**Issue:** none yet (KD-44 is the authority; a `RUNNING_ISSUES` entry is opened in the scope commit only if Langston asks for one). **Owner:** Infra Claude (CC-INFRA). **Reviewers:** Langston at every gate, and **Coltrane second-passes the concurrency diff** at Step 4, because Langston is the beneficiary (KD-34 consensus §8 item 8).
+**Issue:** `#1248` (opened at r2 on Langston's request: the memory-write interface limit, (q4)'s window limit and the ~10-day observation outlive this scope). **Owner:** Infra Claude (CC-INFRA). **Reviewers:** Langston at every gate, and **Coltrane second-passes the concurrency diff** at Step 4, because Langston is the beneficiary (KD-34 consensus §8 item 8).
 **Placement:** `SPRINT_TO_LIVE_PLAN.md` §0a, stage "0 — clear the plates (Infra Claude)", order **4a**, after `B-LANGSTON-MEMORY-WRITE-FENCE`, before `B-TRANSCRIPT-ARCHIVE` (4b) and `B-TOKEN-WATCH-FOLLOWUP-MEMORY`.
 **Kyle (KD-44, 2026-11-05):** *"We can slot this in. Need to observe how well it works and if the quality of the reviews is impacted."*
 **Decision record:** `1-system-manual/pm/decisions/2026-11-05_langston-review-capacity.md` (§3 numbers, §7 positions, §8 consensus of Infra Claude, Langston and Coltrane).
@@ -17,7 +19,7 @@ change-class: architecture
   - `breaker = {"bot_turns": 0}` is created INSIDE `task_worker` (`:762`) and passed to `process_task` (`:440`, used `:458-473`). Two workers would each hold their own and the circuit breaker would count half the turns.
   - `state` is shared; `invoke_claude` writes `state["session_id"]` and calls `save_state` on its rotation backstop (`:307-311`). Every invocation already uses a fresh UUID (`:606`), so the backstop *"now effectively never trigger[s]"* (`:604-605`).
   - The review-queue file is already flock-locked (`langston_queue.py`, `queue_lock`).
-  - **His working files collide by name.** `/home/langston/scratch/` holds 2,547 files with fixed names (`probe.sql`, `gate.sql`, `schema.ts`, `dpg.ts` among the newest), and his home root holds fixed-name drafts (`a.md`, `b.md`, `ri.md`, `plan.md`, `sprint.md`). Two concurrent invokes writing `probe.sql` overwrite each other. **No auto-loaded file of his names a scratch convention:** `grep -l scratch` over `/home/langston/*.md` matches `LEDGER.md` and many drafts (positive control) but NOT `CLAUDE.md` or `MEMORY.md`, so the habit is not written down where it loads (Langston's C3 said his loaded rule names the path; on this read it does not, and the scope does not depend on which).
+  - **His working files collide by name.** `/home/langston/scratch/` holds 2,547 files with fixed names (`probe.sql`, `gate.sql`, `schema.ts`, `dpg.ts` among the newest; Langston counted 2,550, one written by his own first command while reviewing this scope), and his home root holds fixed-name drafts (`a.md`, `b.md`, `ri.md`, `plan.md`, `sprint.md`). Two concurrent invokes writing `probe.sql` overwrite each other. **His loaded set DOES name a scratch convention** (r2, Langston C-1 — r1 said it did not, from a grep one directory too shallow): the harness auto-memory index `/home/langston/.claude/projects/-home-langston/memory/MEMORY.md` carries *"Use /home/langston/scratch (0700), never /tmp"*, detail in `feedback_scratch_dir_not_tmp.md`. **It names a directory and sets no per-file uniqueness rule**, so two workers following it still both write `probe.sql` — which is why OBJ-3 is needed.
   - **His memory and ledger writes:** `langston-memory-write` takes a blocking `flock` and compares `--expect-sha`; a mismatch is `Refused(4)` with **no retry** (Langston's C1, re-derived at `:613`, `:1406`, `:2064`, `:2190` of the installed copy). Under two workers the loser of a race loses its write, and the writer that must notice is a stateless invoke at the end of its turn.
 
 ## 1. Provenance read
@@ -38,12 +40,20 @@ change-class: architecture
 **OBJ-1: two workers, with a per-batch lane that fails closed (consensus §8 item 1, Langston C2).**
 - Exactly two task workers over the existing `TaskPriorityQueue`. Not a pool.
 - A task whose opening carries a readable batch id is not started while another task for the same id is running; it waits and the other worker takes the next eligible task.
+- **The key (r2, Langston C-6), each mode failing CLOSED:**
+  - **Normalised:** case-folded and `_` read as `-`, so `B_LANGSTON_TWO_WORKERS` and `B-langston-two-workers` are one lane.
+  - **Exact token, not prefix:** `B-LANGSTON-RELIEF` never matches a longer id that starts with it.
+  - **Two or more ids in the opening ⇒ the shared serial lane** (never "first id wins").
+  - **"Opening" is defined at Step 2** (proposed: the first line, after the address list, excluding a line that starts with a quote marker `>`), and a test feeds a dispatch whose first line quotes another batch's id.
 - **A task with no readable batch id goes into ONE shared serial lane** — never "no key, so parallel" (12 of 166 posts named no batch on 11-05). Kyle's own messages follow the same rule.
 - Priority order between classes is kept: a worker takes the highest-priority eligible task.
-- **Verify:** unit tests with a fake invoker — two tasks for different batches run at once; two for the same batch run in arrival order; two with no id run in order; a people task is taken before a self-advance task. A mutation that treats "no id" as its own lane per task must fail a test.
+- **Verify:** unit tests with a fake invoker — two tasks for different batches run at once; two for the same batch run in arrival order; two with no id run in order; a people task is taken before a self-advance task; each of the four key modes above. A mutation that treats "no id" as its own lane per task must fail a test. **Live, from the OBJ-7 log:** no two overlapping tasks ever shared a normalised key.
+- **The people class, measured at Step 2 (r2, Langston C-6):** the no-id share WITHIN the people class (Kyle, session text AND escalated alerts, which name an alert id, not a batch), not the global 12 of 166. And stated now: because an ineligible top task does not hold a worker, **Kyle's post can wait behind a lower-priority invoke that started after it arrived** (~6 min at the mean). The log measures that case.
 
 **OBJ-2: memory and ledger writes are safe under concurrency (Langston C1, BINDING).**
-- Step 2 chooses, with Langston: (a) bounded retry on refusal inside `langston-memory-write` (re-read the sha, re-apply the caller's edit, a fixed number of attempts, then refuse loudly), or (b) memory and ledger writes routed through one serialising path.
+- **Split by write type (r2, Langston C-2):**
+  - **`--ledger-append` is retry-safe:** it is an anchored insert with exactly one anchor enforced, so a bounded retry (re-read the sha, re-locate the anchor, insert, a fixed number of attempts, then refuse loudly) is sound.
+  - **A whole-file `--part` write is NOT:** the tool takes the whole body on stdin under compare-and-swap, so a retry can only resubmit the same body and would overwrite what the other writer landed. These writes are **serialised** — Step 2 chooses the mechanism (one lane in the bridge for invokes that write his memory, or a lock the two invokes take before reading the part). A patch or merge interface is out of scope (a bigger batch).
 - **Verify:** two concurrent writes from two processes against a scratch copy, each with a stale-by-the-other sha: both land, in either order, with neither's content lost; the counters (retractions, ledger bullets) move by exactly the sum. A mutation that removes the retry or the serialisation must lose a write in that test.
 
 **OBJ-3: a per-invoke scratch directory, named in the prompt (Langston C3).**
@@ -63,6 +73,7 @@ change-class: architecture
 - Both workers live in the ONE bridge process, so the existing stop (stopping the service, or `crew-switch`) halts both.
 - A **drain flag**: a root-owned file both workers read before taking the next task; when it is set, neither starts a new invocation, each finishes the one in hand, and the queue is kept.
 - A **one-worker flag**: a root-owned file that drops capacity to one worker without a deploy (read when a worker is about to take a task).
+- **Who writes them (r2, Langston C-5):** root only — so Langston cannot raise his own capacity. Every Claude session reaches Helsinki as root over SSH, so CC-INFRA (the owner of OBJ-7's quality consequence) and PM Claude (the 85 % line) can both set them; the mid-window alert (OBJ-7) names the exact command. Each write is logged with its `--by`.
 - **Verify:** tests for each flag; a live drill at Step 7 sets each flag and reads the journal.
 
 **OBJ-6: a concurrent-invoke smoke test before switch-on (consensus §8 item 6).**
@@ -71,25 +82,30 @@ change-class: architecture
 
 **OBJ-7: a pre-registered observation window, measuring wait AND review quality, before vs after (Kyle, KD-44; Langston C4).**
 - **The instrument is persisted, not read from the journal** (journald rotates at defaults): at handling time the bridge appends one line per task to a log on disk: message id, post time from the id, start time, end time, worker, lane key, class, outcome (reply / silent / bridge error / timeout).
-- **Baseline:** the 7 days before switch-on, from the same log (it ships and runs on ONE worker first, so the baseline uses the identical instrument).
-- **After:** the 7 days from switch-on.
+- **Install with the one-worker flag SET** (Langston, attack 3): the code ships, the log runs on one worker, and the second worker switches on only after the baseline.
+- **Wait baseline:** **three full working days or 400 text posts, whichever comes first.** Its job is to **positive-control the new log** against the pack's §3.2 figure (median 70 min on 11-05), not to re-establish the wait.
+- **Quality baselines are retrospective:** (q1)-(q4) read the verdicts already in Discord and the batch documents for the **7 days before install**, so they do not wait on the new log.
+- ⛔ **The Step-2 document that fixes every band, rule and sample is COMMITTED BEFORE ANY BASELINE FIGURE IS COMPUTED, and its sha is named in the progress report** (Langston: a retrospective baseline is visible to the band-setter, so a restatement written after it is read is not a pre-registration).
+- **After:** 7 days from switch-on.
 - **Wait:** the median wait of text posts (alert escalations excluded, the pack's §3.2 population) is **under 20 min over the first full working day**, and the 7-day median is reported beside it.
-- **Quality, each defined and its instrument checked against known cases at Step 2, BEFORE the baseline is read:**
-  - (q1) **Coltrane blind second pass on a sample:** the same fixed number of Step-2 and Step-4 verdicts from each window, chosen by a rule fixed in advance (not by reading them). Coltrane gets the dispatch and the ref, never Langston's verdict, and rules. Measured: agreement on the verdict, and must-fix items Coltrane raises that Langston did not.
-  - (q2) **sent-back rate** per gate type (Step 2, Step 4, Step 8): CHANGES / SENT BACK against PROCEED / APPROVED / CONFIRMED.
-  - (q3) **findings per review**: the count of numbered conditions, must-fixes and blockers in a verdict.
-  - (q4) **later-caught misses**: a defect found at Step 7 or later, or after close, in work a gate in the window passed, traced back to that gate.
-  - (q5) **invoke health**: bridge errors, timeouts and mean invoke time per window.
-- **The decision rule, written at Step 2 before the baseline is read:** PASS = the wait test met AND no quality measure worse than the baseline by more than a band stated at Step 2. A quality miss sets the one-worker flag (OBJ-5) and goes to Kyle through PM, whatever the wait shows.
-- **The reader:** one `scheduled` system alert, owner CC-INFRA, fires at the end of the after-window and names the log. It is resolved at the read with evidence, never acked.
-- **Honest limit, stated now:** a week holds roughly a thousand invocations but only a small Coltrane sample, so (q1) can show a large drop in quality, not a small one. That is the reason (q2)-(q5) are measured too, over every verdict.
+- ⛔ **THE TREATMENT IS "INVOKED WHILE THE OTHER WORKER WAS BUSY", NOT "THE AFTER WINDOW"** (r2, Langston C-7). An after-window verdict that ran with the other worker idle carries no signal about concurrency. The log's worker, start and end give each invoke an **overlap** flag; comparisons are overlapped against non-overlapped invokes, and against the baseline.
+- **Which quality risks have a mechanism** (asked before banding anything): scratch collision (OBJ-3 removes it), memory-write loss (OBJ-2 removes it), a stale memory read at invoke start (already true with one worker), and **shared-account rate pressure or box contention producing slow, truncated or failed invokes** — the only one with a live mechanism. The measures follow from that:
+  - **(q5) invoke health — a STOP, not a band:** bridge errors, timeouts, non-zero exits and mean invoke time, overlapped vs not. A rise beyond the stop stated at Step 2 sets the one-worker flag.
+  - **(q6) degraded invokes (new):** a non-zero exit that still posts, a truncated reply, a lost queue marker. Detected from the log and the reply, counted per invoke. Also a stop.
+  - **(q1) Coltrane blind second pass, one-sided, stratified on overlap:** about eight Step-2/Step-4 verdicts per window, drawn by a rule fixed at Step 2 from overlapped invokes (after) and from the baseline (before). Coltrane gets the dispatch and the ref, never Langston's verdict. **Scored on must-fix items Coltrane raises that Langston did not**, not on two-way agreement (agreement between two reviewers at this n is noise).
+  - **(q2) sent-back rate and (q3) findings per review: DESCRIPTIVE, not banded.** They are confounded by which batches landed and who wrote them; a band there would trip on population change.
+  - **(q4) later-caught misses: a +21-day tail read** on the gates in both windows, because a miss on a day-6 gate surfaces at Step 7 or after close, past the window's edge.
+- **The decision rule, written at Step 2 before any baseline figure:** PASS = the wait test met AND no (q5)/(q6) stop tripped AND (q1) not worse by more than its stated margin. (q2)-(q4) are reported, not graded.
+- **Readers (r2, Langston C-3 — the early stop needs an instrument):** three `scheduled` system alerts, owner CC-INFRA, each resolved at the read with evidence and never acked: (i) **mid-window, day 3 of the after-window**, reading (q5)/(q6) and setting the one-worker flag on a stop; (ii) **end of window, day 7**; (iii) **day +21**, the (q4) tail. They are minted by a script at switch-on, not by hand.
+- **Honest limit, stated now:** about eight blind re-reviews per window can show a large quality drop, not a small one. That is why the stops sit on (q5)/(q6), which are measured on every invoke.
 
 **OBJ-8: review.** Langston at Steps 1, 2, 4, 8 and 11 as usual; **Coltrane second-passes the concurrency diff at Step 4** (OBJ-1, OBJ-2, OBJ-4, OBJ-5), with his verdict recorded in the change list.
 
 **OBJ-9: governance.**
-- `SYSTEM_IMPACT_MAP`: `:2975`'s MUST rewritten with the new invariants; the bridge row `:3021` (which also still names `claude-opus-4-8[1m]`, a stale model, folded here under disposition 1); the new log and flags.
+- `SYSTEM_IMPACT_MAP`: `:2975`'s MUST rewritten with the new invariants; the bridge row `:3021`, which also still names `claude-opus-4-8[1m]` — a stale model, disposition **(2)** (r2, Langston C-5): the row is rewritten to name WHERE the model is read (`CLAUDE_MODEL` in `discord-langston-bridge.py`), never what it is; the new log and flags.
 - `LANGSTON_ARCHITECTURE`: §9 known limit 2 ("Work is serialised, one at a time") updated, and a change-log row with BEFORE/AFTER/why.
 - His rules file (OBJ-3's line), his memory, and the class doc set at Step 10.
+- ⛔ **A declared-`open` row in `GOVERNANCE_EXCEPTIONS.md`** (r2, Langston C-4): the batch sits in an observation window for about ten days, and a `*_PROGRESS_REPORT.md` cannot satisfy the checker's REQUIRED completion report (it matches basenames on `COMPLETION|COMPLETE`), so only the declared-`open` row suspends the deadline. At close: flip it to `open-retired` and PUSH, then hand-resolve the open-age nag — in that order, or the next 30-min tick re-mints it.
 
 ## 3. Out of scope, with homes
 - The alert lane's own worker: untouched.
