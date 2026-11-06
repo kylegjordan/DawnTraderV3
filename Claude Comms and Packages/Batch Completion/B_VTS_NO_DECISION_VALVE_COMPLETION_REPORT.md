@@ -1,6 +1,6 @@
 # B-VTS-NO-DECISION-VALVE — Completion Report
 
-change-class: `architecture` · sprint plan row 4 · Phase-19 row `3n.q3` · `#1075`, `#1145` · owner CC-C (Analyst Claude) · ⏳ **STEP 11 — closes on Langston's confirm**
+change-class: `architecture` · sprint plan row 4 · Phase-19 row `3n.q3` · `#1075`, `#1145` · owner CC-C (Analyst Claude) · ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston 03:27:32Z, at `7e1b3a78b`)
 
 **Scope items left open:** none in this batch. **Homed elsewhere and not claimed here:** `#1144` (the `clamp_no_bid` arm has no age term, and the shadow lane's 48 h hold runs on wall-clock time — row 4c), `#1143` (weekday xStock Class B — row 40, `3b.f-c`), `#1073` (increment 2, a maker rest that can fill after its deadline while a price is refused — row 4b).
 ⚠️ **Two owed items done late, stated:** the rule-8 register enumeration owed at the landing (2026-10-06) ran 2026-11-06, so 2026-09-30 can only be recorded UNDETERMINED (the hot tables keep 30 days); and the collision set's quarterly re-audit alert, which the code comment and plan said was armed at Step 6, did not exist until 2026-11-06 (`53ec89a7`).
@@ -63,7 +63,7 @@ CHANGE-CLASS: `architecture`
 | T2 | CHANGES_AND_FIXES.md | ✅ | FIX-2026-11-06-B |
 | T2 | ADJUSTMENT_FRAMEWORK.md | ✅ | rule 8: the landing enumeration (late) with its directions, the register closed to new A/B members and the `exit = entry` predicate retired, the collision selector (lane vs stamp, all 8 tickers) |
 | T2 | DELETED_COMPONENTS_LOG.md | ✅ | the `stale_timeout → shadow_max_hold` relabel |
-| T2 | GOVERNANCE_EXCEPTIONS.md | BLOCKED — Langston's Step-11 confirm | the two `open` rows (2026-10-07, 2026-11-05) flip to closed when the confirm lands |
+| T2 | GOVERNANCE_EXCEPTIONS.md | ✅ | the two `open` rows (2026-10-07, 2026-11-05) flipped to closed at the confirm |
 | T2 | STORAGE_POLICY.md | N/A | the new column sits on an existing table; no retention change |
 | T2 | MISTAKE_PATTERNS.md | N/A | this batch's `wrong-object` trailers (`7330350e5`, `1107fde64`) fall after the W44 pass window and are counted at W45 |
 | T2 | POST_AUDIT_ROADMAP.md · AUTHORITY_BASELINE.md · MULTI_ASSET_VTS_EXPANSION_PLAN.md · ASSET_CLASS_ONBOARDING_WORKFLOW.md · BUILD_METHOD_PLAYBOOK.md · LANGSTON_ARCHITECTURE.md · CLAUDE.md / CONDUCT.md · rule history · ALERT_HANDLING_PROTOCOL.md · DELIVERY_BOARD_PROTOCOL.md · CLAUDE_CODE_FEATURE_WATCH.md | N/A | no phase, constitutional, expansion-plan, onboarding, method, reviewer, rule or process change |

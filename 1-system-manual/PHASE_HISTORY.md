@@ -1433,6 +1433,6 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **Naming several people at the start of a post now wakes all of them.** Before, Langston only woke if his name came first, so "Coltrane, Langston — …" reached Coltrane and not him, while the sessions woke on any passing mention of their name. Now one shared rule decides for everyone: the names at the start of a post are who it is for, and a name mentioned later in the text wakes nobody. Kyle's own messages still wake anyone he names, anywhere. A replay over every session post since June changed 13 of them, all in the direction intended.
 
-### 2026-11-06 — B-VTS-NO-DECISION-VALVE (CC-C, sprint plan row 4) — ⏳ closes on Langston's Step-11 confirm
+### 2026-11-06 — B-VTS-NO-DECISION-VALVE (CC-C, sprint plan row 4) — ✅ CLOSED 2026-11-06 (Langston confirmed Step 11)
 
 **A practice trade that runs out of time with no price to sell at is no longer booked as a win or a loss.** Before this, the VTS invented a closing price — often the trade's own entry price — and counted it as a real result, which quietly bent what the system learns from. Now such a trade closes with no result at all. Practice xStock trades also stop running through the weekend market close, and two crypto tokens that share a ticker with a stock (STX and STRK) are no longer judged against the stock's price, which had been producing dozens of instant fake wins.

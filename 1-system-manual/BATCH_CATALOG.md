@@ -1476,7 +1476,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** Replay over all 17,705 session posts: 13 posts change, 25 wakes gained, none lost, no other post changed. Live: "Coltrane, Langston — …" woke both; "Langston — … Coltrane may comment" woke Langston only; a two-session opening list woke exactly those two; a review interrupted by the restart was re-fed and answered. Langston narrowed one leg: the live laptop check proves the filter is alive on the new module, not the list-reading itself (that rests on the suites and the replay).
 
-## B-VTS-NO-DECISION-VALVE (CC-C, sprint plan row 4 · Phase-19 row `3n.q3`; `#1075`, `#1145`) — change-class `architecture` — ⏳ **STEP 11 — closes on Langston's confirm** (Step 4 APPROVED 2026-10-01; deployed in release deploy B `3576d3981` 2026-10-06T15:45:04Z; Step 8 by Langston; report `Batch Completion/B_VTS_NO_DECISION_VALVE_COMPLETION_REPORT.md`)
+## B-VTS-NO-DECISION-VALVE (CC-C, sprint plan row 4 · Phase-19 row `3n.q3`; `#1075`, `#1145`) — change-class `architecture` — ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston 03:27:32Z; Step 4 APPROVED 2026-10-01; deployed in release deploy B `3576d3981` 2026-10-06T15:45:04Z; Step 8 by Langston; report `Batch Completion/B_VTS_NO_DECISION_VALVE_COMPLETION_REPORT.md`)
 
 **WHAT IT FIXED.** A VTS trade that hit its time limit with no tradable sell price was booked as if it had closed at a made-up price — the mark, or its entry price — and counted as a real outcome. The shadow lane also ran xStock trades through the weekend shutdown, and the crypto STX and STRK tokens were judged against the equities' prices.
 
