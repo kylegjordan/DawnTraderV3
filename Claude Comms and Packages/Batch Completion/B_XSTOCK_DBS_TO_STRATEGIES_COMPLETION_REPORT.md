@@ -8,7 +8,7 @@ Scope `Scope Files/B_XSTOCK_DBS_TO_STRATEGIES_SCOPE.md` · pre-audit and plan `S
 |---|---|---|---|---|
 | **F2, xStock half:** xStock's `xstock-strong_trend` lane attaches no strong-trend stop/target override (crypto's does). The intent for xStock is not established (crypto's values were built for crypto's lane, and xStock trades 15-minute bars). | decision: Kyle, or the crew under KD-34 | `#1235` (stays open for this alone) | a decision is recorded, with its work placed if any | — |
 | **`#1249`:** nothing announces a staging deploy that lands inside another batch's pre-registered observation window. | Kyle (slot) | `#1249`, SURFACED FOR KYLE, not placed | Kyle slots it or declines | — |
-| **strong_bull_trend's xStock replacement window** (C-1): opened at this deploy. | CC-B | sprint row 52, `B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md` §3a; alerts `b58564a1` (daily), `30047418` (backstop 11-26) | 20 filled closes, the B-ENTRY-GATE inc-A deploy, or 2026-11-26 | its pre-registered criterion, as amended 2026-11-06 |
+| **strong_bull_trend's xStock replacement window** (C-1): opened at this deploy. | CC-B | sprint row 52, `B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md` §3a; alerts `954aa357` (daily), `46ed17ad` (backstop 11-26) | 20 filled closes, the B-ENTRY-GATE inc-A deploy, or 2026-11-26 | its pre-registered criterion, as amended 2026-11-06 |
 | **KD-7 switch-ons** (adaptive_flow, reverse_impulse, volatility_edge, support_bounce for xStock) | CC-B | `B-SILENT-STRATEGY-CENSUS` O3, row 52 | each switched after its feasibility read | — |
 
 ## What it was for
