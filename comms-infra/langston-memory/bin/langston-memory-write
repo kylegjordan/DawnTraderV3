@@ -65,7 +65,8 @@ MODES
 EXIT  0 written (or no change) · 2 refused input · 3 not root or langston · 4 compare-and-swap mismatch (nothing
       written; the message says whether the file changed OUTSIDE this tool) · 5 a declared count was wrong and the
       previous content was RESTORED · 6 a refusal about the environment, or an internal error (see stderr) ·
-      7 a growth over the loaded-set ceiling was refused. Run as the owner, the root service's code is returned.
+      7 a growth over the loaded-set ceiling was refused · 8 a write that would shrink the part below half (from at
+      least 4,096 B) was refused. Run as the owner, the root service's code is returned.
 """
 import base64, datetime, errno, fcntl, hashlib, importlib.util, json, os, pwd, re, secrets, stat, struct, subprocess, sys, tempfile, time, traceback
 
