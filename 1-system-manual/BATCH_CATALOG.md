@@ -1525,3 +1525,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **RESULT.** A pair present on 10-07 dropped out by 10-10 within one process lifetime (manifest version 1 → 11, no restart). The "trade count fell" evidence was withdrawn at Step 8 because the old code could also produce it. The empty-window clear path has never run. No live decision reads these values yet.
 
 **GOVERNANCE FILES CHANGED:** scope · pre-audit · change list · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_IMPACT_MAP.md` (§8.3b) · `SYSTEM_MANUAL.md` · `DELETED_COMPONENTS_LOG.md` · `RUNNING_ISSUES.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.
+
+## B-REST-SIDES-TO-CACHE (CC-C, sprint plan row 14 · Phase-19 row `3n.l`; `#1056`, `#1060`, `#1076`) — change-class `architecture` — ✅ **CLOSED 2026-11-06** (Step 4 APPROVED per increment, conditions met at `77b171d90`, CI `36278341585` 4/4; live in release deploy A `ea456ad40` 2026-10-02T20:38Z; Step 8 CONFIRMED by Langston 2026-11-06; report `Batch Completion/B_REST_SIDES_TO_CACHE_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** REST prices reached the shared price cache without their bid and ask — the adapter parsed both, logged them and stored only the midpoint — and two static-map keys (GBP/USD, ETC/USD) filed REST sides where nothing reads them. Now REST reads carry their sides under the right keys, one pairwise rule decides whether sides are stated at all, and every cached row names the feed that wrote its sides.
+
+**RESULT.** GBP/USD written under its own key on every pass that asked for it; the REST poller named as its writer on all 399 open-trade passes; no false escalation across four WebSocket silences. Not measured: how often a REST write replaces a newer WebSocket price (V4/V9) — the stamps exist, a counter does not; carried to row 14a.
+
+**GOVERNANCE FILES CHANGED:** scope · pre-audit · two change lists · completion report · `BATCH_CATALOG.md` · `PHASE_HISTORY.md` · `SYSTEM_MANUAL.md` · `SYSTEM_IMPACT_MAP.md` (§2.2, §2.3) · `CHANGES_AND_FIXES.md` · `RUNNING_ISSUES.md` · `DELETED_COMPONENTS_LOG.md` · `PHASE_19_PLAN.md` · `SPRINT_TO_LIVE_PLAN.md` · task list.

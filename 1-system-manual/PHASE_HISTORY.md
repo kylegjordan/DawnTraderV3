@@ -1456,3 +1456,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 ### 2026-11-06 — B-VTS-TELEMETRY-AGGREGATES (CC-C, sprint plan row 4a) — ✅ CLOSED 2026-11-06 (Langston confirmed Step 11)
 
 **The VTS's record of how each strategy performs in each regime now tells the truth.** It used to give a strategy with no data of its own another strategy's numbers, and to keep a strategy's old win rate after it stopped trading until the next restart. Now each strategy gets only its own record, rebuilt every six hours from the last seven days. Live since 2026-10-07; confirmed when a stale entry dropped out within a single run of the program. Nothing trades on these numbers yet — the fix makes them honest before anything does. Record: `Batch Completion/B_VTS_TELEMETRY_AGGREGATES_COMPLETION_REPORT.md`.
+
+### 2026-11-06 — B-REST-SIDES-TO-CACHE (CC-C, sprint plan row 14) — ✅ CLOSED 2026-11-06 (Step 10; Step 11 with Langston)
+
+**Exchange prices fetched over the slower REST route now carry their buy and sell sides into the shared price cache.** Before, the bid and ask were read and then thrown away one line before saving, and two currency pairs (GBP/USD, ETC/USD) were saved under names nothing looked up. Every cached price now also says which feed set its sides. Live since the 2026-10-02 release; Langston confirmed the checks on 2026-11-06. One question is left for row 14a: how often a REST price overwrites a newer live one. Record: `Batch Completion/B_REST_SIDES_TO_CACHE_COMPLETION_REPORT.md`.

@@ -3075,7 +3075,7 @@ Single source of truth for symbol translation between DawnTrader's internal form
 
 | Tier | Source | Trust Level |
 |------|--------|-------------|
-| 0 | Static map (KRAKEN_SYMBOL_MAP) | Highest — manually verified |
+| 0 | Static map (KRAKEN_SYMBOL_MAP) | Highest — manually verified **as of its last audit, not self-correcting:** it carried two wrong REST keys (`GBP/USD`, `ETC/USD`) and six dead pairs until `B-REST-SIDES-TO-CACHE` (2026-10-02) |
 | 1 | Auto-map verified (matches static) | High |
 | 2 | Auto-map derived (Kraken API normalization) | Medium |
 | 3 | Auto-map uncertain (not safe for auto-use) | Low |
