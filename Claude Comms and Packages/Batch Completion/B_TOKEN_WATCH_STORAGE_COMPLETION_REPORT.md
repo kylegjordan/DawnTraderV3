@@ -55,7 +55,7 @@ CHANGE-CLASS: architecture
 | T1 | `SPRINT_TO_LIVE_PLAN.md` row 5b | REQUIRED | ✅ | closing, report linked |
 | T1 | `PHASE_19_PLAN.md` | REQUIRED if P19 | N/A | not a `P19-*` batch, no row there |
 | T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | REQUIRED | ✅ / N/A | mine at each step; shared: nothing every session must know |
-| T1 | Langston's `MEMORY.md` | REQUIRED | N/A | nothing he carries forward: the open items live on `#1132`, `#1246` and the follow-up batch, which he reviews from the ref |
+| T1 | Langston's `MEMORY.md` | REQUIRED | ✅ | one STANDING NOTES line through `langston-memory-write` (part `e6360704` → `8988f8bf`): `7b19347d` is a standing condition, its body frozen at mint (7.18 GiB), read the live size as root, never ack, owner the follow-up batch; loaded set 142,797 / 143,856 B |
 | T1 | session task list (mine) | REQUIRED | ✅ | row → Step 11; CC_A / CC_B / CC_C: N/A — not mine |
 | T1 | Observation column | judged | N/A | the open warn row is a standing condition owned by the follow-up batch, not an observation window |
 | T2 | `RUNNING_ISSUES.md` | judged | ✅ | `#1132` annotated: the storage half closes, the rest stays open |
