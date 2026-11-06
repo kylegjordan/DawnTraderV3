@@ -21,8 +21,20 @@ FLAGS = {"drain": "/etc/langston/bridge-drain", "one-worker": "/etc/langston/bri
 LOG = "/var/log/langston-bridge-flags.log"
 
 
+def is_set(path):
+    """Same rule as the bridge's _flag_set: only a positively ABSENT path is clear; a path that cannot be stat'ed
+    reads as set, so this tool can never report an unknown flag as off (Coltrane, Step 4 (4))."""
+    try:
+        os.lstat(path)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def status():
-    return {name: os.path.exists(path) for name, path in FLAGS.items()}
+    return {name: is_set(path) for name, path in FLAGS.items()}
 
 
 def main(argv):
@@ -37,13 +49,16 @@ def main(argv):
         return 2
     name, state, actor = argv[0], argv[1], argv[3].strip()
     path = FLAGS[name]
-    before = os.path.exists(path)
+    before = is_set(path)
     if state == "on":
         with open(path, "w") as fh:
             fh.write("%s set by %s\n" % (datetime.datetime.now(datetime.timezone.utc).isoformat(), actor))
         os.chmod(path, 0o644)
     elif before:
-        os.remove(path)
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
     line = {"ts": datetime.datetime.now(datetime.timezone.utc).isoformat(), "flag": name, "was": before,
             "now": state == "on", "by_claimed": actor, "via_uid": os.getuid()}
     with open(LOG, "a") as fh:

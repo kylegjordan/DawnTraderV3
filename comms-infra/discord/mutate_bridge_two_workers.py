@@ -26,9 +26,14 @@ MUTATIONS = {
         "        _turns = breaker[\"bot_turns\"] + 1\n"),
     "no per-invoke scratch directory": (BRIDGE, "    scratch = make_scratch_dir(task)\n", "    scratch = None\n"),
     "the sweep is not limited to inv-*": (BRIDGE, "os.path.join(SCRATCH_ROOT, \"inv-*\")", "os.path.join(SCRATCH_ROOT, \"*\")"),
-    "one-worker flag ignored": (BRIDGE, "        if worker != WORKER_NAMES[0] and os.path.exists(ONE_WORKER_FLAG):\n",
-                                "        if False:\n"),
+    "one-worker flag ignored": (BRIDGE, "    if worker != WORKER_NAMES[0] and _flag_set(ONE_WORKER_FLAG):\n",
+                                "    if False:\n"),
     "a task does not release its lane": (BRIDGE, "                task_q.release(task)\n", "                pass\n"),
+    # Coltrane, Step 4 (4): os.path.exists() turns a stat failure into "clear" - the fail-open direction
+    "an unreadable flag counts as clear (os.path.exists)": (
+        BRIDGE, "    try:\n        os.lstat(path)\n        return True\n    except FileNotFoundError:\n        return False\n"
+                "    except OSError:\n        return True\n",
+        "    return os.path.exists(path)\n"),
 }
 
 

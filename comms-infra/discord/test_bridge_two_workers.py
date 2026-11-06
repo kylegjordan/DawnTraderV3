@@ -165,6 +165,15 @@ open(b.DRAIN_FLAG, "w").close()
 case("drain: neither may take", (False, False), (b._may_take("task-worker-1"), b._may_take("task-worker-2")))
 os.remove(b.DRAIN_FLAG)
 os.remove(b.ONE_WORKER_FLAG)
+_real_lstat = os.lstat
+def _eacces(p, *a, **k):          # an unstat-able flag (a directory with mode 000 for a non-root reader): root cannot
+    if p in (b.DRAIN_FLAG, b.ONE_WORKER_FLAG):   # produce EACCES on itself, so the stat failure is injected
+        raise PermissionError(13, "Permission denied", p)
+    return _real_lstat(p, *a, **k)
+os.lstat = _eacces
+case("an UNREADABLE drain flag counts as set: neither worker may take (Coltrane (4))",
+     (False, False), (b._may_take("task-worker-1"), b._may_take("task-worker-2")))
+os.lstat = _real_lstat
 
 print("7. two real workers: different batches overlap, one batch's rounds do not; every task is logged (P1, P8)")
 open(b.TASK_LOG, "w").close()

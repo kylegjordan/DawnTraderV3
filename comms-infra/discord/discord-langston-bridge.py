@@ -820,17 +820,27 @@ def _resurface_stale_blocked():
         log(f"queue: stale re-surface failed (non-fatal): {e}")
 
 
+def _flag_set(path):
+    """A flag is SET unless the path is positively ABSENT. os.path.exists() turns every stat failure (EACCES on
+    the directory, an I/O error) into False, i.e. "clear" - the fail-open direction (Coltrane, Step 4 (4)). So:
+    FileNotFoundError means clear; any other OSError means set (fail toward less capacity, never more)."""
+    try:
+        os.lstat(path)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def _may_take(worker):
     """#1248 OBJ-5: read before every take. Drain stops both workers taking new tasks; one-worker stops
-    worker 2. A flag that cannot be read is treated as SET (fail toward less capacity, never more)."""
-    try:
-        if os.path.exists(DRAIN_FLAG):
-            return False
-        if worker != WORKER_NAMES[0] and os.path.exists(ONE_WORKER_FLAG):
-            return False
-        return True
-    except OSError:
+    worker 2. A flag that cannot be read is treated as SET (_flag_set)."""
+    if _flag_set(DRAIN_FLAG):
         return False
+    if worker != WORKER_NAMES[0] and _flag_set(ONE_WORKER_FLAG):
+        return False
+    return True
 
 
 def make_scratch_dir(task):
@@ -1448,7 +1458,7 @@ def main():
     for _name in WORKER_NAMES:
         threading.Thread(target=task_worker, args=(task_q, state), daemon=True, name=_name).start()
     log(f"task workers started: {', '.join(WORKER_NAMES)} (drain flag {DRAIN_FLAG}, one-worker flag "
-        f"{ONE_WORKER_FLAG}: {'SET' if os.path.exists(ONE_WORKER_FLAG) else 'clear'})")
+        f"{ONE_WORKER_FLAG}: {'SET' if _flag_set(ONE_WORKER_FLAG) else 'clear'})")
     sweep_scratch()
     alert_q = None
     if ALERT_LANE_ENABLED:
