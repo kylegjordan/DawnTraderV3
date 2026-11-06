@@ -39,7 +39,8 @@ The token-watch study shares the staging box's disk with the live trading app. O
 | 6 | installed 11-04 and 11-05; the first backlog run hit B2's account download cap and the abort was made to say so (`e27301cc7` → `41b538165`); the lineage gate fired at amendment 1's install and the prune was held until it was explained (Langston PROCEED, msg `1568044465074217033`) |
 | 7 | prune, census, re-download, the nothing-to-move pair, the feed watch — all PASS (`5f1016c4e`) |
 | 8 | Langston CONFIRMED (msg `1568144949201993871`) with three non-blocking conditions |
-| 9 | C-3: the warn body says its figures are mint-time and how to read the live size as root (`5e6f1cec8`, installed 06:34Z; Langston discharged, msg `1568151343321849867`) |
+| 11 | Langston CONFIRMED (msg `1568158267375484991`); OBJ-3 and OBJ-4 re-derived by him (4 rows ever; 7 of 7 units carry `OnFailure=`); two forward items on `B-TOKEN-WATCH-FOLLOWUP-MEMORY` |
+| 9 | C-3: from the next row this key mints, the warn body says its figures are mint-time and how to read the live size as root (the open row `7b19347d` predates the fix and carries neither) (`5e6f1cec8`, installed 06:34Z; Langston discharged, msg `1568151343321849867`) |
 
 ## Governance files changed — the Step 10 ledger
 CHANGE-CLASS: architecture

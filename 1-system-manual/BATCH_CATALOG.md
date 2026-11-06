@@ -1492,7 +1492,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** A direct write is refused (EPERM) — six probes by Langston from his own account; the scheduled fence check passes; every reader of his memory still reads (recall index, backup 509/509, privacy check, load canary LOADED after an unmarked section was fixed). The fence's page has never fired, so its alert path is unproven (#661 leg 3).
 
-## B-TOKEN-WATCH-STORAGE (Infra Claude, sprint row 5b; `#1132`, Kyle D-2 2026-11-04) — change-class `architecture` — ⏳ **CLOSING — Step 11 report with Langston** (installed `41b538165` 2026-11-04, amendment 1 `c428153655a` 2026-11-05, the alert-line fix `5e6f1cec8` 2026-11-06; Step 8 CONFIRMED by Langston, msg `1568144949201993871`; report `Batch Completion/B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md`)
+## B-TOKEN-WATCH-STORAGE (Infra Claude, sprint row 5b; `#1132`, Kyle D-2 2026-11-04) — change-class `architecture` — ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston, msg `1568158267375484991`; installed `41b538165` 2026-11-04, amendment 1 `c428153655a` 2026-11-05, the alert-line fix `5e6f1cec8` 2026-11-06; Step 8 CONFIRMED by Langston, msg `1568144949201993871`; report `Batch Completion/B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md`)
 
 **WHAT IT FIXED.** The token-watch study's store on the staging box had grown to 13 GiB on the disk the live trading app writes to: its compressed archives never left the box, its size check had gone, and its follow-up schedule was never pruned.
 

@@ -153,6 +153,7 @@ token-watch keeps files on the staging box, not database rows, so none of §3's 
 **Caps:** 8 GiB hard cap, 6 GiB warn line, checked daily (store-watch) and hourly (feed-watch). **Move, never drop:** nothing leaves the box until its off-box copy is verified. Details: `SYSTEM_IMPACT_MAP.md` Layer 9 "token-watch".
 
 ## 8. Change log (policy-level)
+- **2026-11-06 (B-TOKEN-WATCH-STORAGE, `#1132`):** §7.6 added — token-watch's own file store: hot / on-box cold / off-box cold to B2 `dt-archive-cold/token-watch/`, the 8 GiB cap and 6 GiB warn line.
 - **2026-11-05 (B-STATUS-BOARD OBJ-6):** §7.5 marked retired — the crew-status writer is deleted; its 18 MB of snapshots are kept as history and stop growing; `#670` becomes a one-time cold copy.
 - **2026-08-07 (B-CREW-STATUS):** §7.5 added — crew-status snapshots classified as business data (Langston ruling) on a deliberately non-DB substrate; cold hand-off into the existing archive owed and homed.
 - **2026-05-06 (B75):** tiered hot/warm/cold + the never-drop directive established.

@@ -11,7 +11,7 @@
 
 | batch | stalled at | waiting on | note |
 |---|---|---|---|
-| ⏳ **`B-TOKEN-WATCH-STORAGE`** (`#1132`; plan §0a stage 00 "data truth first", order 5b — Kyle D-2, 2026-11-04) | **Step 11** — installed (amendment 1 `c428153655a`, alert line `5e6f1cec8`); Langston CONFIRMED Step 8 | Langston | store 6.02 GiB, warn row `7b19347d` held as a standing condition; births/state growth → FOLLOWUP-MEMORY P15 |
+| ✅ ~~`B-TOKEN-WATCH-STORAGE`~~ (`#1132`, Kyle D-2 2026-11-04) | **CLOSED 2026-11-06** (installed; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md`; warn row `7b19347d` standing → FOLLOWUP-MEMORY P10/P15; pager-failure gap P16 |
 | ✅ ~~`B-WAKE-OPENING-LIST`~~ (`#1241`, Kyle KD-20 + KD-21, 2026-11-04) | **CLOSED 2026-11-06** (installed `f38220b83`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_WAKE_OPENING_LIST_COMPLETION_REPORT.md`; A6 (Coltrane cannot wake Langston) with Kyle via PM; bridge-error finding folded into B-AGENT-INVOKE-FAILURE-NOTICE (#1198) |
 | ▶ **`B-LANGSTON-TWO-WORKERS`** (KD-44, Kyle 2026-11-05; plan §0a Infra order 4a) | **Step 4** — built at `82c03b2c3` (CI 4/4); Langston two parts + Coltrane concurrency pass | Langston, Coltrane | two review workers with per-batch lanes; a wait AND review-quality window before vs after (Kyle) |
 | ✅ ~~`B-LANGSTON-MEMORY-WRITE-FENCE`~~ (`#1234`, Kyle-placed 2026-11-04) | **CLOSED 2026-11-06** (installed `fe3c4ad1f`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`; the fence's page never fired (drill offered to Kyle via PM); §10.b exit-8 floor + exit-6 wording → `B-LANGSTON-TWO-WORKERS` |
