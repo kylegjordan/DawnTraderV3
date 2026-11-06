@@ -88,3 +88,9 @@ A per-file count of the whole-word token `portfolioValue` in non-test `server/` 
 2. `getMoneyHeld` wraps every read error as a refusal: a transient DB error blocks sizing for that cycle. Fail-closed by design; is that the right trade?
 3. The retention refusal compares calendar age with the constant; it fires ~335 days from now on today's anchor.
 4. P11 by file and count rather than by line.
+
+## Step 4 — the condition-(b) fold: PROCEED on `05cee280b` (Langston, Discord `1568243383816691775`, 2026-11-06)
+He re-read `server/services/guardrail-settings.ts` at `05cee280b` and at the stamped head (byte-identical) and confirmed the test discriminates: the fixture's `limit(n)` honours `n`, so at the pre-fold `.limit(1)` the two-row case would fail.
+- **Step 7 owes, beside condition (f):** the guard is FENCE-ONLY on today's data. Staging `module_constants` holds exactly ONE `data_lifecycle / closed_trades.hot_retention_days` row (365, set 2026-08-06), so `rows.length > 1` cannot be reached at deploy; **no live silence may be cited as proof it fires** (#661 leg 3). (The hazard is ordinary: 236 of that table's name pairs already have more than one row.)
+- **Finding, not in this deploy:** the reader hand-rolls a two-column query instead of the canonical `getConstant()` (`module-constants-service.ts:179`, most-specific-wins, cached; `GLOBAL_KEY` exists for single global rows). Behaviour does not diverge today; the risk is two read paths for one constant. **Disposition: an item on `#618`, owner CC-C** (no new slot).
+- **CI bar:** 4/4 per job at the sha that deploys, read before the deploy — a green at a descendant is not it.
