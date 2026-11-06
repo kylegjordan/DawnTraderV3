@@ -29,6 +29,9 @@ strong_bull_trend on crypto is roughly flat before fees (−0.26 % per trade) an
 UPDATE module_constants SET value='true'::jsonb, updated_by='b-silent-strategy-census', updated_at=now()
  WHERE module_name='strategy_gates' AND constant_name='enabled' AND asset_class='xstock_spot' AND strategy='strong_bull_trend'
    AND exchange='*' AND regime='*' AND value='false'::jsonb RETURNING *;
+-- ⛔ KYLE-ONLY (2026-11-06, Langston + Coltrane): run this ONLY on Kyle's instruction. No end of the
+--    strong_bull_trend xStock replacement window rolls it back automatically (Kyle P1 2026-10-17: keep all
+--    xStock strategies on until calibration). Record: Batch Completion/B_SILENT_STRATEGY_CENSUS_PROGRESS_REPORT.md section 3a.
 -- ROLLBACK (switch OFF)
 UPDATE module_constants SET value='false'::jsonb, updated_by='b-silent-strategy-census-rollback', updated_at=now()
  WHERE module_name='strategy_gates' AND constant_name='enabled' AND asset_class='xstock_spot' AND strategy='strong_bull_trend'
