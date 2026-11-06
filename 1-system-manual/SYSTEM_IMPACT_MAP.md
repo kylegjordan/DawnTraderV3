@@ -31,6 +31,7 @@
 - [Layer 8: Predictive Learning Stack](#layer-8-predictive-learning-stack)
 - [Layer 9: Infrastructure & Monitoring](#layer-9-infrastructure-monitoring)
   - [Session-Instruction Loading Estate (`.claude/hooks/*` SessionStart)](#session-instruction-loading-estate-claudehooks-sessionstart--added-b-conduct-file-2026-08-20)
+  - [Transcript Archive, Restart Handoff and the PreCompact Trigger (laptop)](#transcript-archive-restart-handoff-and-the-precompact-trigger-laptop--added-b-transcript-archive-2026-11-06)
 - [Layer 10: Frontend & Communication](#layer-10-frontend-communication)
 - [Layer 11: Legacy (Active but Pending Removal)](#layer-11-legacy-active-but-pending-removal)
 - [Quick Lookup: "If I Change X, Check Y"](#quick-lookup-if-i-change-x-check-y)
@@ -1103,7 +1104,8 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 | 2 | `session-reminder.mjs` | re-injects the governed-read rule + wake-watcher check | LOW |
 | 3 | `load-own-memory.mjs` | injects **this session's own** `MEMORY_CC_<X>.md` | LOW |
 | 4 | **`load-conduct.mjs`** *(NEW)* | injects **`CONDUCT.md`** — the behavioural rules | **MEDIUM** — every session's conduct depends on it |
-| 5 | `log-instructions-loaded.mjs` | appends the loaded-set to `~/.claude/instructions-loaded.jsonl` | LOW — **registered LAST deliberately, so it observes the full set** |
+| 5 | **`load-handoff.mjs`** *(NEW, B-TRANSCRIPT-ARCHIVE 2026-11-06)* | runs the restart-handoff GUARD for this session (clone folder → alias, as `load-own-memory.mjs`) and injects its banner, drift lines and the latest handoff, under ~7 KB; **prints nothing when the session has never written a handoff**; fail-open but never silent once one exists (`GUARD FAILED — …`). Detail: the subsection below | **MEDIUM** — when a handoff exists it ssh's to Helsinki and staging at every start; `timeout: 180` (its guard call gives up at 170 s) |
+| 6 | `log-instructions-loaded.mjs` | appends the loaded-set to `~/.claude/instructions-loaded.jsonl` | LOW — **registered LAST deliberately, so it observes the full set** |
 
 
 > ⛔⛔ **THE RULES-FILE SURFACE CHANGED 2026-08-29 (B-CLAUDEMD-SLIM) — READ THIS BEFORE CITING A `CLAUDE.md` SECTION.**
@@ -1128,6 +1130,35 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 **Upstream:** `.claude/settings.local.json` (committed — the registration travels with the repo) · `CONDUCT.md` (repo root) · `CLAUDE_PROJECT_DIR`.
 **Downstream:** every CC session's behaviour. **Shared state:** none — the hook is read-only and stateless.
 **If you change this, check:** `CLAUDE.md` §5 "THE EIGHT" (items 6-8 now cite `CONDUCT.md`) · the per-rule pointers left in `CLAUDE.md` §1, rules 5/6/20/22/24/26/27/28/29 and §11 · `1-system-manual/_pending-skills/bug-investigation-SOURCE.md` (staged rule-24 text B-RULES-1d consumes) · `RUNNING_ISSUES.md` **#700 (scheduled tasks run from a non-repo folder)** — ⚠️ **the number alone is an AMBIGUOUS OBJECT right now: CC-C independently minted a #700 (commodity_perp capture) 2m28s after mine, and both are live at `:2703` and `:2778`. Per the #682 convention, cite this one WITH its batch name. The disambiguator is not a renumber and needs nobody’s assent; the renumber itself waits on the #702 range split.**
+
+---
+
+### Transcript Archive, Restart Handoff and the PreCompact Trigger (laptop) — added B-TRANSCRIPT-ARCHIVE 2026-11-06
+
+> **What it is:** a readable, redacted archive of every Claude Code conversation on Kyle's laptop, kept current by two triggers, plus a restart-handoff file per session that a SessionStart guard checks. **Nothing here runs in the app or on the trading path.** It touches staging only through the system-alerts CLI (the nightly's alarm), and Helsinki only read-only (the handoff census). Code: `comms-infra/laptop/transcript-archive/`. Scope, pre-audit and the full review record: `B_TRANSCRIPT_ARCHIVE_SCOPE.md`, `B_TRANSCRIPT_ARCHIVE_PRE_AUDIT.md`, `Change Lists/B_TRANSCRIPT_ARCHIVE_CHANGE_LIST.md`.
+
+| component | where it runs | what it does | writes |
+|---|---|---|---|
+| `dt_transcript.py` (distiller) | inside every run | one raw conversation → readable lines; three redaction layers, (c) = per-run HMAC fingerprints of known secret VALUES | nothing itself |
+| `dt_secret_hashes.py` (producer) | streamed over ssh to staging and Helsinki, and run on the laptop, once per run | fingerprints the named secrets under a throwaway per-run key; the key is set in the streamed COPY, never in argv, never written | stdout only |
+| `dt_archive.py` (writer) | inside every run | appends new lines per session per day; intent-then-final commit per raw file; refuses on a moved file, a shorter-than-committed ARCHIVE file, an unreadable folder, a non-file `.jsonl`; a RAW file rewritten in place (trim, dedup, distill — shorter than the stored offset, or the 4 KB before it changed) is RE-READ from the start with archived ids skipped and reported as `REREAD` | `~/.claude/transcript-archive/<alias>/*.md`, `.state/<alias>/*.json` (+ `*.lock` while held) |
+| `dt_index.py` | end of every non-dry run | the archive index, action list, and the topic-free index | `<archive>/INDEX.md`, `ACTIONS.tsv`; `DT-SHARED-MEMORY/TRANSCRIPT_INDEX.md` |
+| `dt_archive_run.py` | the ONE run every trigger calls | lock age check (25 h), empty-session-folder check, fingerprints from every machine (one missing = refuse), write, index; last line always `ARCHIVE RUN OK` / `ARCHIVE RUN FAILED`; exits 0/3/4/5/6/7/8 | as above |
+| `dt_archive_trigger.py nightly` | Windows task `\DawnTrader-Transcript-Archive`, daily, from the INSTALLED copy `~/.claude/transcript-archive-bin` (sha-checked against a reviewed commit, `INSTALLED_FROM.txt`) | run lock (`<archive>/.run.lock`, never auto-broken); `RUNS.log` line per attempt; the alarm below | `<archive>/RUNS.log`, `.alert-state.json`; staging alert rows |
+| `dt_archive_trigger.py precompact` | the `PreCompact` hook (`.claude/settings.local.json`, the installed copy, `timeout: 30`) | logs that it fired + its input keys, starts a run DETACHED, returns 0; the run skips when the run lock is held or the last success ended < 30 min ago; raises NO alarm | `RUNS.log` |
+| `dt_handoff.py` + `.claude/hooks/load-handoff.mjs` | SessionStart (estate row 5 above) | per-session handoff + guard: CLEAN / STALE (drift) / STALE/BLOCKED / AGED / GUARD FAILED, from a census of open dispatches (Helsinki inbox log) and due alerts (staging) | `<archive>/handoff/<alias>/` |
+| `dt_dispatch_census.py` | over ssh on Helsinki, called by the guard | dispatches per sender, by snowflake window and exact sender strings | stdout only |
+| backups | `backup-claude-sessions.ps1` (daily additive task, not in git) | copies the archive, `.state`, `RUNS.log`, `.alert-state.json` to Drive `Claude Code Backup Folders\Transcript Archive`, `*.lock` excluded; the restore script does NOT put it back (a new laptop rebuilds; restore guide says so) | Drive |
+
+**The alarm (nightly only)** — two row families in the staging system-alerts queue: a scheduled **never-ran check** at +26 h on its own key per arm (`transcript-archive-deadman-<stamp>`), and an active **failure alert** on `transcript-archive-nightly-failed`. Success arms the new check FIRST and resolves the older keys and the failure key LAST, so a part-failed night leaves a duplicate alarm, never none; any alert-leg failure makes the nightly exit non-zero. Resolve evidence cites the run's own line as `laptop:~/.claude/transcript-archive/RUNS.log:<n>`. ⛔ **Unexercised until a genuinely dark night: no never-ran check has yet been promoted and read by a person. Later silence is not evidence it fires.**
+
+**Shared state:** the archive folder and its `.state` (one writer at a time by the run lock; per-file locks inside); `RUNS.log` (its own byte-range lock); `.alert-state.json` (the armed check keys — lost ⇒ the older checks fire and need resolving by hand); the staging alert rows above. **Upstream:** `~/.claude/projects/*` (every session's raw transcripts); the secret files listed in `dt_archive_run.MACHINES` on staging, Helsinki and the laptop; the Helsinki inbox log and the staging alerts file (guard only). **Downstream:** humans and sessions reading the archive or `TRANSCRIPT_INDEX.md`; Langston's triage of the alarm rows; the Drive backup.
+
+**Blast radius:** every session START (the handoff hook, only once a handoff exists); every COMPACTION in every session (a detached run, bounded by the lock and the 30-min floor; a full run ≈ 70 s plus two ssh fingerprint fetches); the staging alerts queue (≤ 2 live rows on these keys in steady state); the trading system: none.
+
+**Known limits, stated:** the guard does not check Coltrane's posts (they carry no message id it can match); the guard cannot see a dispatch still queued in Langston's bridge before a worker takes it (no enqueue row — folded into `B-AGENT-INVOKE-FAILURE-NOTICE`, `#1198`); restored state holds absolute paths, so a restore onto a renamed profile refuses every file (restore guide: move the archive aside, let it rebuild); a rebuild redacts only the secrets known at rebuild time; the backup's `*.lock` exclusion has NOT been exercised (0 lock files at the source on its first run, 2026-11-06) — that clean run is not evidence the exclusion works.
+
+**If you change this, check:** the installed copy is NOT updated by a push — re-install from the reviewed sha and re-check every file's sha256 (`INSTALLED_FROM.txt`); the task XML must be registered as UTF-16 (`schtasks /xml` refuses UTF-8); `dt_archive_run.MACHINES` when a secret file moves; the staging resolve-evidence gate (`isValidResolutionEvidence`) — a tightened gate fails the resolve and leaves the old check standing (loud, exit 10); `CLAUDE.md` §3.1's backup sentence and the restore guide on Drive.
 
 ---
 

@@ -20,7 +20,9 @@ The **1M-context model does NOT fix this** — the bloat is on disk, not in cont
 DIR="$HOME/.claude/projects/<project-dir>"
 ls -laS "$DIR"/*.jsonl | head          # find the big ones (sizes in bytes)
 ```
-Map a desktop session → its transcript file via `(repo)/.claude/cc-session-roster.json` (name → session_id = filename) and/or the first user message + last timestamp. **Confirm the file is the intended session before touching it.**
+Map a desktop session → its transcript file by its **project folder** (the slug of the clone it opened: `C--DawnTraderV3-old|-new|-analyst|-infra|-pm`, the same key `load-own-memory.mjs` uses), then the first user message + last timestamp. ⚠️ **Do NOT key on the roster's `session_id`** (`(repo)/.claude/cc-session-roster.json`): it is the id the name was first bound to, and a later conversation does not update it — measured 2026-11-06: Infra Claude's roster id begins `e6446f21` while its live conversation is `644fc5fe` (B-TRANSCRIPT-ARCHIVE pre-audit A5). **Confirm the file is the intended session before touching it.**
+
+**Before trimming, the readable archive already holds the conversation:** `~/.claude/transcript-archive/<alias>/` (redacted, appended nightly and before each compaction; index in `DT-SHARED-MEMORY/TRANSCRIPT_INDEX.md`). A trim rewrites the RAW file only; the archive keeps what it already took. The writer notices the rewrite (the file is shorter than where it stopped, or the bytes just before that point changed) and RE-READS that file from the start, skipping every line it already archived, so nothing new is lost and nothing is doubled; the run's result line says `REREAD <file>`. No operator action is needed. Detail: System Impact Map, "Transcript Archive, Restart Handoff and the PreCompact Trigger".
 Age / distribution / compaction count (run on a COPY):
 ```bash
 python3 - <<'PY'
