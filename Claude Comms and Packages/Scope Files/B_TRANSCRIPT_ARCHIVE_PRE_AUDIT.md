@@ -51,4 +51,4 @@ change-class: non_architecture · scope `Scope Files/B_TRANSCRIPT_ARCHIVE_SCOPE.
 **`UNAUDITED`:** none — every item above falls out of a finding. Three things are left for Step 3 to measure before relying on them, and say so: Coltrane's reply linkage (P8), whether the `PreCompact` hook receives the transcript path (P7b; if not, it reads the newest file in the session's folder and says so), and the workflow-run nesting (A2b).
 
 ## 3. Order of work
-P1 → P2 + P3 → **P4 (stop for Kyle)** → P5 → P6 → P7 → P8 with its drill (seventeen cases, listed in P8) → P9 → P10 → P11. Nothing is built before `B-LANGSTON-TWO-WORKERS`' install (KD-47).
+P1 → P2 + P3 → **P4 (stop for Kyle)** → P5 → P6 → P7 → P8 with its drill (seventeen cases, listed in P8) → P9 → P10 → P11. **Sequencing (my own order, not Kyle's — KD-47 is a placement):** code and tests are written now; the Step-4 dispatch, and P3(c)'s root-side hashing on each server, wait until after `B-LANGSTON-TWO-WORKERS`' restart (Langston msg `1568198976115580969`). Index location: KD-49, option (iii) — P6 writes the topic-free index into the shared memory folder.
