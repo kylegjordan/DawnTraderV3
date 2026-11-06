@@ -48,8 +48,11 @@ import type { TradingMode } from '../lib/event-bus';
  * finished record; the next cycle finds no OPEN record and the alert points at the restore. The restore's only guard against
  * a finished record is the position's own `tradeId` — so without this stamp it would insert a SECOND record for a trade
  * already booked, and the next close would book a second exit. With it, the restore refuses (409) as designed.
- * Best-effort: a failed write is logged, never thrown — it must not block the close it precedes. Updates the in-memory
- * position too, so the rest of the cycle sees the id.
+ * Returns false on a failed write (logged, never thrown). The engine's close treats it as best-effort — refusing a close
+ * whose record IS resolved would be worse; the stop flow's orphan step fails CLOSED on it (keeps the position, leaves the
+ * record open, reports it). Updates the in-memory position too, so the rest of the cycle sees the id. The metadata is a
+ * read-modify-write of a column `updateActiveOpenPosition` replaces wholesale — the house convention (the book-state and
+ * ladder writers do the same off the same in-memory object), so the stamp is only as fresh as the cycle's fetch.
  */
 export async function stampPositionTradeId(mode: TradingMode, position: any, recordId: string): Promise<boolean> {
   const meta = position?.metadata ?? {};
