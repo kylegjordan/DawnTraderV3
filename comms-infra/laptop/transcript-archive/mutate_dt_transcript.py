@@ -39,6 +39,8 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("quoted value without its boundary check", replace("(?P=q)(?=[\\s,;})\\]]|$)", "(?P=q)")),
     ("last-resort whole-run alternative removed", replace('                   r"|(?P<raw>\\S+))"', '                   r")"')),
     ("whole-run value given a 4-char floor", replace('                   r"|(?P<raw>\\S+))"', '                   r"|(?P<raw>\\S{4,}))"')),
+    ("prefix tolerance removed", replace("(?!NOPASSWD\\b)\\w*?(?:%s)", "(?:%s)")),
+    ("NOPASSWD exception removed", replace("(?!NOPASSWD\\b)\\w*?(?:%s)", "\\w*?(?:%s)")),
     ("names case-sensitive again", replace("% \"|\".join(SECRET_NAMES), re.IGNORECASE)", "% \"|\".join(SECRET_NAMES))")),
     ("empty --hashes not refused", replace('    if "--hashes" in opts and not red.layer_c_names:', '    if False:')),
     ("drop counter off", replace("        dropped[key] = dropped.get(key, 0) + 1", "        pass")),

@@ -94,6 +94,19 @@ red = dt.Redactor()
 out = red('{"PASSWORD":"v1","next":1}')
 ok("a JSON object keeps its next key", out == '{"PASSWORD":"[REDACTED named:PASSWORD]","next":1}')
 
+print("2d. names - a prefixed name is the same secret kind (Langston r3 blocker)")
+sv = "hunter" + "2zz"
+for form, nm in [("DB_PASSWORD=%s", "DB_PASSWORD"), ("PGPASSWORD=%s psql -c x", "PGPASSWORD"),
+                 ('MYSQL_PASSWORD: "%s"', "MYSQL_PASSWORD"), ("APP_JWT_SECRET=%s", "APP_JWT_SECRET"),
+                 ("MY_GH_TOKEN=%s", "MY_GH_TOKEN"), ("TEST_USER_PASSWORD = %s", "TEST_USER_PASSWORD")]:
+    red = dt.Redactor()
+    out = red(form % sv)
+    ok("prefixed name %r hides the value" % form, sv not in out and red.counts.get("named:" + nm) == 1)
+red = dt.Redactor()
+ok("the sudoers literal NOPASSWD is not a secret", red("deploy ALL=(ALL) NOPASSWD: ALL") == "deploy ALL=(ALL) NOPASSWD: ALL" and red.counts == {})
+red = dt.Redactor()
+ok("a name that only CONTAINS a secret name in the middle is left alone", red("PASSWORD_HASH_ALGO=bcrypt") == "PASSWORD_HASH_ALGO=bcrypt")
+
 # ---- 3. values by hash (layer c): the value is never in the hash file -------------------------------------------------
 print("3. values")
 shapeless = "zx" + "9CQ4u7Lm2Rt8Pw"  # no shape, no name

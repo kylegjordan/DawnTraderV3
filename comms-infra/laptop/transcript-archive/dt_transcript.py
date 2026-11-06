@@ -27,6 +27,11 @@ REDACTION (P3), applied to every string before it is written, in this order:
       values; every text token of a listed length is hashed, and a hit is replaced. With no --hashes file, layer (c)
       is OFF and the output's first line says so.
 Each hit becomes `[REDACTED <kind>]`. The counters are returned so the caller can publish counts per kind (P3, C-3).
+
+KNOWN LIMITS, stated (Langston r3/r4): layer (b) needs a `:`, `=` or `->` after the name, so a command-line flag
+(`--password x`, `-p x`) is NOT caught by name; a value with a space inside an unclosed or odd quote (`"hunter two`,
+`ab" cd`) leaves the part after the space visible; an UNQUOTED JSON value (`{"PASSWORD": 12345,"next":1}`) is
+over-redacted to the end of the run. Layer (c) is off without --hashes and blind under 12 characters.
 """
 import hashlib
 import json
@@ -62,7 +67,10 @@ SECRET_NAMES = [
 # unquoted value, or one with an unpaired or embedded quote (`abc"def`, `"abc` never closed), is taken whole.
 # (r3 first had a middle "unquoted, stop at a quote" alternative: the mutation runner showed it redundant, and it
 # would have hidden only `abc` of `PASSWORD=abc"def` - removed.)
-NAMES = re.compile(r"(?P<name>\b(?:%s)\b)(?P<sep>[\"']?[ \t]*(?::|=|->)[ \t]*)"
+# The NAME takes any prefix of word characters (Langston r3 blocker): `DB_PASSWORD`, `PGPASSWORD`, `MYSQL_PASSWORD`,
+# `APP_JWT_SECRET`, `MY_GH_TOKEN` are the same secret kinds and must not need listing one by one. One exception by
+# name: the sudoers literal `NOPASSWD` (a rule, never a secret).
+NAMES = re.compile(r"(?P<name>\b(?!NOPASSWD\b)\w*?(?:%s)\b)(?P<sep>[\"']?[ \t]*(?::|=|->)[ \t]*)"
                    r"(?:(?P<q>[\"'])(?P<qval>(?:\\.|[^\\\n])*?)(?P=q)(?=[\s,;})\]]|$)"
                    r"|(?P<raw>\S+))"
                    % "|".join(SECRET_NAMES), re.IGNORECASE)
