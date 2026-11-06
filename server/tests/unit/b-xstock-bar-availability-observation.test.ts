@@ -264,4 +264,28 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(finalDrainAt).toBeGreaterThan(feedStopAt);
     expect(handoffAt).toBeGreaterThan(finalDrainAt);
   });
+
+  it('R2: the re-run window moves the governed row and the code constant together, in canonical form', () => {
+    const root = process.cwd();
+    const gate = fs.readFileSync(path.join(root, 'server/scripts/b-xstock-bar-availability-capacity-gate.ts'), 'utf8');
+    const rerun = fs.readFileSync(path.join(
+      root, 'drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun.sql'), 'utf8');
+    const rerunRollback = fs.readFileSync(path.join(
+      root, 'drizzle/migrations/2026-11-06-b-xstock-bar-availability-window-rerun-rollback.sql'), 'utf8');
+    const manifest = fs.readFileSync(path.join(root, 'drizzle/migrations/MANIFEST.txt'), 'utf8');
+
+    const constant = /const EXPECTED_GRADED_WINDOW_START = '([^']+)';/.exec(gate)?.[1];
+    const row = /SET value = to_jsonb\('([^']+)'::text\)/.exec(rerun)?.[1];
+    expect(constant).toBe('2026-11-09T00:05:00.000Z');
+    expect(row).toBe('2026-11-09T00:05:00Z');
+    // The gate compares new Date(row).toISOString() against the literal (capacity-gate.ts, gradedWindowStartMatches):
+    // the literal must be the canonical form of the row, or the gate can never pass.
+    expect(new Date(row as string).toISOString()).toBe(constant);
+    expect(rerun).toContain("constant_name = 'graded_window_start'");
+    expect(rerun).toContain("RAISE EXCEPTION 'graded_window_start: expected exactly 1 row, updated %', n;");
+    expect(rerun).toContain("updated_by = 'b-xstock-bar-availability-r2-rerun'");
+    expect(rerunRollback).toContain("to_jsonb('2026-10-16T00:05:00Z'::text)");
+    expect(manifest.split(/\r?\n/)).toContain('2026-11-06-b-xstock-bar-availability-window-rerun.sql');
+    expect(manifest).not.toContain('window-rerun-rollback');
+  });
 });

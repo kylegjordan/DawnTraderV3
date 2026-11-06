@@ -241,3 +241,4 @@
 2026-11-05-b-entry-gate.sql
 2026-11-05-b-balance-session-pairing-block-reasons.sql
 2026-11-05-b-close-writer-costs-open-positions-mode.sql
+2026-11-06-b-xstock-bar-availability-window-rerun.sql

@@ -5,7 +5,7 @@
  * REPEATABLE READ READ ONLY snapshot. Usage:
  *
  *   npx tsx server/scripts/b-xstock-bar-availability-capacity-gate.ts \
- *     --window-start 2026-10-16T00:05:00Z --graded-ref <deployed-sha> \
+ *     --window-start 2026-11-09T00:05:00Z --graded-ref <deployed-sha> \
  *     --reviewed-ref <every-contributing-deployed-sha>
  *
  * The command prints one JSON evidence object. It never changes database or
@@ -25,7 +25,10 @@ const EIGHT_DAYS_MS = 8 * 86_400_000;
 const EXPECTED_PLAN_CAP_MB = 204_800;
 const EXPECTED_CRITICAL_THRESHOLD = 0.80;
 const EXPECTED_VENUE_SESSION_MAX_GAP_SECONDS = 60;
-const EXPECTED_GRADED_WINDOW_START = '2026-10-16T00:05:00.000Z';
+// B-XSTOCK-BAR-AVAILABILITY R2 (2026-11-06): the re-run window. Moves TOGETHER with the governed row
+// `graded_window_start` (migration 2026-11-06-b-xstock-bar-availability-window-rerun.sql); the gate compares
+// this literal against the row's Date.toISOString(), so it must stay in canonical millisecond form.
+const EXPECTED_GRADED_WINDOW_START = '2026-11-09T00:05:00.000Z';
 const EXPECTED_AVAILABILITY_CONTRACT = 'xstock-bar-availability/v1';
 
 // Exported so the integration fence executes the exact production query. The
