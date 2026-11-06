@@ -1,7 +1,7 @@
 # B-PRICE-FEED-TRUTH — COMPLETION REPORT
 
 **Batch:** `B-PRICE-FEED-TRUTH` · owner CC-C · pre-sprint Stage 1 ("feed truth under the exits") · issues `#1047`, `#1076`, `#1146`, `#1173` · **change-class `architecture`** (scope header).
-**State:** Steps 1-10 done; closes on Langston's Step-11 confirmation. Written 2026-11-06, three weeks after its last verification — the batch was finished on 2026-10-15 and never written up (PM Claude's open-work list, 2026-11-06).
+**State:** ✅ CLOSED 2026-11-06 — Step 11 APPROVED by Langston (Discord `1568218101026390108`, graded at `dee10e97`) after one send-back (Discord `1568215453300555907`). Written 2026-11-06, three weeks after its last verification — the batch was finished on 2026-10-15 and never written up (PM Claude's open-work list, 2026-11-06).
 
 ## OPEN ITEMS AND LIMITS — STATED FIRST
 1. **Two of the four planned increments were NOT built here, by decision, not by omission:** **I1** (an age bound on re-served prices) was taken over and shipped by `B-PRICE-STALENESS-BOUND` (sprint row 33, ✅ CLOSED 2026-10-20 on its pre-registered Sunday-reopen read); **I4** (the xStock recorder following the daily list) was moved out by Kyle on 2026-10-07 to sprint row 31 (`B-XSTOCK-LIVE-FEED`). Neither is graded here.
@@ -35,7 +35,7 @@ Prices reaching the engine should be real and current. Two of its fixes shipped:
 | **I4** the xStock recorder follows the daily list | **MOVED OUT** (Kyle 2026-10-07) | sprint row 31 `B-XSTOCK-LIVE-FEED` |
 
 ## 4. NEW FINDINGS
-None owed by this batch. A stale figure was swept: the xStock/crypto ticker collision set holds 16 USD and 16 EUR pairs since the 2026-10-01 re-audit (`3n.q3` P9; `XSTOCK_SPOT_KRAKEN_COLLISIONS`), but the System Impact Map and System Manual still said 17 (9 + 8) or named 5. My first Step 10 corrected one line; Langston's Step-11 send-back found nine more, and a re-search by content found two more (SIM, the xStock bar-cache entry and the P19-B4a line). All twelve now read the current count, plus one stale list in `RUNNING_ISSUES` annotated. The drift itself came from `3n.q3` P9, which re-audited the set without sweeping the documents.
+None owed by this batch. A stale figure was swept: the xStock/crypto ticker collision set holds 16 USD and 16 EUR pairs since the 2026-10-01 re-audit (`3n.q3` P9; `XSTOCK_SPOT_KRAKEN_COLLISIONS`), but the System Impact Map and System Manual still said 17 (9 + 8) or named 5. My first Step 10 corrected one line; Langston's Step-11 send-back found nine more, and a re-search by content found two more (SIM, the xStock bar-cache entry and the P19-B4a line). All twelve now read the current count, plus one stale list in `RUNNING_ISSUES` annotated. ⚠️ That search covered the System Impact Map and the System Manual only; Langston's repo-wide pass found two more live copies, fixed at Step 11: `ASSET_CLASS_ONBOARDING_WORKFLOW.md` rule 5 and the comment at `server/asset_classes/xstock_spot/active-dispatch.ts:14` (now names the set instead of a count, so it cannot go stale); the onboarding guide's B79.0f history line is annotated. `SYSTEM_IMPACT_MAP` §B79.0f's "the 9 collision tickers" is history and stays. The drift itself came from `3n.q3` P9, which re-audited the set without sweeping the documents.
 
 ## 5. GOVERNANCE — THE STEP-10 LEDGER
 CHANGE-CLASS: architecture

@@ -11,7 +11,7 @@
  *
  * Stamp-at-source: the asset class (xstock_spot) is stamped on the SizingContext HERE — at
  * the per-pipe chokepoint where the pipe (and thus the class) is known by construction —
- * never re-derived from the symbol downstream (which mislabels the 17 collision tickers).
+ * never re-derived from the symbol downstream (which mislabels every ticker in `XSTOCK_SPOT_KRAKEN_COLLISIONS`).
  *
  * Langston-approved design (P19_B4a_C2_DISPATCH_DESIGN_rev1.md + C2 review):
  *  - Q3 DORMANCY BY AUTHORITY: gate on the authoritative active-trading flag

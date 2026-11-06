@@ -23,7 +23,7 @@
 | 40 | `B-XSTOCK-SESSION-FRESHNESS` | ➕ KD-48 (2026-11-06): the weekly xStock opportunity-loss watch is an item of this batch, CC-A building it (spec §20 of the registration). P1b `B-ENTRY-CONSUMPTION-FRESHNESS` ✅ CLOSED 2026-10-15: deployed `3a2cd4ee5`, Coltrane Step 11 confirmed at `c3c8d7ce1`. Umbrella residual alert/exit/dedupe work remains separately placed. |
 | P1c | `B-CLASS-LEG-FILL-MODE` (`#1170` + `[C3]`) | ✅ CLOSED 2026-10-15; final runtime `30af855f2`, Coltrane Step-11 confirmed at `c8c185e63`, CI `38778491511` four of four; no observation or deployment hold. (`B-PRICE-FEED-TRUTH` closed 2026-11-06.) |
 | — | `F-G-2` | ✅ closed as absorbed into `B-PRICE-SIDE-BY-JOB` (2026-09-28, `0ccad12f5`) |
-| Stage 1 | `B-PRICE-FEED-TRUTH` (`#1047`, `#1076`, `#1146`, `#1173`) | ✅ CLOSED 2026-11-06 at Step 10 (I2 + I3 live 2026-10-10, Coltrane-approved 2026-10-15; I1 shipped as `B-PRICE-STALENESS-BOUND`, I4 moved to row 31) — `Batch Completion/B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md`; Step 11 with Langston |
+| Stage 1 | `B-PRICE-FEED-TRUTH` (`#1047`, `#1076`, `#1146`, `#1173`) | ✅ CLOSED 2026-11-06 at Step 10 (I2 + I3 live 2026-10-10, Coltrane-approved 2026-10-15; I1 shipped as `B-PRICE-STALENESS-BOUND`, I4 moved to row 31) — `Batch Completion/B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md`; Step 11 APPROVED by Langston 2026-11-06 |
 
 ## 0b. OUTSIDE THE PLAN — current direction from Kyle
 
