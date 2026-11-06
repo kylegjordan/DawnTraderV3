@@ -559,3 +559,18 @@ The alert's own text reads: *"Routine if transient; **persistent staleness durin
 ⚠️ **Population limit: ONE instance.** How often bucket 3 decides a refusal is unmeasured, and it is `3b.f-c`'s to count across the alert population alongside buckets 1 and 2. **No change to `active_fill_max_age_ms` follows from this (OBJ-9 stands).** Whether the guard should read the live cache instead of the archive is a design question for this row, not a fix made here.
 
 **DISPOSITION: folded into this row (`3b.f-c`) as its third attribution bucket, per Langston's routing. The alert stays resolved (his evidence); future instances are resolved with evidence, never acked, because the shared dedupe key would mute every xStock stale-fill alarm.**
+
+## §20 — ITEM ADDED: THE WEEKLY xSTOCK OPPORTUNITY-LOSS WATCH (`#441`, KD-48, Kyle 2026-11-06) *(CC-C, owner of `3b.f-c`)*
+
+**Kyle's decision:** *"Yes to option A for the X stock price freshness watch."* (KD-48, `1-system-manual/pm/DECISIONS.md`). His July 2026 condition on the 4000 ms xStock capture rate (`#441`) — a weekly watch on the trades the slower rate costs us — is delivered as an ITEM of this batch: §9.4 disposition 2, no new slot. **OLD Claude (CC-A) builds the item; CC-C holds the batch's scope and governance.** The consensus (CC-A + CC-C + Langston + Coltrane, KD-34, four rounds) is in `1-system-manual/pm/decisions/2026-11-05_xstock-freshness-condition.md` §6; it is the authority for the item, and this section is its pointer in the batch record.
+
+**The item, as agreed (round 4):**
+1. At each of the FOUR xStock entry freshness gates — the dispatch gate (`active-dispatch.ts`), `DEPTH_GATE`, `LIVENESS_GATE`, `CONSUMPTION_FRESHNESS` (`active-execution-engine.ts`) — one `archiveSignalEval` row on EVERY reach, accepted AND refused (`rejectStage:'entry_fill'` on a refusal; gate and outcome in `gateDecision`), carrying the measured age AND the pipeline lag floor (Langston F2: ~9 s of apparent age is pipeline lag, so a 15 s breach needs only ~6 s of true silence).
+2. A stable attempt id passed through the dispatch payload and stamped on every gate row, linking the existing VTS `admitted` row WITHOUT changing it (it truthfully records VTS admission).
+3. The 1000 ms figure is a preregistered **counterfactual bound**, never an observed cause. Wording: "blocked while the 4000 ms pipeline was in force".
+4. One scheduled weekly computation registered in `cronRegistry` (so the cron-fire evidence verifier sees it — mind the `no_fires_ever` edge on the first weekly fire), writing one stored per-symbol aggregate row and raising ONE guarded threshold alert (absolute band + minimum-sample guard + `#439` calendar quarantine). No Discord digest.
+5. A row-count reconcile beside the rate (the archive carrier swallows write failures, `eval-cycle.ts:222-223`, and numerator and denominator ride it).
+6. Option C — moving xStock capture back toward 1 s — is NAMED as the later decision this number feeds; it is not part of the item.
+7. The July batch `B-XSTOCK-FRESHNESS-MONITOR` closes into this item; its inert script and unbuilt table are retired under rule 18, and its open `GOVERNANCE_EXCEPTIONS` row dissolves then.
+
+**Step 2 picks the row form** (a row per reach, or one counted row per symbol per interval per stage — Langston: either satisfies the denominator). **This item's Steps 2-9 are CC-A's**, reviewed by Langston; it reports into this batch's record and closes with this batch's completion report, which CC-C writes.
