@@ -1,5 +1,7 @@
 # Open batch register — 2026-11-05 09:40 UTC, built by PM Claude
 
+> **UPDATE 2026-11-06 ~13:0xZ (PM Claude):** six batches closed overnight/this morning and are struck below. The fuller, newer census is `1-system-manual/pm/reviews/2026-11-06_OPEN_WORK_LIST.md` (57a2f4a62); this register is rebuilt from it at the next full crew check. Also closed or moved since that list: B-VTS-TELEMETRY-AGGREGATES (row 4a) at Step 11 with Langston (ANALYST, 75aeb7fad); B-PRICE-FEED-TRUTH at Step 11 with Langston. Open follow-ups from #1235: F2's xStock half (own stop/target sizes for the strong-trend lane, decision pending on #1235) and #1249 (no warning when a deploy lands inside another batch's test window), surfaced for Kyle, not placed.
+
 > **How this register is used (Kyle 2026-11-05, KD-29).** PM Claude re-reads it at EVERY crew check (the scheduled check and any slotting decision) and updates it the same turn.
 > - Every open batch carries ONE of three states: **ACTIVE** (being worked now) · **OBSERVATION** (deployed, waiting on a dated read or window; the date is written) · **STALLED** (no recorded activity for 7 days, or an OBSERVATION read whose date has passed with no result).
 > - A session may hold several batches at once and may switch between them (an urgent fix, a dependency, a wait). This is NOT restricted (Kyle 2026-11-05, ~11:25Z). The register only TRACKS each one and FOLLOWS UP: a STALLED batch is chased with its owner at the next crew check, and raised to Kyle only if it stays stalled with no recorded reason.
@@ -31,14 +33,14 @@ Open count: 7; actively worked: 5; parked/waiting: 2
 | batch id | what it is for | step N of 11 | waiting on | last evidence |
 |---|---|---|---|---|
 | B-CRYPTO-FEED-WATCHDOG (#1232) | The crypto recorder notices a silent connection, reconnects and alerts. | Step 7 / WATCH WINDOW | 48 h watch to 2026-11-06 ~15:47Z (alert `d766f9b3`), then Langston Step 8 | deployed `b8685a453` 2026-11-04 15:47Z; plan row 33a |
-| B-XSTOCK-DBS-TO-STRATEGIES (#1235) | xStock strategies receive the direction score; then switch on four xStock strategies still off. | Step 7 (plan) | first US-session read 21:15Z (alert `dbc60600`), then Langston Step 8 | deployed `8636040255` 2026-11-05 05:36Z (plan line 20) |
+| ~~B-XSTOCK-DBS-TO-STRATEGIES~~ ✅ CLOSED 2026-11-06 (Langston Steps 10-11 12:21Z) (#1235) | xStock strategies receive the direction score; then switch on four xStock strategies still off. | Step 7 (plan) | first US-session read 21:15Z (alert `dbc60600`), then Langston Step 8 | deployed `8636040255` 2026-11-05 05:36Z (plan line 20) |
 | B-ENTRY-GATE (#1224) | Entry refused when the price has moved too far or profit after fees is not positive. | Step 1 (scope r1 sent back 2026-10-21; r2 not yet sent) | queue order: after the watchdog and #1235; Coltrane silent since 10-20 | plan line 32; MEMORY_CC_B.md 11-04 14:40Z entry |
 | B-ENGINE-STOP-DURATION-COLUMN (#1067) | An engine stop no longer crashes on a long session (whole-number overflow at ~24.8 days). | Step 7 (task list) | the engine stop, run as the paper reset's first act | task list B 0; deployed 2026-10-07 |
 | B-RR-FLOOR-HEADROOM (#1183) | Reward-to-risk floors get margin so a small fill slip does not breach them. | Step 10 / WATCH WINDOW | 21-day read from 2026-10-17T13:03Z; terminal alert `20bba77f` 2026-11-07 | progress report commit `34c0a6a7d` 2026-11-04 |
 | B-SILENT-STRATEGY-CENSUS | Find strategies that never evaluate and decide which to switch on. | Step 10 / WATCH WINDOW | alert `dd588f0d` (20 xStock closes or 2026-11-06), then O3 (O3 now discharged through #1235 per KD-7) | progress report `18c5c517c` 2026-10-17 |
-| B-FEED-HEALTH-GRADE-ARM (#1123) | Arm the feed-liveness grade that was read but never loaded. | Step 10 (task list); plan says Step 7 partial; exception row says Step 9 | one weekday of readings and the first real recovery; "one extension at most" | progress report `b41d5442d` 2026-10-18 |
+| ~~B-FEED-HEALTH-GRADE-ARM~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:39Z) (#1123) | Arm the feed-liveness grade that was read but never loaded. | Step 10 (task list); plan says Step 7 partial; exception row says Step 9 | one weekday of readings and the first real recovery; "one extension at most" | progress report `b41d5442d` 2026-10-18 |
 | B-FORMULA-HEALTH-AUDIT-FRESHNESS (#1214) | The Formula Health card shows when the scheduled audit last ran. | PARKED (Kyle: AI pages off-limits) | the cleanup phase | parked 2026-10-19; deployed `ee0a3b0e4` |
-| B-PATTERN-ENUM-DRIFT (hotfix, #1063, plan row 51) | volatility_edge's pattern path was silently dead. | Step 7, verification half-done | first `volatility_edge` open after deploy B, to read its `pattern_type` | task list B (as of 2026-11-04); no completion report found |
+| ~~B-PATTERN-ENUM-DRIFT~~ ✅ CLOSED 2026-11-06 (Langston 10:16Z) (hotfix, #1063, plan row 51) | volatility_edge's pattern path was silently dead. | Step 7, verification half-done | first `volatility_edge` open after deploy B, to read its `pattern_type` | task list B (as of 2026-11-04); no completion report found |
 | B-FEED-MISMATCH-FIX (plan 3n.u) | Stop/target fills use the right side of the book. | Step 10 / PAUSED (Kyle 2026-09-30) | the 300-close window, ended 2026-10-10 | progress report `dea5f554a` 2026-09-30 |
 | T-W20C-SCALAR-LEG (plan row 107) | Capture integrity: the parity harness replays recorded history to the same decisions. | Step 1 (scope r1 drafted, never ruled) PARKED | its turn, after B-PAPER-LANE-PROVENANCE | scope `6e97a8f1c` 2026-09-13 |
 
@@ -52,11 +54,11 @@ Open count: 11; actively worked: 2; parked/waiting: 9
 | B-XSTOCK-BID-TRIGGER-RELAND | xStock trades open and close only where a real trade could. | (4c) Step 7 per memory; (4c) Step 2 per plan; (4b) Step 10 | five complete US sessions from 11-05; C-P5 read 11-16 | (4c) deployed `0abfd7102` 2026-11-05 09:17Z (MEMORY_CC_C.md); plan line 235 |
 | B-BALANCE-SESSION-PAIRING (#618) | Fix sizing reading the $820 anchor against ~$610 held (~34% high). | Step 2 (memory, r3 `0abfd7102`); plan says Step 1 | Langston (Step 2 r3) | git log `0abfd7102` |
 | B-PRICE-SIDE-BY-JOB (plan row 17) | Each job (trigger, fill, booking) uses the price side a real trade would. | UNKNOWN (plan gives no step; rows 8c, 8d still to build) | UNKNOWN; KD-19 (2026-11-04) added three objectives | latest exception re-justification 2026-10-11 (GOVERNANCE_EXCEPTIONS.md:67); plan line 289 edited after 11-04 |
-| B-VTS-NO-DECISION-VALVE (plan row 4) | A VTS trade with no usable sell price stops booking at the midpoint. | Step 7 (plan); memory says Step 5 done, next 6 | weekend reopen count | exception row 2026-10-07T11:25Z (GOVERNANCE_EXCEPTIONS.md:62) |
+| ~~B-VTS-NO-DECISION-VALVE~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:27Z) (plan row 4) | A VTS trade with no usable sell price stops booking at the midpoint. | Step 7 (plan); memory says Step 5 done, next 6 | weekend reopen count | exception row 2026-10-07T11:25Z (GOVERNANCE_EXCEPTIONS.md:62) |
 | B-OHLC-FRAME-GUARD (#1028, row 13) | Guard the bar frame that signals are built from. | Step 7 (plan); memory says Step 5 done | the on-screen check | exception row 2026-09-30T02:45Z (:73) |
 | B-REST-SIDES-TO-CACHE (row 14) | REST price sides go to the shared cache. | Step 7 | the Step-7 read, owed | plan line 283 ("status corrected 2026-10-21") |
-| B-BOOK-STATE-RESTART-DURABLE (row 15) | Order-book state survives restarts. | Step 10 | Steps 10-11 | plan line 286; Step 8 confirmed 2026-10-09 |
-| B-OHLC-WRITE-ORDER (#1031, row 16) | The OHLC writer can no longer put an older bar over a newer one. | Step 10 | Steps 10-11 | plan line 287; Step 8 PASS 2026-10-02 |
+| ~~B-BOOK-STATE-RESTART-DURABLE~~ ✅ CLOSED 2026-11-06 (Langston Step 11 01:05Z) (row 15) | Order-book state survives restarts. | Step 10 | Steps 10-11 | plan line 286; Step 8 confirmed 2026-10-09 |
+| ~~B-OHLC-WRITE-ORDER~~ ✅ CLOSED 2026-11-06 (Langston Step 11, with F-G-1) (#1031, row 16) | The OHLC writer can no longer put an older bar over a newer one. | Step 10 | Steps 10-11 | plan line 287; Step 8 PASS 2026-10-02 |
 | B-VTS-MARK-SIDE (row 3) | VTS xStock prices on the right side (8a-P4c increments 2-3). | UNKNOWN (plan text from 2026-09-30 says "Step 6 with the held release") | UNKNOWN | plan line 253; merge `6eaac010d` 2026-09-30 |
 | B-PRICE-FEED-TRUTH | Price-feed truth fixes I1-I3. | Step 7 (memory, 2026-10-16 block) | I1 gated on a 2026-10-19 window | MEMORY_CC_C.md "(superseded) POSITION 2026-10-16"; no plan row |
 
@@ -101,10 +103,10 @@ Step or status differs between the plan (P), the task list (T) and the memory fi
 - B-CLOSE-WRITER-COSTS: P row 72 "QUEUED"; T item 8 "QUEUED, after items 4-5"; M "STEP: 2 — scope r3 PROCEED + amendment folded".
 - B-XSTOCK-BID-TRIGGER-RELAND: P "(4c) Step 2 r2 with Langston"; M "(4c) `STEP: 6 of 11` DONE — DEPLOYED `0abfd7102` … `NEXT: 7`"; M also has an older block reading "Row 2 `STEP: 7 of 11`".
 - B-BALANCE-SESSION-PAIRING: P "IN FLIGHT — Step 1 (scope r1 …)"; M "Step 1 PROCEED; Step 2 audit+plan `a5135baa` with Langston … Step 2 r3 `0abfd7102`".
-- B-XSTOCK-DBS-TO-STRATEGIES: P "IN FLIGHT — Step 7 (deployed `8636040255` …)"; T (CC_B, as of 2026-11-04) "own batch, named at Step 1"; M position block dated 2026-09-23 with the 11-04 20:45Z line "own batch, name at Step 1" (no 11-05 entry).
+~~- B-XSTOCK-DBS-TO-STRATEGIES: P "IN FLIGHT — Step 7 (deployed `8636040255` …)"; T (CC_B, as of 2026-11-04) "own batch, named at Step 1"; M position block dated 2026-09-23 with the 11-04 20:45Z line "own batch, name at Step 1" (no 11-05 entry).~~ ✅ CLOSED 2026-11-06 (Langston Steps 10-11 12:21Z)
 - B-ENGINE-STOP-DURATION-COLUMN: P row 2a0 "QUEUED — FIRST"; T "deployed 2026-10-07 — STEP 7"; P §0a table "row".
-- B-FEED-HEALTH-GRADE-ARM: P "OPEN — deployed 2026-10-10, Step 7 partial"; T "STEP 10 — progress report, card Observation"; exception row 2026-10-17 "Step-9 fix deployed `162ae0537`".
-- B-VTS-NO-DECISION-VALVE: P "STEP 7 of 11"; M "`STEP: 5 of 11` DONE … `NEXT: 6`, rides deploy B".
+~~- B-FEED-HEALTH-GRADE-ARM: P "OPEN — deployed 2026-10-10, Step 7 partial"; T "STEP 10 — progress report, card Observation"; exception row 2026-10-17 "Step-9 fix deployed `162ae0537`".~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:39Z)
+~~- B-VTS-NO-DECISION-VALVE: P "STEP 7 of 11"; M "`STEP: 5 of 11` DONE … `NEXT: 6`, rides deploy B".~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:27Z)
 - B-OHLC-FRAME-GUARD: P "IN FLIGHT — Step 7"; M "`STEP: 5 of 11` … `NEXT: 6`".
 - B-WAKE-LEAD-NAME: P line 139 "CLOSED 2026-09-11"; T "Step 10"; M "STEP 11 of 11 … BLOCKED-ON Kyle's acknowledgement". Completion report exists, so CLOSED; both the Infra task list and memory are stale.
 - B-LANGSTON-CONTEXT: T "chunk 1: Step 7 … chunk 2 part 1 at Step 3"; M "chunk 1 CLOSED; NEXT: P-2 (Step 1/2)".
@@ -129,14 +131,14 @@ Open batches with no recorded activity in 7+ days (as of 2026-11-05):
 - T-W20C-SCALAR-LEG (NEW): 53 days (scope 2026-09-13).
 - B-OHLC-FRAME-GUARD (ANALYST): 36 days (exception row 2026-09-30); plan says only the on-screen check is left.
 - B-VTS-MARK-SIDE (ANALYST): 36 days (plan text 2026-09-30); step UNKNOWN.
-- B-VTS-NO-DECISION-VALVE (ANALYST): 29 days (exception row 2026-10-07).
+~~- B-VTS-NO-DECISION-VALVE (ANALYST): 29 days (exception row 2026-10-07).~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:27Z)
 - B-ENGINE-STOP-DURATION-COLUMN (NEW): deployed 2026-10-07 (29 days); waits on an engine stop that nobody has scheduled.
 - B-PRICE-FEED-TRUTH (ANALYST): last position 2026-10-16 (20 days); no plan row.
 - B-BOOK-STATE-RESTART-DURABLE, B-OHLC-WRITE-ORDER, B-REST-SIDES-TO-CACHE (ANALYST): plan rows last corrected 2026-10-21 (15 days); Steps 10-11 or the Step-7 read owed. Each is deployed.
-- B-FEED-HEALTH-GRADE-ARM (NEW): 18 days (progress report 2026-10-18); its "one extension at most" window has run out.
+~~- B-FEED-HEALTH-GRADE-ARM (NEW): 18 days (progress report 2026-10-18); its "one extension at most" window has run out.~~ ✅ CLOSED 2026-11-06 (Langston Step 11 03:39Z)
 - B-CREDENTIALS-PRIVATE-REPO (INFRA): 23 days (2026-10-13).
 - B-FORMULA-HEALTH-AUDIT-FRESHNESS (NEW): 17 days, parked by Kyle's rule (2026-10-19); its Step-7 read lapsed unread.
 - B-PRICE-SIDE-BY-JOB (ANALYST): 25 days since the last exception re-justification (2026-10-11); plan edited 2026-11-04 (KD-19) but rows 8c and 8d still unbuilt.
-- B-PATTERN-ENUM-DRIFT (NEW): UNKNOWN date; still awaiting its first volatility_edge open.
+~~- B-PATTERN-ENUM-DRIFT (NEW): UNKNOWN date; still awaiting its first volatility_edge open.~~ ✅ CLOSED 2026-11-06 (Langston 10:16Z)
 - B-CREW-STATUS-2 (INFRA): parked since 2026-08-26 (71 days) on Kyle.
 - Paused on Kyle or after-live, deliberately: B-CREW-ACCESS-HARDEN (2026-10-16), B-TOKEN-WATCH, B-RULES-1e, B-MEASURE-GATE.
