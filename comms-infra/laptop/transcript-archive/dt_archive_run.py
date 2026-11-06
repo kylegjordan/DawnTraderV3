@@ -139,8 +139,10 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
         if not dry:
             di.build(root, shared)
         n = sum(r["lines"] for r in results)
-        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values" % (len(results), n, " (dry run)" if dry else "",
-                                                                                   red.layer_c_names)
+        rr = [os.path.basename(r["raw"]) for r in results if r.get("reread")]
+        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values%s" % (
+            len(results), n, " (dry run)" if dry else "", red.layer_c_names,
+            ("; %d REREAD after an in-place rewrite: %s" % (len(rr), ", ".join(rr[:10]))) if rr else "")
     finally:
         del key
 

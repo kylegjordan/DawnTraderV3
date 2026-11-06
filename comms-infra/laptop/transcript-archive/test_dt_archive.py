@@ -473,5 +473,107 @@ for where in ("top", "nested"):
     ok("...with nothing written", os.listdir(root) == [], os.listdir(root))
     shutil.rmtree(base)
 
+print("12. a raw file REWRITTEN IN PLACE (trim, dedup, distill) is re-read from the start; nothing new is lost or doubled")
+BIG = "y" * 300
+ORIG = [user("r%02d" % i, D1 % 1, "ORIGINAL %d %s" % (i, BIG)) for i in range(1, 9)]
+NEW = [user("n%02d" % i, D1 % 3, "NEW %d after the rewrite" % i) for i in range(1, 6)]
+
+
+def all_text(root):
+    return "".join(open(os.path.join(r, f), encoding="utf-8").read() for r, _d, fs in os.walk(root)
+                   for f in fs if f.endswith(".md") and ".state" not in r)
+
+
+def st_of(root, proj):
+    return json.load(open(da.state_path(root, da.raw_files(proj)[0]), encoding="utf-8"))
+
+
+# (a) rewritten SHORTER, then the session goes on
+base, proj, root = tree()
+put(proj, ORIG, "w")
+res0, _r = da.archive_all(root, proj, dt.Redactor())
+ok("a file's FIRST run is not a re-read", res0 and res0[0].get("reread") is None, res0)
+ok("a committed state carries the tail fingerprint", bool(st_of(root, proj).get("tail")), st_of(root, proj))
+put(proj, [user("r01", D1 % 1, "ORIGINAL 1 (trimmed)"), user("r02", D1 % 1, "ORIGINAL 2 (trimmed)")], "w")
+res, ref = da.archive_all(root, proj, dt.Redactor())
+ok("a rewrite to SHORTER than the offset is reported as a re-read, nothing refused",
+   ref == [] and res and res[0].get("reread", "").startswith("now ") and "shorter" in res[0]["reread"], (res, ref))
+put(proj, NEW)
+res, ref = da.archive_all(root, proj, dt.Redactor())
+t = all_text(root)
+ok("every NEW line after the rewrite is archived (the defect lost 19 of 20)", all(("NEW %d after" % i) in t for i in range(1, 6)), t[-600:])
+ok("no original line is archived twice", all(t.count("ORIGINAL %d " % i) == 1 for i in range(1, 9)), [t.count("ORIGINAL %d " % i) for i in range(1, 9)])
+ok("the trimmed copies are NOT added (their ids were already archived)", "(trimmed)" not in t)
+ok("the run after the re-read is an ordinary one", res and not res[0].get("reread"), res)
+shutil.rmtree(base)
+
+# (b) rewritten but still LONGER than the offset: only the fingerprint can see it
+base, proj, root = tree()
+put(proj, ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor())
+off = st_of(root, proj)["offset"]
+put(proj, [user("r01", D1 % 1, "ORIGINAL 1 rewritten " + "z" * 900)] + ORIG[1:3] + NEW[:2], "w")
+ok("(setup) the rewritten file is longer than the stored offset", os.path.getsize(raw_path(proj)) > off)
+res, ref = da.archive_all(root, proj, dt.Redactor())
+t = all_text(root)
+ok("a LONGER rewrite is caught by the fingerprint and re-read", res and "changed" in (res[0].get("reread") or ""), res)
+ok("...its new lines are archived and nothing is doubled", ("NEW 1 after" in t and "NEW 2 after" in t
+   and all(t.count("ORIGINAL %d " % i) == 1 for i in (1, 2, 3)) and "rewritten" not in t), t[-500:])
+shutil.rmtree(base)
+
+# (c) an untouched file is never re-read
+base, proj, root = tree()
+put(proj, ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor())
+put(proj, NEW[:1])
+res, ref = da.archive_all(root, proj, dt.Redactor())
+ok("an appended-to file is NOT re-read", res and res[0].get("reread") is None and res[0]["lines"] == 1, res)
+shutil.rmtree(base)
+
+# (d) a state written before the fingerprint: only SHORTER is detectable (the stated limit)
+base, proj, root = tree()
+put(proj, ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor())
+sp = da.state_path(root, da.raw_files(proj)[0])
+legacy = st_of(root, proj)
+legacy.pop("tail", None)
+da.write_state(sp, legacy)
+put(proj, [user("r01", D1 % 1, "ORIGINAL 1 rewritten " + "z" * 900)] + ORIG[1:3], "w")
+res, ref = da.archive_all(root, proj, dt.Redactor())
+ok("a legacy state cannot see a LONGER rewrite (stated limit), and a new run records the fingerprint",
+   res and res[0].get("reread") is None and st_of(root, proj).get("tail"), res)
+legacy = st_of(root, proj)
+legacy.pop("tail", None)
+da.write_state(sp, legacy)
+put(proj, ORIG[:1], "w")
+res, ref = da.archive_all(root, proj, dt.Redactor())
+ok("...but it does see a SHORTER one", res and "shorter" in (res[0].get("reread") or ""), res)
+shutil.rmtree(base)
+
+# (e) a dry run reports the re-read and writes nothing
+base, proj, root = tree()
+put(proj, ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor())
+put(proj, ORIG[:1] + NEW[:1], "w")
+snap, st0 = snapshot(root), st_of(root, proj)
+res, ref = da.archive_all(root, proj, dt.Redactor(), dry=True)
+ok("a dry run reports the re-read", res and "shorter" in (res[0].get("reread") or ""), res)
+ok("...and writes nothing, the state included", snapshot(root) == snap and st_of(root, proj) == st0)
+shutil.rmtree(base)
+
+# (f) a re-read never cancels a notice earlier runs rightly HELD, using a delivery they had already weighed
+base, proj, root = tree()
+put(proj, FIRST[:2] + [user("d0", "2026-10-21T11:00:00Z", TN), user("d9", "2026-10-21T11:30:00Z", TN)], "w")   # TWO earlier deliveries
+da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+put(proj, [Q])                                                                # the notice arrives in a LATER run
+da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+held0 = st_of(root, proj)["held"]
+ok("(setup) the notice is held after its own run", len(held0) == 1, held0)
+put(proj, [user("u1", D1 % 1, "hello (trimmed)"), user("d0", "2026-10-21T11:00:00Z", TN), user("d9", "2026-10-21T11:30:00Z", TN), Q], "w")   # a SHORTER rewrite: one delivery is left over after the in-window match
+res, ref = da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+ok("the re-read happened", res and res[0].get("reread"), res)
+ok("...and the held notice is STILL held, not cancelled by the old delivery", st_of(root, proj)["held"] == held0, st_of(root, proj)["held"])
+shutil.rmtree(base)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

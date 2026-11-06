@@ -184,5 +184,17 @@ finally:
     ar.MACHINES.update(saved)
 shutil.rmtree(base)
 
+print("4. a raw file rewritten in place is RE-READ, and the result line says so")
+base, proj, root, shared, machines = tree()
+code, line = run_(proj, root, shared, machines=machines)
+rawp = os.path.join(proj, "C--DawnTraderV3-new", SID + ".jsonl")
+open(rawp, "w", newline="\n").write(json.dumps({"type": "user", "uuid": "u1", "timestamp": "2026-11-06T10:00:00Z",
+                                                "message": {"content": "short"}}) + "\n")
+code, line = run_(proj, root, shared, machines=machines)
+ok("the OK line names the re-read file", code == 0 and ("1 REREAD after an in-place rewrite: " + SID + ".jsonl") in line, line)
+code, line = run_(proj, root, shared, machines=machines)
+ok("...and the next run's line does not", code == 0 and "REREAD" not in line, line)
+shutil.rmtree(base)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

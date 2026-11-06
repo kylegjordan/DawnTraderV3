@@ -34,6 +34,7 @@ MUTATIONS = [
         "    if not os.path.lexists(top):", "    if False:")),
     ("P5 r4: an unexpected failure escapes main as a traceback", replace(
         "    except Exception as e:     # noqa: BLE001", "    except KeyboardInterrupt as e:     # noqa: BLE001")),
+    ("REREAD not named in the run's result line", replace('rr = [os.path.basename(r["raw"]) for r in results if r.get("reread")]', "rr = []")),
 ]
 
 

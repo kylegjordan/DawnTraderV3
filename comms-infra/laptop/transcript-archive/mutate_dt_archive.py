@@ -26,7 +26,7 @@ MUTATIONS = [
                                                        '    return os.path.join(root, ".state", alias, hashlib.sha256(rf[2].encode("utf-8")).hexdigest()[:12] + "_" + k + ".json")')),
     ("MF1: identity not normalised", replace("    return os.path.normcase(os.path.realpath(os.path.abspath(path)))", "    return path")),
     ("MF2: a dry run cuts the uncommitted tail", replace("            if not dry:\n                with open(p, \"r+b\") as fh:", "            if True:\n                with open(p, \"r+b\") as fh:")),
-    ("MF2: a dry run does not report what it would cut", replace('"held": len(keep), "would_cut": would_cut}', '"held": len(keep)}')),
+    ("MF2: a dry run does not report what it would cut", replace('"held": len(keep), "would_cut": would_cut,', '"held": len(keep),')),
     ("MF3: a flag with no value accepted", replace('            if v is None or v.startswith("--"):', '            if False:')),
     ("MF4: UTC read as local time", replace("        return calendar.timegm(time.strptime(str(ts)[:19], \"%Y-%m-%dT%H:%M:%S\"))",
                                             "        return time.mktime(time.strptime(str(ts)[:19], \"%Y-%m-%dT%H:%M:%S\"))")),
@@ -38,7 +38,7 @@ MUTATIONS = [
     ("every nested link called missing", replace('    nested = frozenset((rf[0], rf[4][:8], rf[5]) for rf in rfs if rf[1] == "sub")', "    nested = frozenset()")),
     ("R2-MF1: a dry run's would-cut not printed", replace(
         '            print("WOULD CUT %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))', "            pass")),
-    ("R2-MF1: a real recovery cut not reported", replace('                "cut": would_cut}', '                "cut": []}')),
+    ("R2-MF1: a real recovery cut not reported", replace('                "cut": would_cut, "reread": reread}', '                "cut": [], "reread": reread}')),
     ("R2-MF2: --key-file without --hashes accepted", replace('    if opts.get("--key-file") and not opts.get("--hashes"):', "    if False:")),
     ("R2-MF3: an unreadable folder read as empty", replace("os.walk(p, onerror=unreadable)", "os.walk(p)")),
     ("R3-MF1: an unstattable entry read as neither (isdir/isfile silence)", replace(
@@ -77,6 +77,18 @@ MUTATIONS = [
         "            if name.endswith(\".jsonl\") and k == \"other\":", "            if False:")),
     ("P5 r4: a nested .jsonl that is neither file nor folder dropped silently", replace(
         "                                unreadable(OSError(0, \"neither a file nor a folder\", fp))", "                                continue")),
+    ("REREAD: a rewritten raw file resumed at the old offset (the defect)", replace(
+        "        lines, new_off = read_new(raw, 0 if reread else st[\"offset\"])", "        lines, new_off = read_new(raw, st[\"offset\"])")),
+    ("REREAD: only a SHORTER rewrite detected (the fingerprint ignored)", replace(
+        "    if st.get(\"tail\") and tail_sha(raw, off) != st[\"tail\"]:", "    if False:")),
+    ("REREAD: the fingerprint never stored", replace("        st[\"tail\"] = tail_sha(raw, new_off)\n", "")),
+    ("REREAD: a re-read cancels held notices with deliveries already weighed", replace(
+        "left = {} if reread else dict(ledger.get(\"delivered_key\", {}))", "left = dict(ledger.get(\"delivered_key\", {}))")),
+    ("REREAD: a file's FIRST run reported as a re-read", replace("    if not off:\n        return None", "    if not off:\n        return \"always\"")),
+    ("REREAD: an untouched file re-read every run", replace(
+        "        return \"the %d bytes before the stored offset changed\" % min(off, TAIL)\n    return None",
+        "        return \"the %d bytes before the stored offset changed\" % min(off, TAIL)\n    return \"always\"")),
+    ("REREAD: a dry run hides the re-read", replace('"would_cut": would_cut,\n                    "reread": reread}', '"would_cut": would_cut,\n                    "reread": None}')),
 ]
 
 

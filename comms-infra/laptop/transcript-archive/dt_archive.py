@@ -212,6 +212,39 @@ def recover(root, st, dry=False):
     return would
 
 
+TAIL = 4096
+
+
+def tail_sha(raw, offset):
+    """sha256 of the raw bytes just BEFORE `offset` (up to TAIL of them): the fingerprint that tells a later run whether the
+    bytes it already read are still the bytes on disk. None when the file is shorter than `offset`."""
+    if offset <= 0:
+        return None
+    with open(raw, "rb") as fh:
+        fh.seek(max(0, offset - TAIL))
+        data = fh.read(offset - max(0, offset - TAIL))
+    if len(data) != offset - max(0, offset - TAIL):
+        return None
+    return hashlib.sha256(data).hexdigest()
+
+
+def rewritten_since(raw, st):
+    """Why the raw file is no longer the file this state read, or None. The transcript tools (trim, dedup, distill -
+    pre-audit A3) rewrite a raw file IN PLACE; resuming at the old offset would then read from the middle of other
+    content and silently skip every line between the new end and the old offset (measured: 19 of 20 new lines lost,
+    0 refused). Detected two ways: the file is now SHORTER than the offset, or the bytes just before the offset changed
+    (a state written before this check carries no fingerprint, so only the first applies to it)."""
+    off = st["offset"]
+    if not off:
+        return None
+    size = os.path.getsize(raw)
+    if size < off:
+        return "now %d bytes, shorter than the %d already read" % (size, off)
+    if st.get("tail") and tail_sha(raw, off) != st["tail"]:
+        return "the %d bytes before the stored offset changed" % min(off, TAIL)
+    return None
+
+
 def read_new(raw, offset):
     """Whole lines from `offset`; returns (lines, new_offset)."""
     with open(raw, "rb") as fh:
@@ -254,12 +287,17 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
     try:
         st = load_state(sp, raw)
         would_cut = recover(root, st, dry=dry)
-        lines, new_off = read_new(raw, st["offset"])
+        # A raw file rewritten in place since the last run is RE-READ FROM THE START: every line already archived is
+        # skipped by its id (every archived line carries one - a uuid, or a queued notice's ts+text id), so only what
+        # is genuinely new is appended, and the run says so (`reread`).
+        reread = rewritten_since(raw, st)
+        lines, new_off = read_new(raw, 0 if reread else st["offset"])
         ledger = {}
         ylds = list(dt.distill(lines, red, ledger=ledger))
         done, seen_run = set(st["ids"]), set()
-        # (1) deliveries in these bytes cancel notices held from earlier runs, oldest first
-        left = dict(ledger.get("delivered_key", {}))
+        # (1) deliveries in these bytes cancel notices held from earlier runs, oldest first. NOT on a re-read: those
+        # bytes include deliveries earlier runs already weighed, which could cancel a notice they had rightly held.
+        left = {} if reread else dict(ledger.get("delivered_key", {}))
         held = []
         for h in sorted(st["held"], key=lambda h: h["ts"]):
             if left.get(h["key"], 0) > 0:
@@ -291,7 +329,8 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             by_file.setdefault(target(rf, ts[:10] or "undated"), []).append((uid, line))
             day_of[target(rf, ts[:10] or "undated")] = ts[:10] or "undated"
         if dry:
-            return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "would_cut": would_cut}
+            return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "would_cut": would_cut,
+                    "reread": reread}
         state_line = red.layer_c_state()
         # INTENT FIRST: record every target's length BEFORE this run writes to it, under the OLD offset. A run that
         # dies mid-write then leaves a state whose lengths cover even a file it had just created (length 0), so the
@@ -317,9 +356,10 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             st["lengths"][rel] = os.path.getsize(p)
             done.update(u for u, _l in items)
         st["offset"], st["ids"], st["held"] = new_off, sorted(done), keep
+        st["tail"] = tail_sha(raw, new_off)
         write_state(sp, st)
         return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "offset": new_off,
-                "cut": would_cut}
+                "cut": would_cut, "reread": reread}
     finally:
         if not dry:
             unlock(sp)
@@ -393,6 +433,9 @@ def main(argv):
             print("WOULD CUT %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))
         for rel, n in r.get("cut") or []:
             print("RECOVERED: cut %d uncommitted byte(s) from %s (left by a run that never committed)" % (n, rel))
+        if r.get("reread"):
+            print("REREAD %s: rewritten in place since the last run (%s); re-read from the start, archived lines skipped"
+                  % (r["raw"], r["reread"]))
         if r["lines"] or r["held"]:
             print("%s: %d line(s) into %d file(s), %d held" % (r["raw"], r["lines"], len(r["files"]), r["held"]))
     for e in refused:
