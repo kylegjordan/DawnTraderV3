@@ -8,6 +8,7 @@
 import { nanoid } from 'nanoid';
 import type { FlattenCloseType } from './active-execution-engine';
 import { storage } from '../storage.js';
+import { stampPositionTradeId } from './trade-record-restore.js';
 import type { InsertActiveEngineSession } from '../../shared/schema.js';
 import { tradingStateSync } from './trading-state-sync.js';
 import { KrakenService } from '../exchanges/kraken/kraken.js';
@@ -1138,7 +1139,12 @@ export async function stopActiveEngine(
                     if (!_orec) {
                       const _ocls = asValidAssetClass((orphan as any).assetClass);
                       const _ok = _ocls ? await storage.findOpenTradeRecord('paper', orphan.symbol, _ocls) : null;
-                      if (_ok?.status === 'one') _orec = _ok.record;
+                      if (_ok?.status === 'one') {
+                        _orec = _ok.record;
+                        // Langston Part C NEW-1: resolved BY KEY ⇒ stamp the id back BEFORE the record is finished, so a failed
+                        // delete below leaves a position the restore will refuse (409) rather than double-book.
+                        await stampPositionTradeId('paper', orphan, _orec.id);
+                      }
                     }
                     const _finished = !!_orec && (_orec.closedAt != null || (await closeStaleRecordAtReference('paper', _orec)) === 'closed');
                     if (!_finished) {
@@ -1152,7 +1158,7 @@ export async function stopActiveEngine(
                             body: `During an engine stop, the paper position ${orphan.id} in ${orphan.symbol} remained after the flatten and no open `
                               + `trade record resolves for it (no tradeId, and none or several by symbol, mode and class). It is KEPT rather than `
                               + `deleted without its record (KD-17). If NONE exists, restore it from the position on staging: \`npx tsx `
-                              + `server/scripts/restore-trade-record.ts ${orphan.id} --by <actor>\`; if SEVERAL, find how the duplicate was `
+                              + `server/scripts/restore-trade-record.ts ${orphan.id} --by <actor>\` (or POST /active-engine/positions/${orphan.id}/restore-record); if SEVERAL, find how the duplicate was `
                               + `written and fix it by hand. The engine then closes it. B-CLOSE-WRITER-COSTS P-17/P-12. DISPOSITION: RESOLVE, do not ACK.`,
                             dedupe_key: `close-record-unresolved-paper-${orphan.symbol}`,
                           });
