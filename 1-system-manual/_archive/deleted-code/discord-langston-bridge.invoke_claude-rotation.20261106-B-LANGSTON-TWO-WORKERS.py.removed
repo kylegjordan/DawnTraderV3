@@ -1,0 +1,24 @@
+# REMOVED 2026-11-06 — B-LANGSTON-TWO-WORKERS D-2 (rule 18). From comms-infra/discord/discord-langston-bridge.py,
+# invoke_claude(), as of f6ea3f3d3. Not compilable on purpose; git history is the authoritative archive.
+
+def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False, scratch=None):
+    """Identical contract to the Telegram bridge: claude -p with a stable session-id,
+    Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
+    ...
+    # ONCE per message: the UUID-rotation retry below passes the already-noted prompt with
+    # _noted=True, so it neither re-resolves (a second, possibly different sha) nor adds a second note.
+    if not _noted:
+        ...
+        if result.returncode != 0:
+            stderr_lc = (result.stderr or "").lower()
+            log(f"claude exit {result.returncode} after {elapsed:.1f}s: stderr={result.stderr[:300]}")
+            if "already in use" in stderr_lc and state is not None and _retry_count == 0:
+                new_uuid = str(uuid.uuid4())
+                log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
+                with _SHARED:
+                    state["session_id"] = new_uuid
+                    save_state(state)
+                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1, _noted=True,
+                                     scratch=scratch)
+
+# caller:  response = invoke_claude(addressed_prompt, str(uuid.uuid4()), state=state, scratch=scratch)

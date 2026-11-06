@@ -44,7 +44,7 @@ _INV_LOCK = threading.Lock()
 INVOKE_SLEEP = {"s": 0.0}
 
 
-def fake_invoke(prompt, session_id, state=None, _retry_count=0, _noted=False, scratch=None):
+def fake_invoke(prompt, session_id, scratch=None):
     with _INV_LOCK:
         INVOKES.append({"prompt": prompt, "scratch": scratch, "t": time.time(), "thread": threading.current_thread().name})
     time.sleep(INVOKE_SLEEP["s"])

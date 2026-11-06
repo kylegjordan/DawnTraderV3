@@ -1507,3 +1507,12 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 |---|---|---|
 | `/home/langston/.memory-write.lock` | Helsinki, his home | the `langston-memory-write` lock file; his account could unlink and recreate it, splitting mutual exclusion across two inodes (C-2) |
 **Replaced by** `/home/langston/.memory-archive/.memory-write.lock` (root:root 0600, inside the root-owned archive dir). **Blast radius verified:** the install (`install-fence.sh`, P5) took the OLD lock across the move so no two writer versions ran at once, then deleted it; every lock user is `open_lock()` in the writer (one function, `:599-618`). No archive copy: an empty lock file.
+
+## 2026-11-06 — the session-UUID rotation backstop in Langston's bridge — B-LANGSTON-TWO-WORKERS (`#1248`, D-2), Infra Claude
+| removed | where | what it was |
+|---|---|---|
+| the `"already in use"` retry branch in `invoke_claude()`, and its `state`, `_retry_count`, `_noted` parameters | `comms-infra/discord/discord-langston-bridge.py` | on an "already in use" exit it minted a new session UUID, wrote it to the bridge's state file and re-invoked once |
+**Why:** every invoke has used a fresh UUID since 2026-06-21, so the branch could only fire on a collision that no longer happens; the journal back to 2026-09-10 holds 0 rotations (pre-audit A6), and the P6 smoke test (2026-11-06 07:24:58Z, `/root/langston-smoke-20261106T072458Z`) ran two invokes at once on his account with no "already in use" in either stderr — the positive control D-2 required before deleting it. With two workers, a rotation would also have been a second writer of the shared state file.
+**Blast radius verified:** one caller (`:642`, now `invoke_claude(addressed_prompt, uuid4, scratch=…)`); one test fake (`test_bridge_two_workers.py`, signature matched). **State-write census (§9.5(a-ii)):** the branch wrote `state["session_id"]`; its only other reader is the startup log line (`:1452`) — `langston-bridge-restart`, `langston-memory-write` and `langston-size-watch` do not read it (grep, 0 hits). The log line `invoking claude (… retry=0)` keeps its shape. Suites on Helsinki with the bridge venv: lanes 27/0, two-workers ALL PASS, both mutation runners 9/9, clean-stop 0 failures.
+**Left intentionally:** the bridge's state file and `load_state`/`save_state` (now written only at startup) — whether to keep it is a question for the review, not part of D-2.
+**Archive:** `1-system-manual/_archive/deleted-code/discord-langston-bridge.invoke_claude-rotation.20261106-B-LANGSTON-TWO-WORKERS.py.removed`.

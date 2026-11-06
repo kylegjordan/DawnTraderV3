@@ -287,24 +287,24 @@ def stop_cleanly(signum=None, _frame=None):
     os._exit(0)
 
 
-def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False, scratch=None):
-    """Identical contract to the Telegram bridge: claude -p with a stable session-id,
-    Opus 4.8 [1m], acceptEdits; auto-rotate UUID once on 'already in use'."""
+def invoke_claude(prompt, session_id, scratch=None):
+    """claude -p with a fresh session id per call (the caller mints it), the bridge's CLAUDE_MODEL, acceptEdits.
+    The once-only UUID-rotation retry on 'already in use' was DELETED 2026-11-06 (B-LANGSTON-TWO-WORKERS D-2, rule 18):
+    every call has used a fresh UUID since 2026-06-21, the journal back to 2026-09-10 shows 0 rotations, and the P6
+    smoke test ran two concurrent invokes with no 'already in use' in either stderr. An 'already in use' exit is now
+    reported like any other failed exit."""
     try:
         subprocess.run(["/usr/local/bin/langston-log-loaded", "discord-bridge"], timeout=5, check=False)
     except Exception:
         pass
     # --- point Langston at the review branch on GitHub; he reads off it, no checkout ---
-    # ONCE per message: the UUID-rotation retry below passes the already-noted prompt with
-    # _noted=True, so it neither re-resolves (a second, possibly different sha) nor adds a second note.
-    if not _noted:
-        _ref = resolve_review_ref()
-        if _ref:
-            log("review ref resolved to %s" % _ref[:9])
-            prompt = (REVIEW_SOURCE_NOTE % {"ref": _ref}) + prompt
-        else:
-            log("REVIEW REF RESOLVE FAILED")
-            prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
+    _ref = resolve_review_ref()
+    if _ref:
+        log("review ref resolved to %s" % _ref[:9])
+        prompt = (REVIEW_SOURCE_NOTE % {"ref": _ref}) + prompt
+    else:
+        log("REVIEW REF RESOLVE FAILED")
+        prompt = REVIEW_SOURCE_FAIL_NOTE + prompt
 
     env = os.environ.copy()
     env["CLAUDE_CODE_OAUTH_TOKEN"] = OAUTH_TOKEN
@@ -317,22 +317,13 @@ def invoke_claude(prompt, session_id, state=None, _retry_count=0, _noted=False, 
         "--session-id", session_id, "--model", CLAUDE_MODEL,
         "--permission-mode", "acceptEdits",
     ]
-    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry={_retry_count})")
+    log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}..., retry=0)")
     t0 = time.time()
     try:
         result = run_agent(args, env, WORK_DIR, CLAUDE_TIMEOUT)
         elapsed = time.time() - t0
         if result.returncode != 0:
-            stderr_lc = (result.stderr or "").lower()
             log(f"claude exit {result.returncode} after {elapsed:.1f}s: stderr={result.stderr[:300]}")
-            if "already in use" in stderr_lc and state is not None and _retry_count == 0:
-                new_uuid = str(uuid.uuid4())
-                log(f"session UUID locked, rotating {session_id[:8]}... -> {new_uuid[:8]}...")
-                with _SHARED:
-                    state["session_id"] = new_uuid
-                    save_state(state)
-                return invoke_claude(prompt, new_uuid, state=state, _retry_count=_retry_count + 1, _noted=True,
-                                     scratch=scratch)
             return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
         log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
         return result.stdout.strip()
@@ -642,13 +633,13 @@ def process_task(task, state, breaker, task_q=None):
     # adding latency (one reply took ~2 min) that made Langston look unresponsive on Discord.
     # The bridge already had no real cross-turn continuity (it rotated every turn), so a fresh
     # UUID per call is the clean fix: first-attempt success, no rotation, no latency. The
-    # rotation logic in invoke_claude stays as a backstop (now effectively never triggered).
+    # rotation backstop in invoke_claude was deleted 2026-11-06 (B-LANGSTON-TWO-WORKERS D-2).
     scratch = make_scratch_dir(task)
     if scratch:
         addressed_prompt += (f"\n\n[Your scratch directory for THIS review is {scratch} - run `cd {scratch}` first and do "
                              f"all your work in it. Do NOT write into {SCRATCH_ROOT} itself: another review may be "
                              f"running at the same time and would overwrite files with the same names.]")
-    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), state=state, scratch=scratch)
+    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), scratch=scratch)
     resp_stripped = (response or "").strip()
     is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
     if is_bridge_error:
