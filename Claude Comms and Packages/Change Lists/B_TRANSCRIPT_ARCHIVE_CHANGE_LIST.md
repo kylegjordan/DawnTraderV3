@@ -54,3 +54,36 @@ He re-derived all six prefixed forms (each counted under its own name), `PASSWOR
 - **Chosen for size:** a real working day small enough to read; busier days run to thousands of entries. **That day holds no message typed by Kyle** — every user turn is a machine wake notice — stated to him.
 - **Question put with it:** each wake notice is a 7-line block repeated all day; recommended collapsing each to one line. (Index location already decided: KD-49, option (iii).)
 - Sent to Kyle in the Desktop chat (file) and on Discord; a 10-minute phone notice is armed. **Nothing in P5 onward runs before his answer.**
+
+## P3(c) — the value-hash PRODUCER + the redactor's side of its contract (2026-11-06, Step 3 code; Step 4 owed BEFORE any server run)
+**Unblocked by:** the `B-LANGSTON-TWO-WORKERS` restart (14:05:30Z), per the pre-audit's sequencing line (Langston msg `1568198976115580969`). **Nothing has been run on any server.** The only server reads in this piece were NAME/LENGTH/SHAPE listings (below), never a value.
+
+**NEW `comms-infra/laptop/transcript-archive/dt_secret_hashes.py`** — runs where the secrets are (each server as root, script on stdin, nothing copied to disk) and prints only `{name, length, sha256, source}`:
+- `--env PATH` (dotenv / EnvironmentFile; `export`, quotes and ` #` comments handled) **+ `--names`** — only listed names are taken, so a non-secret setting (a host, a path) is never hashed; **every listed name must be found or nothing is printed (exit 4).**
+- `--file NAME=PATH` — whole file is the value (one trailing newline stripped). `--json NAME=PATH:a.b` — one string field by key path; a missing key, a non-string, or a path running past a string is REFUSED.
+- **THE TOKENIZABILITY CONTRACT (C-3, owned here):** a value is reachable only if it is wholly made of the redactor's token characters `A-Za-z0-9_-+/=.` and is 12+ long (`REACHABLE` is `dt_transcript.TOKEN` anchored, asserted by a test). Otherwise the entry is `reachable: false` with a reason and **NO hash and NO length** (a hash of a short value is reversible by guessing).
+- **A value holding a separator** (`keyid:key`, a URL with a password) is unreachable WHOLE, and **each run of 12+ token characters inside it is hashed on its own as `NAME#1..n`** — the redactor splits text at exactly the same characters, so each run is caught wherever it stands.
+- **Fails closed:** unreadable file / malformed spec / missing name ⇒ nothing on stdout, exit 4; bad arguments ⇒ exit 2.
+
+**MODIFIED `dt_transcript.py` (the redactor):**
+- Candidates per token run, in order: the whole run · the run less one trailing `.` · the part after the run's FIRST `=` · that part less one trailing `.`. The prefix and the stop are kept around `[REDACTED value:<name>]`. **Not caught, stated in the docstring:** a value glued to any other prefix/suffix (`-p<v>`, `<v>-old`).
+- A `reachable: false` entry is **named in the layer (c) state line** (`NOT REACHABLE (named by the producer): NAME (reason)`) and is not counted as loaded, so a file of only unreachable entries is still REFUSED (exit 3).
+
+**Tests, judged by exit code:** `test_dt_secret_hashes.py` drives the SCRIPT AS A PROCESS (both forms, file and stdin) and feeds its real output into the redactor (the connection, not each half) — 0 failed. `test_dt_transcript.py` +3b (glued forms, kept prefix/stop, the residuals, unreachable listing) — 0 failed. **Mutations: producer 22/22 (`mutate_dt_secret_hashes.py`, new); redactor 31/31 (+6 for P3(c)).** Two survivors along the way changed code: the CRLF branch was DEAD (text mode already converts `\r\n`) and is removed; the unreadable-file and unknown-argument tests were too weak and now assert against a run that would otherwise succeed.
+
+**WHAT EACH MACHINE WOULD RUN (names verified 2026-11-06 by listing key NAMES only, `grep -oE '^…[A-Za-z_][A-Za-z0-9_]*='`):**
+| machine | inputs | names |
+|---|---|---|
+| staging | `--env /home/deploy/dawntrader/.env /etc/token-watch/{alchemy,helius,webhook}.env` · `--file B2_COLD_KEY=/etc/token-watch/b2-cold.key` | `DATABASE_URL JWT_SECRET JWT_REFRESH_SECRET INTERNAL_SERVICE_KEY OPENAI_API_KEY KRAKEN_API_KEY KRAKEN_API_SECRET COINGECKO_API_KEY SUPABASE_SERVICE_ROLE_KEY B2_APPLICATION_KEY FINNHUB_API_KEY FRED_API_KEY ALCHEMY_API_KEY HELIUS_API_KEY TOKEN_WATCH_WEBHOOK_SECRET` |
+| Helsinki | `--env /etc/langston/{oauth,ccdt-bot,telegram-bot,discord-cc-bot,discord-langston-bot,github-board}.env /etc/coltrane/discord-coltrane-bot.env /etc/dawntrader/discord-comms.env` · `--json CODEX_REFRESH_TOKEN=/home/coltrane/.codex/auth.json:tokens.refresh_token` | `CLAUDE_CODE_OAUTH_TOKEN TELEGRAM_BOT_TOKEN DISCORD_BOT_TOKEN GH_TOKEN DISCORD_COLTRANE_BOT_TOKEN CC_WEBHOOK_URL` |
+| laptop | `--file` `~/.claude/.alchemy-key` `.helius-key` `.gh-board-token` | (file names) |
+- **Not listed, deliberately:** `B2_KEY_ID`, `B2_BUCKET_ID`, the Discord channel/user/bot IDs — identifiers, not secrets; hashing them would only over-redact.
+- **🟨 A7 GAP, FOLDED IN (§9.4 disposition 1):** Coltrane's `auth.json` holds a 211-character `refresh_token` with NO shape (its `id_token`/`access_token` are JWT-shaped and already caught by layer (a)). Added as `--json`. Langston's `~/.claude/.credentials.json` and the laptop's hold no token (field listing: scopes and tier only) — his token is `oauth.env`, already listed.
+- `b2-cold.key` is one 57-character line with no `=` (25+1+31 — the `keyid:key` form); the part-hashing exists for it and for `DATABASE_URL`'s password.
+
+**WHERE THE HASH FILE LIVES:** `~/.claude/transcript-archive/value-hashes.json` — **outside both backups** (`backup-claude-sessions.ps1` copies `~/.claude/projects` and the listed settings folders `hooks skills scheduled-tasks plugins backup` only; read 2026-11-06), never in git, never on Drive. Proposed: regenerated fresh at each archive run, so a rotated secret's CURRENT value is always covered.
+
+**JUDGEMENT CALLS FOR LANGSTON (attack these):**
+- **J1 — part-hashing over-redacts.** A non-secret run of 12+ inside a separator value (the database host, `postgres.<project-ref>`) becomes `[REDACTED value:DATABASE_URL#n]` wherever it appears. I chose over-redaction; the alternative is to hash only the password segment, which needs URL parsing per format.
+- **J2 — unsalted SHA-256.** Safe for the random API keys; a human-chosen value of 12+ (if `JWT_SECRET` is one) is guessable from its hash. Mitigation is placement (the hash file outside both backups, laptop-only), not cryptography: a salt or slow hash buys nothing when the same file must hold what the redactor needs.
+- **J3 — residuals, stated not fixed:** a rotated-away value is not in the set (old transcripts may hold it); a run under 12 inside a separator value; a value glued to a non-`=` prefix.

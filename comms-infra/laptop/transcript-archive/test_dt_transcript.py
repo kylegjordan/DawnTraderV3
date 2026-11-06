@@ -134,6 +134,33 @@ with contextlib.redirect_stderr(_err), contextlib.redirect_stdout(io.StringIO())
     rc = dt.main(["dt", _raw, "--hashes", _empty])
 ok("--hashes with zero usable entries is REFUSED (exit 3), never silently off", rc == 3 and "REFUSED" in _err.getvalue())
 
+print("3b. values - the P3(c) contract: glued behind '=', a trailing full stop, unreachable entries named")
+sv = "Qm" + "7Vx2Lp9Rt4Wz8Kc"
+hv = [{"name": "FRED_API_KEY", "length": len(sv), "sha256": hashlib.sha256(sv.encode()).hexdigest()}]
+for form in ("token=%s", "--api-key=%s", "see %s.", "api_key=%s.", "x=%s"):
+    red = dt.Redactor(hv)
+    out = red(form % sv)
+    ok("value caught in the form %r" % form, sv not in out and red.counts.get("value:FRED_API_KEY") == 1)
+red = dt.Redactor(hv)
+ok("the prefix before '=' is kept", red("--api-key=" + sv) == "--api-key=[REDACTED value:FRED_API_KEY]")
+red = dt.Redactor(hv)
+ok("the trailing full stop is kept", red("see " + sv + ".") == "see [REDACTED value:FRED_API_KEY].")
+red = dt.Redactor(hv)
+ok("a value glued to another prefix is NOT caught (the stated residual)", sv in red("-p" + sv))
+red = dt.Redactor(hv)
+ok("a value with a suffix glued on is NOT caught (the stated residual)", sv in red(sv + "-old"))
+un = hv + [{"name": "DATABASE_URL", "reachable": False, "reason": "contains characters outside the token set"},
+           {"name": "JWT_SECRET", "reachable": False, "reason": "under 12 characters"}]
+st = dt.Redactor(un).layer_c_state()
+ok("an unreachable entry is named in the state line with its reason",
+   "NOT REACHABLE" in st and "DATABASE_URL (contains characters outside the token set)" in st and "JWT_SECRET (under 12 characters)" in st)
+ok("an unreachable entry is not counted as loaded", dt.Redactor(un).layer_c_names == 1)
+_only = os.path.join(_d, "only-unreachable.json"); open(_only, "w").write(json.dumps(un[1:]))
+_err = io.StringIO()
+with contextlib.redirect_stderr(_err), contextlib.redirect_stdout(io.StringIO()):
+    rc = dt.main(["dt", _raw, "--hashes", _only])
+ok("a hash file holding ONLY unreachable entries is REFUSED (exit 3)", rc == 3)
+
 # ---- 4. the distiller: what is kept and what is dropped ------------------------------------------------------------
 print("4. distiller")
 T = "2026-11-06T09:00:0%dZ"

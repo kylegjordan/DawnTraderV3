@@ -25,13 +25,17 @@ REDACTION (P3), applied to every string before it is written, in this order:
   (b) NAMES — `NAME=value`, `NAME: value`, `"NAME": "value"` for every secret key NAME the project holds (pre-audit A7);
   (c) VALUES — for secrets with no shape: a JSON file of {name, length, sha256} produced ON EACH SERVER (P3), never the
       values; every text token of a listed length is hashed, and a hit is replaced. With no --hashes file, layer (c)
-      is OFF and the output's first line says so.
+      is OFF and the output's first line says so. The producer is dt_secret_hashes.py, which owns the CONTRACT: a
+      value is caught as a whole token, behind the token's first `=`, or with one trailing `.`; a value the producer
+      reports `reachable: false` (too short, or holding a character outside the token set) is NAMED in that first
+      line instead of silently missing.
 Each hit becomes `[REDACTED <kind>]`. The counters are returned so the caller can publish counts per kind (P3, C-3).
 
 KNOWN LIMITS, stated (Langston r3/r4): layer (b) needs a `:`, `=` or `->` after the name, so a command-line flag
 (`--password x`, `-p x`) is NOT caught by name; a value with a space inside an unclosed or odd quote (`"hunter two`,
 `ab" cd`) leaves the part after the space visible; an UNQUOTED JSON value (`{"PASSWORD": 12345,"next":1}`) is
-over-redacted to the end of the run. Layer (c) is off without --hashes and blind under 12 characters.
+over-redacted to the end of the run. Layer (c) is off without --hashes and blind under 12 characters, and it misses a
+value glued to anything other than `<prefix>=` before it or one `.` after it (`-p<value>`, `<value>-old`).
 """
 import hashlib
 import json
@@ -85,7 +89,11 @@ class Redactor:
         self.by_len = {}
         self.layer_c_names = 0       # usable {name,length,sha256} entries loaded (C-2: the header is derived from this)
         self.layer_c_short = []      # names shorter than TOKEN's 12-char floor: listed, but out of layer (c)'s reach (C-3)
+        self.layer_c_unreachable = []  # producer said reachable:false (P3(c) contract): "<name> (<reason>)", no hash
         for h in hashes or []:
+            if isinstance(h, dict) and h.get("reachable") is False and h.get("name"):
+                self.layer_c_unreachable.append("%s (%s)" % (h["name"], h.get("reason", "no reason given")))
+                continue
             try:
                 n, ln, sh = str(h["name"]), int(h["length"]), str(h["sha256"])
             except (KeyError, TypeError, ValueError):
@@ -103,6 +111,8 @@ class Redactor:
         line = "> redaction layer (c), shapeless values: ON, %d value(s) loaded" % self.layer_c_names
         if self.layer_c_short:
             line += "; OUT OF REACH (under 12 characters): %s" % ", ".join(sorted(self.layer_c_short))
+        if self.layer_c_unreachable:
+            line += "; NOT REACHABLE (named by the producer): %s" % ", ".join(sorted(set(self.layer_c_unreachable)))
         return line
 
     def _named(self, m):
@@ -123,13 +133,26 @@ class Redactor:
         for kind, rx in SHAPES:
             text = rx.sub(lambda m, k=kind: self._hit(k), text)
         if self.by_len:
-            def val(m):
-                t = m.group(0)
+            def look(t):
                 names = self.by_len.get(len(t))
-                if names:
-                    n = names.get(hashlib.sha256(t.encode("utf-8")).hexdigest())
+                return names.get(hashlib.sha256(t.encode("utf-8")).hexdigest()) if names else None
+
+            def val(m):
+                # P3(c) contract: the whole run; the run less one trailing "."; the part after the run's first "="
+                # (token=<v>, --key=<v>), with and without one trailing ".". Nothing else glued is caught.
+                t = m.group(0)
+                head, eq, tail = t.partition("=")
+                cands = [("", t, "")]
+                if t.endswith("."):
+                    cands.append(("", t[:-1], "."))
+                if eq:
+                    cands.append((head + eq, tail, ""))
+                    if tail.endswith("."):
+                        cands.append((head + eq, tail[:-1], "."))
+                for pre, cand, post in cands:
+                    n = look(cand)
                     if n:
-                        return self._hit("value:" + n)
+                        return pre + self._hit("value:" + n) + post
                 return t
             text = TOKEN.sub(val, text)
         return text

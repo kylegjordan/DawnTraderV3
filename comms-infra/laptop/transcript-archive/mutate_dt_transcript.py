@@ -45,6 +45,13 @@ MUTATIONS = [("shape removed: %s" % k, drop_shape(k)) for k in (
     ("empty --hashes not refused", replace('    if "--hashes" in opts and not red.layer_c_names:', '    if False:')),
     ("drop counter off", replace("        dropped[key] = dropped.get(key, 0) + 1", "        pass")),
     ("value layer off", replace("        if self.by_len:\n", "        if False:\n")),
+    ("P3(c): unreachable entries dropped silently", replace(
+        '            if isinstance(h, dict) and h.get("reachable") is False and h.get("name"):', '            if False:')),
+    ("P3(c): unreachable not named in the state line", replace("        if self.layer_c_unreachable:", "        if False:")),
+    ("P3(c): no trailing-full-stop candidate", replace('cands.append(("", t[:-1], "."))', 'pass')),
+    ("P3(c): no after-'=' candidate", replace('cands.append((head + eq, tail, ""))', 'pass')),
+    ("P3(c): no after-'=' with full stop candidate", replace('cands.append((head + eq, tail[:-1], "."))', 'pass')),
+    ("P3(c): prefix and stop dropped on a hit", replace('return pre + self._hit("value:" + n) + post', 'return self._hit("value:" + n)')),
     ("thinking kept", replace('if b.get("type") == "text" and b.get("text", "").strip():\n                    yield uid, ts, "\\n**[%s] Session:**',
                               'if b.get("type") in ("text", "thinking") and (b.get("text") or b.get("thinking", "")).strip():\n                    b = dict(b, text=b.get("text") or b.get("thinking")); yield uid, ts, "\\n**[%s] Session:**')),
     ("tool error not attached", replace('p[2] += " ERROR: "', 'p[2] += "" if True else " ERROR: "')),
