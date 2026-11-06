@@ -57,9 +57,9 @@ MUTATIONS = [
     ("a shorter archive file repaired silently", replace(
         '            raise Refused("%s is %d bytes, shorter than its committed %d - something else changed it; not repairing" % (p, size, n))',
         '            continue')),
-    ("ids from earlier runs not skipped", replace("            if uid in done or (uid, line) in seen_run:", "            if (uid, line) in seen_run:")),
-    ("a uuid repeated in one run written twice", replace("            if uid in done or (uid, line) in seen_run:", "            if uid in done:")),
-    ("a half-written line consumed", replace("    end = data.rfind(b\"\\n\")", "    data = data + b\"\\n\"\n    end = len(data) - 1")),
+    ("ids from earlier runs not skipped", replace("            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in held_ids or (uid, line) in seen_run:")),
+    ("a uuid repeated in one run written twice", replace("            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in done or uid in held_ids:")),
+    ("a half-written line consumed", replace("    end = new.rfind(b\"\\n\")", "    new = new + b\"\\n\"\n    end = len(new) - 1")),
     ("the lock not honoured", replace('    except FileExistsError:\n        raise Refused(', '    except FileExistsError:\n        return\n        raise Refused(')),
     ("a held notice written at once", replace("            if quiet or (a is not None and b is not None and a - b >= HOLD_S):", "            if True:")),
     ("a held notice never released", replace("            if quiet or (a is not None and b is not None and a - b >= HOLD_S):", "            if False:")),
@@ -78,16 +78,24 @@ MUTATIONS = [
     ("P5 r4: a nested .jsonl that is neither file nor folder dropped silently", replace(
         "                                unreadable(OSError(0, \"neither a file nor a folder\", fp))", "                                continue")),
     ("REREAD: a rewritten raw file resumed at the old offset (the defect)", replace(
-        "        lines, new_off = read_new(raw, 0 if reread else st[\"offset\"])", "        lines, new_off = read_new(raw, st[\"offset\"])")),
+        "    start = 0 if reread else off\n", "    start = off\n")),
     ("REREAD: only a SHORTER rewrite detected (the fingerprint ignored)", replace(
-        "    if st.get(\"tail\") and tail_sha(raw, off) != st[\"tail\"]:", "    if False:")),
-    ("REREAD: the fingerprint never stored", replace("        st[\"tail\"] = tail_sha(raw, new_off)\n", "")),
+        "            elif st.get(\"tail\") and hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:", "            elif False:")),
+    ("REREAD: the fingerprint never stored", replace("        st[\"tail\"] = tail          # from the bytes this run read, never a second open\n", "")),
     ("REREAD: a re-read cancels held notices with deliveries already weighed", replace(
         "left = {} if reread else dict(ledger.get(\"delivered_key\", {}))", "left = dict(ledger.get(\"delivered_key\", {}))")),
-    ("REREAD: a file's FIRST run reported as a re-read", replace("    if not off:\n        return None", "    if not off:\n        return \"always\"")),
+    ("REREAD: a file's FIRST run reported as a re-read", replace("    reread = None\n    with open(raw, \"rb\") as fh:", "    reread = \"first\"\n    with open(raw, \"rb\") as fh:")),
     ("REREAD: an untouched file re-read every run", replace(
-        "        return \"the %d bytes before the stored offset changed\" % min(off, TAIL)\n    return None",
-        "        return \"the %d bytes before the stored offset changed\" % min(off, TAIL)\n    return \"always\"")),
+        "            elif st.get(\"tail\") and hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:",
+        "            elif st.get(\"tail\"):")),
+    ("P5 r6 FINDING-1: a held notice taken again from re-read bytes", replace(
+        "            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in done or (uid, line) in seen_run:")),
+    ("P5 r6 FINDING-2: the fingerprint from a SECOND open after the write", replace(
+        "        st[\"tail\"] = tail          # from the bytes this run read, never a second open",
+        "        st[\"tail\"] = (lambda b: hashlib.sha256(b[max(0, new_off - TAIL):new_off]).hexdigest() if len(b) >= new_off else None)(open(raw, \"rb\").read())")),
+    ("P5 r6: the fingerprint window off by its own length", replace(
+        "    tail = hashlib.sha256(data[max(0, new_off - TAIL) - base:new_off - base]).hexdigest() if new_off else None",
+        "    tail = hashlib.sha256(data[max(0, new_off - TAIL) - base + 1:new_off - base]).hexdigest() if new_off else None")),
     ("REREAD: a dry run hides the re-read", replace('"would_cut": would_cut,\n                    "reread": reread}', '"would_cut": would_cut,\n                    "reread": None}')),
 ]
 

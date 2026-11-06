@@ -215,45 +215,41 @@ def recover(root, st, dry=False):
 TAIL = 4096
 
 
-def tail_sha(raw, offset):
-    """sha256 of the raw bytes just BEFORE `offset` (up to TAIL of them): the fingerprint that tells a later run whether the
-    bytes it already read are still the bytes on disk. None when the file is shorter than `offset`."""
-    if offset <= 0:
-        return None
-    with open(raw, "rb") as fh:
-        fh.seek(max(0, offset - TAIL))
-        data = fh.read(offset - max(0, offset - TAIL))
-    if len(data) != offset - max(0, offset - TAIL):
-        return None
-    return hashlib.sha256(data).hexdigest()
+def read_raw(raw, st):
+    """ONE open of the raw file covers the rewrite check, the read and the next fingerprint (Langston P5 r6 FINDING-2: the
+    fingerprint used to be taken by RE-OPENING the file after the write, so a rewrite landing in between could commit a
+    state that matched the NEW file, or tail=None - the legacy blind condition). Returns
+    (lines, new_offset, tail, reread): whole lines only; `tail` = sha256 of the <=TAIL bytes before new_offset, taken
+    from the bytes this call read; `reread` = why the file was re-read from the start, or None.
 
-
-def rewritten_since(raw, st):
-    """Why the raw file is no longer the file this state read, or None. The transcript tools (trim, dedup, distill -
-    pre-audit A3) rewrite a raw file IN PLACE; resuming at the old offset would then read from the middle of other
-    content and silently skip every line between the new end and the old offset (measured: 19 of 20 new lines lost,
-    0 refused). Detected two ways: the file is now SHORTER than the offset, or the bytes just before the offset changed
-    (a state written before this check carries no fingerprint, so only the first applies to it)."""
+    Why a re-read: the transcript tools (trim, dedup, distill - pre-audit A3) rewrite a raw file IN PLACE, and resuming
+    at the old offset then reads from the middle of other content (measured: 19 of 20 new lines lost, 0 refused).
+    Detected when the file is SHORTER than the offset, or the bytes just before it no longer match the fingerprint
+    (a state written before the fingerprint existed can show only the first). The fingerprint is POSITIONAL: any length
+    change before the offset shifts the window's content and is caught; only a byte-length-preserving edit of the early
+    prefix escapes it, which none of those tools makes, and then the archived lines keep their earlier text - a
+    fidelity residual, never a loss."""
     off = st["offset"]
-    if not off:
-        return None
-    size = os.path.getsize(raw)
-    if size < off:
-        return "now %d bytes, shorter than the %d already read" % (size, off)
-    if st.get("tail") and tail_sha(raw, off) != st["tail"]:
-        return "the %d bytes before the stored offset changed" % min(off, TAIL)
-    return None
-
-
-def read_new(raw, offset):
-    """Whole lines from `offset`; returns (lines, new_offset)."""
+    base = max(0, off - TAIL)
+    reread = None
     with open(raw, "rb") as fh:
-        fh.seek(offset)
-        data = fh.read()
-    end = data.rfind(b"\n")
-    if end < 0:
-        return [], offset
-    return data[:end + 1].decode("utf-8", errors="replace").splitlines(), offset + end + 1
+        fh.seek(base)
+        data = fh.read()                                   # [base, EOF): the fingerprint window AND the new bytes
+        if off:
+            if base + len(data) < off:
+                reread = "now %d bytes, shorter than the %d already read" % (base + len(data), off)
+            elif st.get("tail") and hashlib.sha256(data[:off - base]).hexdigest() != st["tail"]:
+                reread = "the %d bytes before the stored offset changed" % (off - base)
+        if reread:
+            fh.seek(0)
+            base, data = 0, fh.read()
+    start = 0 if reread else off
+    new = data[start - base:]
+    end = new.rfind(b"\n")
+    new_off = start + end + 1 if end >= 0 else start
+    lines = new[:end + 1].decode("utf-8", errors="replace").splitlines() if end >= 0 else []
+    tail = hashlib.sha256(data[max(0, new_off - TAIL) - base:new_off - base]).hexdigest() if new_off else None
+    return lines, new_off, tail, reread
 
 
 def header(rf, day):
@@ -290,8 +286,7 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
         # A raw file rewritten in place since the last run is RE-READ FROM THE START: every line already archived is
         # skipped by its id (every archived line carries one - a uuid, or a queued notice's ts+text id), so only what
         # is genuinely new is appended, and the run says so (`reread`).
-        reread = rewritten_since(raw, st)
-        lines, new_off = read_new(raw, 0 if reread else st["offset"])
+        lines, new_off, tail, reread = read_raw(raw, st)
         ledger = {}
         ylds = list(dt.distill(lines, red, ledger=ledger))
         done, seen_run = set(st["ids"]), set()
@@ -306,8 +301,12 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             else:
                 held.append(h)
         out, newest = [], max([y[1] for y in ylds] + [h["ts"] for h in held] + [""])
+        # A notice still HELD from an earlier run is in no skip set until it is written; a re-read yields it again from
+        # the same bytes, and without this it was held - then archived - once per re-read (Langston P5 r6 FINDING-1:
+        # 4 copies of one notice after 3 rewrites). Its id is sha(ts + text), so the earlier hold IS this notice.
+        held_ids = {h["id"] for h in held}
         for uid, ts, line, order in ylds:
-            if uid in done or (uid, line) in seen_run:
+            if uid in done or uid in held_ids or (uid, line) in seen_run:
                 continue
             seen_run.add((uid, line))
             if str(uid).startswith("queue:"):       # (2) a queued-only notice is HELD, not written yet
@@ -356,7 +355,7 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             st["lengths"][rel] = os.path.getsize(p)
             done.update(u for u, _l in items)
         st["offset"], st["ids"], st["held"] = new_off, sorted(done), keep
-        st["tail"] = tail_sha(raw, new_off)
+        st["tail"] = tail          # from the bytes this run read, never a second open
         write_state(sp, st)
         return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "offset": new_off,
                 "cut": would_cut, "reread": reread}

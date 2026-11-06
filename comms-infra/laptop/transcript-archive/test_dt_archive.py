@@ -575,5 +575,77 @@ ok("the re-read happened", res and res[0].get("reread"), res)
 ok("...and the held notice is STILL held, not cancelled by the old delivery", st_of(root, proj)["held"] == held0, st_of(root, proj)["held"])
 shutil.rmtree(base)
 
+print("13. Langston P5 r6: a HELD notice survives repeated rewrites as ONE notice; the fingerprint comes from the bytes read")
+import hashlib as _hl
+
+QN = ("<task-notification>\n<task-id>q7</task-id>\n<status>completed</status>\n"
+      "<summary>Background command \"Probe\" completed</summary>\n</task-notification>")
+QQ = {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-10-21T12:00:00Z", "content": QN}
+for arm in ("shorter", "fingerprint"):
+    base, proj, root = tree()
+    put(proj, FIRST[:2] + [QQ] + ORIG[:3], "w")                  # held BECAUSE no delivery is in the file
+    da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+    counts = [len(st_of(root, proj)["held"])]
+    for k in range(3):
+        if arm == "shorter":
+            put(proj, FIRST[:2] + [QQ] + [user("r01", D1 % 1, "ORIGINAL 1 (trim %d)" % k)], "w")
+        else:
+            put(proj, FIRST[:2] + [QQ] + [user("r01", D1 % 1, "ORIGINAL 1 rewritten %d " % k + "z" * 3000)] + ORIG[1:3], "w")
+        res, ref = da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 60)
+        counts.append(len(st_of(root, proj)["held"]))
+        if k == 0:
+            ok("(%s) the rewrite was detected" % arm, res and res[0].get("reread"), res)
+    ok("(%s) one notice stays ONE held notice across three rewrites" % arm, counts == [1, 1, 1, 1], counts)
+    da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) + 3 * da.HOLD_S)
+    ok("(%s) ...and on release it is written exactly once" % arm, all_text(root).count("Probe") == 1, all_text(root).count("Probe"))
+    shutil.rmtree(base)
+
+# FINDING-2: a rewrite landing between the read and the commit must not be fingerprinted as if it were what was read
+base, proj, root = tree()
+put(proj, ORIG[:4], "w")
+da.archive_all(root, proj, dt.Redactor())
+put(proj, NEW[:2])
+read_bytes = open(raw_path(proj), "rb").read()
+real_distill = da.dt.distill
+
+
+def distill_then_rewrite(lines, red, **kw):
+    out = list(real_distill(lines, red, **kw))
+    put(proj, ORIG[:1], "w")                                    # the trim lands mid-run
+    return iter(out)
+
+
+da.dt.distill = distill_then_rewrite
+try:
+    res, ref = da.archive_all(root, proj, dt.Redactor())
+finally:
+    da.dt.distill = real_distill
+st = st_of(root, proj)
+ok("the committed fingerprint is of the bytes the run READ, not of the file after the mid-run rewrite",
+   st.get("tail") == _hl.sha256(read_bytes[max(0, st["offset"] - da.TAIL):st["offset"]]).hexdigest(), st)
+ok("a state with offset > 0 never carries tail=None", st["offset"] > 0 and st.get("tail"), st)
+put(proj, NEW[2:4])
+res, ref = da.archive_all(root, proj, dt.Redactor())
+t = all_text(root)
+ok("...so the next run SEES the mid-run rewrite and re-reads", res and "shorter" in (res[0].get("reread") or ""), res)
+ok("...and the lines after it are archived", "NEW 3 after" in t and "NEW 4 after" in t, t[-400:])
+shutil.rmtree(base)
+
+# (c): one real run stamps a legacy state with nothing new, offset unchanged; a dry run stamps nothing
+base, proj, root = tree()
+put(proj, ORIG[:3], "w")
+da.archive_all(root, proj, dt.Redactor())
+sp = da.state_path(root, da.raw_files(proj)[0])
+legacy = st_of(root, proj)
+legacy.pop("tail", None)
+da.write_state(sp, legacy)
+off0 = legacy["offset"]
+da.archive_all(root, proj, dt.Redactor(), dry=True)
+ok("a DRY run stamps no fingerprint on a legacy state", "tail" not in st_of(root, proj), st_of(root, proj))
+res, ref = da.archive_all(root, proj, dt.Redactor())
+ok("one REAL run with nothing new stamps it, offset unchanged", st_of(root, proj).get("tail") and st_of(root, proj)["offset"] == off0
+   and res and res[0]["lines"] == 0, (res, st_of(root, proj)))
+shutil.rmtree(base)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)
