@@ -3963,6 +3963,15 @@ The B6.5b crypto-only dry-run proved the front half of the active crypto pipelin
 | **BACKUP** | the archive is the only copy of removed content, so `langston-selfmemory-backup` carries it as a second, reproduction-verified source |
 | **CONTROLS** | `--self-test` drives the real entry point in a subprocess for every case. **Mutation-proved: disabling the compare-and-swap, the rule-2 refusal, the restore, the lock, or rule 1's continuation check each makes it fail** |
 
+> **★ CONTENT UPDATE — B-LANGSTON-MEMORY-WRITE-FENCE (`#1234`, live 2026-11-05): a hand edit can no longer lock the tool, because nothing but the tool can write.**
+> | piece | what it is |
+> |---|---|
+> | **the FENCE table** (in `langston-memory-write`, `fence_table()`) | ONE per-path table of owner, group, mode and the immutable flag: `MEMORY.md` and `MEMORY-ARCHIVE.md` root:langston 0640 `+i`; `compose-state.json` root:root 0600 `+i`; `.memory-archive/` root:langston 0750; `index.jsonl` and archive files root:langston 0640; the lock, now `.memory-archive/.memory-write.lock` root:root 0600. Every write site reads it; `ensure_fence()` re-asserts it under the lock on every root call and refuses (exit 6, "never adopted") a fenced path owned by another account. |
+> | **`langston-memory-spoold`** (`/usr/local/sbin`, `.path` + `.service`, spool `/var/spool/langston-memory/{in,tmp,out}`) | run as `langston`, the writer is a CLIENT: it drops the request in the spool and relays the root service's answer verbatim. The service reads each request once by fd (no links, no FIFOs), validates it against `langston_memory_allowlist.py` (five shapes; `--by` forced to `langston`; `--allow-growth`, `--allow-shrink`, `--self-test` not admitted) and runs the writer as root. |
+> | **`langston-memory-fence-check`** (timer 05:51Z; state `/opt/langston-memory/state/fence-check.jsonl`) | daily: every fenced path against the same table, the live `MEMORY.md` sha against compose-state, the spool units, and the writer/service/allowlist trust chains. Mints on a finding; its own failure pages. |
+> | **the shrink gate** (exit 8) | a part write or compose that leaves the part or `MEMORY.md` below half its size (from ≥ 4,096 B) is refused unless root passes `--allow-shrink`. |
+> **Blast radius:** any account's direct write to the fenced files is refused (EPERM, the immutable flag); a new file the writer must own needs a FENCE row or `ensure_fence` refuses; the trim, recall index, backup, load canary and privacy check all still read (shown 2026-11-06). **Known limit (pre-audit §7):** `.memory-archive/` sits in his home, so his account can rename it away — the next root call refuses and the daily check pages; restored by root.
+
 > **★ CONTENT UPDATE — B-LANGSTON-RELIEF OBJ-3 (live 2026-10-16): Langston's memory is now THREE files, and it trims itself.**
 > | file | role | written by | loaded every invoke? |
 > |---|---|---|---|

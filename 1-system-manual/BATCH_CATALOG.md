@@ -1483,3 +1483,11 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 **HOW.** The two no-price arms of the booking resolver now book no price: the trade closes `timeout_unpriced` with a NULL outcome and no learning record. The shadow lane skips xStock trades while the weekend window is shut. Every reader uses the class the trade carries. The xStock/Kraken ticker collision set was re-run in both directions (+8, −BDX) and given a quarterly scheduled re-audit.
 
 **RESULT.** 0 entry-priced shadow closes after the deploy; 0 xStock shadow closes inside the first shut window against 193 the week before; every unpriced close NULL and out of the learning files; xStock and crypto archive rows now carry their real class. **Closed:** `#1075`, `#1145`. **Left:** `#1144` (the no-bid arm has no age term, row 4c), `#1143` (weekday Class B, row 40), `#1073` (increment 2, row 4b).
+
+## B-LANGSTON-MEMORY-WRITE-FENCE (Infra Claude, sprint row 4; `#1234`, Kyle 2026-11-04) — change-class `non_architecture` — ⏳ **CLOSING — Step 11 report with Langston** (installed `fe3c4ad1f`, shrink gate `fe3c4ad1f`; Step 8 CONFIRMED by Langston, msg `1568147175651803219`; report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`)
+
+**WHAT IT FIXED.** Langston's composed memory file could be written directly by his own account or any session; each such write locked the memory tool for everyone until a hand reconcile (five in 19 days).
+
+**HOW.** A per-path FENCE table (owner, group, mode, immutable flag) read by every write site; his calls go to a root spool service that checks them against an allowlist; a daily fence check pages if it is switched off; a shrink gate refuses cutting a part below half. His write recipe corrected to match (2026-11-06).
+
+**RESULT.** A direct write is refused (EPERM) — six probes by Langston from his own account; the scheduled fence check passes; every reader of his memory still reads (recall index, backup 509/509, privacy check, load canary LOADED after an unmarked section was fixed). The fence's page has never fired, so its alert path is unproven (#661 leg 3).

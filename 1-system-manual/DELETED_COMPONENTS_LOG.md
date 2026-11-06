@@ -1501,3 +1501,9 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 |---|---|---|
 | the relabel in the shadow close | `server/services/vts-runner.ts:4432` — `const reason = decision.exitReason === 'stale_timeout' ? 'shadow_max_hold' : (decision.exitReason ?? 'timeout');` | renamed a no-mark shadow timeout to `shadow_max_hold` and booked it at the trade's ENTRY price |
 **Why:** after `3n.q3` P1 a clamp arm books no price, and every `stale_timeout` has no mark, so it closes `timeout_unpriced`; the relabel became unreachable and was removed in the Step-3 commit `b24b755cd` (rule 18). **Blast radius verified:** the label survives only as a historical value — rows written before the deploy keep `shadow_max_hold`, meaning *a no-mark close booked at its entry price* (the comment at the removal site says so); 0 new `shadow_max_hold` rows across the 70,924 shadow closes after 2026-10-06T15:45:04Z (Step 7 (a), re-derived by Langston). **Left intentionally:** the string in the `shadowClose` comment about TTL expiry and in one test's assertion that it is never written. No archive copy: one line, recoverable from git at `b24b755cd~1`.
+
+## 2026-11-05 — the writer's lock in Langston's home — B-LANGSTON-MEMORY-WRITE-FENCE (`#1234`), Infra Claude
+| removed | where | what it was |
+|---|---|---|
+| `/home/langston/.memory-write.lock` | Helsinki, his home | the `langston-memory-write` lock file; his account could unlink and recreate it, splitting mutual exclusion across two inodes (C-2) |
+**Replaced by** `/home/langston/.memory-archive/.memory-write.lock` (root:root 0600, inside the root-owned archive dir). **Blast radius verified:** the install (`install-fence.sh`, P5) took the OLD lock across the move so no two writer versions ran at once, then deleted it; every lock user is `open_lock()` in the writer (one function, `:599-618`). No archive copy: an empty lock file.
