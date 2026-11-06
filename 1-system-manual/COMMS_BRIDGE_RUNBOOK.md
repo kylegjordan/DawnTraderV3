@@ -53,7 +53,7 @@ Check in this order:
 
 ### §chunking-narrowness-original
 
-> **⚠️ Know how NARROW that is, or you will assume it protects traffic it never touches:** reassembly applies **only** to a CC dispatch that **STARTS with "Langston" AND exceeds 2000 chars.** Everything else — Langston's own replies (they lead with "OLD Claude —"/"Kyle —"), all Kyle-facing posts, and the §10.5 alert webhook — takes the untouched path and splits exactly as before, byte-identical.
+> **⚠️ Know how NARROW that is, or you will assume it protects traffic it never touches:** reassembly applies **only** to a CC dispatch whose **opening list names Langston AND that exceeds 2000 chars** (`#1241`). Everything else — Langston's own replies (they lead with "OLD Claude —"/"Kyle —"), all Kyle-facing posts, and the §10.5 alert webhook — takes the untouched path and splits exactly as before, byte-identical.
 
 ### §telegram-ssh-deliver-archived
 

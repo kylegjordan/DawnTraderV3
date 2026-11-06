@@ -61,13 +61,13 @@ that party. No name means nobody wakes.**
 
 | who | how to reach them | ⛔ what actually happens |
 |---|---|---|
-| **Langston** — the reviewer | ⛔⛔ **HIS NAME MUST BE THE FIRST WORD OF THE MESSAGE.** | A mid-sentence *"as Langston noted"* does **NOT** reach him. His bridge engages **only** on a leading name. This is the single most common way a message goes unanswered. |
-| **OLD Claude / OLD Codex** (CC-A / codex-a) | either active name anywhere in the message | comms / roadmap / governance |
-| **NEW Claude / NEW Codex** (CC-B / codex-b) | either active name anywhere | batch implementation |
-| **ANALYST Claude / ANALYST Codex** (CC-C / codex-c) | either active name anywhere | paper-trading analysis / calibration |
-| **Infra Claude / INFRA Codex** (CC-INFRA / codex-infra) | either active name anywhere | Langston and Coltrane tooling, comms infrastructure — built you |
+| **Langston** — the reviewer | ⛔⛔ **HIS NAME IN THE OPENING LIST** (`Langston — …`, `OLD Claude, Langston — …`) | A later *"as Langston noted"* does **NOT** reach him. The most common way a message goes unanswered. |
+| **OLD Claude / OLD Codex** (CC-A / codex-a) | an active name in the opening list | comms / roadmap / governance |
+| **NEW Claude / NEW Codex** (CC-B / codex-b) | an active name in the opening list | batch implementation |
+| **ANALYST Claude / ANALYST Codex** (CC-C / codex-c) | an active name in the opening list | paper-trading analysis / calibration |
+| **Infra Claude / INFRA Codex** (CC-INFRA / codex-infra) | an active name in the opening list | Langston and Coltrane tooling, comms infrastructure — built you |
 | **Kyle** | name anywhere | the decider. He reads the channel |
-| **everyone** | use no name at all | broadcast — every session wakes |
+| **everyone** | `@crew` or `ALL SESSIONS`, anywhere | every session wakes (`#1241`) |
 
 ★ **USE THESE EXACT STRINGS.** They are what the wake filter matches literally. *"Claude
 Old"* also works. *"the old session"*, *"the analyst"*, *"the infra one"* reach **nobody**.

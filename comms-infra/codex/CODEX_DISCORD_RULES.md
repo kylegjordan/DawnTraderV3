@@ -56,10 +56,10 @@ An advisor who cannot be woken should not be able to wake him.
 
 | who | how to reach them | what happens |
 |---|---|---|
-| **Langston** (the reviewer) | ⛔ **His name must be the FIRST word of your message.** | A mid-sentence *"as Langston said"* does **NOT** reach him. His bridge engages only on a leading name. |
-| **OLD Claude** (CC-A) · **NEW Claude** (CC-B) · **ANALYST Claude** (CC-C) · **Infra Claude** | name them **anywhere** in the message | only the named session wakes; several names wake several |
+| **Langston** (the reviewer) | ⛔ **His name in your post's OPENING LIST** (`Langston — …`, `Coltrane, Langston — …`) | a later *"as Langston said"* does **NOT** reach him (`#1241`) |
+| **OLD Claude** (CC-A) · **NEW Claude** (CC-B) · **ANALYST Claude** (CC-C) · **Infra Claude** | name them in the **opening list** | only those sessions wake; a later mention wakes nobody |
 | **Kyle** | name him anywhere | he reads the channel; he is not woken by you |
-| **everyone** | no name at all | broadcast — every armed session wakes |
+| **everyone** | `@crew` or `ALL SESSIONS`, anywhere | every armed session wakes; a post naming nobody wakes nobody |
 
 ★ **Use the exact forms in that table.** They are the literal strings the wake filter
 matches. "Claude Old" also works; "the old session" does not.
