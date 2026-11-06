@@ -647,6 +647,15 @@ def unified(a_bytes, b_bytes, a_name, b_name, limit=4000):
     return d if len(d) <= limit else d[:limit] + "\n... (%d more chars)" % (len(d) - limit)
 
 
+def _trim_reads(text):
+    """True when the daily trim's pure parser accepts the part's section structure."""
+    try:
+        trim_plan(text)
+        return True
+    except Refused:
+        return False
+
+
 def merge3(base, ours, theirs):
     """Three-way merge of whole lines: apply ours' and theirs' changes to base when they touch DIFFERENT base lines.
     Returns (merged_text, None) or (None, 'a description of the overlap'). An insertion at the same point counts as an
@@ -2272,6 +2281,14 @@ def do_direct_write(opts, content, append, declared_ledger, declared_retractions
                     raise Refused(4, "REFUSED: --retry-part: your change and the intervening write touch the same lines (%s). "
                                      "Nothing was written. What landed:\n%s\nRe-read the part (sha %s) and re-apply by hand."
                                   % (conflict, landed, part_old_sha))
+                # C-1 (Langston, Step 4 part 2): the merge is the one path that writes bytes neither writer typed, and it is
+                #   line-granular, blind to the batch section's order (its LAST line must be its STATE line). If the trim can
+                #   read the version you started from and cannot read the merge, the merge broke that structure: refuse.
+                if _trim_reads(base.decode("utf-8")) and not _trim_reads(merged):
+                    raise Refused(4, "REFUSED: --retry-part: the merge of your change and the intervening write breaks the "
+                                     "part's section structure (a batch section's last line must be its STATE line, which "
+                                     "the daily trim requires). Nothing was written. Re-read the part (sha %s) and re-apply "
+                                     "by hand. What landed:\n%s" % (part_old_sha, landed))
                 sys.stderr.write("--retry-part: absorbed an intervening write to %s (%s -> %s); kept both changes. "
                                  "What it changed:\n%s\n" % (part_path, expect[:12], part_old_sha[:12], landed))
                 content = merged

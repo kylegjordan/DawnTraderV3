@@ -53,6 +53,11 @@ def main():
     check("one appends, one prepends: both kept", (m, c), ("theirs\na\nb\nc\nd\ne\nyours\n", None))
     m, c = W.merge3(base, base, "a\nb\nc\nd\ne\nt\n")
     check("no change of yours: theirs is the result", (m, c), ("a\nb\nc\nd\ne\nt\n", None))
+    m, c = W.merge3(base, "a\nB\nc\nd\ne\n", "a\nb\nC\nd\ne\n")
+    check("ADJACENT replaces (lines 2 and 3): both kept - the boundary is not a conflict (C-2)", (m, c),
+          ("a\nB\nC\nd\ne\n", None))
+    m, c = W.merge3(base, "a\nc\nd\ne\n", "a\nb\nC\nd\ne\n")
+    check("delete line 2 beside a replace of line 3: both kept", (m, c), ("a\nC\nd\ne\n", None))
     check("archived_version refuses a non-sha name", W.archived_version("../etc/passwd"), None)
 
     print("2. --retry-part through the service's allowlist and the writer's own argument check")
@@ -101,6 +106,23 @@ def main():
     rc, out = whole(h, s2, d_body, retry=True)
     check("writer D changes the SAME line, stale: refused even with --retry-part (exit 4)", rc, 4)
     check("  ...naming the overlap", "touch the same lines" in out, True)
+    check("  ...and changed nothing", h.snap() == snap, True)
+    h.done()
+
+    print("3b. a merge that would break the section structure is refused (C-1)")
+    sec = NL.join(["## B-FIXTURE-BATCH (a test section)", "", "- a line of the section", "", "STATE: open · batch: B-FIXTURE-BATCH", ""])
+    h = T.Home(text=T.FIXTURE.rstrip(NL) + NL + NL + sec)
+    part0 = rd(h.part).decode("utf-8")
+    s0 = sha(rd(h.part))
+    closed = part0.replace("STATE: open · batch: B-FIXTURE-BATCH",
+                           "STATE: closed · batch: B-FIXTURE-BATCH · superseded-by: somewhere.md")
+    rc, out = whole(h, s0, closed)
+    check("fixture: writer A closes the section (exit 0)", rc, 0)
+    with_keep = part0.rstrip(NL) + NL + "keep: a line writer B appends after the section" + NL
+    snap = h.snap()
+    rc, out = whole(h, s0, with_keep, retry=True)
+    check("writer B's EOF line would land below STATE: refused even with --retry-part (exit 4)", rc, 4)
+    check("  ...naming the section structure", "section structure" in out, True)
     check("  ...and changed nothing", h.snap() == snap, True)
     h.done()
 

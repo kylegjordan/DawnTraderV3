@@ -20,6 +20,12 @@ MUTATIONS = {
         "            sys.stderr.write(\"--ledger-append: absorbed %d B appended since your read (%s -> %s). What arrived:\\n%s\\n\"\n"
         "                             % (len(arrived.encode(\"utf-8\")), expect[:12], old_sha[:12], arrived[:4000]))\n",
         "            pass\n"),
+    "the overlap test also counts touching ranges (< -> <=)": (
+        "        if x[3] != y[3] and (y[0] < x[1] or (x[0] == y[0])):\n",
+        "        if x[3] != y[3] and (y[0] <= x[1] or (x[0] == y[0])):\n"),
+    "the merge's structure check is skipped": (
+        "                if _trim_reads(base.decode(\"utf-8\")) and not _trim_reads(merged):\n",
+        "                if False:\n"),
     "the refusal does not show what landed": (
         "                                     \"Another write landed after you read it; what it changed:\\n%s\\nRe-run the SAME command \"\n",
         "                                     \"Another write landed after you read it; what it changed:%.0s Re-run the SAME command \"\n"),
