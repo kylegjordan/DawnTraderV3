@@ -1280,7 +1280,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **OPEN BEYOND IT.** obj-5's posture term lands inside `resolveEffectivePositionPct` only when the AMR activates (`#616`, condition C-5).
 
-## B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a — paired with 3a1; `#1123`) — change-class `non_architecture` — ⏳ **STEP 11 — close ruled by Langston 2026-11-06, awaiting his confirm** (Step 4 APPROVED at `3a549e3a9`; deployed `ad01f5339` 2026-10-10; Step-9 rework deployed `162ae0537` 2026-10-17; report `Batch Completion/B_FEED_HEALTH_GRADE_ARM_COMPLETION_REPORT.md`)
+## B-FEED-HEALTH-GRADE-ARM (CC-B, sprint plan row 3a — paired with 3a1; `#1123`) — change-class `non_architecture` — ✅ **CLOSED 2026-11-06** (Step 11 CONFIRMED by Langston 03:39:05Z; Step 4 APPROVED at `3a549e3a9`; deployed `ad01f5339` 2026-10-10; Step-9 rework deployed `162ae0537` 2026-10-17; report `Batch Completion/B_FEED_HEALTH_GRADE_ARM_COMPLETION_REPORT.md`)
 
 **WHAT IT DOES.** Loads the feed-health settings at boot, so the per-class liveness grade actually runs. Clears what the grade raises, by acknowledging the dashboard alerts on a recovery; the old clear path tested an alert id that was never set. Prints a per-cycle per-class liveness line. Exposes the liveness to 3a1. Fixes the crypto recorder's subscription naming, which had dropped 8 pairs.
 
