@@ -533,6 +533,114 @@ class TaskPriorityQueue(_queue.Queue):
             return tuple(counts)
 
 
+# ---------------- two task workers, one lane per batch (B-LANGSTON-TWO-WORKERS, #1248) ----------------
+# KD-44 (Kyle 2026-11-05): Langston reviews two pieces of work at once. A batch's rounds must still be
+# reviewed in arrival order, so every task carries a LANE KEY and two tasks with the same key never run at
+# once. The key fails CLOSED (Langston, Step 1 C-6): a task whose opening names no batch, or more than one,
+# goes into ONE shared serial lane - never "no key, so parallel". An escalated alert keys by the alert
+# lane's own precedent key (template, symbol) (Step 2 D-3/AM-3), so two escalations of one template and
+# symbol never interleave their markers; different symbols run in different lanes.
+SHARED_LANE = "shared"
+# A batch id is an exact token: B-<NAME> (first segment starts with a letter, 3+ chars) or P<n>-B<n>[.<x>].
+# Case-folded and "_" read as "-" so B_LANGSTON_TWO_WORKERS and b-langston-two-workers are one lane;
+# matched whole, so B-LANGSTON-RELIEF never matches B-LANGSTON-RELIEF-2.
+_BATCH_ID_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])"
+    r"((?:[Bb][-_][A-Za-z][A-Za-z0-9]{2,}(?:[-_][A-Za-z0-9]+)*)|(?:[Pp][0-9]+[-_][Bb][0-9]+(?:\.[0-9A-Za-z]+)*))"
+    r"(?![A-Za-z0-9_-])")
+
+
+def normalise_batch_id(raw):
+    return raw.upper().replace("_", "-")
+
+
+def opening_line(text):
+    """The OPENING a lane key is read from: the first non-empty line that is not a quote (a line starting
+    with '>' quotes someone else's post, so a batch id inside it is theirs, not this task's)."""
+    for line in (text or "").splitlines():
+        t = line.strip()
+        if not t or t.startswith(">"):
+            continue
+        return t
+    return ""
+
+
+def batch_ids_in_opening(text):
+    return {normalise_batch_id(m) for m in _BATCH_ID_RE.findall(opening_line(text))}
+
+
+def lane_key(task, alert_key=None):
+    """The lane a bridge task runs in. alert_key is alert_lane.alert_key (injected; this module does not
+    import the alert lane). An escalated or alert task keys by its (template, symbol); if that is None it
+    keys by its message id. A person's or self-advance task keys by the ONE batch id in its opening, else
+    the shared lane."""
+    if task.get("escalated") or task.get("is_alert"):
+        k = alert_key(task.get("content") or "") if alert_key else None
+        if k is not None:
+            return "alert:" + repr(tuple(k))
+        return "alert-id:" + str(task.get("message_id"))
+    ids = batch_ids_in_opening(task.get("content") or "")
+    if len(ids) == 1:
+        return "batch:" + next(iter(ids))
+    return SHARED_LANE
+
+
+class LaneTaskQueue(TaskPriorityQueue):
+    """TaskPriorityQueue with lanes. take() returns the highest-priority (then oldest) task whose lane is not
+    running; release() frees the lane. put/qsize/task_done/depth_by_class are inherited unchanged.
+    may_take() is consulted under the queue lock before every take - the drain and one-worker flags."""
+
+    def __init__(self, maxsize=0, alert_key=None):
+        self._alert_key = alert_key
+        super().__init__(maxsize)
+
+    def _init(self, maxsize):
+        super()._init(maxsize)
+        self.running = {}   # lane -> worker name
+
+    def _put(self, task):
+        task.setdefault("_lane", lane_key(task, getattr(self, "_alert_key", None)))
+        super()._put(task)
+        self.not_empty.notify_all()   # every waiting worker re-scans: a lane may be free for one and not another
+
+    def _eligible_index(self):
+        for i in sorted(range(len(self.queue)), key=lambda j: self.queue[j][:2]):
+            if self.queue[i][2]["_lane"] not in self.running:
+                return i
+        return None
+
+    def take(self, worker, timeout, may_take=None, recheck=5.0):
+        """Block up to timeout seconds for an eligible task; raise queue.Empty when none came. The wait wakes
+        at least every `recheck` seconds so a flag that is cleared is noticed without a new put."""
+        deadline = time.monotonic() + timeout
+        with self.not_empty:
+            while True:
+                if may_take is None or may_take(worker):
+                    i = self._eligible_index()
+                    if i is not None:
+                        _prio, _seq, task = self.queue[i]
+                        last = self.queue.pop()
+                        if i < len(self.queue):
+                            self.queue[i] = last
+                            _heapq.heapify(self.queue)
+                        self.running[task["_lane"]] = worker
+                        self.not_full.notify()
+                        return task
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise _queue.Empty
+                self.not_empty.wait(min(remaining, recheck))
+
+    def release(self, task):
+        with self.mutex:
+            self.running.pop(task.get("_lane"), None)
+            self.not_empty.notify_all()
+
+    def running_lanes(self):
+        with self.mutex:
+            return dict(self.running)
+
+
 # ---------------- one-shot recovery of people's messages across a restart (B-LANGSTON-RELIEF OBJ-1) ----------------
 # The task queue is in memory, so a restart loses everything waiting. The gateway watchdog's backfill
 # was meant to recover missed requests, but the bridge's replay guard (B-COMMS-CHUNK-FIX, 2026-07-22)
