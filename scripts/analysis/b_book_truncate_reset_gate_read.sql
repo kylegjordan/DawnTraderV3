@@ -31,13 +31,18 @@ e as (
        and o.interval_begin between t.et - interval '10 min' and t.et + interval '10 min') elo
   from t),
 g as (
+  -- Three states per leg, never two (Langston, KD-34 condition 1, 2026-11-06): a leg with no bar is UNASSESSED, not clean.
+  -- The old coalesce(x, false) scored a missing bar as a clean leg; a flag is now only ever counted on an assessed leg.
   select *, (xhi is not null and elo is not null) assessable,
-         coalesce(xp > xhi, false) exit_bad, coalesce(ep < elo, false) entry_bad from e)
+         (xhi is not null) exit_assessed, (elo is not null) entry_assessed,
+         (xhi is not null and xp > xhi) exit_bad, (elo is not null and ep < elo) entry_bad from e)
 -- 1. the totals
 select 'TOTAL' as k, count(*) n, count(*) filter (where assessable) assessable,
+       -- per-leg reach, so a single-leg question (e.g. a target_hit exit) is not hidden by the both-legs rule
+       -- (exit_assessed / entry_assessed are printed on the TOTAL row's detail column)
        count(*) filter (where exit_bad) exit_contaminated, count(*) filter (where entry_bad) entry_contaminated,
        count(*) filter (where exit_price_source is null or entry_price_source is null) missing_stamp,
-       null::text as detail
+       'exit_assessed=' || count(*) filter (where exit_assessed) || ' entry_assessed=' || count(*) filter (where entry_assessed) as detail
 from g
 union all
 -- 2. per day (the consecutive-days leg)
