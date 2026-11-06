@@ -35,7 +35,7 @@ Prices reaching the engine should be real and current. Two of its fixes shipped:
 | **I4** the xStock recorder follows the daily list | **MOVED OUT** (Kyle 2026-10-07) | sprint row 31 `B-XSTOCK-LIVE-FEED` |
 
 ## 4. NEW FINDINGS
-None owed. One stale figure corrected in passing: the System Manual said the xStock/crypto ticker collision set held 9 USD pairs; it holds 16 USD and 16 EUR pairs (`XSTOCK_SPOT_KRAKEN_COLLISIONS`, `shared/asset-classes.ts`), the change Langston named at I2's Step 4.
+None owed by this batch. A stale figure was swept: the xStock/crypto ticker collision set holds 16 USD and 16 EUR pairs since the 2026-10-01 re-audit (`3n.q3` P9; `XSTOCK_SPOT_KRAKEN_COLLISIONS`), but the System Impact Map and System Manual still said 17 (9 + 8) or named 5. My first Step 10 corrected one line; Langston's Step-11 send-back found nine more, and a re-search by content found two more (SIM, the xStock bar-cache entry and the P19-B4a line). All twelve now read the current count, plus one stale list in `RUNNING_ISSUES` annotated. The drift itself came from `3n.q3` P9, which re-audited the set without sweeping the documents.
 
 ## 5. GOVERNANCE — THE STEP-10 LEDGER
 CHANGE-CLASS: architecture
@@ -47,8 +47,8 @@ CHANGE-CLASS: architecture
 | R | completion report | ✅ | this file |
 | R | `BATCH_CATALOG.md` | ✅ | new entry |
 | R | `PHASE_HISTORY.md` | ✅ | new entry |
-| R | `SYSTEM_MANUAL.md` | ✅ | §16 Unified Price Cache: `getPrice` gone, `getBatch` takes `restEligible`, filing by the venue's pair list, refuse-until-ready; the collision count 9 → 16 |
-| R | `SYSTEM_IMPACT_MAP.md` | ✅ | §2.1 the adapter's symbol-less acknowledgement and bad-pair counting; §2.2 the price cache's dependency on the venue pair list, the RTB refresh's class split, the new ledger counters |
+| R | `SYSTEM_MANUAL.md` | ✅ | §16 Unified Price Cache: `getPrice` gone, `getBatch` takes `restEligible`, filing by the venue's pair list, refuse-until-ready; the collision count corrected at all five live-state lines (§4) |
+| R | `SYSTEM_IMPACT_MAP.md` | ✅ | §2.1 the adapter's symbol-less acknowledgement and bad-pair counting; §2.2 the price cache's dependency on the venue pair list, the RTB refresh's class split, the new ledger counters; the collision count corrected at all seven live-state lines (§4) |
 | judged | `RUNNING_ISSUES.md` | ✅ | `#1047` and `#1076` closed; `#1146` gap 1 discharged, gap 2 stays at row 14a; `#1173` already closed (2026-11-04) |
 | judged | `DELETED_COMPONENTS_LOG.md` | ✅ | `getPrice` entry written at I2 (2026-10-07), archive `_archive/deleted-code/price-cache.getPrice.ts.removed` |
 | judged | `CHANGES_AND_FIXES.md` | N/A | not a hotfix |
@@ -58,5 +58,5 @@ CHANGE-CLASS: architecture
 | plan | `SPRINT_TO_LIVE_PLAN.md` | ✅ | Stage-1 line 3 (`#1047`) closed; row 14a's status states what I2 delivered and what is left |
 | — | shared `MEMORY.md` | N/A | no new consensus truth |
 | — | `MEMORY_CC_C.md` | ✅ | position |
-| — | Langston's `MEMORY.md` | N/A | it holds no line on this batch (checked 2026-11-06), and his load may only go down |
+| — | Langston's `MEMORY.md` | N/A | it holds no line on this batch (checked 2026-11-06) |
 | T1 | session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` |

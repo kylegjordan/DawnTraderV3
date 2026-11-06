@@ -63,5 +63,5 @@ CHANGE-CLASS: non_architecture
 | plan | `SPRINT_TO_LIVE_PLAN.md` | ✅ | row 4a closed, report linked |
 | — | shared `MEMORY.md` | N/A | no new consensus truth |
 | — | `MEMORY_CC_C.md` | ✅ | position |
-| — | Langston's `MEMORY.md` | N/A | no line on this batch (checked 2026-11-06); his load may only go down |
+| — | Langston's `MEMORY.md` | N/A | no line on this batch (checked 2026-11-06) |
 | T1 | session task lists (`CC_A`, `CC_B`, `CC_C`, `CC_INFRA`) | ✅ mine / N/A ×3 | `CC_C_SESSION_TASK_LIST.md` row 4a |
