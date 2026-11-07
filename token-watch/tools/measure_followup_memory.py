@@ -98,6 +98,37 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CURVES = os.path.join(HERE, "tests", "fixtures", "pumpfun_curves.json")
 
 
+MIN_CLASS = 30                                                  # §6 C-3: a size/template class needs >= 30 bodies
+_CLASS_SQL = {"0": "pairs = 0", "1": "pairs = 1", "2": "pairs = 2", "3+": "pairs >= 3"}
+_CLASS_K = {"0": 0, "1": 1, "2": 2, "3+": 4}                   # §6 C-3: the 3+ class counts as k = 4 (09-26 mean 3.7484)
+
+
+def _hash_int(s: str) -> int:
+    return int(hashlib.sha256(s.encode()).hexdigest(), 16)
+
+
+def _load_shape(path: str) -> dict:
+    """{"day": ..., "share": {"0","1","2","3+"}, "alive_share": ...} — the reference day's shape, written down first."""
+    if not path:
+        raise SystemExit("REFUSED: arm sept and derive-n need --shape (the reference day's shape, written down first)")
+    s = json.load(open(path, encoding="utf-8"))
+    if set(s.get("share", {})) != {"0", "1", "2", "3+"} or not 0 < s.get("alive_share", 0) < 1:
+        raise SystemExit("REFUSED: --shape must carry share{0,1,2,3+} and alive_share")
+    if abs(sum(s["share"].values()) - 1) > 1e-3:
+        raise SystemExit("REFUSED: --shape shares sum to %.6f, not 1" % sum(s["share"].values()))
+    return s
+
+
+def _class_of(mint: str, share: dict) -> str:
+    u = (_hash_int("class:" + mint) % 10**9) / 10**9
+    acc = 0.0
+    for k in ("0", "1", "2", "3+"):
+        acc += share[k]
+        if u < acc:
+            return k
+    return "3+"
+
+
 def _refuse_production(path: str) -> None:
     if not path:
         print("REFUSED: empty path", file=sys.stderr)
@@ -191,7 +222,8 @@ def cmd_index(a) -> int:
     if os.path.exists(tmp):
         os.remove(tmp)
     db = sqlite3.connect(tmp)
-    db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL)")
+    db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL, "
+               "pairs INTEGER NOT NULL)")
     n, dups = 0, []
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
@@ -201,7 +233,9 @@ def cmd_index(a) -> int:
                 rec = json.loads(line)
                 if rec.get("source") != "dexscreener_token_state":
                     continue
-                cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?)", (rec["mint"], rec["body"], rec["bytes"]))
+                npairs = len(json.loads(rec["body"]).get("pairs") or [])
+                cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?, ?)",
+                                 (rec["mint"], rec["body"], rec["bytes"], npairs))
                 if cur.rowcount == 1:
                     n += 1
                 else:
@@ -288,6 +322,10 @@ class Counts:
         self.loop_no_body = 0     # ... of which had no captured body
         self.in_loop = False
         self.served_bytes: list[int] = []
+        self.parses = 0           # body texts parsed into a fresh object graph (C-6: == served lookups)
+        self.loop_alive = 0       # loop token_state results with alive True
+        self.loop_class0 = 0      # arm sept: loop lookups assigned class 0
+        self.loop_shaped = 0      # arm sept: loop lookups shaped
 
 
 def _freeze_clock(now: datetime, modules) -> list[str]:
@@ -391,6 +429,17 @@ def cmd_run(a) -> int:
     db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
     db.execute("PRAGMA cache_size = -2048")            # 2 MiB: the harness's own cache, small and constant
     curves = json.load(open(CURVES, encoding="utf-8"))
+    shape = templates = None
+    if a.arm == "sept":
+        shape = _load_shape(a.shape)
+        templates = {k: db.execute("SELECT count(*) FROM bodies WHERE " + _CLASS_SQL[k]).fetchone()[0]
+                     for k in ("1", "2", "3+")}
+        if templates["1"] < MIN_CLASS:
+            return void(11, "arm sept NOT RUN: %d captured bodies with exactly 1 pair, under %d" % (
+                templates["1"], MIN_CLASS), {"templates": templates})
+    pad_copies = 3 if a.arm == "x4" else (max(0, round(a.n) - 1) if a.arm == "xn" else 0)
+    if a.arm == "xn" and (a.n is None or a.n < 1):
+        return void(2, "arm xn needs --n >= 1 (the derived N, written down before the run)")
 
     def fake_request(req):
         c.egress += 1
@@ -403,6 +452,31 @@ def cmd_run(a) -> int:
                 return json.loads(json.dumps(curves[pick]["account_info"]))
             return {"jsonrpc": "2.0", "id": "token-watch", "result": {"value": []}}
         mint = url.rsplit("/", 1)[-1]
+        if a.arm == "sept":
+            # ARM (d), pre-registered (§6 AMENDMENT 1, C-4..C-6): a pair-count class by a hash of the mint on the
+            # reference day's cumulative shares; class 0 -> the no-pairs body; class k -> a REAL captured body of
+            # that class (template chosen by the same hash), parsed FRESH, every pair's baseToken.address set to
+            # this mint. pair_address / name / symbol stay the template's (stated in §6).
+            k = _class_of(mint, shape["share"])
+            c.loop_class0 += c.in_loop and k == "0"
+            c.loop_shaped += c.in_loop
+            if k == "0":
+                c.served += 1
+                c.loop_served += c.in_loop
+                c.parses += 1
+                return json.loads('{"schemaVersion": "1.0.0", "pairs": null}')
+            off = _hash_int(mint) % templates[k]
+            text, nbytes = db.execute("SELECT body, bytes FROM bodies WHERE " + _CLASS_SQL[k] +
+                                      " ORDER BY rowid LIMIT 1 OFFSET ?", (off,)).fetchone()
+            body = json.loads(text)
+            c.parses += 1
+            for p in body.get("pairs") or []:
+                if isinstance(p.get("baseToken"), dict):
+                    p["baseToken"]["address"] = mint
+            c.served += 1
+            c.loop_served += c.in_loop
+            c.served_bytes.append(nbytes)
+            return body
         row = db.execute("SELECT body, bytes FROM bodies WHERE mint = ?", (mint,)).fetchone()
         if row is None:
             c.no_body += 1
@@ -411,13 +485,14 @@ def cmd_run(a) -> int:
         c.served += 1
         c.loop_served += c.in_loop
         text, nbytes = row
-        if a.arm == "x4":
+        if pad_copies:
             inner = text.strip()
-            text = '{"_pad": [%s, %s, %s], %s' % (inner, inner, inner, inner[1:]) if inner != "{}" else \
-                '{"_pad": [{}, {}, {}]}'
+            copies = ", ".join([inner] * pad_copies)
+            text = '{"_pad": [%s], %s' % (copies, inner[1:]) if inner != "{}" else '{"_pad": [%s]}' % copies
             nbytes = len(text.encode("utf-8"))
         c.served_bytes.append(nbytes)
-        return json.loads(text)
+        c.parses += 1
+        return json.loads(text)                         # a FRESH object graph per call (C-6)
 
     providers._request = fake_request
     providers.helius_key = lambda: "synthetic"
@@ -430,7 +505,9 @@ def cmd_run(a) -> int:
             c.call_site += 1
             c.in_loop = True
             try:
-                return providers.token_state(mint)
+                state = providers.token_state(mint)
+                c.loop_alive += bool(state.get("alive"))
+                return state
             finally:
                 c.in_loop = False
     follow_up.providers = CallSite()
@@ -475,12 +552,35 @@ def cmd_run(a) -> int:
                    "synthetic_helius_calls": c.synthetic, "synthetic_label": "SYNTHETIC - not an observed fan-out"},
         "served_body_bytes": _stats(c.served_bytes),
         "shed_observation_rows": shed_rows, "due_minus_requeued": expected, "prepare": prepared,
+        "parses": c.parses, "loop_alive": c.loop_alive, "pad_copies": pad_copies, "n": a.n,
     }
     code = 0
-    if a.arm == "all_shed" and not (c.egress == 0 and c.call_site == expected and shed_rows == expected):
+    if a.arm != "all_shed" and c.parses != c.served:
+        result["void"] = "fresh-parse control (C-6): %d parses for %d served lookups" % (c.parses, c.served)
+        code = 12
+    elif a.arm == "all_shed" and not (c.egress == 0 and c.call_site == expected and shed_rows == expected):
         result["void"] = "arm all_shed control failed: egress=%d call_site=%d shed_rows=%d expected=%d" % (
             c.egress, c.call_site, shed_rows, expected)
         code = 7
+    elif a.arm == "sept":
+        n = c.loop_shaped
+        class0 = c.loop_class0 / n if n else 0.0
+        alive = c.loop_alive / n if n else 0.0
+        result["sept"] = {"shape": shape, "templates": templates, "loop_lookups": n,
+                          "class0_share": round(class0, 6), "alive_share": round(alive, 6),
+                          "class0_test": "WIRING control (C-4), not fidelity to the reference day",
+                          "alive_direction": "below the reference alive share voids; above stands (C-5)"}
+        if abs(class0 - shape["share"]["0"]) > a.wiring_tolerance:
+            result["void"] = "wiring: class-0 share %.4f vs %.4f, outside +/-%.3f" % (class0, shape["share"]["0"],
+                                                                                      a.wiring_tolerance)
+            code = 13
+        elif alive < shape["alive_share"]:
+            result["void"] = "alive share %.4f is BELOW the reference %.4f: the fan-out driver is understated" % (
+                alive, shape["alive_share"])
+            code = 13
+        elif not (0 < c.synthetic <= 2 * c.loop_alive):
+            result["void"] = "synthetic Helius calls %d not in (0, 2 x %d alive]" % (c.synthetic, c.loop_alive)
+            code = 13
     elif a.arm != "all_shed":
         share = (c.loop_served / loop_lookups) if loop_lookups else 0.0
         result["loop_served_share"] = round(share, 6)
@@ -493,6 +593,39 @@ def cmd_run(a) -> int:
         json.dump(result, fh, indent=2, sort_keys=True, default=str)
     print(json.dumps(result, sort_keys=True, default=str))
     return code
+
+
+# ── derive-n ───────────────────────────────────────────────────────────────────────────────────────────────────────
+def cmd_derive_n(a) -> int:
+    """§6 AMENDMENT 1 item 1 and C-3: N = E_sept / E_capture, from the reference day's shares and size per class."""
+    shape = _load_shape(a.shape)
+    db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
+    counts, size, notes = {}, {}, []
+    for k in ("0", "1", "2", "3+"):
+        n, mean = db.execute("SELECT count(*), avg(bytes) FROM bodies WHERE " + _CLASS_SQL[k]).fetchone()
+        counts[k], size[k] = n, mean
+    total, e_capture = db.execute("SELECT count(*), avg(bytes) FROM bodies").fetchone()
+    out = {"shape": shape, "counts": counts, "size_measured": size, "E_capture": e_capture, "bodies": total}
+    if counts["1"] < MIN_CLASS:
+        out["void"] = "N VOID (C-3): %d bodies with exactly 1 pair, under %d; x4 stands alone" % (counts["1"], MIN_CLASS)
+        print(json.dumps(out, indent=2, sort_keys=True))
+        return 14
+    used = {}
+    for k in ("0", "1", "2", "3+"):
+        if k in ("0", "1") or counts[k] >= MIN_CLASS:
+            used[k] = size[k]
+        else:
+            used[k] = _CLASS_K[k] * size["1"]
+            notes.append("size(%s) = %d x size(1): only %d bodies in the class" % (k, _CLASS_K[k], counts[k]))
+    if counts["0"] < MIN_CLASS:
+        out["void"] = "N VOID: %d no-pairs bodies, under %d" % (counts["0"], MIN_CLASS)
+        print(json.dumps(out, indent=2, sort_keys=True))
+        return 14
+    e_sept = sum(shape["share"][k] * used[k] for k in used)
+    out.update({"size_used": used, "substitutions": notes, "E_sept": e_sept, "N": e_sept / e_capture,
+                "label": "x N bounds the TRANSIENT per-body parse/serialise peak only; never headroom (C-2)"})
+    print(json.dumps(out, indent=2, sort_keys=True))
+    return 0
 
 
 # ── lookup-baseline ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -532,7 +665,10 @@ def main(argv=None) -> int:
     p.add_argument("--now", required=True)
     p.add_argument("--with-bodies", action="store_true", help="also copy provenance/follow-up (the index serves them)")
     r = sub.add_parser("run")
-    r.add_argument("--arm", required=True, choices=("all_shed", "live", "x4"))
+    r.add_argument("--arm", required=True, choices=("all_shed", "live", "x4", "xn", "sept"))
+    r.add_argument("--n", type=float, help="arm xn: the DERIVED N, written down before the run (derive-n)")
+    r.add_argument("--shape", help="arm sept: the reference day's shape JSON")
+    r.add_argument("--wiring-tolerance", type=float, default=0.01, help="arm sept: class-0 share tolerance (C-4)")
     r.add_argument("--run-root", required=True)
     r.add_argument("--bodies", required=True)
     r.add_argument("--now", required=True)
@@ -545,13 +681,16 @@ def main(argv=None) -> int:
     r.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     r.add_argument("--no-clock-freeze", action="store_true",
                    help="TEST CONTROL ONLY: proves arm all_shed goes void without the freeze")
+    d = sub.add_parser("derive-n")
+    d.add_argument("--bodies", required=True)
+    d.add_argument("--shape", required=True)
     b = sub.add_parser("lookup-baseline")
     b.add_argument("--run-root", required=True)
     b.add_argument("--bodies", required=True)
     b.add_argument("--out", required=True)
     b.add_argument("--cgroup-dir")
     a = ap.parse_args(argv)
-    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run,
+    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run, "derive-n": cmd_derive_n,
             "lookup-baseline": cmd_lookup_baseline}[a.cmd](a)
 
 

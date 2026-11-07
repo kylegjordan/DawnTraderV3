@@ -262,6 +262,99 @@ p = tool("run", "--arm", "live", "--run-root", run_root, "--bodies", BODIES, "--
          "--skip-egress-check", "--skip-memory-check", root=PRISTINE)
 check("R1 mismatched root refused", p.returncode == 2, p.stderr)
 
+# ── §6 AMENDMENT 1: derive-n, arm xn, arm sept ─────────────────────────────────────────────────────────────────────
+# A second pristine tree whose captured bodies carry a MIX of pair counts (40 with 0, 40 with 1, 5 with 2, 2 with 3),
+# under mints unrelated to the due buckets: arm sept chooses templates by class, not by mint.
+def body_k(mint, k):
+    b = body(mint)
+    pair = b["pairs"][0]
+    b["pairs"] = [dict(pair, pairAddress="PAIR%s_%d" % (mint, i)) for i in range(k)] if k else None
+    return b
+
+
+PRISTINE2 = os.path.join(WORK, "pristine2")
+shutil.copytree(PRISTINE, PRISTINE2)
+with open(os.path.join(PRISTINE2, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    for k, n in ((0, 40), (1, 40), (2, 5), (3, 2)):
+        for i in range(n):
+            m = "TPL%d_%02d" % (k, i)
+            t = json.dumps(body_k(m, k), sort_keys=True)
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+BODIES2 = os.path.join(WORK, "bodies2.sqlite")
+check("S0 index of the mixed tree", tool("index", "--pristine", PRISTINE2, "--out", BODIES2).returncode == 0)
+SHAPE = os.path.join(WORK, "shape.json")
+json.dump({"day": "2026-09-26", "share": {"0": 0.50052, "1": 0.486807, "2": 0.010978, "3+": 0.001695},
+           "alive_share": 0.454697}, open(SHAPE, "w"))
+
+print("N1 expect: derive-n -> size per class, the 2 and 3+ classes substituted (k x size(1)), N = E_sept / E_capture")
+p = tool("derive-n", "--bodies", BODIES2, "--shape", SHAPE)
+dn = json.loads(p.stdout) if p.returncode == 0 else {}
+check("N1 exit 0 with counts 40/40/5/2", p.returncode == 0 and dn.get("counts") == {"0": 40, "1": 40, "2": 5, "3+": 2},
+      p.stdout[-600:] + p.stderr[-600:])
+check("N1 the thin classes are substituted and say so", len(dn.get("substitutions", [])) == 2
+      and abs(dn["size_used"]["3+"] - 4 * dn["size_used"]["1"]) < 1e-6, str(dn.get("substitutions")))
+check("N1 N is E_sept / E_capture and carries its label", dn.get("N") and abs(dn["N"] - dn["E_sept"] / dn["E_capture"]) < 1e-9
+      and "never headroom" in dn.get("label", ""), str(dn))
+
+print("N2 expect: under 30 one-pair bodies -> N VOID (exit 14)")
+THIN = os.path.join(WORK, "thin")
+shutil.copytree(PRISTINE, THIN)
+with open(os.path.join(THIN, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    for k, n in ((0, 40), (1, 10)):
+        for i in range(n):
+            m = "THN%d_%02d" % (k, i)
+            t = json.dumps(body_k(m, k), sort_keys=True)
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+BODIES_THIN = os.path.join(WORK, "thin.sqlite")
+tool("index", "--pristine", THIN, "--out", BODIES_THIN)
+p = tool("derive-n", "--bodies", BODIES_THIN, "--shape", SHAPE)
+check("N2 exit 14, N void", p.returncode == 14 and "N VOID" in p.stdout, p.stdout[-400:])
+
+print("XN expect: arm xn with N = 6 pads five copies; served bytes ~6x the live arm's")
+run_root_xn, _ = prepare("run-xn")
+p, resn = run("xn", run_root_xn, "--n", "6")
+check("XN exit 0", p.returncode == 0, p.stdout[-400:] + p.stderr[-1200:])
+check("XN five pad copies, bytes ~6x", resn.get("pad_copies") == 5 and live_mean
+      and 5.8 <= resn.get("served_body_bytes", {}).get("mean", 0) / live_mean <= 6.2, str(resn.get("served_body_bytes")))
+check("XN fresh-parse control: parses == served", resn.get("parses") == resn.get("fanout", {}).get("served_bodies"),
+      "%s vs %s" % (resn.get("parses"), resn.get("fanout")))
+
+
+def run2(arm, run_root, *extra):
+    out = os.path.join(WORK, arm + "-" + os.path.basename(run_root) + ".json")
+    p = tool("run", "--arm", arm, "--run-root", run_root, "--bodies", BODIES2, "--now", NOW, "--out", out,
+             "--skip-memory-check", "--skip-egress-check", *extra, root=run_root)
+    return p, (json.load(open(out)) if os.path.exists(out) else {})
+
+
+print("D1 expect: arm sept -> exit 0; class-0 share near 0.50 (wiring), alive above the reference, Helius in range")
+run_root_d, _ = prepare("run-sept")
+p, resd = run2("sept", run_root_d, "--shape", SHAPE, "--wiring-tolerance", "0.15")
+sd = resd.get("sept", {})
+check("D1 exit 0", p.returncode == 0, str(resd.get("void")) + p.stderr[-1200:])
+check("D1 the alive branch ran: alive lookups and synthetic Helius calls", resd.get("loop_alive", 0) > 0
+      and 0 < resd.get("fanout", {}).get("synthetic_helius_calls", 0) <= 2 * resd["loop_alive"], str(resd.get("fanout")))
+check("D1 alive share above the reference (adverse-safe)", sd.get("alive_share", 0) >= 0.454697, str(sd))
+check("D1 the class-0 test is labelled a wiring control", "WIRING" in sd.get("class0_test", ""))
+check("D1 fresh-parse control", resd.get("parses") == resd.get("fanout", {}).get("served_bodies"))
+print("D2 expect: the same arm with a tolerance of 0.0001 -> wiring VOID (exit 13)")
+run_root_d2, _ = prepare("run-sept2")
+p, res2 = run2("sept", run_root_d2, "--shape", SHAPE, "--wiring-tolerance", "0.0001")
+check("D2 exit 13 wiring", p.returncode == 13 and "wiring" in str(res2.get("void")), str(res2.get("void")))
+print("D3 expect: a reference alive share of 0.95 -> realised alive BELOW it -> VOID (exit 13)")
+SHAPE_HI = os.path.join(WORK, "shape_hi.json")
+json.dump({"day": "x", "share": {"0": 0.50052, "1": 0.486807, "2": 0.010978, "3+": 0.001695}, "alive_share": 0.95},
+          open(SHAPE_HI, "w"))
+run_root_d3, _ = prepare("run-sept3")
+p, res3 = run2("sept", run_root_d3, "--shape", SHAPE_HI, "--wiring-tolerance", "0.15")
+check("D3 exit 13 alive below", p.returncode == 13 and "BELOW" in str(res3.get("void")), str(res3.get("void")))
+print("D4 expect: under 30 one-pair templates -> arm sept NOT RUN (exit 11)")
+run_root_d4, _ = prepare("run-sept4")
+out4 = os.path.join(WORK, "sept4.json")
+p = tool("run", "--arm", "sept", "--run-root", run_root_d4, "--bodies", BODIES_THIN, "--now", NOW, "--out", out4,
+         "--skip-memory-check", "--skip-egress-check", "--shape", SHAPE, root=run_root_d4)
+check("D4 exit 11 not run", p.returncode == 11 and "NOT RUN" in open(out4).read(), p.stdout[-300:])
+
 shutil.rmtree(WORK, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
