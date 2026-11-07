@@ -244,6 +244,18 @@ The plan:
 9. Switch the job back on and watch it for a week, including whether it keeps up.
 
 ## 4. Measurements taken (staging, read-only, 2026-11-05 18:19-18:50Z)
+- **ADD-6 (Langston, 2026-11-07, §9.4 disposition 1 — folded into this batch's sizing P-item, alongside the warn-line fit and the self-clearing actor) — the over-cap row is minted at the daily TROUGH.**
+  - `_store_size_check` has two callers at `c01d9912`: `liveness.py:289` (the hourly feed watch) and `store_watch.py:117`. **`store_watch.run()` is the only minter of `token-watch-store-over_cap`**; the feed watch mints only the feed-gap row and merely quotes the band (`feed_watch.py:81-82`, `:95`).
+  - `store_watch` samples at 06:00Z, the daily MINIMUM (after the 04:3x tier and the 05:30 off-box). The 11-06/07 series has a ~639 MB sawtooth: peak 7,296,381,905 B at 04:05Z, 6,657,551,554 B at the 06:08Z gauge read.
+  - So the peak crosses 8 GiB ~29.5 days out (~12-06), and the trough the minter reads crosses it ~15 days later (~12-21). In that fortnight the store is over its declared cap for part of every day and the over-cap row never mints. The hourly check COMPUTES `over_cap` in that window (`liveness.py:400-405`) and only logs it.
+  - **Magnitude, honestly:** the cap is a self-imposed budget (`config.py:378`, "~22 % of free space"), not a quota. Nothing refuses a write at 8 GiB, and `/` has 32,338,329,600 B free (58 % used). This is a silent budget breach, not a full disk. `liveness.py:386` calls it "the accept-side dual of the switch"; at the ref it is a detector only.
+  - **Cheapest fix, his:** mint `over_cap` from the band the hourly check already computes, so the PEAK trips it; the 06:00Z row stays the warn/standing instrument. `UNAUDITED`.
+- **Caveats on the figures above (Langston):**
+  - ~44 MB/day is ONE 23-hour delta.
+  - `moved: 1` is a file COUNT, coherent with a ~660 MB drop only because the day's raw provenance is one ~0.8 GB file.
+  - The 11-08 06:00Z ~6.70e9 is Langston's PREDICTION, not a reading.
+  - The two "today" values name different instruments: 6,656,805,640 B is the 06:05:44Z feed-watch line; 6,657,551,554 B is the 06:08:01Z gauge read.
+  - The seven tier-journal runs are root-only reads, `RULED ON REPORTED FACT` for him.
 - `df -B1 /` (22,048,088,064 B available, 72%); `free -m` (3,814 total, 2,420 available); `du -sb /var/lib/token-watch/*` (A6).
 - `ls -la state/`; `cat state/follow_up_cursor.json` (`{"last_bucket": "2026-09-30T13"}`, no `consumed_from`); `cat state/journal_cursors.json`; `stat` of every state file (A2 (i)); a `budget.json` read with `hours` omitted (A3).
 - `stat` and `wc -l dead/dead.jsonl` (258,564,193 B, 766,794 rows, mtime 09-27 16:36:04); `wc -l study/identity.jsonl` (1,883,655).
