@@ -80,6 +80,10 @@ MUTATIONS = [
                                                                   "        return True")),
     ("recall: --batch case-sensitive in the text arm", mut("dt_recall.py", '            if batch.lower() in "\\n".join(_lines(p)).lower():',
                                                            '            if batch in "\\n".join(_lines(p)):')),
+    ("recall: --batch case-sensitive in the ACTIONS arm (Langston's 31st)", mut("dt_recall.py",
+        "            if batch and batch.lower() not in r.lower():", "            if batch and batch not in r:")),
+    ("recall: the date check reduced to a Unicode-wide shape test (no reality check)", mut("dt_recall.py",
+        're.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v) and _real_date(v)', 're.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", v)')),
 ]
 
 
@@ -102,6 +106,19 @@ rc0, line0 = suite({})
 if rc0 != 0 or line0 != "0 failed":
     print("HARNESS BROKEN: the unmutated modules do not pass in the scratch layout (rc=%s, %r)" % (rc0, line0))
     sys.exit(2)
+# A mutant that is a NO-OP on some platform by construction is SKIPPED there, by name and with its reason - never
+# counted as a survivor (the exit code stays truthful on both boxes) and never a generic "expected survivor" allowance
+# that would hide a real one later (Langston P6 r4).
+PLATFORM_ONLY = {"recall: CRLF on stdout": ("nt", "outside Windows the default newline is already LF, so removing "
+                                                  "newline=\"\\n\" changes nothing")}
+kept = []
+for name, mk in MUTATIONS:
+    only = PLATFORM_ONLY.get(name)
+    if only and os.name != only[0]:
+        print("SKIPPED  %s - %s (os.name %s)" % (name, only[1], os.name))
+        continue
+    kept.append((name, mk))
+MUTATIONS = kept
 caught = crashed = 0
 for name, mk in MUTATIONS:
     try:

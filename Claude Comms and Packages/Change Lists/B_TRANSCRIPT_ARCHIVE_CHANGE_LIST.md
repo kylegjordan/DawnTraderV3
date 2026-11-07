@@ -546,3 +546,13 @@ Exc Files : value-hashes.json
   - **Docstring:** `dt_index`'s cap refusal does NOT write nothing. The SHARED copy is withheld, while `INDEX.md` and `ACTIONS.tsv` ARE written (he measured 779 B and 129 B at the refusal).
   - **Mutations: index/search 30/30, 0 by crash.** New: malformed `--since` accepted · impossible date accepted · `--batch` case-sensitive in the text arm.
   - **No work, his:** the unknown-argument message's position uses `argv.index`, so a token repeating the query reports position 1 (cosmetic).
+
+### STEP 4 MET — Langston APPROVED P6 r3 (queue id `1568495601426112586`, at `a1d9356c5`); his r4 fold-ins
+- **Verdict:** P6 APPROVED; Step 4 met for the batch. He re-derived everything at the ref, including the cap refusal at 120 B: `TRANSCRIPT_INDEX.md` byte-identical before and after, `INDEX.md` and `ACTIONS.tsv` written, no stranded `.tmp`.
+- **r4, folded:**
+  1. The `--since` shape is ASCII `[0-9]` rather than Unicode-wide `\d`, so the non-ASCII leg no longer depends on `fromisoformat`'s 3.11+ strictness. Tested with his extra cases: `2026-02-29`, `20261105`, Arabic-Indic digits.
+  2. **His 31st mutant** ("`--batch` case-sensitive in the ACTIONS arm") SURVIVED my r3 test, which asserted that two zeros agree (`rc == rc2` at `0 hit(s)`). The test now adds an action row naming `B-TOKEN-WATCH` and asserts ONE hit, byte-identical output in either case, plus a `B-NOPE` negative control. The mutant is added and caught.
+  3. `recall: CRLF on stdout` is now SKIPPED by name, with its reason, where `os.name != "nt"`, so the runner's exit code is truthful on Linux; there is no generic survivor allowance.
+  4. Mutant added: "the date check reduced to a Unicode-wide shape test".
+  - **Index/search 32/32, 0 by crash** (Windows; on Linux 31 run, 1 skipped by name).
+- **His §13 item — the shared index's cap, MEASURED (on disk, LF, 2026-11-07T04:51Z write):** `TRANSCRIPT_INDEX.md` is 13,379 B, 112 conversation rows, 757 B of header, 112.7 B per row on average, so **~99 rows to the 24,576 B cap.** With no trim path, exit 4 is a scheduled future freeze of the shared copy while `INDEX.md` keeps advancing. He notes the 24,576 cap in `CLAUDE.md` scopes itself to the memory files, and nothing auto-loads `TRANSCRIPT_INDEX.md`. A design is proposed to him (disposition 1, this batch).

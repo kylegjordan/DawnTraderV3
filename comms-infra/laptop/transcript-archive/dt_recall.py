@@ -124,7 +124,9 @@ def main(argv):
                 # a flag with no value must never silently DROP its filter (the writer's MF3 rule, P6 must-fix 1)
                 sys.stderr.write("REFUSED: %s needs a value\n" % a)
                 return 2
-            if a == "--since" and not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) and _real_date(v)):
+            # ASCII digits only: \d is Unicode-wide, and leaning on fromisoformat's ASCII-strictness (3.11+) would make
+            # this leg depend on the laptop's Python version (Langston P6 r4)
+            if a == "--since" and not (re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", v) and _real_date(v)):
                 # a malformed date compares as a string and silently voids or zeroes the filter (P6 r3 must-fix 7)
                 sys.stderr.write("REFUSED: --since needs a real date as YYYY-MM-DD, not %r\n" % v)
                 return 2

@@ -174,7 +174,7 @@ ok("must-fix 4: a search that FAILS exits 3 and says so - never the no-hits code
 os.rmdir(tsv_path)
 os.rename(tsv_path + ".aside", tsv_path)
 
-for bad in ("2026-1-5", "11-05", "yesterday", "2026-13-45", "2026-02-30"):
+for bad in ("2026-1-5", "11-05", "yesterday", "2026-13-45", "2026-02-30", "2026-02-29", "20261105", "٢٠٢٦-٠١-٠١"):
     rc, out = recall_raw("zebra", "--since", bad, "--root", root)
     ok("P6 r3 must-fix 7: --since %r is REFUSED (exit 2), never a voided or zeroed filter" % bad,
        rc == 2 and "real date" in out, (rc, out))
@@ -182,9 +182,18 @@ rc, out = recall("zebra finding", "--batch", "B-TOKEN-WATCH")
 ok("P6 r3 must-fix 8: (control) --batch as written keeps the conversation", rc == 0 and "1 hit(s)" in out, out)
 rc, out = recall("zebra finding", "--batch", "b-token-watch")
 ok("P6 r3 must-fix 8: --batch is case-blind in the TEXT arm too (same hit)", rc == 0 and "1 hit(s)" in out, out)
-rc, out = recall("zebra", "--actions", "--batch", "b-token-watch")
-rc2, out2 = recall("zebra", "--actions", "--batch", "B-TOKEN-WATCH")
-ok("P6 r3 must-fix 8: ...and the two arms agree on case (actions arm: same result either case)", rc == rc2, (rc, rc2))
+# the actions arm, on a row that HITS (Langston r4: the old check asserted that two zeros agree)
+with open(os.path.join(proj, "C--DawnTraderV3-old", SB + ".jsonl"), "a", newline="\n") as fh:
+    fh.write(raw([{"type": "assistant", "uuid": "o9", "timestamp": "2026-10-22T10:30:00Z", "message": {"content": [
+        {"type": "tool_use", "id": "t9", "name": "Bash", "input": {"command": "ls", "description": "Check the B-TOKEN-WATCH capybara store"}}]}}]))
+da.archive_all(root, proj, dt.Redactor())
+di.build(root, shared)
+rc, out = recall("capybara", "--actions", "--batch", "b-token-watch")
+rc2, out2 = recall("capybara", "--actions", "--batch", "B-TOKEN-WATCH")
+ok("P6 r3 must-fix 8: the ACTIONS arm is case-blind too - the same ONE hit either case, byte-identical output",
+   rc == 0 and "1 hit(s)" in out and out == out2, (rc, rc2, out))
+rc3, out3 = recall("capybara", "--actions", "--batch", "B-NOPE")
+ok("P6 r3 must-fix 8: ...and a batch it does not mention gives no hit (negative control)", rc3 == 1 and "0 hit(s)" in out3, out3)
 
 print("6. claim 4 by TEST, not only by construction: a phrase only inside a redacted secret is not found")
 import hmac, hashlib  # noqa: E402,E401
