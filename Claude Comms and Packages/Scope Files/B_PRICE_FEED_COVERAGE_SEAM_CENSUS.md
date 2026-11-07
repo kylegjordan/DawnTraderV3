@@ -1,0 +1,60 @@
+# B-PRICE-FEED-COVERAGE (#1222) — DECISION-SEAM-FIRST census (Step-2 evidence, Coltrane's r2 condition 6)
+
+**Read at `origin/migration/aws-supabase` = `4dc1de70d` (2026-11-08), read-only, tests excluded.** Produced by a fresh reader that was told NOT to open the keyword census (`B_PRICE_FEED_COVERAGE_AGE_CENSUS.md`), so the two enumerations are independent. REVIEWER: claim-only · "start from every decision a price can influence and trace back its price source and age bound" · 37 seam rows · re-derived n (Step 2 re-derives load-bearing rows at the ref). **Method (the reader's):** extracted the ref tree; grepped every price getter (`getCachedPrice`, `getBatch`, `getBookForFill`, `getLatestEquityTick`, `getPriceWithFallback`, `getDepthSnapshot`, `getTickerWitness`, `getTicker(`, `priceCache.get(`, `*_ticker_snap` SQL, `selectCryptoTouch` / `selectTouchPrice` / `buildLevelBasis`); listed the 53 non-test files reading any of them and assigned each call to a decision or the non-decision list; then age vocabulary; then read the decision code region by region. Live `module_constants` values were NOT read by this reader — they are in `B_PRICE_FEED_COVERAGE_LIVE_CONSTANTS_2026-11-08.md`.
+
+**Headline (independently confirms increment 0's finding and widens it):** `xstock_spot_ticker_snap` rows are stamped at receipt with no column saying update vs replay (`equity-spot-archiver.ts:338`); **the crypto recorder does the same (`crypto-spot-archiver.ts:231`)** — so every age check reading either table can pass a replayed old quote as fresh. The in-memory equity tick does not have this problem.
+
+| # | Seam: decision file:line | Class | Price source read | Age bound before use | Replayed/restamped price passes as fresh? |
+|---|---|---|---|---|---|
+| 1 | Active plan build, `signal-orchestrator.ts:2582-2590` | crypto | price-cache mark `getCachedPrice().price` (:2582) + OHLC 60m (:2572) | **NONE** on the mark; OHLC only a 5-min fetch TTL; the last candle's time never checked | yes |
+| 2 | Birth rebase onto a transactable side, `signal-orchestrator.ts:630-646` → `crypto-birth-levels.ts:152` (`no_transactable_basis`) | crypto | WS book top, else cached ticker sides (:629) | `level_basis` `level_build_max_age_ms` (boot bounds (0, 600,000], comment 60,000), `level-basis.ts:212-214`; book receipt clock; ticker venue time else receipt | book: resubscribe resets age; ticker: **yes** for REST-written sides (`price-cache.ts:469`) |
+| 3 | Crypto scanner global filter, `fx5-scanner.ts:1019-1038` | crypto | REST `getTicker()` per scan (`market-scanner.ts:552`) | implicit (fetched during the scan); no venue time | unknown |
+| 4 | xStock plan build, `eval-cycle.ts:697` | xStock | latest 15-min bar close (`scanner.ts:922-923`) | **NONE** ("No freshness GATE", `scanner.ts:569,749`); market-hours gate only | bar recency never checked |
+| 5 | xStock spread/depth filters, `eval-cycle.ts:379,382` | xStock | snap table: newest row in 30 min (`scanner.ts:647`), median depth 20 min (`:702`) | 30 / 20 min SQL windows on `captured_at` | **yes** |
+| 6 | xStock active dispatch stale-skip, `active-dispatch.ts:183-184` | xStock | `MAX(captured_at)` (`:74`) | `active_fill_max_age_ms`, receipt | **yes** — *(increment 0 fixes)* |
+| 7 | SQE at birth, `signal_quality_evaluator.ts:376-381` | both | birth plan levels | none of its own; inherits #1/#2/#4 | inherits |
+| 8 | RTB admission, `ready_to_buy_service.ts:2078` | both | stored birth levels + `currentPrice` | **NONE** (TTL removed, `:223`) | n/a |
+| 9 | RTB refresh SQE re-run, `ready_to_buy_service.ts:1103` | both | stored birth levels | **NONE** — as old as the queue entry | n/a |
+| 10 | RTB refresh geometry + maker-taker netEV, `ready_to_buy_service.ts:631-660` | both | `getCachedSpread` (`cost-metrics.ts:81`) + cost-cache spread (`cost-model.ts:240`) | spread cache 30 s else DEFAULT 0.10 %; cost-cache 300 s; hardcoded, write clock | yes |
+| 11 | RTB price retirement (crypto), `rtb-price-retirement.ts:61-62` | crypto | `selectCryptoTouch` | 2,000 ms hardcoded (`crypto-touch.ts:151`), re-checked at decide time | REST sides yes; a miss can only fail to retire |
+| 12 | RTB price retirement (xStock), `rtb-retirement-ask.ts:57-75` | xStock | in-memory equity tick | cold refused, then σ ceiling (`mark_staleness`) on last-update receipt; re-checked | **no** for replays |
+| 13 | RTB shadow-pool capture, `ready_to_buy_service.ts:1932` | both | stored levels | NONE | n/a |
+| 14 | Open depth gate (crypto), `active-execution-engine.ts:614-621` → `depth-source.ts:78` | crypto | WS book | `warmth_max_age_ms` on `bookUpdatedAt` (receipt) | resubscribe restamps, but carries current venue state |
+| 15 | Open depth gate (xStock), `active-execution-engine.ts:614-644` | xStock | newest snap row | `warmth_max_age_ms` on `captured_at` | **yes** — *(increment 0 fixes)* |
+| 16 | Consumption freshness, `active-execution-engine.ts:6431` | both | snapshot from #14/#15 | age + elapsed, same limit | inherits — *(xStock fixed by increment 0)* |
+| 17 | xStock price-liveness, `active-execution-engine.ts:6223` → `price-liveness.ts` | xStock | snap count + `last` changes in a window | `price_discovery_liveness` | partly (replays add snaps; a move needs `last` to change) |
+| 18 | Hollow-book entry refusal, `active-execution-engine.ts:676` → `book-state-tracker.ts:650` | xStock | in-memory `tick.raw` sides | **NONE** (`raw.atMs` not checked) | unknown (refuses only) |
+| 19 | Maker marketable-at-placement + taker walk + geometry refusal, `engine:6253, ~6458, 6545` | both | `_gate.snapshot.asks` | inherits #14-16 | inherits |
+| 20 | Paper pending maker entry fill (crypto), `engine:1885` → `pending-maker-logic.ts:59-67` | crypto | `selectCryptoTouch` | 8,000 ms hardcoded + quote after placement | REST sides yes |
+| 21 | Paper pending maker entry fill (xStock), `engine:1863` | xStock | guarded raw sides from the tick | σ ceiling on `tsMs` + arrival after placement | no for replays |
+| 22 | Exit mark (crypto), `engine:2936-2972` | crypto | `getPriceWithFallback(sym, 2000)`; REST fallback (`:3018`) | 2,000 ms on `observedAt`; the engine's REST fallback is EXEMPT (`price-basis.ts:177-178`) | **yes** on the REST fallback |
+| 23 | Exit trigger (crypto), `engine:3231-3266` → `exit-trigger.ts` | crypto | book top, else cached ticker bid | 2,000 ms + 0.02 spread hardcoded | REST sides yes |
+| 24 | Exit mark (xStock), `engine:2433-2512` | xStock | in-memory tick | σ ceiling; cold within `min(cold_mark_max_ms, ceiling)` | no |
+| 25 | Exit trigger bid (xStock), `engine:2889` | xStock | `tick.raw` guarded bid | inherits #24 | no for replays |
+| 26 | Paper maker exit-rest fill, `engine:3511-3533` | both | #23 / #25 bid | inherits + arrival after placement | inherits |
+| 27 | Taker close fill + witness grading, `engine:4628-4760` | both | `getDepthSnapshot`; witness `getTickerWitness` | **age does not gate the walk** (warmth judged after the fill, `:4662`); crypto witness ≤ `witness_max_age_ms`; xStock witness newest row, any age, no vouch | **yes** |
+| 28 | Operator flatten price, `active-portfolio-manager.ts:294-312` | both | `getPriceWithFallback(5000)`, else `getDepthSnapshot(allowLastTwoSided)` | **NONE effective** (any-age `last_known_good_reserve`; last two-sided xStock row any age) | **yes** |
+| 29 | Engine-stop reconcile close, `active-engine-service.ts:404` | both | `getPriceWithFallback(5000)` | **NONE** ("observed price of any age") | **yes** |
+| 30 | VTS plan build (crypto), `vts-runner.ts:5627` | crypto | `getBatch('vtsSimulation')` mark + OHLC | mark `lastUpdatedAt` < 60,000 ms (write clock) | yes |
+| 31 | VTS entry placement (crypto), `vts-runner.ts:2459` | crypto | `selectCryptoTouch` | 90,000 ms hardcoded | as #23 |
+| 32 | VTS pending maker fill (crypto), `vts-runner.ts:3836` | crypto | same | 90,000 + arrival | as #20 |
+| 33 | VTS exit trigger + booking (crypto), `vts-runner.ts:3992`; `vts-exit-booking.ts:44-50` | crypto | same; TEC mark from `getBatch` | 90,000 + 0.02 spread; mark < 60 s | as #23/#30 |
+| 34 | VTS entry ask (xStock), `eval-cycle.ts:1045` → `vts-xs-select.ts` | xStock | scanner snap row (30-min window) | σ ceiling via `vts-xs-guard.ts` on `captured_at` | **yes** |
+| 35 | VTS pending maker fill (xStock), `vts-runner.ts:3856` | xStock | snap row, 5-min window | σ ceiling + arrival | **yes** |
+| 36 | VTS exit trigger + booking (xStock), `vts-runner.ts:3982` | xStock | snap row; TEC mark = `last` | bid σ ceiling + exit spread fraction; mark only the 5-min window | **yes** |
+| 37 | VTS shadow-trade exits, `vts-runner.ts:4800/4809` | both | crypto touch / snap row | 90,000 / σ ceiling | as #33/#36 |
+
+**Not attached to any decision (the reader's list):** touch-selection / side-age telemetry (`signal-orchestrator.ts:2734,2836`, `vts-runner.ts:1767,1806`, the RTB refresh stage); the RTB refresh `validPrices` gate (stats only, `rtb-refresh-service.ts:523`); display (`getI7PriceStatus`, several routes, `vts-runner.ts:6806`, `vts-audit.ts`, `trading-state-sync.ts:296`, `metrics-core.ts:103`); alerts/monitors (`reserve-row-tripwire`, feed-integrity, feed-health, health-monitor, venue-quiet, mini-book-integrity, book-ticker-disagreement, the xStock freshness monitor, the qd-probe); feed maintenance (`I8C_STALE_THRESHOLD_MS` 30 s); `micro-execution-service.ts` `micro_trigger` (no consumer found).
+
+**Unresolved by this reader:** whether Kraken WS ticker snapshot frames carry a venue timestamp (`kraken-websocket-adapter.ts:1088`); `evaluateTECExit` internals; `orderPlacer` walk internals beyond the cold-reference branch; live constant values; whether the legacy `trading-engine.ts` / `pre-execution-validator.ts` REST path is live (not counted).
+
+---
+
+## RECONCILIATION LEADS against the keyword census (for Step 2 PART 1 — each to be re-derived at the ref, not taken from either reader)
+1. **Seam #2 vs keyword #25:** the keyword census marked `level-basis.ts:719` (60,000 ms) "RECORD only (shadow)"; this census says the birth rebase REFUSES on `level_build_max_age_ms` (`crypto-birth-levels.ts:152`). One of them is reading a different object — establish which path decides.
+2. **Not in the keyword census:** #10 the spread cache (30 s, else a DEFAULT 0.10 %) and cost-cache (300 s) feeding the RTB refresh's netEV — a silent default, a rule-15 question; #18 hollow-book refusal reading `tick.raw` with no age; #3 the FX5 scanner's REST ticker; the crypto recorder's restamp (`crypto-spot-archiver.ts:231`) behind the crypto witness.
+3. **Any-age paths:** #28 the operator flatten and #29 the engine-stop reconcile accept a price of any age — operator closes are ungated by design (scope OBJ-6), but the any-age price they BOOK is a recording question.
+4. **#22:** the engine's crypto REST fallback is exempt from the 2 s exit bound (`price-basis.ts:177-178`) — confirm against `B-PRICE-STALENESS-BOUND`'s stated design (scope says exempt producers "structurally never decide there").
+5. **#27:** the close walk is not gated by age (warmth judged after the fill) and the xStock witness has no vouch — the keyword census's #4/#28 (RECORD) agree; this is OBJ-6's exit side.
+6. **`market_data.data_freshness_window_ms` xStock 90000** (live constants) appears in neither census as a seam — its reader must be named.
+7. **The legacy `trading-engine.ts` / `pre-execution-validator.ts` REST path** — live or dead (rule 18) must be established.
