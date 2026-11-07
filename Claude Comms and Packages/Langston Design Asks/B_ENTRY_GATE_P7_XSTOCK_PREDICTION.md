@@ -29,3 +29,6 @@ A refresh pass is **priced** for a row when `readRetirementAsk` returns an admis
 - **Any of 1–5 fails:** the seed goes back to Langston with the record before any row is written. No value is chosen to fit the week afterwards.
 
 Owner CC-B. The read is by hand, from the week's `rtb_signals` record plus the P6/P7 log lines. Carrier: a dated alert minted at increment B's deploy for deploy + 7 days.
+
+## Bound on the read's own denominator (Langston, inc-B Step 4 r4, 2026-11-07)
+The hourly `PRICED_SHARE_HOUR` line this read comes off drops the hour in progress at every restart (its counts are in-memory instance state, `ready_to_buy_service.ts:1346`). **So the read, when taken, states how many restarts fell inside the week (from the staging deploy record and the process start times) and that each one cost up to one partial hour of passes** — and names those hours. The instrument is not read as if it were complete.
