@@ -4633,6 +4633,7 @@ HOME (CC-A, W40 census 2026-09-30): `B-CHUNK-ADDRESSING`, owner CC-A, placed in 
 ---
 
 ### #744 OPEN 2026-08-24 (CC-A; **Langston required a MECHANISM rather than another rule at the `B-CONDUCT-DELIVERY-HOTFIX` gate**) — ★★ **A RULE THAT PREDICTED ITS OWN BYPASS AND WAS BYPASSED ANYWAY HAS BEEN TESTED AND FAILED. ANOTHER SENTENCE IS THE SAME INSTRUMENT.**
+> ➕ **2026-11-07 (Langston, Discord `1568630745507823737`; §9.4 disposition 2, owner CC-A, no new slot): a dispatched READY-AT sha that is no longer a fast-forward of the shared branch reaches a ruling unnoticed.** Second instance in three days: B-CLOSE-WRITER-COSTS's landing dispatch at `2915e510b` was 9 commits behind the head by ruling time; earlier, the (4c) PROCEED at `564ae590c` that `044de7888` had already reverted. Backstops exist (git refuses a non-ff push; `dt-deploy:210` refuses an off-branch sha), so the cost is a wasted round plus the pull toward a force-push or a line-dropping merge. **Item for B-GATE-GUARD:** the dispatch names the branch head it is a fast-forward of, and the reviewer asserts ancestry (`git merge-base --is-ancestor`) at ruling time.
 
 **HOME: `B-GATE-GUARD` — OWNER CC-A — QUEUED, slotted after the `B-RULES` sequence. ⛔ NO DUE DATE (§9.4, Kyle 2026-08-25) — this entry READ "DUE 2026-09-05" and that was the shape he struck.** Explicitly NOT built inside the hotfix it came from (his instruction).
 
