@@ -168,6 +168,14 @@ describe('passive archive window counts — read the SELECT, not the transaction
     expect(String(warn.mock.calls[0][0])).toMatch(/^\[PassiveArchive\] 8 of 8 window counts unreadable/);
   });
 
+  it('3b. no free slot on the diagnostic pool (pg-pool acquire timeout) is LOAD, not a fault (B-DB-POOL-GUARD P5 C-5)', async () => {
+    setAll(() => new Error('timeout exceeded when trying to connect'), () => count(3000, 500));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const r = await computePassiveArchiveStatus('rolling_24h');
+    expect(r.universes.every((u) => u.ohlcRowsInWindow === null && u.countUnknownReason === 'timeout')).toBe(true);
+    expect(warn).not.toHaveBeenCalled(); // load writes no fault line
+  });
+
   it('4b. with a timeout on one side and an error on the other, the reason is the fault, not the load', async () => {
     setAll(() => TIMEOUT, () => new Error('connection terminated'));
     vi.spyOn(console, 'warn').mockImplementation(() => {});

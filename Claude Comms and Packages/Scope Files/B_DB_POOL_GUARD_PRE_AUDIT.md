@@ -25,7 +25,7 @@ change-class: architecture · **Owner:** CC-A (OLD Claude) · **Issues:** `#1239
 
 ## 2. Census
 
-**Entry points that create database connections in the app process (repo-wide, tests excluded):** exactly **three** `Pool` builders — `server/db.ts:79` (the app pool, `dawntrader_main`, max 10), `server/services/crew-coordination.ts:92` (crew board, max 2, already bounded and listened), `scripts/b-new-34b-prewarm-snapshot.ts:259` (weekend prewarm, max 1, run in-process by the session-lifecycle controller). Pinned by the census test in `b-db-pool-guard.test.ts` (the list is its own positive control). `server/scripts/*` jobs use their own `Client` and run from cron, outside the app process.
+**Entry points that create database connections in the app process (repo-wide, tests excluded):** exactly **three** `Pool` builders *(FOUR since P5, `2de102383`: `server/db.ts` also builds the diagnostic pool `dawntrader_diag`, max 4 — the census fence checks every config per file)* — `server/db.ts:79` (the app pool, `dawntrader_main`, max 10), `server/services/crew-coordination.ts:92` (crew board, max 2, already bounded and listened), `scripts/b-new-34b-prewarm-snapshot.ts:259` (weekend prewarm, max 1, run in-process by the session-lifecycle controller). Pinned by the census test in `b-db-pool-guard.test.ts` (the list is its own positive control). `server/scripts/*` jobs use their own `Client` and run from cron, outside the app process.
 
 **Other `Pool` builders outside the app process:** `scripts/*` one-off tools (`b-1-5-universe-audit`, `b-phase-a2-backfill`, `b4-dbs-15m-recompute`) build a `Pool` and nothing in `server/` imports them; `server/scripts/*` cron jobs build `Client`s and none of those files is imported by app code (Langston's second-route census). The prewarm builder is `scripts/b-new-34b-prewarm-snapshot.ts:260` at the ref.
 
@@ -314,3 +314,25 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
   - Two panel suites' `db.js` mocks gain `diagDb` and `DIAG_POOL_MAX`.
   - Mutations, each confirmed present: M7 (`timedOut` removed), M8 (pool 2), M9 (the second pool's server bound 40 s), M10 (the panel back on the main pool) — each fails its test.
   - Full suite: the same 11 local-only failing files as before, by file-list diff; tsc 324.
+
+### AMENDMENT inc 3c r3 (2026-11-07, CC-A) — Langston's Step-4 CHANGES on `2de102383` folded (Discord `1568751619972010025`)
+- **C-4, reconciled by Langston:** his 100 is WITHDRAWN. It was the crypto screener's `universeSize` top-N cap (`[REB2.9C][FX5][CycleStart]`, `kraken.ts:734`), which shares the field name; 473 is the probe's live universe.
+  - The universe is NOT static: `XSTOCK_SPOT_SYMBOLS` is replaced on each daily discovery load (`universe-service.ts:128`; historically 260 / 489 / 473).
+  - The headroom is therefore stated, not asserted: max 64 s × 2 ≈ 128 s against the 300 s cadence, about 2.3×, and it halves if the universe doubles. The code comment says this.
+- **C-5 (required):** `safeCount` now books pg-pool's acquire timeout as LOAD — `isAcquireTimeout(err)` → `unknownCount('timeout')`, no fault line. Before this it fell to `error` and into `countFaults`, inverting the distinction the comment above it declares load-bearing. It was unreachable on the old 10-slot / 10 s pool, and it is the steady state on 4 slots / 5 s. Test 3b in `b-ohlc-frame-guard-archive-counts.test.ts`; mutation M11 (branch disabled) fails it.
+- **C-6 (required):** the `db.ts` comment is narrowed to the two heavy panels and NAMES the two that stay on `dawntrader_main`, so a responder is not told to stop looking at the main pool while the dashboard is open.
+- **C-7 — the census rows owed for the Drift Dashboard's other two panels (OBJ-6 "every other candidate is decided per caller"):**
+
+| caller | reads | measured | decision |
+|---|---|---|---|
+| `computeAblationComparison` (`drift-dashboard-aggregator.ts:490`, route `/api/analytics/ablation-comparison`) | `regime_factor_alternates` | **No hold measured:** nginx shows 1 request in two weeks (2026-11-04 18:02:16, status 200), before the minute-line census window (11-05 08:09 onward); the census itself has 0 slow minutes for the table (control: `signal_eval_archive` found in the same run). Table: ~55,879 rows, 104 MB, indexed on `(asset_class, evaluated_at)`, `(pair_symbol, evaluated_at)`, `(factor_name, evaluated_at)` | **STAYS on `dawntrader_main`** — small, indexed, requested about once a fortnight; moving it would add a connection to the diagnostic pool's peak (the page loads every panel at once: 1 + 3 + 2 = 6 > 4), turning these into fail-fast acquire timeouts |
+| `computeFactorCalibration` (`:1189`, routes `/api/analytics/factor-calibration` and `/api/xstocks/factor-calibration`) | `regime_factor_alternates` | the same: 1 nginx request (11-04 18:02:09, 200), none in the census window | **STAYS**, same reasons |
+
+  - **The honest limit:** "small and indexed" is a size argument, not a measured hold. Their first in-window load is the evidence that would test it, and the main pool's minute line will name the family if it is ever slow.
+  - Also seen in that two-week nginx sample: both `data-archive-status` requests ended **499** (the client gave up) at 18:02:35 and 18:03:07 on 11-04 — the heavy panel this increment moves and time-boxes. A fact, not a new finding: it is `#1037`'s subject (row 119, CC-B).
+- **Cheap takes:**
+  - (a) A skipped qd-probe fire now logs a NAMED line (`_cronTask.on('execution:overlap', …)`; node-cron's own warning names no task, and a skipped fire writes no audit row). Fenced; M13 fails it.
+  - (b) The C-1 test gains a non-timeout failure case; M12 (timedOut narrowed to timeouts) fails it.
+  - (c) The tautological disk fan-out `throw` is removed; the coupling is the named constant plus the derived-peak fence.
+  - (d) The "three `Pool` builders" prose above is corrected in place.
+- **Note recorded (Langston):** both panel suites alias `db` and `diagDb` to one mock object, so they are pool-blind by construction. They may not be read green as pool evidence; M10 and the P5 file's call counts are the pool evidence.

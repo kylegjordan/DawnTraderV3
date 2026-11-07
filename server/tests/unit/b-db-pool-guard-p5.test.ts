@@ -9,8 +9,9 @@ import path from 'node:path';
 const ROOT = path.join(__dirname, '../../..');
 const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
+const failWith = vi.hoisted(() => ({ msg: 'canceling statement due to statement timeout' }));
 vi.mock('../../db.js', () => ({
-  diagDb: { execute: vi.fn(async () => { throw new Error('canceling statement due to statement timeout'); }) },
+  diagDb: { execute: vi.fn(async () => { throw new Error(failWith.msg); }) },
   DIAG_POOL_MAX: 4,
   db: { execute: vi.fn(async () => { throw new Error('the MAIN pool must not be used by this panel'); }) },
 }));
@@ -32,6 +33,16 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     for (const t of r.tables) expect(t.timedOut, t.name).toBe(true);
     expect((db as unknown as { diagDb: { execute: { mock: { calls: unknown[] } } } }).diagDb.execute.mock.calls.length).toBe(5);
     expect((db as unknown as { db: { execute: { mock: { calls: unknown[] } } } }).db.execute.mock.calls.length).toBe(0);
+  });
+
+  it('ANY failure sets timedOut — a non-timeout fault too, not only a statement timeout (Langston take (b))', async () => {
+    failWith.msg = 'relation "pair_scan_archive" does not exist';
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+    const r = await computeDataArchiveStatus('rolling_24h' as never);
+    spy.mockRestore();
+    failWith.msg = 'canceling statement due to statement timeout';
+    for (const t of r.tables) expect(t.timedOut, t.name).toBe(true);
   });
 });
 
@@ -70,6 +81,8 @@ describe('P5 — wiring and sizing fences', () => {
     expect(probe).toMatch(/const SNAP_QUERY_CONCURRENCY = 4;/);
     expect(probe).toMatch(/import \{ db \} from '\.\.\/\.\.\/db\.js';/);
     expect(read('server/services/xstock-qd-probe-cron.ts')).toMatch(/\{ timezone: 'UTC', noOverlap: true \}/);
+    // a skipped fire leaves a NAMED line (node-cron's own warning names no task)
+    expect(read('server/services/xstock-qd-probe-cron.ts')).toMatch(/_cronTask\.on\('execution:overlap'[\s\S]{0,200}fire SKIPPED/);
   });
 
   it('the stage-attrition refresher, cache and route are gone (P5-4, rule 18) and archived', () => {

@@ -136,8 +136,12 @@ console.log(
 );
 
 // ─── B-DB-POOL-GUARD P5 / OBJ-6 (#1239, 2026-11-07): the DIAGNOSTIC pool ───────────────────────────────────────
-// Heavy dashboard reads (the Drift Dashboard's data-archive and passive-archive panels) run here, never on
-// `dawntrader_main`, so an open dashboard cannot hold the slots the trading pipeline needs. Same server/client
+// The Drift Dashboard's two HEAVY panels (data-archive status and passive-archive status — whole-table and window
+// counts over the archive tables) run here, never on `dawntrader_main`, so those two cannot hold the trading
+// pipeline's slots. ⚠️ NOT the whole dashboard: its ablation and factor-calibration panels (`computeAblationComparison`,
+// `computeFactorCalibration`, `drift-dashboard-aggregator.ts`) STAY on `dawntrader_main` by decision — they read
+// `regime_factor_alternates`, ~56k rows / 104 MB, indexed on its time column, and moving them would push the page's
+// peak past this pool's size (pre-audit inc 3c r3, census rows). Same server/client
 // statement bounds as the main pool (the census fence in b-db-pool-guard.test.ts checks every config in this file);
 // a SHORT acquire wait, so a busy dashboard fails fast instead of queueing. Size (Langston, P5 ruling): 4 =
 // the passive panel's count workers (DIAG_POOL_MAX - 1) + the data-archive panel's one serial reader; the passive

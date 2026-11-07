@@ -100,6 +100,11 @@ export async function registerXstockQdProbeCron(): Promise<void> {
     // node-cron (4.2.1 `noOverlap`), so the burst cap cannot be doubled by two overlapping runs.
     { timezone: 'UTC', noOverlap: true },
   );
+  // B-DB-POOL-GUARD P5 (Langston take (a)): node-cron's own overlap warning names no task and a skipped fire writes no
+  // audit row, so without this a halved capture rate would look like nothing happened.
+  _cronTask.on('execution:overlap', () => {
+    console.warn(`[P19-B5c][qd-probe][cron] fire SKIPPED at ${new Date().toISOString()} — the previous fire is still running (noOverlap); no capture this tick`);
+  });
   console.log(
     `[P19-B5c][qd-probe][cron] registered (expr=${expression}, freshness_ceiling_ms=${config.freshnessCeilingMs})`,
   );

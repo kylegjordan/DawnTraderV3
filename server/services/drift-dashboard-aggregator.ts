@@ -26,6 +26,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
+import { isAcquireTimeout } from '../db-pool-instrument.js';
 import type { RecorderConnectionLiveness } from './passive-archive/recorder-connection.js';
 // B64a: regime names imported from the canonical SSOT to satisfy the
 // regime_mapping_integrity test ("no hardcoded regime strings outside config/tests").
@@ -991,6 +992,13 @@ export async function computePassiveArchiveStatus(
       if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
         return unknownCount('timeout');
       }
+      // B-DB-POOL-GUARD P5 C-5 (Langston, required): no free slot in the diagnostic pool within its 5 s acquire limit
+      // is LOAD — pg-pool's bare 'timeout exceeded when trying to connect', which drizzle's transaction propagates
+      // unwrapped from its connect(). Unreachable on the old 10-slot / 10 s main pool; the expected steady state on the
+      // 4-slot diagnostic pool when both panels refresh together. Not a fault, so not pushed into countFaults.
+      if (isAcquireTimeout(err)) {
+        return unknownCount('timeout');
+      }
       countFaults.push(msg);
       return unknownCount('error');
     }
@@ -1100,9 +1108,8 @@ export async function computePassiveArchiveStatus(
     }
 
     // B70.2 — disk usage = sum of OHLC + ticker partition sizes for this universe
-    const diskParents = [cfg.ohlcTable, cfg.tickerTable];
-    if (diskParents.length !== DISK_PARENT_FANOUT) throw new Error('[PassiveArchive] disk fan-out differs from DISK_PARENT_FANOUT');
-    const [ohlcBytes, tickerBytes] = await Promise.all(diskParents.map((t) => diskBytesForParent(t)));
+    // DISK_PARENT_FANOUT names this pair's width for the pool-size fence (b-db-pool-guard-p5.test.ts).
+    const [ohlcBytes, tickerBytes] = await Promise.all([cfg.ohlcTable, cfg.tickerTable].map((t) => diskBytesForParent(t)));
     const universeBytes = ohlcBytes + tickerBytes;
     passiveTotalDiskBytes += universeBytes;
 
