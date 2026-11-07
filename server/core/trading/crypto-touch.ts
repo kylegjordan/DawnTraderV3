@@ -251,6 +251,9 @@ export function selectCryptoTouch(
             arrivalMs: book.updatedAtMs,
             clockBasis: 'receipt',
             producer: 'kraken_ws_book',
+            // KD-19 P4: the book's top size is exact; the walk itself reads `acceptedBookBids` (every level).
+            bidQty: book.bids.length > 0 && book.bids[0].qty > 0 ? book.bids[0].qty : null,
+            sizeBasis: book.bids.length > 0 && book.bids[0].qty > 0 ? 'exact' : null,
           }
         : null,
       bookEligible: true,

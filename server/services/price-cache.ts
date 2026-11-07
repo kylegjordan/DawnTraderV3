@@ -118,6 +118,45 @@ export interface CachedPrice {
    * stopped stating sides and they only grow older (Langston Step-4).
    */
   sidesWriter: SidesWriter | null;
+  /**
+   * ⛔⛔ KD-19 P3 (`B-PRICE-SIDE-BY-JOB`) — THE TOP-OF-BOOK SIZE, BOUND TO THE SIDES IT WAS STATED WITH. The venue sends the
+   * size on the same frame or response as the sides (`b[1]` on the WS ticker, `b[2]` on the REST ticker) and every writer
+   * dropped it — the sides' own defect (`4ca371a42`), one field over. It moves ONLY with a stated pair, exactly like
+   * `sidesCapturedAtMs` and `sidesWriter`: a write that states sides WITHOUT a size stores `null` (an old size is never kept
+   * beside new prices — the W-3 rule); a write that states no sides carries the row's sizes with its sides.
+   * `null` = no size was stated with these sides. Read by the VTS exit walk (`vts-exit-booking.ts`) through the touch ladder.
+   */
+  sideSizes: SideSizes | null;
+}
+
+/**
+ * KD-19 P3 — WHAT KIND OF SIZE a writer stated. `exact` = the venue's decimal size (the WS v2 ticker; the WS book's top
+ * level). `rest_rounded_up` = the REST ticker's `lot volume`, which Kraken CEILS to a whole base unit (measured 2026-11-07:
+ * XBT `1.000` against a Depth top of 0.277 at the same price) — an upper bound overstated by less than one unit, never exact.
+ */
+export type SizeBasis = 'exact' | 'rest_rounded_up';
+
+/** KD-19 P3 — the top-of-book sizes stated with a pair of sides. A side's size is `null` when the writer did not state it. */
+export interface SideSizes {
+  bidQty: number | null;
+  askQty: number | null;
+  basis: SizeBasis;
+}
+
+/**
+ * KD-19 P3 (Langston Step-2 BLOCKER-2) — a STATED size is finite and > 0. Anything else is "not stated" (`null`), NEVER a
+ * size of zero: a 0-qty level is skipped by the walk, which then prices the whole order beyond the book at the penalty — an
+ * invented dearer price on a frame that merely did not carry a size (`kraken-v2-translator.ts` defaults a missing size to 0).
+ */
+export function statedSize(x: unknown): number | null {
+  const n = typeof x === 'number' ? x : typeof x === 'string' ? Number(x) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** KD-19 P3 — the sizes object for a writer, or `null` when it stated neither side's size. */
+export function sideSizesOf(bidQty: unknown, askQty: unknown, basis: SizeBasis): SideSizes | null {
+  const b = statedSize(bidQty), a = statedSize(askQty);
+  return b === null && a === null ? null : { bidQty: b, askQty: a, basis };
 }
 
 /** P-7k: which quantity a cached `price` is. */
@@ -142,6 +181,8 @@ export interface StatedSides {
   ask: number;
   capturedAtMs: number;
   writer: SidesWriter;
+  /** KD-19 P3: the top sizes stated WITH these sides, or `null` when the writer stated none. REQUIRED — a writer must say. */
+  sizes: SideSizes | null;
 }
 
 /** The REST ticker fields the cache's own REST sites read (structural; `KrakenTicker` is not exported). */
@@ -428,6 +469,8 @@ class UnifiedPriceCache {
       sidesCapturedAtMs: sides ? Date.now() : (existing?.sidesCapturedAtMs ?? null),
       venueObservedAtMs: sides ? null : (existing?.venueObservedAtMs ?? null),
       sidesWriter: sides ? writer : (existing?.sidesWriter ?? null),
+      // KD-19 P3: REST `b[2]`/`a[2]` (lot volume, CEILED to a whole base unit by Kraken) — moves only with the stated pair.
+      sideSizes: sides ? sideSizesOf(ticker.b?.[2], ticker.a?.[2], 'rest_rounded_up') : (existing?.sideSizes ?? null),
       // ⛔ REST path — NOT a push. Carries forward, never advances.
       lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
       // P-7k (F1): these sites store the raw REST `c[0]` as `price`, the venue's LAST TRADE, and the same number is this
@@ -778,6 +821,11 @@ class UnifiedPriceCache {
      * outside tsc, omitted) writer are NOT stored (Step-4 C2).
      */
     sidesWriter: SidesWriter | null,
+    /**
+     * KD-19 P3: the top sizes stated WITH these sides (`null` = none stated). REQUIRED, like `sidesWriter`. Stored only with
+     * a stated pair; with no stated pair the row's sizes are carried with its sides.
+     */
+    sideSizes: SideSizes | null,
   ): void {
     const now = Date.now();
     const existing = this.cache.get(symbol);
@@ -807,6 +855,8 @@ class UnifiedPriceCache {
       venueObservedAtMs: _stated ? venueObservedAtMs : (existing?.venueObservedAtMs ?? null),
       // `3n.l` OBJ-10: moves with the sides it names, never on a tick that stated none. P11: the caller names the channel.
       sidesWriter: _stated ? sidesWriter : (existing?.sidesWriter ?? null),
+      // KD-19 P3: moves with the sides it was stated with; `?? null` because a test file outside tsc can omit the argument.
+      sideSizes: _stated ? (sideSizes ?? null) : (existing?.sideSizes ?? null),
       // ⭐ ADVANCED HERE AND NOWHERE ELSE — this is the only writer fed by a venue PUSH. Every
       // other writer carries the previous value forward untouched, which is what makes a silent
       // socket death visible instead of masked by the REST poller.
@@ -858,6 +908,8 @@ class UnifiedPriceCache {
       sidesCapturedAtMs: stated ? stated.capturedAtMs : (existing?.sidesCapturedAtMs ?? null),
       venueObservedAtMs: stated ? null : (existing?.venueObservedAtMs ?? null),
       sidesWriter: stated ? stated.writer : (existing?.sidesWriter ?? null),
+      // KD-19 P3: moves with the stated sides (`?? null`: a test file outside tsc can omit `sizes`).
+      sideSizes: stated ? (stated.sizes ?? null) : (existing?.sideSizes ?? null),
       lastWsMessageAtMs: existing?.lastWsMessageAtMs ?? null,
       // P-7k: the caller decides the kind from the REST sides it read (`markKindOf`), and passes REST `c[0]` as the print.
       markKind: markKind ?? null,

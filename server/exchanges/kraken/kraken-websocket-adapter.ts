@@ -20,7 +20,7 @@ import {
 } from '../../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from '../../services/price-trace-service.js';
 import { krakenAssetPairsService } from '../../markets/kraken-asset-pairs-service.js';
-import { priceCache } from '../../services/price-cache.js';
+import { priceCache, sideSizesOf, type SideSizes } from '../../services/price-cache.js';
 import axios from 'axios';
 import { translateV2ToV1, isValidV2TickerUpdate, KrakenV2TickerUpdate } from '../../services/market-data/kraken-v2-translator.js';
 import { observeBookTickerPair, buildBookTickerAlertCopy, BOOK_TICKER_ALERT_ARMED, BOOK_TICKER_FIRE_CONSECUTIVE } from '../../services/market-data/book-ticker-disagreement.js'; // B-PRICE-SIDE-BY-JOB r5 P-7e
@@ -171,6 +171,12 @@ export interface PriceTickEvent {
    * handler saw no trade print (a book update carries none).
    */
   lastTradePrice: number | null;
+  /**
+   * KD-19 P3 — the top-of-book sizes stated WITH `bid`/`ask` on this frame, or `null` when none was stated. REQUIRED, like
+   * the sides: a producer that does not say cannot compile. Read from the venue's RAW frame, never from a translated
+   * default (`kraken-v2-translator.ts` writes a missing size as `0`; Langston Step-2 BLOCKER-2).
+   */
+  sideSizes: SideSizes | null;
   traceId?: string;
 }
 
@@ -1108,6 +1114,9 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         venueObservedAtMs: _venueTs,
         // P-7i: the frame's own `last`, carried from the translator — NOT `lastPrice`, which is the midpoint (#952).
         lastTradePrice: safeData.lastTrade,
+        // KD-19 P3: the RAW frame's sizes (exact decimals on the v2 ticker), only with a stated pair; never `b[1]`, whose
+        // missing size the translator has already turned into "0" (BLOCKER-2).
+        sideSizes: _statedSides ? sideSizesOf((update as any)?.bid_qty, (update as any)?.ask_qty, 'exact') : null,
       });
       this.priceTickCount++;
 
@@ -1413,6 +1422,8 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         // dates the UPDATE that produced this top-of-book, which is the finest grain that exists.
         venueObservedAtMs: _bookVenueTs,
         lastTradePrice: null, // P-7i: a book update carries no trade print
+        // KD-19 P3: the book's own top-level sizes, exact (the same levels `bestBid`/`bestAsk` were taken from).
+        sideSizes: sideSizesOf(book.bids.get(bestBid), book.asks.get(bestAsk), 'exact'),
       });
       this.priceTickCount++;
       
@@ -1559,12 +1570,13 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         venueObservedAtMs: null, traceId,
         // P-7i: on this raw v1 path (no translator) `c[0]` IS the venue's last trade, so the print is `lastPrice` itself.
         lastTradePrice: Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null,
+        sideSizes: null, // KD-19 P3: this unreachable v1 path states no sides, so it states no sizes
       });
       this.priceTickCount++;
       
       // Phase 8.8.4-IA-PRICE-CACHE: Update centralized price cache for active trades
       // B-PRICE-SIDE-BY-JOB r5 P-7k: unreachable (#742), stated anyway: on this raw v1 path `c[0]` is the last trade.
-      priceCache.updateFromWebSocket(internalSymbol, lastPrice, null, null, null, null, 'last', Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null, null);
+      priceCache.updateFromWebSocket(internalSymbol, lastPrice, null, null, null, null, 'last', Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : null, null, null);
       
       // Phase 8.8.3-I6: Diagnostic logging to confirm WS -> cache pipeline
       console.log(`[I6][WS_CACHE_UPDATE] symbol=${internalSymbol} price=${lastPrice} timestamp=${new Date().toISOString()}`);

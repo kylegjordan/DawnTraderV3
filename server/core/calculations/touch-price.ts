@@ -51,7 +51,16 @@ export interface TouchLegInput {
   arrivalMs: number | null | undefined;
   clockBasis: ClockBasis;
   producer: string;
+  /**
+   * KD-19 P3/P4 — the size stated at this leg's bid, and what kind of size it is. Optional on the INPUT (a leg with no
+   * size is legal and common); always present (possibly `null`) on the accepted `TouchQuote`. Never a size of 0.
+   */
+  bidQty?: number | null;
+  sizeBasis?: TouchSizeBasis | null;
 }
+
+/** KD-19 P3 — `exact` (venue decimals: WS ticker, WS book) or `rest_rounded_up` (REST lot volume, ceiled to a whole unit). */
+export type TouchSizeBasis = 'exact' | 'rest_rounded_up';
 
 export interface TouchPolicy {
   /**
@@ -74,6 +83,9 @@ export interface TouchQuote {
   quoteArrivedAtMs: number | null;
   clockBasis: ClockBasis;
   producer: string;
+  /** KD-19 P4 — the accepted leg's bid size (`null` = not stated) and its kind. Read by the VTS exit walk. */
+  bidQty: number | null;
+  sizeBasis: TouchSizeBasis | null;
 }
 
 /**
@@ -139,6 +151,7 @@ export function selectTouchPrice(
           bid: b.basis.bid, ask: b.basis.ask, basis: 'book_top', ageMs: b.basis.ageMs,
           quoteArrivedAtMs: input.book.arrivalMs ?? null,
           clockBasis: input.book.clockBasis, producer: input.book.producer,
+          bidQty: input.book.bidQty ?? null, sizeBasis: input.book.sizeBasis ?? null,
         },
         bookRefusal: null,
       };
@@ -158,6 +171,7 @@ export function selectTouchPrice(
         bid: t.basis.bid, ask: t.basis.ask, basis: input.tickerBasis, ageMs: t.basis.ageMs,
         quoteArrivedAtMs: input.ticker.arrivalMs ?? null,
         clockBasis: input.ticker.clockBasis, producer: input.ticker.producer,
+        bidQty: input.ticker.bidQty ?? null, sizeBasis: input.ticker.sizeBasis ?? null,
       },
       bookRefusal,
     };
@@ -196,6 +210,8 @@ export interface CachedQuoteSides {
   sidesCapturedAtMs: number | null | undefined;
   /** `3n.l` increment 2, P11: the writer of the SIDES (`price-cache.ts` `SidesWriter`), which labels this leg. */
   sidesWriter: string | null | undefined;
+  /** KD-19 P3: the top sizes stated with these sides (`price-cache.ts` `SideSizes`, structural here — this module is pure). */
+  sideSizes?: { bidQty: number | null; askQty: number | null; basis: TouchSizeBasis } | null;
 }
 
 export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined): TouchLegInput | null {
@@ -220,6 +236,9 @@ export function tickerLegFromCachedQuote(q: CachedQuoteSides | null | undefined)
     // `sidesWriter: null` and refuses as `locked_or_synthetic_book` before its label is ever read.
     // ⛔ The series is NOT continuous across this change: a reading before it and one after it label different things.
     producer: q.sidesWriter ?? 'unknown',
+    // KD-19 P3: the size moves with the sides it was stated with (the cache guarantees it); `null` when none was stated.
+    bidQty: q.sideSizes?.bidQty ?? null,
+    sizeBasis: q.sideSizes ? q.sideSizes.basis : null,
   };
 }
 

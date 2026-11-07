@@ -1,7 +1,7 @@
 import { contextBridge } from './context-bridge';
 import { normalizeToInternalSymbol } from '../markets/kraken-symbol-resolver.js';
 import { priceTraceService } from './price-trace-service';
-import { priceCache, type SidesWriter } from './price-cache.js';
+import { priceCache, sideSizesOf, type SidesWriter, type SideSizes } from './price-cache.js';
 import { pairwiseStatedSides } from './market-data/stated-sides.js';
 import { markKindOfProducer } from './market-data/price-basis.js';
 import { restRateLimiter } from './market-data/rest-rate-limiter.js';
@@ -958,7 +958,9 @@ export class LivePricingAdapter {
       // own sides and stamps (`parseFloat(x || '0')` above turns a missing side into `0`, never `null`).
       const _restSides = pairwiseStatedSides(bid, ask);
       priceCache.updateFromRest(normalized, midpoint, _restKind, _lastTradeOrNull,
-        _restSides ? { bid: _restSides.bid, ask: _restSides.ask, capturedAtMs: Date.now(), writer: 'rest_adapter' } : null);
+        _restSides ? { bid: _restSides.bid, ask: _restSides.ask, capturedAtMs: Date.now(), writer: 'rest_adapter',
+          // KD-19 P3: REST `lot volume`, CEILED to a whole base unit by Kraken — labelled, never read as exact.
+          sizes: sideSizesOf(tickerData?.b?.[2], tickerData?.a?.[2], 'rest_rounded_up') } : null);
       
       // A real venue read: `observedAt` is genuinely now, and it is the ONLY return here that
       // may say so.
@@ -1180,6 +1182,8 @@ export class LivePricingAdapter {
      * time, so a carried print never wears a new stamp.
      */
     lastTradePrice: number | null,
+    /** KD-19 P3: the top sizes stated with `bid`/`ask`, or `null`. REQUIRED, like the sides. Stored only with a stated pair. */
+    sideSizes: SideSizes | null,
     traceId?: string,
   ): void {
     const pipelineStart = Date.now(); // Directive 9.0.C: Track pipeline time
@@ -1241,10 +1245,10 @@ export class LivePricingAdapter {
       const _paired = pairwiseStatedSides(bid, ask);
       priceCache.updateFromRest(normalized, price, markKindOfProducer(producer), lastTradePrice ?? null,
         _paired && _writer !== null && sidesCapturedAtMs !== null
-          ? { bid: _paired.bid, ask: _paired.ask, capturedAtMs: sidesCapturedAtMs, writer: _writer }
+          ? { bid: _paired.bid, ask: _paired.ask, capturedAtMs: sidesCapturedAtMs, writer: _writer, sizes: sideSizes ?? null }
           : null);
     } else {
-      priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null, _writer);
+      priceCache.updateFromWebSocket(normalized, price, bid, ask, sidesCapturedAtMs, venueObservedAtMs, markKindOfProducer(producer), lastTradePrice ?? null, _writer, sideSizes ?? null);
     }
     
     // B-DISK-FILE-TIERING OBJ-10 (#1240): three per-tick diagnostic lines were removed here ([I7-WS-D][CACHE_WRITE],
@@ -1589,7 +1593,7 @@ krakenWebSocketAdapter.on('priceTick', (evt: PriceTickEvent) => {
     if (_p !== null) {
       livePricingAdapter.updateCache(
         evt.symbol, evt.price, evt.source, _p, evt.bid, evt.ask, evt.sidesCapturedAtMs,
-        evt.venueObservedAtMs, evt.lastTradePrice, evt.traceId,
+        evt.venueObservedAtMs, evt.lastTradePrice, evt.sideSizes ?? null, evt.traceId,
       );
     }
   } catch (err) {

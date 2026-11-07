@@ -2776,7 +2776,7 @@ export class ActiveExecutionEngine {
           // ⛔ NULL SIDES, STATED NOT OMITTED: the equities tick carries a mark, not a book side.
           // Saying so keeps `sidesCapturedAtMs` honest rather than inheriting the mark's freshness.
           // P-7i: the equities frame's own last trade, when the archiver parsed one (`EquityTick.raw.last`).
-          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer, null, null, null, null, (_eqTick.raw?.last ?? 0) > 0 ? _eqTick.raw!.last : null);
+          livePricingAdapter.updateCache(normalizeToInternalSymbol(position.symbol), currentPrice, 'kraken_equities_ws', priceProducer, null, null, null, null, (_eqTick.raw?.last ?? 0) > 0 ? _eqTick.raw!.last : null, null);
         } else {
 
         // Phase 8.8.3-I7-WS-D (D5): Use WebSocket cache FIRST with 2-second stale threshold
@@ -2933,7 +2933,7 @@ export class ActiveExecutionEngine {
             const internalSymbol = normalizeToInternalSymbol(position.symbol);
             // ⛔ NULL SIDES, STATED NOT OMITTED — the REST engine fallback resolves a mark only.
             // P-7i: the REST `c[0]` print from the same response, kept beside the midpoint.
-            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer, null, null, null, null, Number.isFinite(_rest.lastTrade) && _rest.lastTrade > 0 ? _rest.lastTrade : null);
+            livePricingAdapter.updateCache(internalSymbol, currentPrice, 'kraken_rest', priceProducer, null, null, null, null, Number.isFinite(_rest.lastTrade) && _rest.lastTrade > 0 ? _rest.lastTrade : null, null);
             console.log(`[I7][REST_BROADCAST] symbol=${internalSymbol} price=${currentPrice}`);
           } catch (krakenError) {
             // Throws from outside the request itself (pair resolution, parsing, the cache broadcast), classified the
