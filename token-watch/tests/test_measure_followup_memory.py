@@ -125,9 +125,15 @@ with open(os.path.join(MB, "provenance", "follow-up", "2026-10-01.jsonl"), "w", 
 p = tool("index", "--pristine", MB, "--out", os.path.join(WORK, "mb.sqlite"))
 rep = json.loads(p.stdout) if p.returncode == 0 else {}
 import sqlite3  # noqa: E402
-stored = sqlite3.connect(os.path.join(WORK, "mb.sqlite")).execute("SELECT bytes FROM bodies").fetchone()[0] if rep else None
-check("I2 bytes are UTF-8 bytes, and the divergence is counted", rep.get("bytes_field_vs_utf8_divergent") == 1
-      and stored == len(mb_body.encode("utf-8")) and stored > len(mb_body), "%s stored=%s chars=%d" % (rep, stored, len(mb_body)))
+row = sqlite3.connect(os.path.join(WORK, "mb.sqlite")).execute("SELECT body, bytes FROM bodies").fetchone() if rep else (None, None)
+venue = json.dumps(json.loads(mb_body), separators=(",", ":"), ensure_ascii=False)   # the venue encoding, built here
+stored = row[1]
+check("I2 bytes are UTF-8 bytes of the VENUE encoding, and the field divergence is counted",
+      rep.get("bytes_field_vs_utf8_divergent") == 1 and row[0] == venue
+      and stored == len(venue.encode("utf-8")) and stored > len(venue), "%s stored=%s chars=%d" % (rep, stored, len(venue)))
+check("I2 the re-encoding is reported: stored-form total above venue-form total",
+      rep.get("stored_encoding_bytes_total", 0) == len(mb_body.encode("utf-8")) > rep.get("venue_encoding_bytes_total", 0) == stored,
+      str(rep))
 
 
 def prepare(name, *extra):
@@ -446,11 +452,32 @@ print("SY expect: _synthesise(k=4) returns TEXT holding four pairs with distinct
 # nested objects across pairs (dict() is shallow), and json.loads of ANY text returns independent objects, so a
 # no-shared-object assertion on the parsed result cannot fail. The cure is that the function returns TEXT; the
 # live fence on a shared graph is the C-6 control, parses == served. Do not cite SY as proof of a deep copy.
-tmpl_text = json.dumps(body_k("SYNTH", 1), sort_keys=True)
+# The template is a COMPACT, multibyte body written here as a literal, the venue's form (Langston, Step 4,
+# 2026-11-07): a fixture written with json.dumps(sort_keys=True) would put numerator and denominator in the same
+# inflated encoding and re-ratify the bias. Every other fixture in this file is that inflated form, which is why
+# this one is a literal.
+tmpl_text = ('{"schemaVersion":"1.0.0","pairs":[{"chainId":"solana","pairAddress":"PSYN","baseToken":'
+             '{"address":"SYNTH","name":"Döge 猫","symbol":"🚀"},"txns":{"h24":{"buys":3,"sells":1}},'
+             '"volume":{"h24":12.5},"liquidity":{"usd":900.0},"priceUsd":"0.0001"}]}')
+check("SE the encoder reproduces a compact multibyte venue body byte-exact",
+      mfm._venue_text(json.loads(tmpl_text)) == tmpl_text, mfm._venue_text(json.loads(tmpl_text)))
 syn_text = mfm._synthesise(tmpl_text, 4)
 check("SY returns text, not a shared object", isinstance(syn_text, str), type(syn_text).__name__)
 ps = json.loads(syn_text)["pairs"]
 check("SY four pairs, distinct pairAddress", len(ps) == 4 and len({p["pairAddress"] for p in ps}) == 4, str([p.get("pairAddress") for p in ps]))
+want = json.loads(tmpl_text)
+want["pairs"] = [dict(want["pairs"][0], pairAddress="PSYN~%d" % i) for i in range(4)]
+check("SE the synthesised body is byte-exact the venue encoding of a real 4-pair body",
+      syn_text == json.dumps(want, separators=(",", ":"), ensure_ascii=False), syn_text[:160])
+for label, bad in (("no pairs", '{"schemaVersion":"1.0.0","pairs":null}'),
+                   ("two pairs", '{"pairs":[{"pairAddress":"A"},{"pairAddress":"B"}]}'),
+                   ("no pairAddress", '{"pairs":[{"chainId":"solana"}]}')):
+    try:                                         # any exception is caught, so a mutation fails here with a tally
+        mfm._synthesise(bad, 4)
+        raised = "nothing"
+    except Exception as e:                       # noqa: BLE001
+        raised = type(e).__name__
+    check("SR _synthesise refuses a template with %s (ValueError, by its own check)" % label, raised == "ValueError", raised)
 ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
 check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
 print("SB expect: in D5 (class 3+ synthesised at k = 4), the largest served body is ~4x the class-1 mean, not the template's size")

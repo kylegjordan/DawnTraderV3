@@ -124,15 +124,34 @@ def _load_shape(path: str) -> dict:
     return s
 
 
+def _venue_text(obj) -> str:
+    """THE ONE ENCODER for every body this harness serves: the venue's own — compact, UTF-8 unescaped (Langston,
+    Step 4, 2026-11-07, measured against the live DexScreener API: a compact re-dump of a 30-pair body is byte-exact
+    at 41,432 B; `json.dumps(sort_keys=True)` of the same object is 44,206 B, +6.70%, and `ensure_ascii` escaping
+    adds more on a multibyte name). The capture stores bodies in that inflated form (`provenance.py:201`), so
+    `cmd_index` re-encodes every body through here, and the synthesised, no-pairs and padded bodies use it too —
+    one encoding across all classes and arms, or the per-class sizes are not comparable. Key order does not change
+    the length, so it is left as parsed."""
+    return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+NO_PAIRS_TEXT = _venue_text({"schemaVersion": "1.0.0", "pairs": None})
+
+
 def _synthesise(text: str, k: int) -> str:
     """§6 AMENDMENT 2: a class-k body built from a class-1 template — its one pair duplicated k times, each copy with
-    a distinct pairAddress — returned as TEXT (Langston, Step 4 r2: a dict-level copy was SHALLOW, so the k "pairs"
-    shared txns/volume/liquidity/... objects and held ~0.43x the objects of a real k-pair body; a text round-trip
-    gives k independent pairs, and the caller measures the bytes of exactly what is served)."""
+    a distinct pairAddress — returned as TEXT in the venue encoding. The dict built here is SHALLOW (the k pairs share
+    txns/volume/baseToken objects); the cure is that it is returned as text and parsed fresh by the caller, so the
+    served graph holds k independent pairs (fenced by C-6, parses == served — not by SY). A template that does not
+    hold exactly one pair with a pairAddress RAISES: a fidelity harness does not stand in an empty or "None~0" pair
+    (Langston, Step 4, 2026-11-07); inside run_hour the raise lands in its `errors`, which voids the arm (exit 15)."""
     tmpl = json.loads(text)
-    pair = (tmpl.get("pairs") or [{}])[0]
-    tmpl["pairs"] = [dict(pair, pairAddress="%s~%d" % (pair.get("pairAddress"), i)) for i in range(k)]
-    return json.dumps(tmpl, sort_keys=True)
+    pairs = tmpl.get("pairs") or []
+    if len(pairs) != 1 or not isinstance(pairs[0], dict) or not pairs[0].get("pairAddress"):
+        raise ValueError("_synthesise: template must hold exactly one pair with a pairAddress, holds %d" % len(pairs))
+    pair = pairs[0]
+    tmpl["pairs"] = [dict(pair, pairAddress="%s~%d" % (pair["pairAddress"], i)) for i in range(k)]
+    return _venue_text(tmpl)
 
 
 def _class_of(mint: str, share: dict) -> str:
@@ -241,7 +260,7 @@ def cmd_index(a) -> int:
     db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL, "
                "pairs INTEGER NOT NULL)")
     db.execute("CREATE INDEX bodies_by_pairs ON bodies (pairs)")   # arm sept's template lookups (m3)
-    n, dups, divergent = 0, [], 0
+    n, dups, divergent, stored_total, venue_total = 0, [], 0, 0, 0
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
             continue
@@ -250,14 +269,22 @@ def cmd_index(a) -> int:
                 rec = json.loads(line)
                 if rec.get("source") != "dexscreener_token_state":
                     continue
-                npairs = len(json.loads(rec["body"]).get("pairs") or [])
+                parsed = json.loads(rec["body"])
+                npairs = len(parsed.get("pairs") or [])
                 # ⛔ BYTES, MEASURED HERE (Langston, Step 4 r2): the record's own `bytes` is `len(body)` on a str
                 #    (provenance.py:206) — characters — while the pad arms measure `len(text.encode("utf-8"))`.
-                #    One instrument both sides: store the UTF-8 byte length, and count where the two disagree.
-                nbytes = len(rec["body"].encode("utf-8"))
-                divergent += nbytes != rec.get("bytes")
+                #    One instrument both sides: the UTF-8 byte length, and count where the record's field disagrees.
+                stored = len(rec["body"].encode("utf-8"))
+                divergent += stored != rec.get("bytes")
+                # ⛔ AND THE ENCODING IS THE VENUE'S, NOT THE STORE'S (Langston, Step 4, 2026-11-07): the stored text
+                #    is `json.dumps(sort_keys=True)` (provenance.py:201), ~6.7% larger than what the venue serves.
+                #    Re-encode here so every arm and every class serves one encoding; report both totals.
+                vtext = _venue_text(parsed)
+                nbytes = len(vtext.encode("utf-8"))
+                stored_total += stored
+                venue_total += nbytes
                 cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?, ?)",
-                                 (rec["mint"], rec["body"], nbytes, npairs))
+                                 (rec["mint"], vtext, nbytes, npairs))
                 if cur.rowcount == 1:
                     n += 1
                 else:
@@ -270,7 +297,8 @@ def cmd_index(a) -> int:
               file=sys.stderr)
         return 2
     os.replace(tmp, a.out)
-    print(json.dumps({"indexed": n, "out": a.out, "bytes_field_vs_utf8_divergent": divergent}))
+    print(json.dumps({"indexed": n, "out": a.out, "bytes_field_vs_utf8_divergent": divergent,
+                      "stored_encoding_bytes_total": stored_total, "venue_encoding_bytes_total": venue_total}))
     return 0
 
 
@@ -496,12 +524,11 @@ def cmd_run(a) -> int:
             c.loop_class0 += c.in_loop and k == "0"
             c.loop_shaped += c.in_loop
             if k == "0":
-                text0 = '{"schemaVersion": "1.0.0", "pairs": null}'
                 c.served += 1
                 c.loop_served += c.in_loop
                 c.parses += 1
-                c.served_bytes.append(len(text0))          # served_bytes.n == served in this arm (m2)
-                return json.loads(text0)
+                c.served_bytes.append(len(NO_PAIRS_TEXT.encode("utf-8")))   # served_bytes.n == served here (m2)
+                return json.loads(NO_PAIRS_TEXT)
             synth = templates[k] < MIN_CLASS              # only class 2 / 3+ can be thin here (class 1 is checked)
             cls = "1" if synth else k
             off = _hash_int(mint) % templates[cls]
@@ -524,14 +551,14 @@ def cmd_run(a) -> int:
         if row is None:
             c.no_body += 1
             c.loop_no_body += c.in_loop
-            return json.loads('{"schemaVersion": "1.0.0", "pairs": null}')
+            return json.loads(NO_PAIRS_TEXT)
         c.served += 1
         c.loop_served += c.in_loop
         text, nbytes = row
-        if pad_copies:
+        if pad_copies:                                  # the venue encoding throughout: no separator spaces
             inner = text.strip()
-            copies = ", ".join([inner] * pad_copies)
-            text = '{"_pad": [%s], %s' % (copies, inner[1:]) if inner != "{}" else '{"_pad": [%s]}' % copies
+            copies = ",".join([inner] * pad_copies)
+            text = '{"_pad":[%s],%s' % (copies, inner[1:]) if inner != "{}" else '{"_pad":[%s]}' % copies
             nbytes = len(text.encode("utf-8"))
         c.served_bytes.append(nbytes)
         c.parses += 1
