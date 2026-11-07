@@ -24,8 +24,8 @@ MUTATIONS = [
     ("an old lock not checked", replace("    if stale:\n        return 6,", "    if False:\n        return 6,")),
     ("a fresh lock treated as old", replace("                if now - os.path.getmtime(p) > LOCK_MAX_S:", "                if True:")),
     ("one fixed key for every run", replace("    key = os.urandom(32)", "    key = bytes(32)")),
-    ("the index not built", replace("        if not dry:\n            try:\n                di.build(", "        if False:\n            try:\n                di.build(")),
-    ("a dry run builds the index", replace("        if not dry:\n            try:\n                di.build(", "        if True:\n            try:\n                di.build(")),
+    ("the index not built", replace("        if not dry:\n            ix = di.build(", "        if False:\n            ix = di.build(")),
+    ("a dry run builds the index", replace("        if not dry:\n            ix = di.build(", "        if True:\n            ix = di.build(")),
     ("refused files reported as OK", replace("        if refused:\n            return 5,", "        if False:\n            return 5,")),
     ("a collision reported as OK", replace('            return 4, "ARCHIVE RUN FAILED — %s" % e', '            return 0, "ARCHIVE RUN OK — %s" % e')),
     ("P5 r4: an unreadable lock folder reads as no stale lock", replace(
@@ -45,10 +45,10 @@ MUTATIONS = [
                                                      '            "")')),
     ("QUIET: the outside list may quiet a Dawn Trader name", replace("    if bad:\n        raise ValueError(", "    if False:\n        raise ValueError(")),
     ("QUIET: the outside list ignored", replace("and s not in outside\n", "\n")),
-    ("QUIET: the index told nothing", replace("            di.build(root, shared, unlisted=unlisted)", "            di.build(root, shared)")),
+    ("QUIET: the index told nothing", replace("            ix = di.build(root, shared, unlisted=unlisted)", "            ix = di.build(root, shared)")),
     ("C-1: the gated counts left off the result line", replace("red.layer_c_names, gated,", 'red.layer_c_names, "",')),
-    ("P6 must-fix 5: an index over its cap escapes to the catch-all", replace("            except OverflowError as e:",
-                                                                         "            except ZeroDivisionError as e:")),
+    ("CAP RULING: the shared index size left off the OK line", replace('            body += "; shared index %d bytes" % ix["shared_bytes"]',
+                                                               "            pass")),
 ]
 
 

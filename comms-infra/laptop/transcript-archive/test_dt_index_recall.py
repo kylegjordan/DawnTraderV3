@@ -72,18 +72,22 @@ print("2. the topic-free copy in the shared folder")
 lean = open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), encoding="utf-8").read()
 ok("it carries no topic: neither conversation's words appear", "private note" not in lean and "please look" not in lean, lean)
 ok("...but it does carry both conversations and their batch ids", lean.count("| CC-") == 2 and "B-TOKEN-WATCH" in lean)
-ok("it is LF and under the memory-file cap", b"\r\n" not in open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read()
-   and r["shared_bytes"] <= di.MEMORY_CAP)
-before = open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read()
-cap = di.MEMORY_CAP
-di.MEMORY_CAP = 100
-try:
-    di.build(root, shared)
-    ok("over the cap the shared copy is REFUSED", False)
-except OverflowError:
-    ok("over the cap the shared copy is REFUSED", True)
-di.MEMORY_CAP = cap
-ok("...and the old copy is left as it was", open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read() == before)
+# Langston's cap ruling (2026-11-07): the cap is DELETED; in its place, the invariant it was standing in front of -
+# the shared copy is complete. LF, no topic column, and EXACTLY as many conversation rows as INDEX.md.
+full_idx = open(os.path.join(root, "INDEX.md"), encoding="utf-8").read()
+
+
+def conv_rows(text):
+    return [l for l in text.split("\n") if l.startswith("| CC-") or l.startswith("| HEARTBEAT")]
+
+
+ok("it is LF", b"\r\n" not in open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read())
+ok("its table header carries NO topic column",
+   "topic" not in lean.lower().split("| alias")[1].split("\n")[0] if "| alias" in lean else False, lean[:400])
+ok("COMPLETE: the shared copy lists exactly as many conversations as INDEX.md (%d)" % len(conv_rows(full_idx)),
+   len(conv_rows(lean)) == len(conv_rows(full_idx)) and len(conv_rows(full_idx)) == 2, (len(conv_rows(lean)), len(conv_rows(full_idx))))
+ok("its size is reported on every build", r["shared_bytes"] == len(open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read()), r)
+ok("no cap remains in the module", not hasattr(di, "MEMORY_CAP"))
 # Langston P10 r4 conditions 1 and 3: the coverage bound in both; a folder on no list NAMED only in the laptop copy
 ok("both copies state the coverage bound", di.COVERAGE in open(os.path.join(root, "INDEX.md"), encoding="utf-8").read()
    and di.COVERAGE in lean)

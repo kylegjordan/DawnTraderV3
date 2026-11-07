@@ -9,9 +9,11 @@ Rebuilt WHOLE from the archive files on every run (no state of its own, so it ca
                            it mentions most, and a TOPIC - the first thing a person said in it. Outside every repo.
   <root>/ACTIONS.tsv       one row per action line, all sessions: alias, date, time, session8, file:line, tool, summary.
   <shared>/TRANSCRIPT_INDEX.md   the same lines WITHOUT the topic (Kyle, KD-49 option iii): the shared memory folder is
-                           mirrored into git, and the topic is the one field that can carry a private message. Refused
-                           (exit 4) if it would exceed the memory-file cap of 24,576 bytes: the SHARED copy is not
-                           written (the old one is left as it was), while INDEX.md and ACTIONS.tsv above ARE.
+                           mirrored into git, and the topic is the one field that can carry a private message. NO SIZE
+                           CAP: it lists EVERY conversation INDEX.md lists (same row count), so "not in the index" keeps
+                           meaning "not archived". Its size is printed on every build. (A 24,576-byte cap stood here until
+                           2026-11-07 - the sixth surviving copy of a per-file cap PHASE_19_PLAN row 2.8b retired, and
+                           nothing loads this file; deleted, DELETED_COMPONENTS_LOG.)
 All output is LF. The archive is already redacted; nothing here reads a raw conversation.
 The run (`dt_archive_run`) passes the folders on no list (`unlisted`) to build(); this bare CLI does not, so an index
 rebuilt by hand carries no such line - rebuild through the run when that line matters.
@@ -21,7 +23,6 @@ import re
 import sys
 from collections import Counter
 
-MEMORY_CAP = 24576
 DAY_FILE = re.compile(r"^(\d{4}-\d{2}-\d{2})_([0-9a-f]{8})\.md$")
 HEADER = re.compile(r"^# (\S+) — (\d{4}-\d{2}-\d{2}) — session (\S+)$")
 ACTION = re.compile(r"^- `(\d\d:\d\d:\d\d)` (\S+) — (.*)$")
@@ -145,9 +146,6 @@ def build(root, shared, unlisted=()):
     lean += index_lines(convs, False)
     text = "\n".join(lean) + "\n"
     size = len(text.encode("utf-8"))
-    if size > MEMORY_CAP:
-        raise OverflowError("the topic-free index would be %d bytes, over the %d-byte memory-file cap; not written"
-                            % (size, MEMORY_CAP))
     _write(os.path.join(shared, "TRANSCRIPT_INDEX.md"), text)
     return {"conversations": len(convs), "actions": len(actions), "shared_bytes": size}
 
@@ -163,11 +161,7 @@ def main(argv):
     if not opts.get("--root") or not opts.get("--shared"):
         sys.stderr.write("REFUSED: --root and --shared are required\n")
         return 2
-    try:
-        r = build(opts["--root"], opts["--shared"])
-    except OverflowError as e:
-        sys.stderr.write("REFUSED: %s\n" % e)
-        return 4
+    r = build(opts["--root"], opts["--shared"])
     sys.stderr.write("index: %(conversations)d conversations, %(actions)d actions, shared copy %(shared_bytes)d bytes\n" % r)
     return 0
 

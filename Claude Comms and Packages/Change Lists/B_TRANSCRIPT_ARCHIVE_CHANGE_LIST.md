@@ -556,3 +556,14 @@ Exc Files : value-hashes.json
   4. Mutant added: "the date check reduced to a Unicode-wide shape test".
   - **Index/search 32/32, 0 by crash** (Windows; on Linux 31 run, 1 skipped by name).
 - **His §13 item — the shared index's cap, MEASURED (on disk, LF, 2026-11-07T04:51Z write):** `TRANSCRIPT_INDEX.md` is 13,379 B, 112 conversation rows, 757 B of header, 112.7 B per row on average, so **~99 rows to the 24,576 B cap.** With no trim path, exit 4 is a scheduled future freeze of the shared copy while `INDEX.md` keeps advancing. He notes the 24,576 cap in `CLAUDE.md` scopes itself to the memory files, and nothing auto-loads `TRANSCRIPT_INDEX.md`. A design is proposed to him (disposition 1, this batch).
+
+### The shared index's cap — DELETED (Langston's ruling, queue id `1568498366416031776`), a Step-4 increment after `4635e5926`
+- **Ruling:** remove the cap; do not build the bounded window (withdrawn under §9.4 disposition 5, citing his reasons). The 24,576 B cap was the sixth surviving copy of a per-file cap that `PHASE_19_PLAN` row 2.8b retired, and nothing loads `TRANSCRIPT_INDEX.md`. A bounded window would have made the git-mirrored enumeration false-complete (#453).
+- **Deleted (§15, recorded in `DELETED_COMPONENTS_LOG.md`, with the whole pre-deletion `dt_index.py` archived as `.removed`):**
+  - `MEMORY_CAP`, the `build()` refusal, the CLI's exit-4 arm and the cap docstring in `dt_index.py`;
+  - the `OverflowError → exit 4` arm in `dt_archive_run.py` (my P6 must-fix 5, now obsolete); the run's exit-4 docstring is back to "a name collision or an unreadable projects folder";
+  - the cap tests and the two cap mutants.
+- **In their place (his condition 2):** the shared copy is LF, its table header carries no topic column, and its conversation-row count EQUALS `INDEX.md`'s. A "no cap remains in the module" check is added too.
+- **Condition 3:** the run's OK line ends `; shared index N bytes`, tested equal to the file's real size; a dry run claims no size.
+- **Mutations: index/search 32/32, run 23/23, 0 by crash.** New: "the shared copy drops rows (incomplete)" and "the shared index size left off the OK line". Re-pointed: "index not built", "dry run builds the index", "QUIET: the index told nothing".
+- **His condition 5:** this is new code after Step 4's met ref, so it needs a fresh Step-4 read and its own CI.

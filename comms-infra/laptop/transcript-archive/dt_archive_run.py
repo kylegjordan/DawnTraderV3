@@ -9,7 +9,7 @@ hook, the restart handoff). It owns the key handoff P3(c) promised and the stale
    via a pipe): staging, Helsinki, the laptop - the per-machine arguments of the P3(c) table. EVERY machine must answer;
    one that cannot -> the run REFUSES (exit 3): a partial fingerprint set would read as full coverage.
 3. dt_archive.archive_all with the redactor built from those fingerprints; then dt_index.build.
-4. A LOUD RESULT: exit 0 clean · 3 fingerprints incomplete · 4 a name collision (C-5), an unreadable projects folder, or the topic-free index refused over its cap (the archive itself ran; the line says so) · 5 a file refused (a held lock, a
+4. A LOUD RESULT: exit 0 clean · 3 fingerprints incomplete · 4 a name collision (C-5) or an unreadable projects folder · 5 a file refused (a held lock, a
    shorter-than-committed file) · 6 a LOCK OLDER THAN ONE INTERVAL (25 h) - a run that died and left it; the writer
    never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it ·
    7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero), OR a Dawn
@@ -205,12 +205,8 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
             ("; %d REREAD after an in-place rewrite: %s" % (len(rr), ", ".join(rr[:10]))) if rr else "",
             ("; %d folder(s) on no list: %s" % (len(unlisted), ", ".join(unlisted))) if unlisted else "")
         if not dry:
-            try:
-                di.build(root, shared, unlisted=unlisted)
-            except OverflowError as e:
-                # the topic-free index over the memory-file cap: dt_index's own contract is exit 4, and the archive
-                # itself already ran - so say both, never the catch-all exit 8 (Langston P6 review must-fix 5)
-                return 4, "ARCHIVE RUN FAILED — the topic-free index was refused (%s); the archive itself ran: %s" % (e, body)
+            ix = di.build(root, shared, unlisted=unlisted)
+            body += "; shared index %d bytes" % ix["shared_bytes"]   # growth stays visible (the cap is gone, Langston)
         return 0, "ARCHIVE RUN OK — " + body
     finally:
         del key

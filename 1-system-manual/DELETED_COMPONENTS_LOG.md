@@ -1516,3 +1516,22 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Blast radius verified:** one caller (`:642`, now `invoke_claude(addressed_prompt, uuid4, scratch=…)`); one test fake (`test_bridge_two_workers.py`, signature matched). **State-write census (§9.5(a-ii)):** the branch wrote `state["session_id"]`; its only other reader is the startup log line (`:1443`, `log(f"Discord Langston bridge starting. session_id={state['session_id']} …")`) — `langston-bridge-restart`, `langston-memory-write` and `langston-size-watch` do not read it (grep, 0 hits). The log line `invoking claude (…)` lost its `retry=` field (C-2). Suites on Helsinki with the bridge venv: lanes 27/0, two-workers ALL PASS, both mutation runners 9/9, clean-stop 0 failures.
 **Left intentionally, with a named home:** the bridge's state file, `STATE_FILE`, `load_state`/`save_state` and the startup line that prints its UUID — nothing reads the UUID now. Removing them (and unlinking the file on disk) is item P2b on this batch (Langston, Step 4 of the deletion, msg `1568167450158178386`), deliberately not in the restart that carries the two-worker flip. `comms-infra/telegram-reference/langston-bridge.py` still carries the same rotation branch: a decommissioned system's reference copy, no work — not a missed sweep.
 **Archive:** `1-system-manual/_archive/deleted-code/discord-langston-bridge.invoke_claude-rotation.20261106-B-LANGSTON-TWO-WORKERS.py.removed`.
+
+## 2026-11-07 — the shared transcript index's 24,576-byte cap — B-TRANSCRIPT-ARCHIVE (Step 4 increment), Infra Claude
+**What:** in `comms-infra/laptop/transcript-archive/`:
+- `dt_index.py`: `MEMORY_CAP = 24576`, the `if size > MEMORY_CAP: raise OverflowError(…)` refusal in `build()`, the CLI's `except OverflowError → exit 4` arm, and the docstring lines that justified it as "the memory-file cap";
+- `dt_archive_run.py`: the `except OverflowError → exit 4` arm added at P6 must-fix 5 the same morning;
+- their tests and mutants: `test_dt_index_recall.py` (cap and refusal checks), the `test_dt_archive_run.py` must-fix-5 block, and the mutants "index: the cap is not enforced" and "P6 must-fix 5".
+**Why (Langston's ruling, queue id `1568498366416031776`, re-derived at `4635e5926`):**
+- The cap justified itself as the memory-file cap, but that per-file cap no longer exists. `PHASE_19_PLAN` row 2.8b replaced it with the loaded-set sum, and `langston-memory-write:1096-1098` already records the fifth surviving copy of it. This was the sixth.
+- Nothing loads `TRANSCRIPT_INDEX.md`. Langston's `langston-size-watch --status` lists three watched paths, none of them this file.
+- With ~99 rows of headroom (measured: 13,379 B, 112 rows), the cap was a scheduled freeze of the shared copy.
+- The alternative of a bounded window was rejected: it would make the git-mirrored enumeration false-complete (#453).
+**Replaced by:** the invariant the cap stood in front of. The shared copy is LF, carries no topic column, and its conversation-row count EQUALS `INDEX.md`'s (tested). Its size is printed on every build and now ends the run's OK line (`; shared index N bytes`). A dry run claims no size.
+**Blast radius verified:**
+- `git grep -n "MEMORY_CAP\|OverflowError" -- comms-infra/laptop/transcript-archive/` gives one hit, the test asserting the attribute is GONE. Positive control: 11 hits at `4635e5926`.
+- Nothing outside `comms-infra/laptop/transcript-archive/` names `TRANSCRIPT_INDEX` (`grep -rln` over `.claude/ scripts/ comms-infra/`, excluding that folder).
+- **State-write census:** the deleted branch wrote nothing. It withheld one write, of `TRANSCRIPT_INDEX.md`, whose only readers are humans and sessions opening it.
+- Suites 0 failed; mutation runners re-run.
+**Left intentionally:** if reading cost ever becomes real, the named successor is `dt_recall` and ordering, never deleting rows (Langston, condition 4). No work now.
+**Archive:** `1-system-manual/_archive/deleted-code/dt_index.shared-index-cap.20261107-B-TRANSCRIPT-ARCHIVE.py.removed` (the whole `dt_index.py` at `4635e5926`).
