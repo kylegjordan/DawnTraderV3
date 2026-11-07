@@ -481,3 +481,20 @@ Exc Files : value-hashes.json
   4. `dt_dupes.raw_files`'s walk refuses on error instead of `os.walk`'s silent default;
   5. the move never acts on a duplicate group holding a GATED-folder file judged machine (it has no archive copy); a mixed group is listed, never moved.
 - **Langston's reach number for the prefix-test hypothesis (obs (a)):** over 96,038 user entries in 8,043 Helsinki transcripts, 0 multi-text-block user entries and 0 single-block entries with a machine prefix followed by a body. Positive control: 19 entries the regex does judge machine. The shape is not established as impossible; the population is a different machine.
+
+### P10 — the duplicates census, and the hardening Langston folded into it (2026-11-07 ~03:4xZ)
+- **Hardening:**
+  1. `raw_files.kind_of` re-stats once after 0.5 s before refusing.
+  2. The gate's cached verdict must be a bool, or the file is re-judged.
+  3. `dt_dupes.raw_files` walks with `onerror` raising, so `main` REFUSES with exit 3 instead of under-counting.
+  4. Tests (writer section 19): the gate's `open()` retry fails once and is kept, or keeps failing and is REFUSED (never "no human turn"); `kind_of` fails once and the run goes on, or keeps failing and is refused; a truthy non-bool cached verdict is re-judged. Dupes: an unreadable folder → exit 3.
+  5. **Mutations: writer 82/82, dupes 6/6, run 22/22, 0 by crash.** New: the gate never retries · a failing read reads "no human turn" · `kind_of` never re-stats · a non-bool verdict trusted · dupes' silent walk. Re-pointed: R3-MF1 (kind_of's refusal now sits inside the retry loop) and the three cache-hit anchors. A crash found on the way — my retry test caught only `Refused`, so under "gated folder archived whole" the flaky `open()` escaped from `read_raw` — now fails cleanly.
+- **The census (read-only, `dt_dupes.py` at this tree, run on the laptop):** 4,578 raw files in scope (every Dawn-Trader-named folder, any depth); **743 duplicate groups, 746 extra copies, 125,789,760 B.**
+  - **Where the copies live:**
+    - 740 groups = one copy in `…-ARCHIVE-20260727-201449` + one in `…-BACKUP-…`;
+    - 2 groups = those two + the spare `C--DawnTraderV3`;
+    - 1 group = those two + `G--…DT-Clone-Repo-DawnTraderV3`.
+    - **0 groups have a member inside the five; 0 have a heartbeat member.** So every ARCHIVE file has a byte-identical copy in BACKUP; ARCHIVE is wholly redundant with BACKUP (which holds 7 more).
+  - **Under Langston's rule ("groups with no member inside the five are listed, never moved") P10 moves NOTHING.** The archive is untouched, the orphan baseline (1,096 / 0) stands, and "raw == state" survives.
+  - The 746 copies are part of the pre-session-fix store, whose fate is the April–July Kyle-list item (recommendation (b), after live). Removing ARCHIVE's redundant copies belongs to that item, after its uuid-overlap leg, not to this batch.
+- **#1077, third instance:** the first push of this commit was refused with the 184-counts-below-baseline message while the shell's cwd was the transcript-archive subfolder. From the repo root the same tree passes.

@@ -42,8 +42,8 @@ MUTATIONS = [
     ("R2-MF2: --key-file without --hashes accepted", replace('    if opts.get("--key-file") and not opts.get("--hashes"):', "    if False:")),
     ("R2-MF3: an unreadable folder read as empty", replace("os.walk(p, onerror=unreadable)", "os.walk(p)")),
     ("R3-MF1: an unstattable entry read as neither (isdir/isfile silence)", replace(
-        "        try:\n            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here\n        except OSError as e:\n            unreadable(e)",
-        "        try:\n            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here\n        except OSError as e:\n            return \"other\"")),
+        "                if attempt == 2:" + chr(10) + "                    unreadable(e)",
+        "                return \"other\"")),
     ("R3-MF1: a present but unstattable slug read as absent", replace(
         "        except OSError as e:\n            unreadable(e)               # present but unstattable: refuse, never read as absent",
         "        except OSError as e:\n            continue               # present but unstattable: refuse, never read as absent")),
@@ -134,24 +134,33 @@ MUTATIONS = [
     ("GATE: a machine shape read as human", replace("|resume wake-watcher-heartbeat|# Autonomous loop check|", "|# Autonomous loop check|")),
     ("GATE: default-MACHINE (an unknown shape dropped)", replace("        return bool(c.strip()) and not MACHINE_TEXT.match(c)",
                                                                  "        return bool(re.match(r\"\\s*KYLE\", c))")),
-    ("GATE: the cache trusted over a changed size", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:",
-                                                            "                if isinstance(hit, list) and len(hit) == 3:")),
+    ("GATE: the cache trusted over a changed size", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):",
+                                                            "                if isinstance(hit, list) and len(hit) == 3 and isinstance(hit[2], bool):")),
     ("GATE: an archived conversation re-judged by the cache", replace("        if os.path.exists(state_path(self.root, rf)):\n            return True",
                                                                       "        if False:\n            return True")),
     ("GATE: a dry run writes the cache", replace("        if self.dry or not self.changed:", "        if not self.changed:")),
-    ("GATE: the cache never consulted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:\n                    return hit[2]",
+    ("GATE: the cache never consulted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):\n                    return hit[2]",
                                                 "                if False:\n                    return hit[2]")),
     # Langston P10 review C-1/C-2/C-3 and obs (a)
     ("C-2: a parentless nested file dropped", replace("(rf[4] in ids or gate(rf))", "rf[4] in ids")),
     ("C-3: a corrupt cache raises", replace("        except (OSError, ValueError):\n            self.cache = {}", "        except FileNotFoundError:\n            self.cache = {}")),
     ("C-3: a non-dict cache trusted", replace("        if not isinstance(self.cache, dict):\n            self.cache = {}", "        if False:\n            self.cache = {}")),
-    ("C-3: a wrong-shape entry trusted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:",
-                                                 "                if hit and hit[:2] == now:")),
+    ("C-3: a wrong-shape entry trusted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):",
+                                                 "                if hit and hit[:2] == now and isinstance(hit[2], bool):")),
     ("C-1: every judged run counted as kept", replace("self.kept.get(rf[0], 0) + bool(v)", "self.kept.get(rf[0], 0) + 1")),
     ("C-1: nested files counted as runs", replace('        if rf[1] == "top":\n            self.seen[rf[0]]', '        if True:\n            self.seen[rf[0]]')),
     ("obs (a): a bare block read as machine", replace("    if isinstance(c, dict):", "    if False:")),
     ("obs (a): plain strings in a list read as machine", replace("    if any(isinstance(b, str) and b.strip() and not MACHINE_TEXT.match(b) for b in c):",
                                                                  "    if False:")),
+    # Langston P10 PROCEED: the gate's retry, kind_of's re-stat, a non-bool cached verdict
+    ("RETRY: the gate never retries a failed read", replace("        for attempt in (1, 2):        # one re-stat before refusing",
+                                                            "        for attempt in (2,):        # one re-stat before refusing")),
+    ("RETRY: a read that keeps failing reads as 'no human turn'", replace(
+        "                if attempt == 2:\n                    raise Refused(", "                if attempt == 2:\n                    return False\n                    raise Refused(")),
+    ("RETRY: kind_of never re-stats", replace("        for attempt in (1, 2):\n            try:\n                st = os.stat(path)",
+                                              "        for attempt in (2,):\n            try:\n                st = os.stat(path)")),
+    ("RETRY: a non-bool cached verdict trusted", replace(" and hit[:2] == now and isinstance(hit[2], bool):\n                    return hit[2]",
+                                                        " and hit[:2] == now:\n                    return hit[2]")),
 ]
 
 

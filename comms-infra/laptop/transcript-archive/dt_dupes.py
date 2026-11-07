@@ -24,13 +24,19 @@ def in_scope(slug):
     return da.dt_folder_class(slug) != "outside"
 
 
+def _refuse(err):
+    raise err
+
+
 def raw_files(projects):
+    """Every .jsonl in a Dawn Trader folder. A folder it cannot read REFUSES (os.walk's default is silence - the P5 r2
+    precedent; this census is what the P10 move is justified against, so an under-count must be loud)."""
     out = []
     for slug in sorted(os.listdir(projects)):
         base = os.path.join(projects, slug)
         if not in_scope(slug) or not os.path.isdir(base):
             continue
-        for root, _d, files in os.walk(base):
+        for root, _d, files in os.walk(base, onerror=_refuse):
             for f in files:
                 if f.endswith(".jsonl"):
                     out.append(os.path.join(root, f))
@@ -69,7 +75,11 @@ def main(argv):
     if not opts.get("--projects"):
         sys.stderr.write("REFUSED: --projects is required\n")
         return 2
-    paths = raw_files(opts["--projects"])
+    try:
+        paths = raw_files(opts["--projects"])
+    except OSError as e:
+        sys.stderr.write("REFUSED: cannot read %s (%s) - the census would be incomplete\n" % (getattr(e, "filename", "?"), e))
+        return 3
     g = groups(paths)
     rows = ["sha256\tsize\tcount\tpath"]
     for (h, size), ps in sorted(g.items()):

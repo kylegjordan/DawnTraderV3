@@ -28,6 +28,8 @@ MUTATIONS = [
     ("unknown arguments accepted", replace(
         '            sys.stderr.write("REFUSED: unknown argument at position %d\\n" % argv.index(a))\n            return 2',
         "            continue")),
+    ("an unreadable folder read as fewer files (os.walk's silent default)", replace(
+        "        for root, _d, files in os.walk(base, onerror=_refuse):", "        for root, _d, files in os.walk(base):")),
 ]
 
 

@@ -166,7 +166,7 @@ class Gate:
                 st = os.stat(p)
                 key, now = identity(p), [st.st_size, st.st_mtime_ns]
                 hit = self.cache.get(key)
-                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:
+                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):
                     return hit[2]
                 verdict = human_turn(p)
                 break
@@ -230,11 +230,16 @@ def raw_files(projects, gate=None):
     def kind_of(path):
         """The dir-vs-file decision WITH its reach checked (Langston P5 r3 must-fix): os.path.isdir/isfile swallow
         OSError by design, so a dangling junction or an unstattable entry read as 'neither' and vanished silently -
-        and a missing nested file then stamped a false 'not on disk'. One os.stat per entry; any error refuses."""
-        try:
-            st = os.stat(path)          # follows a junction / symlink: a DANGLING one raises here
-        except OSError as e:
-            unreadable(e)
+        and a missing nested file then stamped a false 'not on disk'. One os.stat per entry, ONE re-stat after 0.5 s
+        on an error (the walk now covers a live, concurrently-written folder - Langston P10 PROCEED), then refuse."""
+        for attempt in (1, 2):
+            try:
+                st = os.stat(path)      # follows a junction / symlink: a DANGLING one raises here
+                break
+            except OSError as e:
+                if attempt == 2:
+                    unreadable(e)
+                time.sleep(0.5)
         if stat.S_ISDIR(st.st_mode):
             return "dir"
         if stat.S_ISREG(st.st_mode):

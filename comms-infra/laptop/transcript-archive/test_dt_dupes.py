@@ -65,6 +65,24 @@ ok("the tree is untouched, byte for byte", after == snap)
 ok("stdout is LF", b"\r\n" not in p.stdout)
 p = subprocess.run([sys.executable, "-I", os.path.join(HERE, "dt_dupes.py"), "--projects", proj, "--move"], capture_output=True)
 ok("an unknown argument (there is no --move) is refused", p.returncode == 2)
+# Langston P10 PROCEED: a folder the census cannot read REFUSES (exit 3), never an under-count
+sys.path.insert(0, HERE)
+import dt_dupes as dd  # noqa: E402
+_scandir = os.scandir
+
+
+def failing_scandir(path="."):
+    if os.path.basename(str(path)) == "x":
+        raise PermissionError(13, "Access is denied", str(path))
+    return _scandir(path)
+
+
+os.scandir = failing_scandir
+try:
+    code = dd.main(["dt_dupes.py", "--projects", proj, "--out", os.path.join(base, "o.tsv")])
+finally:
+    os.scandir = _scandir
+ok("an unreadable folder inside a Dawn Trader folder REFUSES the census (exit 3), never reads as fewer files", code == 3, code)
 shutil.rmtree(base)
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

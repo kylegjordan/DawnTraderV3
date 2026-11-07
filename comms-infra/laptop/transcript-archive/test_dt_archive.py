@@ -925,6 +925,70 @@ da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S, gate=
 ok("C-1: the gate counts TOP runs judged and kept per alias (5 judged, 3 hold a human turn)",
    g.seen == {"HEARTBEAT": 5} and g.kept == {"HEARTBEAT": 3}, (g.seen, g.kept))
 shutil.rmtree(base)
+print("19. Langston P10 PROCEED: the gate's retry (both arms), kind_of's re-stat, a non-bool cached verdict")
+import builtins  # noqa: E402
+QFILE = "a1000003-0000-0000-0000-000000000000.jsonl"
+
+
+def flaky(real, fails):
+    """open() that fails `fails` times on the queued_command heartbeat run, then behaves."""
+    left = [fails]
+
+    def f(file, *a, **kw):
+        if str(file).endswith(QFILE) and left[0] > 0:
+            left[0] -= 1
+            raise PermissionError(32, "The process cannot access the file", str(file))
+        return real(file, *a, **kw)
+    return f
+
+
+da.time.sleep, _slp = (lambda s: None), da.time.sleep
+_open = builtins.open
+for label, fails, want in (("the gate's retry: a read that fails ONCE is retried and the run is kept", 1, "kept"),
+                           ("...a read that keeps failing REFUSES - never 'no human turn'", 99, "refused")):
+    base, proj, root = hb_tree()
+    builtins.open = flaky(_open, fails)
+    try:
+        res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+        got = "kept" if "QUEUED-RUN-REPLY" in all_text(root) else "dropped"
+    except da.Refused:
+        got = "refused"
+    except Exception as e:  # noqa: BLE001  (a failure anywhere else must FAIL this check, never crash the suite)
+        got = "escaped: %r" % e
+    finally:
+        builtins.open = _open
+    ok(label, got == want, got)
+    shutil.rmtree(base)
+_stat = os.stat
+for label, fails, want in (("kind_of: a stat that fails ONCE is re-statted and the run goes on", 1, "ok"),
+                           ("...a stat that keeps failing REFUSES the run", 99, "refused")):
+    base, proj, root = hb_tree()
+    left = [fails]
+
+    def st_flaky(p, *a, **kw):
+        if str(p).endswith(QFILE) and left[0] > 0:
+            left[0] -= 1
+            raise PermissionError(32, "The process cannot access the file", str(p))
+        return _stat(p, *a, **kw)
+    os.stat = st_flaky
+    try:
+        da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+        got = "ok"
+    except da.Refused:
+        got = "refused"
+    finally:
+        os.stat = _stat
+    ok(label, got == want, got)
+    shutil.rmtree(base)
+da.time.sleep = _slp
+base, proj, root = hb_tree()
+mf = os.path.join(proj, HB, "a1000001-0000-0000-0000-000000000000.jsonl")
+s1 = os.stat(mf)
+json.dump({da.identity(mf): [s1.st_size, s1.st_mtime_ns, "yes"]}, open(os.path.join(root, "gate-cache.json"), "w", encoding="utf-8"))
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+ok("a cached verdict that is not a bool (a truthy 'yes') is re-judged, never read as human",
+   "MACHINE-ONLY-RUN" not in all_text(root), all_text(root)[:300])
+shutil.rmtree(base)
 ok("obs (a): content as a list of plain strings is a human turn", da._human_content(["kyle said this"]))
 ok("obs (a): ...but a list holding only a machine string is not", not da._human_content(["<task-notification>x"]))
 ok("obs (a): content as a bare image block is a human turn", da._human_content({"type": "image"}))
