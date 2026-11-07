@@ -27,6 +27,9 @@ writer `provenance.record_follow_up`, in the scratch tree's `provenance/follow-u
    checkpoint, so a stall that began after attempt 1,000 — a sustained 429, the likeliest real mode at 240/min
    against a 300/min host — ran to the end writing nothing and exited 0; and a run of under 1,000 mints (a
    `--resume` tail) was never asserted at all. Checkpoints fall every 1,000 attempts and at the last one.
+   A later interval is called a stall only when the rate so far predicts >= 3 bodies in it (r2: one reliably-404ing
+   mint at the end must not abort a finished capture); a shorter zero tail is recorded on `end` as
+   `no_body_in_final_interval`.
 ⛔ A DISK FLOOR HELD THROUGHOUT (C-5 (ii)): every checkpoint re-reads free space on `/` and aborts (exit 5),
    recording the abort, when free space is under (projected remaining bytes + 10 GiB). The projection uses the bytes
    actually WRITTEN to disk (the envelope and JSON-escaped body, ~1.1x `bytes` and ~287 B for a 41 B no-pairs body),
@@ -196,6 +199,8 @@ def main(argv=None) -> int:
 
     attempted = shed = errors = 0
     prev_bodies, prev_attempted = 0, 0
+    last_free_low = False
+    final_zero_tail = 0              # a final interval too short to call a stall (see below), recorded on `end`
     error_types: dict[str, int] = {}
     for m in todo:
         try:
@@ -222,10 +227,21 @@ def main(argv=None) -> int:
             interval_attempts, interval_bodies = attempted - prev_attempted, st["n"] - prev_bodies
             if interval_attempts and not interval_bodies:
                 first = prev_attempted == 0
-                log({"kind": "abort", "reason": "%s: %d mints attempted, 0 bodies" % (
-                    "no body at the first checkpoint" if first else "a later interval added no body (stall)",
-                    interval_attempts), "attempted": attempted})
-                return 4 if first else 6
+                # ⛔ A ZERO OVER TOO FEW ATTEMPTS IS NOT A STALL (Langston, Step 4 r2, modelled): a final interval of
+                #    one mint that 404s reliably (`providers.py:198-202` re-raises non-429 errors) would abort a
+                #    finished capture and never write the `end` record that carries P1's deliverable. A later
+                #    interval aborts only when the rate so far predicts >= 3 bodies in it; otherwise, at the last
+                #    checkpoint, the short zero tail is recorded on `end`. The first checkpoint is unchanged: a whole
+                #    run with no body still exits 4.
+                expected = (prev_bodies / prev_attempted * interval_attempts) if prev_attempted else None
+                if first or expected >= 3:
+                    log({"kind": "abort", "reason": "%s: %d mints attempted, 0 bodies%s" % (
+                        "no body at the first checkpoint" if first else "a later interval added no body (stall)",
+                        interval_attempts, "" if first else " (%.1f expected at the rate so far)" % expected),
+                        "attempted": attempted})
+                    return 4 if first else 6
+                if not remaining:
+                    final_zero_tail = interval_attempts
             prev_bodies, prev_attempted = st["n"], attempted
             if remaining and free < floor:
                 log({"kind": "abort", "reason": "disk floor", "free_bytes": free, "floor_bytes": floor})
@@ -233,7 +249,7 @@ def main(argv=None) -> int:
             last_free_low = (not remaining) and free < floor
     tail.poll()
     log({"kind": "end", "attempted": attempted, "bodies_this_run": len(tail.sizes) - base,
-         "free_below_floor_at_end": bool(todo) and last_free_low,
+         "free_below_floor_at_end": last_free_low, "no_body_in_final_interval": final_zero_tail,
          "distinct_mints_with_body": len(tail.mints & set(mints)), "of_distinct_mints": len(mints),
          "shed": shed, "errors": errors, "error_types": error_types, "body_bytes": _stats(tail.sizes[base:])})
     return 0

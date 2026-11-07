@@ -198,6 +198,34 @@ p = subprocess.run([sys.executable, TOOL, "--first", "2026-09-30T14", "--last", 
                     os.path.join(ROOT, "r3.jsonl")], env=env, capture_output=True, text=True)
 check("R3 inside-production refused", p.returncode == 2 and "inside it" in p.stderr, "rc=%s %s" % (p.returncode, p.stderr))
 
+# ── S4/S5: the final interval's power (Langston, Step 4 r2, modelled) ──────────────────────────────────────────────
+print("S4 expect: 1,001 mints, the last one always errors (a reliable 404) -> exit 0, end says no_body_in_final_interval=1")
+bucket("2026-10-01T06", ["V%04d" % i for i in range(1001)])
+
+
+def last_errors(mint):
+    if mint == "V1000":
+        raise RuntimeError("HTTP Error 404: Not Found")
+    return real_token_state(mint)
+
+
+providers.token_state = last_errors
+log = os.path.join(ROOT, "s4.jsonl")
+rc = cap.main(["--first", "2026-10-01T06", "--last", "2026-10-01T06", "--log", log])
+recs = records(log)
+providers.token_state = real_token_state
+check("S4 a finished capture with a one-mint zero tail exits 0", rc == 0, "rc=%s %s" % (rc, recs[-1]))
+check("S4 the tail is on the end record", recs[-1]["kind"] == "end" and recs[-1]["no_body_in_final_interval"] == 1,
+      str(recs[-1]))
+print("S5 expect: 1,500 mints, a stall from 1,001 (500-attempt final interval) -> still exit 6")
+bucket("2026-10-01T07", ["W%04d" % i for i in range(1500)])
+served["n"] = 0
+providers.token_state = bodies_then_shed
+log = os.path.join(ROOT, "s5.jsonl")
+rc = cap.main(["--first", "2026-10-01T07", "--last", "2026-10-01T07", "--log", log])
+providers.token_state = real_token_state
+check("S5 a 500-attempt zero final interval is a stall", rc == 6, "rc=%s %s" % (rc, records(log)[-1]))
+
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
