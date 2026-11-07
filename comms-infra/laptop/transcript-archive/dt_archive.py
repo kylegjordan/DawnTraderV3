@@ -95,8 +95,12 @@ MACHINE_TEXT = re.compile(r"\s*(<scheduled-task |<task-notification>|continue (w
 def _human_content(c):
     if isinstance(c, str):
         return bool(c.strip()) and not MACHINE_TEXT.match(c)
+    if isinstance(c, dict):                           # a bare block (Langston P10 review obs (a)): judged as a list
+        c = [c]
     if not isinstance(c, list):
         return False
+    if any(isinstance(b, str) and b.strip() and not MACHINE_TEXT.match(b) for b in c):
+        return True                                   # a list of plain strings: default-human applies to each
     blocks = [b for b in c if isinstance(b, dict)]
     if any(b.get("type") not in ("tool_result", "text") for b in blocks):
         return True                                   # an image, a document... - something a person put there
@@ -127,29 +131,49 @@ class Gate:
     """The per-file question for GATED folders, with a cache `(size, mtime_ns, verdict)` per file at <root>/gate-cache.json
     so a run re-reads only files that changed. A file with a state is archived already and stays in (a conversation
     never drops out of the archive). The cache is never trusted over a changed size or time; losing it costs a re-scan,
-    never a miss. A dry run never writes it."""
+    never a miss: a cache that is missing, unreadable, corrupt or the wrong shape is treated as EMPTY (Langston P10
+    review C-3 - a performance cache must never stop the nightly archive of the five). A dry run never writes it.
+    Bound, stated: a file judged machine is read WHOLE each time it changes, and one long-lived heartbeat session's
+    .jsonl grows without limit. Ids: check_injective sees the POST-gate set, so this folder adds 8-hex session ids only
+    at the rate of runs holding a human turn - archiving the folder whole would add ~24 a day.
+    `seen` / `kept` count the TOP files judged / kept per alias, for the run's result line (C-1: an emptied or blind
+    gated folder must not print a line identical to a healthy one)."""
 
     def __init__(self, root, dry=False):
         self.path, self.dry, self.root = os.path.join(root, "gate-cache.json"), dry, root
         try:
             self.cache = json.load(open(self.path, encoding="utf-8"))
-        except FileNotFoundError:
+        except (OSError, ValueError):
+            self.cache = {}
+        if not isinstance(self.cache, dict):
             self.cache = {}
         self.changed = False
+        self.seen, self.kept = {}, {}
 
     def __call__(self, rf):
+        v = self._judge(rf)
+        if rf[1] == "top":
+            self.seen[rf[0]] = self.seen.get(rf[0], 0) + 1
+            self.kept[rf[0]] = self.kept.get(rf[0], 0) + bool(v)
+        return v
+
+    def _judge(self, rf):
         p = rf[2]
         if os.path.exists(state_path(self.root, rf)):
             return True
-        try:
-            st = os.stat(p)
-            key, now = identity(p), [st.st_size, st.st_mtime_ns]
-            hit = self.cache.get(key)
-            if hit and hit[:2] == now:
-                return hit[2]
-            verdict = human_turn(p)
-        except OSError as e:          # unreadable is a refusal, never "no human turn" (the raw set would be incomplete)
-            raise Refused("cannot read %s to judge it (%s) - nothing written" % (p, e))
+        for attempt in (1, 2):        # one re-stat before refusing: a file mid-write by its own run (Langston C-1 (1))
+            try:
+                st = os.stat(p)
+                key, now = identity(p), [st.st_size, st.st_mtime_ns]
+                hit = self.cache.get(key)
+                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:
+                    return hit[2]
+                verdict = human_turn(p)
+                break
+            except OSError as e:      # unreadable is a refusal, never "no human turn" (the raw set would be incomplete)
+                if attempt == 2:
+                    raise Refused("cannot read %s to judge it (%s) - nothing written" % (p, e))
+                time.sleep(0.5)
         self.cache[key] = now + [verdict]
         self.changed = True
         return verdict
@@ -253,7 +277,9 @@ def raw_files(projects, gate=None):
         if slug in GATED:            # (Langston P10 r3 (iii)) only conversations holding a human turn; nested follow
             kept = [rf for rf in out[start:] if rf[1] == "top" and gate(rf)]
             ids = {rf[3] for rf in kept}
-            out[start:] = kept + [rf for rf in out[start:] if rf[1] == "sub" and rf[4] in ids]
+            # a nested file follows a kept parent, and is judged on its own when its parent is absent or out - a P10
+            # move deletes top files and leaves the session folder (Langston P10 review C-2)
+            out[start:] = kept + [rf for rf in out[start:] if rf[1] == "sub" and (rf[4] in ids or gate(rf))]
     return out
 
 
@@ -534,8 +560,8 @@ def _secs(ts):
         return None
 
 
-def archive_all(root, projects, red, now=None, dry=False):
-    gate = Gate(root, dry=dry)
+def archive_all(root, projects, red, now=None, dry=False, gate=None):
+    gate = gate if gate is not None else Gate(root, dry=dry)
     rfs = raw_files(projects, gate=gate)
     gate.save()
     check_injective(rfs)                    # BEFORE any write (C-5)

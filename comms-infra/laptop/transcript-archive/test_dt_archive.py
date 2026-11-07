@@ -882,5 +882,53 @@ da.archive_all(root, proj, dt.Redactor(), dry=True)
 ok("a dry run writes no gate cache", not os.path.exists(os.path.join(root, "gate-cache.json")))
 shutil.rmtree(base)
 
+print("18. Langston P10 review: a parentless nested file (C-2), a corrupt cache (C-3), the two content shapes (obs (a))")
+SUBP = "a1000009-0000-0000-0000-000000000000"
+for label, entries, want in (("C-2: a nested file with a human turn whose TOP file is absent is judged and archived",
+                              [user("s1", T0 % 1, "kyle typed this inside a subagent run")], True),
+                             ("C-2: ...a parentless nested file with no human turn is not",
+                              [tool_res("s2", T0 % 1)], False)):
+    base, proj, root = tree()
+    d = os.path.join(proj, HB, SUBP, "subagents")
+    os.makedirs(d)
+    with open(os.path.join(d, "agent-x.jsonl"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("".join(json.dumps(e) + "\n" for e in entries))
+    g = da.Gate(root)
+    res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S, gate=g)
+    listed = [r for r in res if "agent-x" in r["raw"]]
+    ok(label, bool(listed) == want and ref == [] and g.seen.get("HEARTBEAT", 0) == 0, (res, ref, g.seen))
+    shutil.rmtree(base)
+for label, body in (("C-3: a TRUNCATED cache", '{"a": [1, 2'), ("C-3: an EMPTY cache file", ""),
+                    ("C-3: a cache that is a JSON LIST", "[1, 2, 3]"), ("C-3: an entry of the wrong shape", '{"x": 5}')):
+    base, proj, root = hb_tree()
+    open(os.path.join(root, "gate-cache.json"), "w", encoding="utf-8").write(body)
+    try:
+        res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+        ok(label + " costs a re-scan, never the run: the queued_command run is still found",
+           "QUEUED-RUN-REPLY" in all_text(root) and ref == [], ref)
+    except Exception as e:  # noqa: BLE001
+        ok(label + " costs a re-scan, never the run: the queued_command run is still found", False, repr(e))
+    shutil.rmtree(base)
+base, proj, root = hb_tree()
+qf = os.path.join(proj, HB, "a1000003-0000-0000-0000-000000000000.jsonl")
+json.dump({da.identity(qf): 5}, open(os.path.join(root, "gate-cache.json"), "w", encoding="utf-8"))
+try:
+    res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+    ok("C-3: a wrong-shape entry UNDER THE FILE'S OWN KEY is re-judged, never trusted or crashed on",
+       "QUEUED-RUN-REPLY" in all_text(root) and ref == [], ref)
+except Exception as e:  # noqa: BLE001
+    ok("C-3: a wrong-shape entry UNDER THE FILE'S OWN KEY is re-judged, never trusted or crashed on", False, repr(e))
+shutil.rmtree(base)
+base, proj, root = hb_tree()
+g = da.Gate(root)
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S, gate=g)
+ok("C-1: the gate counts TOP runs judged and kept per alias (5 judged, 3 hold a human turn)",
+   g.seen == {"HEARTBEAT": 5} and g.kept == {"HEARTBEAT": 3}, (g.seen, g.kept))
+shutil.rmtree(base)
+ok("obs (a): content as a list of plain strings is a human turn", da._human_content(["kyle said this"]))
+ok("obs (a): ...but a list holding only a machine string is not", not da._human_content(["<task-notification>x"]))
+ok("obs (a): content as a bare image block is a human turn", da._human_content({"type": "image"}))
+ok("obs (a): content as a bare tool_result block is not", not da._human_content({"type": "tool_result", "content": "x"}))
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

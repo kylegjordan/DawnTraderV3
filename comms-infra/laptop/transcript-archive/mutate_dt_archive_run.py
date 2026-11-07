@@ -46,6 +46,7 @@ MUTATIONS = [
     ("QUIET: the outside list may quiet a Dawn Trader name", replace("    if bad:\n        raise ValueError(", "    if False:\n        raise ValueError(")),
     ("QUIET: the outside list ignored", replace("and s not in outside\n", "\n")),
     ("QUIET: the index told nothing", replace("            di.build(root, shared, unlisted=unlisted)", "            di.build(root, shared)")),
+    ("C-1: the gated counts left off the result line", replace("red.layer_c_names, gated,", 'red.layer_c_names, "",')),
 ]
 
 

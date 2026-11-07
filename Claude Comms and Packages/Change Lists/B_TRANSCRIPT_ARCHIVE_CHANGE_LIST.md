@@ -434,3 +434,27 @@ Exc Files : value-hashes.json
 - **On install, expected:** every hold live at that moment has no `c9`, so it releases under `NOT RECORDED` (arm (c), ≤1 h of holds). That is the design working, not a defect.
 - **Writer 0 failed; mutations 70/70, 0 by crash** (new: "a refresh keeps the old order"; the three refresh-line anchors re-pointed).
 - **#1077, a second symptom:** the first push of this commit was run with the shell's cwd in `comms-infra/laptop/transcript-archive`. The push guard refused it with "184 (file, code, message) counts BELOW baseline" at an unchanged total (328 = 328). Run from the repo root, `node scripts/check-tsc-baseline.mjs` reads OK, no regressions. This is the same cwd dependence, but with a different message from the six "comparator missing" refusals recorded on #1077.
+
+### P10 counts-leg build — Langston Step 4 CHANGES NEEDED (3) on `f2f882d7f`, folded
+- **C-1, a gated folder that is empty or blind was a silent zero.** Now `Gate` counts TOP runs judged and kept per alias, and the run's OK line ALWAYS ends `; HEARTBEAT: <kept> of <judged> runs hold a human turn`. No folder or an empty folder reads `0 of 0`, a machine-only run `0 of 1`, a kept run `1 of 1`. It is a statement on the line, not an exit 7: an empty heartbeat folder is a legitimate state.
+- **C-2, a parentless nested file in a gated folder was dropped silently.** A `sub` is now kept if its parent is kept OR it passes the gate on its own (`dt_archive.py`, the `raw_files` gated filter). Test: a nested file with a human turn and no top file → archived; without a human turn → not. The test also checks it is not counted as a run.
+- **C-3, a corrupt cache stopped the run.** `except (OSError, ValueError)`, plus `isinstance(dict)` on the cache and a `list` of length 3 on each entry. A truncated, empty, list or wrong-shape cache, including a bad entry under the file's own key, costs a re-scan and the queued_command run is still found.
+- **His four answers, applied:**
+  1. The refusal is kept, with one re-stat (0.5 s) before refusing.
+  2. The size bound sentence is in the `Gate` docstring.
+  3. The post-gate injective namespace is in the `Gate` docstring.
+  4. `outside-folders.txt` stays in the backup, and the System Impact Map's exclusions sentence now says it is deliberately NOT excluded, and why.
+- **Observations:**
+  - (a) The two content shapes are now judged default-human: a list of plain strings (each one judged), and a bare block dict (judged as a one-item list). Tested both ways.
+  - (b) "never read" → "never OPENED; the folder tree IS walked, names and extensions only", in `dt_archive_run.py` and the System Impact Map.
+- **Governance:**
+  - The System Impact Map now names the two persisted artifacts, `gate-cache.json` and `outside-folders.txt`.
+  - The scope `:39` verify line gains the GATED clause: every kept heartbeat run has an archive file, and the kept set re-derived from a fresh empty cache matches.
+  - The System Manual is judged not applicable: laptop comms tooling, not architecture, strategy, regime, signal pipeline or maths.
+- **Mutations: writer 78/78, run 22/22, dupes 5/5, index 20/20, 0 by crash.** New:
+  - C-2 parentless dropped;
+  - C-3 corrupt raises / non-dict trusted / wrong-shape entry trusted;
+  - C-1 every judged counted kept / nested counted as runs / counts left off the line;
+  - obs (a) bare block as machine / plain strings as machine.
+  - Two cache anchors were re-pointed.
+  - Index 20/20 is a Windows run. Langston's Linux re-run reads 19/20, because `recall: CRLF on stdout` is a no-op where LF is already the default — expected.

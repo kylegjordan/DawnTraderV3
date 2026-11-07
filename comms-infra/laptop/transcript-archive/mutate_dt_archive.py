@@ -134,11 +134,24 @@ MUTATIONS = [
     ("GATE: a machine shape read as human", replace("|resume wake-watcher-heartbeat|# Autonomous loop check|", "|# Autonomous loop check|")),
     ("GATE: default-MACHINE (an unknown shape dropped)", replace("        return bool(c.strip()) and not MACHINE_TEXT.match(c)",
                                                                  "        return bool(re.match(r\"\\s*KYLE\", c))")),
-    ("GATE: the cache trusted over a changed size", replace("            if hit and hit[:2] == now:", "            if hit:")),
+    ("GATE: the cache trusted over a changed size", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:",
+                                                            "                if isinstance(hit, list) and len(hit) == 3:")),
     ("GATE: an archived conversation re-judged by the cache", replace("        if os.path.exists(state_path(self.root, rf)):\n            return True",
                                                                       "        if False:\n            return True")),
     ("GATE: a dry run writes the cache", replace("        if self.dry or not self.changed:", "        if not self.changed:")),
-    ("GATE: the cache never consulted", replace("            if hit and hit[:2] == now:\n                return hit[2]", "            if False:\n                return hit[2]")),
+    ("GATE: the cache never consulted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:\n                    return hit[2]",
+                                                "                if False:\n                    return hit[2]")),
+    # Langston P10 review C-1/C-2/C-3 and obs (a)
+    ("C-2: a parentless nested file dropped", replace("(rf[4] in ids or gate(rf))", "rf[4] in ids")),
+    ("C-3: a corrupt cache raises", replace("        except (OSError, ValueError):\n            self.cache = {}", "        except FileNotFoundError:\n            self.cache = {}")),
+    ("C-3: a non-dict cache trusted", replace("        if not isinstance(self.cache, dict):\n            self.cache = {}", "        if False:\n            self.cache = {}")),
+    ("C-3: a wrong-shape entry trusted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now:",
+                                                 "                if hit and hit[:2] == now:")),
+    ("C-1: every judged run counted as kept", replace("self.kept.get(rf[0], 0) + bool(v)", "self.kept.get(rf[0], 0) + 1")),
+    ("C-1: nested files counted as runs", replace('        if rf[1] == "top":\n            self.seen[rf[0]]', '        if True:\n            self.seen[rf[0]]')),
+    ("obs (a): a bare block read as machine", replace("    if isinstance(c, dict):", "    if False:")),
+    ("obs (a): plain strings in a list read as machine", replace("    if any(isinstance(b, str) and b.strip() and not MACHINE_TEXT.match(b) for b in c):",
+                                                                 "    if False:")),
 ]
 
 

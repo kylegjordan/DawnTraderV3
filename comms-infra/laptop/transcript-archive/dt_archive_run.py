@@ -153,7 +153,7 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
         return 7, "ARCHIVE RUN FAILED — session folder(s) present but holding no conversations: %s" % ", ".join(empty)
     # A Dawn Trader folder the archive neither reads nor has excluded, holding a conversation, is loud too: the writer
     # reads only SLUG_ALIAS, so a NEW crew folder would otherwise go unarchived in silence (Langston, P10 counts leg -
-    # how the spare clone reached P10). An empty one stays quiet. Only Dawn Trader names are looked into.
+    # how the spare clone reached P10). An empty one stays quiet.
     try:
         unmapped = [s for s in sorted(os.listdir(projects))
                     if da.dt_folder_class(s) == "UNMAPPED" and holds_conversation(os.path.join(projects, s))]
@@ -164,7 +164,9 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
                    "excludes: %s - map each to a session (SLUG_ALIAS) or exclude it with its measured class (EXCLUDED)"
                    % ", ".join(unmapped))
     # The QUIET class (Langston P10 r4, Kyle's other work): a folder NOT named Dawn Trader's, on no list, holding a
-    # conversation is NAMED in the result line and the laptop-local index - never a failure, never in git, never read.
+    # conversation is NAMED in the result line and the laptop-local index - never a failure, never in git. Its files
+    # are never OPENED, but its folder tree IS walked (names and extensions only) to see whether it holds a .jsonl
+    # (Langston P10 review obs (b): 'never read' would be cited later as proof the tree is never traversed).
     # Its list is a hand-edited LAPTOP-LOCAL file; a Dawn Trader name in it is refused, so it can never mute exit 7.
     try:
         outside = outside_folders(root)
@@ -186,7 +188,8 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
             return 3, ("ARCHIVE RUN FAILED — fingerprints unusable (wrong key %d, malformed %d, loaded %d)"
                        % (red.layer_c_wrong_key, red.layer_c_malformed, red.layer_c_names))
         try:
-            results, refused = da.archive_all(root, projects, red, dry=dry)
+            gate = da.Gate(root, dry=dry)
+            results, refused = da.archive_all(root, projects, red, dry=dry, gate=gate)
         except da.Refused as e:
             return 4, "ARCHIVE RUN FAILED — %s" % e
         if refused:
@@ -195,8 +198,12 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
             di.build(root, shared, unlisted=unlisted)
         n = sum(r["lines"] for r in results)
         rr = [os.path.basename(r["raw"]) for r in results if r.get("reread")]
-        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values%s%s" % (
-            len(results), n, " (dry run)" if dry else "", red.layer_c_names,
+        # every GATED folder's counts, ALWAYS - an emptied or blind gated folder must not print a line identical to a
+        # healthy one (Langston P10 review C-1); "0 of 0" is the empty state, said out loud
+        gated = "".join("; %s: %d of %d runs hold a human turn" % (a, gate.kept.get(a, 0), gate.seen.get(a, 0))
+                        for a in sorted(set(da.GATED.values())))
+        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values%s%s%s" % (
+            len(results), n, " (dry run)" if dry else "", red.layer_c_names, gated,
             ("; %d REREAD after an in-place rewrite: %s" % (len(rr), ", ".join(rr[:10]))) if rr else "",
             ("; %d folder(s) on no list: %s" % (len(unlisted), ", ".join(unlisted))) if unlisted else "")
     finally:

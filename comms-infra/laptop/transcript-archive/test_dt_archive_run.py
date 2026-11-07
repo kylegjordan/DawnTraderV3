@@ -140,6 +140,24 @@ for label, folder, rel, want in (
                    if f.endswith(".md"))
     ok(label, code == want and (want == 0 or folder in line) and "UNMAPPED-MARKER" not in arch, (code, line))
     shutil.rmtree(base)
+# Langston P10 review C-1: the GATED folder's counts are ALWAYS on the result line - empty, machine-only, kept
+HBF = "G--My-Drive-Dawn-Trader"
+SCHED = {"type": "user", "uuid": "g1", "timestamp": "2026-11-06T09:00:00Z",
+         "message": {"content": '<scheduled-task name="wake-watcher-heartbeat">x</scheduled-task>'}}
+HUMAN = {"type": "user", "uuid": "g2", "timestamp": "2026-11-06T09:01:00Z", "message": {"content": "please stop"}}
+for label, entries, want in (("C-1: no heartbeat folder at all -> `HEARTBEAT: 0 of 0`", None, "HEARTBEAT: 0 of 0 runs"),
+                             ("C-1: a heartbeat folder present but EMPTY -> `0 of 0`, said out loud", [], "HEARTBEAT: 0 of 0 runs"),
+                             ("C-1: a machine-only run -> `0 of 1`, distinct from the empty line", [SCHED], "HEARTBEAT: 0 of 1 runs"),
+                             ("C-1: a run holding a human turn -> `1 of 1`", [SCHED, HUMAN], "HEARTBEAT: 1 of 1 runs")):
+    base, proj, root, shared, machines = tree()
+    if entries is not None:
+        os.makedirs(os.path.join(proj, HBF))
+        if entries:
+            open(os.path.join(proj, HBF, "b2000000-0000-0000-0000-000000000000.jsonl"), "w", newline="\n").write(
+                "".join(json.dumps(e) + "\n" for e in entries))
+    code, line = run_(proj, root, shared, machines=machines)
+    ok(label, code == 0 and want in line, line)
+    shutil.rmtree(base)
 # Langston P10 r4: the QUIET class - named in the run line and the laptop index, a COUNT in the git-mirrored copy
 OTHER = "G--My-Drive-Kasia-Projects"
 base, proj, root, shared, machines = tree()
