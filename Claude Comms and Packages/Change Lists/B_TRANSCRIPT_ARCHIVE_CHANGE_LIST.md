@@ -572,3 +572,8 @@ Exc Files : value-hashes.json
   2. **`DELETED_COMPONENTS_LOG.md`'s absence sentence now carries its true population:** my grep did not cover `1-system-manual/`, where his whole-repo grep found 4 mentions, all prose, zero readers.
   3. **The completeness fence counts rows by POSITION** (every `|` line after the `|---` separator), not by `CC-`/`HEARTBEAT` text, so a new alias with any prefix still counts on both sides. His `[:-1]` mutant was added and is caught (`1 vs 2`).
 - **Counts, stated his way:** index/search 33 mutants run and caught on Windows; on posix 32 run + 1 SKIPPED by name (CRLF). "N/N" is the kill count over the mutants RUN, never the list length. His note, recorded: the OK line's `shared index N bytes` is a number a human reads in `RUNS.log`, **not an alarm**, and may never be cited as one.
+
+### INSTALLED 2026-11-07T05:54Z — the cap-free index, from `fa03c15cc568d821d32e2b0c3c7711e9c7377712` (Langston PROCEED at `b9da8d2d7`; runtime files unchanged since)
+- 0 locks; the previous copy was kept at `~/.claude/transcript-archive-bin.4635e5926`; all 8 files match their blobs by object id.
+- The first run attempt at 05:55:01Z was SKIPPED by the 30-minute floor, as designed (the last success ended 05:32:07Z).
+- **Confirming run at 06:03:49Z:** `ARCHIVE RUN OK — 1096 raw files, 69 lines, layer (c) 28 values; HEARTBEAT: 4 of 1986 runs hold a human turn; shared index 13548 bytes`. Orphan census: 1,096 states, 0 orphans.
