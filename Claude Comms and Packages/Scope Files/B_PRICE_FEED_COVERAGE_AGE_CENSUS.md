@@ -7,7 +7,19 @@
 
 ⚠️ **STATUS (Coltrane, scope r2): a CANDIDATE INVENTORY, not an exhaustive census.** The title says "every price-age check"; the method did not read all 164 keyword matches, so a missing row cannot be ruled out. Step 2 reconciles it against an independent decision-seam-first enumeration and the live `module_constants` values.
 
-**Count: 46 rows; 22 change a trading action (11 crypto, 9 xStock, 2 both).** "Receipt" = our own receive/write time.
+**Count: 46 rows; 26 carry DECIDES.** ⚠️ **PREVIOUSLY STATED (r1/r2 header): "22 change a trading action (11 crypto, 9 xStock, 2 both)". NOW: 26 rows carry DECIDES (12 crypto / 11 xStock / 3 both — Langston's parse, re-derived by CC-B with the same 7-cell split). REASON: the reader's 22 silently excluded four source-selection rows; the set is now ENUMERATED below, not counted.** "Receipt" = our own receive/write time.
+
+### THE DECIDING SET, BY ROW ID (scope r3, OBJ-6 binds against this list)
+| bucket | rows | disposition |
+|---|---|---|
+| **ENTRY estimand — in scope** | **#1, #2, #3, #5, #6, #8, #9, #10, #23, #46**, plus **B0 = crypto signal birth** (`signal-orchestrator.ts:2452`, NO bound today — absent from the table because there is nothing to find) | read the entry instantiation of the standard (OBJ-2, OBJ-6) |
+| **EXIT estimand — in scope, separate instantiation** | **#7, #11, #12, #18, #19** | read the exit instantiation (distance = the stop budget, event = crossing the stop/target), derived separately; until it is derived and reviewed, each keeps its current measured contract |
+| **VTS learning lane — excluded** | #20, #21, #24 | the VTS is the learning lane, not the trading pipeline; any alignment is a separate decision |
+| **source selection, not a trading action — demoted** | #13, #14, #16, #26 | each decides WHICH source to read or whether to re-fetch, not whether a trade acts; they serve the central reader and are re-checked at Step 2 for any trading consequence |
+| **feed maintenance — inputs to `sourceHealthy` (OBJ-1)** | #30, #39 | resubscribe / reconnect operations, not price admission |
+| **close grading — excluded** | #28 | grades a close against a witness after the fact (`B-CRYPTO-FEED-WATCHDOG`) |
+| **ranking sample use — excluded** | #40 | AMR friction-sample freshness, not a price that decides an action |
+Total: 10 + 5 + 3 + 4 + 2 + 1 + 1 = **26** census rows, plus B0.
 
 | # | file:line | checkpoint | class / feed | bound and source | clock | decides? | introducing commit (first `-S` hit) |
 |---|---|---|---|---|---|---|---|
