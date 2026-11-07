@@ -1687,8 +1687,9 @@ export class SignalOrchestrator {
         // context.indicators?.atr` per pattern-symbol), so the value is now per-symbol-correct for
         // every consumer. Fed to atr_at_open → Open Trades display, RTB ranking, replay, VTS-parity.
         // Exit-neutral (B8.5k T1/T2; trailing off). Gated by the ≥2-distinct-atr-per-cycle fence
-        // test (p19-b8-5l). No fail-loud here — the reorg-B2 target gate above (B-ENTRY-GATE P8) already
-        // dropped any signal whose ATR was unavailable (its LOUD invalid_atr branch), so this value is present.
+        // test (p19-b8-5l). No fail-loud here, and this value CAN be undefined: the reorg-B2 target gate above
+        // (B-ENTRY-GATE P8) reads `marketContext?.atr ?? sizingContext.atr`, so a present marketContext.atr with an
+        // absent sizingContext.atr passes the gate and still stamps undefined here (Langston inc-B Step-4 C-2).
         atr: sizingContext.atr,
         // P19-B8.10 (OBJ-4): genesis capture of the display-context fields the VTS
         // records at open (regime / global regime / pair+global friction / pair+
