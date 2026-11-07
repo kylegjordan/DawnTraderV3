@@ -142,12 +142,15 @@ export function rebaseLevels(i: {
   }
   if (!finitePos(stop) || !finitePos(target)) return { ok: false, reason: 'non_finite_rebase' };
   if (!(stop < fill && target > fill)) return { ok: false, reason: 'rebased_not_long' };
+  // Step-4 CHANGE-2 (Langston, #546): the basis names what HAPPENED to the value, not which path ran — a mixed leg whose
+  // anchor term wins at both the plan and the fill is re-applied and lands back on the plan, so it reads 'plan'.
+  const moved = (v: number, p: number) => Math.abs(v - p) > Math.max(Math.abs(p), 1) * 1e-12;
   return {
     ok: true,
     stopPrice: stop,
     targetPrice: target,
-    stopBasis: stopUsable ? 'fill_rebased' : 'plan',
-    targetBasis: targetUsable ? 'fill_rebased' : 'plan',
+    stopBasis: stopUsable && moved(stop, planStop) ? 'fill_rebased' : 'plan',
+    targetBasis: targetUsable && moved(target, planTarget) ? 'fill_rebased' : 'plan',
     inconsistent,
   };
 }

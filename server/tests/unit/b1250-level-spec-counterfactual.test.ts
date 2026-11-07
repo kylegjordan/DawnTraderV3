@@ -239,7 +239,8 @@ describe('#1250 FENCE 1 — each leg responds to the decision price exactly as i
         expect(file).toContain(cs.entry);
         for (const t of [...legExprs(cs.stop), ...legExprs(cs.target)]) {
           if (t.expr === 'morningStarLow' || t.expr === 'rangeLow') continue; // bare identifiers, asserted by the stamp below
-          expect(file).toContain(t.expr);
+          // Step-4 (Langston (a)): EXACTLY once — a second copy of the construction could be the one that runs.
+          expect(file.split(t.expr).length - 1, `occurrences of ${t.expr}`).toBe(1);
         }
         expect(file).toContain(cs.stamp);
       });

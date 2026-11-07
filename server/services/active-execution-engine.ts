@@ -6582,7 +6582,7 @@ export class ActiveExecutionEngine {
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
 
     // [27.F.14.B] INSTRUMENTATION: Order computed
-    console.log(`[27.F.14.B][ActiveEngine] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${_carriedStop.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
+    console.log(`[27.F.14.B][ActiveEngine] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${_carriedStop.toFixed(2)}, target:${_carriedTarget.toFixed(2)}}`);
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
       payload: {

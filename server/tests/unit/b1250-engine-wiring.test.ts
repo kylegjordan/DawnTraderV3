@@ -30,8 +30,17 @@ describe('#1250 — argument provenance, per call site', () => {
     expect(E).toContain("decision: 'OPENED',\n        entryPrice: actualEntryPrice.toString(),\n        stopPrice: _carriedStop.toString(),");
     expect(E).toContain('riskAmount: (quantity * Math.abs(actualEntryPrice - _carriedStop)).toFixed(2)');
     expect(E).toContain('entryPrice: actualEntryPrice, stopPrice: _carriedStop, targetPrice: _carriedTarget, ...(_levelRec ?? {}),');
+    expect((E.match(/takeProfit: _carriedTarget\.toString\(\),/g) ?? []).length).toBe(2);
+    expect(E).toContain('stop:${_carriedStop.toFixed(2)}, target:${_carriedTarget.toFixed(2)}}');
     // mutation guard: no durable write takes the plan stop directly any more
     expect(E).not.toMatch(/^\s*stopLoss: signal\.stopPrice\.toString\(\),\s*$/m);
+  });
+  it('Step-4 CHANGE-1: NOTHING past the economics refusal reads the plan levels (the absence, not just the conversions)', () => {
+    const from = at('if (_feT.refuse && !_fillExplo) {');
+    const end = E.indexOf('\n  private ', from); // the end of executeSimulatedTrade
+    expect(end).toBeGreaterThan(from);
+    const tail = E.slice(from, end);
+    expect(tail.match(/signal\.(stopPrice|targetPrice)/g) ?? []).toEqual([]);
   });
   it('signal.* is never assigned (the plan stays the plan)', () => {
     expect(E).not.toMatch(/signal\.(stopPrice|targetPrice)\s*=[^=]/);

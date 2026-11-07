@@ -21,7 +21,7 @@ describe('#1250 P1 — single forms', () => {
     if (!r.ok) throw new Error(r.reason);
     expect(r.stopPrice).toBeCloseTo(fill - 2, 12);
     expect(r.targetPrice).toBeCloseTo(fill + 4, 12);
-    expect(r.stopBasis).toBe('fill_rebased');
+    expect(r.stopBasis).toBe(fill === 100 ? 'plan' : 'fill_rebased'); // CHANGE-2: a fill AT plan moves nothing
   });
   it('proportional ⇒ scales with the fill', () => {
     const r = rebaseLevels({ ...base, fill: 99, spec: { stop: { form: 'proportional' } } });
@@ -62,6 +62,22 @@ describe('#1250 BLOCKER-6 — a mixed leg is re-applied whole', () => {
     const r = rebaseLevels({ ...base, fill: 99, spec: vwapT });
     if (!r.ok) throw new Error(r.reason);
     expect(r.targetPrice).toBe(103); // 2R would be 99 + 2·1 = 101
+  });
+});
+
+describe('#1250 Step-4 CHANGE-2 — the basis names what happened to the VALUE', () => {
+  it('a mixed leg whose anchor term wins at both the plan and the fill reads plan, not fill_rebased', () => {
+    // volatility_edge shape: min(anchor 104, distance 104.5) ⇒ 104 at the plan; a cheaper fill lowers the distance term to 103.9 …
+    const spec: LevelSpec = { target: { op: 'min', terms: [{ spec: { form: 'anchor' }, value: 104 }, { spec: { form: 'distance' }, value: 104.5 }] } };
+    const below = rebaseLevels({ ...base, fill: 99.4, spec });
+    if (!below.ok) throw new Error(below.reason);
+    expect(below.targetPrice).toBeCloseTo(103.9, 12);
+    expect(below.targetBasis).toBe('fill_rebased');
+    // … but an ABOVE-plan fill raises it to 104.6 and the anchor wins at both prices: the value did not move
+    const above = rebaseLevels({ ...base, fill: 100.1, spec });
+    if (!above.ok) throw new Error(above.reason);
+    expect(above.targetPrice).toBe(104);
+    expect(above.targetBasis).toBe('plan');
   });
 });
 
