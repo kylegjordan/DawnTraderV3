@@ -265,15 +265,44 @@ export type EntryWindowOutcome =
   | 'skip_no_price' | 'skip_price_refused' | 'skip_mode_absent' | 'skip_maker' | 'settings_unresolved'
   // The plan's stop is absent, non-finite, or not below plan entry, so the window (a fraction of planEntry − planStop)
   // cannot be measured. COUNTED, never folded into judged_pass (Langston inc-B Step-4 C-1).
-  | 'skip_invalid_geometry';
+  | 'skip_invalid_geometry'
+  // The supplied price is not a finite number, so adverseR cannot be computed — COUNTED, never judged_pass
+  // (Langston inc-B Step-4 PROCEED condition 2: C-1 closed the stop term; this closes the price term).
+  | 'skip_price_nonfinite';
 const _entryWindowTally = new Map<string, number>();
 /** `${phase}:${class}:${outcome}` → count since process start. Read-only copy. */
 export function getEntryWindowTally(): Record<string, number> {
   return Object.fromEntries(_entryWindowTally);
 }
-function _tallyEntryWindow(phase: string, assetClass: string, outcome: EntryWindowOutcome): void {
+// The Step-7 denominator's READER (Langston inc-B PROCEED condition 1: `getEntryWindowTally` had no production reader,
+// and judged_pass / skip_no_price / skip_maker print no line). Every outcome is also counted per UTC hour, and the
+// finished hour is printed — one line per phase:class — on the first tally of the next hour, in the shape of
+// `[P7][PRICED_SHARE_HOUR]`. ⚠️ An hour with no tally after it is printed late (on the next tally), never lost.
+let _entryWindowHour: { hourKey: string; counts: Map<string, number> } = { hourKey: '', counts: new Map() };
+function _flushEntryWindowHour(): void {
+  const byPhaseClass = new Map<string, string[]>();
+  for (const [k, n] of _entryWindowHour.counts) {
+    const i = k.lastIndexOf(':');
+    const pc = k.slice(0, i);
+    const parts = byPhaseClass.get(pc) ?? [];
+    parts.push(`${k.slice(i + 1)}=${n}`);
+    byPhaseClass.set(pc, parts);
+  }
+  for (const [pc, parts] of byPhaseClass) console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_HOUR] hour=${_entryWindowHour.hourKey}Z ${pc} ${parts.join(' ')}`);
+}
+function _tallyEntryWindow(phase: string, assetClass: string, outcome: EntryWindowOutcome, nowMs: number = Date.now()): void {
   const k = `${phase}:${assetClass}:${outcome}`;
   _entryWindowTally.set(k, (_entryWindowTally.get(k) ?? 0) + 1);
+  const hourKey = new Date(nowMs).toISOString().slice(0, 13);
+  if (_entryWindowHour.hourKey !== hourKey) {
+    if (_entryWindowHour.hourKey) _flushEntryWindowHour();
+    _entryWindowHour = { hourKey, counts: new Map() };
+  }
+  _entryWindowHour.counts.set(k, (_entryWindowHour.counts.get(k) ?? 0) + 1);
+}
+/** Test-only: tally at a given clock, so the hourly line can be exercised without waiting an hour. */
+export function _tallyEntryWindowForTests(phase: string, assetClass: string, outcome: EntryWindowOutcome, nowMs: number): void {
+  _tallyEntryWindow(phase, assetClass, outcome, nowMs);
 }
 
 /** Pure apart from the tally and one settings read; pushes onto `failures` (never when shadowing). */
@@ -294,6 +323,7 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
   let outcome: EntryWindowOutcome;
   if (!input.priced) outcome = 'skip_no_price';
   else if (!input.priced.ok) outcome = 'skip_price_refused';
+  else if (!Number.isFinite(input.priced.price)) outcome = 'skip_price_nonfinite';
   else if (input.chosenEntryMode === undefined) outcome = 'skip_mode_absent';
   else if (input.chosenEntryMode !== 'taker') outcome = 'skip_maker';
   else if (!(typeof input.planStop === 'number' && Number.isFinite(input.planStop) && entry - input.planStop > 0)) outcome = 'skip_invalid_geometry';
@@ -320,9 +350,10 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
     }
   }
   _tallyEntryWindow(phase, cls, outcome);
-  if (outcome === 'skip_mode_absent' || outcome === 'skip_price_refused' || outcome === 'skip_invalid_geometry') {
+  if (outcome === 'skip_mode_absent' || outcome === 'skip_price_refused' || outcome === 'skip_invalid_geometry' || outcome === 'skip_price_nonfinite') {
     const why = outcome === 'skip_price_refused' && input.priced && !input.priced.ok ? input.priced.reason
-      : outcome === 'skip_invalid_geometry' ? `plan stop ${String(input.planStop)} not below plan entry ${entry}` : 'chosen entry mode absent';
+      : outcome === 'skip_invalid_geometry' ? `plan stop ${String(input.planStop)} not below plan entry ${entry}`
+      : outcome === 'skip_price_nonfinite' && input.priced && input.priced.ok ? `price ${String(input.priced.price)} is not finite` : 'chosen entry mode absent';
     console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_SKIP:${phase}] ${input.symbol}/${input.strategy} class=${cls} outcome=${outcome} reason=${why} — not judged (counted)`);
   }
   return outcome;
