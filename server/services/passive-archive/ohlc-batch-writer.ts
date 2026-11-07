@@ -104,6 +104,9 @@ export function isTransientWriteError(err: unknown): boolean {
   if (m.includes('statement timeout') || m.includes('canceling statement')) return false;
   return m.includes('deadlock')
     || m.includes('pool slot timeout')
+    // B-DB-POOL-GUARD P3 C1 (Langston): pg-pool 3.7.0's own acquire-timeout text (index.js:205), now reachable
+    // because the app pool sets connectionTimeoutMillis. 'pool slot timeout' matches only this writer's 5 s guard.
+    || m.includes('timeout exceeded when trying to connect')
     || m.includes('connection terminated')
     || m.includes('connection reset')
     || m.includes('econnreset')
@@ -150,10 +153,11 @@ let _xstockBufferFailStopAlerted = false;
  * flush ID (it returns the saved event set once a completion exists), and it is bounded: the
  * 50,000-frame fail-stop refuses intake, and the stuck-flush alert below names the flush ID.
  * Every other class, and every other error, keeps #705's rule.
- * ⛔ COUPLED TO R5 (Langston): this can only fire because `XSTOCK_TX_STATEMENT_TIMEOUT_MS`
- * (xstock-bar-availability.ts) makes the SERVER cancel before the pool's 30 s client timeout. If
- * that bound is raised to 30 s or more, or the SET LOCAL is removed, this exemption becomes dead
- * code and the drops come back as "Query read timeout", which is deliberately not exempted.
+ * ⛔ COUPLED TO R5 (Langston; restated at B-DB-POOL-GUARD P3 C2, 2026-11-07): since P3 the POOL itself sets a
+ * server-side `statement_timeout` (25 s, `server/db.ts`), so a server cancel no longer depends on the SET LOCAL
+ * alone. The binding condition is now: `XSTOCK_TX_STATEMENT_TIMEOUT_MS` (xstock-bar-availability.ts) stays BELOW
+ * the pool's `statement_timeout`, so the xStock transaction's own, shorter bound is the one that fires. The
+ * pool bound in turn stays below the 30 s client `query_timeout` (invariant at `POOL_CONFIG`).
  */
 export function isXstockProjectionRetryable(assetClass: ArchiveAssetClass, err: unknown): boolean {
   if (assetClass !== 'xstock_spot') return false;

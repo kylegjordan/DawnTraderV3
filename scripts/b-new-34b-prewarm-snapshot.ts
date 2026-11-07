@@ -261,6 +261,10 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
     connectionString,
     max: 1,
     query_timeout: 180_000,
+    // B-DB-POOL-GUARD P3 C3 (Langston): the server bound sits BELOW the client bound (same ~20 % ratio as the app
+    // pool), so an over-long prewarm statement is cancelled by the server instead of holding a backend after the
+    // client gives up (pg's query_timeout sends no cancel). 150 s keeps the prewarm's existing 180 s budget intact.
+    statement_timeout: 150_000,
     keepAlive: true,
     keepAliveInitialDelayMillis: 10_000,
   });

@@ -67,11 +67,37 @@ if (!process.env.DATABASE_URL) {
 // recurring schedules introduced. No Central Clock interaction. (See
 // B_NEW_40_PRE_AUDIT.md §2.6 for the per-component audit.)
 
+// ─── B-DB-POOL-GUARD P3 (#1239, increment 3, 2026-11-07): the server-side bounds, set from 56 h of P2 readings ───
+// Readings and the value derivation: `B_DB_POOL_GUARD_PRE_AUDIT.md` "AMENDMENT inc 3" (Langston-approved).
+// ⛔ INVARIANT — statement_timeout (25 s) < query_timeout (30 s), and it is the ORDER that matters: pg 8.13.1's
+// `query_timeout` (client.js:542-564) errors the caller and drops the callback but sends NO cancel and does NOT
+// destroy the connection, so before this commit the server ran an abandoned statement for up to its own 2 min
+// default while the app had already given up — the 2026-11-04 stall (a connection handed back inside an open
+// transaction, ten of them taking every slot; `xstock-bar-availability.ts`). With the server bound FIRST, the server
+// cancels (SQLSTATE 57014), the error arrives on the connection the normal way, and ROLLBACK runs at once. Same
+// ~20 % ratio as `xstock-db-snapshot.ts` (server 2,000 ms, client 2,500 ms). Lowering query_timeout toward 25 s
+// would make the no-cancel path MORE reachable, so it stays at 30 s. Any per-transaction `SET LOCAL
+// statement_timeout` (XSTOCK_TX_STATEMENT_TIMEOUT_MS, the Drift Dashboard's 4 s) must stay BELOW 25 s.
+const POOL_STATEMENT_TIMEOUT_MS = 25_000;
+const POOL_QUERY_TIMEOUT_MS = 30_000;
+if (!(POOL_STATEMENT_TIMEOUT_MS < POOL_QUERY_TIMEOUT_MS)) {
+  throw new Error('[DB_POOL_INIT] statement_timeout must be below query_timeout (B-DB-POOL-GUARD P3 invariant)');
+}
+
 const POOL_CONFIG = {
   connectionString: process.env.DATABASE_URL,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
-  query_timeout: 30_000,
+  query_timeout: POOL_QUERY_TIMEOUT_MS,
+  // P3: server-side statement bound (see the invariant above). Measured: hold > 25 s 30 times in 56 h, 28 of them
+  // beside a logged 30 s client abandon; no write evidenced completing between 25 s and 30 s.
+  statement_timeout: POOL_STATEMENT_TIMEOUT_MS,
+  // P3: a connection idle INSIDE a transaction is ended by the server after 60 s (was 0 = never). Longest transaction
+  // hold measured: 26.5 s.
+  idle_in_transaction_session_timeout: 60_000,
+  // P3: a caller waits at most 10 s for a free slot, then gets pg-pool's 'timeout exceeded when trying to connect'
+  // (was: forever). Measured: max wait 1,167 ms; > 1 s twice in 6.2 M checkouts.
+  connectionTimeoutMillis: 10_000,
   idleTimeoutMillis: 30_000,
   max: 10,
   application_name: 'dawntrader_main',
@@ -102,6 +128,9 @@ console.log(
     `keepAlive=${POOL_CONFIG.keepAlive} ` +
     `keepAliveInitialDelayMillis=${POOL_CONFIG.keepAliveInitialDelayMillis} ` +
     `query_timeout=${POOL_CONFIG.query_timeout} ` +
+    `statement_timeout=${POOL_CONFIG.statement_timeout} ` +
+    `idle_in_transaction_session_timeout=${POOL_CONFIG.idle_in_transaction_session_timeout} ` +
+    `connectionTimeoutMillis=${POOL_CONFIG.connectionTimeoutMillis} ` +
     `idleTimeoutMillis=${POOL_CONFIG.idleTimeoutMillis} ` +
     `max=${POOL_CONFIG.max}`
 );

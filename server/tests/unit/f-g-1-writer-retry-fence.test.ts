@@ -137,6 +137,8 @@ describe('F-G-1 OBJ-9 — the classifier, EXERCISED rather than grepped', () => 
     for (const msg of [
       'deadlock detected',
       'ohlc-batch-writer: pool slot timeout (5s)',
+      // B-DB-POOL-GUARD P3 C1: pg-pool 3.7.0's literal acquire-timeout message (index.js:205)
+      'timeout exceeded when trying to connect',
       'Connection terminated unexpectedly',
       'read ECONNRESET',
       'sorry, too many clients already',
