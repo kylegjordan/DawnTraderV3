@@ -16,8 +16,7 @@ change-class: architecture (the batch's declared class; this addendum adds objec
 | VTS trade size | `vts_open_trades` carries `quantity` and `position_size` (265,247 rows: crypto 199,073, xStock 66,174) | DB, 2026-11-07 |
 
 **THE COVERAGE FACT THAT SHAPES (b) — measured 2026-11-07 ~00:45Z, level-basis funnel, one process lifetime (boot 2026-11-05T14:39:52Z), cell `vts:crypto_spot:vts_exit_trigger:book`:** **3,803 of 51,160 VTS crypto exit attempts (7.4 %) had an order book usable at that moment** — `no_book` 37,518 (73.3 %: the symbol has no book subscription), `stale_book` 9,831 (19.2 %), `implausible_spread` 8. Control, same instant: the ACTIVE exit cell accepts the book on 85,899 of 97,124 (88.4 %) — the active lane trades a few subscribed symbols; the VTS trades the universe. Attempts, not distinct exits.
-**xStock has no depth at all on either lane** — top-of-book bid/ask plus their sizes (`xstock_spot_ticker_snap.bid_qty`/`ask_qty`); the 20-level xStock book is plan row 189a, never built (`#949`, D3).
-⇒ **"the same walk paper uses" can be done literally on ~7 % of VTS crypto exits and on no xStock exit.** Everything else has one price level and its size.
+~~**xStock has no depth at all on either lane** … ⇒ "the same walk paper uses" can be done literally on ~7 % of VTS crypto exits and on no xStock exit.~~ **(struck — wrong object, Langston r1: paper's xStock close ALREADY walks a one-level sized book — `depth-source.ts:120-131` returns `bids: [{ price: bid, qty: bidQty }]` and `order-placer.ts:118-120` calls `closeFillFull` whenever there is a level; the VTS xStock lane already reads the same size (`vts-xs-select.ts:78-82`); `bid_qty` is present on 99.92 % of 9,620,063 xStock snapshots in 72 h. I measured "has a 20-level book", not "can take paper's walk". And the crypto 7.4 / 73.3 / 19.2 % split is RULED ON REPORTED FACT and no longer load-bearing under r2.)**
 
 ## 2. Provenance (tier 1 — behaviour this addendum changes)
 Corpora searched: `BATCH_CATALOG`, the `8a-P3` progress report, `RUNNING_ISSUES` (`#914`, `#1118`), the scope's own D-table, and `git log -S` (not path-limited).
@@ -26,7 +25,7 @@ Corpora searched: `BATCH_CATALOG`, the `8a-P3` progress report, `RUNNING_ISSUES`
 - **`composeVtsLegFriction`** — introduced `eea2dca65` (2026-09-30), *"B-PRICE-SIDE-BY-JOB 8a-P4c Step-3, increment 3a-ii: P14 per-leg VTS friction, recomposed at close (plan §C3.8, #1118)"*. The `slippage × 2` term predates it (Directive 11.3B, the flat allowance P19-B4b.1 already retired on the active seam). **Disposition (2): updated** — (c) removes the allowance where the booked price already carries the impact.
 Tier 2 (read only): `tec-evaluator.ts` (the trigger; unchanged), `calibration-epoch.ts` (the epoch bump mechanism; used, unchanged).
 
-## 3. Objectives
+## 3. Objectives — r1, ⛔ SUPERSEDED BY §7 (r2) — kept for the record
 
 | # | objective | verification |
 |---|---|---|
@@ -49,4 +48,20 @@ The coverage figure is one process lifetime of in-memory attempts, not distinct 
 
 ### ✅ D-1 RULED 2026-11-07 (Coltrane, KD-34; Discord inbox ~00:58Z): **(A), corrected — (C) is not a prerequisite and does not go to Kyle first.**
 KD-19's "same walk" means the same `closeFillFull` mechanism and the D8 completion rule, not universal 20-level coverage: the governing record already says a market sell walks the available bid depth and models the missing depth (`PRICING_DECISIONS_2026-09-11.md:30-35`), and D8 keeps full completion with walked vs extrapolated quantity on every close (`:127-133`); a missing valid bid refuses under D3 (`:52-76`). K2 above is rewritten to that rule, and the source basis is never replaced by a model label. (C) would raise coverage — the measured 3,803 of 51,160 motivates it — but it is a transport batch needing Kyle's slot, not a KD-19 (b) dependency. D-2 is subsumed (the beyond-depth penalty on the excess is the D8 extrapolation). Coltrane's ruling covers D-1 only; Step-1 approval is Langston's review of this file.
+
+---
+
+## 7. RE-SPEC r2 (CC-C, 2026-11-07, after Langston's SENT BACK — Discord `1568423039127789615`; Coltrane's D-1 ruling stands)
+**The rule: ONE function on every VTS exit — `closeFillFull(quantity, levelsWeSaw, beyondDepthPenaltyBps)` — exactly paper's call. The arm stops naming "which formula ran" and records WHAT WE SAW: `levelsSeen`, `walkedQty`, `extrapolatedQty`, plus the unchanged source basis.** A full book is walked; a sized top level is one level; a sizeless top bid is one level of quantity 0, so the whole order extrapolates at the penalty (paper's behaviour on a `qty_absent` xStock row, `depth-source.ts:157-158` — recorded, not smoothed); no valid fresh bid ⇒ refuse (D3). That is Kyle's *"based on the same thing that we've fixed for paper trading"* (`DECISIONS.md:42`) on both classes, with no new transport.
+
+| # | objective | verification |
+|---|---|---|
+| **K1** | **VTS exits book `closeFillFull` over the levels seen, on both classes and both VTS lanes, carrying the observed/extrapolated split FROM THE FIRST COMMIT** — `walkedQty` and `extrapolatedQty` stored per close. ⛔ Folds `P-8e` (`B_PRICE_SIDE_BY_JOB_PRE_AUDIT.md:458-470`; `CODEX_FINDINGS_REGISTER.md:101`: `closeFillFull` returns `exhausted: false` on the penalty path and callers take only `.avgFillPrice`) so the defect is not copied onto the learning lane (§9.4 disposition 1). | Unit: for a fixture book + quantity the VTS price equals paper's call bit for bit; walked + extrapolated = quantity; a mutation booking the top bid fails. Live: per-class mix of `levelsSeen` / extrapolated share, RE-DERIVED after deploy (not carried from the r1 funnel read). |
+| **K2** | **xStock parity today:** the VTS xStock exit passes the guarded row's `bidQty` as the level's size (`vts-xs-select.ts:78-82` already reads it). | Unit on the xStock path; live: xStock closes carry `walkedQty` > 0 where `bid_qty` > 0. |
+| **K3** | **Crypto: carry the bid size on the cached sides** — option (D), a cache-shape change, not a subscription. The producer has it (`crypto_spot_ticker_snap` 24 h: `bid_qty` > 0 on 336,102 of 336,102 rows, Langston). ⚠ **HYPOTHESIS until the pre-audit reads it:** that the LIVE WS ticker path (not only the archiver's write path) holds the size in hand; `CachedQuoteSides` is price-only today (`touch-price.ts:192-199`). | Step 2 names the read site; unit: the cached sides carry `bidQty`; live: crypto ticker-rung closes walk one sized level. |
+| **K4** | **(c) — the fixed slippage allowance leaves VTS friction on every leg priced by the walk with a sized level.** On a leg priced from a SIZELESS bid it is the only impact term we have, so (c) is **gated on K3**, not on an arm condition: until the size lands, a sizeless leg keeps it. | Unit per leg; the five-column cost split still sums to the booked cost (P19-B8.7). |
+| **K5** | **One epoch bump per class whose VTS booking changes** (`crypto_spot/vts`, `xstock_spot/vts`), dated by deploy (`ADJUSTMENT_FRAMEWORK` rule 7). | Read the epoch rows after deploy. |
+| **K6** | **The walk takes a fresh book, judged by the rule the VTS exit trigger already uses** — no looser ceiling for booking than for deciding. | Unit: a stale book is not walked. |
+
+**Dropped from r1:** the `bid_top` arm and `top_size_exceeded` (unmeasurable on the crypto ticker rung, which carries no size — Langston r1-2); **D-2** (under one function the excess takes `beyondDepthPenaltyBps` by construction). **(C), book subscriptions for the VTS universe:** not a precondition and not Kyle's for D-1 — kept as a candidate for his list (it deepens what we see; it is not what makes the mechanism match).
 
