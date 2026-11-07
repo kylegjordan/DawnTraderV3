@@ -365,39 +365,76 @@ def cmd_index(a) -> int:
 
 
 # ── encoding-check ─────────────────────────────────────────────────────────────────────────────────────────────────
-def cmd_encoding_check(a) -> int:
-    """Settle `ensure_ascii` for THIS corpus on the raw wire bytes (Langston, Step 4, 2026-11-07): take the indexed
-    mint with the most non-ASCII characters, fetch ONE fresh reply, read it as bytes before any parse, and see how
-    the venue writes non-ASCII. Exit 0 confirmed (raw UTF-8) / moot; 3 UNSETTLED (the fresh reply has no non-ASCII
-    character, so it cannot discriminate); 4 the venue ESCAPES (this encoder understates; nothing may use the sizes).
-    The verdict is written into the index, where derive-n and arm sept read it."""
-    db = sqlite3.connect(a.bodies)
-    row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
-    if row[0] == "moot":
-        print(json.dumps({"verdict": "moot", "detail": json.loads(row[1])}))
-        return 0
-    mint = json.loads(row[1])["mint"]
-    raw = _fetch_raw(mint)
+_ESCAPE = re.compile(rb"(\\+)u([0-9a-fA-F]{4})")
+
+
+def _non_ascii_escapes(raw: bytes) -> int:
+    """`\\uXXXX` escapes above 0x7F that are REAL escapes: the `u` must follow an ODD run of backslashes. An even run
+    is escaped backslashes followed by a literal `u` — e.g. a token NAME holding the seven characters `\\u00e9`,
+    which serialises as `\\\\u00e9` and must not read as the venue escaping (Langston, Step 4, 2026-11-07)."""
+    return sum(len(run) % 2 == 1 and int(h, 16) > 127 for run, h in _ESCAPE.findall(raw))
+
+
+def _judge(mint: str, raw: bytes) -> dict:
     parsed = json.loads(raw.decode("utf-8"))
     venue = _venue_text(parsed).encode("utf-8")
     high = sum(b > 127 for b in raw)
-    escaped = sum(int(h, 16) > 127 for h in re.findall(rb"\\u([0-9a-fA-F]{4})", raw))
+    escaped = _non_ascii_escapes(raw)
     out = {"mint": mint, "raw_bytes": len(raw), "venue_text_bytes": len(venue),
            "delta_bytes": len(venue) - len(raw), "raw_high_bytes": high, "raw_non_ascii_escapes": escaped,
            "fresh_non_ascii_chars": _non_ascii(_venue_text(parsed))}
     if out["fresh_non_ascii_chars"] == 0:
-        verdict, code = "unsettled", 3
+        out["verdict"] = "unsettled"
     elif escaped == 0 and high > 0:
-        verdict, code = "confirmed", 0
+        out["verdict"] = "confirmed"
     else:
-        verdict, code = "venue-escapes", 4
-    out["verdict"] = verdict
+        out["verdict"] = "venue-escapes"
+    return out
+
+
+def cmd_encoding_check(a) -> int:
+    """How the venue's serializer writes non-ASCII, read off the RAW WIRE BYTES of fresh replies (Langston, Step 4,
+    2026-11-07). ⚠️ THE OBJECT IS THE VENUE AT FETCH TIME, FROM ONE DISCRIMINATING REPLY — not the captured corpus's
+    wire bytes, which are unrecoverable by construction (`_request` parses before the store). And a `moot` verdict
+    (no indexed body holds a non-ASCII character) discharges the question for this corpus while leaving the venue's
+    escaping UNMEASURED: no one may cite a `moot` run as evidence the venue serves raw UTF-8.
+    Subjects: `--mint` if given, else the indexed non-ASCII mints in descending order of non-ASCII characters
+    (recomputed from `bodies.body`, which holds the venue text), at most `--max-tries` fetches, until one reply
+    DISCRIMINATES — a dead or relisted mint whose fresh reply carries no non-ASCII character is skipped, not final.
+    Exit 0 confirmed / moot; 3 UNSETTLED (no tried reply discriminated); 4 the venue ESCAPES (this encoder
+    understates; nothing may use the sizes). The verdict and every attempt are written into the index, where
+    derive-n and arm sept read it."""
+    db = sqlite3.connect(a.bodies)
+    row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    if row[0] == "moot":                              # nothing in the corpus can be affected; never overwritten here
+        if a.mint:
+            print("REFUSED: the index is moot (no non-ASCII body); --mint would only measure the venue, and an "
+                  "unsettled probe must not block a corpus it cannot affect", file=sys.stderr)
+            return 2
+        print(json.dumps({"verdict": "moot", "detail": json.loads(row[1]),
+                          "note": "the venue's escaping is UNMEASURED by a moot run"}))
+        return 0
+    if a.mint:
+        subjects = [a.mint]
+    else:
+        ranked = [(_non_ascii(body), mint) for mint, body in db.execute("SELECT mint, body FROM bodies")]
+        subjects = [mint for n, mint in sorted((r for r in ranked if r[0] > 0), key=lambda r: (-r[0], r[1]))]
+    attempts, final = [], None
+    for mint in subjects[:a.max_tries]:
+        out = _judge(mint, _fetch_raw(mint))
+        attempts.append(out)
+        if out["verdict"] != "unsettled":
+            final = out
+            break
+    verdict = final["verdict"] if final else "unsettled"
+    record = {"verdict": verdict, "decided_by": final, "attempts": attempts, "candidates": len(subjects),
+              "max_tries": a.max_tries, "object": "the venue's serializer at fetch time, from one discriminating reply"}
     db.execute("DELETE FROM encoding_check")
-    db.execute("INSERT INTO encoding_check VALUES (?, ?)", (verdict, json.dumps(out, sort_keys=True)))
+    db.execute("INSERT INTO encoding_check VALUES (?, ?)", (verdict, json.dumps(record, sort_keys=True)))
     db.commit()
     db.close()
-    print(json.dumps(out, sort_keys=True))
-    return code
+    print(json.dumps(record, sort_keys=True))
+    return {"confirmed": 0, "unsettled": 3, "venue-escapes": 4}[verdict]
 
 
 # ── prepare ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -891,6 +928,8 @@ def main(argv=None) -> int:
                    help="TEST CONTROL ONLY: proves arm all_shed goes void without the freeze")
     e = sub.add_parser("encoding-check", help="settle ensure_ascii on the raw wire bytes of ONE fresh reply")
     e.add_argument("--bodies", required=True)
+    e.add_argument("--mint", help="judge this mint only (a dead or relisted best-candidate can be stepped past)")
+    e.add_argument("--max-tries", type=int, default=5, help="fetches at most, walking the non-ASCII mints")
     d = sub.add_parser("derive-n")
     d.add_argument("--bodies", required=True)
     d.add_argument("--shape", required=True)

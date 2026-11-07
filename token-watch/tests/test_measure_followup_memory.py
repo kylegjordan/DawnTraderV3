@@ -532,6 +532,50 @@ mfm._fetch_raw = real_fetch
 p = tool("derive-n", "--bodies", os.path.join(WORK, "ec-0.sqlite"), "--shape", SHAPE_F)
 check("EC once confirmed, derive-n is no longer refused for the encoding",
       "encoding" not in p.stderr and p.returncode in (0, 14), "rc=%s %s" % (p.returncode, p.stderr[-200:]))
+
+print("EP expect: a NAME holding the literal text \\u00e9 is not an escape (backslash parity); a real one is")
+lit = {"pairs": [{"pairAddress": "P", "baseToken": {"address": "L", "name": "\\u00e9 cat", "symbol": "猫"}}]}
+raw_lit = json.dumps(lit, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+check("EP the literal-name reply reads confirmed (0 real escapes)",
+      mfm._non_ascii_escapes(raw_lit) == 0 and mfm._judge("L", raw_lit)["verdict"] == "confirmed",
+      str(mfm._judge("L", raw_lit)))
+raw_esc = json.dumps(lit, separators=(",", ":")).encode("utf-8")          # 猫 escaped for real, name literal kept
+check("EP a real escape beside the literal one is counted once", mfm._non_ascii_escapes(raw_esc) == 1, str(raw_esc[:120]))
+check("EP an escaped backslash before a real escape (\\\\\\u732b) still counts",
+      mfm._non_ascii_escapes(b'"a\\\\\\u732b"') == 1 and mfm._non_ascii_escapes(b'"a\\\\u732b"') == 0)
+
+print("EW expect: the walk steps past a mint whose fresh reply cannot discriminate, to the next non-ASCII mint")
+WALK = os.path.join(WORK, "walk")
+os.makedirs(os.path.join(WALK, "provenance", "follow-up"))
+wbodies = {"W1": dict(body("W1"), pairs=[dict(body("W1")["pairs"][0], baseToken={"address": "W1", "name": "猫猫猫", "symbol": "W"})]),
+           "W2": dict(body("W2"), pairs=[dict(body("W2")["pairs"][0], baseToken={"address": "W2", "name": "é", "symbol": "W"})]),
+           "W3": body("W3")}
+with open(os.path.join(WALK, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    for m, ob in wbodies.items():
+        bb = json.dumps(ob, sort_keys=True)
+        fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": bb, "bytes": len(bb), "sha256": SHA(bb)}) + "\n")
+WDB = os.path.join(WORK, "walk.sqlite")
+tool("index", "--pristine", WALK, "--out", WDB)
+fresh = {"W1": json.dumps(body("W1"), separators=(",", ":")).encode("utf-8"),            # relisted: no non-ASCII now
+         "W2": json.dumps(wbodies["W2"], separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+         "W3": json.dumps(body("W3"), separators=(",", ":")).encode("utf-8")}
+calls = []
+mfm._fetch_raw = lambda mint: (calls.append(mint), fresh[mint])[1]
+for label, argv, want_rc, want_v, want_calls in (
+        ("walk W1 (unsettled) -> W2 (confirmed); the ASCII mint W3 is never tried", [], 0, "confirmed", ["W1", "W2"]),
+        ("--max-tries 1 stops after W1 -> unsettled", ["--max-tries", "1"], 3, "unsettled", ["W1"]),
+        ("--mint W2 judges only W2", ["--mint", "W2"], 0, "confirmed", ["W2"])):
+    dbw = os.path.join(WORK, "walk-%d.sqlite" % len(want_calls) + label[:2].strip())
+    shutil.copy(WDB, dbw)
+    del calls[:]
+    rc = mfm.main(["encoding-check", "--bodies", dbw] + argv)
+    v, det = sqlite3.connect(dbw).execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    check("EW %s" % label, rc == want_rc and v == want_v and calls == want_calls
+          and len(json.loads(det)["attempts"]) == len(want_calls), "rc=%s v=%s calls=%s" % (rc, v, calls))
+del calls[:]
+rc = mfm.main(["encoding-check", "--bodies", BODIES_THIN0, "--mint", "ANY"])
+check("EW --mint on a moot index is refused and fetches nothing", rc == 2 and calls == [], "rc=%s calls=%s" % (rc, calls))
+mfm._fetch_raw = real_fetch
 ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
 check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
 print("SB expect: in D5 (class 3+ synthesised at k = 4), the largest served body is ~4x the class-1 mean, not the template's size")
