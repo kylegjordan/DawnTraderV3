@@ -137,6 +137,24 @@ GROUP BY 1, 2 ORDER BY 1, 2;
 - **Crypto:** 38 AEE rows in the 14 days to the read, all `admitted`, so its baseline is non-empty; its taker leg is assessed at the terminal read.
 - **The §3 prediction** ("if slips accrue, rule (a) most likely FAILS") is tracking: the qualifying cell's statistic is 60× its bound.
 
+### 4c. ⛔ THE TERMINAL READ OF RECORD — 2026-11-07, window 2026-10-17T13:03:42Z → 2026-11-07T13:03:42Z (alert `20bba77f`), CC-B
+Run: the §4 SQL EXACTLY as written (class query, rule-(a) query, crypto baseline), `lo`/`hi` = the window, `statement_timeout` raised to 900 s (the interim's condition) — it completed. Plus one arm split (same `graded` predicate, grouped by `consumptionArm`) because rule (b) requires both arms' rates and the class query reports would-refuse pooled only.
+**Class query (row counts stated):**
+| class | rows in window | `entry_fill` | taker rows without key | graded | direct_taker | maker_to_taker | would-refuse | positive slips |
+|---|---|---|---|---|---|---|---|---|
+| crypto_spot | 47 | 0 | 0 | **0** | 0 | 0 | 0 | 0 |
+| xstock_spot | 377 | **6** | **0** | **195** | **28** | 167 | **10** | **14** |
+Controls: C1 — `entry_fill` 6 > 0 in the window and excluded from `graded` by the filter; C2 — 0 taker rows without the key.
+**Arm split (xStock):** `direct_taker` 28 graded, **10 would-refuse (35.7 %)**, 14 positive slips · `maker_to_taker` 167 graded, **0 would-refuse**, 0 positive slips. **Every would-refuse and every positive slip is a direct taker.**
+**Rule (b), as pre-registered** (*"would-refuse ≤ 5 % per class, with ≥ 20 graded opens in the `direct_taker` arm"*): the direct-taker gate is MET (28 ≥ 20); would-refuse **10 of 195 = 5.13 % > 5 %** ⇒ **FAIL.** Both arms reported: direct 35.7 %, fallback 0 %. The pooled 5.13 % is the live COST, not evidence of safety.
+**Rule (a), as pre-registered** (qualifying cells must cover ≥ 50 % of graded opens; nearest-rank p90 of `adverseR / s_own` must not exceed 1.0): one qualifying cell, **vwap_pullback (floor 1.96): 90 graded = 46.2 % of class < 50 %** ⇒ **INSUFFICIENT** — never PASS. Its own statistic: **p90 = 60.33** (would FAIL by 60×); 8 slips over their own bound; `s_own` min 0.0040, p10 0.01346, median 0.01352, max 1.873; 0 `s_own_nonpositive`. Shadow comparator (describes, never decides): p90 positive `adverseR` 0.9011 vs `s_own_min` 0.0040. No other cell qualifies (strong_bull_trend 11 graded / 1 slip; vwap_bounce 5 / 2; sma_trend_ride 37 / 0; morning_star 24 / 0; pivot_shift 23 / 0; range_trading 4 / 0; mean_reversion 1 / 0).
+**Crypto:** **0 graded ⇒ INSUFFICIENT by policy** (`maker_only`); its 14-day baseline is non-empty (43 AEE rows, every day 10-27 → 11-07 holds ≥ 1, all `admitted`), so the zero is the policy, not an absent class.
+**The three refusal-burden figures (xStock, 201 taker attempts = 195 graded + 6 refused before grading):** graded would-refuse **10/195 = 5.13 %** · refused by the ask-through-stop guard alone (`entry_fill`) **6/201 = 2.99 %** · both, with the fill check live **16/201 = 7.96 %**.
+**`close_reason` split of the graded takers** (join 195 of 195, 0 unjoined): **163 `stop_hit` / 25 `target_hit` / 0 other / 7 open** — against the §3 baseline (takers 21 / 0 / 9 open).
+**The §3 prediction** (*"if slips accrue, rule (a) most likely FAILS … else INSUFFICIENT; the direct-taker gate may not clear"*): slips accrued (14); rule (a) reads INSUFFICIENT on coverage, its statistic 60× over; the direct-taker gate DID clear (28).
+**DECISION, by the pre-registered rule** (*"FAIL or INSUFFICIENT ⇒ shadow stays, numbers on `#1183`, re-home to `#372`"*): **xStock: FAIL (b), INSUFFICIENT (a) ⇒ the fill-time RR check STAYS IN SHADOW.** Crypto: INSUFFICIENT ⇒ shadow stays. Numbers go on `#1183`; the floor question re-homes to `#372` (Phase 25). No refusal goes live from this batch.
+**What the data says beyond the rule (for `#372`, not a decision here):** the would-refuses are concentrated entirely in the 28 DIRECT taker opens (35.7 %); the 167 maker-fallback takers never slipped adversely — consistent with §1 (fallbacks start at or below intended). The vwap_pullback cell's bounds sit at ~0.0135 R for the median row, so any adverse slip breaches; that is the 0.04 floor-headroom finding that opened `#1183`, now measured over 21 days.
+
 ## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
 Written before any post-deploy taker opens exists (crypto `maker_only`, xStock shut since Friday 20:00 ET):
 - **Every** admitted xStock taker row from 2026-10-17T13:03:42Z carries `consumptionArm` — **0** taker rows without the key after the deploy (a non-zero count is a defect, not a warm-up).
