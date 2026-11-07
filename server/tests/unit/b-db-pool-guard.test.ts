@@ -107,6 +107,28 @@ describe('the app pool survives an ended idle connection', () => {
     const EXEMPT = new Set(['crew-coordination.ts']);
     const unguarded = builders.filter((f) => !EXEMPT.has(path.basename(f)) && !/attachPoolGuards\(/.test(fs.readFileSync(f, 'utf8')));
     expect(unguarded).toEqual([]);
+    // B-DB-POOL-GUARD P3 (Langston Step-4 r1 CHANGE): every in-process pool builder sets a SERVER statement_timeout
+    // strictly BELOW its CLIENT query_timeout — pg's query_timeout sends no cancel, so at an equal or larger server
+    // value the server bound never fires first. The crew board (same EXEMPT; CLI-only, B-CREW-BOARD-REMOVAL) sets them
+    // EQUAL, which does NOT satisfy this (the client timer starts at dispatch, the server's at execution).
+    const msOf = (src: string, expr: string): number => {
+      const e = expr.trim();
+      if (/^[0-9_]+$/.test(e)) return Number(e.replace(/_/g, ''));
+      const m = src.match(new RegExp(`const ${e} = ([0-9_]+);`));
+      if (!m) throw new Error(`unresolved timeout expression: ${e}`);
+      return Number(m[1].replace(/_/g, ''));
+    };
+    let checked = 0;
+    for (const f of builders.filter((b) => !EXEMPT.has(path.basename(b)))) {
+      const src = fs.readFileSync(f, 'utf8');
+      const server = src.match(/statement_timeout: ([A-Za-z0-9_]+),/);
+      const client = src.match(/query_timeout: ([A-Za-z0-9_]+),/);
+      expect(server, `${path.basename(f)} sets no server statement_timeout`).not.toBeNull();
+      expect(client, `${path.basename(f)} sets no client query_timeout`).not.toBeNull();
+      expect(msOf(src, server![1]), path.basename(f)).toBeLessThan(msOf(src, client![1]));
+      checked++;
+    }
+    expect(checked).toBe(2); // db.ts and the prewarm pool — the census above names them; a new builder must pass too
   });
 
   it('no whole-transaction time limit is written into the xStock bar writer (scope r3: OBJ-3b withdrawn; R5d retries only the statement-timeout text)', () => {

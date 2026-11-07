@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 // B-DB-POOL-GUARD P3 (#1239, increment 3): the app pool's server-side bounds and their ORDER.
-// Source-read on purpose: importing server/db.ts builds the live pool. What this pins is the configuration
-// text and the ordering invariant Langston set (statement_timeout < query_timeout, and every per-transaction
-// SET LOCAL below the pool's statement_timeout), so a later edit that inverts the order fails here.
+// Source-read on purpose: importing server/db.ts builds the live pool. What this pins: the app pool's values
+// and its order; EVERY `SET LOCAL statement_timeout` in server code below the pool's statement_timeout (a census
+// with a count control); and the xStock snapshot client's server bound below its client bound. The per-builder
+// server < client check for every in-process POOL lives in the sibling fence, b-db-pool-guard.test.ts.
 const DB_TS = readFileSync(join(__dirname, '../../db.ts'), 'utf8');
 const XSTOCK_TS = readFileSync(join(__dirname, '../../services/passive-archive/xstock-bar-availability.ts'), 'utf8');
 
@@ -45,5 +46,33 @@ describe('B-DB-POOL-GUARD P3 — the pool bounds', () => {
 
   it('the xStock transaction bound stays BELOW the pool statement bound (Langston R5d, restated at C2)', () => {
     expect(constMs(XSTOCK_TS, 'XSTOCK_TX_STATEMENT_TIMEOUT_MS')).toBeLessThan(stmt);
+  });
+
+  it('EVERY SET LOCAL statement_timeout in server code is below the pool bound (census, not a named list)', () => {
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const f = join(d, e.name);
+        if (e.isDirectory()) { if (!['tests', 'node_modules'].includes(e.name)) walk(f); }
+        else if (/\.ts$/.test(e.name)) files.push(f);
+      }
+    };
+    walk(join(__dirname, '../..'));
+    let sites = 0;
+    for (const f of files) {
+      const src = readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/SET LOCAL statement_timeout = \$\{([A-Za-z0-9_]+)\}/g)) {
+        expect(constMs(src, m[1]), `${f}: ${m[1]}`).toBeLessThan(stmt);
+        sites++;
+      }
+    }
+    // Control: the two known sites (xstock-bar-availability 20 s, drift-dashboard-aggregator 4 s) were found.
+    expect(sites).toBeGreaterThanOrEqual(2);
+  });
+
+  it('the xStock snapshot client sets its server bound below its client bound', () => {
+    const snap = readFileSync(join(__dirname, '../../services/passive-archive/xstock-db-snapshot.ts'), 'utf8');
+    expect(snap).toMatch(/statement_timeout: XSTOCK_SNAPSHOT_STATEMENT_TIMEOUT_MS,/);
+    expect(snap).toMatch(/query_timeout: XSTOCK_SNAPSHOT_STATEMENT_TIMEOUT_MS \+ [1-9][0-9]*,/);
   });
 });

@@ -946,7 +946,8 @@ export async function computePassiveArchiveStatus(
   const PASSIVE_QUERY_TIMEOUT_MS = 4000;
   // Bounded fan-out (Langston, Step 7 ruling 2026-09-28): the pool is shared with the archive writers, so at
   // most three window counts run at once. ⚠️ This bounds how many counts run together, NOT the endpoint's time:
-  // the pool has no connection-acquire timeout, so `db.transaction` can wait for a client before its BEGIN, and
+  // since B-DB-POOL-GUARD P3 (2026-11-07) the pool's connection-acquire wait is bounded at 10 s (`connectionTimeoutMillis`,
+  // `server/db.ts`), so `db.transaction` can wait up to that long for a client before its BEGIN, and
   // the disk-size lookups below are untimed. The latencies recorded in the scope are measurements under load.
   // Peak simultaneous connections held by this panel rise from 1 to 3; total connection-seconds are about the
   // same (Langston, Step 4 judgement 1).
