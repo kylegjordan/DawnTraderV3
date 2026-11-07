@@ -122,11 +122,52 @@ interface Minute {
   maxHoldMs: number;
   maxHoldSite: string;
   siteMaxHold: Map<string, number>;
+  acquireTimeouts: number;
 }
 const freshMinute = (): Minute => ({
   checkouts: 0, viaQuery: 0, wait: WAIT_BUCKETS_MS.map(() => 0), hold: HOLD_BUCKETS_MS.map(() => 0),
-  maxWaitMs: 0, maxWaitSite: '-', maxHoldMs: 0, maxHoldSite: '-', siteMaxHold: new Map(),
+  maxWaitMs: 0, maxWaitSite: '-', maxHoldMs: 0, maxHoldSite: '-', siteMaxHold: new Map(), acquireTimeouts: 0,
 });
+
+// ─── B-DB-POOL-GUARD P4 (OBJ-5(a), increment 3b r2): the per-flush record the alert module reads ───────────────
+// Handed to subscribers at every flush, so the alerts read the SAME counts as the minute line, with no second timer and
+// no log parsing. `startWallMs`/`endWallMs` are WALL-CLOCK (the instrument's own `now` is `performance.now()`), so the
+// alert window is built from COVERED time, never from a line count (Langston (3): the emit offset drifts). The counts
+// are a per-process accumulator: a restart starts a fresh one.
+export interface PoolFlushRecord {
+  label: string;
+  startWallMs: number;
+  endWallMs: number;
+  checkouts: number;
+  waitsOver1s: number;
+  waitsOver5s: number;
+  acquireTimeouts: number;
+  maxWaitMs: number;
+  maxWaitSite: string;
+  open: number;
+  total: number | null;
+  idle: number | null;
+  waiting: number | null;
+}
+type FlushListener = (r: PoolFlushRecord) => void;
+const flushListeners = new Map<string, Set<FlushListener>>();
+
+/** pg-pool 3.7.0's acquire-timeout rejection (`index.js:205`): a bare `Error`, no `code`, so it is matched by its EXACT
+ *  message. Exported for the fence. */
+export const ACQUIRE_TIMEOUT_MESSAGE = 'timeout exceeded when trying to connect';
+export function isAcquireTimeout(err: unknown): boolean {
+  return err instanceof Error && err.message === ACQUIRE_TIMEOUT_MESSAGE;
+}
+
+/** Subscribe to one instrumented pool's flush record. THROWS when `label` was never instrumented (Langston C5: the
+ *  re-attach path returns a no-op, so a subscriber passed there would never fire and nobody would know). Returns an
+ *  unsubscribe function. */
+export function subscribePoolFlush(label: string, fn: FlushListener): () => void {
+  const set = flushListeners.get(label);
+  if (!set) throw new Error(`subscribePoolFlush: pool '${label}' is not instrumented (attachPoolInstrument was never called for it)`);
+  set.add(fn);
+  return () => { set.delete(fn); };
+}
 
 export interface PoolInstrumentOptions {
   intervalMs?: number;
@@ -146,6 +187,8 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
   const now = opts.now ?? (() => performance.now());
   if (instrumented.has(pool)) return { flush: () => {}, stop: () => {} };
   instrumented.add(pool);
+  if (!flushListeners.has(label)) flushListeners.set(label, new Set());
+  let lastFlushWallMs = Date.now();
 
   let minute = freshMinute();
   let open = 0; // NOT reset per minute: a gauge
@@ -183,12 +226,16 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
     if (typeof cb === 'function') {
       return origConnect((err, client, done) => {
         if (!err) stamp(client);
+        else if (isAcquireTimeout(err)) minute.acquireTimeouts += 1;
         cb(err, client, done);
       });
     }
     return (origConnect() as Promise<unknown>).then((client) => {
       stamp(client);
       return client;
+    }, (err: unknown) => {
+      if (isAcquireTimeout(err)) minute.acquireTimeouts += 1;
+      throw err;
     });
   };
 
@@ -228,8 +275,22 @@ export function attachPoolInstrument(pool: pg.Pool, label: string, opts: PoolIns
         `max_wait_ms=${Math.round(m.maxWaitMs)} max_wait_site=${m.maxWaitSite} ` +
         `max_hold_ms=${Math.round(m.maxHoldMs)} max_hold_site=${m.maxHoldSite} slow_hold_sites=${sites} slow_hold_sql=${sqlSites} ` +
         // instantaneous gauges at flush — they do NOT sum across lines
-        `open=${open} total=${p.totalCount ?? '-'} idle=${p.idleCount ?? '-'} waiting=${p.waitingCount ?? '-'}`,
+        `open=${open} total=${p.totalCount ?? '-'} idle=${p.idleCount ?? '-'} waiting=${p.waitingCount ?? '-'} ` +
+        `acquire_timeouts=${m.acquireTimeouts}`,
     );
+    const endWallMs = Date.now();
+    const record: PoolFlushRecord = {
+      label, startWallMs: lastFlushWallMs, endWallMs, checkouts: m.checkouts,
+      waitsOver1s: m.wait[WAIT_BUCKETS_MS.indexOf(1_000)], waitsOver5s: m.wait[WAIT_BUCKETS_MS.indexOf(5_000)],
+      acquireTimeouts: m.acquireTimeouts, maxWaitMs: Math.round(m.maxWaitMs), maxWaitSite: m.maxWaitSite,
+      open, total: p.totalCount ?? null, idle: p.idleCount ?? null, waiting: p.waitingCount ?? null,
+    };
+    lastFlushWallMs = endWallMs;
+    for (const fn of flushListeners.get(label) ?? []) {
+      // A throwing subscriber must not end the minute line or the other subscribers; the alert module's own blind
+      // key notices a subscriber that stops receiving.
+      try { fn(record); } catch (err) { console.error(`[B-DB-POOL-GUARD][FLUSH_LISTENER_THREW] pool=${label} ${(err as Error)?.message ?? err}`); }
+    }
   };
   const timer = setInterval(flush, opts.intervalMs ?? 60_000);
   timer.unref?.();

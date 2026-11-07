@@ -659,6 +659,12 @@ app.use((req, res, next) => {
   //   console.error('[Server] Failed to start Market Data Health Check service:', error);
   // });
 
+  // B-DB-POOL-GUARD P4 (#1239, OBJ-5): the pool pages — connection waits, acquire timeouts, idle transactions (sampled
+  // every 25 s outside the pool, and the server's 25P03 ends), and an unplanned restart. `./db` is imported first so the
+  // instrument and guards are attached before the module subscribes (its subscribe THROWS on an unattached pool).
+  import('./db').then(() => import('./db-pool-alerts')).then((m) => m.startProductionDbPoolAlerts('dawntrader_main'))
+    .catch((error) => console.error('[Server] Failed to start the B-DB-POOL-GUARD pool alerts:', error));
+
   // Phase 8.8.2: Initialize Memory Lifecycle Manager (async, non-blocking)
   import('./services/memory-lifecycle').then(({ memoryLifecycle }) => {
     memoryLifecycle.initialize().catch((error) => {

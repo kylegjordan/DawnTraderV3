@@ -129,6 +129,27 @@ describe('the app pool survives an ended idle connection', () => {
       checked++;
     }
     expect(checked).toBe(2); // db.ts and the prewarm pool — the census above names them; a new builder must pass too
+    // P4 fold (Langston): the same order for every ONE-CONNECTION client that sets both bounds (the pool monitor's own
+    // client in db-pool-alerts.ts, the xStock snapshot client). A builder that sets neither is outside this rule.
+    const exprMs = (src: string, expr: string): number => {
+      const m = expr.trim().match(/^([A-Za-z0-9_]+)(?:\s*\+\s*([0-9_]+))?$/);
+      if (!m) throw new Error(`unresolved timeout expression: ${expr}`);
+      return msOf(src, m[1]) + (m[2] ? Number(m[2].replace(/_/g, '')) : 0);
+    };
+    let clients = 0;
+    for (const f of files) {
+      const src = fs.readFileSync(f, 'utf8');
+      for (const m of src.matchAll(/new (?:pg\.)?Client\(\{([\s\S]*?)\}\)/g)) {
+        const block = m[1];
+        const sv = block.match(/statement_timeout: ([A-Za-z0-9_ +]+?),/);
+        const cl = block.match(/query_timeout: ([A-Za-z0-9_ +]+?),/);
+        if (!sv && !cl) continue;
+        expect(sv && cl, `${path.basename(f)}: a client sets one bound without the other`).toBeTruthy();
+        expect(exprMs(src, sv![1]), path.basename(f)).toBeLessThan(exprMs(src, cl![1]));
+        clients++;
+      }
+    }
+    expect(clients).toBe(2); // xstock-db-snapshot.ts and db-pool-alerts.ts; a new client that sets the bounds must pass too
   });
 
   it('no whole-transaction time limit is written into the xStock bar writer (scope r3: OBJ-3b withdrawn; R5d retries only the statement-timeout text)', () => {

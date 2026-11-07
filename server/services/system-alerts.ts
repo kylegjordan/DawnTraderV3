@@ -245,6 +245,7 @@ export const ALERT_ACTORS = [
   { value: 'staging-liveness-watchdog',    tag: 'machine', why: 'server/scripts/staging-liveness-watchdog.mjs (5-min systemd timer on staging, User=deploy): raises watchdog-<check> and server-disk-utilization-<level>, and resolves its own rows through the CLI `resolve-key` verb when the re-measured condition clears (B-DISK-FILE-TIERING #1233 — before it, a recovered outage left its row open and the next outage was silently deduped); transport `cli`, because it goes through the CLI (Langston, Step 2 r3 B1)' },
   { value: 'drift-dashboard-moved-day',    tag: 'machine', why: 'server/services/data-archive/moved-day-check.ts (in the app, called by the Drift Dashboard): raises disk-tiering-moved-day:phase15b_dbs_telemetry:<window> when a window covers telemetry days the disk-file job moved to warm storage, and resolves its own row when a later check of that window finds none (B-DISK-FILE-TIERING #1233, pre-audit P6); transport `engine`' },
   { value: 'xstock-bar-repair',            tag: 'machine', why: 'server/services/passive-archive/xstock-bar-availability.ts (the writer-cadence certificate repair): resolves its own xstock-bar-availability-certification-pending rows only when a measured global count of uncertified revisions is 0 (B-XSTOCK-BAR-AVAILABILITY R4)' },
+  { value: 'db-pool-monitor',              tag: 'machine', why: 'server/db-pool-alerts.ts (in the app, B-DB-POOL-GUARD OBJ-5): mints and resolves its own db-pool-* and app-unplanned-restart:* rows' },
   { value: 'langston-privacy-check',       tag: 'machine', why: 'comms-infra/langston-memory/bin/langston-privacy-check (daily 06:00Z timer on Helsinki, root): arms and resolves its own exposure alerts - a machine, so it never claims a session name (B-LANGSTON-CONTEXT)' },
   // human
   { value: 'kyle',     tag: 'human', why: 'the decider; the alerts-page default' },
@@ -881,6 +882,30 @@ export async function resolveAlertsByDedupeKey(
   if (targets.length > 1) {
     console.error(`[RESOLVE_BY_KEY][MULTI_MATCH] key=${dedupeKey} n=${targets.length} — resolving all`);
   }
+  const resolved: string[] = [];
+  for (const t of targets) {
+    const r = await resolveAlert(t.id, by, evidence, transport);
+    if (r) resolved.push(r.id);
+  }
+  return resolved;
+}
+
+/**
+ * B-DB-POOL-GUARD OBJ-5(c) (Langston C2, 2026-11-07): resolve EVERY non-terminal row whose dedupe key starts with
+ * `prefix`, through `resolveAlert` (every gate applies). A key-per-value family (`app-unplanned-restart:<n>`) cannot use
+ * the exact-key resolve: a second value before the clear would leave the first row unclearable. `excludeKeys` keeps
+ * a sibling under the same prefix (the family's blind key) out of the clear. Returns the ids resolved.
+ */
+export async function resolveAlertsByDedupePrefix(
+  prefix: string,
+  by: string,
+  evidence: string,
+  transport: ResolveTransport,
+  excludeKeys: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
+  if (!prefix) throw new Error('resolveAlertsByDedupePrefix: empty prefix would match every keyed row');
+  const targets = readAllAlerts().filter((a) => typeof a.dedupe_key === 'string' && a.dedupe_key.startsWith(prefix)
+    && !excludeKeys.has(a.dedupe_key) && a.state !== 'resolved');
   const resolved: string[] = [];
   for (const t of targets) {
     const r = await resolveAlert(t.id, by, evidence, transport);

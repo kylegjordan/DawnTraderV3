@@ -26,7 +26,8 @@ import type pg from 'pg';
 // queryable), so the listeners only LOG and COUNT. Volume is bounded by OBJ-5's per-window alert, not here.
 // POPULATIONS (Langston): `checkedOutClientErrors` counts connection errors on checked-out clients, INCLUDING plain
 // `pool.query()` ones that were already safe, so it is not a count of crashes prevented. Until OBJ-5 reads the
-// counts, the LOG LINE is the carrier; the counters have no reader yet.
+// counts, the LOG LINE is the carrier. Since B-DB-POOL-GUARD P4 the counts' reader is the `25P03` incident body in
+// `server/db-pool-alerts.ts` (`getPoolGuardCounts`), which states the 2:1 relation of the totals to incidents.
 
 export interface PoolGuardCounts {
   idleClientErrors: number;
@@ -34,6 +35,11 @@ export interface PoolGuardCounts {
 }
 
 const counts = new Map<string, PoolGuardCounts>();
+// B-DB-POOL-GUARD P4 (OBJ-5, increment 3b r2): subscribers to a CHECKED-OUT client's connection error, per pool label.
+// The alert module reads the `25P03` arm here (idle-in-transaction ended by the server, deterministic, one per
+// incident) and puts the counts above into the incident body — the counters' reader (Langston C6).
+type CheckedOutErrorListener = (err: Error & { code?: string }) => void;
+const checkedOutListeners = new Map<string, Set<CheckedOutErrorListener>>();
 const guarded = new WeakSet<object>();
 const CHECKED_OUT = Symbol('dtPoolCheckedOut');
 type GuardedClient = {
@@ -54,6 +60,7 @@ export function attachPoolGuards(pool: pg.Pool, label: string): void {
   guarded.add(pool);
   const c: PoolGuardCounts = counts.get(label) ?? { idleClientErrors: 0, checkedOutClientErrors: 0 };
   counts.set(label, c);
+  if (!checkedOutListeners.has(label)) checkedOutListeners.set(label, new Set());
 
   pool.on('error', (err: Error & { code?: string }) => {
     c.idleClientErrors += 1;
@@ -70,6 +77,9 @@ export function attachPoolGuards(pool: pg.Pool, label: string): void {
       if (checkedOut) {
         c.checkedOutClientErrors += 1;
         console.error(`${line('POOL_CLIENT_ERROR', label, pool, err, c.checkedOutClientErrors)} checkedOut=true`);
+        for (const fn of checkedOutListeners.get(label) ?? []) {
+          try { fn(err); } catch (e) { console.error(`[B-DB-POOL-GUARD][GUARD_LISTENER_THREW] pool=${label} ${(e as Error)?.message ?? e}`); }
+        }
       } else {
         // no count field here: on this path the checked-out counter did not move
         console.error(
@@ -85,6 +95,15 @@ export function attachPoolGuards(pool: pg.Pool, label: string): void {
   pool.on('release', (_err, client) => {
     (client as unknown as GuardedClient)[CHECKED_OUT] = false;
   });
+}
+
+/** Subscribe to checked-out client connection errors on one guarded pool. THROWS when `label` was never guarded (the
+ *  same rule as `subscribePoolFlush`: a subscription that can never fire must fail loudly). Returns an unsubscribe. */
+export function subscribeCheckedOutClientErrors(label: string, fn: CheckedOutErrorListener): () => void {
+  const set = checkedOutListeners.get(label);
+  if (!set) throw new Error(`subscribeCheckedOutClientErrors: pool '${label}' is not guarded (attachPoolGuards was never called for it)`);
+  set.add(fn);
+  return () => { set.delete(fn); };
 }
 
 /** Process-lifetime counts for one pool label (zeroed by a restart; OBJ-5 alerts on occurrences per window). */
