@@ -136,8 +136,10 @@ def _venue_text(obj) -> str:
     ⚠️ BYTE-EXACT ONLY ON THE MEASURED 30-PAIR ASCII BODY. It is not a property of the encoder: number formatting was
     lost at capture (`_request` parses before the store), and a re-dump can move a number's length (`0.000001` ->
     `1e-06`, -3 B; `1e-7` -> `1e-07`, +1 B; Langston, measured). The NON-ASCII leg (`ensure_ascii=False`) is the
-    largest term on an emoji-dense name (-18.3% on his synthetic) and is SETTLED per corpus by `encoding-check` on
-    the raw wire bytes, never assumed: if the venue escapes, this encoder UNDERSTATES, the unsafe direction."""
+    largest term on an emoji-dense name (-18.3% on his synthetic) and is never assumed: `encoding-check` reads how the
+    VENUE'S serializer writes non-ASCII at fetch time, from one discriminating reply's raw wire bytes — not the
+    captured corpus's wire bytes, which are unrecoverable. If the venue escapes, this encoder UNDERSTATES, the unsafe
+    direction; a `moot` index leaves the venue's escaping unmeasured."""
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
 
 
@@ -300,7 +302,9 @@ def cmd_index(a) -> int:
     db.execute("CREATE INDEX bodies_by_pairs ON bodies (pairs)")   # arm sept's template lookups (m3)
     db.execute("CREATE TABLE encoding_check (verdict TEXT NOT NULL, detail TEXT NOT NULL)")
     n, dups, divergent, stored_total, venue_total = 0, [], 0, 0, 0
-    bad_digest, best = [], (0, None)                    # best = (non-ASCII chars, mint): encoding-check's subject
+    # best = (non-ASCII chars, mint), FIRST max in file order: it only decides moot vs pending and names a candidate.
+    # The walk re-ranks every body by (-chars, mint), so the pending row's mint need not be the walk's attempts[0].
+    bad_digest, best = [], (0, None)
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
             continue
@@ -401,11 +405,19 @@ def cmd_encoding_check(a) -> int:
     Subjects: `--mint` if given, else the indexed non-ASCII mints in descending order of non-ASCII characters
     (recomputed from `bodies.body`, which holds the venue text), at most `--max-tries` fetches, until one reply
     DISCRIMINATES — a dead or relisted mint whose fresh reply carries no non-ASCII character is skipped, not final.
-    Exit 0 confirmed / moot; 3 UNSETTLED (no tried reply discriminated); 4 the venue ESCAPES (this encoder
-    understates; nothing may use the sizes). The verdict and every attempt are written into the index, where
-    derive-n and arm sept read it."""
-    db = sqlite3.connect(a.bodies)
-    row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    Exit 0 confirmed / moot; 2 REFUSED (no such index, an index built before the encoding gate, an empty verdict
+    table, or `--mint` on a moot index — nothing fetched, nothing written); 3 UNSETTLED (no tried reply
+    discriminated); 4 the venue ESCAPES (this encoder understates; nothing may use the sizes). The verdict and every
+    attempt are written into the index, where derive-n and arm sept read it."""
+    try:                                                # mode=rw: a mistyped path must not CREATE an empty index
+        db = sqlite3.connect("file:%s?mode=rw" % a.bodies, uri=True)
+        row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    except sqlite3.OperationalError as exc:             # the same misses _encoding_refusal states, refused here too
+        print("REFUSED: cannot read the index's encoding_check (%s): rebuild it with `index`" % exc, file=sys.stderr)
+        return 2
+    if row is None:
+        print("REFUSED: the index's encoding_check table is empty: rebuild it with `index`", file=sys.stderr)
+        return 2
     if row[0] == "moot":                              # nothing in the corpus can be affected; never overwritten here
         if a.mint:
             print("REFUSED: the index is moot (no non-ASCII body); --mint would only measure the venue, and an "
@@ -926,7 +938,8 @@ def main(argv=None) -> int:
     r.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     r.add_argument("--no-clock-freeze", action="store_true",
                    help="TEST CONTROL ONLY: proves arm all_shed goes void without the freeze")
-    e = sub.add_parser("encoding-check", help="settle ensure_ascii on the raw wire bytes of ONE fresh reply")
+    e = sub.add_parser("encoding-check", help="read how the venue's serializer writes non-ASCII at fetch time, from "
+                       "the raw wire bytes of one discriminating fresh reply (walks the non-ASCII mints)")
     e.add_argument("--bodies", required=True)
     e.add_argument("--mint", help="judge this mint only (a dead or relisted best-candidate can be stepped past)")
     e.add_argument("--max-tries", type=int, default=5, help="fetches at most, walking the non-ASCII mints")
