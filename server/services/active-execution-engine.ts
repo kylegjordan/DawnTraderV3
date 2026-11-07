@@ -5964,7 +5964,10 @@ export class ActiveExecutionEngine {
     // `levelGeometry: 'sided'`; a crypto signal arriving here without it either lost its metadata on a hop or was queued
     // before the deploy, and every gate below would price it as mid. It is REFUSED, never priced on a guess — the
     // fail-closed direction (a pre-deploy queue row is refused for the minutes it lives). xStock is not sided at birth.
-    if (asValidAssetClass(signal.metadata?.assetClass) === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {
+    // The class is resolved as promotion resolves it (the stamp, else the symbol) — keying on the stamp alone would let an
+    // unstamped crypto signal past this refusal into the EV gate priced as mid (fresh-reader finding, gap 15).
+    const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
+    if (_cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {
       console.error(`[8c][LEVEL_GEOMETRY_ABSENT][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — a crypto signal without the sided stamp reached the open; not opened`);
       rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_ABSENT', 'crypto signal without levelGeometry=sided at open');
       return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };

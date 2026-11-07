@@ -109,7 +109,9 @@ describe('8c P4 (amendment 5) — the spread is counted once at every site that 
     const sided = computeNetGeometry(100, 98, 104, c, 'sided');
     expect(mid.executionEntry).toBeCloseTo(100 * (1 + 0.0005 + 0.001), 12);
     expect(sided.executionEntry).toBeCloseTo(100 * (1 + 0.0005), 12);
-    expect(sided.netExpectedEdge).toBeCloseTo((104 - sided.executionEntry) / sided.executionEntry - composeSidedFriction(0.004, 0.0005), 12);
+    // C-2: the sided arm charges each cost ONCE — entry slippage in the walk, both fees + the exit slippage after.
+    expect(sided.netExpectedEdge).toBeCloseTo((104 - sided.executionEntry) / sided.executionEntry - (2 * 0.004 + 0.0005), 12);
+    expect(sided.netExpectedEdge).not.toBeCloseTo((104 - sided.executionEntry) / sided.executionEntry - composeSidedFriction(0.004, 0.0005), 9);
     expect(mid.netExpectedEdge).toBeCloseTo((104 - mid.executionEntry) / mid.executionEntry - computeTotalRoundTripCost(0.004, 0.0005, 0.002), 12);
     expect(() => computeNetGeometry(100, 98, 104, c, undefined as never)).toThrow(/levelGeometry/);
   });
@@ -163,9 +165,49 @@ describe('8c amendment 5 (iv)+(v) — the stamp survives every hop, and its abse
     expect(R).toMatch(/metadata: \{\n\s+\.\.\.metadata,/);
   });
   it('the open refuses a crypto signal without the sided stamp, BEFORE the open-gate EV prices it', () => {
-    const refuse = uniq(E, "if (asValidAssetClass(signal.metadata?.assetClass) === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
+    expect(E).toContain("const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');");
+    const refuse = uniq(E, "if (_cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
     expect(refuse).toBeGreaterThan(uniq(E, "return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };"));
     expect(refuse).toBeLessThan(uniq(E, 'const expectancyResult = evaluateTradeExpectancy(signal.symbol, {'));
     expect(E).toContain("return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };");
+  });
+});
+
+describe('8c Step-4 r1 (Langston) — the hop fence, one hop further: hybrid rebuild → RTB persist/reload (jsonb) → open', () => {
+  it('a sized stamp survives the hybrid pick, a JSON round trip (the jsonb column) and still reads sided, with its maker bid', async () => {
+    const { baseCryptoLevelsAtBirth, levelGeometryOf } = await import('../../core/trading/crypto-birth-levels.js');
+    const born = baseCryptoLevelsAtBirth({
+      planEntry: 100, planStop: 98, planTarget: 104,
+      metadata: { levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } },
+      quote: { bid: 99.9, ask: 100.1, basis: 'ticker_bbo', producer: 'rest_poller', ageMs: 5_000 },
+      knobs: { maxAgeMs: 60_000, driftRef60s: 0.00429 },
+    });
+    if (!born.ok) throw new Error(born.reason);
+    const sizedMeta = { levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } }, ...born.stamp, unrelated: 1 };
+    // the hybrid's fresh metadata literal + pickLevelStamps (the same three keys)
+    const picked: Record<string, unknown> = {};
+    for (const k of ['levelSpec', 'levelGeometry', 'levelBasisAtBirth']) picked[k] = (sizedMeta as Record<string, unknown>)[k];
+    const hybridMeta = { signalType: 'HYBRID', ...picked };
+    // the RTB write (`...(input.metadata || {})`) → jsonb → the promotion's `...signal.metadata`
+    const reloaded = { ...(JSON.parse(JSON.stringify(hybridMeta)) as Record<string, unknown>), assetClass: 'crypto_spot' };
+    expect(levelGeometryOf(reloaded)).toBe('sided');
+    expect(makerEntryOf(reloaded)).toBe(99.9);
+    // and the hybrid's re-size is a no-op on prices (idempotent on the sided stamp)
+    const again = baseCryptoLevelsAtBirth({
+      planEntry: born.entryPrice, planStop: born.stopPrice, planTarget: born.targetPrice, metadata: reloaded,
+      quote: null, knobs: { maxAgeMs: 60_000, driftRef60s: 0.00429 },
+    });
+    if (!again.ok) throw new Error(again.reason);
+    expect([again.alreadySided, again.entryPrice, again.stopPrice, again.targetPrice]).toEqual([true, born.entryPrice, born.stopPrice, born.targetPrice]);
+  });
+  it('the promotion carries the RTB row metadata whole (no field-list rebuild between the queue and the open)', () => {
+    const at = E.indexOf('metadata: {\n          ...((signal.metadata as any) ?? {}),');
+    expect(at).toBeGreaterThan(-1);
+  });
+  it('the hybrid cap bit stays consistent with the name fallback: the carried stamp IS the quant strategy\'s (C-2 rounding)', () => {
+    expect(O).toContain("const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);");
+    // only volatility_edge stamps the cap bit, so stamp and name agree for every carried hybrid
+    const caps = ['server/strategies/volatility-edge.ts'].map(src).filter((s) => s.includes('targetIsCap: true'));
+    expect(caps).toHaveLength(1);
   });
 });

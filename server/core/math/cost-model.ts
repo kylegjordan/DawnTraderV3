@@ -325,8 +325,16 @@ export function computeNetGeometry(
   if (levelGeometry !== 'mid' && levelGeometry !== 'sided') {
     throw new Error(`computeNetGeometry: levelGeometry must be 'mid' or 'sided', got ${String(levelGeometry)}`);
   }
+  // ⚠️ THE MID ARM OVERLAPS ITS OWN COSTS, AGAINST ITS OWN DIRECTIVE (row `8c` Step 4 C-2, Langston; recorded, NOT fixed
+  // here): Directive 11.3A (`089ac1bfd`, attached spec) says this "subtracts total cost once (no double-counting)", yet the
+  // entry below is walked up by `slippage + spread/2` AND the full round trip `2·fee + 2·slip + spread` is subtracted from
+  // a gross measured off that walked entry — slippage 3×, spread 1.5×. Fixing it moves every historic netEdge series, so
+  // it is homed, not changed in the increment that adds the sided arm.
+  // ⭐ THE SIDED ARM CHARGES EACH COST ONCE: the entry is the ask (the half-spread is in it) walked by the ENTRY slippage
+  // only; what remains is both fees and the EXIT slippage, `2·fee + 1·slip` — no spread at all (it is in the levels).
+  // The same composition `fill-economics.ts` uses at the fill (`composeAskEntrySidedExitFriction`).
   const totalCost = levelGeometry === 'sided'
-    ? composeSidedFriction(costs.fee, costs.slippage)
+    ? (costs.fee * 2) + costs.slippage
     : computeTotalRoundTripCost(costs.fee, costs.slippage, costs.spread);
   
   const executionEntry = baseEntry * (1 + costs.slippage + (levelGeometry === 'sided' ? 0 : costs.spread / 2));

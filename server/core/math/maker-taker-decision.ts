@@ -310,9 +310,13 @@ export function decideMakerTaker(
 
   // ⛔ REFUSE, NEVER DEFAULT. An absent or inconsistent geometry declaration must not silently
   // pick the mid branch: on a SIDED signal that charges the spread twice — precisely the defect
-  // this change exists to remove, arriving silently. Three constructors are already known to
-  // bypass the signal-birth seam where the stamp is applied (`#927`, `#928`, `#929`), so the
-  // unstamped case is measured, not hypothetical.
+  // this change exists to remove, arriving silently. ⚠️ CORRECTED (row `8c` Step 4 C-3, Langston, at `1396d9c37`): this
+  // named THREE constructors bypassing the birth seam (`#927`, `#928`, `#929`). `#929` is CLOSED (the sizer has one
+  // production caller, the orchestrator); `#928`'s HTTP-intent limb is DELETED (what survives, `POST /api/paper/trade/test`,
+  // writes the legacy `trades` table, not the open gate). Only `#927` still fabricates on the active promotion path
+  // (`active-execution-engine.ts`), and a signal through it is orchestrator-born — it loses a TARGET, not the stamp.
+  // The required argument stays: the unstamped case is now refused where it would matter (row `8c`: the crypto open
+  // refuses a signal without the sided stamp, `LEVEL_GEOMETRY_ABSENT`).
   if (levelGeometry !== 'mid' && levelGeometry !== 'sided') {
     throw new Error(
       `decideMakerTaker: levelGeometry must be 'mid' or 'sided', got ${String(levelGeometry)}`,
