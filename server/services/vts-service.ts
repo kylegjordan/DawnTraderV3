@@ -65,6 +65,8 @@ export interface VirtualSignal {
   frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
   entryPriceBasis?: 'ask' | 'level' | 'limit';
   exitBookingArm?: string;
+  /** KD-19 P7: how the exit was walked (`vts-exit-booking.ts` `VtsExitWalkRecord`). */
+  exitWalk?: { levelsSeen: number; walkedQty: number; extrapolatedQty: number; sizeBasis: string; sizeCertain: boolean; impactPriced: boolean };
   // P19-B3b: net expected value attached by generatePhase10Signal (vts-runner) so the
   // caller-side Net-EV floor check can read it. Computed by computeNetExpectancyKernel.
   netEV?: number;
@@ -110,6 +112,8 @@ export interface VirtualTrade {
   frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
   entryPriceBasis?: 'ask' | 'level' | 'limit';
   exitBookingArm?: string;
+  /** KD-19 P7: how the exit was walked (`vts-exit-booking.ts` `VtsExitWalkRecord`). */
+  exitWalk?: { levelsSeen: number; walkedQty: number; extrapolatedQty: number; sizeBasis: string; sizeCertain: boolean; impactPriced: boolean };
   signalType: string;
   strategy: string;
   regime: string;
@@ -841,6 +845,7 @@ export class VTSService extends EventEmitter {
     frictionBasis?: 'recomposed' | 'stamped' | 'unpriced';
     entryPriceBasis?: 'ask' | 'level' | 'limit';
     exitBookingArm?: string;
+    exitWalk?: { levelsSeen: number; walkedQty: number; extrapolatedQty: number; sizeBasis: string; sizeCertain: boolean; impactPriced: boolean }; // KD-19 P7
     pool: 'ideal' | 'rotational';
     sourcePool?: string; // Batch 45: Family-qualified source pool
     expectedEdge?: number; // Batch 45: Actual computed expected edge
@@ -934,7 +939,7 @@ export class VTSService extends EventEmitter {
       costSpreadFraction: tradeData.costSpreadFraction,
       costEntryFeeFraction: tradeData.costEntryFeeFraction,
       costExitFeeFraction: tradeData.costExitFeeFraction,
-      frictionBasis: tradeData.frictionBasis, entryPriceBasis: tradeData.entryPriceBasis, exitBookingArm: tradeData.exitBookingArm,
+      frictionBasis: tradeData.frictionBasis, entryPriceBasis: tradeData.entryPriceBasis, exitBookingArm: tradeData.exitBookingArm, exitWalk: tradeData.exitWalk,
       regime: tradeData.regime,
       pool: tradeData.pool,
       source: 'vts'  // HF6: Fix source tag so closed trades pass H5.10/H5.45 filter
@@ -979,7 +984,7 @@ export class VTSService extends EventEmitter {
       costSpreadFraction: tradeData.costSpreadFraction,
       costEntryFeeFraction: tradeData.costEntryFeeFraction,
       costExitFeeFraction: tradeData.costExitFeeFraction,
-      frictionBasis: tradeData.frictionBasis, entryPriceBasis: tradeData.entryPriceBasis, exitBookingArm: tradeData.exitBookingArm,
+      frictionBasis: tradeData.frictionBasis, entryPriceBasis: tradeData.entryPriceBasis, exitBookingArm: tradeData.exitBookingArm, exitWalk: tradeData.exitWalk,
       signalType: normalizedSignalType,
       strategy: tradeData.strategy,
       regime: tradeData.regime,

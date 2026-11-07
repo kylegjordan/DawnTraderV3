@@ -28,12 +28,20 @@ export interface VtsExitCounters {
   unpricedNoBid: number;
   unpricedNoMark: number;
   closedUnpriced: number;
+  /** KD-19 P9: priced exits WALKED over stated sizes; of those, any extrapolated beyond them; and uncertain (rounded) ones. */
+  walked: number;
+  walkExtrapolated: number;
+  walkUncertain: number;
+  /** KD-19 P9: priced exits booked at the top bid — no stated size, or no depth config (the latter logged at error). */
+  sizeAbsent: number;
+  noDepthConfig: number;
 }
 
 export type VtsExitCountersByClass = Record<VtsCounterClass, VtsExitCounters>;
 
 const zero = (): VtsExitCounters => ({
   exitLooks: 0, exitNoTransactableSide: 0, unpricedNoBid: 0, unpricedNoMark: 0, closedUnpriced: 0,
+  walked: 0, walkExtrapolated: 0, walkUncertain: 0, sizeAbsent: 0, noDepthConfig: 0,
 });
 
 export function newVtsExitCounters(): VtsExitCountersByClass {
@@ -52,6 +60,17 @@ export function countUnpricedArm(c: VtsExitCounters | null, arm: VtsBookingArm):
   else if (arm === 'clamp_no_mark') c.unpricedNoMark++;
 }
 
+/** KD-19 P9: count one PRICED booking by how its size was known. Unpriced arms are counted by `countUnpricedArm`. */
+export function countVtsExitWalk(c: VtsExitCounters | null, w: { price: number | null; sizeBasis: string; extrapolatedQty: number; sizeCertain: boolean }): void {
+  if (c === null || w.price === null) return;
+  if (w.sizeBasis === 'exact' || w.sizeBasis === 'rest_rounded_up') {
+    c.walked++;
+    if (w.extrapolatedQty > 0) c.walkExtrapolated++;
+    if (!w.sizeCertain) c.walkUncertain++;
+  } else if (w.sizeBasis === 'no_depth_config') c.noDepthConfig++;
+  else if (w.sizeBasis === 'absent') c.sizeAbsent++;
+}
+
 export function anyVtsExitCount(c: VtsExitCountersByClass): boolean {
   return VTS_COUNTER_CLASSES.some((k) => Object.values(c[k]).some((v) => v > 0));
 }
@@ -61,7 +80,8 @@ export function formatVtsExitCounters(c: VtsExitCountersByClass): string {
   return VTS_COUNTER_CLASSES.map((k) => {
     const v = c[k];
     return `${k}{exitLooks=${v.exitLooks} exitNoTransactableSide=${v.exitNoTransactableSide} unpricedNoBid=${v.unpricedNoBid} `
-      + `unpricedNoMark=${v.unpricedNoMark} closedUnpriced=${v.closedUnpriced}}`;
+      + `unpricedNoMark=${v.unpricedNoMark} closedUnpriced=${v.closedUnpriced} walked=${v.walked} walkExtrapolated=${v.walkExtrapolated} `
+      + `walkUncertain=${v.walkUncertain} sizeAbsent=${v.sizeAbsent} noDepthConfig=${v.noDepthConfig}}`;
   }).join(' ');
 }
 

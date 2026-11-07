@@ -7,7 +7,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { vtsSpreadShareByLeg, vtsFeeByLeg } from '../core/trading/vts-friction.js';
+import { vtsSpreadShareByLeg, vtsSlippageShareByLeg, vtsFeeByLeg } from '../core/trading/vts-friction.js';
 
 interface TradeRecord {
   // B65.2-HF2 (2026-04-23): widened to include boolean so trailing-engine
@@ -340,12 +340,14 @@ export async function getClosedVTSTradesFromLogs(days: number = 7): Promise<Arra
                 return { costEntryFee: null, costEntrySlippage: null, costExitFee: null, costExitSlippage: null };
               }
               const _sh = vtsSpreadShareByLeg(trade, true);
+              // KD-19 P6 (L2): a recomposed close whose exit walk was certain dropped the exit allowance; a `stamped` one did not.
+              const _sl = vtsSlippageShareByLeg(trade, true);
               const _fee = vtsFeeByLeg(trade) as { entry: number; exit: number }; // finite _f checked above
               return {
                 costEntryFee: parseFloat((tradeDollarValue * _fee.entry).toFixed(4)), // the leg's own fee (r2 FINDING-1)
-                costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
+                costEntrySlippage: parseFloat((tradeDollarValue * (_s * _sl.entry + _sp * _sh.entry)).toFixed(4)),
                 costExitFee: parseFloat((tradeDollarValue * _fee.exit).toFixed(4)),
-                costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
+                costExitSlippage: parseFloat((tradeDollarValue * (_s * _sl.exit + _sp * _sh.exit)).toFixed(4)),
               };
             })(),
             // `8a-P4c` 3a-ii (Langston census addition): how this row's friction was composed and the bookings it read.

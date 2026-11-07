@@ -36,13 +36,35 @@ export interface VtsLegFrictionInput {
   entryPriceBasis: EntryPriceBasis;
   /** The exit leg was booked on its transactable side (arm `bid`). */
   exitSideBooked: boolean;
+  /**
+   * KD-19 (c) exit leg (plan P6; Langston BLOCKER-1): the exit price was WALKED over a size we can trust, so it already
+   * carries its own impact and the fixed slippage allowance leaves THIS leg. `false`/absent ⇒ the allowance stays (the
+   * open-time estimate, a sizeless or unit-lane exit, an uncertain rounded REST size). The entry leg keeps its allowance
+   * until the later KD-19 increment (row 17).
+   */
+  exitImpactPriced?: boolean;
 }
 
 /** Round-trip booked friction as a fraction of notional. The spread half is charged ONLY on a leg booked at a level. */
 export function composeVtsLegFriction(i: VtsLegFrictionInput): number {
   const entrySpread = i.entryPriceBasis === 'level' ? i.spread / 2 : 0;
   const exitSpread = i.exitSideBooked ? 0 : i.spread / 2;
-  return i.entryFee + i.exitFee + i.slippage * 2 + entrySpread + exitSpread;
+  // KD-19 (c), C6-narrowed condition: ONE doubled term split per leg — entry always, exit unless its impact was priced.
+  const entrySlippage = i.slippage;
+  const exitSlippage = i.exitImpactPriced === true ? 0 : i.slippage;
+  return i.entryFee + i.exitFee + entrySlippage + exitSlippage + entrySpread + exitSpread;
+}
+
+/**
+ * KD-19 P6 — the SLIPPAGE allowance's share per leg in the P19-B8.7 cost split, under the same gate as the spread share
+ * below (Langston Step-2 r2 condition L2): only a CLOSED row whose friction was RECOMPOSED dropped the exit allowance — a
+ * `stamped` close kept the open-time scalar, which still holds the allowance twice, so its exit share stays 1 and the
+ * columns still sum to `costs`. Returns multiples of `costSlippageFraction` for each leg.
+ */
+export function vtsSlippageShareByLeg(t: { frictionBasis?: VtsFrictionBasis; exitWalk?: { impactPriced?: boolean } | null },
+  closed: boolean): { entry: number; exit: number } {
+  const exit = closed && t.frictionBasis === 'recomposed' && t.exitWalk?.impactPriced === true ? 0 : 1;
+  return { entry: 1, exit };
 }
 
 /**
@@ -108,7 +130,9 @@ export interface VtsCloseFriction {
 
 const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 
-export function recomposeVtsCloseFriction(t: VtsFrictionRecord, exitArm: VtsBookingArm): VtsCloseFriction {
+export function recomposeVtsCloseFriction(t: VtsFrictionRecord, exitArm: VtsBookingArm,
+  /** KD-19 P6: the booking's `impactPriced` (`bookVtsExit`). Default false — the allowance stays. */
+  exitImpactPriced = false): VtsCloseFriction {
   const refuse = (missing: string): VtsCloseFriction =>
     ({ friction: t.frictionCost, basis: 'stamped', entryPriceBasis: null, legacyBasis: false, missing });
   // `unpriced` needs ALL FIVE absent — the four fractions AND `chosenEntryMode` (Langston r2 BLOCKER-1): every priced writer
@@ -133,6 +157,7 @@ export function recomposeVtsCloseFriction(t: VtsFrictionRecord, exitArm: VtsBook
     spread: t.costSpreadFraction,
     entryPriceBasis: basis,
     exitSideBooked: exitArm === 'bid',
+    exitImpactPriced: exitArm === 'bid' && exitImpactPriced,
   });
   return { friction, basis: 'recomposed', entryPriceBasis: basis, legacyBasis, missing: null };
 }

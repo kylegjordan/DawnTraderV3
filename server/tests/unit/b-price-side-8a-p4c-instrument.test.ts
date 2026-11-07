@@ -202,7 +202,8 @@ describe('8a-P4c — the xStock VTS exits read the guarded bid (increment 3); th
     // row 2 (4b) P9 — re-pointed: the guarded bid feeds the one rule as the xStock bid (armed: the VTS guard is upstream).
     expect(count(VTS, /_vtsExitBid = _xsExit\.bid;/g)).toBe(1);
     expect(count(VTS, /\{ cls: 'xstock_spot', arm: \{ armed: true \}, bid: _vtsExitBid,/g)).toBe(1);
-    expect(count(VTS, /resolveVtsBookedExitPrice\(_vtsExitBid, currentPrice\)/g)).toBe(1); // `3n.q3` P1: the clamp price arg is gone
+    // KD-19 P5: the real lane's booking is `bookVtsExit` over the same bid and mark (its arms are `resolveVtsBookedExitPrice`'s).
+    expect(count(VTS, /bookVtsExit\(\{ observedBid: _vtsExitBid, observedMark: currentPrice,/g)).toBe(1); // `3n.q3` P1: the clamp price arg is gone
   });
 
   it('shadow lane: xStock triggers on the same guard', () => {

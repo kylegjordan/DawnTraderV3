@@ -29,6 +29,8 @@
  *     its bid from the VTS xStock exit guard (`selectVtsXstockExitBid` in vts-runner.ts). With no class branch left,
  *     the `assetClass` argument was unread and is removed (Langston Step-4 nit; §15 disposition (a)).
  */
+import { closeFillFull, type BookLevel } from '../../services/execution/depth-walk.js'; // KD-19 P5: paper's close walk, shared
+
 export type VtsBookingArm = 'bid' | 'clamp_no_mark' | 'clamp_no_bid';
 
 export interface VtsBookedExit {
@@ -46,4 +48,95 @@ export function resolveVtsBookedExitPrice(
   if (!usable(observedMark)) return { price: null, arm: 'clamp_no_mark' };
   if (!usable(observedBid)) return { price: null, arm: 'clamp_no_bid' };
   return { price: observedBid, arm: 'bid' };
+}
+
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+// KD-19 (b) + (c) exit leg — `B-PRICE-SIDE-BY-JOB` row 17 (scope `B_PRICE_SIDE_BY_JOB_KD19_SCOPE.md` §7 r2; plan
+// `B_PRICE_SIDE_BY_JOB_KD19_PRE_AUDIT.md` P5, with Langston's Step-2 BLOCKER-1/-2 and condition L1).
+// VTS exits are BOOKED THE WAY PAPER BOOKS THEM: `closeFillFull(quantity, levels we saw, beyondDepthPenaltyBps)` — the same
+// function and the same DB-resolved penalty paper's close uses (`order-placer.ts`). The ARM is unchanged and still means
+// "booked on its side" (D-K3 / C2: `vts-friction.ts` reads it for the half-spread). Beside it the booking records WHAT WE
+// SAW: how many sized levels, how much of the order they held, how much was priced beyond them, and what kind of size it was.
+// ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+/** What kind of size priced the exit. `exact` / `rest_rounded_up` = walked over stated sizes; the rest = the top bid. */
+export type VtsExitSizeBasis = 'exact' | 'rest_rounded_up' | 'absent' | 'unit_lane' | 'no_depth_config';
+
+/** The bid depth the exit TRIGGER accepted: the book's levels (book rung) or one sized level (ticker rung / xStock row). */
+export interface VtsExitDepth {
+  levels: ReadonlyArray<BookLevel>;
+  basis: 'exact' | 'rest_rounded_up';
+}
+
+export interface VtsBookedExitWalk extends VtsBookedExit {
+  levelsSeen: number;
+  walkedQty: number;
+  extrapolatedQty: number;
+  sizeBasis: VtsExitSizeBasis;
+  /**
+   * BLOCKER-1: the walk's verdict on whether the order FITS can be trusted. An exact size is certain. A REST size is a
+   * CEILING overstated by less than one whole base unit, so it is certain only when `quantity <= stated - 1` (the true size
+   * is above that). ⛔ Never loosen this bound to make (c) reach more closes — that restores BLOCKER-1 (plan §10 L4).
+   */
+  sizeCertain: boolean;
+  /** (c): the exit leg's price already carries its own impact ⇒ the fixed slippage allowance leaves THIS leg. */
+  impactPriced: boolean;
+}
+
+/** KD-19 P7 — what the close RECORD carries beside the arm (archive `state_snapshot.exitWalk`, the closed VTS JSON). */
+export interface VtsExitWalkRecord {
+  levelsSeen: number;
+  walkedQty: number;
+  extrapolatedQty: number;
+  sizeBasis: VtsExitSizeBasis;
+  sizeCertain: boolean;
+  impactPriced: boolean;
+}
+
+export function exitWalkRecord(w: VtsBookedExitWalk): VtsExitWalkRecord {
+  return { levelsSeen: w.levelsSeen, walkedQty: w.walkedQty, extrapolatedQty: w.extrapolatedQty, sizeBasis: w.sizeBasis,
+    sizeCertain: w.sizeCertain, impactPriced: w.impactPriced };
+}
+
+/** The walk, guarded. Reached ONLY after the sized-level test (L1), so a throw here is a defect, never a shadow close. */
+function walkVtsExit(quantity: number, levels: ReadonlyArray<BookLevel>, penaltyBps: number) {
+  if (!(Number.isFinite(quantity) && quantity > 0)) {
+    throw new Error(`[KD-19][VTS_EXIT_WALK] invalid quantity ${quantity} reached the walk — the sizeless route must take it`);
+  }
+  return closeFillFull(quantity, levels, penaltyBps);
+}
+
+export function bookVtsExit(i: {
+  observedBid: number | null | undefined;
+  observedMark: number | null | undefined;
+  /** The trade's quantity. The shadow lane's is 0 by construction (unit sizing) ⇒ the top bid. */
+  quantity: number;
+  depth: VtsExitDepth | null;
+  /** `fill_depth_gate.beyond_depth_penalty_bps` for the class; `null` when the config could not be resolved. */
+  penaltyBps: number | null;
+}): VtsBookedExitWalk {
+  const booked = resolveVtsBookedExitPrice(i.observedBid, i.observedMark);
+  const top = (sizeBasis: VtsExitSizeBasis): VtsBookedExitWalk => ({
+    ...booked, levelsSeen: 0, walkedQty: 0, extrapolatedQty: 0, sizeBasis, sizeCertain: false, impactPriced: false,
+  });
+  if (booked.price === null) return top('absent');
+  // ⛔ L1: the sizeless routes are taken BEFORE any quantity guard — every shadow close arrives with quantity 0.
+  if (!(Number.isFinite(i.quantity) && i.quantity > 0)) return top('unit_lane');
+  // BLOCKER-2: a level of qty <= 0 is NOT a sized level; it would price the whole order beyond the book at the penalty.
+  const levels = (i.depth?.levels ?? []).filter((l) => l.price > 0 && Number.isFinite(l.qty) && l.qty > 0);
+  if (i.depth === null || levels.length === 0) return top('absent');
+  if (typeof i.penaltyBps !== 'number' || !Number.isFinite(i.penaltyBps)) return top('no_depth_config');
+  const walked = walkVtsExit(i.quantity, levels, i.penaltyBps);
+  const stated = levels.reduce((s, l) => s + l.qty, 0);
+  const sizeCertain = i.depth.basis === 'exact' || i.quantity <= stated - 1;
+  return {
+    price: walked.avgFillPrice,
+    arm: booked.arm,
+    levelsSeen: levels.length,
+    walkedQty: walked.walkedQty,
+    extrapolatedQty: walked.extrapolatedQty,
+    sizeBasis: i.depth.basis,
+    sizeCertain,
+    impactPriced: sizeCertain,
+  };
 }

@@ -24,7 +24,7 @@ describe('P-7d — the touch price, by D3 order', () => {
     const r = selectTouchPrice({ book: book(), bookEligible: true, bookTrusted: true, ticker: ticker(), tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.quote).toEqual({ bid: 100, ask: 100.2, basis: 'book_top', ageMs: 1_000, quoteArrivedAtMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book' });
+    expect(r.quote).toEqual({ bid: 100, ask: 100.2, basis: 'book_top', ageMs: 1_000, quoteArrivedAtMs: NOW - 1_000, clockBasis: 'receipt', producer: 'kraken_ws_book', bidQty: null, sizeBasis: null }); // KD-19 P4: the size fields, null when the leg stated none
     expect(r.bookRefusal).toBeNull();
   });
 
@@ -95,6 +95,6 @@ describe('P-7f — the clock basis is a field, carried and never inferred', () =
     const r = selectTouchPrice({ book: book(), bookEligible: true, bookTrusted: true, ticker: null, tickerBasis: 'ticker_bbo' }, NOW, POLICY);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(Object.keys(r.quote).sort()).toEqual(['ageMs', 'ask', 'basis', 'bid', 'clockBasis', 'producer', 'quoteArrivedAtMs']);
+    expect(Object.keys(r.quote).sort()).toEqual(['ageMs', 'ask', 'basis', 'bid', 'bidQty', 'clockBasis', 'producer', 'quoteArrivedAtMs', 'sizeBasis'] /* KD-19 P4: sizes, never a mid */);
   });
 });

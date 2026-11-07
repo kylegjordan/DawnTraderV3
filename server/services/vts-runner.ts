@@ -89,11 +89,13 @@ import { applyMakerTakerFillPolicy, decideMakerTaker, entryUrgencyClassForFamily
 import { resolveFillPolicy, resolveMakerTakerHaircut, resolveMakerMaxPendingMs, resolveTwinEnabled } from './maker-taker-config.js';
 // P19-B7.2c: the shared PURE pending-maker fill/drop decision (paper+VTS parity — R2).
 import { evaluatePendingMaker, makerFillPrice, isMarketableAtPlacement, planTwin } from '../core/trading/pending-maker-logic.js';
-import { resolveVtsBookedExitPrice, type VtsBookingArm } from '../core/trading/vts-exit-booking.js';
+import { bookVtsExit, exitWalkRecord, type VtsBookingArm, type VtsExitDepth, type VtsExitWalkRecord } from '../core/trading/vts-exit-booking.js';
+import { resolveFillDepthGateConfig } from './execution/depth-gate-config.js'; // KD-19 P5: paper's beyond-depth penalty, per class
+import { statedSize } from './price-cache.js'; // KD-19 P5: a stated size is finite and > 0
 import {
-  anyVtsExitCount, countersFor, countUnpricedArm, formatVtsExitCounters, newVtsExitCounters, resetVtsExitCounters,
+  anyVtsExitCount, countersFor, countUnpricedArm, countVtsExitWalk, formatVtsExitCounters, newVtsExitCounters, resetVtsExitCounters,
 } from '../core/trading/vts-exit-counters.js';
-import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, vtsFeeByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
+import { composeVtsLegFriction, entryPriceBasisFor, recomposeVtsCloseFriction, vtsSpreadShareByLeg, vtsSlippageShareByLeg, vtsFeeByLeg, type EntryPriceBasis, type VtsFrictionBasis } from '../core/trading/vts-friction.js';
 import { noteVtsCloseFriction, vtsFrictionSinceBoot } from './vts-friction-ledger.js';
 import { stepNoTriggerStreak, type NoTriggerStreak } from '../core/trading/vts-no-trigger-streak.js';
 import { refuseTakerBooking, bookedQuantity } from '../core/trading/entry-booking.js';
@@ -747,6 +749,8 @@ interface Phase10TradeRecord {
   frictionBasis?: VtsFrictionBasis;
   /** The exit booking arm the close used (`bid` ⇒ the exit leg carries no spread half). CLOSED records only. */
   exitBookingArm?: VtsBookingArm;
+  /** KD-19 P7: how the exit was walked — levels, walked/extrapolated quantity, size basis, certainty. CLOSED records only. */
+  exitWalk?: VtsExitWalkRecord;
 }
 
 /**
@@ -3324,6 +3328,8 @@ async function archiveVtsExit(
   c: {
     exitReason: string;
     exitArm: VtsBookingArm;
+    /** KD-19 P7: the walk record; absent on an unpriced close (nothing was walked). */
+    exitWalk?: VtsExitWalkRecord;
     exitPrice: number | null;
     pnlPercent: string | null;
     grossPnl: number | null;
@@ -3332,7 +3338,7 @@ async function archiveVtsExit(
     now: number;
   },
 ): Promise<void> {
-  const { exitReason, exitArm, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now } = c;
+  const { exitReason, exitArm, exitWalk, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now } = c;
   // B70 Step 3.5: exit-decision archive — actual exit (parallel to B73 counterfactual).
   // Fire-and-forget, try/catch wrapped — must never block the VTS exit loop.
   try {
@@ -3387,6 +3393,8 @@ async function archiveVtsExit(
         rawExitReason: exitReason,
         // `3n.q3` OBJ-2: the booking arm on the archive row too — for an unpriced close this row is the ONLY durable record.
         exitBookingArm: exitArm,
+        // KD-19 P7 (L3): the walk, durably — `exitSizeCertain` is STORED, so §7(c)'s split is a read, not a derivation.
+        ...(exitWalk ? { exitWalk } : {}),
         tradeMode: finalTradeMode,
         ladderRungsHit: trade.ladderRungsHit ?? 0,
         originalStopPrice: trade.originalStopPrice,
@@ -3746,6 +3754,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout_unpriced';
     /** `8a-P4c` 3a-ii (P14): how the exit was booked. `3n.q3`: a clamp arm now means the exit carries NO price. */
     exitArm: VtsBookingArm;
+    /** KD-19 P5/P7: what the booking walked. */
+    exitWalk: VtsExitWalkRecord;
   }> = [];
   
   // B65.2: VTS exit loop engages the full trailing-exit engine. Each trade
@@ -3958,6 +3968,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // ceilings cannot explain a crossed book.
     let _vtsExitRefusal: string | null = null;
     let _xsExitRow: XsQuoteRow | null = null; // row 2 increment B: the SAME row that decided, kept for the size count
+    let _vtsExitDepth: VtsExitDepth | null = null; // KD-19 P5: the bid depth the trigger accepted (null ⇒ the top bid)
     if (trade.assetClass === 'xstock_spot') {
       // `8a-P4c` increment 3 (P8a): xStock triggers on the GUARDED BID — `null` ⇒ no decision this cycle. The instrument
       // records the look with the ceiling actually applied (S1).
@@ -3968,6 +3979,9 @@ async function resolveOpenVirtualTrades(): Promise<{
       _vtsExitBid = _xsExit.bid;
       _vtsExitRefusal = _xsExit.bid === null ? _xsExit.reason : null;
       _vtsExitByClass.xstock_spot.exitLooks++;
+      // KD-19 P5 (C4): the size is on the ROW the guard judged — one level at the guarded bid, exact.
+      const _xsBidQty = _xsExit.bid !== null ? statedSize(_xsRow?.bidQty) : null;
+      _vtsExitDepth = _xsExit.bid !== null && _xsBidQty !== null ? { levels: [{ price: _xsExit.bid, qty: _xsBidQty }], basis: 'exact' } : null;
     }
     if (trade.assetClass === 'crypto_spot') {
       const _et = selectCryptoTouch(trade.symbol, VTS_CRYPTO_TOUCH_READERS, Date.now(), {
@@ -3976,6 +3990,13 @@ async function resolveOpenVirtualTrades(): Promise<{
       _vtsExitBid = transactableSide(_et.selection, 'sell');
       _vtsExitRefusal = _et.selection.ok ? (_vtsExitBid === null ? 'no_bid_side' : null) : _et.selection.tickerRefusal;
       _vtsExitByClass.crypto_spot.exitLooks++;
+      // KD-19 P4/P5 (K6): the depth the TRIGGER accepted — the book's levels when the book rung carried it, else the ticker's
+      // one level with its stated size (exact on WS, a rounded ceiling on REST); no stated size ⇒ no depth (top bid).
+      _vtsExitDepth = _et.acceptedBookBids !== null
+        ? { levels: _et.acceptedBookBids, basis: 'exact' }
+        : _et.selection.ok && _et.selection.quote.bidQty !== null && _et.selection.quote.sizeBasis !== null
+          ? { levels: [{ price: _et.selection.quote.bid, qty: _et.selection.quote.bidQty }], basis: _et.selection.quote.sizeBasis }
+          : null;
       try { recordTouchSelection({ lane: 'vts', assetClass: 'crypto_spot', stage: 'vts_exit_trigger' }, _et.selection); } catch { /* a recorder never breaks the resolve loop */ }
     }
     // ⭐⭐ Row 2 increment (4b) — THE ONE EXIT-TRIGGER RULE (`core/trading/exit-trigger.ts`), shared with paper and the
@@ -4224,14 +4245,25 @@ async function resolveOpenVirtualTrades(): Promise<{
     // (Langston r1 F3). xStock books on the same arms since `8a-P4c` increment 3. Shared resolver with the shadow lane.
     // ⛔ `3n.q3` P1: a clamp arm books NO price — the trade closes `timeout_unpriced`. Only the valve reaches a clamp arm
     // (`vts-exit-booking.ts` says why), so a level exit is never relabelled here.
-    const _vtsBooked = resolveVtsBookedExitPrice(_vtsExitBid, currentPrice);
+    // ⭐ KD-19 (b) — booked the way paper books a close: `closeFillFull` over the depth the trigger accepted, at paper's
+    // per-class beyond-depth penalty. No depth or no stated size ⇒ the top bid (D-K1); no penalty config ⇒ the top bid,
+    // counted and logged at error (paper REJECTS there — a divergence recorded in the System Manual, plan P10).
+    const _vtsPenaltyBps = trade.assetClass === 'crypto_spot' || trade.assetClass === 'xstock_spot'
+      ? (await resolveFillDepthGateConfig(trade.assetClass))?.beyondDepthPenaltyBps ?? null : null;
+    const _vtsBooked = bookVtsExit({ observedBid: _vtsExitBid, observedMark: currentPrice, quantity: trade.quantity,
+      depth: _vtsExitDepth, penaltyBps: _vtsPenaltyBps });
     if (_vtsBooked.price === null) countUnpricedArm(countersFor(_vtsExitByClass, trade.assetClass), _vtsBooked.arm);
+    countVtsExitWalk(countersFor(_vtsExitByClass, trade.assetClass), _vtsBooked);
+    if (_vtsBooked.sizeBasis === 'no_depth_config') {
+      console.error(`[KD-19][VTS_EXIT_NO_DEPTH_CONFIG] ${trade.symbol} trade ${tradeId} class=${trade.assetClass} — fill_depth_gate unresolved; booked the top bid with the slippage allowance`);
+    }
     tradesToClose.push({
       id: tradeId,
       trade,
       exitPrice: _vtsBooked.price,
       exitReason: _vtsBooked.price === null ? 'timeout_unpriced' : normalizedReason,
       exitArm: _vtsBooked.arm,
+      exitWalk: exitWalkRecord(_vtsBooked),
     });
   }
   
@@ -4256,7 +4288,7 @@ async function resolveOpenVirtualTrades(): Promise<{
   let mlQueued = 0;
   
   // Process closed trades
-  for (const { id, trade, exitPrice, exitReason, exitArm } of tradesToClose) {
+  for (const { id, trade, exitPrice, exitReason, exitArm, exitWalk } of tradesToClose) {
     const holdDurationMs = now - trade.openedAt;
     const holdDurationStr = formatHoldDuration(holdDurationMs);
 
@@ -4282,7 +4314,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // ⛔ `8a-P4c` increment 3a-ii (P14, Langston BLOCKER-1): friction is RECOMPOSED AT CLOSE from the stored parts under
     // the per-leg rule — never read from the open-time scalar — so every close after the deploy carries ONE rule and the
     // epoch (resolved at close) separates cleanly. A missing part keeps the stamped scalar, labelled, and alerts (J7).
-    const _closeFr = recomposeVtsCloseFriction(trade, exitArm);
+    const _closeFr = recomposeVtsCloseFriction(trade, exitArm, exitWalk.impactPriced); // KD-19 (c): exit allowance leaves a certain walk
     noteVtsCloseFriction('vts', trade, _closeFr);
     const netPnl = grossPnl - _closeFr.friction;
     const pnlPercent = (netPnl * 100).toFixed(2);
@@ -4352,7 +4384,7 @@ async function resolveOpenVirtualTrades(): Promise<{
       regimeWeight: trade.regimeWeight,
       decayPenalty: trade.decayPenalty,
       frictionCost: _closeFr.friction, // `8a-P4c` 3a-ii: the RECOMPOSED figure (the readers' decision is recorded, §C3.10)
-      frictionBasis: _closeFr.basis, entryPriceBasis: _closeFr.entryPriceBasis ?? undefined, exitBookingArm: exitArm,
+      frictionBasis: _closeFr.basis, entryPriceBasis: _closeFr.entryPriceBasis ?? undefined, exitBookingArm: exitArm, exitWalk,
       // F-G-2 OBJ-5b (P12): the fractions behind frictionCost reach the closed record too —
       // before this the closed payload carried frictionCost + entryFeeRate and NOTHING that
       // could reconstruct them (Langston (a), 2026-09-02).
@@ -4459,7 +4491,7 @@ async function resolveOpenVirtualTrades(): Promise<{
         regimeWeight: trade.regimeWeight,
         decayPenalty: trade.decayPenalty,
         frictionCost: _closeFr.friction, // `8a-P4c` 3a-ii: the RECOMPOSED figure
-        frictionBasis: _closeFr.basis, entryPriceBasis: _closeFr.entryPriceBasis ?? undefined, exitBookingArm: exitArm,
+        frictionBasis: _closeFr.basis, entryPriceBasis: _closeFr.entryPriceBasis ?? undefined, exitBookingArm: exitArm, exitWalk,
         // F-G-2 OBJ-5b (P12): fractions onto the persist payload as well (see the closed record).
         costFeeFraction: trade.costFeeFraction,
         costSlippageFraction: trade.costSlippageFraction,
@@ -4514,7 +4546,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     }
     
     await archiveVtsExit(trade, {
-      exitReason, exitArm, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now,
+      exitReason, exitArm, exitWalk, exitPrice, pnlPercent, grossPnl, netPnl, finalTradeMode, now,
     });
 
     await finishVtsClose(id, trade);
@@ -4837,7 +4869,9 @@ async function resolveOpenShadowTrades(): Promise<{ shadowResolved: number }> {
     // ⛔ `3n.q3` P1/P3: a clamp arm books NO price ⇒ `timeout_unpriced`. That includes every `stale_timeout` (no mark), so
     // the old `stale_timeout → shadow_max_hold` relabel is unreachable and is removed (rule 18); rows written before this
     // keep `shadow_max_hold`, which means a no-mark close booked at its ENTRY price.
-    const _sBooked = resolveVtsBookedExitPrice(_sExitBid, currentPrice);
+    // KD-19 P5 (L1): the shadow lane books through the same function; its quantity is 0 by construction (unit sizing,
+    // `:1125-1127`), so it takes the sizeless route — the top bid, exactly as before — and walks nothing.
+    const _sBooked = bookVtsExit({ observedBid: _sExitBid, observedMark: currentPrice, quantity: trade.quantity, depth: null, penaltyBps: null });
     if (_sBooked.price === null) countUnpricedArm(countersFor(_vtsShadowByClass, trade.assetClass), _sBooked.arm);
     const reason = _sBooked.price === null ? 'timeout_unpriced' : (decision.exitReason ?? 'timeout');
     toClose.push({ id: tradeId, trade, exitPrice: _sBooked.price, exitReason: reason, exitArm: _sBooked.arm });
@@ -6844,12 +6878,13 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
         // `8a-P4c` 3a-ii (FINDING-1): the spread goes to a leg only where the per-leg rule charged it — an OPEN row's
         // `costs` is the open-time estimate (exit assumed on its side). A legacy row keeps ½ + ½.
         const _sh = vtsSpreadShareByLeg(trade, false);
+        const _sl = vtsSlippageShareByLeg({}, false); // KD-19 P6: an OPEN row's estimate keeps the allowance on both legs
         const _fee = vtsFeeByLeg(trade) as { entry: number; exit: number }; // finite _f checked above ⇒ never null here
         return {
           costEntryFee: parseFloat((tradeDollarValue * _fee.entry).toFixed(4)), // the leg's own fee (r2 FINDING-1)
-          costEntrySlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.entry)).toFixed(4)),
+          costEntrySlippage: parseFloat((tradeDollarValue * (_s * _sl.entry + _sp * _sh.entry)).toFixed(4)),
           costExitFee: parseFloat((tradeDollarValue * _fee.exit).toFixed(4)),
-          costExitSlippage: parseFloat((tradeDollarValue * (_s + _sp * _sh.exit)).toFixed(4)),
+          costExitSlippage: parseFloat((tradeDollarValue * (_s * _sl.exit + _sp * _sh.exit)).toFixed(4)),
         };
       })(),
       netProfitValue: parseFloat(netProfitValue.toFixed(2)),

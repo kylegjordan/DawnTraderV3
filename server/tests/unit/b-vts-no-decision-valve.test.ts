@@ -86,7 +86,7 @@ describe('P7 — counters per asset class (Langston C1)', () => {
     expect(c.crypto_spot.unpricedNoMark).toBe(0);
     expect(anyVtsExitCount(c)).toBe(true);
     const line = formatVtsExitCounters(c);
-    expect(line).toMatch(/^crypto_spot\{exitLooks=0 exitNoTransactableSide=0 unpricedNoBid=1 unpricedNoMark=0 closedUnpriced=0\} xstock_spot\{.*unpricedNoMark=1/);
+    expect(line).toMatch(/^crypto_spot\{exitLooks=0 exitNoTransactableSide=0 unpricedNoBid=1 unpricedNoMark=0 closedUnpriced=0 walked=0 walkExtrapolated=0 walkUncertain=0 sizeAbsent=0 noDepthConfig=0\} xstock_spot\{.*unpricedNoMark=1/);
     resetVtsExitCounters(c);
     expect(anyVtsExitCount(c)).toBe(false);
   });

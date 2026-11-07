@@ -158,7 +158,8 @@ describe('8a-P3 — the call sites read the transactable side, and xStock is exp
     // passed in uncoalesced; never `currentPrice`.
     expect(VTS).toMatch(/triggerPrice:\s*_vtsTrigger\.price/);
     expect(VTS).toMatch(/\{ cls: 'crypto_spot', bid: _vtsExitBid, bidRefusal: _vtsExitRefusal as ExitTriggerRefusal \| null \}/);
-    expect(VTS).toMatch(/resolveVtsBookedExitPrice\(_vtsExitBid,\s*currentPrice/); // `8a-P4c` inc 3: the unread class arg is gone
+    // KD-19 P5: the real lane books through `bookVtsExit`, whose arms ARE `resolveVtsBookedExitPrice`'s (tested above).
+    expect(VTS).toMatch(/bookVtsExit\(\{ observedBid: _vtsExitBid, observedMark: currentPrice/); // `8a-P4c` inc 3: the unread class arg is gone
     expect(VTS).not.toMatch(/bid:\s*_vtsExitBid\s*\?\?/);
     expect(VTS).not.toMatch(/triggerPrice:\s*currentPrice,/);
   });
