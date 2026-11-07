@@ -45,7 +45,7 @@
 
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { argv, exit, cwd } from 'node:process';
+import { argv, exit } from 'node:process';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -87,7 +87,10 @@ function runTsc() {
     output = execSync('npx tsc --noEmit --incremental false --noErrorTruncation', {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
-      cwd: cwd(),
+      // #1077: from the REPO ROOT, never the caller's cwd. Run from a subfolder, tsc keys every
+      // error to a cwd-relative path and the compare read "184 counts below baseline" at an
+      // unchanged total (328 = 328), three times on 2026-11-06/07 (B-TRANSCRIPT-ARCHIVE).
+      cwd: REPO_ROOT,
     });
   } catch (e) {
     // tsc exits 1 on type errors; that is expected — capture its output.
@@ -114,7 +117,7 @@ function runTsc() {
 // can only ever under-normalize into a false regression, never hide a real error (real
 // errors differ in the property/type name, not just the path).
 function normalizeMessage(msg) {
-  const root = cwd().replace(/\\/g, '/');
+  const root = REPO_ROOT.replace(/\\/g, '/');   // #1077: the root tsc ran from, not the caller's cwd
   const rootRe = new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   return msg
     .trim()

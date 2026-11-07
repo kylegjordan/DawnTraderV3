@@ -980,6 +980,38 @@ for label, fails, want in (("kind_of: a stat that fails ONCE is re-statted and t
         os.stat = _stat
     ok(label, got == want, got)
     shutil.rmtree(base)
+# MUST-FIX (Langston P10 ruling): an archived run whose STATE cannot be stat'd is refused, never silently dropped
+base, proj, root = hb_tree()
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+cp = os.path.join(root, "gate-cache.json")
+cache = json.load(open(cp, encoding="utf-8")) if os.path.exists(cp) else {}   # never crash the suite
+for k in cache:
+    cache[k][2] = False                                           # the cache now says machine for every run
+json.dump(cache, open(cp, "w", encoding="utf-8"))
+qrfs = [r for r in da.raw_files(proj, gate=lambda rf: True) if r[2].endswith(QFILE)]
+qsp = da.state_path(root, qrfs[0]) if qrfs else "<no such run listed>"   # never crash the suite: FAIL below
+
+
+def st_state(p, *a, **kw):
+    if os.path.normcase(str(p)) == os.path.normcase(qsp):
+        raise PermissionError(5, "Access is denied", str(p))
+    return _stat(p, *a, **kw)
+
+
+os.stat = st_state
+try:
+    if not qrfs or not os.path.exists(qsp):
+        raise RuntimeError("setup: the queued_command run has no state")
+    res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+    got = "listed" if any(r["raw"].endswith(QFILE) for r in res) else "DROPPED"
+except da.Refused:
+    got = "refused"
+except Exception as e:  # noqa: BLE001
+    got = "escaped: %r" % e
+finally:
+    os.stat = _stat
+ok("an archived run whose state cannot be stat'd is REFUSED, never dropped on a machine cache verdict", got == "refused", got)
+shutil.rmtree(base)
 da.time.sleep = _slp
 base, proj, root = hb_tree()
 mf = os.path.join(proj, HB, "a1000001-0000-0000-0000-000000000000.jsonl")

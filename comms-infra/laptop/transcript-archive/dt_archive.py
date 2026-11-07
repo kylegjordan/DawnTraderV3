@@ -158,11 +158,17 @@ class Gate:
         return v
 
     def _judge(self, rf):
-        p = rf[2]
-        if os.path.exists(state_path(self.root, rf)):
-            return True
+        p, sp = rf[2], state_path(self.root, rf)
         for attempt in (1, 2):        # one re-stat before refusing: a file mid-write by its own run (Langston C-1 (1))
             try:
+                # "a file with a state stays in" - probed with os.stat INSIDE the retry, never os.path.exists, which
+                # swallows OSError: an unstattable state would read as NO state and a machine verdict would drop the
+                # conversation from the run in silence (Langston P10 ruling, MUST-FIX)
+                try:
+                    os.stat(sp)
+                    return True
+                except FileNotFoundError:
+                    pass
                 st = os.stat(p)
                 key, now = identity(p), [st.st_size, st.st_mtime_ns]
                 hit = self.cache.get(key)
@@ -172,7 +178,7 @@ class Gate:
                 break
             except OSError as e:      # unreadable is a refusal, never "no human turn" (the raw set would be incomplete)
                 if attempt == 2:
-                    raise Refused("cannot read %s to judge it (%s) - nothing written" % (p, e))
+                    raise Refused("cannot read %s or its state to judge it (%s) - nothing written" % (p, e))
                 time.sleep(0.5)
         self.cache[key] = now + [verdict]
         self.changed = True

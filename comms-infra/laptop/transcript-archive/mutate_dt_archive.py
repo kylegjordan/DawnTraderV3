@@ -136,8 +136,9 @@ MUTATIONS = [
                                                                  "        return bool(re.match(r\"\\s*KYLE\", c))")),
     ("GATE: the cache trusted over a changed size", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):",
                                                             "                if isinstance(hit, list) and len(hit) == 3 and isinstance(hit[2], bool):")),
-    ("GATE: an archived conversation re-judged by the cache", replace("        if os.path.exists(state_path(self.root, rf)):\n            return True",
-                                                                      "        if False:\n            return True")),
+    ("GATE: an archived conversation re-judged by the cache", replace(
+        "                    os.stat(sp)" + chr(10) + "                    return True",
+        "                    os.stat(sp)" + chr(10) + "                    pass")),
     ("GATE: a dry run writes the cache", replace("        if self.dry or not self.changed:", "        if not self.changed:")),
     ("GATE: the cache never consulted", replace("                if isinstance(hit, list) and len(hit) == 3 and hit[:2] == now and isinstance(hit[2], bool):\n                    return hit[2]",
                                                 "                if False:\n                    return hit[2]")),
@@ -161,6 +162,9 @@ MUTATIONS = [
                                               "        for attempt in (2,):\n            try:\n                st = os.stat(path)")),
     ("RETRY: a non-bool cached verdict trusted", replace(" and hit[:2] == now and isinstance(hit[2], bool):\n                    return hit[2]",
                                                         " and hit[:2] == now:\n                    return hit[2]")),
+    ("MUST-FIX: the state probed with os.path.exists (swallows OSError)", replace(
+        "                try:" + chr(10) + "                    os.stat(sp)" + chr(10) + "                    return True" + chr(10) + "                except FileNotFoundError:" + chr(10) + "                    pass",
+        "                if os.path.exists(sp):" + chr(10) + "                    return True")),
 ]
 
 

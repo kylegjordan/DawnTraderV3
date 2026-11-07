@@ -498,3 +498,20 @@ Exc Files : value-hashes.json
   - **Under Langston's rule ("groups with no member inside the five are listed, never moved") P10 moves NOTHING.** The archive is untouched, the orphan baseline (1,096 / 0) stands, and "raw == state" survives.
   - The 746 copies are part of the pre-session-fix store, whose fate is the April–July Kyle-list item (recommendation (b), after live). Removing ARCHIVE's redundant copies belongs to that item, after its uuid-overlap leg, not to this batch.
 - **#1077, third instance:** the first push of this commit was refused with the 184-counts-below-baseline message while the shell's cwd was the transcript-archive subfolder. From the repo root the same tree passes.
+
+### P10 ruling (Langston, 2026-11-07, on `2e6e1ea43`): hardening CLEARED; one MUST-FIX; zero moves held on one number, now supplied; #1077 folded in
+- **The tally he asked for, by the writer's own test:** each of the 1,489 member paths in the dupes TSV, through `da.dt_folder_class(<top-level slug>)` → `{excluded: 1489}`, sum 1,489. CC-A, CC-B, CC-C, CC-INFRA, CC-PM and HEARTBEAT are each 0. So the two zeros come from the instrument, not from my reading of path strings.
+- **The mechanism behind them, measured** (BACKUP-20260727 against the five, any depth):
+  - Only 7 BACKUP file names recur in the five: 6 crew sessions plus `journal.jsonl` (a workflow journal, unrelated).
+  - For each of the 6, the sessionId is the same and the bytes differ. The live files were trimmed and have grown since: e.g. `0fe1c46a` backup 439 MB / 123,009 entries vs live 234 MB / 143,353; `3ce652e6` 204 MB vs 61 MB, 13,293 of 32,265 backup uuids shared.
+  - Over the whole population: 169,970 BACKUP uuids, 38,133 (22.4 %) also present in the five.
+  - So it is his case (ii): the live counterparts exist but were rewritten after 07-27 (the trim runbook's distil/dedup), so no snapshot copy is byte-identical. Not (iii): the classifier is the writer's own, and the tally above is its output.
+  - This is also the first number for the April–July item's uuid-overlap leg (22.4 % of the old store's entries are already in the five); that leg still owes its full measurement.
+- **MUST-FIX, done:** `Gate._judge` probed the state with `os.path.exists`, which swallows OSError. The probe is now `os.stat(state)` INSIDE the two-attempt loop: FileNotFoundError means no state; any other OSError → retry → `Refused`.
+  - Test: an archived run, with the cache poisoned to "machine" for every run and its state made unstattable, is REFUSED, not dropped.
+  - Mutant "state probed with os.path.exists" is caught. On this Python, `os.path.exists` does not route through `os.stat`, so the patch cannot make `exists` itself lie. The mutant is caught because the test demands a refusal, which only the stat probe gives.
+- **His observation (`:530` setdefault + `recover()`), answered: NO.** The archive root `C:\Users\kyleg\.claude\transcript-archive` and the projects folder are on the local fixed disk C: (`df`: same 1.9T volume), not the Drive/FUSE path. The `G--…` folder names are Claude Code's slug of the folder a session opened, not where the files live. Disposition: this change-list item, no code.
+- **#1077 folded in (Langston: a third occurrence is fixed, not recorded):** `scripts/check-tsc-baseline.mjs` now runs tsc with `cwd: REPO_ROOT` and strips the `<ROOT>` prefix from `REPO_ROOT`, not `cwd()`. `REPO_ROOT` was already derived from the script's own location at `:61`. The unused `cwd` import was removed.
+  - **Control:** the OLD comparator (from `HEAD`), run from `comms-infra/laptop/transcript-archive`, reads `328 = 328 … FAIL`; the NEW one from the same subfolder reads `OK`, and from the root `OK`.
+  - CI is unaffected (its cwd is the root). ANALYST Claude, #1077's owner, was told before the edit.
+- **Hardening + must-fix not yet installed:** the live copy is still `01ee9ff16`. Install follows his read of this commit.
