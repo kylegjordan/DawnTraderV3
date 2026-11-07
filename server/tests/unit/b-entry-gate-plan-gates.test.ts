@@ -21,7 +21,7 @@ vi.mock('../../core/calculations/expectancy.js', async (orig) => ({
 vi.mock('../../core/math/cost-model.js', async (orig) => ({ ...(await orig<any>()), getFrictionForAssetClass: vi.fn(() => ({ feeRateTaker: 0.004, feeRateMaker: 0.002 })) }));
 vi.mock('../../core/logging/skipped-signals-logger.js', () => ({ logSkippedSignal: vi.fn() }));
 
-import { applyPlanGates, getEntryWindowTally, evaluateSignalQualitySync, type SQEInput } from '../../core/filters/signal_quality_evaluator';
+import { applyPlanGates, getEntryWindowTally, evaluateSignalQualitySync, _tallyEntryWindowForTests, type SQEInput } from '../../core/filters/signal_quality_evaluator';
 
 const base = { signalId: 's', symbol: 'BTC/USD', strategy: 'x', mode: 'paper', assetClass: 'crypto_spot', finalScore: 0.9, regimeWeight: 0.9, chosenNetEv: 0.01 } as SQEInput;
 const plan = { planEntry: 100, planStop: 96, planTarget: 108 };
@@ -74,6 +74,29 @@ describe('P2 — EntryWindow judges only a taker, and counts every way it declin
     expect(run({ chosenEntryMode: 'taker', priced: px(100.5), planStop: undefined } as any, { phase: 'birth', entryWindowShadow: true }).o).toBe('skip_invalid_geometry');
     expect(getEntryWindowTally()['refresh:crypto_spot:skip_invalid_geometry']).toBeGreaterThanOrEqual(5);
     expect(getEntryWindowTally()['birth:crypto_spot:skip_invalid_geometry']).toBeGreaterThanOrEqual(1);
+  });
+  it('a price that is not a finite number is NOT a pass: skip_price_nonfinite, counted (Langston PROCEED condition 2)', () => {
+    for (const price of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const r = run({ chosenEntryMode: 'taker', priced: px(price) });
+      expect(r.o).toBe('skip_price_nonfinite');
+      expect(r.f.some((x) => x.startsWith('EntryWindow'))).toBe(false);
+    }
+    expect(getEntryWindowTally()['refresh:crypto_spot:skip_price_nonfinite']).toBeGreaterThanOrEqual(3);
+  });
+  it('every outcome reaches a production line: the finished UTC hour prints one ENTRY_WINDOW_HOUR line per phase:class (Langston PROCEED condition 1)', () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const h1 = Date.parse('2031-01-01T10:15:00Z'), h2 = Date.parse('2031-01-01T11:00:01Z');
+    _tallyEntryWindowForTests('birth', 'xstock_spot', 'judged_pass', h1);
+    _tallyEntryWindowForTests('birth', 'xstock_spot', 'judged_pass', h1);
+    _tallyEntryWindowForTests('birth', 'xstock_spot', 'skip_maker', h1);
+    _tallyEntryWindowForTests('birth', 'xstock_spot', 'skip_no_price', h1);
+    _tallyEntryWindowForTests('refresh', 'crypto_spot', 'shadow_would_refuse', h1);
+    _tallyEntryWindowForTests('refresh', 'crypto_spot', 'judged_pass', h2); // first tally of the next hour flushes 10:00
+    const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('[ENTRY_WINDOW_HOUR] hour=2031-01-01T10Z'));
+    log.mockRestore();
+    expect(lines).toContain('[B-ENTRY-GATE][P2][ENTRY_WINDOW_HOUR] hour=2031-01-01T10Z birth:xstock_spot judged_pass=2 skip_maker=1 skip_no_price=1');
+    expect(lines).toContain('[B-ENTRY-GATE][P2][ENTRY_WINDOW_HOUR] hour=2031-01-01T10Z refresh:crypto_spot shadow_would_refuse=1');
+    expect(lines.length).toBe(2);
   });
   it('the exploration lane cannot admit on either plan gate (neither wears the `NetEV ` prefix)', () => {
     expect(run({ chosenEntryMode: 'taker', priced: px(110), planTarget: null }).f.every((x) => !x.startsWith('NetEV '))).toBe(true);
