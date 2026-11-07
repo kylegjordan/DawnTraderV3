@@ -141,6 +141,63 @@ check("D1 abort recorded with the numbers", recs[-1]["kind"] == "abort" and recs
       and recs[-1]["floor_bytes"] >= cap.FLOOR_BYTES, str(recs[-1]))
 shutil.disk_usage = real_usage
 
+# ── D2: low disk at the LAST checkpoint is recorded on the end record, not an abort ─────────────────────────────────
+print("D2 expect: 3 new mints, free 1 B at their single (last) checkpoint -> exit 0, end says free_below_floor_at_end")
+bucket("2026-10-01T05", ["E1", "E2", "E3"])
+shutil.disk_usage = lambda path: Usage(100, 99, 1)
+log = os.path.join(ROOT, "d2.jsonl")
+rc = cap.main(["--first", "2026-10-01T05", "--last", "2026-10-01T05", "--log", log])
+recs = records(log)
+shutil.disk_usage = real_usage
+check("D2 a finished capture exits 0", rc == 0, "rc=%s %s" % (rc, recs[-1]))
+check("D2 the low reading is on the end record", recs[-1]["kind"] == "end" and recs[-1]["free_below_floor_at_end"] is True,
+      str(recs[-1]))
+
+# ── S2: a stall that starts AFTER the first checkpoint stops the run (Langston, measured) ───────────────────────────
+print("S2 expect: 2,500 mints, bodies for the first 1,000 then every call shed -> exit 6 at attempted 2,000")
+bucket("2026-10-01T02", ["T%04d" % i for i in range(2500)])
+served = {"n": 0}
+
+
+def bodies_then_shed(mint):
+    served["n"] += 1
+    if served["n"] > 1000:
+        raise providers.Shed("follow_up rate-limited")
+    return real_token_state(mint)
+
+
+providers.token_state = bodies_then_shed
+log = os.path.join(ROOT, "s2.jsonl")
+rc = cap.main(["--first", "2026-10-01T02", "--last", "2026-10-01T02", "--log", log])
+recs = records(log)
+providers.token_state = real_token_state
+check("S2 exit 6 (stall)", rc == 6, "rc=%s" % rc)
+check("S2 stopped at 2,000, naming the stall", recs[-1]["kind"] == "abort" and recs[-1]["attempted"] == 2000
+      and "stall" in recs[-1]["reason"], str(recs[-1]))
+
+# ── S3: a run under 1,000 mints is asserted too ─────────────────────────────────────────────────────────────────────
+print("S3 expect: 10 mints, all shed -> exit 4 at the single checkpoint (the first version exited 0)")
+bucket("2026-10-01T03", ["U%02d" % i for i in range(10)])
+providers.token_state = always_shed
+log = os.path.join(ROOT, "s3.jsonl")
+rc = cap.main(["--first", "2026-10-01T03", "--last", "2026-10-01T03", "--log", log])
+providers.token_state = real_token_state
+check("S3 exit 4", rc == 4, "rc=%s %s" % (rc, records(log)[-1]))
+
+# ── B2: an empty-but-present bucket is refused ──────────────────────────────────────────────────────────────────────
+print("B2 expect: a bucket that exists with 0 entries -> exit 3 naming it as empty")
+bucket("2026-10-01T04", [])
+log = os.path.join(ROOT, "b2.jsonl")
+rc = cap.main(["--first", "2026-10-01T04", "--last", "2026-10-01T04", "--log", log])
+check("B2 exit 3, empty named", rc == 3 and records(log)[-1].get("empty") == ["2026-10-01T04"], str(records(log)[-1]))
+
+# ── R3: a root INSIDE the production store is refused ───────────────────────────────────────────────────────────────
+print("R3 expect: TOKEN_WATCH_ROOT = <production>/scratch -> exit 2")
+env["TOKEN_WATCH_ROOT"] = cap.PRODUCTION_ROOT + "/scratch"
+p = subprocess.run([sys.executable, TOOL, "--first", "2026-09-30T14", "--last", "2026-09-30T14", "--log",
+                    os.path.join(ROOT, "r3.jsonl")], env=env, capture_output=True, text=True)
+check("R3 inside-production refused", p.returncode == 2 and "inside it" in p.stderr, "rc=%s %s" % (p.returncode, p.stderr))
+
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

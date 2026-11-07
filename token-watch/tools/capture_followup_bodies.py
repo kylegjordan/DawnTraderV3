@@ -11,26 +11,36 @@ WHAT IT DOES. For every DISTINCT mint in the due buckets [first, last] (first ap
 writer `provenance.record_follow_up`, in the scratch tree's `provenance/follow-up/`. The replay harness
 (`tools/measure_followup_memory.py`) later serves those bodies back to `follow_up.run_hour`.
 
-⛔ IT REFUSES THE PRODUCTION STORE. `config.ROOT` comes from `TOKEN_WATCH_ROOT` (`config.py:220`); if it resolves to
-   `/var/lib/token-watch`, or the variable is unset, the tool exits 2 before any import that could write. A capture
-   into the live store would add ~2 GB of bodies to a store already over its warn line.
+⛔ IT REFUSES THE PRODUCTION STORE. `config.ROOT` comes from `TOKEN_WATCH_ROOT` (`config.py:220`); if it is unset,
+   resolves to `/var/lib/token-watch`, lies INSIDE it, or is the same directory reached another way (a bind mount:
+   same st_dev and st_ino), the tool exits 2 before any import that could write. A capture into the live store
+   would add ~2 GB of bodies to a store already over its warn line (Langston, Step 4 r1: the first version
+   compared realpaths only, so a root inside production or a bind mount of it passed).
 ⛔ THE LEDGER IS A FRESH ONE FOR THE CURRENT MONTH (plan P1 C-5): the scratch `state/budget.json` is replaced with
    `budget._blank(<this month>)` before the first call, so `budget.allowed("follow_up")` is true and the run is not
    shed by a copied ledger. `CREDITS["follow_up"]` is 0, so the run spends no credits either way.
 ⛔ THE CHECKPOINT IS KEYED TO MINTS ATTEMPTED, NOT TO BODIES (Langston C-5 (i), r1c). A shed or failing gate writes
-   no body (`providers.py:193-194` raises before `record_follow_up`), so a body-keyed checkpoint would never arrive.
-   After the first 1,000 mints attempted it asserts bodies > 0 and stops (exit 4) if none, and it prints the body
-   size mean, p99 and max BEFORE the rest of the run is committed.
-⛔ A DISK FLOOR HELD THROUGHOUT (C-5 (ii)): every 1,000 mints it re-reads free space on `/` and aborts (exit 5),
-   recording the abort, when free space is under 10 GiB or under (projected remaining bodies + 10 GiB), whichever is
-   larger. Two points are not a rate, so the floor is re-checked, not predicted.
+   no body (`providers.py:195-196` raises before `record_follow_up`), so a body-keyed checkpoint would never arrive.
+   At the first checkpoint it asserts bodies > 0 (exit 4), and prints the body size mean, p99 and max BEFORE the
+   rest of the run is committed. ★ AND EVERY LATER INTERVAL TOO (Langston, Step 4 r1, measured): a checkpoint whose
+   interval had attempts and added ZERO bodies stops the run (exit 6). The first version tested only the first
+   checkpoint, so a stall that began after attempt 1,000 — a sustained 429, the likeliest real mode at 240/min
+   against a 300/min host — ran to the end writing nothing and exited 0; and a run of under 1,000 mints (a
+   `--resume` tail) was never asserted at all. Checkpoints fall every 1,000 attempts and at the last one.
+⛔ A DISK FLOOR HELD THROUGHOUT (C-5 (ii)): every checkpoint re-reads free space on `/` and aborts (exit 5),
+   recording the abort, when free space is under (projected remaining bytes + 10 GiB). The projection uses the bytes
+   actually WRITTEN to disk (the envelope and JSON-escaped body, ~1.1x `bytes` and ~287 B for a 41 B no-pairs body),
+   not the record's `bytes` field. At the LAST checkpoint nothing remains to write, so a low reading there is
+   recorded on the `end` record as `free_below_floor_at_end`, not as an abort: a finished capture never reads like a
+   truncated one. Two points are not a rate, so the floor is re-checked, not predicted.
 ⛔ EVERY BUCKET IS ACCOUNTED FOR. `store._read` yields nothing for a missing file (`store.py:122-126`), so a missing
    bucket would silently shrink the population. The start record lists each bucket's entry count and whether the
-   file exists; a missing bucket is refused (exit 3) unless `--allow-missing` names it.
+   file exists; a missing OR EMPTY bucket is refused (exit 3) unless `--allow-missing` names it.
 
 Every record is one JSON line in `--log`: `start`, one `checkpoint` per 1,000 mints, then `end` or `abort`.
 --resume skips mints that already have a body in the scratch tree (a restart after a kill re-calls only the rest).
-Exit codes: 0 done · 2 refused before any call · 3 a bucket is missing · 4 no body after 1,000 attempts · 5 disk floor.
+Exit codes: 0 done · 2 refused before any call · 3 a bucket missing or empty · 4 no body at the first checkpoint
+· 5 disk floor · 6 a later interval added no body (a stall).
 """
 
 from __future__ import annotations
@@ -55,8 +65,20 @@ def _refuse_production() -> str:
     if not root:
         print("REFUSED: TOKEN_WATCH_ROOT is unset, which means the production store", file=sys.stderr)
         sys.exit(2)
-    if os.path.realpath(root) == os.path.realpath(PRODUCTION_ROOT):
-        print("REFUSED: TOKEN_WATCH_ROOT is the production store %s" % PRODUCTION_ROOT, file=sys.stderr)
+    real, prod = os.path.realpath(root), os.path.realpath(PRODUCTION_ROOT)
+    try:
+        inside = real == prod or os.path.commonpath([real, prod]) == prod
+    except ValueError:                           # different drives (Windows tests): cannot be inside
+        inside = False
+    same = False
+    try:
+        a, b = os.stat(real), os.stat(prod)
+        same = (a.st_dev, a.st_ino) == (b.st_dev, b.st_ino)
+    except OSError:
+        pass                                     # production absent (a test box): the path checks still apply
+    if inside or same:
+        print("REFUSED: TOKEN_WATCH_ROOT %s is the production store %s, inside it, or the same directory by another "
+              "path" % (root, PRODUCTION_ROOT), file=sys.stderr)
         sys.exit(2)
     if not os.path.isdir(os.path.join(root, "due")):
         print("REFUSED: %s has no due/ — not a scratch copy of the store" % root, file=sys.stderr)
@@ -105,6 +127,12 @@ class BodyTail:
                     self.mints.add(rec["mint"])
 
 
+def _disk_bytes(folder: str) -> int:
+    if not os.path.isdir(folder):
+        return 0
+    return sum(os.path.getsize(os.path.join(folder, n)) for n in os.listdir(folder) if n.endswith(".jsonl"))
+
+
 def _stats(sizes: list[int]) -> dict:
     if not sizes:
         return {"n": 0}
@@ -149,14 +177,16 @@ def main(argv=None) -> int:
                 mints.append(m)
         buckets.append({"hour": h.strftime("%Y-%m-%dT%H"), "exists": exists, "entries": n})
     missing = [b["hour"] for b in buckets if not b["exists"] and b["hour"] not in a.allow_missing]
-    if missing:
-        log({"kind": "abort", "reason": "bucket missing", "missing": missing})
+    empty = [b["hour"] for b in buckets if b["exists"] and b["entries"] == 0 and b["hour"] not in a.allow_missing]
+    if missing or empty:
+        log({"kind": "abort", "reason": "bucket missing or empty", "missing": missing, "empty": empty})
         return 3
 
     tail = BodyTail(provenance.FOLLOW_UP_DIR)
     tail.poll()
     base = len(tail.sizes)    # bodies already in the scratch tree; every count below is THIS run's only, so a copied
                               # or resumed body can never satisfy the bodies > 0 refuse condition
+    disk_base = _disk_bytes(provenance.FOLLOW_UP_DIR)
     todo = [m for m in mints if not (a.resume and m in tail.mints)]
     now = datetime.now(UTC)
     save_state(budget.STATE, budget._blank(budget._month_key(now)))   # the fresh ledger (C-5)
@@ -165,6 +195,7 @@ def main(argv=None) -> int:
          "ledger": "fresh %s" % budget._month_key(now), "allowed_follow_up": budget.allowed("follow_up")})
 
     attempted = shed = errors = 0
+    prev_bodies, prev_attempted = 0, 0
     error_types: dict[str, int] = {}
     for m in todo:
         try:
@@ -181,21 +212,28 @@ def main(argv=None) -> int:
             st = _stats(tail.sizes[base:])
             free = shutil.disk_usage("/").free
             remaining = len(todo) - attempted
-            per_mint = (st.get("total", 0) / attempted) if attempted else 0
-            projected = int(per_mint * remaining)
-            floor = max(FLOOR_BYTES, projected + FLOOR_BYTES)
+            written = _disk_bytes(provenance.FOLLOW_UP_DIR) - disk_base     # bytes actually on disk, envelope included
+            projected = int(written / attempted * remaining) if attempted else 0
+            floor = projected + FLOOR_BYTES
             rec = {"kind": "checkpoint", "attempted": attempted, "bodies": st["n"], "shed": shed, "errors": errors,
-                   "error_types": error_types, "body_bytes": st, "free_bytes": free,
-                   "projected_remaining_bytes": projected, "floor_bytes": floor}
+                   "error_types": error_types, "body_bytes": st, "written_bytes_on_disk": written,
+                   "free_bytes": free, "projected_remaining_bytes": projected, "floor_bytes": floor}
             log(rec)
-            if attempted == CHECKPOINT and st["n"] == 0:
-                log({"kind": "abort", "reason": "no body after %d mints attempted" % CHECKPOINT})
-                return 4
-            if free < floor:
+            interval_attempts, interval_bodies = attempted - prev_attempted, st["n"] - prev_bodies
+            if interval_attempts and not interval_bodies:
+                first = prev_attempted == 0
+                log({"kind": "abort", "reason": "%s: %d mints attempted, 0 bodies" % (
+                    "no body at the first checkpoint" if first else "a later interval added no body (stall)",
+                    interval_attempts), "attempted": attempted})
+                return 4 if first else 6
+            prev_bodies, prev_attempted = st["n"], attempted
+            if remaining and free < floor:
                 log({"kind": "abort", "reason": "disk floor", "free_bytes": free, "floor_bytes": floor})
                 return 5
+            last_free_low = (not remaining) and free < floor
     tail.poll()
     log({"kind": "end", "attempted": attempted, "bodies_this_run": len(tail.sizes) - base,
+         "free_below_floor_at_end": bool(todo) and last_free_low,
          "distinct_mints_with_body": len(tail.mints & set(mints)), "of_distinct_mints": len(mints),
          "shed": shed, "errors": errors, "error_types": error_types, "body_bytes": _stats(tail.sizes[base:])})
     return 0
