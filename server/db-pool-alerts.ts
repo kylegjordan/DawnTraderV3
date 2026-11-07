@@ -36,6 +36,8 @@ export interface AlertDeps {
   /** The open (non-terminal) row for a key, or null. `fired_at` is set when the dispatcher PROMOTES the row (the 15-min
    *  `fireDue`), which precedes its push — it is promotion, not proof of delivery (Langston, inc 3b P4 Step 7). */
   openRow: (key: string) => { id: string; metadata?: Record<string, unknown> | null; fired_at?: string | null } | null;
+  /** Every open (non-terminal) row whose key starts with `prefix` — the restart family's promotion check (C2). */
+  openRowsByPrefix: (prefix: string) => Array<{ dedupe_key: string; fired_at?: string | null }>;
   /** mergeAlertMetadata: returns null on a missing-or-resolved row. */
   merge: (id: string, patch: (cur: Record<string, unknown>) => Record<string, unknown>) => Promise<unknown | null>;
 }
@@ -260,7 +262,7 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
       (cur) => ({ ...cur, waitsOver1s: maxOf(cur.waitsOver1s, v.window.waitsOver1s), waitsOver5s: maxOf(cur.waitsOver5s, v.window.waitsOver5s),
         maxWaitMs: maxOf(cur.maxWaitMs, v.window.maxWaitMs),
         maxWaitSite: v.window.maxWaitMs > Number(cur.maxWaitMs ?? -1) ? v.window.maxWaitSite : cur.maxWaitSite,
-        toWallMs: v.window.toWallMs, open: r.open, waiting: r.waiting }));
+        fromWallMs: v.window.fromWallMs, toWallMs: v.window.toWallMs, open: r.open, waiting: r.waiting }));
     else if (v.clear && known.has(waitKey)) await clear('resolve wait', waitKey);
     if (r.acquireTimeouts > 0) {
       await safe('acquire-timeout incident', raiseIncident(deps, acqKey, 'warning', `Database connection acquire timed out on ${label}`,
@@ -334,7 +336,12 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
       }
       if (known.has(RESTART_BLIND_KEY)) await clear('resolve restart blind', RESTART_BLIND_KEY);
       if (v.kind === 'match') {
-        await safe('resolve restart family', deps.resolveByPrefix(RESTART_PREFIX, new Set([RESTART_BLIND_KEY])));
+        // C2 (Langston, Step 4 on the fold): a crash then a quick dt-deploy is the likeliest sequence, and the family
+        // clear must not erase a row the dispatcher has not promoted yet. Unpromoted rows are excluded; `match` holds
+        // after the deploy, so the 5-minute poll retries until each is promoted.
+        const unpromoted = deps.openRowsByPrefix(RESTART_PREFIX).filter((row) => row.dedupe_key !== RESTART_BLIND_KEY && !row.fired_at).map((row) => row.dedupe_key);
+        if (unpromoted.length) log(`[B-DB-POOL-GUARD][ALERTS] restart family clear deferred for unpromoted row(s): ${unpromoted.join(', ')}`);
+        await safe('resolve restart family', deps.resolveByPrefix(RESTART_PREFIX, new Set([RESTART_BLIND_KEY, ...unpromoted])));
         return;
       }
       await safe('mint restart', deps.addAlert({ severity: 'critical',
@@ -418,6 +425,8 @@ export async function startProductionDbPoolAlerts(label: string): Promise<void> 
     resolveByKey: (key) => sa.resolveAlertsByDedupeKey(key, ACTOR, EVIDENCE, 'engine'),
     resolveByPrefix: (prefix, exclude) => sa.resolveAlertsByDedupePrefix(prefix, ACTOR, EVIDENCE, 'engine', exclude),
     openRow: (key) => sa.readAllAlerts().find((a) => a.dedupe_key === key && a.state !== 'resolved') ?? null,
+    openRowsByPrefix: (prefix) => sa.readAllAlerts().filter((a) => typeof a.dedupe_key === 'string' && a.dedupe_key.startsWith(prefix) && a.state !== 'resolved')
+      .map((a) => ({ dedupe_key: a.dedupe_key as string, fired_at: a.fired_at })),
     merge: (id, patch) => sa.mergeAlertMetadata(id, patch),
   };
   // Not under PM2 (local dev, tests): the restart arm has no restart count to read, so it is not started at all,

@@ -105,7 +105,7 @@ describe('the incident helper', () => {
       minted,
       addAlert: async (o) => { minted.push(o.dedupe_key); return { id: 'n' }; },
       resolveByKey: async () => [], resolveByPrefix: async () => [],
-      openRow: () => open, merge: async () => mergeResult,
+      openRow: () => open, openRowsByPrefix: () => [], merge: async () => mergeResult,
     };
   };
   it('merges into an open row', async () => {
@@ -161,6 +161,7 @@ function memDeps(opt: { promote?: boolean } = {}): AlertDeps & { rows: Map<strin
       return out;
     },
     openRow: (key) => { const r = rows.get(key); return r?.open ? { id: r.id, metadata: r.metadata, fired_at: r.fired === false ? null : 'promoted' } : null; },
+    openRowsByPrefix: (prefix) => [...rows].filter(([k, r]) => k.startsWith(prefix) && r.open).map(([k, r]) => ({ dedupe_key: k, fired_at: r.fired === false ? null : 'promoted' })),
     merge: async (id, patch) => { for (const r of rows.values()) if (r.id === id && r.open) { r.metadata = patch(r.metadata); return r; } return null; },
   };
 }
@@ -354,11 +355,33 @@ describe('the wiring', () => {
     expect(row.open).toBe(true); // clear due (10 covered quiet minutes), deferred: unpromoted
     // fires 6: the 5 s waits ending at minutes 1-2 stay inside the 5-minute window through the flush ending at minute 6
     expect(row.metadata).toMatchObject({ fires: 6, waitsOver5s: 2, maxWaitMs: 9_000, maxWaitSite: 'b' });
+    expect(row.metadata.fromWallMs).toBe(1 * MIN); // C3: the LAST fire's 5-min window (flush ending min 6), not the first mint's start (0)
     row.fired = true;
     await mon.onFlush(rec(14, 15, { label: 'ww' }));
     expect(row.open).toBe(false);
     expect(d.log.filter((l) => l.startsWith('mint'))).toHaveLength(1);
     mon.stop();
+  });
+
+  it('the restart family clear SKIPS an unpromoted row, and resolves it at the next poll once promoted (Langston C2)', async () => {
+    const pool = new FakePool();
+    attachPoolInstrument(pool as unknown as pg.Pool, 'w5', { log: () => {}, intervalMs: 3_600_000 }).stop();
+    attachPoolGuards(pool as unknown as pg.Pool, 'w5');
+    const d = memDeps();
+    d.rows.set(`${RESTART_PREFIX}684`, { id: 'a', open: true, metadata: {} }); // promoted (sent)
+    d.rows.set(`${RESTART_PREFIX}685`, { id: 'b', open: true, metadata: {}, fired: false }); // crash, then a quick deploy
+    const inputs = base({ liveRestartTime: '686', recordText: 'sha=aaa\nrestart_time=686\n' });
+    vi.useFakeTimers();
+    try {
+      const mon = startDbPoolAlerts({ label: 'w5', deps: d, flushIntervalMs: 3_600_000, restartInputs: () => inputs, log: () => {} });
+      await vi.advanceTimersByTimeAsync(MIN + 10); // the boot read: match
+      expect(d.rows.get(`${RESTART_PREFIX}684`)!.open).toBe(false);
+      expect(d.rows.get(`${RESTART_PREFIX}685`)!.open).toBe(true); // not erased unsent
+      d.rows.get(`${RESTART_PREFIX}685`)!.fired = true; // the dispatcher tick promotes it
+      await vi.advanceTimersByTimeAsync(5 * MIN);
+      expect(d.rows.get(`${RESTART_PREFIX}685`)!.open).toBe(false);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
   });
 
   it('the machine actor is in the one canonical table', () => {

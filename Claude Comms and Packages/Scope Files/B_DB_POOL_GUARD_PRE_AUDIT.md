@@ -170,3 +170,48 @@ Deployed `942c65424` 17:51:31Z (CI `42397602218` 4/4; rollback `d01da3d86`). `[D
 **Residual, stated:** a checkout leaked OUTSIDE a transaction (before BEGIN, after COMMIT) is invisible to all of these — no release ⇒ no wait counts, not `idle in transaction` ⇒ the sampler is blind, and `idleTimeoutMillis` does not apply to a checked-out client. Only the `open` gauge (in the (a) body) sees it.
 
 **Forced tests:** (b) the harness holds a `dawntrader_main` transaction idle 45 s; the record names how many 25 s polls covered it (needing a retry to go green is the defect). The harness client carries the 60 s startup parameter (built from `POOL_CONFIG`), so it exercises the detector under the real ceiling; the `25P03` incident key is exercised by letting the same harness transaction run past 60 s. (c) a deliberate `pm2 restart dawntrader` outside `dt-deploy` (row id, pinned to the deployed sha); a second deliberate restart then one `dt-deploy` ⇒ BOTH rows resolved; the LOWER arm by an injected record, labelled *comparator arm exercised, reboot mechanism NOT*. (a) fence-only plus its first real firing, stated.
+
+### AMENDMENT inc 3b r3 (2026-11-07, CC-A) — Step 4 and Step 7 record; the self-clearing keys LATCH UNTIL PROMOTED (Langston rulings `1568702965877973165`, `1568707237172748390`, `1568712632809033783`); this SUPERSEDES r2's "clears itself" wherever they differ
+**Step 4 on P4.** `885f1a314` → CHANGES C-1 (the wait blind key minted behind a `known` guard, so a row resolved while still blind never re-minted) and C-2 (the callback connect arm, the one `pg-pool` `query()` takes at `index.js:399`, had no test). Folded at `1d4be9cf7` (mutation-proved), PROCEED, CI `42403770541` 4/4. Deployed `1d4be9cf7` 19:06:27Z (restart 683), carrying ANALYST's `#1250` (its own PROCEED at `cc4d2a9fc`).
+
+**Step 7 forced test (b) — PASSED.** Harness scripts ran in a private directory on staging, deleted after; the staging worktree stayed clean.
+- **App wiring.** A `dawntrader_main`-named connection was held idle in a transaction for 57 s (19:10:13 → ROLLBACK 19:11:10). The app's sampler minted `ffb9952e` at 19:10:57 with `max_s` 43.9 — ONE poll covered it (the one before, at about 19:10:32, saw about 19 s). It cleared after two clean reads (19:11:47, `db-pool-monitor`, evidence `#1239`).
+  - **Why 57 s, not the planned 45 s:** a 45 s hold leaves a 15 s window above the 30 s bound, under the 25 s poll period, so a miss there would be by design rather than a defect.
+- **Module end to end, outside the app's wiring (stated).** A harness process ran `startProductionDbPoolAlerts('cca_harness')` on its own pool.
+  - The idle level `79857f58` minted at 19:13:55 (`max_s` 49.9).
+  - The server killed the session at 19:14:05.746, raising exactly ONE 25P03 incident, `92390fc4`. The follow-on with no code, at .843, was not counted.
+  - The level cleared at 19:14:45.652, and the incident row was resolved by hand as a test row.
+
+**Step 7 forced test (c) — the incident arm PASSED; the clearing leg rides the next deploy.**
+- **Two deliberate `pm2 restart`s outside `dt-deploy`**, announced in channel first: 684 → `ac7dac78` (minted 19:17:46) and 685 → `513eb051` (19:19:33). Both are `HIGHER`, both bodies read "HEAD matches the record's sha … most likely a crash-restart", and both were promoted at 19:29:46.788Z. Langston confirmed they were orderly SIGTERM restarts, `unstable_restarts=0`.
+- **The LOWER arm:** the real `productionRestartInputs` was run with an injected record (`restart_time=690` against live 685) and returned verdict `LOWER`. **This exercises the comparator arm, NOT the reboot mechanism.**
+
+**THE GAP STEP 7 FOUND — a self-clearing row can be resolved before anyone is sent it.**
+- **Mechanism.** `addAlert` writes `state:'scheduled'`, `fired_at:null` (`server/services/system-alerts.ts:534/541`). Only `fireDue` (`:580`, stamping `fired_at` at `:590`) promotes and pushes, and it runs on the 15-minute `system-alerts-dispatcher.timer`.
+- **Measured.** `ffb9952e` lived 50.1 s and `79857f58` 50 s, both with `fired_at` null: never promoted, never sent. The incident rows were promoted at the next tick.
+- **"About 1 in 10" for the idle level is a lifetime ratio, not a measured delivery rate** (the delivered population is n=1, and it was the incident).
+- **Premise withdrawn:** r2's "a page arrives BEFORE the server ends the session" is false at 15-minute delivery. The 25P03 incident is the durable record of a killed leak, and it is delivered.
+
+**THE FOLD (`6be0c81f2`, Step-4 PROCEED with conditions; `+` C2/C3 in the next commit):**
+- **Latch until promoted.** A self-clearing key (both levels, all three blind keys) resolves only once its open row carries `fired_at`.
+  - Until then the key stays in `known` and every clear arm retries on its next pass. The deferral is logged once per key.
+  - **`fired_at` IS PROMOTION, NOT DELIVERY** (Langston condition 1). `fireDue` stamps it before the push, and a promotion's push is not delivery-checked while a resurface's is. The residual is homed on `#340` (`3a6e3d265`), owner CC-A, with no slot. Fixing it needs a delivery stamp, which is a schema change.
+- **A re-firing level merges** into its open row instead of being deduped into a frozen one (Langston condition 2). The merged fields are `fires`, `first_at`/`last_at`, and the running worst: max `n`/`max_s` for idle; max over-1 s, over-5 s and `maxWaitMs` (with its site) for wait.
+  - **C3:** the wait merge also takes the LATEST window's `fromWallMs`, so the span in the metadata matches the 5-minute maxes beside it. `first_at` records when the condition began.
+  - **The BODY stays as minted** and says so ("as first seen"). Its "At the latest flush" line is frozen, while metadata `open`/`waiting` keep updating.
+  - A row minted by the pre-fold build has no `fires`/`first_at`. Its first merge stamps `fires: 2` with no `first_at`: the count is right, the provenance is absent. Accepted.
+- **C2 — the restart family's MACHINE clear excludes unpromoted rows.** On `match`, the clear excludes every open `app-unplanned-restart:` row with no `fired_at`. `match` persists after a deploy, so the 5-minute poll retries until each row is promoted.
+  - **Why:** a crash followed by a quick `dt-deploy` is the likeliest sequence. Without this exclusion it would wipe the notice unsent — the same defect at a third site.
+- **Cost, stated.**
+  - While a level fires: one `openRow` (a whole-file read, about 64 ms measured by Langston) plus one merge write per pass — every 25 s for idle, every minute for wait.
+  - While a clear is pending: one `openRow` per pass, for up to 15 minutes.
+  - At each `match` poll: one prefix read.
+- **Restart inside a deferral:** `known` is re-seeded from the open rows at boot, so the clear resumes. Idle needs two fresh clean reads.
+- **Tests:** 27. M3 (the gate removed) fails 3 tests; M4 (the merge removed) fails 2; M5 (unpromoted rows not excluded) fails the C2 test; M6 (`fromWallMs` not merged) fails the wait test. The suite's tsc and full-suite legs are discharged by CI per job at the deployed sha, not by the local run.
+
+**Forced test for the fold (Langston: by exercise, not inspection) — owed after the deploy.** Hold a `dawntrader_main` leak until the idle level mints, roll it back, and show:
+1. the row surviving its two clean reads, with the deferral logged;
+2. the row taking `fired_at` at the next dispatcher tick;
+3. the row resolving on the first clean pass after that.
+
+The same deploy's `match` must resolve `ac7dac78`/`513eb051` — both already promoted — while excluding nothing.
