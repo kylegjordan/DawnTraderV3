@@ -1,7 +1,10 @@
 """
 token-watch — the pair-count shape of the observation rows for given days. READ-ONLY.
-(B-TOKEN-WATCH-FOLLOWUP-MEMORY P1, §6 AMENDMENT 1 — the 09-26/09-27 reference shape, committed so the reviewer can
-re-derive it: deploy cannot read `observations/` (mask ---), so the command and its stdout are the record.)
+(B-TOKEN-WATCH-FOLLOWUP-MEMORY P1, §6 AMENDMENT 1 — the 09-26 reference shape.) RUN THIS to re-derive it; the stdout
+in the change list is the author's run, not the record. (A first version said a reviewer could not read
+`observations/`; false — deploy's ACL entry is masked, but deploy holds sudo on staging. Langston re-derived the
+figures himself, 2026-11-07.) `rows` counts EVERY non-blank line, parsed or not, so a corrupt day's denominator stays
+whole and its unparsed rows are reported beside it.
 
     python3 tools/observation_pair_shape.py /var/lib/token-watch/observations 2026-09-26 2026-09-27 2026-09-28
 
@@ -29,12 +32,12 @@ def shape(path: str) -> dict:
         for line in fh:
             if not line.strip():
                 continue
+            rows += 1
             try:
                 r = json.loads(line)
             except ValueError:
                 bad += 1
                 continue
-            rows += 1
             if r.get("observed") is not True:
                 continue
             observed += 1

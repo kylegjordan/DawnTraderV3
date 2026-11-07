@@ -48,3 +48,6 @@ The sum is 152,068–152,107 B, over by ~8,200 — a figure that moves with his 
 ## Out of scope
 
 Lowering the ceiling (row 2.8a); his `MEMORY.md` (trimmed nightly by `B-LANGSTON-RELIEF`); his model. **The module read-check mechanism** (a token per module, checked by the queue) is built here only if OBJ-5's target cannot be met by retiring and compressing — otherwise it is proposed to Kyle as its own item, not started.
+
+## ITEM ADDED 2026-11-07 (Langston, Discord `1568592908901154958`; §9.4 disposition 2 — onto this in-flight batch, owner CC-INFRA, no new slot)
+- **Split the POLICY from the CAPABILITY in his `CLAUDE.md` §9 line** that reads "on staging you are the `deploy` user, NOT root… outside your privilege scope". **Measured by him 2026-11-07:** `sudo -n -l` on staging returns `(ALL) NOPASSWD: ALL` for `deploy`, and he re-derived a root-only measurement with it. **Kyle's policy is unchanged** (he does not restart services or edit config); the capability bound as written is false, and a false capability bound primes him to accept an asserted absence about his own instruments (#453). The line becomes: what he MAY do (policy, Kyle's), separately from what he CAN reach (capability, measured). Lands through this batch's own install path and size accounting; `UNAUDITED` until this batch's next step reads the line at the ref.
