@@ -73,6 +73,13 @@ MUTATIONS = [
                                                           "    if False:" + chr(10) + "        print(")),
     ("recall: a stray file in sub/ walked as a folder", mut("dt_recall.py", "                if not os.path.isdir(pdir):", "                if False:")),
     ("recall: a failed search wears the no-hits code", mut("dt_recall.py", "        return 3", "        return 1")),
+    # Langston P6 r3, must-fixes 7-8
+    ("recall: a malformed --since accepted", mut("dt_recall.py", '            if a == "--since" and not (re.fullmatch(',
+                                                 '            if False and not (re.fullmatch(')),
+    ("recall: a well-shaped but impossible --since accepted", mut("dt_recall.py", "        datetime.date.fromisoformat(v)" + chr(10) + "        return True",
+                                                                  "        return True")),
+    ("recall: --batch case-sensitive in the text arm", mut("dt_recall.py", '            if batch.lower() in "\\n".join(_lines(p)).lower():',
+                                                           '            if batch in "\\n".join(_lines(p)):')),
 ]
 
 

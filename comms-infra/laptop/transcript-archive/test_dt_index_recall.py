@@ -174,6 +174,18 @@ ok("must-fix 4: a search that FAILS exits 3 and says so - never the no-hits code
 os.rmdir(tsv_path)
 os.rename(tsv_path + ".aside", tsv_path)
 
+for bad in ("2026-1-5", "11-05", "yesterday", "2026-13-45", "2026-02-30"):
+    rc, out = recall_raw("zebra", "--since", bad, "--root", root)
+    ok("P6 r3 must-fix 7: --since %r is REFUSED (exit 2), never a voided or zeroed filter" % bad,
+       rc == 2 and "real date" in out, (rc, out))
+rc, out = recall("zebra finding", "--batch", "B-TOKEN-WATCH")
+ok("P6 r3 must-fix 8: (control) --batch as written keeps the conversation", rc == 0 and "1 hit(s)" in out, out)
+rc, out = recall("zebra finding", "--batch", "b-token-watch")
+ok("P6 r3 must-fix 8: --batch is case-blind in the TEXT arm too (same hit)", rc == 0 and "1 hit(s)" in out, out)
+rc, out = recall("zebra", "--actions", "--batch", "b-token-watch")
+rc2, out2 = recall("zebra", "--actions", "--batch", "B-TOKEN-WATCH")
+ok("P6 r3 must-fix 8: ...and the two arms agree on case (actions arm: same result either case)", rc == rc2, (rc, rc2))
+
 print("6. claim 4 by TEST, not only by construction: a phrase only inside a redacted secret is not found")
 import hmac, hashlib  # noqa: E402,E401
 KEY = bytes(range(32))

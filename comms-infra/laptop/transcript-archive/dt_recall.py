@@ -13,6 +13,7 @@ that something did not happen (#453) - the archive holds what was archived, reda
 Exit 0 = hits, 1 = no hits, 2 = bad arguments (an unknown flag, a flag with no value, an empty query), 3 = the search
 itself FAILED (an unreadable or unexpected archive layout) - a failure never wears the no-hits code.
 """
+import datetime
 import os
 import re
 import sys
@@ -52,6 +53,14 @@ def files(root, alias, since, skipped=None):
     return out
 
 
+def _real_date(v):
+    try:
+        datetime.date.fromisoformat(v)
+        return True
+    except ValueError:
+        return False
+
+
 def _lines(p):
     with open(p, encoding="utf-8", errors="replace") as fh:
         return fh.read().split("\n")
@@ -84,7 +93,7 @@ def search(root, words, alias=None, since=None, batch=None, actions=False, skipp
     if batch:
         keep = set()
         for rel, p, _d, sid8 in fl:
-            if batch in "\n".join(_lines(p)):
+            if batch.lower() in "\n".join(_lines(p)).lower():   # case-blind, as the actions arm (P6 r3 must-fix 8)
                 keep.add((rel.split("/")[0], sid8))
         fl = [x for x in fl if (x[0].split("/")[0], x[3]) in keep]
     for rel, p, _d, _s in fl:
@@ -114,6 +123,10 @@ def main(argv):
             if v is None or v.startswith("--") or not v.strip():
                 # a flag with no value must never silently DROP its filter (the writer's MF3 rule, P6 must-fix 1)
                 sys.stderr.write("REFUSED: %s needs a value\n" % a)
+                return 2
+            if a == "--since" and not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", v) and _real_date(v)):
+                # a malformed date compares as a string and silently voids or zeroes the filter (P6 r3 must-fix 7)
+                sys.stderr.write("REFUSED: --since needs a real date as YYYY-MM-DD, not %r\n" % v)
                 return 2
             opts[a] = v
         elif a == "--actions":

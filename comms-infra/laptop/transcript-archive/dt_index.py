@@ -10,7 +10,8 @@ Rebuilt WHOLE from the archive files on every run (no state of its own, so it ca
   <root>/ACTIONS.tsv       one row per action line, all sessions: alias, date, time, session8, file:line, tool, summary.
   <shared>/TRANSCRIPT_INDEX.md   the same lines WITHOUT the topic (Kyle, KD-49 option iii): the shared memory folder is
                            mirrored into git, and the topic is the one field that can carry a private message. Refused
-                           (nothing written, exit 4) if it would exceed the memory-file cap of 24,576 bytes.
+                           (exit 4) if it would exceed the memory-file cap of 24,576 bytes: the SHARED copy is not
+                           written (the old one is left as it was), while INDEX.md and ACTIONS.tsv above ARE.
 All output is LF. The archive is already redacted; nothing here reads a raw conversation.
 The run (`dt_archive_run`) passes the folders on no list (`unlisted`) to build(); this bare CLI does not, so an index
 rebuilt by hand carries no such line - rebuild through the run when that line matters.
