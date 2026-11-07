@@ -22,7 +22,7 @@ SUBCOMMANDS, each run as `tokenwatch`:
               is NOT copied unless --with-bodies (the index serves the bodies).
            Writes <run dir>/PREPARE.json; `run` carries it into its result, so the tree a run used is on record.
 
-  run      --arm {all_shed,live,x4} --run-root <run dir> --bodies <bodies.sqlite> --now <ISO> --out <result.json>
+  run      --arm {all_shed,live,x4,xn,sept} --run-root <run dir> --bodies <bodies.sqlite> --now <ISO> --out <result.json>
            [--trace <dir>] [--min-served-share 0.95]
            Meant for `systemd-run -p MemoryMax=512M -p IPAddressDeny=any -p CPUQuota=40% --uid=tokenwatch`
            (tools/run_followup_arm.sh records the unit's own Result, which is how a KILL is recorded).
@@ -70,7 +70,11 @@ SUBCOMMANDS, each run as `tokenwatch`:
            exactly as `run` would, and nothing else. Its ru_maxrss sits beside the arms (Langston (d)).
 
 Exit: 0 done · 2 refused · 6 egress control · 7 all_shed control · 8 MemoryMax control · 9 served-share floor
-      · 10 clock-freeze control.
+      · 10 clock-freeze control · 11 arm sept NOT RUN (under 30 one-pair templates, the basis) · 12 fresh-parse
+      control (parses != served) · 13 arm sept control (wiring, alive below the reference, Helius range)
+      · 14 derive-n: N VOID · 15 run_hour reported an error (a deterministic replay must have none).
+Arms xn (`--n`, the derived N: ceil(N) − 1 pad copies) and sept (`--shape`, §6 AMENDMENTS 1-2: classes under 30 real
+templates are synthesised from class 1, labelled in the result's `sept.source`) are specified in the pre-audit §6.
 """
 
 from __future__ import annotations
@@ -225,6 +229,7 @@ def cmd_index(a) -> int:
     db = sqlite3.connect(tmp)
     db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL, "
                "pairs INTEGER NOT NULL)")
+    db.execute("CREATE INDEX bodies_by_pairs ON bodies (pairs)")   # arm sept's template lookups (m3)
     n, dups, divergent = 0, [], 0
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
@@ -332,6 +337,8 @@ class Counts:
         self.loop_alive = 0       # loop token_state results with alive True
         self.loop_class0 = 0      # arm sept: loop lookups assigned class 0
         self.loop_shaped = 0      # arm sept: loop lookups shaped
+        self.loop_synthetic = 0   # Helius calls made inside the follow-up loop
+        self.synthetic_shape = 0  # arm sept: bodies synthesised from a class-1 template (§6 AMENDMENT 2)
 
 
 def _freeze_clock(now: datetime, modules) -> list[str]:
@@ -435,14 +442,22 @@ def cmd_run(a) -> int:
     db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
     db.execute("PRAGMA cache_size = -2048")            # 2 MiB: the harness's own cache, small and constant
     curves = json.load(open(CURVES, encoding="utf-8"))
-    shape = templates = None
+    shape = templates = source = None
     if a.arm == "sept":
-        shape = _load_shape(a.shape)
+        try:
+            shape = _load_shape(a.shape)
+        except SystemExit as exc:                       # a refusal leaves a void record, never a bare exit (m1)
+            return void(2, str(exc))
         templates = {k: db.execute("SELECT count(*) FROM bodies WHERE " + _CLASS_SQL[k]).fetchone()[0]
                      for k in ("1", "2", "3+")}
+        # §6 AMENDMENT 2: class 1 is the BASIS and is never synthesised; a thinner class 2 / 3+ is built from it
         if templates["1"] < MIN_CLASS:
-            return void(11, "arm sept NOT RUN: %d captured bodies with exactly 1 pair, under %d" % (
+            return void(11, "arm sept NOT RUN: %d captured bodies with exactly 1 pair, under %d (the basis)" % (
                 templates["1"], MIN_CLASS), {"templates": templates})
+        source = {"1": "real (%d templates)" % templates["1"]}
+        for k in ("2", "3+"):
+            source[k] = ("real (%d templates)" % templates[k] if templates[k] >= MIN_CLASS else
+                         "synthetic-shape from class 1 (%d real templates in the class)" % templates[k])
     # the guard BEFORE the arithmetic (Langston, Step 4): a missing --n must leave a refusal record, not a traceback
     if a.arm == "xn" and (a.n is None or a.n < 1):
         return void(2, "arm xn needs --n >= 1 (the derived N, written down before the run)")
@@ -454,6 +469,7 @@ def cmd_run(a) -> int:
         url = req.full_url
         if "helius" in url:
             c.synthetic += 1
+            c.loop_synthetic += c.in_loop                  # the loop's own Helius calls (the nit: promote's are apart)
             payload = json.loads(req.data.decode())
             if payload.get("method") == "getAccountInfo":
                 pick = int(hashlib.sha1(str(payload["params"][0]).encode()).hexdigest(), 16) % len(curves)
@@ -469,15 +485,25 @@ def cmd_run(a) -> int:
             c.loop_class0 += c.in_loop and k == "0"
             c.loop_shaped += c.in_loop
             if k == "0":
+                text0 = '{"schemaVersion": "1.0.0", "pairs": null}'
                 c.served += 1
                 c.loop_served += c.in_loop
                 c.parses += 1
-                return json.loads('{"schemaVersion": "1.0.0", "pairs": null}')
-            off = _hash_int(mint) % templates[k]
-            text, nbytes = db.execute("SELECT body, bytes FROM bodies WHERE " + _CLASS_SQL[k] +
+                c.served_bytes.append(len(text0))          # served_bytes.n == served in this arm (m2)
+                return json.loads(text0)
+            synth = templates[k] < MIN_CLASS              # only class 2 / 3+ can be thin here (class 1 is checked)
+            cls = "1" if synth else k
+            off = _hash_int(mint) % templates[cls]
+            text, nbytes = db.execute("SELECT body, bytes FROM bodies WHERE " + _CLASS_SQL[cls] +
                                       " ORDER BY rowid LIMIT 1 OFFSET ?", (off,)).fetchone()
             body = json.loads(text)
             c.parses += 1
+            if synth:                                      # §6 AMENDMENT 2: the class-1 pair duplicated k times
+                pair = (body.get("pairs") or [{}])[0]
+                body["pairs"] = [dict(pair, pairAddress="%s~%d" % (pair.get("pairAddress"), i),
+                                      baseToken=dict(pair.get("baseToken") or {}))
+                                 for i in range(_CLASS_K[k])]
+                c.synthetic_shape += 1
             for p in body.get("pairs") or []:
                 if isinstance(p.get("baseToken"), dict):
                     p["baseToken"]["address"] = mint
@@ -516,6 +542,15 @@ def cmd_run(a) -> int:
                 state = providers.token_state(mint)
                 c.loop_alive += bool(state.get("alive"))
                 return state
+            finally:
+                c.in_loop = False
+
+        def pool_sol_reserves(self, pair_address):
+            # the loop's alive-branch Helius call runs AFTER token_state returns, so it is marked here, at its own
+            # call site, or loop_synthetic would count zero by construction
+            c.in_loop = True
+            try:
+                return providers.pool_sol_reserves(pair_address)
             finally:
                 c.in_loop = False
     follow_up.providers = CallSite()
@@ -562,9 +597,16 @@ def cmd_run(a) -> int:
         "served_body_bytes": _stats(c.served_bytes),
         "shed_observation_rows": shed_rows, "due_minus_requeued": expected, "prepare": prepared,
         "parses": c.parses, "loop_alive": c.loop_alive, "pad_copies": pad_copies, "n": a.n,
+        "loop_synthetic_helius_calls": c.loop_synthetic,
+        "bodies_file_bytes": os.path.getsize(a.bodies),   # page cache is in memory.peak; the term differs by arm (m3)
     }
     code = 0
-    if a.arm != "all_shed" and c.parses != c.served:
+    if stats.get("errors"):
+        # §6 AMENDMENT 2: a deterministic replay with a run_hour error is a harness defect by construction
+        # (follow_up.py swallows exceptions into this count, where no other control can see them)
+        result["void"] = "run_hour reported %d error(s); a replay must have none" % stats["errors"]
+        code = 15
+    elif a.arm != "all_shed" and c.parses != c.served:
         result["void"] = "fresh-parse control (C-6): %d parses for %d served lookups" % (c.parses, c.served)
         code = 12
     elif a.arm == "all_shed" and not (c.egress == 0 and c.call_site == expected and shed_rows == expected):
@@ -575,7 +617,8 @@ def cmd_run(a) -> int:
         n = c.loop_shaped
         class0 = c.loop_class0 / n if n else 0.0
         alive = c.loop_alive / n if n else 0.0
-        result["sept"] = {"shape": shape, "templates": templates, "loop_lookups": n,
+        result["sept"] = {"shape": shape, "templates": templates, "source": source, "loop_lookups": n,
+                          "synthetic_shape_bodies": c.synthetic_shape,
                           "class0_share": round(class0, 6), "alive_share": round(alive, 6),
                           "class0_test": "WIRING control (C-4), not fidelity to the reference day",
                           "alive_direction": "below the reference alive share voids; above stands (C-5)"}
@@ -587,8 +630,9 @@ def cmd_run(a) -> int:
             result["void"] = "alive share %.4f is BELOW the reference %.4f: the fan-out driver is understated" % (
                 alive, shape["alive_share"])
             code = 13
-        elif not (0 < c.synthetic <= 2 * c.loop_alive):
-            result["void"] = "synthetic Helius calls %d not in (0, 2 x %d alive]" % (c.synthetic, c.loop_alive)
+        elif not (0 < c.loop_synthetic <= 2 * c.loop_alive):
+            result["void"] = "the loop's synthetic Helius calls %d not in (0, 2 x %d alive]" % (c.loop_synthetic,
+                                                                                          c.loop_alive)
             code = 13
     elif a.arm != "all_shed":
         share = (c.loop_served / loop_lookups) if loop_lookups else 0.0

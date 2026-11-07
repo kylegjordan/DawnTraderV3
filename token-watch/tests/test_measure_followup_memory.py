@@ -397,6 +397,50 @@ p = tool("run", "--arm", "sept", "--run-root", run_root_d4, "--bodies", BODIES_T
          "--skip-memory-check", "--skip-egress-check", "--shape", SHAPE, root=run_root_d4)
 check("D4 exit 11 not run", p.returncode == 11 and "NOT RUN" in open(out4).read(), p.stdout[-300:])
 
+# ── §6 AMENDMENT 2 ─────────────────────────────────────────────────────────────────────────────────────────────────
+SHAPE_WIDE = os.path.join(WORK, "shape_wide.json")
+json.dump({"day": "test", "share": {"0": 0.4, "1": 0.3, "2": 0.2, "3+": 0.1}, "alive_share": 0.3}, open(SHAPE_WIDE, "w"))
+print("D5 expect: classes 2 and 3+ EMPTY (25/40/0/0) under a wide shape -> exit 0, both classes synthesised and labelled,"
+      " no run_hour error (the old code divided by zero inside the loop and the error was swallowed)")
+run_root_d5, _ = prepare("run-sept5")
+out5 = os.path.join(WORK, "sept5.json")
+p = tool("run", "--arm", "sept", "--run-root", run_root_d5, "--bodies", BODIES_THIN0, "--now", NOW, "--out", out5,
+         "--skip-memory-check", "--skip-egress-check", "--shape", SHAPE_WIDE, "--wiring-tolerance", "0.2", root=run_root_d5)
+r5 = json.load(open(out5)) if os.path.exists(out5) else {}
+s5 = r5.get("sept", {})
+check("D5 exit 0, errors 0", p.returncode == 0 and r5.get("stats", {}).get("errors") == 0, str(r5.get("void")) + p.stderr[-600:])
+check("D5 both thin classes are labelled synthetic", "synthetic-shape" in s5.get("source", {}).get("2", "")
+      and "synthetic-shape" in s5.get("source", {}).get("3+", "") and s5.get("source", {}).get("1", "").startswith("real"),
+      str(s5.get("source")))
+check("D5 synthetic bodies were actually served", s5.get("synthetic_shape_bodies", 0) > 0, str(s5.get("synthetic_shape_bodies")))
+check("D5 the loop's own Helius calls are counted", r5.get("loop_synthetic_helius_calls", 0) > 0, str(r5.get("loop_synthetic_helius_calls")))
+print("D6 expect: arm sept without --shape -> exit 2 WITH a void record")
+run_root_d6, _ = prepare("run-sept6")
+out6 = os.path.join(WORK, "sept6.json")
+p = tool("run", "--arm", "sept", "--run-root", run_root_d6, "--bodies", BODIES2, "--now", NOW, "--out", out6,
+         "--skip-memory-check", "--skip-egress-check", root=run_root_d6)
+check("D6 exit 2 and a record", p.returncode == 2 and os.path.exists(out6) and "--shape" in json.load(open(out6)).get("void", ""),
+      p.stderr[-300:])
+print("E15 expect: a captured body whose extraction raises (volume 'x') -> run_hour counts an error -> VOID exit 15")
+BAD = os.path.join(WORK, "bad")
+shutil.copytree(PRISTINE, BAD)
+bad_lines = open(os.path.join(BAD, "provenance", "follow-up", "2026-10-01.jsonl"), encoding="utf-8").read().splitlines()
+first = json.loads(bad_lines[0])
+broken = json.loads(first["body"])
+broken["pairs"][0]["volume"] = {"h24": "x"}
+first["body"] = json.dumps(broken, sort_keys=True)
+bad_lines[0] = json.dumps(first)
+open(os.path.join(BAD, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8").write(chr(10).join(bad_lines) + chr(10))
+BODIES_BAD = os.path.join(WORK, "bad.sqlite")
+tool("index", "--pristine", BAD, "--out", BODIES_BAD)
+run_root_e15, _ = prepare("run-e15")
+out15 = os.path.join(WORK, "e15.json")
+p = tool("run", "--arm", "live", "--run-root", run_root_e15, "--bodies", BODIES_BAD, "--now", NOW, "--out", out15,
+         "--skip-memory-check", "--skip-egress-check", "--min-served-share", "0.9", root=run_root_e15)
+r15 = json.load(open(out15)) if os.path.exists(out15) else {}
+check("E15 exit 15 naming the errors", p.returncode == 15 and "error" in str(r15.get("void")), "rc=%s %s" % (p.returncode, r15.get("void")))
+check("R2 the result records the bodies file size", r5.get("bodies_file_bytes", 0) > 0)
+
 shutil.rmtree(WORK, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
