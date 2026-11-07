@@ -1,0 +1,134 @@
+# B-DISK-HEADROOM — PRE-IMPLEMENTATION AUDIT AND IMPLEMENTATION PLAN
+
+change-class: non_architecture · **Scope:** `B_DISK_HEADROOM_SCOPE.md` r2 (APPROVED by Langston at `12e9bf09d`, queue id `1568516282892947507`; his four Step-2 conditions are §8 of the scope and are answered in §2 below) · **Plan row:** `SPRINT_TO_LIVE_PLAN.md` row 6 · **Owner:** Infra Claude · **Read at:** `origin/migration/aws-supabase` @ `54d671bb7`, 2026-11-07; runtime reads on staging (`188.245.193.8`) and Supabase, all inside `BEGIN TRANSACTION READ ONLY`, 06:56Z-07:05Z. **Staging runs `0f4835b5a`**; the two sweep files there are byte-identical to their blobs at that sha (§1.7).
+
+## 0. Previously stated vs now
+
+1. **PREVIOUSLY (scope §8 condition 3, Langston's estimate):** a sampled peak understates the true peak by "up to one interval × slope (≤ ~1.5 GiB)". **NOW:** up to **~1.9-2.6 GiB at today's sampling phase (14:40Z), and up to ~5 GiB if the phase drifts to just after the sweep.** **REASON:** the 1.06-1.48 GiB/day slope is NET of the nightly drop of the daily partitions (~3.8 GiB a night: §1.5's five children sum to 3,758,374,912 B). Between two drops the database rises at **0.16-0.22 GiB/h** (the five fastest rising intervals of 6 h or more since 10-01: 3.067 GiB in 13.9 h, 3.395 in 16.3 h, 1.684 in 9.2 h, 1.366 in 8.4 h, 1.101 in 7.0 h). The day's high is at the 02:15Z sweep, so a sample taken h hours earlier misses up to h × that rate. **For ruling: OBJ-1 adds a direct reading at the peak instant (P9).**
+2. **PREVIOUSLY (scope OBJ-1, and condition 4's corrected lower bound):** November's peak "at 11-30" = 128.60 + 29.4 days × 1.06-1.48 ⇒ **160.7 to 172.1 GiB** (1.09 lower slope). **NOW:** the peak instant is **12-01 02:15Z** (the first sweep at which `now − 30 d` is in November, so October's monthly children leave), 29.13 days after the 11-01 23:13Z trough sample ⇒ **160.4 to 171.7 GiB** without the flip. **REASON:** the month-boundary arithmetic of `isPartitionEligible`'s monthly arm (§1.4), not "11-30". **Live check:** the direct read at 2026-11-07 06:59Z is **135.53 GiB**, i.e. 6.93 GiB over 5.32 days since the trough = 1.30 GiB/day, inside the range.
+3. **PREVIOUSLY (scope OBJ-3):** the multi-night resume of the sliced lane was cited to `:1020`. **NOW:** it is `deriveModeFromLabels` (`sweep-slicing.ts:49-67`) called at `b75-retention-sweep.ts:797-799` on the warm labels from `listMonthLabels` (`:343-355`), together with `listOldPartitions` re-listing the child on the next night because a child whose DROP did not land is still in `pg_inherits` (`:272-308`). `:1020` is an alert-body string. **REASON:** condition 4.
+4. **PREVIOUSLY (scope §1, flip size):** 20.9 GiB through `_2026_09`. **NOW: unchanged, re-derived by the sweep's own eligibility code:** 11,947,024,384 + 8,817,393,664 + 1,682,849,792 = **22,447,267,840 B = 20.906 GiB** at T = 2026-11-08 02:15Z (§1.5).
+
+## 1. AUDIT
+
+### 1.1 Sources read (the six)
+1. **Code, at the ref:** `server/scripts/b75-retention-sweep.ts` `:105-161` (the table specs), `:218-255` (`loadConfig`), `:272-308` (`listOldPartitions`), `:343-355` (`listMonthLabels`), `:450` (`partitionHotBytes` = `pg_total_relation_size`), `:504-505` (`dropPartition`, bare `DROP TABLE IF EXISTS`), `:775-799` (mode decision and resume), `:1320-1372` (the per-table loop and its three log lines); `server/services/data-archive/sweep-slicing.ts` `:49-67` (`deriveModeFromLabels`), `:97` (`classifyPartition`), `:146-153` (`isPartitionEligible`); `server/services/database-monitor.ts` `:6-21`, `:30`, `:75-95`, `:160-172`. The reader census (§1.6) read every hit at the ref.
+2. **Runtime:** `database_size_logs` since 10-01 (sample count and peaks per day; interval rises); `pg_database_size`; every child of the 15 partitioned parents with `pg_total_relation_size`; `module_constants` (`data_lifecycle`, `max_hold_switch`); `pg_views`, `pg_matviews`, `pg_proc`, `pg_extension`; root and `deploy` crontabs and the systemd timers; last night's sweep log (`/var/log/dawntrader/b75-retention.log`, run `d21c0130`, started 2026-11-07T02:15:02Z). Commands in §4.
+3. **SYSTEM_IMPACT_MAP:** the B75 sweep and the bar tables are covered (47 and 13 matching lines). **It is silent on `database_size_logs`** (0 lines; the same grep returns 1 line in the System Manual, its positive control). The size instrument this batch sizes headroom with has no SIM entry: a gap, homed in P10.
+4. **SYSTEM_MANUAL:** covers the bar tables and B75 (16 and 16 lines). Nothing the batch changes contradicts it. The flip changes a hot window, not an architecture, a formula or a canonical meaning, so the class stays `non_architecture`.
+5. **The ledger:** `STORAGE_POLICY.md:35`, `:44`, `:177` (ruling (C), "LIVE still 365 until execution"), `:198` ("cite a manifest row, not a config key"); `SPRINT_TO_LIVE_PLAN.md:23` (row 5c `B-DB-SIZE-RELIEF`, CC-A: **excludes the bars explicitly** — "the one-minute bars' window is NOT here … it is row 6, Infra Claude's") and `:265` (row 6). No overlap of work; **one overlap of evidence** — alert `c0a0b00d` and the November peak are moved by both batches (P9).
+6. **Provenance:** scope §6 (Tier 1 quoted verbatim there; unchanged). New here: none needed — no new component is touched.
+
+### 1.2 Entry points, enumerated first
+**Exactly one thing removes bar partitions: the B75 sweep**, root cron `15 2 * * *` from the deploy clone (`crontab -l` line 6). The other two B75 crons are the cold rotator (`0 3 1 * *`, warm → cold, never hot) and the cold liveness check (`0 4 * * 1`). The b70 partition creator (`30 2 28 * *`) creates future children. No systemd timer touches these tables (the whole `list-timers --all` output read, 30 lines; the five matching `fresh|ohlc|xstock|b75|token` are all token-watch, the pattern's positive control). No `pg_cron` (extension absent).
+**Exactly one thing writes the setting the flip changes: a manual write to `module_constants`** — this batch's.
+
+### 1.3 Who writes, reads, mutates, deletes, schedules — per bar table
+| question | answer |
+|---|---|
+| writes rows | the OHLC batch writer (`passive-archive/ohlc-batch-writer.ts`), plus `apply_xstock_bar_revision_events` (DB function) on `xstock_spot_ohlc_1m` |
+| reads | §1.6 |
+| mutates | `apply_xstock_bar_revision_events` (`FOR UPDATE` of the exact minute being written) |
+| ★ deletes | **exactly one: the B75 sweep's `dropPartition`** (`:504-505`); nothing deletes rows inside a bar partition |
+| schedules | the B75 root cron (§1.2) |
+
+### 1.4 The eligibility arithmetic the proof relies on
+- `cutoff = Date.now() − N × 86,400,000` and `cutoffMonth = UTC month start of cutoff`, computed **when the loop reaches that table** (`b75-retention-sweep.ts:1325-1327`), not when the sweep starts.
+- A monthly child is eligible when its month starts before `cutoffMonth` (`sweep-slicing.ts:152`); a daily child when its day ends at or before `cutoff` (`:151`).
+- **So a 30-day window drops month M on the first sweep at which `now − 30 d` is in month M+1.** For October that is 12-01 02:15Z; the bars then hold 30 to ~61 days, as the scope says.
+- **The proof band:** for exactly April + May, `cutoffMonth` must be 2026-06-01, i.e. `cutoff` in [Jun 1, Jul 1), i.e. **N ∈ (T − Jul 1, T − Jun 1] days.** The band's width (30 days) dwarfs the gap between the cron start and the moment the loop reaches the bar tables (minutes to hours), so the midpoint is robust to it.
+
+### 1.5 The pre-registered child lists — measured with the sweep's OWN eligibility code
+**Instrument:** `scripts/analysis/b_disk_headroom_eligibility.ts` (committed with this document). It imports `classifyPartition` and `isPartitionEligible` from the deployed `sweep-slicing.ts`, runs the same `pg_inherits` query as `listOldPartitions` plus `pg_total_relation_size` (the sweep's own `bytesHot` function, `:450`), reads the retention constants the same way `loadConfig` does, inside one read-only transaction, and evaluates any instant with any override. It writes nothing.
+
+**★ ITS POSITIVE CONTROL IS TONIGHT, AND THIS DOCUMENT IS COMMITTED BEFORE IT (prediction, nothing changed):** the 2026-11-08 02:15Z sweep processes **exactly these five children and no other**, each `dropped mode=whole`, with `bytes_hot` equal to the figure here (±1% for vacuum or a late write); the other ten tables print `no partitions older than … (retentionDays=…)`.
+
+| table | child | bytes |
+|---|---|---|
+| `xstock_spot_ticker_snap` | `_2026_10_08` | 925,204,480 |
+| `crypto_perp_ticker_snap` | `_2026_10_08` | 371,671,040 |
+| `crypto_perp_ohlc_1m` | `_2026_10_08` | 98,697,216 |
+| `xstock_bar_revision_event` | `_2026_10_30` | 849,747,968 |
+| `signal_eval_archive` | `_2026_10_08` | 1,513,054,208 |
+
+*Shape control already observed:* last night's run (`d21c0130`) processed the same five tables one day earlier (`_2026_10_07` ×4 and `_2026_10_29`) and printed the no-partitions line for the other ten — the shape the instrument predicts.
+
+**Stage A (whole-month lane), first eligible night T = 2026-11-08 02:15Z, `crypto_spot_ohlc_1m` = 145:** the five children above **plus** `crypto_spot_ohlc_1m_2026_04` 7,741,440 B and `_2026_05` 2,937,577,472 B, both whole lane (under 3,221,225,472). Total eligible 6,703,693,824 B.
+- **Band, measured at both ends and just outside them:** N = 130.1, 145 and 160.0 each give exactly April + May. **N = 130.0 adds `_2026_06`** (cutoff 2026-07-01T02:15Z); **N = 160.2 gives April alone** (cutoff 2026-05-31T21:27Z). The band therefore discriminates on both sides.
+- For a later night the band shifts by a day a night; the instrument is re-run for the actual night (P2).
+
+**Stage B (sliced lane), illustrated at T = 2026-11-09 02:15Z, `xstock_spot_ohlc_1m` = 146 (band (131.09, 161.09]):** `xstock_spot_ohlc_1m_2026_04` 2,187,264 B (whole lane) and **`_2026_05` 4,668,841,984 B — SLICED lane**, plus that night's six daily children (`_10_08` and `_10_09` for the four 30-day daily tables, `xstock_bar_revision_event` `_10_30` and `_10_31`).
+
+**The flip, T = 2026-11-08 02:15Z, all three bar tables = 30:** six children each, `_2026_04` … `_2026_09`; per table 11,947,024,384 / 8,817,393,664 / 1,682,849,792 B; only `xstock_spot_ohlc_1m_2026_05` takes the sliced lane.
+
+### 1.6 The reader census (OBJ-2) — repo-wide, tests excluded, re-derived at the ref
+Run by a fresh reader with the three table names, their camelCase symbols and the runtime-built forms (`ohlcTable`, `_ohlc_${…}`, `STUDY_TABLE`), then every caller traced. The load-bearing rows I re-read at the ref myself (marked ✔).
+
+**Runtime (run by the app):**
+| # | reader | table(s) | largest lookback | over 30 d? | disposition |
+|---|---|---|---|---|---|
+| R1 ✔ | drift dashboard, `drift-dashboard-aggregator.ts:997-998`, window `WINDOW_TO_MS` `:903-904`, **`rolling_30d` `:1259`** | all three (+ `crypto_perp_ohlc_1m`) | **exactly 30 d** | no — at equality; monthly children keep 30 to ~61 d | **positive control present** (Langston's 08-17 reader). Served. |
+| R2 | xStock OHLC overlay, `ohlc-aggregator.ts:246-248` via `xstock-ohlc-cache.ts:301`, `:343` | `xstock_spot` | 24 h | no | served |
+| R3 | session prewarm, `scripts/b-new-34b-prewarm-snapshot.ts:128-130`, imported in-process by `session-lifecycle-controller.ts:377`, `:430` | `xstock_spot` | 14 d | no | served |
+| R4 ✔ | exit replay at VTS close, `exit-strategy-replay-service.ts:151-152` (`entryTime − 15 min` → `entryTime + maxHoldMs`); caller `vts-service.ts:1160`; `maxHoldMs` = 7 d while `max_hold_switch.enabled_vts` is true (`vts-runner.ts:1352`, `:1369`, `:4010`) | `xstock_spot` only (the crypto branch uses the Kraken REST cache) | **~7 d + 15 min** — **live value read: `enabled_vts = true`** (`p19-b8.5j`, 2026-07-24) | no | served **while that switch is on.** If it is ever turned off the hold is unbounded and replay could reach past 30 d — a dependency noted in P10's SIM line. |
+| R5 | `availability-aggregator.ts:215-222` | `xstock_spot` | 24 h / 14 d | no | **no live caller** (`runAvailabilityPrewarm` is "intentionally not called", `xstock-ohlc-cache.ts:330-331`) |
+| R6 | `xstock-ohlc-cache.ts:518-522` snapshot count | `xstock_spot` | data-dependent (age of the newest 60/240 snapshot buckets) | possibly | **no live caller** (same path as R5); if wired, a missing 1m row downgrades the bar to `metadata_unknown_legacy`, it does not drop it |
+
+**Database-side, live (closes the census's "not queried" gap):** `pg_views` and `pg_matviews`: none name the three tables. `pg_proc`: one function, `public.apply_xstock_bar_revision_events` — the writer-side lookup of the exact minute (no lookback). The control query `prosrc ~* 'ohlc_1m'` returns exactly 1, so the instrument finds the one known function. `pg_cron`: not installed.
+
+**Offline (scripts/, run by hand, not by the app):** reaching past 30 d by construction — O1 `b-xstock-freshness-monitor.ts` (fixed 06-28..07-05 baseline; **no cron or timer on staging**: root and `deploy` crontabs and the 30 timers read, the `b70` and token-watch lines matching as the grep's control), O2 `b70-b62-relabel-runner.ts` (back to 04-30; its header already says rehydrate first), O3 `b-xstock-bar-availability-capacity-gate.ts:583-587` (crypto control count, `arrived_at` ≥ the governed `graded_window_start` 2026-11-09T00:05Z, `:28-31`), O10/O11 the `b4-*` studies (all history), O12 `b-new-42-corp-action-scan.sql` (names `xstock_spot_ohlc_1m_2026_05`), O13 `scripts/codex-export/export-data.sql` (names the `_2026_09` children), O14 `scripts/analysis/b_book_truncate_reset_gate_read.sql` (user-supplied `since`). Within 30 d by default: O4-O9, O15. Unresolved: O16 (`scripts/hce/*`, entry times from a candidates file).
+- **Disposition of the offline set: no stop.** `STORAGE_POLICY` §2.5 sets a hot window by the deepest RECURRING reader; an offline study reads from WARM after `b75-rehydrate.ts`, and nothing is deleted (warm 365 d → cold, `STORAGE_POLICY.md:22-25`). **O3 is the one with a date on it:** its window starts 11-09, and at a 30-day window November's `crypto_spot` child stays hot until the 12-31 sweep, so any run of that gate before 12-31 is fully served. **O12 and O13 name a partition and will raise an error instead of returning fewer rows** once that child leaves; both are frozen one-shot artifacts (O13 already reads an empty September window today) — named here so their owners are not surprised; §9.4 disposition: **no work — withdrawn, citing `STORAGE_POLICY.md` §2.5 + `b75-rehydrate.ts`**.
+
+**OBJ-2 verdict: no runtime reader needs more than 30 days hot. The flip is not stopped for any of the three tables.** One standing dependency: R4's bound holds only while `max_hold_switch.enabled_vts` stays true.
+
+### 1.7 The deployed copy, and the command run before each proof night
+Staging deploy clone at `0f4835b5a`. `sha256sum` of `server/services/data-archive/sweep-slicing.ts` = `5b0150eb…a021` and `server/scripts/b75-retention-sweep.ts` = `46765364…36be`, each equal to `git show 0f4835b5a…:<path> | sha256sum` (same surface: LF blobs; staging is Linux). The command (P2):
+```
+ssh root@188.245.193.8 'cd /home/deploy/dawntrader && git rev-parse HEAD && git status --porcelain -- server/scripts/b75-retention-sweep.ts server/services/data-archive && sha256sum server/scripts/b75-retention-sweep.ts server/services/data-archive/sweep-slicing.ts'
+git show <that HEAD>:server/scripts/b75-retention-sweep.ts | sha256sum ; git show <that HEAD>:server/services/data-archive/sweep-slicing.ts | sha256sum
+```
+PASS = empty porcelain and both hashes equal. A different HEAD than `0f4835b5a` is fine if the hashes still equal the blobs at it; any change to either file since `2c692f9cc` re-opens §1.4-§1.5 before the night.
+
+### 1.8 Sizes, growth and the instrument
+**By table, 06:59Z 2026-11-07 (total `pg_database_size` 135.532 GiB):** daily, steady — `signal_eval_archive` 39.535, `xstock_spot_ticker_snap` 19.747, `crypto_perp_ticker_snap` 10.407, `xstock_bar_revision_event` 4.822, `crypto_perp_ohlc_1m` 3.082 GiB. Monthly — `xstock_spot_ohlc_1m` 13.659, `crypto_spot_ohlc_1m` 10.005, `signal_eval_provenance` 7.551, `pair_scan_archive` 7.290, `crypto_spot_ticker_snap` 3.402, `xstock_perp_ticker_snap` 2.215, `xstock_perp_ohlc_1m` 1.768, `switch_on_shadow_evidence` 0.733, `macro_feed_archive` 0.024, `exit_decision_archive` 0.017 GiB. Non-partitioned remainder ≈ 11.3 GiB.
+**Per-table monthly growth (October's full child):** `signal_eval_provenance` 6.198, `pair_scan_archive` 6.085, `crypto_spot_ticker_snap` 2.930, `xstock_spot_ohlc_1m` 1.989, `xstock_perp_ticker_snap` 1.839, `crypto_spot_ohlc_1m` 1.551, `switch_on_shadow_evidence` 0.354, `xstock_perp_ohlc_1m` 0.166 GiB. **The bars add 3.706 GiB a month, and today none of it ever leaves** — that is the floor rise the flip removes.
+**The floor without the bars:** trough to trough, 10-01 14:39Z 121.95 GiB → 11-01 23:13Z 128.60 GiB = +6.65 GiB, of which the bars are 3.71 ⇒ **~2.94 GiB/month from everything else.** ⚠️ **One interval, two samples: not decision-grade** (CLAUDE.md rule 13); it is the denominator the headroom figure uses until December gives a second interval.
+**The instrument (condition 3):** `database-monitor.ts:160-172` samples once at process start and then every 24 h (`:30`), so the phase moves at every app restart. Since 11-05 14:40Z it has sampled once a day at ~14:40Z (11-06 14:40:05Z is the last row). **Expected samples 11-25 → 11-30: six at ~14:40Z, plus one per app restart in that span, at the restart time.** Each understates its day's 02:15Z high by up to ~11.6 h × 0.16-0.22 GiB/h ≈ **1.9-2.6 GiB** (§0.1).
+
+### 1.9 The cap — unit and provenance (condition 2)
+- **What the instrument uses:** `plan_cap_mb = 204800`, divided in MiB ⇒ **200 GiB (214.75 GB decimal)**; its comment and alert title say "200 GB" (`database-monitor.ts:10-15`, `:84`). Provenance in the repo: `BATCH_75_SCOPE` `:43`/`:148` ("default `204800` = 200 GB Pro plan auto-expand cap") and nothing upstream of it — **no Supabase document is cited anywhere. The unit is unprovenanced.**
+- **Both bounds, carried through every headroom figure:** 200 GiB (instrument) and **186.26 GiB if Supabase's 200 GB is decimal.** The July high-water 172.18 GiB is 86.1% of the first and 92.4% of the second; October's 149.56 GiB is 74.8% and 80.3%.
+- **`pg_database_size` is logical size of this one database:** it excludes WAL, the other databases on the instance and filesystem overhead, so it understates what Supabase bills as disk. Headroom against the real disk is therefore smaller than either figure here, by an amount this batch cannot read.
+- **Who can settle it:** only the Supabase dashboard (Project Settings → Compute and Disk) — no management credential exists on our side (`SUPABASE_SERVICE_ROLE_KEY` is the data-API key and cannot read the disk quota). **A read for Kyle, non-blocking:** the flip only lowers usage, so the unit changes the headroom FIGURE, not whether to flip. Asked in the Step-2 report, never as a gate.
+
+## 2. Langston's four Step-2 conditions — answered
+1. **OBJ-3 criterion 4, rewritten (binding; replaces the scope's first bullet):** on a proof night the evidence that the sweep READ the proof value is the proof table's **eligible set**: `processing partition=2026-04 child=<table>_2026_04` and `processing partition=2026-05 child=<table>_2026_05`, and **no** `processing partition=2026-06` for that table — a set only N ∈ (T − Jul 1, T − Jun 1] produces (§1.5, edges measured). The `retentionDays=` echo is printed only on the no-eligible path (`:1338-1345`) and stays a control on the **other** tables: each of them prints its usual value, unchanged from §1.5's prediction.
+2. **The cap:** §1.9. Every headroom figure is given against both 200 GiB and 186.26 GiB, with the logical-size caveat.
+3. **The sampled peak:** §0.1 and §1.8; OBJ-1 adds the direct reading at the peak instant (P9).
+4. **Citations:** §0.3 (resume), §1.4 (`sweep-slicing.ts:152`), §0.2 (slope 1.09 ⇒ lower bound; recomputed to the 12-01 02:15Z instant).
+
+## 3. IMPLEMENTATION PLAN — each item names the finding it falls out of
+
+- **P1 (← §2.1, condition 1).** OBJ-3 criterion 4 is the text in §2.1. The scope gets a pointer to it in the same commit as Langston's Step-2 approval.
+- **P2 (← §1.7, §1.5).** Before each proof night, after 18:00Z the evening before: run the deployed-copy command; run the eligibility instrument at T = that night's 02:15Z with the proof override; post both outputs in the change list. **The value written is the band midpoint for that T, rounded to a whole day.** If either check differs from §1.5's shape, no write.
+- **P3 (← OBJ-3 Stage A, §1.5).** The write: `module_constants` row (`data_lifecycle`, `*`, `*`, `*`, `*`, `crypto_spot_ohlc_1m.hot_retention_days`) `value = <midpoint>`, `updated_by = 'B-DISK-HEADROOM OBJ-3 stage A'`, as an `UPDATE` keyed on all six columns inside a transaction that **reads back and asserts exactly one row for (`data_lifecycle`, that constant_name)** before `COMMIT` (`loadConfig` keys on `constant_name` alone, `:218-225`).
+- **P4 (← scope §3, lock scope).** Across the proof night's drop window, a read-only sampler from this session reads `pg_stat_activity` every 10 s (`wait_event_type`, `wait_event`, `state`, query prefix) for sessions waiting on the parent's lock, and the active engine's PM2 log is read for bar-read errors in the same window.
+- **P5 (← scope OBJ-3 verify, §2.1).** Next morning: the five §1.5 controls and the two proof children in the sweep log; one manifest row per month, `tier=warm`, `state=active`, `completeness_basis = source-count-matched`, each with its `data_archive_exact_evidence` row; the children gone from `pg_inherits`. **Then restore the value to 365 on the same key, read back one row.** Exposure bound if a restore were missed: June becomes eligible from 2026-11-23T00:00Z at N = 145 — archived, never deleted.
+- **P6 (← OBJ-3 Stage B, §1.5).** Same as P2-P5 for `xstock_spot_ohlc_1m`, whose May child takes the sliced lane: ~31 day objects, each verified before the single DROP. **If the night ends before every slice verifies, the child stays, and the next night resumes it through `deriveModeFromLabels` (§0.3).** Restore to 365 only after the DROP lands.
+- **P7 (← §1.6, OBJ-2).** Gate before the flip: re-read R4's switch (`max_hold_switch.enabled_vts` = true) and `git log` the six runtime reader files since `54d671bb7` for any new lookback. A change re-opens §1.6.
+- **P8 (← OBJ-4, §1.5).** The flip: each of the three constants = 30 on its six-column key, `updated_by = 'B-DISK-HEADROOM OBJ-4'`, read-back one row each. Expected that night: §1.5's flip list, 20.906 GiB out, `xstock_spot_ohlc_1m_2026_05` already gone after Stage B.
+- **P9 (← §0.1, §0.2, §1.8, §1.9; OBJ-1).** Headroom:
+  - **A direct `pg_database_size` reading at 2026-12-01 ~02:05Z**, before the sweep, as November's measured peak; a scheduled system alert (owner Infra Claude) carries the instant. The sampled series is reported beside it with §1.8's expected count and bound.
+  - **Predicted peak at 12-01 02:15Z:** without the flip 160.4-171.7 GiB; with the flip landed before then, less 20.906 ⇒ **139.5-150.8 GiB**; **and if `B-DB-SIZE-RELIEF` (row 5c) lands first, its own freed bytes come off as well** — the two are reported separately so neither batch claims the other's drop.
+  - **Months of headroom after the flip = (cap − peak) / 2.94 GiB/month:** against 200 GiB, (200 − 150.8)/2.94 ≈ **16.7** to (200 − 139.5)/2.94 ≈ **20.6 months**; against 186.26 GiB, **12.0 to 15.9 months.** Stated as one-interval figures; December's trough gives the second interval.
+  - Alert `c0a0b00d` is resolved only on a measured `pg_database_size` under its line (65% of the cap), never acked; either batch's reading can satisfy it, and the resolve names which.
+- **P10 (← §1.1 source 3, R4).** Governance: `STORAGE_POLICY.md` `:44` and `:177` flip to "30 d LIVE" with the date and the manifest rows (its own `:198` rule); a SIM entry for `database_size_logs` / `database-monitor.ts` (the instrument, its 24 h phase that moves on restart, its MiB cap) and a line on R4's dependency on `max_hold_switch.enabled_vts`; System Manual: judged N/A unless a reader is found to change behaviour.
+
+**UNAUDITED:** none. Every item above points at a finding in §0-§2.
+
+## 4. Commands (all read-only)
+- Eligibility: `NODE_PATH=/home/deploy/dawntrader/node_modules npx tsx /home/deploy/b_disk_headroom_eligibility.ts --at <ISO> [--set <table>=<N>,…] --slicing /home/deploy/dawntrader/server/services/data-archive/sweep-slicing.ts`, as `deploy` in `/home/deploy/dawntrader` (the script lives outside the clone so the deploy tree stays clean).
+- Sizes by child kind, `pg_database_size`, the sampling series, the interval rises, `max_hold_switch`, views/functions/`pg_cron`: SQL files run with `psql "$DATABASE_URL" -X -q -f`, each wrapped in `BEGIN TRANSACTION READ ONLY … ROLLBACK`, then deleted.
+- Last night's sweep: `grep -n "started at" /var/log/dawntrader/b75-retention.log` and the run's `processing|no partitions|dropped` lines.
+
+REVIEWER: object handed (the three tables, repo-wide) · who reads these and how far back, with callers traced · 6 runtime + 16 offline readers, R1 present · re-derived y (R1, R4 and the live switch at the ref; views/functions/cron live, the census's own stated gap).
