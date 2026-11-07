@@ -25,6 +25,7 @@ def mut(mod, a, b):
 MUTATIONS = [
     ("index: the topic goes into the shared copy", mut("dt_index.py", "    lean += index_lines(convs, False)", "    lean += index_lines(convs, True)")),
     ("index: the shared copy drops rows (incomplete)", mut("dt_index.py", "    lean += index_lines(convs, False)", "    lean += index_lines(convs, False)[:1]")),
+    ("index: the shared copy drops ONE row (Langston's)", mut("dt_index.py", "    lean += index_lines(convs, False)", "    lean += index_lines(convs, False)[:-1]")),
     ("index: a wake notice can be the topic", mut("dt_index.py", 'USER = re.compile(r"^\\*\\*\\[(\\d\\d:\\d\\d:\\d\\d)\\] User:\\*\\* (.*)$")',
                                                   'USER = re.compile(r"^\\*\\*\\[(\\d\\d:\\d\\d:\\d\\d)\\] (?:User|Wake)[^*]*\\*\\* (.*)$")')),
     ("index: nested transcripts not counted", mut("dt_index.py", '                    convs[(alias, parent8)]["nested"] = n', "                    pass")),

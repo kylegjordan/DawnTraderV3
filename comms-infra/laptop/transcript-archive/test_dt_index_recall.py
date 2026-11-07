@@ -78,7 +78,17 @@ full_idx = open(os.path.join(root, "INDEX.md"), encoding="utf-8").read()
 
 
 def conv_rows(text):
-    return [l for l in text.split("\n") if l.startswith("| CC-") or l.startswith("| HEARTBEAT")]
+    """The table's rows by POSITION - every `|` line after the `|---` separator - never by alias text, so a new alias
+    with any prefix still counts on both sides (Langston: an alias filter would narrow the completeness fence)."""
+    lines, out, seen_sep = text.split("\n"), [], False
+    for l in lines:
+        if not seen_sep:
+            seen_sep = l.startswith("|---")
+            continue
+        if not l.startswith("|"):
+            break
+        out.append(l)
+    return out
 
 
 ok("it is LF", b"\r\n" not in open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read())

@@ -1530,7 +1530,7 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **Replaced by:** the invariant the cap stood in front of. The shared copy is LF, carries no topic column, and its conversation-row count EQUALS `INDEX.md`'s (tested). Its size is printed on every build and now ends the run's OK line (`; shared index N bytes`). A dry run claims no size.
 **Blast radius verified:**
 - `git grep -n "MEMORY_CAP\|OverflowError" -- comms-infra/laptop/transcript-archive/` gives one hit, the test asserting the attribute is GONE. Positive control: 11 hits at `4635e5926`.
-- Nothing outside `comms-infra/laptop/transcript-archive/` names `TRANSCRIPT_INDEX` (`grep -rln` over `.claude/ scripts/ comms-infra/`, excluding that folder).
+- No READER of `TRANSCRIPT_INDEX.md` exists outside `comms-infra/laptop/transcript-archive/`. Population, stated: my `grep -rln` covered `.claude/ scripts/ comms-infra/` (0 mentions outside the folder). It did NOT cover `1-system-manual/`, where Langston's whole-repo grep found 4 mentions, all PROSE (the trim runbook `:25`, the System Impact Map `:1145`/`:1155`, and this log's own entry), zero readers.
 - **State-write census:** the deleted branch wrote nothing. It withheld one write, of `TRANSCRIPT_INDEX.md`, whose only readers are humans and sessions opening it.
 - Suites 0 failed; mutation runners re-run.
 **Left intentionally:** if reading cost ever becomes real, the named successor is `dt_recall` and ordering, never deleting rows (Langston, condition 4). No work now.
