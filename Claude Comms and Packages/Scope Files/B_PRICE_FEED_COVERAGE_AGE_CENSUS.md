@@ -5,6 +5,8 @@
 
 **Enumeration method (the reader's):** age-variable-vs-bound comparisons (130 lines), `now − timestamp` vs bound, constants named `*MAX_AGE*` / `*STALE*` / `*FRESH*` / `*TTL*` / `*QUIET*`, quoted `module_constants` keys containing age/stale/fresh/cold/quiet and their migration seeds, SQL `NOW() - INTERVAL` windows, callers of each judging function; ~30 files read in their relevant sections. **Not every one of the 164 files matching "stale" was read line by line**; ordinary cache lifetimes that are not price ages were excluded on purpose (list at the end). Seeded values are from migrations, not the live DB. Commit lookups were not path-limited, so a first hit can be a design document (named in "Not resolved").
 
+⚠️ **STATUS (Coltrane, scope r2): a CANDIDATE INVENTORY, not an exhaustive census.** The title says "every price-age check"; the method did not read all 164 keyword matches, so a missing row cannot be ruled out. Step 2 reconciles it against an independent decision-seam-first enumeration and the live `module_constants` values.
+
 **Count: 46 rows; 22 change a trading action (11 crypto, 9 xStock, 2 both).** "Receipt" = our own receive/write time.
 
 | # | file:line | checkpoint | class / feed | bound and source | clock | decides? | introducing commit (first `-S` hit) |
