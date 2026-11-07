@@ -1550,6 +1550,16 @@ app.use((req, res, next) => {
       console.error('[B-NEW-49] ⚠️ Cron observability startup failed:', error);
     }
 
+    // Row `8c` P7 / condition 4: the level-basis funnel, appended every 15 min to a dedicated file a second party can
+    // read (`/var/log/dawntrader/level-basis-funnel.jsonl`). The ONE scheduler of that file.
+    try {
+      const { startLevelBasisFunnelWriter } = await import('./services/level-basis-funnel-writer.js');
+      startLevelBasisFunnelWriter();
+      console.log('[8c] ✅ Level-basis funnel file writer started (15-min snapshots)');
+    } catch (error) {
+      console.error('[8c] ⚠️ Level-basis funnel file writer startup failed:', error);
+    }
+
     // Phase 41F-C: Start Unified Engine Health Monitor (5s heartbeat, auto-recovery)
     try {
       const { healthMonitor } = await import('./services/health-monitor.js');

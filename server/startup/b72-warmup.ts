@@ -187,6 +187,9 @@ const PREFETCH_MODULES = [
   // B-VENUE-QUIET-ALERTING (#526/#994/#638, row 3a1): the venue-quiet delivery thresholds (quiet/thin ticking counts,
   // duration escalation, stuck-resolve bound), read sync by venue-quiet-alerting.ts. Seeds: 2026-10-07-b-venue-quiet-alerting.sql.
   'venue_quiet',
+  // B-PRICE-SIDE-BY-JOB row 8c (switch-on): the crypto level-build knobs (age ceiling, spread plausibility, drift reference),
+  // read sync at every crypto signal birth and the VTS level-build shadow. Seeds: 2026-11-08-b-price-side-8c-level-build-knobs.sql.
+  'level_basis',
   // Future: more Slice 2/3/4 modules added here as source replacements ship.
 ];
 
@@ -397,6 +400,15 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
     const { assertVtsXstockTouchKnobsAtBoot } = await import('../asset_classes/xstock_spot/vts-xs-touch-config.js');
     const v = assertVtsXstockTouchKnobsAtBoot();
     console.log(`[8a-P4c][warmup] vts_xstock_touch.exit_max_spread_fraction verified for xstock_spot (${v})`);
+  }
+
+  // ── row `8c` (switch-on) — the crypto level-build knobs, asserted at BOOT. ───────────────────────────────────────────
+  // A crypto signal whose level basis cannot be judged is REFUSED (condition 1: no mid fallback), so a cold or missing knob
+  // would refuse every crypto birth and read as a quiet market. Failing the boot makes it loud instead.
+  {
+    const { assertLevelBuildKnobsAtBoot } = await import('../core/trading/level-build-config.js');
+    const k = assertLevelBuildKnobsAtBoot();
+    console.log(`[8c][warmup] level_basis knobs verified for crypto_spot (maxAgeMs=${k.maxAgeMs} maxSpread=${k.maxSpreadFraction} driftRef60s=${k.driftRef60s})`);
   }
 
   // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded

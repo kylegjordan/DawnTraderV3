@@ -18,6 +18,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
+import type { LevelSpec } from '../core/trading/level-rebase.js';
 import type { PatternType, SignalType, Candle, PatternSignal, Timeframe } from '../types';
 import { CANDLE_INTERVALS_MS, TIMEFRAME_WEIGHTS, HYBRID_PARAMS } from '../config/system-guards.js';
 // B79.0n.PATTERN-DETECT (2026-05-24) — REQUIRED-assetClass plumbing per
@@ -602,6 +603,9 @@ export function patternToTradeSignal(
     signalType: 'PATTERN',
     metadata: {
       ...pattern.metadata,
+      // Row `8c` (ruling item 4's class): both legs are entry ± k·ATR — DISTANCE legs — stamped at the branch that built
+      // them, so the crypto birth re-base moves them onto the bid instead of refusing an unstamped signal.
+      levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } satisfies LevelSpec,
       patternType: pattern.pattern,
       patternStrength: pattern.strength,
       patternDirection: pattern.direction,

@@ -2,10 +2,9 @@ import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-ada
 // B-PRICE-SIDE-BY-JOB (plan row 3n) — the level basis, SHADOW arm. This is the SECOND
 // level-setting hand-off (census §9 W-1); wiring only the orchestrator would leave the
 // LEARNING population on the smoothed mid while every active-path check read as fixed.
-import {
-  recordSideAgeAttempt,
-  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-} from '../core/calculations/level-basis.js';
+import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
+// Row `8c` switch-on: the level-build ceilings are DB-governed (`level_basis.level_build_*`); the literals are deleted.
+import { readCryptoLevelBuildKnobs } from '../core/trading/level-build-config.js';
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
 import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote } from '../core/calculations/touch-price.js';
@@ -1800,6 +1799,10 @@ async function generatePhase10Signal(
     // Own read: the probe block above scopes its `_c` to itself, and reaching into another
     // block's variable would couple two shadows that are deliberately independent.
     const _lbCache = priceCache.getCachedPrice(symbol);
+    // An unreadable knob skips this SHADOW recording only (boot asserts the rows; nothing here gates a VTS trade).
+    let _lbKnobs: ReturnType<typeof readCryptoLevelBuildKnobs> | null = null;
+    try { _lbKnobs = readCryptoLevelBuildKnobs(); } catch { _lbKnobs = null; }
+    if (_lbKnobs !== null) {
     const _lbSel = selectTouchPrice(
       {
         book: _lbBook
@@ -1821,14 +1824,12 @@ async function generatePhase10Signal(
         tickerBasis: 'ticker_bbo',
       },
       _lbNow,
-      {
-        maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
-        maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-      },
+      { maxAgeMs: _lbKnobs.maxAgeMs, maxSpreadFraction: _lbKnobs.maxSpreadFraction },
     );
-    // One ceiling governs both rungs, at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS — stated with its
+    // One ceiling governs both rungs, at `level_basis.level_build_max_age_ms` — stated with its
     // name as `touch-price.ts:50` requires of whoever wires this.
     recordTouchSelection({ lane: 'vts', assetClass: _assetClass, stage: 'vts_signal_birth' }, _lbSel);
+    }
   }
 
   const stratDetectIndicators = {

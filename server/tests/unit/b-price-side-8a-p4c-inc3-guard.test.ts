@@ -170,6 +170,9 @@ const RESOLVED_NON_LITERALS: Array<{ file: string; expr: string; module: string 
     def: { file: 'server/asset_classes/xstock_spot/book-state.ts', re: /BOOK_STATE_MODULE\s*=\s*'book_state'/ } },
   { file: 'server/asset_classes/xstock_spot/vts-xs-touch-config.ts', expr: 'VTS_XSTOCK_TOUCH_MODULE', module: 'vts_xstock_touch',
     def: { file: 'server/asset_classes/xstock_spot/vts-xs-touch-config.ts', re: /VTS_XSTOCK_TOUCH_MODULE\s*=\s*'vts_xstock_touch'/ } },
+  // row `8c` switch-on: the crypto level-build knobs.
+  { file: 'server/core/trading/level-build-config.ts', expr: 'LEVEL_BASIS_MODULE', module: 'level_basis',
+    def: { file: 'server/core/trading/level-build-config.ts', re: /LEVEL_BASIS_MODULE\s*=\s*'level_basis'/ } },
   { file: 'server/services/amr-context-bonus-shadow.ts', expr: 'MOD', module: 'ranking_context_bonus',
     def: { file: 'server/services/amr-context-bonus-shadow.ts', re: /const MOD\s*=\s*'ranking_context_bonus'/ } },
   { file: 'server/services/passive-archive/ohlc-frame-skip-tracker.ts', expr: 'OHLC_FRAME_SKIP_ALERT_KNOB.module', module: 'passive_archive',

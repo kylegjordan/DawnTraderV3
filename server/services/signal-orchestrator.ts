@@ -133,13 +133,13 @@ import { getSmoothedPrice, getKalmanFilter } from '../utils/adaptive-kalman.js';
 // B-PRICE-SIDE-BY-JOB (plan row 3n) — the level basis. SHADOW at this commit: built and
 // COUNTED, consumed by nothing. See the observation block at the hand-off below.
 import { krakenWebSocketAdapter } from '../exchanges/kraken/kraken-websocket-adapter.js';
-import {
-  recordSideAgeAttempt, recordFeedAgreement,
-  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS, LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-} from '../core/calculations/level-basis.js';
+import { recordSideAgeAttempt, recordFeedAgreement } from '../core/calculations/level-basis.js';
 // Row `8c` P1: D3's ladder replaces the direct book-only assessment. `buildLevelBasis` is no
 // longer imported here — `selectTouchPrice` calls it internally, once per rung.
-import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote } from '../core/calculations/touch-price.js';
+import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote, type TouchLegInput } from '../core/calculations/touch-price.js';
+// Row `8c` switch-on: the crypto level-build knobs (DB-governed, fail hard) and the birth re-base.
+import { readCryptoLevelBuildKnobs, type LevelBuildKnobs } from '../core/trading/level-build-config.js';
+import { baseCryptoLevelsAtBirth, levelGeometryOf, makerEntryOf } from '../core/trading/crypto-birth-levels.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -150,6 +150,43 @@ import { ohlcCache } from './ohlc-cache.js';
 import { priceCache } from './price-cache.js';
 /** Trailing window for the feed-liveness symbol count. Recorded beside every count. */
 const FEED_LIVENESS_WINDOW_MS = 60_000;
+
+/** Row `8c`: the three level stamps a re-sized signal must carry from its source (levelSpec, levelGeometry, its record). */
+function pickLevelStamps(metadata: unknown): Record<string, unknown> {
+  if (metadata === null || typeof metadata !== 'object') return {};
+  const m = metadata as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of ['levelSpec', 'levelGeometry', 'levelBasisAtBirth'] as const) if (m[k] !== undefined) out[k] = m[k];
+  return out;
+}
+
+/**
+ * Row `8c` — the crypto ladder's two legs from THIS process's own book and price cache. ONE construction, used by the
+ * operative level build (`buildSizedSignalForStrategy`) and the per-symbol birth shadow, so the two cannot drift apart on
+ * the one line that matters (the book's AGE is reconstructed as a capture instant, never `Date.now()`).
+ */
+function cryptoTouchLegs(
+  book: ReturnType<typeof krakenWebSocketAdapter.getBookForFill>,
+  cache: ReturnType<typeof priceCache.getCachedPrice>,
+  nowMs: number,
+): { book: TouchLegInput | null; ticker: TouchLegInput | null } {
+  return {
+    book: book
+      ? {
+          bid: book.bids.length > 0 ? book.bids[0].price : null,
+          ask: book.asks.length > 0 ? book.asks[0].price : null,
+          // ⛔ `getBookForFill` hands back an AGE, not a capture time, so the capture instant is reconstructed rather
+          // than invented. Written out so nobody later "simplifies" it into `Date.now()`.
+          stampMs: nowMs - book.ageMs,
+          arrivalMs: book.updatedAtMs,
+          clockBasis: 'receipt',
+          producer: 'kraken_ws_book',
+        }
+      : null,
+    // ⛔ ONE HOME FOR THE TICKER LEG (Langston BLOCKER-1, 2026-09-13) — the `sidesCapturedAtMs` choice is fixtured there.
+    ticker: tickerLegFromCachedQuote(cache),
+  };
+}
 // Directive 12.3.1: Canonical regime calculator for pair-level regime
 import { calculatePairRegime } from '../core/metrics/market-regime.js';
 import type { OHLCData } from '../types/market-regime.types';
@@ -568,6 +605,60 @@ export class SignalOrchestrator {
       (sizingContext.assetClass === 'crypto_spot' || sizingContext.assetClass === 'xstock_spot')
         ? sizingContext.assetClass : undefined;
     if (_fClass) recordActiveSignalsGenerated(sizingContext.mode, _fClass, 1);
+
+    // ══ ROW `8c` (SWITCH-ON) — CRYPTO LEVELS ON THE TRANSACTABLE SIDES, PER STAMPED FORM ═══════════════════════════════
+    // Plan: `B_PRICE_SIDE_BY_JOB_8C_AUDIT_AND_PLAN.md` §9 (amendment 4, ruled 2026-11-07). The strategy built its triple
+    // on the smoothed mid; here, before the venue grid rounds it and before sizing, the SQE, the target gate and the
+    // maker/taker decision judge it, the ENTRY moves to the ask and each stop/target leg is re-derived by its stamped form
+    // onto the bid (`crypto-birth-levels.ts`). Everything below this block therefore judges the levels that will trade.
+    // ⛔ CONDITION 1 — NO MIDPOINT FALLBACK: no transactable quote, no stamp, a malformed or inconsistent stamp, or an
+    // unreadable knob ⇒ the signal is REFUSED here and counted as a pre-SQE drop (`level_<reason>`). Crypto ONLY: the
+    // xStock lane moves its levels at the FILL (`#1250`), and its birth stays on the venue bar closes.
+    if (sizingContext.assetClass === 'crypto_spot') {
+      const _cbSigSym = rawSignal.symbol;
+      const _cbRefuse = (reason: string): null => {
+        console.warn(`[8c][LEVEL_BUILD_REFUSED] ${_cbSigSym}/${strategyId} reason=${reason}`);
+        // One `level_` prefix, never two (the `grid_grid_unknown` slip): some reasons already carry it.
+        recordActivePreSqeReject(sizingContext.mode, 'crypto_spot', reason.startsWith('level_') ? reason : `level_${reason}`, strategyId);
+        return null;
+      };
+      let _cbKnobs: LevelBuildKnobs;
+      try { _cbKnobs = readCryptoLevelBuildKnobs(); } catch { return _cbRefuse('knobs_unreadable'); }
+      const _cbSym = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
+      const _cbNow = Date.now();
+      const _cbLegs = cryptoTouchLegs(krakenWebSocketAdapter.getBookForFill(_cbSym), priceCache.getCachedPrice(_cbSym), _cbNow);
+      const _cbSel = selectTouchPrice(
+        {
+          book: _cbLegs.book,
+          bookEligible: true,
+          bookTrusted: krakenWebSocketAdapter.isBookTrusted(_cbSym),
+          ticker: _cbLegs.ticker,
+          tickerBasis: 'ticker_bbo',
+        },
+        _cbNow,
+        { maxAgeMs: _cbKnobs.maxAgeMs, maxSpreadFraction: _cbKnobs.maxSpreadFraction },
+      );
+      // An already-sided triple (a HYBRID re-sizing a sized quant signal) takes no walk: it is not a new level build.
+      if (rawSignal.metadata?.levelGeometry !== 'sided') {
+        recordTouchSelection({ lane: 'active', assetClass: 'crypto_spot', stage: 'active_level_build' }, _cbSel);
+      }
+      const _cb = baseCryptoLevelsAtBirth({
+        planEntry: rawSignal.entryPrice, planStop: rawSignal.stopPrice, planTarget: rawSignal.targetPrice,
+        metadata: rawSignal.metadata,
+        quote: _cbSel.ok
+          ? { bid: _cbSel.quote.bid, ask: _cbSel.quote.ask, basis: _cbSel.quote.basis, producer: _cbSel.quote.producer, ageMs: _cbSel.quote.ageMs }
+          : null,
+        knobs: _cbKnobs,
+      });
+      if (!_cb.ok) return _cbRefuse(_cb.reason);
+      rawSignal = {
+        ...rawSignal,
+        entryPrice: _cb.entryPrice,
+        stopPrice: _cb.stopPrice,
+        targetPrice: _cb.targetPrice,
+        metadata: { ...(rawSignal.metadata ?? {}), ..._cb.stamp },
+      };
+    }
 
     // ⚠️ THE ORDERING HERE IS DELIBERATE AND WAS A DEFECT WHEN I FIRST WROTE IT. This block
     // sat ABOVE `recordActiveSignalsGenerated`, so a grid-rejected signal was counted as a
@@ -1062,16 +1153,24 @@ export class SignalOrchestrator {
     const _mtFeeRateMaker = _mtFriction.feeRateMaker;
     const _mtFeeRateTaker = _mtFriction.feeRateTaker; // single-source the taker−maker fee delta (Langston Q1)
     const _mtGlobalKey = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+    const _mtGeometry = levelGeometryOf(rawSignal.metadata);
+    const _mtMakerEntry = makerEntryOf(rawSignal.metadata);
+    if (_mtGeometry === 'sided' && _mtMakerEntry === null) {
+      // Unreachable through the 8c seam (it writes both fields together); a sided flag without its bid is refused, never
+      // decided on a guessed maker entry.
+      console.warn(`[8c][LEVEL_GEOMETRY_STAMP_MALFORMED] ${rawSignal.symbol}/${strategyId} — sided without a recorded bid`);
+      if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, 'level_geometry_stamp_malformed', strategyId);
+      return null;
+    }
     const _mtDecision = decideMakerTaker({
       entryPrice: rawSignal.entryPrice,
-      // ⛔ B-PRICE-SIDE-BY-JOB — THIS IS THE LANE THAT WILL BE SIDED, AND IT IS STILL 'mid'.
-      // The level basis is built and mutation-proved but NOT yet wired to the strategies
-      // (census §9 W-1/W-2), so the triple reaching here is still smoothed-mid-derived and the
-      // historic arithmetic is the correct one. ⇒ Flipping this to 'sided' before the levels
-      // actually are would UNDER-charge the spread — the mirror of the double-count this field
-      // exists to prevent. The two changes ship in ONE commit.
-      levelGeometry: 'mid' as const,
-      entryPriceMaker: rawSignal.entryPrice,
+      // ⛔⛔ ROW `8c` SWITCH-ON — FLIPPED IN THE SAME COMMIT THAT SIDES THE LEVELS (the condition this comment carried).
+      // A crypto triple built above is sided: the taker arm enters on the ASK (`rawSignal.entryPrice`), the maker arm
+      // rests on the BID recorded at the build, and the exits are on the bid — so the spread is IN the geometry and
+      // `composeSidedFriction` charges none. Every other triple (xStock, an unstamped row) reads 'mid' through the ONE
+      // reader and keeps the historic arithmetic, where the two arms share one entry.
+      levelGeometry: _mtGeometry,
+      entryPriceMaker: _mtGeometry === 'sided' && _mtMakerEntry !== null ? _mtMakerEntry : rawSignal.entryPrice,
       stopPrice: rawSignal.stopPrice,
       targetPrice: rawSignal.targetPrice,
       costs: _mtCosts,
@@ -2347,6 +2446,9 @@ export class SignalOrchestrator {
                 assetClass: DEFAULT_ASSET_CLASS,
                 patternType: patternSig.pattern,
                 patternStrength: patternSig.strength,
+                // Row `8c`: carry the builder's level-form stamp — this metadata is a fresh object, so it is dropped
+                // otherwise, and the crypto birth re-base REFUSES an unstamped signal (no mid fallback).
+                levelSpec: tradeSignal.metadata.levelSpec,
               },
             };
 
@@ -2682,11 +2784,7 @@ export class SignalOrchestrator {
           });
         }
 
-        // ⛔ ONE HOME FOR THE TICKER LEG (Langston BLOCKER-1, 2026-09-13). r1 built this inline
-        // here AND in `vts-runner.ts`, verbatim and untested, turning on the choice of
-        // `sidesCapturedAtMs` over `lastUpdatedAt` — both `number | null`, so a swap compiles and
-        // passes every test. The helper is fixtured; a twin site could not be.
-        const _lbTicker = tickerLegFromCachedQuote(_lbCache);
+        // The ticker leg is built by `cryptoTouchLegs` (via `tickerLegFromCachedQuote`, its one fixtured home).
 
         // ⛔⛔ ROW `8c` (P1): THE LADDER, NOT THE BOOK ALONE. Until 2026-09-13 this assessed the
         // BOOK and nothing else — rung 1 of a three-rung rule — and it was built on 2026-09-05,
@@ -2700,28 +2798,22 @@ export class SignalOrchestrator {
         // against a mid-reading trigger ship a MIXED POPULATION — bid-anchored for the handful of
         // symbols with a book, mid for the rest — and every resulting exit is unattributable.
         const _lbNow = Date.now();
+        // ⛔ `8c` switch-on: the ceilings are the DB-governed level-build knobs (the literals are deleted). This is still
+        // the per-symbol SHADOW; the operative walk is in `buildSizedSignalForStrategy`, its own cell. An unreadable knob
+        // skips this recording only — boot asserts the rows, and the operative seam REFUSES on the same failure.
+        let _lbKnobs: LevelBuildKnobs | null = null;
+        try { _lbKnobs = readCryptoLevelBuildKnobs(); } catch { _lbKnobs = null; }
+        if (_lbKnobs !== null) {
+        const _lbLegs = cryptoTouchLegs(_lbBook, _lbCache, _lbNow);
         const _lbSel = selectTouchPrice(
           {
-            book: _lbBook
-              ? {
-                  bid: _lbBook.bids.length > 0 ? _lbBook.bids[0].price : null,
-                  ask: _lbBook.asks.length > 0 ? _lbBook.asks[0].price : null,
-                  // ⛔ `getBookForFill` hands back an AGE, not a capture time, so the capture
-                  // instant is reconstructed rather than invented. This is the ONE place the two
-                  // representations meet and it is written out so nobody later "simplifies" it
-                  // into `Date.now()`.
-                  stampMs: _lbNow - _lbBook.ageMs,
-                  arrivalMs: _lbBook.updatedAtMs,
-                  clockBasis: 'receipt',
-                  producer: 'kraken_ws_book',
-                }
-              : null,
+            book: _lbLegs.book,
             // Crypto's book is eligible by construction — `book_not_eligible` is the xStock maintained-book gate
             // (`touch-price.ts`) and never fires on this leg. Whether it is TRUSTED is the checksum circuit breaker's
             // call (#1220); a refused book records `book_untrusted`.
             bookEligible: true,
             bookTrusted: krakenWebSocketAdapter.isBookTrusted(symbol),
-            ticker: _lbTicker,
+            ticker: _lbLegs.ticker,
             // ⚠️ `ticker_bbo` NAMES THE QUANTITY, AND `producer` CARRIES THE TRANSPORT. Kraken's
             // REST ticker `a`/`b` ARE best ask and best bid, exactly as the WS bbo ticker is, so
             // both are a best-bid/offer quote; what differs is how it reached us, which
@@ -2730,15 +2822,12 @@ export class SignalOrchestrator {
             tickerBasis: 'ticker_bbo',
           },
           _lbNow,
-          {
-            maxAgeMs: LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
-            maxSpreadFraction: LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-          },
+          { maxAgeMs: _lbKnobs.maxAgeMs, maxSpreadFraction: _lbKnobs.maxSpreadFraction },
         );
-        // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated with its number as `touch-price.ts:50` requires
-        // of whoever wires this: both rungs are judged at LEVEL_BASIS_OBSERVATION_MAX_AGE_MS.
-        // A per-leg ceiling is P-8a's, not this row's.
+        // ⚠️ ONE CEILING GOVERNS BOTH LEGS, stated as `touch-price.ts:50` requires of whoever wires this: both rungs are
+        // judged at `level_basis.level_build_max_age_ms`. A per-leg ceiling is P-8a's, not this row's.
         recordTouchSelection({ lane: 'active', assetClass: _lbClass, stage: 'active_signal_birth' }, _lbSel);
+        }
       }
 
       const indicators = {
@@ -3309,6 +3398,11 @@ export class SignalOrchestrator {
               effectivePatternStrength: hybrid.effectivePatternStrength,  // Directive 10.5
               decayAge: hybrid.decayAge,                                  // Directive 10.5
               componentScores: hybrid.componentScores,
+              // Row `8c`: a HYBRID copies an already-SIZED quant signal's prices (`hybrid-integration.ts` `...q`), so on
+              // crypto its triple is already sided. Carry the quant signal's level stamps, or this fresh metadata drops
+              // them: without `levelSpec` the birth re-base refuses it, and without `levelGeometry` it would re-base the
+              // distance legs a SECOND time. With them the re-base is a no-op (idempotent on the sided stamp).
+              ...pickLevelStamps(hybrid.metadata),
             }
           };
           

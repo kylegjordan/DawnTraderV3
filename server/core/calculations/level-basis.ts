@@ -697,27 +697,12 @@ export function __resetLevelBasisFunnelForTest(): void {
 }
 
 /**
- * ⛔⛔ OBSERVATION CEILINGS — FOR THE SHADOW ARM ONLY. **THESE ARE NOT LIVE GATES AND MUST NOT
- * BECOME ONE BY DEFAULT.**
- *
- * Nothing gates on these: at this commit the basis is built and COUNTED, and no level is
- * derived from it. They exist so the shadow arm has a declared ceiling to declare — the
- * parameters are REQUIRED by construction, which is the whole point, so an observation run
- * still has to name its numbers.
- *
- * ★ THEY ARE DELIBERATELY GENEROUS, AND THAT MAKES THE MEASUREMENT READABLE IN ONE DIRECTION:
- * a refusal under these ceilings is a book that is structurally broken or grossly wide, so the
- * `accepted` count is an **UPPER BOUND** on what any tighter live gate would accept. A tighter
- * gate can only accept fewer. That is a true and useful statement without pretending either
- * number is calibrated.
- *
- * ⛔ THE LIVE VALUES ARE DB-GOVERNED AND ARE OWED TO `3b.f-c`, which is measuring exactly this.
- * ⚠️ WHEN THEY LAND THEY ARE RESOLVED FROM THE DB AND FAIL HARD ON AN EMPTY READ — never
- * silently defaulted to these (`CLAUDE.md`: no hard-coded fallbacks for DB-governed settings).
- * ⇒ These two constants are then DELETED, not repurposed.
+ * ⛔ THE OBSERVATION CEILINGS `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000) AND `_MAX_SPREAD_FRACTION` (0.50) ARE DELETED
+ * (row `8c` switch-on, Langston's §5 ruling 2026-11-06). Their own docblock said so: "when the live values land they are
+ * resolved from the DB and fail hard on an empty read … these two constants are then DELETED, not repurposed." The level
+ * build — operative and shadow, active and VTS — reads `level_basis.level_build_*` through `level-build-config.ts`.
+ * Record: `DELETED_COMPONENTS_LOG.md`.
  */
-export const LEVEL_BASIS_OBSERVATION_MAX_AGE_MS = 60_000;
-export const LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50;
 
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -774,6 +759,9 @@ export const LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION = 0.50;
  */
 export type LevelBasisStage =
   | 'active_signal_birth'
+  // row `8c` switch-on: the OPERATIVE crypto level build, one walk per built signal (the per-symbol shadow above stays
+  // its own population — never pool the two).
+  | 'active_level_build'
   | 'vts_signal_birth'
   | 'rtb_refresh'
   | 'exit_trigger'

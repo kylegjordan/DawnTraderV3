@@ -87,11 +87,10 @@ import {
   recordTouchSelection,
   tickerLegFromCachedQuote,
 } from '../core/calculations/touch-price.js';
-import {
-  recordSideAgeAttempt,
-  LEVEL_BASIS_OBSERVATION_MAX_AGE_MS,
-  LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION,
-} from '../core/calculations/level-basis.js';
+// Row `8c`: the observation ceilings this imported (unused here) are deleted — the level build reads `level_basis.*`.
+import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
+// Row `8c` switch-on: the maker arm's resting limit on a sided crypto triple.
+import { makerEntryOf } from '../core/trading/crypto-birth-levels.js';
 
 /**
  * ⛔⛔ THE PER-POSITION ACCUMULATOR, AT **MODULE** SCOPE — AND THE THREE FIELDS BELOW SIT WITH IT
@@ -3257,7 +3256,7 @@ export class ActiveExecutionEngine {
               _lsNow,
               {
                 // ⛔⛔ `8a-P2` — THE EXIT LANE'S OWN CEILING, AND IT IS NOT THE LEVEL LANE'S.
-                // This read `LEVEL_BASIS_OBSERVATION_MAX_AGE_MS` (60,000 ms) while it was a shadow,
+                // This read the level lane's 60,000 ms observation ceiling while it was a shadow,
                 // which was harmless for a recorder and is NOT harmless for a decider: it would
                 // have handed a 60-second-old quote to a live stop check, in the same loop pass
                 // whose own mark fetch demands ≤2,000 ms. Derivation at `EXIT_TRIGGER_MAX_AGE_MS`.
@@ -6230,7 +6229,11 @@ export class ActiveExecutionEngine {
     let _b72cEffectiveMode: 'taker' | 'maker' = _b72ChosenMode;
     let _b72cPendingMaker = false;
     let _b72cRestAsk: number | null = null; // `8a-P4b` P5: the ask the rest was placed against, for MAKER_PLACED
-    const _b72cLimit = signal.entryPrice;
+    // ⛔ row `8c` switch-on: on a SIDED crypto triple `signal.entryPrice` is the ASK (the taker's role price), and a buy
+    // limit resting at the ask is marketable by construction — every maker would convert. The maker rests at its OWN role
+    // price, the bid recorded when the levels were built (`makerEntryOf`, the one reader). A mid-priced triple keeps one
+    // shared entry, exactly as before.
+    const _b72cLimit = makerEntryOf(signal.metadata) ?? signal.entryPrice;
     if (_b72ChosenMode === 'maker') {
       const _b72cBestAsk = _gate.snapshot.asks[0]?.price;
       if (_b72cBestAsk != null && isMarketableAtPlacement({ side: 'buy', transactablePrice: _b72cBestAsk, limit: _b72cLimit })) {

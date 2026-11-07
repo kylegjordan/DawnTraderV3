@@ -561,10 +561,14 @@ describe('row 8a-P2 — every trigger surface reads the trigger, not the mark', 
     // number stays 3b.f-c's open question and must NOT have moved with this row.
     const ORCH = readFileSync(join(process.cwd(), 'server/services/signal-orchestrator.ts'), 'utf-8');
     const VTS = readFileSync(join(process.cwd(), 'server/services/vts-runner.ts'), 'utf-8');
+    // ⛔ row `8c` switch-on — AMENDED DELIBERATELY AND VISIBLY: the shared literal is DELETED (Langston's §5 ruling), and
+    // both level lanes read the DB-governed level-build knob instead. The point of this control is unchanged: the level
+    // lanes never borrow the EXIT lane's ceiling.
     for (const src of [ORCH, VTS]) {
-      expect(src).toMatch(/maxSpreadFraction:\s*LEVEL_BASIS_OBSERVATION_MAX_SPREAD_FRACTION/);
+      expect(src).toMatch(/maxSpreadFraction:\s*_lbKnobs\.maxSpreadFraction/);
       expect(src).not.toMatch(/EXIT_TRIGGER_MAX_SPREAD_FRACTION/);
     }
+    expect(ORCH).toMatch(/maxSpreadFraction:\s*_cbKnobs\.maxSpreadFraction/); // the operative level build
     // ⛔ `8a-P3` — AMENDED DELIBERATELY AND VISIBLY. VTS's LEVEL lane still holds the shared constants (asserted
     // above); its EXIT lane now has its OWN, derived in `crypto-touch.ts` — never the paper exit lane's.
     expect(VTS).toMatch(/maxSpreadFraction:\s*VTS_EXIT_TOUCH_MAX_SPREAD_FRACTION/);
