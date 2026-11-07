@@ -744,6 +744,40 @@ ok("(b) on release it is written once, under ON, without the value", t.count("Pr
    (t.count("Probe"), block_of(t, "Probe")))
 shutil.rmtree(base)
 
+# (d) THE REACHABLE SWITCH (Langston P5 r7 review FINDING-1): the run refuses layer (c) OFF, so production goes
+# ON, N -> ON, N+1. A hold minted before the second value is written under `ON, 1` with that value in clear, and the
+# next fresh line under `ON, 2` - so no reader of the `ON, 2` line concludes the second value was redacted there.
+sv2 = "Zk" + "8Pq3Rm7Tw2Xy5Lb"
+hs2 = hs + [{"name": "OTHER_API_KEY", "length": len(sv2), "hmac": hmac.new(KEY, sv2.encode(), hashlib.sha256).hexdigest(),
+             "key_id": dt.key_id(KEY)}]
+ON2 = dt.Redactor(hs2, key=KEY)
+SQ2 = dict(SQ, content=SECRET_TN.replace(sv, sv2))
+base, proj, root = tree()
+put(proj, FIRST[:2] + [SQ2], "w")
+da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+put(proj, [reply("z3", "2026-10-21T13:30:00Z", "after the second value")])
+da.archive_all(root, proj, ON2, now=os.path.getmtime(raw_path(proj)) + 3 * da.HOLD_S)
+t = all_text(root)
+ok("(d) ON,1 -> ON,2: the hold is written under its own `ON, 1` line (the value it could not reach, in clear)",
+   "ON, 1 value(s)" in (block_of(t, "Probe") or "") and sv2 in t, block_of(t, "Probe"))
+ok("(d) ...and the fresh line under `ON, 2`", "ON, 2 value(s)" in (block_of(t, "after the second value") or ""),
+   block_of(t, "after the second value"))
+shutil.rmtree(base)
+
+# (e) a refresh takes the ORDER from the re-read bytes too (a trim can move the enqueue): it equals a fresh archive's
+base, proj, root = tree()
+put(proj, FIRST[:2] + [SQ] + ORIG[:3], "w")
+da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+put(proj, FIRST[:1] + [SQ], "w")                                   # rewritten SHORTER, the enqueue one line earlier
+da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+fresh = os.path.join(base, "fresh")
+os.makedirs(fresh)
+da.archive_all(fresh, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+ho, hf = st_of(root, proj)["held"], st_of(fresh, proj)["held"]
+ok("(e) the refreshed hold's order is the re-read bytes' order", len(ho) == 1 and len(hf) == 1 and ho[0]["order"] == hf[0]["order"],
+   (ho, hf))
+shutil.rmtree(base)
+
 # (c) a hold from a state written before holds recorded their state: the archive says NOT RECORDED
 base, proj, root = tree()
 put(proj, FIRST[:2] + [SQ], "w")

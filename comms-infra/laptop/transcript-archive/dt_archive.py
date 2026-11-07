@@ -28,8 +28,13 @@ THE GUARANTEES:
     cancels it, otherwise it is written labelled `queued; no delivered copy in this file` (Langston P4 finding).
     The hold also records the layer (c) state line its display line was redacted under: released after a switch, it
     is written under ITS OWN state line (C-9 holds line by line); a re-read refreshes it from the bytes under the
-    current state; a hold from before this was recorded is written under a `NOT RECORDED` state line.
-KNOWN LIMITS, stated: an action whose tool result (and so its ERROR) lands in a LATER run is written without the ERROR;
+    current state; a hold from before this was recorded is written under a `NOT RECORDED` state line. The reachable
+    switch is `ON, N values` -> `ON, N+1` (the run refuses layer (c) OFF): a hold minted before the new value is
+    written under `ON, N`, with that value in clear - LEGIBLE, not hidden (Langston P5 r7 review).
+KNOWN LIMITS, stated: a value held under a layer (c) state that could not reach it is written to the append-only
+archive in clear at release, and sits in clear in `.state/<alias>/*.json` until then - bounded by HOLD_S plus the run
+cadence; the raw .jsonl holds it regardless, so the archive is not the exposure boundary. Re-redacting a stored
+display line at release is deliberately not done (double-redaction artifacts; it would not touch the .state copy); an action whose tool result (and so its ERROR) lands in a LATER run is written without the ERROR;
 a held notice's delivery that never reaches this raw file (another file) does not cancel it; a held notice released
 late is appended at the END of its day file, so a day file is not strictly chronological; for an abandoned session
 only the file-quiet arm can release a hold (no new lines, so the session clock never advances). The state's file keys
@@ -175,8 +180,8 @@ def dt_folder_class(slug):
 HOLD_S = 3600
 # The C-9 line for a notice held before holds recorded their layer (c) state (states written before 2026-11-07): the
 # state it was redacted under is unknown, so the archive says so rather than borrowing the current one.
-C9_UNRECORDED = ("> redaction layer (c), shapeless values: NOT RECORDED for the next line - a notice held before the "
-                 "writer stored the state it was redacted under")
+C9_UNRECORDED = ("> redaction layer (c), shapeless values: NOT RECORDED - a notice held before the writer stored the "
+                 "state it was redacted under")
 SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -447,11 +452,17 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
         # the same bytes, and without this it was held - then archived - once per re-read (Langston P5 r6 FINDING-1:
         # 4 copies of one notice after 3 rewrites). Its id is sha(ts + text), so the earlier hold IS this notice - and
         # it is REFRESHED from these bytes: its display line redacted again under the CURRENT layer (c), so a re-read
-        # never lets an older redaction outlive the bytes it came from (held-notice item, P5 r7).
+        # never lets an older redaction outlive the bytes it came from (held-notice item, P5 r7). It fires on ANY
+        # re-yield - a re-read, or a byte-identical duplicate enqueue in new bytes - and always toward the CURRENT
+        # state, which only ever ADDS values: dt_archive_run refuses a run with no layer (c) (exit 3), so a refresh can
+        # never rewrite a stored line back to clear. The order is refreshed too: a trim can move the enqueue.
+        # NOTE: these dicts are the ones in st["held"], so the intent-first write_state below persists the REFRESHED
+        # holds in what is otherwise the pre-run state. Harmless across a crash: the old offset re-yields the notice,
+        # and the refresh repeats.
         held_by_id = {h["id"]: h for h in held}
         for uid, ts, line, order in ylds:
             if uid in held_by_id:
-                held_by_id[uid].update(line=line, c9=state_line)
+                held_by_id[uid].update(line=line, c9=state_line, order=list(order))
                 continue
             if uid in done or (uid, line) in seen_run:
                 continue

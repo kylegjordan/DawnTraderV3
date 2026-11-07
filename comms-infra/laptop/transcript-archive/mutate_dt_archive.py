@@ -94,7 +94,7 @@ MUTATIONS = [
         "            elif hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:",
         "            elif True:")),
     ("P5 r6 FINDING-1: a held notice taken again from re-read bytes", replace(
-        "            if uid in held_by_id:\n                held_by_id[uid].update(line=line, c9=state_line)\n                continue\n", "")),
+        "            if uid in held_by_id:\n                held_by_id[uid].update(line=line, c9=state_line, order=list(order))\n                continue\n", "")),
     ("P5 r6 FINDING-2: the fingerprint from a SECOND open after the write", replace(
         "        st[\"tail\"] = tail          # from the bytes this run read, never a second open",
         "        st[\"tail\"] = (lambda b: hashlib.sha256(b[max(0, new_off - TAIL):new_off]).hexdigest() if len(b) >= new_off else None)(open(raw, \"rb\").read())")),
@@ -105,10 +105,12 @@ MUTATIONS = [
     # held-notice item (P5 r7): a hold keeps the layer (c) state it was redacted under
     ("C9-HOLD: a new hold forgets its state", replace('"order": list(order),\n                             "c9": state_line})',
                                                       '"order": list(order)})')),
-    ("C9-HOLD: a re-yielded hold skipped, not refreshed", replace("                held_by_id[uid].update(line=line, c9=state_line)",
+    ("C9-HOLD: a re-yielded hold skipped, not refreshed", replace("                held_by_id[uid].update(line=line, c9=state_line, order=list(order))",
                                                                   "                pass")),
-    ("C9-HOLD: a refresh keeps the old state", replace("                held_by_id[uid].update(line=line, c9=state_line)",
-                                                       "                held_by_id[uid].update(line=line)")),
+    ("C9-HOLD: a refresh keeps the old state", replace("                held_by_id[uid].update(line=line, c9=state_line, order=list(order))",
+                                                       "                held_by_id[uid].update(line=line, order=list(order))")),
+    ("C9-HOLD: a refresh keeps the old order", replace("                held_by_id[uid].update(line=line, c9=state_line, order=list(order))",
+                                                       "                held_by_id[uid].update(line=line, c9=state_line)")),
     ("C9-HOLD: a released hold borrows the current state", replace('h["line"], h.get("c9") or C9_UNRECORDED))',
                                                                    'h["line"], state_line))')),
     ("C9-HOLD: a legacy hold borrows the current state", replace('h["line"], h.get("c9") or C9_UNRECORDED))',
