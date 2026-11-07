@@ -138,8 +138,11 @@ class FakePool extends EventEmitter {
   query() { return Promise.resolve({ rows: [] }); }
 }
 
-function memDeps(): AlertDeps & { rows: Map<string, { id: string; open: boolean; metadata: Record<string, unknown> }>; log: string[] } {
-  const rows = new Map<string, { id: string; open: boolean; metadata: Record<string, unknown> }>();
+// `fired` models the dispatcher's promotion stamp (fired_at). Seeded rows and, by default, minted rows count as promoted,
+// so the clear edges below test the evaluators; `memDeps({ promote: false })` mints UNPROMOTED rows for the deferral.
+type MemRow = { id: string; open: boolean; metadata: Record<string, unknown>; fired?: boolean };
+function memDeps(opt: { promote?: boolean } = {}): AlertDeps & { rows: Map<string, MemRow>; log: string[] } {
+  const rows = new Map<string, MemRow>();
   const log: string[] = [];
   let n = 0;
   return {
@@ -147,7 +150,7 @@ function memDeps(): AlertDeps & { rows: Map<string, { id: string; open: boolean;
     addAlert: async (o) => {
       const cur = rows.get(o.dedupe_key);
       if (cur?.open) return { id: cur.id }; // the non-terminal dedupe
-      const row = { id: `id${++n}`, open: true, metadata: o.metadata ?? {} };
+      const row = { id: `id${++n}`, open: true, metadata: o.metadata ?? {}, fired: opt.promote ?? true };
       rows.set(o.dedupe_key, row); log.push(`mint ${o.dedupe_key}`);
       return { id: row.id };
     },
@@ -157,7 +160,7 @@ function memDeps(): AlertDeps & { rows: Map<string, { id: string; open: boolean;
       for (const [k, r] of rows) if (k.startsWith(prefix) && !exclude.has(k) && r.open) { r.open = false; log.push(`resolve ${k}`); out.push(r.id); }
       return out;
     },
-    openRow: (key) => { const r = rows.get(key); return r?.open ? { id: r.id, metadata: r.metadata } : null; },
+    openRow: (key) => { const r = rows.get(key); return r?.open ? { id: r.id, metadata: r.metadata, fired_at: r.fired === false ? null : 'promoted' } : null; },
     merge: async (id, patch) => { for (const r of rows.values()) if (r.id === id && r.open) { r.metadata = patch(r.metadata); return r; } return null; },
   };
 }
@@ -286,6 +289,75 @@ describe('the wiring', () => {
     expect(d.rows.get(`${RESTART_PREFIX}683`)!.open).toBe(false);
     expect(d.rows.get(`${RESTART_PREFIX}684`)!.open).toBe(false);
     expect(d.log).toContain(`resolve ${RESTART_BLIND_KEY}`); // the blind key clears on a READABLE decision, separately
+    mon.stop();
+  });
+
+  it('a self-clearing level does NOT resolve until the dispatcher has promoted its row, then resolves on the next clean pass (Step-7 fold)', async () => {
+    vi.useFakeTimers();
+    try {
+      const pool = new FakePool();
+      attachPoolInstrument(pool as unknown as pg.Pool, 'wd', { log: () => {}, intervalMs: 3_600_000 }).stop();
+      attachPoolGuards(pool as unknown as pg.Pool, 'wd');
+      const d = memDeps({ promote: false });
+      const logs: string[] = [];
+      let read: { ok: true; n: number; maxS: number } = { ok: true, n: 1, maxS: 35 };
+      const mon = startDbPoolAlerts({ label: 'wd', deps: d, flushIntervalMs: 3_600_000, idleRead: async () => read, log: (l) => logs.push(l) });
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.log).toEqual(['mint db-pool-idle-in-tx:wd']);
+      read = { ok: true, n: 0, maxS: 0 };
+      await vi.advanceTimersByTimeAsync(4 * IDLE_IN_TX_POLL_MS); // four clean reads: clear is due from the 2nd
+      expect(d.rows.get('db-pool-idle-in-tx:wd')!.open).toBe(true); // ...but the row is not promoted: deferred
+      expect(logs.filter((l) => l.includes('resolve deferred'))).toHaveLength(1); // said once, not every pass
+      d.rows.get('db-pool-idle-in-tx:wd')!.fired = true; // the dispatcher tick promotes it
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      expect(d.rows.get('db-pool-idle-in-tx:wd')!.open).toBe(false);
+      expect(d.log).toEqual(['mint db-pool-idle-in-tx:wd', 'resolve db-pool-idle-in-tx:wd']);
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a level re-firing into its pending row MERGES (fires, last_at, the running max) and never mints a second row (Langston condition 2)', async () => {
+    vi.useFakeTimers();
+    try {
+      const pool = new FakePool();
+      attachPoolInstrument(pool as unknown as pg.Pool, 'wm', { log: () => {}, intervalMs: 3_600_000 }).stop();
+      attachPoolGuards(pool as unknown as pg.Pool, 'wm');
+      const d = memDeps({ promote: false });
+      let read: { ok: true; n: number; maxS: number } = { ok: true, n: 1, maxS: 35 };
+      const mon = startDbPoolAlerts({ label: 'wm', deps: d, flushIntervalMs: 3_600_000, idleRead: async () => read, log: () => {} });
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      read = { ok: true, n: 0, maxS: 0 };
+      await vi.advanceTimersByTimeAsync(3 * IDLE_IN_TX_POLL_MS); // clear due, deferred (unpromoted)
+      read = { ok: true, n: 2, maxS: 52 }; // a second, bigger leak while the first row waits
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      read = { ok: true, n: 1, maxS: 40 }; // a smaller one does not lower the worst
+      await vi.advanceTimersByTimeAsync(IDLE_IN_TX_POLL_MS);
+      const row = d.rows.get('db-pool-idle-in-tx:wm')!;
+      expect(d.log).toEqual(['mint db-pool-idle-in-tx:wm']);
+      expect(row.metadata).toMatchObject({ fires: 3, n: 2, max_s: 52 });
+      expect(row.metadata.first_at).toBeDefined();
+      expect(row.metadata.last_at).toBeDefined();
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('the wait level defers its clear too, and merges a later window\'s worst into the open row', async () => {
+    const pool = new FakePool();
+    attachPoolInstrument(pool as unknown as pg.Pool, 'ww', { log: () => {}, intervalMs: 3_600_000 }).stop();
+    attachPoolGuards(pool as unknown as pg.Pool, 'ww');
+    const d = memDeps({ promote: false });
+    const mon = startDbPoolAlerts({ label: 'ww', deps: d, flushIntervalMs: 3_600_000, log: () => {} });
+    await mon.onFlush(rec(0, 1, { label: 'ww', waitsOver5s: 1, waitsOver1s: 1, maxWaitMs: 6_000, maxWaitSite: 'a' }));
+    await mon.onFlush(rec(1, 2, { label: 'ww', waitsOver5s: 1, waitsOver1s: 1, maxWaitMs: 9_000, maxWaitSite: 'b' }));
+    for (let i = 2; i < 14; i++) await mon.onFlush(rec(i, i + 1, { label: 'ww' }));
+    const row = d.rows.get('db-pool-wait:ww')!;
+    expect(row.open).toBe(true); // clear due (10 covered quiet minutes), deferred: unpromoted
+    // fires 6: the 5 s waits ending at minutes 1-2 stay inside the 5-minute window through the flush ending at minute 6
+    expect(row.metadata).toMatchObject({ fires: 6, waitsOver5s: 2, maxWaitMs: 9_000, maxWaitSite: 'b' });
+    row.fired = true;
+    await mon.onFlush(rec(14, 15, { label: 'ww' }));
+    expect(row.open).toBe(false);
+    expect(d.log.filter((l) => l.startsWith('mint'))).toHaveLength(1);
     mon.stop();
   });
 

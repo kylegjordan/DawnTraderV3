@@ -33,8 +33,9 @@ export interface AlertDeps {
     metadata?: Record<string, unknown> }) => Promise<{ id: string } | null | undefined>;
   resolveByKey: (key: string) => Promise<string[]>;
   resolveByPrefix: (prefix: string, exclude: ReadonlySet<string>) => Promise<string[]>;
-  /** The open (non-terminal) row for a key, or null. */
-  openRow: (key: string) => { id: string; metadata?: Record<string, unknown> | null } | null;
+  /** The open (non-terminal) row for a key, or null. `fired_at` is set when the dispatcher PROMOTES the row (the 15-min
+   *  `fireDue`), which precedes its push — it is promotion, not proof of delivery (Langston, inc 3b P4 Step 7). */
+  openRow: (key: string) => { id: string; metadata?: Record<string, unknown> | null; fired_at?: string | null } | null;
   /** mergeAlertMetadata: returns null on a missing-or-resolved row. */
   merge: (id: string, patch: (cur: Record<string, unknown>) => Record<string, unknown>) => Promise<unknown | null>;
 }
@@ -76,7 +77,8 @@ function waitBody(label: string, v: WaitVerdict, r: PoolFlushRecord): string {
     + `${iso(v.window.toWallMs)}: ${v.window.waitsOver1s} waits over 1 s, ${v.window.waitsOver5s} over 5 s, longest `
     + `${v.window.maxWaitMs} ms (${v.window.maxWaitSite}). At the latest flush: open=${r.open} total=${r.total} `
     + `idle=${r.idle} waiting=${r.waiting} (a high 'open' with few waits is a PIN, many short waits a FLAP). Counts are per `
-    + `process and restart at a restart. Clears itself after 10 minutes of covered time with no wait over 1 s. B-DB-POOL-GUARD OBJ-5(a).`;
+    + `process and restart at a restart. Clears itself after 10 minutes of covered time with no wait over 1 s, and not before the `
+    + `dispatcher has promoted this row; later windows fold into the metadata (fires, last_at, the running worst). B-DB-POOL-GUARD OBJ-5(a).`;
 }
 
 // ═══ (b) LEVEL — a backend idle inside a transaction, sampled from outside the pool ════════════════════════════════
@@ -214,8 +216,36 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
   // no-op resolve; a row we think closed is re-minted by addAlert's own dedupe if it is in fact open.)
   const known = new Set<string>();
   for (const k of [waitKey, waitBlindKey, idleKey, idleBlindKey, RESTART_BLIND_KEY]) if (deps.openRow(k)) known.add(k);
-  const mint = (what: string, o: Parameters<AlertDeps['addAlert']>[0]) => { known.add(o.dedupe_key); return safe(what, deps.addAlert(o)); };
-  const clear = (what: string, key: string) => { known.delete(key); return safe(what, deps.resolveByKey(key)); };
+  const pending = new Set<string>();
+  const mint = (what: string, o: Parameters<AlertDeps['addAlert']>[0]) => { pending.delete(o.dedupe_key); known.add(o.dedupe_key); return safe(what, deps.addAlert(o)); };
+  // DEFERRED CLEAR (inc 3b P4 Step-7 fold, Langston-ruled). A new row is 'scheduled' and only the dispatcher's 15-minute
+  // fireDue promotes and pushes it, so a self-clearing row resolved before the next tick was never sent (measured:
+  // ffb9952e, 79857f58, fired_at null). A self-clearing key therefore does NOT resolve until its row carries fired_at;
+  // until then the key stays in `known` and the clear is retried each pass. fired_at is PROMOTION, not delivery: a
+  // promotion whose push failed is not re-tried (that residual is on the alert-protocol issue, not here).
+  const clear = async (what: string, key: string) => {
+    const row = deps.openRow(key);
+    if (row && !row.fired_at) {
+      if (!pending.has(key)) { pending.add(key); log(`[B-DB-POOL-GUARD][ALERTS] ${key}: condition clear, resolve deferred until the dispatcher promotes the row`); }
+      return;
+    }
+    pending.delete(key); known.delete(key);
+    await safe(what, deps.resolveByKey(key));
+  };
+  // A LEVEL re-firing into its still-open row folds into that row's metadata (fires, last_at, the running worst): the
+  // row is a latch until promoted, and without this a page sent up to 15 minutes later would describe only the first
+  // sighting (Langston condition 2, the raiseIncident shape). The body stays as minted and says so.
+  const raiseLevel = async (what: string, o: Parameters<AlertDeps['addAlert']>[0], fold: (cur: Record<string, unknown>) => Record<string, unknown>) => {
+    const nowIso = new Date().toISOString();
+    const open = known.has(o.dedupe_key) ? deps.openRow(o.dedupe_key) : null;
+    if (open) {
+      pending.delete(o.dedupe_key);
+      const merged = await safe(what, deps.merge(open.id, (cur) => ({ ...fold(cur), fires: Number(cur.fires ?? 1) + 1, last_at: nowIso })));
+      if (merged !== null && merged !== undefined) return;
+    }
+    await mint(what, { ...o, metadata: { ...(o.metadata ?? {}), fires: 1, first_at: nowIso, last_at: nowIso } });
+  };
+  const maxOf = (a: unknown, b: number) => Math.max(Number(a ?? 0) || 0, b);
 
 
   // (a) + the acquire-timeout incident, on every flush
@@ -225,8 +255,12 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
     records.push(r);
     records = records.filter((x) => x.endWallMs > r.endWallMs - WAIT_CLEAR_MS - flushEvery);
     const v = evaluateWaitLevel(records, r.endWallMs);
-    if (v.fire) await mint('mint wait', { severity: 'warning', title: `Database connection waits on ${label}`,
-      body: waitBody(label, v, r), dedupe_key: waitKey, metadata: { source: 'db-pool-alerts', ...v.window, open: r.open, waiting: r.waiting } });
+    if (v.fire) await raiseLevel('mint wait', { severity: 'warning', title: `Database connection waits on ${label}`,
+      body: waitBody(label, v, r), dedupe_key: waitKey, metadata: { source: 'db-pool-alerts', ...v.window, open: r.open, waiting: r.waiting } },
+      (cur) => ({ ...cur, waitsOver1s: maxOf(cur.waitsOver1s, v.window.waitsOver1s), waitsOver5s: maxOf(cur.waitsOver5s, v.window.waitsOver5s),
+        maxWaitMs: maxOf(cur.maxWaitMs, v.window.maxWaitMs),
+        maxWaitSite: v.window.maxWaitMs > Number(cur.maxWaitMs ?? -1) ? v.window.maxWaitSite : cur.maxWaitSite,
+        toWallMs: v.window.toWallMs, open: r.open, waiting: r.waiting }));
     else if (v.clear && known.has(waitKey)) await clear('resolve wait', waitKey);
     if (r.acquireTimeouts > 0) {
       await safe('acquire-timeout incident', raiseIncident(deps, acqKey, 'warning', `Database connection acquire timed out on ${label}`,
@@ -275,10 +309,12 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
         }
         if (known.has(idleBlindKey)) await clear('resolve idle blind', idleBlindKey);
         const ok = read as IdleRead;
-        if (s.fire) await mint('mint idle', { severity: 'warning', title: `Idle transaction held open on ${label}`,
-          body: `${ok.n} ${label} backend(s) idle inside a transaction for over ${IDLE_IN_TX_BOUND_S} s (longest ${Math.round(ok.maxS)} s). `
-            + `The server ends them at 60 s. Clears after two consecutive clean reads (${IDLE_IN_TX_POLL_MS / 1000} s apart). B-DB-POOL-GUARD OBJ-5(b).`,
-          dedupe_key: idleKey, metadata: { source: 'db-pool-alerts', n: ok.n, max_s: ok.maxS } });
+        if (s.fire) await raiseLevel('mint idle', { severity: 'warning', title: `Idle transaction held open on ${label}`,
+          body: `${ok.n} ${label} backend(s) idle inside a transaction for over ${IDLE_IN_TX_BOUND_S} s (longest ${Math.round(ok.maxS)} s, as first seen). `
+            + `The server ends them at 60 s. Clears after two consecutive clean reads (${IDLE_IN_TX_POLL_MS / 1000} s apart), and not before the `
+            + `dispatcher has promoted this row; later sightings fold into the metadata (fires, last_at, max n, max_s). B-DB-POOL-GUARD OBJ-5(b).`,
+          dedupe_key: idleKey, metadata: { source: 'db-pool-alerts', n: ok.n, max_s: ok.maxS } },
+          (cur) => ({ ...cur, n: maxOf(cur.n, ok.n), max_s: maxOf(cur.max_s, ok.maxS) }));
         else if (s.clear && known.has(idleKey)) await clear('resolve idle', idleKey);
       })();
     }, IDLE_IN_TX_POLL_MS));
