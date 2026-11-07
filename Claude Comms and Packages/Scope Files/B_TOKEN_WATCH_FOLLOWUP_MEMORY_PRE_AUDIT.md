@@ -266,3 +266,48 @@ The plan:
 - `/opt/token-watch` listing and `INSTALLED`; `sha256sum` (raw and CR-stripped) of installed files against `git show <ref>:<path> | sha256sum`.
 - `wc -l` and the key set of `offbox/cold-offbox-manifest.jsonl` (86 rows).
 - **Not read:** the September journal (gone); the B2 bucket, which is P11's work; anything over about 1 GB, so the full backlog parse (ages, band counts) is **owed at Step 3 by P8**.
+
+## 5. STEP-3 ENTRY AUDIT — the items added after Step 2 (2026-11-07, Infra Claude; read at `origin/migration/aws-supabase` @ `d5ffb50b9`, runtime reads on staging as root)
+These were placed on the batch `UNAUDITED`. Each is audited here and proposed a disposition, **for Langston's confirmation before any of it is built.** P1-P14 stand as approved.
+
+**A-ADD-1 — the store warning has no self-clearing actor. CONFIRMED, and one premise CORRECTED.**
+- `ops/store_watch.py` `run()` (the whole of it, `:116-127`) mints on `warn`/`over_cap` and logs on `ok`; **it resolves nothing — neither key.** The ruling's "the same discipline as the over-cap key it already clears" does not hold at the ref: **the over-cap key has no clearing leg either.** `alert_mint.py` exposes `mint` only.
+- **The mechanism to use already exists:** the CLI verb `resolve-key <dedupe-key> --by <actor> --evidence <ref>` (`scripts/system-alerts.ts:329-351`, B-DISK-FILE-TIERING #1233), which runs every row through `resolveAlert`'s gates. Its precedent is `staging-liveness-watchdog`, a `machine` actor that resolves its own rows through that verb when the re-measured condition clears (`server/services/system-alerts.ts`, `ALERT_ACTORS`).
+- **Proposed (fold, disposition 1):**
+  - (a) a new `machine` actor `token-watch-store-watch` in `ALERT_ACTORS` (an app-code change, so it rides P7's `dt-deploy`);
+  - (b) `alert_mint.resolve_key(key, evidence)`, the same argument-list form as `mint`, run as `deploy`;
+  - (c) `run()`: `ok` ⇒ resolve-key `token-watch-store-warn` and `token-watch-store-over_cap`; `warn` ⇒ resolve-key `…-over_cap` only (back under the cap, still over the line); `over_cap` ⇒ none. **Never on an incomplete walk (A-ADD-3).**
+  - Evidence string: `token-watch/ops/store_watch.py:<line> store_bytes=<N> at <UTC>`, which satisfies `isValidResolutionEvidence`'s path:line rule and carries the measurement.
+  - Test: a fake runner records the argv; `ok` resolves both keys, `warn` resolves only over-cap, `over_cap` and an incomplete walk resolve none (mutation: resolve on `warn` → red).
+
+**A-ADD-2 — the standing row's body is frozen at mint. CONFIRMED; proposed narrower than asked.**
+- Dedupe (`server/services/system-alerts.ts:553-560`) returns the open row and writes nothing, so a row's body is fixed for its life. `mergeAlertMetadata` exists (`:897-915`), but **no CLI verb exposes it**, and it never re-renders title or body by design (#572).
+- Every row minted after 2026-11-06T06:34Z already carries the as-of-mint line (`store_watch.py:108-112`). **The gap is exactly one row, `7b19347d`, minted 2026-11-05T06:00Z.**
+- **Proposed:** no new verb and no re-mint of an open condition (resolving an unfixed condition in order to re-mint it would break resolve = fixed). A-ADD-1 clears `7b19347d` when the store measures under the line, and the next warn row is minted with the disclosure. **Until then the gap stands, stated here.** For ruling: if you want `7b19347d` itself to carry the date now, the only route is a new CLI verb over `mergeAlertMetadata`, which is app-code scope I would rather not add for one row.
+
+**A-ADD-3 — the gauge has no reach control. CONFIRMED.**
+- `liveness._store_size_check()` (`:385-410`): `os.walk(ROOT)` with no `onerror`, and `except OSError: continue` on `getsize` (`:397-398`). An unreadable subtree or file LOWERS the total silently.
+- **Two callers:** `store_watch.run` (root, daily) and `liveness.check()` at `:289` (the feed watch, as `tokenwatch`). Root reads through file permissions, so on the daily job the realistic error is a file vanishing mid-walk (tier unlinking), not EACCES; as `tokenwatch` it is EACCES on anything it cannot read.
+- **Proposed (fold):** the walk counts `walk_errors` (via `onerror`) and `getsize_errors`, both returned. **A count above zero makes `ok` impossible**: below the warn line with errors ⇒ state `incomplete`. `warn` and `over_cap` stand with errors, because a lowered total that still crosses a line is a lower bound. `store_watch` on `incomplete`: no mint, **no resolve**; it logs the counts and exits 1, so the unit fails and `token-watch-failed@` pages through the existing path.
+- **Positive control, as you required:** the test plants an unreadable subdirectory and an unreadable file inside a temp store and asserts both counts are non-zero and the state is `incomplete`. It runs as a non-root user, and **is SKIPPED BY NAME when euid is 0** (root reads through mode 000, so the control could not fail). A second leg makes `getsize` raise `FileNotFoundError` between listing and sizing, which is the root-relevant case.
+
+**A-ADD-4 — raw provenance ~0.8 GB/day gross; which lever. Taxonomy outcome (2), a DECISION.**
+- The outflow is measured above (the ADD-4 row and the 06:08Z third point): the tier job compresses and unlinks the previous day's raw file (`tier.py:170`, `:183-185`), and off-box moves it at 05:30Z. Net ≈ +43.8 MB/day (one interval).
+- **Proposed:** fold into P15, which already carries the `#1246` decision (Kyle's, via PM). No code here.
+
+**A-ADD-5 — the one-day transit buffer against the warn line. Outcome (2), by design; a SIZING item.**
+- **Proposed:** fold into P15's sizing. The warn line is set against the measured floor **including** the designed ~115 MB transit buffer (`tier.STILL_WARM_SECONDS`, applied at `cold_offbox.py:326-327`). Not raised today (your ruling).
+
+**A-CENSUS — `due-census.json` was not refreshed by the 11-07 tier run. NOT A DEFECT: the file has one writer, a by-hand tool.**
+- `ROOT/due-census.json` is written only by `tools/due_census.py` (`:28`, `OUT`). No unit and no cron runs it: 0 unit files under `/etc/systemd/system/` name it (control: `store_watch` is named in 1), and 0 root crontab lines. Its mtime, 2026-11-06 04:40:51Z, is a hand run.
+- The DAILY census of record is the tier job's journal line, computed by the same `classify_due_buckets` (`tier.py:198-200`): 11-07 04:32:00Z, `removed 0 (0 B); kept spent-window 0, after cursor 2663 (1,707,949,486 B), before consumed_from 1 (21,739 B), unparsed 0`.
+- **Proposed (fold, small):** the tier run writes `due-census.json` from the classes it has already computed, so a file named "census" is never a day stale. Or withdraw it (disposition 5), citing the journal line as the record. My preference is the fold: a stale artifact with an authoritative name is the shape that misled this morning.
+
+**A-P15 — the store's growth with no prune path. Outcome (2), a DECISION for Kyle.** The inputs are gathered above (the P15 rows, KD-53, the off-box rate, and the runway of ~29.5 days to the 8 GiB cap at the daily peak). **No code until Kyle decides `#1246`.** P10's report says the warn row is expected to re-mint until P15 lands.
+
+**A-P16 — a failure of the pager pages nothing. CONFIRMED.**
+- `token-watch-failed@.service` has no `OnFailure=` (correctly, against recursion). Its own failure, including `alert_mint` failing (the shared path of every token-watch page), goes nowhere.
+- **The independent path must not share the transport**, so a second root job on the same box that also mints through `npm run system-alerts` would fail together with the pager.
+- **Proposed:** a Helsinki-side check (comms-infra, my lane): an hourly timer that reads `systemctl list-units --failed 'token-watch*'` on staging over the existing restricted SSH path, and posts one line to Discord via `cc-send` when any `token-watch-failed@` instance has failed — a different machine and a different transport. It is deduped by unit name in a local state file, so a standing failure posts once. Test: a fake `systemctl` output with a failed pager instance posts; one with only a failed non-pager unit does not (that one has already paged through the normal path). For ruling.
+
+**Every item above stays a PROPOSAL until you confirm it.** Code starts with P1 (the measurement), which none of these touch.
