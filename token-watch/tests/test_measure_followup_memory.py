@@ -441,6 +441,25 @@ r15 = json.load(open(out15)) if os.path.exists(out15) else {}
 check("E15 exit 15 naming the errors", p.returncode == 15 and "error" in str(r15.get("void")), "rc=%s %s" % (p.returncode, r15.get("void")))
 check("R2 the result records the bodies file size", r5.get("bodies_file_bytes", 0) > 0)
 
+print("SY expect: _synthesise(k=4) gives FOUR INDEPENDENT pairs (no shared nested object), distinct pairAddress, ~4x the bytes")
+tmpl_text = json.dumps(body_k("SYNTH", 1), sort_keys=True)
+syn = json.loads(mfm._synthesise(tmpl_text, 4))
+ps = syn["pairs"]
+check("SY four pairs, distinct pairAddress", len(ps) == 4 and len({p["pairAddress"] for p in ps}) == 4, str([p.get("pairAddress") for p in ps]))
+check("SY no nested object shared across pairs (txns, volume, baseToken)",
+      all(ps[0][f] is not ps[1][f] for f in ("txns", "volume", "baseToken")))
+ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
+check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
+print("SB expect: in D5 (class 3+ synthesised at k = 4), the largest served body is ~4x the class-1 mean, not the template's size")
+c1_mean = sqlite3.connect(BODIES_THIN0).execute("SELECT avg(bytes) FROM bodies WHERE pairs = 1").fetchone()[0]
+mx = r5.get("served_body_bytes", {}).get("max", 0)
+check("SB served bytes measure the body SERVED", c1_mean and 3.3 <= mx / c1_mean <= 4.1, "max %s, class-1 mean %s" % (mx, c1_mean))
+print("DN expect: derive-n with an invalid --shape -> exit 2 with a reason, not a bare exit 1")
+BADSHAPE = os.path.join(WORK, "badshape.json")
+json.dump({"share": {"0": 1.0}}, open(BADSHAPE, "w"))
+p = tool("derive-n", "--bodies", BODIES2, "--shape", BADSHAPE)
+check("DN exit 2", p.returncode == 2 and "void" in p.stderr, "rc=%s %s" % (p.returncode, p.stderr[-300:]))
+
 shutil.rmtree(WORK, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

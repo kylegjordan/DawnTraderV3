@@ -124,6 +124,17 @@ def _load_shape(path: str) -> dict:
     return s
 
 
+def _synthesise(text: str, k: int) -> str:
+    """§6 AMENDMENT 2: a class-k body built from a class-1 template — its one pair duplicated k times, each copy with
+    a distinct pairAddress — returned as TEXT (Langston, Step 4 r2: a dict-level copy was SHALLOW, so the k "pairs"
+    shared txns/volume/liquidity/... objects and held ~0.43x the objects of a real k-pair body; a text round-trip
+    gives k independent pairs, and the caller measures the bytes of exactly what is served)."""
+    tmpl = json.loads(text)
+    pair = (tmpl.get("pairs") or [{}])[0]
+    tmpl["pairs"] = [dict(pair, pairAddress="%s~%d" % (pair.get("pairAddress"), i)) for i in range(k)]
+    return json.dumps(tmpl, sort_keys=True)
+
+
 def _class_of(mint: str, share: dict) -> str:
     u = (_hash_int("class:" + mint) % 10**9) / 10**9
     acc = 0.0
@@ -495,15 +506,13 @@ def cmd_run(a) -> int:
             cls = "1" if synth else k
             off = _hash_int(mint) % templates[cls]
             text, nbytes = db.execute("SELECT body, bytes FROM bodies WHERE " + _CLASS_SQL[cls] +
-                                      " ORDER BY rowid LIMIT 1 OFFSET ?", (off,)).fetchone()
+                                      " ORDER BY pairs, rowid LIMIT 1 OFFSET ?", (off,)).fetchone()
+            if synth:                                      # §6 AMENDMENT 2: the class-1 pair duplicated k times
+                text = _synthesise(text, _CLASS_K[k])      # built as TEXT, so the parse below is k real pairs
+                nbytes = len(text.encode("utf-8"))         # and the bytes are the body SERVED, not the template's
+                c.synthetic_shape += 1
             body = json.loads(text)
             c.parses += 1
-            if synth:                                      # §6 AMENDMENT 2: the class-1 pair duplicated k times
-                pair = (body.get("pairs") or [{}])[0]
-                body["pairs"] = [dict(pair, pairAddress="%s~%d" % (pair.get("pairAddress"), i),
-                                      baseToken=dict(pair.get("baseToken") or {}))
-                                 for i in range(_CLASS_K[k])]
-                c.synthetic_shape += 1
             for p in body.get("pairs") or []:
                 if isinstance(p.get("baseToken"), dict):
                     p["baseToken"]["address"] = mint
@@ -600,6 +609,17 @@ def cmd_run(a) -> int:
         "loop_synthetic_helius_calls": c.loop_synthetic,
         "bodies_file_bytes": os.path.getsize(a.bodies),   # page cache is in memory.peak; the term differs by arm (m3)
     }
+    if a.arm == "sept":
+        # built BEFORE the void chain (Langston r2 tidy): a sept run voided at 15 or 12 still publishes its
+        # templates and sources, which are exactly what that void needs to be read
+        n = c.loop_shaped
+        class0 = c.loop_class0 / n if n else 0.0
+        alive = c.loop_alive / n if n else 0.0
+        result["sept"] = {"shape": shape, "templates": templates, "source": source, "loop_lookups": n,
+                          "synthetic_shape_bodies": c.synthetic_shape,
+                          "class0_share": round(class0, 6), "alive_share": round(alive, 6),
+                          "class0_test": "WIRING control (C-4), not fidelity to the reference day",
+                          "alive_direction": "below the reference alive share voids; above stands (C-5)"}
     code = 0
     if stats.get("errors"):
         # §6 AMENDMENT 2: a deterministic replay with a run_hour error is a harness defect by construction
@@ -614,14 +634,6 @@ def cmd_run(a) -> int:
             c.egress, c.call_site, shed_rows, expected)
         code = 7
     elif a.arm == "sept":
-        n = c.loop_shaped
-        class0 = c.loop_class0 / n if n else 0.0
-        alive = c.loop_alive / n if n else 0.0
-        result["sept"] = {"shape": shape, "templates": templates, "source": source, "loop_lookups": n,
-                          "synthetic_shape_bodies": c.synthetic_shape,
-                          "class0_share": round(class0, 6), "alive_share": round(alive, 6),
-                          "class0_test": "WIRING control (C-4), not fidelity to the reference day",
-                          "alive_direction": "below the reference alive share voids; above stands (C-5)"}
         if abs(class0 - shape["share"]["0"]) > a.wiring_tolerance:
             result["void"] = "wiring: class-0 share %.4f vs %.4f, outside +/-%.3f" % (class0, shape["share"]["0"],
                                                                                       a.wiring_tolerance)
@@ -651,7 +663,11 @@ def cmd_run(a) -> int:
 # ── derive-n ───────────────────────────────────────────────────────────────────────────────────────────────────────
 def cmd_derive_n(a) -> int:
     """§6 AMENDMENT 1 item 1 and C-3: N = E_sept / E_capture, from the reference day's shares and size per class."""
-    shape = _load_shape(a.shape)
+    try:
+        shape = _load_shape(a.shape)
+    except SystemExit as exc:                           # an invalid --shape exits 2 with a reason, as documented
+        print(json.dumps({"void": str(exc)}), file=sys.stderr)
+        return 2
     db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
     counts, size, notes = {}, {}, []
     for k in ("0", "1", "2", "3+"):
