@@ -13,7 +13,8 @@ import { validateStopDistance } from '../../strategies/strategy-helpers.js';
 const ROOT = join(__dirname, '..', '..', '..');
 const src = (f: string) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
 const E = src('server/services/active-execution-engine.ts');
-const at = (s: string) => { const i = E.indexOf(s); expect(i, s).toBeGreaterThan(-1); return i; };
+// Step-4 item (Langston): an anchor must be UNIQUE, or the order assertions below could read the wrong copy.
+const at = (s: string) => { const i = E.indexOf(s); expect(i, s).toBeGreaterThan(-1); expect(E.lastIndexOf(s), `unique: ${s}`).toBe(i); return i; };
 
 describe('#1250 — argument provenance, per call site', () => {
   it('the plan-judging gates read the PLAN', () => {
@@ -55,7 +56,8 @@ describe('#1250 — the gate is the blast radius', () => {
     expect(rb - gate).toBeLessThan(400);
     // and it sits inside the taker branch: after the maker branch opens, after the taker fill is known
     expect(rb).toBeGreaterThan(at('actualEntryPrice = _openFill.fillPrice;'));
-    expect(rb).toBeGreaterThan(at('if (_b72cPendingMaker) {'));
+    // the MAKER branch head (two `if (_b72cPendingMaker) {` exist; this one sets the limit fill — unique with its first line)
+    expect(rb).toBeGreaterThan(at('if (_b72cPendingMaker) {\n      actualEntryPrice = _b72cLimit;'));
   });
   it('the carried levels start as the plan, so every other path writes the plan', () => {
     expect(E).toContain('let _carriedStop: number = signal.stopPrice;');

@@ -30,69 +30,71 @@ interface Case {
   stop: Leg;
   target: Leg;
   stamp: string;          // the stamp literal as it appears in the source (a substring)
+  /** Step-4 dup-pin item (Langston): for a strategy-engine case, the detector whose BODY must hold the stamp + levels. */
+  fn?: string;
 }
 
 const CASES: Case[] = [
-  { key: 'vwap_pullback', branch: 'B63 override', file: ENGINE, decision: 'currentPrice',
+  { key: 'vwap_pullback', fn: 'detectVWAPPullback', branch: 'B63 override', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice + atr * c['entry_atr_premium']",
     stop: { expr: 'entryPrice - atr * override.stopAtrMultiplier', form: 'distance' },
     target: { expr: 'entryPrice + riskDistance * override.targetAsRMultiple', form: 'r_multiple' },
     stamp: "_levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple } };" },
-  { key: 'vwap_pullback', branch: 'default', file: ENGINE, decision: 'currentPrice',
+  { key: 'vwap_pullback', fn: 'detectVWAPPullback', branch: 'default', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice + atr * c['entry_atr_premium']",
     stop: { expr: "Math.min(vwap - atr * c['stop_atr_mult_vwap'], low24h + atr * c['stop_atr_mult_low24h'])", form: 'anchor' },
     target: { op: 'max', terms: [
       { expr: "high24h - atr * c['target_atr_offset_high24h']", form: 'anchor' },
       { expr: "entryPrice + (riskDistance * c['target_r_multiple_default'])", form: 'r_multiple' }] },
     stamp: "{ spec: { form: 'r_multiple', r: c['target_r_multiple_default'] }, value: twoRTarget }" },
-  { key: 'abcd_long', branch: 'fixed target', file: ENGINE, decision: 'cHigh',
+  { key: 'abcd_long', fn: 'detectABCDLong', branch: 'fixed target', file: ENGINE, decision: 'cHigh',
     entry: "cHigh + abcdAtr * c['entry_atr_buffer']",
     stop: { expr: "parseFloat(cPoint.low) - abcdAtr * c['stop_atr_buffer']", form: 'anchor' },
     target: { expr: 'entryPrice * (1 + targetPercent)', form: 'proportional' },
     stamp: "_targetSpec = { form: 'proportional' };" },
-  { key: 'abcd_long', branch: 'trailing', file: ENGINE, decision: 'cHigh',
+  { key: 'abcd_long', fn: 'detectABCDLong', branch: 'trailing', file: ENGINE, decision: 'cHigh',
     entry: "cHigh + abcdAtr * c['entry_atr_buffer']",
     stop: { expr: "parseFloat(cPoint.low) - abcdAtr * c['stop_atr_buffer']", form: 'anchor' },
     target: { op: 'min', terms: [
       { expr: 'entryPrice + abDistance', form: 'distance' },
       { expr: "entryPrice + (riskDistance * c['trailing_target_r_multiple'])", form: 'r_multiple' }] },
     stamp: "{ spec: { form: 'r_multiple', r: c['trailing_target_r_multiple'] }, value: twoRTarget }" },
-  { key: 'sma_trend_ride', branch: 'trailing', file: ENGINE, decision: 'currentPrice',
+  { key: 'sma_trend_ride', fn: 'detectSMATrendRide', branch: 'trailing', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: "Math.min(priorSwingLow * c['swing_low_stop_mult'], sma * c['sma_stop_mult'])", form: 'anchor' },
     target: { expr: "entryPrice * (1 + trendStrength * c['trailing_strength_factor'])", form: 'proportional' },
     stamp: "_targetSpec = { form: 'proportional' };" },
-  { key: 'sma_trend_ride', branch: 'break', file: ENGINE, decision: 'currentPrice',
+  { key: 'sma_trend_ride', fn: 'detectSMATrendRide', branch: 'break', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: "Math.min(priorSwingLow * c['swing_low_stop_mult'], sma * c['sma_stop_mult'])", form: 'anchor' },
     target: { expr: "entryPrice + (riskDistance * c['break_target_r_multiple'])", form: 'r_multiple' },
     stamp: "_targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'] };" },
-  { key: 'breakout', branch: 'only', file: ENGINE, decision: 'breakoutLevel',
+  { key: 'breakout', fn: 'detectBreakout', branch: 'only', file: ENGINE, decision: 'breakoutLevel',
     entry: "breakoutLevel * c['entry_premium_mult']",
     stop: { expr: "rangeResult.rangeLow * c['stop_below_low_mult']", form: 'anchor' },
     target: { expr: 'entryPrice + rangeHeight', form: 'distance' },
     stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: range low; entry + range height" },
-  { key: 'mean_reversion', branch: 'only', file: ENGINE, decision: 'currentPrice',
+  { key: 'mean_reversion', fn: 'detectMeanReversion', branch: 'only', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: 'currentPrice * (1 - stopLossBuffer)', form: 'proportional' },
     target: { expr: "meanValue * c['target_below_mean_mult']", form: 'anchor' },
     stamp: "levelSpec: { stop: { form: 'proportional' }, target: { form: 'anchor' } } satisfies LevelSpec" },
-  { key: 'range_trade', branch: 'only', file: ENGINE, decision: 'currentPrice',
+  { key: 'range_trade', fn: 'detectRangeTrading', branch: 'only', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice + atr * c['entry_atr_premium']",
     stop: { expr: "rangeResult.rangeLow - atr * c['stop_atr_below_low']", form: 'anchor' },
     target: { expr: "rangeResult.rangeHigh - atr * c['target_atr_below_high']", form: 'anchor' },
     stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'anchor' } } satisfies LevelSpec, // #1250 P0: range low / range high" },
-  { key: 'vwap_bounce', branch: 'only', file: ENGINE, decision: 'currentPrice',
+  { key: 'vwap_bounce', fn: 'detectVWAPBounce', branch: 'only', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: "vwap * c['stop_below_vwap_mult']", form: 'anchor' },
     target: { expr: "entryPrice + (riskDistance * c['target_r_multiple'])", form: 'r_multiple' },
     stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'] } } satisfies LevelSpec" },
-  { key: 'liquidity_trap', branch: 'only (disabled; bearish geometry)', file: ENGINE, decision: 'currentBarPrice',
+  { key: 'liquidity_trap', fn: 'detectLiquidityTrap', branch: 'only (disabled; bearish geometry)', file: ENGINE, decision: 'currentBarPrice',
     entry: "currentBarPrice * c['entry_on_return_mult']",
     stop: { expr: "breakoutHigh * c['stop_above_trap_mult']", form: 'anchor' },
     target: { expr: "rangeResult.rangeLow * c['target_range_low_mult']", form: 'anchor' },
     stamp: "levelSpec: { stop: { form: 'anchor' }, target: { form: 'anchor' } } satisfies LevelSpec, // #1250 P0: trap high / range low" },
-  { key: 'dhma', branch: 'only', file: ENGINE, decision: 'currentPrice',
+  { key: 'dhma', fn: 'detectDHMA', branch: 'only', file: ENGINE, decision: 'currentPrice',
     entry: "currentPrice * c['entry_premium_mult']",
     stop: { expr: 'currentPrice - k_tp * realizedVol', form: 'distance' },
     target: { expr: 'currentPrice + k_tp * realizedVol', form: 'distance' },
@@ -234,7 +236,17 @@ function classify(form: Form, a: { entry: number; level: number; stop?: number }
 describe('#1250 FENCE 1 — each leg responds to the decision price exactly as its stamp claims', () => {
   for (const cs of CASES) {
     describe(`${cs.key} — ${cs.branch}`, () => {
-      const file = src(cs.file);
+      const whole = src(cs.file);
+      // ⛔ #1250 Step-4 dup-pin item (Langston): `_targetSpec = { form: 'proportional' };` occurs in TWO detectors, so a
+      // whole-file `toContain` let either copy satisfy either case. Each engine case is pinned inside ITS detector's body.
+      const file = (() => {
+        if (!cs.fn) return whole;
+        const start = whole.indexOf(`\n  ${cs.fn}(`);
+        expect(start, `${cs.fn} defined once`).toBeGreaterThan(-1);
+        expect(whole.indexOf(`\n  ${cs.fn}(`, start + 1)).toBe(-1);
+        const next = whole.indexOf('\n  detect', start + 1);
+        return whole.slice(start, next === -1 ? undefined : next);
+      })();
       it('the evaluated expressions are pinned to the source (what runs is what is tested)', () => {
         expect(file).toContain(cs.entry);
         for (const t of [...legExprs(cs.stop), ...legExprs(cs.target)]) {
