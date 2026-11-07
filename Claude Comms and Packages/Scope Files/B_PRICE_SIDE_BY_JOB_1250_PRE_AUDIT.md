@@ -206,3 +206,10 @@ The active xStock signal is born in the VTS lane unrounded (`eval-cycle.ts:744-7
 - `DISPOSITION: added to #1250 (row 17), owner CC-C, before the close — the duplicate stamp pin: `_targetSpec = { form: 'proportional' };` occurs twice in strategy-engine.ts (abcd_long fixed target, sma_trend_ride trailing), so either copy satisfies either case's toContain; pin a branch-distinguishing substring or assert the occurrence count, and give the wiring fence's at() a uniqueness assert. Verified by Langston at Step 10.`
 - **Deploy held on a shared range:** OLD Claude's `885f1a314` (B-DB-POOL-GUARD inc 3b P4) sits between the #1250 commits, its Step-4 fold `1d4be9cf7` is above `cc4d2a9fc`; one deploy of a sha carrying both, after inc 3b's PROCEED and CI at that sha.
 
+## 12. STEP 6 + STEP 7 (deploy-time leg) — 2026-11-07
+- **Deployed** by OLD Claude in one joint deploy with B-DB-POOL-GUARD inc 3b: `1d4be9cf7c27ab337dd68e660a56a89b737d27f0`, live 2026-11-07T19:06:27Z (both Step-4 PROCEED; CI `42403770541` 4/4 at that sha, his post).
+- **Migration PASS:** `calibration_epoch` `xstock_spot/paper_sim` 7 → 8 and `xstock_spot/vts` 10 → 11, both `updated_by b-price-side-1250`, `updated_at` 19:06:15Z; every other row unchanged against the 15:15Z read (crypto_spot/vts 8, crypto_spot/paper_sim 3, xstock_spot/live 3, the three `*` rows). `_migrations` row at 19:06:15Z.
+- **The process runs the new code:** `dist/index.js` — `rebaseLevels` 3 lines, `STOP_DISTANCE_AT_FILL` 1, negative control string 0.
+- **Boot:** only the known `#1053` TEC prime race; no `#1250` line (xStock closed for the weekend; crypto does not take the path).
+- **NOT YET VERIFIED — needs live xStock taker opens (first session Monday 2026-11-10 ~01:00Z onward):** the stamps on the row, both refusals, the VTS `levelRebase`, and the UI (Open Trades, Claude-in-Chrome). Carriers: first look `0c5f81ac-be2d-4d68-8e47-1a97d7079356` (2026-11-10T02:00Z), five-session read `ac78c006-76a1-48a9-bea4-b4a8bbea416d` (2026-11-15T02:00Z). Both post-fill refusals and the VTS arm stay unexercised until then (#661 leg 3) — no silence before then is evidence.
+
