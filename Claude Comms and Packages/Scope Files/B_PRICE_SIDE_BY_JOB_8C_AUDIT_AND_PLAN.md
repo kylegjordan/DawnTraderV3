@@ -408,6 +408,21 @@ Step 3 starts after the 2026-11-07 joint deploy, and carries in the same build w
 **FAIL of the method:** if (a) lands far from 34.7 % for a reason other than `strong_bull_trend`, or (b) is not exact, the FORMULA is wrong, not the data. §6 limit (5) carries: the result is a FLOOR (11 of the 12 records without a spread read are `strong_bull_trend`).
 
 
+### §10-RESULT (CC-C, 2026-11-07T22:16Z) — the per-form re-score, against the predictions written above
+**Instrument:** `scripts/analysis/b_price_side_8c_rescore.sql` + `.py` (committed with this result; re-run on staging as written in the script header).
+**Population — PREVIOUSLY STATED: 70 records / 62 non-pattern / 50 with a spread read / 49 passing on the mid (§6(a), read 2026-11-06). NOW: 71 / 63 / 51 / 50 on the same window (opened before 2026-11-06T10Z, the latest record before §6's read; the next opened 2026-11-07T11Z). REASON: one more `strong_bull_trend` record appears in the window on re-read; the query is unchanged, so the table is not frozen (rows are written at open; this one was not visible at §6's read).** The full table to now is 73 / 65 / 53 / 52.
+| strategy | form | mid-pass | newly refused, **per-form** | newly refused, every-leg (§6) |
+|---|---|---|---|---|
+| `strong_bull_trend` | distance / distance | 40 | **18** | 18 |
+| `morning_star` | anchor / distance | 5 | 0 | 0 |
+| `reverse_impulse` | anchor / distance | 2 | 0 | 0 |
+| `sma_trend_ride` | anchor / proportional or r_multiple | 2 | **0** | 1 |
+| `vwap_pullback` | anchor / max(anchor, r_multiple) | 1 | 0 | 0 |
+| **all** | | **50** | **18 (36.0 %)** | 19 (38.0 %) |
+**(a) — PASS on the method.** The headline barely moves and for the predicted reason: `strong_bull_trend` stands (it is distance/distance, where per-form and every-leg are the same formula), and the per-form credit lands on `sma_trend_ride`'s 1 of 2, exactly as predicted. The number differs from the predicted 17/49 = 34.7 % by the one extra `strong_bull_trend` record above (refused under both rules), not by any other cause. To now (52 mid-pass): 19 per-form, 20 every-leg.
+**(b) — NOT EXERCISED BY THIS POPULATION; holds by construction.** No record matches an `r_multiple` branch's R exactly: the two `sma_trend_ride` records read 2.4978 and 2.4861 against `break_target_r_multiple` 2.5, because `intended_entry_price` is the promotion price, not the birth price (§6 limit 1) — so they could be either branch, and BOTH branches pass on them. The one `vwap_pullback` record (3.3883) is the default branch with the anchor term winning. The invariance itself is the arithmetic of `rebaseLevels` at `entryBasis` = the ask, fenced exactly in `b8c-birth-levels.test.ts` (§10 (b)).
+**What it means for Kyle's §6(b) report:** about four in ten of last month's crypto trades (18 of 50) had less reward per unit of real-price risk than their floor requires; nearly all of them are `strong_bull_trend`, whose reward-to-risk sits 2.56 % above its floor by construction. Still a per-signal refusal rate on trades already taken, not a count of fewer trades (§6(b)).
+
 ## 11. STEP-2 AMENDMENT 5 (CC-C, 2026-11-07, found in Step 3) — P4 IS SEVEN SITES, NOT ONE; AND THE HYBRID RE-ENTRY. ONE QUESTION.
 **Why.** P4 says the spread is counted once "across level construction and the cost model". The census at `c3ec81851` (repo-wide, tests excluded: every caller of `computeTotalRoundTripCost`, `computeNetGeometry`, `decideMakerTaker`, `evaluateTradeExpectancy`, `computeFillEconomics`) finds **seven sites that judge a crypto active signal's own levels and charge the spread on them**, not the one (`decideMakerTaker`) the plan named:
 
