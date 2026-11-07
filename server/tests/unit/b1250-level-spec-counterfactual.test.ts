@@ -152,6 +152,25 @@ const CASES: Case[] = [
     stamp: "target: { op: 'min', terms: [{ spec: { form: 'anchor' }, value: measuredMoveTarget }, { spec: { form: 'distance' }, value: atrTarget }] }, targetIsCap: true }" },
 ];
 
+/**
+ * Row `8c` (switch-on): the crypto birth re-base reads the SAME stamps, and two crypto constructors are outside the xStock
+ * membership above — so they are fenced here, in fence 1, and KEPT OUT of fence 2 (whose xStock count stays 18).
+ * `defensive_hedge` (crypto-only: `canonical-regime-strategy-map.ts` excludes it from xStock) and the pattern pool's
+ * `patternToTradeSignal` (the crypto pattern pass is its only caller).
+ */
+const CRYPTO_ONLY_CASES: Case[] = [
+  { key: 'defensive_hedge', branch: 'only', file: 'server/strategies/defensive-hedge.ts', decision: 'currentPrice',
+    entry: 'currentPrice * 1.001',
+    stop: { expr: 'engulfingLow * (1 - DH_STOP_BUFFER)', form: 'anchor' },
+    target: { expr: 'entryPrice + DH_TARGET_ATR_MULT * effectiveATR', form: 'distance' },
+    stamp: "{ stop: { form: 'anchor' }, target: { form: 'distance' } } satisfies LevelSpec, // 8c amd-4 item 4: engulfing low·(1 − buf)" },
+  { key: 'pattern_pool', branch: 'patternToTradeSignal', file: 'server/services/pattern-recognizer.ts', decision: 'currentPrice',
+    entry: 'currentPrice',
+    stop: { expr: 'currentPrice - stopDistance', form: 'distance' },
+    target: { expr: 'currentPrice + targetDistance', form: 'distance' },
+    stamp: "levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } satisfies LevelSpec," },
+];
+
 // ── a tiny evaluator over the pinned expressions ───────────────────────────────────────────────────────────────────────
 function seeded(seed: number) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 function makeEnv(rnd: () => number, decision: string, decisionValue: number, fixed: Record<string, number>) {
@@ -234,7 +253,7 @@ function classify(form: Form, a: { entry: number; level: number; stop?: number }
 }
 
 describe('#1250 FENCE 1 — each leg responds to the decision price exactly as its stamp claims', () => {
-  for (const cs of CASES) {
+  for (const cs of [...CASES, ...CRYPTO_ONLY_CASES]) {
     describe(`${cs.key} — ${cs.branch}`, () => {
       const whole = src(cs.file);
       // ⛔ #1250 Step-4 dup-pin item (Langston): `_targetSpec = { form: 'proportional' };` occurs in TWO detectors, so a
@@ -284,5 +303,19 @@ describe('#1250 FENCE 2 — every member of the xStock membership is covered, ke
     const resolvedMembers = new Set([...members].map((m) => resolveCanonicalStrategy(m)));
     expect([...resolvedMembers].sort()).toEqual([...covered].sort());
     expect(resolvedMembers.size).toBe(18);
+  });
+});
+
+describe('8c FENCE 3 — every member of the CRYPTO membership is covered (the birth re-base refuses an unstamped one)', () => {
+  it('crypto membership ⊆ the xStock cases ∪ the crypto-only cases', () => {
+    const members = new Set<string>();
+    for (const r of CANONICAL_REGIMES) for (const s of getStrategiesForRegime('crypto_spot' as never, r as never) as unknown as Array<string | { strategyKey: string }>) {
+      members.add(typeof s === 'string' ? s : s.strategyKey);
+    }
+    expect(members.size).toBeGreaterThan(0); // instrument control
+    const covered = new Set([...CASES, ...CRYPTO_ONLY_CASES].map((c) => c.key === 'pattern_pool' ? c.key : resolveCanonicalStrategy(c.key)));
+    const uncovered = [...members].map((m) => resolveCanonicalStrategy(m)).filter((m) => !covered.has(m));
+    expect(uncovered).toEqual([]);
+    expect(covered.has(resolveCanonicalStrategy('defensive_hedge'))).toBe(true);
   });
 });
