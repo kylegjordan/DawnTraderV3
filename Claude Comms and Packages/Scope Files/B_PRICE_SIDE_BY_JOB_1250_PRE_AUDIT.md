@@ -109,3 +109,43 @@ xStock plans are built off a 15-minute price bar, so by the time we actually buy
 - **BLOCKER-3** (P2 loosens a live refusal unnamed): named and sized above; accepted with its direction stated.
 - **A5 ruled in**, conditions met: P5 inherits the per-leg rule; the VTS row carries the plan fields, so §3's VTS leg is runnable.
 - **His confirmations recorded:** A3 exact to the row (and 7/7 still-open rows below plan); A1's chain; A2's census complete by construction (`private`).
+
+## 7. r3 — STEP 2 r2 RULED 2026-11-07 (Langston, Discord `1568662748320235525`, re-derived at `b3aa3989`) — SENT BACK: BLOCKER-1/2 discharged, BLOCKER-3 re-opened, BLOCKER-4/5 new; A11 ruled FOLD-IN, no Kyle slot. ⛔ THIS SECTION SUPERSEDES A7's two-valued rule, P0, P1 and the BLOCKER-3 sizing above.
+
+### 7.1 BLOCKER-4 + BLOCKER-5 — FOUR CONSTRUCTION FORMS, STAMPED AT THE BRANCH THAT BUILT THE LEVEL
+Read at the ref (`strategy-engine.ts:245-258`, `:515-532`, `:745-749`, `:955-960`, plus Langston's per-leg list). **A level is built one of four ways, and a single strategy can use different forms on different branches:**
+| form | how the strategy built it | re-derived at the fill | examples at the ref |
+|---|---|---|---|
+| **anchor** | a market price (VWAP, swing low, 24 h high/low, range low, mean) | **unchanged** | `vwap_pullback` default stop `:253`; `sma_trend_ride` stop `:517`; `vwap_bounce` stop `:958`; `morning_star` stop `morning-star.ts:173`; `mean_reversion` target `:749` |
+| **distance** | entry ± k·ATR | `level' = level + (fill − plan)` | `strong_bull_trend` both legs; `vwap_pullback` B63 override stop `:247`; `morning_star` target `:175`; `pivot_shift` target `:182` |
+| **r_multiple** (targets) | entry + R·(entry − stop) | `target' = fill + R·(fill − stop')`, `R = (planTarget − plan)/(plan − planStop)` | `vwap_bounce` `:960`; `sma_trend_ride` break branch `:531`; `vwap_pullback` override `:249` and the `twoRTarget` arm of `:257` |
+| **proportional** | a fraction of the price | `level' = level · fill/plan` | `sma_trend_ride` trailing-branch target `:525`; `mean_reversion` stop `:748` (`currentPrice·(1 − buffer)`, entry = `currentPrice·premium`) |
+**Mixed constructions (`max`/`min` of two forms — `vwap_pullback :253` stop, `:258` `max(anchorTarget, twoRTarget)`, `pivot_shift :180`) stamp the form of the term that WON at construction**, at the line that chose it. ⇒ **`vwap_pullback` (106 of 239 rows) is stamped per branch** — the B63 override (`:246`) and the default (`:251`) produce different forms; A7's "198 of 246 anchor stops" was a by-strategy inference and is **withdrawn**; the per-row form mix is **unmeasurable historically** (no row carries it) and is first measured by the stamps at Step 7. A3's population is **239**.
+**Stamp:** `levelSpec: { stop: {form}, target: {form, r?} }` beside the levels, at the branch. **Absent ⇒ every leg `anchor` ⇒ no change** (fail-safe = today).
+**Fences (Langston: the presence fence passes a wrong stamp):**
+1. **Counterfactual invariance, per strategy and per branch:** run the strategy on a fixture, then on the same fixture with only the decision price perturbed, and assert each leg moved as its stamp claims — anchor invariant, distance 1:1, r_multiple with the risk, proportional scaled. A wrong stamp fails.
+2. **Membership through the normaliser:** every key in the xStock regime membership, normalised (`canonical-regime-strategy-map.ts:252`, alias `:613` — `range_trading` → `range_trade`, the `#1063` drift), has a counterfactual fixture. **Sized: 8 strategies traded (their branches classified above); 11 more in the membership (`orb`, `reverse_impulse`, `support_bounce`, `volatility_edge`, `adaptive_flow`, `abcd_long`, `dhma`, `breakout`, `inside_bar_reversal`, `liquidity_trap`, `defensive_hedge`) = 22 leg judgements plus their branches, made in Step 3 by reading each construction and proved by fence 1.**
+3. **Self-consistency at birth (runtime, cheap):** applying the stamp at the plan entry must reproduce the plan level exactly; a mismatch drops the stamp (⇒ anchor, no change) and counts `LEVEL_SPEC_INCONSISTENT`. It cannot catch a wrong form that happens to reproduce — fence 1 does that.
+
+### 7.2 BLOCKER-3 — RE-SIZED, BOTH DIRECTIONS, AND MEASURED RATHER THAN ARGUED
+r2 sized it on `strong_bull_trend` alone; distance and r_multiple TARGETS are wider. On a **below-plan** fill a distance target returns from `planTarget − fill` (larger) to `planTarget − plan`, and an r_multiple target over an anchored stop shrinks with the smaller risk — **both shrink `distTarget`, so net EV at fill FALLS and admission TIGHTENS**; on an **above-plan** fill the reverse — it LOOSENS. Exposure in A3 (by strategy; the per-row form is not knowable historically): below-plan rows on strategies with a non-anchor target — `strong_bull_trend` 9, `morning_star` 23, `pivot_shift` 22, `vwap_bounce` 3, `sma_trend_ride` 34, `vwap_pullback` up to 67 (form-dependent); above-plan 11 (8 `vwap_pullback`, 2 `vwap_bounce`, 1 `strong_bull_trend`). ⇒ **Up to ~158 rows exposed to a tightening, up to 11 to a loosening; the dominant direction is TIGHTER.**
+**P2b (new): the admitted and refused rows record BOTH `netEvAtFill` (carried geometry, deciding) and `netEvAtFillPlanGeometry` (today's inputs, recorded only).** Step 7 counts the flips in each direction instead of estimating them.
+**Disposition: accept the carried geometry as the deciding one** — the test exists to judge the trade the position will be (its header), and the dominant effect is the fail-safe direction; recorded in the System Manual at Step 10.
+
+### 7.3 A11 / P3 — FOLD-IN, his three conditions
+- **(a) An admission change, stated:** 25 of 239 (10.5 %) would have been refused, all 25 closed on a stop; +$4.71 over the window had they been refused.
+- **(b) Ordering — the WINDOW wins, and a fixture pins it:** the two are NOT exclusive by construction. The floor fails mostly on a BELOW-plan fill over an anchor stop (the window never refuses those); but an ABOVE-plan fill over a DISTANCE stop keeps the distance and lowers its fraction (`d/fill < d/plan`), so a plan sitting near 0.3 % can fail the floor at a fill the window also refuses. **P3 sits after the `ENTRY_WINDOW` return (`:6497`), so a doubly-refusable row reports `ENTRY_WINDOW`** — the cause (the fill drifted past the plan's window) rather than its consequence (the stop fraction it produced). §3(a2) counts `STOP_DISTANCE_AT_FILL` on rows the window admitted; a fixture drives one doubly-refusable input and asserts `ENTRY_WINDOW`.
+- **(c) Live mode:** P3 refuses after `actualEntryPrice` exists — clean in paper (an internal fill), but in live a taker fill is already executed. Its two siblings (`ENTRY_GEOMETRY`, `ENTRY_WINDOW`) have the same shape; this is the third. `DISPOSITION: added to the live-readiness list (`PRE_LIVE_SPRINT.md`) as an item — "post-fill refusals in live mode (three: ENTRY_GEOMETRY, ENTRY_WINDOW, STOP_DISTANCE_AT_FILL) must become pre-placement checks or an immediate flatten" — owner to place.`
+
+### 7.4 A4's park, dispositioned
+The crypto rows carrying `crypto_ws_book_walk` on a maker-policy signal are a provenance label on a durable column that may name the wrong arm. `DISPOSITION: added to 8c as an item, owner CC-C` — no new slot.
+
+### 7.5 §3 r3 — named expected counts per arm
+Population: xStock paper taker opens (realised `entryArm`), five US sessions. **Expected:** `STOP_DISTANCE_AT_FILL` on ≈ 10 % of taker opens (25/239); `levelSpec` present on 100 % of opens from a stamped strategy, `LEVEL_SPEC_INCONSISTENT` = 0; flips (7.2) reported both directions with counts. **A zero `STOP_DISTANCE_AT_FILL` over ≥ 50 taker opens is a FAIL to investigate (the gate never armed), not a clean read.** VTS xStock taker arm: the same, from its own rows.
+
+### 7.6 Plan deltas (supersede P0, P1, and extend P2-P3, P8)
+- **P0 (r3):** `levelSpec` stamped per leg at the constructing branch, every strategy in the normalised xStock membership (19); fences 1-3 above.
+- **P1 (r3):** `rebaseLevels` implements the four forms; the r_multiple target is re-derived from the CARRIED stop.
+- **P2b:** both EVs recorded (7.2).
+- **P3 (r3):** placed after the `ENTRY_WINDOW` return; the window wins a doubly-refusable row, pinned by a fixture.
+
