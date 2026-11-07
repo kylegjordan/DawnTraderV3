@@ -63,6 +63,18 @@ describe('P2 — EntryWindow judges only a taker, and counts every way it declin
     for (const k of ['refresh:crypto_spot:skip_mode_absent', 'refresh:crypto_spot:skip_no_price', 'refresh:crypto_spot:skip_price_refused', 'birth:crypto_spot:shadow_would_refuse'])
       expect(t[k]).toBeGreaterThanOrEqual(1);
   });
+  it('a stop that is absent, non-finite or not below the plan entry is NOT a pass: skip_invalid_geometry, counted (Langston C-1)', () => {
+    for (const planStop of [undefined, Number.NaN, Number.POSITIVE_INFINITY, 100, 101] as any[]) {
+      const r = run({ chosenEntryMode: 'taker', priced: px(100.5), planStop });
+      expect(r.o).toBe('skip_invalid_geometry');
+      expect(r.o).not.toBe('judged_pass');
+      expect(r.f.some((x) => x.startsWith('EntryWindow'))).toBe(false);
+    }
+    // birth (the pre-registered shadow denominator): the same plan is a named skip there too, never a pass
+    expect(run({ chosenEntryMode: 'taker', priced: px(100.5), planStop: undefined } as any, { phase: 'birth', entryWindowShadow: true }).o).toBe('skip_invalid_geometry');
+    expect(getEntryWindowTally()['refresh:crypto_spot:skip_invalid_geometry']).toBeGreaterThanOrEqual(5);
+    expect(getEntryWindowTally()['birth:crypto_spot:skip_invalid_geometry']).toBeGreaterThanOrEqual(1);
+  });
   it('the exploration lane cannot admit on either plan gate (neither wears the `NetEV ` prefix)', () => {
     expect(run({ chosenEntryMode: 'taker', priced: px(110), planTarget: null }).f.every((x) => !x.startsWith('NetEV '))).toBe(true);
   });

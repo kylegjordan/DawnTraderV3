@@ -262,7 +262,10 @@ export async function getSQEThresholdsFromConfig(mode: 'paper' | 'live', assetCl
 // way it can decline to judge (r12 C-2: never a silent pass), so the Step-7 would-refuse share has its full denominator.
 export type EntryWindowOutcome =
   | 'judged_pass' | 'judged_refuse' | 'shadow_would_refuse'
-  | 'skip_no_price' | 'skip_price_refused' | 'skip_mode_absent' | 'skip_maker' | 'settings_unresolved';
+  | 'skip_no_price' | 'skip_price_refused' | 'skip_mode_absent' | 'skip_maker' | 'settings_unresolved'
+  // The plan's stop is absent, non-finite, or not below plan entry, so the window (a fraction of planEntry − planStop)
+  // cannot be measured. COUNTED, never folded into judged_pass (Langston inc-B Step-4 C-1).
+  | 'skip_invalid_geometry';
 const _entryWindowTally = new Map<string, number>();
 /** `${phase}:${class}:${outcome}` → count since process start. Read-only copy. */
 export function getEntryWindowTally(): Record<string, number> {
@@ -293,6 +296,7 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
   else if (!input.priced.ok) outcome = 'skip_price_refused';
   else if (input.chosenEntryMode === undefined) outcome = 'skip_mode_absent';
   else if (input.chosenEntryMode !== 'taker') outcome = 'skip_maker';
+  else if (!(typeof input.planStop === 'number' && Number.isFinite(input.planStop) && entry - input.planStop > 0)) outcome = 'skip_invalid_geometry';
   else {
     let w: number | null = null;
     try {
@@ -304,7 +308,7 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
       outcome = 'settings_unresolved';
       if (!options.entryWindowShadow) failures.push('EntryWindow: settings_unresolved — refused, never assumed');
     } else {
-      const r = entryWindowRefusalAt(input.priced.price, entry, input.planStop ?? Number.NaN, w);
+      const r = entryWindowRefusalAt(input.priced.price, entry, input.planStop as number, w);
       if (r === null) outcome = 'judged_pass';
       else if (options.entryWindowShadow) {
         outcome = 'shadow_would_refuse';
@@ -316,8 +320,9 @@ export function applyPlanGates(input: SQEInput, options: SQEOptions, failures: s
     }
   }
   _tallyEntryWindow(phase, cls, outcome);
-  if (outcome === 'skip_mode_absent' || outcome === 'skip_price_refused') {
-    const why = outcome === 'skip_price_refused' && input.priced && !input.priced.ok ? input.priced.reason : 'chosen entry mode absent';
+  if (outcome === 'skip_mode_absent' || outcome === 'skip_price_refused' || outcome === 'skip_invalid_geometry') {
+    const why = outcome === 'skip_price_refused' && input.priced && !input.priced.ok ? input.priced.reason
+      : outcome === 'skip_invalid_geometry' ? `plan stop ${String(input.planStop)} not below plan entry ${entry}` : 'chosen entry mode absent';
     console.log(`[B-ENTRY-GATE][P2][ENTRY_WINDOW_SKIP:${phase}] ${input.symbol}/${input.strategy} class=${cls} outcome=${outcome} reason=${why} — not judged (counted)`);
   }
   return outcome;
