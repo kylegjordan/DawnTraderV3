@@ -215,3 +215,13 @@ Deployed `942c65424` 17:51:31Z (CI `42397602218` 4/4; rollback `d01da3d86`). `[D
 3. the row resolving on the first clean pass after that.
 
 The same deploy's `match` must resolve `ac7dac78`/`513eb051` — both already promoted — while excluding nothing.
+
+**Step 7 after the fold — deployed `4f9fe259f` 20:09:22Z (restart 686; Langston PROCEED, CI `42408201480` 4/4).**
+- **(c) clearing leg:** the boot `match` resolved `ac7dac78` (20:10:18.107) and `513eb051` (20:10:18.197), `db-pool-monitor`. Both rows had been promoted at 19:29:46, so the exclude set was `{blind}` and nothing was held back — **C2's exclusion arm is fence-proved only (#661 leg 3); this clean clear is NOT evidence that it works.**
+- **The fold's forced test — PASSED.** A `dawntrader_main` connection held idle 57 s (20:09:39 → ROLLBACK 20:10:36).
+  - Row `c1b22bf7` minted 20:10:33.022, `max_s` 53.9, `fires` 1.
+  - At 20:11:23 the condition was clear and the log said, ONCE: *resolve deferred until the dispatcher promotes the row*.
+  - At the next dispatcher tick the row took `fired_at` 20:14:50.378, and the alerts webhook posted it at 20:15:10.780 (`langston_alert_inbound` in the channel log; the two pre-fold idle rows, `ffb9952e` and `79857f58`, never appear there).
+  - It resolved on the first clean pass after promotion: 20:15:08.187, `db-pool-monitor`.
+  - The merge arm (a re-fire into a pending row) is fence-proved only in this run: no second leak occurred while the row was pending.
+- **Mutations M3-M6 were RUN, not predicted** (each with the mutation confirmed present by grep, then restored).
