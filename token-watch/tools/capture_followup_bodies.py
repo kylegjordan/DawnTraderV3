@@ -43,8 +43,13 @@ writer `provenance.record_follow_up`, in the scratch tree's `provenance/follow-u
 
 Every record is one JSON line in `--log`: `start`, one `checkpoint` per 1,000 mints, then `end` or `abort`.
 --resume skips mints that already have a body in the scratch tree (a restart after a kill re-calls only the rest).
+⛔ THE MEMORY CAP IS VERIFIED, NOT TYPED (Langston, Step 4 r2, BLOCKER-3): before anything else it reads its own
+   cgroup's memory.max and refuses (exit 7) unless it is exactly 268,435,456 (MemoryMax=256M). A mistyped or dropped
+   `-p MemoryMax` would run the 25-hour capture uncapped on the box the trading app shares, and the OOM signature
+   (Result=oom-kill) would then be impossible. The `end` record carries memory.events (max, oom, oom_kill) and
+   memory.peak.
 Exit codes: 0 done · 2 refused before any call · 3 a bucket missing or empty · 4 no body at the first checkpoint
-· 5 disk floor · 6 a later interval added no body (a stall).
+· 5 disk floor · 6 a later interval added no body (a stall) · 7 the memory cap is not 256M.
 """
 
 from __future__ import annotations
@@ -60,6 +65,7 @@ from datetime import datetime, timedelta, timezone
 PRODUCTION_ROOT = "/var/lib/token-watch"
 CHECKPOINT = 1000
 FLOOR_BYTES = 10 * 2**30
+EXPECT_MEMORY_MAX = 256 * 1024 * 1024
 UTC = timezone.utc
 
 
@@ -88,6 +94,33 @@ def _refuse_production() -> str:
         print("REFUSED: %s has no due/ — not a scratch copy of the store" % root, file=sys.stderr)
         sys.exit(2)
     return root
+
+
+def _read(path: str):
+    try:
+        with open(path) as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def _cgroup_dir(override):
+    if override:
+        return override
+    try:
+        with open("/proc/self/cgroup") as fh:
+            return os.path.join("/sys/fs/cgroup", fh.read().strip().split("::", 1)[1].lstrip("/"))
+    except Exception:                                # noqa: BLE001 — no cgroup v2: the check then refuses
+        return None
+
+
+def _cgroup(cg) -> dict:
+    if not cg:
+        return {"dir": None}
+    ev = _read(os.path.join(cg, "memory.events")) or ""
+    return {"dir": cg, "memory_max": _read(os.path.join(cg, "memory.max")),
+            "memory_peak_incl_page_cache": _read(os.path.join(cg, "memory.peak")),
+            "memory_events": {k: int(v) for k, v in (l.split() for l in ev.splitlines()) if k in ("max", "oom", "oom_kill")}}
 
 
 def _hours(first: str, last: str) -> list[datetime]:
@@ -152,9 +185,16 @@ def main(argv=None) -> int:
     ap.add_argument("--log", required=True)
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--allow-missing", action="append", default=[], help="a bucket hour (YYYY-MM-DDTHH) known absent")
+    ap.add_argument("--cgroup-dir", help="TEST ONLY: read memory.* from here instead of this process's cgroup")
+    ap.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     a = ap.parse_args(argv)
 
     root = _refuse_production()
+    cg = _cgroup_dir(a.cgroup_dir)
+    if not a.skip_memory_check and _read(os.path.join(cg, "memory.max") if cg else "") != str(EXPECT_MEMORY_MAX):
+        print("REFUSED: memory.max is %r, not %d (MemoryMax=256M)" % (
+            _read(os.path.join(cg, "memory.max")) if cg else None, EXPECT_MEMORY_MAX), file=sys.stderr)
+        return 7
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     import budget                                    # noqa: E402  (after the production refusal, on purpose)
     import providers                                 # noqa: E402
@@ -252,6 +292,7 @@ def main(argv=None) -> int:
     tail.poll()
     log({"kind": "end", "attempted": attempted, "bodies_this_run": len(tail.sizes) - base,
          "free_below_floor_at_end": last_free_low, "no_body_in_final_interval": final_zero_tail,
+         "cgroup": _cgroup(cg),
          "distinct_mints_with_body": len(tail.mints & set(mints)), "of_distinct_mints": len(mints),
          "shed": shed, "errors": errors, "error_types": error_types, "body_bytes": _stats(tail.sizes[base:])})
     return 0

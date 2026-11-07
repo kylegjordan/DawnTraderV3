@@ -23,8 +23,11 @@
 #    copy sees whole records; it is not gated.
 # ⛔ THE LOCK IS NOT COPIED (B-2): state/periodic.lock and any state/*.tmp are removed from the copy, or the replay's
 #    own run_hour would skip (a lock under 30 min old) or log a steal (over it).
-# ★ deploy gets READ-ONLY access to the tree (setfacl r-X, default too), as the store itself grants it, so the
-#    reviewer reads the capture log at first hand (R-1). deploy cannot write, so it cannot touch the capture.
+# ★ deploy gets READ access to THE CAPTURE LOG ONLY (R-1, narrowed at Step 4 r2): traverse (--x) on the tree's root
+#    and r-- on a pre-created capture-log.jsonl (0640). NOT the data: `config.harden` chmods every follow-up body and
+#    its folder (0600/0700) on each write, which collapses any ACL mask there within seconds; and a readable mask
+#    over the copied births/dead/state/study would grant deploy the census production deliberately denies it
+#    (summary.py:8-15). The capture opens its log with a plain append and never hardens it.
 # The tree is tokenwatch:tokenwatch 0700, OUTSIDE /var/lib/token-watch, so the store-size watch never counts it.
 # Every copy runs under nice -n 19 / ionice -c3 (the trading app shares this disk). Exit 0 prints the copy's bytes.
 set -euo pipefail
@@ -35,6 +38,7 @@ FLOOR=$((10 * 1024 * 1024 * 1024))
 [[ $EUID -eq 0 ]] || { echo "REFUSED: run as root (it creates $DST owned by tokenwatch)" >&2; exit 2; }
 [[ "$(systemctl is-enabled token-watch-followup.timer || true)" == disabled ]] || { echo "REFUSED: the follow-up timer is not disabled" >&2; exit 2; }
 [[ "$(systemctl is-active token-watch-followup.timer || true)" == inactive ]] || { echo "REFUSED: the follow-up timer is active" >&2; exit 2; }
+[[ "$(systemctl is-active token-watch-followup.service || true)" == inactive ]] || { echo "REFUSED: a follow-up run is active (started by hand?)" >&2; exit 2; }
 [[ ! -e "$DST" ]] || { echo "REFUSED: $DST already exists; remove it deliberately first" >&2; exit 2; }
 
 BUCKETS=()
@@ -60,5 +64,7 @@ runuser -u tokenwatch -- env TOKEN_WATCH_ROOT="$SRC" PYTHONDONTWRITEBYTECODE=1 \
   python3 "$HERE/tools/locked_copy.py" "$DST" "${DIRS[@]}" "${FILES[@]}"
 rm -f "$DST/state/periodic.lock"
 find "$DST/state" -maxdepth 1 -name '*.tmp' -print -delete
-setfacl -R -m u:deploy:r-X -m d:u:deploy:r-X "$DST"
+setfacl -m u:deploy:--x "$DST"
+install -o tokenwatch -g tokenwatch -m 0640 /dev/null "$DST/capture-log.jsonl"
+setfacl -m u:deploy:r-- "$DST/capture-log.jsonl"
 echo "done: $(du -sb "$DST" | cut -f1) B in $DST; free now $(df -B1 --output=avail / | tail -1 | tr -d ' ') B"
