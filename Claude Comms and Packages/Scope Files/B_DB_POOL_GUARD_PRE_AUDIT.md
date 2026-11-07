@@ -225,3 +225,60 @@ The same deploy's `match` must resolve `ac7dac78`/`513eb051` — both already pr
   - It resolved on the first clean pass after promotion: 20:15:08.187, `db-pool-monitor`.
   - The merge arm (a re-fire into a pending row) is fence-proved only in this run: no second leak occurred while the row was pending.
 - **Mutations M3-M6 were RUN, not predicted** (each with the mutation confirmed present by grep, then restored).
+
+### AMENDMENT inc 3c r1 (2026-11-07, CC-A) — P5 build plan: the diagnostic pool (OBJ-6). Design only; one Langston gate before code
+**Measured input — the per-SQL-family slow-hold census.**
+- **Population:** every `POOL_MINUTE_V2` line for `pool=dawntrader_main` in `error__2026-11-06`, `error__2026-11-07` and `error.log` on staging. That is 3,603 minute lines, 2026-11-05 08:09 → 11-07 20:18, split at the P3 deploy (17:51:31).
+- **Instrument:** `slow_hold_sql` carries each family's LONGEST hold in that minute, so these are minute-maxima, not per-statement counts.
+- **Control:** the same script returned 0 lines on `out*.log`. Those files hold no minute lines, which a grep confirmed (0 / 0 / 0 against 1,212 in `error.log`). The census reads the right file.
+
+| family (pre-P3, 3,459 minutes) | minutes with a slow hold | p50 ms | max ms | > 10 s | caller | disposition in P5 |
+|---|---|---|---|---|---|---|
+| `with:xstock_spot_ohlc_15m_snapshot` | 1,634 | 4,450 | 30,002 | 248 | scanner / `xstock-ohlc-cache` / warmup | **stays** — a trading read, not diagnostic; its slowness is ANALYST's R6 (`B-XSTOCK-BAR-AVAILABILITY`, scope §5) |
+| `select:signal_eval_archive` | 497 | 5,990 | 29,999 | 45 | **`stage-attrition-cache.ts:80`** — see below | **a decision for this gate** (below) |
+| `select:xstock_spot_ticker_snap` | 411 | 1,708 | 30,001 | 23 | about 15 trading readers (dispatch, depth, VTS, sigma, scanner, qd-probe) — the label cannot separate them | qd-probe below; the rest stay |
+| `with:xstock_spot_ohlc_1m` | 461 | 1,634 | 20,367 | 7 | xStock trading reads | stays |
+| `insert:xstock_qd_probe_history` | 179 | 4,526 | 29,999 | 5 | the probe's own capture write | stays (a capture write) |
+| `select:scheduled_tasks_audit` | 128 | 3,656 | 30,000 | 9 | `cron-fire-evidence-verifier.ts:94` (a watchdog that raises alerts) | **stays** — an alerting path needs the main pool's reliability; its slowness is a query-shape lead, put to you here rather than placed |
+
+Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot family has not appeared at all. **That is the market, not P3, until a weekday says otherwise.**
+
+**FINDING (the census attributed it; §9.4) — the stage-attrition refresher has no reader.**
+- **What it does:** `startStageAttritionRefresher` (`server/index.ts:1558`) runs a 6-hour GROUP BY over `signal_eval_archive` every 5 minutes.
+- **Measured:** 479 of the 501 gaps between slow `select:signal_eval_archive` minutes are exactly 5 minutes, at 12 per hour, so the slow family IS this job (p50 about 6 s of one main slot per run, up to the 30 s cap).
+- **Its only consumer is gone:** `StageAttritionTable` was deleted from `vts-filter-diagnostics-panel.tsx` by `22f54c4a6` (`B-FILTER-DIAG-STANDARDIZE`, 2026-08-07; its scope item 5 said the table "survives ONLY if it maps onto a VTS-spec table … or goes").
+- **Proof there is no other reader:** `git grep -i attrition -- client/` returns nothing; the control `drift` returns hits in the same tree. The route `/active-engine/diagnostics/stage-attrition` stays, and nothing in the repo calls it.
+- **`#648` is stale:** it still says the instrument "SHIPPED" on the Filter-Diagnostics tabs.
+- **Owner:** the cache is CC-B's (`B-FILTER-DIAG-PAPER`). I tell CC-B once.
+
+**THE PLAN**
+- **P5-1 — `server/db.ts` gains `diagPool` / `diagDb`.**
+  - Settings: `application_name: 'dawntrader_diag'`, `max: 3`, `statement_timeout: 25_000` below `query_timeout: 30_000` (the same invariant and census fence as the main pool), `idle_in_transaction_session_timeout: 60_000`, `connectionTimeoutMillis: 5_000` (a panel fails fast instead of queueing), `idleTimeoutMillis: 30_000`, keepAlive.
+  - `attachPoolInstrument` + `attachPoolGuards` under `dawntrader_diag`, so its own minute line separates it and an ended idle client cannot crash the process.
+  - **NOT paged:** OBJ-5's pages watch `dawntrader_main`, and the diagnostic pool's failures land in the panels, by design. Stated, not silent.
+  - The `[DB_POOL_INIT]` line prints both pools.
+- **P5-2 — both Drift Dashboard functions read through `diagDb`:** `computeDataArchiveStatus` (`:813`) and `computePassiveArchiveStatus` (`:905`, including its untimed `diskBytesForParent`).
+  - `PASSIVE_COUNT_CONCURRENCY` drops 3 → 2, so both panels refreshing together peak at 1 + 2 = 3 = `max`, and the pool never queues on itself (scope §6's "queues on itself" risk).
+  - Server only; no page change; panel logic untouched. Time-boxing the data-archive counts stays with `#1037` (row 119, CC-B).
+- **P5-3 — `qd-probe-service.ts:128` stays on the MAIN pool, with its burst capped 8 → 4.**
+  - **What it is:** a CAPTURE job — `server/index.ts:96-99`: *capture-only; friction-extraction → B81/Phase-25*. No trading code reads `xstock_qd_probe_history`: the only other server references are its metrics module and the retention sweep (`b75-retention-sweep.ts:195`).
+  - **Why it stays:** its loss is calibration data, and the diagnostic pool is fail-fast and shared with dashboards, so a capture would be dropped whenever a panel holds the slots.
+  - **Why the cap:** each statement is a LIMIT-1 indexed seek, but 8 in flight asks for 8 of 10 slots in a burst. 4 caps it at 40%. Its duration changes from 5 batches to 10 batches of millisecond seeks.
+  - **The limit, stated:** its holds cannot be separated from about 15 other readers of the same table in P2's labels, so the cap rests on the burst arithmetic, not on a measured hold of its own.
+- **P5-4 — the stage-attrition refresher. Your ruling, two options:**
+  - **(i) Delete it** under rule 18 + rule 23: the refresher, the cache module, the route and the `index.ts` start, with the `DELETED_COMPONENTS_LOG.md` entry, `#648` corrected, and SIM's B-FILTER-DIAG-PAPER section retired.
+  - **(ii) Move it to `diagDb`** and home the delete-or-restore question on `#648` for CC-B.
+  - **I recommend (i).** It has no reader. Moving it still runs a pointless 6 s query on the database every 5 minutes, which costs the database, not just the pool. The instrument it served can be rebuilt from the archive whenever `#648` needs it.
+  - **What makes (i) safe:** the census shows no `server` caller beyond the route and the starter, nothing in `client/`, and scripts and docs reference it only as prose.
+  - **What (i) does NOT do:** decide `#648`'s analysis. That stays CC-B's.
+
+**Tests planned:**
+- the pool-config fence extended to `diagPool` (invariant, `application_name`, `max`);
+- a fence that both panel functions import `diagDb`, not `db`;
+- the passive concurrency equals the diagnostic pool's `max` minus the data-archive panel's one;
+- the qd-probe cap value;
+- for (i), the starter and route absent and `tsc` clean.
+
+**Forced test (Step 7):**
+- In Claude-in-Chrome, load Analytics → Drift Dashboard while reading `pg_stat_activity` by `application_name`. The panels show under `dawntrader_diag`, `dawntrader_main` stays under its max, and `error.log` holds no `pool slot timeout` in the window (scope OBJ-6). This needs Kyle's Chrome signed in to staging.
+- The Passive Archive Capture card check for `B-OHLC-FRAME-GUARD` §8.1 rides the same tab-open.
