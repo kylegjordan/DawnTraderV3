@@ -94,3 +94,10 @@ Window: the first 48 h after the deploy, real lane, per class. **PASS:** (a) eve
 - **C-1** ⇒ P1 refuses at the paper seam; **C-2** ⇒ N3 named xStock-only; **C-3** ⇒ P4 negative fixture; **C-4** ⇒ P10.
 - Not held by him: P2, P4, P7, P8, P9. All six fold into this increment (disposition 1); nothing for Kyle's list.
 - His RULED-ON-REPORTED-FACT list: N1 funnel counts, N2's 821/8,148, M1/M2/M4, N4's DB control; M3 partly re-derived (207 pass lines in today's file, the 346-close denominator not). No condition of his rests on them.
+
+## 10. ✅ STEP 2 r2 DISCHARGED 2026-11-07 (Langston, Discord `1568451565965152297`, at `eb90475f7`) — PROCEED on all ten P-items, four conditions folded
+He re-derived BLOCKER-1 at the field read: REST `b[2]` is itself ceiled to a whole base unit (XBT `1.000` vs Depth `0.277` at the same price), and WS-ticker sizes are exact decimals (archiver, 20,644 of 22,033 rows non-integer in 2 h). BLOCKER-2's premise and harm confirmed at the translator and `depth-walk.ts`.
+- **L1 (P1 ↔ P5):** `bookVtsExit` takes the sizeless route BEFORE any quantity guard — quantity 0 (every shadow close) ⇒ top bid, `sizeBasis: 'unit_lane'`, no throw. The throw lives only in the walk wrapper, reached after the sized-level test. Both arms fixtured.
+- **L2 (P6):** `vtsSlippageShareByLeg` carries the same `frictionBasis === 'recomposed'` gate as `vtsSpreadShareByLeg` (`vts-friction.ts:62`) — on a `stamped` close the kept friction still holds `slippage × 2`, so the exit share stays 1. `stamped` is the fourth verification case beside walked / sizeless / legacy.
+- **L3 (P7):** `exitSizeCertain` IS persisted on the close record (not derived), so §7(c)'s split reads a stored field.
+- **L4 — RATCHET, pre-registered:** the haircut is in base units, so certainty is denied in inverse proportion to the base's price (at $250: XBT never certain; SOL certain). Expected: (c) reaches the REST rung on low-priced bases only, and the C6 report fires. ⛔ **A Step-7 (c) miss may NOT be closed by loosening `levelQty − 1`** — that restores BLOCKER-1. The cure is a finer size source (D-K2 (iii) or (C)), which is Kyle's slot.
