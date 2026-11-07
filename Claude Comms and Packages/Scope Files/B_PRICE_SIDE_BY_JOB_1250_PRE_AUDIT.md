@@ -149,3 +149,33 @@ Population: xStock paper taker opens (realised `entryArm`), five US sessions. **
 - **P2b:** both EVs recorded (7.2).
 - **P3 (r3):** placed after the `ENTRY_WINDOW` return; the window wins a doubly-refusable row, pinned by a fixture.
 
+## 8. r4 — STEP 2 r3 RULED 2026-11-07 (Langston, graded at `95b2473f4`) — SENT BACK: BLOCKER-6, BLOCKER-7, six measured corrections; everything else in §7 accepted as ruled. ⛔ THIS SECTION AMENDS §7.1, §7.5, P0, P1 and P8.
+
+### 8.1 BLOCKER-6 — A MIXED CONSTRUCTION IS RE-APPLIED WHOLE, NEVER WINNER-ONLY
+Winner-only re-derivation can return a level the construction itself would never produce: `pivot-shift.ts:180` `max(morningStarLow, entry − 1.5·ATR)` (*"picks tighter stop for BUY"*) re-derived as `fill − 1.5·ATR` alone can fall BELOW `morningStarLow` — a wider stop, risk-increasing; `vwap_pullback :258` `max(anchorTarget, twoRTarget)` can flip winner and land below its own output.
+⇒ **`levelSpec` carries the operator and BOTH terms:** a leg is either a single form or `{ op: 'max'|'min', terms: [spec, spec] }`; at the fill each term is re-derived by its form and **the same operator is re-applied.** `pivot_shift` stop ⇒ `max(morningStarLow, fill − 1.5·ATR)`; `vwap_pullback` default target ⇒ `max(anchorTarget, fill + R·(fill − stop'))`.
+**The genuinely mixed set among the 8 traded strategies is exactly these two** (`vwap_pullback :258`, `pivot_shift :180`). **Correction to §7.1's prose:** `vwap_pullback :253` and `morning_star :173` are `min()`s of two ANCHOR terms (the ATR offsets are from `vwap`/`low24h`/candle lows, not from entry) — anchor whichever wins; the table had them right.
+⇒ **Fence 1 re-stated:** with the whole construction re-applied, a perturbation large enough to flip the operator must still pass — the fence uses perturbations on BOTH sides of the flip point, and a fixture that flips the winner is required for each mixed leg.
+
+### 8.2 BLOCKER-7 — THE CHECK RUNS WHERE THE ROUNDED PLAN ARRIVES; `r` IS STAMPED; THE RE-BASED LEVELS ARE ROUNDED TOO
+The active xStock signal is born in the VTS lane unrounded (`eval-cycle.ts:744-746`, tag-only grid evaluation) and rounded once by the orchestrator (`signal-orchestrator.ts:726-729`, *"ROUND ONCE, PERSIST ONLY THE ROUNDED VALUES"*). So the plan that reaches `executeSimulatedTrade` is post-rounding while `levelSpec` is stamped pre-rounding.
+- **Self-consistency moves to the re-base site**, against the plan values that ARRIVE, with a **one-venue-tick tolerance** (the class grid, `resolveVenueGrid` / `isOnGrid` `venue-price-grid.ts:214`). Failure ⇒ that leg is not re-based (anchor), counted `LEVEL_SPEC_INCONSISTENT` and archived with both values — and §3 names its expected count as **0**, so a non-zero is a reported FAIL, not a silent no-op.
+- **`r` is stamped explicitly** by the strategy (`override.targetAsRMultiple`, `c['target_r_multiple']`, `c['break_target_r_multiple']`, `c['target_r_multiple_default']`) — never back-derived from rounded numbers.
+- **⭐ The re-based levels are themselves rounded to the venue grid** (F-G-1: every price we emit is venue-representable), by the same rounding the orchestrator applies at birth (`roundPriceForRole`, `venue-price-grid.ts:236`, per level role — the per-leg form of `roundTripleToGrid` `:263`, which the orchestrator calls at `signal-orchestrator.ts:90`-imported birth), and **P3's floor is judged on the ROUNDED carried stop** — the same order Kyle's post-round re-check uses. (Missing from r3; the r3 ruling's rounding point surfaced it.)
+- **The two arms have two plan bases, and §3 says so:** active xStock plans are post-rounding and its re-based levels are rounded; the VTS xStock lane books unrounded (`:1207-1208`) and re-bases unrounded. §3(a) is checked at one-tick tolerance on the active arm and at 1e-9 relative on the VTS arm; they are NOT pooled.
+
+### 8.3 MEASURED CORRECTIONS (Langston, folded)
+- **Membership is 18, not 19:** `defensive_hedge` is class-ineligible for `xstock_spot` (`canonical-regime-strategy-map.ts:429-431`, `excludeStrategies.HIGH_VOLATILITY_UNSTABLE`; `:231` is its only base placement), and `getStrategiesForRegime` (`:714`) reads the materialised map. ⇒ **10 untraded members, 20 leg judgements** in Step 3. (19 was the gate-seed count, `:1190` — an adjacent object.)
+- **Fence 2 keys through `resolveCanonicalStrategy` (`:682`, fail-closed)**, not bare `normalizeStrategy` (`:662`, identity-returns an unknown token by contract — a drifted key would pass as canonical). The alias is `:613`; `:252` is the `range_trade` definition.
+- **A3 as of 2026-11-07T16:52Z (Langston's re-derivation, same predicates): 246 total / 169 below / 11 above / 66 at plan; `vwap_pullback` 110.** The 7 added are the 7 still-open below-plan rows. Floor arm unchanged: **25, all `stop_hit`, −$4.7060, plan-relative 0.** Non-anchor-target below-plan exposure **165** against **11** the other way — the TIGHTER direction holds. (§1 A3's 239 is the same query at ~16:00Z.)
+- **§7.5's expectation is restated on the window-admitted denominator:** the floor fails on a fill the window admitted, so the expectation is **≤ ~10 % of window-admitted xStock taker opens (25/239 is an upper bound — it carries no window filter)**, and the FAIL threshold is **zero `STOP_DISTANCE_AT_FILL` over ≥ 50 window-admitted taker opens.**
+- **P8's matrix adds the cross pairing anchor stop × r_multiple target** (`vwap_bounce :958/:960`, traded) — the only pairing where the carried-stop dependency and a swapped argument are observable (on a distance stop, r_multiple and distance re-derivations coincide). **Fence 1's claim is narrowed:** it proves each leg moves as its stamp claims; it cannot separate observationally-equivalent forms, and does not claim to.
+- **Fence 1's fixtures assert both runs produced a signal ON THE SAME BRANCH** (`isNearVWAP`/`isNearSupport`/`isOversold` can null or re-route under perturbation); a run that changes branch is not a comparison.
+- **A11's record:** the floor already has TWO plan-side sites — `applyGlobalGuards` at construction and `signal-orchestrator.ts:714` post-rounding — so P3 is the **third** check.
+
+### 8.4 Plan deltas (amend §7.6)
+- **P0 (r4):** `levelSpec` per leg = a form, or `{op, terms}` for the two mixed legs; `r` stamped explicitly.
+- **P1 (r4):** `rebaseLevels` re-derives each term by form and re-applies the operator; then rounds to the venue grid exactly as the orchestrator's birth rounding does; self-consistency at one tick against the arriving plan, per leg.
+- **P3 (r4):** judged on the rounded carried stop; after `ENTRY_WINDOW`.
+- **P8 (r4):** the matrix above; flip fixtures for each mixed leg; same-branch assertion; the anchor × r_multiple pairing.
+
