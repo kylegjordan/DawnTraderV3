@@ -594,7 +594,11 @@ export class SignalOrchestrator {
       // The ONE cap in the strategy set: `volatility-edge` takes Math.min(measuredMove, atr),
       // so its target is a CEILING and rounding it AWAY would push it past the bound it was
       // defined by. Every other target is a floor ("at least K x ATR").
-      const _isCap = strategyId === ('volatility_edge' as StrategyType);
+      // #1250 C-2 (Langston): the cap bit TRAVELS on the stamp, so the re-base rounds the same way birth does. The
+      // name equality remains ONLY for a signal with no stamp (a HYBRID rebuild drops the strategy's metadata), so an
+      // unstamped volatility_edge still rounds as a cap — today's behaviour, never a silent flip.
+      const _stampSpec = (rawSignal.metadata as { levelSpec?: { targetIsCap?: boolean } } | undefined)?.levelSpec;
+      const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);
       const _r = roundTripleToGrid(
         rawSignal.entryPrice, rawSignal.stopPrice, rawSignal.targetPrice,
         _grid.tick, { targetIsCap: _isCap, symbol: rawSignal.symbol },

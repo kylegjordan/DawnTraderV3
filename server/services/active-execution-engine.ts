@@ -344,6 +344,9 @@ import {
 } from './execution/close-fill-contract-config.js';
 // P19-B8.5 (OBJ-8): real-venue well-formedness vetting for paper opens (paper-only leg).
 import { roundQuantityForVenue } from '../core/calculations/venue-price-grid.js';
+import { rebaseLevels, type LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P1/P2
+import { validateStopDistance } from '../strategies/strategy-helpers.js'; // #1250 P3 — the plan's own floor, at the fill
+import { resolveVenueGrid } from '../markets/venue-grid-resolver.js'; // #1250 P1 — the re-based levels are venue-representable
 import { resolveVenueSizeLimits } from '../markets/venue-grid-resolver.js';
 import { validatePaperOrderWithVenue } from './execution/venue-validate.js';
 import {
@@ -2056,6 +2059,25 @@ export class ActiveExecutionEngine {
       measuredBaseSource: 'flat_pwin_base:p19-b8-5a:2026-07-13:pinned-placeholder:n12140-vts:vts-era-contaminated',
       spreadSource: fe.spreadSource, // Step-4 C-6: a refusal on a placeholder spread says so
     };
+  }
+
+  /** #1250 P1/P3: refuse an xStock taker open whose levels cannot be carried — archived and counted like its siblings. */
+  private async _refuseLevelAtFill(signal: any, assetClass: AssetClass, r: { stage: 'LEVEL_REBASE_INVALID' | 'STOP_DISTANCE_AT_FILL'; reason: string },
+    fill: number, stop: number, target: number, rec: Record<string, unknown>): Promise<OpenOutcome> {
+    console.error(`[#1250][${r.stage}][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} class=${assetClass} fill=${fill} stop=${stop} target=${target} plan=${signal.entryPrice}/${signal.stopPrice}/${signal.targetPrice} reason=${r.reason} — not opened`);
+    rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, r.stage, r.reason);
+    try {
+      const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+      archiveSignalEval({
+        mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass,
+        source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
+        gateDecision: { gate: 'entry_fill', accepted: false, reason: r.reason, fillPrice: fill, entryPrice: fill, entryArm: 'taker',
+          stopPrice: stop, targetPrice: target, ...rec },
+      });
+    } catch (archErr) {
+      console.error(`[#1250][${r.stage}][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
+    }
+    return { opened: false, stage: r.stage, reason: r.reason };
   }
 
   private async _refuseFillEconomics(signal: any, assetClass: AssetClass, arm: 'taker' | 'maker', price: number, fe: FillEconomics, rec: Record<string, unknown>): Promise<OpenOutcome> {
@@ -6320,6 +6342,13 @@ export class ActiveExecutionEngine {
     let _entryShadowRec: Record<string, unknown> | null = null;
     // B-ENTRY-GATE (#1224) P4: the economic test at the price paid, recorded on the admitted row of BOTH arms.
     let _fillEconRec: Record<string, unknown> | null = null;
+    // ⭐ #1250 (pre-audit §7-§9): the levels the position CARRIES. The plan (`signal.stopPrice`/`signal.targetPrice`) is
+    // never mutated — the plan-judging gates read it; the economics and every write read these. Equal to the plan on
+    // every path except the xStock TAKER arm, where they are re-based onto the price paid by the strategy's own stamp.
+    let _carriedStop: number = signal.stopPrice;
+    let _carriedTarget: number = signal.targetPrice;
+    let _levelRec: Record<string, unknown> | null = null;
+    let _levelRefusal: { stage: 'LEVEL_REBASE_INVALID' | 'STOP_DISTANCE_AT_FILL'; reason: string } | null = null;
     const _fillExplo = this.mode === 'paper' && (signal.metadata as any)?.admissionBasis === 'exploration';
     // B-ENTRY-GATE (#1224) Step-4 C-2 (Langston): EVERY fail-hard read the entry gate needs is resolved HERE, before the
     // fill and before either arm, so a missing settings row can never throw past the book walk into a catch that does not
@@ -6436,9 +6465,37 @@ export class ActiveExecutionEngine {
     // (The two thresholds were resolved before the fill — Step-4 C-2.)
     const _ewCheaper = cheaperSideRecord(_shadow.adverseR, _ewCheaperFloor);
     const _ewRefusal = entryWindowRefusal(_shadow.adverseR, _ewWorseSide);
+    // ⭐ #1250 P1/P2 — re-base the xStock taker's levels onto the price paid (this branch IS the taker arm, so the
+    // gate is `!_b72cPendingMaker && class === 'xstock_spot'` by construction). Anchor legs keep their price; distance,
+    // R-multiple and proportional legs follow the fill; a mixed leg is re-applied whole. Absent stamp ⇒ nothing moves.
+    if (_openClass === 'xstock_spot') {
+      const _rbTick = resolveVenueGrid(normalizeToInternalSymbol(signal.symbol) || signal.symbol, _openClass).tick ?? null;
+      const _rbSpec = (signal.metadata as { levelSpec?: LevelSpec } | undefined)?.levelSpec;
+      const _rb = rebaseLevels({ planEntry: signal.entryPrice, planStop: signal.stopPrice, planTarget: signal.targetPrice,
+        fill: actualEntryPrice, spec: _rbSpec, tick: _rbTick });
+      if (_rb.ok) {
+        _carriedStop = _rb.stopPrice;
+        _carriedTarget = _rb.targetPrice;
+        if (_rb.inconsistent.length > 0) {
+          console.warn(`[#1250][LEVEL_SPEC_INCONSISTENT] ${signal.symbol} strategy=${signal.strategy} legs=${_rb.inconsistent.join(',')} plan=${signal.entryPrice}/${signal.stopPrice}/${signal.targetPrice} — kept on the plan`);
+        }
+      } else {
+        _levelRefusal = { stage: 'LEVEL_REBASE_INVALID', reason: `level_rebase_${_rb.reason}` };
+      }
+      _levelRec = {
+        planEntryPrice: signal.entryPrice, planStopLoss: signal.stopPrice, planTakeProfit: signal.targetPrice,
+        stopBasis: _rb.ok ? _rb.stopBasis : null, targetBasis: _rb.ok ? _rb.targetBasis : null,
+        levelBasis: _rb.ok && (_rb.stopBasis === 'fill_rebased' || _rb.targetBasis === 'fill_rebased') ? 'fill_rebased' : 'plan',
+        levelSpecStamped: _rbSpec !== undefined, levelSpecInconsistent: _rb.ok ? _rb.inconsistent : null,
+      };
+    }
     // B-ENTRY-GATE (#1224) P4: the economic test at the price this taker actually paid (its walked average fill).
-    const _feT = computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice });
-    _fillEconRec = this._fillEconRecord(_feT, 'taker', _fillExplo);
+    // #1250 BLOCKER-3 (accepted, pre-audit §7.2): it judges the CARRIED levels — the trade the position will be.
+    const _feT = computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice, stopPrice: _carriedStop, targetPrice: _carriedTarget });
+    // #1250 P2b: today's inputs (the plan geometry at the fill), RECORDED ONLY, so Step 7 counts the flips each way.
+    const _feTPlan = _levelRec !== null ? computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice }) : null;
+    _fillEconRec = { ...this._fillEconRecord(_feT, 'taker', _fillExplo),
+      ...(_feTPlan !== null ? { netEvAtFillPlanGeometry: _feTPlan.netEvAtFill, fillEconRefusedPlanGeometry: _feTPlan.refuse } : {}) };
     _entryShadowRec = {
       intendedEntryPrice: signal.entryPrice, rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,
       rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',
@@ -6496,6 +6553,16 @@ export class ActiveExecutionEngine {
       }
       return { opened: false, stage: 'ENTRY_WINDOW', reason: _ewRefusal };
     }
+    // ⭐ #1250 P3 (A11) — the plan's own stop-distance floor, re-checked on the CARRIED stop at the price paid. The third
+    // site of this check (construction `applyGlobalGuards`, post-rounding `signal-orchestrator.ts:715`, here). Placed
+    // after ENTRY_WINDOW so a doubly-refusable row reports the cause (the fill past the window), not its consequence.
+    if (_levelRefusal === null && _openClass === 'xstock_spot' && !validateStopDistance(actualEntryPrice, _carriedStop)) {
+      _levelRefusal = { stage: 'STOP_DISTANCE_AT_FILL', reason: 'stop_distance_at_fill' };
+    }
+    if (_levelRefusal !== null) {
+      return await this._refuseLevelAtFill(signal, _openClass, _levelRefusal, actualEntryPrice, _carriedStop, _carriedTarget,
+        { ...(_entryShadowRec ?? {}), ...(_fillEconRec ?? {}), ...(_levelRec ?? {}) });
+    }
     if (_feT.refuse && !_fillExplo) {
       return await this._refuseFillEconomics(signal, _openClass, 'taker', actualEntryPrice, _feT, { ...(_entryShadowRec ?? {}), ..._fillEconRec });
     }
@@ -6506,7 +6573,7 @@ export class ActiveExecutionEngine {
     console.log(`  Entry Slippage: $${totalSlippage.toFixed(2)}, Entry Fee: $${entryFee.toFixed(2)}`);
 
     // [27.F.14.B] INSTRUMENTATION: Order computed
-    console.log(`[27.F.14.B][ActiveEngine] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${signal.stopPrice.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
+    console.log(`[27.F.14.B][ActiveEngine] order_computed {symbol:"${signal.symbol}", quantity:${quantity.toFixed(4)}, entry:${actualEntryPrice.toFixed(2)}, stop:${_carriedStop.toFixed(2)}, target:${signal.targetPrice.toFixed(2)}}`);
     contextBridge.broadcast({
       type: 'trading_pipeline_event' as any,
       payload: {
@@ -6518,8 +6585,8 @@ export class ActiveExecutionEngine {
           symbol: signal.symbol,
           quantity: quantity,
           entryPrice: actualEntryPrice,
-          stopPrice: signal.stopPrice,
-          targetPrice: signal.targetPrice,
+          stopPrice: _carriedStop,
+          targetPrice: _carriedTarget,
           positionValue: positionValue,
           slippage: totalSlippage,
           fees: entryFee
@@ -6689,8 +6756,8 @@ export class ActiveExecutionEngine {
         side: 'buy',
         quantity: quantity.toString(),
         entryPrice: actualEntryPrice.toString(),
-        stopLoss: signal.stopPrice.toString(),
-        takeProfit: signal.targetPrice.toString(),
+        stopLoss: _carriedStop.toString(), // #1250: the carried levels (the plan unless re-based)
+        takeProfit: _carriedTarget.toString(),
         fees: entryFee.toString(),
         slippage: totalSlippage.toString(),
         // B-CLOSE-WRITER-COSTS P-14: the entry values are WRITTEN, not left to a column default — the `DEFAULT 0`s on the
@@ -6751,7 +6818,8 @@ export class ActiveExecutionEngine {
         entryFeeRate: _b72EntryFeeRate.toString(),
         // P19-B8.2 (OBJ-4): the balance-ratio calibration stamp (or honest NULLs).
         ..._b82RatioStamp,
-        metadata: signal.metadata || {}
+        // #1250 P4: the plan beside the carried levels, and how each leg was based (absent ⇒ written before #1250).
+        metadata: { ...(signal.metadata || {}), ...(_levelRec ?? {}) }
       });
 
       // AJ10.3: Diagnostic - trade record created
@@ -6810,8 +6878,8 @@ export class ActiveExecutionEngine {
         quantity: quantity.toString(),
         avgPrice: actualEntryPrice.toString(),
         currentPrice: actualEntryPrice.toString(),
-        stopLoss: signal.stopPrice.toString(),
-        takeProfit: signal.targetPrice.toString(),
+        stopLoss: _carriedStop.toString(), // #1250: the carried levels (the plan unless re-based)
+        takeProfit: _carriedTarget.toString(),
         unrealizedPnl: '0',
         unrealizedPnlPercent: '0',
         confidence: (signal.confidence * 100).toString(),
@@ -6957,7 +7025,7 @@ export class ActiveExecutionEngine {
           strategy: signal.strategy,
           rejectStage: 'admitted',
           confidenceModulated: signal.confidence,
-          gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
+          gateDecision: { gate: 'admitted', accepted: true, path: 'paper-execution-open', entryPrice: actualEntryPrice, stopPrice: _carriedStop, targetPrice: _carriedTarget, ...(_levelRec ?? {}),
             ...(_entryShadowRec ?? {}), // B-ENTRY-DISTANCE-GUARD CHANGE 1: the shadow measurement, same schema as the refused arm
             ...(_fillEconRec ?? {}), // B-ENTRY-GATE (#1224) P4: the economic test at the price paid, both arms
             // Always present (r2 condition): the arm this open REALISED — not `chosenEntryMode`, since a maker that cannot rest
@@ -7010,12 +7078,12 @@ export class ActiveExecutionEngine {
         tradeId: trade.id,
         positionId: null,
         eventType: 'position_opened',
-        message: `Position opened: ${signal.symbol} (${signal.strategy}) - Entry: $${actualEntryPrice.toFixed(2)}, Stop: $${signal.stopPrice.toFixed(2)}, Target: $${signal.targetPrice.toFixed(2)}`,
+        message: `Position opened: ${signal.symbol} (${signal.strategy}) - Entry: $${actualEntryPrice.toFixed(2)}, Stop: $${_carriedStop.toFixed(2)}, Target: $${_carriedTarget.toFixed(2)}`,
         metadata: {
           strategy: signal.strategy,
           entryPrice: actualEntryPrice,
-          stopPrice: signal.stopPrice,
-          targetPrice: signal.targetPrice,
+          stopPrice: _carriedStop,
+          targetPrice: _carriedTarget,
           quantity: quantity,
           positionValue: positionValue,
           slippage: totalSlippage,
@@ -7044,8 +7112,8 @@ export class ActiveExecutionEngine {
         direction: 'long',
         entryPrice: actualEntryPrice,
         size: quantity,
-        stopLoss: signal.stopPrice,
-        takeProfit: signal.targetPrice,
+        stopLoss: _carriedStop,
+        takeProfit: _carriedTarget,
         confidence: signal.confidence,
         timestamp: new Date().toISOString()
       }));
@@ -7093,15 +7161,15 @@ export class ActiveExecutionEngine {
         strategy: signal.strategy,
         decision: 'OPENED',
         entryPrice: actualEntryPrice.toString(),
-        stopPrice: signal.stopPrice.toString(),
-        targetPrice: signal.targetPrice.toString(),
+        stopPrice: _carriedStop.toString(),
+        targetPrice: _carriedTarget.toString(),
         confidence: (signal.confidence * 100).toString(),
         portfolioValue: portfolioValue === null ? null : portfolioValue.toString(),
         // §17 P-2 / §17.4 C3: the dollars this position risks, a measurement, not a setting. TAKER open: the FILLED
         // quantity (`quantity` is re-set to the fill's quantity after the depth-walk, so a partial fill is not
         // overstated) × |fill price − stop|. MAKER left resting at its limit: nothing has filled yet, so it is the
         // requested, lot-rounded quantity × |limit − stop| — the risk IF it fills (`actualEntryPrice` is the limit).
-        riskAmount: (quantity * Math.abs(actualEntryPrice - signal.stopPrice)).toFixed(2),
+        riskAmount: (quantity * Math.abs(actualEntryPrice - _carriedStop)).toFixed(2),
         positionSize: quantity.toString(),
         tradeId: trade.id,
       }).catch(err => console.error('[8.8.3-J][AUDIT_ERROR] Failed to log opened execution attempt:', err));

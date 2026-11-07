@@ -110,7 +110,7 @@ describe('the wiring, proved at the source (the engine needs its whole graph to 
     expect(src).toContain('planQueuedAt:');
     expect(src).toContain('rtbQueueId:');
     const spreads = src.split('...(_entryShadowRec ?? {})').length - 1;
-    expect(spreads).toBe(4); // the geometry-refused row, the B-ENTRY-GATE window-refused and fill-economics-refused rows (#1224 P1, P4), and the admitted row
+    expect(spreads).toBe(5); // the geometry-refused row, the B-ENTRY-GATE window-refused and fill-economics-refused rows (#1224 P1, P4), the #1250 level-at-fill refused row (P1/P3), and the admitted row
     expect(at("gate: 'admitted', accepted: true")).toBeLessThan(src.lastIndexOf('...(_entryShadowRec ?? {})'));
   });
   it('B-RR-FLOOR-HEADROOM (row 59a): the taker arm rides INSIDE the shadow record, so both archive rows carry it', () => {

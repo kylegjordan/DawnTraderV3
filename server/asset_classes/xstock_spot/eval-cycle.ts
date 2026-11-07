@@ -1396,6 +1396,7 @@ export async function evaluateXstockPairForVTS(
           entryPrice,
           stopPrice: stopLoss,
           targetPrice: takeProfit,
+          levelSpec: (strategySignal.metadata as { levelSpec?: unknown } | undefined)?.levelSpec, // #1250 P0
           predictiveConfidence,
           signalType: stratDef.signalType,
           sourcePool: lane.sourcePool,

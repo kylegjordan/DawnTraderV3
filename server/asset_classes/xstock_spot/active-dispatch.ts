@@ -128,6 +128,8 @@ export interface XstockActiveDispatchInput {
   // FX5 pool, so its value must ride through here. Optional: absent stays absent.
   entryLiquidityValue?: number;
   entryLiquidityKind?: 'depth_usd';
+  /** #1250 P0: how the strategy built each level (`core/trading/level-rebase.ts`). Optional: absent ⇒ anchor ⇒ no re-base. */
+  levelSpec?: unknown;
 }
 
 /**
@@ -212,6 +214,8 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
         // (crypto stamps its own off fx5Data; xStock is not in the FX5 pool). Absent stays absent.
         entryLiquidityValue: input.entryLiquidityValue,
         entryLiquidityKind: input.entryLiquidityKind,
+        // #1250 P0: rides the metadata through the RTB row to `processSignal`, where the taker open re-bases on it.
+        ...(input.levelSpec !== undefined ? { levelSpec: input.levelSpec } : {}),
       },
     };
 
