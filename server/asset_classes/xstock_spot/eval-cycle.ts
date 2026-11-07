@@ -98,6 +98,8 @@ import { selectVtsXstockEntryAsk, vtsXstockSideSize } from './vts-xs-select.js';
  *  one constant so the two can never disagree. */
 const VTS_XSTOCK_ENTRY_DOLLAR_VALUE = 150;
 import { refuseTakerBooking, bookedQuantity } from '../../core/trading/entry-booking.js';
+import { rebaseLevels, type LevelSpec } from '../../core/trading/level-rebase.js'; // #1250 P5 — the VTS twin of the active re-base
+import { validateStopDistance } from '../../strategies/strategy-helpers.js'; // #1250 P5 — the plan's floor at the fill
 import { entryWindowRefusalAt } from '../../core/trading/entry-window.js'; // B-ENTRY-GATE (#1224) P3v
 import type { XsQuoteRow } from './vts-xs-instrument.js';
 import { getCachedNumberRequired } from '../../services/module-constants-service.js';
@@ -1134,6 +1136,12 @@ export async function evaluateXstockPairForVTS(
         // The booked entry: a taker at the guarded ask, a maker at its limit (the level). Stop and target stay the levels —
         // and a taker's ask AT OR THROUGH either one would invert the trade, so it is refused (FINDING-1).
         const _xBookedEntry = _xEffectiveMode === 'taker' ? (_xEntryAsk as number) : entryPrice;
+        // ⭐ #1250 P5 — the levels this VTS trade CARRIES. `stopLoss`/`takeProfit` stay the plan (they also feed the active
+        // dispatch below, which re-bases on its own path); a taker re-bases onto its booked ask, unrounded (this lane books
+        // unrounded — pre-audit §8.2: two plan bases, not pooled).
+        let _xCarriedStop = stopLoss;
+        let _xCarriedTarget = takeProfit;
+        let _xLevelRebase: Record<string, unknown> | undefined;
         if (_xEffectiveMode === 'taker') {
           const _xInv = refuseTakerBooking(_xBookedEntry, stopLoss, takeProfit);
           if (_xInv !== null) {
@@ -1146,6 +1154,28 @@ export async function evaluateXstockPairForVTS(
           if (_xEw !== null) {
             _xRefuseBooking(_xEw, `taker ask ${_xBookedEntry} vs plan ${entryPrice} / stop ${stopLoss}, window ${_xEwW}`);
             continue;
+          }
+          // #1250 P5: after the window (it wins a doubly-refusable row), the same order as the active open.
+          const _xRbSpec = (strategySignal.metadata as { levelSpec?: LevelSpec } | undefined)?.levelSpec;
+          const _xRb = rebaseLevels({ planEntry: entryPrice, planStop: stopLoss, planTarget: takeProfit, fill: _xBookedEntry, spec: _xRbSpec, tick: null });
+          if (!_xRb.ok) {
+            _xRefuseBooking(`level_rebase_${_xRb.reason}`, `taker ask ${_xBookedEntry} vs plan ${entryPrice}/${stopLoss}/${takeProfit}`);
+            continue;
+          }
+          _xCarriedStop = _xRb.stopPrice;
+          _xCarriedTarget = _xRb.targetPrice;
+          if (!validateStopDistance(_xBookedEntry, _xCarriedStop)) {
+            _xRefuseBooking('stop_distance_at_fill', `taker ask ${_xBookedEntry} vs carried stop ${_xCarriedStop} (plan ${stopLoss})`);
+            continue;
+          }
+          _xLevelRebase = {
+            planEntryPrice: entryPrice, planStopLoss: stopLoss, planTakeProfit: takeProfit,
+            stopBasis: _xRb.stopBasis, targetBasis: _xRb.targetBasis,
+            levelBasis: _xRb.stopBasis === 'fill_rebased' || _xRb.targetBasis === 'fill_rebased' ? 'fill_rebased' : 'plan',
+            levelSpecStamped: _xRbSpec !== undefined, levelSpecInconsistent: _xRb.inconsistent,
+          };
+          if (_xRb.inconsistent.length > 0) {
+            console.warn(`[#1250][VTS][LEVEL_SPEC_INCONSISTENT] ${symbol} strategy=${strategyKey} legs=${_xRb.inconsistent.join(',')} — kept on the plan`);
           }
         }
 
@@ -1204,8 +1234,9 @@ export async function evaluateXstockPairForVTS(
             makerDeadline: (_xMakerPlacedAtMs as number) + resolveMakerMaxPendingMs(ASSET_CLASS),
           } : {}),
           entryPrice: _xBookedEntry, // `8a-P4c` 3b (P9): a taker at the guarded ask; a maker at its limit
-          stopLoss,
-          takeProfit,
+          stopLoss: _xCarriedStop, // #1250 P5: the carried levels (the plan unless re-based)
+          takeProfit: _xCarriedTarget,
+          ...(_xLevelRebase !== undefined ? { levelRebase: _xLevelRebase } : {}),
           positionSize: dollarValue,
           dollarValue,
           quantity,
@@ -1279,6 +1310,7 @@ export async function evaluateXstockPairForVTS(
               netEv: _xPolicyDecision.chosenNetEV,
               chosenMode: _xPolicyDecision.chosenMode,
               takerNetEv: _xMtDecision.taker.netEV, // P19-B8.5c (#503): the single kernel site's taker leg (honest price-unit dollars)
+              ...(_xLevelRebase !== undefined ? { levelRebase: _xLevelRebase } : {}), // #1250 P5: §3(a3) reads it here
             },
             // B-NEW-53.2 (#208): at-entry economics + context, mirroring the crypto
             // B70.2 admitted-features key SET so a Phase-25 cross-class query reads ONE

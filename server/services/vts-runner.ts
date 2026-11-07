@@ -744,6 +744,8 @@ interface Phase10TradeRecord {
   /** `8a-P4c` increment 3a-ii (P14, BLOCKER-3): how the ENTRY was priced — stamped by every open writer; absent only
    *  on a legacy row. Drives the per-leg spread charge (a leg on its side or at a maker limit carries none). */
   entryPriceBasis?: EntryPriceBasis;
+  /** #1250 P5: the xStock taker's plan beside its carried levels (`level-rebase.ts`) — persisted in `context`. */
+  levelRebase?: Record<string, unknown>;
   /** `8a-P4c` 3a-ii (P14, J7): the booked friction was recomposed at close under the per-leg rule, or the stamped
    *  scalar was kept because an input was missing (refused — alerted and counted). Set on CLOSED records only. */
   frictionBasis?: VtsFrictionBasis;
@@ -802,6 +804,8 @@ interface OpenVirtualTrade {
   /** `8a-P4c` increment 3a-ii (P14, BLOCKER-3): how the ENTRY was priced — stamped by every open writer; absent only
    *  on a legacy row. Drives the per-leg spread charge (a leg on its side or at a maker limit carries none). */
   entryPriceBasis?: EntryPriceBasis;
+  /** #1250 P5: the xStock taker's plan beside its carried levels (`level-rebase.ts`) — persisted in `context`. */
+  levelRebase?: Record<string, unknown>;
   // Same class of omission, unmasked by the declaration above (tsc reports one excess property
   // per literal): the IMF filter tier is WRITTEN at registerOpenVtsTrade and READ at the closed
   // record (:3463) and the persist payload (:3562). Type mirrors Phase10TradeRecord.
@@ -5071,6 +5075,8 @@ export interface RegisterOpenVtsTradeInput {
   /** `8a-P4c` increment 3a-ii (P14, BLOCKER-3): how the ENTRY was priced — stamped by every open writer; absent only
    *  on a legacy row. Drives the per-leg spread charge (a leg on its side or at a maker limit carries none). */
   entryPriceBasis?: EntryPriceBasis;
+  /** #1250 P5: the xStock taker's plan beside its carried levels (`level-rebase.ts`) — persisted in `context`. */
+  levelRebase?: Record<string, unknown>;
   regime: MarketRegimeType;
   regimeScore: number;
   signalType: CanonicalSignalType;
@@ -5228,6 +5234,7 @@ export async function registerOpenVtsTrade(input: RegisterOpenVtsTradeInput): Pr
     costEntryFeeFraction: input.costEntryFeeFraction,
     costExitFeeFraction: input.costExitFeeFraction,
     entryPriceBasis: input.entryPriceBasis,
+    levelRebase: input.levelRebase, // #1250 P5
     regime: input.regime,
     regimeScore: input.regimeScore,
     signalType: input.signalType,
