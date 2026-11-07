@@ -2,92 +2,197 @@
 token-watch — replay the follow-up pass over the 48 buckets it died on, and measure its memory.
 (B-TOKEN-WATCH-FOLLOWUP-MEMORY P1, the measurement; #1132.)
 
-THREE SUBCOMMANDS, run in this order, each as `tokenwatch`:
+SUBCOMMANDS, each run as `tokenwatch`:
 
   index    --pristine <scratch tree> --out <bodies.sqlite>
-           Builds mint -> captured DexScreener body from the capture's provenance/follow-up/*.jsonl.
+           Builds mint -> captured DexScreener body (+ its byte count) from the capture's provenance/follow-up.
            ⛔ WHY SQLITE: the replay must not hold 361,853 bodies in its own heap — that would be measured as the
-              follow-up's memory. One indexed lookup per call keeps the harness's own footprint small and constant.
+              follow-up's memory. One indexed lookup per call; a 2 MiB cache.
+           ⛔ It REFUSES a duplicate mint (the capture calls each mint once and --resume skips captured ones, so a
+              duplicate means an anomaly, and keeping either copy silently would be a choice nobody made), an empty
+              index, and an --out under the production store.
 
-  prepare  --pristine <scratch tree> --run-root <run dir> --now <ISO>
-           Copies the pristine tree to a fresh run dir (every run starts from the same state, because run_hour
-           writes), then makes the ledger history FAITHFUL TO --now: the spend journal of now's month is cut to
-           the rows with ts <= now, and journals of later months are removed. (The copy holds today's journals;
-           on 2026-10-02 the October journal held two days, not the month. Folding 287 MB that did not exist then
-           would measure work the 09-30 pass never did.) Prints what it cut.
+  prepare  --pristine <scratch tree> --run-root <run dir> --now <ISO> [--with-bodies]
+           A fresh run dir per run (run_hour writes). The copy holds TODAY's journals, so now's month's journal is
+           cut to the rows with ts <= now (ts parsed, not compared as text) and later months are removed: on
+           2026-10-02 the October journal held two days. The September tail is left as it is (cursor 253M of
+           260M is only consistent with no fold since 09-30, which is the premise; a 10-02 pass would drain it).
+           ⛔ The DISK FLOOR is held here as in make_followup_scratch.sh: it refuses unless free space on / stays
+              >= 10 GiB after the copy, re-checks after, and copies under nice 19 / ionice idle. provenance/follow-up
+              is NOT copied unless --with-bodies (the index serves the bodies).
+           Writes <run dir>/PREPARE.json; `run` carries it into its result, so the tree a run used is on record.
 
   run      --arm {all_shed,live,x4} --run-root <run dir> --bodies <bodies.sqlite> --now <ISO> --out <result.json>
-           [--trace <dir>] [--skip-egress-check]
-           Meant to run inside `systemd-run -p MemoryMax=512M -p IPAddressDeny=any -p CPUQuota=40% --uid=tokenwatch`.
-           1. POSITIVE CONTROL FIRST: a real TCP connect to api.dexscreener.com:443 must FAIL, or the run is void
-              (exit 6) — `IPAddressDeny` is proved, not assumed.
-           2. THE CLOCK IS FROZEN AT --now in every module that reads it (`from datetime import datetime` in budget,
-              provenance, store, follow_up, promote, summary, providers). ⛔ Not optional: `providers.token_state`
-              calls `budget.allowed("follow_up")` with no `now`, i.e. the WALL clock, while `run_hour` folds with the
-              injected one. Without the freeze, arm (a)'s October ledger is discarded as the wrong month by the
-              gate's own read (`budget._load`), the gate opens, and arm (a) silently becomes arm (b).
-           3. The cursor is set so `_buckets_to_read` returns the 48 buckets (last_bucket = first bucket − 1h).
-           4. The ledger: all_shed = now's month with spent over the monthly cap (bound (b), `remaining > 0`);
-              live / x4 = a fresh ledger for now's month.
-           5. The egress `providers._request` is replaced: DexScreener → the captured body (x4: padded to 4× its
-              bytes with a `_pad` field, so the parse and the provenance write are 4× and no field changes meaning);
-              a mint with no captured body (promote's births) → a no-pairs body, COUNTED SEPARATELY; Helius →
-              A7's shape-true SYNTHETIC reply (getAccountInfo value null, then an empty token-account list),
-              COUNTED SEPARATELY AND LABELLED synthetic — never an observed fan-out.
-           6. `token_state` is counted AT THE FOLLOW-UP LOOP'S CALL SITE: `follow_up.providers` is swapped for a
-              proxy that counts, while `promote` keeps the real module (r1e: promote shares the budget key).
-           7. arm all_shed's own control, or the run is VOID (exit 7): egress == 0 AND call-site token_state ==
-              due − requeued_not_yet_due AND shed observation ROWS written by this run == the same number.
-           8. Recorded: cgroup memory.peak (INCLUDES PAGE CACHE — stated), ru_maxrss, run_hour's stats, the fan-out
-              (call-site token_state, served bodies, no-body mints, synthetic Helius calls), alive/dead counts.
-           --trace: tracemalloc on, a snapshot's top 10 written to disk at each stage boundary (after the fold,
-           after each dead_set, around promote.run, around summary.build and around the identity map), so a kill
-           still leaves the last stage's sites. Traced runs are SEPARATE runs (tracemalloc's own memory).
+           [--trace <dir>] [--min-served-share 0.95]
+           Meant for `systemd-run -p MemoryMax=512M -p IPAddressDeny=any -p CPUQuota=40% --uid=tokenwatch`
+           (tools/run_followup_arm.sh records the unit's own Result, which is how a KILL is recorded).
+           ⛔ THREE CONTROLS BEFORE ANYTHING IS MEASURED, each voiding the run with its own exit code:
+              (1) MemoryMax (exit 8): the cgroup's memory.max must be exactly 536,870,912. A run under
+                  MemoryMax=infinity returns a clean memory.peak and reads as "it fits".
+              (2) IPAddressDeny (exit 6): a connect to a LITERAL IP must fail with EPERM/EACCES (a DNS failure is
+                  not proof: under IPAddressDeny DNS fails too, and so it does with no resolver), and the named
+                  host must fail as well. The probe target is a flag so a test can point it at a live socket.
+              (3) the clock (exit 10): all seven modules that read `datetime` are frozen at --now, or the run is
+                  void. ⛔ `providers.token_state` calls `budget.allowed("follow_up")` with NO now (the wall clock)
+                  while `run_hour` folds with the injected one; without the freeze arm (a)'s ledger is discarded as
+                  the wrong month by the gate's own read and arm (a) silently becomes arm (b). `receiver` is in the
+                  import closure (promote) and is NOT frozen: its three clock reads are webhook-path only,
+                  unreachable from run_hour (Langston, Step 4 r1).
+           The run: cursor last_bucket = the first bucket − 1h, so `_buckets_to_read` returns the 48 buckets.
+           Ledger: all_shed = now's month with spent over the cap (cap + 1, independent of > vs >=); live/x4 = a
+           fresh ledger for now's month. The journal offset starts at 0 because the copied ledger is a later month
+           (`_load` discards it) — and 0 IS faithful: no fold has run since 09-30, so a real 10-02 pass met a
+           blank October ledger at offset 0.
+           The egress `providers._request` is replaced:
+              DexScreener -> the captured body, re-PARSED from text every call. Arm x4 builds a 4x TEXT before
+                parsing: the body plus `_pad` = three copies of the body itself, inert (token_state reads top-level
+                `pairs` only), so bytes AND objects are ~4x;
+              a mint with no captured body -> a no-pairs body, counted apart;
+              Helius -> getAccountInfo answered with one of the 40 REAL curve-account replies in
+                tests/fixtures/pumpfun_curves.json (chosen by a hash of the pool address), so the one-call curve
+                path runs as it does for ~97% of live tokens; anything else (getTokenAccountsByOwner) -> [].
+                Every Helius call is counted apart and labelled SYNTHETIC — never an observed fan-out.
+           `token_state` is counted AT THE FOLLOW-UP LOOP'S CALL SITE (a proxy swapped into follow_up.providers;
+           promote keeps the real module, r1e), and the loop's own served / no-body split is counted inside it.
+           VOID (exit 7) if all_shed's control fails: egress == 0 AND call-site == due − requeued AND shed rows
+           written this run == the same. VOID (exit 9) if live/x4 serve under --min-served-share of the loop's
+           calls from captured bodies (an empty or thin index would otherwise publish a figure off no-pairs bodies).
+           Recorded: memory.max, memory.peak (INCLUDES PAGE CACHE — stated), memory.events (max, oom, oom_kill),
+           ru_maxrss, stats, the fan-out, the frozen modules, the bytes p99/max of the bodies THIS run served, and
+           the PREPARE.json it ran on.
+           --trace: tracemalloc snapshots (top 10, to disk) after the fold, after each dead_set, around promote.run,
+           around summary.build, and around `summary._identity_map` (A2's 321 MB site — summary binds it at import
+           as `from store import identity_map as _identity_map`, so that name is the one wrapped). A wrap target
+           that does not exist RAISES rather than skipping.
 
-It refuses the production store in every subcommand.
-Exit: 0 done · 2 refused · 6 egress control failed (void) · 7 arm all_shed's control failed (void).
+  lookup-baseline --run-root <run dir> --bodies <bodies.sqlite> --out <result.json>
+           The harness's own read-path footprint: fetches every distinct mint of the 48 buckets from the index,
+           exactly as `run` would, and nothing else. Its ru_maxrss sits beside the arms (Langston (d)).
+
+Exit: 0 done · 2 refused · 6 egress control · 7 all_shed control · 8 MemoryMax control · 9 served-share floor
+      · 10 clock-freeze control.
 """
 
 from __future__ import annotations
 
 import argparse
+import errno
+import hashlib
 import json
 import os
 import shutil
 import socket
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
 PRODUCTION_ROOT = "/var/lib/token-watch"
 FIRST_BUCKET = "2026-09-30T14"
+BUCKETS = 48
+EXPECT_MEMORY_MAX = 512 * 1024 * 1024
+FLOOR_BYTES = 10 * 2**30
 UTC = timezone.utc
 CLOCK_MODULES = ("budget", "provenance", "store", "follow_up", "promote", "summary", "providers")
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CURVES = os.path.join(HERE, "tests", "fixtures", "pumpfun_curves.json")
 
 
 def _refuse_production(path: str) -> None:
-    if not path or os.path.realpath(path) == os.path.realpath(PRODUCTION_ROOT):
-        print("REFUSED: %r is the production store (or empty)" % path, file=sys.stderr)
+    if not path:
+        print("REFUSED: empty path", file=sys.stderr)
+        sys.exit(2)
+    real, prod = os.path.realpath(path), os.path.realpath(PRODUCTION_ROOT)
+    if real == prod or real.startswith(prod + os.sep):
+        print("REFUSED: %r is (inside) the production store" % path, file=sys.stderr)
         sys.exit(2)
 
 
-def _parse_now(s: str) -> datetime:
+def _parse_ts(s: str) -> datetime:
     d = datetime.fromisoformat(s.replace("Z", "+00:00"))
     if d.tzinfo is None:
-        raise SystemExit("--now must carry a timezone")
+        raise ValueError("timestamp without a timezone: %r" % s)
     return d.astimezone(UTC)
+
+
+def _stats(sizes: list[int]) -> dict:
+    if not sizes:
+        return {"n": 0}
+    s = sorted(sizes)
+    return {"n": len(s), "p99": s[min(len(s) - 1, -(-99 * len(s) // 100) - 1)], "max": s[-1],
+            "mean": round(sum(s) / len(s), 1)}
+
+
+def _maxrss_kib():
+    try:
+        import resource                              # Linux only; the run is meant for the staging box
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except ImportError:
+        return None
+
+
+def _cgroup_dir(override: str | None) -> str | None:
+    if override:
+        return override
+    try:
+        with open("/proc/self/cgroup") as fh:
+            rel = fh.read().strip().split("::", 1)[1]
+        return os.path.join("/sys/fs/cgroup", rel.lstrip("/"))
+    except Exception:                                # noqa: BLE001 — no cgroup v2 here; the control then voids
+        return None
+
+
+def _read(path: str):
+    try:
+        with open(path) as fh:
+            return fh.read().strip()
+    except OSError:
+        return None
+
+
+def _cgroup(cg: str | None) -> dict:
+    out = {"dir": cg, "memory_max": None, "memory_peak_incl_page_cache": None, "memory_events": None}
+    if not cg:
+        return out
+    out["memory_max"] = _read(os.path.join(cg, "memory.max"))
+    peak = _read(os.path.join(cg, "memory.peak"))
+    out["memory_peak_incl_page_cache"] = int(peak) if peak and peak.isdigit() else peak
+    ev = _read(os.path.join(cg, "memory.events"))
+    if ev:
+        out["memory_events"] = {k: int(v) for k, v in (line.split() for line in ev.splitlines())
+                                if k in ("max", "oom", "oom_kill")}
+    return out
+
+
+def _free(path="/") -> int:
+    return shutil.disk_usage(path).free
+
+
+def _du(path: str) -> int:
+    total = 0
+    for base, _d, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(base, f))
+            except OSError:
+                pass
+    return total
 
 
 # ── index ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 def cmd_index(a) -> int:
     _refuse_production(a.pristine)
+    _refuse_production(a.out)
     folder = os.path.join(a.pristine, "provenance", "follow-up")
     if os.path.exists(a.out):
         print("REFUSED: %s exists" % a.out, file=sys.stderr)
         return 2
-    db = sqlite3.connect(a.out)
+    tmp = a.out + ".building"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    db = sqlite3.connect(tmp)
     db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL)")
-    n = dup = 0
+    n, dups = 0, []
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
             continue
@@ -97,26 +202,51 @@ def cmd_index(a) -> int:
                 if rec.get("source") != "dexscreener_token_state":
                     continue
                 cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?)", (rec["mint"], rec["body"], rec["bytes"]))
-                n += cur.rowcount
-                dup += 1 - cur.rowcount
+                if cur.rowcount == 1:
+                    n += 1
+                else:
+                    dups.append(rec["mint"])
     db.commit()
-    print(json.dumps({"indexed": n, "duplicate_mints_ignored": dup, "out": a.out}))
+    db.close()
+    if dups or n == 0:
+        os.remove(tmp)
+        print("REFUSED: %s" % ("%d duplicate mint(s), e.g. %s" % (len(dups), dups[:3]) if dups else "no body indexed"),
+              file=sys.stderr)
+        return 2
+    os.replace(tmp, a.out)
+    print(json.dumps({"indexed": n, "out": a.out}))
     return 0
 
 
 # ── prepare ────────────────────────────────────────────────────────────────────────────────────────────────────────
+def _be_gentle() -> None:
+    try:
+        os.nice(19)
+        subprocess.run(["ionice", "-c3", "-p", str(os.getpid())], check=False, capture_output=True)
+    except Exception:                                # noqa: BLE001 — off Linux (tests); the copy still runs
+        pass
+
+
 def cmd_prepare(a) -> int:
     _refuse_production(a.pristine)
     _refuse_production(a.run_root)
-    now = _parse_now(a.now)
+    now = _parse_ts(a.now)
     if os.path.exists(a.run_root):
         print("REFUSED: %s exists; remove it deliberately first" % a.run_root, file=sys.stderr)
         return 2
-    shutil.copytree(a.pristine, a.run_root, symlinks=True,
-                    ignore=shutil.ignore_patterns("follow-up") if a.skip_bodies else None)
+    ignore = None if a.with_bodies else shutil.ignore_patterns("follow-up")
+    need = _du(a.pristine) - (0 if a.with_bodies else _du(os.path.join(a.pristine, "provenance", "follow-up")))
+    free_before = _free()
+    if free_before - need < FLOOR_BYTES:
+        print("REFUSED: free %d - copy %d is under the 10 GiB floor" % (free_before, need), file=sys.stderr)
+        return 2
+    _be_gentle()
+    shutil.copytree(a.pristine, a.run_root, symlinks=True, ignore=ignore)
+    free_after = _free()
     state = os.path.join(a.run_root, "state")
     month = now.strftime("%Y-%m")
-    report = {"run_root": a.run_root, "now": now.isoformat(), "journals": {}}
+    report = {"run_root": a.run_root, "pristine": a.pristine, "now": now.isoformat(), "with_bodies": a.with_bodies,
+              "copied_bytes_estimate": need, "free_before": free_before, "free_after": free_after, "journals": {}}
     for name in sorted(os.listdir(state)):
         if not (name.startswith("spend-journal-") and name.endswith(".jsonl")):
             continue
@@ -130,28 +260,37 @@ def cmd_prepare(a) -> int:
             tmp = path + ".cut"
             with open(path, encoding="utf-8") as src, open(tmp, "w", encoding="utf-8") as dst:
                 for line in src:
-                    if json.loads(line).get("ts", "") <= now.isoformat():
+                    if _parse_ts(json.loads(line)["ts"]) <= now:
                         dst.write(line)
                         kept += 1
                     else:
                         cut += 1
             os.replace(tmp, path)
             report["journals"][name] = {"rows_kept": kept, "rows_cut": cut, "bytes_after": os.path.getsize(path)}
+    with open(os.path.join(a.run_root, "PREPARE.json"), "w") as fh:
+        json.dump(report, fh, indent=2, sort_keys=True)
     print(json.dumps(report, sort_keys=True))
+    if free_after < FLOOR_BYTES:
+        print("WARNING: free space after the copy is under the 10 GiB floor; remove the run dir", file=sys.stderr)
+        return 2
     return 0
 
 
 # ── run ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 class Counts:
     def __init__(self):
-        self.egress = 0          # every call into the replaced _request
-        self.served = 0          # DexScreener, a captured body
-        self.no_body = 0         # DexScreener, no captured body (promote's births): a no-pairs body
-        self.synthetic = 0       # Helius, A7's synthetic reply — never an observed fan-out
-        self.call_site = 0       # token_state calls made by the follow-up loop itself
+        self.egress = 0           # every call into the replaced _request
+        self.served = 0           # DexScreener, a captured body (loop + promote)
+        self.no_body = 0          # DexScreener, no captured body: a no-pairs body (loop + promote)
+        self.synthetic = 0        # Helius, A7's synthetic leg — never an observed fan-out
+        self.call_site = 0        # token_state calls made by the follow-up loop itself
+        self.loop_served = 0      # ... of which served from a captured body
+        self.loop_no_body = 0     # ... of which had no captured body
+        self.in_loop = False
+        self.served_bytes: list[int] = []
 
 
-def _freeze_clock(now: datetime, modules) -> None:
+def _freeze_clock(now: datetime, modules) -> list[str]:
     class Frozen(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -160,27 +299,28 @@ def _freeze_clock(now: datetime, modules) -> None:
         @classmethod
         def utcnow(cls):
             return now.replace(tzinfo=None)
+    frozen = []
     for m in modules:
         if getattr(m, "datetime", None) is datetime:
             m.datetime = Frozen
+            frozen.append(m.__name__)
+    return frozen
 
 
-def _maxrss_kib() -> int | None:
-    try:
-        import resource                              # Linux only; the run is meant for the staging box
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    except ImportError:
-        return None
-
-
-def _cgroup_peak() -> int | None:
-    try:
-        with open("/proc/self/cgroup") as fh:
-            rel = fh.read().strip().split("::", 1)[1]
-        with open(os.path.join("/sys/fs/cgroup", rel.lstrip("/"), "memory.peak")) as fh:
-            return int(fh.read().strip())
-    except Exception:                                # noqa: BLE001 — absent off a cgroup v2 unit; reported as null
-        return None
+def _egress_control(probes: list[str]) -> tuple[bool, str]:
+    """True when every probe is refused the deny-shaped way. A literal IP must fail with EPERM/EACCES."""
+    notes = []
+    for p in probes:
+        host, port = p.rsplit(":", 1)
+        literal = all(ch.isdigit() or ch == "." for ch in host)
+        try:
+            socket.create_connection((host, int(port)), timeout=5).close()
+            return False, "a connection to %s SUCCEEDED; IPAddressDeny is not in force" % p
+        except OSError as exc:
+            if literal and exc.errno not in (errno.EPERM, errno.EACCES):
+                return False, "%s failed with %s, not EPERM/EACCES: not proof of a deny" % (p, errno.errorcode.get(exc.errno, exc.errno))
+            notes.append("%s refused (%s)" % (p, errno.errorcode.get(exc.errno, type(exc).__name__)))
+    return True, "; ".join(notes)
 
 
 def cmd_run(a) -> int:
@@ -188,16 +328,29 @@ def cmd_run(a) -> int:
     if os.path.realpath(os.environ.get("TOKEN_WATCH_ROOT", "")) != os.path.realpath(a.run_root):
         print("REFUSED: TOKEN_WATCH_ROOT must equal --run-root (config reads it at import)", file=sys.stderr)
         return 2
-    now = _parse_now(a.now)
-    if not a.skip_egress_check:
-        try:
-            socket.create_connection(("api.dexscreener.com", 443), timeout=5).close()
-            print(json.dumps({"void": "egress control: a live connection SUCCEEDED; IPAddressDeny is not in force"}))
-            return 6
-        except OSError as exc:
-            egress_control = "refused as required (%s)" % type(exc).__name__
+    now = _parse_ts(a.now)
+    prepared = json.load(open(os.path.join(a.run_root, "PREPARE.json")))
+
+    def void(code: int, why: str, extra: dict | None = None) -> int:
+        rec = {"arm": a.arm, "void": why, "exit": code, "prepare": prepared, **(extra or {})}
+        with open(a.out, "w") as fh:
+            json.dump(rec, fh, indent=2, sort_keys=True, default=str)
+        print(json.dumps(rec, sort_keys=True, default=str))
+        return code
+
+    # (1) MemoryMax
+    cg = _cgroup_dir(a.cgroup_dir)
+    cgroup_before = _cgroup(cg)
+    if not a.skip_memory_check and cgroup_before["memory_max"] != str(EXPECT_MEMORY_MAX):
+        return void(8, "MemoryMax control: memory.max is %r, not %d" % (cgroup_before["memory_max"], EXPECT_MEMORY_MAX),
+                    {"cgroup": cgroup_before})
+    # (2) IPAddressDeny
+    if a.skip_egress_check:
+        egress_note = "SKIPPED (test)"
     else:
-        egress_control = "SKIPPED (test)"
+        ok, egress_note = _egress_control(a.egress_probe or ["1.1.1.1:443", "api.dexscreener.com:443"])
+        if not ok:
+            return void(6, "egress control: " + egress_note)
 
     tracer = None
     if a.trace:
@@ -214,15 +367,16 @@ def cmd_run(a) -> int:
                 fh.write("traced current %d peak %d\n" % (cur, peak))
                 for st in s.statistics("lineno")[:10]:
                     fh.write("%s\n" % st)
-    else:
-        def snap(stage):
-            return None
 
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, HERE)
     import budget, follow_up, promote, provenance, providers, store, summary  # noqa: E401,E402
     from config import MONTHLY_CREDIT_CAP  # noqa: E402
-    if not a.no_clock_freeze:
-        _freeze_clock(now, (budget, provenance, store, follow_up, promote, summary, providers))
+    mods = {"budget": budget, "provenance": provenance, "store": store, "follow_up": follow_up,
+            "promote": promote, "summary": summary, "providers": providers}
+    # (3) the clock
+    frozen = [] if a.no_clock_freeze else _freeze_clock(now, [mods[n] for n in CLOCK_MODULES])
+    if not a.no_clock_freeze and sorted(frozen) != sorted(CLOCK_MODULES):
+        return void(10, "clock control: froze %s, expected %s" % (frozen, list(CLOCK_MODULES)))
 
     first = datetime.strptime(FIRST_BUCKET, "%Y-%m-%dT%H").replace(tzinfo=UTC)
     cur = store.load_state("follow_up_cursor", {})
@@ -230,36 +384,40 @@ def cmd_run(a) -> int:
     store.save_state("follow_up_cursor", cur)
     ledger = budget._blank(budget._month_key(now))
     if a.arm == "all_shed":
-        ledger["spent"]["birth"] = MONTHLY_CREDIT_CAP
-    # keep the journal cursor the copy carries (the fold's offset), so the fold does the work it would have done
-    old = store.load_state(budget.STATE, {})
-    if old.get("month") == ledger["month"]:
-        ledger["journal_offset"] = old.get("journal_offset", 0)
+        ledger["spent"]["birth"] = MONTHLY_CREDIT_CAP + 1
     store.save_state(budget.STATE, ledger)
 
     c = Counts()
     db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
     db.execute("PRAGMA cache_size = -2048")            # 2 MiB: the harness's own cache, small and constant
+    curves = json.load(open(CURVES, encoding="utf-8"))
 
     def fake_request(req):
         c.egress += 1
         url = req.full_url
         if "helius" in url:
             c.synthetic += 1
-            method = json.loads(req.data.decode()).get("method")
-            if method == "getAccountInfo":
-                return {"jsonrpc": "2.0", "id": "token-watch", "result": {"value": None}}
+            payload = json.loads(req.data.decode())
+            if payload.get("method") == "getAccountInfo":
+                pick = int(hashlib.sha1(str(payload["params"][0]).encode()).hexdigest(), 16) % len(curves)
+                return json.loads(json.dumps(curves[pick]["account_info"]))
             return {"jsonrpc": "2.0", "id": "token-watch", "result": {"value": []}}
         mint = url.rsplit("/", 1)[-1]
-        row = db.execute("SELECT body FROM bodies WHERE mint = ?", (mint,)).fetchone()
+        row = db.execute("SELECT body, bytes FROM bodies WHERE mint = ?", (mint,)).fetchone()
         if row is None:
             c.no_body += 1
-            return {"schemaVersion": "1.0.0", "pairs": None}
+            c.loop_no_body += c.in_loop
+            return json.loads('{"schemaVersion": "1.0.0", "pairs": null}')
         c.served += 1
-        body = json.loads(row[0])
+        c.loop_served += c.in_loop
+        text, nbytes = row
         if a.arm == "x4":
-            body["_pad"] = "x" * (3 * len(row[0]))
-        return body
+            inner = text.strip()
+            text = '{"_pad": [%s, %s, %s], %s' % (inner, inner, inner, inner[1:]) if inner != "{}" else \
+                '{"_pad": [{}, {}, {}]}'
+            nbytes = len(text.encode("utf-8"))
+        c.served_bytes.append(nbytes)
+        return json.loads(text)
 
     providers._request = fake_request
     providers.helius_key = lambda: "synthetic"
@@ -270,14 +428,16 @@ def cmd_run(a) -> int:
 
         def token_state(self, mint):
             c.call_site += 1
-            return providers.token_state(mint)
+            c.in_loop = True
+            try:
+                return providers.token_state(mint)
+            finally:
+                c.in_loop = False
     follow_up.providers = CallSite()
 
     if tracer:
         def wrap(mod, name, before=True, after=True):
-            fn = getattr(mod, name, None)
-            if fn is None:
-                return
+            fn = getattr(mod, name)                    # a missing target RAISES: a silent skip misses A2's site
 
             def w(*args, **kw):
                 if before:
@@ -292,8 +452,7 @@ def cmd_run(a) -> int:
         wrap(follow_up, "dead_set", before=False)
         wrap(promote, "run")
         wrap(summary, "build")
-        wrap(store, "identity_map")
-        wrap(summary, "identity_map")
+        wrap(summary, "_identity_map")
 
     obs_day = store.observation_path(now)
     rows_before = sum(1 for _ in open(obs_day, encoding="utf-8")) if os.path.exists(obs_day) else 0
@@ -306,24 +465,59 @@ def cmd_run(a) -> int:
             if i >= rows_before and '"shed":' in line:
                 shed_rows += 1
     expected = stats["due"] - stats["requeued_not_yet_due"]
+    loop_lookups = c.loop_served + c.loop_no_body
     result = {
-        "arm": a.arm, "now": now.isoformat(), "egress_control": egress_control,
-        "memory_peak_bytes_cgroup_incl_page_cache": _cgroup_peak(),
-        "ru_maxrss_kib": _maxrss_kib(),
-        "stats": {k: v for k, v in stats.items() if k not in ("summary",)},
+        "arm": a.arm, "now": now.isoformat(), "egress_control": egress_note, "frozen_modules": frozen,
+        "cgroup": _cgroup(cg), "ru_maxrss_kib": _maxrss_kib(),
+        "stats": {k: v for k, v in stats.items() if k != "summary"},
         "fanout": {"call_site_token_state": c.call_site, "egress": c.egress, "served_bodies": c.served,
-                   "no_body_mints": c.no_body, "synthetic_helius_calls": c.synthetic},
-        "shed_observation_rows": shed_rows, "due_minus_requeued": expected,
+                   "no_body_mints": c.no_body, "loop_served": c.loop_served, "loop_no_body": c.loop_no_body,
+                   "synthetic_helius_calls": c.synthetic, "synthetic_label": "SYNTHETIC - not an observed fan-out"},
+        "served_body_bytes": _stats(c.served_bytes),
+        "shed_observation_rows": shed_rows, "due_minus_requeued": expected, "prepare": prepared,
     }
-    void = None
+    code = 0
     if a.arm == "all_shed" and not (c.egress == 0 and c.call_site == expected and shed_rows == expected):
-        void = "arm all_shed control failed: egress=%d call_site=%d shed_rows=%d expected=%d" % (
+        result["void"] = "arm all_shed control failed: egress=%d call_site=%d shed_rows=%d expected=%d" % (
             c.egress, c.call_site, shed_rows, expected)
-        result["void"] = void
+        code = 7
+    elif a.arm != "all_shed":
+        share = (c.loop_served / loop_lookups) if loop_lookups else 0.0
+        result["loop_served_share"] = round(share, 6)
+        if share < a.min_served_share:
+            result["void"] = "served-share floor: %.4f of the loop's %d lookups served from captured bodies, under %.2f" % (
+                share, loop_lookups, a.min_served_share)
+            code = 9
+    result["exit"] = code
     with open(a.out, "w") as fh:
         json.dump(result, fh, indent=2, sort_keys=True, default=str)
     print(json.dumps(result, sort_keys=True, default=str))
-    return 7 if void else 0
+    return code
+
+
+# ── lookup-baseline ────────────────────────────────────────────────────────────────────────────────────────────────
+def cmd_lookup_baseline(a) -> int:
+    _refuse_production(a.run_root)
+    first = datetime.strptime(FIRST_BUCKET, "%Y-%m-%dT%H").replace(tzinfo=UTC)
+    seen, found = set(), 0
+    db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
+    db.execute("PRAGMA cache_size = -2048")
+    for i in range(BUCKETS):
+        path = os.path.join(a.run_root, "due", (first + timedelta(hours=i)).strftime("%Y-%m-%dT%H") + ".jsonl")
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                m = json.loads(line).get("mint")
+                if m and m not in seen:
+                    seen.add(m)
+                    row = db.execute("SELECT body FROM bodies WHERE mint = ?", (m,)).fetchone()
+                    found += row is not None
+    result = {"lookups": len(seen), "found": found, "ru_maxrss_kib": _maxrss_kib(),
+              "cgroup": _cgroup(_cgroup_dir(a.cgroup_dir)), "sqlite_cache_bound_bytes": 2048 * 1024,
+              "note": "the set of seen mints is held, as run_hour holds its own; the bodies are not"}
+    with open(a.out, "w") as fh:
+        json.dump(result, fh, indent=2, sort_keys=True)
+    print(json.dumps(result, sort_keys=True))
+    return 0
 
 
 def main(argv=None) -> int:
@@ -336,7 +530,7 @@ def main(argv=None) -> int:
     p.add_argument("--pristine", required=True)
     p.add_argument("--run-root", required=True)
     p.add_argument("--now", required=True)
-    p.add_argument("--skip-bodies", action="store_true", help="do not copy provenance/follow-up (the index has them)")
+    p.add_argument("--with-bodies", action="store_true", help="also copy provenance/follow-up (the index serves them)")
     r = sub.add_parser("run")
     r.add_argument("--arm", required=True, choices=("all_shed", "live", "x4"))
     r.add_argument("--run-root", required=True)
@@ -344,11 +538,21 @@ def main(argv=None) -> int:
     r.add_argument("--now", required=True)
     r.add_argument("--out", required=True)
     r.add_argument("--trace")
-    r.add_argument("--skip-egress-check", action="store_true")
+    r.add_argument("--min-served-share", type=float, default=0.95)
+    r.add_argument("--egress-probe", action="append", help="host:port; repeatable (tests point it at a live socket)")
+    r.add_argument("--cgroup-dir", help="TEST ONLY: read memory.* from here instead of this process's cgroup")
+    r.add_argument("--skip-egress-check", action="store_true", help="TEST ONLY")
+    r.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     r.add_argument("--no-clock-freeze", action="store_true",
                    help="TEST CONTROL ONLY: proves arm all_shed goes void without the freeze")
+    b = sub.add_parser("lookup-baseline")
+    b.add_argument("--run-root", required=True)
+    b.add_argument("--bodies", required=True)
+    b.add_argument("--out", required=True)
+    b.add_argument("--cgroup-dir")
     a = ap.parse_args(argv)
-    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run}[a.cmd](a)
+    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run,
+            "lookup-baseline": cmd_lookup_baseline}[a.cmd](a)
 
 
 if __name__ == "__main__":
