@@ -15,6 +15,16 @@
 #    cursor and last_seen it copies are a still picture).
 # ⛔ REFUSES if the scratch tree already exists (it never overwrites a capture in progress), or if free space on /
 #    would fall under 10 GiB after the copy.
+# ⛔ THE COPY RUNS UNDER THE STORE'S OWN periodic_lock (Langston, Step 4 B-1), through tools/locked_copy.py as
+#    tokenwatch. The follow-up is not the only writer: summary and feed-watch (hourly), tier and cold-offbox (daily)
+#    take that lock, and each creates and removes state/periodic.lock and budget.json.<pid>.<hex>.tmp; a file renamed
+#    away between listdir and open makes `cp -a` fail and the script die on a partial tree that every retry refuses.
+#    The RECEIVER takes no lock by design and only appends whole fsync'd lines (store.py:114-117), so a concurrent
+#    copy sees whole records; it is not gated.
+# ⛔ THE LOCK IS NOT COPIED (B-2): state/periodic.lock and any state/*.tmp are removed from the copy, or the replay's
+#    own run_hour would skip (a lock under 30 min old) or log a steal (over it).
+# ★ deploy gets READ-ONLY access to the tree (setfacl r-X, default too), as the store itself grants it, so the
+#    reviewer reads the capture log at first hand (R-1). deploy cannot write, so it cannot touch the capture.
 # The tree is tokenwatch:tokenwatch 0700, OUTSIDE /var/lib/token-watch, so the store-size watch never counts it.
 # Every copy runs under nice -n 19 / ionice -c3 (the trading app shares this disk). Exit 0 prints the copy's bytes.
 set -euo pipefail
@@ -44,8 +54,11 @@ free=$(df -B1 --output=avail / | tail -1 | tr -d ' ')
 (( free - need >= FLOOR )) || { echo "REFUSED: free $free - copy $need is under the 10 GiB floor" >&2; exit 4; }
 echo "copying $need B (free before: $free B)"
 
+HERE=$(cd "$(dirname "$0")/.." && pwd)
 install -d -o tokenwatch -g tokenwatch -m 0700 "$DST" "$DST/due" "$DST/observations" "$DST/provenance" "$DST/provenance/follow-up"
-for d in "${DIRS[@]}"; do nice -n 19 ionice -c3 cp -a "$SRC/$d" "$DST/$d"; done
-for f in "${FILES[@]}"; do nice -n 19 ionice -c3 cp -a "$SRC/$f" "$DST/$f"; done
-chown -R tokenwatch:tokenwatch "$DST"
+runuser -u tokenwatch -- env TOKEN_WATCH_ROOT="$SRC" PYTHONDONTWRITEBYTECODE=1 \
+  python3 "$HERE/tools/locked_copy.py" "$DST" "${DIRS[@]}" "${FILES[@]}"
+rm -f "$DST/state/periodic.lock"
+find "$DST/state" -maxdepth 1 -name '*.tmp' -print -delete
+setfacl -R -m u:deploy:r-X -m d:u:deploy:r-X "$DST"
 echo "done: $(du -sb "$DST" | cut -f1) B in $DST; free now $(df -B1 --output=avail / | tail -1 | tr -d ' ') B"
