@@ -1584,3 +1584,16 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESTORE PATH:** `git mv 1-system-manual/_archive/deleted-code/stage-attrition-cache.ts.20261107-B-DB-POOL-GUARD.removed server/services/stage-attrition-cache.ts`, then re-add the route and the `index.ts` start from git history at `ad641be94` — and run it on `diagDb`, not `db`. A restored instrument also needs its client view, which is CC-B's call under `#648`.
 **ARCHIVE:** `1-system-manual/_archive/deleted-code/stage-attrition-cache.ts.20261107-B-DB-POOL-GUARD.removed` (a `git mv`, blob-identical).
 **COMMIT:** the P5 commit. **DEPLOY:** after Langston's Step 4 and CI 4/4.
+
+## 2026-11-07 — the xStock dispatch gate's DB age query `getLatestTickAgeMs` — B-PRICE-FEED-COVERAGE increment 0 (`#1222`), CC-B
+| removed | where (pre-removal, at `382c1793f`) | what it was |
+|---|---|---|
+| `getLatestTickAgeMs(symbol)` (module-private function) | `server/asset_classes/xstock_spot/active-dispatch.ts:74-84` | P19-B4a (C3): the dispatch freshness gate's age, `NOW() − MAX(captured_at)` over `xstock_spot_ticker_snap` for the symbol |
+| the `db` and `sql` imports | `active-dispatch.ts:38-39` | used only by that function |
+
+**WHY:** rule 18. Replaced in the same change by the in-memory tick (`judgeDispatchTick` over `getLatestEquityTick`): the archiver writes a snapshot row for EVERY frame, including the venue's subscribe replay of a book, stamped at receipt, so this query read a replayed, hours-old book as ≈ 0 ms old (Langston measured AAPL 15.68 h; ~12 replay bursts a day over 78 h). Langston's PART-0 ruling (Discord 2026-11-07 ~22:2xZ): PROCEED, pull forward.
+**BLAST RADIUS (§9.5(a-ii)):** one definition (`:74`) and one call site (`:183`) at the ref, repo-wide (Langston re-derived; positive control `getXstockActiveDispatchStats`, 36 hits). The function wrote no state. Tests that stubbed its DB read (`p19-b4a-c2-xstock-dispatch`, `p19-b6-5a-per-class-active-gate`, `p19-b4a-c3-gate-watchdog`) now stub or drive the in-memory tick.
+**LEFT INTENTIONALLY:** `xstock_spot_ticker_snap` and its `captured_at` are untouched — the receipt stamp is honest archive data; the defect was reading it as the book's age. The other DB-snapshot readers (`depth-source.ts` entry path corrected in this same increment; `entry-spread-plausibility`, the birth quote) stay on their own sequence in `#1222` OBJ-6.
+**RESTORE PATH:** re-add the function and the two imports from git history at `382c1793f` — but a restored reader is false-fresh on every replay burst; restore only with the frame-type discriminator (`#1222` OBJ-6).
+**ARCHIVE:** none — a 10-line private function, recoverable from git at `382c1793f`; no file was removed.
+**COMMIT:** the increment-0 commit on `review/b-price-feed-coverage-inc0`. **DEPLOY:** after Langston's Step 4, landing byte-identical, CI 4/4 per job, after alert `801330ae` (2026-11-09 21:30Z).

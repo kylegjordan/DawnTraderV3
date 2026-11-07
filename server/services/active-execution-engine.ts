@@ -355,6 +355,7 @@ import {
   assessSufficiency,
   getTickerWitness,
   recordDepthGateBlock,
+  applyXstockEntryTickAge,
   type DepthSnapshot,
 } from './execution/depth-source.js';
 // B-CRYPTO-FEED-WATCHDOG (#1232, P7): a crypto witness grades a close only when VOUCHED by a live recorder connection.
@@ -611,12 +612,22 @@ export class ActiveExecutionEngine {
         return { pass: false, reason: `venue_transition_pause ${_vp.window}`, snapshot: null, warmthMaxAgeMs: null };
       }
     }
-    const snapshot = await getDepthSnapshot(symbol, assetClass);
+    let snapshot = await getDepthSnapshot(symbol, assetClass);
     // B-XSTOCK-BID-TRIGGER-RELAND increment A, P4 ([C5]): the NEWEST xStock row must hold BOTH sides with size. Its own
     // reason code (`depth_verdict`), separate from P3's `implausible_spread_entry` so Step 8 can count each.
     if (snapshot?.verdict && (snapshot.verdict.bid !== 'ok' || snapshot.verdict.ask !== 'ok' || snapshot.verdict.crossed)) {
       // Row 2 increment B (P5): a crossed book refuses here too, under the same reason code with `crossed=true`.
       return { pass: false, reason: `depth_verdict bid=${snapshot.verdict.bid} ask=${snapshot.verdict.ask} crossed=${snapshot.verdict.crossed}`, snapshot: null, warmthMaxAgeMs: null };
+    }
+    // B-PRICE-FEED-COVERAGE increment 0 (`#1222`, P0-2): the xStock snapshot's DB age reads a venue REPLAY of a frozen book as
+    // ≈ 0 ms. On this ENTRY path only, an absent or unobserved in-memory tick refuses (`cold_tick`), and the age the snapshot
+    // CARRIES becomes the larger of the row's and the tick's — so warmth below, the consumption check before `openOrder` and
+    // `entry_book_age_ms` read one honest age. Crypto is byte-for-byte unchanged. No counter here: the open-path caller is the
+    // only writer of `recordDepthGateBlock` for this gate's reasons (the double-increment trap noted below).
+    if (assetClass === 'xstock_spot' && snapshot) {
+      const _tickAge = applyXstockEntryTickAge(snapshot, getLatestEquityTick(symbol));
+      if (!_tickAge.ok) return { pass: false, reason: _tickAge.reason, snapshot: null, warmthMaxAgeMs: null };
+      snapshot = _tickAge.snapshot;
     }
     const warmth = assessWarmth(snapshot, 'asks', config);
     if (!warmth.warm || !snapshot) return { pass: false, reason: warmth.reason, snapshot: null, warmthMaxAgeMs: null };
@@ -636,7 +647,7 @@ export class ActiveExecutionEngine {
     // constraint 3 — crypto depth is the venue's own published ladder). Crypto's entry behaviour is
     // BYTE-FOR-BYTE unchanged by this batch; widening it would be an unreviewed change to a class this
     // batch never audited.
-    // ⛔ NEITHER ARM BELOW CALLS `recordDepthGateBlock` — THE CALLER IS THE SOLE WRITER (`:3724`), as it
+    // ⛔ NEITHER ARM BELOW CALLS `recordDepthGateBlock` — THE OPEN-PATH CALLER IS THE SOLE WRITER (`openPosition`'s `[DEPTH_GATE_BLOCK]` branch — corrected B-PRICE-FEED-COVERAGE inc 0: this read `:3724`, which is unrelated entry-fill-look pruning; `recordDepthGateBlock` has three callers, depth gate / liveness / consumption, all in `openPosition`), as it
     // is for all four arms above. Both arms did call it in the first draft, so `xstock_spot:one_sided_book`
     // and `:hollow_book` incremented 2× per refusal while every other bucket incremented 1× — inside the
     // one per-reason counter Step 8 reads to say whether this gate fires (Langston Step-4 BLOCKER-1).

@@ -35,9 +35,8 @@ import { STRATEGY_DISPLAY_NAMES } from '../../config/canonical-regime-strategy-m
 import type { StrategySignal } from '../../services/strategy-engine.js';
 import type { StrategyType } from '../../services/active-position-sizing.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
-import { db } from '../../db.js';
-import { sql } from 'drizzle-orm';
 import { addAlert } from '../../services/system-alerts.js';
+import { getLatestEquityTick, type EquityTick } from '../../services/passive-archive/equity-spot-archiver.js';
 import { resolveXstockFillSafetyConfig } from './fill-safety-config.js';
 // P19-B4b.1 (#295): the RTH liquid-fill-window clock predicate is retired from the
 // active path — the 24/5 book-depth-sufficiency gate at the engine open seam replaces it.
@@ -50,6 +49,9 @@ let _dispatchErrors = 0;   // assert/build/dispatch failures (loud-logged, never
 // P19-B4a (C3) — fill-safety gate counters (all fail-CLOSED, all observable).
 let _configClosedSkips = 0; // fill-safety config missing/incomplete → fail-closed block
 let _staleSkips = 0;        // latest tick older than the freshness threshold (or absent)
+// B-PRICE-FEED-COVERAGE increment 0 (`#1222`): the symbol's in-memory tick exists only because the venue REPLAYED the book on
+// a subscribe (`observed === false`) — its receipt time is not a quote age, so it is refused on its own arm.
+let _coldSkips = 0;
 // P19-B6.5a — per-asset-class active gate: master engine ON but xstock_spot class gated OFF
 // (fail-closed, default-OFF). The expected state until B7b explicitly activates xStock.
 let _classDormantSkips = 0;
@@ -62,26 +64,55 @@ export function getXstockActiveDispatchStats() {
     dispatchErrors: _dispatchErrors,
     configClosedSkips: _configClosedSkips,
     staleSkips: _staleSkips,
+    coldSkips: _coldSkips,
     classDormantSkips: _classDormantSkips,
   };
 }
 
 /**
- * P19-B4a (C3) — latest-tick age (ms) for `symbol` from the append-only ticker
- * snapshots, or `null` when no tick exists. Index-served by
- * `xstock_spot_ticker_snap_sym_time (symbol, captured_at DESC)`.
+ * B-PRICE-FEED-COVERAGE increment 0 (`#1222`, pulled forward by Langston 2026-11-07) — the freshness gate's age source.
+ *
+ * ⛔ WHY NOT THE DB ANY MORE: gate (b) read `NOW() − MAX(captured_at)` off `xstock_spot_ticker_snap`. The archiver writes that
+ * row for EVERY frame — including the venue's subscribe REPLAY of a book, however old — stamped at receipt
+ * (`equity-spot-archiver.ts`, `bufferTickerSnap` sits outside the frame-type arms). Each replay burst (`snapshot:467`, ~12 a
+ * day measured over 78 h) therefore read every symbol's age as ≈ 0 on books up to 15.7 h old: false-fresh and fail-OPEN.
+ * `capturedAt` is honest — it records receipt, as an archive should; the defect was READING it as the book's age.
+ * The in-memory tick (`getLatestEquityTick`) moves its age only on a venue CHANGE (`update`) and marks a replay-only mark
+ * `observed: false` — the same predicate the RTB refresh already applies (`rtb-retirement-ask.ts`).
+ * Langston's bound condition: test `observed === true` AND the age, or refuse — a tick born from a replay after a restart
+ * reads `tsMs ≈ now`, so an age-only reader is exactly as false-fresh as the DB.
+ * ⚠️ Two-sided: the DB age carried the archive's throttle + flush lag (up to ~9 s); this age does not, so on genuinely
+ * ticking names the gate is up to ~9 s LOOSER while it CLOSES the replay case (pre-registered both ways, pre-audit P0-6).
  */
-async function getLatestTickAgeMs(symbol: string): Promise<number | null> {
-  const res = await db.execute<{ age_ms: string | number | null }>(sql`
-    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(captured_at))) * 1000 AS age_ms
-    FROM xstock_spot_ticker_snap
-    WHERE symbol = ${symbol}
-  `);
-  const rows = (res as any).rows ?? res;
-  const raw = Array.isArray(rows) ? rows[0]?.age_ms : undefined;
-  if (raw === null || raw === undefined) return null;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+export type DispatchTickArm = 'ok' | 'absent' | 'cold' | 'stale';
+export function judgeDispatchTick(
+  tick: EquityTick | null,
+  nowMs: number,
+  maxAgeMs: number,
+): { arm: DispatchTickArm; ageMs: number | null } {
+  if (!tick) return { arm: 'absent', ageMs: null };
+  const ageMs = nowMs - tick.tsMs;
+  if (tick.observed !== true) return { arm: 'cold', ageMs: Number.isFinite(ageMs) ? ageMs : null };
+  if (!(Number.isFinite(ageMs) && ageMs >= 0) || ageMs > maxAgeMs) return { arm: 'stale', ageMs: Number.isFinite(ageMs) ? ageMs : null };
+  return { arm: 'ok', ageMs };
+}
+
+/** Increment 0: the cold arm's OWN alert key — never the symbol-less stale key, which suppresses every new mint while one
+ *  non-terminal row holds it (`system-alerts.ts`, `a.state !== 'resolved'`). A cold arm fires by construction after every
+ *  restart; sharing the key would silence the genuine feed-problem `stale` alarm underneath it (Langston BLOCKER-1). */
+async function raiseColdTickFillAlert(symbol: string, maxAgeMs: number): Promise<void> {
+  try {
+    await addAlert({
+      triggers_at: new Date(),
+      category: 'breakage',
+      severity: 'warning',
+      title: 'xStock active fill blocked — price only replayed, not observed',
+      body: `An active xStock dispatch was refused because the latest price for ${symbol} exists only as the venue's replay of the book on a subscribe (no venue update since this process started tracking it), so its age is unknown (limit ${maxAgeMs}ms). Expected for a minute or so after a restart or reconnect; persistent outside that means the symbol's feed is not updating.`,
+      dedupe_key: 'xstock-cold-tick-fill-block',
+    });
+  } catch (err) {
+    console.error(`[B-PRICE-FEED-COVERAGE][INC0] failed to raise cold-tick alert for ${symbol}:`, err);
+  }
 }
 
 /** P19-B4a (C3) — dedup'd warning when an active fill is blocked on a stale price. */
@@ -179,11 +210,22 @@ export async function dispatchXstockActiveSignal(input: XstockActiveDispatchInpu
     //     directions (blocked fillable off-hours books, passed thin RTH books). The
     //     other two C3 gates — freshness (b) + the silent-stall watchdog — STAY
     //     (both 24/5-correct; #295 keeps them).
-    // (b) Freshness — the symbol's latest tick must be within the max-age window.
-    const ageMs = await getLatestTickAgeMs(input.symbol);
-    if (ageMs === null || ageMs > safety.activeFillMaxAgeMs) {
-      _staleSkips++;
-      await raiseStaleFillAlert(input.symbol, ageMs, safety.activeFillMaxAgeMs);
+    // (b) Freshness — the symbol's latest OBSERVED tick must be within the max-age window (increment 0: the in-memory tick,
+    //     not the DB snapshot — see `judgeDispatchTick`). Every refusal writes one stderr line (the counters have no
+    //     production reader; stderr is the Step-7 instrument).
+    const _tickJudge = judgeDispatchTick(getLatestEquityTick(input.symbol), Date.now(), safety.activeFillMaxAgeMs);
+    if (_tickJudge.arm !== 'ok') {
+      console.warn(
+        `[B-PRICE-FEED-COVERAGE][INC0][DISPATCH_REFUSE] arm=${_tickJudge.arm} symbol=${input.symbol} ` +
+        `ageMs=${_tickJudge.ageMs === null ? 'null' : Math.round(_tickJudge.ageMs)}`,
+      );
+      if (_tickJudge.arm === 'cold') {
+        _coldSkips++;
+        await raiseColdTickFillAlert(input.symbol, safety.activeFillMaxAgeMs);
+      } else {
+        _staleSkips++;
+        await raiseStaleFillAlert(input.symbol, _tickJudge.ageMs, safety.activeFillMaxAgeMs);
+      }
       return;
     }
 

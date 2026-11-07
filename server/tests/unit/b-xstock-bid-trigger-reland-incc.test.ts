@@ -85,7 +85,7 @@ describe('C-P3 — the paper entry refusal precedes the depth read', () => {
   const AEE = SRC('services/active-execution-engine.ts');
   const gate = AEE.indexOf('private async _evaluateOpenDepthGate(');
   const refuse = AEE.indexOf('venue_transition_pause ${_vp.window}`, snapshot: null', gate);
-  const depth = AEE.indexOf('const snapshot = await getDepthSnapshot(symbol, assetClass);', gate);
+  const depth = AEE.indexOf('let snapshot = await getDepthSnapshot(symbol, assetClass);', gate);
   it('the refusal exists inside the gate and comes before getDepthSnapshot', () => {
     expect(gate).toBeGreaterThan(0); expect(refuse).toBeGreaterThan(gate); expect(depth).toBeGreaterThan(refuse);
   });

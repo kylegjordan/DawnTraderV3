@@ -54,6 +54,34 @@ export interface DepthSnapshot {
 }
 
 /**
+ * B-PRICE-FEED-COVERAGE increment 0 (`#1222`, Langston PART-0 ruling P0-2) — the xStock ENTRY book's age, made honest.
+ *
+ * ⛔ The xStock snapshot above takes its age from the NEWEST `xstock_spot_ticker_snap` row's `captured_at`, and the archiver
+ * writes a row for EVERY frame — including the venue's subscribe REPLAY of a book, however old — stamped at receipt. A
+ * replay therefore reads ≈ 0 ms old on a frozen book, and both capital-gating checks read that one age: `assessWarmth` at the
+ * open gate and `assessConsumptionFreshness` before `openOrder`, while the fill walks the same row's ask.
+ * The in-memory tick moves its age only on a venue CHANGE and marks a replay-only mark `observed: false`. So, for the ENTRY
+ * path only: an absent or unobserved tick REFUSES (`cold_tick`, its own reason — never `stale_book`); otherwise the carried
+ * age becomes the LARGER of the row's age and the tick's age — conservative in the one direction, never looser than today.
+ * The corrected age lands on the snapshot the gate CARRIES, so warmth, consumption freshness and `entry_book_age_ms` all
+ * read ONE age. Pure apart from the default clock (age arithmetic only — never a time-of-day term). ⚠️ Not for closes or the flatten — they record, never
+ * block, and read `getDepthSnapshot` unchanged. `ageReadValid` is untouched: an unreadable DB age still fails CLOSED at the
+ * consumption check (the clamp above is deliberate).
+ */
+export function applyXstockEntryTickAge(
+  snapshot: DepthSnapshot,
+  tick: { tsMs: number; observed: boolean } | null,
+  nowMs: number = Date.now(), // the clock lives HERE, not in the gate: the gate is clock-free by fence (Kyle 2026-09-03)
+): { ok: true; snapshot: DepthSnapshot } | { ok: false; reason: string } {
+  if (!tick) return { ok: false, reason: 'cold_tick absent' };
+  if (tick.observed !== true) return { ok: false, reason: 'cold_tick observed=false' };
+  const tickAgeMs = nowMs - tick.tsMs;
+  if (!(Number.isFinite(tickAgeMs) && tickAgeMs >= 0)) return { ok: false, reason: 'cold_tick tick_age_invalid' };
+  if (tickAgeMs <= snapshot.ageMs) return { ok: true, snapshot };
+  return { ok: true, snapshot: { ...snapshot, ageMs: tickAgeMs } };
+}
+
+/**
  * Fetch the current fill-time depth for a symbol+class. `null` when absent
  * (cold/no two-sided book) → caller blocks the open / penalizes the close.
  *

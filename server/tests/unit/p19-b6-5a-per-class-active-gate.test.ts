@@ -38,6 +38,11 @@ vi.mock('../../services/active-engine-service.js', () => ({
 // B-BALANCE-SESSION-PAIRING (pre-audit P10): the xStock dispatch sizes against getMoneyHeld now.
 vi.mock('../../services/guardrail-settings.js', () => ({ getPortfolioBalanceV2: async () => 1000, getMoneyHeld: async () => 1000, MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } } }));
 vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
+// B-PRICE-FEED-COVERAGE increment 0: the freshness gate reads the in-memory equity tick now, not the DB snapshot.
+// Stub it OPEN (an observed tick one second old) so these assertions still reach the downstream logic.
+vi.mock('../../services/passive-archive/equity-spot-archiver.js', () => ({
+  getLatestEquityTick: () => ({ price: 100, tsMs: Date.now() - 1000, kind: 'mid', observed: true }),
+}));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
 // P19-B8.5 (gate-12): the activation refusal counts strategy_gates rows — mock
 // non-empty by default so the round-trip tests exercise the flip, and mutable so

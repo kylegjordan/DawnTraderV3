@@ -97,7 +97,13 @@ describe('P19-B4a C3 — active-fill safety gate', () => {
     alertSpy = vi.fn();
   });
 
+  // B-PRICE-FEED-COVERAGE increment 0: gate (b) reads the REAL in-memory equity tick, so each case feeds the archiver the
+  // frame it describes (an `update` is a venue change; a `snapshot` is the venue replaying the book on a subscribe).
+  const frame = (symbol: string, type: 'update' | 'snapshot') =>
+    Buffer.from(JSON.stringify({ channel: 'ticker', type, data: [{ symbol, bid: 99.9, ask: 100.1, last: 100 }] }));
+
   it('fresh tick + in liquid window → dispatches', async () => {
+    _handleMessageForTests(frame('TSLA/USD', 'update'));
     await dispatchXstockActiveSignal(input());
     expect(captured, 'should have dispatched').toBeTruthy();
     expect(captured.sizingContext.assetClass).toBe('xstock_spot');
@@ -116,21 +122,60 @@ describe('P19-B4a C3 — active-fill safety gate', () => {
   // sufficiency gate at the engine open seam replaced it; the watchdog block below still
   // exercises `inLiquidWindow` for its RTH-vs-off-RTH stall threshold).
 
-  it('stale latest tick (> max age) → blocked + staleSkips + dedup alert', async () => {
-    tickAgeMs = 30000; // > 15000ms
-    const before = getXstockActiveDispatchStats().staleSkips;
-    await dispatchXstockActiveSignal(input());
-    expect(captured).toBeNull();
-    expect(getXstockActiveDispatchStats().staleSkips).toBe(before + 1);
-    expect(alertSpy).toHaveBeenCalled();
+  it('stale latest tick (> max age) → blocked + staleSkips + the STALE alert key + its stderr line', async () => {
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0, toFake: ['Date'] });
+    try {
+      _handleMessageForTests(frame('STALE1/USD', 'update'));
+      vi.setSystemTime(t0 + 30_000); // > 15000ms
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const before = getXstockActiveDispatchStats().staleSkips;
+      await dispatchXstockActiveSignal(input({ symbol: 'STALE1/USD' }));
+      expect(captured).toBeNull();
+      expect(getXstockActiveDispatchStats().staleSkips).toBe(before + 1);
+      expect(alertSpy.mock.calls.at(-1)?.[0]?.dedupe_key).toBe('xstock-stale-fill-block');
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+        '[B-PRICE-FEED-COVERAGE][INC0][DISPATCH_REFUSE] arm=stale symbol=STALE1/USD ageMs=30000');
+      warn.mockRestore();
+    } finally { vi.useRealTimers(); }
   });
 
-  it('no tick at all (age null) → blocked + staleSkips', async () => {
-    tickAgeMs = null;
+  it('no tick at all → blocked + staleSkips (arm=absent)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const before = getXstockActiveDispatchStats().staleSkips;
-    await dispatchXstockActiveSignal(input());
+    await dispatchXstockActiveSignal(input({ symbol: 'NOTICK/USD' }));
     expect(captured).toBeNull();
     expect(getXstockActiveDispatchStats().staleSkips).toBe(before + 1);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+      '[B-PRICE-FEED-COVERAGE][INC0][DISPATCH_REFUSE] arm=absent symbol=NOTICK/USD ageMs=null');
+    warn.mockRestore();
+  });
+
+  it('INCREMENT 0: a book that exists only as the venue REPLAY after a restart → refused cold, on its OWN alert key', async () => {
+    // The DB snapshot of this replay would read ~0 ms old (the defect). The in-memory tick is born `observed: false`.
+    _handleMessageForTests(frame('COLDREPLAY/USD', 'snapshot'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const before = getXstockActiveDispatchStats();
+    await dispatchXstockActiveSignal(input({ symbol: 'COLDREPLAY/USD' }));
+    expect(captured).toBeNull();
+    expect(getXstockActiveDispatchStats().coldSkips).toBe(before.coldSkips + 1);
+    expect(getXstockActiveDispatchStats().staleSkips).toBe(before.staleSkips); // not counted as stale
+    expect(alertSpy.mock.calls.at(-1)?.[0]?.dedupe_key).toBe('xstock-cold-tick-fill-block');
+    expect(warn.mock.calls.some((c) => String(c[0]).startsWith(
+      '[B-PRICE-FEED-COVERAGE][INC0][DISPATCH_REFUSE] arm=cold symbol=COLDREPLAY/USD ageMs='))).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('INCREMENT 0: a later REPLAY of a book last changed 30 s ago keeps the old age → refused stale (a replay never refreshes)', async () => {
+    const t0 = Date.now();
+    vi.useFakeTimers({ now: t0, toFake: ['Date'] });
+    try {
+      _handleMessageForTests(frame('OLDBOOK/USD', 'update'));
+      vi.setSystemTime(t0 + 30_000);
+      _handleMessageForTests(frame('OLDBOOK/USD', 'snapshot')); // the reconnect replay — its DB row would read fresh
+      await dispatchXstockActiveSignal(input({ symbol: 'OLDBOOK/USD' }));
+      expect(captured).toBeNull();
+    } finally { vi.useRealTimers(); }
   });
 });
 

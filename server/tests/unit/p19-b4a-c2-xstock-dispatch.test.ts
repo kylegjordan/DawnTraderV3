@@ -50,6 +50,11 @@ vi.mock('../../services/guardrail-settings.js', () => ({
 // C2-specific assertions still exercise the downstream logic. (The gate's own
 // blocking behavior is covered by p19-b4a-c3-gate-watchdog.test.ts.)
 vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: 1000 }] }) } }));
+// B-PRICE-FEED-COVERAGE increment 0: the freshness gate reads the in-memory equity tick now, not the DB snapshot.
+// Stub it OPEN (an observed tick one second old) so these assertions still reach the downstream logic.
+vi.mock('../../services/passive-archive/equity-spot-archiver.js', () => ({
+  getLatestEquityTick: () => ({ price: 100, tsMs: Date.now() - 1000, kind: 'mid', observed: true }),
+}));
 vi.mock('../../services/system-alerts.js', () => ({ addAlert: async () => ({}) }));
 vi.mock('../../asset_classes/xstock_spot/fill-safety-config.js', () => ({
   resolveXstockFillSafetyConfig: async () => ({
