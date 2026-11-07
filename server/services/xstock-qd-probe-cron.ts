@@ -96,7 +96,9 @@ export async function registerXstockQdProbeCron(): Promise<void> {
         });
       }
     },
-    { timezone: 'UTC' },
+    // B-DB-POOL-GUARD P5-3 (Langston C-4): a fire that would start while the previous one still runs is SKIPPED by
+    // node-cron (4.2.1 `noOverlap`), so the burst cap cannot be doubled by two overlapping runs.
+    { timezone: 'UTC', noOverlap: true },
   );
   console.log(
     `[P19-B5c][qd-probe][cron] registered (expr=${expression}, freshness_ceiling_ms=${config.freshnessCeilingMs})`,

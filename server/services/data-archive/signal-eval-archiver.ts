@@ -110,8 +110,9 @@ export type SignalEvalSource =
   // P19-B5a: active-path reject source — RTB confidence-drop (reject_stage='rtb').
   | 'ready-to-buy'
   // `B-RTB-REFRESH-LIVE-PRICE` (row 59e): the RTB REFRESH's price check — a retirement (`rtb_price`) and the sampled shadow
-  // (`rtb_price_shadow`). Its own source so `stage-attrition-cache.ts` (the table's only runtime reader, which GROUPS BY
-  // source) keeps it apart from the confidence-drop rows above.
+  // (`rtb_price_shadow`). Its own source so a reader grouping by source keeps it apart from the confidence-drop rows
+  // above. (The reader that motivated it, `stage-attrition-cache.ts`, was deleted in B-DB-POOL-GUARD P5 — it had no
+  // page consumer since 2026-08-07; see DELETED_COMPONENTS_LOG.md.)
   | 'rtb-refresh';
 export type RejectStage =
   | 'admitted'

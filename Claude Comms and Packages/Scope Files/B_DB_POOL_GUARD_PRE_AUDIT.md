@@ -282,3 +282,35 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
 **Forced test (Step 7):**
 - In Claude-in-Chrome, load Analytics → Drift Dashboard while reading `pg_stat_activity` by `application_name`. The panels show under `dawntrader_diag`, `dawntrader_main` stays under its max, and `error.log` holds no `pool slot timeout` in the window (scope OBJ-6). This needs Kyle's Chrome signed in to staging.
 - The Passive Archive Capture card check for `B-OHLC-FRAME-GUARD` §8.1 rides the same tab-open.
+
+### AMENDMENT inc 3c r2 (2026-11-07, CC-A) — P5 BUILT to Langston's ruling (Discord `1568734628930519283` and `1568736965413707777`): P5-4 delete, C-1 to C-4 folded
+**THE HOLD CENSUS ABOVE IS A FLOOR, NOT A COUNT — and the mechanism is why (Langston, C4 answered).**
+- pg 8.13.1's `query_timeout` errors the caller and drops the callback, but sends NO cancel and does NOT destroy the connection (`db.ts:72-77`).
+- The instrument stamps a hold on RELEASE (`db-pool-instrument.ts:249-250`). So an abandoned checkout adds nothing to the minute it failed in; its hold lands in whatever later minute the statement finishes.
+- Before P3 there was no server bound, so such a statement ran on toward the server default (`statement_timeout` 120000 on staging, Langston measured).
+- **Consequence:** the census under-reports exactly the families that time out — the stage-attrition family among them. That is also the explanation for the 13:20:33 `refresh FAILED … Query read timeout` beside a minute reading `hold_gt_25000ms=0` (C4 above).
+- After P3 the 25 s server cancel closes the gap. "The 15-minute snapshot is absent after P3" stays a Saturday observation, never a P3 effect, until a weekday says otherwise.
+
+**WHAT WAS BUILT**
+- **P5-1 `server/db.ts`:** `diagPool` / `diagDb`, built as specified.
+  - Settings: `application_name 'dawntrader_diag'`, `DIAG_POOL_MAX = 4` (Langston's sizing preference: `max_connections` 90 with 23 in use, measured), statement 25 s below query 30 s, idle-in-transaction 60 s, acquire 5 s, the instrument and the shared guards, and its own `[DB_POOL_INIT]` line.
+  - **C-3:** the comment names where a diagnostic failure is visible, and only there: its own `POOL_MINUTE_V2` line (with `acquire_timeouts`), its `POOL_CLIENT_ERROR` guard line, and the panels. It is not paged; the OBJ-5 pages read `dawntrader_main` alone. A quiet `dawntrader_diag` is not evidence that it is healthy.
+- **P5-2 `drift-dashboard-aggregator.ts`:** both panel functions take `diagDb`.
+  - **C-1:** the data-archive panel's catch sets `timedOut = true`, so a failed count renders the client's existing QUERY TIMEOUT badge instead of "0 rows". The log line keeps the real error.
+  - **C-2:** `PASSIVE_COUNT_CONCURRENCY = DIAG_POOL_MAX - 1` (3), with `DISK_PARENT_FANOUT = 2` named and checked at its use. The peak `max(3, 2) + 1 = 4 ≤ 4` is FENCED from the derived values. The old "shared with the archive writers" rationale is rewritten.
+  - **Same class:** `diskBytesForParent` failures are collected and logged ONCE per call. They still render 0 bytes, because the field is a number and this batch changes no page.
+- **P5-3:** `qd-probe` stays on the main pool with its burst at 8 → 4 (`SNAP_QUERY_CONCURRENCY`), and its cron gains `noOverlap: true` (node-cron 4.2.1).
+  - **C-4, the arithmetic corrected:** the live universe is **473** (`scheduled_tasks_audit.meta.universe_size`, 2,010 fires over 7 days; two error fires carry none). So 8 meant 60 rounds and 4 means 119 rounds.
+  - Measured run time is p50 3.3 s / p99 12.3 s / max 64 s, so doubling stays inside the 5-minute cadence, and `noOverlap` makes stacking impossible.
+  - ⚠️ **Langston's 100 versus this 473:** his figure came from the summary log lines and mine from the audit table, so the two read different fields. The audit field is the one the cron itself writes per fire. Stated for him to reconcile, not resolved by me.
+- **P5-4 DELETED:** the stage-attrition cache module (archived `.removed` by `git mv`), its `index.ts` start and its route.
+  - **The rule-18 sweep:** `signal-eval-archiver.ts:113` comment rewritten; SIM `:586` rewritten; SIM B-FILTER-DIAG-PAPER section gets a DELETED banner (its funnel-tracker paragraph stays live); SIM `:168` is a different object (`strategyAttrition`), untouched; `DELETED_COMPONENTS_LOG.md` entry with the restore path and "no stored data lost".
+  - **`#648`:** its body was REWRITTEN in place — not in service, outcome (2), CC-B's reader decision, attribution `19ba83c1e` kept.
+  - **The KD-32 pack's section 5:** corrected by PM Claude (`48b6a80d5`).
+  - **Runtime absence (Langston's own two instruments):** nginx 0 versus control 2, and the app log 0 versus control 2, filtered on the `/api/` prefix (the bare-path hits are the boot route dump).
+- **Tests:**
+  - New `b-db-pool-guard-p5.test.ts` (6 tests): behaviour for C-1 through a mocked pool — all 5 tables `timedOut`, 5 diagnostic calls, 0 main-pool calls; fences for the wiring, the derived peak, the probe cap and `noOverlap`; the deletion, with a sibling-route control.
+  - The census in `b-db-pool-guard.test.ts` now checks EVERY pool config per file, so `db.ts`'s second pool is checked rather than certified unseen by a first-match read (checked = 3).
+  - Two panel suites' `db.js` mocks gain `diagDb` and `DIAG_POOL_MAX`.
+  - Mutations, each confirmed present: M7 (`timedOut` removed), M8 (pool 2), M9 (the second pool's server bound 40 s), M10 (the panel back on the main pool) — each fails its test.
+  - Full suite: the same 11 local-only failing files as before, by file-list diff; tsc 324.

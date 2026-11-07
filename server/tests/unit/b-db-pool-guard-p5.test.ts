@@ -1,0 +1,83 @@
+import { describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// B-DB-POOL-GUARD P5 (OBJ-6, #1239): the diagnostic pool. Behaviour where it is cheap to drive (the data-archive panel's
+// failure flag, through a mocked pool), source fences for the wiring and the sizing arithmetic (Langston C-2: the
+// fence is on the DERIVED peak, not on a constant).
+
+const ROOT = path.join(__dirname, '../../..');
+const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+vi.mock('../../db.js', () => ({
+  diagDb: { execute: vi.fn(async () => { throw new Error('canceling statement due to statement timeout'); }) },
+  DIAG_POOL_MAX: 4,
+  db: { execute: vi.fn(async () => { throw new Error('the MAIN pool must not be used by this panel'); }) },
+}));
+vi.mock('../../services/data-archive/archive-batch-writer.js', () => ({ getArchiveStats: () => ({}) }));
+vi.mock('../../services/data-archive/archive-config.js', () => ({
+  getArchiveConfig: () => ({ pairScanEnabled: true, signalEvalEnabled: true, signalEvalPreFilterEnabled: true, exitDecisionEnabled: true,
+    macroFeedEnabled: true, parquetExportEnabled: false, retentionDays: 15, archiveWriterQueueMax: 1 }),
+}));
+vi.mock('../../services/run-mode-controller.js', () => ({ getCurrentMode: () => 'paper' }));
+
+describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston blocking)', () => {
+  it('a failed count reads timedOut=true, never a confident 0 with timedOut=false — and it reads the DIAGNOSTIC pool', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+    const db = await import('../../db.js');
+    const r = await computeDataArchiveStatus('rolling_24h' as never);
+    spy.mockRestore();
+    expect(r.tables.length).toBe(5);
+    for (const t of r.tables) expect(t.timedOut, t.name).toBe(true);
+    expect((db as unknown as { diagDb: { execute: { mock: { calls: unknown[] } } } }).diagDb.execute.mock.calls.length).toBe(5);
+    expect((db as unknown as { db: { execute: { mock: { calls: unknown[] } } } }).db.execute.mock.calls.length).toBe(0);
+  });
+});
+
+describe('P5 — wiring and sizing fences', () => {
+  const dbSrc = read('server/db.ts');
+  const agg = read('server/services/drift-dashboard-aggregator.ts');
+
+  it('the diagnostic pool has its own name, its size constant, the shared guard and the instrument', () => {
+    expect(dbSrc).toMatch(/application_name: 'dawntrader_diag'/);
+    expect(dbSrc).toMatch(/max: DIAG_POOL_MAX,/);
+    expect(dbSrc).toMatch(/attachPoolGuards\(diagPool,/);
+    expect(dbSrc).toMatch(/attachPoolInstrument\(diagPool,/);
+  });
+
+  it('both Drift Dashboard panel functions import the diagnostic pool, not the main one', () => {
+    for (const fn of ['computeDataArchiveStatus', 'computePassiveArchiveStatus']) {
+      const start = agg.indexOf(`export async function ${fn}(`);
+      expect(start, fn).toBeGreaterThan(0);
+      const head = agg.slice(start, start + 600);
+      expect(head, fn).toMatch(/const \{ diagDb: db[^}]*\} = await import\('\.\.\/db\.js'\);/);
+      expect(head, fn).not.toMatch(/const \{ db \} = await import/);
+    }
+  });
+
+  it('the passive panel\'s peak, with the data-archive panel\'s one connection, fits the pool (derived, not asserted)', () => {
+    const max = Number(dbSrc.match(/export const DIAG_POOL_MAX = (\d+);/)![1]);
+    const concExpr = agg.match(/const PASSIVE_COUNT_CONCURRENCY = ([^;]+);/)![1].trim();
+    expect(concExpr).toBe('DIAG_POOL_MAX - 1');
+    const conc = max - 1;
+    const fanout = Number(agg.match(/const DISK_PARENT_FANOUT = (\d+);/)![1]);
+    expect(Math.max(conc, fanout) + 1).toBeLessThanOrEqual(max);
+  });
+
+  it('qd-probe stays on the main pool with its burst at 4, and its cron cannot overlap itself (C-4)', () => {
+    const probe = read('server/asset_classes/xstock_spot/qd-probe-service.ts');
+    expect(probe).toMatch(/const SNAP_QUERY_CONCURRENCY = 4;/);
+    expect(probe).toMatch(/import \{ db \} from '\.\.\/\.\.\/db\.js';/);
+    expect(read('server/services/xstock-qd-probe-cron.ts')).toMatch(/\{ timezone: 'UTC', noOverlap: true \}/);
+  });
+
+  it('the stage-attrition refresher, cache and route are gone (P5-4, rule 18) and archived', () => {
+    expect(fs.existsSync(path.join(ROOT, 'server/services/stage-attrition-cache.ts'))).toBe(false);
+    expect(fs.existsSync(path.join(ROOT, '1-system-manual/_archive/deleted-code/stage-attrition-cache.ts.20261107-B-DB-POOL-GUARD.removed'))).toBe(true);
+    expect(read('server/index.ts')).not.toMatch(/startStageAttritionRefresher/);
+    expect(read('server/routes.ts')).not.toMatch(/diagnostics\/stage-attrition/);
+    // control: the sibling route the panel really calls is still there, so the absence above is not a misread file
+    expect(read('server/routes.ts')).toMatch(/diagnostics\/scan-latest/);
+  });
+});

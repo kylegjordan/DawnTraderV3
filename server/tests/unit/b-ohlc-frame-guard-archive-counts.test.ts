@@ -36,8 +36,10 @@ function tableOf(text: string): string {
   return m ? m[1] : '';
 }
 
-vi.mock('../../db.js', () => ({
-  db: {
+// B-DB-POOL-GUARD P5: the panel reads the DIAGNOSTIC pool (`diagDb`), sized by DIAG_POOL_MAX; `db` is kept for
+// any other import of the module.
+vi.mock('../../db.js', () => {
+  const d = {
     // disk-size lookups only
     execute: vi.fn(async () => ({ rows: [{ bytes: 1024 }] })),
     transaction: vi.fn(async (cb: (tx: any) => Promise<unknown>) => {
@@ -64,8 +66,9 @@ vi.mock('../../db.js', () => ({
         h.inFlight--;
       }
     }),
-  },
-}));
+  };
+  return { db: d, diagDb: d, DIAG_POOL_MAX: 4 };
+});
 
 const statsFor = (name: string) => () => h.stats[name];
 vi.mock('../../services/passive-archive/equity-spot-archiver.js', () => ({ getEquitySpotStats: statsFor('xstock_spot') }));

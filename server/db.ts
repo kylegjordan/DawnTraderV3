@@ -134,3 +134,44 @@ console.log(
     `idleTimeoutMillis=${POOL_CONFIG.idleTimeoutMillis} ` +
     `max=${POOL_CONFIG.max}`
 );
+
+// ─── B-DB-POOL-GUARD P5 / OBJ-6 (#1239, 2026-11-07): the DIAGNOSTIC pool ───────────────────────────────────────
+// Heavy dashboard reads (the Drift Dashboard's data-archive and passive-archive panels) run here, never on
+// `dawntrader_main`, so an open dashboard cannot hold the slots the trading pipeline needs. Same server/client
+// statement bounds as the main pool (the census fence in b-db-pool-guard.test.ts checks every config in this file);
+// a SHORT acquire wait, so a busy dashboard fails fast instead of queueing. Size (Langston, P5 ruling): 4 =
+// the passive panel's count workers (DIAG_POOL_MAX - 1) + the data-archive panel's one serial reader; the passive
+// panel's disk lookups (2) run only after its counts finish, so they never add to that peak. Connections are not
+// scarce: staging `max_connections` 90, 23 in use when measured (Langston, 2026-11-07).
+// ⚠️ WHERE A DIAGNOSTIC FAILURE IS VISIBLE — and ONLY there: this pool is NOT paged (OBJ-5's pages read
+// `dawntrader_main` alone: `IDLE_IN_TX_SQL` filters by application_name, and its guard-count readers above are bound
+// to the main label). Its human surfaces are its own `[B-DB-POOL-GUARD][POOL_MINUTE_V2] pool=dawntrader_diag` line
+// (which carries `acquire_timeouts`), the guards' `[B-DB-POOL-GUARD][POOL_CLIENT_ERROR] pool=dawntrader_diag` line,
+// and the panels themselves (the data-archive panel shows QUERY TIMEOUT on a failed count). A quiet
+// `dawntrader_diag` in the alert queue is therefore NOT evidence that it is healthy.
+export const DIAG_POOL_MAX = 4;
+const DIAG_POOL_CONFIG = {
+  connectionString: process.env.DATABASE_URL,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
+  query_timeout: POOL_QUERY_TIMEOUT_MS,
+  statement_timeout: POOL_STATEMENT_TIMEOUT_MS,
+  idle_in_transaction_session_timeout: 60_000,
+  connectionTimeoutMillis: 5_000,
+  idleTimeoutMillis: 30_000,
+  max: DIAG_POOL_MAX,
+  application_name: 'dawntrader_diag',
+} as const;
+export const diagPool = new Pool(DIAG_POOL_CONFIG);
+attachPoolInstrument(diagPool, DIAG_POOL_CONFIG.application_name);
+export const diagDb = drizzle({ client: diagPool, schema });
+attachPoolGuards(diagPool, DIAG_POOL_CONFIG.application_name);
+console.log(
+  `[DB_POOL_INIT] application_name=${DIAG_POOL_CONFIG.application_name} ` +
+    `query_timeout=${DIAG_POOL_CONFIG.query_timeout} ` +
+    `statement_timeout=${DIAG_POOL_CONFIG.statement_timeout} ` +
+    `idle_in_transaction_session_timeout=${DIAG_POOL_CONFIG.idle_in_transaction_session_timeout} ` +
+    `connectionTimeoutMillis=${DIAG_POOL_CONFIG.connectionTimeoutMillis} ` +
+    `idleTimeoutMillis=${DIAG_POOL_CONFIG.idleTimeoutMillis} ` +
+    `max=${DIAG_POOL_CONFIG.max}`
+);

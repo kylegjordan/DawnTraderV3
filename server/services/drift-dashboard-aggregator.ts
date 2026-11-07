@@ -813,7 +813,8 @@ export interface DataArchiveStatusResponse {
 export async function computeDataArchiveStatus(
   window: DashboardWindow,
 ): Promise<DataArchiveStatusResponse> {
-  const { db } = await import('../db.js');
+  // B-DB-POOL-GUARD P5 (OBJ-6): the diagnostic pool, never `dawntrader_main` (server/db.ts, `diagDb`).
+  const { diagDb: db } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
   const { getArchiveStats } = await import('./data-archive/archive-batch-writer.js');
   const { getArchiveConfig } = await import('./data-archive/archive-config.js');
@@ -875,6 +876,12 @@ export async function computeDataArchiveStatus(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[B70][archive-status] query failed for ${t}:`, msg);
+      // B-DB-POOL-GUARD P5 C-1 (Langston, blocking): before this, a failed read rendered as 0 rows / 0 bytes with
+      // `timedOut: false` — "the archive is empty", no badge. The diagnostic pool makes failure routine (a 25 s server
+      // bound and a 5 s acquire limit this function never had), so the flag is set on ANY failure: the client's
+      // QUERY TIMEOUT badge is the only render arm it has, and a timeout is the expected failure here. The log line
+      // above names the actual error, so a non-timeout fault is still distinguishable where it is read.
+      timedOut = true;
     }
     tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut });
   }
@@ -905,7 +912,8 @@ export async function computeDataArchiveStatus(
 export async function computePassiveArchiveStatus(
   window: DashboardWindow,
 ): Promise<PassiveArchiveResponse> {
-  const { db } = await import('../db.js');
+  // B-DB-POOL-GUARD P5 (OBJ-6): the diagnostic pool, never `dawntrader_main` (server/db.ts, `diagDb`).
+  const { diagDb: db, DIAG_POOL_MAX } = await import('../db.js');
   const { sql } = await import('drizzle-orm');
   const { getEquitySpotStats } = await import('./passive-archive/equity-spot-archiver.js');
   const { getEquityPerpStats } = await import('./passive-archive/equity-perp-archiver.js');
@@ -944,14 +952,15 @@ export async function computePassiveArchiveStatus(
   // (active symbols, store %, status) is unknown too. A zero here reads as "nothing was captured", which is
   // the one thing this panel exists to detect.
   const PASSIVE_QUERY_TIMEOUT_MS = 4000;
-  // Bounded fan-out (Langston, Step 7 ruling 2026-09-28): the pool is shared with the archive writers, so at
-  // most three window counts run at once. ⚠️ This bounds how many counts run together, NOT the endpoint's time:
-  // since B-DB-POOL-GUARD P3 (2026-11-07) the pool's connection-acquire wait is bounded at 10 s (`connectionTimeoutMillis`,
-  // `server/db.ts`), so `db.transaction` can wait up to that long for a client before its BEGIN, and
-  // the disk-size lookups below are untimed. The latencies recorded in the scope are measurements under load.
-  // Peak simultaneous connections held by this panel rise from 1 to 3; total connection-seconds are about the
-  // same (Langston, Step 4 judgement 1).
-  const PASSIVE_COUNT_CONCURRENCY = 3;
+  // Bounded fan-out, DERIVED from the diagnostic pool's size (B-DB-POOL-GUARD P5 C-2, Langston). Since P5 this panel
+  // no longer shares a pool with the archive writers (the old reason for the bound); it shares `dawntrader_diag` with
+  // the data-archive panel, which holds ONE connection at a time. So the counts get every slot but that one. The
+  // disk lookups (DISK_PARENT_FANOUT, below) start only after every count has finished, so the panel's own peak is
+  // max(PASSIVE_COUNT_CONCURRENCY, DISK_PARENT_FANOUT), and with the data-archive panel's one it must fit the pool —
+  // fenced in b-db-pool-guard-p5.test.ts. ⚠️ This bounds how many run together, NOT the endpoint's time: the pool's
+  // acquire wait is 5 s and the disk lookups are untimed.
+  const PASSIVE_COUNT_CONCURRENCY = DIAG_POOL_MAX - 1;
+  const DISK_PARENT_FANOUT = 2; // the OHLC + ticker parents per universe, looked up together below
   // `unknown` says WHY a count is unknown (Langston rider (a)): a timeout is load, an error or a bad shape is a
   // fault. They must stay distinguishable, or the next reader repeats item 46's misread in the other direction.
   type CountOutcome = { rowCount: number | null; symCount: number | null; unknown: CountUnknownReason | null };
@@ -988,6 +997,10 @@ export async function computePassiveArchiveStatus(
   }
 
   // B70.2 — disk-size lookup helper. Sums all monthly partitions for a parent.
+  // B-DB-POOL-GUARD P5 (Langston C-1, same class): a failed lookup is collected and logged ONCE per call, so a 0 that
+  // is really an unread size is visible in error.log. It still renders 0 bytes: the field is a number and this batch
+  // changes no page.
+  const diskFaults: string[] = [];
   async function diskBytesForParent(parent: string): Promise<number> {
     try {
       const r = await db.execute(
@@ -998,7 +1011,8 @@ export async function computePassiveArchiveStatus(
       );
       const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{ bytes: number | string | null }>;
       return rows[0]?.bytes != null ? Number(rows[0].bytes) : 0;
-    } catch {
+    } catch (err) {
+      diskFaults.push(`${parent}: ${err instanceof Error ? err.message : String(err)}`);
       return 0;
     }
   }
@@ -1086,10 +1100,9 @@ export async function computePassiveArchiveStatus(
     }
 
     // B70.2 — disk usage = sum of OHLC + ticker partition sizes for this universe
-    const [ohlcBytes, tickerBytes] = await Promise.all([
-      diskBytesForParent(cfg.ohlcTable),
-      diskBytesForParent(cfg.tickerTable),
-    ]);
+    const diskParents = [cfg.ohlcTable, cfg.tickerTable];
+    if (diskParents.length !== DISK_PARENT_FANOUT) throw new Error('[PassiveArchive] disk fan-out differs from DISK_PARENT_FANOUT');
+    const [ohlcBytes, tickerBytes] = await Promise.all(diskParents.map((t) => diskBytesForParent(t)));
     const universeBytes = ohlcBytes + tickerBytes;
     passiveTotalDiskBytes += universeBytes;
 
@@ -1112,6 +1125,9 @@ export async function computePassiveArchiveStatus(
       diskBytes: universeBytes,
       diskPretty: formatBytes(universeBytes),
     });
+  }
+  if (diskFaults.length > 0) {
+    console.warn(`[PassiveArchive] ${diskFaults.length} of ${universeConfigs.length * DISK_PARENT_FANOUT} disk-size lookups unreadable — shown as 0 bytes; first: ${diskFaults[0]}`);
   }
 
   // PM2 process start reference (counters reset on restart)

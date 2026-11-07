@@ -118,17 +118,22 @@ describe('the app pool survives an ended idle connection', () => {
       if (!m) throw new Error(`unresolved timeout expression: ${e}`);
       return Number(m[1].replace(/_/g, ''));
     };
+    // P5 (Langston): EVERY config in a file, not the first — db.ts now builds two pools (main + diagnostic), and a
+    // first-match read would have certified the second one unseen.
     let checked = 0;
     for (const f of builders.filter((b) => !EXEMPT.has(path.basename(b)))) {
       const src = fs.readFileSync(f, 'utf8');
-      const server = src.match(/statement_timeout: ([A-Za-z0-9_]+),/);
-      const client = src.match(/query_timeout: ([A-Za-z0-9_]+),/);
-      expect(server, `${path.basename(f)} sets no server statement_timeout`).not.toBeNull();
-      expect(client, `${path.basename(f)} sets no client query_timeout`).not.toBeNull();
-      expect(msOf(src, server![1]), path.basename(f)).toBeLessThan(msOf(src, client![1]));
-      checked++;
+      const servers = [...src.matchAll(/statement_timeout: ([A-Za-z0-9_]+),/g)];
+      const clients = [...src.matchAll(/query_timeout: ([A-Za-z0-9_]+),/g)];
+      const pools = (src.match(/new (pg\.)?Pool\(/g) ?? []).length;
+      expect(servers.length, `${path.basename(f)}: one server statement_timeout per pool`).toBe(pools);
+      expect(clients.length, `${path.basename(f)}: one client query_timeout per pool`).toBe(pools);
+      servers.forEach((sv, i) => {
+        expect(msOf(src, sv[1]), `${path.basename(f)} pool ${i + 1}`).toBeLessThan(msOf(src, clients[i][1]));
+        checked++;
+      });
     }
-    expect(checked).toBe(2); // db.ts and the prewarm pool — the census above names them; a new builder must pass too
+    expect(checked).toBe(3); // db.ts main + diagnostic, and the prewarm pool; a new builder must pass too
     // P4 fold (Langston): the same order for every ONE-CONNECTION client that sets both bounds (the pool monitor's own
     // client in db-pool-alerts.ts, the xStock snapshot client). A builder that sets neither is outside this rule.
     const exprMs = (src: string, expr: string): number => {

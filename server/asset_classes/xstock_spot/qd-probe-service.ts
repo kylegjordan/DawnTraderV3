@@ -125,7 +125,13 @@ export async function runQdProbeOnce(fireTime: Date, config: QdProbeConfig): Pro
   // them across the pool. Mirrors `depth-source.ts`. No quote filter here — we
   // capture + CLASSIFY degenerate quotes (A1), we don't drop them.
   const snapBySymbol = new Map<string, QdRawSnap>();
-  const SNAP_QUERY_CONCURRENCY = 8;
+  // B-DB-POOL-GUARD P5-3 (OBJ-6, Langston C-4): 4, was 8. This capture job stays on the MAIN pool (it is not a
+  // dashboard read, and a fail-fast diagnostic pool would drop captures), but 8 in flight asked for 8 of the pool's
+  // 10 slots, and with the live universe of 473 symbols (scheduled_tasks_audit `universe_size`, 2,010 fires over
+  // 7 days) that is 60 rounds every 5 minutes: a duty cycle, not a burst. At 4 it is 119 rounds; measured run time
+  // p50 3.3 s / p99 12.3 s / max 64 s roughly doubles, inside the 5-minute cadence, and the cron runs with
+  // `noOverlap` so two runs can never stack 4 + 4.
+  const SNAP_QUERY_CONCURRENCY = 4;
   for (let i = 0; i < symbols.length; i += SNAP_QUERY_CONCURRENCY) {
     const batch = symbols.slice(i, i + SNAP_QUERY_CONCURRENCY);
     const results = await Promise.all(
