@@ -53,6 +53,14 @@ MUTATIONS = [
         "            continue")),
     ("recall: CRLF on stdout", mut("dt_recall.py", '        sys.stdout.reconfigure(encoding="utf-8", newline="\\n")',
                                    '        sys.stdout.reconfigure(encoding="utf-8")')),
+    ("index: the coverage bound left out of the shared copy", mut("dt_index.py",
+        '            "`dt_recall.py`. Topics are left out on purpose: this file is mirrored into git (Kyle, KD-49).", "",\n            COVERAGE, ""]',
+        '            "`dt_recall.py`. Topics are left out on purpose: this file is mirrored into git (Kyle, KD-49).", ""]')),
+    ("index: a folder on no list NAMED in the git-mirrored copy", mut("dt_index.py",
+        '        lean += ["%d folder(s) on no list hold conversations; their names are in the laptop\'s own index only." % len(unlisted), ""]',
+        '        lean += ["%d folder(s) on no list: %s" % (len(unlisted), ", ".join(unlisted)), ""]')),
+    ("index: a folder on no list left out of the laptop index", mut("dt_index.py",
+        '    if unlisted:' + chr(10) + '        full += ["Folders on no list', '    if False:' + chr(10) + '        full += ["Folders on no list')),
 ]
 
 

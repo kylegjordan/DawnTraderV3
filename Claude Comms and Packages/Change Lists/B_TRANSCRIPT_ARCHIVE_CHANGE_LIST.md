@@ -381,3 +381,44 @@ Exc Files : value-hashes.json
   - Five anchors were re-pointed at the rewritten loop: ids from earlier runs not skipped · a uuid repeated written twice · the state line repeated every run · the state line written only once ever · the raw text kept in the state. FINDING-1's mutant is re-pointed at the refresh block.
   - "A held notice written at once" first crashed the suite (IndexError in the new section, which indexed a list that mutant leaves empty). The section now fails cleanly, so it is caught, not crashed.
 - **Not installed.** The installed copy stays r8 `91c039cdb` until this is reviewed. No live hold is affected: layer (c) has not switched since install (every RUNS.log line reads "layer (c) 28 values").
+
+### P10 counts leg — Langston's rulings of 2026-11-07, folded in (msgs `1568439919695888462`, `1568442693112307724`, the r3 heartbeat ruling, `1568445934277234789`)
+- **Correction to the held-notice entry above:** "every RUNS.log line reads layer (c) 28 values" means every RUN line. 3 of the 10 lines are archive runs, all three `layer (c) 28 values`; the other 7 are a probe, hook-fired and SKIPPED lines, which carry no state.
+- **Spare clone `C--DawnTraderV3`, conditions (a) and (b):** 3 `.jsonl` at any depth (`memory\` excluded), all top-level, 1,137,524 B. Every line parsed: 0 unparseable; types assistant 79, user 48, attachment 20, custom-title 18, last-prompt 17, queue-operation 6, mode 2. User entries: 45 `tool_result`, 3 `<scheduled-task …>` strings, 0 other.
+- **The from-disk census of all 24 project folders,** measured 2026-11-07 ~01:50-02:40Z, read-only, every user entry parsed. Count = `.jsonl` at any depth, `memory\` excluded.
+
+| folder | count | what it is | disposition |
+|---|---|---|---|
+| the five (`C--DawnTraderV3-old`, `-new`, `-analyst`, `-infra`, `-pm`) | 1,091 | the crew sessions | archived |
+| `C--DawnTraderV3` (spare) | 3 | `daily-claude-model-check` runs | EXCLUDED, live |
+| `…-C--DawnTraderV3-old-66dbb030-…-scratchpad` | 5 | 5 user entries, all model probes (`ok` ×3, `Reply with the single word ok…` ×2); NOT CC-A conversations (my first description was wrong) | EXCLUDED, frozen |
+| `G--My-Drive-Dawn-Trader` | 1,982 | `wake-watcher-heartbeat` runs. Human turns: 4 files — 6 `user` entries in `ada63275` (4), `9c1366fa` (1), `e5899daa` (1), plus 1 `queued_command` attachment in `59ec1026` that a user-entry count never saw | GATED `HEARTBEAT`, live: a run is archived only if it holds a human turn |
+| `G--…DT-Clone-Repo-DawnTraderV3` (hyphen) | 1 | one model-check run: 1 scheduled injection + 19 tool results | EXCLUDED, frozen |
+| `…-ARCHIVE-20260727-201449` / `…-BACKUP-…` | 743 / 750 | the pre-session-fix store, first entries 04-15 to 07-27, 646 non-scheduled. Of BACKUP's 107 top files, 0 have most uuids in the five's top files; 10 of 750 recur by name, 0 identical or prefix | EXCLUDED, frozen; Kyle-list candidate, recommendation (b) after live, with the uuid-overlap measurement as its own first leg (Langston) |
+| `G--…DT-Clone_Repo-DawnTraderV3` (underscore), `…-workflows-wf-d8bbea22-0a5` | 0 / 0 | empty | quiet by the run-time `holds no .jsonl` test, never by name |
+| `C--Users-kyleg--claude-crew-status-work` | 1,771 | 1,769 summariser preambles + 2 JSON probes. Mechanism: `crew-status.py.20261105-B-STATUS-BOARD.removed:611` `SUMMARISER_CWD`, whose comment says it is deliberately not one of the mapped session dirs (Langston C6) | `KNOWN_OUTSIDE`, frozen — the design working |
+| `C--` | 1 | one Desktop conversation, a security question, not Dawn Trader (first line read only) | outside by name; on the laptop-local list |
+| 9 others (Kyle's projects, Kasia's, Mundo's, `DT-SHARED-MEMORY`) | — | not Dawn Trader | never read; names never in git |
+
+- **Built:**
+  - `dt_archive.dt_folder_class`, one function that `dt_dupes.in_scope` now imports; its old `:23` literal is gone. Inputs: `DT_NAME` (case-blind `dawntrader|dawn-trader`), `EXCLUDED` (a measured class for each), `GATED`, `KNOWN_OUTSIDE`.
+  - `Gate`: `human_turn`, default-human. The machine shapes are enumerated; `queued_command` attachments count as human; an image block counts as human. Its cache `gate-cache.json` holds `(size, mtime_ns, verdict)`. A file with a state is in, whatever the cache says. A dry run writes no cache.
+  - In the run, exit 7 for a Dawn-Trader-named folder that is neither archived nor excluded and holds a `.jsonl`. A non-Dawn-Trader folder on no list holding a `.jsonl` is named in the OK line and the laptop `INDEX.md`, and only counted in `TRANSCRIPT_INDEX.md`. The laptop-local `outside-folders.txt` refuses a Dawn Trader name (exit 7).
+  - Both indexes state the COVERAGE bound.
+  - `dt_offset_census` reads each state's raw file directly and counts `ORPHAN: raw file gone`.
+- **Measured on the real folders (scratch cache):**
+  - The gate keeps 4 heartbeat runs: `59ec1026` (queued_command only), `9c1366fa`, `ada63275`, `e5899daa`. 1,096 raw files in all.
+  - First scan 11.1 s; cached re-run 0.6 s, nothing re-read.
+  - **Positive control (Langston's condition):** a fresh, empty cache finds `59ec1026` again, and it enters ONLY through the `queued_command` attachment.
+  - With the new rule, tonight's real folders produce 0 loud folders.
+- **Orphan baseline before P10's move:** 1,091 states, 0 orphans, 1,091 `ok`, 1,091 fingerprinted. Positive control: a planted state whose raw file was then deleted reads `ORPHAN: raw file gone` 1. The same read runs after the move, and the delta is reported.
+- **P10's reach, stated:** a duplicate group's key is SHA-256 of the whole file after a size match. Its reach is the five plus every Dawn-Trader-named folder at any depth, so it inherits the COVERAGE bound. Groups with no member inside the five are listed, never moved. After the move, raw count = 1091 − N against 1091 states: "raw with no state: 0" must survive; "raw == state" will not, and that is expected.
+- **Tests:**
+  - writer: section 14b (the 24 measured names, case-blind) and section 17 (the gate: typed / queued_command / image IN; every enumerated machine shape and isMeta OUT; cache answers unchanged files; a run that later gets a human turn is re-judged and archived from its start; a poisoned all-machine cache loses no archived run, still 4 listed; a lost cache re-finds the queued_command run; a dry run writes no cache).
+  - run: unmapped Dawn Trader folder → 7 (top, nested, case-blind); memory-only, empty, excluded and other-project folders quiet; a folder on no list named in the line and the laptop index, counted only in the shared copy; the outside list quiets it; a Dawn Trader name on that list → 7.
+  - index: the coverage bound in both copies; a name only in the laptop copy.
+  - All suites 0 failed.
+- **Mutations: writer 69/69, run 21/21, index 20/20, dupes 5/5 — 0 by crash.**
+  - First pass: 2 crashed and 1 survived ("an archived conversation re-judged by the cache": my test compared archive text, which a dropped file leaves unchanged). Now it counts the listed runs.
+  - Re-pointed anchors: "folders outside the five read", "the index not built", "a dry run builds the index", "every project folder read" (dupes; its runner now copies `dt_archive.py` + `dt_transcript.py`).
+- **Not installed.** The live copy stays r8 `91c039cdb`. On install: create the laptop-local `outside-folders.txt` for Kyle's other folders, or the first run names them, which is the designed behaviour.

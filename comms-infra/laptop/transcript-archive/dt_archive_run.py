@@ -12,7 +12,8 @@ hook, the restart handoff). It owns the key handoff P3(c) promised and the stale
 4. A LOUD RESULT: exit 0 clean · 3 fingerprints incomplete · 4 a name collision (C-5) · 5 a file refused (a held lock, a
    shorter-than-committed file) · 6 a LOCK OLDER THAN ONE INTERVAL (25 h) - a run that died and left it; the writer
    never breaks a lock, so a human must: read the pid and stamp inside, confirm no run is alive, then delete it ·
-   7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero) ·
+   7 a session folder PRESENT but holding NO conversations (a moved or emptied folder, never a quiet zero), OR a Dawn
+   Trader folder holding conversations that is neither archived nor EXCLUDED (dt_archive.dt_folder_class) ·
    8 anything unexpected (an unreadable lock folder, a missing shared folder) - still printed as ARCHIVE RUN FAILED.
    The last line printed is always one of: `ARCHIVE RUN OK`, `ARCHIVE RUN FAILED — <why>`.
 5. OPERATOR NOTE (Langston P5 r2 obs 2): if the projects folder MOVES or is re-junctioned, every raw file's identity
@@ -103,6 +104,35 @@ def old_locks(root, now):
     return hits
 
 
+OUTSIDE_FILE = "outside-folders.txt"
+
+
+def outside_folders(root):
+    """The laptop-local list of folders known to be outside Dawn Trader: one folder name per line, then a TAB and a
+    note; '#' starts a comment. Hand-edited, never in git (it names other people's work). Raises ValueError on a Dawn
+    Trader name in it - the list may quiet Kyle's other work, never the loud class."""
+    try:
+        lines = open(os.path.join(root, OUTSIDE_FILE), encoding="utf-8").read().splitlines()
+    except FileNotFoundError:
+        return set()
+    names = {ln.split("\t")[0].strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")}
+    bad = sorted(n for n in names if da.dt_folder_class(n) != "outside")
+    if bad:
+        raise ValueError("%s names Dawn Trader folder(s), which it may never quiet: %s" % (OUTSIDE_FILE, ", ".join(bad)))
+    return names
+
+
+def holds_conversation(folder):
+    """Does this folder hold a .jsonl at any depth (the memory junction aside)? A walk error refuses, never reads as no."""
+    def refuse(e):
+        raise e
+    for _root, dirs, files in os.walk(folder, onerror=refuse):
+        dirs[:] = [d for d in dirs if d != "memory"]
+        if any(f.endswith(".jsonl") for f in files):
+            return True
+    return False
+
+
 def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_machine):
     """Returns (exit_code, last_line). Never raises for an expected failure."""
     now = time.time() if now is None else now
@@ -121,6 +151,31 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
              if os.path.isdir(os.path.join(projects, slug)) and not any(r[0] == alias for r in rfs)]
     if empty:
         return 7, "ARCHIVE RUN FAILED — session folder(s) present but holding no conversations: %s" % ", ".join(empty)
+    # A Dawn Trader folder the archive neither reads nor has excluded, holding a conversation, is loud too: the writer
+    # reads only SLUG_ALIAS, so a NEW crew folder would otherwise go unarchived in silence (Langston, P10 counts leg -
+    # how the spare clone reached P10). An empty one stays quiet. Only Dawn Trader names are looked into.
+    try:
+        unmapped = [s for s in sorted(os.listdir(projects))
+                    if da.dt_folder_class(s) == "UNMAPPED" and holds_conversation(os.path.join(projects, s))]
+    except OSError as e:
+        return 4, "ARCHIVE RUN FAILED — the projects folder could not be listed: %s" % e
+    if unmapped:
+        return 7, ("ARCHIVE RUN FAILED — Dawn Trader folder(s) holding conversations that the archive neither reads nor "
+                   "excludes: %s - map each to a session (SLUG_ALIAS) or exclude it with its measured class (EXCLUDED)"
+                   % ", ".join(unmapped))
+    # The QUIET class (Langston P10 r4, Kyle's other work): a folder NOT named Dawn Trader's, on no list, holding a
+    # conversation is NAMED in the result line and the laptop-local index - never a failure, never in git, never read.
+    # Its list is a hand-edited LAPTOP-LOCAL file; a Dawn Trader name in it is refused, so it can never mute exit 7.
+    try:
+        outside = outside_folders(root)
+    except ValueError as e:
+        return 7, "ARCHIVE RUN FAILED — %s" % e
+    try:
+        unlisted = [s for s in sorted(os.listdir(projects))
+                    if da.dt_folder_class(s) == "outside" and s not in da.KNOWN_OUTSIDE and s not in outside
+                    and holds_conversation(os.path.join(projects, s))]
+    except OSError as e:
+        return 4, "ARCHIVE RUN FAILED — the projects folder could not be read: %s" % e
     key = os.urandom(32)
     try:
         hs, failed = fingerprints(key, machines, runner)
@@ -137,12 +192,13 @@ def run(projects, root, shared, dry=False, now=None, machines=None, runner=run_m
         if refused:
             return 5, "ARCHIVE RUN FAILED — %d file(s) refused: %s" % (len(refused), "; ".join(refused)[:400])
         if not dry:
-            di.build(root, shared)
+            di.build(root, shared, unlisted=unlisted)
         n = sum(r["lines"] for r in results)
         rr = [os.path.basename(r["raw"]) for r in results if r.get("reread")]
-        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values%s" % (
+        return 0, "ARCHIVE RUN OK — %d raw files, %d lines%s, layer (c) %d values%s%s" % (
             len(results), n, " (dry run)" if dry else "", red.layer_c_names,
-            ("; %d REREAD after an in-place rewrite: %s" % (len(rr), ", ".join(rr[:10]))) if rr else "")
+            ("; %d REREAD after an in-place rewrite: %s" % (len(rr), ", ".join(rr[:10]))) if rr else "",
+            ("; %d folder(s) on no list: %s" % (len(unlisted), ", ".join(unlisted))) if unlisted else "")
     finally:
         del key
 

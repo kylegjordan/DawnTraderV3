@@ -18,7 +18,7 @@ def replace(a, b):
 
 
 MUTATIONS = [
-    ("every project folder read", replace('    return slug in FIVE or "DawnTrader" in slug or "Dawn-Trader" in slug', "    return True")),
+    ("every project folder read", replace('    return da.dt_folder_class(slug) != "outside"', "    return True")),
     ("same size taken as same bytes", replace("            out[(sha256(p), size)].append(p)", "            out[(\"size-only\", size)].append(p)")),
     ("a single file counted as a group", replace("    return {k: sorted(v) for k, v in out.items() if len(v) >= 2}",
                                                  "    return {k: sorted(v) for k, v in out.items()}")),
@@ -35,7 +35,8 @@ def suite(src):
     d = tempfile.mkdtemp(prefix="dt-dmut-")
     try:
         open(os.path.join(d, "dt_dupes.py"), "w", encoding="utf-8").write(src)
-        shutil.copy(os.path.join(HERE, "test_dt_dupes.py"), d)
+        for f in ("test_dt_dupes.py", "dt_archive.py", "dt_transcript.py"):   # dt_dupes imports the writer's folder test
+            shutil.copy(os.path.join(HERE, f), d)
         p = subprocess.run([sys.executable, "-I", os.path.join(d, "test_dt_dupes.py")], capture_output=True, cwd=d, timeout=300)
         tail = [l for l in p.stdout.decode("utf-8", "replace").splitlines() if l.endswith(" failed")]
         return p.returncode, (tail[-1] if tail else None)

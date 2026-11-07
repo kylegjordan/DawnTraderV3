@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -669,6 +670,33 @@ da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) +
 ok("...and it is written exactly once on release", all_text(root).count("Probe") == 1, all_text(root).count("Probe"))
 shutil.rmtree(base)
 
+print("14b. the ONE Dawn Trader folder test, over the 24 folder names measured on the laptop 2026-11-07")
+REAL = {
+    "C--DawnTraderV3-old": "CC-A", "C--DawnTraderV3-new": "CC-B", "C--DawnTraderV3-analyst": "CC-C",
+    "C--DawnTraderV3-infra": "CC-INFRA", "C--DawnTraderV3-pm": "CC-PM",
+    "C--DawnTraderV3": "excluded", "G--My-Drive-Dawn-Trader": "HEARTBEAT",
+    "C--Users-kyleg-AppData-Local-Temp-claude-C--DawnTraderV3-old-66dbb030-b3cb-4448-8086-39344c645007-scratchpad": "excluded",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3": "excluded",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3-ARCHIVE-20260727-201449": "excluded",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3-BACKUP-20260727-201449": "excluded",
+    # Dawn Trader by name, EMPTY today: UNMAPPED, which the run makes loud only if one ever holds a conversation
+    "C--Users-kyleg--claude-projects-C--DawnTraderV3-old-66dbb030-b3cb-4448-8086-39344c645007-subagents-workflows-wf-d8bbea22-0a5": "UNMAPPED",
+    "G--My-Drive-Dawn-Trader-DT-Clone_Repo-DawnTraderV3": "UNMAPPED",
+    # not Dawn Trader by name: never read (crew-status-work is Dawn Trader's by content - KNOWN_OUTSIDE records it)
+    "C--": "outside", "C--Users-kyleg--claude-crew-status-work": "outside", "DT-SHARED-MEMORY": "outside",
+    "G--My-Drive": "outside", "G--My-Drive-1--Docs": "outside", "G--My-Drive-2--KJ-AI-Projects": "outside",
+    "G--My-Drive-2--KJ-AI-Projects-Client-Engagement-Infrastructure-Proposal-Co-Pilot": "outside",
+    "G--My-Drive-2--KJ-AI-Projects-Fantasy-Football": "outside", "G--My-Drive-2--KJ-AI-Projects-Finances-Tracker": "outside",
+    "G--My-Drive-Kasia-Projects-Kasia-Marketing-Materials-Generator": "outside",
+    "I--Shared-drives-Mundo-TNMI-Shared-Files-1-TNMI-OpsPlat-Build": "outside",
+}
+got = {s: da.dt_folder_class(s) for s in REAL}
+ok("all 24 measured folders classed as recorded", len(REAL) == 24 and got == REAL, {s: g for s, g in got.items() if g != REAL[s]})
+ok("every EXCLUDED name is a Dawn Trader name (an exclusion the test cannot reach is dead)",
+   all(da.dt_folder_class(s) == "excluded" for s in da.EXCLUDED), [s for s in da.EXCLUDED if da.dt_folder_class(s) != "excluded"])
+ok("the name test is case-blind, both spellings", da.dt_folder_class("x-DAWNTRADER-y") == "UNMAPPED"
+   and da.dt_folder_class("x-dawn-trader") == "UNMAPPED" and da.dt_folder_class("x-Dawn_Trader") == "outside")
+
 print("15. a HELD notice keeps the layer (c) state it was redacted under, across a switch (held-notice item, P5 r7)")
 SECRET_TN = ("<task-notification>\n<task-id>q9</task-id>\n<status>failed</status>\n"
              "<summary>Background command \"Probe " + sv + "\" failed</summary>\n</task-notification>")
@@ -732,6 +760,92 @@ put(proj, [reply("z2", "2026-10-21T15:00:00Z", "after the legacy release")])
 da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 60)
 ok("(c) ...and the next line is under the real state line again", "values: OFF" in (block_of(all_text(root), "after the legacy") or ""),
    block_of(all_text(root), "after the legacy"))
+shutil.rmtree(base)
+
+print("17. a GATED folder (heartbeat runs): a conversation is archived only if it holds a human turn - default-human")
+HB = "G--My-Drive-Dawn-Trader"
+
+
+def sched(uid, ts):
+    return {"type": "user", "uuid": uid, "timestamp": ts, "message": {"content": '<scheduled-task name="wake-watcher-heartbeat">run</scheduled-task>'}}
+
+
+def tool_res(uid, ts):
+    return {"type": "user", "uuid": uid, "timestamp": ts, "message": {"content": [{"type": "tool_result", "tool_use_id": "t", "content": "x"}]}}
+
+
+def queued(uid, ts, text):
+    return {"type": "attachment", "uuid": uid, "timestamp": ts, "attachment": {"type": "queued_command", "prompt": text}}
+
+
+T0 = "2026-10-21T10:0%d:00Z"
+CASES = {   # session id -> (entries, archived?)
+    "a1000001-0000-0000-0000-000000000000": ([sched("m1", T0 % 1), tool_res("m2", T0 % 2), reply("m3", T0 % 3, "MACHINE-ONLY-RUN")], False),
+    "a1000002-0000-0000-0000-000000000000": ([sched("h1", T0 % 1), user("h2", T0 % 2, "okay, please stop for the rest of the day")], True),
+    "a1000003-0000-0000-0000-000000000000": ([sched("q1", T0 % 1), queued("q2", T0 % 2, "KYLE-QUEUED please stop"),
+                                              reply("q3", T0 % 3, "QUEUED-RUN-REPLY")], True),
+    "a1000004-0000-0000-0000-000000000000": ([sched("i1", T0 % 1), {"type": "user", "uuid": "i2", "timestamp": T0 % 2, "message": {
+        "content": [{"type": "image", "source": {}}]}}, reply("i3", T0 % 3, "IMAGE-RUN-REPLY")], True),
+    "a1000005-0000-0000-0000-000000000000": ([sched("n1", T0 % 1)] + [user("n%d" % k, T0 % (k + 1), t) for k, t in enumerate((
+        "<task-notification>\n<task-id>x</task-id>", "continue heartbeat", "continue wake-watcher-heartbeat now",
+        "resume wake-watcher-heartbeat", "# Autonomous loop check", "[Request interrupted by user]",
+        "[Your previous response had no text]"), 2)] + [{"type": "user", "uuid": "nm", "timestamp": T0 % 9, "isMeta": True,
+        "message": {"content": "META-ONLY"}}, reply("n9", T0 % 9, "SHAPES-ONLY-RUN")], False),
+}
+
+
+def hb_tree():
+    base = tempfile.mkdtemp(prefix="dt-hb-")
+    proj, root = os.path.join(base, "projects"), os.path.join(base, "archive")
+    os.makedirs(os.path.join(proj, HB))
+    os.makedirs(root)
+    for sid, (entries, _w) in CASES.items():
+        with open(os.path.join(proj, HB, sid + ".jsonl"), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write("".join(json.dumps(e) + "\n" for e in entries))
+    return base, proj, root
+
+
+base, proj, root = hb_tree()
+calls = []
+_real = da.human_turn
+da.human_turn = lambda p: calls.append(p) or _real(p)
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+got = {sid: any(f.endswith(sid[:8] + ".md") for _r, _d, fs in os.walk(os.path.join(root, "HEARTBEAT")) for f in fs) for sid in CASES}
+ok("only the runs holding a human turn are archived (typed, queued_command, image), machine-only runs are not",
+   got == {s: w for s, (_e, w) in CASES.items()}, got)
+t = all_text(root)
+ok("...a queued_command-only run is IN (the measured shape a user-entry count missed)", "QUEUED-RUN-REPLY" in t)
+ok("...every enumerated machine shape and isMeta stays OUT", "SHAPES-ONLY-RUN" not in t and "MACHINE-ONLY-RUN" not in t)
+ok("...the judgement is cached on disk", os.path.exists(os.path.join(root, "gate-cache.json")))
+n1 = len(calls)
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+ok("an unchanged run is NOT re-read (the cache answers); an archived one is in by its state", len(calls) == n1, (n1, len(calls)))
+mo = os.path.join(proj, HB, "a1000001-0000-0000-0000-000000000000.jsonl")
+with open(mo, "a", encoding="utf-8", newline="\n") as fh:
+    fh.write(json.dumps(user("m9", "2026-10-21T10:59:00Z", "KYLE-LATER on a machine run")) + "\n")
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+ok("a machine run that LATER gets a human turn is re-judged (size changed) and archived, from its start",
+   "KYLE-LATER" in all_text(root) and "MACHINE-ONLY-RUN" in all_text(root), all_text(root)[-400:])
+cp = os.path.join(root, "gate-cache.json")
+cache = json.load(open(cp, encoding="utf-8")) if os.path.exists(cp) else {}
+for k in cache:
+    cache[k][2] = False                                      # a cache that wrongly says machine for every file
+json.dump(cache, open(cp, "w", encoding="utf-8"))
+before = all_text(root)
+res_p, _r = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+ok("an archived run stays archived whatever the cache says (its state answers first): still LISTED, nothing lost",
+   all_text(root) == before and len([r for r in res_p if "HEARTBEAT" in r["raw"] or HB in r["raw"]]) == 4, len(res_p))
+if os.path.exists(cp):
+    os.remove(cp)
+shutil.rmtree(os.path.join(root, ".state"), ignore_errors=True)
+shutil.rmtree(os.path.join(root, "HEARTBEAT"), ignore_errors=True)
+da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
+ok("a lost cache costs a re-scan, never a miss: the queued_command run is found again", "QUEUED-RUN-REPLY" in all_text(root))
+da.human_turn = _real
+shutil.rmtree(base)
+base, proj, root = hb_tree()
+da.archive_all(root, proj, dt.Redactor(), dry=True)
+ok("a dry run writes no gate cache", not os.path.exists(os.path.join(root, "gate-cache.json")))
 shutil.rmtree(base)
 
 print("\n%d failed" % len(FAILS))

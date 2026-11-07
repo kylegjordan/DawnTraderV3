@@ -15,12 +15,13 @@ import os
 import sys
 from collections import defaultdict
 
-FIVE = ("C--DawnTraderV3-old", "C--DawnTraderV3-new", "C--DawnTraderV3-analyst", "C--DawnTraderV3-infra",
-        "C--DawnTraderV3-pm")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import dt_archive as da  # noqa: E402
 
 
 def in_scope(slug):
-    return slug in FIVE or "DawnTrader" in slug or "Dawn-Trader" in slug
+    """Dawn Trader's folders - the writer's ONE test (dt_archive.dt_folder_class), never a second literal here."""
+    return da.dt_folder_class(slug) != "outside"
 
 
 def raw_files(projects):

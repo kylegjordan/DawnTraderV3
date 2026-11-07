@@ -118,6 +118,48 @@ code, line = run_(proj, root, shared, machines=machines)
 ok("a session folder present but EMPTY -> exit 7, naming it, nothing archived", code == 7 and "C--DawnTraderV3-old" in line
    and not os.path.exists(os.path.join(root, "CC-B")), line)
 shutil.rmtree(base)
+# Langston P10 counts leg: a Dawn Trader folder holding a conversation that is neither archived nor excluded is LOUD
+NEWDT = "C--DawnTraderV3-sixth"
+for label, folder, rel, want in (
+        ("a NEW Dawn Trader folder holding a conversation -> exit 7, naming it", NEWDT, "s.jsonl", 7),
+        ("...the name test is case-blind", "G--My-Drive-dawn-trader-copy", "s.jsonl", 7),
+        ("...a conversation only in a nested folder still counts", NEWDT, "x/subagents/agent-1.jsonl", 7),
+        ("...a .jsonl only under memory\\ does not", NEWDT, "memory/m.jsonl", 0),
+        ("...an EMPTY Dawn Trader folder stays quiet", NEWDT, None, 0),
+        ("...an EXCLUDED folder holding conversations stays quiet, and is not archived", "C--DawnTraderV3", "s.jsonl", 0),
+        ("...one of Kyle's other projects stays quiet, and is never read", "G--My-Drive-Kasia-Projects", "s.jsonl", 0)):
+    base, proj, root, shared, machines = tree()
+    os.makedirs(os.path.join(proj, folder))
+    if rel:
+        p = os.path.join(proj, folder, rel)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        open(p, "w", newline="\n").write(json.dumps({"type": "user", "uuid": "z9", "timestamp": "2026-11-06T11:00:00Z",
+                                                      "message": {"content": "UNMAPPED-MARKER"}}) + "\n")
+    code, line = run_(proj, root, shared, machines=machines)
+    arch = "".join(open(os.path.join(r, f), encoding="utf-8").read() for r, _d, fs in os.walk(root) for f in fs
+                   if f.endswith(".md"))
+    ok(label, code == want and (want == 0 or folder in line) and "UNMAPPED-MARKER" not in arch, (code, line))
+    shutil.rmtree(base)
+# Langston P10 r4: the QUIET class - named in the run line and the laptop index, a COUNT in the git-mirrored copy
+OTHER = "G--My-Drive-Kasia-Projects"
+base, proj, root, shared, machines = tree()
+os.makedirs(os.path.join(proj, OTHER))
+open(os.path.join(proj, OTHER, "s.jsonl"), "w").write("{}\n")
+code, line = run_(proj, root, shared, machines=machines)
+idx, lean = (open(os.path.join(d, f), encoding="utf-8").read() if os.path.exists(os.path.join(d, f)) else ""
+             for d, f in ((root, "INDEX.md"), (shared, "TRANSCRIPT_INDEX.md")))
+ok("a folder on no list -> exit 0, NAMED in the result line", code == 0 and "1 folder(s) on no list: " + OTHER in line, line)
+ok("...named in the laptop-local index", OTHER in idx, idx[:600])
+ok("...the git-mirrored index carries a COUNT and never the name", OTHER not in lean and "1 folder(s) on no list" in lean, lean[:600])
+ok("...both indexes state the coverage bound", "COVERAGE, and its bound" in idx and "COVERAGE, and its bound" in lean)
+open(os.path.join(root, "outside-folders.txt"), "w", encoding="utf-8").write("# Kyle's other work\n%s\tKasia's project\n" % OTHER)
+code, line = run_(proj, root, shared, machines=machines)
+ok("once it is on the laptop-local outside list, it is no longer named", code == 0 and "on no list" not in line, line)
+open(os.path.join(root, "outside-folders.txt"), "a", encoding="utf-8").write("C--DawnTraderV3-sixth\ttrying to quiet it\n")
+code, line = run_(proj, root, shared, machines=machines)
+ok("a Dawn Trader name on the outside list is REFUSED (exit 7) - the list can never mute the loud class",
+   code == 7 and "C--DawnTraderV3-sixth" in line and "never quiet" in line, line)
+shutil.rmtree(base)
 base, proj, root, shared, machines = tree()
 code, line = run_(proj, root, shared, dry=True, machines=machines)
 ok("a dry run -> OK, and the archive and shared folders stay empty", code == 0 and "dry run" in line

@@ -110,10 +110,22 @@ def _write(path, text):
     os.replace(tmp, path)
 
 
-def build(root, shared):
+COVERAGE = ("COVERAGE, and its bound: every conversation folder whose NAME carries `DawnTrader` or `Dawn-Trader` is "
+            "archived, archived per conversation (heartbeat runs holding a human turn), or excluded by a measured class "
+            "- a run checks that. A crew conversation in a folder named WITHOUT that string is not covered, so a clean run "
+            "says nothing about it (the duplicate list inherits the same bound).")
+
+
+def build(root, shared, unlisted=()):
+    """`unlisted`: folders NOT named Dawn Trader's, on no list, holding a conversation. Their NAMES go only into the
+    laptop-local index; the shared copy (mirrored into git) carries the count (Langston P10 r4 condition 1)."""
     convs, actions = scan(root)
     full = ["# Conversation archive — index", "",
-            "One line per conversation. Read the archive file for anything you rely on; this index only points.", ""]
+            "One line per conversation. Read the archive file for anything you rely on; this index only points.", "",
+            COVERAGE, ""]
+    if unlisted:
+        full += ["Folders on no list that hold conversations (not read; add each to `outside-folders.txt` or map it): "
+                 + ", ".join("`%s`" % u for u in unlisted), ""]
     full += index_lines(convs, True)
     _write(os.path.join(root, "INDEX.md"), "\n".join(full) + "\n")
     rows = ["alias\tdate\ttime\tsession8\tfile:line\ttool\tsummary"]
@@ -121,7 +133,10 @@ def build(root, shared):
     _write(os.path.join(root, "ACTIONS.tsv"), "\n".join(rows) + "\n")
     lean = ["# Conversation archive — index (no topics)", "",
             "Where the full conversations are: `~/.claude/transcript-archive/` on Kyle's laptop (not in git). Search with",
-            "`dt_recall.py`. Topics are left out on purpose: this file is mirrored into git (Kyle, KD-49).", ""]
+            "`dt_recall.py`. Topics are left out on purpose: this file is mirrored into git (Kyle, KD-49).", "",
+            COVERAGE, ""]
+    if unlisted:
+        lean += ["%d folder(s) on no list hold conversations; their names are in the laptop's own index only." % len(unlisted), ""]
     lean += index_lines(convs, False)
     text = "\n".join(lean) + "\n"
     size = len(text.encode("utf-8"))

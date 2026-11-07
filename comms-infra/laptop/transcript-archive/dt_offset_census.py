@@ -8,7 +8,9 @@ Per state: the raw file's size; whether `offset` lands immediately after a newli
 record ending there (the line just before the offset) parses as JSON. A NON-boundary offset, or a non-parsing record, is
 positive proof that the raw file was rewritten in place since that state was written. ⛔ A clean census proves NOTHING
 about the opposite (#453): a rewrite that happens to leave a whole JSON line ending at the old offset is invisible to it.
---held also lists every held notice's id, key and timestamp, so their fate across the re-read can be checked by hand."""
+--held also lists every held notice's id, key and timestamp, so their fate across the re-read can be checked by hand.
+Each state's raw file is also read DIRECTLY for existence: a state whose raw file is gone is counted as an ORPHAN (the
+P10 baseline is taken before the duplicates move, and read again after it)."""
 import json
 import os
 import sys
@@ -20,6 +22,10 @@ def check(st):
     raw, off = st["raw"], st["offset"]
     try:
         size = os.path.getsize(raw)
+    except FileNotFoundError:
+        # the ORPHAN direction, read directly per state (Langston, P10 counts leg): equal totals cannot show a deleted
+        # raw file replaced by a new one, and P10's move is exactly what deletes raw files from the five
+        return "ORPHAN: raw file gone" if not os.path.lexists(raw) else "unreadable raw (dangling link)"
     except OSError as e:
         return "unreadable raw (%s)" % type(e).__name__
     if off == 0:
@@ -62,6 +68,7 @@ def main(argv):
                 held.append((os.path.basename(st["raw"]), h.get("id"), h.get("key"), h.get("ts")))
     total = sum(counts.values())
     print("states: %d" % total)
+    print("orphan states (raw file gone): %d" % counts.get("ORPHAN: raw file gone", 0))
     for k in sorted(counts, key=lambda k: -counts[k]):
         print("  %-45s %d" % (k, counts[k]))
     for r, raw, off in bad:

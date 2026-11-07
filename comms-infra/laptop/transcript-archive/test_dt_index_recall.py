@@ -84,6 +84,15 @@ except OverflowError:
     ok("over the cap the shared copy is REFUSED", True)
 di.MEMORY_CAP = cap
 ok("...and the old copy is left as it was", open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), "rb").read() == before)
+# Langston P10 r4 conditions 1 and 3: the coverage bound in both; a folder on no list NAMED only in the laptop copy
+ok("both copies state the coverage bound", di.COVERAGE in open(os.path.join(root, "INDEX.md"), encoding="utf-8").read()
+   and di.COVERAGE in lean)
+di.build(root, shared, unlisted=["G--Someone-Elses-Project"])
+idx2 = open(os.path.join(root, "INDEX.md"), encoding="utf-8").read()
+lean2 = open(os.path.join(shared, "TRANSCRIPT_INDEX.md"), encoding="utf-8").read()
+ok("a folder on no list is NAMED in the laptop-local index", "G--Someone-Elses-Project" in idx2)
+ok("...and only COUNTED in the git-mirrored copy, never named", "G--Someone-Elses-Project" not in lean2
+   and "1 folder(s) on no list" in lean2, lean2[:500])
 
 print("3. ACTIONS.tsv, one row per action, each pointing at its own line")
 tsv = open(os.path.join(root, "ACTIONS.tsv"), encoding="utf-8").read().strip().split("\n")

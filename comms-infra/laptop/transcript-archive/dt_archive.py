@@ -52,6 +52,126 @@ import dt_transcript as dt  # noqa: E402
 
 SLUG_ALIAS = {"C--DawnTraderV3-old": "CC-A", "C--DawnTraderV3-new": "CC-B", "C--DawnTraderV3-analyst": "CC-C",
               "C--DawnTraderV3-infra": "CC-INFRA", "C--DawnTraderV3-pm": "CC-PM"}
+# WHICH FOLDERS ARE DAWN TRADER'S, AND WHAT THE ARCHIVE DOES WITH EACH - ONE function, imported by dt_dupes and the run
+# (Langston, P10 counts leg, 2026-11-07: two literals in one batch is fix-follows-pointer). A folder whose name carries
+# "DawnTrader" or "Dawn-Trader" (any case) is Dawn Trader's: it is archived (SLUG_ALIAS) or EXCLUDED with its measured
+# class - EXCLUDED is total over every such folder that holds a conversation, and one that is neither is UNMAPPED,
+# which the run makes loud. Any other folder is Kyle's other work (Kasia's, Mundo's, personal) and is never read.
+DT_NAME = re.compile(r"dawntrader|dawn-trader", re.IGNORECASE)
+EXCLUDED = {   # measured 2026-11-07, every user entry parsed; the counts are the change list's
+    "C--DawnTraderV3": "the spare clone: daily-claude-model-check runs, no human turn",
+    "C--Users-kyleg-AppData-Local-Temp-claude-C--DawnTraderV3-old-66dbb030-b3cb-4448-8086-39344c645007-scratchpad":
+        "model probes ('ok'), no human turn",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3": "one daily-claude-model-check run, no human turn",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3-ARCHIVE-20260727-201449":
+        "the pre-session-fix store (04-15 to 07-27): whether it becomes searchable is a question for Kyle's list",
+    "G--My-Drive-Dawn-Trader-DT-Clone-Repo-DawnTraderV3-BACKUP-20260727-201449":
+        "the pre-session-fix store (04-15 to 07-27): whether it becomes searchable is a question for Kyle's list",
+}
+# Dawn Trader's by content, not by name - so the name test cannot see them; recorded so a from-disk count reads them as
+# known, never as a miss. Nothing reads them.
+KNOWN_OUTSIDE = {
+    "C--Users-kyleg--claude-crew-status-work": "the deleted crew-status tool's headless summariser runs, frozen 11-05",
+}
+
+
+# A GATED folder is LIVE and mostly machine runs: a conversation in it is archived only if it holds a human turn
+# (Langston P10 r3 (iii): exclude FILES with zero human turns, not the folder - a folder exclusion would drop the next
+# Kyle message, measured by a census taken before it existed).
+GATED = {"G--My-Drive-Dawn-Trader": "HEARTBEAT"}   # wake-watcher-heartbeat scheduled runs, ~24 a day (live)
+# DEFAULT-HUMAN (Langston's condition): these are the MACHINE shapes; anything else a user entry or a queued_command
+# attachment carries is a human turn. Written the other way round, a new human shape would be dropped in silence; this
+# way a new machine shape only adds noise, and noise is visible.
+MACHINE_TEXT = re.compile(r"\s*(<scheduled-task |<task-notification>|continue (wake-watcher-)?heartbeat"
+                          r"|resume wake-watcher-heartbeat|# Autonomous loop check|\[Request interrupted"
+                          r"|\[Your previous response)")
+
+
+def _human_content(c):
+    if isinstance(c, str):
+        return bool(c.strip()) and not MACHINE_TEXT.match(c)
+    if not isinstance(c, list):
+        return False
+    blocks = [b for b in c if isinstance(b, dict)]
+    if any(b.get("type") not in ("tool_result", "text") for b in blocks):
+        return True                                   # an image, a document... - something a person put there
+    text = " ".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+    return bool(text.strip()) and not MACHINE_TEXT.match(text)
+
+
+def human_turn(path):
+    """Does this raw file hold a human turn? A user entry or a queued_command attachment (a message typed while the
+    session was busy - measured 2026-11-07: one exists in the heartbeat folder that a user-entry count never saw)."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for ln in fh:
+            try:
+                e = json.loads(ln)
+            except ValueError:
+                continue                              # a line still being written: not a turn yet
+            if not isinstance(e, dict) or e.get("isMeta"):
+                continue
+            if e.get("type") == "user" and _human_content((e.get("message") or {}).get("content")):
+                return True
+            a = e.get("attachment") if e.get("type") == "attachment" else None
+            if isinstance(a, dict) and a.get("type") == "queued_command" and _human_content(a.get("prompt")):
+                return True
+    return False
+
+
+class Gate:
+    """The per-file question for GATED folders, with a cache `(size, mtime_ns, verdict)` per file at <root>/gate-cache.json
+    so a run re-reads only files that changed. A file with a state is archived already and stays in (a conversation
+    never drops out of the archive). The cache is never trusted over a changed size or time; losing it costs a re-scan,
+    never a miss. A dry run never writes it."""
+
+    def __init__(self, root, dry=False):
+        self.path, self.dry, self.root = os.path.join(root, "gate-cache.json"), dry, root
+        try:
+            self.cache = json.load(open(self.path, encoding="utf-8"))
+        except FileNotFoundError:
+            self.cache = {}
+        self.changed = False
+
+    def __call__(self, rf):
+        p = rf[2]
+        if os.path.exists(state_path(self.root, rf)):
+            return True
+        try:
+            st = os.stat(p)
+            key, now = identity(p), [st.st_size, st.st_mtime_ns]
+            hit = self.cache.get(key)
+            if hit and hit[:2] == now:
+                return hit[2]
+            verdict = human_turn(p)
+        except OSError as e:          # unreadable is a refusal, never "no human turn" (the raw set would be incomplete)
+            raise Refused("cannot read %s to judge it (%s) - nothing written" % (p, e))
+        self.cache[key] = now + [verdict]
+        self.changed = True
+        return verdict
+
+    def save(self):
+        if self.dry or not self.changed:
+            return
+        tmp = self.path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(self.cache, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, self.path)
+
+
+def dt_folder_class(slug):
+    """'<alias>' archived (a GATED alias: per conversation) · 'excluded' · 'UNMAPPED' (Dawn Trader's, neither - the run
+    is loud if it holds a .jsonl) · 'outside' (not Dawn Trader's by name: never read)."""
+    if slug in SLUG_ALIAS:
+        return SLUG_ALIAS[slug]
+    if slug in GATED:
+        return GATED[slug]
+    if not DT_NAME.search(slug):
+        return "outside"
+    return "excluded" if slug in EXCLUDED else "UNMAPPED"
+
+
 HOLD_S = 3600
 # The C-9 line for a notice held before holds recorded their layer (c) state (states written before 2026-11-07): the
 # state it was redacted under is unknown, so the archive says so rather than borrowing the current one.
@@ -64,9 +184,10 @@ class Refused(Exception):
     pass
 
 
-def raw_files(projects):
+def raw_files(projects, gate=None):
     """[(alias, kind, raw_path, session_id, parent_id, nested_name)] for the five session folders, sorted. kind is 'top'
-    (<slug>/<session>.jsonl) or 'sub' (any .jsonl below <slug>/<session>/)."""
+    (<slug>/<session>.jsonl) or 'sub' (any .jsonl below <slug>/<session>/). A GATED folder's conversations are listed
+    only where `gate(rf)` says so (a nested file follows its parent); with no gate, a gated folder is not listed."""
     out = []
 
     def unreadable(err):
@@ -91,8 +212,9 @@ def raw_files(projects):
             return "file"
         return "other"
 
-    for slug in sorted(SLUG_ALIAS):
-        alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)
+    for slug in sorted(SLUG_ALIAS) + (sorted(GATED) if gate is not None else []):
+        alias, base = (SLUG_ALIAS.get(slug) or GATED[slug]), os.path.join(projects, slug)
+        start = len(out)
         try:
             os.stat(base)
         except FileNotFoundError:
@@ -123,6 +245,10 @@ def raw_files(projects):
                                 unreadable(OSError(0, "neither a file nor a folder", fp))
                             rel = os.path.relpath(fp, p)[:-6]
                             out.append((alias, "sub", fp, None, name, SAFE.sub("_", rel.replace(os.sep, "__"))))
+        if slug in GATED:            # (Langston P10 r3 (iii)) only conversations holding a human turn; nested follow
+            kept = [rf for rf in out[start:] if rf[1] == "top" and gate(rf)]
+            ids = {rf[3] for rf in kept}
+            out[start:] = kept + [rf for rf in out[start:] if rf[1] == "sub" and rf[4] in ids]
     return out
 
 
@@ -398,7 +524,9 @@ def _secs(ts):
 
 
 def archive_all(root, projects, red, now=None, dry=False):
-    rfs = raw_files(projects)
+    gate = Gate(root, dry=dry)
+    rfs = raw_files(projects, gate=gate)
+    gate.save()
     check_injective(rfs)                    # BEFORE any write (C-5)
     nested = frozenset((rf[0], rf[4][:8], rf[5]) for rf in rfs if rf[1] == "sub")
     results, refused = [], []

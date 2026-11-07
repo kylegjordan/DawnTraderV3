@@ -68,8 +68,8 @@ MUTATIONS = [
     ("the state line written only once ever", replace("                if st[\"layer_c\"].get(rel) != c9:", "                if rel not in st[\"layer_c\"]:")),
     ("CRLF written", replace('                fh.write(chunk.encode("utf-8"))', '                fh.write(chunk.replace("\\n", "\\r\\n").encode("utf-8"))')),
     ("dry run writes", replace("        if dry:\n            return", "        if False:\n            return")),
-    ("folders outside the five read", replace("    for slug in sorted(SLUG_ALIAS):\n        alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)",
-                                              "    for slug in sorted(os.listdir(projects)):\n        alias, base = SLUG_ALIAS.get(slug, 'X'), os.path.join(projects, slug)")),
+    ("folders outside the five read", replace("    for slug in sorted(SLUG_ALIAS) + (sorted(GATED) if gate is not None else []):\n        alias, base = (SLUG_ALIAS.get(slug) or GATED[slug]), os.path.join(projects, slug)",
+                                              "    for slug in sorted(os.listdir(projects)):\n        alias, base = (SLUG_ALIAS.get(slug) or GATED.get(slug) or 'X'), os.path.join(projects, slug)")),
     ("the raw text kept in the state", replace(
         '"order": list(order),\n                             "c9": state_line})',
         '"order": list(order),\n                             "c9": state_line, "raw": lines})')),
@@ -115,6 +115,28 @@ MUTATIONS = [
                                                                  'h["line"], h.get("c9") or state_line))')),
     ("C9-HOLD: the state line only at a file's first line", replace('                if st["layer_c"].get(rel) != c9:',
                                                                     '                if st["layer_c"].get(rel) != c9 and _u == items[0][0]:')),
+    # the ONE Dawn Trader folder test
+    ("FOLDER: the name test case-sensitive", replace('DT_NAME = re.compile(r"dawntrader|dawn-trader", re.IGNORECASE)', 'DT_NAME = re.compile(r"DawnTrader|Dawn-Trader")')),
+    ("FOLDER: EXCLUDED ignored", replace('    return "excluded" if slug in EXCLUDED else "UNMAPPED"', '    return "UNMAPPED"')),
+    ("FOLDER: every folder Dawn Trader's", replace("    if not DT_NAME.search(slug):\n        return \"outside\"", "    if False:\n        return \"outside\"")),
+    # the GATED folder: per conversation, default-human (Langston P10 r3 (iii))
+    ("GATE: the gated folder archived whole", replace("            kept = [rf for rf in out[start:] if rf[1] == \"top\" and gate(rf)]",
+                                                      "            kept = [rf for rf in out[start:] if rf[1] == \"top\"]")),
+    ("GATE: the gated folder never listed", replace("    for slug in sorted(SLUG_ALIAS) + (sorted(GATED) if gate is not None else []):",
+                                                    "    for slug in sorted(SLUG_ALIAS):")),
+    ("GATE: a queued_command message not a human turn", replace("            if isinstance(a, dict) and a.get(\"type\") == \"queued_command\" and _human_content(a.get(\"prompt\")):",
+                                                                "            if False:")),
+    ("GATE: an image read as machine", replace("    if any(b.get(\"type\") not in (\"tool_result\", \"text\") for b in blocks):\n        return True",
+                                               "    if False:\n        return True")),
+    ("GATE: isMeta read as human", replace("            if not isinstance(e, dict) or e.get(\"isMeta\"):", "            if not isinstance(e, dict):")),
+    ("GATE: a machine shape read as human", replace("|resume wake-watcher-heartbeat|# Autonomous loop check|", "|# Autonomous loop check|")),
+    ("GATE: default-MACHINE (an unknown shape dropped)", replace("        return bool(c.strip()) and not MACHINE_TEXT.match(c)",
+                                                                 "        return bool(re.match(r\"\\s*KYLE\", c))")),
+    ("GATE: the cache trusted over a changed size", replace("            if hit and hit[:2] == now:", "            if hit:")),
+    ("GATE: an archived conversation re-judged by the cache", replace("        if os.path.exists(state_path(self.root, rf)):\n            return True",
+                                                                      "        if False:\n            return True")),
+    ("GATE: a dry run writes the cache", replace("        if self.dry or not self.changed:", "        if not self.changed:")),
+    ("GATE: the cache never consulted", replace("            if hit and hit[:2] == now:\n                return hit[2]", "            if False:\n                return hit[2]")),
 ]
 
 

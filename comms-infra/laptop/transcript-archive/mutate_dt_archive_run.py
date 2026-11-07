@@ -24,8 +24,8 @@ MUTATIONS = [
     ("an old lock not checked", replace("    if stale:\n        return 6,", "    if False:\n        return 6,")),
     ("a fresh lock treated as old", replace("                if now - os.path.getmtime(p) > LOCK_MAX_S:", "                if True:")),
     ("one fixed key for every run", replace("    key = os.urandom(32)", "    key = bytes(32)")),
-    ("the index not built", replace("        if not dry:\n            di.build(root, shared)", "        if False:\n            di.build(root, shared)")),
-    ("a dry run builds the index", replace("        if not dry:\n            di.build(root, shared)", "        if True:\n            di.build(root, shared)")),
+    ("the index not built", replace("        if not dry:\n            di.build(root, shared, unlisted=unlisted)", "        if False:\n            di.build(root, shared, unlisted=unlisted)")),
+    ("a dry run builds the index", replace("        if not dry:\n            di.build(root, shared, unlisted=unlisted)", "        if True:\n            di.build(root, shared, unlisted=unlisted)")),
     ("refused files reported as OK", replace("        if refused:\n            return 5,", "        if False:\n            return 5,")),
     ("a collision reported as OK", replace('            return 4, "ARCHIVE RUN FAILED — %s" % e', '            return 0, "ARCHIVE RUN OK — %s" % e')),
     ("P5 r4: an unreadable lock folder reads as no stale lock", replace(
@@ -35,6 +35,17 @@ MUTATIONS = [
     ("P5 r4: an unexpected failure escapes main as a traceback", replace(
         "    except Exception as e:     # noqa: BLE001", "    except KeyboardInterrupt as e:     # noqa: BLE001")),
     ("REREAD not named in the run's result line", replace('rr = [os.path.basename(r["raw"]) for r in results if r.get("reread")]', "rr = []")),
+    # Langston P10 counts leg: an unmapped Dawn Trader folder is loud
+    ("UNMAPPED: a Dawn Trader folder neither read nor excluded passes quietly", replace("    if unmapped:\n        return 7,", "    if False:\n        return 7,")),
+    ("UNMAPPED: an empty Dawn Trader folder made loud", replace("        if any(f.endswith(\".jsonl\") for f in files):", "        if True:")),
+    ("UNMAPPED: a conversation only in a nested folder missed", replace("        if any(f.endswith(\".jsonl\") for f in files):", "        if any(f.endswith(\".jsonl\") for f in files) and _root == folder:")),
+    ("UNMAPPED: the memory junction walked", replace("        dirs[:] = [d for d in dirs if d != \"memory\"]\n        if any(", "        if any(")),
+    # Langston P10 r4: the QUIET class and its laptop-local list
+    ("QUIET: a folder on no list not named", replace('            ("; %d folder(s) on no list: %s" % (len(unlisted), ", ".join(unlisted))) if unlisted else "")',
+                                                     '            "")')),
+    ("QUIET: the outside list may quiet a Dawn Trader name", replace("    if bad:\n        raise ValueError(", "    if False:\n        raise ValueError(")),
+    ("QUIET: the outside list ignored", replace("and s not in outside\n", "\n")),
+    ("QUIET: the index told nothing", replace("            di.build(root, shared, unlisted=unlisted)", "            di.build(root, shared)")),
 ]
 
 
