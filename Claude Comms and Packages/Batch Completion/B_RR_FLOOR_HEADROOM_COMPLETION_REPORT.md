@@ -1,4 +1,4 @@
-# B-RR-FLOOR-HEADROOM — COMPLETION REPORT — Step 11, awaiting Langston's confirm
+# B-RR-FLOOR-HEADROOM — COMPLETION REPORT — ✅ CLOSED 2026-11-07 (Langston confirmed Steps 10-11, 2026-11-07)
 
 **Owner:** CC-B (NEW Claude) · **change-class:** `architecture` · **Sprint plan row:** 59a · **Issue:** `#1183` · converted from the progress report below (renamed 2026-11-07), which is kept as written; §4c is the read of record.
 **Records:** scope `Scope Files/B_RR_FLOOR_HEADROOM_SCOPE.md` (r3) · pre-audit + plan `Scope Files/B_RR_FLOOR_HEADROOM_PRE_AUDIT.md` · Step-7 record `Change Lists/STEP7_DEPLOY_162ae0537_2026-10-17.md` · terminal read `d57130d6e`.
@@ -77,7 +77,7 @@ CHANGE-CLASS: architecture
 | T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable rule changed |
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` rule changed |
 | T2 | `DELETED_COMPONENTS_LOG.md` | N/A | nothing removed |
-| T2 | `MISTAKE_PATTERNS.md` | N/A | no `MISTAKE:` trailer written at this close |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | a `MISTAKE: wrong-object [B-RR-FLOOR-HEADROOM]` trailer IS on `9ad5a604a` (the stale staging line); the slug is already in the index, so no new entry (cell corrected at Langston's confirm) |
 | T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | the 2026-10-17 declared-open row → `open-retired`; the 2026-11-05 `deploy-hold` row is CC-A's and left as is |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | unchanged |
 | T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | unchanged |
