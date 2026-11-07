@@ -300,7 +300,7 @@ export class RecorderConnection {
 
   /**
    * Is data arriving on this CONNECTION (a data frame within `silenceMs`, socket OPEN)?
-   * ⚠️ THREE NOTIONS OF "LIVE" IN THIS CLASS, ON PURPOSE (Langston Step-4 record item 1; the third added at Step 9) —
+   * ⚠️ FOUR "LIVE" DECIDERS IN THIS CLASS, ON PURPOSE (Langston Step-4 record item 1; the last two split at Step 9) —
    *   do not merge them:
    *   - HERE, connection-scoped: `lastDataAtMs` survives a socket replacement, so for up to `silenceMs` after a
    *     reconnect this reads live on a socket that has received nothing yet. The witness vouch asks exactly this
@@ -308,7 +308,8 @@ export class RecorderConnection {
    *   - `liveSinceMs`, socket-scoped: reset on every open, set on the first data frame. The ALERT CLEAR reads it, so a
    *     page clears only after a full window of data on the CURRENT socket. Never move the clear onto `lastDataAtMs`.
    *   - `decideSilence` (the forced-reconnect trigger) grants a FRESH socket a whole window: it measures from
-   *     `max(lastDataAtMs, openedAtMs)`. `dataLiveness` (the panel and stats) does NOT: it reads `isDataLive`, so after
+   *     `max(lastDataAtMs, openedAtMs)`.
+   *   - `dataLiveness` (the panel and stats) does NOT grant that window: at its last arm it reads `isDataLive`, so after
    *     a reconnect it reads 'live' only while the carried-over `lastDataAtMs` is still inside `silenceMs`. On the
    *     CLOSE-driven path and the subscribe-timeout path that is usually true for a while; on the SILENCE-driven path
    *     (`forceReconnect` because data stopped) `lastDataAtMs` is already older than `silenceMs`, so the new socket reads
