@@ -277,7 +277,8 @@ export function getEntryWindowTally(): Record<string, number> {
 // The Step-7 denominator's READER (Langston inc-B PROCEED condition 1: `getEntryWindowTally` had no production reader,
 // and judged_pass / skip_no_price / skip_maker print no line). Every outcome is also counted per UTC hour, and the
 // finished hour is printed — one line per phase:class — on the first tally of the next hour, in the shape of
-// `[P7][PRICED_SHARE_HOUR]`. ⚠️ An hour with no tally after it is printed late (on the next tally), never lost.
+// `[P7][PRICED_SHARE_HOUR]`. ⚠️ An hour with no tally after it is printed late (on the next tally). Residual (same as
+// P7's PRICED_SHARE_HOUR): the hour in progress at a restart is NOT emitted — its counts live only in memory.
 let _entryWindowHour: { hourKey: string; counts: Map<string, number> } = { hourKey: '', counts: new Map() };
 function _flushEntryWindowHour(): void {
   const byPhaseClass = new Map<string, string[]>();
