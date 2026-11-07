@@ -23,8 +23,9 @@ import {
 
 /** The WS mini-book shape `krakenWebSocketAdapter.getBookForFill` returns — an IN-MEMORY read, not a venue call. */
 export interface CryptoBookTop {
-  bids: ReadonlyArray<{ price: number }>;
-  asks: ReadonlyArray<{ price: number }>;
+  /** KD-19 P4: each level carries its size — `getBookForFill` already returns it; the VTS exit walk reads it. */
+  bids: ReadonlyArray<{ price: number; qty: number }>;
+  asks: ReadonlyArray<{ price: number; qty: number }>;
   ageMs: number;
   /** Exact local time this book frame was accepted. */
   updatedAtMs: number;
@@ -226,7 +227,17 @@ export function selectCryptoTouch(
   readers: CryptoTouchReaders,
   nowMs: number,
   policy: CryptoTouchPolicy,
-): { internalSymbol: string; selection: TouchSelection } {
+): {
+  internalSymbol: string;
+  selection: TouchSelection;
+  /**
+   * KD-19 P4 (objective K6) — THE BID LEVELS THE SELECTION ACCEPTED, when (and only when) the BOOK rung carried it. The
+   * VTS exit walk prices over exactly these, so the depth it books is the depth the trigger judged fresh — by
+   * construction, not by a second read under a second ceiling. `null` whenever the book rung did not carry the selection
+   * (refused, absent, untrusted, or the ticker rung answered).
+   */
+  acceptedBookBids: ReadonlyArray<{ price: number; qty: number }> | null;
+} {
   const internalSymbol = readers.normalize(rawSymbol);
   const book = readers.getBook(internalSymbol);
   const selection = selectTouchPrice(
@@ -250,7 +261,8 @@ export function selectCryptoTouch(
     nowMs,
     policy,
   );
-  return { internalSymbol, selection };
+  const acceptedBookBids = book && selection.ok && selection.quote.basis === 'book_top' ? book.bids : null;
+  return { internalSymbol, selection, acceptedBookBids };
 }
 
 /** The side a counterparty fills: a BUY on the ASK, a SELL on the BID. A refused selection ⇒ `null`. */

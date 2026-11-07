@@ -22,7 +22,7 @@ import { resolveVtsBookedExitPrice } from '../../core/trading/vts-exit-booking.j
 import { evaluatePendingMaker, isMarketableAtPlacement, planTwin } from '../../core/trading/pending-maker-logic.js';
 
 const NOW = 1_000_000_000;
-const book = (bid: number, ask: number, ageMs = 100): CryptoBookTop => ({ bids: [{ price: bid }], asks: [{ price: ask }], ageMs, updatedAtMs: NOW - ageMs });
+const book = (bid: number, ask: number, ageMs = 100): CryptoBookTop => ({ bids: [{ price: bid, qty: 1 }], asks: [{ price: ask, qty: 1 }], ageMs, updatedAtMs: NOW - ageMs }); // KD-19 P4: levels carry qty
 const sides = (bid: number, ask: number, ageMs: number) => ({
   bid, ask, venueObservedAtMs: null, sidesCapturedAtMs: NOW - ageMs, lastSource: 'kraken_rest',
 });
