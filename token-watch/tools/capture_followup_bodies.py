@@ -2,9 +2,12 @@
 token-watch — capture one real DexScreener body per mint in a window of due buckets, INTO A SCRATCH TREE.
 (B-TOKEN-WATCH-FOLLOWUP-MEMORY P1, the measurement's input; #1132.)
 
-    TOKEN_WATCH_ROOT=/var/lib/token-watch-scratch \
-      python3 tools/capture_followup_bodies.py --first 2026-09-30T14 --last 2026-10-02T13 \
-        --log /var/lib/token-watch-scratch/capture-log.jsonl [--resume]
+    systemd-run --unit=tw-p1-capture --uid=tokenwatch --gid=tokenwatch -p MemoryMax=256M -p CPUQuota=25% \
+      -p RemainAfterExit=yes -p WorkingDirectory=/opt/token-watch-p1 \
+      -E TOKEN_WATCH_ROOT=/var/lib/token-watch-scratch -E PYTHONUNBUFFERED=1 \
+      /usr/bin/python3 /opt/token-watch-p1/tools/capture_followup_bodies.py --first 2026-09-30T14 \
+        --last 2026-10-02T13 --log /var/lib/token-watch-scratch/capture-log.jsonl [--resume]
+  `-p MemoryMax=256M` is what satisfies the cap check below; there is no flag that skips it.
 
 WHAT IT DOES. For every DISTINCT mint in the due buckets [first, last] (first appearance order), it calls
 `providers.token_state(mint)` once — the production code path, unchanged — so each body lands, by the production
@@ -55,6 +58,7 @@ Exit codes: 0 done · 2 refused before any call · 3 a bucket missing or empty �
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -186,12 +190,11 @@ def main(argv=None) -> int:
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--allow-missing", action="append", default=[], help="a bucket hour (YYYY-MM-DDTHH) known absent")
     ap.add_argument("--cgroup-dir", help="TEST ONLY: read memory.* from here instead of this process's cgroup")
-    ap.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     a = ap.parse_args(argv)
 
     root = _refuse_production()
     cg = _cgroup_dir(a.cgroup_dir)
-    if not a.skip_memory_check and _read(os.path.join(cg, "memory.max") if cg else "") != str(EXPECT_MEMORY_MAX):
+    if _read(os.path.join(cg, "memory.max") if cg else "") != str(EXPECT_MEMORY_MAX):
         print("REFUSED: memory.max is %r, not %d (MemoryMax=256M)" % (
             _read(os.path.join(cg, "memory.max")) if cg else None, EXPECT_MEMORY_MAX), file=sys.stderr)
         return 7
@@ -236,7 +239,11 @@ def main(argv=None) -> int:
     save_state(budget.STATE, budget._blank(budget._month_key(now)))   # the fresh ledger (C-5)
     log({"kind": "start", "root": root, "buckets": buckets, "entries": sum(b["entries"] for b in buckets),
          "distinct_mints": len(mints), "already_captured": len(mints) - len(todo), "to_call": len(todo),
-         "ledger": "fresh %s" % budget._month_key(now), "allowed_follow_up": budget.allowed("follow_up")})
+         "ledger": "fresh %s" % budget._month_key(now), "allowed_follow_up": budget.allowed("follow_up"),
+         # provenance of the tree that ran (Langston r2, R-2): the install's own root-run comparison is the CHECK;
+         # this puts the identity in the measurement's own log so "the cleared tree ran" is not reported fact
+         "tool_sha256": hashlib.sha256(open(os.path.abspath(__file__), "rb").read()).hexdigest(),
+         "install_dir": os.path.dirname(os.path.dirname(os.path.abspath(__file__)))})
 
     attempted = shed = errors = 0
     prev_bodies, prev_attempted = 0, 0

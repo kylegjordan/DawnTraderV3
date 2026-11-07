@@ -103,6 +103,20 @@ out, err = p.communicate(timeout=60)
 check("L4 exit 8", p.returncode == 8, "rc=%s %s" % (p.returncode, err))
 check("L4 no lock recreated", not os.path.exists(LOCK))
 
+print("L6 expect: the beat never fires (a dead beat thread), the lock replaced mid-copy -> the RELEASE edge catches it:"
+      " exit 8, the thief's lock survives (Langston's probe, inverted)")
+dst = os.path.join(WORK, "dst6")
+os.makedirs(dst)
+p = start(dst, "births", slow=2.0, beat="1000")
+check("L6 POSITIVE CONTROL: the lock is taken", wait_for_lock())
+with open(LOCK, "w") as fh:
+    fh.write("intruder 998 2026-11-07T00:00:00+00:00\n")
+out, err = p.communicate(timeout=60)
+check("L6 exit 8 at release", p.returncode == 8 and "at release" in err, "rc=%s %s" % (p.returncode, err))
+check("L6 the thief's lock survives", os.path.exists(LOCK) and open(LOCK).read().startswith("intruder 998"))
+if os.path.exists(LOCK):
+    os.remove(LOCK)
+
 print("L5 expect: a destination inside the store -> exit 2")
 p = start(os.path.join(SRC, "inside"), "births")
 out, err = p.communicate(timeout=60)

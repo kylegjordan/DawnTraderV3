@@ -25,6 +25,11 @@ os.environ["TOKEN_WATCH_ROOT"] = ROOT
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tools"))
 os.makedirs(os.path.join(ROOT, "due"))
+# A cgroup fixture at exactly MemoryMax=256M: the tool has no switch that skips its cap check (Langston r2), so every
+# run here satisfies it the way production does — by the cgroup reading 268435456.
+CGOK = tempfile.mkdtemp(prefix="token-watch-capture-cg-")
+open(os.path.join(CGOK, "memory.max"), "w").write("268435456" + chr(10))
+open(os.path.join(CGOK, "memory.events"), "w").write(chr(10).join(["low 0", "high 0", "max 0", "oom 0", "oom_kill 0"]) + chr(10))
 
 import capture_followup_bodies as cap  # noqa: E402
 import providers  # noqa: E402
@@ -81,7 +86,7 @@ print("M1 expect: a gap in the bucket range -> exit 3 naming the hour; --allow-m
 bucket("2026-09-30T14", ["A", "B", "A"])
 bucket("2026-09-30T16", ["C", "D", "B"])
 log = os.path.join(ROOT, "m1.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log])
 recs = records(log)
 check("M1 exit 3", rc == 3, "rc=%s" % rc)
 check("M1 names the hour", recs[-1].get("missing") == ["2026-09-30T15"], str(recs[-1]))
@@ -90,7 +95,7 @@ check("M1 no call made", CALLS == [], str(CALLS))
 # ── N1: the normal run — one call per DISTINCT mint, bodies by the production writer, counted ───────────────────────
 print("N1 expect: 6 entries, 4 distinct mints -> 4 calls, 4 bodies this run, exit 0, a fresh ledger for this month")
 log = os.path.join(ROOT, "n1.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log, "--allow-missing", "2026-09-30T15"])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log, "--allow-missing", "2026-09-30T15"])
 recs = records(log)
 start, end = recs[0], recs[-1]
 check("N1 exit 0", rc == 0, "rc=%s" % rc)
@@ -99,13 +104,16 @@ check("N1 the gap is listed, not hidden", [b for b in start["buckets"] if not b[
 check("N1 one call per distinct mint", len(CALLS) == 4, str(len(CALLS)))
 check("N1 bodies this run = 4", end["bodies_this_run"] == 4 and end["distinct_mints_with_body"] == 4, str(end))
 check("N1 the gate was open", start["allowed_follow_up"] is True)
+check("N1 the start record names the tool that ran (sha256 of this very file) and its install dir",
+      start.get("tool_sha256") == __import__("hashlib").sha256(open(cap.__file__, "rb").read()).hexdigest()
+      and start.get("install_dir") == os.path.dirname(os.path.dirname(os.path.abspath(cap.__file__))), str(start))
 check("N1 a checkpoint at the end", any(r["kind"] == "checkpoint" and r["attempted"] == 4 for r in recs))
 
 # ── N2: --resume calls only what has no body ────────────────────────────────────────────────────────────────────────
 print("N2 expect: --resume over the same window -> 0 calls")
 CALLS.clear()
 log = os.path.join(ROOT, "n2.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log, "--allow-missing",
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-09-30T14", "--last", "2026-09-30T16", "--log", log, "--allow-missing",
                "2026-09-30T15", "--resume"])
 check("N2 nothing re-called", rc == 0 and CALLS == [] and records(log)[0]["to_call"] == 0, str(records(log)[0]))
 
@@ -121,7 +129,7 @@ def always_shed(mint):
 
 providers.token_state = always_shed
 log = os.path.join(ROOT, "s1.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T00", "--last", "2026-10-01T00", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T00", "--last", "2026-10-01T00", "--log", log])
 recs = records(log)
 check("S1 exit 4", rc == 4, "rc=%s" % rc)
 check("S1 stopped at 1,000 attempted", [r for r in recs if r["kind"] == "checkpoint"][-1]["attempted"] == 1000)
@@ -134,7 +142,7 @@ Usage = namedtuple("Usage", "total used free")
 real_usage = shutil.disk_usage
 shutil.disk_usage = lambda path: Usage(100, 99, 1)
 log = os.path.join(ROOT, "d1.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T00", "--last", "2026-10-01T00", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T00", "--last", "2026-10-01T00", "--log", log])
 recs = records(log)
 check("D1 exit 5", rc == 5, "rc=%s" % rc)
 check("D1 abort recorded with the numbers", recs[-1]["kind"] == "abort" and recs[-1]["reason"] == "disk floor"
@@ -146,7 +154,7 @@ print("D2 expect: 3 new mints, free 1 B at their single (last) checkpoint -> exi
 bucket("2026-10-01T05", ["E1", "E2", "E3"])
 shutil.disk_usage = lambda path: Usage(100, 99, 1)
 log = os.path.join(ROOT, "d2.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T05", "--last", "2026-10-01T05", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T05", "--last", "2026-10-01T05", "--log", log])
 recs = records(log)
 shutil.disk_usage = real_usage
 check("D2 a finished capture exits 0", rc == 0, "rc=%s %s" % (rc, recs[-1]))
@@ -168,7 +176,7 @@ def bodies_then_shed(mint):
 
 providers.token_state = bodies_then_shed
 log = os.path.join(ROOT, "s2.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T02", "--last", "2026-10-01T02", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T02", "--last", "2026-10-01T02", "--log", log])
 recs = records(log)
 providers.token_state = real_token_state
 check("S2 exit 6 (stall)", rc == 6, "rc=%s" % rc)
@@ -180,7 +188,7 @@ print("S3 expect: 10 mints, all shed -> exit 4 at the single checkpoint (the fir
 bucket("2026-10-01T03", ["U%02d" % i for i in range(10)])
 providers.token_state = always_shed
 log = os.path.join(ROOT, "s3.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T03", "--last", "2026-10-01T03", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T03", "--last", "2026-10-01T03", "--log", log])
 providers.token_state = real_token_state
 check("S3 exit 4", rc == 4, "rc=%s %s" % (rc, records(log)[-1]))
 
@@ -188,7 +196,7 @@ check("S3 exit 4", rc == 4, "rc=%s %s" % (rc, records(log)[-1]))
 print("B2 expect: a bucket that exists with 0 entries -> exit 3 naming it as empty")
 bucket("2026-10-01T04", [])
 log = os.path.join(ROOT, "b2.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T04", "--last", "2026-10-01T04", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T04", "--last", "2026-10-01T04", "--log", log])
 check("B2 exit 3, empty named", rc == 3 and records(log)[-1].get("empty") == ["2026-10-01T04"], str(records(log)[-1]))
 
 # ── R3: a root INSIDE the production store is refused ───────────────────────────────────────────────────────────────
@@ -211,7 +219,7 @@ def last_errors(mint):
 
 providers.token_state = last_errors
 log = os.path.join(ROOT, "s4.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T06", "--last", "2026-10-01T06", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T06", "--last", "2026-10-01T06", "--log", log])
 recs = records(log)
 providers.token_state = real_token_state
 check("S4 a finished capture with a one-mint zero tail exits 0", rc == 0, "rc=%s %s" % (rc, recs[-1]))
@@ -222,7 +230,7 @@ bucket("2026-10-01T07", ["W%04d" % i for i in range(1500)])
 served["n"] = 0
 providers.token_state = bodies_then_shed
 log = os.path.join(ROOT, "s5.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T07", "--last", "2026-10-01T07", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T07", "--last", "2026-10-01T07", "--log", log])
 providers.token_state = real_token_state
 check("S5 a 500-attempt zero final interval is a stall", rc == 6, "rc=%s %s" % (rc, records(log)[-1]))
 
@@ -241,7 +249,7 @@ def two_then_dead(mint):
 
 providers.token_state = two_then_dead
 log = os.path.join(ROOT, "s6.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T08", "--last", "2026-10-01T08", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T08", "--last", "2026-10-01T08", "--log", log])
 providers.token_state = real_token_state
 check("S6 exit 6 at 2,000", rc == 6 and records(log)[-1].get("attempted") == 2000, "rc=%s %s" % (rc, records(log)[-1]))
 print("S7 expect: 2,001 mints, every call serves a body except the last (one 429) -> exit 0, end written, tail 1")
@@ -256,7 +264,7 @@ def last_429(mint):
 
 providers.token_state = last_429
 log = os.path.join(ROOT, "s7.jsonl")
-rc = cap.main(["--skip-memory-check", "--first", "2026-10-01T09", "--last", "2026-10-01T09", "--log", log])
+rc = cap.main(["--cgroup-dir", CGOK, "--first", "2026-10-01T09", "--last", "2026-10-01T09", "--log", log])
 recs = records(log)
 providers.token_state = real_token_state
 check("S7 exit 0 with an end record and tail 1", rc == 0 and recs[-1]["kind"] == "end"

@@ -14,7 +14,9 @@ lists and opens it. Each path is copied with `cp -a` under nice 19 / ionice idle
    lock, and `periodic_lock`'s unconditional unlink on exit would delete it while the thief still runs.
 ⛔ SO EACH BEAT FIRST ASSERTS THE LOCK STILL CARRIES OUR HOLDER STRING AND PID. If it is gone or foreign, the copy is
    killed and the process exits 8 at once with os._exit — skipping `periodic_lock`'s finally, which would otherwise
-   unlink a lock that is no longer ours. (Release-by-token in `store.periodic_lock` itself is P4 of this batch.)
+   unlink a lock that is no longer ours. An OSError in the beat is a lost lock too, and ownership is asserted AGAIN
+   at the release edge (after the beat thread is joined), so a beat thread that died for any reason cannot let the
+   unconditional unlink run on a foreign lock. (Release-by-token in `store.periodic_lock` itself is P4.)
 Exit: 0 copied · 2 refused · 8 the lock was lost or taken mid-copy · 9 the lock was not free within 300 s.
 """
 
@@ -59,20 +61,24 @@ def main(argv: list[str], copy_cmd=None) -> int:
         if not held:
             print("REFUSED: could not take the store's periodic lock within 300 s", file=sys.stderr)
             return 9
-        state = {"child": None, "lost": False}
+        state = {"child": None}
         stop = threading.Event()
+
+        def lose(why: str) -> None:
+            child = state["child"]
+            if child is not None and child.poll() is None:
+                child.kill()
+            print("ABORTED: %s; nothing of ours is unlinked" % why, file=sys.stderr, flush=True)
+            os._exit(8)                             # skip periodic_lock's finally: it would unlink a foreign lock
 
         def beat():
             while not stop.wait(BEAT_S):
-                if not _ours():
-                    state["lost"] = True
-                    child = state["child"]
-                    if child is not None and child.poll() is None:
-                        child.kill()
-                    print("ABORTED: the periodic lock is gone or not ours; nothing of ours is unlinked",
-                          file=sys.stderr, flush=True)
-                    os._exit(8)                     # skip periodic_lock's finally: it would unlink a foreign lock
-                os.utime(store.LOCK_PATH)
+                try:
+                    if not _ours():
+                        lose("the periodic lock is gone or not ours")
+                    os.utime(store.LOCK_PATH)
+                except OSError as exc:              # an unbeatable lock is a lost lock (Langston r2 fold)
+                    lose("the beat failed (%s)" % exc)
         t = threading.Thread(target=beat, daemon=True)
         t.start()
         try:
@@ -82,9 +88,16 @@ def main(argv: list[str], copy_cmd=None) -> int:
                 rc = state["child"].wait()
                 if rc != 0:
                     print("FAILED: cp -a %s exited %d" % (rel, rc), file=sys.stderr)
+                    if not _ours():
+                        lose("the periodic lock is gone or not ours at release")
                     return 1
         finally:
             stop.set()
+        t.join()
+        # ⛔ OWNERSHIP IS CHECKED AT THE RELEASE EDGE TOO (Langston r2 fold): whatever ended the beat thread, the
+        #    lock is ours here or periodic_lock's finally must not run.
+        if not _ours():
+            lose("the periodic lock is gone or not ours at release")
     print("copied under the lock: %d paths" % len(rels))
     return 0
 
