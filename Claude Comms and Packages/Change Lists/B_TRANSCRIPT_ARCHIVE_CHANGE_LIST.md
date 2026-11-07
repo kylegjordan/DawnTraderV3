@@ -458,3 +458,26 @@ Exc Files : value-hashes.json
   - obs (a) bare block as machine / plain strings as machine.
   - Two cache anchors were re-pointed.
   - Index 20/20 is a Windows run. Langston's Linux re-run reads 19/20, because `recall: CRLF on stdout` is a no-op where LF is already the default — expected.
+
+### INSTALLED 2026-11-07T03:29:35Z — the held-notice item + the P10 counts leg, from `01ee9ff16cdc19d4c758c6e9d228879910f1ddd9` (Langston PROCEED, queue id `1568464130640318506`)
+- **Install:**
+  - `~/.claude/transcript-archive-bin` was moved aside to `~/.claude/transcript-archive-bin.91c039cdb` (kept), with 0 locks held at the time.
+  - 8 files were written from `git show <sha>:<path>`. Each one's sha256 matched the blob piped the same way, and 3 were also checked by object id (`git hash-object --no-filters` = `git rev-parse <sha>:<path>`).
+  - `INSTALLED_FROM.txt` was updated.
+- **`outside-folders.txt` created (laptop-local, not in git):** 8 names, generated from the live census as `outside` + not `KNOWN_OUTSIDE` + holds a `.jsonl`. The list loads and equals that set.
+- **One real run from the installed copy** (`dt_archive_trigger.py precompact-run`; no alert leg, 30-min floor respected): RUNS.log `2026-11-07T03:30:38Z precompact 0 ARCHIVE RUN OK — 1096 raw files, 720 lines, layer (c) 28 values; HEARTBEAT: 4 of 1984 runs hold a human turn`, 35.8 s.
+  - No REREAD, and no folder "on no list" (the list quieted all 8).
+  - 1,096 = 1,091 + the 4 heartbeat runs + 1 new conversation in the five since the counts were taken. 1,984 = 1,982 + 2 heartbeat runs since.
+- **Read back:**
+  - `HEARTBEAT/` holds `2026-07-22_9c1366fa.md`, `2026-07-22_ada63275.md`, `2026-10-08_59ec1026.md`, `2026-10-08_e5899daa.md`, the 4 measured ids.
+  - `gate-cache.json` is 288,859 B.
+  - Orphan census: 1,096 states, 0 orphans, 1,096 ok, 1,096 fingerprinted.
+  - Both index headers carry COVERAGE.
+- **`NOT RECORDED` appeared in 4 archive files, as Langston predicted at review** (holds live at install have no `c9`): `CC-A/sub/66dbb030/…agent-a5f38e6fb22126761.md`, `CC-C/2026-11-07_4dfcc10e.md`, `CC-INFRA/2026-11-07_644fc5fe.md`, `CC-PM/2026-11-07_994e6488.md`. This is arm (c) working, not a defect.
+- **Folded into the P10 move commit (Langston's PROCEED, §13 disposition 1):**
+  1. a two-attempt re-stat in `raw_files.kind_of` (the `os.stat` arm of the gate's retry is dead code; `kind_of` refuses first);
+  2. a mutant for the gate's retry (he reached both arms by patching `open`);
+  3. `hit[2]` checked as a bool;
+  4. `dt_dupes.raw_files`'s walk refuses on error instead of `os.walk`'s silent default;
+  5. the move never acts on a duplicate group holding a GATED-folder file judged machine (it has no archive copy); a mixed group is listed, never moved.
+- **Langston's reach number for the prefix-test hypothesis (obs (a)):** over 96,038 user entries in 8,043 Helsinki transcripts, 0 multi-text-block user entries and 0 single-block entries with a machine prefix followed by a body. Positive control: 19 entries the regex does judge machine. The shape is not established as impossible; the population is a different machine.
