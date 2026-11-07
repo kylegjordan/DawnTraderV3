@@ -1990,6 +1990,15 @@ export class ActiveExecutionEngine {
           // `entry_price_source`); before it, that no book was read. The column comment says the same.
           entryBookAgeMs: _fillBookAgeMs,
         } as any);
+        // ⭐ #1250 P7 (OBJ-3, Langston option (c)): the AGE of the price that filled this resting order, at the fill — under
+        // its own name, so `entry_book_age_ms` keeps its NULL-by-intent arm discriminator (option (b) refused). The fill
+        // instant exists only here (`openedAt` stays at placement), so it is stamped here or never.
+        if (_fillStamped && typeof provenance.observedAtMs === 'number' && Number.isFinite(provenance.observedAtMs)) {
+          const _ageMs = Math.max(0, Math.round(Date.now() - provenance.observedAtMs));
+          storage.mergeClosedTradeMetadata(this.mode, _fillTradeId, { entryObservedAgeMs: _ageMs })
+            .then((ok) => { if (!ok) console.error(`[#1250][ENTRY_OBSERVED_AGE][NO_ROW] ${position.symbol} trade=${_fillTradeId}`); })
+            .catch((e) => console.error(`[#1250][ENTRY_OBSERVED_AGE][WRITE_FAILED] ${position.symbol} trade=${_fillTradeId}:`, e instanceof Error ? e.message : e));
+        }
         if (!_fillStamped) {
           console.warn(`[P19-B7.2c][MAKER_FILL_STAMP_NOROW:${this.mode}] ${position.symbol}: tradeId ${_fillTradeId} matched no closed_trades row — entry provenance NOT written (silent no-op made visible)`);
         }

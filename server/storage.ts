@@ -549,6 +549,8 @@ export interface IStorage {
   // guarantee is the leaf's `Record<TradeCloseReason, …>`: a new REASON is a compile error until it is CLASSED.
   createClosedTrade(mode: TradingMode, trade: ClosedTradeWrite<Omit<InsertClosedTrade, 'mode'>>): Promise<ClosedTrade>;
   updateClosedTrade(mode: TradingMode, id: string, updates: ClosedTradeWrite<Partial<ClosedTrade>>): Promise<ClosedTrade>;
+  /** #1250 P7: merge keys INTO `metadata` (jsonb `||`), never replacing it. Returns false when no row matched. */
+  mergeClosedTradeMetadata(mode: TradingMode, id: string, patch: Record<string, unknown>): Promise<boolean>;
   getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined>;
   getClosedTrades(mode: TradingMode, filters: { limit: number | 'all'; closedOnly?: boolean; includeNeverFilled?: boolean }): Promise<ClosedTrade[]>;
   // B-BALANCE-TRUTH Step C (#618): whole-history / whole-window aggregates. Use THESE for any
@@ -3173,6 +3175,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(closedTradesTable.id, id))
       .returning();
     return result;
+  }
+
+  async mergeClosedTradeMetadata(mode: TradingMode, id: string, patch: Record<string, unknown>): Promise<boolean> {
+    // ⛔ A MERGE, NOT A SET: `updateClosedTrade({ metadata })` would replace every key the open wrote (levelSpec, the plan
+    // fields, admissionBasis …). The `.returning()` length is the row-matched signal (`#704`: a silent no-op is a defect).
+    const rows = await db.update(closedTradesTable)
+      .set({ metadata: sql`COALESCE(${closedTradesTable.metadata}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb` } as any)
+      .where(and(eq(closedTradesTable.id, id), eq(closedTradesTable.mode, mode)))
+      .returning({ id: closedTradesTable.id });
+    return rows.length > 0;
   }
 
   async getClosedTrade(mode: TradingMode, id: string): Promise<ClosedTrade | undefined> {
