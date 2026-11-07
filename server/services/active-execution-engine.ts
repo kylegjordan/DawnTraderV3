@@ -647,7 +647,7 @@ export class ActiveExecutionEngine {
     // constraint 3 — crypto depth is the venue's own published ladder). Crypto's entry behaviour is
     // BYTE-FOR-BYTE unchanged by this batch; widening it would be an unreviewed change to a class this
     // batch never audited.
-    // ⛔ NEITHER ARM BELOW CALLS `recordDepthGateBlock` — THE OPEN-PATH CALLER IS THE SOLE WRITER (`openPosition`'s `[DEPTH_GATE_BLOCK]` branch — corrected B-PRICE-FEED-COVERAGE inc 0: this read `:3724`, which is unrelated entry-fill-look pruning; `recordDepthGateBlock` has three callers, depth gate / liveness / consumption, all in `openPosition`), as it
+    // ⛔ NEITHER ARM BELOW CALLS `recordDepthGateBlock` — THE OPEN-PATH CALLER IS THE SOLE WRITER (`executeSimulatedTrade`'s `[DEPTH_GATE_BLOCK]` branch — corrected B-PRICE-FEED-COVERAGE inc 0: this read `:3724`, which is unrelated entry-fill-look pruning; `recordDepthGateBlock` has three callers, depth gate / liveness / consumption, all in `executeSimulatedTrade`), as it
     // is for all four arms above. Both arms did call it in the first draft, so `xstock_spot:one_sided_book`
     // and `:hollow_book` incremented 2× per refusal while every other bucket incremented 1× — inside the
     // one per-reason counter Step 8 reads to say whether this gate fires (Langston Step-4 BLOCKER-1).
