@@ -133,6 +133,62 @@ rc, out = recall("zebra", "--bogus")
 ok("an unknown argument is refused, exit 2", rc == 2)
 ok("recall's stdout is LF", b"\r\n" not in subprocess.run([sys.executable, "-I", os.path.join(HERE, "dt_recall.py"), "zebra", "--root", root],
                                                          capture_output=True).stdout)
+
+print("5. Langston P6 review: a flag with no value, an empty query, --since and nested files, a stray file, a failure")
+
+
+def recall_raw(*a):
+    p = subprocess.run([sys.executable, "-I", os.path.join(HERE, "dt_recall.py")] + list(a), capture_output=True)
+    return p.returncode, p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace")
+
+
+for flag in ("--alias", "--since", "--batch"):
+    rc, out = recall_raw("zebra", flag, "--root", root)          # the flag's value would be "--root"
+    ok("must-fix 1: %s with no value is REFUSED (exit 2), never a dropped filter" % flag, rc == 2 and "needs a value" in out, (rc, out))
+    rc, out = recall_raw("zebra", "--root", root, flag)            # the flag is the LAST argument
+    ok("must-fix 1: ...and as the last argument too (%s)" % flag, rc == 2 and "needs a value" in out, (rc, out))
+rc, out = recall_raw("zebra", "--root")
+ok("must-fix 1: a bare --root is refused, never the live laptop archive", rc == 2 and "needs a value" in out, (rc, out))
+for q, extra in (("", ()), ("   ", ()), ("", ("--actions",))):
+    rc, out = recall_raw(q, "--root", root, *extra)
+    ok("must-fix 3: an empty query %r%s is REFUSED (exit 2) - never a zero, never every row" % (q, " --actions" if extra else ""),
+       rc == 2 and "empty query" in out, (rc, out))
+rc, out = recall("zebra", "--actions")
+ok("must-fix 2: (control) the nested action row is found without --since", rc == 0 and "sub/0fe1c46a" in out, out)
+rc, out = recall("zebra", "--actions", "--since", "2026-10-20")
+ok("must-fix 2: --since leaves the undated nested action row OUT, as the text arm does, and SAYS so",
+   rc == 1 and "left out 1 nested" in out, out)
+rc, out = recall("token watch", "--since", "2026-10-20")
+ok("must-fix 2: a text search under --since says how many nested transcripts it left out",
+   "left out 1 nested" in out, out)
+stray = os.path.join(root, "CC-B", "sub", "stray.txt")
+open(stray, "w").write("not a folder")
+rc, out = recall("zebra finding")
+ok("must-fix 4: a stray FILE in <alias>/sub/ does not crash the search (exit 0, the hit still found)", rc == 0 and "1 hit(s)" in out, (rc, out))
+os.remove(stray)
+tsv_path = os.path.join(root, "ACTIONS.tsv")
+os.rename(tsv_path, tsv_path + ".aside")
+os.makedirs(tsv_path)                                             # an archive layout the tool cannot read
+rc, out = recall_raw("zebra", "--actions", "--root", root)
+ok("must-fix 4: a search that FAILS exits 3 and says so - never the no-hits code 1", rc == 3 and "SEARCH FAILED" in out, (rc, out))
+os.rmdir(tsv_path)
+os.rename(tsv_path + ".aside", tsv_path)
+
+print("6. claim 4 by TEST, not only by construction: a phrase only inside a redacted secret is not found")
+import hmac, hashlib  # noqa: E402,E401
+KEY = bytes(range(32))
+SECRET = "Qm" + "7Vx2Lp9Rt4Wz8Kc"
+hs = [{"name": "FRED_API_KEY", "length": len(SECRET), "hmac": hmac.new(KEY, SECRET.encode(), hashlib.sha256).hexdigest(),
+       "key_id": dt.key_id(KEY)}]
+with open(os.path.join(proj, "C--DawnTraderV3-old", SB + ".jsonl"), "a", newline="\n") as fh:
+    fh.write(raw([{"type": "user", "uuid": "o2", "timestamp": "2026-10-22T11:00:00Z",
+                   "message": {"content": "the walrus credential is " + SECRET + " keep it"}}]))
+da.archive_all(root, proj, dt.Redactor(hs, key=KEY))
+rc, out = recall(SECRET)
+ok("the secret itself returns NO hit (exit 1)", rc == 1 and "0 hit(s)" in out and SECRET not in out, out)
+rc, out = recall("walrus credential")
+ok("...while the SAME line's other words DO hit - so that zero is redaction, not a broken query",
+   rc == 0 and "1 hit(s)" in out and SECRET not in out, out)
 shutil.rmtree(base)
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

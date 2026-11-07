@@ -244,6 +244,20 @@ finally:
     ar.MACHINES.update(saved)
 shutil.rmtree(base)
 
+# Langston P6 review must-fix 5: the topic-free index over its cap is dt_index's exit 4 - and the archive's own result
+# survives in the line, never the catch-all exit 8 (whose written procedure is the stale-lock one)
+base, proj, root, shared, machines = tree()
+_cap = ar.di.MEMORY_CAP
+ar.di.MEMORY_CAP = 10
+try:
+    code, line = run_(proj, root, shared, machines=machines)
+finally:
+    ar.di.MEMORY_CAP = _cap
+ok("must-fix 5: the index refused over its cap -> exit 4, naming it, with the archive's own result kept in the line",
+   code == 4 and "topic-free index was refused" in line and "raw files" in line and "HEARTBEAT:" in line, (code, line))
+ok("must-fix 5: ...and the archive itself was written", any(f.endswith(".md") for _r, _d, fs in os.walk(os.path.join(root, "CC-B")) for f in fs))
+shutil.rmtree(base)
+
 print("4. a raw file rewritten in place is RE-READ, and the result line says so")
 base, proj, root, shared, machines = tree()
 code, line = run_(proj, root, shared, machines=machines)

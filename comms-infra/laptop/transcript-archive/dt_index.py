@@ -12,6 +12,8 @@ Rebuilt WHOLE from the archive files on every run (no state of its own, so it ca
                            mirrored into git, and the topic is the one field that can carry a private message. Refused
                            (nothing written, exit 4) if it would exceed the memory-file cap of 24,576 bytes.
 All output is LF. The archive is already redacted; nothing here reads a raw conversation.
+The run (`dt_archive_run`) passes the folders on no list (`unlisted`) to build(); this bare CLI does not, so an index
+rebuilt by hand carries no such line - rebuild through the run when that line matters.
 """
 import os
 import re
@@ -133,7 +135,9 @@ def build(root, shared, unlisted=()):
     _write(os.path.join(root, "ACTIONS.tsv"), "\n".join(rows) + "\n")
     lean = ["# Conversation archive — index (no topics)", "",
             "Where the full conversations are: `~/.claude/transcript-archive/` on Kyle's laptop (not in git). Search with",
-            "`dt_recall.py`. Topics are left out on purpose: this file is mirrored into git (Kyle, KD-49).", "",
+            "`python -I <any DawnTraderV3 clone>/comms-infra/laptop/transcript-archive/dt_recall.py \"<words>\"` (e.g. the",
+            "clone `C:/DawnTraderV3-old`); it runs from a clone, never an installed copy. Topics are left out on purpose: this",
+            "file is mirrored into git (Kyle, KD-49).", "",
             COVERAGE, ""]
     if unlisted:
         lean += ["%d folder(s) on no list hold conversations; their names are in the laptop's own index only." % len(unlisted), ""]
