@@ -72,20 +72,38 @@ export function openFill(orderQty: number, asks: readonly BookLevel[]): WalkResu
 }
 
 /**
+ * KD-19 P1 (`B-PRICE-SIDE-BY-JOB`, folds P-8e): a close's fill SPLIT — how much of the order the captured bids
+ * actually held (`walkedQty`) and how much was priced beyond them at the penalty (`extrapolatedQty`).
+ * `walkedQty + extrapolatedQty === filledQty === orderQty`.
+ */
+export interface CloseFillResult extends WalkResult {
+  walkedQty: number;
+  extrapolatedQty: number;
+}
+
+/**
  * CLOSE fill (sell): walk the BID side, then ALWAYS full-fill (R2 — a market exit
  * always gets out, just at a worse price in a thin book; never a phantom stuck
  * position). Any remainder beyond the captured book is priced at the worst captured
  * bid worsened by `beyondDepthPenaltyBps` (DB-resolved per class — NOT a magic
  * constant; Langston Q-A condition), and blended into the VWAP over the full order.
  * Returns filledQty === orderQty always (full fill).
+ *
+ * ⛔ KD-19 P1 — THE SPLIT IS RETURNED, AND `exhausted` NOW TELLS THE TRUTH. This used to return `exhausted: false` on the
+ * penalty path and drop `walked.filledQty`, so the observed/extrapolated split was discarded one line above its only
+ * caller (`CODEX_FINDINGS_REGISTER.md`, P-8e). `exhausted` is now true exactly when part of the order was priced beyond
+ * the captured book. `avgFillPrice` is unchanged, byte for byte. The one caller reads only `.avgFillPrice` and the split.
+ * ⛔ `orderQty` must be finite and > 0: `walkBook(0, …)` returns `avgFillPrice: 0` (a −100 % close). This function does
+ * not guard it — each CALLER refuses in its own terms (the paper seam returns `rejected`, `order-placer.ts`; the VTS helper
+ * throws, `vts-exit-booking.ts`), because only the caller knows what a refusal must leave behind.
  */
 export function closeFillFull(
   orderQty: number,
   bids: readonly BookLevel[],
   beyondDepthPenaltyBps: number,
-): WalkResult {
+): CloseFillResult {
   const walked = walkBook(orderQty, bids);
-  if (!walked.exhausted) return walked;
+  if (!walked.exhausted) return { ...walked, walkedQty: walked.filledQty, extrapolatedQty: 0 };
   const remainder = orderQty - walked.filledQty;
   // worst captured bid = the deepest level we touched; if the book was empty, fall
   // back to the best (only) reference we have — but an empty book here means no
@@ -99,7 +117,9 @@ export function closeFillFull(
     filledQty: orderQty,
     avgFillPrice: totalNotional / orderQty,
     consumedNotional: totalNotional,
-    exhausted: false,
+    exhausted: true,
+    walkedQty: walked.filledQty,
+    extrapolatedQty: remainder,
   };
 }
 

@@ -58,6 +58,12 @@ export interface FilledResult {
   feeQuote: number;
   /** Absolute slippage cost in quote currency already reflected in fillPrice. */
   slippageQuote: number;
+  /**
+   * KD-19 P2 (folds P-8e) — CLOSE fills only: how the full quantity was priced. `walk` = over the captured bids
+   * (`walkedQty` held by them, `extrapolatedQty` priced beyond them at the penalty); `cold_reference` = a stopped-engine
+   * flatten with no bids, priced off its observed reference (walked 0, extrapolated = the whole quantity). Absent on opens.
+   */
+  closeSplit?: { branch: 'walk' | 'cold_reference'; walkedQty: number; extrapolatedQty: number };
 }
 
 /** Order partially filled — live reality (thin book). Paper never produces this. */

@@ -36,6 +36,7 @@ import type {
   OpenOrderRequest,
   CloseOrderRequest,
   FillResult,
+  FilledResult,
 } from './types.js';
 import type { AssetClass } from '../../../shared/asset-classes.js';
 import { openFill, closeFillFull } from './depth-walk.js';
@@ -110,6 +111,16 @@ export class PaperOrderPlacer implements OrderPlacer {
     const bids = req.bookBids;
     const penaltyBps = req.beyondDepthPenaltyBps;
     let fillPrice: number;
+    let closeSplit: NonNullable<FilledResult['closeSplit']>;
+    // ⛔ KD-19 P1 (Langston Step-2 C-1): a close of no quantity would walk nothing and book a price of 0 (a −100 % close,
+    // `depth-walk.ts` `walkBook`). REFUSED through the ordinary non-filled path so the engine counts and bounds it
+    // (`_countCloseRefusal`) like every other refusal — a throw here would skip the counter, the cap and the alert.
+    if (!(Number.isFinite(req.quantity) && req.quantity > 0)) {
+      console.error(
+        `[PaperOrderPlacer][CLOSE_INVALID_QTY] ${req.symbol} pos=${req.positionId} quantity=${req.quantity} — close REJECTED, position stays open`,
+      );
+      return { status: 'rejected', reason: `invalid close quantity ${req.quantity}`, code: 'invalid_close_qty' };
+    }
     if (typeof penaltyBps !== 'number') {
       console.error(
         `[PaperOrderPlacer][CLOSE_NO_DEPTH_CONFIG] ${req.symbol} pos=${req.positionId} — fill_depth_gate config unavailable; close REJECTED, position stays open (seed fill_depth_gate)`,
@@ -117,9 +128,12 @@ export class PaperOrderPlacer implements OrderPlacer {
       return { status: 'rejected', reason: 'fill_depth_gate config unavailable', code: 'no_depth_config' };
     }
     if (bids && bids.length > 0) {
-      fillPrice = closeFillFull(req.quantity, bids, penaltyBps).avgFillPrice;
+      const walked = closeFillFull(req.quantity, bids, penaltyBps);
+      fillPrice = walked.avgFillPrice;
+      closeSplit = { branch: 'walk', walkedQty: walked.walkedQty, extrapolatedQty: walked.extrapolatedQty };
     } else if (typeof req.coldBookReferencePrice === 'number' && req.coldBookReferencePrice > 0) {
       fillPrice = req.coldBookReferencePrice * (1 - penaltyBps / 10_000);
+      closeSplit = { branch: 'cold_reference', walkedQty: 0, extrapolatedQty: req.quantity };
       console.warn(
         `[PaperOrderPlacer][CLOSE_COLD_BOOK_REFERENCE] ${req.symbol} pos=${req.positionId} — no live bids; flatten booked at observed reference ${req.coldBookReferencePrice}*(1-${penaltyBps}bps)`,
       );
@@ -133,6 +147,6 @@ export class PaperOrderPlacer implements OrderPlacer {
     const feeQuote = notional * (this.feePercentFor(req.symbol, req.assetClass) / 100); // P19-B6.5d (OBJ-4): use the carried stamp
     // Slippage vs requested price (positive when the fill is worse/lower for a sell).
     const slippageQuote = (req.requestedPrice - fillPrice) * req.quantity;
-    return { status: 'filled', fillPrice, fillQty: req.quantity, feeQuote, slippageQuote };
+    return { status: 'filled', fillPrice, fillQty: req.quantity, feeQuote, slippageQuote, closeSplit };
   }
 }

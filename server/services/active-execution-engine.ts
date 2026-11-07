@@ -4444,6 +4444,8 @@ export class ActiveExecutionEngine {
     let _fillWarm = true;                           // taker leg overwrites from assessWarmth
     let _fillWalkedBook = false;                    // true iff the fill walked real bids
     let _fillArm: string | null = null;             // see the exit_fill_arm column comment
+    // KD-19 P2 (folds P-8e): the taker close's split — bids held vs priced beyond them. Null on the maker leg (no walk).
+    let _fillSplit: { branch: 'walk' | 'cold_reference'; walkedQty: number; extrapolatedQty: number } | null = null;
     if (options?.makerExitFill) {
       // P19-B8.6 MAKER fill leg: the resting exit filled at its limit — price = the
       // limit exactly (makerFillPrice semantics, same CI-guarded fill=limit rule as
@@ -4521,6 +4523,7 @@ export class ActiveExecutionEngine {
         return;
       }
       actualExitPrice = _closeFill.fillPrice;
+      _fillSplit = _closeFill.closeSplit ?? null;
       exitFee = _closeFill.feeQuote;
       _takerCloseSlippage = _closeFill.slippageQuote;
     }
@@ -4890,6 +4893,8 @@ export class ActiveExecutionEngine {
           // row 2 increment A, P5 — the durable refusal-duration record. ALLOWLIST, like every key in this block.
           const _erTally = this._exitRefusalTally.get(position.id);
           if (_erTally) _carry.exitRefusal = snapshotExitRefusal(_erTally, Date.now());
+          // KD-19 P2 (folds P-8e): how much of the close the captured bids held; `metadata.exitFillSplit` (no column).
+          if (_fillSplit) _carry.exitFillSplit = _fillSplit;
           return Object.keys(_carry).length
             ? { metadata: { ...(((trade as any).metadata as Record<string, unknown> | null) ?? {}), ..._carry } }
             : {};

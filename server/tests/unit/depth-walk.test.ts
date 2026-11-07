@@ -89,7 +89,10 @@ describe('P19-B4b.1 depth-walk — open partial / close full-fill', () => {
     const penaltyBps = 50; // 0.50%
     const r = closeFillFull(4, bids, penaltyBps);
     expect(r.filledQty).toBe(4);
-    expect(r.exhausted).toBe(false);
+    // KD-19 P1: `exhausted` is TRUE on the penalty path now (it read false and hid the split — P-8e), and the split is returned.
+    expect(r.exhausted).toBe(true);
+    expect(r.walkedQty).toBeCloseTo(2, 12);
+    expect(r.extrapolatedQty).toBeCloseTo(2, 12);
     // filled 2 @ VWAP (100,99) = 99.5; remainder 2 @ worst-bid(99) * (1-0.005) = 98.505
     // blended = (2*99.5 + 2*98.505)/4 = 99.0025
     expect(r.avgFillPrice).toBeCloseTo((2 * 99.5 + 2 * 98.505) / 4, 8);
@@ -100,6 +103,25 @@ describe('P19-B4b.1 depth-walk — open partial / close full-fill', () => {
     const r = closeFillFull(3, bids, 50);
     expect(r.filledQty).toBe(3);
     expect(r.avgFillPrice).toBeCloseTo(100, 10);
+    expect(r.exhausted).toBe(false);
+    expect(r.walkedQty).toBe(3);
+    expect(r.extrapolatedQty).toBe(0);
+  });
+
+  it('KD-19 P1: a sizeless level (qty 0) is skipped, so the whole order prices beyond it at the penalty', () => {
+    const r = closeFillFull(2, asLevels([[100, 0]]), 50);
+    expect(r.walkedQty).toBe(0);
+    expect(r.extrapolatedQty).toBe(2);
+    expect(r.avgFillPrice).toBeCloseTo(100 * (1 - 0.005), 10);
+  });
+
+  it('KD-19 P1: the price is byte-identical to the pre-split arithmetic on a short book', () => {
+    const bids = asLevels([[100, 1], [99.5, 0.5], [99, 0.25]]);
+    const r = closeFillFull(3, bids, 37);
+    const consumed = 100 * 1 + 99.5 * 0.5 + 99 * 0.25;
+    const expected = (consumed + (3 - 1.75) * (99 * (1 - 37 / 10_000))) / 3;
+    expect(r.avgFillPrice).toBe(expected);
+    expect(r.walkedQty + r.extrapolatedQty).toBeCloseTo(3, 12);
   });
 });
 
