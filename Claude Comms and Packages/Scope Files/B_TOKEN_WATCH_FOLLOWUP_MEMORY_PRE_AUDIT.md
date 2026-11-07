@@ -203,12 +203,24 @@ Crontabs: root holds no token-watch lines (0), and `tokenwatch` has no crontab. 
   - Per folder: observations 1,880,342,585 · due 1,709,730,521 · births 1,498,735,996 · state 632,688,429 · study 377,622,638 · dead 258,564,193 · provenance 184,706,325 · cold 115,064,283 · public 55,926 · offbox 39,777.
   - **Against the mint (2026-11-05T06:00:02Z, 7,708,004,159 B), same daily phase: −1,050,452,605 B over 2.006 days.** That fall is NOT a steady trend. Most of it is the 11-06 due prune (1,220,540,157 B in one run), and the 11-07 tier run pruned **0** due bytes (`kept … after cursor 2663 (1,707,949,486 B)`). So no outflow is due to bring the store under the line by itself: the day's raw provenance in and the cold off-box out roughly cancel, and `births` and `due` (behind the cursor) grow.
   - After today's cold file went off-box by hand (below), the store is ~6,542,487,271 B by subtraction, ~100 MB over. That figure is NOT re-measured; the next scheduled read is 11-08 06:00Z.
-- **ADD-5 (measured 2026-11-07, §9.4 disposition 2 — an item on this batch) — the off-box job races the tier job and skips the day's file whenever tier finishes after 04:30:02.**
-  - `token-watch-tier.timer` fires at 04:30 with a randomised delay (next fire 04:39:41; today 04:31:04, its cold file finished at 04:31:59).
-  - `token-watch-cold-offbox.timer` fires at a fixed 05:30, and the job skips any file modified under 3,600 s ago (`skipping provenance-raw-2026-11-06.jsonl.gz: modified under 3600s ago`). Today's gap was 58 min, so `0 file(s) to move`.
-  - **Two days running:** 11-06 05:30 skipped the 11-05 file; a later 05:55 run moved it. On 11-07 the file was moved by hand at 06:08:42Z: `moved 1 file(s), 115064283 B; 0 file(s) still on the box`, manifest 88 → 89. That run also discharged alert `e7e54cae` (the paid-B2 check: no `storage_cap_exceeded`), RESOLVED with the manifest line as evidence.
-  - Consequence: a day's cold file sits on the box a further 24 h in the gauge's folder.
-  - **Fix shape, not chosen:** order the jobs (off-box `After=` the tier unit or triggered on its success), or move the off-box timer past tier's worst case plus the quiet window. `UNAUDITED`.
+- **ADD-5 (measured 2026-11-07; CORRECTED the same morning per Langston, queue id `1568508055858192498`) — bug taxonomy OUTCOME (2), WORKING AS DESIGNED: the off-box job never takes the same morning's cold file, and is not meant to.**
+  - The off-box timer's own comment states the design: "An hour after tiering (04:30 plus up to 10 minutes). The upload skips any file modified in the last hour, so the morning's new archive is left for the next day's run: in steady state cold/ always holds about one day's file." It is implemented at `cold_offbox.py:327` (`STILL_WARM_SECONDS`, "it may still be being written") and restated at `:11`.
+  - It is deterministic, not a race: tier is `04:30:00 + RandomizedDelaySec=600`, off-box a fixed `05:30:00`. Today the gap was 04:31:59 → 05:30:02, 3,483 s; tomorrow's scheduled 04:39:41 gives 3,019 s. "Two days running" is the steady state.
+  - **What this is NOT:** a reason to move the off-box job earlier. That is the half-written-upload case the guard exists to prevent.
+  - **My hand-move at 06:08:42Z bought one reading, not a reduction.** It took the file the 11-08 05:30 run would have taken, and tomorrow's archive refills the one-day buffer.
+  - **Langston's falsifiable prediction for 11-08 06:00Z: ~6.70 GB, ~260 MB over.** Materially below that means one of his premises on births/provenance net flow is wrong.
+  - **What it bears on:** sizing the warn line. The 6 GiB line was never fitted to a floor that includes this designed ~115 MB transit buffer, and we are over it by less than one buffer. That is a sizing P-item inside this batch (Langston: no to raising it today to clear the row).
+- **The store's rate, from the instrument that already existed (`feed_watch.py:81-82`, hourly `store_bytes=`; journal read as root 2026-11-07, retained from 2026-11-05T22:04:59Z, so 24 readings, 11-06 07:05 → 11-07 06:05):**
+  - Hourly growth +20.9 to +61.7 MB, highest 17:00-01:00Z (US hours). A single tier drop of −660,481,988 B between 04:05 and 05:05.
+  - Peak 7,296,381,905 B at 04:05Z, just before tier.
+  - **Day over day (07:05 → 06:05, 23 h): +158,890,240 B.** Excluding the 11-07 cold file still on the box at 06:05 (115,064,283 B; the 11-05 file was already off at 11-06 07:05) leaves **≈ +43.8 MB/day net**, which matches Langston's independent +44,211,895 B/day due-ahead-of-cursor delta.
+  - **Runway to the 8 GiB cap:** (8,589,934,592 − ~6,542,487,271) / ~44 MB ≈ 46 days.
+  - **One interval, a delta, not a trend.** The retained journal holds no reading before 11-06 07:05, so the 09-30 slope change is not visible in it.
+- **Langston's ruling on the lever (same msg): none of (a)/(b)/(c) as I framed them.**
+  - **(a) is wrong, not premature:** `observations/` is a PAUSED writer, not a frozen archive. Its directory mtime is 2026-09-30 00:02:59Z, the date `store_watch.py:9-10` records the follow-up sweep switched off for OOM, and `token-watch-followup.timer` is disabled. Restarting that producer is this batch's purpose.
+  - **(b) dissolves:** the 11-06 census holds 0 B removable and 0 B in the spent window. Everything is ahead of the cursor, because the reader is stopped.
+  - **The lever is the batch's own objective: restore the follow-up sweep.** The queue order stands; nothing is pulled ahead.
+  - Also his: today's 04:31 tier run did not refresh `due-census.json` (mtime 11-06 04:40), so the census of record is a day stale; it goes on this batch as an audit item. My per-folder table omitted 3 trivial rows (`offbox`, `public`, root files); restored, the walks agree to the byte.
 
 ## 3. Plain-language summary
 
