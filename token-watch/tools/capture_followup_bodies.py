@@ -20,15 +20,16 @@ writer `provenance.record_follow_up`, in the scratch tree's `provenance/follow-u
    `budget._blank(<this month>)` before the first call, so `budget.allowed("follow_up")` is true and the run is not
    shed by a copied ledger. `CREDITS["follow_up"]` is 0, so the run spends no credits either way.
 ⛔ THE CHECKPOINT IS KEYED TO MINTS ATTEMPTED, NOT TO BODIES (Langston C-5 (i), r1c). A shed or failing gate writes
-   no body (`providers.py:195-196` raises before `record_follow_up`), so a body-keyed checkpoint would never arrive.
+   no body (the 429 shed at `providers.py:200-201` — the one that fires, since the budget shed at `:195-196` cannot at 0 credits — raises before `record_follow_up`), so a body-keyed checkpoint would never arrive.
    At the first checkpoint it asserts bodies > 0 (exit 4), and prints the body size mean, p99 and max BEFORE the
    rest of the run is committed. ★ AND EVERY LATER INTERVAL TOO (Langston, Step 4 r1, measured): a checkpoint whose
    interval had attempts and added ZERO bodies stops the run (exit 6). The first version tested only the first
    checkpoint, so a stall that began after attempt 1,000 — a sustained 429, the likeliest real mode at 240/min
    against a 300/min host — ran to the end writing nothing and exited 0; and a run of under 1,000 mints (a
    `--resume` tail) was never asserted at all. Checkpoints fall every 1,000 attempts and at the last one.
-   A later interval is called a stall only when the rate so far predicts >= 3 bodies in it (r2: one reliably-404ing
-   mint at the end must not abort a finished capture); a shorter zero tail is recorded on `end` as
+   A later interval is a stall when it is a full 1,000-attempt interval, or when the rate so far predicts >= 3
+   bodies in it (r2/r3: one reliably-404ing mint at the end must not abort a finished capture, and a low rate must
+   not disarm a full window); so only a short FINAL tail can be exempt, and it is recorded on `end` as
    `no_body_in_final_interval`.
 ⛔ A DISK FLOOR HELD THROUGHOUT (C-5 (ii)): every checkpoint re-reads free space on `/` and aborts (exit 5),
    recording the abort, when free space is under (projected remaining bytes + 10 GiB). The projection uses the bytes
@@ -230,11 +231,12 @@ def main(argv=None) -> int:
                 # ⛔ A ZERO OVER TOO FEW ATTEMPTS IS NOT A STALL (Langston, Step 4 r2, modelled): a final interval of
                 #    one mint that 404s reliably (`providers.py:198-202` re-raises non-429 errors) would abort a
                 #    finished capture and never write the `end` record that carries P1's deliverable. A later
-                #    interval aborts only when the rate so far predicts >= 3 bodies in it; otherwise, at the last
+                #    interval aborts when it is a FULL interval (r3: a low rate must not disarm a full window — 2 bodies
+                #    then 1,000 dead calls is a stall) or when the rate so far predicts >= 3 bodies; otherwise, at the last
                 #    checkpoint, the short zero tail is recorded on `end`. The first checkpoint is unchanged: a whole
                 #    run with no body still exits 4.
                 expected = (prev_bodies / prev_attempted * interval_attempts) if prev_attempted else None
-                if first or expected >= 3:
+                if first or interval_attempts >= CHECKPOINT or expected >= 3:
                     log({"kind": "abort", "reason": "%s: %d mints attempted, 0 bodies%s" % (
                         "no body at the first checkpoint" if first else "a later interval added no body (stall)",
                         interval_attempts, "" if first else " (%.1f expected at the rate so far)" % expected),

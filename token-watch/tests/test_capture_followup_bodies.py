@@ -226,6 +226,42 @@ rc = cap.main(["--first", "2026-10-01T07", "--last", "2026-10-01T07", "--log", l
 providers.token_state = real_token_state
 check("S5 a 500-attempt zero final interval is a stall", rc == 6, "rc=%s %s" % (rc, records(log)[-1]))
 
+# ── S6/S7: Langston r3 — a low rate does not disarm a full window; his 2,001 probe ─────────────────────────────────
+print("S6 expect: 3,000 mints, bodies for the first 2 then every call dead -> exit 6 at 2,000 (expected 2.0 < 3, but a full window)")
+bucket("2026-10-01T08", ["X%04d" % i for i in range(3000)])
+two = {"n": 0}
+
+
+def two_then_dead(mint):
+    two["n"] += 1
+    if two["n"] > 2:
+        raise providers.Shed("follow_up rate-limited")
+    return real_token_state(mint)
+
+
+providers.token_state = two_then_dead
+log = os.path.join(ROOT, "s6.jsonl")
+rc = cap.main(["--first", "2026-10-01T08", "--last", "2026-10-01T08", "--log", log])
+providers.token_state = real_token_state
+check("S6 exit 6 at 2,000", rc == 6 and records(log)[-1].get("attempted") == 2000, "rc=%s %s" % (rc, records(log)[-1]))
+print("S7 expect: 2,001 mints, every call serves a body except the last (one 429) -> exit 0, end written, tail 1")
+bucket("2026-10-01T09", ["Y%04d" % i for i in range(2001)])
+
+
+def last_429(mint):
+    if mint == "Y2000":
+        raise providers.Shed("follow_up rate-limited")
+    return real_token_state(mint)
+
+
+providers.token_state = last_429
+log = os.path.join(ROOT, "s7.jsonl")
+rc = cap.main(["--first", "2026-10-01T09", "--last", "2026-10-01T09", "--log", log])
+recs = records(log)
+providers.token_state = real_token_state
+check("S7 exit 0 with an end record and tail 1", rc == 0 and recs[-1]["kind"] == "end"
+      and recs[-1]["no_body_in_final_interval"] == 1 and recs[-1]["bodies_this_run"] == 2000, str(recs[-1]))
+
 shutil.rmtree(ROOT, ignore_errors=True)
 print("%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
