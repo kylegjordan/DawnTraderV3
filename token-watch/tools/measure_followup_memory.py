@@ -78,6 +78,7 @@ from __future__ import annotations
 import argparse
 import errno
 import hashlib
+import math
 import json
 import os
 import shutil
@@ -442,9 +443,11 @@ def cmd_run(a) -> int:
         if templates["1"] < MIN_CLASS:
             return void(11, "arm sept NOT RUN: %d captured bodies with exactly 1 pair, under %d" % (
                 templates["1"], MIN_CLASS), {"templates": templates})
-    pad_copies = 3 if a.arm == "x4" else (max(0, round(a.n) - 1) if a.arm == "xn" else 0)
+    # the guard BEFORE the arithmetic (Langston, Step 4): a missing --n must leave a refusal record, not a traceback
     if a.arm == "xn" and (a.n is None or a.n < 1):
         return void(2, "arm xn needs --n >= 1 (the derived N, written down before the run)")
+    # ceil, not round: a bound's rounding goes conservative (N = 2.5 pads 2 copies -> 3x text, never 2x)
+    pad_copies = 3 if a.arm == "x4" else (max(0, math.ceil(a.n) - 1) if a.arm == "xn" else 0)
 
     def fake_request(req):
         c.egress += 1
@@ -612,8 +615,16 @@ def cmd_derive_n(a) -> int:
         counts[k], size[k] = n, mean
     total, e_capture = db.execute("SELECT count(*), avg(bytes) FROM bodies").fetchone()
     out = {"shape": shape, "counts": counts, "size_measured": size, "E_capture": e_capture, "bodies": total}
+    # ⛔ BOTH ALWAYS-MEASURED CLASSES ARE CHECKED BEFORE ANY ARITHMETIC, each with its own reason (Langston, Step 4):
+    #    size(1) is the substitution BASIS (a thin mean would propagate into size(2) and size(3+)); size(0) has no
+    #    valid formula at all (k = 0 would price a no-pairs body at 0 bytes). Neither is ever substituted.
+    voids = []
     if counts["1"] < MIN_CLASS:
-        out["void"] = "N VOID (C-3): %d bodies with exactly 1 pair, under %d; x4 stands alone" % (counts["1"], MIN_CLASS)
+        voids.append("%d bodies with exactly 1 pair, under %d (the substitution basis)" % (counts["1"], MIN_CLASS))
+    if counts["0"] < MIN_CLASS:
+        voids.append("%d no-pairs bodies, under %d (no formula can stand in for it)" % (counts["0"], MIN_CLASS))
+    if voids:
+        out["void"] = "N VOID (C-3): " + "; ".join(voids) + "; x4 stands alone"
         print(json.dumps(out, indent=2, sort_keys=True))
         return 14
     used = {}
@@ -623,12 +634,11 @@ def cmd_derive_n(a) -> int:
         else:
             used[k] = _CLASS_K[k] * size["1"]
             notes.append("size(%s) = %d x size(1): only %d bodies in the class" % (k, _CLASS_K[k], counts[k]))
-    if counts["0"] < MIN_CLASS:
-        out["void"] = "N VOID: %d no-pairs bodies, under %d" % (counts["0"], MIN_CLASS)
-        print(json.dumps(out, indent=2, sort_keys=True))
-        return 14
     e_sept = sum(shape["share"][k] * used[k] for k in used)
+    # which class N actually rests on: each class's share of E_sept (Langston, Step 4 tidy 2)
+    contribution = {k: round(shape["share"][k] * used[k] / e_sept, 6) for k in used}
     out.update({"size_used": used, "substitutions": notes, "E_sept": e_sept, "N": e_sept / e_capture,
+                "contribution_to_E_sept": contribution,
                 "label": "x N bounds the TRANSIENT per-body parse/serialise peak only; never headroom (C-2)"})
     print(json.dumps(out, indent=2, sort_keys=True))
     return 0

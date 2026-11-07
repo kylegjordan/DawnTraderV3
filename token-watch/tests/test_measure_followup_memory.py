@@ -325,6 +325,23 @@ tool("index", "--pristine", THIN, "--out", BODIES_THIN)
 p = tool("derive-n", "--bodies", BODIES_THIN, "--shape", SHAPE)
 check("N2 exit 14, N void", p.returncode == 14 and "N VOID" in p.stdout, p.stdout[-400:])
 
+print("N3 expect: under 30 NO-PAIRS bodies (40 one-pair) -> N VOID naming class 0 (exit 14)")
+THIN0 = os.path.join(WORK, "thin0")
+shutil.copytree(PRISTINE, THIN0)
+with open(os.path.join(THIN0, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    for k, n in ((0, 25), (1, 40)):
+        for i in range(n):
+            m = "TH0%d_%02d" % (k, i)
+            t = json.dumps(body_k(m, k), sort_keys=True)
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+BODIES_THIN0 = os.path.join(WORK, "thin0.sqlite")
+tool("index", "--pristine", THIN0, "--out", BODIES_THIN0)
+p = tool("derive-n", "--bodies", BODIES_THIN0, "--shape", SHAPE)
+check("N3 exit 14, the void names the no-pairs class", p.returncode == 14 and "no-pairs" in p.stdout and "(C-3)" in p.stdout,
+      p.stdout[-400:])
+check("N1 the output carries each class's contribution to E_sept", set(dn.get("contribution_to_E_sept", {})) == {"0", "1", "2", "3+"}
+      and abs(sum(dn["contribution_to_E_sept"].values()) - 1) < 1e-3, str(dn.get("contribution_to_E_sept")))
+
 print("XN expect: arm xn with N = 6 pads five copies; served bytes ~6x the live arm's")
 run_root_xn, _ = prepare("run-xn")
 p, resn = run("xn", run_root_xn, "--n", "6")
@@ -333,6 +350,16 @@ check("XN five pad copies, bytes ~6x", resn.get("pad_copies") == 5 and live_mean
       and 5.8 <= resn.get("served_body_bytes", {}).get("mean", 0) / live_mean <= 6.2, str(resn.get("served_body_bytes")))
 check("XN fresh-parse control: parses == served", resn.get("parses") == resn.get("fanout", {}).get("served_bodies"),
       "%s vs %s" % (resn.get("parses"), resn.get("fanout")))
+print("XN2 expect: N = 2.5 rounds UP (ceil) -> 2 pad copies, bytes ~3x; a missing --n and --n 0.5 refuse with a record")
+run_root_xn2, _ = prepare("run-xn2")
+p, resn2 = run("xn", run_root_xn2, "--n", "2.5")
+check("XN2 ceil: 2 copies at N = 2.5", p.returncode == 0 and resn2.get("pad_copies") == 2, str(resn2.get("pad_copies")))
+run_root_xn3, _ = prepare("run-xn3")
+p, resn3 = run("xn", run_root_xn3)
+check("XN2 a missing --n -> exit 2 with a void record, not a traceback", p.returncode == 2
+      and "needs --n" in str(resn3.get("void")) and "Traceback" not in p.stderr, p.stderr[-300:])
+p, resn4 = run("xn", run_root_xn3, "--n", "0.5")
+check("XN2 --n 0.5 -> exit 2", p.returncode == 2 and "needs --n" in str(resn4.get("void")), str(resn4.get("void")))
 
 
 def run2(arm, run_root, *extra):
