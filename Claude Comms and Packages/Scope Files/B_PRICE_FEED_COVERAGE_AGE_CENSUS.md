@@ -13,7 +13,7 @@
 | bucket | rows | disposition |
 |---|---|---|
 | **ENTRY estimand — in scope** | **#1, #2, #3, #5, #6, #8, #9, #10, #23, #46**, plus **B0 = crypto signal birth** (`signal-orchestrator.ts:2452`, NO bound today — absent from the table because there is nothing to find) | read the entry instantiation of the standard (OBJ-2, OBJ-6) |
-| **EXIT estimand — in scope, separate instantiation** | **#7, #11, #12, #18, #19** | read the exit instantiation (distance = the stop budget, event = crossing the stop/target), derived separately; until it is derived and reviewed, each keeps its current measured contract |
+| **EXIT estimand — in scope, separate instantiation** | **#7, #11, #12, #18, #19** | read the separate exit estimand (crossing either contemporaneous boundary, stop and target direction-specific — scope r4), derived separately; until it is derived and reviewed, each keeps its current measured contract |
 | **VTS learning lane — excluded** | #20, #21, #24 | the VTS is the learning lane, not the trading pipeline; any alignment is a separate decision |
 | **source selection, not a trading action — demoted** | #13, #14, #16, #26 | each decides WHICH source to read or whether to re-fetch, not whether a trade acts; they serve the central reader and are re-checked at Step 2 for any trading consequence |
 | **feed maintenance — inputs to `sourceHealthy` (OBJ-1)** | #30, #39 | resubscribe / reconnect operations, not price admission |
