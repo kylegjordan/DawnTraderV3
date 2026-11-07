@@ -50,14 +50,14 @@ const isMixed = (s: LegSpec): s is { op: 'max' | 'min'; terms: [LevelTerm, Level
 const finitePos = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
 
 /** Re-derive one single-form value. `stop` is the CARRIED stop, needed only by `r_multiple`. */
-function deriveForm(spec: LevelForm, value: number, plan: number, fill: number, stop: number | null): number {
+function deriveForm(spec: LevelForm, value: number, plan: number, fill: number, stop: number | null, entryBasis: number = fill): number {
   switch (spec.form) {
     case 'anchor': return value;
     case 'distance': return value + (fill - plan);
     case 'proportional': return value * (fill / plan);
     case 'r_multiple':
       if (stop === null) return NaN; // an r_multiple stop has no meaning
-      return fill + spec.r * (fill - stop);
+      return entryBasis + spec.r * (entryBasis - stop);
   }
 }
 
@@ -71,11 +71,11 @@ function atPlan(spec: LegSpec, level: number, plan: number, planStop: number | n
   return spec.op === 'max' ? Math.max(a.value, b.value) : Math.min(a.value, b.value);
 }
 
-function deriveLeg(spec: LegSpec, level: number, plan: number, fill: number, stop: number | null): number {
-  if (!isMixed(spec)) return deriveForm(spec, level, plan, fill, stop);
+function deriveLeg(spec: LegSpec, level: number, plan: number, fill: number, stop: number | null, entryBasis: number = fill): number {
+  if (!isMixed(spec)) return deriveForm(spec, level, plan, fill, stop, entryBasis);
   const [a, b] = spec.terms;
-  const va = deriveForm(a.spec, a.value, plan, fill, stop);
-  const vb = deriveForm(b.spec, b.value, plan, fill, stop);
+  const va = deriveForm(a.spec, a.value, plan, fill, stop, entryBasis);
+  const vb = deriveForm(b.spec, b.value, plan, fill, stop, entryBasis);
   return spec.op === 'max' ? Math.max(va, vb) : Math.min(va, vb);
 }
 
@@ -109,11 +109,19 @@ export function rebaseLevels(i: {
   planStop: number;
   planTarget: number;
   fill: number;
+  /**
+   * 8c amendment 4 item 3 (Langston): the ENTRY ROLE PRICE, when it differs from the level basis. At the fill (#1250) the
+   * price paid is both, so it defaults to `fill`. At crypto BIRTH (8c) the levels move onto the bid (`fill`) while the entry
+   * is the ask: an `r_multiple` target is a ratio over OUR geometry (`entry + r·(entry − stop)`), so it reads `entryBasis`,
+   * and so does the long-ness assertion — a target inside the spread is not a long trade.
+   */
+  entryBasis?: number;
   spec: LevelSpec | null | undefined;
   tick: number | null;
 }): RebaseOutcome {
   const { planEntry, planStop, planTarget, fill, tick } = i;
-  if (![planEntry, planStop, planTarget, fill].every(finitePos)) return { ok: false, reason: 'invalid_inputs' };
+  const entryBasis = i.entryBasis ?? fill;
+  if (![planEntry, planStop, planTarget, fill, entryBasis].every(finitePos)) return { ok: false, reason: 'invalid_inputs' };
   if (!(planStop < planEntry && planTarget > planEntry)) return { ok: false, reason: 'plan_not_long' };
 
   const spec = i.spec ?? {};
@@ -131,9 +139,9 @@ export function rebaseLevels(i: {
     && Math.abs(atPlan(targetSpec, planTarget, planEntry, planStop) - planTarget) <= tol;
   if (targetSpec !== undefined && !isAnchorOnly(targetSpec) && !targetUsable) inconsistent.push('target');
 
-  let stop = stopUsable ? deriveLeg(stopSpec as LegSpec, planStop, planEntry, fill, null) : planStop;
+  let stop = stopUsable ? deriveLeg(stopSpec as LegSpec, planStop, planEntry, fill, null, entryBasis) : planStop;
   // The target's r_multiple is kept against the CARRIED stop (Langston BLOCKER-4).
-  let target = targetUsable ? deriveLeg(targetSpec as LegSpec, planTarget, planEntry, fill, stop) : planTarget;
+  let target = targetUsable ? deriveLeg(targetSpec as LegSpec, planTarget, planEntry, fill, stop, entryBasis) : planTarget;
 
   // F-G-1: every price we emit is venue-representable. Boundaries round AWAY from entry; a cap target TOWARD it.
   if (tick !== null && finitePos(tick)) {
@@ -141,7 +149,7 @@ export function rebaseLevels(i: {
     if (targetUsable) target = roundPriceForRole(target, tick, 'target', true, spec.targetIsCap === true);
   }
   if (!finitePos(stop) || !finitePos(target)) return { ok: false, reason: 'non_finite_rebase' };
-  if (!(stop < fill && target > fill)) return { ok: false, reason: 'rebased_not_long' };
+  if (!(stop < entryBasis && target > entryBasis)) return { ok: false, reason: 'rebased_not_long' };
   // Step-4 CHANGE-2 (Langston, #546): the basis names what HAPPENED to the value, not which path ran — a mixed leg whose
   // anchor term wins at both the plan and the fill is re-applied and lands back on the plan, so it reads 'plan'.
   const moved = (v: number, p: number) => Math.abs(v - p) > Math.max(Math.abs(p), 1) * 1e-12;

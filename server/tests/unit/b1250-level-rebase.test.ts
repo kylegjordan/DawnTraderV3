@@ -137,3 +137,30 @@ describe('#1250 — refusals', () => {
     expect(r).toMatchObject({ ok: true, stopPrice: 98, stopBasis: 'plan' });
   });
 });
+
+describe('8c amendment 4 item 3 — entryBasis beside the level basis (one transform, two moments)', () => {
+  // birth: plan built on the mid 100; bid 99.9, ask 100.1
+  const birth = { planEntry: 100, planStop: 98, planTarget: 104, tick: null as number | null, fill: 99.9, entryBasis: 100.1 };
+  it('an r_multiple target is a ratio over OUR geometry: R holds exactly against the ask (prediction (b))', () => {
+    const r = rebaseLevels({ ...birth, spec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: 2 } } });
+    if (!r.ok) throw new Error(r.reason);
+    expect((r.targetPrice - 100.1) / (100.1 - r.stopPrice)).toBeCloseTo(2, 12);
+    expect(r.targetPrice).toBeCloseTo(100.1 + 2 * (100.1 - 98), 12); // not 99.9 + 2·(99.9 − 98)
+  });
+  it('a distance leg moves onto the level basis (the bid), not the entry', () => {
+    const r = rebaseLevels({ ...birth, spec: { stop: { form: 'distance' }, target: { form: 'distance' } } });
+    if (!r.ok) throw new Error(r.reason);
+    expect(r.stopPrice).toBeCloseTo(98 - 0.1, 12);
+    expect(r.targetPrice).toBeCloseTo(104 - 0.1, 12);
+  });
+  it('the long-ness assertion reads the ENTRY basis: a target inside the spread is refused', () => {
+    // a distance target 0.15 above the mid lands at 100.05 on the bid — below the ask 100.1
+    const r = rebaseLevels({ ...birth, planTarget: 100.15, spec: { target: { form: 'distance' } } });
+    expect(r).toEqual({ ok: false, reason: 'rebased_not_long' });
+  });
+  it('#1250 is the degenerate case: entryBasis omitted ⇒ the fill', () => {
+    const a = rebaseLevels({ ...birth, entryBasis: undefined, spec: { target: { form: 'r_multiple', r: 2 } } });
+    const b = rebaseLevels({ ...birth, entryBasis: birth.fill, spec: { target: { form: 'r_multiple', r: 2 } } });
+    expect(a).toEqual(b);
+  });
+});
