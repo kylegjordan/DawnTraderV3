@@ -44,6 +44,22 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     failWith.msg = 'canceling statement due to statement timeout';
     for (const t of r.tables) expect(t.timedOut, t.name).toBe(true);
   });
+
+  it('load writes NO error line; a real fault writes ONE line per call, not one per table (Langston fold)', async () => {
+    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (const load of ['canceling statement due to statement timeout', 'timeout exceeded when trying to connect']) {
+      failWith.msg = load;
+      await computeDataArchiveStatus('rolling_24h' as never);
+    }
+    expect(spy).not.toHaveBeenCalled();
+    failWith.msg = 'relation "pair_scan_archive" does not exist';
+    await computeDataArchiveStatus('rolling_24h' as never);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(String(spy.mock.calls[0][0])).toMatch(/^\[B70\]\[archive-status\] 5 of 5 table reads failed .*first: pair_scan_archive: relation/);
+    spy.mockRestore();
+    failWith.msg = 'canceling statement due to statement timeout';
+  });
 });
 
 describe('P5 — wiring and sizing fences', () => {

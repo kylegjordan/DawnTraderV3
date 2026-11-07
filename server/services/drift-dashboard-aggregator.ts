@@ -836,6 +836,11 @@ export async function computeDataArchiveStatus(
 
   const tables: DataArchiveStatusResponse['tables'] = [];
   let totalDiskBytes = 0;
+  // B-DB-POOL-GUARD P5 (Langston, fold before close): load and faults are kept apart, as in the passive panel. A
+  // statement timeout or an acquire timeout on the 4-slot diagnostic pool is LOAD — the table shows QUERY TIMEOUT
+  // and no line is written; a real error is collected and logged ONCE per call, never once per table (error.log is
+  // the stream #1037's drop check reads).
+  const archiveFaults: string[] = [];
   for (const t of TABLES) {
     let rowsInWindow = 0;
     let totalRows = 0;
@@ -876,15 +881,19 @@ export async function computeDataArchiveStatus(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[B70][archive-status] query failed for ${t}:`, msg);
+      const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+      if (!isLoad) archiveFaults.push(`${t}: ${msg}`);
       // B-DB-POOL-GUARD P5 C-1 (Langston, blocking): before this, a failed read rendered as 0 rows / 0 bytes with
       // `timedOut: false` — "the archive is empty", no badge. The diagnostic pool makes failure routine (a 25 s server
       // bound and a 5 s acquire limit this function never had), so the flag is set on ANY failure: the client's
-      // QUERY TIMEOUT badge is the only render arm it has, and a timeout is the expected failure here. The log line
-      // above names the actual error, so a non-timeout fault is still distinguishable where it is read.
+      // QUERY TIMEOUT badge is the only render arm it has, and a timeout is the expected failure here. A non-timeout
+      // fault is still distinguishable where it is read: the once-per-call line after the loop names it.
       timedOut = true;
     }
     tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut });
+  }
+  if (archiveFaults.length > 0) {
+    console.error(`[B70][archive-status] ${archiveFaults.length} of ${TABLES.length} table reads failed — shown as QUERY TIMEOUT; first: ${archiveFaults[0]}`);
   }
 
   const cfg = getArchiveConfig();
