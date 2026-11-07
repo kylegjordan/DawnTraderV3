@@ -669,5 +669,70 @@ da.archive_all(root, proj, dt.Redactor(), now=os.path.getmtime(raw_path(proj)) +
 ok("...and it is written exactly once on release", all_text(root).count("Probe") == 1, all_text(root).count("Probe"))
 shutil.rmtree(base)
 
+print("15. a HELD notice keeps the layer (c) state it was redacted under, across a switch (held-notice item, P5 r7)")
+SECRET_TN = ("<task-notification>\n<task-id>q9</task-id>\n<status>failed</status>\n"
+             "<summary>Background command \"Probe " + sv + "\" failed</summary>\n</task-notification>")
+SQ = {"type": "queue-operation", "operation": "enqueue", "timestamp": "2026-10-21T12:00:00Z", "content": SECRET_TN}
+OFF, ON = dt.Redactor(), dt.Redactor(hs, key=KEY)
+
+
+def block_of(text, needle):
+    """The C-9 state line in force for the first archive line holding `needle` (the last state line above it)."""
+    state = None
+    for ln in text.splitlines():
+        if ln.startswith("> redaction layer (c)"):
+            state = ln
+        elif needle in ln:
+            return state
+    return "NEEDLE NOT FOUND"
+
+
+# (a) held under OFF, released under ON with no re-read: written under its OWN (OFF) state line
+base, proj, root = tree()
+put(proj, FIRST[:2] + [SQ], "w")
+da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 60)
+held = st_of(root, proj)["held"]
+ok("(a) a new hold records the state it was redacted under", len(held) == 1 and held[0].get("c9") == OFF.layer_c_state(), held)
+put(proj, [reply("z1", "2026-10-21T13:30:00Z", "later work")])
+da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+t = all_text(root)
+ok("(a) the released notice sits under the OFF state line, never under ON", "values: OFF" in (block_of(t, "Probe") or ""), (block_of(t, "Probe"), t))
+ok("(a) ...and the next fresh line is under the ON state line again", "values: ON" in (block_of(t, "later work") or ""), block_of(t, "later work"))
+shutil.rmtree(base)
+
+# (b) held under OFF, then the file is rewritten and re-read under ON: the hold is refreshed from the bytes
+base, proj, root = tree()
+put(proj, FIRST[:2] + [SQ] + ORIG[:3], "w")
+da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 60)
+ok("(b setup) the OFF-era hold carries the shapeless value in its stored line", sv in json.dumps(st_of(root, proj)["held"]), st_of(root, proj)["held"])
+put(proj, FIRST[:2] + [SQ] + [user("r01", D1 % 1, "ORIGINAL 1 (trimmed)")], "w")
+res, ref = da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 60)
+h = st_of(root, proj)["held"]
+ok("(b) the re-read happened and the notice is still ONE hold", res and res[0].get("reread") and len(h) == 1, (res, h))
+ok("(b) ...its stored line is re-redacted under ON, and records ON", len(h) == 1 and sv not in h[0]["line"] and h[0].get("c9") == ON.layer_c_state(), h)
+da.archive_all(root, proj, ON, now=os.path.getmtime(raw_path(proj)) + 3 * da.HOLD_S)
+t = all_text(root)
+ok("(b) on release it is written once, under ON, without the value", t.count("Probe") == 1 and sv not in t and "values: ON" in (block_of(t, "Probe") or ""),
+   (t.count("Probe"), block_of(t, "Probe")))
+shutil.rmtree(base)
+
+# (c) a hold from a state written before holds recorded their state: the archive says NOT RECORDED
+base, proj, root = tree()
+put(proj, FIRST[:2] + [SQ], "w")
+da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 60)
+sp = da.state_path(root, da.raw_files(proj)[0])
+legacy = st_of(root, proj)
+for _h in legacy["held"]:
+    _h.pop("c9", None)
+da.write_state(sp, legacy)
+da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 3 * da.HOLD_S)
+t = all_text(root)
+ok("(c) a legacy hold is written under the NOT RECORDED line, not under a borrowed state", block_of(t, "Probe") == da.C9_UNRECORDED, (block_of(t, "Probe"), t))
+put(proj, [reply("z2", "2026-10-21T15:00:00Z", "after the legacy release")])
+da.archive_all(root, proj, OFF, now=os.path.getmtime(raw_path(proj)) + 60)
+ok("(c) ...and the next line is under the real state line again", "values: OFF" in (block_of(all_text(root), "after the legacy") or ""),
+   block_of(all_text(root), "after the legacy"))
+shutil.rmtree(base)
+
 print("\n%d failed" % len(FAILS))
 sys.exit(1 if FAILS else 0)

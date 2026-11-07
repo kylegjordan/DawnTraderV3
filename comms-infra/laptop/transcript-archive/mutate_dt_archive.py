@@ -57,22 +57,22 @@ MUTATIONS = [
     ("a shorter archive file repaired silently", replace(
         '            raise Refused("%s is %d bytes, shorter than its committed %d - something else changed it; not repairing" % (p, size, n))',
         '            continue')),
-    ("ids from earlier runs not skipped", replace("            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in held_ids or (uid, line) in seen_run:")),
-    ("a uuid repeated in one run written twice", replace("            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in done or uid in held_ids:")),
+    ("ids from earlier runs not skipped", replace("            if uid in done or (uid, line) in seen_run:", "            if (uid, line) in seen_run:")),
+    ("a uuid repeated in one run written twice", replace("            if uid in done or (uid, line) in seen_run:", "            if uid in done:")),
     ("a half-written line consumed", replace("    end = new.rfind(b\"\\n\")", "    new = new + b\"\\n\"\n    end = len(new) - 1")),
     ("the lock not honoured", replace('    except FileExistsError:\n        raise Refused(', '    except FileExistsError:\n        return\n        raise Refused(')),
     ("a held notice written at once", replace("            if quiet or (a is not None and b is not None and a - b >= HOLD_S):", "            if True:")),
     ("a held notice never released", replace("            if quiet or (a is not None and b is not None and a - b >= HOLD_S):", "            if False:")),
     ("a later delivery does not cancel", replace("            if left.get(h[\"key\"], 0) > 0:", "            if False:")),
-    ("the state line repeated every run", replace("            if st[\"layer_c\"].get(rel) != state_line:", "            if True:")),
-    ("the state line written only once ever", replace("            if st[\"layer_c\"].get(rel) != state_line:", "            if rel not in st[\"layer_c\"]:")),
+    ("the state line repeated every run", replace("                if st[\"layer_c\"].get(rel) != c9:", "                if True:")),
+    ("the state line written only once ever", replace("                if st[\"layer_c\"].get(rel) != c9:", "                if rel not in st[\"layer_c\"]:")),
     ("CRLF written", replace('                fh.write(chunk.encode("utf-8"))', '                fh.write(chunk.replace("\\n", "\\r\\n").encode("utf-8"))')),
     ("dry run writes", replace("        if dry:\n            return", "        if False:\n            return")),
     ("folders outside the five read", replace("    for slug in sorted(SLUG_ALIAS):\n        alias, base = SLUG_ALIAS[slug], os.path.join(projects, slug)",
                                               "    for slug in sorted(os.listdir(projects)):\n        alias, base = SLUG_ALIAS.get(slug, 'X'), os.path.join(projects, slug)")),
     ("the raw text kept in the state", replace(
-        '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order)})',
-        '                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order), "raw": lines})')),
+        '"order": list(order),\n                             "c9": state_line})',
+        '"order": list(order),\n                             "c9": state_line, "raw": lines})')),
     ("P5 r4: a top .jsonl that is neither file nor folder dropped silently", replace(
         "            if name.endswith(\".jsonl\") and k == \"other\":", "            if False:")),
     ("P5 r4: a nested .jsonl that is neither file nor folder dropped silently", replace(
@@ -94,7 +94,7 @@ MUTATIONS = [
         "            elif hashlib.sha256(data[:off - base]).hexdigest() != st[\"tail\"]:",
         "            elif True:")),
     ("P5 r6 FINDING-1: a held notice taken again from re-read bytes", replace(
-        "            if uid in done or uid in held_ids or (uid, line) in seen_run:", "            if uid in done or (uid, line) in seen_run:")),
+        "            if uid in held_by_id:\n                held_by_id[uid].update(line=line, c9=state_line)\n                continue\n", "")),
     ("P5 r6 FINDING-2: the fingerprint from a SECOND open after the write", replace(
         "        st[\"tail\"] = tail          # from the bytes this run read, never a second open",
         "        st[\"tail\"] = (lambda b: hashlib.sha256(b[max(0, new_off - TAIL):new_off]).hexdigest() if len(b) >= new_off else None)(open(raw, \"rb\").read())")),
@@ -102,6 +102,19 @@ MUTATIONS = [
         "    tail = hashlib.sha256(data[max(0, new_off - TAIL) - base:new_off - base]).hexdigest() if new_off else None",
         "    tail = hashlib.sha256(data[max(0, new_off - TAIL) - base + 1:new_off - base]).hexdigest() if new_off else None")),
     ("REREAD: a dry run hides the re-read", replace('"would_cut": would_cut,\n                    "reread": reread}', '"would_cut": would_cut,\n                    "reread": None}')),
+    # held-notice item (P5 r7): a hold keeps the layer (c) state it was redacted under
+    ("C9-HOLD: a new hold forgets its state", replace('"order": list(order),\n                             "c9": state_line})',
+                                                      '"order": list(order)})')),
+    ("C9-HOLD: a re-yielded hold skipped, not refreshed", replace("                held_by_id[uid].update(line=line, c9=state_line)",
+                                                                  "                pass")),
+    ("C9-HOLD: a refresh keeps the old state", replace("                held_by_id[uid].update(line=line, c9=state_line)",
+                                                       "                held_by_id[uid].update(line=line)")),
+    ("C9-HOLD: a released hold borrows the current state", replace('h["line"], h.get("c9") or C9_UNRECORDED))',
+                                                                   'h["line"], state_line))')),
+    ("C9-HOLD: a legacy hold borrows the current state", replace('h["line"], h.get("c9") or C9_UNRECORDED))',
+                                                                 'h["line"], h.get("c9") or state_line))')),
+    ("C9-HOLD: the state line only at a file's first line", replace('                if st["layer_c"].get(rel) != c9:',
+                                                                    '                if st["layer_c"].get(rel) != c9 and _u == items[0][0]:')),
 ]
 
 

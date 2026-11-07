@@ -26,6 +26,9 @@ THE GUARANTEES:
     its already-REDACTED display line (what the archive would show), never the raw text - for an hour of the
     session's own clock or of file quiet, because its delivery may land in the next run's bytes; a later delivery
     cancels it, otherwise it is written labelled `queued; no delivered copy in this file` (Langston P4 finding).
+    The hold also records the layer (c) state line its display line was redacted under: released after a switch, it
+    is written under ITS OWN state line (C-9 holds line by line); a re-read refreshes it from the bytes under the
+    current state; a hold from before this was recorded is written under a `NOT RECORDED` state line.
 KNOWN LIMITS, stated: an action whose tool result (and so its ERROR) lands in a LATER run is written without the ERROR;
 a held notice's delivery that never reaches this raw file (another file) does not cancel it; a held notice released
 late is appended at the END of its day file, so a day file is not strictly chronological; for an abandoned session
@@ -50,6 +53,10 @@ import dt_transcript as dt  # noqa: E402
 SLUG_ALIAS = {"C--DawnTraderV3-old": "CC-A", "C--DawnTraderV3-new": "CC-B", "C--DawnTraderV3-analyst": "CC-C",
               "C--DawnTraderV3-infra": "CC-INFRA", "C--DawnTraderV3-pm": "CC-PM"}
 HOLD_S = 3600
+# The C-9 line for a notice held before holds recorded their layer (c) state (states written before 2026-11-07): the
+# state it was redacted under is unknown, so the archive says so rather than borrowing the current one.
+C9_UNRECORDED = ("> redaction layer (c), shapeless values: NOT RECORDED for the next line - a notice held before the "
+                 "writer stored the state it was redacted under")
 SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -309,36 +316,44 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             else:
                 held.append(h)
         out, newest = [], max([y[1] for y in ylds] + [h["ts"] for h in held] + [""])
+        state_line = red.layer_c_state()
         # A notice still HELD from an earlier run is in no skip set until it is written; a re-read yields it again from
         # the same bytes, and without this it was held - then archived - once per re-read (Langston P5 r6 FINDING-1:
-        # 4 copies of one notice after 3 rewrites). Its id is sha(ts + text), so the earlier hold IS this notice.
-        held_ids = {h["id"] for h in held}
+        # 4 copies of one notice after 3 rewrites). Its id is sha(ts + text), so the earlier hold IS this notice - and
+        # it is REFRESHED from these bytes: its display line redacted again under the CURRENT layer (c), so a re-read
+        # never lets an older redaction outlive the bytes it came from (held-notice item, P5 r7).
+        held_by_id = {h["id"]: h for h in held}
         for uid, ts, line, order in ylds:
-            if uid in done or uid in held_ids or (uid, line) in seen_run:
+            if uid in held_by_id:
+                held_by_id[uid].update(line=line, c9=state_line)
+                continue
+            if uid in done or (uid, line) in seen_run:
                 continue
             seen_run.add((uid, line))
-            if str(uid).startswith("queue:"):       # (2) a queued-only notice is HELD, not written yet
-                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order)})
+            if str(uid).startswith("queue:"):       # (2) a queued-only notice is HELD, not written yet - with the
+                # layer (c) state its display line was redacted under, so its release can say which (C-9)
+                held.append({"id": uid, "ts": ts, "key": ledger["queued_key"][uid], "line": line, "order": list(order),
+                             "c9": state_line})
+                held_by_id[uid] = held[-1]
                 continue
-            out.append((ts, tuple(order), uid, check_links(line, rf[0], nested)))
+            out.append((ts, tuple(order), uid, check_links(line, rf[0], nested), state_line))
         # (3) release held notices whose hour has passed - on the session's clock, or of file quiet
         quiet = now - os.path.getmtime(raw) >= HOLD_S
         keep = []
         for h in held:
             a, b = _secs(newest), _secs(h["ts"])
             if quiet or (a is not None and b is not None and a - b >= HOLD_S):
-                out.append((h["ts"], tuple(h["order"]), h["id"], h["line"]))
+                out.append((h["ts"], tuple(h["order"]), h["id"], h["line"], h.get("c9") or C9_UNRECORDED))
             else:
                 keep.append(h)
         out.sort(key=lambda x: (x[0], x[1]))
         by_file, day_of = {}, {}
-        for ts, _o, uid, line in out:
-            by_file.setdefault(target(rf, ts[:10] or "undated"), []).append((uid, line))
+        for ts, _o, uid, line, c9 in out:
+            by_file.setdefault(target(rf, ts[:10] or "undated"), []).append((uid, line, c9))
             day_of[target(rf, ts[:10] or "undated")] = ts[:10] or "undated"
         if dry:
             return {"raw": raw, "files": sorted(by_file), "lines": len(out), "held": len(keep), "would_cut": would_cut,
                     "reread": reread}
-        state_line = red.layer_c_state()
         # INTENT FIRST: record every target's length BEFORE this run writes to it, under the OLD offset. A run that
         # dies mid-write then leaves a state whose lengths cover even a file it had just created (length 0), so the
         # next run's recover() cuts it back - without this, a new day file's partial bytes would have no owner.
@@ -352,16 +367,17 @@ def archive_file(root, rf, red, now=None, dry=False, nested=frozenset()):
             chunk = ""
             if not os.path.exists(p) or os.path.getsize(p) == 0:
                 chunk += header(rf, day_of.get(rel, "undated"))
-            if st["layer_c"].get(rel) != state_line:          # C-9: the state wherever it changes
-                chunk += state_line + "\n"
-                st["layer_c"][rel] = state_line
-            chunk += "\n".join(line for _u, line in items) + "\n"
+            for _u, line, c9 in items:
+                if st["layer_c"].get(rel) != c9:              # C-9: the state wherever it changes, LINE BY LINE - a
+                    chunk += c9 + "\n"                        # hold released under a different state is written under
+                    st["layer_c"][rel] = c9                   # its own state line, the next line under the current one
+                chunk += line + "\n"
             with open(p, "ab") as fh:
                 fh.write(chunk.encode("utf-8"))
                 fh.flush()
                 os.fsync(fh.fileno())
             st["lengths"][rel] = os.path.getsize(p)
-            done.update(u for u, _l in items)
+            done.update(u for u, _l, _c in items)
         st["offset"], st["ids"], st["held"] = new_off, sorted(done), keep
         st["tail"] = tail          # from the bytes this run read, never a second open
         write_state(sp, st)
