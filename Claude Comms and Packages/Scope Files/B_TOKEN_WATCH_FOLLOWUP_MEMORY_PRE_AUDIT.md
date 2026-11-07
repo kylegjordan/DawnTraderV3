@@ -320,3 +320,33 @@ These were placed on the batch `UNAUDITED`. Each is audited here and proposed a 
 - **A-CENSUS fold approved, narrowed:** a convenience, not a correctness fix (the file stamps `measured_at`; the misread was mtime taken for currency). Write from `prune_due_buckets`' classes (`tier.py:318-320`, computed at `:301`), with the tier run's own `now`; never on the lock-skip path (`:326-328`); one test that both writers emit the same schema. Citations: `DUE_CLASSES` `:198-201`, definition `:208`, call `:301`, journal line `:311`.
 - **P15:** no code until `#1246`. **P16 approved, four conditions:** C1 tell "no failed units" from "box unreachable" (exit code + a positive control in the same call, a different line on unreachable); C2 dedupe on unit + the failure's own timestamp, cleared when the unit recovers; C3 read `list-timers 'token-watch*'` in the same hop or state the disabled-timer blind spot; C4 exercise the live path once at close or say it is unexercised.
 - **Batch-level:** change-class `non_architecture` stands; the SIM row is REQUIRED in the ledger. **The declared-`open` row is filed at the first code-bearing push** (`GOVERNANCE_EXCEPTIONS.md`, `bf84dba87`, 2026-11-07T08:59:24Z).
+
+## 6. AMENDMENT 1 to P1 (append-only; 2026-11-07, Infra Claude, on Langston's ruling Discord `1568588995514859581`). The P1 row above is NOT rewritten: its arm (c) "×4" stands as written, and is superseded for the decision by what follows.
+
+**What happened.** The capture (`tw-p1-capture`, started 11:20:58Z, installed tree `019b199ca`) returned, over its first 1,389 bodies, **1,387 `{"pairs": null}`**. ⚠️ **That share is a PREFIX of a bucket-ordered walk (1,389 of 361,853) set beside baselines drawn from observation rows — two populations. Its DIRECTION is accepted (the scope pre-registered the drift as adverse); its MAGNITUDE is RULED ON REPORTED FACT until the finished capture gives the window's own share.** The September mints are mostly dead five weeks on.
+
+**Ruling (Langston):** the capture runs to the end. A recent window cannot feed arms (b)/(c): the replay looks bodies up BY THE 09-30 MINTS (`measure_followup_memory.py`, `SELECT … WHERE mint = ?`), so a different cohort misses nearly every lookup and the 0.95 served-share floor voids the arm (exit 9). Two things are owed instead, and both are pre-registered here BEFORE the capture's numbers are read.
+
+**The 09-30-era shape, measured (read-only, staging, 2026-11-07 ~11:35Z; object: `observations/<day>.jsonl`, rows with `observed: true`; population: every such row that day):**
+
+| day | observed rows | alive | pairs 0 | 1 | 2 | 3 | 4 | 5 | 6+ |
+|---|---|---|---|---|---|---|---|---|---|
+| 2026-09-26 | 180,630 | 82,132 (45.47%) | 90,409 (50.05%) | 87,932 | 1,983 | 183 | 60 | 20 | 43 |
+| 2026-09-27 | 99,997 | 39,545 (39.55%) | 58,347 (58.35%) | 40,530 | 994 | 70 | 32 | 12 | 12 |
+
+09-28 → 09-30 hold 0 observed rows (all `shed: follow_up`, A3). `cold/` holds no follow-up provenance locally (it went off-box), so September's own bodies are not available on the box.
+
+**PRE-REGISTERED, item 1 — the size factor is DERIVED, not chosen (supersedes "×4" for the decision; the ×4 arm still runs as written and is reported beside it):**
+- `size(k)` = the mean byte length of the captured bodies with exactly `k` pairs (k = 0, 1, 2, 3+), measured over the FINISHED capture's bodies (the alive September mints are the size-per-pair-count sample; it is the only body population on the box with real pairs). If any `k` class has fewer than 30 bodies, `size(k)` for that class = `k × size(1)` and the substitution is stated.
+- `E_sept = Σ_k share_k(09-26) × size(k)`, with the 09-26 shares in the table above (the fuller day; 09-27 is reported beside it as the sensitivity).
+- `N = E_sept / E_capture`, where `E_capture` is the mean byte length over ALL the finished capture's bodies. Arm **(c′) "×N"** pads each served body to N× its text exactly as the ×4 arm does (inert `_pad`, so bytes and objects scale, no field changes meaning). N is reported with both shares' values.
+
+**PRE-REGISTERED, item 2 — the FAN-OUT leg: arm (d) "September-shaped".** Padding text cannot reach fan-out: a no-pairs reply returns `alive: False` (the no-pairs branch, `providers.py:212-226`), so `pool_sol_reserves` and `record_identity` never run, and the scope names fan-out as the per-mint driver. Arm (d) therefore serves each loop lookup a body whose SHAPE is drawn from the 09-26 distribution:
+- each served mint is assigned a pair-count class `k` deterministically (a hash of the mint, mapped onto the 09-26 cumulative shares above), so the arm is reproducible;
+- class 0 → the no-pairs body; class `k ≥ 1` → a REAL captured body with `k` pairs (a template chosen by the same hash from the finished capture's bodies with that pair count), with its `baseToken.address` set to the looked-up mint so the extraction sees a self-consistent reply. `token_state` then decides alive/dead from the template exactly as in production, and the alive branch runs its real fan-out (synthetic Helius curve replies, identity writes).
+- **Its own control, or the run is VOID:** the realised share of class-0 lookups must be within ±1 percentage point of 50.05%, and the realised alive share reported beside 09-26's 45.47%; the synthetic Helius calls must be > 0 and ≤ 2 per alive lookup.
+- If the finished capture holds fewer than 30 bodies with ≥ 1 pair, arm (d) cannot be built from real templates and is NOT run; that is reported, not substituted.
+
+**Where today's near-empty bodies ARE the right population — folded into OBJ-3 (§9.4 disposition 1):** the late-observation pass calls these same 09-30 mints NOW and gets these replies. The finished capture's no-pairs share over the whole window is a datum for P8(2)/(3): if nearly all of the backlog returns no pairs, a late read yields a tombstone, not the checkpoint observation OBJ-5 lacks, which bears on whether the one-time pass is worth running. Recorded in the P8 census when it runs.
+
+**Order:** the capture finishes (~2026-11-08 12:30Z) → the acceptance read of its `end` record (Step 4 condition) → `size(k)`, `E_capture`, `N` and the template counts computed and written HERE, beside this pre-registration, before any arm runs → the harness change for (c′) and (d) to Langston as its own gate → arms (a), (b), (c), (c′), (d).
