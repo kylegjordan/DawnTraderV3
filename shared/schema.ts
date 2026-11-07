@@ -1949,7 +1949,10 @@ export const closedTradesTable = pgTable("closed_trades", {
    *  ⛔ AND NOT THE SAME QUANTITY ACROSS CLASSES, for the same reason as
    *  `exit_fill_depth_age_ms`: on xStock this is a `xstock_spot_ticker_snap` ROW AGE, not an
    *  order-book age. An xStock row can carry a value here beside a structurally-NULL
-   *  `exit_book_age_ms`, and the two are not comparable. */
+   *  `exit_book_age_ms`, and the two are not comparable.
+   *  ⛔ DEFINITION CHANGES AT `B-PRICE-FEED-COVERAGE` INCREMENT 0's DEPLOY (`#1222`), xStock only: from then on this is
+   *  `max(row receipt age, in-memory mark CHANGE age)` — the gate's corrected age, because a venue subscribe-replay restamps the
+   *  row as ≈ 0 ms old. Two instruments either side of that deploy: never pool xStock values across it. Crypto unchanged. */
   entryBookAgeMs: doublePrecision("entry_book_age_ms"),
   /** B-ENTRY-CONSUMPTION-FRESHNESS: conservative age of the SAME depth snapshot immediately before
    *  an immediate taker walk. NULL means the row predates the cutover or the entry was a resting

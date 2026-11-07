@@ -77,6 +77,10 @@ export function applyXstockEntryTickAge(
   if (tick.observed !== true) return { ok: false, reason: 'cold_tick observed=false' };
   const tickAgeMs = nowMs - tick.tsMs;
   if (!(Number.isFinite(tickAgeMs) && tickAgeMs >= 0)) return { ok: false, reason: 'cold_tick tick_age_invalid' };
+  // ⚠️ The two ages are anchored at different instants — the row's at `ageReadStartedMonoMs` (before the DB round-trip), the
+  // tick's here — and the consumption check later re-adds elapsed time from that anchor. Both effects OVER-state age: the
+  // tick gets a head start in this `max`, and that latency is counted again at consumption. Fail-closed by construction; do
+  // not "fix" it toward a younger age (Langston Step-4 review, increment 0).
   if (tickAgeMs <= snapshot.ageMs) return { ok: true, snapshot };
   return { ok: true, snapshot: { ...snapshot, ageMs: tickAgeMs } };
 }

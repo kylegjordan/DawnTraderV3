@@ -73,6 +73,22 @@ describe('applyXstockEntryTickAge — the ENTRY depth snapshot carries one hones
   });
 });
 
+describe('the NO-CLOCK fence reaches the helper the gate now depends on (Kyle 2026-09-03: one standard at every hour)', () => {
+  // Same tokens as b-xstock-feed-sanity-fence.test.ts, comment-stripped the same way, minus `Date.now` — which is allowed
+  // EXACTLY ONCE, as the default for the age arithmetic's clock (`nowMs: number = Date.now()`), never as a cutoff or hour.
+  const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  const ds = code(readFileSync(join(__dirname, '../../services/execution/depth-source.ts'), 'utf8'));
+  const start = ds.indexOf('export function applyXstockEntryTickAge(');
+  const helper = ds.slice(start, ds.indexOf('\n}', start) + 2);
+  const NON_NOW_CLOCK = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|\bRTH\b|\bsession\b|premarket|after_?hours|overnight/i;
+  it('CONTROL: the helper body was located', () => { expect(helper.length).toBeGreaterThan(200); expect(start).toBeGreaterThan(0); });
+  it('no hour, calendar or session term in the helper', () => { expect(helper).not.toMatch(NON_NOW_CLOCK); });
+  it('Date.now appears once, only as the clock default', () => {
+    expect(helper.split('Date.now').length - 1).toBe(1);
+    expect(helper).toMatch(/nowMs: number = Date\.now\(\)/);
+  });
+});
+
 describe('the engine seam — wired once, xStock only, before warmth, with no counter inside the gate', () => {
   const src = readFileSync(join(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
   const a = src.indexOf('private async _evaluateOpenDepthGate(');
@@ -86,6 +102,9 @@ describe('the engine seam — wired once, xStock only, before warmth, with no co
   });
   it('the gate itself never calls recordDepthGateBlock (the open-path caller is the only writer)', () => {
     expect(body).not.toMatch(/recordDepthGateBlock\(/);
+  });
+  it('the REFUSAL arm returns a non-passing gate on the helper\'s reason (a dead `if (!ok) {}` must fail here — M5)', () => {
+    expect(body).toMatch(/if \(!_tickAge\.ok\) return \{ pass: false, reason: _tickAge\.reason, snapshot: null, warmthMaxAgeMs: null \};/);
   });
   it('exactly one call site of applyXstockEntryTickAge in the engine', () => {
     expect(src.split('applyXstockEntryTickAge(').length - 1).toBe(1);

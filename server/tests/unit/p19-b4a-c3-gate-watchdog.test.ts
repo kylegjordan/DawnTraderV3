@@ -23,7 +23,6 @@ let engineActive = true;
 let safetyConfig: any = { ...FULL_CONFIG };
 let inLiquidWindow = true;
 let weekendClose = false;
-let tickAgeMs: number | null = 1000;
 let alertSpy = vi.fn();
 
 vi.mock('../../services/active-engine-service.js', () => ({
@@ -44,7 +43,8 @@ vi.mock('../../storage.js', () => ({
 }));
 // B-BALANCE-SESSION-PAIRING (pre-audit P10): the xStock dispatch sizes against getMoneyHeld now.
 vi.mock('../../services/guardrail-settings.js', () => ({ getMoneyHeld: async () => 1000, MoneyHeldUnavailable: class MoneyHeldUnavailable extends Error { constructor(public readonly reason: string) { super(reason); this.name = 'MoneyHeldUnavailable'; } } }));
-vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [{ age_ms: tickAgeMs }] }) } }));
+// The archiver import needs a db; gate (b) no longer reads a DB age (B-PRICE-FEED-COVERAGE increment 0), so the row is inert.
+vi.mock('../../db.js', () => ({ db: { execute: async () => ({ rows: [] }) } }));
 vi.mock('../../services/system-alerts.js', () => ({
   addAlert: (...a: any[]) => { alertSpy(...a); return Promise.resolve({}); },
 }));
@@ -93,7 +93,6 @@ describe('P19-B4a C3 — active-fill safety gate', () => {
     engineActive = true;
     safetyConfig = { ...FULL_CONFIG };
     inLiquidWindow = true;
-    tickAgeMs = 1000;
     alertSpy = vi.fn();
   });
 
@@ -173,8 +172,17 @@ describe('P19-B4a C3 — active-fill safety gate', () => {
       _handleMessageForTests(frame('OLDBOOK/USD', 'update'));
       vi.setSystemTime(t0 + 30_000);
       _handleMessageForTests(frame('OLDBOOK/USD', 'snapshot')); // the reconnect replay — its DB row would read fresh
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const before = getXstockActiveDispatchStats();
       await dispatchXstockActiveSignal(input({ symbol: 'OLDBOOK/USD' }));
       expect(captured).toBeNull();
+      // MEASURED, not inferred from `captured`: refused STALE on the 30 s-old age the replay did not refresh — not cold
+      // (a replay that reset `observed` would be refused too, but as cold, and this claim would go unmeasured).
+      expect(getXstockActiveDispatchStats().staleSkips).toBe(before.staleSkips + 1);
+      expect(getXstockActiveDispatchStats().coldSkips).toBe(before.coldSkips);
+      expect(warn.mock.calls.map((c) => String(c[0]))).toContain(
+        '[B-PRICE-FEED-COVERAGE][INC0][DISPATCH_REFUSE] arm=stale symbol=OLDBOOK/USD ageMs=30000');
+      warn.mockRestore();
     } finally { vi.useRealTimers(); }
   });
 });
