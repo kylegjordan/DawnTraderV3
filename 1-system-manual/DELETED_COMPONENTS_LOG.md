@@ -1541,3 +1541,19 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 - **Re-homed, not deleted (subject survives):** `LIVE0/1/2/4/6/7` → `plan-table.test.mjs` (new; `LIVE6` rewritten without board symbols, with fixture red/green legs); `SB30` → `poller.test.mjs` `P29b`; `SB28` → `census.test.mjs` `PS11b`. **Died with their subjects:** `SB1-27` and `SB31-38` except those, `LIVE3` (its subject `mapWaiting` goes in commit 2), `LIVE5`.
 - **Still present until commit 2:** `status-board.mjs` itself, the board-only `config.mjs` constants, `checker.mjs` `mapWaiting`, the `openReason` sites in the two exception parsers, `STATUS_BOARD_DESCRIPTIONS.md`. Commit 2 deletes them after a tick has run commit 1; the board JSON is moved to the retired folder after that.
 - **COMMIT:** this entry's commit, on `review/b-status-board-retire-c1`; merged to `migration/aws-supabase` only after the app half is live (joint deploy after 2026-11-07T13:03:42Z).
+
+## 2026-11-07 — the phone status board, CHECKER HALF commit 2: the writer file, its descriptions and its board-only helpers — B-STATUS-BOARD OBJ-10 (Kyle KD-35), CC-A
+| removed | where (pre-removal, at `c073979af`) | what it was |
+|---|---|---|
+| `scripts/governance-checker/status-board.mjs` (whole file) | — | the board writer (`buildBoard`, `runStatusBoard`); unwired since commit 1 |
+| `1-system-manual/STATUS_BOARD_DESCRIPTIONS.md` (whole file) | — | the one-line descriptions the writer read |
+| `config.mjs` `BOARD_FILE`, `BOARD_DESCRIPTIONS_PATH`, `STATE_LABELS`, `WAITING_WORDS`, `BOARD_STALE_MS`, `WORK_RECORD_RECENT_MS` (with its derivation comment), `DESCRIPTION_MAX_CHARS` | `config.mjs` the status-board block | board-only constants |
+| `checker.mjs` `mapWaiting` + its `WAITING_WORDS` import | `checker.mjs` | the `waiting on` mapper; the board was its only caller |
+| `poller.mjs` `exceptionReason` and the `openReason` map in BOTH exception parsers (declaration, set, return — the seven sites of pre-audit r8) | `poller.mjs` | the open-row reason, added only for the board (B-STATUS-BOARD P5 + Step-4 C2) |
+| `census.test.mjs` `PS15` and its `mapWaiting` import | `census.test.mjs` | `mapWaiting`'s own SUBJECT test — dies with it (r6 C-3) |
+
+**WHY:** Kyle KD-35 (the phone status board is not maintained); rule 18. Commit 1 unwired the writer and took the file out of `DRIFT_LOADED_FILES`; the 2026-11-07 13:42Z tick ran commit 1 (Langston: `state.json` 13:42:33.684Z, `status-board.json` unchanged since 13:12:32Z), so deleting the file cannot blind the drift self-check (r8 C-1).
+**BLAST RADIUS (§9.5(a-ii)):** before the edit `git grep` (tracked, non-`.md`) found these names only in `status-board.mjs`, `config.mjs`, `checker.mjs`, `poller.mjs` and `census.test.mjs`; after it, 0 matches for every one of `BOARD_FILE`, `BOARD_DESCRIPTIONS_PATH`, `WAITING_WORDS`, `STATE_LABELS`, `BOARD_STALE_MS`, `WORK_RECORD_RECENT_MS`, `DESCRIPTION_MAX_CHARS`, `mapWaiting`, `openReason`, `exceptionReason`, `runStatusBoard`, `buildBoard` (control: `mapStatus` still found in 6 files — it SURVIVES with `STATUS_PREFIXES` and `presprintRows`, which the census reads). State written: none (the writer was already unwired). `ci.yml` names no deleted file. Tests: plan-table 7/0, poller 445/0, census 228/0 (229 − PS15), heartbeat 103/0; all four checker modules import.
+**ARCHIVE:** `1-system-manual/_archive/deleted-code/status-board.mjs.20261107-B-STATUS-BOARD-RETIRE.removed` and `STATUS_BOARD_DESCRIPTIONS.md.20261107-B-STATUS-BOARD-RETIRE.removed` — blob-identical to the originals at `c073979af` (`e727d0df9…`, `2d90fd943…`).
+**AFTER:** `/var/lib/governance-checker/status-board.json` (last written 2026-11-07T13:12:32Z) moved to the retired folder on staging after this commit's first tick; then Step 7.
+**COMMIT:** this entry's commit, on a review branch first (the checker deploys the moment it reaches the shared branch); merged after Langston's Step 4.

@@ -210,11 +210,8 @@ export const PLAN_LINE = {
   s0aHeader: '| stage | order | item | owner | plan row | issue | agreed | status | waiting on |',
 };
 
-// ── THE STATUS BOARD (B-STATUS-BOARD #1227) ───────────────────────────────────────────────────────────────
-// The board file the checker writes and the app reads. Default under /var/lib (NOT the script dir, which the
-// auto-redeploy fast-forwards); written with writeStateAtomic. The pairing of the two is new (pre-audit A2).
-export const BOARD_FILE = process.env.GOV_BOARD_FILE || '/var/lib/governance-checker/status-board.json';
-export const BOARD_DESCRIPTIONS_PATH = '1-system-manual/STATUS_BOARD_DESCRIPTIONS.md';
+// ── THE PLAN STATUS VOCABULARY (B-STATUS-BOARD #1227; the phone board itself was retired by Kyle's KD-35) ──
+// Read by mapStatus (checker.mjs), which the weekly census (census.mjs s0Closed) and plan-table.test.mjs use.
 // A status cell maps to ONE of seven plain states by a STATED rule (Langston B6): strip leading
 // non-alphanumeric characters (the ✅ ⏳ ⏸ markers), then take the LONGEST declared prefix, case-insensitive.
 // Nothing left, or no prefix matches ⇒ 'unrecognised'. Every live §4 cell maps at the commit that wrote this
@@ -227,21 +224,6 @@ export const STATUS_PREFIXES = [
   ['DONE', 'done'], ['CLOSED', 'done'], ['VERIFIED', 'done'],
   ['MOVED', 'moved'], ['SUBSUMED', 'moved'], ['FOLDED INTO', 'moved'], ['WITHDRAWN', 'moved'],
 ];
-export const STATE_LABELS = {
-  queued: 'queued', in_progress: 'in progress', built: 'built, not yet live', observation: 'watching data',
-  parked: 'parked', done: 'done', moved: 'moved or withdrawn', unrecognised: 'unrecognised',
-};
-// `waiting on` vocabulary (scope OBJ-1, C2). A session is named by its plan owner form; `data — …` is free text
-// after the dash. Anything else renders `unrecognised — <text>`.
-export const WAITING_WORDS = ['nothing', 'Kyle', 'Langston', 'Coltrane', 'CC-A', 'CC-B', 'CC-C', 'Infra Claude'];
-export const BOARD_STALE_MS = 60 * 60 * 1000;      // the page's stale banner (OBJ-4)
-// OBJ-9 (Kyle 2026-11-04): a QUEUED line whose batch has a Step commit newer than this reads in progress; older reads
-// "work stopped". DERIVATION (Langston, Step-9 r1, measured 2026-11-04 over 800 commits 2026-10-11..11-04): 416 consecutive
-// same-id Step gaps over 31 ids - p50 0.01 d, p95 0.29 d, p99 2.80 d, max 14.43 d (B-STATUS-BOARD's own Step 3 -> 9, across
-// the crew's two-week break). 14 d is ~5x p99. CLOCK: the date is the commit's COMMITTER (landed) date, which a rebase can
-// move up to ~3.3 d after authoring (measured) - so never tighten this below ~4 d.
-export const WORK_RECORD_RECENT_MS = 14 * 24 * 60 * 60 * 1000;
-export const DESCRIPTION_MAX_CHARS = 700;          // one paragraph; longer shows a `too long` mark (OBJ-2)
 
 // Undeclared class → strictest (architecture) + flag (Item 5 / fail-closed).
 export const DEFAULT_CLASS = 'architecture';

@@ -12,7 +12,7 @@ import {
   historyStruck, parseHandover, HANDOVER_FILE_RE, tailStatusWord, recountAfterLive,
 } from './census.mjs';
 import { CENSUS_BODY_MAX } from './config.mjs';
-import { presprintRows, idsInCell, mapStatus, mapWaiting, planRowsByBatch } from './checker.mjs';
+import { presprintRows, idsInCell, mapStatus, planRowsByBatch } from './checker.mjs';
 
 let pass = 0, fail = 0;
 const ok = (name, cond, extra = '') => { if (cond) pass++; else { fail++; console.log(`  FAIL: ${name} ${extra}`); } };
@@ -680,8 +680,6 @@ function frameResurface(alert, d, nowMs) {
     ['IN FLIGHT — Step 7', 'in_progress'], ['STEP 7 of 11', 'in_progress'], ['⏸ PAUSED', 'parked'], ['FOLDED into row 2', 'moved'],
     ['BUILT — deploy after', 'built'], ['—', 'unrecognised'], ['REOPENED — Step 3', 'unrecognised']];
   for (const [cell, want] of cases) ok(`PS14 status "${cell}" → ${want}`, mapStatus(cell).state === want, mapStatus(cell).state);
-  ok('PS15 waiting-on: a data window, a declared word, and an unknown word', mapWaiting('data — 20 closes').waiting === 'data'
-    && mapWaiting('Kyle (both-sided window)').waiting === 'Kyle' && mapWaiting('me').waiting === 'unrecognised');
 }
 
 // ── THE FENCE (#1180, Langston Step 4; at the END so every real runCensus result above is in the union) ──
