@@ -441,13 +441,16 @@ r15 = json.load(open(out15)) if os.path.exists(out15) else {}
 check("E15 exit 15 naming the errors", p.returncode == 15 and "error" in str(r15.get("void")), "rc=%s %s" % (p.returncode, r15.get("void")))
 check("R2 the result records the bodies file size", r5.get("bodies_file_bytes", 0) > 0)
 
-print("SY expect: _synthesise(k=4) gives FOUR INDEPENDENT pairs (no shared nested object), distinct pairAddress, ~4x the bytes")
+print("SY expect: _synthesise(k=4) returns TEXT holding four pairs with distinct pairAddress, ~4x the bytes")
+# The copy depth is NOT fenced here (Langston, Step 4, 2026-11-07): _synthesise's internal dict shares the
+# nested objects across pairs (dict() is shallow), and json.loads of ANY text returns independent objects, so a
+# no-shared-object assertion on the parsed result cannot fail. The cure is that the function returns TEXT; the
+# live fence on a shared graph is the C-6 control, parses == served. Do not cite SY as proof of a deep copy.
 tmpl_text = json.dumps(body_k("SYNTH", 1), sort_keys=True)
-syn = json.loads(mfm._synthesise(tmpl_text, 4))
-ps = syn["pairs"]
+syn_text = mfm._synthesise(tmpl_text, 4)
+check("SY returns text, not a shared object", isinstance(syn_text, str), type(syn_text).__name__)
+ps = json.loads(syn_text)["pairs"]
 check("SY four pairs, distinct pairAddress", len(ps) == 4 and len({p["pairAddress"] for p in ps}) == 4, str([p.get("pairAddress") for p in ps]))
-check("SY no nested object shared across pairs (txns, volume, baseToken)",
-      all(ps[0][f] is not ps[1][f] for f in ("txns", "volume", "baseToken")))
 ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
 check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
 print("SB expect: in D5 (class 3+ synthesised at k = 4), the largest served body is ~4x the class-1 mean, not the template's size")
