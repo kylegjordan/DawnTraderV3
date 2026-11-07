@@ -3,7 +3,7 @@
 #
 #   bash b_disk_headroom_lock_sampler.sh <until ISO-UTC> <log path>
 #
-# Every 10 s, one read-only query: every lock on the three bar parents or their children that is waiting or ACCESS
+# Every 10 s, one read-only query: every lock on the four one-minute bar parents (the three this batch changes plus crypto_perp_ohlc_1m, the one that drops a daily child every night) or their children that is waiting or ACCESS
 # EXCLUSIVE, every session waiting on any lock, and every active session whose query names a bar table. Each row carries
 # query_start, state_change and pg_blocking_pids, so a wait's LENGTH and its BLOCKER are read from one sample, not
 # inferred from how many samples it appeared in (Langston Step 4 B3). Each sample writes a `# tick` line first, so a
@@ -24,7 +24,7 @@ SELECT now()::timestamptz(0) AS t, a.pid, a.wait_event_type, a.wait_event, a.sta
        a.query_start::timestamptz(0), a.state_change::timestamptz(0), pg_blocking_pids(a.pid)::text,
        left(regexp_replace(a.query, '\s+', ' ', 'g'), 120) AS q
   FROM pg_locks l JOIN pg_class c ON c.oid = l.relation JOIN pg_stat_activity a ON a.pid = l.pid
- WHERE c.relname ~ '^(xstock_spot|crypto_spot|xstock_perp)_ohlc_1m'
+ WHERE c.relname ~ '^(xstock_spot|crypto_spot|xstock_perp|crypto_perp)_ohlc_1m'
    AND (NOT l.granted OR l.mode = 'AccessExclusiveLock' OR a.wait_event_type = 'Lock')
 UNION ALL
 SELECT now()::timestamptz(0), a.pid, a.wait_event_type, a.wait_event, a.state, NULL, NULL, NULL,
@@ -38,7 +38,7 @@ SELECT now()::timestamptz(0), a.pid, a.wait_event_type, a.wait_event, 'ACTIVE-ON
        a.query_start::timestamptz(0), a.state_change::timestamptz(0), pg_blocking_pids(a.pid)::text,
        left(regexp_replace(a.query, '\s+', ' ', 'g'), 120)
   FROM pg_stat_activity a
- WHERE a.state = 'active' AND a.pid <> pg_backend_pid() AND a.query ~ '(xstock_spot|crypto_spot|xstock_perp)_ohlc_1m';
+ WHERE a.state = 'active' AND a.pid <> pg_backend_pid() AND a.query ~ '(xstock_spot|crypto_spot|xstock_perp|crypto_perp)_ohlc_1m';
 ROLLBACK;
 Q
 )
