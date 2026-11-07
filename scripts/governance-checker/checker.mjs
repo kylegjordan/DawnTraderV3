@@ -16,7 +16,7 @@ import {
   CODE_PREFIXES, GOVERNANCE_PREFIXES, HOUSEKEEPING_ONLY_PATHS, HOUSEKEEPING_ONLY_BASENAMES,
   SCOPE_DIR, CHANGE_CLASS_MARKER, VALID_CLASSES, CORE_ENGINE_PATHS,
   extractBatchId, batchIdToFileRegex, LEDGER_ROWS, GOV_REF, PLAN_LINE, extractLeadingBatchId,
-  STATUS_PREFIXES, WAITING_WORDS,
+  STATUS_PREFIXES,
 } from './config.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -429,15 +429,6 @@ export function mapStatus(cell) {
   const up = stripped.toUpperCase();
   const hit = PREFIXES_LONGEST_FIRST.find(([p]) => up.startsWith(p));
   return hit ? { state: hit[1], text } : { state: 'unrecognised', text };
-}
-// `waiting on` (scope OBJ-1, C2): a declared word, a `data — …` window, or `unrecognised`.
-export function mapWaiting(cell) {
-  const text = deMark(cell);
-  if (!text) return { waiting: 'nothing', text: '' };
-  if (/^data\s*[—-]/i.test(text)) return { waiting: 'data', text };
-  const low = text.toLowerCase();
-  const hit = WAITING_WORDS.find((w) => low === w.toLowerCase() || low.startsWith(w.toLowerCase() + ' ') || low.startsWith(w.toLowerCase() + ' (') || low.startsWith(w.toLowerCase() + ','));
-  return hit ? { waiting: hit, text } : { waiting: 'unrecognised', text };
 }
 
 // The STATUS test — fail on the machine default only (Langston §10g N6): FAIL iff deMark(status) is EMPTY or
