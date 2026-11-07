@@ -61,7 +61,15 @@ export function composeVtsLegFriction(i: VtsLegFrictionInput): number {
  * `stamped` close kept the open-time scalar, which still holds the allowance twice, so its exit share stays 1 and the
  * columns still sum to `costs`. Returns multiples of `costSlippageFraction` for each leg.
  */
-export function vtsSlippageShareByLeg(t: { frictionBasis?: VtsFrictionBasis; exitWalk?: { impactPriced?: boolean } | null },
+/** The fields the two cost-split readers take — one record shape, so an open trade and a closed one pass the same way. */
+export interface VtsCostSplitRecord {
+  entryPriceBasis?: EntryPriceBasis;
+  frictionBasis?: VtsFrictionBasis;
+  exitBookingArm?: string;
+  exitWalk?: { impactPriced?: boolean } | null;
+}
+
+export function vtsSlippageShareByLeg(t: VtsCostSplitRecord,
   closed: boolean): { entry: number; exit: number } {
   const exit = closed && t.frictionBasis === 'recomposed' && t.exitWalk?.impactPriced === true ? 0 : 1;
   return { entry: 1, exit };
@@ -77,7 +85,7 @@ export function vtsSlippageShareByLeg(t: { frictionBasis?: VtsFrictionBasis; exi
  *     or a `stamped` close, 0 — the open-time estimate assumes the exit books its side.
  * Returns the fractions of `spread` for each leg.
  */
-export function vtsSpreadShareByLeg(t: { entryPriceBasis?: EntryPriceBasis; frictionBasis?: VtsFrictionBasis; exitBookingArm?: string },
+export function vtsSpreadShareByLeg(t: VtsCostSplitRecord,
   closed: boolean): { entry: number; exit: number } {
   if (t.entryPriceBasis === undefined) return { entry: 0.5, exit: 0.5 };
   const entry = t.entryPriceBasis === 'level' ? 0.5 : 0;

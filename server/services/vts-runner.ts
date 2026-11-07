@@ -3754,8 +3754,8 @@ async function resolveOpenVirtualTrades(): Promise<{
     exitReason: 'stop_hit' | 'target_hit' | 'timeout' | 'trailing_stop_hit' | 'moonbag_timeout' | 'break_even_stop' | 'timeout_unpriced';
     /** `8a-P4c` 3a-ii (P14): how the exit was booked. `3n.q3`: a clamp arm now means the exit carries NO price. */
     exitArm: VtsBookingArm;
-    /** KD-19 P5/P7: what the booking walked. */
-    exitWalk: VtsExitWalkRecord;
+    /** KD-19 P5/P7: what the booking walked — PRICED closes only (Step-4 CHANGES-1): carrying `exitWalk` == priced. */
+    exitWalk?: VtsExitWalkRecord;
   }> = [];
   
   // B65.2: VTS exit loop engages the full trailing-exit engine. Each trade
@@ -4263,7 +4263,10 @@ async function resolveOpenVirtualTrades(): Promise<{
       exitPrice: _vtsBooked.price,
       exitReason: _vtsBooked.price === null ? 'timeout_unpriced' : normalizedReason,
       exitArm: _vtsBooked.arm,
-      exitWalk: exitWalkRecord(_vtsBooked),
+      // ⛔ KD-19 Step-4 CHANGES-1 (Langston): only a PRICED close carries the walk. `top('absent')` also serves the unpriced
+      // clamp close, so writing it there stored two states as one `sizeBasis` and put unpriced closes into §7's population.
+      // The clamp close's durable record is `exitBookingArm` (`3n.q3`).
+      ...(_vtsBooked.price !== null ? { exitWalk: exitWalkRecord(_vtsBooked) } : {}),
     });
   }
   
@@ -4314,7 +4317,7 @@ async function resolveOpenVirtualTrades(): Promise<{
     // ⛔ `8a-P4c` increment 3a-ii (P14, Langston BLOCKER-1): friction is RECOMPOSED AT CLOSE from the stored parts under
     // the per-leg rule — never read from the open-time scalar — so every close after the deploy carries ONE rule and the
     // epoch (resolved at close) separates cleanly. A missing part keeps the stamped scalar, labelled, and alerts (J7).
-    const _closeFr = recomposeVtsCloseFriction(trade, exitArm, exitWalk.impactPriced); // KD-19 (c): exit allowance leaves a certain walk
+    const _closeFr = recomposeVtsCloseFriction(trade, exitArm, exitWalk?.impactPriced === true); // KD-19 (c): exit allowance leaves a certain walk
     noteVtsCloseFriction('vts', trade, _closeFr);
     const netPnl = grossPnl - _closeFr.friction;
     const pnlPercent = (netPnl * 100).toFixed(2);
@@ -6878,7 +6881,7 @@ export async function getOpenVirtualTradesForML(): Promise<Array<{
         // `8a-P4c` 3a-ii (FINDING-1): the spread goes to a leg only where the per-leg rule charged it — an OPEN row's
         // `costs` is the open-time estimate (exit assumed on its side). A legacy row keeps ½ + ½.
         const _sh = vtsSpreadShareByLeg(trade, false);
-        const _sl = vtsSlippageShareByLeg({}, false); // KD-19 P6: an OPEN row's estimate keeps the allowance on both legs
+        const _sl = vtsSlippageShareByLeg(trade, false); // KD-19 P6: an OPEN row's estimate keeps the allowance on both legs
         const _fee = vtsFeeByLeg(trade) as { entry: number; exit: number }; // finite _f checked above ⇒ never null here
         return {
           costEntryFee: parseFloat((tradeDollarValue * _fee.entry).toFixed(4)), // the leg's own fee (r2 FINDING-1)

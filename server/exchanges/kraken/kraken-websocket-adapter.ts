@@ -1116,7 +1116,7 @@ export class KrakenWebSocketAdapter extends EventEmitter {
         lastTradePrice: safeData.lastTrade,
         // KD-19 P3: the RAW frame's sizes (exact decimals on the v2 ticker), only with a stated pair; never `b[1]`, whose
         // missing size the translator has already turned into "0" (BLOCKER-2).
-        sideSizes: _statedSides ? sideSizesOf((update as any)?.bid_qty, (update as any)?.ask_qty, 'exact') : null,
+        sideSizes: _statedSides ? sideSizesOf(update.bid_qty, update.ask_qty, 'exact') : null,
       });
       this.priceTickCount++;
 

@@ -35,13 +35,15 @@ export interface VtsExitCounters {
   /** KD-19 P9: priced exits booked at the top bid — no stated size, or no depth config (the latter logged at error). */
   sizeAbsent: number;
   noDepthConfig: number;
+  /** KD-19 Step-4 item 2: a PRICED real-lane exit with no quantity (the case paper refuses as `invalid_close_qty`). */
+  unitLane: number;
 }
 
 export type VtsExitCountersByClass = Record<VtsCounterClass, VtsExitCounters>;
 
 const zero = (): VtsExitCounters => ({
   exitLooks: 0, exitNoTransactableSide: 0, unpricedNoBid: 0, unpricedNoMark: 0, closedUnpriced: 0,
-  walked: 0, walkExtrapolated: 0, walkUncertain: 0, sizeAbsent: 0, noDepthConfig: 0,
+  walked: 0, walkExtrapolated: 0, walkUncertain: 0, sizeAbsent: 0, noDepthConfig: 0, unitLane: 0,
 });
 
 export function newVtsExitCounters(): VtsExitCountersByClass {
@@ -69,6 +71,7 @@ export function countVtsExitWalk(c: VtsExitCounters | null, w: { price: number |
     if (!w.sizeCertain) c.walkUncertain++;
   } else if (w.sizeBasis === 'no_depth_config') c.noDepthConfig++;
   else if (w.sizeBasis === 'absent') c.sizeAbsent++;
+  else if (w.sizeBasis === 'unit_lane') c.unitLane++;
 }
 
 export function anyVtsExitCount(c: VtsExitCountersByClass): boolean {
@@ -81,7 +84,7 @@ export function formatVtsExitCounters(c: VtsExitCountersByClass): string {
     const v = c[k];
     return `${k}{exitLooks=${v.exitLooks} exitNoTransactableSide=${v.exitNoTransactableSide} unpricedNoBid=${v.unpricedNoBid} `
       + `unpricedNoMark=${v.unpricedNoMark} closedUnpriced=${v.closedUnpriced} walked=${v.walked} walkExtrapolated=${v.walkExtrapolated} `
-      + `walkUncertain=${v.walkUncertain} sizeAbsent=${v.sizeAbsent} noDepthConfig=${v.noDepthConfig}}`;
+      + `walkUncertain=${v.walkUncertain} sizeAbsent=${v.sizeAbsent} noDepthConfig=${v.noDepthConfig} unitLane=${v.unitLane}}`;
   }).join(' ');
 }
 
