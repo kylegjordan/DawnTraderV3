@@ -47,3 +47,13 @@
   3. **`InvalidTarget` is expected 0 at BIRTH too**, not only as a draining refresh population (the same 0-in-14-days measurement).
 - **Recorded as a change, not a pure move (Langston note):** the resolver extraction added `Number()` and `targetPrice == null → NaN`, so the open path's null-target behaviour changes from `null − entry` to NaN — an improvement, unreachable after P8.
 - **Expected at the inc-B deploy, not a defect:** every queued crypto row has `last_priced_at` NULL, so it reads `unpriced` until its next refresh pass — a ≤ 120 s promotion pause.
+## r3 PROCEED + r4 — at `20404d0a498e815e81a5dd1046640fef705aa46b` on `review/b-entry-gate-inc-b`
+- **r3 (`c9388ea4e`): Langston PROCEED, both conditions met** — condition 1, a non-finite live price counts `skip_price_nonfinite`, never judged; condition 2, the hourly `ENTRY_WINDOW_HOUR` reader (Step 7's denominator has a production reader).
+- **r4 (`20404d0a4`), the one correction he required in the same commit as the landing:** the comment claimed an hour is "never lost". False: **the hour in progress at a restart is not emitted** — the same residual as P7's `PRICED_SHARE_HOUR`. Comment only.
+- **Reading notes carried to Step 7 (Langston, non-blocking):**
+  1. `skip_price_nonfinite` sits ahead of the mode arms, so a MAKER row with a bad price counts there too — not "taker rows with a bad price".
+  2. `skip_invalid_geometry` also catches a NaN/null `planEntry` (`planEntry` returns early only on `undefined`) under a reason naming the stop — not purely a stop problem. Never `judged_pass`, so C-1 holds.
+  3. The exact-string test pins Map insertion order (kept; a harmless reorder would go red).
+  4. Stdout retention is ~3 days: the Step-7 read of `ENTRY_WINDOW_HOUR` must run inside that window (first full session 11-10, read by 11-12).
+- **TIMING — HOLD (pre-registered, `B_ENTRY_GATE_PRE_AUDIT.md:133`, `B_ENTRY_GATE_SCOPE.md:132`):** lands byte-identical to `20404d0a4` after inc A's Step-7 read (alert `801330ae`, 2026-11-09 21:30Z); CI 4/4 per job; `dt-deploy`; own session 11-10. **The reason (Langston's correction of mine):** the P2 commit alone moves no admission; the risk is P6 (refresh re-pricing at the live ask) and P8 (its own queue-admission magnitude, pre-audit `:141`) blurring inc A's P4-at-the-fill read. **P8 is not an inc-A magnitude, and the 3-8 % figure is inc A's fill-side P1 — neither is carried into the Step-7 report.**
+- **The inc-B Step-7 report must enumerate staging HEAD movements from the deploy reflog across the window and name the hours a restart dropped.**
