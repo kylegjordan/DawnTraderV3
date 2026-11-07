@@ -58,10 +58,10 @@ describe('8c — the engine rests a maker at the maker role price', () => {
     expect(E).toContain('const _b72cLimit = makerEntryOf(signal.metadata) ?? signal.entryPrice;');
   });
   it('makerEntryOf: the bid only on a sided triple with a usable record', () => {
-    expect(makerEntryOf({ levelGeometry: 'sided', levelBasisAtBirth: { bid: 99.9, ask: 100.1 } })).toBe(99.9);
-    expect(makerEntryOf({ levelBasisAtBirth: { bid: 99.9, ask: 100.1 } })).toBeNull();
+    expect(makerEntryOf({ levelGeometry: 'sided', levelBasisAtBirth: { bid: 99.9, ask: 100.1, capturedAtMs: 0, ageMs: 0, producer: 'x' } })).toBe(99.9);
+    expect(makerEntryOf({ levelBasisAtBirth: { bid: 99.9, ask: 100.1, capturedAtMs: 0, ageMs: 0, producer: 'x' } })).toBeNull();
     expect(makerEntryOf({ levelGeometry: 'sided' })).toBeNull();
-    expect(makerEntryOf({ levelGeometry: 'sided', levelBasisAtBirth: { bid: 100.2, ask: 100.1 } })).toBeNull(); // crossed
+    expect(makerEntryOf({ levelGeometry: 'sided', levelBasisAtBirth: { bid: 100.2, ask: 100.1, capturedAtMs: 0, ageMs: 0, producer: 'x' } })).toBeNull(); // crossed
   });
 });
 
@@ -179,7 +179,7 @@ describe('8c Step-4 r1 (Langston) — the hop fence, one hop further: hybrid reb
     const born = baseCryptoLevelsAtBirth({
       planEntry: 100, planStop: 98, planTarget: 104,
       metadata: { levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } },
-      quote: { bid: 99.9, ask: 100.1, basis: 'ticker_bbo', producer: 'rest_poller', ageMs: 5_000 },
+      quote: { bid: 99.9, ask: 100.1, basis: 'ticker_bbo', producer: 'rest_poller', ageMs: 5_000, capturedAtMs: 1_000_000 },
       knobs: { maxAgeMs: 60_000, driftRef60s: 0.00429 },
     });
     if (!born.ok) throw new Error(born.reason);
@@ -209,5 +209,18 @@ describe('8c Step-4 r1 (Langston) — the hop fence, one hop further: hybrid reb
     // only volatility_edge stamps the cap bit, so stamp and name agree for every carried hybrid
     const caps = ['server/strategies/volatility-edge.ts'].map(src).filter((s) => s.includes('targetIsCap: true'));
     expect(caps).toHaveLength(1);
+  });
+});
+
+describe('8c amendment 6 — the sided floor sits after the arm is chosen and BEFORE the queue write', () => {
+  it('placement and refusal', () => {
+    const fl = uniq(O, "if (sizingContext.assetClass === 'crypto_spot' && _mtGeometry === 'sided') {");
+    expect(fl).toBeGreaterThan(uniq(O, 'const _mtPolicyDecision = applyMakerTakerFillPolicy(_mtDecision, _entryFillPolicy, 0);'));
+    expect(fl).toBeLessThan(uniq(O, 'readyToBuyService.queueSQESignal(sqeSignalInput)'));
+    const body = O.slice(fl, O.indexOf('console.log(', fl));
+    expect(body).toContain("const _flArm = _mtPolicyDecision.chosenMode === 'maker' ? 'maker' : 'taker';");
+    expect(body).toContain('sidedRewardToRisk(rawSignal.metadata, rawSignal.stopPrice, rawSignal.targetPrice, _flArm)');
+    expect(body).toContain("!(_flRr.rr >= _flMin) ? 'level_rr_below_min_sided'");
+    expect(body).toContain('return null;');
   });
 });

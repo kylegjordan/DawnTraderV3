@@ -17,6 +17,9 @@
 // PURE: no I/O, no clock, no config read — the quote, the knobs and the time arrive as arguments.
 // ════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 import { rebaseLevels, isWellFormedLegSpec, type LevelSpec, type LegBasis } from './level-rebase.js';
+// Every entry and level below is read through the ONE role mapping (Langston BLOCKER-1, 2026-09-04): a taker entry lifts
+// the ask, a resting maker entry IS a bid, both exits of a long hit the bid.
+import { priceForLevelRole, type LevelBasis } from '../calculations/level-basis.js';
 
 export type LevelGeometry = 'mid' | 'sided';
 
@@ -37,7 +40,26 @@ export function levelGeometryOf(metadata: unknown): LevelGeometry {
 export function makerEntryOf(metadata: unknown): number | null {
   if (levelGeometryOf(metadata) !== 'sided') return null;
   const s = readSidedStamp(metadata);
-  return s === null ? null : s.bid;
+  return s === null ? null : priceForLevelRole(basisOf(s), 'entry_maker_resting');
+}
+
+/** The build record as the `LevelBasis` it was taken from — so every later reader uses the SAME basis, never a fresh read. */
+function basisOf(s: LevelBasisAtBirth): LevelBasis {
+  return { bid: s.bid, ask: s.ask, mid: (s.bid + s.ask) / 2, capturedAtMs: s.capturedAtMs, ageMs: s.ageMs, producer: s.producer };
+}
+
+/**
+ * Row `8c` amendment 6 (Langston 22:49Z, item 2) — reward-to-risk of a SIDED triple for the ARM that will enter, read from
+ * the SAME basis the levels were built on: a taker pays the ask, a resting maker the bid. Null when the triple is not
+ * sided or its record is unusable (the caller refuses; it never guesses an entry).
+ */
+export function sidedRewardToRisk(metadata: unknown, stop: number, target: number, arm: 'maker' | 'taker'): { rr: number; entry: number } | null {
+  if (levelGeometryOf(metadata) !== 'sided') return null;
+  const s = readSidedStamp(metadata);
+  if (s === null) return null;
+  const entry = priceForLevelRole(basisOf(s), arm === 'maker' ? 'entry_maker_resting' : 'entry_taker');
+  if (!(entry > stop)) return { rr: -Infinity, entry };
+  return { rr: (target - entry) / (entry - stop), entry };
 }
 
 /** The transactable quote the levels are built on — the ladder's accepted rung (`selectTouchPrice`). */
@@ -48,6 +70,8 @@ export interface BirthQuote {
   basis: string;
   producer: string;
   ageMs: number;
+  /** The quote's capture instant (the caller reconstructs it as now − age, as the ladder does). */
+  capturedAtMs: number;
 }
 
 /** What every built level carries (§5 ruling: the accepted age AND the f it implies; Step 7 stratifies by stop distance). */
@@ -61,6 +85,7 @@ export interface LevelBasisAtBirth {
   basis: string;
   producer: string;
   ageMs: number;
+  capturedAtMs: number;
   stopBasis: LegBasis;
   targetBasis: LegBasis;
   /** (ask − stop) / ask, on the built levels. */
@@ -99,7 +124,8 @@ function readSidedStamp(metadata: unknown): LevelBasisAtBirth | null {
   const lb = (metadata as { levelBasisAtBirth?: unknown } | null | undefined)?.levelBasisAtBirth;
   if (!lb || typeof lb !== 'object') return null;
   const o = lb as Record<string, unknown>;
-  return finitePos(o.bid) && finitePos(o.ask) && (o.bid as number) <= (o.ask as number) ? (lb as LevelBasisAtBirth) : null;
+  return finitePos(o.bid) && finitePos(o.ask) && (o.bid as number) <= (o.ask as number)
+    && typeof o.capturedAtMs === 'number' && Number.isFinite(o.capturedAtMs) ? (lb as LevelBasisAtBirth) : null;
 }
 
 export function baseCryptoLevelsAtBirth(i: {
@@ -117,15 +143,19 @@ export function baseCryptoLevelsAtBirth(i: {
     if (prior === null) return { ok: false, reason: 'level_geometry_stamp_malformed' };
     return {
       ok: true, alreadySided: true,
-      entryPrice: i.planEntry, entryPriceMaker: prior.bid, stopPrice: i.planStop, targetPrice: i.planTarget,
+      entryPrice: i.planEntry, entryPriceMaker: priceForLevelRole(basisOf(prior), 'entry_maker_resting'), stopPrice: i.planStop, targetPrice: i.planTarget,
       stamp: { levelGeometry: 'sided', levelBasisAtBirth: prior },
     };
   }
 
   const q = i.quote;
-  if (q === null || !finitePos(q.bid) || !finitePos(q.ask) || q.bid > q.ask || !(q.ageMs >= 0)) {
+  if (q === null || !finitePos(q.bid) || !finitePos(q.ask) || q.bid > q.ask || !(q.ageMs >= 0) || !Number.isFinite(q.capturedAtMs)) {
     return { ok: false, reason: 'no_transactable_basis' };
   }
+  const basis: LevelBasis = { bid: q.bid, ask: q.ask, mid: (q.bid + q.ask) / 2, capturedAtMs: q.capturedAtMs, ageMs: q.ageMs, producer: q.producer };
+  const levelSide = priceForLevelRole(basis, 'stop'); // both exits of a long: the bid
+  const takerEntry = priceForLevelRole(basis, 'entry_taker');
+  const makerEntry = priceForLevelRole(basis, 'entry_maker_resting');
 
   // ── The stamp: both legs present and well-formed (ruling item 4 — absent or malformed is a refusal at crypto birth).
   const spec = (i.metadata as { levelSpec?: unknown } | null | undefined)?.levelSpec;
@@ -138,22 +168,22 @@ export function baseCryptoLevelsAtBirth(i: {
   // ── The transform. `tick: null`: the venue-grid seam rounds the whole triple next, with the stamp's cap bit.
   const r = rebaseLevels({
     planEntry: i.planEntry, planStop: i.planStop, planTarget: i.planTarget,
-    fill: q.bid, entryBasis: q.ask, spec: s, tick: null,
+    fill: levelSide, entryBasis: takerEntry, spec: s, tick: null,
   });
   if (!r.ok) return { ok: false, reason: `rebase_${r.reason}` };
   if (r.inconsistent.length > 0) return { ok: false, reason: 'level_spec_inconsistent' };
 
-  const stopDistanceFraction = (q.ask - r.stopPrice) / q.ask;
+  const stopDistanceFraction = (takerEntry - r.stopPrice) / takerEntry;
   const f = (i.knobs.driftRef60s / stopDistanceFraction) * Math.sqrt(q.ageMs / 60_000);
   return {
     ok: true, alreadySided: false,
-    entryPrice: q.ask, entryPriceMaker: q.bid, stopPrice: r.stopPrice, targetPrice: r.targetPrice,
+    entryPrice: takerEntry, entryPriceMaker: makerEntry, stopPrice: r.stopPrice, targetPrice: r.targetPrice,
     stamp: {
       levelGeometry: 'sided',
       levelBasisAtBirth: {
         bid: q.bid, ask: q.ask,
         planEntry: i.planEntry, planStop: i.planStop, planTarget: i.planTarget,
-        basis: q.basis, producer: q.producer, ageMs: q.ageMs,
+        basis: q.basis, producer: q.producer, ageMs: q.ageMs, capturedAtMs: q.capturedAtMs,
         stopBasis: r.stopBasis, targetBasis: r.targetBasis,
         stopDistanceFraction, f,
         driftRef60s: i.knobs.driftRef60s, maxAgeMs: i.knobs.maxAgeMs,

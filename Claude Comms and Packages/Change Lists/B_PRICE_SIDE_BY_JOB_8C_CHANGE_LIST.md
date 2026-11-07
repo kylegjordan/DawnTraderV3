@@ -21,6 +21,8 @@
 | (iv) | A `crypto_spot` signal reaching the open without the sided stamp is REFUSED before the open-gate EV (`LEVEL_GEOMETRY_ABSENT`). | `active-execution-engine.ts`, `rtb-metrics-service.ts` |
 | item 4 | `defensive_hedge` stamped (anchor stop, distance target). **Pattern pool** stamped distance/distance at `patternToTradeSignal` and carried by the pattern pass (its metadata is a fresh object). **HYBRID** carries the quant signal's three stamps. | `defensive-hedge.ts`, `pattern-recognizer.ts`, `signal-orchestrator.ts` |
 | P7 | `/var/log/dawntrader/level-basis-funnel.jsonl`, one line per 15 min, every row, with the lifetime anchor (process start, pid, PM2 `pm_uptime` and `restart_time`, build sha). Started once at boot. | `level-basis-funnel-writer.ts`, `server/index.ts` |
+| §12 | **The held floor on the SIDED triple, before the queue write** (crypto_spot): after `_mtPolicyDecision`, `sidedRewardToRisk` reads the ARM's entry (taker ask / resting-maker bid) from the build basis via `priceForLevelRole`; `rr < min_rr` ⇒ `level_rr_below_min_sided`. The reorg-B2 floor runs after `queueSQESignal` and never refused a paper open (`#373`). The birth re-base also reads every price through `priceForLevelRole`. | `crypto-birth-levels.ts`, `signal-orchestrator.ts` |
+| C-1/C-2/C-3 | VTS lane cannot receive sided levels (`vts-runner.ts:1908/:1917/:2016`); `computeNetGeometry`'s sided arm charges each cost once (`2·fee + 1·slip` after the entry walk), the mid arm's overlap filed `#1252`; the three-constructors docblock corrected; the refusal population measured (0 rows / 0 inserts over 3 min). | §11 response |
 | §10 | The per-form re-score: **18 of 50 (36.0 %)** vs every-leg 19 of 50; (a) PASS on method; (b) not exercised by the population, fenced in code. | §10-RESULT, `scripts/analysis/b_price_side_8c_rescore.*` |
 
 ## The fences
@@ -34,7 +36,11 @@
 2. **`pattern-recognizer.ts` carries a "LOCKED MODULE — DO NOT MODIFY without architectural review" header.** The change is one metadata key (the stamp) on `patternToTradeSignal`'s output; no detection logic moves. This review is that architectural review.
 3. **The spread plausibility bound stays 0.50 for an operative level** (now DB-governed). Reason: a wide but REAL spread is not a broken quote — on sided levels it widens risk and narrows reward by a full spread, so the RR floor and the EV gate refuse it on its economics. Attack this if you read 0.50 as too loose for a level a stop will be fired against.
 
+## Second reader (one pass, claim-only)
+`REVIEWER: claim-only · "every crypto_spot signal reaching the open is sided or refused before an economic gate" · 13 SAFE / 2 GAP + 1 ordering finding · re-derived y` — gap 15 (refusal keyed on the class stamp only) FIXED; gap 14 (pre-deploy rows priced as mid by refresh/ranker before the open refuses them) stated, population measured 0; the ordering finding became amendment 6 (§12).
+
 ## Judgement calls I want attacked
-- The open refusal (iv) also refuses every crypto RTB row queued before the deploy, for the minutes it lives. Fail-closed by design; say so if a grace window is wanted.
+- The open refusal (iv) refuses crypto RTB rows queued before the deploy; measured 0 rows / 0 inserts over 3 min (22:28-22:31Z), re-read before the deploy.
+- §12's floor uses the CHOSEN arm: a maker-chosen signal is judged at the bid (higher R) — if its maker rest later converts to taker (`MARKETABLE_TAKER_FALLBACK`), the fill-time economics decide, not this floor.
 - S4's sided-without-bid row throws into the refresh's existing catch (keeps the gen-time snapshot) rather than refusing the row.
 - The HYBRID's carried stamp makes its re-size a no-op on prices; its `levelBasisAtBirth` is the quant signal's, so its recorded age is the quant build's, not a second walk (no `active_level_build` record for it).

@@ -139,7 +139,7 @@ import { recordSideAgeAttempt, recordFeedAgreement } from '../core/calculations/
 import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote, type TouchLegInput } from '../core/calculations/touch-price.js';
 // Row `8c` switch-on: the crypto level-build knobs (DB-governed, fail hard) and the birth re-base.
 import { readCryptoLevelBuildKnobs, type LevelBuildKnobs } from '../core/trading/level-build-config.js';
-import { baseCryptoLevelsAtBirth, levelGeometryOf, makerEntryOf } from '../core/trading/crypto-birth-levels.js';
+import { baseCryptoLevelsAtBirth, levelGeometryOf, makerEntryOf, sidedRewardToRisk } from '../core/trading/crypto-birth-levels.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -646,7 +646,8 @@ export class SignalOrchestrator {
         planEntry: rawSignal.entryPrice, planStop: rawSignal.stopPrice, planTarget: rawSignal.targetPrice,
         metadata: rawSignal.metadata,
         quote: _cbSel.ok
-          ? { bid: _cbSel.quote.bid, ask: _cbSel.quote.ask, basis: _cbSel.quote.basis, producer: _cbSel.quote.producer, ageMs: _cbSel.quote.ageMs }
+          ? { bid: _cbSel.quote.bid, ask: _cbSel.quote.ask, basis: _cbSel.quote.basis, producer: _cbSel.quote.producer, ageMs: _cbSel.quote.ageMs,
+              capturedAtMs: _cbNow - _cbSel.quote.ageMs }
           : null,
         knobs: _cbKnobs,
       });
@@ -1207,6 +1208,26 @@ export class SignalOrchestrator {
         `taker=${_mtDecision.takerNetEV.toFixed(6)} maker_adj=${_mtDecision.makerNetEVAdjusted.toFixed(6)}`,
       );
       return null;
+    }
+    // ⛔⛔ ROW `8c` AMENDMENT 6 (Langston 22:49Z) — THE HELD FLOOR JUDGES THE LEVELS THAT TRADE. The post-strategy floor
+    // (reorg-B2, `normalizeAndGateTarget` below) runs AFTER `queueSQESignal` and has never refused a paper open (`#373`
+    // annotation); the in-strategy guard judged the MID triple, before the 8c re-base. So for a SIDED crypto triple the
+    // per-class `min_rr` is checked HERE, before the queue write, for the ARM that will enter, from the SAME basis the
+    // levels were built on (a taker pays the ask, a resting maker the bid — `priceForLevelRole`). crypto_spot only: the
+    // xStock active leg rides `#373` / row 80a (8c measured nothing there). Refusal: `level_rr_below_min_sided`.
+    if (sizingContext.assetClass === 'crypto_spot' && _mtGeometry === 'sided') {
+      const _flArm = _mtPolicyDecision.chosenMode === 'maker' ? 'maker' : 'taker';
+      const _flRr = sidedRewardToRisk(rawSignal.metadata, rawSignal.stopPrice, rawSignal.targetPrice, _flArm);
+      let _flMin: number | null = null;
+      try { _flMin = getPerClassTargetGate(sizingContext.assetClass, strategyId).minRR; } catch { _flMin = null; }
+      const _flReason = _flRr === null ? 'level_geometry_stamp_malformed'
+        : _flMin === null ? 'level_rr_floor_unresolved'
+        : !(_flRr.rr >= _flMin) ? 'level_rr_below_min_sided' : null;
+      if (_flReason !== null) {
+        console.warn(`[8c][SIDED_RR_FLOOR] ${rawSignal.symbol}/${strategyId} arm=${_flArm} entry=${_flRr?.entry} rr=${_flRr?.rr?.toFixed(4)} min_rr=${_flMin} — refused (${_flReason})`);
+        if (_fClass) recordActivePreSqeReject(sizingContext.mode, _fClass, _flReason, strategyId);
+        return null;
+      }
     }
     console.log(
       `[P19-B7.2][MAKER_TAKER] ${rawSignal.symbol}/${strategyId}: chose ${_mtPolicyDecision.chosenMode} policy=${_entryFillPolicy} ` +

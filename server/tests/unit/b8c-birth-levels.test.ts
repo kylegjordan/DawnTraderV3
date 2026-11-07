@@ -8,7 +8,7 @@ import type { LevelSpec } from '../../core/trading/level-rebase.js';
 
 const knobs = { maxAgeMs: 60_000, driftRef60s: 0.00429 };
 // mid 100, spread 0.2 ⇒ bid 99.9, ask 100.1
-const quote = { bid: 99.9, ask: 100.1, basis: 'ticker_bbo', producer: 'rest_poller', ageMs: 15_000 };
+const quote = { bid: 99.9, ask: 100.1, basis: 'ticker_bbo', producer: 'rest_poller', ageMs: 15_000, capturedAtMs: 1_000_000 };
 const plan = { planEntry: 100, planStop: 98, planTarget: 104 };
 const run = (spec: unknown, over: Partial<typeof plan> = {}, q: typeof quote | null = quote) =>
   baseCryptoLevelsAtBirth({ ...plan, ...over, metadata: spec === undefined ? {} : { levelSpec: spec }, quote: q, knobs });
@@ -124,5 +124,22 @@ describe('levelGeometryOf — the one reader', () => {
     for (const m of [undefined, null, {}, { levelGeometry: 'SIDED' }, { levelGeometry: true }, 'sided', { levelGeometry: 'mid' }]) {
       expect(levelGeometryOf(m)).toBe('mid');
     }
+  });
+});
+
+describe('8c amendment 6 — the held floor on the SIDED triple, for the arm that enters, from the build basis', () => {
+  it('a taker is judged at the ask, a resting maker at the bid (BLOCKER-1 roles), never a fresh read', async () => {
+    const { sidedRewardToRisk } = await import('../../core/trading/crypto-birth-levels.js');
+    const r = run({ stop: { form: 'distance' }, target: { form: 'distance' } });
+    if (!r.ok) throw new Error(r.reason);
+    const meta = { ...r.stamp };
+    const t = sidedRewardToRisk(meta, r.stopPrice, r.targetPrice, 'taker')!;
+    const m = sidedRewardToRisk(meta, r.stopPrice, r.targetPrice, 'maker')!;
+    expect(t.entry).toBe(100.1);
+    expect(m.entry).toBe(99.9);
+    expect(t.rr).toBeCloseTo((103.9 - 100.1) / (100.1 - 97.9), 12);
+    expect(m.rr).toBeCloseTo((103.9 - 99.9) / (99.9 - 97.9), 12);
+    expect(m.rr).toBeGreaterThan(t.rr); // the maker pays no spread: its R is higher on the same levels
+    expect(sidedRewardToRisk({}, 98, 104, 'taker')).toBeNull(); // not sided ⇒ the caller refuses
   });
 });
