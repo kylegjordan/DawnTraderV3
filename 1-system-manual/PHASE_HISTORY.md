@@ -1467,7 +1467,7 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **One bad price bar can no longer wipe out a batch of good ones.** A minute bar arriving with no price used to make the archive throw away every bar saved alongside it; now each bar is checked first and a bad one is skipped and counted. The archive's monitoring panel also stopped showing zero for counts it could not finish. Live since 2026-09-11 (panel fix 2026-10-02). The skip has never actually triggered in live data, and the on-screen panel check moved to the connection-pool batch, which has to open that page anyway. Record: `Batch Completion/B_OHLC_FRAME_GUARD_COMPLETION_REPORT.md`.
 
-### 2026-11-04 — B-CRYPTO-FEED-WATCHDOG (CC-B, sprint plan row 33a, pre-sprint stage 00 order 1, `#1232`) — ✅ CLOSED 2026-11-07 at Step 11, pending Langston's confirm (reopened once at Step 9)
+### 2026-11-04 — B-CRYPTO-FEED-WATCHDOG (CC-B, sprint plan row 33a, pre-sprint stage 00 order 1, `#1232`) — ✅ CLOSED 2026-11-07 at Step 11, Langston confirmed (reopened once at Step 9)
 
 **Re-close, 2026-11-07:** the Passive Archive panel now tells a connection that is open but silent from one that is receiving data — it shows "DATA SILENT" instead of OK. Langston checked it live on staging; every connection was receiving data.
 
