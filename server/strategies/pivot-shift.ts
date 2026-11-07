@@ -38,6 +38,7 @@ import { recordGuardEval } from './guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.pivot_shift'.
 import { getCachedNumbersForModule } from '../services/module-constants-service.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 // ============================================================================
 // Strategy Constants
@@ -219,6 +220,7 @@ export function detectPivotShift(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { op: 'max', terms: [{ spec: { form: 'anchor' }, value: morningStarLow }, { spec: { form: 'distance' }, value: atrBasedStop }] }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: max(3-candle low, entry − k·ATR); entry + k·ATR
       directive: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',

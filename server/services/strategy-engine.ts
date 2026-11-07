@@ -4,6 +4,7 @@ import { storage } from '../storage';
 import { detectRange, detectStopZone, type RangeDetectionResult, type StopZoneResult } from './strategy-filters';
 import { telemetryService } from './telemetry-service.js';
 import { confirmMultiTimeframe } from './strategy-features.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0: how each level was built, stamped at its branch
 // Directive 12.3.2: Import 8 new strategy modules
 import { detectMorningStar } from '../strategies/morning-star.js';
 import { detectInsideBarReversal } from '../strategies/inside-bar-reversal.js';
@@ -243,10 +244,12 @@ export class StrategyEngine {
       const override = indicators.strongTrendGeometryOverride;
       let stopPrice: number;
       let finalTarget: number;
+      let _levelSpec: LevelSpec; // #1250 P0: per branch — the override is distance/R, the default anchor/max(anchor, R)
       if (override && atr > 0) {
         stopPrice = entryPrice - atr * override.stopAtrMultiplier;
         const riskDistance = entryPrice - stopPrice;
         finalTarget = entryPrice + riskDistance * override.targetAsRMultiple;
+        _levelSpec = { stop: { form: 'distance' }, target: { form: 'r_multiple', r: override.targetAsRMultiple } };
         console.log(`[VWAP Strategy] [B63 Item 12] Using strong-trend geometry override: stop=${override.stopAtrMultiplier}×ATR, target=${override.targetAsRMultiple}R`);
       } else {
         // Default (pre-B63-Item-12) geometry for low-DBS pullback context
@@ -256,6 +259,10 @@ export class StrategyEngine {
         const riskDistance = entryPrice - stopPrice;
         const twoRTarget = entryPrice + (riskDistance * c['target_r_multiple_default']);
         finalTarget = Math.max(targetPrice, twoRTarget);
+        _levelSpec = { stop: { form: 'anchor' }, target: { op: 'max', terms: [
+          { spec: { form: 'anchor' }, value: targetPrice },
+          { spec: { form: 'r_multiple', r: c['target_r_multiple_default'] }, value: twoRTarget },
+        ] } };
       }
 
       // B3: Safety validation - reject signal if target is not above entry
@@ -275,6 +282,7 @@ export class StrategyEngine {
         targetPrice: finalTarget,
         confidence: c['base_confidence'] + (hasReversalPattern ? c['reversal_confidence_bonus'] : 0),
         metadata: {
+          levelSpec: _levelSpec,
           vwap,
           nearVWAPPercent: Math.abs(currentPrice - vwap) / vwap * 100,
           reversalConfirmed: hasReversalPattern,
@@ -378,11 +386,13 @@ export class StrategyEngine {
       const stopPrice = parseFloat(cPoint.low) - abcdAtr * c['stop_atr_buffer']; // Stop: below C-low by ATR buffer
       
       let targetPrice: number;
+      let _targetSpec: LevelSpec['target']; // #1250 P0: proportional, or min(distance, R)
       
       // ✅ Exit type logic: Fixed Target vs Trailing Stop
       if (exitType === 'target') {
         // Fixed target based on user-configured percentage
         targetPrice = entryPrice * (1 + targetPercent);
+        _targetSpec = { form: 'proportional' };
         console.log(`[ABCD Strategy] Using FIXED TARGET exit: ${(targetPercent * 100).toFixed(1)}%`);
       } else {
         // Trailing stop - use measured move as initial target
@@ -393,6 +403,10 @@ export class StrategyEngine {
         const riskDistance = entryPrice - stopPrice;
         const twoRTarget = entryPrice + (riskDistance * c['trailing_target_r_multiple']);
         targetPrice = Math.min(measuredTarget, twoRTarget);
+        _targetSpec = { op: 'min', terms: [
+          { spec: { form: 'distance' }, value: measuredTarget },
+          { spec: { form: 'r_multiple', r: c['trailing_target_r_multiple'] }, value: twoRTarget },
+        ] };
         
         console.log(`[ABCD Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
       }
@@ -407,6 +421,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: _targetSpec } satisfies LevelSpec, // stop = C-low − k·ATR
           aPoint: { price: aPoint.high, time: aPoint.timestamp },
           bPoint: { price: bPoint.low, time: bPoint.timestamp },
           cPoint: { price: cPoint.close, time: cPoint.timestamp },
@@ -517,18 +532,21 @@ export class StrategyEngine {
       const stopPrice = Math.min(priorSwingLow * c['swing_low_stop_mult'], sma * c['sma_stop_mult']); // Below swing low or SMA
 
       let targetPrice: number;
+      let _targetSpec: LevelSpec['target']; // #1250 P0: proportional (trailing) or R (break)
 
       // ✅ Exit condition determines target calculation
       if (exitCondition === 'trailing') {
         // Trailing stop exit - set wider initial target
         const trendStrength = this.calculateTrendStrength(recentPrices);
         targetPrice = entryPrice * (1 + trendStrength * c['trailing_strength_factor']);
+        _targetSpec = { form: 'proportional' };
 
         console.log(`[SMA Strategy] Using TRAILING STOP exit: ${(trailingStopPercent * 100).toFixed(1)}%`);
       } else {
         // Break below SMA exit - use fixed NR target
         const riskDistance = entryPrice - stopPrice;
         targetPrice = entryPrice + (riskDistance * c['break_target_r_multiple']);
+        _targetSpec = { form: 'r_multiple', r: c['break_target_r_multiple'] };
         
         console.log(`[SMA Strategy] Using BREAK exit: 2R target`);
       }
@@ -543,6 +561,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: _targetSpec } satisfies LevelSpec, // stop = min(swing low, SMA)
           sma,
           smaLength,
           entryCondition,
@@ -656,6 +675,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: range low; entry + range height
           rangeSupport: rangeResult.rangeLow,
           rangeResistance: rangeResult.rangeHigh,
           consolidationBars: rangeResult.durationBars,
@@ -758,6 +778,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'proportional' }, target: { form: 'anchor' } } satisfies LevelSpec, // #1250 P0: price·(1 − buffer); the mean
           meanType,
           meanValue,
           deviation: deviation * 100,
@@ -866,6 +887,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: { form: 'anchor' } } satisfies LevelSpec, // #1250 P0: range low / range high, ATR-offset
           rangeSupport: rangeResult.rangeLow,
           rangeResistance: rangeResult.rangeHigh,
           rangeWidth: rangeWidth * 100,
@@ -969,6 +991,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: { form: 'r_multiple', r: c['target_r_multiple'] } } satisfies LevelSpec, // #1250 P0
           vwap,
           vwapSlope: vwapSlope * 100,
           distanceFromVWAP: distanceFromVWAP * 100,
@@ -1071,6 +1094,7 @@ export class StrategyEngine {
         targetPrice,
         confidence: c['base_confidence'],
         metadata: {
+          levelSpec: { stop: { form: 'anchor' }, target: { form: 'anchor' } } satisfies LevelSpec, // #1250 P0: trap high / range low
           trapLevel: rangeResult.rangeHigh,
           trapExtension: trapExtension * 100,
           stopZoneStrength: stopZone.clusterStrength,
@@ -1581,6 +1605,7 @@ export class StrategyEngine {
       targetPrice,
       confidence,
       metadata: {
+        levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: price ∓ k·vol
         obi,
         micropriceTilt,
         signedFlowRatio,

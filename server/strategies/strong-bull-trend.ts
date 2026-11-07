@@ -42,6 +42,7 @@ import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from './guard-eval-tracker.js';
 import { setNullReason } from '../utils/null-reason-tracker.js';
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 // Strategy constants
 // B72 (2026-05-05): SBT_DBS_MIN moved to module_constants.
@@ -188,6 +189,7 @@ export function detectStrongBullTrend(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { form: 'distance' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: entry ∓ k·ATR
       directive: 'B63',
       type: 'QUANT',              // B63: mirrors morning_star's metadata.type pattern — consumers read signalType from canonical map but this provides parity
       direction: 'BUY',

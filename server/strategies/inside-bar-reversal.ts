@@ -40,6 +40,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.inside_bar_reversal'.
 // IB_BREAKOUT_BUFFER + IB_STOP_BUFFER remain hardcoded — KEEP per LEVER_INVENTORY (geometric buffers).
 import { getCachedNumbersForModule } from '../services/module-constants-service.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 // ============================================================================
 // Strategy Constants — geometric buffers (KEEP)
@@ -222,6 +223,7 @@ export function detectInsideBarReversal(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { form: 'anchor' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: parent low; entry + k·ATR
       directive: '12.3.2',
       type: 'PATTERN',
       direction,

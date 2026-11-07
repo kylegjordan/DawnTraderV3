@@ -36,6 +36,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // prefetched at server boot in server/startup/b72-warmup.ts.
 // AF_STOP_BUFFER (0.003) remains hardcoded — KEEP per LEVER_INVENTORY (structural geometric buffer).
 import { getCachedNumbersForModule } from '../services/module-constants-service.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants — pre-B72 hardcoded literals migrated to
@@ -227,6 +228,7 @@ export function detectAdaptiveFlow(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { op: 'min', terms: [{ spec: { form: 'anchor' }, value: patternStop }, { spec: { form: 'distance' }, value: atrStop }] }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: min(three-soldiers low, entry − k·ATR); entry + k·ATR
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',

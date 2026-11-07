@@ -62,6 +62,7 @@ import { applyGlobalGuards, clampEffectiveATR } from './strategy-helpers.js';
 import { guardForcesDrop, type GateDisposition } from './strategy-helpers.js';
 import { getPerClassTargetGate } from '../core/calculations/expectancy.js';
 import { recordGuardEval } from './guard-eval-tracker.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 const STRATEGY_KEY = 'orb';
 const LOG_PREFIX = '[B79.0d][ORB]';
@@ -311,6 +312,7 @@ export function detectORB(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { form: 'anchor' }, target: { form: 'distance' } } satisfies LevelSpec, // #1250 P0: range low; entry + mult·range height
       direction,
       rangeHigh,
       rangeLow,

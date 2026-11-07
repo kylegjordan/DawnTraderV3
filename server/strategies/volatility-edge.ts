@@ -38,6 +38,7 @@ import { setNullReason } from '../utils/null-reason-tracker.js';
 // B72 (2026-05-05): all strategy levers moved to module='strategy.volatility_edge'.
 // VE_BREAKOUT_BUFFER + VE_STOP_BUFFER remain hardcoded — KEEP per LEVER_INVENTORY (structural geometric buffers).
 import { getCachedNumberRequired, getCachedNumbersForModule } from '../services/module-constants-service.js';
+import type { LevelSpec } from '../core/trading/level-rebase.js'; // #1250 P0
 
 // ═══════════════════════════════════════════════════════════════
 // Strategy Constants — structural geometric buffers (KEEP)
@@ -267,6 +268,7 @@ export function detectVolatilityEdge(
     targetPrice,
     confidence,
     metadata: {
+      levelSpec: { stop: { form: 'anchor' }, target: { op: 'min', terms: [{ spec: { form: 'anchor' }, value: measuredMoveTarget }, { spec: { form: 'distance' }, value: atrTarget }] }, targetIsCap: true } satisfies LevelSpec, // #1250 P0 + C-2: the ONE cap
       strategyVersion: '12.3.2',
       type: 'HYBRID',
       direction: 'BUY',
