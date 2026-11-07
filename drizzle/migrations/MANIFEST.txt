@@ -244,3 +244,4 @@
 2026-11-06-b-xstock-bar-availability-window-rerun.sql
 2026-11-07-b-price-side-kd19-vts-epoch.sql
 2026-11-05-b-close-writer-costs-restore-columns.sql
+2026-11-08-b-price-side-1250-xstock-epoch.sql
