@@ -21,6 +21,9 @@
 | **ranking sample use — excluded** | #40 | AMR friction-sample freshness, not a price that decides an action |
 Total: 10 + 5 + 3 + 4 + 2 + 1 + 1 = **26** census rows, plus B0.
 
+**THE BINDING SET (OBJ-6), with class totals derived from the table's class column:** ENTRY #1 #2 #3 #5 #6 #8 #9 #10 #23 #46 + B0 = **11 (crypto 3 · xStock 5 · both 3)**; EXIT #7 #11 #12 #18 #19 = **5 (crypto 3 · xStock 2 · both 0)**; together **16 (crypto 6 · xStock 7 · both 3)**.
+**Why #46 is bound while #26 is demoted (Coltrane r2 reconciliation):** both rows' own check only decides a re-fetch. #26 sits in front of a price that a downstream checkpoint already bounds (the RTB refresh, #8-#10), so its decision is purely which source to read. **#46's re-fetch check is the ONLY age test on xStock signal birth's price, the latest 15-minute bar close (`scanner.ts:922`), and nothing bounds that bar's own age** — the same position as B0 on crypto. It is bound not for what its check does today but because it marks a birth price with no bound; OBJ-6 adds one there. Demoting it would leave xStock birth with no row in the binding set.
+
 | # | file:line | checkpoint | class / feed | bound and source | clock | decides? | introducing commit (first `-S` hit) |
 |---|---|---|---|---|---|---|---|
 | 1 | `xstock_spot/active-dispatch.ts:184` | xStock active dispatch | xStock / DB snapshot | 15,000 — `xstock_fill_safety.active_fill_max_age_ms` (seed 2026-06-14) | DB `NOW()−MAX(captured_at)` | DECIDES (skip + alert) | 69e65b24e 2026-06-15 "P19-B4a C3 design ask: freshness(15s)+equity-session(RTH liquidity gate)+silent-stall watchdog; evidence from Fri session" |
