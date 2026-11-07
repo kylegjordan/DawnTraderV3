@@ -83,3 +83,32 @@ change-class: architecture · **Owner:** CC-A (OLD Claude) · **Issues:** `#1239
 
 ## 5. In plain language
 The audit found that the app could crash in a second way: when the database closes a connection the app is in the middle of using. That fix, and the one for a third pool Langston spotted, are built and in review. It also found that the database's own statistics can't tell us how long the app's statements normally take, only the worst cases from past jams. So the plan is to measure first for two days, then set the time limits from those numbers. After that come the alarms, and moving the heavy dashboard reads onto their own connections. The limit that would have bounded a whole transaction is dropped from the shared settings: it closes the connection mid-statement whenever a transaction runs more than one statement, which would have broken ANALYST's retry logic. Today's transactions are each a few fixed statements, so the per-statement limit already caps them.
+
+## AMENDMENT inc 3 (2026-11-07, CC-A) — P2's readings and the P3 values proposed from them
+
+**Instrument and population.** `[B-DB-POOL-GUARD][POOL_MINUTE_V2]` lines, pool `dawntrader_main`, read from `/var/log/dawntrader/error__2026-11-06_00-00-00.log`, `error__2026-11-07_00-00-00.log` and `error.log` on staging: **3,385 minute lines, 2026-11-05 08:09:21 → 2026-11-07 16:36:31** (≈ 56 h, includes the 11-05 and 11-06 US sessions and three restarts). Fixed buckets summed across lines; per-label figures come from each minute's top-3 code labels + top-3 statement families, so they are **FLOORS**.
+
+**What the database runs with today (read live, 2026-11-07):** `show statement_timeout` = **2min** (the server default; nothing sets it); `show idle_in_transaction_session_timeout` = **0** (off); the pool's client-side `query_timeout` = **30 s** (`server/db.ts`, `POOL_CONFIG`). ⇒ **a hold of ~30,000 ms is the CLIENT giving up, not the statement finishing** — the server keeps running that statement for up to 2 minutes, holding a backend the app no longer counts. That is the gap OBJ-2 closes.
+
+**Totals:** 6,195,853 checkouts (6,067,417 by `query`, 128,436 by `connect`). **Wait:** > 100 ms 418,969 (6.8 %); **> 1 s: 2**; > 5 s: 0; max **1,167 ms** (`boundedTransaction<runPendingCertificateRepair`, 11-06 12:45:54). **Hold:** > 1 s 7,163; > 5 s 1,580; > 10 s 382; > 20 s 56; **> 25 s: 30**; max 30,002 ms. Gauges: `open` max 10, `waiting` max 11.
+
+**Minutes in which a label held past 10 / 15 / 20 / 25 / 28 s (floors):**
+
+| label | >10s | >15s | >20s | >25s | >28s | kind |
+|---|---|---|---|---|---|---|
+| `sql:with:xstock_spot_ohlc_15m_snapshot` | 248 | 79 | 33 | 14 | 13 | read |
+| `sql:select:signal_eval_archive` | 45 | 3 | 3 | 2 | 1 | read |
+| `sql:select:xstock_spot_ticker_snap` | 23 | 9 | 6 | 4 | 3 | read |
+| `sql:select:scheduled_tasks_audit` | 9 | 1 | 1 | 1 | 1 | read |
+| `sql:with:xstock_spot_ohlc_1m` | 7 | 3 | 1 | 0 | 0 | read |
+| `sql:insert:signal_eval_archive` | 5 | 3 | 0 | 0 | 0 | **write** (max 18,644 ms) |
+| `sql:insert:xstock_qd_probe_history` | 5 | 2 | 2 | 1 | 1 | **write** (max 29,999 ms) |
+| `boundedTransaction@…<index.js:38134` | 1 | 1 | 1 | 1 | 0 | transaction (max 26,519 ms) |
+| `boundedTransaction@…<index.js:38236` | 1 | 1 | 0 | 0 | 0 | transaction (max 16,320 ms) |
+
+**Proposed values (P3):**
+1. **`statement_timeout` = 25 s, set on the pool's connections** (server side). It stops the work the client already abandons at 30 s and frees the backend at the same moment the app frees the slot. **Writer census between 25 s and 30 s: ONE** — `sql:insert:xstock_qd_probe_history`, 1 minute in ~56 h (floor), max 29,999 ms — it completed one millisecond inside the client's 30 s abort, so a 25 s server bound WOULD fail it. P3's rule sends this trade-off to Kyle with the count: **1 in ~56 h (a floor), a telemetry insert into the qd probe history.** `sql:insert:signal_eval_archive` stays under (max 18.6 s).
+2. **`idle_in_transaction_session_timeout` = 60 s** (scope start). The longest transaction hold seen is 26.5 s; nothing idles near 60 s.
+3. **`connectionTimeoutMillis` = 10 s.** Max wait seen 1.167 s, > 1 s twice in 6.2 M checkouts; 10 s is ~8× the max and well inside the 25 s statement bound.
+4. **OBJ-5(a) wait alert:** occurrences of a wait > 1 s per 5-minute window; page at ≥ 3 in one window, self-clear after a window with 0. Baseline: 2 in 56 h (whether both fell in one window is NOT yet read).
+5. **OBJ-6 evidence:** `sql:with:xstock_spot_ohlc_15m_snapshot` is the longest reader by far (248 minutes over 10 s). Its callers are named at Step 3 before any move.
