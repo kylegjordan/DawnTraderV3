@@ -990,6 +990,13 @@ for k in cache:
 json.dump(cache, open(cp, "w", encoding="utf-8"))
 qrfs = [r for r in da.raw_files(proj, gate=lambda rf: True) if r[2].endswith(QFILE)]
 qsp = da.state_path(root, qrfs[0]) if qrfs else "<no such run listed>"   # never crash the suite: FAIL below
+# the setup guard is evaluated HERE, with the real os.stat, BEFORE the patch (Langston: guarding with os.path.exists
+# after the patch made the guard itself the swallowed OSError on a Python where exists routes through os.stat)
+try:
+    _stat(qsp)
+    have_state = bool(qrfs)
+except OSError:
+    have_state = False
 
 
 def st_state(p, *a, **kw):
@@ -998,9 +1005,22 @@ def st_state(p, *a, **kw):
     return _stat(p, *a, **kw)
 
 
-os.stat = st_state
+_exists = os.path.exists
+
+
+def exists_via_stat(p):
+    """os.path.exists as a stat-routing Python implements it - so the old probe's swallowed OSError is reproduced on
+    EVERY host (Langston: on Windows 3.13 exists does not route through os.stat, which made the kill host-specific)."""
+    try:
+        os.stat(p)
+        return True
+    except OSError:
+        return False
+
+
+os.stat, os.path.exists = st_state, exists_via_stat
 try:
-    if not qrfs or not os.path.exists(qsp):
+    if not have_state:
         raise RuntimeError("setup: the queued_command run has no state")
     res, ref = da.archive_all(root, proj, dt.Redactor(), now=time.time() + 3 * da.HOLD_S)
     got = "listed" if any(r["raw"].endswith(QFILE) for r in res) else "DROPPED"
@@ -1009,7 +1029,7 @@ except da.Refused:
 except Exception as e:  # noqa: BLE001
     got = "escaped: %r" % e
 finally:
-    os.stat = _stat
+    os.stat, os.path.exists = _stat, _exists
 ok("an archived run whose state cannot be stat'd is REFUSED, never dropped on a machine cache verdict", got == "refused", got)
 shutil.rmtree(base)
 da.time.sleep = _slp

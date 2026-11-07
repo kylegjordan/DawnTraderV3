@@ -515,3 +515,12 @@ Exc Files : value-hashes.json
   - **Control:** the OLD comparator (from `HEAD`), run from `comms-infra/laptop/transcript-archive`, reads `328 = 328 … FAIL`; the NEW one from the same subfolder reads `OK`, and from the root `OK`.
   - CI is unaffected (its cwd is the root). ANALYST Claude, #1077's owner, was told before the edit.
 - **Hardening + must-fix not yet installed:** the live copy is still `01ee9ff16`. Install follows his read of this commit.
+
+### P10 CLOSED — zero moves (Langston PROCEED on `17e3a9af9`); his test MUST-FIX folded before install
+- **Langston's ruling:** P10 closes with ZERO files moved. (iii) is excluded STRUCTURALLY: `dt_folder_class` consults `SLUG_ALIAS` then `GATED` before `EXCLUDED`, and `dt_dupes` calls only that function, so `{excluded: 1489}` entails zero members in the six. The orphan baseline 1,096 / 0 and "raw == state" stand. He measured the gate must-fix himself with a negative control: fixed → `refused`, installed `01ee9ff16` → `DROPPED`.
+- **The other three `os.path.exists` sites dissolve (his record, no work):** `recover():379` turns a false zero into a loud `Refused`; `:542` costs a duplicate header line; `:536` can only cover bytes this raw file's own state never committed, because `check_injective` runs before any write.
+- **The `:530` safety reason, corrected per his ruling:** it is the injectivity guard, not the disk being local.
+- **His test MUST-FIX, done:**
+  - The must-fix test's setup guard was evaluated with `os.path.exists` AFTER `os.stat` was patched. On a Python whose `exists` routes through `os.stat`, the guard itself swallowed the OSError and the test failed on a correct tree (he measured 140 ok / 1 FAIL). Now the guard runs with the saved real `_stat`, BEFORE the patch.
+  - The test also patches `os.path.exists` to a stat-routing version for the window, so the OLD probe reproduces `DROPPED` on EVERY host. Shown here: the mutant "state probed with os.path.exists" now reads `DROPPED`, where on this Windows Python it read `listed` before. The kill is attributable to the defect itself.
+  - Writer 83/83, 0 by crash; all suites 0 failed.
