@@ -263,7 +263,12 @@ describe('5 — #1100: the stop never sells a resting maker buy that never fille
     const [mode, tradeId, updates] = h.updateClosedTrade.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
     expect([mode, tradeId]).toEqual(['paper', 't-9']);
     expect(updates.closeReason).toBe('never_filled');
-    expect(Object.keys(updates).sort()).toEqual(['closeReason', 'closedAt', 'metadata']); // no exit price, no P&L
+    // No exit price. B-CLOSE-WRITER-COSTS P-14 (Langston-ruled): the drop writes an explicit '0' into all eleven cost and
+    // P&L columns — nothing was paid — instead of leaving the open record's placement-time fee estimate in place.
+    const MONEY = ['entryFee', 'entrySlippage', 'exitFee', 'exitSlippage', 'fees', 'grossPnl', 'netPnl', 'netPnlPercent', 'slippage', 'totalCost', 'totalFee'];
+    expect(Object.keys(updates).sort()).toEqual(['closeReason', 'closedAt', ...MONEY, 'metadata'].sort());
+    expect(updates).not.toHaveProperty('exitPrice');
+    for (const k of MONEY) expect(updates[k], k).toBe('0');
     expect(updates.metadata).toEqual({
       tradeId: 't-9',
       neverFilledReason: 'pending maker cancelled by the engine stop, unfilled',
