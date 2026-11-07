@@ -2,7 +2,7 @@
  * `B-ENTRY-GATE` (`#1224`) increment A, P4 — THE ECONOMIC TEST AT THE PRICE ACTUALLY PAID (Kyle KD-11, Reply A).
  *
  * One deciding number at the fill: net EV for the ARM THAT FILLS, at the PRICE IT PAYS, through the same kernel and the
- * same friction model the birth decision used (`decideMakerTaker`, `levelGeometry: 'mid'`, as every lane is today):
+ * same friction model the birth decision used (`decideMakerTaker`, with the triple's own `levelGeometry` — row `8c`):
  *   - a TAKER at its walked average fill price → the kernel's taker leg at that price;
  *   - a MAKER at its limit → the kernel's maker leg at the limit, CONDITIONAL ON HAVING FILLED: the adverse-selection
  *     haircut applies, the fill-probability weight and the non-fill cost do not (the order is being placed to fill).
@@ -40,6 +40,15 @@ export function composeAskEntryMidExitFriction(fee: number, slippage: number, sp
   return 2 * fee + slippage + 0.5 * spread;
 }
 
+/**
+ * Row `8c` P4 (S7): the same TAKER entry at its walked ask fill, against BID-priced exits (a sided crypto triple). The exit
+ * half-spread is now in the levels as well, so what remains is both fees and the exit leg's slippage: `2·fee + 1·slippage`.
+ * Not `composeSidedFriction` (`2·fee + 2·slip`): the walked fill already contains the entry walk.
+ */
+export function composeAskEntrySidedExitFriction(fee: number, slippage: number): number {
+  return 2 * fee + slippage;
+}
+
 /** Everything the test needs except the arm and the price: resolved BEFORE the fill (Step-4 C-2). */
 export type FillEconInputs = Omit<FillEconomicsInput, 'arm' | 'fillPrice'>;
 
@@ -64,6 +73,12 @@ export interface FillEconomicsInput {
   haircut: MakerTakerHaircutConfig;
   /** `scoring_base.flat_pwin_base` for the class — the measured base rate, for the A-12 shadow only. */
   measuredBasePWin: number;
+  /**
+   * Row `8c` P4 (S7) — the triple's geometry, REQUIRED (read with `levelGeometryOf`): `'sided'` (a crypto triple whose
+   * exits are on the bid) charges no spread on top of the fill, because the spread is in the geometry; `'mid'` keeps the
+   * historic arithmetic.
+   */
+  levelGeometry: 'mid' | 'sided';
 }
 
 export interface FillEconomics {
@@ -99,7 +114,7 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
   const d = decideMakerTaker({
     entryPrice: i.fillPrice,
     entryPriceMaker: i.fillPrice,
-    levelGeometry: 'mid',
+    levelGeometry: i.levelGeometry,
     stopPrice: i.stopPrice,
     targetPrice: i.targetPrice,
     costs: i.costs,
@@ -120,7 +135,9 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
   const leg = i.arm === 'taker'
     ? computeNetExpectancyKernel({
         entryPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice,
-        totalFriction: composeAskEntryMidExitFriction(i.costs.fee, i.costs.slippage, i.costs.spread) * i.fillPrice,
+        totalFriction: (i.levelGeometry === 'sided'
+          ? composeAskEntrySidedExitFriction(i.costs.fee, i.costs.slippage)
+          : composeAskEntryMidExitFriction(i.costs.fee, i.costs.slippage, i.costs.spread)) * i.fillPrice,
         DI: i.DI, sourcePool: i.sourcePool, dbsScore: i.dbsScore,
         minPWin: i.minPWin, maxPWin: i.maxPWin, diPWinFactor: i.diPWinFactor,
       })

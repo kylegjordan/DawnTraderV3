@@ -313,11 +313,23 @@ export function computeNetGeometry(
   baseEntry: number,
   baseStop: number,
   baseTarget: number,
-  costs: CostComponents
+  costs: CostComponents,
+  /**
+   * Row `8c` (P4, S2/S4) — which geometry the triple was built with. REQUIRED, no default (the discipline of
+   * `decideMakerTaker`'s own `levelGeometry`): `'mid'` keeps the historic arithmetic — entry marked up by half a spread and
+   * the full spread in the round trip; `'sided'` means the entry is already the ASK and the exits are on the bid, so the
+   * spread is IN the geometry and neither term is charged (`composeSidedFriction`). Spread is geometry OR friction, never both.
+   */
+  levelGeometry: 'mid' | 'sided',
 ): ExecutionGeometry {
-  const totalCost = computeTotalRoundTripCost(costs.fee, costs.slippage, costs.spread);
+  if (levelGeometry !== 'mid' && levelGeometry !== 'sided') {
+    throw new Error(`computeNetGeometry: levelGeometry must be 'mid' or 'sided', got ${String(levelGeometry)}`);
+  }
+  const totalCost = levelGeometry === 'sided'
+    ? composeSidedFriction(costs.fee, costs.slippage)
+    : computeTotalRoundTripCost(costs.fee, costs.slippage, costs.spread);
   
-  const executionEntry = baseEntry * (1 + costs.slippage + costs.spread / 2);
+  const executionEntry = baseEntry * (1 + costs.slippage + (levelGeometry === 'sided' ? 0 : costs.spread / 2));
   const executionStop = baseStop;
   const executionTarget = baseTarget;
   

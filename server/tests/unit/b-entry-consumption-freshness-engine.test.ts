@@ -301,7 +301,9 @@ function signal(chosenEntryMode: 'taker' | 'maker' = 'taker') {
     entryFillPolicy: 'maker_preferred' as const,
     chosenNetEv: 0.1,
     takerNetEv: 0.1,
-    metadata: { assetClass: 'crypto_spot', volume24h: 1_000_000 },
+    // Row `8c`: a crypto signal born after the switch-on carries the sided stamp (an unstamped one is refused at the open,
+    // LEVEL_GEOMETRY_ABSENT). bid = the fixture entry, so the maker's resting limit stays at 100 as these tests assume.
+    metadata: { assetClass: 'crypto_spot', volume24h: 1_000_000, levelGeometry: 'sided', levelBasisAtBirth: { bid: 100, ask: 100 } },
   };
 }
 

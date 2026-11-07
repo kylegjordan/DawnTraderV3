@@ -34,7 +34,7 @@
 
 import { calculateDirectionalIntegrity, calculateVolNoise } from '../../utils/analysis-utils.js';
 // Directive 12.1.2: Import canonical cost model (replaces calculateFriction flat-rate helper)
-import { getCachedCostMetrics, computeTotalRoundTripCost } from '../math/cost-model.js';
+import { getCachedCostMetrics, computeTotalRoundTripCost, composeSidedFriction } from '../math/cost-model.js';
 // B79.0n.MCE: resolveAssetClass — getCachedCostMetrics now REQUIRES an explicit
 // asset class; evaluateTradeExpectancy resolves it from the symbol (interim).
 import { safeResolveAssetClass, type AssetClass } from '../../../shared/asset-classes.js';
@@ -82,6 +82,12 @@ export interface TradeMeta {
   // signals are not penalized by DI-based pWin (DBS supersedes DI for strong trends).
   sourcePool?: string;
   dbsScore?: number;
+  /**
+   * Row `8c` (P4, S5/S6) — the triple's geometry, REQUIRED with no default: `'sided'` (a crypto triple built on the ask
+   * and the bid) charges `composeSidedFriction`, because the spread is already in the levels; `'mid'` keeps
+   * `computeTotalRoundTripCost`. Read it with `levelGeometryOf(metadata)`, the one reader.
+   */
+  levelGeometry: 'mid' | 'sided';
 }
 
 /**
@@ -577,7 +583,13 @@ export function evaluateTradeExpectancy(symbol: string, tradeMeta: TradeMeta, as
     };
   }
   const costMetrics = getCachedCostMetrics(symbol, _evAssetClass);
-  const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+  if (tradeMeta.levelGeometry !== 'mid' && tradeMeta.levelGeometry !== 'sided') {
+    throw new Error(`evaluateTradeExpectancy: levelGeometry must be 'mid' or 'sided', got ${String(tradeMeta.levelGeometry)}`);
+  }
+  // Row `8c` (P4): spread is geometry OR friction, never both.
+  const frictionPct = tradeMeta.levelGeometry === 'sided'
+    ? composeSidedFriction(costMetrics.fee, costMetrics.slippage)
+    : computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
   const friction = frictionPct * tradeMeta.entryPrice;
   
   // B72: Inject pWin parameters from module_constants so the kernel stays

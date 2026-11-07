@@ -200,7 +200,7 @@ import { TIMEFRAME_CONFIG } from '../config/system-guards.js';
 // Directive 10.9A: Math Core Harmonization - Version-tracked weights
 import { SCORE_WEIGHTS, SCORE_WEIGHTS_VERSION } from '../config/score-weights.config.js';
 // Directive 11.3A: Net Expectancy Standardization - Canonical Cost Model
-import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost, getFrictionForAssetClass } from '../core/math/cost-model.js';
+import { getCachedCostMetrics, computeNetGeometry, computeTotalRoundTripCost, composeSidedFriction, getFrictionForAssetClass } from '../core/math/cost-model.js';
 // Directive 11.4F.1B: Canonical regime-strategy mapping (single source of truth)
 import {
   CANONICAL_REGIME_STRATEGY_MAP as REGIME_STRATEGY_MAP,
@@ -1581,6 +1581,10 @@ export class SignalOrchestrator {
         // sibling: an allow-list is not a pass-through, and a comment warning about it is not a
         // fence against it.
         gridAtBirth: rawSignal.metadata?.gridAtBirth,
+        // ⛔ Row `8c` — and the FOURTH instance would have been mine: the level stamps (`levelSpec`, `levelGeometry`,
+        // `levelBasisAtBirth`) must survive this allow-list, or the RTB refresh, the open gate and the engine's maker limit
+        // all read a sided triple as mid-priced. Carried by the one picker the HYBRID re-size uses; fenced by a hop test.
+        ...pickLevelStamps(rawSignal.metadata),
         // P19-B8.5l (#581, unblocks #556): carry the entry-time ATR forward. RE-ENABLED after
         // the source fix in THIS batch — the B8.5k carry was reverted because `sizingContext.atr`
         // was a SINGLE SHARED value per scan cycle (the pattern pass at :1846 never re-stamped it,
@@ -2059,9 +2063,12 @@ export class SignalOrchestrator {
       rawSignal.entryPrice,
       rawSignal.stopPrice,
       _b2Target,
-      costMetrics
+      costMetrics,
+      levelGeometryOf(rawSignal.metadata), // row `8c` P4 (S2): spread is geometry OR friction, never both
     );
-    const totalCost = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+    const totalCost = levelGeometryOf(rawSignal.metadata) === 'sided'
+      ? composeSidedFriction(costMetrics.fee, costMetrics.slippage)
+      : computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
     
     console.log(`[11.3A][NET_GEOMETRY] ${rawSignal.symbol}/${strategyId}: netEdge=${(netGeometry.netExpectedEdge * 100).toFixed(3)}%, netRR=${netGeometry.netRewardToRisk.toFixed(2)}, totalCost=${(totalCost * 100).toFixed(3)}%`);
 
@@ -3438,7 +3445,10 @@ export class SignalOrchestrator {
           // B79.0n.MCE: assetClass REQUIRED. P19-B6.5d: reuse the carried stamp captured
           // above (closure) — do NOT re-derive inside the filter callback.
           const costMetrics = getCachedCostMetrics(symbol, assetClass);
-          const frictionPct = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
+          // Row `8c` P4 (S3): a sided crypto triple carries the spread in its levels — charge it once, not twice.
+          const frictionPct = levelGeometryOf(signal.metadata) === 'sided'
+            ? composeSidedFriction(costMetrics.fee, costMetrics.slippage)
+            : computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
           const frictionPerUnit = frictionPct * entry;
           // reorg-B3 (#233, OBJ-5) DI-provenance note: this inline [HF9] NetEV pre-filter recomputes
           // DI from closePrices at EVALUATE time (a fresh value for the pre-filter, on the live VTS

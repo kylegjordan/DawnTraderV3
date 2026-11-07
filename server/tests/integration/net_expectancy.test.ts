@@ -50,7 +50,7 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
       const target = 110;
       const costMetrics = { fee: 0.001, slippage: 0.0005, spread: 0.001 };
       
-      const geometry = computeNetGeometry(entry, stop, target, costMetrics);
+      const geometry = computeNetGeometry(entry, stop, target, costMetrics, 'mid');
       
       expect(geometry.netExpectedEdge).toBeLessThan(0.10);
       expect(geometry.netExpectedEdge).toBeGreaterThan(0);
@@ -64,8 +64,8 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
       const stop = 95;
       const target = 110;
       
-      const zeroCostGeometry = computeNetGeometry(entry, stop, target, { fee: 0, slippage: 0, spread: 0 });
-      const withCostGeometry = computeNetGeometry(entry, stop, target, { fee: 0.002, slippage: 0.001, spread: 0.002 });
+      const zeroCostGeometry = computeNetGeometry(entry, stop, target, { fee: 0, slippage: 0, spread: 0 }, 'mid');
+      const withCostGeometry = computeNetGeometry(entry, stop, target, { fee: 0.002, slippage: 0.001, spread: 0.002 }, 'mid');
       
       expect(withCostGeometry.netExpectedEdge).toBeLessThan(zeroCostGeometry.netExpectedEdge);
     });
@@ -78,7 +78,7 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
       const target = 115;
       const costMetrics = { fee: 0.001, slippage: 0.0005, spread: 0.001 };
       
-      const geometry = computeNetGeometry(entry, stop, target, costMetrics);
+      const geometry = computeNetGeometry(entry, stop, target, costMetrics, 'mid');
       
       const grossR2R = (target - entry) / (entry - stop);
       expect(geometry.netRewardToRisk).toBeLessThan(grossR2R);
@@ -92,7 +92,7 @@ describe('Directive 11.3A: Net Expectancy Standardization', () => {
       const target = 110;
       const costMetrics = { fee: 0.001, slippage: 0.0005, spread: 0.001 };
       
-      const geometry = computeNetGeometry(entry, stop, target, costMetrics);
+      const geometry = computeNetGeometry(entry, stop, target, costMetrics, 'mid');
       const totalCost = computeTotalRoundTripCost(costMetrics.fee, costMetrics.slippage, costMetrics.spread);
       
       const executionEntry = entry * (1 + costMetrics.slippage + costMetrics.spread / 2);

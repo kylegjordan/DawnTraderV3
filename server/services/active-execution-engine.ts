@@ -90,7 +90,7 @@ import {
 // Row `8c`: the observation ceilings this imported (unused here) are deleted — the level build reads `level_basis.*`.
 import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
 // Row `8c` switch-on: the maker arm's resting limit on a sided crypto triple.
-import { makerEntryOf } from '../core/trading/crypto-birth-levels.js';
+import { makerEntryOf, levelGeometryOf } from '../core/trading/crypto-birth-levels.js';
 
 /**
  * ⛔⛔ THE PER-POSITION ACCUMULATOR, AT **MODULE** SCOPE — AND THE THREE FIELDS BELOW SIT WITH IT
@@ -2051,6 +2051,7 @@ export class ActiveExecutionEngine {
       urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
       haircut: resolveMakerTakerHaircut(assetClass),
       measuredBasePWin: base,
+      levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)
     };
   }
 
@@ -5959,6 +5960,16 @@ export class ActiveExecutionEngine {
       return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };
     }
 
+    // ⛔ Row `8c` (amendment 5 (iv)) — CONDITION 1 AT THE FAR END. Every crypto signal born after the switch-on carries
+    // `levelGeometry: 'sided'`; a crypto signal arriving here without it either lost its metadata on a hop or was queued
+    // before the deploy, and every gate below would price it as mid. It is REFUSED, never priced on a guess — the
+    // fail-closed direction (a pre-deploy queue row is refused for the minutes it lives). xStock is not sided at birth.
+    if (asValidAssetClass(signal.metadata?.assetClass) === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {
+      console.error(`[8c][LEVEL_GEOMETRY_ABSENT][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — a crypto signal without the sided stamp reached the open; not opened`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_ABSENT', 'crypto signal without levelGeometry=sided at open');
+      return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };
+    }
+
     // Directive 11.8B: Net Expectancy Gate
     // Check if trade has positive mathematical expectancy after fees & slippage
     //
@@ -5999,6 +6010,7 @@ export class ActiveExecutionEngine {
       prices: signal.metadata?.prices,
       sourcePool: (signal as any).sourcePool ?? signal.metadata?.sourcePool,
       dbsScore: signal.dbsScoreAtQueue ?? undefined,
+      levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S6): the open-gate EV prices the geometry it is given
       // P19-B6.5d (OBJ-4): thread the carried stamp so EV friction is priced by the
       // signal's actual class, not re-derived from a (possibly collision) symbol.
     }, asValidAssetClass(signal.metadata?.assetClass) ?? undefined);

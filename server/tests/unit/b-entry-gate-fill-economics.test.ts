@@ -16,7 +16,7 @@ const base: FillEconomicsInput = {
   arm: 'taker', fillPrice: 100, stopPrice: 96, targetPrice: 108,
   costs: { fee: 0.004, slippage: 0.0005, spread: 0.001 } as any, feeRateMaker: 0.002, feeRateTaker: 0.004,
   DI: 20, sourcePool: undefined, dbsScore: undefined, minPWin: 0.40, maxPWin: 0.60, diPWinFactor: 200,
-  signalStrength: 0.3, urgencyClass: 'neutral', haircut, measuredBasePWin: 0.317,
+  signalStrength: 0.3, urgencyClass: 'neutral', haircut, measuredBasePWin: 0.317, levelGeometry: 'mid',
 };
 
 describe('P4 — the deciding number is net EV at the PRICE PAID for the ARM THAT FILLS', () => {

@@ -24,6 +24,8 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
+// Row `8c` (P4): the one reader of a triple's level geometry, and the maker arm's role price on a sided triple.
+import { levelGeometryOf, makerEntryOf } from '../trading/crypto-birth-levels.js';
 import { storage } from '../../storage';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs'; // B-ENTRY-GATE (#1224) P9: ESM imports — `require` throws in the ESM bundle
 import { join as joinPath } from 'node:path';
@@ -696,7 +698,8 @@ class ReadyToBuyService {
 
       if (geomClass !== null && entryPrice > 0 && stopPrice > 0 && targetPrice > 0) {
         const costMetrics = getCachedCostMetrics(normalizedSymbol, geomClass);
-        const geometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics);
+        // Row `8c` P4 (S4): the refresh REPEATS the birth stamp, it never authors one — a sided triple keeps sided costs.
+        const geometry = computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics, levelGeometryOf(signal.metadata));
         netExpectedEdge = geometry.netExpectedEdge;
         geometryRefreshed = true;
         console.log(`[11.3A][GEOMETRY_REFRESH] ${normalizedSymbol}: netEdge=${(netExpectedEdge * 100).toFixed(3)}%`);
@@ -731,14 +734,19 @@ class ReadyToBuyService {
         const { geomClass, costMetrics, entryPrice, stopPrice, targetPrice } = _mtInputs;
         const _mtFr = getFrictionForAssetClass(geomClass);
         const _mtGK = { exchange: '*', assetClass: '*', strategy: '*', regime: '*' };
+        const _mtGeom = levelGeometryOf(signal.metadata);
+        const _mtMaker = makerEntryOf(signal.metadata);
+        if (_mtGeom === 'sided' && _mtMaker === null) throw new Error('row 8c: sided triple without a recorded maker entry');
         const _mt = decideMakerTaker({
           entryPrice, stopPrice, targetPrice,
           // B-PRICE-SIDE-BY-JOB: declared EXPLICITLY rather than defaulted. The RTB refresh
           // re-decides on the geometry the signal already carries; it does not construct levels,
-          // so it inherits whatever the birth lane used. Mid today, and it changes when the
-          // source lane is sided — this is a REPEATER of the birth stamp, not an author of it.
-          levelGeometry: 'mid' as const,
-          entryPriceMaker: entryPrice,
+          // so it inherits whatever the birth lane used — a REPEATER of the birth stamp, not an
+          // author of it. Row `8c` (S4): read through the one reader; a sided triple's maker arm
+          // rests at the bid recorded at the build (a sided flag without it throws → the catch below
+          // keeps the gen-time snapshot, never a guessed maker entry).
+          levelGeometry: _mtGeom,
+          entryPriceMaker: _mtGeom === 'sided' ? _mtMaker as number : entryPrice,
           costs: costMetrics,
           feeRateMaker: _mtFr.feeRateMaker,
           feeRateTaker: _mtFr.feeRateTaker,
@@ -1736,6 +1744,7 @@ class ReadyToBuyService {
       prices: meta.prices,
       sourcePool: (signal as any).sourcePool ?? meta.sourcePool,
       assetClass: ac,
+      levelGeometry: levelGeometryOf(meta), // row `8c` P4 (S5)
     });
   }
 
@@ -1760,6 +1769,8 @@ class ReadyToBuyService {
     prices?: any;
     sourcePool?: string;
     assetClass?: AssetClass;
+    /** Row `8c` P4 (S5): REQUIRED — a sided triple is ranked on sided costs, the same number the open gate uses. */
+    levelGeometry: 'mid' | 'sided';
   }): { r: number; pwinFloored: boolean } {
     if (!Number.isFinite(p.entry) || !Number.isFinite(p.stop)) return { r: -Infinity, pwinFloored: false };
     // B-ENTRY-GATE (#1224) P5 (Kyle decision 7, "we shouldn't be doing anything with fallbacks"): a plan with no valid
@@ -1775,6 +1786,7 @@ class ReadyToBuyService {
       prices: p.prices,
       sourcePool: p.sourcePool,
       dbsScore: p.dbs !== undefined && Number.isFinite(p.dbs) ? p.dbs : undefined,
+      levelGeometry: p.levelGeometry,
     }, p.assetClass, /* quiet */ true);
     const distStop = Math.abs(p.entry - p.stop);
     let r = Number.isFinite(result.netRewardToRisk) ? result.netRewardToRisk : -Infinity;

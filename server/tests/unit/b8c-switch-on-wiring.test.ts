@@ -100,3 +100,72 @@ describe('8c P7 — the funnel file', () => {
     expect(I.match(/startLevelBasisFunnelWriter\(\);/g) ?? []).toHaveLength(1);
   });
 });
+
+describe('8c P4 (amendment 5) — the spread is counted once at every site that judges a crypto triple', () => {
+  it('computeNetGeometry: sided charges neither the entry half-spread nor the round-trip spread; geometry is REQUIRED', async () => {
+    const { computeNetGeometry, composeSidedFriction, computeTotalRoundTripCost } = await import('../../core/math/cost-model.js');
+    const c = { fee: 0.004, slippage: 0.0005, spread: 0.002 };
+    const mid = computeNetGeometry(100, 98, 104, c, 'mid');
+    const sided = computeNetGeometry(100, 98, 104, c, 'sided');
+    expect(mid.executionEntry).toBeCloseTo(100 * (1 + 0.0005 + 0.001), 12);
+    expect(sided.executionEntry).toBeCloseTo(100 * (1 + 0.0005), 12);
+    expect(sided.netExpectedEdge).toBeCloseTo((104 - sided.executionEntry) / sided.executionEntry - composeSidedFriction(0.004, 0.0005), 12);
+    expect(mid.netExpectedEdge).toBeCloseTo((104 - mid.executionEntry) / mid.executionEntry - computeTotalRoundTripCost(0.004, 0.0005, 0.002), 12);
+    expect(() => computeNetGeometry(100, 98, 104, c, undefined as never)).toThrow(/levelGeometry/);
+  });
+  it('fill economics: a sided triple is not charged the spread on top of its fill', async () => {
+    const { computeFillEconomics } = await import('../../core/trading/fill-economics.js');
+    const haircut = { adverseSelectionBase: 0.0, adverseSelectionStrengthMult: 0.0, pFillByUrgency: { patient: 0.9, neutral: 0.8, urgent: 0.7 }, nonFillCostPct: 0 } as any;
+    const base = {
+      arm: 'taker' as const, fillPrice: 100, stopPrice: 96, targetPrice: 108,
+      costs: { fee: 0.004, slippage: 0.0005, spread: 0.002 } as any, feeRateMaker: 0.002, feeRateTaker: 0.004,
+      DI: 20, sourcePool: undefined, dbsScore: undefined, minPWin: 0.40, maxPWin: 0.60, diPWinFactor: 200,
+      signalStrength: 0.3, urgencyClass: 'neutral' as const, haircut, measuredBasePWin: 0.317,
+    };
+    const mid = computeFillEconomics({ ...base, levelGeometry: 'mid' });
+    const sided = computeFillEconomics({ ...base, levelGeometry: 'sided' });
+    // The taker at its walked ASK fill already paid the entry half; mid-priced exits owed the exit half (C-1). Sided exits
+    // carry that half in the levels, so the difference is exactly HALF a spread per unit — no more.
+    expect(sided.netEvAtFill - mid.netEvAtFill).toBeCloseTo(0.5 * 0.002 * 100, 9);
+    // and the maker arm (its limit is the price it pays) loses the decision's spread term the same way
+    const mM = computeFillEconomics({ ...base, arm: 'maker', levelGeometry: 'mid' });
+    const mS = computeFillEconomics({ ...base, arm: 'maker', levelGeometry: 'sided' });
+    expect(Number.isFinite(mS.netEvAtFill) && Number.isFinite(mM.netEvAtFill)).toBe(true);
+  });
+  it('every site reads the geometry through the one reader (S2-S7)', () => {
+    const R = src('server/core/rtb/ready_to_buy_service.ts');
+    const X = src('server/core/calculations/expectancy.ts');
+    const F = src('server/core/trading/fill-economics.ts');
+    expect(O).toContain('levelGeometryOf(rawSignal.metadata), // row `8c` P4 (S2)');
+    expect(O).toMatch(/const frictionPct = levelGeometryOf\(signal\.metadata\) === 'sided'\n\s+\? composeSidedFriction/); // S3
+    expect(R).toContain('computeNetGeometry(entryPrice, stopPrice, targetPrice, costMetrics, levelGeometryOf(signal.metadata));'); // S4
+    expect(R).toContain('levelGeometry: _mtGeom,'); // S4 re-decision
+    expect(R).not.toMatch(/levelGeometry: 'mid' as const/);
+    expect(R).toContain('levelGeometry: levelGeometryOf(meta), // row `8c` P4 (S5)');
+    expect(E).toContain('levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S6)');
+    expect(E).toContain('levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)');
+    expect(F).toContain('levelGeometry: i.levelGeometry,');
+    expect(F).not.toMatch(/levelGeometry: 'mid',/);
+    expect(F).toContain("? composeAskEntrySidedExitFriction(i.costs.fee, i.costs.slippage)");
+    expect(X).toMatch(/const frictionPct = tradeMeta\.levelGeometry === 'sided'/);
+  });
+});
+
+describe('8c amendment 5 (iv)+(v) — the stamp survives every hop, and its absence at the open is a refusal', () => {
+  it('orchestrator → RTB: the allow-listed RTB metadata carries the level stamps', () => {
+    const at = uniq(O, '...pickLevelStamps(rawSignal.metadata),');
+    expect(at).toBeGreaterThan(uniq(O, 'gridAtBirth: rawSignal.metadata?.gridAtBirth,'));
+    expect(at).toBeLessThan(uniq(O, 'readyToBuyService.queueSQESignal(sqeSignalInput)'));
+  });
+  it('RTB keeps every metadata key it is given, and its refresh writes the row metadata back whole', () => {
+    const R = src('server/core/rtb/ready_to_buy_service.ts');
+    expect(R).toContain('...(input.metadata || {}),');
+    expect(R).toMatch(/metadata: \{\n\s+\.\.\.metadata,/);
+  });
+  it('the open refuses a crypto signal without the sided stamp, BEFORE the open-gate EV prices it', () => {
+    const refuse = uniq(E, "if (asValidAssetClass(signal.metadata?.assetClass) === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
+    expect(refuse).toBeGreaterThan(uniq(E, "return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };"));
+    expect(refuse).toBeLessThan(uniq(E, 'const expectancyResult = evaluateTradeExpectancy(signal.symbol, {'));
+    expect(E).toContain("return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };");
+  });
+});
