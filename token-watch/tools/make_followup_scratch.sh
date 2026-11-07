@@ -38,7 +38,11 @@ FLOOR=$((10 * 1024 * 1024 * 1024))
 [[ $EUID -eq 0 ]] || { echo "REFUSED: run as root (it creates $DST owned by tokenwatch)" >&2; exit 2; }
 [[ "$(systemctl is-enabled token-watch-followup.timer || true)" == disabled ]] || { echo "REFUSED: the follow-up timer is not disabled" >&2; exit 2; }
 [[ "$(systemctl is-active token-watch-followup.timer || true)" == inactive ]] || { echo "REFUSED: the follow-up timer is active" >&2; exit 2; }
-[[ "$(systemctl is-active token-watch-followup.service || true)" == inactive ]] || { echo "REFUSED: a follow-up run is active (started by hand?)" >&2; exit 2; }
+# A RUNNING follow-up is refused. "inactive" and "failed" both mean no process: the service's last state is the
+# 2026-09-30 13:05:17Z OOM kill (Result: oom-kill) this batch exists to measure, and it stays "failed" until reset.
+case "$(systemctl is-active token-watch-followup.service || true)" in
+  active|activating|deactivating|reloading) echo "REFUSED: a follow-up run is in progress (started by hand?)" >&2; exit 2 ;;
+esac
 [[ ! -e "$DST" ]] || { echo "REFUSED: $DST already exists; remove it deliberately first" >&2; exit 2; }
 
 BUCKETS=()
