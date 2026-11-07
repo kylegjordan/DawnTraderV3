@@ -148,3 +148,21 @@ The plan row's 160 GiB was exceeded at the sampled peak in 3 of the last 4 month
 - **The pre-registered child list, with expected bytes, for EVERY table on each proof night**, from `listOldPartitions` at the ref.
 - The per-table monthly growth behind OBJ-1's range.
 - The deployed-copy hash check, written as a command to run before each proof night.
+
+## 8. Step 1 APPROVED (Langston, queue id `1568516282892947507`, at `12e9bf09d`) — four conditions, all for Step 2
+He re-derived every §1 figure, every byte, the constants on the six-column key, the manifest correction, the band, the carrier run and the deployed-copy hashes himself; all matched.
+1. ⛔ **OBJ-3 criterion 4's first bullet is INVERTED as written.** `retentionDays=` is printed ONLY on the no-eligible-partitions path (`b75-retention-sweep.ts:1338-1345`); the eligible path (`:1347`) prints `processing partition=` with no echo. So on a successful proof night that line cannot appear for the proof table. **Rewrite at Step 2:**
+   - the proof table's evidence that the setting was read is its ELIGIBLE SET: `processing partition=2026-04` and `2026-05`, and NO `2026-06`, which only N ∈ (130.09, 160.09] produces;
+   - the `retentionDays=` echo stays a control on the OTHER tables (criterion 5).
+   **No proof night until this is in writing.**
+2. **The plan cap's unit and provenance, before any headroom figure.** `plan_cap_mb = 204800` is divided into MiB, so the instrument's cap is 200 GiB = 214.75 GB decimal, while its comment and alert title say "200 GB" (`database-monitor.ts:15`, `:84`).
+   - If Supabase's disk is 200 GB decimal (186.26 GiB), the high-water is 92.4 %, not 86.1 %, and headroom loses ~14.5 GiB ≈ 3.6 months.
+   - Also state that `pg_database_size` is logical size, not provisioned disk.
+3. **What "sampled peak" costs.** `database-monitor.ts:30/168` is an in-process 24 h `setInterval` with an immediate check at startup, so samples run 2.6-5.5/day. The steady 23:13Z series stopped after 2026-11-03.
+   - A sampled peak understates the true peak by up to one interval × slope (≤ ~1.5 GiB).
+   - OBJ-1's verify states the expected sample count in 11-25 → 11-30 and that bound.
+4. **Citations:**
+   - the multi-night resume is implemented by `deriveModeFromLabels` + `listOldPartitions` revisiting non-active rows, not `:1020` (an alert-body string);
+   - the monthly arm is `sweep-slicing.ts:152`;
+   - October's slope named: 1.06 off 10-04's high, 1.09 off 10-04's low, which moves OBJ-1's lower bound 159.8 → 160.7.
+**In his favour, recorded:** the proof window (145 d) is strictly looser than the flip's (30 d), so OBJ-3 removes a subset of what OBJ-2 gates. The lock precedent is stronger than §3 says: `xstock_spot_ticker_snap` and `crypto_spot_ticker_snap` are active-path reads dropped nightly too.
