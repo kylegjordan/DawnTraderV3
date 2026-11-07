@@ -154,7 +154,7 @@ He re-derived every §1 figure, every byte, the constants on the six-column key,
 1. ⛔ **OBJ-3 criterion 4's first bullet is INVERTED as written.** `retentionDays=` is printed ONLY on the no-eligible-partitions path (`b75-retention-sweep.ts:1338-1345`); the eligible path (`:1347`) prints `processing partition=` with no echo. So on a successful proof night that line cannot appear for the proof table. **Rewrite at Step 2:**
    - the proof table's evidence that the setting was read is its ELIGIBLE SET: `processing partition=2026-04` and `2026-05`, and NO `2026-06`, which only N ∈ (130.09, 160.09] produces;
    - the `retentionDays=` echo stays a control on the OTHER tables (criterion 5).
-   **No proof night until this is in writing.**
+   **No proof night until this is in writing.** ➕ **In writing: `B_DISK_HEADROOM_PRE_AUDIT.md` §2.1, approved at Step 2 (Langston, 2026-11-07); it replaces OBJ-3 criterion 4's first bullet.**
 2. **The plan cap's unit and provenance, before any headroom figure.** `plan_cap_mb = 204800` is divided into MiB, so the instrument's cap is 200 GiB = 214.75 GB decimal, while its comment and alert title say "200 GB" (`database-monitor.ts:15`, `:84`).
    - If Supabase's disk is 200 GB decimal (186.26 GiB), the high-water is 92.4 %, not 86.1 %, and headroom loses ~14.5 GiB ≈ 3.6 months.
    - Also state that `pg_database_size` is logical size, not provisioned disk.
