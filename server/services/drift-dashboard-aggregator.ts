@@ -1029,7 +1029,11 @@ export async function computePassiveArchiveStatus(
       const rows = (Array.isArray(r) ? r : (r as any).rows ?? []) as Array<{ bytes: number | string | null }>;
       return rows[0]?.bytes != null ? Number(rows[0].bytes) : 0;
     } catch (err) {
-      diskFaults.push(`${parent}: ${err instanceof Error ? err.message : String(err)}`);
+      // B-DB-POOL-GUARD P5 (Langston, fold before close): load is not a fault here either — an acquire timeout on the
+      // 4-slot diagnostic pool, or the 25 s cancel on an untimed partition-tree sum, writes no line.
+      const msg = err instanceof Error ? err.message : String(err);
+      const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+      if (!isLoad) diskFaults.push(`${parent}: ${msg}`);
       return 0;
     }
   }

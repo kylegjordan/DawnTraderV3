@@ -337,15 +337,17 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
   - (d) The "three `Pool` builders" prose above is corrected in place.
 - **Note recorded (Langston):** both panel suites alias `db` and `diagDb` to one mock object, so they are pool-blind by construction. They may not be read green as pool evidence; M10 and the P5 file's call counts are the pool evidence.
 
-### AMENDMENT inc 3c r4 (2026-11-08, CC-A) — Step 4 PROCEED on `9cdc05633` (Langston, Discord `1568761405039972353`); his measurement replaces my C-7 hedge; the one fold before close
+### AMENDMENT inc 3c r4 (2026-11-07 ~23:45Z, CC-A — dated to the measurement) — Step 4 PROCEED on `9cdc05633` (Langston, Discord `1568761405039972353`); his measurement replaces my C-7 hedge; the one fold before close
 - **C-7, now MEASURED (Langston, `EXPLAIN (ANALYZE)` on staging), superseding r3's "a size argument, not a measured hold":**
   - `computeAblationComparison` takes 2.5 ms at `rolling_24h` (284 buffers, all hits) and 86 ms at `rolling_30d` (15,672 rows, bitmap via `pair_time_idx`).
   - `computeFactorCalibration` takes 101 ms at `rolling_30d` (14,872 rows, the partial `(asset_class, evaluated_at)` index, whose `WHERE replay_completed_at IS NOT NULL` its predicates match exactly).
   - **The cost is bounded by the 30-day window, so it does not grow with the table.** Both stay on `dawntrader_main`. Live rows 56,345 against my 55,879: growth, not a discrepancy.
-- **nginx frequency — the readability Langston could not re-derive (his account cannot open `access.log*`, `0640 www-data:adm`):** my reads ran as `root` on staging, and **15 of 15** rotated files decompressed and read (`zcat -f` succeeded on each; measured 2026-11-08). No file read as zero by being unreadable. No longer load-bearing, since the cost is measured directly.
+- **nginx frequency — the readability Langston could not re-derive (his account cannot open `access.log*`, `0640 www-data:adm`):** my reads ran as `root` on staging, and **15 of 15** rotated files decompressed and read (`zcat -f` succeeded on each; measured 2026-11-07 ~23:4xZ). No file read as zero by being unreadable. No longer load-bearing, since the cost is measured directly.
 - **C-5 version coupling (noted, not blocking):** `ACQUIRE_TIMEOUT_MESSAGE` is our literal. The existing fence `b-db-pool-alerts.test.ts` ("the acquire-timeout literal is pg-pool 3.7.0's own text") reads `node_modules/pg-pool/index.js` and asserts the source contains `new Error('<our literal>')`, so a pg-pool message change fails THAT test rather than silently reverting C-5.
 - **THE FOLD (§13 disposition 1, into P5):** `computeDataArchiveStatus` now keeps load and faults apart, as the passive panel does.
   - A statement timeout or an acquire timeout is LOAD: the table shows QUERY TIMEOUT and no error line is written.
   - A real error is collected and logged ONCE per call (`[B70][archive-status] N of 5 table reads failed — shown as QUERY TIMEOUT; first: …`), never per table. `error.log` is the stream `#1037`'s drop check reads.
   - `timedOut = true` is unchanged for any failure.
   - Test: load (both kinds) writes no line; a fault writes one line naming 5 of 5. M14 (load counted as a fault) fails it.
+
+- **PROCEED on `a5a887c58` (Langston, Discord `1568774345134706780`) with one more fold, done:** `diskBytesForParent`, the file's third fault collector, now splits load from fault the same way (an acquire timeout or the 25 s cancel on an untimed partition-tree sum writes no line; a real error is collected and logged once per call). Test 3c in `b-ohlc-frame-guard-archive-counts.test.ts`; M15 (the split removed) fails it.

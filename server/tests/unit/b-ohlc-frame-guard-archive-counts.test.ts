@@ -176,6 +176,22 @@ describe('passive archive window counts — read the SELECT, not the transaction
     expect(warn).not.toHaveBeenCalled(); // load writes no fault line
   });
 
+  it('3c. a disk-size lookup that hits LOAD writes no line; a real fault writes ONE line per call (B-DB-POOL-GUARD P5 fold)', async () => {
+    setAll(() => count(3000, 500), () => count(3000, 500));
+    const dbm = (await import('../../db.js')) as unknown as { diagDb: { execute: ReturnType<typeof vi.fn> } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    for (const load of ['timeout exceeded when trying to connect', 'canceling statement due to statement timeout']) {
+      dbm.diagDb.execute.mockImplementation(async () => { throw new Error(load); });
+      await computePassiveArchiveStatus('rolling_24h');
+    }
+    expect(warn).not.toHaveBeenCalled();
+    dbm.diagDb.execute.mockImplementation(async () => { throw new Error('relation "xstock_spot_ohlc_1m" does not exist'); });
+    await computePassiveArchiveStatus('rolling_24h');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/8 of 8 disk-size lookups unreadable .*first: xstock_spot_ohlc_1m: relation/);
+    dbm.diagDb.execute.mockImplementation(async () => ({ rows: [{ bytes: 1024 }] }));
+  });
+
   it('4b. with a timeout on one side and an error on the other, the reason is the fault, not the load', async () => {
     setAll(() => TIMEOUT, () => new Error('connection terminated'));
     vi.spyOn(console, 'warn').mockImplementation(() => {});
