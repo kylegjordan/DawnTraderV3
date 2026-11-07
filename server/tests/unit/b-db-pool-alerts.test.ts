@@ -195,6 +195,46 @@ describe('the wiring', () => {
     mon.stop();
   });
 
+  it('the CALLBACK connect path (pg-pool query() at index.js:399, i.e. every drizzle query) counts an acquire timeout too (Langston C-2)', async () => {
+    const pool = new FakePool();
+    const inst = attachPoolInstrument(pool as unknown as pg.Pool, 'w1cb', { log: () => {}, intervalMs: 3_600_000 });
+    attachPoolGuards(pool as unknown as pg.Pool, 'w1cb');
+    inst.stop();
+    const d = memDeps();
+    const mon = startDbPoolAlerts({ label: 'w1cb', deps: d, flushIntervalMs: 3_600_000 });
+    pool.failNext = new Error(ACQUIRE_TIMEOUT_MESSAGE);
+    const got = await new Promise<Error | undefined>((res) => { (pool as unknown as { connect: (cb: (e?: Error) => void) => void }).connect((e) => res(e)); });
+    expect(got?.message).toBe(ACQUIRE_TIMEOUT_MESSAGE); // the caller still receives the error unchanged
+    pool.failNext = new Error('some other connect error');
+    await new Promise<void>((res) => { (pool as unknown as { connect: (cb: (e?: Error) => void) => void }).connect(() => res()); });
+    inst.flush(); await tick(); await tick();
+    expect(d.log).toEqual(['mint db-pool-acquire-timeout:w1cb']);
+    expect(d.rows.get('db-pool-acquire-timeout:w1cb')!.metadata.count).toBe(1); // the other error is not counted
+    mon.stop();
+  });
+
+  it('the wait blind key RE-MINTS after a person resolves it while the monitor is still blind (Langston C-1)', async () => {
+    vi.useFakeTimers();
+    try {
+      const pool = new FakePool();
+      const inst = attachPoolInstrument(pool as unknown as pg.Pool, 'wb', { log: () => {}, intervalMs: 3_600_000 });
+      attachPoolGuards(pool as unknown as pg.Pool, 'wb');
+      inst.stop();
+      const d = memDeps();
+      const mon = startDbPoolAlerts({ label: 'wb', deps: d, flushIntervalMs: 1_000 });
+      await vi.advanceTimersByTimeAsync(4_100); // > 3 intervals with no flush
+      expect(d.log.filter((l) => l === 'mint db-pool-wait:blind')).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(2_000); // still blind, row open: no second mint (addAlert's dedupe)
+      expect(d.log.filter((l) => l === 'mint db-pool-wait:blind')).toHaveLength(1);
+      d.rows.get('db-pool-wait:blind')!.open = false; // a person resolves it while still blind
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(d.log.filter((l) => l === 'mint db-pool-wait:blind')).toHaveLength(2);
+      await mon.onFlush(rec(0, 1, { label: 'wb' })); // a flush arrives: the blind row clears
+      expect(d.log).toContain('resolve db-pool-wait:blind');
+      mon.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
   it('the wait level mints once, does not re-mint while open, and clears at the edge', async () => {
     const pool = new FakePool();
     const inst = attachPoolInstrument(pool as unknown as pg.Pool, 'w2', { log: () => {}, intervalMs: 3_600_000 });

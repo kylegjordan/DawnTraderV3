@@ -240,7 +240,9 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
 
   // (a) blind — no flush for 3 intervals (a cleared timer, a detached instrument, a throwing flush; NOT a loop stall)
   timers.push(setInterval(() => {
-    if (!known.has(waitBlindKey) && Date.now() - lastFlushAt > 3 * flushEvery) {
+    // Unguarded mint, like the other two blind keys: addAlert's own dedupe holds the open row, and a row a person
+    // resolved while still blind re-mints on the next pass (a `known` guard here silenced it for the process life).
+    if (Date.now() - lastFlushAt > 3 * flushEvery) {
       void mint('mint wait blind', { severity: 'warning', title: `Pool wait monitor is blind on ${label}`,
         body: `No pool flush record for over ${Math.round((3 * flushEvery) / 1000)} s, so the connection-wait page cannot fire. `
           + `It reaches a stopped instrument timer or a detached subscriber, NOT an event-loop stall. B-DB-POOL-GUARD OBJ-5(a).`,
@@ -304,8 +306,7 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
         body: restartBody(v), dedupe_key: `${RESTART_PREFIX}${v.live}`,
         metadata: { source: 'db-pool-alerts', live: v.live, record: v.record, direction: v.direction, record_sha: v.recordSha, repo_head: v.repoHead } }));
     };
-    const boot = setTimeout(() => { void check(); }, MIN);
-    boot.unref?.();
+    timers.push(setTimeout(() => { void check(); }, MIN)); // in `timers` so stop() clears it (clearInterval clears a Timeout too)
     timers.push(setInterval(() => { void check(); }, 5 * MIN));
   }
 
