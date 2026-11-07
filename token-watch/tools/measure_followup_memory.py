@@ -224,7 +224,7 @@ def cmd_index(a) -> int:
     db = sqlite3.connect(tmp)
     db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL, "
                "pairs INTEGER NOT NULL)")
-    n, dups = 0, []
+    n, dups, divergent = 0, [], 0
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
             continue
@@ -234,8 +234,13 @@ def cmd_index(a) -> int:
                 if rec.get("source") != "dexscreener_token_state":
                     continue
                 npairs = len(json.loads(rec["body"]).get("pairs") or [])
+                # ⛔ BYTES, MEASURED HERE (Langston, Step 4 r2): the record's own `bytes` is `len(body)` on a str
+                #    (provenance.py:206) — characters — while the pad arms measure `len(text.encode("utf-8"))`.
+                #    One instrument both sides: store the UTF-8 byte length, and count where the two disagree.
+                nbytes = len(rec["body"].encode("utf-8"))
+                divergent += nbytes != rec.get("bytes")
                 cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?, ?)",
-                                 (rec["mint"], rec["body"], rec["bytes"], npairs))
+                                 (rec["mint"], rec["body"], nbytes, npairs))
                 if cur.rowcount == 1:
                     n += 1
                 else:
@@ -248,7 +253,7 @@ def cmd_index(a) -> int:
               file=sys.stderr)
         return 2
     os.replace(tmp, a.out)
-    print(json.dumps({"indexed": n, "out": a.out}))
+    print(json.dumps({"indexed": n, "out": a.out, "bytes_field_vs_utf8_divergent": divergent}))
     return 0
 
 
@@ -546,6 +551,7 @@ def cmd_run(a) -> int:
     result = {
         "arm": a.arm, "now": now.isoformat(), "egress_control": egress_note, "frozen_modules": frozen,
         "cgroup": _cgroup(cg), "ru_maxrss_kib": _maxrss_kib(),
+        "memory_check": "SKIPPED (test)" if a.skip_memory_check else "memory.max == %d" % EXPECT_MEMORY_MAX,
         "stats": {k: v for k, v in stats.items() if k != "summary"},
         "fanout": {"call_site_token_state": c.call_site, "egress": c.egress, "served_bodies": c.served,
                    "no_body_mints": c.no_body, "loop_served": c.loop_served, "loop_no_body": c.loop_no_body,

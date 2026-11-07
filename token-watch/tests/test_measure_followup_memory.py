@@ -113,6 +113,21 @@ for d in ("due", os.path.join("provenance", "follow-up")):
     os.makedirs(os.path.join(EMPTY, d))
 p = tool("index", "--pristine", EMPTY, "--out", os.path.join(WORK, "empty.sqlite"))
 check("I1 refuses an empty index", p.returncode == 2 and "no body" in p.stderr, p.stderr)
+print("I2 expect: a body with a multibyte name -> the index stores UTF-8 BYTES and reports the field divergence")
+MB = os.path.join(WORK, "multibyte")
+for d in ("due", os.path.join("provenance", "follow-up")):
+    os.makedirs(os.path.join(MB, d))
+mb_body = json.dumps(dict(body("MBX"), pairs=[dict(body("MBX")["pairs"][0], baseToken={"address": "MBX", "name": "Döge 猫", "symbol": "猫"})]),
+                     ensure_ascii=False, sort_keys=True)
+with open(os.path.join(MB, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"mint": "MBX", "source": "dexscreener_token_state", "body": mb_body, "bytes": len(mb_body)},
+                        ensure_ascii=False) + chr(10))
+p = tool("index", "--pristine", MB, "--out", os.path.join(WORK, "mb.sqlite"))
+rep = json.loads(p.stdout) if p.returncode == 0 else {}
+import sqlite3  # noqa: E402
+stored = sqlite3.connect(os.path.join(WORK, "mb.sqlite")).execute("SELECT bytes FROM bodies").fetchone()[0] if rep else None
+check("I2 bytes are UTF-8 bytes, and the divergence is counted", rep.get("bytes_field_vs_utf8_divergent") == 1
+      and stored == len(mb_body.encode("utf-8")) and stored > len(mb_body), "%s stored=%s chars=%d" % (rep, stored, len(mb_body)))
 
 
 def prepare(name, *extra):
