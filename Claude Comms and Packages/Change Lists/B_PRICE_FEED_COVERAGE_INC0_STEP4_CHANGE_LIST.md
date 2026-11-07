@@ -28,3 +28,14 @@
 
 ## Step 7 (pre-registered in the plan, P0-6 — restated)
 (a) closing direction: `arm=cold` stderr lines on the first restart after the deploy (successor test: a forced restart with a dispatch attempt); `cold_tick` in the depth-gate bucket; (b) loosening direction at the dispatch gate only: xStock dispatch admissions per session before vs after; (c) `entry_book_age_ms` for xStock opens before vs after.
+
+## r2 — Langston's Step-4 PROCEED (six conditions), at `3d7f43f27e70c2732bdab339ac3c9588457b7e65` on `review/b-price-feed-coverage-inc0`
+Decision 1 (depth age = max(row, tick)) APPROVED; Decision 2 (the clock in the helper) APPROVED with C-1. Three commits since r1: `9664752f0` (the conditions) and `3d7f43f27` (restores `shared/schema.ts`'s mixed line endings — `9664752f0` had normalised its 44 LF-only lines; the file's net change vs `382c1793f` is +4/−1, the comment only).
+1. **C-1:** the NO-CLOCK fence now reaches `applyXstockEntryTickAge` (comment-stripped body: no hour, calendar or session term; `Date.now` exactly once, as the age clock's default).
+2. **C-2:** the seam's refusal arm is asserted by source, and **M5** — `if (!_tickAge.ok) { } else { snapshot = _tickAge.snapshot; }`, a dead capital gate that compiles — was RUN: **red**.
+3. **C-3:** the replay-of-an-old-book test measures `staleSkips` +1, `coldSkips` unchanged and the exact `arm=stale … ageMs=30000` line.
+4. **C-4:** the dead `tickAgeMs` knob removed; the inert db mock kept for the archiver import.
+5. **C-5:** `shared/schema.ts` `entry_book_age_ms` states its xStock definition changes at this deploy (`max(row receipt age, mark change age)`), and **Step-7 leg (c) compares two instruments across the deploy boundary — it is read as a before/after of two definitions, never pooled.**
+6. **C-6, the two survivors, named by path so a later grep does not read as a missed sweep (both OBJ-6, both telemetry/provenance, not gates):** `active-execution-engine.ts` close/flatten walk (`_fillDepthAgeMs` from `_closeSnap.ageMs`, ~`:4639`) stamps a replayed book's age as ≈ 0; `active-portfolio-manager.ts:305` the flatten price stamps `observedAtMs: Date.now() − snap.ageMs`, ≈ now on a replayed book.
+Also folded: the helper carries the anchor-mismatch note (both effects over-state age; do not "fix" toward younger). **Re-verified at the new ref:** tsc baseline unchanged; `b-price-feed-coverage-inc0` 20/20, `p19-b4a-c3-gate-watchdog` 22/22, `b-xstock-feed-sanity-fence` 41/41; **M1-M5 re-run, all red.** Measured diff vs base, mine: `git diff --stat 382c1793f 3d7f43f27` = 10 files, +313 / −37.
+**§13 rider, Langston's (pre-existing, not this increment's):** `b-xstock-feed-sanity-fence.test.ts`'s class-gating leg binds the FIRST `assetClass === 'xstock_spot'` in the gate — the venue-transition block, not the bid/book-state gate it is named for. `HOME:` a rider on `#1222` increment 1 (same fence, agreed work, no new slot).
