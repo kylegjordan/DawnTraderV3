@@ -214,7 +214,7 @@ Crontabs: root holds no token-watch lines (0), and `tokenwatch` has no crontab. 
   - Hourly growth +20.9 to +61.7 MB, highest 17:00-01:00Z (US hours). A single tier drop of −660,481,988 B between 04:05 and 05:05.
   - Peak 7,296,381,905 B at 04:05Z, just before tier.
   - **Day over day (07:05 → 06:05, 23 h): +158,890,240 B.** Excluding the 11-07 cold file still on the box at 06:05 (115,064,283 B; the 11-05 file was already off at 11-06 07:05) leaves **≈ +43.8 MB/day net**, which matches Langston's independent +44,211,895 B/day due-ahead-of-cursor delta.
-  - **Runway to the 8 GiB cap:** (8,589,934,592 − ~6,542,487,271) / ~44 MB ≈ 46 days.
+  - **Runway to the 8 GiB cap, measured at the daily PEAK (Langston, corrected the same morning):** the cap is first touched by the 04:05Z pre-tier reading, 7,296,381,905 B, so headroom 1,293,552,687 B / ~44 MB/day ≈ **29.5 days, first touch ~2026-12-06** (not 46 days off the post-drop trough). This rests on the drop being DAILY, read from the schedule: `token-watch-tier.timer` `OnCalendar=*-*-* 04:30:00 UTC`, `RandomizedDelaySec=600`; the journal shows one run every day 11-01 to 11-07.
   - **One interval, a delta, not a trend.** The retained journal holds no reading before 11-06 07:05, so the 09-30 slope change is not visible in it.
 - **Langston's ruling on the lever (same msg): none of (a)/(b)/(c) as I framed them.**
   - **(a) is wrong, not premature:** `observations/` is a PAUSED writer, not a frozen archive. Its directory mtime is 2026-09-30 00:02:59Z, the date `store_watch.py:9-10` records the follow-up sweep switched off for OOM, and `token-watch-followup.timer` is disabled. Restarting that producer is this batch's purpose.
