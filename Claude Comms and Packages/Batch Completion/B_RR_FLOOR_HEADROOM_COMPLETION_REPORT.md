@@ -1,4 +1,102 @@
-# B-RR-FLOOR-HEADROOM — PROGRESS REPORT — OPEN — waiting on the pre-registered 21-day read of the fill-time RR check (window from 2026-10-17T13:03:42Z)
+# B-RR-FLOOR-HEADROOM — COMPLETION REPORT — Step 11, awaiting Langston's confirm
+
+**Owner:** CC-B (NEW Claude) · **change-class:** `architecture` · **Sprint plan row:** 59a · **Issue:** `#1183` · converted from the progress report below (renamed 2026-11-07), which is kept as written; §4c is the read of record.
+**Records:** scope `Scope Files/B_RR_FLOOR_HEADROOM_SCOPE.md` (r3) · pre-audit + plan `Scope Files/B_RR_FLOOR_HEADROOM_PRE_AUDIT.md` · Step-7 record `Change Lists/STEP7_DEPLOY_162ae0537_2026-10-17.md` · terminal read `d57130d6e`.
+**Read confirmed:** Langston, 2026-11-07 ~13:55Z, re-deriving every figure on staging, with three additions — folded in at §1(b) and in the "Confirmed by Langston" block after §4c.
+
+## 0. ⚠️ OPEN AT CLOSE — stated first
+| item | owner | home | closes when | fails when |
+|---|---|---|---|---|
+| **The floor question — the fill-time RR check STAYS IN SHADOW.** What `#372` inherits: **after the entry window, promoting the RR refusal buys 3 of 195 = 1.54 % additional refusals** — a scope decision (bug taxonomy outcome 2), not a defect. ⛔ NOT the "5.13 % vs 5 %" framing, which is a mix artifact (§1(b) 3). | CC-B (row 131's owner) | `#372`, carried by `SPRINT_TO_LIVE_PLAN` row 131 (roadmap 25-20, the Phase 25 per-strategy × per-class `min_rr` recalibration) — the pre-registered re-home | the floors are recalibrated per cell under row 131, or a decision to promote or retire the RR refusal is recorded on `#372` | — |
+| **Crypto's own read** — never started: 0 graded crypto takers while `entry_fill_policy` is `maker_only` | CC-B | row 59b `B-MAKER-CANCEL-ON-STOP` (`#1184`) — the forward-binding rider (scope objective 5), written into the System Manual, `#1183` and row 59b | crypto moves to `maker_preferred` under row 59b; crypto's read then starts at that change, with the shadow unpromoted | — |
+| **Step 7's per-row reconciliation, archive → log** (each row's `consumptionArm` equals its own `[CONSUMPTION_PASS] arm=` line — pre-audit record (iv), §4b): **NOT RUN.** No record of it in this report or in the Step-7 record (searched for `59a` and `CONSUMPTION_PASS`). What IS shown is the archive side (§2, objective 1). `NOT RE-READ` | CC-B | for Langston's ruling at this Step 11 — proposed: recorded as not run, no new work, objective 1 resting on the archive population (§9.4 disposition 5); otherwise one read over the kept logs | Langston rules | — |
+| **Alerts `07df291f-6351-4385-887b-bc6bc7ae3d21` (weekly read) and `20bba77f-4070-4b57-b126-f1f4abdc0c0e` (terminal read):** the read they carry is taken and decided | CC-B | resolve whichever is still unresolved at Langston's confirm, with this report's commit as evidence — **not resolved by this draft.** Any `gov-openmaxage` alert minted off the 2026-10-17 declared-open row has no resolve edge (`#1074`): hand-resolve it at the flip; its id was not read here (NOT MEASURED) | resolved with evidence | — |
+
+## 1. (a) WHAT DATA CAME IN — against the criterion as pre-registered (§3 below)
+- **Window:** 2026-10-17T13:03:42Z → 2026-11-07T13:03:42Z, the full 21 days; neither early-stop condition held at the interim (§4a). Read by CC-B 2026-11-07 with the §4 SQL exactly as written (`statement_timeout` 900 s; commit `d57130d6e`); re-derived on staging by Langston.
+- **Rule (b)**, as pre-registered: *"would-refuse ≤ 5 % per class, with ≥ 20 graded opens in the `direct_taker` arm; under 20 ⇒ **INSUFFICIENT, never PASS**. Both arms' rates reported; the pooled rate is the live **cost**, not evidence the floor is safe."* ⇒ **xStock: FAIL.** The direct-taker gate is met (28 ≥ 20); would-refuse **10 of 195 graded = 5.13 % > 5 %**. Arms: `direct_taker` 10 of 28 = 35.7 %; `maker_to_taker` 0 of 167.
+- **Rule (a)**, as pre-registered: *"a cell (strategy × floor) qualifies with ≥ 5 graded opens and ≥ 5 positive-`adverseR` fills; in a qualifying cell the **nearest-rank** p90 of positive `adverseR` must not exceed `s* = (RR − floor)/(1 + floor)`. INSUFFICIENT if no cell qualifies, the class's positive-adverse population is under 5, or qualifying cells cover under 50 % — never PASS by absence."* (graded per row under Langston's 2026-10-17 ruling, §4: FAIL at a p90 of `adverseR / s_own` above 1.0) ⇒ **xStock: INSUFFICIENT.** One qualifying cell, vwap_pullback (floor 1.96): 90 graded = **46.2 % < 50 %**. Its own statistic would FAIL: p90 = **60.33**, 8 slips over their own bound.
+- **Crypto:** 0 graded ⇒ **INSUFFICIENT by policy** (`maker_only`). Its 14-day baseline is non-empty (43 AEE rows), so the zero is the policy, not an absent class.
+- **Controls:** C1 — 6 `entry_fill` rows in the window, excluded from `graded`; C2 — 0 taker rows without the key.
+- **Reported beside the slip figures:** the graded takers closed **163 `stop_hit` / 25 `target_hit` / 0 other / 7 open** (pre-deploy baseline 21 / 0 / 9 open). Refusal burden: 5.13 % graded would-refuse · 2.99 % by the ask-through-stop guard alone (6 of 201) · 7.96 % both (16 of 201).
+- **The §3 prediction:** slips accrued (14 positive); rule (a) INSUFFICIENT on coverage with its statistic 60× over; the direct-taker gate DID clear (28). Graded opens came in under the predicted ~300 (195).
+
+## 1. (b) WHAT DECISION WAS TAKEN ON IT, AND BY WHOM
+1. **The decision, by the pre-registered rule** (*"FAIL or INSUFFICIENT ⇒ shadow stays, numbers on `#1183`, re-home to `#372`"*): **the fill-time RR check STAYS IN SHADOW**, both classes. No refusal goes live from this batch, so objective 3 does not run. **Taken by CC-B applying the pre-registered rule; the read CONFIRMED by Langston 2026-11-07 ~13:55Z**, who re-derived every figure on staging. Numbers on `#1183`; the floor question re-homed to `#372` (Phase 25, sprint row 131).
+2. ⛔ **THE READ OF RECORD IS NOT RE-RUNNABLE — BOUNDARY 2026-11-07T13:20:49Z (Langston addition 2).** Of the 195 graded, 7 carry `adverseR` > 0.25 and all 7 are would-refuses; only 3 would-refuses sit inside 0.25. From 2026-11-07T13:20:49Z the live entry window (`entry_window_worse_side_frac` = 0.25, `B-ENTRY-GATE`, both classes) refuses those opens before admission, so a re-run would read about 3 of 188 ≈ 1.6 % ⇒ PASS on rule (b), for a reason unrelated to the floor. **No comparison across that timestamp.** The 21-day population itself is clean of the entry gate (addition 1, the block after §4c).
+3. **What `#372` inherits — and the framing it must NOT (Langston addition 3).** The pooled 5.13 % against 5 % is a **mix artifact**: the fallback arm's `adverseR` is strictly negative (max −0.00398908 over 167 rows), so that arm cannot produce a would-refuse, and the pooled rate is set by the 28 / 167 arm mix. ⇒ **The figure `#372` carries: post-entry-window, promoting the RR refusal buys 3 of 195 = 1.54 % additional refusals** — a scope decision (bug taxonomy outcome 2), not a defect. Every would-refuse and every positive slip is a `direct_taker`.
+4. **"Extend for coverage" is not an option (addition 3).** Rule (a)'s coverage DILUTED over the window: 48.9 % at 141 graded → 46.2 % at 195, because vwap_pullback took 21 of the 54 new rows (38.9 %). Any extension would also cross the 13:20:49Z boundary.
+5. **Correction (addition 1):** the joint deploy HAD landed when CC-B's terminal-read post said staging was "still at `0f4835b5a`" — the block after §4c.
+
+## 2. Objectives (scope r3 §3)
+| # | objective | verdict | evidence |
+|---|---|---|---|
+| 1 | Reconnect the arm: `consumptionArm` on every taker open's archive row, `admitted` and `entry_fill`; a maker row carries none | **YES** | `1b705c80d` + `4a640a60e`, deployed `162ae0537` 2026-10-17T13:03:42Z. **Both branches fire live:** 28 `direct_taker` + 167 `maker_to_taker` graded rows in the window; 0 taker rows without the key (C2); all 6 `entry_fill` rows carry it (Langston, C1 enumerated). The fallback arm's `adverseR` maximum (−0.00399 over 167 rows) is what its code floor predicts — a fallback fills at or below intended. Maker rows carrying none: unit-tested, not counted live. The archive → log reconciliation: NOT RUN (§0). |
+| 2 | The read of record, pre-registered, forward 21 days | **YES** | run at the window's end exactly as written (§4c), re-derived by Langston; the result is §1(a) |
+| 3 | If a class passes: the check refuses live, tested | **NO — not triggered** | no class passed (§1(a)), so nothing was promoted; conditional objective |
+| 4 | If a class fails or is INSUFFICIENT: shadow stays, numbers on `#1183`, re-home to `#372` | **YES** | shadow unchanged; `#1183` and `#372` annotated 2026-11-07; `#372` is carried by sprint row 131 |
+| 5 | The crypto rider, written forward | **YES** | System Manual fill-time row, `#1183` (2026-10-17 annotation), row 59b's item text |
+
+## 3. Numeric deltas
+- **PREVIOUSLY STATED** (interim, §4a, 2026-11-04): rule (b) would-refuse 6 of 141 = 4.3 %, `direct_taker` 18 < 20 ⇒ INSUFFICIENT. **NOW:** 10 of 195 = 5.13 %, `direct_taker` 28 ⇒ FAIL. **REASON:** 54 more graded rows and 4 more would-refuses, all direct takers.
+- **PREVIOUSLY STATED** (interim): rule (a) vwap_pullback 69 graded = 48.9 % of class, 6 slips over their own bound. **NOW:** 90 = 46.2 %, 8. **REASON:** vwap_pullback took 21 of the 54 new rows (38.9 %).
+- **PREVIOUSLY STATED** (§3 prediction): ~300 graded opens, ~10 positive slips. **NOW:** 195 graded, 14 positive slips. **REASON:** fewer xStock taker opens than the pre-registered sample's rate, and more of them slipped.
+- **PREVIOUSLY STATED** (CC-B's terminal-read post, 2026-11-07): staging "still at `0f4835b5a`". **NOW:** reset to `e0e68dfdb` at 13:20:32Z, app restarted 13:20:49Z. **REASON:** Langston's correction — the post was wrong; the joint deploy had landed.
+
+## 4. CI
+No code changed at this close: the terminal read (`d57130d6e`) and this conversion are documents only. The batch's code: run `39034690051` at the deployed `162ae0537` — TypeScript Check, Test Suite, Build, Docker Build: all success (§2, Step 5).
+
+## 5. Governance files changed — the Step-10 ledger
+CHANGE-CLASS: architecture
+
+| tier | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | entry set to closed at Step 11 pending confirm, with the result and the `#372` hand-off |
+| T1 | `PHASE_HISTORY.md` | ✅ | the 2026-10-17 entry given its outcome in plain language |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` | ✅ | row 59a status → closed pending confirm; report cell → this report |
+| T1 | `PHASE_19_PLAN.md` | N/A — no row there | the batch is sprint row 59a; `PHASE_19_PLAN.md` has no line naming it |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_B.md` | N/A + ✅ | no shared truth changed; my position block → closed pending confirm |
+| T1 | the batch `SCOPE` | ✅ | r3, written at Step 1; unchanged at close |
+| T1 | the batch `PRE_AUDIT` | ✅ | written at Step 2; its Step-10 line now names this report |
+| T1 | `COMPLETION_REPORT` | ✅ | this file, converted from the progress report by rename |
+| T1 | the `Observation` column | ✅ | the 21-day window closed 2026-11-07T13:03:42Z, read and decided — the card leaves Observation |
+| T1 | the four session task lists | ✅ mine / N/A ×3 | CC-B row 59a → closed pending confirm, carried items named; CC-A, CC-C, CC-INFRA lists not mine |
+| T1 | Langston's `MEMORY.md` | BLOCKED — Langston's own write | asked in the Step-11 dispatch |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | the fill-time RR row: decided 2026-11-07, stays shadow — the arm finding and the 13:20:49Z boundary |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | fill-time checks entry: `consumptionArm`'s downstream read taken; pointer → this report (the field was already documented) |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1183` terminal result and decision; `#372` what it inherits; `#1074` item v: terminal read taken, the weekly reads still missed |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | no fix landed at close; the registry records fixes (the check itself is FIX-2026-10-11-A), not shadow-read outcomes |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | `#372` already sits at roadmap 25-20; the figure it inherits is on `#372` |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | no parameter changed; the floors are untouched |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | no constitutional change |
+| T2 | `STORAGE_POLICY.md` | N/A | no table or retention changed at close |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | not the VTS; the 15-minute-bar working list is unaffected |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no onboarding learning |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | the method did not change |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | the reviewer's build did not change |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable rule changed |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` rule changed |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | nothing removed |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | no `MISTAKE:` trailer written at this close |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | ✅ | the 2026-10-17 declared-open row → `open-retired`; the 2026-11-05 `deploy-hold` row is CC-A's and left as is |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | unchanged |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | unchanged |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | the daily check did not run in this batch |
+
+## 6. New findings in passing
+None beyond §0 and §1(b).
+
+## 7. Honest residual
+- The read keeps the check in shadow; it does not say what the floors should be — that is `#372`.
+- Rule (a) never became evaluable: its 60× statistic describes one cell holding 46.2 % of opens and decides nothing.
+- Crypto was not measured: 0 graded, by policy.
+- The archive → log per-row arm reconciliation was not run; objective 1 rests on the archive population.
+- The weekly reads due 10-24 and 10-31 were never taken (`#1074` item v); the 11-04 interim and the terminal read are the only two.
+- The window closed 17 minutes before the entry gate went live; nothing read after 2026-11-07T13:20:49Z is comparable with it.
+
+---
+
+# (was) B-RR-FLOOR-HEADROOM — PROGRESS REPORT — OPEN — waiting on the pre-registered 21-day read of the fill-time RR check (window from 2026-10-17T13:03:42Z)
 
 **Owner:** CC-B (NEW Claude) · **Plan row:** `SPRINT_TO_LIVE_PLAN` 59a · **Issue:** `#1183` · **change-class:** `architecture`
 **Records:** scope `Scope Files/B_RR_FLOOR_HEADROOM_SCOPE.md` (r3, approved) · pre-audit + plan `Scope Files/B_RR_FLOOR_HEADROOM_PRE_AUDIT.md` (approved) · Step-7 record `Change Lists/STEP7_DEPLOY_162ae0537_2026-10-17.md`
@@ -154,6 +252,12 @@ Controls: C1 — `entry_fill` 6 > 0 in the window and excluded from `graded` by 
 **The §3 prediction** (*"if slips accrue, rule (a) most likely FAILS … else INSUFFICIENT; the direct-taker gate may not clear"*): slips accrued (14); rule (a) reads INSUFFICIENT on coverage, its statistic 60× over; the direct-taker gate DID clear (28).
 **DECISION, by the pre-registered rule** (*"FAIL or INSUFFICIENT ⇒ shadow stays, numbers on `#1183`, re-home to `#372`"*): **xStock: FAIL (b), INSUFFICIENT (a) ⇒ the fill-time RR check STAYS IN SHADOW.** Crypto: INSUFFICIENT ⇒ shadow stays. Numbers go on `#1183`; the floor question re-homes to `#372` (Phase 25). No refusal goes live from this batch.
 **What the data says beyond the rule (for `#372`, not a decision here):** the would-refuses are concentrated entirely in the 28 DIRECT taker opens (35.7 %); the 167 maker-fallback takers never slipped adversely — consistent with §1 (fallbacks start at or below intended). The vwap_pullback cell's bounds sit at ~0.0135 R for the median row, so any adverse slip breaches; that is the 0.04 floor-headroom finding that opened `#1183`, now measured over 21 days.
+⛔ **BOUNDARY, STAMPED AT CLOSE (Langston addition 2): THIS READ IS NOT RE-RUNNABLE ACROSS 2026-11-07T13:20:49Z.** From then the live entry window (`B-ENTRY-GATE`, `entry_window_worse_side_frac` = 0.25) refuses before admission the 7 would-refuses that carry `adverseR` > 0.25, so a later window reads ~3 / 188 ≈ 1.6 % — a PASS on rule (b) unrelated to the floor. No comparison across it (item 2 below).
+
+### 4c-i. ✅ CONFIRMED BY LANGSTON — 2026-11-07 ~13:55Z, every figure re-derived on staging, with three additions (folded in at close)
+1. **Correction — the joint deploy HAD landed** when CC-B wrote "still at `0f4835b5a`": staging reset to `e0e68dfdb` at 13:20:32Z, the b-entry-gate migration applied 13:20:44.849786Z, the app restarted 13:20:49Z; `entry_window_worse_side_frac` = 0.25 is live on both classes. **The 21-day population is clean of the entry gate:** `entry_window_worse_side_frac` has 0 matches in `server/services/active-execution-engine.ts` at the in-window deploy shas `d307debe5`, `0abfd7102`, `0f4835b5a` (positive control: 3 matching lines at `d57130d6e` and `e0e68dfdb`; the five counts re-run by CC-B at the ref at close, `git show <sha>:<path> | grep -c`, the same). **C1 enumerated:** all 6 `entry_fill` rows are `ask_at_or_through_stop`, every one with `adverseR` < −1, every one carrying `consumptionArm`.
+2. ⛔ **THE READ OF RECORD IS NOT RE-RUNNABLE — boundary 2026-11-07T13:20:49Z.** Of the 195 graded, 7 carry `adverseR` > 0.25 and all 7 are would-refuses; only 3 would-refuses sit inside the 0.25 window. From 13:20:49Z the live entry window refuses those 7 before admission, so a re-run would read ~3 / 188 ≈ 1.6 % ⇒ PASS on rule (b), for a reason unrelated to the floor. **No comparison across the boundary.**
+3. **Do not hand `#372` the "5.13 % vs 5 %" framing — it is a mix artifact.** The fallback arm's `adverseR` is strictly negative (max −0.00398908 over 167 rows), so it cannot produce a would-refuse; the pooled rate is set by the 28 / 167 arm mix. **The figure `#372` inherits:** post-entry-window, promoting the RR refusal buys **3 of 195 = 1.54 %** additional refusals — a scope decision (bug taxonomy outcome 2), not a defect. And rule (a)'s coverage DILUTED over the window (48.9 % at 141 graded → 46.2 % at 195; vwap_pullback took 21 of the 54 new rows = 38.9 %), so "extend for coverage" is not an option.
 
 ## 4b. Step 7 — the arms EXPECTED, written before Monday's session (Langston Step-8 instruction, 2026-10-17 ~14:15Z)
 Written before any post-deploy taker opens exists (crypto `maker_only`, xStock shut since Friday 20:00 ET):
@@ -183,10 +287,10 @@ GROUP BY c.asset_class ORDER BY c.asset_class;
 - That the `maker_to_taker` arm stamps correctly in a live open — not exercisable until a maker cannot rest.
 - That 21 days yields enough direct takers or adverse slips to decide anything.
 
-## 6. Governance files changed so far
+## 6. Governance files changed so far *(as of the progress report; the close's ledger is §5 at the top)*
 Scope; pre-audit; this progress report; `SYSTEM_IMPACT_MAP` (fill-time checks entry — `consumptionArm` on both archive rows); `SYSTEM_MANUAL` (`:720` — the arm, the two arm fields' relation, the read's state, the crypto rider); `RUNNING_ISSUES` `#1183`; `SPRINT_TO_LIVE_PLAN` rows 59a, 59b; `BATCH_CATALOG`; `PHASE_HISTORY`; `CC_B_SESSION_TASK_LIST`; `MEMORY_CC_B`. Tier ledger in §7.
 
-## 7. Tier ledger (CHANGE-CLASS: `architecture`)
+## 7. Tier ledger (CHANGE-CLASS: `architecture`) *(as of the progress report; the close's ledger is §5 at the top)*
 | tier | document | verdict | line |
 |---|---|---|---|
 | T1 | `BATCH_CATALOG.md` | ✅ | entry: open, in observation |
