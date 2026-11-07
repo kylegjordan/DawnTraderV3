@@ -524,3 +524,8 @@ Exc Files : value-hashes.json
   - The must-fix test's setup guard was evaluated with `os.path.exists` AFTER `os.stat` was patched. On a Python whose `exists` routes through `os.stat`, the guard itself swallowed the OSError and the test failed on a correct tree (he measured 140 ok / 1 FAIL). Now the guard runs with the saved real `_stat`, BEFORE the patch.
   - The test also patches `os.path.exists` to a stat-routing version for the window, so the OLD probe reproduces `DROPPED` on EVERY host. Shown here: the mutant "state probed with os.path.exists" now reads `DROPPED`, where on this Windows Python it read `listed` before. The kill is attributable to the defect itself.
   - Writer 83/83, 0 by crash; all suites 0 failed.
+
+### INSTALLED 2026-11-07T04:50:31Z — P10 hardening + the gate must-fix, from `e2d0d0318a7acd25b254e61485a8a6a187e74535` (Langston PROCEED on `17e3a9af9`; the installed runtime files are unchanged between the two, `git diff --stat` empty)
+- 0 locks held. The previous copy was kept at `~/.claude/transcript-archive-bin.01ee9ff16`. All 8 files match their blobs by object id (`git hash-object --no-filters` = `git rev-parse <sha>:<path>`).
+- Confirming run (`precompact-run`): `2026-11-07T04:51:09Z precompact 0 ARCHIVE RUN OK — 1096 raw files, 149 lines, layer (c) 28 values; HEARTBEAT: 4 of 1985 runs hold a human turn`. Orphan census: 1,096 states, 0 orphans, 1,096 ok.
+- First scheduled exercise of this copy: tonight's nightly, 02:30 local (01:30Z). The never-ran check `04dd44a1` is armed for 2026-11-08T03:30:22Z.
