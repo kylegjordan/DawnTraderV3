@@ -85,6 +85,7 @@ import hashlib
 import math
 import json
 import os
+import re
 import shutil
 import socket
 import sqlite3
@@ -131,8 +132,45 @@ def _venue_text(obj) -> str:
     adds more on a multibyte name). The capture stores bodies in that inflated form (`provenance.py:201`), so
     `cmd_index` re-encodes every body through here, and the synthesised, no-pairs and padded bodies use it too —
     one encoding across all classes and arms, or the per-class sizes are not comparable. Key order does not change
-    the length, so it is left as parsed."""
+    the length, so it is left as parsed.
+    ⚠️ BYTE-EXACT ONLY ON THE MEASURED 30-PAIR ASCII BODY. It is not a property of the encoder: number formatting was
+    lost at capture (`_request` parses before the store), and a re-dump can move a number's length (`0.000001` ->
+    `1e-06`, -3 B; `1e-7` -> `1e-07`, +1 B; Langston, measured). The NON-ASCII leg (`ensure_ascii=False`) is the
+    largest term on an emoji-dense name (-18.3% on his synthetic) and is SETTLED per corpus by `encoding-check` on
+    the raw wire bytes, never assumed: if the venue escapes, this encoder UNDERSTATES, the unsafe direction."""
     return json.dumps(obj, separators=(",", ":"), ensure_ascii=False)
+
+
+def _non_ascii(text: str) -> int:
+    return sum(ord(ch) > 127 for ch in text)
+
+
+ENCODING_OK = ("moot", "confirmed")
+
+
+def _encoding_refusal(db) -> str | None:
+    """None when the index's encoding verdict permits sizes to be used; otherwise the reason (derive-n, arm sept)."""
+    try:
+        row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    except sqlite3.OperationalError:
+        return "the index has no encoding_check table (built before the encoding gate): rebuild it"
+    if row is None or row[0] not in ENCODING_OK:
+        return "encoding verdict is %r, not one of %s: run encoding-check first (%s)" % (
+            row and row[0], ENCODING_OK, row and row[1])
+    return None
+
+
+def _fetch_raw(mint: str) -> bytes:
+    """ONE fresh DexScreener reply, as RAW WIRE BYTES, read before any parse (`providers._request` parses on read,
+    so it cannot answer this). Paced by the package's own pacer; a follow-up call costs no credits."""
+    sys.path.insert(0, HERE)
+    import urllib.request
+    import providers  # noqa: E402
+    url = "%s/latest/dex/tokens/%s" % (providers.DEXSCREENER_BASE, mint)
+    providers._pace(url)
+    req = urllib.request.Request(url, headers={"User-Agent": providers.USER_AGENT})
+    with urllib.request.urlopen(req, timeout=providers.TIMEOUT) as resp:
+        return resp.read()
 
 
 NO_PAIRS_TEXT = _venue_text({"schemaVersion": "1.0.0", "pairs": None})
@@ -260,7 +298,9 @@ def cmd_index(a) -> int:
     db.execute("CREATE TABLE bodies (mint TEXT PRIMARY KEY, body TEXT NOT NULL, bytes INTEGER NOT NULL, "
                "pairs INTEGER NOT NULL)")
     db.execute("CREATE INDEX bodies_by_pairs ON bodies (pairs)")   # arm sept's template lookups (m3)
+    db.execute("CREATE TABLE encoding_check (verdict TEXT NOT NULL, detail TEXT NOT NULL)")
     n, dups, divergent, stored_total, venue_total = 0, [], 0, 0, 0
+    bad_digest, best = [], (0, None)                    # best = (non-ASCII chars, mint): encoding-check's subject
     for name in sorted(os.listdir(folder)):
         if not name.endswith(".jsonl"):
             continue
@@ -268,6 +308,11 @@ def cmd_index(a) -> int:
             for line in fh:
                 rec = json.loads(line)
                 if rec.get("source") != "dexscreener_token_state":
+                    continue
+                # ⛔ THE LAST PLACE THE DIGEST CAN BE CHECKED (Langston, Step 4 rider): the stored text is not kept
+                #    past this loop, and `sha256` (provenance.py:207) is the corpus's only integrity field.
+                if hashlib.sha256(rec["body"].encode("utf-8")).hexdigest() != rec.get("sha256"):
+                    bad_digest.append(rec.get("mint"))
                     continue
                 parsed = json.loads(rec["body"])
                 npairs = len(parsed.get("pairs") or [])
@@ -283,23 +328,76 @@ def cmd_index(a) -> int:
                 nbytes = len(vtext.encode("utf-8"))
                 stored_total += stored
                 venue_total += nbytes
+                na = _non_ascii(vtext)
+                if na > best[0]:
+                    best = (na, rec["mint"])
                 cur = db.execute("INSERT OR IGNORE INTO bodies VALUES (?, ?, ?, ?)",
                                  (rec["mint"], vtext, nbytes, npairs))
                 if cur.rowcount == 1:
                     n += 1
                 else:
                     dups.append(rec["mint"])
+    # the encoding verdict: "moot" when no indexed body holds a non-ASCII character (ensure_ascii cannot matter);
+    # otherwise "pending" naming the most non-ASCII mint, until encoding-check settles it on the raw wire bytes
+    if best[1] is None:
+        verdict = ("moot", json.dumps({"reason": "no indexed body holds a non-ASCII character"}))
+    else:
+        verdict = ("pending", json.dumps({"mint": best[1], "non_ascii_chars": best[0]}))
+    db.execute("INSERT INTO encoding_check VALUES (?, ?)", verdict)
     db.commit()
     db.close()
-    if dups or n == 0:
+    if bad_digest or dups or n == 0:
         os.remove(tmp)
-        print("REFUSED: %s" % ("%d duplicate mint(s), e.g. %s" % (len(dups), dups[:3]) if dups else "no body indexed"),
-              file=sys.stderr)
+        why = ("%d body/bodies whose sha256 does not match the record, e.g. %s" % (len(bad_digest), bad_digest[:3])
+               if bad_digest else "%d duplicate mint(s), e.g. %s" % (len(dups), dups[:3]) if dups
+               else "no body indexed")
+        print("REFUSED: %s" % why, file=sys.stderr)
         return 2
     os.replace(tmp, a.out)
-    print(json.dumps({"indexed": n, "out": a.out, "bytes_field_vs_utf8_divergent": divergent,
+    print(json.dumps({"indexed": n, "out": a.out, "encoding_verdict": verdict[0],
+                      "encoding_detail": json.loads(verdict[1]),
+                      "bytes_field_vs_utf8_divergent": divergent,
+                      "bytes_field_vs_utf8_divergent_note": "FORWARD FENCE: zero by construction while the producer "
+                      "stores json.dumps(ensure_ascii=True) (provenance.py:201, the dict branch); it can only fire on "
+                      "a future raw-text writer, so a zero here says nothing about the char/byte question",
                       "stored_encoding_bytes_total": stored_total, "venue_encoding_bytes_total": venue_total}))
     return 0
+
+
+# ── encoding-check ─────────────────────────────────────────────────────────────────────────────────────────────────
+def cmd_encoding_check(a) -> int:
+    """Settle `ensure_ascii` for THIS corpus on the raw wire bytes (Langston, Step 4, 2026-11-07): take the indexed
+    mint with the most non-ASCII characters, fetch ONE fresh reply, read it as bytes before any parse, and see how
+    the venue writes non-ASCII. Exit 0 confirmed (raw UTF-8) / moot; 3 UNSETTLED (the fresh reply has no non-ASCII
+    character, so it cannot discriminate); 4 the venue ESCAPES (this encoder understates; nothing may use the sizes).
+    The verdict is written into the index, where derive-n and arm sept read it."""
+    db = sqlite3.connect(a.bodies)
+    row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
+    if row[0] == "moot":
+        print(json.dumps({"verdict": "moot", "detail": json.loads(row[1])}))
+        return 0
+    mint = json.loads(row[1])["mint"]
+    raw = _fetch_raw(mint)
+    parsed = json.loads(raw.decode("utf-8"))
+    venue = _venue_text(parsed).encode("utf-8")
+    high = sum(b > 127 for b in raw)
+    escaped = sum(int(h, 16) > 127 for h in re.findall(rb"\\u([0-9a-fA-F]{4})", raw))
+    out = {"mint": mint, "raw_bytes": len(raw), "venue_text_bytes": len(venue),
+           "delta_bytes": len(venue) - len(raw), "raw_high_bytes": high, "raw_non_ascii_escapes": escaped,
+           "fresh_non_ascii_chars": _non_ascii(_venue_text(parsed))}
+    if out["fresh_non_ascii_chars"] == 0:
+        verdict, code = "unsettled", 3
+    elif escaped == 0 and high > 0:
+        verdict, code = "confirmed", 0
+    else:
+        verdict, code = "venue-escapes", 4
+    out["verdict"] = verdict
+    db.execute("DELETE FROM encoding_check")
+    db.execute("INSERT INTO encoding_check VALUES (?, ?)", (verdict, json.dumps(out, sort_keys=True)))
+    db.commit()
+    db.close()
+    print(json.dumps(out, sort_keys=True))
+    return code
 
 
 # ── prepare ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -487,6 +585,9 @@ def cmd_run(a) -> int:
             shape = _load_shape(a.shape)
         except SystemExit as exc:                       # a refusal leaves a void record, never a bare exit (m1)
             return void(2, str(exc))
+        refusal = _encoding_refusal(db)                 # per-class served bytes need a settled encoding
+        if refusal:
+            return void(2, "REFUSED: " + refusal)
         templates = {k: db.execute("SELECT count(*) FROM bodies WHERE " + _CLASS_SQL[k]).fetchone()[0]
                      for k in ("1", "2", "3+")}
         # §6 AMENDMENT 2: class 1 is the BASIS and is never synthesised; a thinner class 2 / 3+ is built from it
@@ -696,6 +797,10 @@ def cmd_derive_n(a) -> int:
         print(json.dumps({"void": str(exc)}), file=sys.stderr)
         return 2
     db = sqlite3.connect("file:%s?mode=ro" % a.bodies, uri=True)
+    refusal = _encoding_refusal(db)                     # sizes are not used until the encoding is settled
+    if refusal:
+        print(json.dumps({"void": "REFUSED: " + refusal}), file=sys.stderr)
+        return 2
     counts, size, notes = {}, {}, []
     for k in ("0", "1", "2", "3+"):
         n, mean = db.execute("SELECT count(*), avg(bytes) FROM bodies WHERE " + _CLASS_SQL[k]).fetchone()
@@ -784,6 +889,8 @@ def main(argv=None) -> int:
     r.add_argument("--skip-memory-check", action="store_true", help="TEST ONLY")
     r.add_argument("--no-clock-freeze", action="store_true",
                    help="TEST CONTROL ONLY: proves arm all_shed goes void without the freeze")
+    e = sub.add_parser("encoding-check", help="settle ensure_ascii on the raw wire bytes of ONE fresh reply")
+    e.add_argument("--bodies", required=True)
     d = sub.add_parser("derive-n")
     d.add_argument("--bodies", required=True)
     d.add_argument("--shape", required=True)
@@ -793,8 +900,8 @@ def main(argv=None) -> int:
     b.add_argument("--out", required=True)
     b.add_argument("--cgroup-dir")
     a = ap.parse_args(argv)
-    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run, "derive-n": cmd_derive_n,
-            "lookup-baseline": cmd_lookup_baseline}[a.cmd](a)
+    return {"index": cmd_index, "prepare": cmd_prepare, "run": cmd_run, "encoding-check": cmd_encoding_check,
+            "derive-n": cmd_derive_n, "lookup-baseline": cmd_lookup_baseline}[a.cmd](a)
 
 
 if __name__ == "__main__":

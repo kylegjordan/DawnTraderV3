@@ -6,6 +6,7 @@ TOKEN_WATCH_ROOT at import). The egress check is skipped (no systemd unit here);
 Each block states its expectation first. Run:  python3 token-watch/tests/test_measure_followup_memory.py  (exit 0 = all pass)
 """
 
+import hashlib
 import json
 import os
 import shutil
@@ -13,6 +14,10 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
+
+
+def SHA(text):
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -74,7 +79,7 @@ with open(os.path.join(PRISTINE, "provenance", "follow-up", "2026-10-01.jsonl"),
     for m in mints[:-10]:
         b = json.dumps(body(m), sort_keys=True)
         fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": b, "bytes": len(b),
-                             "observed_at": "2026-11-07T00:00:00+00:00", "sha256": "x"}) + "\n")
+                             "observed_at": "2026-11-07T00:00:00+00:00", "sha256": SHA(b)}) + "\n")
 # the October journal: two rows before NOW, one after (prepare must cut the last)
 with open(os.path.join(PRISTINE, "state", "spend-journal-2026-10.jsonl"), "w", encoding="utf-8") as fh:
     for ts in ("2026-10-01T00:00:01+00:00", "2026-10-02T12:59:59+00:00", "2026-10-20T00:00:00+00:00"):
@@ -104,7 +109,7 @@ DUP = os.path.join(WORK, "dup")
 shutil.copytree(PRISTINE, DUP)
 with open(os.path.join(DUP, "provenance", "follow-up", "2026-10-02.jsonl"), "w", encoding="utf-8") as fh:
     b = json.dumps(body("M000"), sort_keys=True)
-    fh.write(json.dumps({"mint": "M000", "source": "dexscreener_token_state", "body": b, "bytes": len(b)}) + "\n")
+    fh.write(json.dumps({"mint": "M000", "source": "dexscreener_token_state", "body": b, "bytes": len(b), "sha256": SHA(b)}) + "\n")
 p = tool("index", "--pristine", DUP, "--out", os.path.join(WORK, "dup.sqlite"))
 check("I1 refuses a duplicate mint, and leaves no index", p.returncode == 2 and "duplicate" in p.stderr
       and not os.path.exists(os.path.join(WORK, "dup.sqlite")), p.stderr)
@@ -120,7 +125,7 @@ for d in ("due", os.path.join("provenance", "follow-up")):
 mb_body = json.dumps(dict(body("MBX"), pairs=[dict(body("MBX")["pairs"][0], baseToken={"address": "MBX", "name": "Döge 猫", "symbol": "猫"})]),
                      ensure_ascii=False, sort_keys=True)
 with open(os.path.join(MB, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
-    fh.write(json.dumps({"mint": "MBX", "source": "dexscreener_token_state", "body": mb_body, "bytes": len(mb_body)},
+    fh.write(json.dumps({"mint": "MBX", "source": "dexscreener_token_state", "body": mb_body, "bytes": len(mb_body), "sha256": SHA(mb_body)},
                         ensure_ascii=False) + chr(10))
 p = tool("index", "--pristine", MB, "--out", os.path.join(WORK, "mb.sqlite"))
 rep = json.loads(p.stdout) if p.returncode == 0 else {}
@@ -300,7 +305,7 @@ with open(os.path.join(PRISTINE2, "provenance", "follow-up", "2026-10-01.jsonl")
         for i in range(n):
             m = "TPL%d_%02d" % (k, i)
             t = json.dumps(body_k(m, k), sort_keys=True)
-            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t), "sha256": SHA(t)}) + "\n")
 BODIES2 = os.path.join(WORK, "bodies2.sqlite")
 check("S0 index of the mixed tree", tool("index", "--pristine", PRISTINE2, "--out", BODIES2).returncode == 0)
 SHAPE = os.path.join(WORK, "shape.json")
@@ -325,7 +330,7 @@ with open(os.path.join(THIN, "provenance", "follow-up", "2026-10-01.jsonl"), "w"
         for i in range(n):
             m = "THN%d_%02d" % (k, i)
             t = json.dumps(body_k(m, k), sort_keys=True)
-            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t), "sha256": SHA(t)}) + "\n")
 BODIES_THIN = os.path.join(WORK, "thin.sqlite")
 tool("index", "--pristine", THIN, "--out", BODIES_THIN)
 p = tool("derive-n", "--bodies", BODIES_THIN, "--shape", SHAPE)
@@ -339,7 +344,7 @@ with open(os.path.join(THIN0, "provenance", "follow-up", "2026-10-01.jsonl"), "w
         for i in range(n):
             m = "TH0%d_%02d" % (k, i)
             t = json.dumps(body_k(m, k), sort_keys=True)
-            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t)}) + "\n")
+            fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": t, "bytes": len(t), "sha256": SHA(t)}) + "\n")
 BODIES_THIN0 = os.path.join(WORK, "thin0.sqlite")
 tool("index", "--pristine", THIN0, "--out", BODIES_THIN0)
 p = tool("derive-n", "--bodies", BODIES_THIN0, "--shape", SHAPE)
@@ -435,6 +440,7 @@ first = json.loads(bad_lines[0])
 broken = json.loads(first["body"])
 broken["pairs"][0]["volume"] = {"h24": "x"}
 first["body"] = json.dumps(broken, sort_keys=True)
+first["sha256"] = SHA(first["body"])                 # a deliberately edited body carries its own digest
 bad_lines[0] = json.dumps(first)
 open(os.path.join(BAD, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8").write(chr(10).join(bad_lines) + chr(10))
 BODIES_BAD = os.path.join(WORK, "bad.sqlite")
@@ -478,6 +484,54 @@ for label, bad in (("no pairs", '{"schemaVersion":"1.0.0","pairs":null}'),
     except Exception as e:                       # noqa: BLE001
         raised = type(e).__name__
     check("SR _synthesise refuses a template with %s (ValueError, by its own check)" % label, raised == "ValueError", raised)
+
+print("I3 expect: a record whose sha256 does not match its body -> the index REFUSES (the digest's last check)")
+BADSHA = os.path.join(WORK, "badsha")
+os.makedirs(os.path.join(BADSHA, "provenance", "follow-up"))
+with open(os.path.join(BADSHA, "provenance", "follow-up", "2026-10-01.jsonl"), "w", encoding="utf-8") as fh:
+    for m in ("GOOD1", "BAD01"):
+        bb = json.dumps(body(m), sort_keys=True)
+        fh.write(json.dumps({"mint": m, "source": "dexscreener_token_state", "body": bb, "bytes": len(bb),
+                             "sha256": SHA(bb) if m == "GOOD1" else SHA(bb + " ")}) + "\n")
+p = tool("index", "--pristine", BADSHA, "--out", os.path.join(WORK, "badsha.sqlite"))
+check("I3 refused, naming the mint", p.returncode == 2 and "sha256" in p.stderr and "BAD01" in p.stderr
+      and not os.path.exists(os.path.join(WORK, "badsha.sqlite")), "rc=%s %s" % (p.returncode, p.stderr))
+
+print("EC expect: an all-ASCII index is 'moot'; a non-ASCII one is 'pending' and derive-n refuses until encoding-check")
+v_ascii = sqlite3.connect(BODIES_THIN0).execute("SELECT verdict FROM encoding_check").fetchone()[0]
+check("EC an all-ASCII index reads moot", v_ascii == "moot", v_ascii)
+MBDB = os.path.join(WORK, "mb.sqlite")
+v_mb, d_mb = sqlite3.connect(MBDB).execute("SELECT verdict, detail FROM encoding_check").fetchone()
+check("EC a non-ASCII index reads pending, naming its most non-ASCII mint",
+      v_mb == "pending" and json.loads(d_mb)["mint"] == "MBX", "%s %s" % (v_mb, d_mb))
+SHAPE_F = os.path.join(WORK, "ec-shape.json")
+with open(SHAPE_F, "w", encoding="utf-8") as fh:
+    json.dump({"share": {"0": 0.5, "1": 0.48, "2": 0.015, "3+": 0.005}, "alive_share": 0.45}, fh)
+p = tool("derive-n", "--bodies", MBDB, "--shape", SHAPE_F)
+check("EC derive-n refuses a pending index, exit 2 with the reason", p.returncode == 2 and "encoding" in p.stderr,
+      "rc=%s %s" % (p.returncode, p.stderr[-200:]))
+mb_obj = json.loads(sqlite3.connect(MBDB).execute("SELECT body FROM bodies").fetchone()[0])
+cases = (("raw UTF-8 (the venue as stated)", json.dumps(mb_obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8"),
+          0, "confirmed"),
+         ("escaped non-ASCII", json.dumps(mb_obj, separators=(",", ":")).encode("utf-8"), 4, "venue-escapes"),
+         ("an all-ASCII fresh reply", json.dumps(body("MBX"), separators=(",", ":")).encode("utf-8"), 3, "unsettled"),
+         # MIXED: raw UTF-8 for one name and an escape for another — high bytes present, so only the "no escape"
+         # half of the confirm rule can refuse it (the all-escaped case above has no high byte at all)
+         ("mixed raw and escaped", json.dumps(mb_obj, separators=(",", ":"), ensure_ascii=False)
+          .replace("猫", "\\u732b", 1).encode("utf-8"), 4, "venue-escapes"))
+real_fetch = mfm._fetch_raw
+for i, (label, raw, want_rc, want_v) in enumerate(cases):
+    dbc = os.path.join(WORK, "ec-%d.sqlite" % i)
+    shutil.copy(MBDB, dbc)
+    mfm._fetch_raw = lambda mint, raw=raw: raw
+    rc = mfm.main(["encoding-check", "--bodies", dbc])
+    got = sqlite3.connect(dbc).execute("SELECT verdict FROM encoding_check").fetchone()[0]
+    check("EC %s -> exit %d, verdict %s" % (label, want_rc, want_v), rc == want_rc and got == want_v,
+          "rc=%s verdict=%s" % (rc, got))
+mfm._fetch_raw = real_fetch
+p = tool("derive-n", "--bodies", os.path.join(WORK, "ec-0.sqlite"), "--shape", SHAPE_F)
+check("EC once confirmed, derive-n is no longer refused for the encoding",
+      "encoding" not in p.stderr and p.returncode in (0, 14), "rc=%s %s" % (p.returncode, p.stderr[-200:]))
 ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
 check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
 print("SB expect: in D5 (class 3+ synthesised at k = 4), the largest served body is ~4x the class-1 mean, not the template's size")
