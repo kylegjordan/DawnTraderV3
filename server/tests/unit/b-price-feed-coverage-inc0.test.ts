@@ -83,6 +83,19 @@ describe('the NO-CLOCK fence reaches the helper the gate now depends on (Kyle 20
   const NON_NOW_CLOCK = /market-?hours|isMarketOpen|isXstockMarketOpen|liquidFillWindow|get(UTC)?Hours|getUTC(Date|Day)|toLocale|timeZone|\bRTH\b|\bsession\b|premarket|after_?hours|overnight/i;
   it('CONTROL: the helper body was located', () => { expect(helper.length).toBeGreaterThan(200); expect(start).toBeGreaterThan(0); });
   it('no hour, calendar or session term in the helper', () => { expect(helper).not.toMatch(NON_NOW_CLOCK); });
+  it('CONTROL: the copied token list FIRES on every clock shape it must catch, and holds its word boundaries (Langston C-7)', () => {
+    // The fence's own fixtures (b-xstock-feed-sanity-fence.test.ts), minus the `Date.now()` one this list deliberately omits.
+    for (const fixture of [
+      'const h = new Date().getUTCHours();',
+      "import { isXstockMarketOpenUTC } from '../asset_classes/xstock_spot/market-hours.js';",
+      "if (isMarketOpen(symbol)) return { pass: true };",
+      "const et = d.toLocaleTimeString('en-US', { timeZone: 'America/New_York' });",
+      'if (session === "overnight") widen();',
+      'const et = nowET(); // RTH only',
+    ]) expect(NON_NOW_CLOCK.test(fixture), fixture).toBe(true);
+    for (const benign of ['const worth = 1;', 'if (north) go();', 'further();', 'const sessionId = x;'])
+      expect(NON_NOW_CLOCK.test(benign), benign).toBe(false);
+  });
   it('Date.now appears once, only as the clock default', () => {
     expect(helper.split('Date.now').length - 1).toBe(1);
     expect(helper).toMatch(/nowMs: number = Date\.now\(\)/);
