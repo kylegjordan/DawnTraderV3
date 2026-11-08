@@ -2138,7 +2138,12 @@ function DataArchiveSection() {
                   <tr className="border-b">
                     <th className="text-left py-2 pr-4">Table</th>
                     <th className="text-right py-2 pr-4">Rows in window</th>
-                    <th className="text-right py-2 pr-4">Total rows</th>
+                    <th
+                      className="text-right py-2 pr-4"
+                      title="Rows in the live database only. Each table keeps its last N days there; older rows are in the archive tier and are not counted."
+                    >
+                      Total rows (hot)
+                    </th>
                     <th className="text-right py-2 pr-4">Disk</th>
                     <th className="text-right py-2 pr-4">Last write</th>
                     <th className="text-right py-2 pr-4">Buffer depth</th>
@@ -2159,7 +2164,8 @@ function DataArchiveSection() {
                               QUERY TIMEOUT
                             </span>
                           )}
-                          {t.windowPartial === true && (
+                          {/* Never beside a count that was not taken: a timed-out row's 0 is not a 15-day count (gate 2 C-1). */}
+                          {!t.timedOut && t.windowPartial === true && (
                             <span
                               className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-sky-700"
                               title={`The live database holds only the last ${t.hotHorizonDays} days of this table; older rows are in the archive tier, so this count covers ${t.hotHorizonDays} days, not the whole window.`}
@@ -2174,7 +2180,12 @@ function DataArchiveSection() {
                           )}
                         </td>
                         <td className="text-right py-2 pr-4">{fmtN(t.rowsInWindow)}</td>
-                        <td className="text-right py-2 pr-4">{fmtN(t.totalRows)}</td>
+                        <td
+                          className="text-right py-2 pr-4"
+                          title={t.hotHorizonDays != null ? `The last ${t.hotHorizonDays} days held in the live database; older rows are in the archive tier.` : undefined}
+                        >
+                          {fmtN(t.totalRows)}
+                        </td>
                         <td className="text-right py-2 pr-4">{t.diskPretty}</td>
                         <td className="text-right py-2 pr-4">{fmtTimeAgo(t.lastWriteAt)}</td>
                         <td className="text-right py-2 pr-4">{bw ? fmtN(bw.bufferDepth) : '—'}</td>

@@ -38,26 +38,65 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     expect((db as unknown as { db: { execute: { mock: { calls: unknown[] } } } }).db.execute.mock.calls.length).toBe(0);
   });
 
-  it('B-DB-SIZE-RELIEF OBJ-2: a window wider than the hot horizon is flagged PARTIAL; one inside it is not', async () => {
+  const HORIZON_ROWS = { rows: [
+    { constant_name: 'signal_eval_archive.hot_retention_days', value: 15 },
+    { constant_name: 'pair_scan_archive.hot_retention_days', value: 30 },
+    { constant_name: 'exit_decision_archive.hot_retention_days', value: 30 },
+    { constant_name: 'macro_feed_archive.hot_retention_days', value: 30 },
+    // signal_eval_provenance deliberately absent: a missing key is UNKNOWN, never defaulted
+  ] };
+
+  it('B-DB-SIZE-RELIEF OBJ-2: with the table reads SUCCEEDING, a window wider than the hot horizon is PARTIAL beside a real count; one inside it is not', async () => {
     const db = await import('../../db.js');
     const exec = (db as unknown as { diagDb: { execute: ReturnType<typeof vi.fn> } }).diagDb.execute;
-    exec.mockImplementationOnce(async () => ({ rows: [
-      { constant_name: 'signal_eval_archive.hot_retention_days', value: 15 },
-      { constant_name: 'pair_scan_archive.hot_retention_days', value: 30 },
-      { constant_name: 'exit_decision_archive.hot_retention_days', value: 30 },
-      { constant_name: 'macro_feed_archive.hot_retention_days', value: 30 },
-      // signal_eval_provenance deliberately absent: a missing key is UNKNOWN, never defaulted
-    ] }));
+    exec.mockImplementationOnce(async () => HORIZON_ROWS);
+    for (let i = 0; i < 5; i++) {
+      exec.mockImplementationOnce(async () => ({ rows: [{ rows_in_window: 1000 + i, total_rows: 2000 + i, last_write_at: '2026-11-08T03:00:00Z', disk_bytes: 4096 }] }));
+    }
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+    const r = await computeDataArchiveStatus('rolling_30d' as never);
+    expect(spy).not.toHaveBeenCalled(); // nothing failed, so no fault line
+    spy.mockRestore();
+    const byName = new Map(r.tables.map((t) => [t.name, t]));
+    expect(byName.get('signal_eval_archive')).toMatchObject({ timedOut: false, rowsInWindow: 1001, hotHorizonDays: 15, windowPartial: true });
+    expect(byName.get('pair_scan_archive')).toMatchObject({ timedOut: false, rowsInWindow: 1000, hotHorizonDays: 30, windowPartial: false });
+    expect(byName.get('signal_eval_provenance')).toMatchObject({ timedOut: false, hotHorizonDays: null, windowPartial: null });
+    const r24 = await (await import('../../services/drift-dashboard-aggregator.js')).computeDataArchiveStatus('rolling_24h' as never);
+    expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
+  });
+
+  it('gate 2 C-1: horizon read OK but the table reads time out (the likely render under pool pressure) — the client never shows PARTIAL beside QUERY TIMEOUT', async () => {
+    const db = await import('../../db.js');
+    const exec = (db as unknown as { diagDb: { execute: ReturnType<typeof vi.fn> } }).diagDb.execute;
+    exec.mockImplementationOnce(async () => HORIZON_ROWS); // then the default: every table read throws a statement timeout
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
     const r = await computeDataArchiveStatus('rolling_30d' as never);
     spy.mockRestore();
-    const byName = new Map(r.tables.map((t) => [t.name, t]));
-    expect(byName.get('signal_eval_archive')).toMatchObject({ hotHorizonDays: 15, windowPartial: true });
-    expect(byName.get('pair_scan_archive')).toMatchObject({ hotHorizonDays: 30, windowPartial: false });
-    expect(byName.get('signal_eval_provenance')).toMatchObject({ hotHorizonDays: null, windowPartial: null });
-    const r24 = await (await import('../../services/drift-dashboard-aggregator.js')).computeDataArchiveStatus('rolling_24h' as never);
-    expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
+    const sea = r.tables.find((t) => t.name === 'signal_eval_archive')!;
+    // the server row states the geometry (15 d < 30 d) AND that no count was taken; the client must not combine them
+    expect(sea).toMatchObject({ timedOut: true, rowsInWindow: 0, windowPartial: true });
+    const client = read('client/src/pages/analytics.tsx');
+    expect(client).toContain('{!t.timedOut && t.windowPartial === true && (');
+    expect(client).not.toMatch(/\{t\.windowPartial === true && \(/);
+    expect(client).toContain('Total rows (hot)'); // C-3: the total is the HOT total, said in the header
+  });
+
+  it('gate 2 C-2: only the statement-timeout cancel and the acquire timeout are LOAD; the rest of the "canceling statement" family are FAULTS', async () => {
+    const { isDiagPoolLoad } = await import('../../services/drift-dashboard-aggregator.js');
+    expect(isDiagPoolLoad(new Error('canceling statement due to statement timeout'))).toBe(true);
+    expect(isDiagPoolLoad(new Error('timeout exceeded when trying to connect'))).toBe(true);
+    for (const fault of ['canceling statement due to lock timeout', 'canceling statement due to user request',
+      'canceling statement due to conflict with recovery', 'relation "x" does not exist']) {
+      expect(isDiagPoolLoad(new Error(fault)), fault).toBe(false);
+    }
+    // all four catch sites use the one predicate/text; no loose substring survives
+    const src = read('server/services/drift-dashboard-aggregator.ts');
+    expect(src.match(/isDiagPoolLoad\(err\)/g)?.length).toBe(3);
+    expect(src).toContain('msg.includes(STATEMENT_TIMEOUT_CANCEL)');
+    expect(src).not.toMatch(/includes\('canceling statement'\)/);
+    expect(src).not.toMatch(/includes\('statement timeout'\)/);
   });
 
   it('ANY failure sets timedOut — a non-timeout fault too, not only a statement timeout (Langston take (b))', async () => {

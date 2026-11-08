@@ -27,6 +27,23 @@ import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
 import { HOT_HORIZON_SQL, parseHorizonRows } from './data-archive/hot-horizon.js';
+
+/**
+ * The ONE statement-timeout text these panels treat as LOAD. Postgres's "canceling statement due to ..." is a FAMILY —
+ * statement timeout · lock timeout · user request · conflict with recovery — and only the first is load here; the
+ * other three are faults and must be logged (Langston, B-DB-SIZE-RELIEF Step-4 gate 2 C-2). A bare
+ * substring match on the bare "canceling statement" prefix swallowed all four; only the pool config kept three unreachable
+ * (no lock_timeout on diagDb, no pg_cancel_backend caller), which can change without touching this file.
+ * drizzle-orm 0.39.1 passes the pg error through unwrapped, so the message is the server's own text.
+ */
+export const STATEMENT_TIMEOUT_CANCEL = 'canceling statement due to statement timeout';
+
+/** Diagnostic-pool LOAD (no slot within the acquire limit, or the server's statement_timeout) — never a fault line. */
+export function isDiagPoolLoad(err: unknown): boolean {
+  if (isAcquireTimeout(err)) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes(STATEMENT_TIMEOUT_CANCEL);
+}
 import { isAcquireTimeout } from '../db-pool-instrument.js';
 import type { RecorderConnectionLiveness } from './passive-archive/recorder-connection.js';
 // B64a: regime names imported from the canonical SSOT to satisfy the
@@ -856,7 +873,7 @@ export async function computeDataArchiveStatus(
     // Load (an acquire or statement timeout on the diagnostic pool) is not a fault and writes no line — the same split
     // as the per-table reads below (B-DB-POOL-GUARD P5); a real fault is logged once.
     const msg = err instanceof Error ? err.message : String(err);
-    const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+    const isLoad = isDiagPoolLoad(err);
     if (!isLoad) horizonFault = msg; // reported on the once-per-call line after the table loop
   }
   // B-DB-POOL-GUARD P5 (Langston, fold before close): load and faults are kept apart, as in the passive panel. A
@@ -904,7 +921,7 @@ export async function computeDataArchiveStatus(
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+      const isLoad = isDiagPoolLoad(err);
       if (!isLoad) archiveFaults.push(`${t}: ${msg}`);
       // B-DB-POOL-GUARD P5 C-1 (Langston, blocking): before this, a failed read rendered as 0 rows / 0 bytes with
       // `timedOut: false` — "the archive is empty", no badge. The diagnostic pool makes failure routine (a 25 s server
@@ -914,6 +931,12 @@ export async function computeDataArchiveStatus(
       timedOut = true;
     }
     const hotHorizonDays = horizons?.get(t) ?? null;
+    // STRICT `>` IS CORRECT, and the direction matters (Langston, gate 2): the hot set holds N days PLUS a part-day,
+    // never less — b75-retention-sweep.ts tiers a daily child only once its whole day is past the cutoff (now - N d),
+    // a monthly one only when its month starts before the cutoff's month, and the archive lane day-floors the cutoff.
+    // Measured 2026-11-08: signal_eval_archive (daily) oldest child exactly 30 d at a 30 d key; the monthly four 38 d.
+    // Windows are 24 h / 7 d / 30 d and horizons whole days, so a window in (N, N+1) — the only one a strict test
+    // could under-badge — is unreachable. Do NOT relax this to `>=`: it would badge every 30-day table at rolling_30d.
     const windowPartial = hotHorizonDays === null ? null : windowMs > hotHorizonDays * 86_400_000;
     tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut, hotHorizonDays, windowPartial });
   }
@@ -1026,7 +1049,7 @@ export async function computePassiveArchiveStatus(
       // A cancelled SELECT is followed by drizzle's ROLLBACK on the same client; if that ROLLBACK itself fails, its
       // error surfaces here instead of the timeout, so a timeout can land as `error`. That is the safe direction
       // (a fault reported, never load hidden), so it is left as is (Langston, Step 4 judgement 2).
-      if (msg.includes('statement timeout') || msg.includes('canceling statement')) {
+      if (msg.includes(STATEMENT_TIMEOUT_CANCEL)) {
         return unknownCount('timeout');
       }
       // B-DB-POOL-GUARD P5 C-5 (Langston, required): no free slot in the diagnostic pool within its 5 s acquire limit
@@ -1060,7 +1083,7 @@ export async function computePassiveArchiveStatus(
       // B-DB-POOL-GUARD P5 (Langston, fold before close): load is not a fault here either — an acquire timeout on the
       // 4-slot diagnostic pool, or the 25 s cancel on an untimed partition-tree sum, writes no line.
       const msg = err instanceof Error ? err.message : String(err);
-      const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+      const isLoad = isDiagPoolLoad(err);
       if (!isLoad) diskFaults.push(`${parent}: ${msg}`);
       return 0;
     }
