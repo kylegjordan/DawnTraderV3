@@ -199,11 +199,11 @@ Three things changed the plan:
 **C-6 (blocking) — where the reversal waits, and what "tested" means.**
 - **Why it needs a holding place:** `scripts/db-migrate.ts` enforces a BIJECTION between the forward `.sql` files in `drizzle/migrations/` and `MANIFEST.txt` (`:113-118` builds the forward set — every `*.sql` from a NON-recursive `readdirSync`, minus names containing `rollback`; `:127-149` throws on drift either way). A `…-cutover-reversal.sql` in that directory breaks every deploy if unlisted (for every batch), and applies itself at the next deploy if listed. Uncommitted is not an option either: `dt-deploy:214-219` refuses a dirty worktree.
 - **The holding path:** `drizzle/migrations/held/2026-11-XX-b-db-size-relief-cutover-reversal.sql`.
-  - `readdirSync` is non-recursive and keeps only `*.sql`, so a `held/` subdirectory is invisible to the bijection (`:115`). No other tooling scans the directory recursively (`git grep drizzle/migrations` over `.github`, `Dockerfile*`, `scripts/*.sh` returns nothing).
+  - `readdirSync` is non-recursive and keeps only `*.sql`, so a `held/` subdirectory is invisible to the bijection (`:115`). No other tooling sees `held/`. The census is repo-wide (Langston's wider instrument, adopted): two tests readdir the directory (`b-pattern-enum-drift.test.ts:47`, `b-balance-session-pairing-block-reason-enum.test.ts:46`), both non-recursive AND gated on `manifestLines.has(f)`; `drizzle.config.ts` has `out: "./migrations"`, a different directory, so drizzle-kit never reads `drizzle/migrations`. (My first instrument — `.github`, `Dockerfile*`, `scripts/*.sh` — reached neither `scripts/analysis/*.sh` nor `server/tests/**`.)
   - `drizzle/migrations/` has no subdirectories today, so `held/` is new and is named in the file's header.
   - **To use it:** ONE commit does `git mv drizzle/migrations/held/<file> drizzle/migrations/<file>`, adds its `MANIFEST.txt` line, AND reverts P3's six registry entries. That commit then goes out in one `dt-deploy`.
 - **"Tested at Step 3", concretely:**
-  - (1) An integration test in the suite, run where CI runs `db:migrate` (`ci.yml:56`, the CI Postgres service). It builds throwaway RANGE-partitioned parents shaped like the six (same partition key, a monthly child before the cutover, empty monthlies after it), applies the forward cutover SQL body, asserts the daily and monthly child sets, then applies the held reversal body and asserts the monthly set is back and the dailies are gone. Both refusal arms are exercised too: after the cutover date, and with a non-empty daily.
+  - (1) An integration test in the suite, run where CI runs `db:migrate` (`ci.yml:101-102`, the step `run: npm run db:migrate` against the CI Postgres service; `:56` is a comment). It builds throwaway RANGE-partitioned parents shaped like the six (same partition key, a monthly child before the cutover, empty monthlies after it), applies the forward cutover SQL body, asserts the daily and monthly child sets, then applies the held reversal body and asserts the monthly set is back and the dailies are gone. Both refusal arms are exercised too: after the cutover date, and with a non-empty daily.
   - (2) A fence that the held file exists under `held/` and is NOT in `MANIFEST.txt`, so it can never be applied by accident.
 
 **C-7 (blocking) — the abort-recovery step branches on whether the migration committed.** `dt-deploy` has four failure points AFTER `npm run db:migrate` returns at `:242`: `--pre-restart` (`:246-249`), `pm2 restart` (`:253`), the `LIVE_HEAD` assert (`:257-258`), and the 240 s engine poll (`:263-287`). The discriminator is the runner's own ledger, `_migrations` (`db-migrate.ts:63-76`), whose row is written after the SQL commits (`:193-195`). The recovery step in the deploy note reads:
@@ -224,3 +224,22 @@ Three things changed the plan:
 4. P4's drop set, re-derived by Langston on staging: 11 per table, `_2026_12 … _2027_10`, 66 in all. "The count the catalog lists" stands.
 
 **§13 (Langston):** nothing watches the three partition-creator logs. `b-storage-archival-health.ts` has four log-freshness specs (`b75-retention`, `b75-cold-rotator`, `b75-cold-liveness`, `disk-file-tiering`), and `b74-daily-partitions.log`, `b74-partitions.log` and `b70-partitions.log` are absent, which is why C-5(iii) is a human read. **DISPOSITION:** added to Infra Claude's `B-DISK-HEADROOM` (row 6), the same home as the r2 crontab-comment item. Told once.
+
+---
+
+## STEP 2 CLOSED — Langston PROCEED on r4 (Discord `1568813558140108852`, board Review = Approved). Binding at Step 3, verified at Step 4:
+- **C-8 — the forward-abort discriminator is the PARTITION CATALOG, not `_migrations`.**
+  - **Why:** `db-migrate.ts:192` runs the file's own BEGIN/COMMIT as one `client.query`, and the ledger INSERT (`:193-195`) is a separate statement after it. So "row ABSENT ⇒ not applied" is false in that window, and ABSENT is the branch whose action is a worktree reset (C-4's collision by hand).
+  - The deploy note's recovery reads `pg_inherits`/`pg_class` for the six parents: monthlies at/after the cutover present ⇒ NOT applied (reset the worktree); dailies present and those monthlies gone ⇒ APPLIED (do not reset). `_migrations` is corroboration only.
+  - **Committed but unledgered:** P4 raises on a drop-count mismatch, so a re-run cannot heal that state. The hand step is: insert the `_migrations` row for the file, then re-run `dt-deploy <same sha>`. P4's exception text names that step.
+- **C-9 — the integration test derives its SQL from the SHIPPED FILE'S BYTES** (the forward migration and the held reversal, read from disk), substituting throwaway parent names for the six real ones by a stated, mechanical rename. It never re-types an equivalent body, so a later edit to either shipped file is exercised.
+- **C-10 — `.gitignore:47` is `*.sql` with no negations:** the held reversal is `git add -f` like P1's two files. Fence (2) — the held file exists and is NOT in `MANIFEST.txt` — is what catches an un-added file, since CI sees only the tracked tree.
+- **The cron schedules — re-read as root on staging 2026-11-08 ~02:25Z, committed here so the leg is second-party checkable (Langston's account cannot read root's crontab):**
+  - line 3: `0 2 28 * *` → `b74-create-monthly-partitions.ts` → `b74-partitions.log`
+  - line 4: the misleading `# [B-STORAGE-HARDEN 2026-07-07 …] DISABLED — B70 tiering pending …` comment (Infra's §13 item)
+  - line 5: `30 2 28 * *` → `b70-create-monthly-partitions.ts` → `b70-partitions.log` (LIVE)
+  - line 6: `15 2 * * *` → `b75-retention-sweep.ts`
+  - line 10: `0 1 * * *` → `b74-create-daily-partitions.ts` → `b74-daily-partitions.log`
+  - line 13: `45 2 * * *` → `b-disk-file-tiering.ts` (runs during the sweep; not this batch's)
+  - The C-7 deadlines therefore stand: 2026-11-17 (12-01 enters the daily window), then 01:00Z daily; the monthly creators on the 28th at 02:00Z and 02:30Z.
+- **Next:** Step 3 at this batch's queue place (stage 00, order 5c — after `B-DB-POOL-GUARD` and `B-CLOSE-WRITER-COSTS`, which are in their verification steps waiting on external events; A1 jumps ahead of `B-CLOSE-WRITER-COSTS` if that batch is not done by ~2026-11-20, scope header).
