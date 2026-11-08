@@ -12,9 +12,12 @@
 --   level_build_drift_ref_60s       = 0.00429 his bid-drift leg: p90 0.3727 % one-minute bid drift (crypto_spot_ticker_snap,
 --                                             52,863 symbol-minutes / 406 symbols) scaled to 60 s; the reference for the
 --                                             stamped f = (drift / stop distance) * sqrt(age / 60 s)
---   crypto_birth_sided_enabled      = 0       THE 8c SWITCH-ON, seeded OFF: the birth re-base, its walk record and the open
---                                             refusal are skipped and no levelGeometry stamp is written, so every cost site
---                                             keeps today's 'mid' arithmetic. Set to 1 only after Kyle's section 6(b) report.
+--   crypto_birth_sided_enabled      = 0       THE 8c SWITCH-ON, seeded OFF: only the birth re-base and its walk record are
+--                                             skipped; every crypto signal is stamped levelGeometry 'mid', so every cost site
+--                                             keeps today's 'mid' arithmetic. The open refusal is LIVE in both states (keyed on
+--                                             the stamp): a crypto RTB row queued BEFORE this deploy has no stamp and is refused
+--                                             at the open - re-read the queue immediately before deploying. Set to 1 only
+--                                             after Kyle's section 6(b) report.
 
 BEGIN;
 

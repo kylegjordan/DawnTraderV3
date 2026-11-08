@@ -10,10 +10,13 @@
  *   level_build_max_spread_fraction  the plausibility bound on that side, a fraction of its mid (0.50 — unchanged; a wide
  *                                    but REAL spread is not refused here, it is priced: on sided levels it widens risk and
  *                                    narrows reward by a full spread, so the RR floor and the EV gate refuse it)
- *   crypto_birth_sided_enabled       THE 8c SWITCH-ON (0 | 1, seeded 0). Off: the birth re-base, its walk record and the open
- *                                    refusal are skipped, no `levelGeometry` stamp is written, and every cost site reads 'mid'
- *                                    — today's behaviour. On: crypto levels are built on the transactable sides. Flipped only
- *                                    after Kyle's §6(b) report (his 2026-10-19 rule: every on/off outcome is reported).
+ *   crypto_birth_sided_enabled       THE 8c SWITCH-ON (0 | 1, seeded 0). OFF: only the birth re-base and its walk record are
+ *                                    skipped; every crypto signal is STAMPED `levelGeometry: 'mid'` and every cost site reads
+ *                                    'mid' — today's arithmetic. ⚠️ The open refusal is LIVE in both states and keys on that
+ *                                    stamp: a crypto row with NO stamp (queued before 8c deployed, or lost on a hop) is refused
+ *                                    at the open — so re-read the crypto RTB queue immediately before any deploy that brings
+ *                                    8c in. ON: crypto levels are built on the transactable sides and stamped 'sided'. Flipped
+ *                                    only after Kyle's §6(b) report (his 2026-10-19 rule: every on/off outcome is reported).
  *   level_build_drift_ref_60s        the bid-side drift reference for the stamped `f` — his leg: p90 0.3727 % one-minute
  *                                    bid drift, ≈ 0.429 % at 60 s. `f = (drift / stop distance) · √(age / 60 s)`.
  *
