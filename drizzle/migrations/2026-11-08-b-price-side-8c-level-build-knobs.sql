@@ -12,6 +12,9 @@
 --   level_build_drift_ref_60s       = 0.00429 his bid-drift leg: p90 0.3727 % one-minute bid drift (crypto_spot_ticker_snap,
 --                                             52,863 symbol-minutes / 406 symbols) scaled to 60 s; the reference for the
 --                                             stamped f = (drift / stop distance) * sqrt(age / 60 s)
+--   crypto_birth_sided_enabled      = 0       THE 8c SWITCH-ON, seeded OFF: the birth re-base, its walk record and the open
+--                                             refusal are skipped and no levelGeometry stamp is written, so every cost site
+--                                             keeps today's 'mid' arithmetic. Set to 1 only after Kyle's section 6(b) report.
 
 BEGIN;
 
@@ -20,10 +23,11 @@ INSERT INTO module_constants
 VALUES
   ('level_basis', 'level_build_max_age_ms',          '60000'::jsonb,   'crypto_spot', '*', '*', '*', NOW(), 'b-price-side-8c'),
   ('level_basis', 'level_build_max_spread_fraction', '0.50'::jsonb,    'crypto_spot', '*', '*', '*', NOW(), 'b-price-side-8c'),
-  ('level_basis', 'level_build_drift_ref_60s',       '0.00429'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'b-price-side-8c')
+  ('level_basis', 'level_build_drift_ref_60s',       '0.00429'::jsonb, 'crypto_spot', '*', '*', '*', NOW(), 'b-price-side-8c'),
+  ('level_basis', 'crypto_birth_sided_enabled',      '0'::jsonb,       'crypto_spot', '*', '*', '*', NOW(), 'b-price-side-8c')
 ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name) DO NOTHING;
 
--- Exactly these three rows, with these values (an ON CONFLICT DO NOTHING over a pre-existing different value must fail).
+-- Exactly these four rows, with these values (an ON CONFLICT DO NOTHING over a pre-existing different value must fail).
 DO $$
 DECLARE n int;
 BEGIN
@@ -31,9 +35,10 @@ BEGIN
    WHERE module_name = 'level_basis' AND asset_class = 'crypto_spot' AND exchange = '*' AND strategy = '*' AND regime = '*'
      AND ((constant_name = 'level_build_max_age_ms'          AND value = '60000'::jsonb)
        OR (constant_name = 'level_build_max_spread_fraction' AND value = '0.50'::jsonb)
-       OR (constant_name = 'level_build_drift_ref_60s'       AND value = '0.00429'::jsonb));
-  IF n <> 3 THEN
-    RAISE EXCEPTION '8c level-build seed: expected exactly 3 level_basis/crypto_spot rows at the seeded values, found %', n;
+       OR (constant_name = 'level_build_drift_ref_60s'       AND value = '0.00429'::jsonb)
+       OR (constant_name = 'crypto_birth_sided_enabled'      AND value = '0'::jsonb));
+  IF n <> 4 THEN
+    RAISE EXCEPTION '8c level-build seed: expected exactly 4 level_basis/crypto_spot rows at the seeded values, found %', n;
   END IF;
 END $$;
 

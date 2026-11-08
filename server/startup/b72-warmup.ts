@@ -408,7 +408,7 @@ export async function warmModuleConstantsForSyncCallers(): Promise<void> {
   {
     const { assertLevelBuildKnobsAtBoot } = await import('../core/trading/level-build-config.js');
     const k = assertLevelBuildKnobsAtBoot();
-    console.log(`[8c][warmup] level_basis knobs verified for crypto_spot (maxAgeMs=${k.maxAgeMs} maxSpread=${k.maxSpreadFraction} driftRef60s=${k.driftRef60s})`);
+    console.log(`[8c][warmup] level_basis knobs verified for crypto_spot (maxAgeMs=${k.maxAgeMs} maxSpread=${k.maxSpreadFraction} driftRef60s=${k.driftRef60s} sidedEnabled=${k.sidedEnabled})`);
   }
 
   // reorg-B2 (Piece A/B, 2026-06-20): per-class ROI gate + target-floor/min-RR must be seeded

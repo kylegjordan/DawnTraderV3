@@ -624,6 +624,10 @@ export class SignalOrchestrator {
       };
       let _cbKnobs: LevelBuildKnobs;
       try { _cbKnobs = readCryptoLevelBuildKnobs(); } catch { return _cbRefuse('knobs_unreadable'); }
+      // ⛔ THE 8c SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0). OFF ⇒ this block is skipped whole: no walk,
+      // no re-base, no refusal, and no `levelGeometry` stamp — so every cost site downstream reads 'mid' and keeps today's
+      // arithmetic, and the open refusal and the sided floor (both keyed on the stamp / this switch) never fire.
+      if (_cbKnobs.sidedEnabled) {
       const _cbSym = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
       const _cbNow = Date.now();
       const _cbLegs = cryptoTouchLegs(krakenWebSocketAdapter.getBookForFill(_cbSym), priceCache.getCachedPrice(_cbSym), _cbNow);
@@ -659,6 +663,7 @@ export class SignalOrchestrator {
         targetPrice: _cb.targetPrice,
         metadata: { ...(rawSignal.metadata ?? {}), ..._cb.stamp },
       };
+      }
     }
 
     // ⚠️ THE ORDERING HERE IS DELIBERATE AND WAS A DEFECT WHEN I FIRST WROTE IT. This block

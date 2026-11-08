@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildFunnelSnapshotLine, LEVEL_BASIS_FUNNEL_FILE, LEVEL_BASIS_FUNNEL_INTERVAL_MS } from '../../services/level-basis-funnel-writer.js';
 import { makerEntryOf } from '../../core/trading/crypto-birth-levels.js';
+import { computeNetGeometry, composeSidedFriction, computeTotalRoundTripCost } from '../../core/math/cost-model.js';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const src = (f: string) => readFileSync(join(ROOT, f), 'utf8').replace(/\r\n/g, '\n');
@@ -103,7 +104,6 @@ describe('8c P7 — the funnel file', () => {
 
 describe('8c P4 (amendment 5) — the spread is counted once at every site that judges a crypto triple', () => {
   it('computeNetGeometry: sided charges neither the entry half-spread nor the round-trip spread; geometry is REQUIRED', async () => {
-    const { computeNetGeometry, composeSidedFriction, computeTotalRoundTripCost } = await import('../../core/math/cost-model.js');
     const c = { fee: 0.004, slippage: 0.0005, spread: 0.002 };
     const mid = computeNetGeometry(100, 98, 104, c, 'mid');
     const sided = computeNetGeometry(100, 98, 104, c, 'sided');
@@ -166,7 +166,7 @@ describe('8c amendment 5 (iv)+(v) — the stamp survives every hop, and its abse
   });
   it('the open refuses a crypto signal without the sided stamp, BEFORE the open-gate EV prices it', () => {
     expect(E).toContain("const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');");
-    const refuse = uniq(E, "if (_cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
+    const refuse = uniq(E, "if (_cbSidedOn && _cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
     expect(refuse).toBeGreaterThan(uniq(E, "return { opened: false, stage: 'GUARDRAIL_BLOCK', reason: riskCheck.reason || riskCheck.code || 'guardrail_block' };"));
     expect(refuse).toBeLessThan(uniq(E, 'const expectancyResult = evaluateTradeExpectancy(signal.symbol, {'));
     expect(E).toContain("return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };");

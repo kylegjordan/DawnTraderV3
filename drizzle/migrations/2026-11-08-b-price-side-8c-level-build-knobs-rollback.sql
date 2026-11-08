@@ -4,5 +4,5 @@
 BEGIN;
 DELETE FROM module_constants
  WHERE module_name = 'level_basis' AND asset_class = 'crypto_spot' AND exchange = '*' AND strategy = '*' AND regime = '*'
-   AND constant_name IN ('level_build_max_age_ms', 'level_build_max_spread_fraction', 'level_build_drift_ref_60s');
+   AND constant_name IN ('level_build_max_age_ms', 'level_build_max_spread_fraction', 'level_build_drift_ref_60s', 'crypto_birth_sided_enabled');
 COMMIT;
