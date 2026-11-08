@@ -10,7 +10,7 @@ change-class: architecture · **Owner:** OLD Claude (CC-A) · **Scope:** `B_DB_S
 - **PREVIOUSLY STATED:** the oldest 15 dailies of `signal_eval_archive` are `_2026_10_07 … _10_21` = 20,385 MiB. **NOW:** `_2026_10_08 … _10_22` = **20,328 MiB**. **REASON:** the 11-07 sweep dropped `_10_07`; the window moves one day per night.
 - **PREVIOUSLY STATED:** the bars' hot windows are 365 (`xstock_spot_ohlc_1m`, `crypto_spot_ohlc_1m`, `xstock_perp_ohlc_1m`). **NOW:** **`crypto_spot_ohlc_1m` is 145** (`updated_by 'B-DISK-HEADROOM OBJ-3 stage A'`, 2026-11-07 18:18:48Z). **REASON:** Infra Claude's row 6 started its staged cut. Not this batch's; it matters for the sweep's load (F2).
 - **PREVIOUSLY STATED:** October monthlies — provenance 6,346 · pair_scan 6,231 · `crypto_spot_ticker_snap` 3,001 · `xstock_perp_ticker_snap` 1,883 · macro 20 · exit 13 MiB. **NOW:** 6,346 · 6,231 · **3,000** · **1,882** · 20 · **12** MiB. **REASON:** rounding of `pg_total_relation_size` / 1,048,576; no material change. November so far: 1,401 · 1,287 · 539 · 424 · 5 · 3 MiB.
-- **PREVIOUSLY STATED:** `computeDataArchiveStatus` at `drift-dashboard-aggregator.ts:800`, `WINDOW_TO_MS` at `:1256`. **NOW:** **`:813`** and **`:1325`**. **REASON:** `B-DB-POOL-GUARD` P5 (`2de102383` … `2a25fcfb1`) edited the file above them.
+- **PREVIOUSLY STATED:** `computeDataArchiveStatus` at `drift-dashboard-aggregator.ts:800`, `WINDOW_TO_MS` at `:1256`. **NOW:** **`:814`** and **`:1325`**. **REASON:** `B-DB-POOL-GUARD` P5 (`2de102383` … `2a25fcfb1`) edited the file above them.
 
 ---
 
@@ -55,7 +55,7 @@ change-class: architecture · **Owner:** OLD Claude (CC-A) · **Scope:** `B_DB_S
 
 **F6 — The 15-day floor, re-derived after the stage-attrition deletion.** Every code file naming `signal_eval_archive` (24 files) was classified. **No live server reader remains except the Drift Dashboard's data-archive panel**, now on `diagDb`. The others are comments, the id allocator, the export tool's list, the sweep's own lists, an analysis script's table list, and by-hand scripts: `b4-regime-parity.ts` (`LIVE_WINDOW_DAYS = 14`, `:107`), `b5-w2a-geometry-sweep.ts` (`WINDOW_DAYS` default 14, `:43`), the replay script (era), the fee-contract SQL (14 days before deploy), the `b-xstock-calib-*` scripts, and the two `b79-0f` collision scripts (historical). Control: the archiver's `const TABLE = 'signal_eval_archive'` (`signal-eval-archiver.ts:34`) is found. **15 is a measured floor with one day of slack.**
 
-**F7 — OBJ-2's panel.** `computeDataArchiveStatus` (`:813`) counts five tables (`pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance`) with `captured_at >= windowStart` against HOT partitions. At `rolling_30d` after OBJ-1 the `signal_eval_archive` row would show 15 days under a 30-day label; the other four stay at 30. The client renders `rowsInWindow` per table and a QUERY TIMEOUT badge on `timedOut` (`analytics.tsx:2034-2039`, `:2153-2159`), so there is already a per-row badge slot. Reading warm for the older days would mean downloading `jsonl.gz` objects per refresh (30 s refetch) — rejected on cost.
+**F7 — OBJ-2's panel.** `computeDataArchiveStatus` (`:814`) counts five tables (`pair_scan_archive`, `signal_eval_archive`, `exit_decision_archive`, `macro_feed_archive`, `signal_eval_provenance`) with `captured_at >= windowStart` against HOT partitions. At `rolling_30d` after OBJ-1 the `signal_eval_archive` row would show 15 days under a 30-day label; the other four stay at 30. The client renders `rowsInWindow` per table and a QUERY TIMEOUT badge on `timedOut` (`analytics.tsx:2034-2039`, `:2153-2159`), so there is already a per-row badge slot. Reading warm for the older days would mean downloading `jsonl.gz` objects per refresh (30 s refetch) — rejected on cost.
 
 **F8 — OBJ-3's two readers.**
 - Replay script: `ERA_START` default `2026-06-08T00:00:00Z` (`:46`). C1 coverage is a base-driven LEFT JOIN over `signal_eval_archive` (`:133-139`); the fired and no-fire samples are INNER joins from `signal_eval_provenance` to the archive on `(id, captured_at)` (`:159-186`). **New since the scope:** after OBJ-1 the two joined tables have DIFFERENT hot horizons (15 vs 30), so the readable window is the SHORTER one. The samples lose provenance rows 15-30 days old silently, and C1 counts base only over 15.
@@ -85,12 +85,12 @@ change-class: architecture · **Owner:** OLD Claude (CC-A) · **Scope:** `B_DB_S
 - The 15-day key lands only AFTER Infra Claude's `crypto_spot_ohlc_1m` stage-A backlog has drained, read in `b75-retention.log` as a run whose `DONE` line shows no remaining B74 bar months.
 - This keeps one night from carrying both backlogs. Its cost is a delay of a night or two, against ~20 GB. Infra Claude is told once.
 
-**P3 — OBJ-4 registry: six entries in `DAILY_PARTITION_CUTOVERS`, `cutoverDate '2026-12-01'`** (the first clean boundary if this deploys in November; else `2027-01-01`). ← F3, F4. Each entry's comment names this batch. No consumer needs a code change (F3); the archival-health runway checks for the six begin on the cutover date.
+**P3 — OBJ-4 registry: six entries APPENDED after the existing six in `DAILY_PARTITION_CUTOVERS` (r3, C-5(i)), `cutoverDate '2026-12-01'`** (the first clean boundary if this deploys in November; else `2027-01-01`). ← F3, F4. Each entry's comment names this batch. No consumer needs a code change (F3); the archival-health runway checks for the six begin on the cutover date.
 
 **P4 — OBJ-4 cutover migration.** ← F4, F5. ⛔ **Its rollback and its locking are SUPERSEDED by r2 (C-1, C-2).**
 - One transaction, the Wave-D shape, for the six tables.
 - **Guard per child, the scope's predicate:** `pg_relation_size(child) = 0` AND `NOT EXISTS (SELECT 1 FROM child LIMIT 1)`, else `RAISE EXCEPTION` naming the child.
-- For each monthly child at/after the cutover: DETACH + DROP (66 expected; the migration NOTICEs each, and raises if the dropped count differs from what the catalog listed).
+- For each monthly child at/after the cutover: DETACH + DROP — **the count the catalog lists** (66 for a 2026-12-01 cutover; 60 for 2027-01-01, `_2027_01 … _2027_10`). The migration NOTICEs each and raises if the dropped count differs from what it listed.
 - Then pre-create the dailies `cutover … cutover+15` per table.
 - **Rollback:** valid ONLY BEFORE the cutover date. It drops the pre-created dailies if each is empty by the same predicate, and recreates the monthly children `_2026_12 … _2027_10` with the monthly creator's bare-date bounds. After the cutover date the dailies hold rows, so the rollback refuses rather than move data. Stated in its header.
 - The registry entries (P3) ship in the SAME deploy, so the monthly creators never re-create what P4 dropped (the Wave-D deploy-order rule).
@@ -167,3 +167,27 @@ Three things changed the plan:
 - **Nits corrected:** `computeDataArchiveStatus` is at **`:814`**. F2's six per-daily timings are a SIX-NIGHT series (10-02 … 10-07 dailies, one per run), not the 11-07 run; that run's SEA daily took 243,092 ms.
 
 **§13 (Langston, found in the root crontab):** the `[B-STORAGE-HARDEN 2026-07-07] DISABLED — B70 tiering pending` comment sits directly above the LIVE `30 2 28 * *` b70 partition-creator line, so it reads as if that cron were off, with a dangling "re-enable at OBJ-2 close". **DISPOSITION:** added to Infra Claude's `B-DISK-HEADROOM` (row 6) — that session is already in these keys and has root. Told once.
+
+---
+
+## AMENDMENT r3 (2026-11-08 ~02:00Z, CC-A) — Langston: C-2 and C-3 cleared; C-1's mechanism refuted (C-4) and an abort gap (C-5); Discord `1568803708341330004`. SUPERSEDES r2's C-1 rollback mechanism
+
+**C-4 (blocking) — the pre-cutover reversal is a dated FORWARD migration, not a rollback file.**
+- **Why:** `dt-deploy:242` runs `npm run db:migrate` → `scripts/db-migrate.ts` (`package.json:12`). Its `:117` strips any filename containing `rollback` from the forward set, and `:120-123` throws if `MANIFEST.txt` holds one ("never legal here"). So r2's "the code revert and the SQL go out in the same `dt-deploy`" is false: a revert deploy would revert the registry and apply nothing.
+- That would leave the registry entries gone, 96 dailies present and 66 monthlies dropped. Then `isDailyPartitionedForMonth` turns false for the six, so the b70 (`30 2 28 * *`) and b74 (`0 2 28 * *`) monthly creators build `…_2026_12` over the surviving dailies: RANGE OVERLAP, the same fatal shape.
+- **The plan:** the way back before the cutover date is a dated FORWARD migration, `…-b-db-size-relief-cutover-reversal.sql`, registered in `MANIFEST.txt` and shipped in ONE `dt-deploy` with the code revert of P3's six entries. It is written at Step 3 beside the forward migration, tested, and NOT shipped unless needed.
+  - It refuses after the cutover date, or if any daily it would drop is non-empty (heap = 0 AND `LIMIT 1`).
+  - It drops the six tables' pre-created dailies, then recreates the monthly children with the monthly creator's bare-date bounds, under `SET LOCAL lock_timeout = '5s'` in one transaction (C-2 applies to it too).
+- After the cutover date the way back is a forward migration of its own design, unchanged from judgement call 2.
+- **The P1 key rollback is a different case:** a single `UPDATE` of one constant. It is applied BY HAND with `psql` (the convention for `-rollback.sql` files, which `db:migrate` refuses), and BEFORE any code revert, because a missing key aborts the night (F2).
+
+**C-5 (blocking) — an aborted deploy can leave the registry live to the cron with the monthlies intact.**
+- **Why:** `dt-deploy:222-223` runs `git reset --hard "$SHA"` BEFORE build and migrate, under `set -euo pipefail` (`:35`), and its only trap is `rm -rf "$LOCK_DIR"` (`:196`). Nothing unwinds the worktree on a failure.
+- The daily creator is a cron, not the pm2 app (root crontab line 10, `0 1 * * *`, `cd /home/deploy/dawntrader && npx tsx server/scripts/b74-create-daily-partitions.ts`). It reads the WORKING TREE, so the entries go live at `git reset --hard`.
+- C-2's 5 s lock timeout makes a migration abort plausible, and `b-storage-archival-health.ts:272-277` skips pre-cutover tables, so the six would be silent.
+- **(i) P3 APPENDS** the six after the existing six (`daily-partition-cutover.ts:39-54`). The creator loops in array order with no per-table catch (`:84-107`, `main().catch → process.exit(1)`), so `xstock_spot_ticker_snap`, `signal_eval_archive`, both `crypto_perp` tables and both `xstock_bar_*` tables are provisioned before any collision. **This also narrows C-1's blast-radius sentence, which is order-dependent:** a collision on an appended table stops only the tables after it, i.e. the other new ones.
+- **(ii) The deploy note carries the abort-recovery step:** on ANY failure at or after `db:migrate`, `git reset --hard` the staging clone to the pre-deploy sha before the next 01:00Z, finding it in `git reflog` — `dt-deploy` echoes `DEPLOYED_SHA` only on a lockfile diff (`:225`). Then confirm `daily-partition-cutover.ts` no longer holds the six.
+- **(iii) Named verification:** read `b74-daily-partitions.log` on the first morning after the deploy, because the runway watchdog cannot see the six before 12-01.
+
+**Cleared (Langston):** C-2 and C-3 as written in r2; all six folds; the objective → plan line covers OBJ-1 … OBJ-6 (OBJ-5 struck).
+**Corrected in the body, not stacked (non-blocking):** `:814` in §0 and F7; P4's drop count is "the count the catalog lists".
