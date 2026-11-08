@@ -318,6 +318,11 @@ def apply_marker(items, marker, now=None):
         # masked as "reviewed"). Like `done`, it leaves the ready set so the self-advance loop won't re-feed it.
         item["state"] = "noop"
         item.pop("self_advance_refires", None)
+        # B-AGENT-INVOKE-FAILURE-NOTICE P3 / C-3 (Langston): a noop that carries a reason STORES it, so an item settled
+        # because its request FAILED (the requester was told to re-send) is not byte-identical to "there was nothing to
+        # review" - a review that never ran must never wear a completed read's clothes (#546).
+        if marker.get("reason"):
+            item["settle_reason"] = marker.get("reason")
     elif st == "blocked":
         item["state"] = "blocked"
         item["blocked_on"] = {"who": marker.get("on"), "want": marker.get("want")}

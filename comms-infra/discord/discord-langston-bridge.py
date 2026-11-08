@@ -287,7 +287,7 @@ def stop_cleanly(signum=None, _frame=None):
     os._exit(0)
 
 
-def invoke_claude(prompt, session_id, scratch=None):
+def invoke_claude(prompt, session_id, scratch=None, meta=None):
     """claude -p with a fresh session id per call (the caller mints it), the bridge's CLAUDE_MODEL, acceptEdits.
     The once-only UUID-rotation retry on 'already in use' was DELETED 2026-11-06 (B-LANGSTON-TWO-WORKERS D-2, rule 18):
     every call has used a fresh UUID since 2026-06-21, the journal back to 2026-09-10 shows 0 rotations, and the P6
@@ -318,19 +318,28 @@ def invoke_claude(prompt, session_id, scratch=None):
         "--permission-mode", "acceptEdits",
     ]
     log(f"invoking claude (prompt={len(prompt)} chars, session={session_id[:8]}...)")
+    # B-AGENT-INVOKE-FAILURE-NOTICE C-2 (Langston): the outcome and the elapsed time are RETURNED STRUCTURALLY in `meta`
+    # (outcome: None on success, else "timeout" | "exit" | "error"), never re-derived by sniffing the returned text - a
+    # failed exit whose stderr mentions a timeout used to record `timeout`, and the elapsed time never left this function.
+    meta = meta if meta is not None else {}
+    meta["outcome"], meta["elapsed"] = None, None
     t0 = time.time()
     try:
         result = run_agent(args, env, WORK_DIR, CLAUDE_TIMEOUT)
         elapsed = time.time() - t0
+        meta["elapsed"] = elapsed
         if result.returncode != 0:
+            meta["outcome"] = "exit"
             log(f"claude exit {result.returncode} after {elapsed:.1f}s: stderr={result.stderr[:300]}")
             return f"_Langston bridge error: claude returned exit code {result.returncode}_\n\n```\n{result.stderr[:1500]}\n```"
         log(f"claude returned {len(result.stdout)} chars in {elapsed:.1f}s")
         return result.stdout.strip()
     except subprocess.TimeoutExpired:
+        meta["outcome"], meta["elapsed"] = "timeout", time.time() - t0
         log(f"claude timeout after {CLAUDE_TIMEOUT}s")
         return "_Langston bridge: claude invocation timed out (15 min cap)_"
     except Exception as e:
+        meta["outcome"], meta["elapsed"] = "error", time.time() - t0
         log(f"claude invoke error: {type(e).__name__}: {e}")
         return f"_Langston bridge: invoke error — {type(e).__name__}: {e}_"
 
@@ -383,8 +392,11 @@ def _self_advance_pick(items, channel_id, prev_task):
     # (LOUD) instead of re-invoking; a re-mark clears it. Checked BEFORE the CapTracker.
     if lq.item_refire_halt(nxt):
         lq.park_unmarked(items, nxt["id"])
+        # P5: when the re-fires FAILED, the notice names how, instead of blaming a missing settle marker
+        _why = (f"its last attempt FAILED ({nxt['last_failure']})" if nxt.get("last_failure")
+                else "without a settle marker")
         notices.append(f"Kyle — Langston self-advance PARKED queue item {nxt['id']}: it re-fired "
-                       f"{nxt.get('self_advance_refires', lq.SAME_ID_CAP)}x without a settle marker (per-item "
+                       f"{nxt.get('self_advance_refires', lq.SAME_ID_CAP)}x, {_why} (per-item "
                        f"runaway guard, survives inbound chatter). Re-mark [[QUEUE id={nxt['id']} status=ready]] "
                        f"to retry once its blocker clears.")
         log(f"self-advance per-item PARK: id={nxt['id']} refires>={lq.SAME_ID_CAP}")
@@ -455,6 +467,139 @@ def extract_attachments(text):
     if notes:
         text = (text.rstrip() + "\n" + " ".join(notes)).strip()
     return text, files
+
+
+# ─── B-AGENT-INVOKE-FAILURE-NOTICE (#1198, #1206): a task that ends with NO DELIVERED REPLY is never silent ────────
+# Before this, a bridge error posted nothing in the channel (`bridge_error_suppressed`, 64 rows 06-22 → 11-07), POSTED THE
+# RAW STDERR in a DM, left a review-queue item `ready` for self-advance to re-run, and re-ran an escalated alert at every
+# start with nobody told. ⛔ C-1 (Langston): keyed on "this task produced no delivered reply" - every exit path calls
+# _after_no_reply (the invoke-failure branch, a reply whose post failed, and task_worker's exception arm), never on a
+# test of the returned string. The 06-20 intent ("infra error, not a real reply — don't spam the channel") is kept: ONE
+# line, no error dump; the error itself stays in this log.
+FAILURE_NOTICE_MARKER = "⚠️ request failed —"     # P11: fixed, so the OTHER agent's gate can recognise a notice
+FAILURE_OUTCOME_WORDS = {"timeout": "it timed out at the 15-minute limit", "bridge_error": "it ended in an error",
+                         "post_failed": "the reply could not be posted", "worker_error": "the bridge hit an internal error"}
+ALERT_FAILURE_CAP = 2                              # P5: failed triage attempts on one escalated alert before Kyle hears
+
+
+def _notify_requester(task, outcome, elapsed=None):
+    """P1/P2: one name-led line to the person who asked - channel or DM - and, ONLY if it posted, the inbox row the
+    readers key on (`langston_outbound` + `failure_notice`, so recovery's `started & replied` skips it) and the journal
+    line `langston-bridge-restart` waits for (gate 2, `responded to msg <id>`). A notice that fails to post writes
+    neither, so the request stays unanswered and recovery may re-run it - the safe direction."""
+    channel_id, msg_id = task["channel_id"], task["message_id"]
+    after = ", after %d s" % int(elapsed) if elapsed else ""
+    body = (f"{FAILURE_NOTICE_MARKER} your request to Langston failed ({FAILURE_OUTCOME_WORDS.get(outcome, outcome)}"
+            f"{after}); nothing was reviewed. Please re-send.")
+    text = lq.lead_with_addressee(body, task, CFG.get("kyle_id"))
+    sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE)
+    if sent_id is None:
+        log(f"failure notice for msg {msg_id} did NOT post - no outbound row written; it stays unanswered")
+        return False
+    mirror_event("langston_outbound", channel_id=channel_id, message_id=sent_id, reply_to=msg_id, text=text,
+                 failure_notice=True, outcome=outcome)
+    log(f"responded to msg {msg_id} (failure notice: {outcome})")
+    return True
+
+
+def _settle_failed_item(task):
+    """P3 / C-3: the review-queue item this request created is settled `noop` WITH its reason, so self-advance cannot
+    re-run what the requester was told to re-send, and the item does not read as "nothing to review"."""
+    eid = task.get("_enqueued_id")
+    if not eid:
+        return
+    item, act = lq.locked_update(QUEUE_FILE, lambda items: lq.apply_marker(
+        items, {"id": eid, "status": "noop", "reason": "request failed, requester re-sends"}))
+    log(f"queue: failed request {eid} settled -> {act}")
+
+
+def _count_alert_failure(task, outcome):
+    """P5 / C-4: an escalated alert has no requester. The failed-attempt count lives on its SPOOL RECORD (atomic, cleared
+    on success) - never in the tasks log, which a rotation would reset. spool_write REPLACES the record, so every field
+    it held is carried forward. At ALERT_FAILURE_CAP, ONE Kyle line; the record is removed only AFTER that line posts
+    (the discipline of the alert branch in process_task). The alert ROW stays active for its owner - the spool is only
+    Langston's work queue."""
+    mid = task["message_id"]
+    path = al.spool_path(al.SPOOL_DIR, mid)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except FileNotFoundError:
+        rec = None
+    n = (rec or {}).get("failed_attempts", 0) + 1
+    if rec is not None:
+        extra = {k: v for k, v in rec.items() if k not in ("state", "ts", "task")}
+        extra["failed_attempts"] = n
+        al.spool_write(al.SPOOL_DIR, rec["task"], rec.get("state", "escalated"), **extra)
+    if rec is not None and n < ALERT_FAILURE_CAP:
+        log(f"alert spool: escalated msg {mid} failed ({outcome}), attempt {n} of {ALERT_FAILURE_CAP} - kept for retry")
+        return
+    line = (f"Kyle — Langston could not triage alert message {mid} ({outcome}){' twice' if rec is not None else ''}; "
+            f"the alert row is still active for its owner, nothing is lost. Hand it on, or re-send it to Langston.")
+    if dc.rest_send(BOT_TOKEN, task["channel_id"], line, LOG_FILE, mention_user_id=CFG["kyle_id"]) is None:
+        log(f"alert spool: the Kyle line for msg {mid} did NOT post - the spool record is KEPT")
+        return
+    if rec is not None:
+        al.spool_remove(al.SPOOL_DIR, mid)
+    log(f"alert spool: escalated msg {mid} failed {n}x ({outcome}) - Kyle told, spool record removed")
+
+
+def _note_self_advance_failure(task, outcome):
+    """P5: a self-advance item is re-picked until its per-item cap PARKS it with a Kyle notice; record the failure on
+    the item so that notice names the outcome instead of 'without a settle marker'."""
+    mid = str(task.get("message_id", ""))
+    aid = mid[4:] if mid.startswith("adv-") else None
+    if not aid:
+        return
+
+    def _mark(items):
+        for it in items:
+            if it.get("id") == aid:
+                it["last_failure"] = outcome
+                return True
+        return False
+    lq.locked_update(QUEUE_FILE, _mark)
+
+
+AGENT_BOT_IDS = {int(x) for x in os.environ.get("LANGSTON_AGENT_BOT_IDS", "").split(",") if x.strip().isdigit()}
+
+
+def is_other_agent_failure_notice(author_id, content):
+    """P11: True for a post by another AGENT bot whose opening carries the failure-notice marker. A person who quotes
+    the marker still engages (only an agent author counts). Inert while AGENT_BOT_IDS is empty (until #1241 A6)."""
+    return author_id in AGENT_BOT_IDS and FAILURE_NOTICE_MARKER in (content or "")[:200]
+
+
+def enqueue_person(task_q, task):
+    """P10: a person's request is RECORDED when the bridge accepts it, before a worker takes it - so a request lost
+    between here and a worker (the in-memory queue on a restart) is no longer invisible. ⛔ Langston condition 1
+    (blocker-grade): `langston_enqueued` must NEVER join the dedup kinds (`kinds={"langston_inbound"}` in recovery and
+    `dedup_kinds` in the watchdog) - those are HANDLED-rows-only on purpose, and adding it would false-skip exactly the
+    enqueued-but-never-handled requests this row exists to show. The dispatch census reads it as QUEUED; it lands in
+    every clone's census BEFORE this bridge writes it (pre-audit P10 ordering, C-8). Recovery and the watchdog's replay
+    re-enter through on_message, so every person route passes here."""
+    mirror_event("langston_enqueued", channel_id=task.get("channel_id"), message_id=task.get("message_id"),
+                 sender_username=task.get("author_name"), task_kind=task.get("kind"),
+                 text=task.get("content") if task.get("kind") == "text" else None)
+    task_q.put(task)
+
+
+def _after_no_reply(task, outcome, elapsed=None):
+    """The one entry point for a task that produced no delivered reply (C-1). Runs at most once per task; never raises
+    (it is called from task_worker's exception arm)."""
+    if task.get("_no_reply_handled"):
+        return
+    task["_no_reply_handled"] = True
+    try:
+        if task.get("self_advance"):
+            _note_self_advance_failure(task, outcome)
+        elif task.get("is_alert"):
+            _count_alert_failure(task, outcome)
+        else:
+            _notify_requester(task, outcome, elapsed)
+            _settle_failed_item(task)
+    except Exception as e:      # noqa: BLE001 - a failed notice must never take the worker down
+        log(f"no-reply handling FAILED for msg {task.get('message_id')} ({type(e).__name__}: {e})")
 
 
 def process_task(task, breaker, task_q=None):
@@ -552,6 +697,7 @@ def process_task(task, breaker, task_q=None):
                 # #1248 A3: one locked read-modify-write, so the other worker cannot erase this item.
                 if lq.locked_update(QUEUE_FILE, _enqueue):
                     enqueued_id = str(msg_id)  # OBJ-A: this inbound created an item → auto-settle after the reply
+                    task["_enqueued_id"] = enqueued_id   # P3: so EVERY no-reply exit (C-1) can settle it, worker arm too
             except Exception as e:
                 log(f"queue: enqueue failed (non-fatal): {e}")
 
@@ -639,15 +785,18 @@ def process_task(task, breaker, task_q=None):
         addressed_prompt += (f"\n\n[Your scratch directory for THIS review is {scratch} - run `cd {scratch}` first and do "
                              f"all your work in it. Do NOT write into {SCRATCH_ROOT} itself: another review may be "
                              f"running at the same time and would overwrite files with the same names.]")
-    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), scratch=scratch)
+    _meta = {}
+    response = invoke_claude(addressed_prompt, str(uuid.uuid4()), scratch=scratch, meta=_meta)
     resp_stripped = (response or "").strip()
-    is_bridge_error = resp_stripped.startswith("_Langston bridge error:") or resp_stripped.startswith("_Langston bridge:")
-    if is_bridge_error:
-        task["_outcome"] = "timeout" if "timed out" in resp_stripped.lower() else "bridge_error"
-    if is_bridge_error and not is_dm:
-        # infra error, not a real reply — mirror only, don't spam the channel
-        mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="bridge_error_suppressed")
-        log(f"bridge error on msg {msg_id} — suppressed in channel")
+    # C-2: the failure is read from what invoke_claude RETURNED structurally, never by sniffing the text it produced
+    if _meta.get("outcome") is not None:
+        task["_outcome"] = "timeout" if _meta["outcome"] == "timeout" else "bridge_error"
+        if not is_dm:
+            # the silent row stays: its series (64 rows 06-22 → 11-07) is the history of this failure
+            mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="bridge_error_suppressed")
+        # P1/P2: no error dump in the channel OR a DM (the 06-20 intent) - one line to the requester instead
+        log(f"bridge error on msg {msg_id} ({_meta['outcome']}) — no reply posted; telling the requester")
+        _after_no_reply(task, task["_outcome"], _meta.get("elapsed"))
         return
     # Strip any reflexive [SILENT] marker and post; brief ack only if nothing substantive remains.
     cleaned = re.sub(r"\[SILENT\]", "", resp_stripped, flags=re.I).strip()
@@ -684,6 +833,7 @@ def process_task(task, breaker, task_q=None):
                     f"- kept for restore")
         else:
             log(f"alert spool: Langston's reply to msg {msg_id} was NOT posted - kept for restore")
+            _after_no_reply(task, "post_failed")     # C-1: a failed post is a no-reply exit too (P5 counts it)
         if _done:
             al.spool_remove(al.SPOOL_DIR, msg_id)
     elif sent_id is not None:
@@ -697,7 +847,10 @@ def process_task(task, breaker, task_q=None):
         # the generated text rides on the row (Langston C3): it survives for the record and his recall corpus even
         # though recovery re-ASKS rather than re-posts. langston_silent has no live reader that decides anything.
         mirror_event("langston_silent", channel_id=channel_id, reply_to=msg_id, reason="post_failed", text=cleaned)
-        log(f"reply to msg {msg_id} did NOT post (or posted truncated) - recorded as post_failed, recovery re-feeds it")
+        log(f"reply to msg {msg_id} did NOT post (or posted truncated) - recorded as post_failed")
+        # C-1: a reply that never reached Discord is a no-reply exit - the requester is told (if the notice posts, its
+        # row ends the request for recovery; if it does not, recovery re-feeds it exactly as before)
+        _after_no_reply(task, "post_failed")
     # B-COMMS-IMAGES: upload his approved attachments AFTER the text lands; an upload
     # failure is announced in-channel, never silently dropped (Langston (d)).
     for _fp in _attach_files:
@@ -881,7 +1034,12 @@ def _post_time_from_id(mid):
 
 
 def record_task(task, worker, started, ended):
-    """#1248 OBJ-7: one line per handled task - the observation's instrument. No message content."""
+    """#1248 OBJ-7: one line per handled task - the observation's instrument. No message content.
+    ⛔ DO NOT ROTATE TASK_LOG WHILE A PRE-REGISTERED WINDOW READS IT (B-AGENT-INVOKE-FAILURE-NOTICE C-5, Langston): it is
+    the named observation log of `B_LANGSTON_TWO_WORKERS_PRE_REGISTRATION.md` (:8), whose scheduled reads say "Read
+    /var/log/langston-tasks.jsonl" - a rotation hands that reader a population starting at the rotation. It grows ~14 MB
+    a year, so not rotating it is no work. A later rotation must make every such read enumerate the live file AND every
+    `.N` / `.N.gz`."""
     try:
         line = {"message_id": str(task.get("message_id")), "posted": _post_time_from_id(task.get("message_id")),
                 "started": round(started, 3), "ended": round(ended, 3), "worker": worker,
@@ -920,6 +1078,9 @@ def task_worker(task_q):
             except Exception as e:
                 task["_outcome"] = "worker_error"
                 log(f"{me} error: {type(e).__name__}: {e}\n{traceback.format_exc()[:500]}")
+                # C-1 (Langston): an exception in process_task posted nothing, not even a silent row, and left the
+                # queue item `ready` and the alert's spool record in place. It is a no-reply exit like any other.
+                _after_no_reply(task, "worker_error")
             finally:
                 task_q.release(task)
                 task_q.task_done()
@@ -1189,6 +1350,15 @@ def build_client(task_q, recover_floor=None, alert_q=None):
             #    STARTED message was treated as done). A started message with no recorded reply is re-fed; its
             #    chunk group with it. Residual, stated: a reply that was posted but whose inbox record failed would
             #    be answered twice - duplication is the safe direction of that error.
+            # ⚠️ B-AGENT-INVOKE-FAILURE-NOTICE P4 — THE TRADE, WRITTEN WHERE IT IS DECIDED (Langston): a FAILED request
+            #    whose requester was TOLD (a delivered failure notice: `langston_outbound` + `failure_notice`, which
+            #    inbox_evidence counts as replied) is NOT re-fed here any more. Before it, a channel failure left only a
+            #    `langston_silent` row, which is not a reply, so a restart re-ran it. The requester now holds the re-send
+            #    (and a re-fed dispatch could review a sha that has since moved). This does NOT regress the 10-17 fix
+            #    above: a request with no delivered reply AND no delivered notice is still re-fed.
+            # ⚠️ INBOX TAIL WINDOW (P9 constraint, stated at the reader): this reads the last 1 GiB of the inbox log, and
+            #    `started` the watchdog's default 8 MB tail - a rotation that leaves a recovery window's rows outside the
+            #    live file makes both sets silently smaller. Any inbox rotation must keep a full recovery window in view.
             _routed, replied = al.inbox_evidence(dc.INBOX_LOG, tail_bytes=1 << 30)
             started = started & replied
             ch = client.get_channel(CFG["channel_id"])
@@ -1322,7 +1492,7 @@ def build_client(task_q, recover_floor=None, alert_q=None):
                              f"{len(_e['parts'])}/{_e['n']}, missing {_missing}. "
                              f"Content above is PARTIAL — treat conclusions as provisional.]")
                 log(f"chunk-group {_sg}: TIMEOUT flush, missing {_missing}")
-                task_q.put({**_e['base'], 'kind': 'text', 'content': _partial})
+                enqueue_person(task_q, {**_e['base'], 'kind': 'text', 'content': _partial})
             _gm = GROUP_MARKER_RE.search(content)
             if _gm:
                 _grp, _k, _n = _gm.group(1), int(_gm.group(2)), int(_gm.group(3))
@@ -1361,6 +1531,12 @@ def build_client(task_q, recover_floor=None, alert_q=None):
         elif author_is_cc_bot and "LANGSTON" in dc.opening_list(content)[0]:
             pass  # a CC post whose OPENING LIST names Langston (address_list.py, #1241)
         else:
+            return
+        # P11 (B-AGENT-INVOKE-FAILURE-NOTICE): a FAILURE NOTICE from the OTHER agent is not a request. ⚠️ INERT UNTIL
+        # #1241 A6 — Coltrane's posts cannot reach this gate today (author_is_cc_bot is the pinned CC bot or webhook), and
+        # AGENT_BOT_IDS is empty until A6 names his id; it sits BEFORE engagement so A6 cannot land without it.
+        if is_other_agent_failure_notice(message.author.id, content):
+            log(f"msg {message.id}: another agent's failure notice - not a request, not invoked")
             return
 
         base = {
@@ -1406,12 +1582,12 @@ def build_client(task_q, recover_floor=None, alert_q=None):
             log(f"ALERT enqueued: msg {message.id} via alerts webhook")
             return
         if voice:
-            task_q.put({**base, "kind": "voice", "voice": voice})
+            enqueue_person(task_q, {**base, "kind": "voice", "voice": voice})
             log(f"voice enqueued: msg {message.id} from {message.author}")
             return
         if not content:
             return
-        task_q.put({**base, "kind": "text", "content": content})
+        enqueue_person(task_q, {**base, "kind": "text", "content": content})
         log(f"text enqueued: msg {message.id} from {message.author}: {content[:80]}")
 
     # B-DISCORD-INBOUND-LIVENESS (#462): same receive-liveness watchdog as the CC bridge — this

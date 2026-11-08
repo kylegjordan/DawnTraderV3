@@ -77,6 +77,10 @@ b = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(b)
 b.LOG_FILE = os.path.join(SCRATCH, "bridge.log")
 open(b.LOG_FILE, "w").close()
+# ⛔ NEVER THE LIVE INBOX (B-AGENT-INVOKE-FAILURE-NOTICE): since P10, on_message writes a `langston_enqueued` row for
+#    every request it accepts. Run on Helsinki without this redirect, this suite wrote 13 test rows into
+#    /var/log/cc-discord-inbox.jsonl (2026-11-08 00:25:20Z). Every live path the bridge writes is redirected here.
+dc.INBOX_LOG = b.dc.INBOX_LOG = os.path.join(SCRATCH, "inbox.jsonl")
 
 
 class TaskQ(list):

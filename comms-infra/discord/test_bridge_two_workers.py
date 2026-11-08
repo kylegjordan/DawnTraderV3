@@ -44,7 +44,7 @@ _INV_LOCK = threading.Lock()
 INVOKE_SLEEP = {"s": 0.0}
 
 
-def fake_invoke(prompt, session_id, scratch=None):
+def fake_invoke(prompt, session_id, scratch=None, meta=None):    # meta: B-AGENT-INVOKE-FAILURE-NOTICE C-2's contract
     with _INV_LOCK:
         INVOKES.append({"prompt": prompt, "scratch": scratch, "t": time.time(), "thread": threading.current_thread().name})
     time.sleep(INVOKE_SLEEP["s"])
