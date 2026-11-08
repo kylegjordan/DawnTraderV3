@@ -94,9 +94,11 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     // all four catch sites use the one predicate/text; no loose substring survives
     const src = read('server/services/drift-dashboard-aggregator.ts');
     expect(src.match(/isDiagPoolLoad\(err\)/g)?.length).toBe(3);
-    expect(src).toContain('msg.includes(STATEMENT_TIMEOUT_CANCEL)');
-    expect(src).not.toMatch(/includes\('canceling statement'\)/);
-    expect(src).not.toMatch(/includes\('statement timeout'\)/);
+    // the constant is USED at exactly two sites: inside the predicate, and the passive panel's safeCount timeout branch
+    // (Langston r2: a toContain was satisfied by the predicate alone, so the fourth site was pinned by nothing)
+    expect(src.match(/msg\.includes\(STATEMENT_TIMEOUT_CANCEL\)/g)?.length).toBe(2);
+    // no literal timeout/cancel text inside ANY includes(), whatever the quote style (', ", or a template literal)
+    expect(src).not.toMatch(/includes\(\s*[`'"][^`'"]*(canceling statement|statement timeout)/);
   });
 
   it('ANY failure sets timedOut — a non-timeout fault too, not only a statement timeout (Langston take (b))', async () => {
