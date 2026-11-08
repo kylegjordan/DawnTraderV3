@@ -105,8 +105,13 @@ describe('the NO-CLOCK fence reaches the helper the gate now depends on (Kyle 20
 describe('the engine seam — wired once, xStock only, before warmth, with no counter inside the gate', () => {
   const src = readFileSync(join(__dirname, '../../services/active-execution-engine.ts'), 'utf8');
   const a = src.indexOf('private async _evaluateOpenDepthGate(');
-  const body = src.slice(a, src.indexOf("return { pass: true, reason: 'ok', snapshot, warmthMaxAgeMs: config.warmthMaxAgeMs };", a));
-  it('CONTROL: the gate body was located', () => { expect(body.length).toBeGreaterThan(500); });
+  const end = src.indexOf("return { pass: true, reason: 'ok', snapshot, warmthMaxAgeMs: config.warmthMaxAgeMs };", a);
+  const body = src.slice(a, end);
+  it('CONTROL: the gate body was located — it STARTED and ENDED where meant (a -1 end would slice to end of file)', () => {
+    expect(a).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(a);
+    expect(body.length).toBeGreaterThan(500);
+  });
   it('applies the tick age for xstock_spot only, before the first assessWarmth', () => {
     const apply = body.indexOf('applyXstockEntryTickAge(snapshot, getLatestEquityTick(symbol))');
     expect(apply).toBeGreaterThan(0);
@@ -122,4 +127,19 @@ describe('the engine seam — wired once, xStock only, before warmth, with no co
   it('exactly one call site of applyXstockEntryTickAge in the engine', () => {
     expect(src.split('applyXstockEntryTickAge(').length - 1).toBe(1);
   });
+});
+
+describe('no control characters in increment 0\'s own files (the heredoc-backspace corruption class)', () => {
+  // Same detector as b-xstock-feed-sanity-fence.test.ts's F-CTRL, which covers THAT batch's files only (Langston r3 note).
+  const CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
+  const files = [
+    join(__dirname, '../../services/execution/depth-source.ts'),
+    join(__dirname, '../../asset_classes/xstock_spot/active-dispatch.ts'),
+    join(__dirname, 'b-price-feed-coverage-inc0.test.ts'),
+  ];
+  it('CONTROL: the detector fires on an injected backspace and passes tab/CR/LF', () => {
+    expect(CONTROL.test('abc\x08def')).toBe(true);
+    expect(CONTROL.test('abc\tdef\r\nghi')).toBe(false);
+  });
+  for (const f of files) it(`clean: ${f.split(/[\\/]/).pop()}`, () => { expect(CONTROL.test(readFileSync(f, 'utf8'))).toBe(false); });
 });
