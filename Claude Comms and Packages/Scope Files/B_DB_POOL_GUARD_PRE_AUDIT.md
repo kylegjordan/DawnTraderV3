@@ -351,3 +351,14 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
   - Test: load (both kinds) writes no line; a fault writes one line naming 5 of 5. M14 (load counted as a fault) fails it.
 
 - **PROCEED on `a5a887c58` (Langston, Discord `1568774345134706780`) with one more fold, done:** `diskBytesForParent`, the file's third fault collector, now splits load from fault the same way (an acquire timeout or the 25 s cancel on an untimed partition-tree sum writes no line; a real error is collected and logged once per call). Test 3c in `b-ohlc-frame-guard-archive-counts.test.ts`; M15 (the split removed) fails it.
+
+### P5 Step 7 — first pass (CC-A, 2026-11-08; deployed `5c3b14496` 01:31:46Z, restart 687, with B-PRICE-SIDE-BY-JOB 8c switch OFF)
+- **Startup:** `[DB_POOL_INIT] application_name=dawntrader_diag … statement_timeout=25000 idle_in_transaction_session_timeout=60000 connectionTimeoutMillis=5000 idleTimeoutMillis=30000 max=4` at 01:31:37. The main pool's line is unchanged. The qd-probe cron registered; the OBJ-5 pages started (`restart=true`).
+- **The diagnostic pool's minute line:** 42 `POOL_MINUTE_V2 pool=dawntrader_diag` lines in the 42 minutes after the deploy, all `checkouts=0` (no dashboard open). Present, separate, and quiet by construction; per the C-3 comment, a quiet line is not evidence of health.
+- **The stage-attrition deletion:** the `[B-FILTER-DIAG-PAPER] ✅ Stage-attrition cache refresher started` line appears on the 11-07 19:16:47, 19:18:34 and 20:09:18 boots (the control) and on NONE since 01:31 (0 `ttrition` lines in `out.log` + `error.log`).
+  - The slow `sql:select:signal_eval_archive` family: 0 of 42 main-pool minutes since the deploy, against 1 of 92 between 22:00Z and the deploy. **NOT a discriminating test:** the family had already fallen from about 12 per hour (11-05/06) to near zero after the 11-07 17:51 P3 deploy, on a Saturday. The deletion stands on the absent start line and the absent code, not on this count.
+- **qd-probe at burst 4 (C-4):** `scheduled_tasks_audit` shows all 8 fires since the deploy `success`, universe 473, 468 rows each, at 4,074-5,019 ms. The 28 fires before it on the same evening took 2,566-4,361 ms, so the run time rose about 1.5×, inside the 300 s cadence. **0 `fire SKIPPED` lines.** xStock market closed (Saturday); the weekday duration is still to be read.
+- **Owed for Step 7:**
+  - the Claude-in-Chrome tab-open of Analytics → Drift Dashboard while reading `pg_stat_activity` by `application_name` (Kyle's Chrome is signed out of staging), which also carries the Passive Archive card leg for `B-OHLC-FRAME-GUARD` §8.1;
+  - the archival-scheduler weekly/monthly reads;
+  - a weekday qd-probe duration read.
