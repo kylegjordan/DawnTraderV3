@@ -253,7 +253,7 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
 
 **THE PLAN**
 - **P5-1 — `server/db.ts` gains `diagPool` / `diagDb`.**
-  - Settings: `application_name: 'dawntrader_diag'`, `max: 3`, `statement_timeout: 25_000` below `query_timeout: 30_000` (the same invariant and census fence as the main pool), `idle_in_transaction_session_timeout: 60_000`, `connectionTimeoutMillis: 5_000` (a panel fails fast instead of queueing), `idleTimeoutMillis: 30_000`, keepAlive.
+  - Settings: `application_name: 'dawntrader_diag'`, `max: 4` (`DIAG_POOL_MAX`; Langston's P5 sizing ruling — this design line read 3 and was corrected in the body), `statement_timeout: 25_000` below `query_timeout: 30_000` (the same invariant and census fence as the main pool), `idle_in_transaction_session_timeout: 60_000`, `connectionTimeoutMillis: 5_000` (a panel fails fast instead of queueing), `idleTimeoutMillis: 30_000`, keepAlive.
   - `attachPoolInstrument` + `attachPoolGuards` under `dawntrader_diag`, so its own minute line separates it and an ended idle client cannot crash the process.
   - **NOT paged:** OBJ-5's pages watch `dawntrader_main`, and the diagnostic pool's failures land in the panels, by design. Stated, not silent.
   - The `[DB_POOL_INIT]` line prints both pools.
@@ -354,11 +354,26 @@ Post-P3 (144 minutes, a Saturday with xStocks shut) the 15-minute snapshot famil
 
 ### P5 Step 7 — first pass (CC-A, 2026-11-08; deployed `5c3b14496` 01:31:46Z, restart 687, with B-PRICE-SIDE-BY-JOB 8c switch OFF)
 - **Startup:** `[DB_POOL_INIT] application_name=dawntrader_diag … statement_timeout=25000 idle_in_transaction_session_timeout=60000 connectionTimeoutMillis=5000 idleTimeoutMillis=30000 max=4` at 01:31:37. The main pool's line is unchanged. The qd-probe cron registered; the OBJ-5 pages started (`restart=true`).
-- **The diagnostic pool's minute line:** 42 `POOL_MINUTE_V2 pool=dawntrader_diag` lines in the 42 minutes after the deploy, all `checkouts=0` (no dashboard open). Present, separate, and quiet by construction; per the C-3 comment, a quiet line is not evidence of health.
+- **The diagnostic pool's minute line:** 43 `POOL_MINUTE_V2 pool=dawntrader_diag` lines by 02:14Z (Langston's count; I first wrote 42), one per minute with no gap, all `checkouts=0` (no dashboard open). Present, separate, and quiet by construction; per the C-3 comment, a quiet line is not evidence of health.
 - **The stage-attrition deletion:** the `[B-FILTER-DIAG-PAPER] ✅ Stage-attrition cache refresher started` line appears on the 11-07 19:16:47, 19:18:34 and 20:09:18 boots (the control) and on NONE since 01:31 (0 `ttrition` lines in `out.log` + `error.log`).
   - The slow `sql:select:signal_eval_archive` family: 0 of 42 main-pool minutes since the deploy, against 1 of 92 between 22:00Z and the deploy. **NOT a discriminating test:** the family had already fallen from about 12 per hour (11-05/06) to near zero after the 11-07 17:51 P3 deploy, on a Saturday. The deletion stands on the absent start line and the absent code, not on this count.
-- **qd-probe at burst 4 (C-4):** `scheduled_tasks_audit` shows all 8 fires since the deploy `success`, universe 473, 468 rows each, at 4,074-5,019 ms. The 28 fires before it on the same evening took 2,566-4,361 ms, so the run time rose about 1.5×, inside the 300 s cadence. **0 `fire SKIPPED` lines.** xStock market closed (Saturday); the weekday duration is still to be read.
+- **qd-probe at burst 4 (C-4):** `scheduled_tasks_audit` shows all 8 fires since the deploy `success`, universe 473, 468 rows each, at 4,074-5,019 ms. The 31 fires before it on the same evening (Langston's enumeration; I first wrote 28) took 2,566-4,361 ms, so the run time rose about 1.5×, inside the 300 s cadence. **0 `fire SKIPPED` lines.** xStock market closed (Saturday); the weekday duration is still to be read.
 - **Owed for Step 7:**
   - the Claude-in-Chrome tab-open of Analytics → Drift Dashboard while reading `pg_stat_activity` by `application_name` (Kyle's Chrome is signed out of staging), which also carries the Passive Archive card leg for `B-OHLC-FRAME-GUARD` §8.1;
   - the archival-scheduler weekly/monthly reads;
   - a weekday qd-probe duration read.
+
+### P5 Step 8 — evidence legs CONFIRMED by Langston (Discord `1568815695393853545`); the UI leg is LOAD-BEARING and outstanding
+- **Leg 1 (diag init):** confirmed. Both `DB_POOL_INIT` lines are at 01:31:37. The main line is byte-identical to the four boots before the deploy, and diag is absent from all four.
+  - **Fixed:** the diag line now prints `keepAlive` and `keepAliveInitialDelayMillis`, and the P5 fence asserts both in `DIAG_POOL_CONFIG` and in the print. A mutation removing the print fails it.
+- **Leg 2 (diag minute line):** confirmed, 54 lines by 02:25:37, all 60 s steps. **Every field on every line is 0 or `-` (`open=0 total=0`), so the pool has never opened a connection.**
+  - ⇒ **OBJ-6 is CONFIGURED, not yet FUNCTIONAL** (#661 leg 3). The Claude-in-Chrome tab-open is the ONLY thing that can exercise it, which is why the UI leg is load-bearing.
+- **Leg 3 (stage-attrition gone):** confirmed. The control is broader than I named: 9 start lines in that file (the last at 20:09:18), plus the failure family — 2 × `refresh FAILED … Query read timeout` on 11-07 (00:15:32, 13:20:33), i.e. the removed refresher failed twice in 24 h, not continuously. The slow-select sub-leg stays withdrawn.
+- **Leg 4 (qd-probe):** confirmed on content; counts corrected (post 11 fires at his read, mean 4,332 ms; pre 31, mean 2,954 ms). **The floor moved:** every post fire is ≥ 4,074 ms. Output is unchanged (468 rows, 5 skipped symbols in both eras).
+  - **The `noOverlap` half is UNEXERCISED:** 0 `fire SKIPPED` lines across the 13 retained days, at a 1.7 % duty cycle, so it cannot be expected to fire.
+  - **The weekday read must test the MAIN pool's `wait_gt_*` / `max_wait_ms` in the probe's minute**, not the probe's own duration.
+- **Leg 5 (the latch):** confirmed, row `c1b22bf7` as recorded. **The fold is UNEXERCISED:** no row in the 2,962-row queue carries `fires > 1`.
+- **Leg 6, added by Langston — OBJ-5 is armed on THIS build:** exactly one `[B-DB-POOL-GUARD][ALERTS] started for pool=dawntrader_main (…, restart=true)` at 01:31:42 on `5c3b14496`. The restart family's silence is explained, not merely absent: deploy record `restart_time=687` equals live pm2 687, and there is no lock file.
+- **Fixed in the same commit:** both level-page bodies now say the clear never precedes promotion and, if the clean reads (or quiet minutes) come first, resolves on the first one after promotion. (Measured: promotion → resolve took 17.8 s on `c1b22bf7`.)
+- **Withdrawn (§13 disposition 5, Langston):** diag not paged (C-3, `db.ts:150-155`, declared); the restart key per value (declared INCIDENT per value, with C2's prefix-wide clear).
+- **Carried as #661-leg-3 bounds in the completion report, with successors:** the merge fold's first second-sighting; the overlap guard's first fire; the diag pool's first checkout (the UI leg).

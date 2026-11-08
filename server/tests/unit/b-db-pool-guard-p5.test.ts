@@ -68,6 +68,11 @@ describe('P5 — wiring and sizing fences', () => {
 
   it('the diagnostic pool has its own name, its size constant, the shared guard and the instrument', () => {
     expect(dbSrc).toMatch(/application_name: 'dawntrader_diag'/);
+    // keepAlive is set on BOTH pools and printed on both DB_POOL_INIT lines (Langston, Step 8 leg 1)
+    const diagCfg = dbSrc.slice(dbSrc.indexOf('const DIAG_POOL_CONFIG = {'), dbSrc.indexOf('} as const;', dbSrc.indexOf('const DIAG_POOL_CONFIG = {')));
+    expect(diagCfg).toMatch(/keepAlive: true,/);
+    expect(diagCfg).toMatch(/keepAliveInitialDelayMillis: 10_000,/);
+    expect(dbSrc).toMatch(/keepAlive=\$\{DIAG_POOL_CONFIG\.keepAlive\}/);
     expect(dbSrc).toMatch(/max: DIAG_POOL_MAX,/);
     expect(dbSrc).toMatch(/attachPoolGuards\(diagPool,/);
     expect(dbSrc).toMatch(/attachPoolInstrument\(diagPool,/);

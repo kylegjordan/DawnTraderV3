@@ -172,6 +172,8 @@ export const diagDb = drizzle({ client: diagPool, schema });
 attachPoolGuards(diagPool, DIAG_POOL_CONFIG.application_name);
 console.log(
   `[DB_POOL_INIT] application_name=${DIAG_POOL_CONFIG.application_name} ` +
+    `keepAlive=${DIAG_POOL_CONFIG.keepAlive} ` +
+    `keepAliveInitialDelayMillis=${DIAG_POOL_CONFIG.keepAliveInitialDelayMillis} ` +
     `query_timeout=${DIAG_POOL_CONFIG.query_timeout} ` +
     `statement_timeout=${DIAG_POOL_CONFIG.statement_timeout} ` +
     `idle_in_transaction_session_timeout=${DIAG_POOL_CONFIG.idle_in_transaction_session_timeout} ` +

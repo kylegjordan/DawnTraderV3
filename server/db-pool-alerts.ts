@@ -79,8 +79,9 @@ function waitBody(label: string, v: WaitVerdict, r: PoolFlushRecord): string {
     + `${iso(v.window.toWallMs)}: ${v.window.waitsOver1s} waits over 1 s, ${v.window.waitsOver5s} over 5 s, longest `
     + `${v.window.maxWaitMs} ms (${v.window.maxWaitSite}). At the latest flush: open=${r.open} total=${r.total} `
     + `idle=${r.idle} waiting=${r.waiting} (a high 'open' with few waits is a PIN, many short waits a FLAP). Counts are per `
-    + `process and restart at a restart. Clears itself after 10 minutes of covered time with no wait over 1 s, and not before the `
-    + `dispatcher has promoted this row; later windows fold into the metadata (fires, last_at, the running worst). B-DB-POOL-GUARD OBJ-5(a).`;
+    + `process and restart at a restart. Clears itself after 10 minutes of covered time with no wait over 1 s — but never before the `
+    + `dispatcher has promoted this row: if the quiet minutes come first, it resolves at the first quiet flush after promotion. Later `
+    + `windows fold into the metadata (fires, last_at, the running worst). B-DB-POOL-GUARD OBJ-5(a).`;
 }
 
 // ═══ (b) LEVEL — a backend idle inside a transaction, sampled from outside the pool ════════════════════════════════
@@ -313,8 +314,9 @@ export function startDbPoolAlerts(opts: MonitorOptions): { stop: () => void; onF
         const ok = read as IdleRead;
         if (s.fire) await raiseLevel('mint idle', { severity: 'warning', title: `Idle transaction held open on ${label}`,
           body: `${ok.n} ${label} backend(s) idle inside a transaction for over ${IDLE_IN_TX_BOUND_S} s (longest ${Math.round(ok.maxS)} s, as first seen). `
-            + `The server ends them at 60 s. Clears after two consecutive clean reads (${IDLE_IN_TX_POLL_MS / 1000} s apart), and not before the `
-            + `dispatcher has promoted this row; later sightings fold into the metadata (fires, last_at, max n, max_s). B-DB-POOL-GUARD OBJ-5(b).`,
+            + `The server ends them at 60 s. Clears after two consecutive clean reads (${IDLE_IN_TX_POLL_MS / 1000} s apart) — but never before the `
+            + `dispatcher has promoted this row: if the clean reads come first, it resolves on the first clean read after promotion. Later `
+            + `sightings fold into the metadata (fires, last_at, max n, max_s). B-DB-POOL-GUARD OBJ-5(b).`,
           dedupe_key: idleKey, metadata: { source: 'db-pool-alerts', n: ok.n, max_s: ok.maxS } },
           (cur) => ({ ...cur, n: maxOf(cur.n, ok.n), max_s: maxOf(cur.max_s, ok.maxS) }));
         else if (s.clear && known.has(idleKey)) await clear('resolve idle', idleKey);
