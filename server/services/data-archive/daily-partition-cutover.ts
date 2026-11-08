@@ -52,6 +52,20 @@ export const DAILY_PARTITION_CUTOVERS: DailyPartitionCutover[] = [
   // pre-creates deploy-day coverage plus the same 14-day forward window.
   { table: 'xstock_bar_revision_event', cutoverDate: '2026-10-01' },
   { table: 'xstock_bar_aggregate_revision', cutoverDate: '2026-10-01' },
+  // B-DB-SIZE-RELIEF OBJ-4 (Kyle KD-60; absorbs #688): six 30-day tables still on MONTHLY partitions cut over at the
+  // first clean month boundary after the batch's deploy. Their cutover migration
+  // (drizzle/migrations/2026-11-08-b-db-size-relief-daily-cutover.sql) drops the empty future monthlies and pre-creates
+  // 16 dailies, and MUST ship in the same dt-deploy as these entries (from 2026-11-17 the daily creator reaches
+  // 12-01; a registry entry over a surviving monthly _2026_12 collides). ⛔ APPENDED LAST ON PURPOSE (pre-audit r3
+  // C-5(i)): the daily creator loops this array in order with no per-table catch, so a collision on one of these can
+  // only stop the tables after it — never the six above. Way back before 12-01: the held reversal migration plus a
+  // revert of these six lines, in one commit and one deploy (never one without the other).
+  { table: 'signal_eval_provenance', cutoverDate: '2026-12-01' },
+  { table: 'pair_scan_archive', cutoverDate: '2026-12-01' },
+  { table: 'crypto_spot_ticker_snap', cutoverDate: '2026-12-01' },
+  { table: 'xstock_perp_ticker_snap', cutoverDate: '2026-12-01' },
+  { table: 'macro_feed_archive', cutoverDate: '2026-12-01' },
+  { table: 'exit_decision_archive', cutoverDate: '2026-12-01' },
 ];
 
 /** The cutover Date (UTC midnight) for a table, or null if it is not daily-partitioned. */

@@ -246,3 +246,5 @@
 2026-11-05-b-close-writer-costs-restore-columns.sql
 2026-11-08-b-price-side-1250-xstock-epoch.sql
 2026-11-08-b-price-side-8c-level-build-knobs.sql
+2026-11-08-b-db-size-relief-retention.sql
+2026-11-08-b-db-size-relief-daily-cutover.sql
