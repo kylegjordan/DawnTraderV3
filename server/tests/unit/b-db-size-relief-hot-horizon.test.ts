@@ -62,4 +62,11 @@ describe('wiring', () => {
     expect(i0).toBeLessThan(sql.indexOf('=== (1) P8 p0'));
     expect(sql).toContain("'signal_eval_archive.hot_retention_days', 'switch_on_shadow_evidence.hot_retention_days'");
   });
+
+  it('the Drift Dashboard panel (OBJ-2) uses the SAME query and parser, not a copy of its own', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'server/services/drift-dashboard-aggregator.ts'), 'utf8');
+    expect(src).toContain('sql.raw(HOT_HORIZON_SQL)');
+    expect(src).toContain('parseHorizonRows(');
+    expect(src).not.toContain("LIKE '%.hot_retention_days'");
+  });
 });

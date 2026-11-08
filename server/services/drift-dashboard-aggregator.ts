@@ -26,6 +26,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { directionalBiasStore } from '../core/metrics/directional-bias-store.js';
 import { checkMovedTelemetryDays } from './data-archive/moved-day-check.js';
+import { HOT_HORIZON_SQL, parseHorizonRows } from './data-archive/hot-horizon.js';
 import { isAcquireTimeout } from '../db-pool-instrument.js';
 import type { RecorderConnectionLiveness } from './passive-archive/recorder-connection.js';
 // B64a: regime names imported from the canonical SSOT to satisfy the
@@ -848,15 +849,9 @@ export async function computeDataArchiveStatus(
   let horizons: Map<string, number> | null = null;
   let horizonFault: string | null = null;
   try {
-    const hr = await db.execute(sql.raw(`SELECT constant_name, value FROM module_constants
-       WHERE module_name = 'data_lifecycle' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
-         AND constant_name LIKE '%.hot_retention_days'`));
-    const hrows = (Array.isArray(hr) ? hr : (hr as any).rows ?? []) as Array<{ constant_name: string; value: unknown }>;
-    horizons = new Map();
-    for (const row of hrows) {
-      const days = Number(row.value);
-      if (Number.isFinite(days) && days > 0) horizons.set(row.constant_name.replace(/\.hot_retention_days$/, ''), days);
-    }
+    // ONE query and ONE parser, shared with the replay script's era gate (data-archive/hot-horizon.ts, OBJ-3).
+    const hr = await db.execute(sql.raw(HOT_HORIZON_SQL));
+    horizons = parseHorizonRows((Array.isArray(hr) ? hr : (hr as any).rows ?? []) as Array<{ constant_name: string; value: unknown }>);
   } catch (err) {
     // Load (an acquire or statement timeout on the diagnostic pool) is not a fault and writes no line — the same split
     // as the per-table reads below (B-DB-POOL-GUARD P5); a real fault is logged once.
