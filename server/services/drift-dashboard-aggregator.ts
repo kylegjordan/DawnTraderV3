@@ -785,6 +785,10 @@ export interface DataArchiveStatusResponse {
     diskPretty: string;
     lastWriteAt: string | null;
     timedOut: boolean;
+    /** B-DB-SIZE-RELIEF OBJ-2: the table's hot window in days (data_lifecycle), or null when it could not be read. */
+    hotHorizonDays: number | null;
+    /** True when the selected window reaches past the hot horizon (the count covers only the hot days); null = unknown. */
+    windowPartial: boolean | null;
   }>;
   totalDiskBytes: number;
   totalDiskPretty: string;
@@ -836,6 +840,30 @@ export async function computeDataArchiveStatus(
 
   const tables: DataArchiveStatusResponse['tables'] = [];
   let totalDiskBytes = 0;
+  // B-DB-SIZE-RELIEF OBJ-2 (pre-audit P5, Langston's Step-2 fold): each table's hot horizon, read ONCE per call. The
+  // counts below read HOT partitions only, so a window wider than the horizon covers just the hot days — the row says
+  // so instead of showing a 15-day count under a 30-day label. This read has its own try: on any failure (an acquire
+  // timeout on the 4-slot diagnostic pool included) every horizon is null and `windowPartial` unknown, and the panel
+  // still renders. A missing key is null too, never a default (no hard-coded fallback for a DB-governed setting).
+  let horizons: Map<string, number> | null = null;
+  let horizonFault: string | null = null;
+  try {
+    const hr = await db.execute(sql.raw(`SELECT constant_name, value FROM module_constants
+       WHERE module_name = 'data_lifecycle' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
+         AND constant_name LIKE '%.hot_retention_days'`));
+    const hrows = (Array.isArray(hr) ? hr : (hr as any).rows ?? []) as Array<{ constant_name: string; value: unknown }>;
+    horizons = new Map();
+    for (const row of hrows) {
+      const days = Number(row.value);
+      if (Number.isFinite(days) && days > 0) horizons.set(row.constant_name.replace(/\.hot_retention_days$/, ''), days);
+    }
+  } catch (err) {
+    // Load (an acquire or statement timeout on the diagnostic pool) is not a fault and writes no line — the same split
+    // as the per-table reads below (B-DB-POOL-GUARD P5); a real fault is logged once.
+    const msg = err instanceof Error ? err.message : String(err);
+    const isLoad = isAcquireTimeout(err) || msg.includes('statement timeout') || msg.includes('canceling statement');
+    if (!isLoad) horizonFault = msg; // reported on the once-per-call line after the table loop
+  }
   // B-DB-POOL-GUARD P5 (Langston, fold before close): load and faults are kept apart, as in the passive panel. A
   // statement timeout or an acquire timeout on the 4-slot diagnostic pool is LOAD — the table shows QUERY TIMEOUT
   // and no line is written; a real error is collected and logged ONCE per call, never once per table (error.log is
@@ -890,10 +918,15 @@ export async function computeDataArchiveStatus(
       // fault is still distinguishable where it is read: the once-per-call line after the loop names it.
       timedOut = true;
     }
-    tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut });
+    const hotHorizonDays = horizons?.get(t) ?? null;
+    const windowPartial = hotHorizonDays === null ? null : windowMs > hotHorizonDays * 86_400_000;
+    tables.push({ name: t, rowsInWindow, totalRows, diskBytes, diskPretty, lastWriteAt, timedOut, hotHorizonDays, windowPartial });
   }
   if (archiveFaults.length > 0) {
-    console.error(`[B70][archive-status] ${archiveFaults.length} of ${TABLES.length} table reads failed — shown as QUERY TIMEOUT; first: ${archiveFaults[0]}`);
+    console.error(`[B70][archive-status] ${archiveFaults.length} of ${TABLES.length} table reads failed — shown as QUERY TIMEOUT; first: ${archiveFaults[0]}`
+      + (horizonFault ? `; the hot-horizon read also failed (horizons shown as unknown): ${horizonFault}` : ''));
+  } else if (horizonFault) {
+    console.error(`[B70][archive-status] hot-horizon read failed — horizons shown as unknown: ${horizonFault}`);
   }
 
   const cfg = getArchiveConfig();

@@ -2037,6 +2037,10 @@ interface DataArchiveTableStat {
   diskPretty: string;
   lastWriteAt: string | null;
   timedOut: boolean;
+  /** B-DB-SIZE-RELIEF OBJ-2: the table's hot window in days, or null when the server could not read it. */
+  hotHorizonDays: number | null;
+  /** True when the selected window reaches past the hot window, so the count covers only the hot days. */
+  windowPartial: boolean | null;
 }
 
 interface DataArchiveBatchWriterStat {
@@ -2153,6 +2157,19 @@ function DataArchiveSection() {
                           {t.timedOut && (
                             <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700">
                               QUERY TIMEOUT
+                            </span>
+                          )}
+                          {t.windowPartial === true && (
+                            <span
+                              className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-900/30 text-sky-700"
+                              title={`The live database holds only the last ${t.hotHorizonDays} days of this table; older rows are in the archive tier, so this count covers ${t.hotHorizonDays} days, not the whole window.`}
+                            >
+                              PARTIAL — hot holds {t.hotHorizonDays} d
+                            </span>
+                          )}
+                          {t.windowPartial === null && (
+                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground" title="The table's hot window could not be read, so whether this count covers the whole window is unknown.">
+                              HOT WINDOW UNKNOWN
                             </span>
                           )}
                         </td>

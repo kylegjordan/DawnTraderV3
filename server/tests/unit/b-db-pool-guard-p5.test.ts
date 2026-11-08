@@ -31,8 +31,33 @@ describe('P5 — the data-archive panel on the diagnostic pool (C-1, Langston bl
     spy.mockRestore();
     expect(r.tables.length).toBe(5);
     for (const t of r.tables) expect(t.timedOut, t.name).toBe(true);
-    expect((db as unknown as { diagDb: { execute: { mock: { calls: unknown[] } } } }).diagDb.execute.mock.calls.length).toBe(5);
+    // 1 hot-horizon read (B-DB-SIZE-RELIEF OBJ-2) + 5 table reads, all on the diagnostic pool
+    expect((db as unknown as { diagDb: { execute: { mock: { calls: unknown[] } } } }).diagDb.execute.mock.calls.length).toBe(6);
+    // the horizon read failed too, so every row's partial flag is UNKNOWN (null), never a default
+    for (const t of r.tables) { expect(t.hotHorizonDays, t.name).toBeNull(); expect(t.windowPartial, t.name).toBeNull(); }
     expect((db as unknown as { db: { execute: { mock: { calls: unknown[] } } } }).db.execute.mock.calls.length).toBe(0);
+  });
+
+  it('B-DB-SIZE-RELIEF OBJ-2: a window wider than the hot horizon is flagged PARTIAL; one inside it is not', async () => {
+    const db = await import('../../db.js');
+    const exec = (db as unknown as { diagDb: { execute: ReturnType<typeof vi.fn> } }).diagDb.execute;
+    exec.mockImplementationOnce(async () => ({ rows: [
+      { constant_name: 'signal_eval_archive.hot_retention_days', value: 15 },
+      { constant_name: 'pair_scan_archive.hot_retention_days', value: 30 },
+      { constant_name: 'exit_decision_archive.hot_retention_days', value: 30 },
+      { constant_name: 'macro_feed_archive.hot_retention_days', value: 30 },
+      // signal_eval_provenance deliberately absent: a missing key is UNKNOWN, never defaulted
+    ] }));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { computeDataArchiveStatus } = await import('../../services/drift-dashboard-aggregator.js');
+    const r = await computeDataArchiveStatus('rolling_30d' as never);
+    spy.mockRestore();
+    const byName = new Map(r.tables.map((t) => [t.name, t]));
+    expect(byName.get('signal_eval_archive')).toMatchObject({ hotHorizonDays: 15, windowPartial: true });
+    expect(byName.get('pair_scan_archive')).toMatchObject({ hotHorizonDays: 30, windowPartial: false });
+    expect(byName.get('signal_eval_provenance')).toMatchObject({ hotHorizonDays: null, windowPartial: null });
+    const r24 = await (await import('../../services/drift-dashboard-aggregator.js')).computeDataArchiveStatus('rolling_24h' as never);
+    expect(r24.tables.every((t) => t.windowPartial === null)).toBe(true); // that call's horizon read failed (the mock throws): unknown
   });
 
   it('ANY failure sets timedOut — a non-timeout fault too, not only a statement timeout (Langston take (b))', async () => {
