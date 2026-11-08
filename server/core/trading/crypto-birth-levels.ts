@@ -33,6 +33,17 @@ export function levelGeometryOf(metadata: unknown): LevelGeometry {
 }
 
 /**
+ * The geometry a crypto signal was STAMPED with at birth — `'sided'` or `'mid'` — or null when it carries no stamp (lost on a
+ * hop, or queued before 8c deployed). The open refuses a crypto signal whose stamp is null (row `8c` switch condition (b):
+ * the refusal keys on the row's own stamp, never on the live switch).
+ */
+export function levelGeometryStampOf(metadata: unknown): LevelGeometry | null {
+  if (metadata === null || typeof metadata !== 'object') return null;
+  const g = (metadata as Record<string, unknown>).levelGeometry;
+  return g === 'sided' || g === 'mid' ? g : null;
+}
+
+/**
  * The MAKER arm's entry on a sided triple — the bid recorded at the build — or null when the triple is not sided or the
  * record is unusable. ONE reader for the birth decision and the engine's resting limit: on a sided triple the signal's
  * `entryPrice` is the ASK, and a buy limit resting at the ask is marketable by construction (it would cross every time).

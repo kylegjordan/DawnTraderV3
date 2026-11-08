@@ -42,7 +42,7 @@ describe('8c switch — what OFF skips (source)', () => {
   const O = src('server/services/signal-orchestrator.ts');
   const E = src('server/services/active-execution-engine.ts');
   it('the whole birth block (walk, re-base, refusal, stamp) sits inside the switch', () => {
-    const sw = O.indexOf('      if (_cbKnobs.sidedEnabled) {');
+    const sw = O.indexOf('      } else {', O.indexOf('      if (!_cbKnobs.sidedEnabled) {'));
     expect(sw).toBeGreaterThan(-1);
     for (const inner of ["stage: 'active_level_build'", 'const _cb = baseCryptoLevelsAtBirth({', 'metadata: { ...(rawSignal.metadata ?? {}), ..._cb.stamp },']) {
       const at = O.indexOf(inner);
@@ -50,11 +50,25 @@ describe('8c switch — what OFF skips (source)', () => {
       expect(at, inner).toBeLessThan(O.indexOf('// ══ F-G-1 (OBJ-7 / OBJ-7b / P1-P3) — VENUE PRICE GRID'));
     }
   });
-  it('the open refusal needs the switch ON; an unreadable switch fails closed (treated as ON)', () => {
-    expect(E).toContain("if (_cbSidedOn && _cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {");
-    expect(E).toContain('try { _cbSidedOn = readCryptoLevelBuildKnobs().sidedEnabled; } catch { _cbSidedOn = true; }');
+  it("condition (b): ONE read site — OFF stamps the birth geometry 'mid' (a carried stamp is kept); the open keys on the STAMP", () => {
+    const off = O.indexOf('      if (!_cbKnobs.sidedEnabled) {');
+    expect(off).toBeGreaterThan(-1);
+    const offBody = O.slice(off, O.indexOf('} else {', off));
+    expect(offBody).toContain('if (levelGeometryStampOf(rawSignal.metadata) === null) {');
+    expect(offBody).toContain("levelGeometry: 'mid'");
+    // the open refusal never reads the live switch
+    expect(E).toContain("if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) === null) {");
+    expect(E).not.toContain('readCryptoLevelBuildKnobs');
+    // the switch is read in ONE place in the orchestrator (the birth seam) — the shadows read only the ceilings
+    expect((O.match(/\.sidedEnabled/g) ?? []).length).toBe(1);
   });
-  it('the sided floor and every cost site key on the STAMP, which OFF never writes', () => {
+  it('levelGeometryStampOf: the exact stamp or null', async () => {
+    const { levelGeometryStampOf } = await import('../../core/trading/crypto-birth-levels.js');
+    expect(levelGeometryStampOf({ levelGeometry: 'mid' })).toBe('mid');
+    expect(levelGeometryStampOf({ levelGeometry: 'sided' })).toBe('sided');
+    for (const m of [undefined, null, {}, { levelGeometry: 'MID' }, 'mid']) expect(levelGeometryStampOf(m)).toBeNull();
+  });
+  it("the sided floor and every cost site key on the STAMP, which OFF writes as 'mid'", () => {
     expect(O).toContain("if (sizingContext.assetClass === 'crypto_spot' && _mtGeometry === 'sided') {");
     expect(O).toContain('const _mtGeometry = levelGeometryOf(rawSignal.metadata);');
   });

@@ -139,7 +139,7 @@ import { recordSideAgeAttempt, recordFeedAgreement } from '../core/calculations/
 import { selectTouchPrice, recordTouchSelection, tickerLegFromCachedQuote, type TouchLegInput } from '../core/calculations/touch-price.js';
 // Row `8c` switch-on: the crypto level-build knobs (DB-governed, fail hard) and the birth re-base.
 import { readCryptoLevelBuildKnobs, type LevelBuildKnobs } from '../core/trading/level-build-config.js';
-import { baseCryptoLevelsAtBirth, levelGeometryOf, makerEntryOf, sidedRewardToRisk } from '../core/trading/crypto-birth-levels.js';
+import { baseCryptoLevelsAtBirth, levelGeometryOf, levelGeometryStampOf, makerEntryOf, sidedRewardToRisk } from '../core/trading/crypto-birth-levels.js';
 import { calculateEfficiencyRatio, calculateVolNoise, calculateTrendSlope, calculateDirectionalIntegrity } from '../utils/analysis-utils.js';
 // HF9: DSS import removed — DSS deleted (superseded by MCE regime filtering + detect functions)
 // Batch 19G VN HF: SYSTEM_GUARDS import removed — deprecated filter constants deleted.
@@ -624,10 +624,17 @@ export class SignalOrchestrator {
       };
       let _cbKnobs: LevelBuildKnobs;
       try { _cbKnobs = readCryptoLevelBuildKnobs(); } catch { return _cbRefuse('knobs_unreadable'); }
-      // ⛔ THE 8c SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0). OFF ⇒ this block is skipped whole: no walk,
-      // no re-base, no refusal, and no `levelGeometry` stamp — so every cost site downstream reads 'mid' and keeps today's
-      // arithmetic, and the open refusal and the sided floor (both keyed on the stamp / this switch) never fire.
-      if (_cbKnobs.sidedEnabled) {
+      // ⛔ THE 8c SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0) — READ HERE AND ONLY HERE, once per built
+      // signal (Langston's switch condition (b)). The flip binds at BIRTH: the signal is stamped with the geometry it was
+      // built on — `'sided'` (ON, the block below) or `'mid'` (OFF, today's arithmetic) — and every later job (the four cost
+      // sites, the section-12 floor, the open refusal) keys off that stamp, never the live flag. So a row born under one
+      // setting keeps that setting for its whole life, whatever the flag says later. A row that already carries a stamp
+      // (a HYBRID re-sizing a sized quant signal) keeps its own.
+      if (!_cbKnobs.sidedEnabled) {
+        if (levelGeometryStampOf(rawSignal.metadata) === null) {
+          rawSignal = { ...rawSignal, metadata: { ...(rawSignal.metadata ?? {}), levelGeometry: 'mid' } };
+        }
+      } else {
       const _cbSym = normalizeToInternalSymbol(rawSignal.symbol) || rawSignal.symbol;
       const _cbNow = Date.now();
       const _cbLegs = cryptoTouchLegs(krakenWebSocketAdapter.getBookForFill(_cbSym), priceCache.getCachedPrice(_cbSym), _cbNow);
@@ -692,8 +699,11 @@ export class SignalOrchestrator {
       // so its target is a CEILING and rounding it AWAY would push it past the bound it was
       // defined by. Every other target is a floor ("at least K x ATR").
       // #1250 C-2 (Langston): the cap bit TRAVELS on the stamp, so the re-base rounds the same way birth does. The
-      // name equality remains ONLY for a signal with no stamp (a HYBRID rebuild drops the strategy's metadata), so an
-      // unstamped volatility_edge still rounds as a cap — today's behaviour, never a silent flip.
+      // name equality remains ONLY for a signal with no stamp, so an unstamped volatility_edge still rounds as a cap —
+      // today's behaviour, never a silent flip. ⚠️ CORRECTED (row `8c`, Langston's switch review): this said "a HYBRID
+      // rebuild drops the strategy's metadata". It did until 8c — the HYBRID literal now carries the quant source's
+      // `levelSpec` via `pickLevelStamps` — so at this ref NO known constructor reaches here unstamped (every crypto
+      // constructor stamps; census in the 8c change list). The fallback stays as the defence for a future unstamped one.
       const _stampSpec = (rawSignal.metadata as { levelSpec?: { targetIsCap?: boolean } } | undefined)?.levelSpec;
       const _isCap = _stampSpec !== undefined ? _stampSpec.targetIsCap === true : strategyId === ('volatility_edge' as StrategyType);
       const _r = roundTripleToGrid(

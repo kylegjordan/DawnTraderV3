@@ -90,8 +90,7 @@ import {
 // Row `8c`: the observation ceilings this imported (unused here) are deleted — the level build reads `level_basis.*`.
 import { recordSideAgeAttempt } from '../core/calculations/level-basis.js';
 // Row `8c` switch-on: the maker arm's resting limit on a sided crypto triple.
-import { makerEntryOf, levelGeometryOf } from '../core/trading/crypto-birth-levels.js';
-import { readCryptoLevelBuildKnobs } from '../core/trading/level-build-config.js';
+import { makerEntryOf, levelGeometryOf, levelGeometryStampOf } from '../core/trading/crypto-birth-levels.js';
 
 /**
  * ⛔⛔ THE PER-POSITION ACCUMULATOR, AT **MODULE** SCOPE — AND THE THREE FIELDS BELOW SIT WITH IT
@@ -5968,13 +5967,12 @@ export class ActiveExecutionEngine {
     // The class is resolved as promotion resolves it (the stamp, else the symbol) — keying on the stamp alone would let an
     // unstamped crypto signal past this refusal into the EV gate priced as mid (fresh-reader finding, gap 15).
     const _cbOpenClass = asValidAssetClass(signal.metadata?.assetClass) ?? safeResolveAssetClass(signal.symbol, 'kraken');
-    // Only while the 8c switch is ON (`level_basis.crypto_birth_sided_enabled`): off, no crypto signal is sided by design.
-    // An unreadable switch is treated as ON here — the fail-closed direction (boot asserts the row).
-    let _cbSidedOn = true;
-    try { _cbSidedOn = readCryptoLevelBuildKnobs().sidedEnabled; } catch { _cbSidedOn = true; }
-    if (_cbSidedOn && _cbOpenClass === 'crypto_spot' && levelGeometryOf(signal.metadata) !== 'sided') {
-      console.error(`[8c][LEVEL_GEOMETRY_ABSENT][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — a crypto signal without the sided stamp reached the open; not opened`);
-      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_ABSENT', 'crypto signal without levelGeometry=sided at open');
+    // Switch condition (b) (Langston): this keys on the row's OWN birth stamp, never the live switch. Every crypto signal born
+    // after 8c deployed carries `levelGeometry` ('sided' or 'mid'); one without it lost its metadata on a hop or was queued
+    // before the deploy — either way it cannot be priced honestly, so it is refused.
+    if (_cbOpenClass === 'crypto_spot' && levelGeometryStampOf(signal.metadata) === null) {
+      console.error(`[8c][LEVEL_GEOMETRY_ABSENT][REFUSED:${this.mode}] ${signal.symbol} strategy=${signal.strategy} — a crypto signal without its birth geometry stamp reached the open; not opened`);
+      rtbMetricsService.recordOpenFailed(signal.symbol, signal.strategy, 'LEVEL_GEOMETRY_ABSENT', 'crypto signal without a levelGeometry birth stamp at open');
       return { opened: false, stage: 'LEVEL_GEOMETRY_ABSENT', reason: 'level_geometry_absent' };
     }
 
