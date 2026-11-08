@@ -98,6 +98,7 @@ describe('P5 — wiring and sizing fences', () => {
     expect(diagCfg).toMatch(/keepAlive: true,/);
     expect(diagCfg).toMatch(/keepAliveInitialDelayMillis: 10_000,/);
     expect(dbSrc).toMatch(/keepAlive=\$\{DIAG_POOL_CONFIG\.keepAlive\}/);
+    expect(dbSrc).toMatch(/keepAliveInitialDelayMillis=\$\{DIAG_POOL_CONFIG\.keepAliveInitialDelayMillis\}/);
     expect(dbSrc).toMatch(/max: DIAG_POOL_MAX,/);
     expect(dbSrc).toMatch(/attachPoolGuards\(diagPool,/);
     expect(dbSrc).toMatch(/attachPoolInstrument\(diagPool,/);
