@@ -1,0 +1,17 @@
+# B-AGENT-INVOKE-FAILURE-NOTICE P9: Langston's bridge DEBUG log had no rotation (16.75 MB on 2026-11-08, growing).
+# It has no code reader (git grep at the batch ref). The bridge writes it through discord_common.log, which opens the
+# file by path on EVERY write (discord_common.py:151), so a rename-and-create rotation is safe and loses nothing.
+# The file is langston:langston 0644 and /var/log is root-owned, so `su root root` and `create ... langston langston`.
+# ⛔ NOT the inbox (/var/log/cc-discord-inbox.jsonl): its readers track it by inode/offset and by tail bytes - it stays
+#    out of this batch, its constraint written at its readers in code.
+/var/log/discord-langston-bridge.log {
+    su root root
+    weekly
+    maxsize 20M
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 langston langston
+}

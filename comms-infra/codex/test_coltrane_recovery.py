@@ -223,7 +223,7 @@ class Recovery(unittest.TestCase):
         for mid, result, want in ((1, (0, "an answer", ""), True), (2, (0, "SILENT", ""), True),
                                   (3, (1, "", "boom"), False), (4, (0, "", ""), False),
                                   (6, (1, "SILENT", "boom"), False), (7, (2, "SILENT\n", ""), False)):
-            bot.invoke = lambda *a, _r=result: _r
+            bot.invoke = lambda *a, _r=result: _r + ({},)     # (rc, out, err, info) - B-AGENT-INVOKE-FAILURE-NOTICE P8
             chan = Chan([])
             asyncio.run(c._handle(Msg(mid, 0, channel=chan), "q", "NEW Claude", True, "dm", True))
             self.assertIs(rows()[-1]["answered"], want, mid)
@@ -232,7 +232,7 @@ class Recovery(unittest.TestCase):
         class FailingChan(Chan):
             async def send(self, part):
                 raise RuntimeError("send failed")
-        bot.invoke = lambda *a: (0, "an answer", "")
+        bot.invoke = lambda *a: (0, "an answer", "", {})
         asyncio.run(c._handle(Msg(5, 0, channel=FailingChan([])), "q", "NEW Claude", True, "dm", True))
         self.assertIs(rows()[-1]["answered"], False, "a failed send is not an answer")
 

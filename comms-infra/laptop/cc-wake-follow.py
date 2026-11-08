@@ -26,6 +26,9 @@ OUTPUT (the filter's input contract, `cc-wake-filter.py`):
   #@KEEPALIVE <utc>         every 300 s — the liveness signal (the filter touches <state>.alive)
 POSITION RULES (condition C2): (inode, offset). A changed inode, or a file now shorter than the
 offset (copytruncate), re-reads from 0. A missing file is skipped until it exists.
+⚠️ ROTATION CONSTRAINT, stated at the reader (B-AGENT-INVOKE-FAILURE-NOTICE P9): the inbox log has no rotation today.
+A rename rotation is followed (new inode -> from 0), but rows appended to the OLD file after this reader's last
+position and before the rename are never read, by any watcher - a rotation of the inbox must drain that gap first.
 TEARDOWN (condition C8): #@CAUGHTUP is written on every idle pass (1 s), so when the laptop side
 exits, the next write fails and this process ends within about a second rather than lingering.
 """

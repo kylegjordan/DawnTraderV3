@@ -27,7 +27,7 @@
 """
 
 import tempfile
-import asyncio, hashlib, json, os, re, subprocess, sys, time, types
+import asyncio, hashlib, json, os, re, signal, subprocess, sys, threading, time, types, uuid
 from datetime import datetime, timezone
 
 import discord
@@ -152,6 +152,19 @@ def env(path, key):
 
 # ⚠️ Fails toward FEWER invokes: with no Kyle id on file, Kyle must lead with the name too.
 KYLE_ID = env(COMMS_FILE, "KYLE_DISCORD_ID") or ""
+# B-AGENT-INVOKE-FAILURE-NOTICE P7/P11: the notice's fixed marker - the SAME string as Langston's bridge
+# (`FAILURE_NOTICE_MARKER` there), so either agent recognises the other's notice and never invokes on it.
+FAILURE_NOTICE_MARKER = "⚠️ request failed —"
+FAILURE_OUTCOME_WORDS = {"timeout": "it timed out at the 15-minute limit", "failed": "it ended in an error",
+                         "error": "it ended in an error", "send_failed": "the reply could not be posted",
+                         "empty": "it produced no reply", "capped": "it failed on every retry"}
+LANGSTON_BOT_ID = env(COMMS_FILE, "LANGSTON_BOT_ID") or ""
+
+
+def is_langston_failure_notice(author_id, text):
+    """P11: Langston's failure notice (his bot, the marker in its opening) is not a request. A person who quotes the
+    marker still engages - only Langston's author id counts."""
+    return bool(LANGSTON_BOT_ID) and str(author_id) == LANGSTON_BOT_ID and FAILURE_NOTICE_MARKER in (text or "")[:200]
 
 
 def engage_reason(text, author_id, who, is_dm):
@@ -234,12 +247,18 @@ def log(row):
 #    sees no answer and feeds the same id (Langston r2). Two processes are not guarded here.
 # ⛔ THE WINDOW IS THE CLOCK, NOT A COUNT: the history read is `after=` the window start with no limit - a 500-message cap
 #    bound at ~10-17 h on busy days (>500 channel messages/day on 6 of 14 days, peak ~1,134).
-# ⚠️ The answered-dedupe depends on the run log NOT being rotated inside 24 h (no logrotate rule exists for it today,
-#    measured 2026-10-17); a sub-24 h rotation would re-enable replays of answered posts.
-# Limits, stated: DMs are not recovered (no single history to read); a post older than 24 h is not; an invoke that
-# FAILED (nothing posted) is recorded `answered: false` and IS retried at the next ready; an invoke that TIMED OUT
-# raises before its log row, so it is retried by the ABSENCE of a row. There is no attempt cap: an unanswerable post is
-# re-invoked at every ready for 24 h (homed on B-LANGSTON-RELIEF's own list, Langston r2).
+# ⚠️ THE CONTRACT, REWRITTEN by B-AGENT-INVOKE-FAILURE-NOTICE (P4b, P6, P9; Langston note 3 - the three lines this block
+#    used to state are all false now):
+#    - ROTATION: the run log IS rotated now (weekly), so every reader goes through runlog_rows(), which reads the
+#      newest rotated file (`.1`) AND the live file - any one rotation therefore leaves the whole 24 h window in view.
+#      ⛔ A reader that opens RUNLOG alone would re-enable replays of answered posts and reset the attempt cap (C-7).
+#    - FAILURE: every invoke outcome writes ONE row (timeouts too - they no longer raise past _handle), with `outcome`,
+#      `error_tail` and `notified`. A failed post whose requester was TOLD (`notified: true`) counts as handled: the
+#      requester holds the re-send, so recovery does not re-run it.
+#    - CAP: a post is attempted at most ATTEMPT_CAP times inside the window, counting every attempt row for its id,
+#      `recovery feed FAILED` rows included; at the cap it is skipped (`recovery capped`) and, if nobody was told, ONE
+#      notice is posted. Before this, an unanswerable post was re-invoked at every ready for 24 h (#1206).
+# Limits, stated: DMs are not recovered (no single history to read); a post older than 24 h is not.
 FLOOR = "/var/lib/coltrane-bot/recover-floor.json"
 RECOVER_MAX_AGE_S = 24 * 3600
 
@@ -272,27 +291,56 @@ def ensure_floor(now_epoch, path=None):
         return None
 
 
-def handled_ids(path=None):
-    """Message ids the run log records as ANSWERED (rows carry `message_id` and `answered` since this change). Only a
-    row saying `answered: true` counts - a failed invoke, a row without the field, or a line that is not a JSON object
-    does not."""
+ATTEMPT_CAP = 2
+
+
+def runlog_rows(path=None):
+    """THE ONE READER of the run log (C-7): the newest rotated file (`<path>.1`) first, then the live file, so a weekly
+    rotation never hides any part of a 24 h window from the dedupe or the cap. Yields dict rows; a bad line is skipped."""
     path = path or RUNLOG
-    out = set()
+    for p in (path + ".1", path):
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    try:
+                        row = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(row, dict):
+                        yield row
+        except OSError:
+            continue
+
+
+def _mid(row):
     try:
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    row = json.loads(line)
-                except ValueError:
-                    continue
-                if not isinstance(row, dict) or not row.get("message_id") or row.get("answered") is not True:
-                    continue
-                try:
-                    out.add(int(row["message_id"]))
-                except (TypeError, ValueError):
-                    continue
-    except OSError:
-        pass
+        return int(row.get("message_id"))
+    except (TypeError, ValueError):
+        return None
+
+
+def handled_ids(path=None):
+    """Message ids that need no re-run: a row saying `answered: true`, or one saying `notified: true` (its requester was
+    told it failed and holds the re-send - P4b). A failed invoke with no posted notice, a row without either field, or
+    a line that is not a JSON object does not count."""
+    out = set()
+    for row in runlog_rows(path):
+        mid = _mid(row)
+        if mid is not None and (row.get("answered") is True or row.get("notified") is True):
+            out.add(mid)
+    return out
+
+
+def attempt_counts(path=None):
+    """{message_id: attempts} - every attempt row for an id: an invoke row (it carries `rc` or `outcome`) and a
+    `recovery feed FAILED` row (C-7: the cap counts it, or a test goes green while the loop survives)."""
+    out = {}
+    for row in runlog_rows(path):
+        mid = _mid(row)
+        if mid is None:
+            continue
+        if "rc" in row or "outcome" in row or row.get("event") == "recovery feed FAILED":
+            out[mid] = out.get(mid, 0) + 1
     return out
 
 
@@ -392,18 +440,106 @@ def invoke(message_text, why, history, role_prompt):
         fh.write(prompt)
     try:
         with open(p, encoding="utf-8") as fh:
-            r = subprocess.run(
-                ["sudo", "-u", USER, "env", "HOME=" + HOME, "sh", "-c",
-                 "cd " + WORKDIR + " && codex exec --skip-git-repo-check "
-                 + SANDBOX + " -"],
-                stdin=fh, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=900)
-        return r.returncode, (r.stdout or "").strip(), (r.stderr or "")
+            return run_codex(["sh", "-c", "cd " + WORKDIR + " && codex exec --skip-git-repo-check " + SANDBOX + " -"], fh)
     finally:
         try:
             os.unlink(p)
         except OSError:
             pass
+
+
+# ─── B-AGENT-INVOKE-FAILURE-NOTICE P8 + C-6: codex stops and times out CLEANLY, and only ITS OWN processes die ────────
+# Before this, `subprocess.run(..., timeout=900)` on timeout killed sudo alone and returned - MEASURED on Helsinki
+# (pre-audit §1.5): its children kept running, orphaned. Langston's `run_agent` shape is ported around the EXISTING sudo
+# call: without a terminal, sudo's `use_pty` has no effect (sudoers(5), verified by Langston on the live process), so
+# sudo and codex share the launcher's process group and one group kill reaches them.
+# ⛔ C-6 (Langston, blocker): two invokes can run at once (`_inflight` is per message id, invoke runs on a thread,
+#    nothing is throttled), so NOTHING is ever killed by uid. Each invoke carries its own tag, COLTRANE_INVOKE=<uuid>,
+#    set by `env` - sudo's TARGET program - so it lands after sudo's env_reset and is inherited by sh and codex. After a
+#    group kill the pipes drain in milliseconds; if something still holds them after DRAIN_S, only processes whose
+#    /proc/<pid>/environ carries THIS invoke's tag are killed. A holder carrying no tag is LOGGED and PAGED, never killed
+#    (it may be another invoke's; codex could re-exec a child with a scrubbed environment - Langston's unproven leg).
+INVOKE_TIMEOUT_S = 900
+DRAIN_S = 10
+_LIVE, _LIVE_LOCK = set(), threading.Lock()
+
+
+def _kill_group(p):
+    """SIGKILL the invoke's whole process group. ⚠️ A PermissionError is swallowed: safe ONLY while this bot runs as root
+    (it does: the unit has no User=) - if that ever changes, the group kill silently stops reaching codex."""
+    try:
+        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _tagged_pids(tag):
+    """PIDs whose environment carries COLTRANE_INVOKE=<tag> exactly (root reads every /proc/<pid>/environ)."""
+    want, out = ("COLTRANE_INVOKE=" + tag).encode(), []
+    for d in os.listdir("/proc"):
+        if not d.isdigit():
+            continue
+        try:
+            with open("/proc/%s/environ" % d, "rb") as fh:
+                if want in fh.read().split(b"\0"):
+                    out.append(int(d))
+        except OSError:
+            continue
+    return out
+
+
+def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
+    """(rc, stdout, stderr, info). info = {"outcome": None | "timeout", "tag", "killed_tagged": [pids],
+    "escaped_untagged": bool}. Never raises on a timeout: the caller logs one row for EVERY outcome (P6)."""
+    tag = uuid.uuid4().hex
+    argv = ["sudo", "-u", user, "env", "HOME=" + HOME, "COLTRANE_INVOKE=" + tag] + list(cmd)
+    info = {"outcome": None, "tag": tag, "killed_tagged": [], "escaped_untagged": False}
+    p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                         encoding="utf-8", errors="replace", start_new_session=True)
+    with _LIVE_LOCK:
+        _LIVE.add(p)
+    try:
+        try:
+            out, err = p.communicate(timeout=timeout)
+            return p.returncode, (out or "").strip(), (err or ""), info
+        except subprocess.TimeoutExpired:
+            info["outcome"] = "timeout"
+            _kill_group(p)
+        try:
+            out, err = p.communicate(timeout=drain_s)          # EOF in milliseconds once the group is gone
+        except subprocess.TimeoutExpired:
+            # something outside the group still holds our pipes: kill only what carries THIS invoke's tag
+            info["killed_tagged"] = _tagged_pids(tag)
+            for pid in info["killed_tagged"]:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            try:
+                out, err = p.communicate(timeout=drain_s)
+            except subprocess.TimeoutExpired:
+                info["escaped_untagged"] = True                # never killed - logged and paged by the caller
+                for f in (p.stdout, p.stderr):
+                    try:
+                        f.close()
+                    except OSError:
+                        pass
+                out, err = "", ""
+        return 124, (out or "").strip(), (err or ""), info
+    finally:
+        with _LIVE_LOCK:
+            _LIVE.discard(p)
+
+
+def stop_cleanly(signum=None, _frame=None):
+    """SIGTERM: end every running invoke's process group, then exit 0 - so a restart mid-invoke stops in seconds, leaves
+    no codex orphan, and is not a 90 s stop timeout recorded as a failure that pages Kyle (#1206's 2026-11-05 leg)."""
+    with _LIVE_LOCK:
+        running = list(_LIVE)
+    print("coltrane-bot: stop requested (signal %s): ending %d running invoke(s)" % (signum, len(running)), flush=True)
+    for p in running:
+        _kill_group(p)
+    os._exit(0)
 
 
 def chunks(text, n=1900):
@@ -456,17 +592,31 @@ class Coltrane(discord.Client):
                                                 oldest_first=True)]
             scanned = len(msgs)
             by_id = {x.id: x for x in msgs}
+            capped = 0
             for mid in recoverable([(x.id, x.created_at.timestamp()) for x in msgs], floor, handled_ids(), now):
-                if mid in handled_ids():     # FEED-time re-check: answered since the snapshot (another pass/process)
+                if mid in handled_ids():     # FEED-time re-check: answered or notified since the snapshot
+                    continue
+                # P4b / #1206: the attempt CAP, read at feed time through the same rotated set as handled_ids (C-7)
+                if attempt_counts().get(mid, 0) >= ATTEMPT_CAP:
+                    capped += 1
+                    m0 = by_id[mid]
+                    who0 = str(m0.author.display_name or m0.author.name)
+                    told = await self._notify(m0, who0, False, "capped", None)
+                    # no `rc`/`outcome` key: this row is not an attempt; `notified` makes every later pass skip it
+                    log({"ts": utc(), "event": "recovery capped", "message_id": mid, "notified": told,
+                         "attempts": attempt_counts().get(mid, 0)})
                     continue
                 try:
                     await self.on_message(by_id[mid], _recovered=True)
                     fed += 1
                 except Exception as e:       # one bad post never aborts the rest of the queue
                     failed += 1
-                    log({"ts": utc(), "event": "recovery feed FAILED", "message_id": mid,
+                    # Langston note 1: since _handle catches the invoke, this row carries only escapes OUTSIDE _handle;
+                    # it gains `outcome` so the cap counts it (it already carried message_id)
+                    log({"ts": utc(), "event": "recovery feed FAILED", "message_id": mid, "outcome": "recovery_feed_failed",
                          "error": "%s: %s" % (type(e).__name__, e)})
-            log({"ts": utc(), "event": "recovery done", "scanned": scanned, "fed": fed, "failed": failed})
+            log({"ts": utc(), "event": "recovery done", "scanned": scanned, "fed": fed, "failed": failed,
+                 "capped": capped})
         except Exception as e:
             log({"ts": utc(), "event": "recovery FAILED", "scanned": scanned, "fed": fed,
                  "error": "%s: %s" % (type(e).__name__, e)})
@@ -485,6 +635,9 @@ class Coltrane(discord.Client):
         if who.strip().lower() in MUTE_SENDERS:
             return
 
+        # P11: Langston's failure notice to Coltrane is not a request (it would wake a review of a "please re-send")
+        if is_langston_failure_notice(m.author.id, text):
+            return
         is_dm = isinstance(m.channel, discord.DMChannel)
         why = engage_reason(text, m.author.id, who, is_dm)
         if why is None:
@@ -520,9 +673,13 @@ class Coltrane(discord.Client):
                 history = ""
 
         invocation_identity, role_prompt = reviewer_role()
+        info, exc = {}, None
         async with m.channel.typing():
             t0 = time.time()
-            rc, out, err = await asyncio.to_thread(invoke, text, why, history, role_prompt)
+            try:
+                rc, out, err, info = await asyncio.to_thread(invoke, text, why, history, role_prompt)
+            except Exception as e:   # P6: an invoke that raises still writes its row (it used to escape before the log)
+                rc, out, err, exc = 1, "", "%s: %s" % (type(e).__name__, e), e
 
         role_changed, out = response_after_mode_check(invocation_identity, out, who)
         if role_changed:
@@ -548,14 +705,66 @@ class Coltrane(discord.Client):
 
         # `answered` is what restart recovery keys on: true only when the reply was POSTED, or the invoke SUCCEEDED and
         # the model chose SILENT. A failed invoke (even one whose stdout reads SILENT - Langston r2, measured), a failed
-        # send or an empty reply is `false`, so it is retried at the next ready.
+        # send or an empty reply is `false`.
         answered = bool((rc == 0 and silent) or (posted or "").startswith("ok "))
+        # P6: ONE outcome per row, on BOTH entry paths (live arrival; recovery feed)
+        if answered:
+            outcome = "silent" if silent else "reply"
+        elif info.get("outcome") == "timeout":
+            outcome = "timeout"
+        elif exc is not None:
+            outcome = "error"
+        elif (posted or "").startswith("SEND FAILED"):
+            outcome = "send_failed"
+        elif rc != 0:
+            outcome = "failed"
+        else:
+            outcome = "empty"
+        # P7 (C-1 applied to Coltrane): ANY outcome with no delivered reply tells the requester, once. `notified` is
+        # true ONLY when the notice itself posted (Langston note 2) - a failed notice leaves the capped retry running.
+        notified = False
+        if not answered:
+            notified = await self._notify(m, who, is_dm, outcome, time.time() - t0)
+        if info.get("escaped_untagged"):
+            await self._page_escape(m, info)
         log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc, "message_id": m.id, "recovered": _recovered,
-             "answered": answered,
+             "answered": answered, "outcome": outcome, "notified": notified,
+             "error_tail": (err or "")[-1000:] if not answered else None,    # the failure text, never tokens
+             "killed_tagged": info.get("killed_tagged") or None, "escaped_untagged": info.get("escaped_untagged") or None,
              "seconds": round(time.time() - t0, 1), "tokens_used": toks,
              "silent": silent, "posted": posted, "mirrored": mirrored, "woken_by": who,
              "measures": ("one row per wake that led to an invoke; token count is the "
                           "spend surface, and nothing here is rate-limited by design")})
+
+    async def _notify(self, m, who, is_dm, outcome, elapsed):
+        """P7: one name-led line to the requester - same shape as Langston's (P1): the marker, 'nothing was reviewed'
+        verbatim, under 300 characters, no stderr. Mirrored like a reply so the requester's session wakes."""
+        name = "Kyle" if KYLE_ID and str(m.author.id) == KYLE_ID else who
+        after = ", after %d s" % int(elapsed) if elapsed else ""
+        line = ("%s — %s your request to Coltrane failed (%s%s); nothing was reviewed. Please re-send."
+                % (name, FAILURE_NOTICE_MARKER, FAILURE_OUTCOME_WORDS.get(outcome, outcome), after))
+        try:
+            await m.channel.send(line)
+        except Exception:
+            return False
+        mirror_to_inbox(line, m.channel.id, is_dm)
+        return True
+
+    async def _page_escape(self, m, info):
+        """C-6: a process carrying NO invoke tag still held the pipes after the group kill and the tagged kill - it is
+        never killed (it may belong to another invoke); Kyle is told, with the census to act on."""
+        try:
+            census = subprocess.run(["pgrep", "-u", USER, "-a"], capture_output=True, text=True, timeout=10).stdout
+        except Exception as e:
+            census = "pgrep failed: %s" % e
+        msg = ("<@%s> Coltrane: after a timeout, a process with NO invoke tag still held codex's output pipes, so it was "
+               "left running (never killed by user - it may be another review's). coltrane processes now: %s"
+               % (KYLE_ID, " | ".join(census.split("\n")[:8])[:1200]))
+        try:
+            await m.channel.send(msg[:1900])
+        except Exception:
+            pass
+        print("coltrane-bot: ESCAPED UNTAGGED holder after timeout (tag %s) - paged" % info.get("tag"), flush=True)
 
 
 def main():
@@ -568,6 +777,7 @@ def main():
     if not token:
         print("no token at " + TOKEN_FILE, file=sys.stderr)
         return 2
+    signal.signal(signal.SIGTERM, stop_cleanly)    # P8: a stop mid-invoke ends codex, leaves no orphan, exits 0
     intents = discord.Intents.default()
     intents.message_content = True      # matches the portal toggle; without it, content is blank
     intents.dm_messages = True

@@ -132,6 +132,11 @@ def sd_notify(state):
 def inbox_message_ids(inbox_log, tail_bytes=8_000_000, kinds=None):
     """Set of message_ids already present in the inbox log (tail-scan bounded for speed).
 
+    ⚠️ ROTATION CONSTRAINT, stated at the reader (B-AGENT-INVOKE-FAILURE-NOTICE P9): this reads the LAST `tail_bytes` of
+    the LIVE file only. The inbox has no rotation today; any rotation must keep every caller's window (the watchdog's
+    replay dedup here, the recovery pass's started set) inside the live file, or this set silently shrinks and an
+    already-handled message reads as new.
+
     `kinds` (optional set): count an id only if it appears in a row whose `kind` is in the set.
     This SCOPES the dedup to the rows a given bridge itself writes — both bridges fan one
     message_id into DIFFERENT kind rows (a Kyle→Langston message = a "" Kyle row from the CC

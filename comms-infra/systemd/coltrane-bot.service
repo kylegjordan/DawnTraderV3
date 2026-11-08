@@ -7,6 +7,9 @@ Type=simple
 ExecStart=/opt/discord-bridges/venv/bin/python3 /usr/local/bin/coltrane-bot.py
 Restart=always
 RestartSec=15
+# B-AGENT-INVOKE-FAILURE-NOTICE P8: the bot's SIGTERM handler (stop_cleanly) ends every running codex group and exits 0
+# in well under a second; this bounds a child that left the group (parity with discord-langston-bridge.service).
+TimeoutStopSec=15
 # Runs as root ONLY to sudo -u coltrane for the invoke and to read the token file.
 # The AGENT itself never runs as root - that is what the coltrane user is for.
 StandardOutput=journal

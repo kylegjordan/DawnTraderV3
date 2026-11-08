@@ -1,0 +1,14 @@
+# B-AGENT-INVOKE-FAILURE-NOTICE P9 / C-7: Coltrane's run log, rotated weekly.
+# ⛔ ITS READER DEPENDS ON THE SHAPE BELOW: coltrane-bot.py runlog_rows() reads `<log>.1` AND the live file, so the
+#    newest rotated file MUST stay uncompressed (`delaycompress`) - a compressed .1 would hide part of the 24 h window
+#    from the answered-dedupe AND reset the attempt cap (the #1206 loop). Weekly also keeps any rotation's split inside
+#    what live + .1 can see. The bot opens the file by path on every write (log()), so rename-and-create is safe.
+/var/log/coltrane-invokes.jsonl {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
