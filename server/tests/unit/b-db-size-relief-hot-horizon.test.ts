@@ -60,7 +60,10 @@ describe('wiring', () => {
     const i0 = sql.indexOf('=== (0) B-DB-SIZE-RELIEF OBJ-3');
     expect(i0).toBeGreaterThan(-1);
     expect(i0).toBeLessThan(sql.indexOf('=== (1) P8 p0'));
-    expect(sql).toContain("'signal_eval_archive.hot_retention_days', 'switch_on_shadow_evidence.hot_retention_days'");
+    // one row per table ALWAYS (a VALUES list LEFT JOINed to the keys), so a missing key prints MISSING, never vanishes
+    expect(sql).toContain("FROM (VALUES ('signal_eval_archive'), ('switch_on_shadow_evidence')) AS t(table_name)");
+    expect(sql).toMatch(/LEFT JOIN module_constants m[\s\S]{0,200}m\.constant_name = t\.table_name \|\| '\.hot_retention_days'/);
+    expect(sql).toContain("'MISSING - hot window unknown");
   });
 
   it('the Drift Dashboard panel (OBJ-2) uses the SAME query and parser, not a copy of its own', () => {

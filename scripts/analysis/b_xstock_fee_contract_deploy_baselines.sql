@@ -27,11 +27,14 @@ INSERT INTO _bxfc_alias VALUES
 
 \echo === (0) B-DB-SIZE-RELIEF OBJ-3: the hot horizons of the tables this file reads. Every query below reads HOT partitions only; ===
 \echo ===     rows older than hot_from are in the warm tier and are NOT counted. Check each range below starts after its table's hot_from. ===
-SELECT replace(constant_name, '.hot_retention_days', '') AS table_name, (value)::int AS hot_days,
-       now() - make_interval(days => (value)::int) AS hot_from
-FROM module_constants
-WHERE module_name = 'data_lifecycle' AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
-  AND constant_name IN ('signal_eval_archive.hot_retention_days', 'switch_on_shadow_evidence.hot_retention_days')
+-- One row per table this file reads, ALWAYS: a missing key prints as MISSING rather than as an absent row.
+SELECT t.table_name, (m.value)::int AS hot_days,
+       now() - make_interval(days => (m.value)::int) AS hot_from,
+       CASE WHEN m.value IS NULL THEN 'MISSING - hot window unknown, the counts below cannot be bounded' ELSE 'ok' END AS state
+FROM (VALUES ('signal_eval_archive'), ('switch_on_shadow_evidence')) AS t(table_name)
+LEFT JOIN module_constants m
+  ON m.module_name = 'data_lifecycle' AND m.exchange = '*' AND m.asset_class = '*' AND m.strategy = '*' AND m.regime = '*'
+ AND m.constant_name = t.table_name || '.hot_retention_days'
 ORDER BY 1;
 
 \echo === (1) P8 p0: xStock maker share among maker_taker decisions since f8870022f, up to the deploy instant ===
