@@ -43,6 +43,12 @@ describe('decideEra', () => {
   it('REFUSES an unparseable era', () => {
     expect(decideEra('not-a-date', JOINED, H, NOW).ok).toBe(false);
   });
+
+  it('an era servable at the START of a run can be unservable a day later — why the replay re-checks at the end', () => {
+    const era = '2026-11-06T00:00:00Z'; // exactly the earliest servable era at NOW
+    expect(decideEra(era, JOINED, H, NOW).ok).toBe(true);
+    expect(decideEra(era, JOINED, H, NOW + 86_400_000).ok).toBe(false);
+  });
 });
 
 describe('wiring', () => {
@@ -53,6 +59,14 @@ describe('wiring', () => {
     expect(src).toMatch(/if \(!era\.ok\) \{[\s\S]{0,120}process\.exit\(2\)/);
     // the check runs BEFORE the first archive query
     expect(src.indexOf('decideEra(ERA_START')).toBeLessThan(src.indexOf('FROM signal_eval_archive b'));
+  });
+
+  it('the replay script RE-CHECKS the era at the END of the run and exits 3 if a sweep may have truncated it', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
+    const iEnd = src.indexOf('const endEra = decideEra(ERA_START');
+    expect(iEnd).toBeGreaterThan(-1);
+    expect(iEnd).toBeGreaterThan(src.lastIndexOf('FROM signal_eval_archive')); // after the last archive read
+    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,400}process\.exit\(3\)/);
   });
 
   it('the fee-contract SQL prints the hot horizons of both tables it reads, before section (1)', () => {
