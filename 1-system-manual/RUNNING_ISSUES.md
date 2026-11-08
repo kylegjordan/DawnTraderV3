@@ -7049,6 +7049,20 @@ CC-A's batch argues the workflow is not reliably firing. **This is that thesis, 
 
 ---
 
+### #976 AMENDMENT 2 — A SEVENTH SHAPE, ON THE MISS PATH: A FABRICATED DEFAULT WRITTEN WITH A FRESH STAMP
+
+**Recorded 2026-11-08 by CC-B, found reconciling `B-PRICE-FEED-COVERAGE` seam lead 2. A cross-reference on this issue, not a new one. NOT filed as a defect — the three-outcome read is owed.**
+
+- **The shape:** `cost-cache.ts:119 getOrSetCostMetrics` writes `DEFAULT_SPREAD` (0.10 %, `exchange-defaults.ts:22`) and `DEFAULT_SLIPPAGE` through `setCostMetrics`, which stamps `t: Date.now()` (`:115`). For the next 300 s (`CACHE_TTL_MS`, `:47`) `getCostMetrics` serves that default exactly as a measurement — `CostMetrics` carries no source and no age. Mechanism (e) again, but the value is not even a retained measurement.
+- **The consumer that decides:** crypto `getCachedCostMetrics` (`cost-model.ts:240`) → RTB refresh (`ready_to_buy_service.ts:700`) → `computeNetGeometry` + `decideMakerTaker` → `chosen_net_ev`, which drives the ranker and the [11.8B] open gate (`:731`). Other crypto readers of the same function: `signal-orchestrator.ts:1167`, `:2097`, `:3483`; `active-execution-engine.ts:2044`; `trailing-exit-controller.ts:1117`; `expectancy.ts:585`.
+- **Writers:** two, both crypto, both per scan cycle — `market-scanner.ts:797` (every pair in the adaptive batch, written before the already-active check at `:817`, so a queued pair is refreshed while it is in the batch) and `fx5-scanner.ts:1038`. A pair out of the batch for more than 300 s reads the default next time.
+- **Intent:** the default-on-miss is deliberate (B-4.5 / B-5.1 comments, `:121-125`); Directive 11.4H.4 Task 1 (`market-scanner.ts:795-796`) widened the writes to all evaluated pairs to remove *"the '50 Moderate Liquidity' artifact caused by cache-miss defaults"*, and P19-B7.2a (`#330`) describes the cache as serving the MEASURED spread. So the design treats the default as an artifact to minimise, not a value to decide on.
+- **Not measured yet: how often the open path reads a default.** ⛔ The ready instrument, `GET /api/diagnostics/tec/costs` (`routes.ts:8563`), calls `getOrSetCostMetrics` on every expired symbol — **reading it WRITES defaults into the live cache.** It is itself an instance of this shape; do not use it to measure this.
+- **Not in `#1222`'s estimand:** a spread enters net EV as a cost; the entry standard bounds the age of the price a trade acts on (same reason as that census's row 40).
+- ⚠️ **Live placement:** sprint row 123 `B-PROVENANCE-LOSS-CENSUS`, owner **CC-B** (`SPRINT_TO_LIVE_PLAN.md:439`). This entry's header still names CC-C and Phase-19 row 3b.m, which predate the sprint plan; the sprint row is the placement.
+
+---
+
 ### #951 AMENDMENT — ⚠️ **THE NEW PRODUCER TOKEN CHANGES WHAT AN EXISTING ANALYTIC POPULATION MEASURES. NAMED BEFORE DEPLOY, NOT AFTER.**
 
 **Surfaced 2026-08-31 by a claim-only reader on the Step-3 implementation. No code defect — an INSTRUMENT consequence, which is the kind this project keeps discovering late.**
