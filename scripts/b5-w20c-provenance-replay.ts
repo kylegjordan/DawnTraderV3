@@ -30,6 +30,7 @@ import { warmModuleConstantsForSyncCallers } from '../server/startup/b72-warmup.
 import { computeDirectionalBias } from '../server/core/metrics/directional-bias.js';
 import { DEFAULT_DBS_CONFIG, type DBSConfig } from '../server/types/directional-bias.types.js';
 import { getConstant } from '../server/services/module-constants-service.js';
+import { HOT_HORIZON_SQL, parseHorizonRows, decideEra } from '../server/services/data-archive/hot-horizon.js';
 
 const { Client } = pg;
 const strategyEngine = new StrategyEngine();
@@ -119,6 +120,21 @@ async function main(): Promise<void> {
   // One-off read-only study: the coverage LEFT JOIN spans two multi-million-row
   // partitioned tables and legitimately runs past the default statement timeout.
   await client.query(`SET statement_timeout = 0`);
+
+  // B-DB-SIZE-RELIEF OBJ-3 (pre-audit P6 / F8): say what this run can actually read. Both tables are queried in their
+  // HOT partitions only; the C1 LEFT JOIN and the INNER samples join them, so the readable window is the SHORTER of the
+  // two hot horizons. An era older than that would silently report a truncated population under an era label —
+  // the script refuses instead and names the earliest era it can serve.
+  const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
+  const era = decideEra(ERA_START, ['signal_eval_archive', 'signal_eval_provenance'], parseHorizonRows(horizonRows), Date.now());
+  console.log(`[W20C] hot horizons: ${Object.entries(era.perTable).map(([t, d]) => `${t}=${d ?? 'UNKNOWN'} d`).join(', ')}`);
+  if (!era.ok) {
+    console.error(`[W20C] ${era.message}`);
+    await client.end();
+    process.exit(2);
+  }
+  console.log(`[W20C] population: rows captured >= ${ERA_START} in the HOT partitions of both tables; readable window ${era.horizonDays} d `
+    + `(set by ${era.limitingTable}), hot from ${era.horizonStartIso}.`);
 
   console.log(`[W20C] warming module_constants for sync detect callers...`);
   await warmModuleConstantsForSyncCallers();

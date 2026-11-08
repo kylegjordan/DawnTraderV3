@@ -1,0 +1,65 @@
+import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { decideEra, parseHorizonRows } from '../../services/data-archive/hot-horizon.js';
+
+// B-DB-SIZE-RELIEF OBJ-3 (pre-audit P6 / F8): a by-hand reader of the HOT tables states what it read and refuses an
+// era it cannot serve; a JOIN of two tables is limited by the SHORTER horizon.
+
+const NOW = Date.parse('2026-11-20T12:00:00Z');
+const H = parseHorizonRows([
+  { constant_name: 'signal_eval_archive.hot_retention_days', value: 15 },
+  { constant_name: 'signal_eval_provenance.hot_retention_days', value: 30 },
+  { constant_name: 'pair_scan_archive.hot_retention_days', value: 'junk' },
+]);
+const JOINED = ['signal_eval_archive', 'signal_eval_provenance'];
+
+describe('decideEra', () => {
+  it('REFUSES the replay script\'s default era (2026-06-08) and names the warm tier and the earliest servable era', () => {
+    const d = decideEra('2026-06-08T00:00:00Z', JOINED, H, NOW);
+    expect(d.ok).toBe(false);
+    if (d.ok) return;
+    expect(d.message).toMatch(/WARM tier/);
+    expect(d.message).toMatch(/b75-rehydrate\.ts/);
+    expect(d.message).toMatch(/15 d, set by signal_eval_archive/);
+    expect(d.earliestServableIso).toBe('2026-11-06T00:00:00.000Z'); // next UTC midnight after 2026-11-05T12:00Z
+  });
+
+  it('serves an era inside the SHORTER horizon and reports the limiting table', () => {
+    const d = decideEra('2026-11-10T00:00:00Z', JOINED, H, NOW);
+    expect(d).toMatchObject({ ok: true, horizonDays: 15, limitingTable: 'signal_eval_archive' });
+  });
+
+  it('an era inside the longer table\'s horizon but outside the shorter one is still REFUSED (the INNER-join loss)', () => {
+    expect(decideEra('2026-10-30T00:00:00Z', JOINED, H, NOW).ok).toBe(false); // 21 d back: inside 30, outside 15
+  });
+
+  it('REFUSES when a key is missing or invalid — never a default', () => {
+    const d = decideEra('2026-11-15T00:00:00Z', ['signal_eval_archive', 'pair_scan_archive'], H, NOW);
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.message).toMatch(/no data_lifecycle hot_retention_days for pair_scan_archive/);
+  });
+
+  it('REFUSES an unparseable era', () => {
+    expect(decideEra('not-a-date', JOINED, H, NOW).ok).toBe(false);
+  });
+});
+
+describe('wiring', () => {
+  const ROOT = path.join(__dirname, '../../..');
+  it('the replay script reads the horizons for BOTH joined tables and exits non-zero on a refusal', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
+    expect(src).toMatch(/decideEra\(ERA_START, \['signal_eval_archive', 'signal_eval_provenance'\]/);
+    expect(src).toMatch(/if \(!era\.ok\) \{[\s\S]{0,120}process\.exit\(2\)/);
+    // the check runs BEFORE the first archive query
+    expect(src.indexOf('decideEra(ERA_START')).toBeLessThan(src.indexOf('FROM signal_eval_archive b'));
+  });
+
+  it('the fee-contract SQL prints the hot horizons of both tables it reads, before section (1)', () => {
+    const sql = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql'), 'utf8');
+    const i0 = sql.indexOf('=== (0) B-DB-SIZE-RELIEF OBJ-3');
+    expect(i0).toBeGreaterThan(-1);
+    expect(i0).toBeLessThan(sql.indexOf('=== (1) P8 p0'));
+    expect(sql).toContain("'signal_eval_archive.hot_retention_days', 'switch_on_shadow_evidence.hot_retention_days'");
+  });
+});
