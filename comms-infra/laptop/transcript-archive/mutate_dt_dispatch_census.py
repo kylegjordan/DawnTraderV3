@@ -20,6 +20,12 @@ def replace(a, b):
 
 
 MUTATIONS = [
+    # B-AGENT-INVOKE-FAILURE-NOTICE P1/P10
+    ("a failure notice counted as an answer", replace('                if d.get("failure_notice") is True:', "                if False:")),
+    ("the queued state dropped (enqueued reads as NOT HANDLED)",
+     replace('        if i in enqueued_ids or piece_received(text, enqueued_text, ms):', "        if False:")),
+    ("the enqueue kind removed from the closed set", replace('         "langston_enqueued"}', '         }')),
+    ("a failed-notified dispatch not listed", replace('            out["failed_notified"].append(i)', "            pass")),
     ("decline matched as a prefix", replace("            if r in DECLINE:", "            if any(r and r.startswith(x[:20]) for x in DECLINE):")),
     ("a reply with no message id ends the dispatch", replace(
         '            if d.get("reply_to") is not None and d.get("message_id") is not None:', '            if d.get("reply_to") is not None:')),

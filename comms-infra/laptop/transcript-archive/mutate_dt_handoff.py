@@ -25,6 +25,9 @@ MUTATIONS = [
         "    if returncode != 0 or not any(str(x).startswith(CENSUS_RAN) for x in c.get(\"not_checked\", [])):", "    if False:")),
     ("C-1: a non-JSON reply taken as zero open", replace(
         '        return {"guard_failed": ["the census did not answer (exit %s, no JSON)" % returncode]}', "        return {}")),
+    ("P10: QUEUED leaves the banner CLEAN", replace(
+        "                drift.append(\"dispatch\")\n                lines.append(\"QUEUED — accepted, not started yet: %s\" % i)",
+        "                lines.append(\"QUEUED — accepted, not started yet: %s\" % i)")),
     ("C-2: NOT HANDLED leaves the banner CLEAN", replace(
         "                drift.append(\"dispatch\")\n                lines.append(\"NOT HANDLED — no inbound row for %s\" % i)",
         "                lines.append(\"NOT HANDLED — no inbound row for %s\" % i)")),

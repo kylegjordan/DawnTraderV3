@@ -4,8 +4,8 @@ log ALONE (scope OBJ-5, Langston C-4: never from the handoff it grades). Runs on
 
     ssh root@204.168.141.77 'python3 -I - --alias CC-B --since-ms <ms>' < dt_dispatch_census.py
 
-Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_handled": [ids], "guard_failed": [...],
-"not_checked": [...], "counts": {...}}. Any guard_failed entry means the leg could not be trusted: the guard prints
+Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_handled": [ids], "queued": [ids],
+"failed_notified": [ids], "guard_failed": [...], "not_checked": [...], "counts": {...}}. Any guard_failed entry means the leg could not be trusted: the guard prints
 `GUARD FAILED — open-dispatch leg: <reason>` and never a green. The rules (pre-audit P8, each a drill case):
   * DISPATCH RAIL: `langston_inbound` rows in the window whose `sender_username` maps to this alias (exact strings).
     Deduplicated on message_id; the window is cut on the Discord SNOWFLAKE's own time, never on `ts`.
@@ -13,9 +13,13 @@ Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_han
     non-null message_id of its own (a reply with no message id is a post that FAILED), or by a `langston_silent` row whose
     reason is EXACTLY one of the four DECLINE strings. `bridge_error_suppressed`, `circuit_breaker`, `post_failed`
     leave it OPEN, with the reason. Any other silent reason in the window -> GUARD FAILED.
-  * Every kind in the window is one of the ELEVEN named; any other -> GUARD FAILED. Unmapped senders -> GUARD FAILED.
+  * A `langston_outbound` carrying `failure_notice: true` (B-AGENT-INVOKE-FAILURE-NOTICE P1) does NOT end a dispatch: the
+    request was not reviewed and this session holds the re-send. It stays OPEN, noted `failed, notified (<outcome>)`, and
+    is listed in `failed_notified`.
+  * Every kind in the window is one of the TWELVE named; any other -> GUARD FAILED. Unmapped senders -> GUARD FAILED.
   * CROSS-CHECK (C-8): every `cc_outbound` row of this alias whose OPENING LIST names Langston must have an inbound
-    row (same id, or each piece matched on whitespace-normalised text); else NOT HANDLED (no inbound row yet - the bridge writes it when a worker handles the message, so this also covers a dispatch still queued). Coltrane's posts carry no
+    row (same id, or each piece matched on whitespace-normalised text); else, if a `langston_enqueued` row matches it the same way (P10), QUEUED - accepted, no worker has started it; else
+    NOT HANDLED (the bridge has no record of accepting it). Coltrane's posts carry no
     message id and are NOT CHECKED - said every run.
   * The address rule and the piece matcher are each controlled before a row is read; a failed control -> GUARD FAILED.
 Ids are compared as STRINGS (the log holds both int and str eras).
@@ -26,9 +30,15 @@ import re
 import sys
 
 EPOCH_MS = 1420070400000
+# ⛔ A CLOSED SET, AND AN UNKNOWN KIND IS A HARD GUARD FAILURE ON PURPOSE (B-AGENT-INVOKE-FAILURE-NOTICE C-8): an unknown
+#    kind is a dispatch state this census cannot classify, and reading it silently as open or ended is the false-absence
+#    class the guard exists to refuse. A new kind lands HERE first, before any writer emits it.
 KINDS = {"langston_inbound", "cc_outbound", "langston_outbound", "langston_outbound_media", "langston_silent",
          "langston_alert_inbound", "", "voice_inbound", "langston_inbound_voice", "langston_inbound_voice_failed",
-         "voice_inbound_failed"}
+         "voice_inbound_failed",
+         # B-AGENT-INVOKE-FAILURE-NOTICE P10: the bridge accepted a person's request (written at enqueue, BEFORE a worker
+         # takes it). A Langston-addressed post with this row and no `langston_inbound` is QUEUED, not NOT HANDLED.
+         "langston_enqueued"}
 DECLINE = {"voice not addressed to Langston",
            "[SILENT] addressed to Claude New (CC-B), not me",
            "[SILENT] addressed to Claude Old (CC-A), not me",
@@ -95,7 +105,8 @@ def piece_received(text, inbound, at_ms):
 
 
 def census(rows, alias, since_ms, until_ms, addr, registry):
-    out = {"open": [], "ended": 0, "not_handled": [], "guard_failed": [], "not_checked": [], "counts": {}}
+    out = {"open": [], "ended": 0, "not_handled": [], "queued": [], "failed_notified": [], "guard_failed": [],
+           "not_checked": [], "counts": {}}
     gf = out["guard_failed"]
     # CONTROLS FIRST (CHANGES-3, CHANGES-2): the address rule and the piece matcher must each find a known positive
     if "LANGSTON" not in registry:
@@ -117,6 +128,7 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
         return ms is not None and ms >= since_ms and (until_ms is None or ms < until_ms)
 
     dispatches, inbound_text, replies, silents, cc = {}, [], {}, [], []
+    enqueued_ids, enqueued_text, failed = set(), [], {}
     seen_cc = set()
     for d in rows:
         kind = d.get("kind", "")
@@ -142,7 +154,16 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
                 dispatches.setdefault(str(mid), ms)          # deduplicated on message_id (C-2)
         elif kind in ("langston_outbound", "langston_outbound_media"):
             if d.get("reply_to") is not None and d.get("message_id") is not None:
-                replies.setdefault(str(d["reply_to"]), True)
+                if d.get("failure_notice") is True:
+                    # P1: a delivered FAILURE NOTICE ends nothing - the request was not reviewed; the requester holds the
+                    # re-send. Reported as failed-notified, never counted as answered.
+                    failed.setdefault(str(d["reply_to"]), str(d.get("outcome") or "failed"))
+                else:
+                    replies.setdefault(str(d["reply_to"]), True)
+        elif kind == "langston_enqueued":
+            if d.get("message_id") is not None:
+                enqueued_ids.add(str(d["message_id"]))
+            enqueued_text.append((ms, norm(d.get("text"))))
         elif kind == "langston_silent":
             r = d.get("reason")
             if r in DECLINE:
@@ -177,6 +198,10 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
     for i, ms in sorted(dispatches.items(), key=lambda kv: kv[1]):
         if replies.get(i):
             out["ended"] += 1
+        elif i in failed:
+            # still OPEN work for this session (it must re-send), and named as what it is
+            out["open"].append({"id": i, "at_ms": ms, "note": "failed, notified (%s) - re-send" % failed[i]})
+            out["failed_notified"].append(i)
         else:
             out["open"].append({"id": i, "at_ms": ms, "note": notes.get(i, "no reply yet")})
     inbound_ids = set()
@@ -193,8 +218,12 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
             continue
         if i in inbound_ids or piece_received(text, inbound_text, ms):
             continue
+        if i in enqueued_ids or piece_received(text, enqueued_text, ms):
+            out["queued"].append(i)          # accepted by the bridge, no worker has started it yet
+            continue
         out["not_handled"].append(i)
-    out["counts"] = {"dispatches": len(dispatches), "cc_posts_checked": len(cc)}
+    out["counts"] = {"dispatches": len(dispatches), "cc_posts_checked": len(cc), "queued": len(out["queued"]),
+                     "failed_notified": len(out["failed_notified"])}
     return out
 
 

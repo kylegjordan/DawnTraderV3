@@ -117,6 +117,33 @@ r = run([{"kind": "cc_outbound", "sender": "Coltrane", "text": "Langston — hel
 ok("the named excluded path: NOT CHECKED, neither GUARD FAILED nor NOT HANDLED",
    r["guard_failed"] == [] and r["not_handled"] == [] and "NOT CHECKED" in r["not_checked"][0], r)
 
+print("(19) B-AGENT-INVOKE-FAILURE-NOTICE P10: the enqueue row")
+
+
+def enq(n, text="Langston — review the writer please"):
+    return {"kind": "langston_enqueued", "message_id": str(sid(n)), "sender_username": "Infra Claude#0000", "text": text}
+
+
+r = run([cco(1, "Langston — review the writer please"), enq(1)])
+ok("an enqueued, never-started dispatch is QUEUED, not NOT HANDLED, and is no guard failure",
+   r["queued"] == [str(sid(1))] and r["not_handled"] == [] and r["guard_failed"] == [], r)
+r = run([cco(1, p1), cco(1, p2), enq(1, text=p1 + "\n" + p2)])
+ok("a two-piece dispatch enqueued as one task matches on text: QUEUED", r["queued"] == [str(sid(1))] and r["not_handled"] == [], r)
+r = run([cco(1, "Langston — review the writer please"), enq(1), inb(1, text="Langston — review the writer please")])
+ok("once a worker writes its inbound row it is no longer QUEUED (the inbound state wins)", r["queued"] == [] and r["not_handled"] == [], r)
+ok("control: without the enqueue row the same post is NOT HANDLED", run([cco(1, "Langston — review the writer please")])["not_handled"] == [str(sid(1))])
+print("(20) P1: a delivered FAILURE NOTICE does not end the dispatch")
+fn = dict(out(1, 2), failure_notice=True, outcome="timeout")
+r = run([inb(1), sil(1, "bridge_error_suppressed"), fn])
+ok("OPEN, noted failed-notified with the outcome, listed in failed_notified, NOT counted ended",
+   r["ended"] == 0 and r["failed_notified"] == [str(sid(1))] and r["open"] and r["open"][0]["note"].startswith("failed, notified (timeout)"), r)
+ok("control: the same reply WITHOUT failure_notice ENDS it", run([inb(1), sil(1, "bridge_error_suppressed"), out(1, 2)])["ended"] == 1)
+ok("a failure notice whose own post failed (null message_id) is not a notice: OPEN on the silent reason",
+   (run([inb(1), sil(1, "bridge_error_suppressed"), dict(fn, message_id=None)])["open"] or [{}])[0].get("note") == "bridge_error_suppressed")
+print("(21) the closed set still refuses an unknown kind beside the new one")
+r = run([enq(1), {"kind": "langston_enqueued_v2", "message_id": sid(2)}])
+ok("GUARD FAILED on the unknown kind, the new kind alone is accepted", any("unknown kind" in g for g in r["guard_failed"]), r)
+
 print("window and other alias")
 ok("a dispatch before the window is not counted", run([{"kind": "langston_inbound", "message_id": BASE - (1 << 22), "sender_username": "Infra Claude#0000", "text": "x"}])["open"] == [])
 ok("another session's dispatch is not this session's", run([inb(1, su="NEW Claude#0000")])["open"] == [])

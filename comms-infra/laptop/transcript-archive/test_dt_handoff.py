@@ -53,7 +53,8 @@ STATE = {"open": [{"id": "1568300000000000001"}], "alerts": ["aaaaaaaa-1111-2222
 
 
 def census(alias, since_ms):
-    return {"open": list(STATE["open"]), "not_handled": list(STATE.get("nh", [])), "guard_failed": list(STATE["gf"]),
+    return {"open": list(STATE["open"]), "not_handled": list(STATE.get("nh", [])), "queued": list(STATE.get("q", [])),
+            "guard_failed": list(STATE["gf"]),
             "not_checked": ["NOT CHECKED — Coltrane's posts"]}
 
 
@@ -209,6 +210,13 @@ ok("C-2: a NOT HANDLED post raises the banner (never CLEAN over unanswered work)
    b.startswith("STALE (drift) — dispatch") and "NOT HANDLED — no inbound row for 1568330334603321411" in lines, (b, lines))
 STATE["nh"] = []
 ok("restored: green", guard(T0 + datetime.timedelta(minutes=20))[0].startswith("HANDOFF GUARD: CLEAN"))
+STATE["q"] = ["1568330334603321499"]          # B-AGENT-INVOKE-FAILURE-NOTICE P10: accepted, not started
+b, lines, _ = guard(T0 + datetime.timedelta(minutes=20))
+ok("P10: a QUEUED post raises the banner too, named as queued (unanswered work, not NOT HANDLED)",
+   b.startswith("STALE (drift) — dispatch") and "QUEUED — accepted, not started yet: 1568330334603321499" in lines
+   and not any("NOT HANDLED" in l for l in lines), (b, lines))
+STATE["q"] = []
+ok("restored after QUEUED: green", guard(T0 + datetime.timedelta(minutes=20))[0].startswith("HANDOFF GUARD: CLEAN"))
 GOODC = json.dumps({"open": [{"id": "1"}], "not_handled": [], "guard_failed": [],
                     "not_checked": ["NOT CHECKED — Coltrane's posts (no message id; this leg cannot witness their absence)"]}).encode()
 ok("C-1: a completed census (exit 0 + its Coltrane line) is taken as is", dh.parse_census(0, GOODC).get("open") == [{"id": "1"}])

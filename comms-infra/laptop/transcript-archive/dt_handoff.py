@@ -231,6 +231,11 @@ def guard(alias, repo, root, census=real_census, alerts=real_due_alerts, clock=n
                 # design §5's "listed"; the banner rises)
                 drift.append("dispatch")
                 lines.append("NOT HANDLED — no inbound row for %s" % i)
+            for i in c.get("queued", []):
+                # B-AGENT-INVOKE-FAILURE-NOTICE P10: accepted by Langston's bridge, no worker has started it - still
+                # unanswered work, so the banner rises exactly as for NOT HANDLED, named as what it is
+                drift.append("dispatch")
+                lines.append("QUEUED — accepted, not started yet: %s" % i)
             lines += c.get("not_checked", [])
     except Exception:      # noqa: BLE001
         failed.append("open-dispatch")
