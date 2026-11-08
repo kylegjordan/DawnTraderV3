@@ -81,13 +81,13 @@ change-class: architecture · **Owner:** OLD Claude (CC-A) · **Scope:** `B_DB_S
 - The forward migration UPSERTs the seven keys at their stated values (15; and 30 for `pair_scan_archive`, `signal_eval_provenance`, `exit_decision_archive`, `macro_feed_archive`, `crypto_spot_ticker_snap`, `xstock_perp_ticker_snap`) with `updated_by = 'b-db-size-relief-obj1'`.
 - The rollback writes `signal_eval_archive` back to 30 and leaves the six at 30. A rollback NEVER deletes a key (F2: a missing key fails the whole night).
 
-**P2 — OBJ-1 deploy timing.** ← F2.
+**P2 — OBJ-1 deploy timing.** ← F2. ⛔ **SUPERSEDED by r2 (C-3): the hold is dropped to a note.**
 - The 15-day key lands only AFTER Infra Claude's `crypto_spot_ohlc_1m` stage-A backlog has drained, read in `b75-retention.log` as a run whose `DONE` line shows no remaining B74 bar months.
 - This keeps one night from carrying both backlogs. Its cost is a delay of a night or two, against ~20 GB. Infra Claude is told once.
 
 **P3 — OBJ-4 registry: six entries in `DAILY_PARTITION_CUTOVERS`, `cutoverDate '2026-12-01'`** (the first clean boundary if this deploys in November; else `2027-01-01`). ← F3, F4. Each entry's comment names this batch. No consumer needs a code change (F3); the archival-health runway checks for the six begin on the cutover date.
 
-**P4 — OBJ-4 cutover migration.** ← F4, F5.
+**P4 — OBJ-4 cutover migration.** ← F4, F5. ⛔ **Its rollback and its locking are SUPERSEDED by r2 (C-1, C-2).**
 - One transaction, the Wave-D shape, for the six tables.
 - **Guard per child, the scope's predicate:** `pg_relation_size(child) = 0` AND `NOT EXISTS (SELECT 1 FROM child LIMIT 1)`, else `RAISE EXCEPTION` naming the child.
 - For each monthly child at/after the cutover: DETACH + DROP (66 expected; the migration NOTICEs each, and raises if the dropped count differs from what the catalog listed).
@@ -132,3 +132,38 @@ Three things changed the plan:
 1. **The nightly cleanup is fast enough** to move the 20 GB in one extra hour. But Infra Claude just gave it a large backlog of their own, so the window change should land after that clears.
 2. **The provenance-replay script joins two tables** that will keep different amounts of recent data. It has to report the shorter one, or its samples quietly lose rows.
 3. **The System Manual's retention table is out of date** and is corrected at the end.
+
+---
+
+## AMENDMENT r2 (2026-11-08 ~01:40Z, CC-A) — Langston: Part A APPROVED, Part B CHANGES (Discord `1568797362317426709`); this SUPERSEDES P2 and P4's rollback and locking
+
+**C-1 (blocking) — the rollback is registry revert AND SQL, one operation; the forward deploy states its ordering.**
+- **Why:** the daily creator (`0 1 * * *`) loops `today … today+14` and skips only days before the cutover, so from 2026-11-17 it reaches 2026-12-01.
+- With a registry entry live and a monthly `_2026_12` present, `ensureDailyPartition` passes its name probe and its `CREATE … FOR VALUES FROM ('2026-12-01')` throws on RANGE OVERLAP.
+- There is no per-table catch (`main().catch → process.exit(1)`), so every registry table after the failing one loses its forward window — `signal_eval_archive` and `xstock_spot_ticker_snap` included.
+- And `b-storage-archival-health.ts:272-277` skips pre-cutover tables, so nothing alerts for the six until 12-01. (This is the P19-B-PERPFEED BLOCKER-1 collider pointing the other way.)
+- **P4 rollback, re-specified:** the rollback is a CODE revert of the six `DAILY_PARTITION_CUTOVERS` entries (P3) PLUS the SQL, shipped as one deploy. The SQL file's header says it MUST NOT be applied alone.
+  - Valid only before the cutover date; it refuses after it (unchanged).
+  - Order inside that deploy: the code revert and the SQL go out in the same `dt-deploy` (it runs the migration step with the code), so no 01:00 creator run sees one without the other.
+- **Forward ordering, stated like P1's:** the registry entries (P3) and the cutover migration (P4) ship in ONE `dt-deploy`. The migration therefore runs before the next 01:00 creator run that sees the code. If a deploy ever applied the code without the migration, that 01:00 run would collide; the header says so.
+
+**C-2 (blocking) — `SET LOCAL lock_timeout = '5s'`, single transaction kept, a deploy window.**
+- The forward and rollback SQL both open with `SET LOCAL lock_timeout = '5s'` (the house convention since 2026-09-29: `b-sizing-inc2a`, `b-sizing-p5`, `f-g-1-ohlc-arrived-at`, `b-vts-no-decision-valve`). The cost it bounds: 66 DETACH + 96 CREATE, each ACCESS EXCLUSIVE on six continuously written parents, held to commit.
+- **ONE transaction stays:** per-table commits would strand registry entries over surviving monthlies, which is C-1 again.
+- **Deploy window:** NOT between 02:15Z and the sweep's `DONE` line (the 10-31 run took 95 min and DETACHes the same parents).
+
+**C-3 (blocking) — the P2 hold is dropped to a note** (Langston's enumeration). At 145 days `crypto_spot_ohlc_1m`'s cutoff is 2026-06-16 and its `cutoffMonthStart` 06-01.
+- Under the monthly rule `rangeStart < cutoffMonthStart`, exactly TWO children are eligible: `_2026_04` (7,741,440 B) and `_2026_05` (2,937,577,472 B) = 2,809 MiB. `_2026_06` is not.
+- The 10-31 run moved 11 partitions / 22,330,368,000 B in 95 min with no per-run cap, so stage A drains in ONE run (tonight's), before this batch's code exists.
+- **Note kept:** if OBJ-1 ever lands while a bar stage is mid-drain, read the two named children (or their successors, e.g. stage B's `_2026_06`/`_2026_07`) in the sweep log — never "no bar months left", which `DONE` cannot show (it carries no per-table fields).
+- **First-night magnitude, corrected:** 16 dailies = **21,836 MiB** on the night the 15-day key lands. The earlier 20,328 MiB was the oldest 15.
+
+**Folds (non-blocking, Step 3):**
+- **P5 guards its own read:** the `data_lifecycle` read for `hotHorizonDays` sits in a try of its own. On any failure (an acquire timeout on the 4-slot `diagDb` included) each table's `hotHorizonDays` is null and `windowPartial` unknown; the panel never fails whole. The function has no outer try, and its per-table catch (`:882-892`) is what isolates a row. Fenced, that arm included.
+- **P1 names the conflict target:** `module_constants_pkey` is `(module_name, exchange, asset_class, strategy, regime, constant_name)` (measured); every `data_lifecycle` row is `(data_lifecycle, *, *, *, *, <name>)`. The UPSERT is `ON CONFLICT (module_name, exchange, asset_class, strategy, regime, constant_name)` with the `*` values written explicitly, never `ON CONFLICT (constant_name)`.
+- **F9 restated:** the System Manual table carries 5 of 35 live `data_lifecycle` keys, and three of its names (`equity_spot_ticker_snap`, `equity_perp_ticker_snap`, `equity_*_ohlc_1m`) were retired by the rename. P7 fixes the names in the rows it touches, adds the B70 tables, and says in-table that the bar rows are Infra Claude's (row 6) — it is not left half-corrected without a note.
+- **Objective → plan coverage (the `#744` line):** OBJ-1 → P1 (and the P2 note); OBJ-2 → P5; OBJ-3 → P6; OBJ-4 → P3 + P4; OBJ-5 struck in scope r3; OBJ-6 → P7.
+- **F6's control (Langston's addition):** these tables are not Drizzle-declared (`shared/schema.ts` has 0 hits for `signal_eval_archive` / `pair_scan_archive` / `signal_eval_provenance` against 9 for `closed_trades`), so the snake_case grep is the complete instrument. Of the live-code hits, only `drift-dashboard-aggregator.ts:831` is a read.
+- **Nits corrected:** `computeDataArchiveStatus` is at **`:814`**. F2's six per-daily timings are a SIX-NIGHT series (10-02 … 10-07 dailies, one per run), not the 11-07 run; that run's SEA daily took 243,092 ms.
+
+**§13 (Langston, found in the root crontab):** the `[B-STORAGE-HARDEN 2026-07-07] DISABLED — B70 tiering pending` comment sits directly above the LIVE `30 2 28 * *` b70 partition-creator line, so it reads as if that cron were off, with a dangling "re-enable at OBJ-2 close". **DISPOSITION:** added to Infra Claude's `B-DISK-HEADROOM` (row 6) — that session is already in these keys and has root. Told once.
