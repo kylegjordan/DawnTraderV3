@@ -627,9 +627,11 @@ export class SignalOrchestrator {
       // ⛔ THE 8c SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0) — READ HERE AND ONLY HERE, once per built
       // signal (Langston's switch condition (b)). The flip binds at BIRTH: the signal is stamped with the geometry it was
       // built on — `'sided'` (ON, the block below) or `'mid'` (OFF, today's arithmetic) — and every later job (the four cost
-      // sites, the section-12 floor, the open refusal) keys off that stamp, never the live flag. So a row born under one
-      // setting keeps that setting for its whole life, whatever the flag says later. A row that already carries a stamp
-      // (a HYBRID re-sizing a sized quant signal) keeps its own.
+      // sites, the section-12 floor, the open refusal) keys off that stamp, never the live flag. A row stamped 'sided' keeps
+      // it for life (the ON branch is idempotent on it); OFF keeps any stamp a row already carries. ⚠️ The one asymmetry
+      // (Langston's Step-4 F2): with the switch ON, a HYBRID re-sizing a quant signal stamped 'mid' before the flip IS
+      // re-based and re-stamped 'sided' — prices and stamp always move together, and its mid triple is genuinely the plan,
+      // so no row is ever priced on a geometry its stamp does not name.
       if (!_cbKnobs.sidedEnabled) {
         if (levelGeometryStampOf(rawSignal.metadata) === null) {
           rawSignal = { ...rawSignal, metadata: { ...(rawSignal.metadata ?? {}), levelGeometry: 'mid' } };

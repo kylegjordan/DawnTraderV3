@@ -1,6 +1,10 @@
 /**
- * Row `8c` — THE SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0). Off ⇒ 8c is inert at runtime: no birth
- * re-base, no walk record, no open refusal, no `levelGeometry` stamp ⇒ every cost site keeps 'mid'.
+ * Row `8c` — THE SWITCH-ON (`level_basis.crypto_birth_sided_enabled`, seeded 0). Off ⇒ no birth re-base and no walk record;
+ * every crypto signal is stamped `levelGeometry: 'mid'` ⇒ every cost site keeps today's arithmetic. NOT fully inert, stated
+ * (Langston's Step-4 F4): the open refusal of an UNSTAMPED crypto row is live in both states, and the seam still reads all
+ * four `level_basis` rows per crypto signal — a missing or out-of-bounds ceiling row refuses crypto signals even with the
+ * switch off. The boot assertion contains that (the process will not start without them); it bites only on a runtime DB
+ * edit followed by a cache refresh.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
