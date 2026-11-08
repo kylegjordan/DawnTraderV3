@@ -42,6 +42,17 @@ BEGIN
   IF n <> 7 THEN
     RAISE EXCEPTION 'B-DB-SIZE-RELIEF OBJ-1: expected exactly 7 data_lifecycle rows at their stated values, found %', n;
   END IF;
+  -- Any scope (Langston): b75-retention-sweep.ts reads data_lifecycle keyed on constant_name alone, so a competing row
+  -- at a narrower scope would make the window whichever row Postgres returns last. Exactly one row per key, any scope.
+  SELECT count(*) INTO n FROM module_constants
+   WHERE module_name = 'data_lifecycle'
+     AND constant_name IN ('signal_eval_archive.hot_retention_days', 'pair_scan_archive.hot_retention_days',
+                           'signal_eval_provenance.hot_retention_days', 'exit_decision_archive.hot_retention_days',
+                           'macro_feed_archive.hot_retention_days', 'crypto_spot_ticker_snap.hot_retention_days',
+                           'xstock_perp_ticker_snap.hot_retention_days');
+  IF n <> 7 THEN
+    RAISE EXCEPTION 'B-DB-SIZE-RELIEF OBJ-1: expected exactly 7 data_lifecycle rows for these keys at ANY scope, found % (a competing scope would split the sweep''s read)', n;
+  END IF;
 END $$;
 
 COMMIT;

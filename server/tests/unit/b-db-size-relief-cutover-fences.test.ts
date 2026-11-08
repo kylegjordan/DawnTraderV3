@@ -56,6 +56,28 @@ describe('B-DB-SIZE-RELIEF — the migrations\' locking and keys (C-2, P1)', () 
   });
 });
 
+describe('B-DB-SIZE-RELIEF — the reversal test hook has no setter outside the test (C-12)', () => {
+  it('b_db_size_relief.as_of appears only in the held reversal and the integration test', () => {
+    const hits: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name === '.git' || e.name === 'dist' || e.name.startsWith('_archive')) continue;
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.(ts|tsx|js|mjs|cjs|sql|sh|py)$/.test(e.name) && fs.readFileSync(p, 'utf8').includes('b_db_size_relief.as_of')) hits.push(path.relative(ROOT, p).split(path.sep).join('/'));
+      }
+    };
+    for (const d of ['server', 'shared', 'scripts', 'client', 'drizzle']) walk(path.join(ROOT, d));
+    expect(hits.sort()).toEqual([
+      'drizzle/migrations/held/2026-11-08-b-db-size-relief-cutover-reversal.sql',
+      'server/tests/integration/b-db-size-relief-cutover.test.ts',
+      'server/tests/unit/b-db-size-relief-cutover-fences.test.ts',
+    ]);
+    // the reversal makes the override audible
+    expect(fs.readFileSync(path.join(MIG, 'held', HELD_REVERSAL), 'utf8')).toMatch(/RAISE WARNING 'B-DB-SIZE-RELIEF reversal: the date check is using the session override/);
+  }, 30_000); // a whole-tree walk; the 5 s default is not enough under full-suite parallel load
+});
+
 describe('B-DB-SIZE-RELIEF — the registry (P3, r3 C-5(i))', () => {
   it('the six are APPENDED after the pre-existing six, in order, with a 2026-12-01 cutover', () => {
     const tables = DAILY_PARTITION_CUTOVERS.map((c) => c.table);

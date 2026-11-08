@@ -38,6 +38,12 @@ DECLARE
   mname TEXT;
   n INT;
 BEGIN
+  -- C-12 (Langston): the override is AUDIBLE. A role-level SET of this GUC is the only way the date check could be
+  -- spoofed (the emptiness guard below still refuses to drop a non-empty daily, whatever the date says).
+  IF NULLIF(current_setting('b_db_size_relief.as_of', true), '') IS NOT NULL THEN
+    RAISE WARNING 'B-DB-SIZE-RELIEF reversal: the date check is using the session override b_db_size_relief.as_of = % (not CURRENT_DATE) — expected only in the integration test',
+      current_setting('b_db_size_relief.as_of', true);
+  END IF;
   IF as_of >= cutover THEN
     RAISE EXCEPTION 'B-DB-SIZE-RELIEF reversal REFUSED: today (%) is on or after the cutover (%) — the dailies hold live rows; the way back is a forward migration of its own design',
       as_of, cutover;
@@ -93,9 +99,10 @@ BEGIN
       JOIN pg_class child  ON child.oid  = pg_inherits.inhrelid
       JOIN pg_class parent ON parent.oid = pg_inherits.inhparent
      WHERE parent.relname = p
-       AND child.relname ~ ('^' || p || '_[0-9]{4}_[0-9]{2}_[0-9]{2}$');
+       AND child.relname ~ ('^' || p || '_[0-9]{4}_[0-9]{2}_[0-9]{2}$')
+       AND to_date(substring(child.relname from '_([0-9]{4}_[0-9]{2}_[0-9]{2})$'), 'YYYY_MM_DD') >= cutover;
     IF n <> 0 THEN
-      RAISE EXCEPTION 'B-DB-SIZE-RELIEF reversal postcondition: % still has % daily child(ren)', p, n;
+      RAISE EXCEPTION 'B-DB-SIZE-RELIEF reversal postcondition: % still has % daily child(ren) at/after %', p, n, cutover;
     END IF;
     SELECT count(*) INTO n
       FROM pg_inherits

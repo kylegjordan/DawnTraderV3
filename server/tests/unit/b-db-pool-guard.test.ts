@@ -155,7 +155,7 @@ describe('the app pool survives an ended idle connection', () => {
       }
     }
     expect(clients).toBe(2); // xstock-db-snapshot.ts and db-pool-alerts.ts; a new client that sets the bounds must pass too
-  });
+  }, 30_000); // a whole-tree walk: 1.6 s alone, over the 5 s default under full-suite parallel load (2026-11-08)
 
   it('no whole-transaction time limit is written into the xStock bar writer (scope r3: OBJ-3b withdrawn; R5d retries only the statement-timeout text)', () => {
     const root = path.join(__dirname, '..', '..', '..');

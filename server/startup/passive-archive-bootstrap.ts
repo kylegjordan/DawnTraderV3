@@ -65,7 +65,8 @@ const ARCHIVE_TABLES = [
  * failed. Bootstrap doesn't fix the gap (that's the cron's job, run on the
  * 28th); just surfaces it.
  */
-async function checkPartitionHeadroom(): Promise<void> {
+// Exported for its unit test (B-DB-SIZE-RELIEF C-11); called only by passiveArchiveBootstrap below.
+export async function checkPartitionHeadroom(): Promise<void> {
   const now = new Date();
   const twoMonthsFromNow = new Date(now);
   twoMonthsFromNow.setMonth(twoMonthsFromNow.getMonth() + 2);
@@ -132,7 +133,7 @@ async function checkPartitionHeadroom(): Promise<void> {
       // warn under 7 days (the daily cron's lookahead is 14 — a week short
       // means it has been stalled ~a week).
       const rows = await db.execute(sql`
-        SELECT pg_get_expr(c.relpartbound, c.oid) AS partition_bound
+        SELECT c.relname AS child_name, pg_get_expr(c.relpartbound, c.oid) AS partition_bound
         FROM pg_inherits i
         JOIN pg_class c ON c.oid = i.inhrelid
         JOIN pg_class p ON p.oid = i.inhparent
@@ -140,7 +141,7 @@ async function checkPartitionHeadroom(): Promise<void> {
         ORDER BY c.relname DESC
         LIMIT 1
       `);
-      const result = (Array.isArray(rows) ? rows : (rows as any).rows ?? []) as Array<{ partition_bound: string }>;
+      const result = (Array.isArray(rows) ? rows : (rows as any).rows ?? []) as Array<{ child_name: string; partition_bound: string }>;
       if (result.length === 0) {
         console.warn(`[B74][partitions][WARN] no partitions found for ${tableName} — partition cron may have never run`);
         continue;
@@ -151,7 +152,13 @@ async function checkPartitionHeadroom(): Promise<void> {
         continue;
       }
       const latestEnd = new Date(match[1]);
-      if (curMonthIsDaily) {
+      // B-DB-SIZE-RELIEF (Langston C-11): the threshold follows the SHAPE of the child being measured, not the current
+      // month. Daily names sort above monthly ones on the same parent, so once a table's future cutover dailies exist
+      // (pre-created by its cutover migration) the farthest child is a DAILY even while the current month is still
+      // monthly — keying on the month then applied the 2-month rule to a 14-day runway and WARNed at every boot until the
+      // cutover (BLOCKER-2's false WARN, re-opened for the interregnum). `measuredIsDaily` keys on what was measured.
+      const measuredIsDaily = /_\d{4}_\d{2}_\d{2}$/.test(result[0].child_name);
+      if (measuredIsDaily) {
         const sevenDaysOut = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         if (latestEnd < sevenDaysOut) {
           console.warn(

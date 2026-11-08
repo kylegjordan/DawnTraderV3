@@ -15,6 +15,12 @@
 -- :193-195 ledger INSERT) is healed by re-running `dt-deploy <same sha>`: the re-run applies this file again harmlessly
 -- and writes the ledger row. No hand step is needed.
 --
+-- ⛔ IDEMPOTENT IS NOT REPLAYABLE FOREVER (Langston, Step-4 gate 1): re-run AFTER the pre-created dailies have aged
+--   out under the sweep and pass 3 would re-create 16 empty, already-swept partitions. Unreachable through dt-deploy
+--   (the ledger row skips it); stated so nobody over-reads "idempotent".
+-- ⛔ A lock_timeout ABORT IS THE EXPECTED, SAFE OUTCOME under load: the 5 s SET LOCAL bound makes a blocked DETACH fail
+--   the whole transaction, NOTHING is committed (one transaction), and re-running `dt-deploy <same sha>` is correct.
+--   It is NOT a partial apply. (Concurrent ticker inserts queue behind ACCESS EXCLUSIVE; unexercised under load in CI.)
 -- ⛔ DEPLOY ORDER: ships in the SAME dt-deploy as the six DAILY_PARTITION_CUTOVERS entries
 --   (server/services/data-archive/daily-partition-cutover.ts). A registry entry live in the worktree WITHOUT this
 --   migration collides: from 2026-11-17 the daily creator (cron 0 1 * * *) reaches 12-01 and its CREATE overlaps the
