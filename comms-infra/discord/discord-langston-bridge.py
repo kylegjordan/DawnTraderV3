@@ -489,8 +489,15 @@ def _notify_requester(task, outcome, elapsed=None):
     neither, so the request stays unanswered and recovery may re-run it - the safe direction."""
     channel_id, msg_id = task["channel_id"], task["message_id"]
     after = ", after %d s" % int(elapsed) if elapsed else ""
-    body = (f"{FAILURE_NOTICE_MARKER} your request to Langston failed ({FAILURE_OUTCOME_WORDS.get(outcome, outcome)}"
-            f"{after}); nothing was reviewed. Please re-send.")
+    if outcome == "post_failed":
+        # Langston 4B fix 2: _send_chunks aborts on the FIRST failed chunk with the earlier chunks already posted, so on a
+        # multi-chunk reply "nothing was reviewed" would be FALSE - the requester may be reading a partial review (#546,
+        # inverted). Its own clause says what is true.
+        body = (f"{FAILURE_NOTICE_MARKER} Langston's reply to your request could not be posted in full — treat anything "
+                f"above as incomplete. Please re-send.")
+    else:
+        body = (f"{FAILURE_NOTICE_MARKER} your request to Langston failed ({FAILURE_OUTCOME_WORDS.get(outcome, outcome)}"
+                f"{after}); nothing was reviewed. Please re-send.")
     text = lq.lead_with_addressee(body, task, CFG.get("kyle_id"))
     sent_id = dc.rest_send(BOT_TOKEN, channel_id, text, LOG_FILE)
     if sent_id is None:
@@ -524,7 +531,9 @@ def _count_alert_failure(task, outcome):
     try:
         with open(path, encoding="utf-8") as fh:
             rec = json.load(fh)
-    except FileNotFoundError:
+    except (OSError, ValueError):
+        # Langston 4B fix 1: a CORRUPT record (one bad byte) must not raise out to _after_no_reply's catch-all - spool_load
+        # would rename it .bad at the next start and the alert would vanish untold. Unreadable = no record = Kyle now.
         rec = None
     n = (rec or {}).get("failed_attempts", 0) + 1
     if rec is not None:

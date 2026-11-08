@@ -50,6 +50,10 @@ MUTANTS = [
          'message_id=task.get("message_id"), sender_username=task.get("author_name"), task_kind=task.get("kind"))')),
     ("P10: langston_enqueued joins the watchdog's dedup kinds",
      rep(BRIDGE, '        dedup_kinds={"langston_inbound"},', '        dedup_kinds={"langston_inbound", "langston_enqueued"},')),
+    ("4B fix 1: a corrupt spool record raises again",
+     rep(BRIDGE, "    except (OSError, ValueError):\n        # Langston 4B fix 1", "    except FileNotFoundError:\n        # Langston 4B fix 1")),
+    ("4B fix 2: a post_failed notice says nothing was reviewed again",
+     rep(BRIDGE, '    if outcome == "post_failed":\n        # Langston 4B fix 2', '    if False:\n        # Langston 4B fix 2')),
     ("P11: the other-agent notice check is removed",
      rep(BRIDGE, "        if is_other_agent_failure_notice(message.author.id, content):", "        if False:")),
 ]

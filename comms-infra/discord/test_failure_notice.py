@@ -72,11 +72,13 @@ open(b.QUEUE_FILE, "w").write("[]")
 ROWS, SENT = [], []
 dc.append_inbox = lambda entry: ROWS.append(entry)
 POST_OK = {"v": True}
+POST_PLAN = []      # if non-empty, each send pops its own success flag (first-in, first-out)
 
 
 def fake_send(token, ch, text, logf=None, mention_user_id=None):
     SENT.append({"ch": ch, "text": text, "mention": mention_user_id})
-    return "777" if POST_OK["v"] else None
+    ok_now = POST_PLAN.pop(0) if POST_PLAN else POST_OK["v"]
+    return "777" if ok_now else None
 
 
 dc.rest_send = fake_send
@@ -221,6 +223,16 @@ case("then: ONE Kyle line, mentioning Kyle, naming the outcome", (1, KYLE, True,
      (len(SENT), SENT[0]["mention"] if SENT else None, (SENT[0]["text"] if SENT else "").startswith("Kyle — "), "timeout" in (SENT[0]["text"] if SENT else "")))
 case("the spool record is removed after the line posted", False, os.path.exists(al.spool_path(al.SPOOL_DIR, at["message_id"])))
 
+print("7b. Langston 4B fix 1: a CORRUPT spool record does not swallow the alert - Kyle is told at once")
+reset(); INVOKE["mode"] = "timeout"
+at2 = task(content="**Fill blocked — stale price Y**", author=0, display="alerts", is_alert=True, escalated=True)
+os.makedirs(al.SPOOL_DIR, exist_ok=True)
+open(al.spool_path(al.SPOOL_DIR, at2["message_id"]), "w").write("{not json")
+b.process_task(dict(at2), b.BREAKER, None)
+case("one Kyle line, mentioning Kyle", (1, KYLE, True), (len(SENT), SENT[0]["mention"] if SENT else None,
+                                                         (SENT[0]["text"] if SENT else "").startswith("Kyle — ")))
+case("the handler did not fail silently (no 'no-reply handling FAILED' line)", False, "no-reply handling FAILED" in log_text())
+
 print("8. P5: a self-advance failure is recorded on its item, and the PARK notice names it")
 reset(); INVOKE["mode"] = "timeout"
 item = lq.new_item("ADV1", "OLD Claude", "review B-ADV", pointer=None, gate_type=None)
@@ -294,6 +306,17 @@ b.process_task(t, b.BREAKER, None)
 out = kinds(ROWS, "langston_outbound")
 case("one reply, no failure_notice, no marker in the text", (1, None, False),
      (len(out), out[0].get("failure_notice") if out else "x", b.FAILURE_NOTICE_MARKER in (SENT[0]["text"] if SENT else "")))
+
+print("12. Langston 4B fix 2: a reply that could NOT be posted in full gets its own wording, never 'nothing was reviewed'")
+reset(); INVOKE["mode"] = "ok"; POST_PLAN[:] = [False, True]     # the reply's post fails, the notice's succeeds
+t = task()
+b.process_task(t, b.BREAKER, None)
+note = SENT[-1]["text"] if SENT else ""
+case("the notice says the reply could not be posted in full and anything above is incomplete", (True, True, False),
+     (b.FAILURE_NOTICE_MARKER in note, "treat anything above as incomplete" in note, "nothing was reviewed" in note))
+case("its row carries outcome post_failed", ["post_failed"],
+     [r.get("outcome") for r in kinds(ROWS, "langston_outbound") if r.get("failure_notice")])
+POST_PLAN[:] = []
 
 print("\n%d passed, %d failed (scratch %s)" % (P, F, SCRATCH))
 sys.exit(1 if F else 0)

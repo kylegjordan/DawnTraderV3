@@ -43,6 +43,8 @@ DECLINE = {"voice not addressed to Langston",
            "[SILENT] addressed to Claude New (CC-B), not me",
            "[SILENT] addressed to Claude Old (CC-A), not me",
            "[SILENT] not named — only Langston-rule and Claude New apply; I'm not the addressee."}
+# ⚠️ `circuit_breaker` here is a DORMANT arm (Langston 4B): the render loop keys on `langston_inbound`, and the breaker
+#    returns before that row is written, so a breaker reason can never render. Kept for completeness; do not trust it.
 OPEN_REASONS = {"bridge_error_suppressed", "circuit_breaker", "post_failed"}
 # `langston_inbound.sender_username` -> alias, EXACT strings (A6b; the discriminator is part of the value)
 SENDER_USERNAME = {"OLD Claude#0000": "CC-A", "Claude Old#0000": "CC-A", "NEW Claude#0000": "CC-B", "Claude New#0000": "CC-B",
