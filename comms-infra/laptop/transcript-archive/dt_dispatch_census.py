@@ -4,7 +4,7 @@ log ALONE (scope OBJ-5, Langston C-4: never from the handoff it grades). Runs on
 
     ssh root@204.168.141.77 'python3 -I - --alias CC-B --since-ms <ms>' < dt_dispatch_census.py
 
-Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_handled": [ids], "queued": [ids],
+Prints ONE JSON object: {"open": [{"id", "at_ms", "note"}], "ended": n, "not_handled": [ids], "queued": [{"id", "at_ms"}],
 "failed_notified": [ids], "guard_failed": [...], "not_checked": [...], "counts": {...}}. Any guard_failed entry means the leg could not be trusted: the guard prints
 `GUARD FAILED — open-dispatch leg: <reason>` and never a green. The rules (pre-audit P8, each a drill case):
   * DISPATCH RAIL: `langston_inbound` rows in the window whose `sender_username` maps to this alias (exact strings).
@@ -219,7 +219,9 @@ def census(rows, alias, since_ms, until_ms, addr, registry):
         if i in inbound_ids or piece_received(text, inbound_text, ms):
             continue
         if i in enqueued_ids or piece_received(text, enqueued_text, ms):
-            out["queued"].append(i)          # accepted by the bridge, no worker has started it yet
+            # accepted by the bridge, no worker has started it yet. WITH its age (Langston 4A): over a 7-day handoff window
+            # a request queued 40 s ago behind two busy workers and one lost in a restart days back must read differently.
+            out["queued"].append({"id": i, "at_ms": ms})
             continue
         out["not_handled"].append(i)
     out["counts"] = {"dispatches": len(dispatches), "cc_posts_checked": len(cc), "queued": len(out["queued"]),

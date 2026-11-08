@@ -126,9 +126,10 @@ def enq(n, text="Langston — review the writer please"):
 
 r = run([cco(1, "Langston — review the writer please"), enq(1)])
 ok("an enqueued, never-started dispatch is QUEUED, not NOT HANDLED, and is no guard failure",
-   r["queued"] == [str(sid(1))] and r["not_handled"] == [] and r["guard_failed"] == [], r)
+   [q["id"] for q in r["queued"]] == [str(sid(1))] and r["not_handled"] == [] and r["guard_failed"] == [], r)
+ok("...carrying its age: at_ms is the post's own snowflake time", r["queued"] and r["queued"][0]["at_ms"] == dc.snowflake_ms(sid(1)), r)
 r = run([cco(1, p1), cco(1, p2), enq(1, text=p1 + "\n" + p2)])
-ok("a two-piece dispatch enqueued as one task matches on text: QUEUED", r["queued"] == [str(sid(1))] and r["not_handled"] == [], r)
+ok("a two-piece dispatch enqueued as one task matches on text: QUEUED", [q["id"] for q in r["queued"]] == [str(sid(1))] and r["not_handled"] == [], r)
 r = run([cco(1, "Langston — review the writer please"), enq(1), inb(1, text="Langston — review the writer please")])
 ok("once a worker writes its inbound row it is no longer QUEUED (the inbound state wins)", r["queued"] == [] and r["not_handled"] == [], r)
 ok("control: without the enqueue row the same post is NOT HANDLED", run([cco(1, "Langston — review the writer please")])["not_handled"] == [str(sid(1))])

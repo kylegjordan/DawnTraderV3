@@ -231,11 +231,13 @@ def guard(alias, repo, root, census=real_census, alerts=real_due_alerts, clock=n
                 # design §5's "listed"; the banner rises)
                 drift.append("dispatch")
                 lines.append("NOT HANDLED — no inbound row for %s" % i)
-            for i in c.get("queued", []):
+            for q in c.get("queued", []):
                 # B-AGENT-INVOKE-FAILURE-NOTICE P10: accepted by Langston's bridge, no worker has started it - still
                 # unanswered work, so the banner rises exactly as for NOT HANDLED, named as what it is
                 drift.append("dispatch")
-                lines.append("QUEUED — accepted, not started yet: %s" % i)
+                i = q.get("id") if isinstance(q, dict) else q
+                age = (int(clock().timestamp() * 1000) - q["at_ms"]) // 60000 if isinstance(q, dict) and q.get("at_ms") else None
+                lines.append("QUEUED — accepted, not started yet: %s%s" % (i, "" if age is None else " (queued %d min ago)" % age))
             lines += c.get("not_checked", [])
     except Exception:      # noqa: BLE001
         failed.append("open-dispatch")

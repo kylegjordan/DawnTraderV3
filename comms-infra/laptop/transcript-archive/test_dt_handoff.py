@@ -215,6 +215,11 @@ b, lines, _ = guard(T0 + datetime.timedelta(minutes=20))
 ok("P10: a QUEUED post raises the banner too, named as queued (unanswered work, not NOT HANDLED)",
    b.startswith("STALE (drift) — dispatch") and "QUEUED — accepted, not started yet: 1568330334603321499" in lines
    and not any("NOT HANDLED" in l for l in lines), (b, lines))
+_now = T0 + datetime.timedelta(minutes=20)
+STATE["q"] = [{"id": "1568330334603321499", "at_ms": int((_now - datetime.timedelta(minutes=95)).timestamp() * 1000)}]
+b, lines, _ = guard(_now)
+ok("Langston 4A: a QUEUED entry carrying at_ms prints its AGE (queued 95 min ago), from the guard's own clock",
+   "QUEUED — accepted, not started yet: 1568330334603321499 (queued 95 min ago)" in lines, (b, lines))
 STATE["q"] = []
 ok("restored after QUEUED: green", guard(T0 + datetime.timedelta(minutes=20))[0].startswith("HANDOFF GUARD: CLEAN"))
 GOODC = json.dumps({"open": [{"id": "1"}], "not_handled": [], "guard_failed": [],

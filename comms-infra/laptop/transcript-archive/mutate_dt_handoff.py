@@ -26,7 +26,10 @@ MUTATIONS = [
     ("C-1: a non-JSON reply taken as zero open", replace(
         '        return {"guard_failed": ["the census did not answer (exit %s, no JSON)" % returncode]}', "        return {}")),
     ("P10: QUEUED leaves the banner CLEAN", replace(
-        "                drift.append(\"dispatch\")\n                lines.append(\"QUEUED — accepted, not started yet: %s\" % i)",
+        "                drift.append(\"dispatch\")\n                i = q.get(\"id\") if isinstance(q, dict) else q",
+        "                i = q.get(\"id\") if isinstance(q, dict) else q")),
+    ("Langston 4A: QUEUED prints no age", replace(
+        "                lines.append(\"QUEUED — accepted, not started yet: %s%s\" % (i, \"\" if age is None else \" (queued %d min ago)\" % age))",
         "                lines.append(\"QUEUED — accepted, not started yet: %s\" % i)")),
     ("C-2: NOT HANDLED leaves the banner CLEAN", replace(
         "                drift.append(\"dispatch\")\n                lines.append(\"NOT HANDLED — no inbound row for %s\" % i)",
