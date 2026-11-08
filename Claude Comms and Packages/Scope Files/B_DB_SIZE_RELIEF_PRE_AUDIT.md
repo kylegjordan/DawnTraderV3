@@ -191,3 +191,36 @@ Three things changed the plan:
 
 **Cleared (Langston):** C-2 and C-3 as written in r2; all six folds; the objective → plan line covers OBJ-1 … OBJ-6 (OBJ-5 struck).
 **Corrected in the body, not stacked (non-blocking):** `:814` in §0 and F7; P4's drop count is "the count the catalog lists".
+
+---
+
+## AMENDMENT r4 (2026-11-08 ~02:20Z, CC-A) — Langston CHANGES on r3 (Discord `1568808851753402381`): C-6 the reversal's holding place, C-7 the recovery branches on the ledger. SUPERSEDES r3's "written … not shipped" and its C-5(ii) step
+
+**C-6 (blocking) — where the reversal waits, and what "tested" means.**
+- **Why it needs a holding place:** `scripts/db-migrate.ts` enforces a BIJECTION between the forward `.sql` files in `drizzle/migrations/` and `MANIFEST.txt` (`:113-118` builds the forward set — every `*.sql` from a NON-recursive `readdirSync`, minus names containing `rollback`; `:127-149` throws on drift either way). A `…-cutover-reversal.sql` in that directory breaks every deploy if unlisted (for every batch), and applies itself at the next deploy if listed. Uncommitted is not an option either: `dt-deploy:214-219` refuses a dirty worktree.
+- **The holding path:** `drizzle/migrations/held/2026-11-XX-b-db-size-relief-cutover-reversal.sql`.
+  - `readdirSync` is non-recursive and keeps only `*.sql`, so a `held/` subdirectory is invisible to the bijection (`:115`). No other tooling scans the directory recursively (`git grep drizzle/migrations` over `.github`, `Dockerfile*`, `scripts/*.sh` returns nothing).
+  - `drizzle/migrations/` has no subdirectories today, so `held/` is new and is named in the file's header.
+  - **To use it:** ONE commit does `git mv drizzle/migrations/held/<file> drizzle/migrations/<file>`, adds its `MANIFEST.txt` line, AND reverts P3's six registry entries. That commit then goes out in one `dt-deploy`.
+- **"Tested at Step 3", concretely:**
+  - (1) An integration test in the suite, run where CI runs `db:migrate` (`ci.yml:56`, the CI Postgres service). It builds throwaway RANGE-partitioned parents shaped like the six (same partition key, a monthly child before the cutover, empty monthlies after it), applies the forward cutover SQL body, asserts the daily and monthly child sets, then applies the held reversal body and asserts the monthly set is back and the dailies are gone. Both refusal arms are exercised too: after the cutover date, and with a non-empty daily.
+  - (2) A fence that the held file exists under `held/` and is NOT in `MANIFEST.txt`, so it can never be applied by accident.
+
+**C-7 (blocking) — the abort-recovery step branches on whether the migration committed.** `dt-deploy` has four failure points AFTER `npm run db:migrate` returns at `:242`: `--pre-restart` (`:246-249`), `pm2 restart` (`:253`), the `LIVE_HEAD` assert (`:257-258`), and the 240 s engine poll (`:263-287`). The discriminator is the runner's own ledger, `_migrations` (`db-migrate.ts:63-76`), whose row is written after the SQL commits (`:193-195`). The recovery step in the deploy note reads:
+- **Forward deploy aborted.** Query `_migrations` for the cutover file.
+  - **Row ABSENT** — the migration did not commit, so the DB is still monthly while the registry entries are live in the worktree: `git reset --hard` the staging clone to the pre-deploy sha (found in `git reflog`; `dt-deploy` echoes `DEPLOYED_SHA` only on a lockfile diff, `:225`), then confirm the six are gone from `daily-partition-cutover.ts`.
+  - **Row PRESENT** — the DB is in the daily state (monthlies dropped, dailies created): do NOT reset, which would build C-4's collision by hand. Re-run `dt-deploy <same sha>` (the migration is ledgered, so it skips), or take the C-4 reversal.
+- **Reversal deploy aborted.** Query `_migrations` for the reversal file.
+  - **Row PRESENT** — the DB is monthly again and the code revert is in the worktree, which is consistent. Re-run `dt-deploy <same sha>` to finish the restart.
+  - **Row ABSENT** — the code revert removed the six from `DAILY_PARTITION_CUTOVERS` while the DB still holds only dailies. This case is SILENT: `b-storage-archival-health.ts:270` no longer iterates them, the daily creator no longer touches them, and the 16-day runway expires into "no partition of relation found for row". `git reset --hard` to the pre-reversal sha (registry entries restored, matching the daily DB), then retry the reversal.
+- **The deadlines (fold 3), not "the next 01:00Z":**
+  - `LOOKAHEAD_DAYS = 14` with `i <= LOOKAHEAD_DAYS` (`b74-create-daily-partitions.ts:41`, `:86`), so 2026-12-01 enters the daily window on **2026-11-17**. Before that the 01:00Z hazard is latent; from then on the deadline is the next 01:00Z.
+  - The monthly creators' hazard is the **28th** of the month at 02:00Z (b74, `0 2 28 * *`) and 02:30Z (b70, `30 2 28 * *`).
+
+**Folds (Langston: no further round needed):**
+1. **The blast radius differs per creator.** For the DAILY creator, appending (C-5(i)) keeps the six existing tables ahead of any collision. The MONTHLY creators iterate their own hardcoded lists: `pair_scan_archive` is index 0 of `b70-create-monthly-partitions.ts:34-41`, so a C-4-shape collision there aborts that run before `switch_on_shadow_evidence` (held out of this batch, 3.3 M rows, monthly) gets its forward monthlies. In `b74-create-monthly-partitions.ts:36-43` the two new tables are indexes 4-5 of `SIX_TABLES`, so the four ahead of them are safe. Stated in the deploy note beside the recovery step.
+2. **The reversal makes P4 non-replayable:** the forward file's `_migrations` row survives (`db-migrate.ts:155` filters applied files), so re-landing the cutover after a reversal needs a THIRD dated file. Said in the reversal's header.
+3. The deadlines — above.
+4. P4's drop set, re-derived by Langston on staging: 11 per table, `_2026_12 … _2027_10`, 66 in all. "The count the catalog lists" stands.
+
+**§13 (Langston):** nothing watches the three partition-creator logs. `b-storage-archival-health.ts` has four log-freshness specs (`b75-retention`, `b75-cold-rotator`, `b75-cold-liveness`, `disk-file-tiering`), and `b74-daily-partitions.log`, `b74-partitions.log` and `b70-partitions.log` are absent, which is why C-5(iii) is a human read. **DISPOSITION:** added to Infra Claude's `B-DISK-HEADROOM` (row 6), the same home as the r2 crontab-comment item. Told once.
