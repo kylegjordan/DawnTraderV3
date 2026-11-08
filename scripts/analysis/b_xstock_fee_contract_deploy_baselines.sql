@@ -26,19 +26,26 @@ INSERT INTO _bxfc_alias VALUES
   ('OPEN/USD'), ('PEP/USD'), ('STRK/USD'), ('STX/USD'), ('SUI/USD'), ('T/USD'), ('WELL/USD'), ('WEN/USD');
 
 \echo === (0) B-DB-SIZE-RELIEF OBJ-3: the hot horizons of the tables this file reads. Every query below reads HOT partitions only; ===
-\echo ===     rows older than hot_from are in the warm tier and are NOT counted. Check each range below starts after its table's hot_from. ===
+\echo ===     rows older than hot_from are in the warm tier and are NOT counted. Check each range below starts after the hot_from of its table. ===
 -- One row per table this file reads, ALWAYS: a missing key prints as MISSING rather than as an absent row.
-SELECT t.table_name, (m.value)::int AS hot_days,
-       now() - make_interval(days => (m.value)::int) AS hot_from,
-       CASE WHEN m.value IS NULL THEN 'MISSING - hot window unknown, the counts below cannot be bounded' ELSE 'ok' END AS state
+SELECT t.table_name,
+       CASE WHEN jsonb_typeof(m.value) = 'number' THEN (m.value)::numeric END AS hot_days,
+       CASE WHEN jsonb_typeof(m.value) = 'number'
+            THEN CASE WHEN (m.value)::numeric > 0 THEN now() - make_interval(secs => (m.value)::numeric * 86400) END END AS hot_from,
+       CASE WHEN m.value IS NULL THEN 'MISSING - hot window unknown, the counts below cannot be bounded'
+            WHEN jsonb_typeof(m.value) <> 'number' THEN 'NOT A NUMBER - the sweep would refuse it; the counts below cannot be bounded'
+            WHEN (m.value)::numeric <= 0 THEN 'NOT POSITIVE - the sweep would refuse it; the counts below cannot be bounded'
+            ELSE 'ok' END AS state
 FROM (VALUES ('signal_eval_archive'), ('switch_on_shadow_evidence')) AS t(table_name)
 LEFT JOIN module_constants m
   ON m.module_name = 'data_lifecycle' AND m.exchange = '*' AND m.asset_class = '*' AND m.strategy = '*' AND m.regime = '*'
  AND m.constant_name = t.table_name || '.hot_retention_days'
 ORDER BY 1;
--- Gate 3 (Langston): a MISSING key STOPS the file. This output is pasted into the deploy note as evidence, and whoever
--- reads a later section's n= does not scroll back to (0) — an unbounded count must not sit beside bounded ones. (A
--- non-number value already stops it: (m.value)::int errors on a jsonb string, and the run uses ON_ERROR_STOP=1.)
+-- Gate 3 (Langston): a MISSING key STOPS the file - and so does a present key that is not a positive number (gate 4
+-- fold: the same test as parseLifecycleNumber / the sweep's reqNum; a 0 would otherwise print 'ok' with hot_from = now()). This output is pasted into the deploy note as evidence, and whoever
+-- reads a later section's n= does not scroll back to (0) — an unbounded count must not sit beside bounded ones. The
+-- SELECT above prints which of MISSING / NOT A NUMBER / NOT POSITIVE applies; this block STOPS on any of them
+-- (the run uses ON_ERROR_STOP=1).
 DO $$
 DECLARE missing TEXT;
 BEGIN
@@ -47,9 +54,10 @@ BEGIN
     LEFT JOIN module_constants m
       ON m.module_name = 'data_lifecycle' AND m.exchange = '*' AND m.asset_class = '*' AND m.strategy = '*' AND m.regime = '*'
      AND m.constant_name = t.table_name || '.hot_retention_days'
-   WHERE m.value IS NULL;
+   -- CASE, not OR: Postgres does not promise left-to-right OR, and the numeric cast errors on a jsonb string.
+   WHERE CASE WHEN m.value IS NULL THEN true WHEN jsonb_typeof(m.value) <> 'number' THEN true ELSE (m.value)::numeric <= 0 END;
   IF missing IS NOT NULL THEN
-    RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): no data_lifecycle hot_retention_days for % - the counts in this file cannot be bounded; STOPPING before any count is printed', missing;
+    RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): data_lifecycle hot_retention_days absent, or not a positive number, for % - the counts in this file cannot be bounded; STOPPING before any count is printed', missing;
   END IF;
 END $$;
 

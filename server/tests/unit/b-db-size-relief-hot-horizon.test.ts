@@ -108,6 +108,8 @@ describe('wiring', () => {
     expect(src.lastIndexOf('signal_eval_archive b ON')).toBeGreaterThan(src.indexOf('FROM signal_eval_archive'));
     expect(iEnd).toBeGreaterThan(src.lastIndexOf('signal_eval_archive b ON'));
     expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}process\.exit\(3\)/);
+    // gate 4 fold (Langston): spelling-independent — NO archive read of any alias after the end check
+    expect(src.slice(iEnd)).not.toMatch(/FROM signal_eval/);
     // gate 3 F1: the refusal is on STDOUT as well as stderr, before the exit
     expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}console\.log\(banner\);[\s\S]{0,60}console\.error\(banner\);[\s\S]{0,80}process\.exit\(3\)/);
   });
@@ -122,10 +124,19 @@ describe('wiring', () => {
     expect(sql).toMatch(/LEFT JOIN module_constants m[\s\S]{0,200}m\.constant_name = t\.table_name \|\| '\.hot_retention_days'/);
     expect(sql).toContain("'MISSING - hot window unknown");
     // gate 3: a MISSING key STOPS the file (RAISE under the run's ON_ERROR_STOP=1), before section (1)
-    const iRaise = sql.indexOf("RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): no data_lifecycle hot_retention_days");
+    const iRaise = sql.indexOf("RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): data_lifecycle hot_retention_days absent, or not a positive number");
     expect(iRaise).toBeGreaterThan(i0);
     expect(iRaise).toBeLessThan(sql.indexOf('=== (1) P8 p0'));
     expect(sql).toContain('-v ON_ERROR_STOP=1');
+    // gate 4 fold: the SAME value test as parseLifecycleNumber — absent, non-number and <= 0 all stop; a CASE (ordered),
+    // never an OR, so the numeric cast cannot run on a jsonb string
+    expect(sql).toContain("WHERE CASE WHEN m.value IS NULL THEN true WHEN jsonb_typeof(m.value) <> 'number' THEN true ELSE (m.value)::numeric <= 0 END;");
+    expect(sql).toContain("WHEN (m.value)::numeric <= 0 THEN 'NOT POSITIVE");
+    expect(sql).not.toMatch(/\(m\.value\)::int\b/); // the old cast errored on a string before the guard could name it
+    // psql \echo treats an apostrophe as an open quote: none may carry one
+    const echoes = sql.split(/\r?\n/).filter((x) => x.startsWith('\\echo'));
+    expect(echoes.length).toBeGreaterThan(10); // the filter finds the echo lines (12 at gate 4), so its silence means something
+    for (const l of echoes) expect(l, l).not.toContain("'");
   });
 
   it('the Drift Dashboard panel (OBJ-2) uses the SAME query and parser, not a copy of its own', () => {
