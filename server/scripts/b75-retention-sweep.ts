@@ -50,6 +50,7 @@ import {
   ExportRowCountMismatchError,
 } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';
 import {
   classifyPartition,
   decideSliceMode,
@@ -218,9 +219,11 @@ interface SweepConfig {
 }
 
 async function loadConfig(client: pg.Client): Promise<SweepConfig> {
+  // B-DB-SIZE-RELIEF increment 4: the SAME scope filter the horizon readers use (all four scope columns '*'), so a
+  // narrower-scope row can never win this map unseen while the Drift Dashboard and the W20C replay state the '*' value.
   const r = await client.query(
     `SELECT constant_name, value FROM module_constants
-       WHERE module_name = 'data_lifecycle'`,
+       WHERE ${DATA_LIFECYCLE_SCOPE_SQL}`,
   );
   const map = new Map<string, unknown>();
   for (const row of r.rows) map.set(row.constant_name, row.value);
@@ -233,8 +236,9 @@ async function loadConfig(client: pg.Client): Promise<SweepConfig> {
     return v;
   }
   function reqNum(key: string): number {
-    const v = map.get(key);
-    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) {
+    // The SAME value test the horizon readers use (parseLifecycleNumber: a jsonb number, finite, > 0).
+    const v = parseLifecycleNumber(map.get(key));
+    if (v === null) {
       throw new Error(`[B75 sweep] missing or invalid numeric data_lifecycle.${key}`);
     }
     return v;

@@ -57,5 +57,21 @@
 - **`scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`:** a section (0) printing `hot_days` / `hot_from` for `signal_eval_archive` and `switch_on_shadow_evidence`, before section (1).
 - **`b-db-size-relief-hot-horizon.test.ts`** (7): the default era refuses (earliest 2026-11-06 at a fixed now), in-horizon passes, the limiting table is reported, an era inside 30 d but outside 15 d refuses (the INNER-join loss), plus the missing-key, unparseable-era and wiring fences. Mutation (longest horizon chosen) fails three.
 
+## Step-4 folds (all disposition 1, on this batch's own increments)
+| sha | gate | what |
+|---|---|---|
+| `8d9866ef9` | 1 | C-11 boot headroom keyed on the measured child · C-12 audible `as_of` override + whole-tree fence · reversal postcondition `>= cutover` · retention any-scope exact-7 · cutover header notes |
+| `e32b1a6c1` | pre-2 | the panel uses the shared `HOT_HORIZON_SQL` / `parseHorizonRows` |
+| `8ed34497d` | pre-3 | fee SQL section (0): one row per table, `MISSING` when a key is absent |
+| `71468a8bf` | 2 | C-1 no PARTIAL beside a timed-out count · C-2 one load predicate (full statement-timeout phrase; four sites) · C-3 "Total rows (hot)" · strictness comment carries the measured direction |
+| `bec4c8df1` | pre-3 | the replay re-checks its era at the END of the run (exit 3) |
+| `0c9947d77` | 2 r2 | the load-predicate fence pins the fourth site and any quote style |
+
+## Increment 4 — the sweep and the horizon readers share one scope filter and one value test (Langston, gate 2: fold into this batch)
+- **`hot-horizon.ts`:** `DATA_LIFECYCLE_SCOPE_SQL` (module + all four scope columns `'*'`) and `parseLifecycleNumber` (a jsonb NUMBER, finite, > 0; a string `"15"` is null). `HOT_HORIZON_SQL` is built from the filter; `parseHorizonRows` uses the value test (it used `Number()` and accepted `"15"`).
+- **`server/scripts/b75-retention-sweep.ts` `loadConfig`:** the query is `WHERE ${DATA_LIFECYCLE_SCOPE_SQL}` (it was `module_name` alone, last-row-wins); `reqNum` calls `parseLifecycleNumber` (same predicate as before, now shared).
+- **Measured before changing the enforcer (staging, read-only):** 35 `data_lifecycle` rows, 35 at `'*'` on all four scope columns, 35 distinct names, every `.hot_retention_days` a jsonb number. **So the filter changes nothing the sweep reads tonight**; it removes the future case where a narrower row wins the sweep's map unseen, and a string seed now reads UNKNOWN to the readers instead of a confident horizon the sweep would abort on.
+- **Tests (hot-horizon):** the value test's truth table; a string-seeded key is UNKNOWN and the era refuses; a source fence that the sweep imports and uses both, and the unscoped read is gone. Mutation (`Number()` coercion restored) fails two.
+
 ## Suite
 Full suite after each increment: the same 11 local-only failing files (by file-list diff against the earlier baseline); tsc 324. The integration file skips locally (no database) and ran in CI.

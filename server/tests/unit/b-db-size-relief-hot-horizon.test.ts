@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { decideEra, parseHorizonRows } from '../../services/data-archive/hot-horizon.js';
+import { decideEra, parseHorizonRows, parseLifecycleNumber, DATA_LIFECYCLE_SCOPE_SQL, HOT_HORIZON_SQL } from '../../services/data-archive/hot-horizon.js';
 
 // B-DB-SIZE-RELIEF OBJ-3 (pre-audit P6 / F8): a by-hand reader of the HOT tables states what it read and refuses an
 // era it cannot serve; a JOIN of two tables is limited by the SHORTER horizon.
@@ -48,6 +48,32 @@ describe('decideEra', () => {
     const era = '2026-11-06T00:00:00Z'; // exactly the earliest servable era at NOW
     expect(decideEra(era, JOINED, H, NOW).ok).toBe(true);
     expect(decideEra(era, JOINED, H, NOW + 86_400_000).ok).toBe(false);
+  });
+});
+
+describe('increment 4 — the ENFORCER and the READERS share one scope filter and one value test (Langston, gate 2)', () => {
+  it('parseLifecycleNumber accepts only what the sweep enforces: a finite number > 0 — a string "15" is NOT a horizon', () => {
+    expect(parseLifecycleNumber(15)).toBe(15);
+    expect(parseLifecycleNumber(30.5)).toBe(30.5);
+    for (const bad of ['15', 0, -1, Number.NaN, Number.POSITIVE_INFINITY, null, undefined, true, { days: 15 }]) {
+      expect(parseLifecycleNumber(bad), String(bad)).toBeNull();
+    }
+  });
+
+  it('a string-seeded key is UNKNOWN to the readers (the sweep would abort on it, so no badge or era may trust it)', () => {
+    const h = parseHorizonRows([{ constant_name: 'signal_eval_archive.hot_retention_days', value: '15' }]);
+    expect(h.has('signal_eval_archive')).toBe(false);
+    expect(decideEra('2026-11-19T00:00:00Z', ['signal_eval_archive'], h, NOW).ok).toBe(false);
+  });
+
+  it('the sweep reads data_lifecycle through the SAME scope filter and the SAME value test', () => {
+    const ROOT = path.join(__dirname, '../../..');
+    const sweep = fs.readFileSync(path.join(ROOT, 'server/scripts/b75-retention-sweep.ts'), 'utf8');
+    expect(sweep).toContain("import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';");
+    expect(sweep).toMatch(/FROM module_constants\s+WHERE \$\{DATA_LIFECYCLE_SCOPE_SQL\}/);
+    expect(sweep).toMatch(/function reqNum\(key: string\): number \{[\s\S]{0,200}parseLifecycleNumber\(map\.get\(key\)\)/);
+    expect(sweep).not.toMatch(/WHERE module_name = 'data_lifecycle'`/); // the unscoped read is gone
+    expect(HOT_HORIZON_SQL).toContain(DATA_LIFECYCLE_SCOPE_SQL);
   });
 });
 
