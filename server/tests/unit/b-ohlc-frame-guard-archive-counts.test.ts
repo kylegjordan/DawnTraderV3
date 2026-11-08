@@ -182,7 +182,9 @@ describe('passive archive window counts — read the SELECT, not the transaction
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const load of ['timeout exceeded when trying to connect', 'canceling statement due to statement timeout']) {
       dbm.diagDb.execute.mockImplementation(async () => { throw new Error(load); });
-      await computePassiveArchiveStatus('rolling_24h');
+      const r = await computePassiveArchiveStatus('rolling_24h');
+      // the CHOSEN behaviour, pinned (Langston): an unread disk size renders 0 bytes — carried on #1239, not hidden
+      for (const u of r.universes) expect(u.diskBytes, u.universe).toBe(0);
     }
     expect(warn).not.toHaveBeenCalled();
     dbm.diagDb.execute.mockImplementation(async () => { throw new Error('relation "xstock_spot_ohlc_1m" does not exist'); });
