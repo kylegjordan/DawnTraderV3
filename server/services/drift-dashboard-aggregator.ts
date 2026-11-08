@@ -863,7 +863,7 @@ export async function computeDataArchiveStatus(
   // so instead of showing a 15-day count under a 30-day label. This read has its own try: on any failure (an acquire
   // timeout on the 4-slot diagnostic pool included) every horizon is null and `windowPartial` unknown, and the panel
   // still renders. A missing key is null too, never a default (no hard-coded fallback for a DB-governed setting).
-  let horizons: Map<string, number> | null = null;
+  let horizons: Map<string, number | null> | null = null; // a malformed value maps to null: shown as UNKNOWN, never a default
   let horizonFault: string | null = null;
   try {
     // ONE query and ONE parser, shared with the replay script's era gate (data-archive/hot-horizon.ts, OBJ-3).

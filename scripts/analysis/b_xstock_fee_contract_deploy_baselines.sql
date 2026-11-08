@@ -36,6 +36,22 @@ LEFT JOIN module_constants m
   ON m.module_name = 'data_lifecycle' AND m.exchange = '*' AND m.asset_class = '*' AND m.strategy = '*' AND m.regime = '*'
  AND m.constant_name = t.table_name || '.hot_retention_days'
 ORDER BY 1;
+-- Gate 3 (Langston): a MISSING key STOPS the file. This output is pasted into the deploy note as evidence, and whoever
+-- reads a later section's n= does not scroll back to (0) — an unbounded count must not sit beside bounded ones. (A
+-- non-number value already stops it: (m.value)::int errors on a jsonb string, and the run uses ON_ERROR_STOP=1.)
+DO $$
+DECLARE missing TEXT;
+BEGIN
+  SELECT string_agg(t.table_name, ', ' ORDER BY t.table_name) INTO missing
+    FROM (VALUES ('signal_eval_archive'), ('switch_on_shadow_evidence')) AS t(table_name)
+    LEFT JOIN module_constants m
+      ON m.module_name = 'data_lifecycle' AND m.exchange = '*' AND m.asset_class = '*' AND m.strategy = '*' AND m.regime = '*'
+     AND m.constant_name = t.table_name || '.hot_retention_days'
+   WHERE m.value IS NULL;
+  IF missing IS NOT NULL THEN
+    RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): no data_lifecycle hot_retention_days for % - the counts in this file cannot be bounded; STOPPING before any count is printed', missing;
+  END IF;
+END $$;
 
 \echo === (1) P8 p0: xStock maker share among maker_taker decisions since f8870022f, up to the deploy instant ===
 SELECT count(*) AS n,

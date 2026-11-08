@@ -356,14 +356,19 @@ async function main(): Promise<void> {
   console.log(`==========================================================================================\n`);
   // B-DB-SIZE-RELIEF OBJ-3, END-OF-RUN RE-CHECK: the start check proves the era was servable WHEN THE RUN BEGAN. The
   // retention sweep (02:15Z daily) can tier the oldest day out WHILE a long run is reading — the population then
-  // shrinks mid-run with no signal. The hot set holds at least N days at every sweep (it tiers a day only once the
-  // whole day is past now - N), so an era still inside the horizon NOW was inside it for the whole run. If it is not,
-  // the numbers above may be over a truncated population: say so and exit non-zero.
+  // shrinks mid-run with no signal. SOUND BY CONSTRUCTION (Langston, gate 3): the sweep's cutoff is
+  // Date.now() - N·86.4M (b75-retention-sweep.ts), monotone in wall-clock, and the horizons are RE-READ here, so this
+  // check evaluates the run's MAXIMUM cutoff — an era inside it now was inside every cutoff the run lived through. If it
+  // is not, the numbers above may be over a truncated population: say so ON STDOUT TOO and exit non-zero.
   const endRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
   const endEra = decideEra(ERA_START, ['signal_eval_archive', 'signal_eval_provenance'], parseHorizonRows(endRows), Date.now());
   if (!endEra.ok) {
-    console.error(`[W20C] POPULATION MAY BE TRUNCATED: the era was servable at the start but not at the end of this run — `
-      + `the retention sweep may have tiered rows out while it was reading. ${endEra.message}`);
+    const banner = `[W20C] POPULATION MAY BE TRUNCATED: the era was servable at the start but not at the end of this run — `
+      + `the retention sweep may have tiered rows out while it was reading. ${endEra.message}`;
+    // Gate 3 F1: stdout carries the report this invalidates (`node ... > report.txt`), so the refusal goes there as
+    // well — a reader must never have to notice the ABSENCE of "the population held" (#453).
+    console.log(banner);
+    console.error(banner);
     await client.end();
     process.exit(3);
   }

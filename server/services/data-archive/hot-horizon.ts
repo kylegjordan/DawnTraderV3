@@ -40,13 +40,14 @@ export type EraDecision =
   | { ok: true; horizonDays: number; limitingTable: string; horizonStartIso: string; perTable: Record<string, number> }
   | { ok: false; message: string; earliestServableIso: string | null; perTable: Record<string, number | null> };
 
-/** Parse the HOT_HORIZON_SQL rows into table → days — only values the sweep will enforce (parseLifecycleNumber). */
-export function parseHorizonRows(rows: Array<{ constant_name: string; value: unknown }>): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const r of rows) {
-    const days = parseLifecycleNumber(r.value);
-    if (days !== null) out.set(r.constant_name.replace(/\.hot_retention_days$/, ''), days);
-  }
+/**
+ * Parse the HOT_HORIZON_SQL rows into table → days. A key whose value the sweep would NOT enforce (parseLifecycleNumber)
+ * maps to null — PRESENT BUT MALFORMED — so it is never confused with an ABSENT key (Langston gate 3 F3: "no key" sends
+ * the reader to add a key that already exists). Absent = not in the map; malformed = in the map as null.
+ */
+export function parseHorizonRows(rows: Array<{ constant_name: string; value: unknown }>): Map<string, number | null> {
+  const out = new Map<string, number | null>();
+  for (const r of rows) out.set(r.constant_name.replace(/\.hot_retention_days$/, ''), parseLifecycleNumber(r.value));
   return out;
 }
 
@@ -54,13 +55,20 @@ export function parseHorizonRows(rows: Array<{ constant_name: string; value: unk
  * Can `eraStartIso` be served from the HOT partitions of every table in `tables`?
  * The earliest servable era is the next UTC midnight after `now - min(horizon)`, so a re-run there is fully inside.
  */
-export function decideEra(eraStartIso: string, tables: string[], horizons: Map<string, number>, nowMs: number): EraDecision {
+export function decideEra(eraStartIso: string, tables: string[], horizons: Map<string, number | null>, nowMs: number): EraDecision {
   const perTable: Record<string, number | null> = {};
   for (const t of tables) perTable[t] = horizons.get(t) ?? null;
-  const missing = tables.filter((t) => perTable[t] === null);
-  if (missing.length > 0) {
+  const missing = tables.filter((t) => !horizons.has(t));
+  const malformed = tables.filter((t) => horizons.has(t) && horizons.get(t) === null);
+  if (missing.length > 0 || malformed.length > 0) {
+    const parts: string[] = [];
+    if (missing.length > 0) parts.push(`no data_lifecycle hot_retention_days for ${missing.join(', ')}`);
+    if (malformed.length > 0) {
+      parts.push(`data_lifecycle hot_retention_days is PRESENT but not a positive number for ${malformed.join(', ')} `
+        + `(the retention sweep would refuse it too) — fix the value; the key exists`);
+    }
     return { ok: false, earliestServableIso: null, perTable,
-      message: `REFUSED: no data_lifecycle hot_retention_days for ${missing.join(', ')} — the hot horizon is unknown, so the population cannot be stated.` };
+      message: `REFUSED: ${parts.join('; ')} — the hot horizon is unknown, so the population cannot be stated.` };
   }
   let limitingTable = tables[0];
   for (const t of tables) if ((perTable[t] as number) < (perTable[limitingTable] as number)) limitingTable = t;

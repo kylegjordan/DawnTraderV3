@@ -55,7 +55,7 @@
   - A missing or invalid key refuses, as does an unparseable era.
 - **`scripts/b5-w20c-provenance-replay.ts`:** reads both joined tables' horizons BEFORE the first archive query, prints them and the population, and `process.exit(2)` on a refusal.
 - **`scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql`:** a section (0) printing `hot_days` / `hot_from` for `signal_eval_archive` and `switch_on_shadow_evidence`, before section (1).
-- **`b-db-size-relief-hot-horizon.test.ts`** (7): the default era refuses (earliest 2026-11-06 at a fixed now), in-horizon passes, the limiting table is reported, an era inside 30 d but outside 15 d refuses (the INNER-join loss), plus the missing-key, unparseable-era and wiring fences. Mutation (longest horizon chosen) fails three.
+- **`b-db-size-relief-hot-horizon.test.ts`** (7 at `bc85346f3`; **14** after the folds and increment 4 - gate 3 F4 caught the stale count): the default era refuses (earliest 2026-11-06 at a fixed now), in-horizon passes, the limiting table is reported, an era inside 30 d but outside 15 d refuses (the INNER-join loss), plus the missing-key, unparseable-era and wiring fences. Mutation (longest horizon chosen) fails three.
 
 ## Step-4 folds (all disposition 1, on this batch's own increments)
 | sha | gate | what |
@@ -72,6 +72,15 @@
 - **`server/scripts/b75-retention-sweep.ts` `loadConfig`:** the query is `WHERE ${DATA_LIFECYCLE_SCOPE_SQL}` (it was `module_name` alone, last-row-wins); `reqNum` calls `parseLifecycleNumber` (same predicate as before, now shared).
 - **Measured before changing the enforcer (staging, read-only):** 35 `data_lifecycle` rows, 35 at `'*'` on all four scope columns, 35 distinct names, every `.hot_retention_days` a jsonb number. **So the filter changes nothing the sweep reads tonight**; it removes the future case where a narrower row wins the sweep's map unseen, and a string seed now reads UNKNOWN to the readers instead of a confident horizon the sweep would abort on.
 - **Tests (hot-horizon):** the value test's truth table; a string-seeded key is UNKNOWN and the era refuses; a source fence that the sweep imports and uses both, and the unscoped read is gone. Mutation (`Number()` coercion restored) fails two.
+
+## Gate-3 revisions (Langston APPROVED-WITH-REVISIONS, msg 1568840535962030222)
+- **F1:** the end-of-run refusal goes to STDOUT as well as stderr, so a `> report.txt` capture carries it.
+- **F2:** the end-check fence anchors on the LAST archive read (`signal_eval_archive b ON`, the sampling joins), not the first.
+- **F3:** a PRESENT-but-malformed key is reported as such ("the key exists"), distinct from an ABSENT key; `parseHorizonRows` maps a malformed value to null instead of dropping it.
+- **F4:** the test count above.
+- **Attack 3:** fee SQL section (0) RAISEs on a MISSING key (the run uses `ON_ERROR_STOP=1`). Proved on staging: the real block passes; a copy with a control table raised and psql stopped with exit 3.
+- **Attack 2 record:** the end-check comment states the stronger reason: the sweep cutoff is monotone in wall-clock and the horizons are re-read, so the check evaluates the run's MAXIMUM cutoff.
+- **For the completion report:** at 30/30 the default `ERA_START` 2026-06-08 is 153 days back, so the replay exits 2 on every default invocation. That is the defect being caught, not a regression.
 
 ## Suite
 Full suite after each increment: the same 11 local-only failing files (by file-list diff against the earlier baseline); tsc 324. The integration file skips locally (no database) and ran in CI.

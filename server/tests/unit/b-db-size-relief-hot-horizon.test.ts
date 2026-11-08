@@ -34,10 +34,21 @@ describe('decideEra', () => {
     expect(decideEra('2026-10-30T00:00:00Z', JOINED, H, NOW).ok).toBe(false); // 21 d back: inside 30, outside 15
   });
 
-  it('REFUSES when a key is missing or invalid — never a default', () => {
-    const d = decideEra('2026-11-15T00:00:00Z', ['signal_eval_archive', 'pair_scan_archive'], H, NOW);
+  it('REFUSES a PRESENT-but-malformed key, and says the key exists (gate 3 F3) — never a default', () => {
+    const d = decideEra('2026-11-15T00:00:00Z', ['signal_eval_archive', 'pair_scan_archive'], H, NOW); // pair_scan = 'junk'
     expect(d.ok).toBe(false);
-    if (!d.ok) expect(d.message).toMatch(/no data_lifecycle hot_retention_days for pair_scan_archive/);
+    if (d.ok) return;
+    expect(d.message).toMatch(/PRESENT but not a positive number for pair_scan_archive/);
+    expect(d.message).toMatch(/the key exists/);
+    expect(d.message).not.toMatch(/no data_lifecycle hot_retention_days for pair_scan_archive/);
+  });
+
+  it('REFUSES an ABSENT key with the missing-key message (distinct from malformed)', () => {
+    const d = decideEra('2026-11-15T00:00:00Z', ['signal_eval_archive', 'macro_feed_archive'], H, NOW); // not in H at all
+    expect(d.ok).toBe(false);
+    if (d.ok) return;
+    expect(d.message).toMatch(/no data_lifecycle hot_retention_days for macro_feed_archive/);
+    expect(d.message).not.toMatch(/PRESENT but not a positive number/);
   });
 
   it('REFUSES an unparseable era', () => {
@@ -62,8 +73,10 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
 
   it('a string-seeded key is UNKNOWN to the readers (the sweep would abort on it, so no badge or era may trust it)', () => {
     const h = parseHorizonRows([{ constant_name: 'signal_eval_archive.hot_retention_days', value: '15' }]);
-    expect(h.has('signal_eval_archive')).toBe(false);
-    expect(decideEra('2026-11-19T00:00:00Z', ['signal_eval_archive'], h, NOW).ok).toBe(false);
+    expect(h.get('signal_eval_archive')).toBeNull(); // present, not a horizon
+    const d = decideEra('2026-11-19T00:00:00Z', ['signal_eval_archive'], h, NOW);
+    expect(d.ok).toBe(false);
+    if (!d.ok) expect(d.message).toMatch(/PRESENT but not a positive number for signal_eval_archive/);
   });
 
   it('the sweep reads data_lifecycle through the SAME scope filter and the SAME value test', () => {
@@ -91,8 +104,12 @@ describe('wiring', () => {
     const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
     const iEnd = src.indexOf('const endEra = decideEra(ERA_START');
     expect(iEnd).toBeGreaterThan(-1);
-    expect(iEnd).toBeGreaterThan(src.lastIndexOf('FROM signal_eval_archive')); // after the last archive read
-    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,400}process\.exit\(3\)/);
+    // after the LAST archive read: the sampling joins (gate 3 F2 — 'FROM signal_eval_archive' is the FIRST read only)
+    expect(src.lastIndexOf('signal_eval_archive b ON')).toBeGreaterThan(src.indexOf('FROM signal_eval_archive'));
+    expect(iEnd).toBeGreaterThan(src.lastIndexOf('signal_eval_archive b ON'));
+    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}process\.exit\(3\)/);
+    // gate 3 F1: the refusal is on STDOUT as well as stderr, before the exit
+    expect(src.slice(iEnd)).toMatch(/if \(!endEra\.ok\) \{[\s\S]{0,900}console\.log\(banner\);[\s\S]{0,60}console\.error\(banner\);[\s\S]{0,80}process\.exit\(3\)/);
   });
 
   it('the fee-contract SQL prints the hot horizons of both tables it reads, before section (1)', () => {
@@ -104,6 +121,11 @@ describe('wiring', () => {
     expect(sql).toContain("FROM (VALUES ('signal_eval_archive'), ('switch_on_shadow_evidence')) AS t(table_name)");
     expect(sql).toMatch(/LEFT JOIN module_constants m[\s\S]{0,200}m\.constant_name = t\.table_name \|\| '\.hot_retention_days'/);
     expect(sql).toContain("'MISSING - hot window unknown");
+    // gate 3: a MISSING key STOPS the file (RAISE under the run's ON_ERROR_STOP=1), before section (1)
+    const iRaise = sql.indexOf("RAISE EXCEPTION 'B-DB-SIZE-RELIEF section (0): no data_lifecycle hot_retention_days");
+    expect(iRaise).toBeGreaterThan(i0);
+    expect(iRaise).toBeLessThan(sql.indexOf('=== (1) P8 p0'));
+    expect(sql).toContain('-v ON_ERROR_STOP=1');
   });
 
   it('the Drift Dashboard panel (OBJ-2) uses the SAME query and parser, not a copy of its own', () => {
