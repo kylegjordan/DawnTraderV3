@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT } from '../services/data-archive/exact-archive-evidence.js';
+import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';
 
 const { Client } = pg;
 const GIB = 1024 ** 3;
@@ -401,7 +402,7 @@ async function main(): Promise<void> {
                 WHERE module_name='database_monitor' AND constant_name='critical_threshold_pct'
                 LIMIT 1) AS critical_threshold_pct,
               (SELECT value FROM module_constants
-                WHERE module_name='data_lifecycle'
+                WHERE ${DATA_LIFECYCLE_SCOPE_SQL}
                   AND constant_name='xstock_bar_revision_event.hot_retention_days'
                 LIMIT 1) AS revision_hot_retention_days,
               (SELECT value FROM module_constants
@@ -415,6 +416,10 @@ async function main(): Promise<void> {
     )).rows[0] as JsonRow;
     const observedAt = new Date(String(meta.observed_at));
     const venueSessionMaxGapSeconds = num(meta.venue_session_max_gap_seconds);
+    const revisionHotRetentionDays = parseLifecycleNumber(meta.revision_hot_retention_days);
+    if (revisionHotRetentionDays === null) {
+      throw new Error('governed xStock revision hot retention is absent or invalid');
+    }
     const governedWindowStart = new Date(String(meta.graded_window_start));
     if (!Number.isFinite(governedWindowStart.getTime())) {
       throw new Error('governed xStock graded_window_start is absent or invalid');
@@ -739,7 +744,7 @@ async function main(): Promise<void> {
       planCapMb: num(meta.plan_cap_mb),
       criticalThreshold: num(meta.critical_threshold_pct),
       venueSessionMaxGapSeconds,
-      revisionHotRetentionDays: num(meta.revision_hot_retention_days),
+      revisionHotRetentionDays,
       gradedWindowStartMatches,
     };
     const verdict = evaluateCapacityGate(inputs);
@@ -764,7 +769,7 @@ async function main(): Promise<void> {
       governedCapacity: {
         planCapMb: num(meta.plan_cap_mb),
         criticalThresholdPct: num(meta.critical_threshold_pct),
-        revisionHotRetentionDays: num(meta.revision_hot_retention_days),
+        revisionHotRetentionDays,
         venueSessionMaxGapSeconds,
         gradedWindowStart: windowStart.toISOString(),
       },

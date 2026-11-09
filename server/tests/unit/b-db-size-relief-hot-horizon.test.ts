@@ -63,6 +63,8 @@ describe('decideEra', () => {
 });
 
 describe('increment 4 — the ENFORCER and the READERS share one scope filter and one value test (Langston, gate 2)', () => {
+  const ROOT = path.join(__dirname, '../../..');
+
   it('parseLifecycleNumber accepts only what the sweep enforces: a finite number > 0 — a string "15" is NOT a horizon', () => {
     expect(parseLifecycleNumber(15)).toBe(15);
     expect(parseLifecycleNumber(30.5)).toBe(30.5);
@@ -80,13 +82,42 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
   });
 
   it('the sweep reads data_lifecycle through the SAME scope filter and the SAME value test', () => {
-    const ROOT = path.join(__dirname, '../../..');
     const sweep = fs.readFileSync(path.join(ROOT, 'server/scripts/b75-retention-sweep.ts'), 'utf8');
     expect(sweep).toContain("import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';");
     expect(sweep).toMatch(/FROM module_constants\s+WHERE \$\{DATA_LIFECYCLE_SCOPE_SQL\}/);
     expect(sweep).toMatch(/function reqNum\(key: string\): number \{[\s\S]{0,200}parseLifecycleNumber\(map\.get\(key\)\)/);
     expect(sweep).not.toMatch(/WHERE module_name = 'data_lifecycle'`/); // the unscoped read is gone
     expect(HOT_HORIZON_SQL).toContain(DATA_LIFECYCLE_SCOPE_SQL);
+  });
+
+  it('the three enforcing readers use the shared value test, and wildcard readers use the shared scope predicate', () => {
+    const eligibility = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_disk_headroom_eligibility.ts'), 'utf8');
+    expect(eligibility).toContain('DATA_LIFECYCLE_SCOPE_SQL');
+    expect(eligibility).toContain('parseLifecycleNumber');
+    expect(eligibility).toMatch(/FROM module_constants WHERE \$\{DATA_LIFECYCLE_SCOPE_SQL\}/);
+    expect(eligibility).toMatch(/parseLifecycleNumber\(consts\.get\(`\$\{parent\}\.hot_retention_days`\)\)/);
+
+    const guardrail = fs.readFileSync(path.join(ROOT, 'server/services/guardrail-settings.ts'), 'utf8');
+    expect(guardrail).toContain("import { parseLifecycleNumber } from './data-archive/hot-horizon.js';");
+    expect(guardrail).toMatch(/const days = parseLifecycleNumber\(row\?\.value\);[\s\S]{0,80}days === null/);
+    // Deliberately NOT scope-pinned: its limit(2) duplicate guard must keep refusing any second scoped row.
+    expect(guardrail).toMatch(/constantName, 'closed_trades\.hot_retention_days'\)\)\)[\s\S]{0,40}\.limit\(2\)/);
+
+    const capacity = fs.readFileSync(path.join(ROOT, 'server/scripts/b-xstock-bar-availability-capacity-gate.ts'), 'utf8');
+    expect(capacity).toContain('DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber');
+    expect(capacity).toMatch(/WHERE \$\{DATA_LIFECYCLE_SCOPE_SQL\}[\s\S]{0,100}xstock_bar_revision_event\.hot_retention_days/);
+    expect(capacity).toMatch(/const revisionHotRetentionDays = parseLifecycleNumber\(meta\.revision_hot_retention_days\)/);
+  });
+
+  it('the sweep detects narrow rows, alerts without refusing tiering, and resolves the alert on a clean read', () => {
+    const sweep = fs.readFileSync(path.join(ROOT, 'server/scripts/b75-retention-sweep.ts'), 'utf8');
+    expect(sweep).toContain("b75-retention-sweep:data-lifecycle-narrow-scope");
+    for (const column of ['exchange', 'asset_class', 'strategy', 'regime']) {
+      expect(sweep).toContain(`${column} IS DISTINCT FROM '*'`);
+    }
+    expect(sweep).toContain('a narrow row is not out-voted; it is unseen by the sweep');
+    expect(sweep).toMatch(/if \(narrowNames\.length > 0\) \{[\s\S]{0,800}raiseSweepAlert\(/);
+    expect(sweep).toMatch(/\} else \{[\s\S]{0,180}resolveSweepAlerts\(\[NARROW_LIFECYCLE_SCOPE_ALERT_KEY\]/);
   });
 });
 
@@ -137,6 +168,26 @@ describe('wiring', () => {
     const echoes = sql.split(/\r?\n/).filter((x) => x.startsWith('\\echo'));
     expect(echoes.length).toBeGreaterThan(10); // the filter finds the echo lines (12 at gate 4), so its silence means something
     for (const l of echoes) expect(l, l).not.toContain("'");
+  });
+
+  it('the three gate-4 SQL copies of the data_lifecycle wildcard predicate carry all five terms (gate 4 C-2)', () => {
+    const sql = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_xstock_fee_contract_deploy_baselines.sql'), 'utf8');
+    const setter = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_disk_headroom_set_retention.sh'), 'utf8');
+    const sqlSelect = sql.slice(sql.indexOf('SELECT t.table_name'), sql.indexOf('DO $$'));
+    const sqlGuard = sql.slice(sql.indexOf('DO $$'), sql.indexOf('=== (1) P8 p0'));
+    const setterUpdate = setter.slice(setter.indexOf('UPDATE module_constants'), setter.indexOf('GET DIAGNOSTICS'));
+    const copies = [sqlSelect, sqlGuard, setterUpdate];
+    const terms = [
+      "module_name = 'data_lifecycle'",
+      "exchange = '*'",
+      "asset_class = '*'",
+      "strategy = '*'",
+      "regime = '*'",
+    ];
+    for (const copy of copies) {
+      expect(copy.length).toBeGreaterThan(100); // positive control: every slice reached a real SQL block
+      for (const term of terms) expect(copy, term).toContain(term);
+    }
   });
 
   it('the Drift Dashboard panel (OBJ-2) uses the SAME query and parser, not a copy of its own', () => {

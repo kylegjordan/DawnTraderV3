@@ -16,6 +16,10 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { pathToFileURL } from 'node:url';
+import {
+  DATA_LIFECYCLE_SCOPE_SQL,
+  parseLifecycleNumber,
+} from '../../server/services/data-archive/hot-horizon.js';
 
 const B74_PARENTS = [
   'xstock_spot_ticker_snap', 'xstock_perp_ticker_snap', 'crypto_spot_ticker_snap', 'crypto_perp_ticker_snap',
@@ -55,16 +59,17 @@ async function main(): Promise<void> {
   try {
     await client.query('BEGIN TRANSACTION READ ONLY');
     const cfg = await client.query(
-      `SELECT constant_name, value FROM module_constants WHERE module_name = 'data_lifecycle'`,
+      `SELECT constant_name, value FROM module_constants WHERE ${DATA_LIFECYCLE_SCOPE_SQL}`,
     );
     const consts = new Map<string, unknown>(cfg.rows.map((r) => [r.constant_name, r.value]));
-    const sliceThreshold = Number(consts.get('slice_threshold_hot_bytes'));
+    const sliceThreshold = parseLifecycleNumber(consts.get('slice_threshold_hot_bytes'));
+    if (sliceThreshold === null) throw new Error('data_lifecycle.slice_threshold_hot_bytes is absent or invalid');
     console.log(`at ${new Date(now).toISOString()} · slice_threshold_hot_bytes ${sliceThreshold} · slicing ${slicingPath}`);
     let total = 0;
     for (const parent of B74_PARENTS) {
-      const configured = Number(consts.get(`${parent}.hot_retention_days`));
+      const configured = parseLifecycleNumber(consts.get(`${parent}.hot_retention_days`));
       const n = overrides.get(parent) ?? configured;
-      if (!Number.isFinite(n) || n <= 0) { console.log(`${parent}: NO retention constant`); continue; }
+      if (n === null) { console.log(`${parent}: NO valid retention constant`); continue; }
       const cutoff = new Date(now - n * 86_400_000);
       const cutoffMonth = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
       const r = await client.query(
