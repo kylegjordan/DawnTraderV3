@@ -67,7 +67,8 @@ ok('T1 langston on/off', C('Langston ON') == ('langston', True) and C('langston 
 ok('T1 session either order', C('OLD CLAUDE ON') == ('session', ('old claude', True)) and C('codex new off') == ('session', ('codex new', False)))
 ok('T1 PM session either order', C('PM CLAUDE ON') == ('session', ('pm claude', True)) and C('codex pm off') == ('session', ('codex pm', False)))
 ok('T1 coltrane', C('Coltrane off')[0] == 'coltrane')
-ok('T1 near (short)', C('Langston, switch to codex please')[0] == 'near' and C('turn langston on now')[0] == 'near')
+ok('T1 near (short)', C('Langston, switch to codex please')[0] == 'near' and C('turn langston on now')[0] == 'near'
+   and C('turn Coltrane off now')[0] == 'near')
 ok('T1 long conversation ignored', C('Langston on this issue I think we should look again at how the switch to codex handles alerts') is None)
 ok('T1 unrelated ignored', C('hello there') is None)
 

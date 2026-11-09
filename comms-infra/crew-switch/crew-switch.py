@@ -67,7 +67,7 @@ TRIGGER = re.compile(r'^\W*switch\s+(?:the\s+crew\s+)?(?:over\s+)?to\s+(codex|cl
 ONOFF = re.compile(r'^\W*(langston|coltrane|' + _NAME_ALT + r')\s+(on|off)\W*$', re.I)
 # A Kyle message that MENTIONS a command but is not the bare command gets a "not acted on" reply (Langston: never trade
 # a self-announcing failure for a silent one). No phone ping: he is on Discord when he types it.
-NEAR = re.compile(r'\bswitch\b.*\b(codex|claude)\b|\b(langston|' + _NAME_ALT + r')\s+(on|off)\b', re.I | re.S)
+NEAR = re.compile(r'\bswitch\b.*\b(codex|claude)\b|\b(langston|coltrane|' + _NAME_ALT + r')\s+(on|off)\b', re.I | re.S)
 
 def now(): return time.time()
 def iso(t=None): return datetime.fromtimestamp(t or now(), timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
