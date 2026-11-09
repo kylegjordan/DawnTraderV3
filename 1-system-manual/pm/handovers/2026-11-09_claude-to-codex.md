@@ -12,6 +12,9 @@ Written by PM Claude (skill `pm-transition-to-codex`) on Kyle's word in the Desk
 - **Deploys restart the trading app.** Before any `dt-deploy`, read `/home/deploy/dawntrader-deploy.record` and the held-deploy notes below.
 - **Coordination:** PM Codex does not exist yet. OLD Codex builds it first (brief: `1-system-manual/pm/reviews/2026-11-09_PM_CODEX_BUILD_BRIEF.md`) and coordinates until it is running.
 
+## The order
+PM Claude issued `crew-switch start codex` at **2026-11-09T20:32:08Z** (order **S3**). `crew-switch status` then read: crew mode CODEX; on duty OLD Codex, NEW Codex, ANALYST Codex, INFRA Codex; Langston bridge inactive/disabled. The four Claude sessions were already stopped, so PM Claude typed their receipts itself, after checking their handover (the folder check below and each POSITION block). The receipt is PM's check, not the session's. The order then read: no open orders.
+
 ## Folder state at the switch (PM Claude read it, 2026-11-09)
 All four clones: nothing uncommitted, nothing unpushed. Each is 4-7 commits behind the review branch, so **pull first**. Only `.claude/launch.json` is untracked (local config). **ANALYST's folder is on branch `b8c-step3`**, which has nothing that is not already on the review branch. Switch it to `migration/aws-supabase` before working.
 
