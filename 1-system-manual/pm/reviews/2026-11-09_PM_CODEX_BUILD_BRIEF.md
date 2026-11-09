@@ -19,7 +19,8 @@ The ChatGPT stand-in for PM Claude (Kyle's project manager and coordinator), wor
 4. **Alert actor names:** add `pm-claude` and `pm-codex` to `ALERT_ACTORS` in `server/services/system-alerts.ts`. This is a code change that needs a deploy, so it may wait for the next deploy. The PM rarely acks alerts.
 5. **Roster:** change the "PM Codex" entry in `.claude/cc-session-roster.json` from "planned" to "active".
 6. **Backups:** confirm the transcript archive and nightly backup cover `C:\DawnTraderV3-pm`, and the Codex side's equivalent covers PM Codex.
-7. **Prove one handover with Kyle watching:** PM Claude → PM Codex → back. Not done until this passes.
+7. **The return trip is PM Codex's job (Kyle, 2026-11-09).** Write PM Codex's own procedure for `SWITCH TO CLAUDE`, mirroring PM Claude's `.claude/skills/pm-transition-to-codex/SKILL.md` in reverse, and point to it from the PM section of `AGENTS.md`. It must: collect each Codex session's handover block and write `1-system-manual/pm/handovers/<date>_codex-to-claude.md`; check every clone is synced; tell Kyle to post the line and which Claude windows to open; chase receipts; re-send every unanswered Coltrane review to Langston (Langston comes back on with the switch); hand PM Claude a PM handover block in MEMORY_PM.md; and report complete only when every check passes, so Kyle never chases a session himself.
+8. **Prove one handover with Kyle watching:** PM Claude → PM Codex → back. Not done until this passes.
 
 ## Rules PM Codex must carry (learned the hard way)
 - Kyle gets plain language only. Every decision ask gives the issue, what the fix fixes, the options, the pros and cons, the session's recommendation, and whether PM agrees (KD-34). One final clear instruction, never back-and-forth.
