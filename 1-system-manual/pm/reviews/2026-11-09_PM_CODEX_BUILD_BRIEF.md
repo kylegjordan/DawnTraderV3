@@ -8,6 +8,7 @@
 The ChatGPT stand-in for PM Claude (Kyle's project manager and coordinator), working in `C:\DawnTraderV3-pm`. It keeps the crew moving, triages every Discord post addressed to Kyle, brings Kyle only what needs him, and records his decisions. It does not build trading code.
 
 ## Build steps (each one reviewed by Coltrane, workflow as usual)
+0. **Tell Kyle, in plain step-by-step words, how to open the new PM Codex session (Kyle, 2026-11-09).** He has not opened a Codex session in the PM folder before. Give him: which app to open; how to start a new session there; that its folder is `C:\DawnTraderV3-pm`; and the exact first message to paste. That message tells it it is PM Codex, to pull first, and to read the PM section of `AGENTS.md` and the crew handover sheet `1-system-manual/pm/handovers/2026-11-09_claude-to-codex.md`. Check the steps against the Codex app as it is today, not from memory. Do this once steps 1-3 below are reviewed, so the session he opens finds its instructions in place. Until then, tell him it is coming and roughly when.
 1. **`AGENTS.md`:** add the row `C:\DawnTraderV3-pm` → **PM Codex** (actor `codex-pm`), standing in for PM Claude (CC-PM). Add a short PM section telling it to read, in order:
    - `1-system-manual/PM_CLAUDE_RULES.md` (the role file);
    - `.claude/memory/MEMORY_PM.md`, the CURRENT POSITION block first (it has the stop record, pending Kyle decisions and the plan);
