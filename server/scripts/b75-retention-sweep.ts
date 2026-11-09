@@ -218,7 +218,30 @@ interface SweepConfig {
   sliceThresholdHotBytes: number;
 }
 
+const NARROW_LIFECYCLE_SCOPE_ALERT_KEY = 'b75-retention-sweep:data-lifecycle-narrow-scope';
+
 async function loadConfig(client: pg.Client): Promise<SweepConfig> {
+  const narrow = await client.query(
+    `SELECT constant_name FROM module_constants
+       WHERE module_name = 'data_lifecycle'
+         AND (exchange IS DISTINCT FROM '*' OR asset_class IS DISTINCT FROM '*'
+           OR strategy IS DISTINCT FROM '*' OR regime IS DISTINCT FROM '*')
+       ORDER BY constant_name`,
+  );
+  const narrowNames = narrow.rows.map((row) => String(row.constant_name));
+  if (narrowNames.length > 0) {
+    await raiseSweepAlert(
+      'B75 sweep found narrow-scope data_lifecycle rows',
+      `Found ${narrowNames.length} non-wildcard data_lifecycle row(s): ${narrowNames.join(', ')}. `
+        + 'After B-DB-SIZE-RELIEF increment 4 a narrow row is not out-voted; it is unseen by the sweep.',
+      'warning',
+      { batch: 'B-DB-SIZE-RELIEF', row_count: narrowNames.length, constant_names: narrowNames },
+      NARROW_LIFECYCLE_SCOPE_ALERT_KEY,
+    );
+  } else {
+    await resolveSweepAlerts([NARROW_LIFECYCLE_SCOPE_ALERT_KEY], 'the data_lifecycle scope-shape read');
+  }
+
   // B-DB-SIZE-RELIEF increment 4: the SAME scope filter the horizon readers use (all four scope columns '*'), so a
   // narrower-scope row can never win this map unseen while the Drift Dashboard and the W20C replay state the '*' value.
   const r = await client.query(
@@ -978,7 +1001,7 @@ async function raiseSweepAlert(
       severity,
       title,
       body: `${body} First seen in sweep run ${RUN_ID} (${new Date().toISOString()}); ` +
-        `the current state of this partition is in ${SWEEP_LOG}.`,
+        `the current state of this condition is in ${SWEEP_LOG}.`,
       // batch = the batch that owns this keyed alert path (B-NEW-47 built the original
       // unkeyed one); metadata.batch is a routing read-site (Langston gate C record iv).
       metadata: { batch: 'B-B75-EXPORT-COMPLETENESS', source: 'b75-retention-sweep', run_id: RUN_ID, ...metadata },

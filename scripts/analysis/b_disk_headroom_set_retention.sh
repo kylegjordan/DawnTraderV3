@@ -10,12 +10,13 @@
 # DRY=1 runs every step-1 assertion and then ROLLS BACK (nothing written); step 2 is skipped.
 #
 # WHY EVERY CHECK (Langston, Step-2 ruling 2026-11-07, condition (b)):
-#  - The sweep's loadConfig reads data_lifecycle into a Map keyed on constant_name ALONE (b75-retention-sweep.ts:219-225),
-#    so the key must hit the ONE existing row on all six columns, and exactly one row may exist for the constant_name.
+#  - The sweep's loadConfig reads only the sanctioned all-wildcard data_lifecycle rows. A narrower row is now invisible,
+#    not a last-row-wins override, so this writer still insists that exactly one row exists for the constant_name and
+#    that its six-column key is the sanctioned wildcard key. That keeps a hidden narrow duplicate from surviving a write.
 #  - The UPDATE's own rowcount must be 1: a six-column key that missed changes nothing, and a read-back of "one row" would
 #    still pass.
-#  - The value must be stored as a JSON NUMBER. The sweep's reqNum (`b75-retention-sweep.ts:234-236`: not a number, not
-#    finite or <= 0 ⇒ throw) runs inside loadConfig, which runSweep calls ONCE at `:1308`, before any table, inside a
+#  - The value must be stored as a JSON NUMBER. The sweep's reqNum (not a number, not finite or <= 0 ⇒ throw) runs
+#    inside loadConfig, which runSweep calls ONCE before any table, inside a
 #    try/finally with no catch: a value stored as a JSON string ABORTS THE WHOLE NIGHT'S SWEEP, all fifteen tables.
 #  - An in-transaction read-back proves what the transaction WILL commit. Step 2 re-reads in a NEW session, after COMMIT.
 #  - The 1..365 bound is enforced TWICE: in bash, on the decimal-normalised number (a leading zero is NOT octal here),

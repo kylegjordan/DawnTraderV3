@@ -335,10 +335,12 @@ describe('sweep wiring (structure at the source)', () => {
   });
   it('every raiseSweepAlert call carries a dedupe key, and each has a resolve edge', () => {
     const calls = SWEEP.match(/await raiseSweepAlert\(/g) ?? [];
-    expect(calls).toHaveLength(3);
+    expect(calls).toHaveLength(4);
+    expect(SWEEP).toContain('NARROW_LIFECYCLE_SCOPE_ALERT_KEY,');
     expect(SWEEP).toContain('partitionAlertKey(spec.parent, partition.partitionLabel, cls),');
     expect(SWEEP).toContain('plainAlertKey(spec.table, cls),');
     expect(SWEEP).toMatch(/\{ fatal: true \},\s*FATAL_ALERT_KEY,/);
+    expect(SWEEP).toContain("await resolveSweepAlerts([NARROW_LIFECYCLE_SCOPE_ALERT_KEY], 'the data_lifecycle scope-shape read')");
     expect(SWEEP).toContain("AUTO_RESOLVED_CLASSES.map((cls) => partitionAlertKey(spec.parent, partition.partitionLabel, cls))");
     expect(SWEEP).toContain('AUTO_RESOLVED_CLASSES.map((cls) => plainAlertKey(spec.table, cls))');
     expect(SWEEP).toContain('await resolveSweepAlerts([FATAL_ALERT_KEY]');

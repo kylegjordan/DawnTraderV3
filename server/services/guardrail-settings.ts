@@ -12,6 +12,7 @@
 import { storage } from '../storage';
 import { TradingSettings } from '@shared/schema';
 import { deriveSlotCount, resolveEffectivePositionPct } from './active-position-sizing.js';
+import { parseLifecycleNumber } from './data-archive/hot-horizon.js';
 
 /**
  * Phase 8.8.3-H4/C7: Get portfolio balance from mode-level portfolio_state
@@ -168,8 +169,8 @@ async function readClosedTradesHotRetentionDays(): Promise<number> {
     throw new MoneyHeldUnavailable('data_lifecycle/closed_trades.hot_retention_days matches more than one row');
   }
   const row = rows[0];
-  const days = Number(row?.value);
-  if (!Number.isFinite(days) || days <= 0) {
+  const days = parseLifecycleNumber(row?.value);
+  if (days === null) {
     throw new MoneyHeldUnavailable(`data_lifecycle/closed_trades.hot_retention_days unreadable (${JSON.stringify(row?.value ?? null)})`);
   }
   return days;

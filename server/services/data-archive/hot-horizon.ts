@@ -14,8 +14,9 @@
 
 /**
  * B-DB-SIZE-RELIEF increment 4 (Langston, gate 2): ONE scope filter and ONE value test, shared by the ENFORCER
- * (server/scripts/b75-retention-sweep.ts loadConfig) and every READER that states a horizon (this file's callers: the
- * Drift Dashboard panel, the W20C replay). Before this the sweep read data_lifecycle with no scope filter into a
+ * (server/scripts/b75-retention-sweep.ts loadConfig) and the horizon-reporting readers (the Drift Dashboard panel and
+ * the W20C replay). Other enforcement readers import the same value test; readers that select the sanctioned wildcard
+ * row also reuse the scope predicate. Before this the sweep read data_lifecycle with no scope filter into a
  * last-row-wins map and demanded `typeof number`, while the readers pinned the four '*' scopes and accepted Number("15")
  * — so a badge could state a horizon the sweep would not enforce (a narrower-scope row winning the sweep's map), or a
  * string seed could make the badge confident while the sweep aborted the night. Same filter + same test = they cannot
