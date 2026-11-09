@@ -2,7 +2,7 @@
 
 change-class: sub_batch
 
-**Parent:** `B-PM-CLAUDE`, existing OBJ-4. **Owner for this increment:** OLD Codex (`codex-a`) until PM Codex is active, then PM Codex (`codex-pm`) owns its own operating procedures. **Board:** parent card `PVTI_lAHODmulEM4BfQP4zhGEKyM`. **Directive:** KD-62, KD-63 and KD-64; build brief `1-system-manual/pm/reviews/2026-11-09_PM_CODEX_BUILD_BRIEF.md`.
+**Parent:** `B-PM-CLAUDE`, existing OBJ-4. **Owner for this increment:** OLD Codex (`codex-a`) until PM Codex is active, then PM Codex owns its own operating procedures under the session identity `codex-pm`. `codex-pm` is not a permission-bearing actor. **Board:** parent card `PVTI_lAHODmulEM4BfQP4zhGEKyM`. **Directive:** KD-62, KD-63 and KD-64; build brief `1-system-manual/pm/reviews/2026-11-09_PM_CODEX_BUILD_BRIEF.md`.
 
 ## 1. Why this is an increment, not a second PM batch
 
@@ -14,9 +14,9 @@ The change class is `sub_batch`: this is a bounded delivery increment under an a
 
 ### OBJ-1 — PM Codex identity, read order and activation
 
-Add `C:\DawnTraderV3-pm` → **PM Codex**, operational actor `codex-pm`, standing in for PM Claude (CC-PM) to the root Codex instruction surface. Give PM Codex a dedicated short section with this read order: the PM role rules; `MEMORY_PM.md` CURRENT POSITION first; the decision ledger, decision protocol and open-batch register; then the sprint and pre-live plans. Name both historical sources: the local CC-PM transcript archive plus its index, and `git log -p -- .claude/memory/MEMORY_PM.md`. Point the same section at the reverse-switch and Codex-usage-stop skills. Change the existing PM Codex roster record from planned to active only after those instructions are present.
+Add `C:\DawnTraderV3-pm` → **PM Codex**, session identity `codex-pm`, standing in for PM Claude (CC-PM) to the root Codex instruction surface. `codex-pm` identifies the session in instructions, handovers and PM-owned records; it grants no alert, deployment or governance-confirmation permission. Give PM Codex a dedicated short section with this read order: the PM role rules; `MEMORY_PM.md` CURRENT POSITION first; the decision ledger, decision protocol and open-batch register; then the sprint and pre-live plans. Name both historical sources: the local CC-PM transcript archive plus its index, and `git log -p -- .claude/memory/MEMORY_PM.md`. Point the same section at the reverse-switch and Codex-usage-stop skills. Change the existing PM Codex roster record from planned to active only after those instructions are present.
 
-*Verify:* from the PM folder, a fresh Codex session identifies itself as PM Codex, names `codex-pm`, reads the CURRENT POSITION first, resolves every required pointer, and can find one older PM fact through each history route. The roster record says active. The exact first message Kyle pastes is recorded in the Step-0 handover and names the 2026-11-09 crew handover sheet.
+*Verify:* from the PM folder, a fresh Codex session identifies itself as PM Codex, names `codex-pm` as its session identity, reads the CURRENT POSITION first, resolves every required pointer, and can find one older PM fact through each history route. The same test positively proves `codex-pm` is refused by the alert allowlist, both deployment-actor surfaces and governance-exception confirmation. The roster record says active. The exact first message Kyle pastes is recorded in the Step-0 handover and names the 2026-11-09 crew handover sheet.
 
 ### OBJ-2 — Discord attribution without sender impersonation
 
@@ -32,9 +32,9 @@ Append PM Claude and PM Codex at the same index in both `crew-switch` crews. Rem
 
 ### OBJ-4 — PM alert identities remain advisory only
 
-Add canonical alert actors `pm-claude` and `pm-codex` under the approved `advisory` category: they may acknowledge or resolve alerts but never deploy and never confirm governance exceptions. The operational Codex identity (`codex-pm`) and the canonical alert actor (`pm-codex`) are deliberately different namespaces; the instructions state which is used where. Do not add bare `pm` aliases.
+Add canonical alert actors `pm-claude` and `pm-codex` under the approved `advisory` category: they may acknowledge or resolve alerts but never deploy and never confirm governance exceptions. The Codex session identity (`codex-pm`) and the canonical alert actor (`pm-codex`) are deliberately different namespaces; the instructions state which is used where. `codex-pm` is refused at every permission-bearing surface. Do not add bare `pm` aliases.
 
-*Verify:* the actor allowlist and client union accept the advisory tag; the advisory set is exactly the two PM actors; an alert action by `pm-claude` and `pm-codex` is accepted; `pm` is refused; both PM actors are positively asserted absent from both deploy actor lists and from exception confirmers. CI is green per job before any deploy. The code may ride the next safe deploy because the current deployment line is held by B-DB-SIZE-RELIEF.
+*Verify:* the actor allowlist and client union accept the advisory tag; the advisory set is exactly the two PM actors; an alert action by `pm-claude` and `pm-codex` is accepted; `pm` and `codex-pm` are refused; both PM alert actors and the `codex-pm` session identity are positively asserted absent from both deploy actor lists and from exception confirmers. CI is green per job before any deploy. The code may ride the next safe deploy because the current deployment line is held by B-DB-SIZE-RELIEF.
 
 ### OBJ-5 — Transcript and backup reach is stated truthfully
 
@@ -50,9 +50,11 @@ Create a PM-Codex-only reverse-switch skill. It runs only when Kyle tells PM Cod
 
 ### OBJ-7 — PM Codex usage stop uses Codex mechanisms
 
-Create a PM-Codex-only usage-stop skill after settling four facts with evidence: where Kyle can read the relevant ChatGPT/Codex allowance; Kyle's stop line (asked, never assumed from Claude's 85%); every Dawn Trader consumer of that allowance (four Codex builders, PM Codex, Coltrane and any scheduled Codex work); and what can actually be stopped remotely. Extend `crew-switch` with a reviewed Coltrane-bridge off/on control only if the current mechanism cannot stop it. Because Codex has no session messaging or wake path, the skill must state the reliable route and its limit: PM records and announces the stop, stops every remotely controlled consumer, and gives Kyle one exact instruction for any open Codex turns that only he can stop. Resume reverses the recorded list only on Kyle's word.
+Create a PM-Codex-only usage-stop skill after settling four facts with evidence: where Kyle can read the relevant ChatGPT/Codex allowance; Kyle's stop line (asked, never assumed from Claude's 85%); every Dawn Trader consumer of that allowance (four Codex builders, PM Codex, Coltrane and any scheduled Codex work); and what can actually be stopped remotely. Because Codex has no session messaging or wake path, the skill must state the reliable route and its limit: PM records and announces the stop, stops every remotely controlled consumer, and gives Kyle one exact instruction for any open Codex turns that only he can stop. Resume reverses the recorded list only on Kyle's word.
 
-*Verify:* Kyle's supplied line is written into the skill and PM memory; the consumer census is source-backed; all relevant Codex app automations/schedules are listed and one pause/resume rehearsal is observed; Coltrane's bridge state has an explicit read-back; a planted already-stopped consumer stays idempotent; the record enumerates exactly what was stopped and what requires Kyle.
+Coltrane control is an explicit dependency, not folded into this PM increment. The current service can be stopped safely only when no Coltrane invocation is active; `#1198` / `B-AGENT-INVOKE-FAILURE-NOTICE` owns the unsafe mid-invoke stop, orphan and false-failure-page path. PM Codex therefore must not add or claim a general Coltrane off/on control until that dependency lands. Until then the skill may perform an idle-only stop with the existing `pgrep -u coltrane -f "codex exec"` guard and service-state read-back; an active invocation is a loud refusal, not a kill or restart. OBJ-7 and the watched round trip cannot close while the dependency remains open unless Coltrane separately reviews an equivalent safe-stop implementation.
+
+*Verify:* Kyle's supplied line is written into the skill and PM memory; the consumer census is source-backed; all relevant Codex app automations/schedules are listed and one pause/resume rehearsal is observed; Coltrane's bridge state has an explicit read-back; a planted already-stopped consumer stays idempotent; the record enumerates exactly what was stopped and what requires Kyle. Before `#1198` lands, an active real Coltrane invocation makes the stop refuse without killing, restarting, orphaning or paging; an idle real-process case stops and reads back disabled state. After the dependency lands, its active-invoke mutation and real-process proof are cited rather than duplicated.
 
 ### OBJ-8 — One watched round trip proves the system
 
@@ -66,6 +68,7 @@ With Kyle watching, prove PM Claude → PM Codex → PM Claude. This is not repl
 
 - `B-CODEX-FAILOVER` (§ around 4092): `AGENTS.md` is the Codex instruction surface; crew-switch owns one state record and the handover receipt checklist; downstream is operator coordination only.
 - Discord Comms Fabric (§ around 3067): sender display names drive attribution and routing; `cc-send` is the live boundary. A sender-map change therefore belongs at the boundary, not in message content.
+- Discord Comms Fabric (§ around 3078): Coltrane restart recovery exists, but the clean-stop leg did not port because `sudo use_pty` separates the invoked Codex process from the group that a service stop can safely terminate.
 - Alert actor registry (§ around 985 and 4094): `ALERT_ACTORS` is the canonical alert identity source. The parent pre-audit already settled the PM-specific advisory category so deploy rights do not follow.
 - Session-Instruction Loading Estate (§ around 1095): the PM folder is a distinct clone identity; missing/mis-mapped instructions are a crew-wide coordination risk, not a trading risk.
 - Transcript Archive (§ around 1136): `dt_folder_class` is the single classifier, the archive is Claude-conversation-specific, and the Drive job backs up that archive. Its known reach does not establish a Codex desktop backup.
@@ -84,6 +87,7 @@ Corpora searched: `BATCH_CATALOG.md`, completion reports, `RUNNING_ISSUES.md`, t
 - **Codex outbox/sender boundary, TIER 1.** `aba41a602`: *“THE SENDER NAME IS SET BY THE WATCHER AND CANNOT BE SET BY THE FILE.”* **Disposition 2:** preserve the control and choose the fixed sender from an allowlisted folder, never from body data.
 - **PM Codex parent objective, TIER 1.** `f17130187`: *“PM Claude joins the crew's shared machinery (roster, loader, wake filter, alert actors, Codex mirror, backups, status board)”*; `f6227fd49` records the approved PM alert/deploy separation. **Disposition 2:** still the correct parent, amended by KD-63's return-trip and usage-stop duties.
 - **Transition and usage-stop skills, TIER 1.** `193a65b32`: *“PM skills: pm-usage-stop and pm-transition-to-codex … PM Codex brief adds the return-trip procedure”*; `9a23a12ea`: *“PM Codex gets its own stop and switch-back.”* **Disposition 2:** mirror the responsibility, not the Claude mechanism.
+- **Coltrane safe-stop gap, TIER 1 dependency.** The SIM records that crew-switch controls Langston only and that Coltrane's clean-stop leg did not port because of `sudo use_pty`. `RUNNING_ISSUES` `#1198` records the measured hang/orphan and false-failure-page path and places it in `B-AGENT-INVOKE-FAILURE-NOTICE`, owner Infra Claude. **Disposition 4:** dependency, not folded in. This PM increment may use only the existing idle guard and cannot close OBJ-7/8 until the owned safe-stop path lands or Coltrane reviews an equivalent replacement.
 - **Transcript archive, TIER 2 (read-only proof).** Its current classifier explicitly maps `C--DawnTraderV3-pm` to CC-PM and the SIM defines it as a Claude conversation archive. **Disposition 1** for PM Claude coverage; **disposition 3** for Codex conversation backup remains the already placed `#1238`, unless a supported current Codex export changes that fact.
 - **Roster, TIER 1.** The PM Codex record was created in the parent scope as `planned (active once P4 lands)`. **Disposition 2:** flip only when the instructions and procedures land.
 
@@ -98,17 +102,17 @@ Each brief build step is a separate pushed increment and a separate Coltrane rev
 5. roster activation (brief 5);
 6. backup proof and honest Codex gap/result (brief 6);
 7. reverse-switch skill (brief 7);
-8. Codex usage-stop skill (brief 7b), after Kyle supplies the stop line;
+8. Codex usage-stop skill (brief 7b), after Kyle supplies the stop line and the `#1198` safe-stop dependency is satisfied or an equivalent implementation is separately reviewed;
 9. watched round trip (brief 8).
 
 Normal workflow gates still apply around those increments: Step 2 audits the current code and current Codex product surfaces; Step 4 reviews implementation; Steps 5–9 verify and review; Step 10 updates the System Impact Map; Step 11 closes the parent increment record. No other OLD work resumes before this is complete.
 
 ## 6. Risks and rollback
 
-- **Identity collision:** operational `codex-pm` and alert actor `pm-codex` can be confused. Both are named with their use sites and tested; no bare `pm` alias.
+- **Identity collision:** session identity `codex-pm` and alert actor `pm-codex` can be confused. Both are named with their use sites and tested; `codex-pm` is positively refused at every permission surface and there is no bare `pm` alias.
 - **Wrong Discord boundary:** three Codex-era send paths exist for different actors. Step 2 proves which one PM Codex actually uses before any sender map is written.
 - **False delivery guarantee:** neither PM Codex nor crew-switch can wake Codex sessions. Procedures say what Kyle must do rather than claiming delivery.
-- **Reviewer spend:** crew-switch currently does not control Coltrane. OBJ-7 must settle and test that path before the stop skill claims completeness.
+- **Reviewer stop safety:** crew-switch currently does not control Coltrane, and `#1198` records that a mid-invoke stop can orphan Codex and trigger a false failure page. OBJ-7 depends on that owned safe-stop work; before it lands, only an idle-guarded stop may run and an active invocation must cause a loud refusal.
 - **Held deploy:** alert actors are a staging code change, but the current branch includes held database migrations. The implementation is reviewable and CI-able without deploying; any deploy needs the existing hold owner's explicit release.
 - **Backup overclaim:** Claude transcript coverage is not Codex coverage. A missing supported Codex export stays an explicit after-live gap.
 
