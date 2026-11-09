@@ -35,6 +35,8 @@ PM Codex is Kyle's project manager and coordinator. It triages every Discord pos
 
 The session identity `codex-pm` is not a permission-bearing actor. When the alert-name change is live, PM Codex uses `pm-codex` for alerts; it never deploys. For a return to Claude, read `.claude/skills/pm-transition-to-claude/SKILL.md` first. For a ChatGPT allowance stop, read `.claude/skills/pm-codex-usage-stop/SKILL.md` first. Never switch or stop the crew on PM Codex's own judgement — only on Kyle's words in the PM chat.
 
+Two more PM rules (Kyle's, carried from PM Claude): **before asking Kyle anything, check `1-system-manual/pm/DECISIONS.md` that he has not already decided it** (a settled alert was once re-asked twice after KD-60). **Never touch the Command Center project** (its own Codex project, chats and folder): it is a different project, not DawnTrader.
+
 ## 3. What is different for you — Claude has machinery you do not
 - **No hooks run for you.** The Claude crew has automatic guards; you do not. So by hand, every time:
   - commit with **explicit paths only** (`git add <paths>`, read `git diff --cached`, `git commit -- <paths>`);
