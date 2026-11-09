@@ -39,6 +39,10 @@ LANGSTON_UNIT = 'discord-langston-bridge.service'
 COLTRANE_UNIT = 'coltrane-bot.service'
 PGREP = '/usr/bin/pgrep'
 COLTRANE_USER = 'coltrane'
+# Shared with coltrane-bot.py. Each review holds a shared lock for its whole lifetime; OFF takes the exclusive lock
+# before the active-review census and holds it through stop. That closes the check-then-stop gap: a live review makes
+# OFF refuse, and once OFF owns this lock no new `codex exec` can be born.
+COLTRANE_INVOKE_GATE = '/run/coltrane-invoke.lock'
 
 CREWS = {
     'claude': ['OLD Claude', 'NEW Claude', 'ANALYST Claude', 'Infra Claude', 'PM Claude'],
@@ -149,26 +153,49 @@ def coltrane_state(on, errs=()):
     good = (a == 'active' and e == 'enabled') if on else (a in ('inactive', 'failed') and e == 'disabled')
     return good and not errs, f'{a}/{e}', list(errs)
 
-def set_coltrane(on):
-    """Enable+start Coltrane, or stop+disable him only while no `codex exec` review is active.
+def _take_coltrane_invoke_gate():
+    """Prevent new Coltrane invokes before the idle census. A shared holder is an active review."""
+    fd = os.open(COLTRANE_INVOKE_GATE, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
 
-    The idle fence is deliberate: the installed bot may lag the reviewed clean-stop code, and even the new code should
-    finish a requested review rather than turn an allowance stop into a killed review. A refusal changes nothing.
+def set_coltrane(on):
+    """Enable+start Coltrane, or atomically fence launches then stop+disable only while no review is active.
+
+    The bot shares COLTRANE_INVOKE_GATE across every Popen. OFF owns it exclusively before pgrep and through stop, so a
+    launch cannot enter between the idle result and SIGTERM. A review already launched is visible and makes OFF release
+    the gate and refuse without touching the service.
     """
     errs = []
+    gate_fd = None
     if not on:
-        p = subprocess.run([PGREP, '-u', COLTRANE_USER, '-f', 'codex exec'], capture_output=True, text=True, timeout=30)
-        if p.returncode not in (0, 1):
-            return coltrane_state(False, [f'active-review check rc={p.returncode} {p.stderr.strip()[:120]}'])
-        if p.stdout.strip():
-            return coltrane_state(False, ['an active Coltrane review is in progress; refusing to stop it'])
-    for v in (['enable', 'start'] if on else ['stop', 'disable']):
         try:
-            r = subprocess.run([SYSTEMCTL, v, COLTRANE_UNIT], capture_output=True, text=True, timeout=30)
-            if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
-        except subprocess.TimeoutExpired:
-            errs.append(f'{v} timed out after 30 s')
-    return coltrane_state(on, errs)
+            gate_fd = _take_coltrane_invoke_gate()
+        except BlockingIOError:
+            return coltrane_state(False, ['an active Coltrane review holds the invoke gate; refusing to stop it'])
+        except OSError as x:
+            return coltrane_state(False, [f'could not fence new Coltrane reviews: {x}'])
+    try:
+        if not on:
+            p = subprocess.run([PGREP, '-u', COLTRANE_USER, '-f', 'codex exec'], capture_output=True, text=True, timeout=30)
+            if p.returncode not in (0, 1):
+                return coltrane_state(False, [f'active-review check rc={p.returncode} {p.stderr.strip()[:120]}'])
+            if p.stdout.strip():
+                return coltrane_state(False, ['an active Coltrane review is in progress; refusing to stop it'])
+        for v in (['enable', 'start'] if on else ['stop', 'disable']):
+            try:
+                r = subprocess.run([SYSTEMCTL, v, COLTRANE_UNIT], capture_output=True, text=True, timeout=30)
+                if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
+            except subprocess.TimeoutExpired:
+                errs.append(f'{v} timed out after 30 s')
+        return coltrane_state(on, errs)
+    finally:
+        if gate_fd is not None:
+            os.close(gate_fd)
 
 def coltrane_msg(oid, on, good, state, errs):
     want = 'ON' if on else 'OFF'

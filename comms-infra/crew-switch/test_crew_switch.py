@@ -4,7 +4,7 @@ FAKE cc-send (records every post) and a FAKE systemctl — nothing reaches Disco
 ⛔ A first draft of this file missed the fake systemctl and stopped+disabled Langston's LIVE bridge (2026-10-13,
 restored in ~20 s). Two guards now: the fake must be in place (assert), AND the unit name is a fake (Langston,
 finding 2), so even a real systemctl could only fail harmlessly.  Run: python3 test_crew_switch.py"""
-import importlib.util, json, os, shutil, sys, tempfile, threading, time
+import fcntl, importlib.util, json, os, shutil, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location('cs', os.path.join(HERE, 'crew-switch.py'))
@@ -19,6 +19,7 @@ open(fake, 'w').write('#!/usr/bin/env python3\nimport json,sys\nopen(%r,"a").wri
 os.chmod(fake, 0o700)
 cs.STATE = os.path.join(d, 'state', 'state.json'); cs.CC_SEND = fake
 cs.INBOX = os.path.join(d, 'inbox.jsonl'); cs.KYLE_ENV = os.path.join(d, 'k.env')
+cs.COLTRANE_INVOKE_GATE = os.path.join(d, 'coltrane-invoke.lock')
 open(cs.KYLE_ENV, 'w').write('KYLE_DISCORD_ID=42\n')
 act = os.path.join(d, 'active'); ena = os.path.join(d, 'enabled')
 open(act, 'w').write('active'); open(ena, 'w').write('enabled')
@@ -32,7 +33,8 @@ fpg = os.path.join(d, 'pgrep')
 open(fpg, 'w').write('#!/bin/sh\nif [ -f %s ]; then echo 123; exit 0; fi\nexit 1\n' % repr(pgmark))
 os.chmod(fpg, 0o700); cs.PGREP = fpg
 if not (cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test')
-        and cs.COLTRANE_UNIT.startswith('crew-switch-test') and cs.PGREP.startswith(d)):   # not `assert`: -O strips it
+        and cs.COLTRANE_UNIT.startswith('crew-switch-test') and cs.PGREP.startswith(d)
+        and cs.COLTRANE_INVOKE_GATE.startswith(d)):   # not `assert`: -O strips it
     raise SystemExit('REFUSING TO RUN: a real service could be touched')
 
 P = F = 0
@@ -123,10 +125,23 @@ ok('T6 LANGSTON OFF', lang() == 'inactive/disabled' and 'Langston is OFF' in tex
 cs.langston(True); ok('T6 LANGSTON ON', lang() == 'active/enabled')
 ok('T6 reviewer-neutral Langston commands do not advance mode generation', cs.load()['mode_generation'] == 2)
 
-# T6b COLTRANE OFF/ON: idle stop works; an active review refuses without touching the service
+# T6b COLTRANE OFF/ON: idle stop works; a launch in the old check/stop gap is fenced; an active review refuses
 n = len(read_posts()); cs.coltrane(False); p = since(n)
 ok('T6b COLTRANE OFF while idle', lang() == 'inactive/disabled' and 'Coltrane is OFF' in text(p[0]))
 cs.coltrane(True); ok('T6b COLTRANE ON', lang() == 'active/enabled')
+
+# Coltrane review blocker: attempt a launch exactly when systemctl stop is called (after pgrep returned idle). The fake
+# launch takes the same shared lock as coltrane-bot.py. OFF must already own it exclusively, so the launch is refused.
+race_result = os.path.join(d, 'coltrane-race-result')
+race_sc = GOOD_SC.replace(
+    'stop) echo inactive > $A;;',
+    'stop) if flock -n %s -c true; then echo launched > %s; else echo refused > %s; fi; echo inactive > $A;;'
+    % (cs.COLTRANE_INVOKE_GATE, race_result, race_result))
+set_sc(race_sc)
+n = len(read_posts()); cs.coltrane(False); p = since(n)
+ok('T6b launch between idle probe and stop is fenced', open(race_result).read().strip() == 'refused'
+   and lang() == 'inactive/disabled' and 'Coltrane is OFF' in text(p[0]))
+set_sc(GOOD_SC); cs.coltrane(True)
 open(pgmark, 'w').write('active')
 n = len(read_posts()); cs.coltrane(False); p = since(n)
 ok('T6b active Coltrane review refuses stop', lang() == 'active/enabled' and 'refusing to stop' in text(p[0])

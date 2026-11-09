@@ -27,7 +27,7 @@
 """
 
 import tempfile
-import asyncio, hashlib, json, os, re, signal, subprocess, sys, threading, time, types, uuid
+import asyncio, fcntl, hashlib, json, os, re, signal, subprocess, sys, threading, time, types, uuid
 from datetime import datetime, timezone
 
 import discord
@@ -37,6 +37,7 @@ COMMS_FILE = "/etc/dawntrader/discord-comms.env"
 RUNLOG = "/var/log/coltrane-invokes.jsonl"
 INBOX = "/var/log/cc-discord-inbox.jsonl"
 CREW_STATE = "/var/lib/crew-switch/state.json"
+INVOKE_GATE = "/run/coltrane-invoke.lock"  # shared with crew-switch; root-owned /run prevents path substitution
 USER, HOME = "coltrane", "/home/coltrane"
 # ⛔ cwd is a SCRATCH directory, and that is the fence rather than a tidiness choice.
 #    Codex's workspace-write sandbox makes the working directory writable. With cwd
@@ -494,8 +495,17 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
     tag = uuid.uuid4().hex
     argv = ["sudo", "-u", user, "env", "HOME=" + HOME, "COLTRANE_INVOKE=" + tag] + list(cmd)
     info = {"outcome": None, "tag": tag, "killed_tagged": [], "escaped_untagged": False}
-    p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                         encoding="utf-8", errors="replace", start_new_session=True)
+    # crew-switch OFF owns this gate exclusively before its active-review census and through systemctl stop. Each
+    # review holds the shared side for its whole lifetime. OFF therefore refuses immediately while any review exists;
+    # once OFF owns the exclusive side, no new child can be born between the idle result and the stop.
+    gate_fd = os.open(INVOKE_GATE, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(gate_fd, fcntl.LOCK_SH)
+        p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             encoding="utf-8", errors="replace", start_new_session=True)
+    except BaseException:
+        os.close(gate_fd)
+        raise
     with _LIVE_LOCK:
         _LIVE.add(p)
     try:
@@ -529,6 +539,7 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
     finally:
         with _LIVE_LOCK:
             _LIVE.discard(p)
+        os.close(gate_fd)
 
 
 def stop_cleanly(signum=None, _frame=None):
