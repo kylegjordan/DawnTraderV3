@@ -7,7 +7,10 @@
 ## What PM Codex is
 The ChatGPT stand-in for PM Claude (Kyle's project manager and coordinator), working in `C:\DawnTraderV3-pm`. It keeps the crew moving, triages every Discord post addressed to Kyle, brings Kyle only what needs him, and records his decisions. It does not build trading code.
 
-## Build steps (each one reviewed by Coltrane, workflow as usual)
+## How to build it (Kyle, 2026-11-09, KD-65): just build it, NOT as a batch
+**No eleven workflow steps, no scope, audit, change list or step-by-step review.** Kyle: *"That's overkill. I just want it built."* Write the files, push them, tell Kyle how to open PM Codex, then prove it works. The one exception is item 3 below: it changes the live switch tool, so it gets a single look from Coltrane before it is installed. If time is short, leave items 3 and 4 for later. PM Codex works without them, and the PM can hand over by hand meanwhile.
+
+## What to build
 0. **Tell Kyle, in plain step-by-step words, how to open the new PM Codex session (Kyle, 2026-11-09).** He has not opened a Codex session in the PM folder before. Give him: which app to open; how to start a new session there; that its folder is `C:\DawnTraderV3-pm`; and the exact first message to paste. That message tells it it is PM Codex, to pull first, and to read the PM section of `AGENTS.md` and the crew handover sheet `1-system-manual/pm/handovers/2026-11-09_claude-to-codex.md`. Check the steps against the Codex app as it is today, not from memory. Do this once steps 1-3 below are reviewed, so the session he opens finds its instructions in place. Until then, tell him it is coming and roughly when.
 1. **`AGENTS.md`:** add the row `C:\DawnTraderV3-pm` → **PM Codex** (actor `codex-pm`), standing in for PM Claude (CC-PM). Add a short PM section telling it to read, in order:
    - `1-system-manual/PM_CLAUDE_RULES.md` (the role file);
@@ -16,8 +19,8 @@ The ChatGPT stand-in for PM Claude (Kyle's project manager and coordinator), wor
    - `1-system-manual/SPRINT_TO_LIVE_PLAN.md` and `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md`.
    - **Where the old history is:** the full conversation archive is on the laptop at `C:\Users\kyleg\.claude\transcript-archive\` (`CC-PM\` plus `INDEX.md`), and older notes trimmed out of memory are in the file history (`git log -p -- .claude/memory/MEMORY_PM.md`). Search these before answering Kyle about anything older.
 2. **Discord:** PM Codex posts as **"PM Codex"** through the existing Codex outbox (`comms-infra/codex/codex-send`). The sender is set by the outbox, never by the message, so map the PM folder to "PM Codex" there.
-3. **`crew-switch`:** add PM CLAUDE / PM CODEX to its session list, so one switch line moves the PM with the crew and its handover receipt is chased like everyone else's.
-4. **Alert actor names:** add `pm-claude` and `pm-codex` to `ALERT_ACTORS` in `server/services/system-alerts.ts`. This is a code change that needs a deploy, so it may wait for the next deploy. The PM rarely acks alerts.
+3. **`crew-switch` (can wait; one Coltrane look before installing):** add PM CLAUDE / PM CODEX to its session list, so one switch line moves the PM with the crew and its handover receipt is chased like everyone else's.
+4. **Alert actor names (can wait for the next deploy):** add `pm-claude` and `pm-codex` to `ALERT_ACTORS` in `server/services/system-alerts.ts`. This is a code change that needs a deploy, so it may wait for the next deploy. The PM rarely acks alerts.
 5. **Roster:** change the "PM Codex" entry in `.claude/cc-session-roster.json` from "planned" to "active".
 6. **Backups:** confirm the transcript archive and nightly backup cover `C:\DawnTraderV3-pm`, and the Codex side's equivalent covers PM Codex.
 7. **The return trip is PM Codex's job (Kyle, 2026-11-09).** Write PM Codex's own procedure for the switch back to Claude, mirroring PM Claude's `.claude/skills/pm-transition-to-codex/SKILL.md` in reverse, and point to it from the PM section of `AGENTS.md`.
