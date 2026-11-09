@@ -23,8 +23,18 @@ def case(name, want, got):
 
 def census():
     """Every coltrane process, unscoped: {pid: cmdline}."""
-    out = subprocess.run(["pgrep", "-u", "coltrane", "-a"], capture_output=True, text=True).stdout
-    return {int(l.split()[0]): l.split(None, 1)[1] if " " in l else "" for l in out.splitlines() if l.strip()}
+    p = subprocess.run(["pgrep", "-u", "coltrane", "-a"], capture_output=True, text=True)
+    if p.returncode not in (0, 1):
+        raise RuntimeError("pgrep census failed rc=%d: %s" % (p.returncode, p.stderr.strip()))
+    return {int(l.split()[0]): l.split(None, 1)[1] if " " in l else "" for l in p.stdout.splitlines() if l.strip()}
+
+
+def invoke_tag(pid):
+    with open("/proc/%d/environ" % pid, "rb") as fh:
+        for item in fh.read().split(b"\0"):
+            if item.startswith(b"COLTRANE_INVOKE="):
+                return item.split(b"=", 1)[1].decode()
+    return None
 
 
 def stubs(pattern):
@@ -51,7 +61,7 @@ spec = importlib.util.spec_from_file_location("coltrane_bot_stop_test", os.path.
 bot = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(bot)
 NULL = open(os.devnull)
-BASE = set(census())
+BASE = census()
 print("census before: %d coltrane process(es), none of them stubs" % len(BASE))
 IGN = "trap '' HUP TERM; "
 
@@ -87,16 +97,26 @@ case("A: timeout", 124, res["A"][0])
 case("B: completed normally with its output", (0, "B-OK"), (res["B"][0], res["B"][1]))
 case("no A stub survives", [], stubs(r"sleep 330[78]"))
 
-print("E. SIGTERM mid-invoke: stop_cleanly ends the group and exits 0 (P8)")
+print("E. SIGTERM mid-invoke: stop_cleanly ends the group AND a self-setsid tagged escapee, then exits 0 (P8)")
 child = subprocess.Popen([sys.executable, "-c", (
     "import importlib.util,os,signal,sys,threading,time\n"
     "os.environ.setdefault('COLTRANE_ADDRESS_LIST', %r)\n"
     "s=importlib.util.spec_from_file_location('cb', %r); b=importlib.util.module_from_spec(s); s.loader.exec_module(b)\n"
     "signal.signal(signal.SIGTERM, b.stop_cleanly)\n"
-    "threading.Thread(target=lambda: b.run_codex(['sh','-c',\"trap '' HUP TERM; sleep 3309 & exec sleep 3310\"], open(os.devnull), timeout=300), daemon=True).start()\n"
+    "threading.Thread(target=lambda: b.run_codex(['sh','-c',\"trap '' HUP TERM; setsid sleep 3309 & exec sleep 3310\"], open(os.devnull), timeout=300), daemon=True).start()\n"
     "time.sleep(60)\n") % (os.environ["COLTRANE_ADDRESS_LIST"], os.path.join(HERE, "coltrane-bot.py"))])
 time.sleep(3)
-case("the stubs are running before the stop", True, len(stubs(r"sleep 33(09|10)")) >= 1)
+escapee, grouped = stubs(r"sleep 3309"), stubs(r"sleep 3310")
+case("the group member AND self-setsid escapee are both running before the stop", (1, 1),
+     (len(escapee), len(grouped)))
+if len(escapee) == len(grouped) == 1:
+    case("3309 is a real session escapee, not another process in the launcher's session", True,
+         os.getsid(escapee[0]) == escapee[0] and os.getsid(escapee[0]) != os.getsid(grouped[0]))
+    case("the escapee carries the same exact invoke tag as the group member", True,
+         bool(invoke_tag(escapee[0])) and invoke_tag(escapee[0]) == invoke_tag(grouped[0]))
+else:
+    case("3309 is a real session escapee, not another process in the launcher's session", True, False)
+    case("the escapee carries the same exact invoke tag as the group member", True, False)
 child.send_signal(signal.SIGTERM)
 try:
     code = child.wait(timeout=15)
@@ -115,7 +135,25 @@ except subprocess.TimeoutExpired:
     pass
 time.sleep(0.5)
 case("the old shape leaves survivors (positive control for the census)", True, len(stubs(r"sleep 331[12]")) >= 1)
+control_delta = {pid: cmd for pid, cmd in census().items() if pid not in BASE}
+case("the FULL user-wide census sees the survivor (positive control)", True,
+     any(re.search(r"sleep 331[12]", cmd) for cmd in control_delta.values()))
 kill_stubs(r"sleep 331[12]")
+
+print("F2. CONTROL: a survivor whose command does NOT match the old sleep-33NN selector")
+nonmatching = subprocess.Popen(
+    ["sudo", "-u", "coltrane", "bash", "-c", "exec -a full-census-control sleep 91"],
+    stdin=NULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+time.sleep(0.5)
+control_delta = {pid: cmd for pid, cmd in census().items() if BASE.get(pid) != cmd}
+case("the old named-stub selector cannot see this control", [], stubs(r"sleep 33\d\d"))
+case("the FULL user-wide census sees the nonmatching control", True,
+     any("full-census-control" in cmd for cmd in control_delta.values()))
+kill_stubs(r"full-census-control")
+try:
+    nonmatching.wait(timeout=3)
+except subprocess.TimeoutExpired:
+    nonmatching.kill()
 
 print("G. MUTANT: kill by anything wider than the tag -> B (another invoke) dies; the gate must catch it")
 real = bot._tagged_pids
@@ -130,7 +168,7 @@ bot._tagged_pids = real
 case("under the mutant, B does NOT complete normally (the mutant is caught)", True, res.get("B", (None,))[0] != 0)
 kill_stubs(r"sleep 33(1[3-6])")
 
-after = {pid: cmd for pid, cmd in census().items() if pid not in BASE and re.search(r"sleep 33\d\d", cmd)}
-case("FINAL census: no stub of this gate is left on the coltrane user", {}, after)
+after = {pid: cmd for pid, cmd in census().items() if BASE.get(pid) != cmd}
+case("FINAL FULL census: no new process of any command is left on the coltrane user", {}, after)
 print("\n%d passed, %d failed" % (P, F))
 sys.exit(1 if F else 0)
