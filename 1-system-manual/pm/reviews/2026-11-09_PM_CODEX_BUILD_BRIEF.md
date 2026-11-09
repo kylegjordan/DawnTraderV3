@@ -1,0 +1,29 @@
+# PM Codex build brief, for OLD Codex (first job of the Codex shift)
+
+**Decision:** Kyle 2026-11-09, recorded as KD-62: "OLD Codex builds it." PM Codex was planned (B-PM-CLAUDE P4, roster entry "planned") but never built. The Claude allowance is past Kyle's 85% stop line, so the build happens on the Codex side, reviewed by Coltrane.
+
+**Source of the requirements:** `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md` item 4. This brief adds what PM Claude learned running the role.
+
+## What PM Codex is
+The ChatGPT stand-in for PM Claude (Kyle's project manager and coordinator), working in `C:\DawnTraderV3-pm`. It keeps the crew moving, triages every Discord post addressed to Kyle, brings Kyle only what needs him, and records his decisions. It does not build trading code.
+
+## Build steps (each one reviewed by Coltrane, workflow as usual)
+1. **`AGENTS.md`:** add the row `C:\DawnTraderV3-pm` → **PM Codex** (actor `codex-pm`), standing in for PM Claude (CC-PM). Add a short PM section telling it to read, in order:
+   - `1-system-manual/PM_CLAUDE_RULES.md` (the role file);
+   - `.claude/memory/MEMORY_PM.md`, the CURRENT POSITION block first (it has the stop record, pending Kyle decisions and the plan);
+   - `1-system-manual/pm/DECISIONS.md` (the KD ledger), `DECISION_PROTOCOL.md`, `OPEN_BATCH_REGISTER.md`;
+   - `1-system-manual/SPRINT_TO_LIVE_PLAN.md` and `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md`.
+   - **Where the old history is:** the full conversation archive is on the laptop at `C:\Users\kyleg\.claude\transcript-archive\` (`CC-PM\` plus `INDEX.md`), and older notes trimmed out of memory are in the file history (`git log -p -- .claude/memory/MEMORY_PM.md`). Search these before answering Kyle about anything older.
+2. **Discord:** PM Codex posts as **"PM Codex"** through the existing Codex outbox (`comms-infra/codex/codex-send`). The sender is set by the outbox, never by the message, so map the PM folder to "PM Codex" there.
+3. **`crew-switch`:** add PM CLAUDE / PM CODEX to its session list, so one switch line moves the PM with the crew and its handover receipt is chased like everyone else's.
+4. **Alert actor names:** add `pm-claude` and `pm-codex` to `ALERT_ACTORS` in `server/services/system-alerts.ts`. This is a code change that needs a deploy, so it may wait for the next deploy. The PM rarely acks alerts.
+5. **Roster:** change the "PM Codex" entry in `.claude/cc-session-roster.json` from "planned" to "active".
+6. **Backups:** confirm the transcript archive and nightly backup cover `C:\DawnTraderV3-pm`, and the Codex side's equivalent covers PM Codex.
+7. **Prove one handover with Kyle watching:** PM Claude → PM Codex → back. Not done until this passes.
+
+## Rules PM Codex must carry (learned the hard way)
+- Kyle gets plain language only. Every decision ask gives the issue, what the fix fixes, the options, the pros and cons, the session's recommendation, and whether PM agrees (KD-34). One final clear instruction, never back-and-forth.
+- Technical decisions are made by the owning session plus the reviewer to consensus. Kyle gets only money, risk or go-live calls, additions to his agreed list, and true deadlocks.
+- A placement or ownership ask to Kyle needs a fresh slot check first (`node scripts/pm/slot-check.mjs`).
+- Check a decision is not already in DECISIONS.md before asking Kyle again (the database-warning alert was re-asked twice after KD-60 settled it).
+- Never type a password into a form. Never touch `G:\My Drive\Misc\I.T. and Security`. Never touch the COMMAND CENTER session.
