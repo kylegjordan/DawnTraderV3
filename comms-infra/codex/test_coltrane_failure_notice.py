@@ -21,8 +21,9 @@ class Author:
 
 
 class Chan:
-    def __init__(self, msgs=(), fail_send=False):
+    def __init__(self, msgs=(), fail_send=False, fail_on_send=None):
         self.msgs, self.sent, self.id, self.fail_send = list(msgs), [], 42, fail_send
+        self.fail_on_send, self.send_calls = fail_on_send, 0
 
     def history(self, limit=100, after=None, oldest_first=None):
         async def gen():
@@ -42,7 +43,8 @@ class Chan:
         return T()
 
     async def send(self, part):
-        if self.fail_send:
+        self.send_calls += 1
+        if self.fail_send or self.send_calls == self.fail_on_send:
             raise RuntimeError("send failed")
         self.sent.append(part)
 
@@ -111,10 +113,29 @@ class FailureNotice(unittest.TestCase):
         chan, r = self.handle((1, "", "boom", {}), chan=Chan(fail_send=True))
         self.assertEqual((r["outcome"], r["notified"]), ("failed", False), "Langston note 2: notified only when POSTED")
 
+    def test_a_PARTIAL_reply_warns_that_earlier_chunks_are_incomplete(self):
+        reply = ("A" * 1800) + "\n" + ("B" * 200)
+        chan, r = self.handle((0, reply, "", {}), chan=Chan(fail_on_send=2))
+        self.assertEqual((r["outcome"], r["answered"], r["notified"]), ("send_failed", False, True))
+        self.assertEqual((r["posted_parts"], r["reply_parts"]), (1, 2))
+        self.assertEqual(len(chan.sent), 2, "the first reply part and the later failure notice both posted")
+        notice = chan.sent[-1]
+        self.assertIn("could not be posted in full", notice)
+        self.assertIn("treat anything above as incomplete", notice)
+        self.assertNotIn("nothing was reviewed", notice)
+        self.assertEqual(self.mirrored, [notice])
+
     def test_a_reply_has_no_notice_and_no_error_tail(self):
         chan, r = self.handle((0, "an answer", "tokens used: 12", {}))
         self.assertEqual((r["outcome"], r["answered"], r["notified"], r["error_tail"]), ("reply", True, False, None))
         self.assertEqual(chan.sent, ["an answer"])
+
+    def test_a_mirror_failure_does_not_rewrite_a_fully_posted_reply_as_partial(self):
+        bot.mirror_to_inbox = lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("mirror failed"))
+        chan, r = self.handle((0, "a complete answer", "", {}))
+        self.assertEqual((r["outcome"], r["answered"], r["notified"]), ("reply", True, False))
+        self.assertEqual(chan.sent, ["a complete answer"])
+        self.assertIn("MIRROR FAILED", r["mirrored"])
 
     def test_silent_and_empty(self):
         _, r = self.handle((0, "SILENT", "", {}))

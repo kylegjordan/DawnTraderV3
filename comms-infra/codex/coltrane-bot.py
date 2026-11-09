@@ -462,7 +462,7 @@ def invoke(message_text, why, history, role_prompt):
 #    (it may be another invoke's; codex could re-exec a child with a scrubbed environment - Langston's unproven leg).
 INVOKE_TIMEOUT_S = 900
 DRAIN_S = 10
-_LIVE, _LIVE_LOCK = set(), threading.Lock()
+_LIVE, _LIVE_LOCK = {}, threading.Lock()
 
 
 def _kill_group(p):
@@ -501,13 +501,15 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
     gate_fd = os.open(INVOKE_GATE, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         fcntl.flock(gate_fd, fcntl.LOCK_SH)
-        p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                             encoding="utf-8", errors="replace", start_new_session=True)
+        # Hold the registry lock across birth + registration. A SIGTERM handler blocks here until a newly born child
+        # has a tag in _LIVE, rather than observing the old Popen-to-register gap as an empty live set.
+        with _LIVE_LOCK:
+            p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                 encoding="utf-8", errors="replace", start_new_session=True)
+            _LIVE[p] = tag
     except BaseException:
         os.close(gate_fd)
         raise
-    with _LIVE_LOCK:
-        _LIVE.add(p)
     try:
         try:
             out, err = p.communicate(timeout=timeout)
@@ -538,7 +540,7 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
         return 124, (out or "").strip(), (err or ""), info
     finally:
         with _LIVE_LOCK:
-            _LIVE.discard(p)
+            _LIVE.pop(p, None)
         os.close(gate_fd)
 
 
@@ -546,10 +548,24 @@ def stop_cleanly(signum=None, _frame=None):
     """SIGTERM: end every running invoke's process group, then exit 0 - so a restart mid-invoke stops in seconds, leaves
     no codex orphan, and is not a 90 s stop timeout recorded as a failure that pages Kyle (#1206's 2026-11-05 leg)."""
     with _LIVE_LOCK:
-        running = list(_LIVE)
+        running = list(_LIVE.items())
     print("coltrane-bot: stop requested (signal %s): ending %d running invoke(s)" % (signum, len(running)), flush=True)
-    for p in running:
+    for p, _tag in running:
         _kill_group(p)
+    # A child can call setsid() and leave the launcher's process group. Every descendant that did not deliberately
+    # scrub its environment still carries this invoke's tag, so account for those escapees before the bot exits.
+    for _p, tag in running:
+        deadline = time.monotonic() + 1.0
+        while True:
+            tagged = _tagged_pids(tag)
+            for pid in tagged:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+            if not tagged or time.monotonic() >= deadline:
+                break
+            time.sleep(0.05)
     os._exit(0)
 
 
@@ -702,15 +718,25 @@ class Coltrane(discord.Client):
             toks = mt.group(1)
 
         posted, silent, mirrored = None, (out.strip().upper() == "SILENT" if out else False), None
+        posted_parts, reply_parts = 0, []
         if rc == 0 and out and not silent:
+            reply_parts = chunks(out)
             try:
-                for part in chunks(out):
+                for part in reply_parts:
                     await m.channel.send(part)
-                posted = "ok (%d part(s))" % len(chunks(out))
-                mirrored = mirror_to_inbox(out, m.channel.id, is_dm)
+                    posted_parts += 1
+                posted = "ok (%d part(s))" % len(reply_parts)
             except Exception as e:
-                posted = "SEND FAILED: %s: %s" % (type(e).__name__, e)
+                posted = "SEND FAILED after %d/%d part(s): %s: %s" % (
+                    posted_parts, len(reply_parts), type(e).__name__, e)
                 mirrored = "not attempted (send failed)"
+            else:
+                # Discord delivery is the answer. A later local mirror failure must not rewrite a fully delivered
+                # reply as partial and tell the requester to disregard text that is already complete in the channel.
+                try:
+                    mirrored = mirror_to_inbox(out, m.channel.id, is_dm)
+                except Exception as e:
+                    mirrored = "MIRROR FAILED: %s: %s" % (type(e).__name__, e)
         elif rc != 0:
             posted = "invoke failed rc=%d" % rc
 
@@ -735,11 +761,13 @@ class Coltrane(discord.Client):
         # true ONLY when the notice itself posted (Langston note 2) - a failed notice leaves the capped retry running.
         notified = False
         if not answered:
-            notified = await self._notify(m, who, is_dm, outcome, time.time() - t0)
+            notified = await self._notify(
+                m, who, is_dm, outcome, time.time() - t0, partial_reply=posted_parts > 0)
         if info.get("escaped_untagged"):
             await self._page_escape(m, info)
         log({"ts": utc(), "why": why, "dm": is_dm, "rc": rc, "message_id": m.id, "recovered": _recovered,
              "answered": answered, "outcome": outcome, "notified": notified,
+             "posted_parts": posted_parts, "reply_parts": len(reply_parts),
              "error_tail": (err or "")[-1000:] if not answered else None,    # the failure text, never tokens
              "killed_tagged": info.get("killed_tagged") or None, "escaped_untagged": info.get("escaped_untagged") or None,
              "seconds": round(time.time() - t0, 1), "tokens_used": toks,
@@ -747,13 +775,18 @@ class Coltrane(discord.Client):
              "measures": ("one row per wake that led to an invoke; token count is the "
                           "spend surface, and nothing here is rate-limited by design")})
 
-    async def _notify(self, m, who, is_dm, outcome, elapsed):
+    async def _notify(self, m, who, is_dm, outcome, elapsed, partial_reply=False):
         """P7: one name-led line to the requester - same shape as Langston's (P1): the marker, 'nothing was reviewed'
-        verbatim, under 300 characters, no stderr. Mirrored like a reply so the requester's session wakes."""
+        for a wholly absent reply, or the incomplete-reply warning when an earlier chunk landed; under 300 characters,
+        no stderr. Mirrored like a reply so the requester's session wakes."""
         name = "Kyle" if KYLE_ID and str(m.author.id) == KYLE_ID else who
         after = ", after %d s" % int(elapsed) if elapsed else ""
-        line = ("%s — %s your request to Coltrane failed (%s%s); nothing was reviewed. Please re-send."
-                % (name, FAILURE_NOTICE_MARKER, FAILURE_OUTCOME_WORDS.get(outcome, outcome), after))
+        if partial_reply:
+            line = ("%s — %s Coltrane's reply to your request could not be posted in full — treat anything above as "
+                    "incomplete. Please re-send." % (name, FAILURE_NOTICE_MARKER))
+        else:
+            line = ("%s — %s your request to Coltrane failed (%s%s); nothing was reviewed. Please re-send."
+                    % (name, FAILURE_NOTICE_MARKER, FAILURE_OUTCOME_WORDS.get(outcome, outcome), after))
         try:
             await m.channel.send(line)
         except Exception:
