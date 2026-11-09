@@ -63,6 +63,114 @@ P2/P5/P6/P7/P8 are increment-B objects and were deliberately held off `migration
 
 No batch UI surface exists to verify: the scope explicitly leaves the Filter Diagnostics display out of B-ENTRY-GATE. The API and durable objects above are the user-visible/operational verification surfaces; no staging password was entered.
 
+## Step-8 reproduction recipe
+
+Run the database block on staging as `deploy`, after loading `/home/deploy/dawntrader/.env`. It prints the six-source/678,101-row control, all four active-engine rows, the equal-window opens and closes, the 246→324 upstream-admission control, and the shadow-sink control. The sink's all-history positive-control totals continue to grow after this read; the report freezes the totals observed at read time.
+
+```sql
+\pset null '∅'
+select source,count(*) from signal_eval_archive
+where captured_at >= '2026-11-09 14:30+00' and captured_at < '2026-11-09 21:00+00'
+group by source order by source;
+
+select captured_at,symbol,asset_class,gate_decision->>'entryArm' entry_arm,
+  gate_decision->>'entryWindowRefused' window_refused,gate_decision->>'adverseR' adverse_r,
+  gate_decision->>'remainingRiskFrac' remaining_risk_frac,
+  gate_decision->>'belowCheaperFloor' below_cheaper_floor,
+  gate_decision->>'fillEconRefused' econ_refused,gate_decision->>'netEvAtFill' net_ev,
+  gate_decision->>'pWinDefaulted' pwin_defaulted,
+  gate_decision->>'missingPWinWouldRefuse' missing_pwin_would_refuse
+from signal_eval_archive
+where captured_at >= '2026-11-09 14:30+00' and captured_at < '2026-11-09 21:00+00'
+  and source='active-execution-engine' order by captured_at;
+
+with windows(label,lo,hi) as (values
+  ('prior',timestamptz '2026-11-06 14:30+00',timestamptz '2026-11-06 21:00+00'),
+  ('registered',timestamptz '2026-11-09 14:30+00',timestamptz '2026-11-09 21:00+00')),
+classes(asset_class) as (values ('xstock_spot'),('crypto_spot'))
+select w.label,c.asset_class,count(t.id) opens,
+  count(t.id) filter(where t.metadata->>'admissionBasis'='organic') organic,
+  count(t.id) filter(where t.metadata->>'admissionBasis'='exploration') exploration
+from windows w cross join classes c left join closed_trades t
+  on t.opened_at>=w.lo and t.opened_at<w.hi and t.mode='paper' and t.asset_class=c.asset_class
+group by w.label,c.asset_class order by w.label,c.asset_class;
+
+with windows(label,lo,hi) as (values
+  ('prior',timestamptz '2026-11-06 14:30+00',timestamptz '2026-11-06 21:00+00'),
+  ('registered',timestamptz '2026-11-09 14:30+00',timestamptz '2026-11-09 21:00+00'))
+select w.label,count(*) from windows w join signal_eval_archive s
+  on s.captured_at>=w.lo and s.captured_at<w.hi
+where s.source='signal-orchestrator' and s.mode='paper_sim'
+  and s.asset_class='xstock_spot' and s.reject_stage='admitted'
+group by w.label order by w.label;
+
+with windows(label,lo,hi) as (values
+  ('prior',timestamptz '2026-11-06 14:30+00',timestamptz '2026-11-06 21:00+00'),
+  ('registered',timestamptz '2026-11-09 14:30+00',timestamptz '2026-11-09 21:00+00'))
+select w.label,coalesce(t.close_reason,'∅') reason,count(t.id)
+from windows w left join closed_trades t
+  on t.closed_at>=w.lo and t.closed_at<w.hi and t.mode='paper' and t.asset_class='xstock_spot'
+group by w.label,coalesce(t.close_reason,'∅') order by w.label,reason;
+
+select proof_type,
+  count(*) filter(where captured_at >= '2026-11-09 14:30+00'
+                  and captured_at < '2026-11-09 21:00+00') registered,
+  count(*) all_history
+from switch_on_shadow_evidence group by proof_type order by proof_type;
+```
+
+The complete log population is the two rotating stdout files that intersect the window plus current stdout/stderr. This exact read produces 6 entry-window twin skips, 119 xStock twin opens, 0 crypto twin opens, 0 direct VTS window refusals, 0 would-cancel resolutions, 0 drift lines, and the three maker-fill positive controls.
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+lo, hi = '2026-11-09 14:30:00', '2026-11-09 21:00:00'
+paths = [Path('/var/log/dawntrader/out__2026-11-09_11-15-15.log'),
+         Path('/var/log/dawntrader/out__2026-11-09_19-23-45.log'),
+         Path('/var/log/dawntrader/out.log'), Path('/var/log/dawntrader/error.log')]
+rows = [line for path in paths for line in path.open(errors='replace') if lo <= line[:19] < hi]
+patterns = ['[B-ENTRY-GATE][VTS][TWIN_SKIPPED]', '[P19-B7.2c][VTS][TWIN_OPENED]',
+            '[B-ENTRY-GATE][VTS][ENTRY_WINDOW_REFUSED]',
+            '[B-ENTRY-GATE][MAKER_WOULD_CANCEL][SHADOW:',
+            '[11.8B][EV_REJECT_SHADOW]', '[P19-B7.2c][MAKER_FILLED:paper]']
+for p in patterns:
+    print(p, sum(p in line for line in rows))
+print('entry-window skips', sum('[B-ENTRY-GATE][VTS][TWIN_SKIPPED]' in line
+                                and 'reason=entry_window' in line for line in rows))
+print('xStock twin opens', sum('[P19-B7.2c][VTS][TWIN_OPENED]' in line
+                               and '(xstock_spot)' in line for line in rows))
+print('crypto twin opens', sum('[P19-B7.2c][VTS][TWIN_OPENED]' in line
+                               and '(crypto_spot)' in line for line in rows))
+print(''.join(line for line in rows if '[P19-B7.2c][MAKER_FILLED:paper]' in line), end='')
+PY
+```
+
+The failed-promotion split comes from the stderr file holding each window:
+
+```bash
+for spec in \
+  "prior|/var/log/dawntrader/error__2026-11-07_00-00-00.log|2026-11-06 14:30:00|2026-11-06 21:00:00" \
+  "registered|/var/log/dawntrader/error.log|2026-11-09 14:30:00|2026-11-09 21:00:00"; do
+  IFS='|' read -r label file lo hi <<< "$spec"; echo "$label"
+  awk -v lo="$lo" -v hi="$hi" 'substr($0,1,19) >= lo && substr($0,1,19) < hi' "$file" |
+    grep '\[RTB-Promotion:paper\].*Failed to execute promoted signal:' |
+    sed 's/^.*Failed to execute promoted signal: //' |
+    sed -E 's/(Max Total Portfolio Exposure exceeded).*/\1/' | sort | uniq -c
+done
+```
+
+The code/instrument gap is checked at the pushed ref, not the working tree. Adjacent-field matches are the positive control:
+
+```bash
+git grep -n 'entry_friction_coverage_k' 873584797 --
+git grep -n 'missingPWinWouldRefuse' 873584797 -- server
+git grep -n -E 'friction.*coverage|coverage.*friction' 873584797 -- server migrations
+git show 873584797:server/core/trading/fill-economics.ts
+git show 873584797:server/services/active-execution-engine.ts
+```
+
+Deployment/restart and CI controls were read with `git -C /home/deploy/dawntrader reflog --date=iso`, `tail -n 30 /home/deploy/dawntrader-deploy.record`, `pm2 jlist`, and `gh run view 42376198522 --json jobs` / `gh run view 42431079807 --json jobs`; inspect each named job rather than the aggregate conclusion.
+
 ## Step-8 ask
 
 Coltrane should review at the pushed ref:
