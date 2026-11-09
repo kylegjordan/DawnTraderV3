@@ -7,7 +7,7 @@
 
 # ▶▶ CURRENT POSITION — READ THIS FIRST, BEFORE ANYTHING ELSE
 
-> ⛔ **STOPPED 2026-11-08 ~03:45Z — usage past Kyle's 85% line (PM Claude). START NO WORK, SEND NOTHING TO LANGSTON, until Kyle says resume.** On resume: read Langston's gate-4C ruling (msg `1568814816225660989`, queued), and his single ruling on the drift item (#1117 PENDING). Tree clean, nothing unpushed, no deploy in flight.
+> ⛔ **HANDED TO INFRA CODEX 2026-11-09 (crew switch S3, KD-64); Claude stopped since 11-08 85% line.** Start with `pm/handovers/2026-11-09_claude-to-codex.md` INFRA section. It omits: #1117 drift item PENDING, disposition 2 with Langston's 4 conditions (alert `6a0b292c` = 3rd blind parse failure); B-WAKE-LEAD-NAME needs no Kyle ack (shared memory). Tree clean, no deploy.
 > **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
