@@ -43,7 +43,7 @@ describe('ALERT_ACTORS — the table is the SSOT', () => {
     const values = ALERT_ACTORS.map((a) => a.value);
     expect(new Set(values).size).toBe(values.length);
     for (const a of ALERT_ACTORS) {
-      expect(['roster', 'codex', 'machine', 'human']).toContain(a.tag);
+      expect(['roster', 'codex', 'advisory', 'machine', 'human']).toContain(a.tag);
       expect(a.why.length).toBeGreaterThan(0);
       expect(a.value).toBe(a.value.trim().toLowerCase());     // stored form IS the canonical form
       expect(normaliseAlertActor(a.value)).toBe(a.value);      // round-trips
@@ -56,6 +56,17 @@ describe('ALERT_ACTORS — the table is the SSOT', () => {
     const { ALERT_ACTORS } = await load();
     const roster = ALERT_ACTORS.filter((a) => a.tag === 'roster').map((a) => a.value).sort();
     expect(roster).toEqual(['cc-a', 'cc-b', 'cc-c', 'cc-infra']);
+  });
+
+  it('PM actors are advisory-only; the PM Codex session identity has no alert permission', async () => {
+    const { ALERT_ACTORS, normaliseAlertActor } = await load();
+    const advisory = ALERT_ACTORS.filter((a) => a.tag === 'advisory').map((a) => a.value).sort();
+    expect(advisory).toEqual(['pm-claude', 'pm-codex']);
+    expect(normaliseAlertActor('pm-claude')).toBe('pm-claude');
+    expect(normaliseAlertActor('pm-codex')).toBe('pm-codex');
+    expect(normaliseAlertActor('codex-pm')).toBeNull();
+    expect(normaliseAlertActor('PM Codex')).toBeNull();
+    expect(normaliseAlertActor('pm')).toBeNull();
   });
 });
 

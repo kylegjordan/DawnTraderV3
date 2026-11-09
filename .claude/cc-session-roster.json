@@ -73,7 +73,7 @@
       "why_it_is_not_in_the_roster": "Same reason as Codex above: no session id, cannot look itself up or arm a watcher.",
       "discord_sender": "PM Codex",
       "added": "2026-11-04 (B-PM-CLAUDE)",
-      "status": "planned (active once P4 lands)"
+      "status": "active (KD-62/KD-65, built by OLD Codex 2026-11-09)"
     }
   ]
 }

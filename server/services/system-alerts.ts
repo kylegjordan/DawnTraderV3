@@ -215,7 +215,7 @@ export function isValidResolutionEvidence(s: unknown): s is string {
 // the normalisation table below is EXACT strings after trim + lowercase — never a
 // prefix, never a regex — so `langston (transport: …)` is refused, not mapped
 // (Langston Step-2 condition L3). Historical rows are NOT rewritten (OBJ-5).
-export type AlertActorTag = 'roster' | 'codex' | 'machine' | 'human';
+export type AlertActorTag = 'roster' | 'codex' | 'advisory' | 'machine' | 'human';
 export interface AlertActor {
   readonly value: string;
   readonly tag: AlertActorTag;
@@ -233,6 +233,10 @@ export const ALERT_ACTORS = [
   { value: 'codex-b', tag: 'codex', why: 'NEW Codex — the Codex stand-in for NEW Claude (CC-B) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
   { value: 'codex-c', tag: 'codex', why: 'ANALYST Codex — the Codex stand-in for ANALYST Claude (CC-C) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
   { value: 'codex-infra', tag: 'codex', why: 'INFRA Codex — the Codex stand-in for Infra Claude (CC-INFRA) while Kyle\'s weekly Claude allowance is used up (B-CODEX-FAILOVER #1192)' },
+  // advisory — PM may own an alert action, but never deploys or confirms a governance exception. `codex-pm` is a
+  // session identity only and is deliberately absent from this table; PM Codex acts on alerts only as `pm-codex`.
+  { value: 'pm-claude', tag: 'advisory', why: 'PM Claude — project manager; may act on an alert, never deploys' },
+  { value: 'pm-codex', tag: 'advisory', why: 'PM Codex — ChatGPT stand-in for PM Claude; may act on an alert, never deploys' },
   // machine — timers and scripts that act on the file with a fixed name
   { value: 'governance-checker',           tag: 'machine', why: 'scripts/governance-checker/poller.mjs (30-min timer): add + auto-resolve' },
   { value: 'governance-checker-heartbeat', tag: 'machine', why: 'scripts/governance-checker/heartbeat-check.mjs (15-min timer)' },

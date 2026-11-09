@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { computeBatchStates, decideAlerts, applyCutoff, anchorClosedBatches, decideOrphanSweep, decideStaleOpenAlertDrops, makeVerifyLedgerRow, parseExceptions, parseExceptionsLegacy, decideMalformedAlerts, DRIFT_LOADED_FILES, driftAlertAction, checkerCodeDrift, driftAlertBody, writeStateAtomic, resolveGradedRef, checkerResolveEvidence, decidePlanLineAlerts, decidePlanReadAlerts, decidePlanLineTick, runPlanLineRule, makeVerifyPlanLine, planMalformedSignature, PLANLINE_UNREADABLE_KEY, PLANLINE_LISTING_EMPTY_KEY, PLANLINE_MALFORMED_KEY, maybeRunWeekly, buildAddCommand, weekGateMs, weeklySeverity } from './poller.mjs';
 import { decideHeartbeat, CENSUS_SILENT_KEY } from './heartbeat-check.mjs';
 import { CENSUS_FAILED_KEY, MISTAKEPASS_FAILED_KEY } from './census.mjs';
-import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
+import { batchIdToFileRegex, extractBatchId, extractLeadingBatchId, parentBatchId, resolveEvidenceOrSentinel, LEDGER_ROWS, DOCS, VALID_CLASSES, UMBRELLA_NOT_IMPLEMENTED, EXCEPTIONS_MALFORMED_PREFIX, EXCEPTIONS_MALFORMED_TYPE_CAP, EXCEPTION_CONFIRMERS, isoWeek, resolveGovRefEnv, DEFAULT_GOV_REF, GOV_REF, PLAN_LINE } from './config.mjs';
 import { ledgerRowInText, checkLedgerRows, __setGitExecForTest, docPresent, resolveGovRefSha, lsTreeNamesAt, showFileAt, planRowsByBatch, statusIsDefault, cellNamesFile, checkPlanState, findGlobDoc, govRefRemoteRefusal } from './checker.mjs';
 
 const HOUR = 3600 * 1000;
@@ -22,6 +22,12 @@ const noStaleOpen = { open: new Set(), openSince: new Map(), naConfirmed: new Se
 // and its default reads git. Every pre-existing test that sets hasCompletionReport injects this stub so
 // the suite stays pure (no git, no network) — the row logic has its own tests at the foot of the file.
 const noRows = () => ({});
+
+// KD-62/KD-65 identity fence: PM identities act on alerts only. Neither the session identity nor the alert actor may
+// confirm a governance exception; this is a direct assertion on the set confirmerVerdict reads.
+ok('PM Codex session identity cannot confirm a governance exception', !EXCEPTION_CONFIRMERS.includes('codex-pm'));
+ok('PM Codex alert actor cannot confirm a governance exception', !EXCEPTION_CONFIRMERS.includes('pm-codex'));
+ok('PM Claude alert actor cannot confirm a governance exception', !EXCEPTION_CONFIRMERS.includes('pm-claude'));
 
 // ── batchIdToFileRegex exact-not-prefix (Langston Step-4 C8: numeric + bare-letter guards) ──
 {

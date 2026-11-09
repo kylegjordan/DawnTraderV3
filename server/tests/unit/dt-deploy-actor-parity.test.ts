@@ -10,8 +10,8 @@
  *
  * WHAT IT ASSERTS
  *  1. SET EQUALITY between the bash table and the derived deploy set.
- *  2. The derivation itself: deploy set = ALERT_ACTORS where tag !== 'machine'.
- *     Hand-listing the six would be right today and silently wrong the first
+ *  2. The derivation itself: deploy set = ALERT_ACTORS excluding machine and advisory.
+ *     Hand-listing today's set would be right today and silently wrong the first
  *     time a machine actor is added.
  *  3. Every alias maps to the SAME canonical value on both sides.
  *  4. The record-line PROPERTY (OBJ-4) — as a property of the TABLE, not a
@@ -76,7 +76,7 @@ function parseDeployActors(src: string): Map<string, string> {
 }
 
 // ── the expected set, DERIVED from the tag rather than listed ────────────────
-const deployCanonical = ALERT_ACTORS.filter((a) => a.tag !== 'machine').map((a) => a.value);
+const deployCanonical = ALERT_ACTORS.filter((a) => !['machine', 'advisory'].includes(a.tag)).map((a) => a.value);
 const deployCanonicalSet = new Set(deployCanonical);
 const deployAliases = Object.entries(ALERT_ACTOR_NORMALISATION).filter(([, target]) =>
   deployCanonicalSet.has(target),
@@ -88,7 +88,7 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     expect(table.size).toBeGreaterThan(0);
   });
 
-  it('the deploy set is the NON-MACHINE actors — derived, not hand-listed', () => {
+  it('the deploy set excludes MACHINE and ADVISORY actors — derived, not hand-listed', () => {
     // If this ever fails, do not "fix" it by editing the expected list: it means
     // ALERT_ACTORS changed, and the question is whether the new actor DEPLOYS.
     expect(deployCanonical.sort()).toEqual(
@@ -96,9 +96,24 @@ describe('dt-deploy --by parity with ALERT_ACTORS (B-DEPLOY-ACTOR-ALLOWLIST)', (
     );
     const machine = ALERT_ACTORS.filter((a) => a.tag === 'machine').map((a) => a.value);
     for (const m of machine) expect(deployCanonicalSet.has(m)).toBe(false);
+    const advisory = ALERT_ACTORS.filter((a) => a.tag === 'advisory').map((a) => a.value);
+    expect(advisory.sort()).toEqual(['pm-claude', 'pm-codex']);
+    for (const a of advisory) expect(deployCanonicalSet.has(a)).toBe(false);
   });
 
-  it('bash keys == the six canonical values PLUS every alias targeting them', () => {
+  it('PM Codex identity and PM alert actor are refused by both deploy surfaces', () => {
+    const src = readScript();
+    const table = parseDeployActors(src);
+    for (const refused of ['codex-pm', 'pm-codex', 'pm-claude']) {
+      expect(table.has(refused), `${refused} appears in the deploy actor table`).toBe(false);
+      const usage = /^USAGE="([^"]+)"/m.exec(src)?.[1] ?? '';
+      const list = /^DEPLOY_ACTOR_LIST="([^"]+)"/m.exec(src)?.[1] ?? '';
+      expect(usage).not.toContain(refused);
+      expect(list).not.toContain(refused);
+    }
+  });
+
+  it('bash keys == the deploy canonical values PLUS every alias targeting them', () => {
     const table = parseDeployActors(readScript());
     const expected = new Set<string>([...deployCanonical, ...deployAliases.map(([k]) => k)]);
     expect([...table.keys()].sort()).toEqual([...expected].sort());

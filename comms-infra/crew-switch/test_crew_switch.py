@@ -12,6 +12,7 @@ cs = importlib.util.module_from_spec(spec); spec.loader.exec_module(cs)
 
 d = tempfile.mkdtemp(); os.chmod(d, 0o700)
 cs.LANGSTON_UNIT = 'crew-switch-test-fake.service'
+cs.COLTRANE_UNIT = 'crew-switch-test-coltrane.service'
 posts = os.path.join(d, 'posts.jsonl')
 fake = os.path.join(d, 'cc-send')
 open(fake, 'w').write('#!/usr/bin/env python3\nimport json,sys\nopen(%r,"a").write(json.dumps(sys.argv[1:])+"\\n")\n' % posts)
@@ -26,7 +27,12 @@ GOOD_SC = ('#!/bin/sh\nA=%s\nE=%s\ncase "$1" in start) echo active > $A;; stop) 
            'enable) echo enabled > $E;; disable) echo disabled > $E;; is-active) cat $A;; is-enabled) cat $E;; esac\nexit 0\n') % (act, ena)
 def set_sc(body): open(fsc, 'w').write(body); os.chmod(fsc, 0o700)
 set_sc(GOOD_SC); cs.SYSTEMCTL = fsc
-if not (cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test')):   # not `assert`: -O strips it
+pgmark = os.path.join(d, 'coltrane-active')
+fpg = os.path.join(d, 'pgrep')
+open(fpg, 'w').write('#!/bin/sh\nif [ -f %s ]; then echo 123; exit 0; fi\nexit 1\n' % repr(pgmark))
+os.chmod(fpg, 0o700); cs.PGREP = fpg
+if not (cs.SYSTEMCTL.startswith(d) and cs.LANGSTON_UNIT.startswith('crew-switch-test')
+        and cs.COLTRANE_UNIT.startswith('crew-switch-test') and cs.PGREP.startswith(d)):   # not `assert`: -O strips it
     raise SystemExit('REFUSING TO RUN: a real service could be touched')
 
 P = F = 0
@@ -42,11 +48,22 @@ def raises(fn, needle):
 def lang(): return open(act).read().strip() + '/' + open(ena).read().strip()
 def text(p): return p[3]
 
+# T0 a live pre-PM state gains only the missing PM pair, according to the current mode
+os.makedirs(os.path.dirname(cs.STATE), exist_ok=True)
+old_duty = {n: (cs.KIND[n] == 'codex') for n in cs.KIND if not n.startswith('PM ')}
+open(cs.STATE, 'w').write(json.dumps({'mode': 'codex', 'mode_generation': 2, 'seq': 3, 'history': [],
+                                      'orders': {}, 'duty': old_duty}))
+migrated = cs.load()
+ok('T0 pre-PM live state gains PM Codex on duty', migrated['duty']['PM Codex'] and not migrated['duty']['PM Claude'])
+ok('T0 migration preserves existing duty choices', all(migrated['duty'][n] == v for n, v in old_duty.items()))
+os.unlink(cs.STATE)
+
 # T1 classify: commands, near-misses (short only), conversation ignored
 C = cs.classify
 ok('T1 switch', C('SWITCH TO CODEX') == ('start', 'codex') and C('switch the crew over to Claude.') == ('start', 'claude'))
 ok('T1 langston on/off', C('Langston ON') == ('langston', True) and C('langston off!') == ('langston', False))
 ok('T1 session either order', C('OLD CLAUDE ON') == ('session', ('old claude', True)) and C('codex new off') == ('session', ('codex new', False)))
+ok('T1 PM session either order', C('PM CLAUDE ON') == ('session', ('pm claude', True)) and C('codex pm off') == ('session', ('codex pm', False)))
 ok('T1 coltrane', C('Coltrane off')[0] == 'coltrane')
 ok('T1 near (short)', C('Langston, switch to codex please')[0] == 'near' and C('turn langston on now')[0] == 'near')
 ok('T1 long conversation ignored', C('Langston on this issue I think we should look again at how the switch to codex handles alerts') is None)
@@ -57,7 +74,7 @@ n = len(read_posts()); cs.start('codex'); st = cs.load(); p = since(n)
 ok('T2 mode + duty', st['mode'] == 'codex' and st['duty']['OLD Codex'] and not st['duty']['OLD Claude'])
 ok('T2 mode generation advances on a real crew transition', st['mode_generation'] == 1)
 ok('T2 Langston inactive/disabled', lang() == 'inactive/disabled')
-ok('T2 first post is the handover order naming all four Claude sessions', 'OUTGOING' in text(p[0]) and all(x in text(p[0]) for x in cs.CREWS['claude']))
+ok('T2 first post is the handover order naming all five Claude sessions', 'OUTGOING' in text(p[0]) and all(x in text(p[0]) for x in cs.CREWS['claude']))
 ok('T2 on-duty notice names the Codex crew + Coltrane', all(x in text(p[1]) for x in cs.CREWS['codex'] + ['Coltrane']))
 ok('T2 Langston OFF reported', any('Langston is OFF' in text(x) and 'inactive/disabled' in text(x) for x in p))
 s1 = [o for o in st['orders'].values()][0]['id']
@@ -84,7 +101,7 @@ ok('T4 started-but-disabled is NOT good', not good and state == 'active/disabled
 set_sc(GOOD_SC)
 
 # T5 acks complete the crew order; Kyle notified; then crew back to claude turns Langston ON
-for x in ['new claude', 'ANALYST CLAUDE', 'claude infra']: cs.ack(s1, x)
+for x in ['new claude', 'ANALYST CLAUDE', 'claude infra', 'PM Claude']: cs.ack(s1, x)
 st = cs.load(); p = read_posts()
 ok('T5 complete + Kyle notified', s1 not in st['orders'] and 'COMPLETE' in text(p[-1]) and '--notify' in p[-1])
 # Step-8 blocker (Coltrane): the last outgoing ack closes the order before an incoming session opened later can
@@ -105,6 +122,16 @@ n = len(read_posts()); cs.langston(False); p = since(n)
 ok('T6 LANGSTON OFF', lang() == 'inactive/disabled' and 'Langston is OFF' in text(p[0]) and cs.load()['mode'] == 'claude')
 cs.langston(True); ok('T6 LANGSTON ON', lang() == 'active/enabled')
 ok('T6 reviewer-neutral Langston commands do not advance mode generation', cs.load()['mode_generation'] == 2)
+
+# T6b COLTRANE OFF/ON: idle stop works; an active review refuses without touching the service
+n = len(read_posts()); cs.coltrane(False); p = since(n)
+ok('T6b COLTRANE OFF while idle', lang() == 'inactive/disabled' and 'Coltrane is OFF' in text(p[0]))
+cs.coltrane(True); ok('T6b COLTRANE ON', lang() == 'active/enabled')
+open(pgmark, 'w').write('active')
+n = len(read_posts()); cs.coltrane(False); p = since(n)
+ok('T6b active Coltrane review refuses stop', lang() == 'active/enabled' and 'refusing to stop' in text(p[0])
+   and 'Nothing was killed' in text(p[0]) and '--notify' in p[0])
+os.unlink(pgmark)
 
 # T7 single session ON hands its counterpart OFF (one worker per folder); counterpart OFF-duty -> no handover
 st = cs.load(); [cs._close(st, o, 'test') for o in list(st['orders'])]; cs.save(st)

@@ -1,7 +1,7 @@
 #!/bin/sh
-# Post to the crew Discord channel AS `Codex`, from the headless agent on Helsinki.
+# Post to the crew Discord channel under the identity fixed to the calling workspace.
 #
-# ⛔ THE SENDER IS FIXED HERE AND IS NOT AN ARGUMENT. Every wake-routing and attribution
+# ⛔ THE SENDER IS FIXED HERE FROM THE WORKSPACE FOLDER AND IS NOT AN ARGUMENT. Every wake-routing and attribution
 #    rule in this project keys off the sender name, so a settable one would let this agent
 #    post as OLD Claude or as Langston — corrupting the record and misrouting real work.
 #
@@ -19,6 +19,11 @@
 #                                         live alert body on this project already)
 set -e
 
+case "$(basename "$PWD")" in
+  DawnTraderV3-pm) SENDER='PM Codex' ;;
+  *) SENDER='Codex' ;;
+esac
+
 BODY="$(cat)"
 if [ -z "$(printf '%s' "$BODY" | tr -d '[:space:]')" ]; then
   echo "codex-send: refusing to post an empty message" >&2
@@ -30,4 +35,4 @@ printf '%s' "$BODY" > "$TMP"
 # shellcheck disable=SC2064
 trap "rm -f '$TMP'" EXIT
 
-cc-send --sender "Codex" --message "$(cat "$TMP")"
+cc-send --sender "$SENDER" --message "$(cat "$TMP")"

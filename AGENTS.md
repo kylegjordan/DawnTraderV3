@@ -11,6 +11,7 @@
 | `C:\DawnTraderV3-new` | **NEW Codex** (also "Codex New"; actor `codex-b`) | NEW Claude (CC-B) — batch implementation |
 | `C:\DawnTraderV3-analyst` | **ANALYST Codex** (also "Codex Analyst"; actor `codex-c`) | ANALYST Claude (CC-C) — pricing, VTS, analysis |
 | `C:\DawnTraderV3-infra` | **INFRA Codex** (also "Codex Infra"; actor `codex-infra`) | Infra Claude (CC-INFRA) — servers, comms, Langston's box |
+| `C:\DawnTraderV3-pm` | **PM Codex** (actor/session identity `codex-pm`) | PM Claude (CC-PM) — coordination, Discord triage, Kyle's decisions; no trading code |
 
 **Coltrane** (the Codex reviewer: he runs on the Helsinki box with his own Discord bot and his own read-only mirror of the repo) replaces **Langston** as the reviewer for the shift. **He wakes when a Discord post STARTS with "Coltrane"**, exactly as Langston does. During a Codex shift Langston is switched OFF.
 ⛔ Work **directly in your folder above, never in a separate worktree** — worktrees are banned here (they let one session's changes silently undo another's at merge).
@@ -19,9 +20,20 @@
 0. **Orders come first** (`crew-switch` is installed on the Helsinki box since 2026-10-13). Run `ssh root@204.168.141.77 'crew-switch status'`. It lists who is ON DUTY and every open ORDER. If an open order names you as OUTGOING, hand over (step boundary, push, POSITION block) and confirm; if it names you as INCOMING, finish steps 1-3 below, then confirm: `ssh root@204.168.141.77 'crew-switch ack <id> "<your name>"'`. **If you are not on the on-duty list, you are off duty: say so to Kyle and do nothing else.**
 1. `git fetch origin` then `git pull --rebase origin migration/aws-supabase` (a rejected push means pull first — that is normal).
 2. Read **`CONDUCT.md`** (how you behave and report to Kyle) and **`CLAUDE.md`** (the binding rules). Wherever they say "Claude", "CC" or "the session", read **you**. Wherever they say **Langston**, read **Coltrane** for this shift.
-3. Read **`.claude/memory/MEMORY.md`** and **your own** file: `MEMORY_CC_A.md` (OLD) · `MEMORY_CC_B.md` (NEW) · `MEMORY_CC_C.md` (ANALYST) · `MEMORY_CC_INFRA.md` (INFRA) in `.claude/memory/`. Its **POSITION** block says which batch and which step you are on. **Resume from there.**
+3. Read **`.claude/memory/MEMORY.md`** and **your own** file: `MEMORY_CC_A.md` (OLD) · `MEMORY_CC_B.md` (NEW) · `MEMORY_CC_C.md` (ANALYST) · `MEMORY_CC_INFRA.md` (INFRA) · `MEMORY_PM.md` (PM) in `.claude/memory/`. Its **POSITION** block says which batch and which step you are on. **Resume from there.**
 4. Before working any step of the 11-step workflow, read that step's file: `.claude/skills/workflow-NN-*/SKILL.md` (the table is at the top of `CLAUDE.md`).
 ⚠️ `CLAUDE.md` is large (~118 KB). After a compaction, re-read `CONDUCT.md` and your memory file in full, and only the `CLAUDE.md` sections you need.
+
+### 2a. PM Codex read order and limits
+PM Codex reads these after the startup checks above, in order:
+1. `1-system-manual/PM_CLAUDE_RULES.md` — the PM role. Read "PM Claude" as PM Codex while on duty.
+2. `.claude/memory/MEMORY_PM.md` — **CURRENT POSITION first**, including the stop record, pending Kyle decisions and active plan.
+3. `1-system-manual/pm/DECISIONS.md`, `1-system-manual/pm/DECISION_PROTOCOL.md`, then `1-system-manual/pm/OPEN_BATCH_REGISTER.md`.
+4. `1-system-manual/SPRINT_TO_LIVE_PLAN.md`, then `Claude Comms and Packages/Scope Files/PRE_LIVE_SPRINT.md`.
+
+PM Codex is Kyle's project manager and coordinator. It triages every Discord post addressed to Kyle, records his decisions, keeps the crew moving, and does **not** build trading code. Before asking Kyle about an older matter, search the conversation archive at `C:\Users\kyleg\.claude\transcript-archive\CC-PM\` and its `INDEX.md`, then the notebook's file history with `git log -p -- .claude/memory/MEMORY_PM.md`.
+
+The session identity `codex-pm` is not a permission-bearing actor. When the alert-name change is live, PM Codex uses `pm-codex` for alerts; it never deploys. For a return to Claude, read `.claude/skills/pm-transition-to-claude/SKILL.md` first. For a ChatGPT allowance stop, read `.claude/skills/pm-codex-usage-stop/SKILL.md` first. Never switch or stop the crew on PM Codex's own judgement — only on Kyle's words in the PM chat.
 
 ## 3. What is different for you — Claude has machinery you do not
 - **No hooks run for you.** The Claude crew has automatic guards; you do not. So by hand, every time:
@@ -33,7 +45,7 @@
   - every number you report names **what was measured and over what population**, and a zero or an absence needs a **positive control** first (show the check can find something); an error message in a command's output (`No such file or directory`, `Permission denied`, `404`, `unknown revision or path`) is a **failed read, never a result**.
 - **Alerts reach nobody automatically.** Each time Kyle opens you, read the queue: `ssh deploy@188.245.193.8 'python3 -' < scripts/due-alerts.py`. **The alerts routed to your Claude counterpart are yours** (owner CC-A -> OLD Codex, CC-B -> NEW Codex, CC-C -> ANALYST Codex, CC-INFRA -> INFRA Codex); handle them as `CLAUDE.md` section 10.5 and `1-system-manual/ALERT_HANDLING_PROTOCOL.md` say, acting **under your own actor name** (`--by codex-a` etc.), never the Claude one. Do **not** `ack` an alert that is waiting on an event: route it (an ack silences every future occurrence); `resolve` only when fixed, with evidence. Coltrane sorts unrouted alerts during the shift.
 - **Nobody can wake you.** Kyle opens you when he needs you, and may not open all of you. So post **complete** messages — claim, evidence, what you need — never "thoughts?".
-- **Discord** (`#general`): `ssh root@204.168.141.77 'cc-send --sender "<YOUR NAME>" --message "..."'` with your name from §1 (e.g. `OLD Codex`). A message for the reviewer **starts with "Coltrane"**. Kyle may write any name in either order ("Codex Old" = "OLD Codex").
+- **Discord** (`#general`): the four building sessions use `ssh root@204.168.141.77 'cc-send --sender "<YOUR NAME>" --message "..."'` with the name from §1 (e.g. `OLD Codex`). **PM Codex writes body-only `.md` files under `C:\DawnTraderV3-pm\out\discord`; `comms-infra/codex-discord-outbox.py` maps that folder to the fixed sender `PM Codex`. The body never chooses the sender.** A message for the reviewer **starts with "Coltrane"**. Kyle may write any name in either order ("Codex Old" = "OLD Codex").
 - **Reviews:** Coltrane reads at a pushed ref, exactly as Langston does — **commit and push to a throwaway `migration/<name>` branch first**, put the change list in `Claude Comms and Packages/Change Lists/`, then post on Discord starting with "Coltrane" — he wakes on his name and replies in the channel.
 - **Memory:** update your POSITION block in `.claude/memory/MEMORY_CC_<X>.md` at every step boundary and commit it (explicit path). Write `STEP: N of 11 · NEXT STEP: N+1 of 11`.
 

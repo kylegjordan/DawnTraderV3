@@ -5,10 +5,11 @@ session got the order.  B-CODEX-FAILOVER (#1192, Kyle 2026-10-13).
 Kyle types ONE line on Discord (either word order for names; case-insensitive; punctuation ignored):
   SWITCH TO CODEX / SWITCH TO CLAUDE     the whole crew. Langston is switched OFF / ON with it.
   LANGSTON ON / LANGSTON OFF             Langston alone (he costs Claude credit while on).
+  COLTRANE ON / COLTRANE OFF             Coltrane alone. OFF refuses while a review is active; it never kills one.
   OLD CLAUDE ON, CODEX NEW OFF, ...      one session. Turning a session ON hands its counterpart OFF: OLD Claude and
                                          OLD Codex share one folder, and two workers in one folder overwrite each other.
-  Coltrane is never switched off: on a Codex shift he is the reviewer; on a Claude shift he is a second reviewer who
-  works only when called by name.
+  A crew switch does not change Coltrane: on a Codex shift he is the reviewer; on a Claude shift he is a second reviewer
+  who works only when called by name. PM Codex uses COLTRANE OFF for an allowance stop.
 
 A deterministic script — not a reviewer's judgement — then posts the order to each session BY NAME, keeps a checklist
 (`crew-switch ack <id> "<name>"`), and `nag` (5-min timer) re-sends to every OUTGOING session that has not confirmed
@@ -17,7 +18,7 @@ HONEST LIMIT: nothing can wake a closed Claude window, and nothing can wake a Co
 guarantee is CONFIRMATION + ESCALATION, never assumed delivery. Incoming sessions are tracked, never nagged.
 
 State: /var/lib/crew-switch/state.json (the one record).  Subcommands: start <claude|codex> · session <name> <on|off>
-· langston <on|off> · ack <id> <name> · status · nag · watch
+· langston <on|off> · coltrane <on|off> · ack <id> <name> · status · nag · watch
 """
 import fcntl, json, os, re, subprocess, sys, time
 from datetime import datetime, timezone
@@ -35,10 +36,13 @@ EXPIRE_S = 24 * 60 * 60        # B2 (Langston): an unconfirmed order stops naggi
 # Langston on five legs), so the switch stops AND disables it and reads BOTH back.
 SYSTEMCTL = '/usr/bin/systemctl'
 LANGSTON_UNIT = 'discord-langston-bridge.service'
+COLTRANE_UNIT = 'coltrane-bot.service'
+PGREP = '/usr/bin/pgrep'
+COLTRANE_USER = 'coltrane'
 
 CREWS = {
-    'claude': ['OLD Claude', 'NEW Claude', 'ANALYST Claude', 'Infra Claude'],
-    'codex':  ['OLD Codex', 'NEW Codex', 'ANALYST Codex', 'INFRA Codex'],
+    'claude': ['OLD Claude', 'NEW Claude', 'ANALYST Claude', 'Infra Claude', 'PM Claude'],
+    'codex':  ['OLD Codex', 'NEW Codex', 'ANALYST Codex', 'INFRA Codex', 'PM Codex'],
 }
 REVIEWER = {'claude': 'Langston', 'codex': 'Coltrane'}
 COUNTERPART = {a: b for ca, cb in [('claude', 'codex'), ('codex', 'claude')] for a, b in zip(CREWS[ca], CREWS[cb])}
@@ -77,7 +81,11 @@ def load():
     if type(st['mode_generation']) is not int or st['mode_generation'] < 0:
         raise SystemExit('crew-switch: invalid mode_generation in state')
     st.setdefault('orders', {}); st.setdefault('history', [])
-    st.setdefault('duty', {n: (KIND[n] == st['mode']) for n in KIND})
+    duty = st.setdefault('duty', {n: (KIND[n] == st['mode']) for n in KIND})
+    # Forward migration for a live state written before a new counterpart pair joined CREWS. Existing explicit duty
+    # choices stay untouched; only missing names inherit the current crew mode.
+    for n in KIND:
+        duty.setdefault(n, KIND[n] == st['mode'])
     return st
 
 def save(st):
@@ -134,6 +142,40 @@ def langston_msg(oid, on, good, state, errs):
         return (f"{oid}: Langston is {want} (his Discord bridge reads `{state}`).", False)
     return (f"Kyle — {oid}: Langston should be {want} but his bridge reads `{state}`"
             f"{' (' + '; '.join(errs) + ')' if errs else ''}. Check `{LANGSTON_UNIT}` on the Helsinki box.", True)
+
+def coltrane_state(on, errs=()):
+    a = subprocess.run([SYSTEMCTL, 'is-active', COLTRANE_UNIT], capture_output=True, text=True, timeout=30).stdout.strip() or 'unknown'
+    e = subprocess.run([SYSTEMCTL, 'is-enabled', COLTRANE_UNIT], capture_output=True, text=True, timeout=30).stdout.strip() or 'unknown'
+    good = (a == 'active' and e == 'enabled') if on else (a in ('inactive', 'failed') and e == 'disabled')
+    return good and not errs, f'{a}/{e}', list(errs)
+
+def set_coltrane(on):
+    """Enable+start Coltrane, or stop+disable him only while no `codex exec` review is active.
+
+    The idle fence is deliberate: the installed bot may lag the reviewed clean-stop code, and even the new code should
+    finish a requested review rather than turn an allowance stop into a killed review. A refusal changes nothing.
+    """
+    errs = []
+    if not on:
+        p = subprocess.run([PGREP, '-u', COLTRANE_USER, '-f', 'codex exec'], capture_output=True, text=True, timeout=30)
+        if p.returncode not in (0, 1):
+            return coltrane_state(False, [f'active-review check rc={p.returncode} {p.stderr.strip()[:120]}'])
+        if p.stdout.strip():
+            return coltrane_state(False, ['an active Coltrane review is in progress; refusing to stop it'])
+    for v in (['enable', 'start'] if on else ['stop', 'disable']):
+        try:
+            r = subprocess.run([SYSTEMCTL, v, COLTRANE_UNIT], capture_output=True, text=True, timeout=30)
+            if r.returncode != 0: errs.append(f'{v} rc={r.returncode} {r.stderr.strip()[:120]}')
+        except subprocess.TimeoutExpired:
+            errs.append(f'{v} timed out after 30 s')
+    return coltrane_state(on, errs)
+
+def coltrane_msg(oid, on, good, state, errs):
+    want = 'ON' if on else 'OFF'
+    if good:
+        return (f"{oid}: Coltrane is {want} (his Discord bot reads `{state}`).", False)
+    return (f"Kyle — {oid}: Coltrane should be {want} but his bot reads `{state}`"
+            f"{' (' + '; '.join(errs) + ')' if errs else ''}. Nothing was killed. Check `{COLTRANE_UNIT}` on the Helsinki box.", True)
 
 def ack_cmd(oid):
     return f"ssh root@204.168.141.77 'crew-switch ack {oid} \"<your name>\"'"
@@ -260,6 +302,12 @@ def langston(on):
         st = load(); st['langston'] = {'on': on, 'at': iso(), 'by': 'kyle', 'state': state}; save(st)
     post_all([langston_msg('Kyle asked', on, good, state, errs)])
 
+def coltrane(on):
+    good, state, errs = set_coltrane(on)
+    with Lock():
+        st = load(); st['coltrane'] = {'on': on if good else None, 'at': iso(), 'by': 'kyle', 'state': state}; save(st)
+    post_all([coltrane_msg('Kyle asked', on, good, state, errs)])
+
 def ack(oid, name):
     n = ALIASES.get(re.sub(r'[\s-]+', ' ', name.strip().lower()))
     if not n: raise SystemExit(f'crew-switch: unknown name {name!r}. Known: ' + ', '.join(sorted(set(ALIASES.values()))))
@@ -300,6 +348,8 @@ def status():
     print('on duty: ' + ', '.join(n for n, v in st['duty'].items() if v))
     a, e = langston_state(True)[1].split('/')
     print(f'Langston bridge: {a}/{e}')
+    a, e = coltrane_state(True)[1].split('/')
+    print(f'Coltrane bot: {a}/{e}')
     if not st['orders']: print('no open orders')
     for o in st['orders'].values():
         print(f"open order {o['id']} ({o['note']}) started {o['started']}")
@@ -356,9 +406,7 @@ def safe(what, arg):
         if what == 'start': start(arg)
         elif what == 'langston': langston(arg)
         elif what == 'session': session(*arg)
-        elif what == 'coltrane':
-            post('Kyle — Coltrane is always on and is not switched by these commands: on a Codex shift he is the reviewer; '
-                 'on a Claude shift he is a second reviewer who works only when called by name. Nothing changed.')
+        elif what == 'coltrane': coltrane(arg)
         else:
             post(f'Kyle — I saw a message that looks like a crew command but did NOT act on it: "{arg}". Post the command '
                  f'on its own line, e.g. SWITCH TO CODEX, LANGSTON ON, OLD CLAUDE OFF.')
@@ -418,6 +466,7 @@ if __name__ == '__main__':
     if c == 'start' and len(a) >= 2: start(a[1])
     elif c == 'session' and len(a) == 3: session(a[1], a[2].lower() == 'on')
     elif c == 'langston' and len(a) == 2: langston(a[1].lower() == 'on')
+    elif c == 'coltrane' and len(a) == 2: coltrane(a[1].lower() == 'on')
     elif c == 'ack' and len(a) == 3: ack(a[1], a[2])
     elif c == 'status': status()
     elif c == 'nag': nag()

@@ -8,8 +8,10 @@ mirror already uses in reverse: it writes a file, something outside picks it up.
 That is a constraint, not a preference — and it is why this is symmetric with
 `codex-channel-mirror.py` rather than clever.
 
-⛔⛔ THE SENDER NAME IS SET HERE AND CANNOT BE SET BY THE FILE. Codex writes the
-    BODY; this watcher supplies the identity. If the message file could name its
+⛔⛔ THE SENDER NAME IS SET HERE FROM THE OUTBOX'S FIXED FOLDER MAP AND CANNOT BE
+    SET BY THE FILE. Codex writes the BODY; this watcher supplies the identity.
+    C:\\DawnTrader-Codex posts as Codex and C:\\DawnTraderV3-pm posts as PM Codex.
+    If the message file could name its
     own sender, an advisor outside the crew could post as OLD Claude or as
     Langston, and every wake-routing and attribution rule in the project keys off
     that name. ★ Making impersonation IMPOSSIBLE rather than forbidden is the
@@ -46,11 +48,13 @@ import time
 from datetime import datetime, timezone
 
 HOST = "root@204.168.141.77"
-SENDER = "Codex"                    # ⛔ fixed here; the file cannot change it
-SANDBOX = r"C:\DawnTrader-Codex"
-OUTBOX = os.path.join(SANDBOX, "out", "discord")
-SENT = os.path.join(OUTBOX, "sent")
-FAILED = os.path.join(OUTBOX, "failed")
+# ⛔ Identity is selected only by the containing folder. The body file has no sender
+# field and cannot choose another row. This gives PM Codex its own identity without
+# making `--sender` message-controlled.
+IDENTITIES = {
+    r"C:\DawnTrader-Codex": "Codex",
+    r"C:\DawnTraderV3-pm": "PM Codex",
+}
 STATE_DIR = os.path.join(os.path.expanduser("~"), ".claude")
 RUNLOG = os.path.join(STATE_DIR, "codex-outbox.jsonl")
 
@@ -84,30 +88,33 @@ def candidates():
     """Ready message files, oldest first. A file is ready when its mtime has been
     stable for STABLE_SECONDS — Codex may still be writing it, and a half-sent
     message cannot be unsent."""
-    try:
-        names = os.listdir(OUTBOX)
-    except FileNotFoundError:
-        return []
     now = time.time()
     out = []
-    for n in sorted(names):
-        if not n.lower().endswith(".md"):
-            continue
-        p = os.path.join(OUTBOX, n)
-        if not os.path.isfile(p):
-            continue
+    for sandbox, sender in sorted(IDENTITIES.items()):
+        outbox = os.path.join(sandbox, "out", "discord")
         try:
-            st = os.stat(p)
-        except OSError:
+            names = os.listdir(outbox)
+        except FileNotFoundError:
             continue
-        if now - st.st_mtime < STABLE_SECONDS:
-            continue
-        out.append((st.st_mtime, p))
+        for n in sorted(names):
+            if not n.lower().endswith(".md"):
+                continue
+            p = os.path.join(outbox, n)
+            if not os.path.isfile(p):
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if now - st.st_mtime < STABLE_SECONDS:
+                continue
+            out.append((st.st_mtime, p, sender,
+                        os.path.join(outbox, "sent"), os.path.join(outbox, "failed")))
     out.sort()
-    return [p for _m, p in out]
+    return [(p, sender, sent, failed) for _m, p, sender, sent, failed in out]
 
 
-def send(path, dry):
+def send(path, sender, dry):
     body = io.open(path, encoding="utf-8", errors="replace").read().strip()
     if not body:
         return False, "empty file — nothing to post"
@@ -115,7 +122,7 @@ def send(path, dry):
     if nbytes > MAX_BYTES:
         return False, "%d B exceeds the %d B ceiling for one message" % (nbytes, MAX_BYTES)
     if dry:
-        return True, "DRY RUN — would post %d B as %s" % (nbytes, SENDER)
+        return True, "DRY RUN — would post %d B as %s" % (nbytes, sender)
 
     # ⛔ THE BODY GOES OVER AS A FILE, NEVER AS AN ARGUMENT. It is arbitrary prose
     #    written by another agent: apostrophes, backticks, `#`, newlines. This project
@@ -131,7 +138,7 @@ def send(path, dry):
 
     # `--sender` is supplied HERE. Nothing in the file can influence it.
     cmd = ("cc-send --sender %s --message \"$(cat %s)\"; rc=$?; rm -f %s; exit $rc"
-           % (json.dumps(SENDER), remote, remote))
+           % (json.dumps(sender), remote, remote))
     p = subprocess.run(["ssh", "-o", "ConnectTimeout=20", HOST, cmd],
                        capture_output=True, text=True, encoding="utf-8",
                        errors="replace", timeout=300, creationflags=NO_WINDOW)
@@ -146,20 +153,22 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="report what would be sent; post nothing")
     args = ap.parse_args()
 
-    for d in (OUTBOX, SENT, FAILED):
-        os.makedirs(d, exist_ok=True)
+    for sandbox in IDENTITIES:
+        outbox = os.path.join(sandbox, "out", "discord")
+        for d in (outbox, os.path.join(outbox, "sent"), os.path.join(outbox, "failed")):
+            os.makedirs(d, exist_ok=True)
 
     ready = candidates()
     if not ready:
         return 0
 
     sent_n = 0
-    for path in ready[:MAX_PER_RUN]:
-        ok, detail = send(path, args.dry_run)
+    for path, sender, sent, failed in ready[:MAX_PER_RUN]:
+        ok, detail = send(path, sender, args.dry_run)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         base = os.path.basename(path)
         row = {"ts": utc(), "file": base, "sent": ok, "detail": detail,
-               "sender": SENDER, "dry_run": args.dry_run,
+               "sender": sender, "dry_run": args.dry_run,
                "measures": ("one row per outbound message file; records that it was POSTED, "
                             "not that anyone read it — and Codex cannot be woken, so nothing "
                             "here says whether a reply arrived")}
@@ -167,7 +176,7 @@ def main():
         print(("SENT  " if ok else "FAILED") + "  " + base + "  " + str(detail)[:120])
         if args.dry_run:
             continue
-        dest = os.path.join(SENT if ok else FAILED, stamp + "__" + base)
+        dest = os.path.join(sent if ok else failed, stamp + "__" + base)
         try:
             os.replace(path, dest)
         except OSError as e:
