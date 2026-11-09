@@ -10,7 +10,7 @@ This is the Codex-side equivalent of PM Claude's stop duty, not a copy of its me
 ## Fixed facts and honest limits
 
 - Read the percentage in **ChatGPT → Settings → Usage**. Record the percentage, local and UTC time, the reset time shown, and which allowance the screen names.
-- The stop line is the `CODEX USAGE STOP LINE` recorded in `MEMORY_PM.md`. If it is absent, ask Kyle and do not assume PM Claude's 85% line.
+- The stop line is **85% of ChatGPT token usage used**, as recorded in the `CODEX USAGE STOP LINE` in `MEMORY_PM.md` (Kyle, 2026-11-09). If the memory value is absent or differs, stop and ask Kyle rather than guessing.
 - Consumers are the four building Codex chats, PM Codex, Coltrane's bot on the Helsinki box, and any active Codex Scheduled tasks. A chat spends only while a turn is running. The Windows Discord mirror and outbox tasks move files but do not invoke a model, so they stay on.
 - Codex has no reliable session-to-session message or wake route. A Discord stop line is a durable notice, not proof a Codex chat read it. PM Codex can identify the chats Kyle must stop or avoid opening; only Kyle can press Stop in another running chat.
 - The current Codex conversation history has no crew backup. PM Codex's durable state is therefore the pushed PM notebook and handover sheet; never claim the ChatGPT conversation itself is backed up.
