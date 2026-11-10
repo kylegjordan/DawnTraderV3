@@ -70,6 +70,8 @@ Positive control and recovery population: the same exact-message search found th
 
 **Causation is not assigned.** The incident overlaps this investigation, but the heavy Data Archive table reads use the diagnostic pool. The available records do not distinguish page-wide sibling requests, authentication work, normal background load, or another concurrent source as the cause of the main-pool pressure. This alert therefore does not change Coltrane's ruling or prove a new `B-DB-SIZE-RELIEF` implementation defect.
 
+**Alert disposition:** resolved by `codex-a` at `2026-11-10T21:09:07.114Z` with evidence ref `e9ce7d63345cb1376b7434db60b2aaa70b2445cb`; a whole-file row readback confirmed `state=resolved`, the same actor, and the same evidence ref. This closes the single recovered point incident after 22 quiet minute records. It does not claim the existing `#1037` condition is fixed, and a new acquire-timeout incident can now create a fresh row under the same key.
+
 ## Timed evidence still owed
 
 - First post-deploy `01:00Z` daily-partition creator result.
