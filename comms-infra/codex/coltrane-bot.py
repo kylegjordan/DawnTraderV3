@@ -462,7 +462,7 @@ def invoke(message_text, why, history, role_prompt):
 #    (it may be another invoke's; codex could re-exec a child with a scrubbed environment - Langston's unproven leg).
 INVOKE_TIMEOUT_S = 900
 DRAIN_S = 10
-_LIVE, _LIVE_LOCK = {}, threading.Lock()
+_LIVE, _LIVE_LOCK, _STOPPING = {}, threading.Lock(), False
 
 
 def _kill_group(p):
@@ -504,6 +504,8 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
         # Hold the registry lock across birth + registration. A SIGTERM handler blocks here until a newly born child
         # has a tag in _LIVE, rather than observing the old Popen-to-register gap as an empty live set.
         with _LIVE_LOCK:
+            if _STOPPING:
+                raise RuntimeError("Coltrane is stopping; refusing a new invoke")
             p = subprocess.Popen(argv, stdin=stdin, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                  encoding="utf-8", errors="replace", start_new_session=True)
             _LIVE[p] = tag
@@ -547,7 +549,13 @@ def run_codex(cmd, stdin, timeout=INVOKE_TIMEOUT_S, drain_s=DRAIN_S, user=USER):
 def stop_cleanly(signum=None, _frame=None):
     """SIGTERM: end every running invoke's process group, then exit 0 - so a restart mid-invoke stops in seconds, leaves
     no codex orphan, and is not a 90 s stop timeout recorded as a failure that pages Kyle (#1206's 2026-11-05 leg)."""
+    global _STOPPING
+    # Close admission in the same critical section that births/registers an invoke. A worker already dispatched on
+    # another thread can reach this lock after the snapshot, but it sees _STOPPING and refuses before Popen.
     with _LIVE_LOCK:
+        if _STOPPING:       # a repeated SIGTERM must not interrupt the first handler's cleanup
+            return
+        _STOPPING = True
         running = list(_LIVE.items())
     print("coltrane-bot: stop requested (signal %s): ending %d running invoke(s)" % (signum, len(running)), flush=True)
     for p, _tag in running:
