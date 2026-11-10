@@ -577,3 +577,99 @@ Exc Files : value-hashes.json
 - 0 locks; the previous copy was kept at `~/.claude/transcript-archive-bin.4635e5926`; all 8 files match their blobs by object id.
 - The first run attempt at 05:55:01Z was SKIPPED by the 30-minute floor, as designed (the last success ended 05:32:07Z).
 - **Confirming run at 06:03:49Z:** `ARCHIVE RUN OK — 1096 raw files, 69 lines, layer (c) 28 values; HEARTBEAT: 4 of 1986 runs hold a human turn; shared index 13548 bytes`. Orphan census: 1,096 states, 0 orphans.
+
+## Step 7 COMPLETE — scheduled archive and scheduled backup read back (2026-11-10)
+
+### The installed object and the scheduled run
+- Windows task `\DawnTrader-Transcript-Archive` is enabled and Ready. Its action is the installed `dt_archive_trigger.py nightly`; its registered daily start is 02:30 local, Last Run Time is 2026-11-10 02:30:01 local with Last Result 0, and its next start is 2026-11-11 02:30 local.
+- `INSTALLED_FROM.txt` names exact ref `fa03c15cc568d821d32e2b0c3c7711e9c7377712`. All eight installed runtime/task files have the same Git object id as that exact ref: task XML, archive run, trigger, writer, index, offset census, fingerprint producer, and distiller.
+- The run record corresponding to that scheduled start is `2026-11-10T01:31:02Z nightly 0 ARCHIVE RUN OK — 1106 raw files, 171 lines, layer (c) 28 values; HEARTBEAT: 4 of 2036 runs hold a human turn; shared index 13770 bytes`. The Windows Task Scheduler Operational channel is disabled, so this is precise task metadata plus the corresponding run record, not an immutable Windows event-chain claim.
+- The live offset census found 1,106 state files over the scheduled run's 1,106-file population: 1,106 `ok`, 1,106 with fingerprints, and 0 orphan states. The instrument's orphan arm was positive-controlled at P10 with one planted state whose raw file was removed; it returned `ORPHAN: raw file gone` once before the real zero was accepted.
+- A separate bidirectional census bounded at the run's 01:31:02Z success stamp found 1,106 raw identities created by that point and the same 1,106 identities in state: 0 scheduled raw identities without state and 0 state identities without scheduled raw. State owned 1,567 archive paths and the five alias trees held exactly those 1,567 Markdown files: 0 missing, 0 unowned, and 0 shorter than the committed length. All filesystem traversal errors were configured to fail the census rather than disappear.
+- One additional raw identity existed at verification time. It was created at 09:06:15Z, after the scheduled run, and is therefore part of the next run's population rather than a miss in this one. The 36 states with no committed archive path were all workflow journals with zero archived ids; none was silently counted as an archive file.
+- The prior never-ran check `04dd44a1-3ff3-40d8-a07d-ebd20c3771da` is resolved by the first post-install scheduled run, with its own `RUNS.log` line as evidence. The current success armed `719af3be-be8c-4e69-8b3a-7d794fb743c1`, state `scheduled`, for 2026-11-11T03:31:02Z; `.alert-state.json` names the same dedupe key.
+
+### The prior scheduled Drive snapshot, reproduced
+- Windows task `\Claude Code Session Backup` has a registered 11:30 local start; its Last Run Time is 2026-11-09 11:30:01 local with Last Result 0. Its Transcript Archive leg saw 2,679 files: 1,119 copied and 1,560 unchanged; the task's own summary recorded no mismatch or failed file.
+- A closed archive file was restored from the Drive destination and matched the laptop byte-for-byte: 22,918 B on each side, SHA-256 `125f5f5961b751b45a546bb603efbdcbb1e7be33c8cce5ba14100420e5a1d5d7`.
+- `RUNS.log` is append-only and grew after that backup. The Drive copy's 5,733 B hash, `ddadd7adffa8e3c7664bc0df22aec5e38a31290565411b574ba49a220d4eafb1`, equals the hash of the laptop file's first 5,733 B; the laptop file is now 6,230 B. This proves the scheduled copy is a true prefix rather than comparing a live file's later whole-file hash.
+- This proves a recoverable sample from the 2026-11-09 scheduled snapshot. It does not claim whole-manifest completeness or that the 2026-11-10 nightly archive had already reached Drive; that later population waits for the next scheduled 11:30 copy.
+
+### Redaction counts over the real archive
+- Population: 1,568 archive Markdown files under the five crew aliases plus the kept heartbeat set; the one-day `sample` folder is excluded because it is a duplicate derivative. The census found 177 recognised complete marker strings over the 64 kinds the exact installed distiller can emit. A marker-census positive control supplied one marker of every expected kind and recovered 64 of 64 exactly once.
+- The exact installed distiller's planted-secret suite passed with 0 failures, and all 59 deliberate redaction/distillation mutations were caught by assertions (0 crash-only catches). These tests prove the expected marker patterns are emitted and detectable. Each zero below means no complete recognised marker string of that kind persisted in this archive population; it does not prove that no redactor event occurred, that no marker was truncated, or that every historical secret is absent.
+- Two prose examples use placeholder text (`[REDACTED ...]` and `[REDACTED …]`). They are not recognised kinds and are excluded from the 177 operational markers.
+
+```text
+anthropic-token 0
+b2-application-key 1
+base64-image 0
+bearer-token 0
+discord-bot-token 0
+discord-webhook 0
+github-token 3
+jwt 0
+named:ALCHEMY_API_KEY 0
+named:ANTHROPIC_API_KEY 0
+named:B2_APPLICATION_KEY 0
+named:B2_KEY_ID 0
+named:CC_WEBHOOK_URL 0
+named:CLAUDE_CODE_OAUTH_TOKEN 81
+named:COINGECKO_API_KEY 6
+named:DATABASE_URL 17
+named:DISCORD_BOT_TOKEN 0
+named:DISCORD_COLTRANE_BOT_TOKEN 0
+named:FINNHUB_API_KEY 0
+named:FRED_API_KEY 4
+named:GH_TOKEN 1
+named:GITHUB_TOKEN 0
+named:HELIUS_API_KEY 0
+named:INTERNAL_SERVICE_KEY 0
+named:JWT_REFRESH_SECRET 0
+named:JWT_SECRET 0
+named:KRAKEN_API_KEY 0
+named:KRAKEN_API_SECRET 0
+named:OPENAI_API_KEY 1
+named:PASSWD 1
+named:PASSWORD 28
+named:SUPABASE_SERVICE_ROLE_KEY 0
+named:TELEGRAM_BOT_TOKEN 0
+named:TOKENWATCH_WEBHOOK_SECRET 0
+openai-key 15
+private-key-block 0
+telegram-bot-token 0
+url-credentials 0
+value:ALCHEMY_API_KEY 2
+value:B2_APPLICATION_KEY 0
+value:B2_COLD_KEY#1 0
+value:B2_COLD_KEY#2 0
+value:CC_WEBHOOK_URL#1 0
+value:CLAUDE_CODE_OAUTH_TOKEN 0
+value:CODEX_REFRESH_TOKEN 0
+value:COINGECKO_API_KEY 0
+value:DATABASE_URL#1 5
+value:DATABASE_URL#2 0
+value:DISCORD_BOT_TOKEN 0
+value:DISCORD_COLTRANE_BOT_TOKEN 0
+value:FINNHUB_API_KEY 4
+value:FRED_API_KEY 4
+value:GH_BOARD_TOKEN 0
+value:GH_TOKEN 0
+value:HELIUS_API_KEY 2
+value:INTERNAL_SERVICE_KEY 0
+value:JWT_REFRESH_SECRET 0
+value:JWT_SECRET 0
+value:KRAKEN_API_KEY 0
+value:KRAKEN_API_SECRET 0
+value:OPENAI_API_KEY 0
+value:SUPABASE_SERVICE_ROLE_KEY 0
+value:TELEGRAM_BOT_TOKEN#1 0
+value:TOKEN_WATCH_WEBHOOK_SECRET 0
+```
+
+### Step boundary
+- `REVIEWER: claim-only · Step-7 scheduled archive/full population/redaction/backup claim · HIT: scheduler provenance, bidirectional set, marker provenance, and backup-date limits · re-derived y`
+- There is no staging UI surface for this batch: it is laptop transcript capture, search, scheduled-task and backup tooling. The Step-7 object is the scheduled Windows run and its produced archive, not the DawnTrader web app; no landing-Dashboard evidence is used.
+- Delivery card `B-TRANSCRIPT-ARCHIVE — every session conversation kept as a readable, searchable text archive` is now `Verification`, `Blocked on = Nothing`. The stale `Review = SENT BACK TO OWNER` field was not changed; the reviewer owns it.
+- Alert `77afc074-1ada-4172-8607-8449ac651f56` remains active and unacknowledged while the declared-open batch proceeds. It is resolved only when the batch closes.
+- **Next: Step 8 — Coltrane independently verifies the scheduled-run, archive-state, redaction and scheduled-backup evidence.**
