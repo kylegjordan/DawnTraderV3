@@ -200,3 +200,77 @@ drift-alarm cell remains **UNVERIFIED**, not zero, until the extraction is
 mutation-proved and its exact producer-to-sink path has a positive control.
 Alert `801330ae` remains correctly resolved because it evidenced completion of
 this read; the delivery card and increment-A closure remain blocked at Step 8.
+
+## Correction Step-7 pre-registration — 2026-11-10 full session
+
+**Registered at 2026-11-10T08:00:14Z, before the first eligible session and before any post-restart fill row existed.**
+The correction entered staging at exact reviewed ref `957b13fde2fdb9b9c12791699b8fabeaa3a9afed` at
+2026-11-10T07:48:04Z. The frozen read window is **2026-11-10 14:30:00Z–21:00:00Z**, the first full U.S. regular
+session after deployment; this leaves more than six hours of restart warm-up before the window opens.
+
+The pre-registration controls are non-vacuous and separate from the outcome: the live database has exactly two
+`entry_gate.entry_friction_coverage_k` rows, one each for `crypto_spot` and `xstock_spot`, both `1.0` with
+`updated_by='b-entry-gate-friction-coverage'`. At registration time the post-restart active-execution population was
+**0 rows and 0 dedicated carriers**. That is the before-data state, not a measured zero and not evidence that the
+carrier works.
+
+### Frozen carrier read
+
+The magnitude population is every durable `signal_eval_archive` row in the registered window with
+`source='active-execution-engine'` and `gate_decision.gate='friction_coverage_shadow'`. Report separately by asset
+class and arm:
+
+1. carrier count;
+2. complete-field count for `k`, net reward, round-trip friction and would-refuse; ratio may be null only when friction
+   is exactly zero;
+3. min / 25th percentile / median / 75th percentile / max of the full friction-coverage ratio;
+4. the count and share below the watch-only `k=1` line; and
+5. net-reward and round-trip-friction ranges in price units.
+
+The watch-only line has **no rollback ceiling**: its purpose is to return the magnitude to Kyle. It must not be read as
+an admission decision. A missing/changed class setting, a non-finite carried field, a nonzero count of
+`[B-ENTRY-GATE][FRICTION_COVERAGE][ARCHIVE_FAILED]`, or a terminal fill-economics row with no same-symbol/same-arm
+carrier in the preceding 60 seconds is a verification failure. Dedicated carriers may outnumber terminal rows because
+the carrier is deliberately written before later entry-window, economics, duplicate, race or insert exits. If the
+session contains no carrier rows, the result is **unavailable**, not zero; active fill-economics rows with no carrier
+are a defect.
+
+The deployment identity is re-read after 21:00Z from the deploy record, running `BUILD_SHA`, PM2 metadata and git
+reflog. Any restart or code movement inside the registered window invalidates the window. The complete stdout/stderr
+rotation span intersecting the window is enumerated from file boundaries before pattern extraction; a known line in
+each selected stream is the file/read control.
+
+The drift-alarm cell stays separate. A registered-window absence of `[11.8B][EV_REJECT_SHADOW]` or `ev_reject` sink
+rows may be reported only as **UNVERIFIED** unless the extraction is mutation-proved and the exact engine producer to
+durable sink path has a positive control. Adjacent `maker_taker` / `sqe_shadow` rows do not satisfy that condition.
+
+No batch UI surface is introduced by the correction: it writes an internal durable shadow carrier and leaves Filter
+Diagnostics explicitly out of scope. Step 7 therefore verifies the live durable carrier, settings, logs, process and
+database objects; there is no affected staging panel to navigate.
+
+```sql
+\pset null '∅'
+with carrier as (
+  select captured_at,symbol,asset_class,
+         gate_decision->>'entryArm' arm,
+         (gate_decision->>'frictionCoverageK')::double precision k,
+         (gate_decision->>'netRewardAtFill')::double precision net_reward,
+         (gate_decision->>'roundTripFrictionAtFill')::double precision friction,
+         (gate_decision->>'frictionCoverageRatio')::double precision ratio,
+         (gate_decision->>'frictionCoverageWouldRefuse')::boolean would_refuse
+  from signal_eval_archive
+  where captured_at >= timestamptz '2026-11-10 14:30:00+00'
+    and captured_at <  timestamptz '2026-11-10 21:00:00+00'
+    and source='active-execution-engine'
+    and gate_decision->>'gate'='friction_coverage_shadow'
+)
+select asset_class,arm,count(*) n,
+       count(*) filter(where k is not null and net_reward is not null and friction is not null
+                       and would_refuse is not null and (ratio is not null or friction=0)) complete,
+       min(ratio),percentile_cont(0.25) within group(order by ratio),
+       percentile_cont(0.50) within group(order by ratio),
+       percentile_cont(0.75) within group(order by ratio),max(ratio),
+       count(*) filter(where would_refuse) below_k,
+       min(net_reward),max(net_reward),min(friction),max(friction)
+from carrier group by asset_class,arm order by asset_class,arm;
+```
