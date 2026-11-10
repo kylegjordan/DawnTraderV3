@@ -7,17 +7,17 @@
 
 ## (a) completion reports absent from plan lines — 3 at the graded ref
 - `B_PATTERN_ENUM_DRIFT_COMPLETION_NOTE.md` — CC-B, row 51: this is explicitly a partial completion note for the closed hotfix; the remaining drift work is still queued, so the plan must not close the row.
-- `B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md` — CC-C: already linked in the pre-sprint register and closed at the handover head. No work.
-- `F_G_1_COMPLETION_REPORT.md` — CC-C: already linked from row 16 and closed at the handover head. No work.
+- `B_PRICE_FEED_TRUTH_COMPLETION_REPORT.md` — CC-C: verified rather than reopened at current-head ancestor `68907f092`: the report object exists, and `SPRINT_TO_LIVE_PLAN.md` §0 marks B-PRICE-FEED-TRUTH closed and links the report. No work.
+- `F_G_1_COMPLETION_REPORT.md` — CC-C: verified rather than reopened at current-head ancestor `68907f092`: the report object exists, and `SPRINT_TO_LIVE_PLAN.md` §0 plus row 16 mark it closed and link the report. No work.
 
-## (b) unplaced OPEN issues — 5 at the graded ref
-| owner | issue | disposition at handover |
-|---|---:|---|
-| CC-B | `#237` | Handed over for owner disposition; U2 says its HOME batch already has a completion report. |
-| CC-B | `#1165` | Placed since the census at row 2a0f; no further placement work. |
-| CC-INFRA | `#1237` | Handed over for owner disposition; U5 says its HOME batch is in no list. |
-| PM | `#1243` | Still ownerless and explicitly waiting for Kyle to slot the crew-roster correction; previously passed to PM on 2026-11-05. No implementation is authorised. |
-| CC-C | `#1253` | Handed over for owner disposition; U6 says its HOME row has no owner. |
+## THE SETS — (b) unplaced OPEN issues — 5 at the graded ref
+| issue | owner | disposition at handover |
+|---:|---|---|
+| `#237` | CC-B | Handed over for owner disposition; U2 says its HOME batch already has a completion report. |
+| `#1165` | CC-B | Placed since the census at row 2a0f; no further placement work. |
+| `#1237` | CC-INFRA | Handed over for owner disposition; U5 says its HOME batch is in no list. |
+| `#1243` | PM | Still ownerless and explicitly waiting for Kyle to slot the crew-roster correction; previously passed to PM on 2026-11-05. No implementation is authorised. |
+| `#1253` | CC-C | Disposition (2) complete: moved from closed/absorbed row `8d` to the existing after-live "Break-even stop + moonbag exits" item in `PRE_LIVE_SPRINT.md`, owned by CC-C and binding before the two enabling switches. No new batch or row. |
 
 The handed-over-issue check counted 165 issue blocks at the graded ref: 94 placed, 70 closed, and only `#1165` still unplaced there. It is placed at the handover head.
 
@@ -30,7 +30,7 @@ The empty set is supported by the same census instrument that found nine unmatch
 ## (e) ordering references that do not name an earlier row — 9 findings
 - **CC-A:** row 18's wording now says it starts once row 72 closes, instead of using a false `after` reference to a later row. Row 105 now says it starts once CC-A's stage-00 items are complete, without presenting `OLD` as a row id.
 - **CC-B:** row 59g2 → `N`; row 100 → `B-XSTOCK-ENTRY-COMPARATOR`, `B-EXIT-TRIGGER-FILL-PARITY`, `B-BOOK-STATE-RING-INDEPENDENT-BOUND`; row 100 → row 32. Handed over for owner disposition.
-- **CC-C:** row 124b → row 150; row 124c → row 148a. Handed over for owner disposition.
+- **CC-C:** disposed. Row 124b now describes row 150 as a later publication gate, not an ordering dependency; row 124c describes the scoring work as a later follow-on that begins when row 148a is complete, not a prerequisite for the capture row. The valid earlier-row placement of 124b/124c is unchanged.
 
 ## (f) not-closed plan lines with a report — 5 total, 2 new in W46
 - **CC-B, new:** row 51 `B-PATTERN-ENUM-DRIFT`. The report is deliberately a completion note for the hotfix; the remainder stays queued.
@@ -44,4 +44,4 @@ The census recount over §4's seven-cell item rows is CC-C 83, CC-INFRA 55, CC-B
 `#559 #561 #642 #646 #648 #660 #741 #921` remain the known legacy doubles. They are not renumbered blind.
 
 ## Handover state
-The CC-B, CC-C, CC-INFRA and PM worklists above were sent in one complete Discord post on 2026-11-10, naming every item and the action owed: `1569650115927474197`. The census alert is resolved with this commit as evidence.
+Every item in THE SETS was **handed over 2026-11-10** in one complete Discord post to CC-B, CC-C, CC-INFRA and PM, naming every item and the action owed: `1569650115927474197`. The census alert is resolved with this commit as evidence.

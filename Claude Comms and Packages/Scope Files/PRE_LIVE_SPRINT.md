@@ -66,7 +66,7 @@ The sprint order is `1-system-manual/SPRINT_TO_LIVE_PLAN.md` §4, and the observ
 ### Break-even, trailing and moonbag exits — 7
 
 - B-TEC-STATE-DURABILITY (?) — on restart the engine reads every open position's trailing progress from one /tmp file inside a catch-and-continue — a corrupt file boots with zero trailing pro
-- Break-even stop + moonbag exits ((none)) — 
+- Break-even stop + moonbag exits (CC-C) — includes `#1253`: before crypto sided geometry and break-even are both enabled, make `computeNetBreakeven` use the position's level geometry so a sided exit does not charge the spread again. Existing after-live item; no new batch or plan row (W46 census disposition, 2026-11-10)
 - Shadow break-even and moonbag calculations (paper now, live later) (?) — Kyle: launch with both off, but compute what break-even stops and moonbags WOULD have done on every paper trade (and live trades once live), so we can analyse w
 - row:3n.c (CC-C) — trailing-exit state lost on restart — becomes MUST the moment trailing exits are switched on (see BE-MOONBAG)
 - #639 (CC-B) — the stop in force at close is kept only on the open-position row and lost at close — a must once break-even or trailing is switched on; re-enters the sprint if row 69 finds a real exit defect (added 2026-09-29)
