@@ -230,6 +230,10 @@ async function loadConfig(client: pg.Client): Promise<SweepConfig> {
   );
   const narrowNames = narrow.rows.map((row) => String(row.constant_name));
   if (narrowNames.length > 0) {
+    console.warn(
+      `[B75 sweep] narrow-scope data_lifecycle rows count=${narrowNames.length} `
+        + `constant_names=${narrowNames.join(',')}`,
+    );
     await raiseSweepAlert(
       'B75 sweep found narrow-scope data_lifecycle rows',
       `Found ${narrowNames.length} non-wildcard data_lifecycle row(s): ${narrowNames.join(', ')}. `
