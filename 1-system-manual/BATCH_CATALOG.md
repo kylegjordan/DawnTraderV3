@@ -1420,6 +1420,14 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging the tab shows Formula Health (10 formulas, 9 passing, 1 minor warning) and Feed Health; the page asks for none of the removed routes, and the server's "missing module" errors went from 116 that afternoon to none. **Left:** the card's "last audit" line always reads "just now" (`#1214`); the health-check address registered three times (`#1212`).
 
+## B-FORMULA-HEALTH-AUDIT-FRESHNESS (CC-B, sprint row 59g1a; `#1214`) — change-class `non_architecture` — **STEP 11 AT COLTRANE 2026-11-10** (deployed `ee0a3b0e4` 2026-10-18T04:38:39Z; record `Claude Comms and Packages/Batch Completion/B_FORMULA_HEALTH_AUDIT_FRESHNESS_COMPLETION_REPORT.md`)
+
+**WHAT WAS BROKEN.** Opening the Formula Health card ran a new audit, so “Last audit” always meant the page load rather than the daily scheduled audit.
+
+**THE FIX.** The scheduled job stores its result in its existing `scheduled_tasks_audit` fire row. The card reads the newest valid counted scheduled result or a newer in-process admin result, labels the source, and runs on read only when neither exists.
+
+**CLOSE DISPOSITION.** The pre-fire UI state was observed and the durable writer later produced counted results in 22 of 22 post-deploy rows. Kyle parked the AI pages before the registered card/reload/restart read; CC-B's direct perform-or-drop question then went unanswered, so CC-B let that leg lapse and recorded it as dropped rather than calling it a pass. Langston later recommended closing on that record; the harmless code stays. This close creates no deferred batch; any future AI-page read requires a new Kyle-agreed cleanup slot.
+
 ## B-BOOK-CHECKSUM-CIRCUIT-BREAKER (CC-B, pre-sprint item 1; `#1220`) — change-class `architecture` — ✅ **CLOSED 2026-10-20 (Langston Step 8 and Step 11 CONFIRMED)** — deployed `725a7f3f5` 2026-10-20T21:50:37Z; Step 8 CONFIRMED by Langston (57,867 checks = 57,867 matches, 7 symbols) (record `Claude Comms and Packages/Batch Completion/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** On 2026-10-13 our own code tripped Kraken's live-feed limits. When a coin's order book stopped matching Kraken's checksum, the code deleted the book and resubscribed both channels; the next update built a partial book on the empty copy, mismatched, and was wiped again, at frame rate, until Kraken throttled the connection. A second connection kept feeding the same book after the code had moved on to a new one, and its traffic kept the liveness checks satisfied, so nothing recovered.

@@ -10139,7 +10139,7 @@ The following pages/components are flagged for component decomposition:
 
 | File | Lines | Decomposition Strategy |
 |------|-------|----------------------|
-| `ai-transparency.tsx` | 2,074 | Extract each section (transparency logs, calibration, error logs, semantic memories, orchestrator, formula audit, feed health) into standalone components |
+| `ai-transparency.tsx` | 1,691 | Extract each section (transparency logs, calibration, error logs, semantic memories, orchestrator, formula audit, feed health) into standalone components |
 | `machine-learning.tsx` | 1,985 | Extract ML scores, predictive adjustments, stability analysis, safety signals, regime archive into individual tab components |
 | `analytics.tsx` | 1,939 | Extract narrative feed, batch analysis, benchmarks, governance, predictive diagnostics into standalone components |
 | `top-bar.tsx` | 1,042 | Extract trading toggle, mode switch, time display, approvals bell, portfolio metrics row into individual components |

@@ -1403,6 +1403,10 @@ The xStock feed's stall watchdog no longer false-fires at the Sunday reopen: on 
 
 **The AI Command Center tab shows its working cards again.** Four routes that loaded an AI module deleted in November 2025 — and failed every time — are removed with the page pieces that relied on them (including the AI Analysis tab and the System Audit, removed rather than repaired). The Formula Health card, hidden inside the broken section, is drawn. Verified in Chrome and by Langston.
 
+### 2026-10-18 — B-FORMULA-HEALTH-AUDIT-FRESHNESS (CC-B; sprint row 59g1a, `#1214`) — STEP 11 AT COLTRANE 2026-11-10
+
+**The Formula Health card now shows the latest real audit result instead of manufacturing “just now” on every read.** The daily job persists counts and test results in its existing fire row; 22 of 22 post-deploy rows carry them. Kyle parked the AI pages before the registered card/reload/restart read; CC-B's direct perform-or-drop question then went unanswered, so CC-B recorded that historical leg as dropped and unread. Langston later recommended closing on that record; the deployed code stays. Record: `Batch Completion/B_FORMULA_HEALTH_AUDIT_FRESHNESS_COMPLETION_REPORT.md`.
+
 ### 2026-10-20 — B-BOOK-CHECKSUM-CIRCUIT-BREAKER (CC-B; pre-sprint item 1, `#1220`) — ✅ CLOSED
 
 **A crypto order book that stops matching Kraken is now held and refused, re-checked once, and switched off for that coin if it still fails — instead of being wiped and resubscribed in a loop; and only one connection to Kraken can run at a time.** Deployed `725a7f3f5`; on staging every check matched and nothing was withheld. The switch-off path has never fired live and is proven by tests. Placed: the fleet guard (`#1226`, item 5). Langston confirmed on staging (57,867 of 57,867 checks matched). Record: `Claude Comms and Packages/Batch Completion/B_BOOK_CHECKSUM_CIRCUIT_BREAKER_COMPLETION_REPORT.md`.
