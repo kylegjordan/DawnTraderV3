@@ -292,6 +292,21 @@ Coltrane returned **PROCEED** at exact evidence ref `266828df2fa1c263d659df38ce8
 
 Two historical Step-7 observations were explicitly tagged `RULED ON REPORTED FACT`: the zero-file population inside the intentionally `0700` evidence directory, which Coltrane cannot enumerate, and the past post-run alert-store mtime, which cannot be recreated later. Neither carries the Step-8 conclusion: the independent 39-check rerun, structural command shadowing/state redirection, dry-run write suppression, unchanged reachable live metadata and log population do. They remain provenance-labelled observations rather than independent evidence.
 
+## STEP 9 — OBJECTIVE RECONCILIATION
+
+| registered condition | installed evidence | verdict |
+|---|---|---|
+| Land before OBJ-4 conversion and name that conversion as the removal point | capture is installed while OBJ-4 conversion remains unlanded; removal point is named in source, change list and `RUNNING_ISSUES` | GREEN |
+| Preserve only a non-empty body rejected by JSON decoding | installed fixture distinguishes non-JSON capture from empty, curl-failed and syntactically valid rejected responses | GREEN |
+| Private persistent storage | installed leaf is `langston:langston 0700`; captured files are `0600`; wrong-owner and symlink controls pass | GREEN |
+| Bounded retention | every-run cleanup covers completed `.body` and interrupted `.body.tmp` publications; unrelated-file control remains | GREEN |
+| Saved path and HTTP status are diagnostic evidence | installed-entry fixture confirms both appear in the measurement-failed output | GREEN |
+| HTTP status does not control success | valid JSON with HTTP 503 reaches the normal zero result in the installed-entry fixture | GREEN |
+| Registered non-empty syntactically non-JSON control | exact rejected bytes are recovered byte-for-byte by the installed-entry fixture | GREEN |
+| Installed result is independently reproducible | Coltrane bound the installed blob and independently reran 39/39 assertions | GREEN |
+
+All registered conditions are green. No Step-9 correction or redeploy loop is required; a natural post-install parse failure is not an objective or observation gate and is not invented.
+
 ## REVIEW GATE
 
-**STEP: 8 of 11 COMPLETE · NEXT STEP: 9 of 11.** Coltrane independently returned **PROCEED** at exact evidence ref `266828df2fa1c263d659df38ce82998819ea59df` after rerunning all 39 installed-entry assertions and independently binding the installed monitor to the reviewed object. CI run `42813966403` remains green per job at the reviewed ref. Crew readback remains Codex mode with Langston disabled/inactive, zero Langston worker units, and Coltrane active. The delivery card remains in Verification with `Blocked on = Nothing` for Step 9.
+**STEP: 9 of 11 COMPLETE · NEXT STEP: 10 of 11.** Every registered drift-capture condition is green at the installed reviewed object; no correction, review, CI, installation or re-verification loop is required. Coltrane's independent Step-8 PROCEED remains the installed-state gate. The delivery card remains in Verification with `Blocked on = Nothing` until Step 10 begins.
