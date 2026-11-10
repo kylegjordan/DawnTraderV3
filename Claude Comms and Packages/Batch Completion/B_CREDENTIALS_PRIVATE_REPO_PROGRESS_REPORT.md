@@ -44,7 +44,7 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 
 **STEP 11 CONFIRMED — OBJ-1 complete:** after Kyle explicitly authorized Codex-shift reviews, Coltrane independently confirmed exact ref `680e87b8d30f8909dbd8937a8687e66f78d1cf5a` on 2026-10-13. He reproduced the live seven-day token, authenticated 200 / unauthenticated 401 control, signed-in dashboard / fresh-context login redirect, timer state, source behavior and all four green CI jobs. The protected 2026-10-12 journal remained outside his shell boundary, so he relied on the exact-ref 2-of-2 scheduled-run record for that leg and said so. This closes OBJ-1 only; the shared parent card remains in Governance with `Blocked on = Nothing` because the remaining objectives below are still open.
 
-### 2C. WHAT HAS SHIPPED — `#1117` drift parse-failure evidence increment (Steps 3-10)
+### 2C. WHAT HAS SHIPPED — `#1117` drift parse-failure evidence increment (Steps 3-11)
 
 Full implementation, review, install and verification record: `Claude Comms and Packages/Change Lists/B_CREDENTIALS_PRIVATE_REPO_DRIFT_CAPTURE_CHANGE_LIST.md`.
 
@@ -58,8 +58,9 @@ Full implementation, review, install and verification record: `Claude Comms and 
 | 8 · Coltrane verification | PROCEED at exact evidence ref `266828df2fa1c263d659df38ce82998819ea59df`; Coltrane independently matched the installed blob and repeated 39/39 assertions. |
 | 9 · iterate | all eight registered conditions reconciled green; no correction, review, CI, reinstall or re-verification loop was needed. |
 | 10 · governance | the scope, pre-audit, this progress report, active plan, Infra task list, System Impact Map, Running Issues, Langston Architecture and both current memories record the shipped increment; the full ledger follows. |
+| 11 · confirmation | Coltrane CONFIRMED exact governance ref `bf7cbda78563204fd4cae3adfe9675d5a960c9f2`: 8/8 registered conditions supported, all ten changed documents and the three ledger copies agreed, and CI run `42821742529` was 4/4 green. |
 
-This increment is complete, but the parent is not: GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repository flip remain open.
+This increment is closed at Step 11, but the parent is not: GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repository flip remain open. The parent progress report is not converted, and the shared delivery card remains Governance / Nothing / Approved.
 
 #### `#1117` DRIFT PARSE-CAPTURE GOVERNANCE LEDGER
 CHANGE-CLASS: non_architecture
