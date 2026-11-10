@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-10-B — `B-ENTRY-GATE` increment A (`#1224`, CC-B / NEW Codex) — the system could buy after the market had invalidated the plan, price the fill with stale economics, and silently invent targets
+
+**CLASS: `architecture`. SYMPTOM:** the active taker booked whatever the book walk returned without bounding the move from the planned entry; the deciding net-EV value was the earlier snapshot rather than the arm and price actually paid; three downstream sites substituted `entry × 1.02` when a target was absent; and the refresh diagnostics used CommonJS `require` inside ESM and therefore never wrote.
+
+**FIX:** both classes now resolve fail-hard `entry_gate` settings before either fill arm; a worse-side taker move above 0.25 R refuses, cheaper-side headroom below 0.40 is watch-only, and resting-maker window breaches are watch-only. The fill-economics kernel decides on the realised arm at the price paid and refuses non-exploration rows whose net EV is not positive. A separate probability-free carrier records net reward against complete round-trip friction at watch-only `k=1` before later exits can erase the population. The three fabricated targets and the dead `ENTRY_PREMIUM_BPS` constant are deleted; missing targets rank last, skip shadow simulation, or refuse at promoted open. The refresh trace and SQE-rejection writers now use ESM imports and surface write failures.
+
+**Verified:** deployed `957b13fde` 2026-11-10T07:48:04Z. The first full U.S. session produced 11 complete carriers and 11 terminal fill-economics rows; all 11 matched by symbol and arm 145–254 ms later, 0/11 fell below `k=1`, and a 100 ms mutation found 0/11 matches. The window had no restart or ref movement; Coltrane independently confirmed exact evidence ref `56509024d`. The live `ev_reject` drift-event cell remains UNVERIFIED because its exact producer-to-sink path has no positive control. Parent batch remains OPEN for increment B. Record: `Claude Comms and Packages/Batch Completion/B_ENTRY_GATE_PROGRESS_REPORT.md`.
+
 ## FIX-2026-11-10-A — `B-TRANSCRIPT-ARCHIVE` (KD-47, Infra Claude): an in-place rewrite of a raw conversation could make the archive silently skip later lines
 
 **CLASS: `non_architecture`. SYMPTOM:** the archive resumed each raw conversation at its saved byte offset. The existing trim, deduplication and distillation tools rewrite raw files in place, so a rewrite could move that offset into unrelated bytes; a reproduced shorter rewrite followed by 20 new lines archived only 1 and silently lost 19 from the readable copy, while the raw source remained intact.
