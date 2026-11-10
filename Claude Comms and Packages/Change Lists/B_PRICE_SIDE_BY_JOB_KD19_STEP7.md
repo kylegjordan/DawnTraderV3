@@ -4,7 +4,7 @@
 **Deployed ref:** `6c39f14cb275ade22ff2cc220b3a4214007b83ec` at `2026-11-07T15:15:11Z`.
 **Registered population:** selected real-lane VTS exits in the half-open window `[2026-11-07T15:15:11Z, 2026-11-09T15:15:11Z)`, per class. The predicates are `B_PRICE_SIDE_BY_JOB_KD19_PRE_AUDIT.md` §7 as restated, without predicate changes, in §11.
 
-**STEP: 7 of 11 · NEXT STEP: 8 of 11.**
+**STEP: 8 of 11 · NEXT STEP: 9 of 11.**
 
 ## 1. Population and instrument proof
 
@@ -123,3 +123,15 @@ Result: one test file passed, 17 tests passed, 0 failed.
 `REVIEWER: claim-only · necessary objects found independently · qualified hit on twin population/materiality wording; core numeric claim supported · re-derived y.`
 
 Both hits were re-derived before dispatch. “Selected” now explicitly excludes counterfactual twins and never-filled rows, and the C6 row reports the measured 12/26 reach without inventing a numeric definition for “material.”
+
+## 6. Step-8 independent confirmation
+
+Coltrane independently reran the registered staging read and **CONFIRMED** the completed 48-hour Step-7 read at exact ref `8a19a33c7a5d7f206f5aee8af64d4a513c05f117` on `2026-11-10T00:08:03Z`.
+
+His explicit rulings were:
+
+1. Runtime JavaScript conservation is the registered object. All 166 stored objects reproduce with 0 runtime mismatches; the five PostgreSQL exact-decimal differences, maximum `2e-13` units, are serialization residue rather than lost quantity.
+2. Crypto REST reach of 12/26 is material because it is nearly half of the complete REST population and is plainly non-de-minimis; C6 does not fire.
+3. The fixed 48-hour window may advance separately from the event-triggered unpriced arm. Alert `7e20ed0f-692a-4899-8af3-c3db071bd97a` remains active and unacknowledged until a live selected unpriced close supplies the missing behavioral proof; the fixture is not a substitute, and KD-19 is not fully closed before that event proof.
+
+**Step-8 verdict: CONFIRMED. Advance to Step 9 carrying the unpriced event wait.**
