@@ -108,4 +108,8 @@ grep -Fq 'discord.py>=2.3' "$T/deploy.r4" \
 2. Is refusing before the installer's explicit bridge-file loop the correct boundary, or must Step 3 also prove distribution metadata, target hashes/mtimes, or state left by pip/import failure?
 3. Do the mismatch test, exact pip-argument test, and pre-change positive control discriminate the intended regression without overstating live deployment?
 
-**STEP: 3 of 11 COMPLETE · NEXT STEP: 4 of 11.** Dispatch the exact correction ref and repeated suite evidence to Coltrane. Langston and both Langston workers remain off.
+## STEP 4 — CODE REVIEW
+
+Coltrane returned **PROCEED with no correction required** at exact graded ref `5215c529d77f8f48063fdfa38c0d128a752a851b` on 2026-11-10T13:57:43Z. He confirmed that the exact request plus imported-version refusal form a coherent release-label pin, that the refusal boundary is stated honestly before the explicit bridge-file loop, and that the mismatch, exact-argument and pre-change control checks discriminate the regression. Discord message timestamp is the durable verdict record; the review cites the exact installer and test lines at the graded ref.
+
+**STEP: 4 of 11 COMPLETE · NEXT STEP: 5 of 11.** Confirm the four GitHub jobs per job at the newest code-touching commit in the graded range. Langston and both Langston workers remain off.
