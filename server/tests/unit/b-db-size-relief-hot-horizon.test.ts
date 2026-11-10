@@ -116,6 +116,10 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
       expect(sweep).toContain(`${column} IS DISTINCT FROM '*'`);
     }
     expect(sweep).toContain('a narrow row is not out-voted; it is unseen by the sweep');
+    const narrowBranch = sweep.slice(sweep.indexOf('if (narrowNames.length > 0)'), sweep.indexOf('} else {', sweep.indexOf('if (narrowNames.length > 0)')));
+    expect(narrowBranch).toContain('narrow-scope data_lifecycle rows count=${narrowNames.length}');
+    expect(narrowBranch).toContain("constant_names=${narrowNames.join(',')}");
+    expect(narrowBranch.indexOf('console.warn(')).toBeLessThan(narrowBranch.indexOf('raiseSweepAlert('));
     expect(sweep).toMatch(/if \(narrowNames\.length > 0\) \{[\s\S]{0,800}raiseSweepAlert\(/);
     expect(sweep).toMatch(/\} else \{[\s\S]{0,180}resolveSweepAlerts\(\[NARROW_LIFECYCLE_SCOPE_ALERT_KEY\]/);
   });
