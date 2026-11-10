@@ -596,9 +596,9 @@ Exc Files : value-hashes.json
 - This proves a recoverable sample from the 2026-11-09 scheduled snapshot. It does not claim whole-manifest completeness or that the 2026-11-10 nightly archive had already reached Drive; that later population waits for the next scheduled 11:30 copy.
 
 ### Redaction counts over the real archive
-- Population: 1,568 archive Markdown files under the five crew aliases plus the kept heartbeat set; the one-day `sample` folder is excluded because it is a duplicate derivative. The census found 177 recognised complete marker strings over the 64 kinds the exact installed distiller can emit. A marker-census positive control supplied one marker of every expected kind and recovered 64 of 64 exactly once.
+- Population: 1,568 archive Markdown files: 1,563 under the five crew aliases, 4 in the kept heartbeat set, and the root `INDEX.md`; the one-day `sample` folder is excluded because it is a duplicate derivative. The census found 175 recognised complete marker strings over the 64 kinds the exact installed distiller can emit, plus 2 prose placeholders excluded below. A marker-census positive control supplied one marker of every expected kind and recovered 64 of 64 exactly once.
 - The exact installed distiller's planted-secret suite passed with 0 failures, and all 59 deliberate redaction/distillation mutations were caught by assertions (0 crash-only catches). These tests prove the expected marker patterns are emitted and detectable. Each zero below means no complete recognised marker string of that kind persisted in this archive population; it does not prove that no redactor event occurred, that no marker was truncated, or that every historical secret is absent.
-- Two prose examples use placeholder text (`[REDACTED ...]` and `[REDACTED …]`). They are not recognised kinds and are excluded from the 177 operational markers.
+- Two prose examples use placeholder text (`[REDACTED ...]` and `[REDACTED …]`). They are not recognised kinds; they are the 2 excluded strings outside the 175 recognised-marker total.
 
 ```text
 anthropic-token 0
