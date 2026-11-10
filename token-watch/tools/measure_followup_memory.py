@@ -409,20 +409,26 @@ def cmd_encoding_check(a) -> int:
     table, or `--mint` on a moot index — nothing fetched, nothing written); 3 UNSETTLED (no tried reply
     discriminated); 4 the venue ESCAPES (this encoder understates; nothing may use the sizes). The verdict and every
     attempt are written into the index, where derive-n and arm sept read it."""
+    db = None
     try:                                                # mode=rw: a mistyped path must not CREATE an empty index
         db = sqlite3.connect("file:%s?mode=rw" % a.bodies, uri=True)
         row = db.execute("SELECT verdict, detail FROM encoding_check").fetchone()
-    except sqlite3.OperationalError as exc:             # the same misses _encoding_refusal states, refused here too
+    except sqlite3.DatabaseError as exc:                # missing, non-SQLite, pre-gate, or otherwise unreadable
+        if db is not None:
+            db.close()
         print("REFUSED: cannot read the index's encoding_check (%s): rebuild it with `index`" % exc, file=sys.stderr)
         return 2
     if row is None:
+        db.close()
         print("REFUSED: the index's encoding_check table is empty: rebuild it with `index`", file=sys.stderr)
         return 2
     if row[0] == "moot":                              # nothing in the corpus can be affected; never overwritten here
         if a.mint:
+            db.close()
             print("REFUSED: the index is moot (no non-ASCII body); --mint would only measure the venue, and an "
                   "unsettled probe must not block a corpus it cannot affect", file=sys.stderr)
             return 2
+        db.close()
         print(json.dumps({"verdict": "moot", "detail": json.loads(row[1]),
                           "note": "the venue's escaping is UNMEASURED by a moot run"}))
         return 0

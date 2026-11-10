@@ -576,8 +576,12 @@ del calls[:]
 rc = mfm.main(["encoding-check", "--bodies", BODIES_THIN0, "--mint", "ANY"])
 check("EW --mint on a moot index is refused and fetches nothing", rc == 2 and calls == [], "rc=%s calls=%s" % (rc, calls))
 
-print("EG expect: encoding-check REFUSES (exit 2, no fetch, nothing written) on a missing, pre-gate or empty index")
+print("EG expect: encoding-check REFUSES (exit 2, no fetch, nothing written) on a missing, non-SQLite, pre-gate or empty index")
 missing = os.path.join(WORK, "no-such-index.sqlite")
+nonsql = os.path.join(WORK, "eg-not-sqlite.sqlite")
+nonsql_bytes = b"this exists, but is not a sqlite database\n"
+with open(nonsql, "wb") as fh:
+    fh.write(nonsql_bytes)
 nogate, empty = os.path.join(WORK, "eg-nogate.sqlite"), os.path.join(WORK, "eg-empty.sqlite")
 for path, sql in ((nogate, "DROP TABLE encoding_check"), (empty, "DELETE FROM encoding_check")):
     shutil.copy(WDB, path)
@@ -585,7 +589,8 @@ for path, sql in ((nogate, "DROP TABLE encoding_check"), (empty, "DELETE FROM en
     cx.execute(sql)
     cx.commit()
     cx.close()
-for label, path in (("a mistyped path", missing), ("an index built before the gate", nogate), ("an empty verdict table", empty)):
+for label, path in (("a mistyped path", missing), ("an existing non-SQLite file", nonsql),
+                    ("an index built before the gate", nogate), ("an empty verdict table", empty)):
     del calls[:]
     try:
         rc = mfm.main(["encoding-check", "--bodies", path])
@@ -593,6 +598,7 @@ for label, path in (("a mistyped path", missing), ("an index built before the ga
         rc = type(exc).__name__
     check("EG %s -> exit 2, no fetch" % label, rc == 2 and calls == [], "rc=%s calls=%s" % (rc, calls))
 check("EG a mistyped path does not CREATE an index file", not os.path.exists(missing))
+check("EG the refused non-SQLite input is byte-identical", open(nonsql, "rb").read() == nonsql_bytes)
 mfm._fetch_raw = real_fetch
 ratio = len(mfm._synthesise(tmpl_text, 4).encode("utf-8")) / len(tmpl_text.encode("utf-8"))
 check("SY ~4x the template's bytes", 3.3 <= ratio <= 4.1, "ratio %.3f" % ratio)
