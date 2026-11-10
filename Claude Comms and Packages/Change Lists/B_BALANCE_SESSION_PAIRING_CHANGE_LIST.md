@@ -132,3 +132,72 @@ He re-read `server/services/guardrail-settings.ts` at `05cee280b` and at the sta
 ### Honest UI limit
 
 This batch has no dedicated configuration panel; its only staging-visible consequence is smaller notionals in Open/Closed Trades. ANALYST Codex verified the backend through the authenticated API, database and both PM2 streams, but cannot use Kyle's logged-in Chrome and did not type a password into any form. **UI not yet checked** under `AGENTS.md` §3a; Kyle or the returning Claude session must visually confirm that the affected trade rows render normally. This does not change any numeric result above.
+
+### Step-8 reproduction map
+
+Run SQL through staging's server-held `DATABASE_URL`, read-only, with the fixed restart lower bound `2026-11-07T13:20:49Z` and snapshot upper bound `2026-11-10T17:19:14.217935Z`:
+
+```sql
+-- First-log reconstruction: change the upper bound to 2026-11-07T13:21:54Z.
+WITH p AS (
+  SELECT pae.occurred_at anchor_at, ps.balance::numeric anchor
+  FROM portfolio_state ps JOIN portfolio_anchor_events pae
+    ON pae.mode=ps.mode AND pae.anchor_version=ps.anchor_version
+  WHERE ps.mode='paper' AND ps.global_context_id='default'
+), s AS (
+  SELECT count(*) n, count(*) FILTER (WHERE ct.quantity<=0 OR ct.entry_price<=0) invalid,
+         coalesce(sum(ct.quantity*ct.entry_price),0) cost
+  FROM closed_trades ct,p WHERE ct.mode='paper' AND ct.opened_at<p.anchor_at
+    AND (ct.closed_at IS NULL OR ct.closed_at>p.anchor_at)
+    AND (ct.close_reason IS NULL OR ct.close_reason NOT IN ('never_filled','hard_reset'))
+), r AS (
+  SELECT count(*) n, coalesce(sum(coalesce(ct.reconstructed_net_pnl,ct.pnl)),0) pnl
+  FROM closed_trades ct,p WHERE ct.mode='paper' AND ct.closed_at IS NOT NULL
+    AND ct.closed_at>=p.anchor_at AND ct.closed_at<='2026-11-10T17:19:14.217935Z'
+    AND (ct.close_reason IS NULL OR ct.close_reason NOT IN ('never_filled','hard_reset'))
+)
+SELECT p.anchor,s.n,s.invalid,s.cost,r.n,r.pnl,p.anchor+s.cost+r.pnl FROM p,s,r;
+
+SELECT decision,coalesce(block_reason::text,'NULL'),count(*),min(created_at),max(created_at)
+FROM execution_attempt_audit
+WHERE created_at BETWEEN '2026-11-07T13:20:49Z' AND '2026-11-10T17:19:14.217935Z'
+GROUP BY decision,block_reason ORDER BY decision,block_reason;
+
+WITH o AS (
+  SELECT a.created_at,a.symbol,a.trade_id,a.portfolio_value::numeric pv,
+         ct.quantity::numeric*ct.entry_price::numeric actual
+  FROM execution_attempt_audit a JOIN closed_trades ct ON ct.id=a.trade_id
+  WHERE a.created_at BETWEEN '2026-11-07T13:20:49Z' AND '2026-11-10T17:19:14.217935Z'
+    AND a.decision='OPENED'
+)
+SELECT count(*),min(created_at),max(created_at),min(actual),max(actual),avg(actual),
+       min(actual/(820*0.0485)),max(actual/(820*0.0485)),min(pv/820),max(pv/820)
+FROM o;
+
+SELECT 'MONEY_HELD_UNAVAILABLE'::execution_block_reason;
+SELECT count(*) FROM execution_attempt_audit
+WHERE created_at BETWEEN '2026-11-07T13:20:49Z' AND '2026-11-10T17:19:14.217935Z'
+  AND block_reason='MONEY_HELD_UNAVAILABLE';
+SELECT count(*),string_agg(value::text,',' ORDER BY updated_at)
+FROM module_constants
+WHERE module_name='data_lifecycle' AND constant_name='closed_trades.hot_retention_days';
+SELECT count(*) FROM (
+  SELECT module_name,constant_name FROM module_constants
+  GROUP BY module_name,constant_name HAVING count(*)>1
+) duplicate_pairs;
+```
+
+For each resumed open, reconstruct exposure by treating `closed_trades` as an interval: sum `quantity * entry_price` for qualifying paper rows with `opened_at < audit.created_at` and `(closed_at IS NULL OR closed_at > audit.created_at)`; exclude the candidate for the pre-open value and include it for the post-open value. The document's 17-row claim is the minimum post-open `moneyHeld - exposure`, grouped by the OPENED audit row.
+
+For the error-stream census, stream exactly `/var/log/dawntrader/error__2026-11-08_00-00-00.log`, `error__2026-11-09_00-00-00.log`, `error__2026-11-10_00-00-00.log`, and `error.log`; retain timestamp prefixes from `2026-11-07 13:20:49` through `2026-11-10 17:20:22`. Count the five literal needles named in §4 and `[3n.q7][XS_FRAME]` as the positive control. Read each file's first and last timestamp as the reach check.
+
+Other commands:
+
+```bash
+sudo -n -u dtapi /usr/local/bin/dt-api GET /api/diagnostics/rtb-metrics
+grep -R -n -m 1 -F '[B-BALANCE-SESSION-PAIRING][MONEY_HELD_UNAVAILABLE]' /home/deploy/dawntrader/dist /home/deploy/dawntrader/server
+npx vitest run server/tests/unit/b-balance-session-pairing.test.ts server/tests/unit/b-balance-session-pairing-block-reason-enum.test.ts server/tests/unit/b-guardrail-fail-closed.test.ts
+gh run view 42376198522 --json jobs,headSha,conclusion
+```
+
+The RTB counter is process-local and continues moving; its Step-8 discriminator is a current named `MONEY_HELD_UNAVAILABLE` zero with a current non-zero block reason in the same response, not byte-for-byte reproduction of the 17:19 snapshot.
