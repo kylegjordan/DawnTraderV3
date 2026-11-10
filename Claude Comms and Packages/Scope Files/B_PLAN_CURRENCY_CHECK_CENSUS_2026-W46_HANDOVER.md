@@ -3,6 +3,16 @@
 
 **Method:** every listed id was re-checked against the plan and ledgers at the handover head on 2026-11-10. A graded-ref finding that had already been corrected is recorded as such, not handed over as fresh work. Partial completion reports remain partial; no open remainder is falsely closed.
 
+The unresolved owner items were **handed over 2026-11-10** in Discord message `1569650115927474197`.
+
+## THE SETS
+| issue | owner at handover |
+|---:|---|
+| `#237` | CC-B |
+| `#1237` | CC-INFRA |
+| `#1243` | PM |
+| `#1253` | CC-C |
+
 ⛔ **KYLE'S RULE (2026-10-19, restated 2026-11-04) APPLIES:** no new batch or plan row without his agreement; findings go to their owners or PM to slot. This record adds no plan rows.
 
 ## (a) completion reports absent from plan lines — 3 at the graded ref
@@ -36,6 +46,13 @@ The empty set is supported by the same census instrument that found nine unmatch
 - **CC-B, new:** row 51 `B-PATTERN-ENUM-DRIFT`. The report is deliberately a completion note for the hotfix; the remainder stays queued.
 - **CC-INFRA, new:** §0 `B-TOKEN-WATCH`. The report covers completed work while the plan line remains paused after live; handed over for owner confirmation.
 - **Existing:** row 55 `B-RTB-REFRESH-CONSOLIDATE` (CC-B), §0 `B-MEASURE-GATE` (CC-A), §5 `B-XSTOCK-FEE-CONTRACT` (CC-B). No new CC-A work: B-MEASURE-GATE remains open on its observation objective by design.
+
+## CC-B owner disposition — 2026-11-10 (NEW Codex)
+- `#237`: remains OPEN. Its durable home is the still-open `P19-B8.5 THE SWITCH-ON` umbrella's OBJ-6 tail; the issue now names that scope explicitly and excludes completed lettered sub-batches. No new batch or plan row was created.
+- `#1165`: confirmed already placed at sprint row `2a0f` as `R-XSTOCK-PATTERN-TYPE`; no change owed.
+- Row 51 `B-PATTERN-ENUM-DRIFT`: confirmed intentionally partial. The deployed hotfix is closed; the raw-vs-canonical sink-label and `UNKNOWN` fallback remainder stays queued on the same row, exactly as its scope and completion note state.
+- Row 59g2 → `N`: parser false positive. The closed row meant a configurable consecutive-skip count, implemented and reported as four, not a plan predecessor; wording now says “upon four consecutive skips.”
+- Row 100: removed the three stale predecessor names because all three were deleted/folded into existing row 2 `B-XSTOCK-BID-TRIGGER-RELAND`, already named as row 100's first prerequisite. Replaced obsolete ordinal “row 32” with that row's current stable batch id, `B-DISK-HEADROOM`. Sequence is unchanged.
 
 ## (g) §6 ownership recount
 The census recount over §4's seven-cell item rows is CC-C 83, CC-INFRA 55, CC-B 96, CC-A 89: 323 items total. The hand-maintained table said 83, 57, 96, 85: 321. This commit corrects CC-INFRA, CC-A, the total and the recount history; no row ownership changes are made.
