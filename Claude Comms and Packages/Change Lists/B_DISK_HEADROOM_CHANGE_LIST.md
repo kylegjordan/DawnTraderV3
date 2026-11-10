@@ -101,3 +101,25 @@ Read as root 2026-11-08 ~00:50Z: line 4 `# [B-STORAGE-HARDEN 2026-07-07 Kyle-aut
 **Lock scope (the sampler, P4):** ran 02:10:00Z → `# sweep exited; sampler stop 2026-11-08T02:45:37Z`, 208 ticks, 0 `sample failed`. **0 sessions waiting on a Lock, 0 not-granted lock rows, 0 AccessExclusive rows observed.** Positive control present: 3 `ACTIVE-ON-BARS` rows — the sweep's own export reading `crypto_spot_ohlc_1m_2026_05` (02:24:34Z) and two live inserts into the bar parents (02:29:11Z) — so the sampler was not blind. Stated limit: a DROP lasting under one 10 s sample can fall between samples; the drop's own time is in the sweep line above.
 **THE RESTORE — DONE:** `bash /home/deploy/b_disk_headroom_set_retention.sh crypto_spot_ohlc_1m 365 "B-DISK-HEADROOM OBJ-3 stage A restore"` at 03:20:30Z → `IN-TX OK … = 365 (number)`, `POST-COMMIT (new session): 1|365|number|B-DISK-HEADROOM OBJ-3 stage A restore|2026-11-08 03:20:31.996567+00`, `PASS`. June is no longer exposed.
 **Stage A: PASS on every pre-registered control.** NEXT (unchanged plan): P6 Stage B (`xstock_spot_ohlc_1m`, the sliced lane) on its own night, with P2 again.
+
+## P6 — Stage B armed for 2026-11-11 02:15Z (INFRA Codex, 2026-11-10)
+
+### P2 — deployed copy, reviewed tools, and eligibility
+- Staging HEAD `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`; porcelain on the two sweep paths EMPTY. Staging = deployed blob: `b75-retention-sweep.ts` `bad1aeb51f615b505a356ed5b7f86f801ee38afa999c1d19621116f9c3ef97bb`; `sweep-slicing.ts` `5b0150ebfa24d5845b53a22b3d8f309b100db65205222227fe94bb18c93ea021`.
+- Installed = Step-4 blob at `c5682ec6b`: setter `d0e1cbb662da2c346084e8863bd3dd05df1aa3298009d2866793981be5e28211`; sampler `2e801a79fc095953695f58e33f3f2ea96aebad8c9edcc427a10f68947a6a83ca`; eligibility instrument `cda8a1e13192a28aae4aa203f3097291e938c848b0340a3c7418f844b98128f7`.
+- The sweep main file changed since Stage A. Exact-ref diff: the B-DB-SIZE-RELIEF loader now selects the four-wildcard `data_lifecycle` rows, applies the shared positive-number parser, and emits a narrow-row alert; slicing, listing, export, verification, and drop are unchanged. Live positive control: the full `data_lifecycle` population has 0 non-wildcard rows; `slice_threshold_hot_bytes` is wildcard-scoped numeric `3221225472`, and `xstock_spot_ohlc_1m.hot_retention_days` was wildcard-scoped numeric `365` before the write.
+- **Re-open ruled PROCEED by Coltrane at exact deployed ref `957b13fde` (19:17Z):** he independently reproduced the hashes, loader reach, `(133.09, 163.09]` proof band, and unchanged monthly rule. The reviewed write to 148 was permitted.
+- Read-only rehearsal at T=`2026-11-11T02:15:00Z`, override 148: `xstock_spot_ohlc_1m_2026_04` = 2,187,264 B, whole; `_2026_05` = 4,668,841,984 B, SLICED; proof-table total **4,671,029,248 B**. Other eligible children: ticker 2026-10-11 xstock 942,080 B and crypto-perp 369,737,728 B; crypto-perp OHLC 2026-10-11 127,950,848 B; revision-event 2026-11-02 807,641,088 B; signal-eval 2026-10-11..26 sixteen children totaling 22,374,408,192 B. All other registered parents have 0 eligible children. Whole-sweep predicted total **28,351,709,184 B**.
+
+### P3 — the write
+Two command-line quoting attempts were refused by the setter's `updated_by` fence before any database statement. The corrected reviewed invocation then returned exit 0 at `2026-11-10 19:18:47Z`: `IN-TX OK: xstock_spot_ohlc_1m.hot_retention_days = 148 (number), by B-DISK-HEADROOM OBJ-3-stage-B`; new-session read `1|148|number|B-DISK-HEADROOM OBJ-3-stage-B|2026-11-10 19:18:47.40673+00`; `PASS`.
+
+The no-override instrument then read `retentionDays=148`, the same cutoff, exact child list and byte counts as P2; the only P2/P3 difference is the removed `(OVERRIDE)` tag. Exposure bound if the restore is missed: July becomes the cutoff month on 2026-11-26T00:00Z (N=148); the five-night/11-21 stop rule is earlier.
+
+### P4 — sampler armed
+Positive control: the prior Stage-A log exists at 7,256 bytes; before arming, the 20261111 target log and unit were both absent. `b-disk-headroom-sampler-20261111.timer` is scheduled for `2026-11-11 02:10:00 UTC`, `AccuracyUSec=1s`, activating a service as `deploy:deploy` in `/home/deploy` with:
+`/bin/bash /home/deploy/b_disk_headroom_lock_sampler.sh 2026-11-11T05:15:00Z /home/deploy/b_disk_headroom_locks_20261111.log`.
+
+**WAIT:** P6 morning read after the production sweep: exact eligible set and sliced resume/drop result; manifest + exact-evidence rows; child absence with a positive control; one-day rehydrate SHA-256; lock sampler with its positive control; then restore this setting to 365 by the same reviewed setter.
+
+Step-7 UI judgement: this batch changes a background retention setting and nightly database/archive path; it has no user-facing panel to verify. The stale landing dashboard is expressly excluded. Runtime, database, archive, rehydrate, and lock evidence are the affected surfaces.
