@@ -5,7 +5,7 @@ REFUSES (exit 3) if a real codex run is active, so it never shares the coltrane 
 STUB processes (`sleep 33NN`, unique durations) and kills only what it started or what carries ITS tags - never by uid.
 The census is `pgrep -u coltrane`, UNSCOPED, before and after each case (Langston's gate-A condition (ii): a census for
 the TEST, never a selector for the runtime). Expected outcomes are stated before results."""
-import importlib.util, os, re, signal, subprocess, sys, threading, time
+import importlib.util, os, re, signal, subprocess, sys, tempfile, threading, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 P = F = 0
@@ -126,6 +126,49 @@ except subprocess.TimeoutExpired:
 time.sleep(0.5)
 case("exit code 0 (a clean stop, not a failure that pages Kyle)", 0, code)
 case("no stub survives the stop", [], stubs(r"sleep 33(09|10)"))
+
+print("E2. SIGTERM closes admission: a second dispatched worker cannot birth after the stop snapshot")
+marker_fd, marker = tempfile.mkstemp(prefix="coltrane-stop-admission-", dir=os.environ.get("TMPDIR"))
+os.close(marker_fd)
+os.unlink(marker)
+child = subprocess.Popen([sys.executable, "-c", (
+    "import importlib.util,os,signal,sys,threading,time\n"
+    "os.environ.setdefault('COLTRANE_ADDRESS_LIST', %r)\n"
+    "s=importlib.util.spec_from_file_location('cb', %r); b=importlib.util.module_from_spec(s); s.loader.exec_module(b)\n"
+    "go=threading.Event(); real=b._tagged_pids; fired=[False]\n"
+    "def delayed(tag):\n"
+    "  if not fired[0]: fired[0]=True; go.set(); time.sleep(1)\n"
+    "  return real(tag)\n"
+    "b._tagged_pids=delayed\n"
+    "def second():\n"
+    "  go.wait(); open(%r,'w').write('attempted')\n"
+    "  try: b.run_codex(['sh','-c',\"trap '' HUP TERM; setsid sleep 3319 & exec sleep 3320\"], open(os.devnull), timeout=300)\n"
+    "  except RuntimeError as e:\n"
+    "    if 'stopping; refusing' not in str(e): raise\n"
+    "    open(%r,'a').write('|refused')\n"
+    "signal.signal(signal.SIGTERM, b.stop_cleanly)\n"
+    "threading.Thread(target=lambda: b.run_codex(['sh','-c',\"trap '' HUP TERM; setsid sleep 3317 & exec sleep 3318\"], open(os.devnull), timeout=300), daemon=True).start()\n"
+    "threading.Thread(target=second, daemon=True).start()\n"
+    "time.sleep(60)\n") % (os.environ["COLTRANE_ADDRESS_LIST"], os.path.join(HERE, "coltrane-bot.py"), marker, marker)])
+deadline = time.time() + 10
+while time.time() < deadline and len(stubs(r"sleep 331[78]")) < 2:
+    time.sleep(0.1)
+case("the first invoke's group member and escapee are running before stop", 2, len(stubs(r"sleep 331[78]")))
+child.send_signal(signal.SIGTERM)
+try:
+    code = child.wait(timeout=15)
+except subprocess.TimeoutExpired:
+    child.kill()
+    code = "hung"
+time.sleep(0.5)
+marker_state = open(marker).read() if os.path.exists(marker) else ""
+case("the second worker attempted admission and was refused before Popen", "attempted|refused", marker_state)
+case("exit code 0 with admission held closed", 0, code)
+case("neither invoke leaves a survivor", [], stubs(r"sleep 33(1[7-9]|20)"))
+try:
+    os.unlink(marker)
+except OSError:
+    pass
 
 print("F. CONTROL: today's shape - subprocess.run(sudo ..., timeout) - ORPHANS (the census can see a survivor)")
 try:
