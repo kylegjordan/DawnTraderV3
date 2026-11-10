@@ -135,3 +135,15 @@ His explicit rulings were:
 3. The fixed 48-hour window may advance separately from the event-triggered unpriced arm. Alert `7e20ed0f-692a-4899-8af3-c3db071bd97a` remains active and unacknowledged until a live selected unpriced close supplies the missing behavioral proof; the fixture is not a substitute, and KD-19 is not fully closed before that event proof.
 
 **Step-8 verdict: CONFIRMED. Advance to Step 9 carrying the unpriced event wait.**
+
+## 7. Step-9 event-wait registration
+
+The only objective not yet green is the live behavioral proof for an unpriced selected real-lane close. This is an event wait, not a code correction and not a hold on unrelated batches or deployments.
+
+- **Owner:** ANALYST Codex (`codex-c`), standing in for CC-C.
+- **Placed home:** KD-19 Step 9, this evidence record, the CURRENT POSITION block, Delivery Board status `Verification` / blocked on `External`, and active alert `7e20ed0f-692a-4899-8af3-c3db071bd97a`.
+- **Closing condition:** the first post-deploy selected real-lane archive row with `source='vts-runner'`, carried `mode='vts'`, and `exit_price IS NULL` has no `state_snapshot.exitWalk`; reconcile its trade id to the durable VTS record, record the row as evidence, resolve the alert without a separate acknowledgement, and advance to Step 10.
+- **Failure condition:** that first row carries `exitWalk`, or the durable record and archive disagree on whether the close was unpriced. Enter the Step-9 fix → Coltrane review → push → CI → deploy → verify loop; do not resolve or acknowledge the alert.
+- **No-event rule:** continued absence of the event is neither pass nor fail. Keep the alert active and unacknowledged and continue other sequenced work.
+
+**STEP: 9 of 11 · NEXT STEP: 9 completion on the first qualifying live event.**
