@@ -2039,6 +2039,8 @@ export class ActiveExecutionEngine {
     const di = signal.diAtQueue != null && Number.isFinite(Number(signal.diAtQueue)) ? Number(signal.diAtQueue) : undefined;
     const dbs = signal.dbsScoreAtQueue != null && Number.isFinite(Number(signal.dbsScoreAtQueue)) ? Number(signal.dbsScoreAtQueue) : undefined;
     const base = getCachedNumberRequired('scoring_base', 'flat_pwin_base', ck);
+    const frictionCoverageK = getCachedNumberRequired('entry_gate', 'entry_friction_coverage_k', ck);
+    if (frictionCoverageK < 0) throw new Error(`entry_gate.entry_friction_coverage_k must be non-negative, got ${frictionCoverageK}`);
     return {
       stopPrice: signal.stopPrice, targetPrice: signal.targetPrice,
       costs: getCachedCostMetrics(signal.symbol, assetClass),
@@ -2051,7 +2053,7 @@ export class ActiveExecutionEngine {
       urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
       haircut: resolveMakerTakerHaircut(assetClass),
       measuredBasePWin: base,
-      frictionCoverageK: getCachedNumberRequired('entry_gate', 'entry_friction_coverage_k', ck),
+      frictionCoverageK,
       levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)
     };
   }
@@ -2076,6 +2078,51 @@ export class ActiveExecutionEngine {
       measuredBaseSource: 'flat_pwin_base:p19-b8-5a:2026-07-13:pinned-placeholder:n12140-vts:vts-era-contaminated',
       spreadSource: fe.spreadSource, // Step-4 C-6: a refusal on a placeholder spread says so
     };
+  }
+
+  /**
+   * OBJ-4's dedicated carrier: one durable shadow row immediately after each successful fill-economics evaluation.
+   * Terminal admitted/refused rows keep the same fields for local diagnosis, but this row makes the measurement total:
+   * a later duplicate, class, insert or concurrent-position failure cannot erase an evaluation that already happened.
+   */
+  private async _archiveFrictionCoverageShadow(
+    signal: any,
+    assetClass: AssetClass,
+    arm: 'taker' | 'maker',
+    fillPrice: number,
+    stopPrice: number,
+    targetPrice: number,
+    fe: FillEconomics,
+  ): Promise<void> {
+    try {
+      const { archiveSignalEval } = await import('./data-archive/signal-eval-archiver.js');
+      archiveSignalEval({
+        mode: tradingModeToRunMode(this.mode),
+        symbol: signal.symbol,
+        exchange: 'kraken',
+        assetClass,
+        source: 'active-execution-engine',
+        strategy: signal.strategy,
+        rejectStage: 'entry_fill',
+        confidenceModulated: signal.confidence,
+        gateDecision: {
+          gate: 'friction_coverage_shadow',
+          accepted: true,
+          shadow: true,
+          entryArm: arm,
+          fillPrice,
+          stopPrice,
+          targetPrice,
+          frictionCoverageK: fe.frictionCoverageK,
+          netRewardAtFill: fe.netRewardAtFill,
+          roundTripFrictionAtFill: fe.roundTripFrictionAtFill,
+          frictionCoverageRatio: fe.frictionCoverageRatio,
+          frictionCoverageWouldRefuse: fe.frictionCoverageWouldRefuse,
+        },
+      });
+    } catch (archErr) {
+      console.error(`[B-ENTRY-GATE][FRICTION_COVERAGE][ARCHIVE_FAILED] ${signal.symbol}:`, archErr instanceof Error ? archErr.message : archErr);
+    }
   }
 
   /** #1250 P1/P3: refuse an xStock taker open whose levels cannot be carried — archived and counted like its siblings. */
@@ -6422,6 +6469,7 @@ export class ActiveExecutionEngine {
       // B-ENTRY-GATE (#1224) P4: a resting maker pays its limit if it fills, so it is judged there, before it rests.
       const _feM = computeFillEconomics({ ..._feInputs, arm: 'maker', fillPrice: _b72cLimit });
       _fillEconRec = this._fillEconRecord(_feM, 'maker', _fillExplo);
+      await this._archiveFrictionCoverageShadow(signal, _openClass, 'maker', _b72cLimit, signal.stopPrice, signal.targetPrice, _feM);
       if (_feM.refuse && !_fillExplo) {
         return await this._refuseFillEconomics(signal, _openClass, 'maker', _b72cLimit, _feM, _fillEconRec);
       }
@@ -6534,6 +6582,7 @@ export class ActiveExecutionEngine {
     const _feTPlan = _levelRec !== null ? computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice }) : null;
     _fillEconRec = { ...this._fillEconRecord(_feT, 'taker', _fillExplo),
       ...(_feTPlan !== null ? { netEvAtFillPlanGeometry: _feTPlan.netEvAtFill, fillEconRefusedPlanGeometry: _feTPlan.refuse } : {}) };
+    await this._archiveFrictionCoverageShadow(signal, _openClass, 'taker', actualEntryPrice, _carriedStop, _carriedTarget, _feT);
     _entryShadowRec = {
       intendedEntryPrice: signal.entryPrice, rrFill: _shadow.rrFill, adverseR: _shadow.adverseR, rrFloor: _entryFloor,
       rrWouldRefuse: _shadow.wouldRefuse, rrFloorUnresolved: _entryFloorNote !== '',

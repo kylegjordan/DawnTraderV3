@@ -139,4 +139,14 @@ describe('OBJ-4 — friction coverage is a probability-free WATCH-ONLY result', 
   it('rejects an invalid k instead of silently substituting a threshold', () => {
     expect(() => computeFillEconomics({ ...base, frictionCoverageK: -1 })).toThrow(/frictionCoverageK must be non-negative/);
   });
+  it('maker coverage stays probability-free when the pWin-linked adverse-selection strength changes', () => {
+    const variableHaircut = { ...haircut, adverseSelectionStrengthMult: 0.01 };
+    const low = computeFillEconomics({ ...base, arm: 'maker', haircut: variableHaircut, signalStrength: 0.1 });
+    const high = computeFillEconomics({ ...base, arm: 'maker', haircut: variableHaircut, signalStrength: 0.9 });
+    expect(high.netEvAtFill).not.toBeCloseTo(low.netEvAtFill, 12); // P4 still prices adverse selection.
+    expect(high.roundTripFrictionAtFill).toBeCloseTo(low.roundTripFrictionAtFill, 12);
+    expect(high.netRewardAtFill).toBeCloseTo(low.netRewardAtFill, 12);
+    expect(high.frictionCoverageRatio).toBeCloseTo(low.frictionCoverageRatio!, 12);
+    expect(high.frictionCoverageWouldRefuse).toBe(low.frictionCoverageWouldRefuse);
+  });
 });

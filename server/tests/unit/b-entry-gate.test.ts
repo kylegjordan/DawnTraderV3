@@ -158,7 +158,8 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
     expect(resolve).toBeGreaterThan(0);
     expect(fill).toBeGreaterThan(resolve);
     expect(src).toMatch(/_ewWorseSide = getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac', _ewKey\)/);
-    expect(src).toMatch(/frictionCoverageK: getCachedNumberRequired\('entry_gate', 'entry_friction_coverage_k', ck\)/);
+    expect(src).toMatch(/const frictionCoverageK = getCachedNumberRequired\('entry_gate', 'entry_friction_coverage_k', ck\)/);
+    expect(src).toMatch(/if \(frictionCoverageK < 0\) throw new Error/);
     expect(src).toMatch(/catch \(settingsErr\) \{[\s\S]{0,400}recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', why\)[\s\S]{0,120}return \{ opened: false/);
     // no settings read left between the fill and the window decision
     const seg = src.slice(fill, src.indexOf("stage: 'ENTRY_WINDOW'"));
@@ -180,7 +181,10 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
   });
   it('the friction-coverage shadow is archived on every evaluated fill and never enters a refusal branch', () => {
     expect(src).toMatch(/frictionCoverageK: fe\.frictionCoverageK[\s\S]{0,400}frictionCoverageWouldRefuse: fe\.frictionCoverageWouldRefuse/);
-    expect(src).toMatch(/reason: _geom,[\s\S]{0,300}\.\.\.\(_entryShadowRec \?\? \{\}\), \.\.\.\(_fillEconRec \?\? \{\}\)/);
+    expect(src).toMatch(/gate: 'friction_coverage_shadow'[\s\S]{0,500}frictionCoverageWouldRefuse: fe\.frictionCoverageWouldRefuse/);
+    expect(src.split('await this._archiveFrictionCoverageShadow(').length - 1).toBe(2);
+    expect(src).toMatch(/_fillEconRec = this\._fillEconRecord\(_feM[\s\S]{0,200}await this\._archiveFrictionCoverageShadow\(signal, _openClass, 'maker', _b72cLimit, signal\.stopPrice, signal\.targetPrice, _feM\)/);
+    expect(src).toMatch(/_fillEconRec = \{ \.\.\.this\._fillEconRecord\(_feT[\s\S]{0,350}await this\._archiveFrictionCoverageShadow\(signal, _openClass, 'taker', actualEntryPrice, _carriedStop, _carriedTarget, _feT\)/);
     expect(src).not.toMatch(/if \([^)]*frictionCoverageWouldRefuse/);
   });
 });

@@ -161,11 +161,12 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
   // Maker, conditional on filling: the adverse-selection cost applies; pFill and the non-fill cost do not.
   const adverseSelection = i.arm === 'maker' ? d.adverseSelectionPct * i.fillPrice : 0;
   const netEvAtFill = leg.netEV - adverseSelection;
-  // OBJ-4 friction coverage is deliberately probability-free. `leg.totalCost` is the arm's round-trip friction;
-  // maker adverse selection is an additional fill-contingent cost, so it belongs in both the net reward and the
-  // comparator denominator. The scope's `>=` edge passes; this remains WATCH-ONLY until its measured distribution
-  // returns to Kyle.
-  const roundTripFrictionAtFill = leg.totalCost + adverseSelection;
+  // OBJ-4 friction coverage is deliberately probability-free. `leg.totalCost` is the arm's round-trip friction.
+  // Maker adverse selection is intentionally NOT part of this shadow: its strength multiplier consumes
+  // `signalStrength`, which today is the class's scoring-base pWin placeholder. Including it would make the supposedly
+  // probability-free comparison depend on a probability proxy. P4's deciding net EV still includes it above.
+  // The scope's `>=` edge passes; this remains WATCH-ONLY until its measured distribution returns to Kyle.
+  const roundTripFrictionAtFill = leg.totalCost;
   const netRewardAtFill = leg.distTarget - roundTripFrictionAtFill;
   const frictionCoverageRatio = roundTripFrictionAtFill === 0 ? null : netRewardAtFill / roundTripFrictionAtFill;
   const frictionCoverageWouldRefuse = netRewardAtFill < i.frictionCoverageK * roundTripFrictionAtFill;

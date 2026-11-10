@@ -7,19 +7,25 @@
 > complete friction, the friction amount, their ratio, `k`, and whether the observation falls below `k`. The full ratio
 > is the durable measurement; `k=1` is an observation line, never an open/refuse input.
 >
-> **Exact computation:** `roundTripFrictionAtFill = kernel totalCost + maker adverseSelection` (the second term is zero
-> for takers); `netRewardAtFill = distTarget - roundTripFrictionAtFill`;
+> **Exact computation:** `roundTripFrictionAtFill = kernel totalCost`; `netRewardAtFill = distTarget - roundTripFrictionAtFill`;
 > `frictionCoverageWouldRefuse = netRewardAtFill < k * roundTripFrictionAtFill`. The scope's exact `>=` edge passes.
 > The reader is fail-hard in the existing pre-fill settings guard, so an absent class row becomes the already-counted
-> `FILL_ECONOMICS` refusal rather than a fallback. The record reaches admitted, entry-window, entry-geometry,
-> level-refusal and fill-economics archive outcomes whenever economics was evaluated.
+> `FILL_ECONOMICS` refusal rather than a fallback. A dedicated `friction_coverage_shadow` archive row is queued
+> immediately after each successful maker or taker evaluation, before any later failure can erase the population;
+> terminal admitted/refused rows keep the same fields for local diagnosis.
 >
 > **Files:** `server/core/trading/fill-economics.ts`; `server/services/active-execution-engine.ts`;
 > `server/startup/b72-warmup.ts`; `server/tests/unit/b-entry-gate-fill-economics.test.ts`;
 > `server/tests/unit/b-entry-gate.test.ts`; `server/tests/unit/b8c-switch-on-wiring.test.ts`;
 > `drizzle/migrations/2026-11-10-b-entry-gate-friction-coverage.sql` and its rollback; `MANIFEST.txt`.
-> **Proof:** 91/91 targeted tests passed; the TypeScript baseline held at 324/324. Mutation M6 (`<` → `<=` at the
+> **Proof:** 92/92 targeted tests passed; the TypeScript baseline held at 324/324. Mutation M6 (`<` → `<=` at the
 > coverage edge) made the exact-edge test red, proving the comparison fence can detect the boundary regression.
+>
+> **Fresh-reader HIT, re-derived and folded before dispatch:** maker adverse selection consumed the pWin-derived
+> `signalStrength`, so including it in coverage made the shadow probability-linked; it is now excluded from the shadow
+> while remaining in P4's deciding net EV, with a nonzero-slope test. The same reader found late duplicate/race/insert
+> exits could follow a computation with no terminal archive row; the dedicated immediate carrier closes that gap.
+> `REVIEWER: claim-only · name settling objects and materially different consistent states · HIT—maker probability dependency, post-evaluation archive gaps, and setting-dependent decision parity; boundary test kills <= but retained mutation-run evidence is assertion-only · re-derived y`
 
 > **r3 (2026-11-05 ~16:00Z): Langston's PROCEED (msg 1567911217417429013, graded at head `c67740745`, Review = Approved) — his three conditions and four record items, against the r2 code.**
 > - **C-1** (window-refused row lacks the EV legs): **already in r2** — `..._fillEconRec` is spread on the `ENTRY_WINDOW` row and `_fillEconRec` is assigned from `_feT` before the refusal (r2's own C-5). His graded head predates `db4152691`.
