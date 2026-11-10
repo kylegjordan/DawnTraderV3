@@ -63,6 +63,8 @@
 
 **★ THE TRANSCRIPT ARCHIVE IS LIVE AND CLOSED (`B-TRANSCRIPT-ARCHIVE`, 2026-11-10; Coltrane report ref `6d9535aa`):** the five DawnTrader Claude-session folders are distilled to readable, redacted, searchable files nightly and before compaction; SessionStart checks the latest restart handoff. Search hits are leads and misses are never evidence; raw conversations remain the deep-dive source. Registry: System Impact Map "Transcript Archive, Restart Handoff and the PreCompact Trigger".
 
+**★ `B-ENTRY-GATE` PARENT IS OPEN; INCREMENT A IS LIVE AND VERIFIED (2026-11-10):** deployed `957b13fde`; the first full U.S. session produced 11/11 complete probability-free friction carriers and 11/11 terminal matches, with 0/11 below watch-only `k=1`; Coltrane confirmed exact evidence ref `56509024d`. The exact live `ev_reject` drift-event path remains UNVERIFIED. Increment B remains reviewed at `20404d0a4` but unlanded and requires its own deploy and full-session read. Record: `Batch Completion/B_ENTRY_GATE_PROGRESS_REPORT.md`.
+
 **★ A COMPLETION REPORT WITHOUT THE T1 TASK-LIST ROW NOW RAISES `gov-ledgerrow` (checker, 2026-09-11, `#1009`)** — add the row and it clears itself; genuinely N/A ⇒ a confirmed `na-skip` `task_lists` row.
 
 - [Kyle: a batch close needs no acknowledgement from him](kyle-batch-close-no-ack-needed.md) — Langston's Step-11 confirm closes it; move the card, post the block, never block on Kyle for an ack (2026-09-02).
