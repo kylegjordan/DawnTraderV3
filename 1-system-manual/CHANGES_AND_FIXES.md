@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-10-A — `B-TRANSCRIPT-ARCHIVE` (KD-47, Infra Claude): an in-place rewrite of a raw conversation could make the archive silently skip later lines
+
+**CLASS: `non_architecture`. SYMPTOM:** the archive resumed each raw conversation at its saved byte offset. The existing trim, deduplication and distillation tools rewrite raw files in place, so a rewrite could move that offset into unrelated bytes; a reproduced shorter rewrite followed by 20 new lines archived only 1 and silently lost 19 from the readable copy, while the raw source remained intact.
+
+**FIX:** each committed state stores a fingerprint of the raw bytes immediately before its offset. A shorter or fingerprint-changed raw file is re-read from the beginning, and stable entry ids skip lines already archived; legacy states without a fingerprint re-read once before being stamped. The same-file reader, held-notice handling and first-run conversion were corrected through review, and every re-read is named in the run record.
+
+**Verified:** all 1,091 legacy states re-read once after install, then 1,091 of 1,091 carried a valid fingerprint; the bounded backup comparison found the same 425 cross-state duplicate-id groups before and after, no new or missing group, and 1,540 of 1,540 append-only archive files were exact prefixes where that property applies. Coltrane independently confirmed the final installed population and test/mutation evidence at `d98c1b7f2`. **Residual:** a byte-length-preserving substitution before the offset is outside the reachable rewrite tools and can still escape the fingerprint.
+
 ## FIX-2026-11-04-A — `B-XSTOCK-BID-TRIGGER-RELAND` increment (4b) (row 2, objective 8's shared trigger, CC-C) — three exit-decision sites each chose their own trigger price
 
 **CLASS: `architecture`. SYMPTOM:** the paper engine and the VTS real and shadow lanes each chose the price compared against a position's stop and target. They agreed, but by coincidence of three separate expressions; nothing failed if one drifted, and a fourth caller could inline any price.

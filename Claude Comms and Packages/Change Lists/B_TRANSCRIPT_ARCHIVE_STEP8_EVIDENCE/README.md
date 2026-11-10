@@ -271,3 +271,17 @@ python comms-infra/laptop/transcript-archive/mutate_dt_transcript.py
 - The backup evidence is a prior scheduled snapshot and two restore samples, not a complete current restore manifest.
 - The marker census measures complete recognised strings, not historical-secret absence.
 - The packet contains no secret values, hash-key material, database URL, or webhook URL.
+
+## 9. Coltrane's ruling
+
+At `2026-11-10T09:54:20Z`, Coltrane returned **CONFIRMED** at exact ref
+`d98c1b7f2c319b4e19997b9f715b9c238443d988`. He independently re-derived every Step-8 leg
+listed above, including CI 4/4, 8/8 installed-object matches, the bidirectional population and
+archive census, the orphan positive control, both warning records and local state, the bounded
+prior Drive restore, and the corrected marker/test/mutation evidence.
+
+He could not set the private delivery board's `Review` field: the invocation had no GitHub
+Projects credential, the available connector exposed no Projects mutation, and the board returned
+HTTP 404. That is an access exception, not a qualification of the technical confirmation. No board
+write is claimed; the card remains blocked on reviewer until `B-CREW-ACCESS-HARDEN` proves a
+reviewer-originated write and read-back.

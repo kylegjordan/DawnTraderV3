@@ -110,3 +110,28 @@ auto-loaded size may only go down); the tool's usage text documents `--ref`.
 
 DISPOSITION: folded into B-CREW-ACCESS-HARDEN (reviewer-access parity, the same scope as the
 2026-10-15 corrections above).
+
+## GitHub Projects review-field access — follow-on recorded 2026-11-10
+
+During `B-TRANSCRIPT-ARCHIVE` Step 8, Coltrane independently confirmed exact ref
+`d98c1b7f2c319b4e19997b9f715b9c238443d988` but could not set the private delivery board's
+`Review` field. The invocation held no GitHub Projects credential, the available GitHub connector
+exposed no Projects mutation, and the private board returned HTTP 404. His screenshot is retained
+on Helsinki at `/home/coltrane/work/b-transcript-archive-board-404.png`. At that review boundary the
+transcript card remained in `Verification`, blocked on reviewer, with its stale review value; no
+successful board write is claimed.
+
+The owner later moved only the card's Status to `Governance` for Step 10. `Review` remains
+`SENT BACK TO OWNER`, and `Blocked on` remains reviewer; that owner-side status move is not evidence
+that Coltrane can write or read back his field.
+
+**Closing condition:** from a normal Coltrane review invocation, set one private DawnTrader delivery
+card's `Review` field to the intended reviewer verdict and independently read the same field/value
+back from the board without borrowing Kyle's or a crew session's credential.
+
+**Failure condition:** the invocation has no credential or Projects mutation path, the private board
+returns HTTP 404, the write is refused, or the read-back does not equal the requested value. A crew
+session writing the field on Coltrane's behalf does not satisfy the closing condition.
+
+DISPOSITION: added to the existing `B-CREW-ACCESS-HARDEN` reviewer-access-parity work. It is not a
+runtime defect or an objective of `B-TRANSCRIPT-ARCHIVE`.

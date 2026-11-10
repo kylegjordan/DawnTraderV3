@@ -15,6 +15,7 @@
 | ✅ ~~`B-WAKE-OPENING-LIST`~~ (`#1241`, Kyle KD-20 + KD-21, 2026-11-04) | **CLOSED 2026-11-06** (installed `f38220b83`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_WAKE_OPENING_LIST_COMPLETION_REPORT.md`; A6 (Coltrane cannot wake Langston) with Kyle via PM; bridge-error finding folded into B-AGENT-INVOKE-FAILURE-NOTICE (#1198) |
 | ▶ **`B-LANGSTON-TWO-WORKERS`** (KD-44, Kyle 2026-11-05; plan §0a Infra order 4a) | **Step 4** — built at `82c03b2c3` (CI 4/4); Langston two parts + Coltrane concurrency pass | Langston, Coltrane | two review workers with per-batch lanes; a wait AND review-quality window before vs after (Kyle) |
 | ✅ ~~`B-LANGSTON-MEMORY-WRITE-FENCE`~~ (`#1234`, Kyle-placed 2026-11-04) | **CLOSED 2026-11-06** (installed `fe3c4ad1f`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`; the fence's page never fired (drill offered to Kyle via PM); §10.b exit-8 floor + exit-6 wording → `B-LANGSTON-TWO-WORKERS` |
+| ▶ **`B-TRANSCRIPT-ARCHIVE`** (KD-47, plan §0a Infra order 4b) | **Step 10** — all seven objectives green; Coltrane CONFIRMED Step 8 at `d98c1b7f2` | governance commit, then Coltrane Step 11 | laptop transcript archive, search, compaction capture, restart handoff and daily Drive copy; board Review-field access gap is tracked separately under B-CREW-ACCESS-HARDEN |
 | ⏳ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | queued | me, after the fence | the follow-up recorder's memory fix; the `due/` steady state; the B2 version census + orphan reconciliation (Langston Step 9) |
 | ⏳ **`#1238`** Codex conversation backup | after live (Kyle D-1, 2026-11-04) | me | the ChatGPT stand-ins' conversations are not backed up |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |
@@ -33,7 +34,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` (#1023) — **OBJ-4a DONE 2026-09-29; OBJ-1 DONE 2026-10-13 through Step 10** (server-held crew login live; Langston Step 8 confirmed; both scheduled proof runs, clean-environment run and both stored sessions passed; `#613` closed). **NEXT: GB-8 bridges increment** (discord.py pinned), then OBJ-2/OBJ-3/remaining OBJ-4 readers and OBJ-6 (the flip). **OWNED ALERT NEXT:** `aaf0b2b5` — remove `testuser123.is_admin` under `#1092` and settle Plans A/B with Coltrane, one review gate each. **NEXT after this batch (plan §0):** `B-LANGSTON-RECONCILE-VERB` (#1057), then `B-CHAPLET-DELETE` and `B-TRANSCRIPT-ARCHIVE`; the sprint plan is authoritative for the full order.
+**NOW, ahead of the sprint (§0 plate):** `B-TRANSCRIPT-ARCHIVE` is at Step 10; its full governance ledger and Step 11 are next. The plan remains the authority for the other open Infra work, including `B-LANGSTON-TWO-WORKERS`, `B-CREDENTIALS-PRIVATE-REPO`, the owned `aaf0b2b5` access alert, and the later queue.
 
 | row | item | what it is for |
 |---|---|---|

@@ -673,3 +673,43 @@ value:TOKEN_WATCH_WEBHOOK_SECRET 0
 - Delivery card `B-TRANSCRIPT-ARCHIVE — every session conversation kept as a readable, searchable text archive` is now `Verification`, `Blocked on = Nothing`. The stale `Review = SENT BACK TO OWNER` field was not changed; the reviewer owns it.
 - Alert `77afc074-1ada-4172-8607-8449ac651f56` remains active and unacknowledged while the declared-open batch proceeds. It is resolved only when the batch closes.
 - **Next: Step 8 — Coltrane independently verifies the scheduled-run, archive-state, redaction and scheduled-backup evidence.**
+
+## Step 8 COMPLETE — Coltrane second-pass confirmation (2026-11-10)
+
+- Coltrane first halted at `2026-11-10T09:34:38Z` because the Windows task, archive tree, run log and local alert state were unreachable from Helsinki. The reviewer-accessible primary evidence packet was then committed with the two read-only derivations beside it; this changed no runtime bytes.
+- At `2026-11-10T09:54:20Z`, Coltrane returned **CONFIRMED** at exact ref `d98c1b7f2c319b4e19997b9f715b9c238443d988`. He independently re-derived CI 4/4; 8/8 installed-object matches to runtime ref `fa03c15cc568d821d32e2b0c3c7711e9c7377712`; the 1,106/1,106 raw/state and 1,567/1,567 owned/on-disk archive populations with zero missing, unowned or short files; the orphan positive control; the prior/current warning lifecycle; the bounded prior Drive snapshot restore; the corrected 1,568-file marker census (175 recognised complete markers, 2 excluded prose placeholders, 64/64 positive control); 0 failed installed tests; and 59/59 caught mutations with 0 crash-only catches.
+- Scheduler provenance remains limited to registered task metadata plus the corresponding run record because the Operational event channel is disabled. The Drive claim remains limited to the prior scheduled snapshot and the two restore samples. The redaction census remains limited to complete recognised marker strings, not proof of historical-secret absence.
+- **Board exception:** Coltrane could not set `Review = Approved`: the invocation had no GitHub Projects credential, no connector mutation for Projects, and the private board returned HTTP 404. The card remains `Verification`, blocked on reviewer, with `Review = SENT BACK TO OWNER`; no board update is claimed. The access gap is added to `B-CREW-ACCESS-HARDEN` with a write-and-read-back closing condition.
+- **Next: Step 9 — re-check every scope objective against the confirmed object and iterate only if one remains red.**
+
+## Step 9 COMPLETE — all seven scope objectives green (2026-11-10)
+
+No implementation iteration is required. Each objective was checked against the scope's own
+verification and the evidence Coltrane confirmed at Step 8:
+
+| objective | verdict | closing evidence |
+|---|---|---|
+| OBJ-1 backups | GREEN | The reproduction proof matched 7/7 selected backup objects across both backup forms; the later scheduled additive snapshot also restored one 22,918-byte whole file exactly and one append-only log as an exact 5,733-byte prefix. Coverage limits for the older zip remain explicit. |
+| OBJ-2 distiller/redaction/sample | GREEN | Kyle's gated one-day sample passed the PM, owner, Coltrane and Langston reads; the installed planted-secret suite has 0 failures; 59/59 current mutations are caught; the real 1,568-file complete-marker census and its 64/64 positive control are published with their limits. |
+| OBJ-3 archive/index/actions/search | GREEN | The scheduled-run cutoff has 1,106 raw identities and 1,106 state identities; state owns 1,567 archive files and disk holds the same 1,567, with 0 missing, unowned or short. The reviewed search/index tests include a planted known hit and a redacted-secret no-hit with a working-query control. |
+| OBJ-4 forgetting-event capture | GREEN | The reviewed nightly task, PreCompact trigger and restart handoff path are installed from the pinned runtime. The scheduled nightly task completed successfully and the full run-end population was reconciled bidirectionally. |
+| OBJ-5 handoff/injection/drift guard | GREEN | The reviewed handoff writer, independent dispatch census, alert read and SessionStart injection are installed; transport failures fail loud, and the registered stale/aged/guard-failed drill cases and hostile mutations are caught. |
+| OBJ-6 duplicates | GREEN | The read-only census found 743 duplicate groups and 746 extra copies over 4,578 in-scope raw files. The production classifier measured 0 duplicate members in the five live crew folders or kept heartbeat set, so the reviewed safe result was zero moves; history remains intact. |
+| OBJ-7 governance content | GREEN | The System Impact Map, `CLAUDE.md` backup wording, trim runbook pointer and dated `#1237` correction all carry the shipped mechanism and its measured limits. Step 10 writes the governance ledger; Step 11 writes the completion report and final close-state flips. |
+
+The Coltrane GitHub Projects write gap is not a red transcript-archive objective: his technical
+confirmation is complete, and the separate access parity item has explicit closing and failure
+conditions under `B-CREW-ACCESS-HARDEN`. The transcript card remains in `Verification` while that
+reviewer-owned field cannot be written.
+
+- **Next: Step 10 — update every applicable governance record and publish the full tier ledger.**
+
+## Step 10 — governance content landed (2026-11-10)
+
+- The batch is recorded at its current Step-10 boundary in `BATCH_CATALOG.md`, `PHASE_HISTORY.md`, `SPRINT_TO_LIVE_PLAN.md`, the shared memory, Infra memory and `CC_INFRA_SESSION_TASK_LIST.md`.
+- The final mechanism and evidence limits are recorded in `SYSTEM_IMPACT_MAP.md`, the raw-rewrite defect in `CHANGES_AND_FIXES.md`, and the backup reproduction on `RUNNING_ISSUES` `#1237`. The earlier shared-index-cap deletion remains recorded in `DELETED_COMPONENTS_LOG.md`.
+- Langston's memory was updated through `langston-memory-write`: his loaded set fell from 143,472 to 143,412 bytes by replacing the older B-ARM-REMOVAL mechanics paragraph with its shorter durable pointers; no reviewer-ledger or retraction content changed.
+- The delivery card is in `Governance`. Coltrane's technical confirmation is complete, while his inaccessible `Review` field remains blocked on the separate B-CREW-ACCESS-HARDEN condition.
+- The declared-open exception remains `open` through Step 10; Step 11 retires it before the stale-open alert is resolved. The completion report is also a Step-11 deliverable.
+
+- **Next: Step 11 — write the completion report from the Step-10 ledger, dispatch the exact governance ref to Coltrane, and apply the final close-state flips only after his confirmation.**
