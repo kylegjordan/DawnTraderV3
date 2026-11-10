@@ -49,6 +49,7 @@ The live `module_constants` population was re-read on 2026-11-10 before governan
 | 8 — second pass | Coltrane CONFIRMED exact evidence ref `56509024d`; a 100 ms mutation found 0/11 terminal matches and proved the registered join turns red. |
 | 9 — objectives | 8/8 targeted files and 130/130 tests passed; governed runtime/test files were byte-identical to deployed `957b13fde`; three target fallbacks stayed absent with unrelated positive controls. |
 | 10 — governance | This progress report and the filled Tier ledger below record the open parent state. |
+| 11 — progress boundary | Coltrane CONFIRMED exact ref `f613926b1` with no changes on 2026-11-10 and explicitly did not certify the parent closed; increment B remains required. |
 
 ## 4. First-full-session result against the registered criterion
 
