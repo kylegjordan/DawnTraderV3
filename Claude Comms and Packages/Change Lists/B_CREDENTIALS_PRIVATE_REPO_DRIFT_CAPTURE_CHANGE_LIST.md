@@ -46,18 +46,20 @@ This increment changes only that parse-failure path:
   - writes atomically as `0600` under a `0700`, current-user-owned persistent directory;
   - names the saved path and retention result in the alert detail;
   - deletes matching diagnostics older than 14 days on every hourly run and leaves unrelated files alone, bounding expiry to 14 days plus at most one scheduling interval;
+  - applies that same bound to interrupted `.body.tmp` publications, so a power loss between copy and rename cannot leave evidence indefinitely;
   - refuses a symlinked evidence directory and reports capture failure inside the same measurement-failed alert;
+  - checks ownership before changing mode, so a wrong-owner directory is refused untouched;
   - leaves empty responses, curl failures, syntactically valid responses rejected by validation, and successful JSON on the existing scratch-only path;
   - accepts path/retention overrides only after an explicit fixture-mode switch; the installed path ignores ambient overrides.
-- `comms-infra/discord/deploy.sh` creates `/var/lib/dt-deploy-drift/failed-compare` as `langston:langston 0700` before the hourly cron is installed.
-- `scripts/analysis/test-deploy-drift-parse-capture.sh` drives the committed production entry point with stubbed network commands. Its load-bearing fixture is non-empty and syntactically non-JSON; it also proves exact bytes, retention, unrelated-file preservation, alert-path disclosure, HTTP-status non-control, empty/success non-capture, modes and symlink refusal.
-- `comms-infra/helsinki/tests/deploy_tests.sh` extends the notices-install assertion to the evidence directory's owner, group and mode.
+- `comms-infra/discord/deploy.sh` refuses state/evidence symlinks both in pre-flight and at the mutation boundary, then creates `/var/lib/dt-deploy-drift/failed-compare` as `langston:langston 0700` through directory file descriptors opened with `O_NOFOLLOW` before the hourly cron is installed.
+- `scripts/analysis/test-deploy-drift-parse-capture.sh` drives the committed production entry point with stubbed network commands. Its load-bearing fixture is non-empty and syntactically non-JSON; it also proves exact bytes, completed and interrupted-publication retention, unrelated-file preservation, alert-path disclosure, HTTP-status non-control, empty/success non-capture, modes, symlink refusal, wrong-owner refusal, and that ambient overrides are ignored without the explicit switch.
+- `comms-infra/helsinki/tests/deploy_tests.sh` adds planted pre-flight and execution-time installer symlinks and proves the root-owned target's owner, mode and contents remain unchanged.
 - `1-system-manual/RUNNING_ISSUES.md` replaces the stale conflicting-rulings text with Langston's final ruling and Coltrane's re-confirmation, and records the third occurrence.
 
 ## STEP-3 VERIFICATION
 
-- Linux isolated fixture on Helsinki, private temporary directory removed by the same remote command: **29 passed, 0 failed**.
-- Windows Git Bash fixture: **26 passed, 0 failed**; POSIX mode and symlink assertions explicitly defer to the Linux run.
+- Linux isolated fixture on Helsinki, private temporary directory removed by the same remote command: **39 passed, 0 failed**.
+- Windows Git Bash fixture: **27 passed, 0 failed**; POSIX mode, owner, symlink and no-test-mode assertions explicitly defer to the Linux run.
 - Existing drift-shape guard: expected PASS/FAIL outcomes unchanged.
 - Existing runtime-predicate suite: **34 cases, 0 failures**; control still separates the fixed predicate from the old prefix-only form.
 - `bash -n`: monitor, installer and new fixture all parse.
@@ -155,10 +157,10 @@ case "$READ" in
 prepare_failed_compare_dir() {
   [ ! -L "$FAILED_COMPARE_DIR" ] || { echo "diagnostic directory is a symlink" >&2; return 1; }
   mkdir -p -- "$FAILED_COMPARE_DIR" || { echo "cannot create diagnostic directory" >&2; return 1; }
-  chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
   local owner
   owner="$(stat -c %U -- "$FAILED_COMPARE_DIR" 2>/dev/null)"
   [ "$owner" = "$(id -un)" ] || { echo "diagnostic directory owner is $owner, expected $(id -un)" >&2; return 1; }
+  chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
 }
 ```
 
@@ -185,7 +187,8 @@ The every-run retention function is separately load-bearing and exact:
 prune_failed_compares() {
   [ -e "$FAILED_COMPARE_DIR" ] || return 0
   prepare_failed_compare_dir || return 1
-  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f -name 'compare-*.body' \
+  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f \
+    \( -name 'compare-*.body' -o -name 'compare-*.body.tmp' \) \
     -mmin "+$FAILED_COMPARE_RETENTION_MINUTES" -delete
 }
 ```
@@ -219,17 +222,32 @@ if want notices; then
 fi
 ```
 
-After (`1247381ec`):
+After (graded ref at re-dispatch):
 
 ```sh
 if want notices; then
   langston_log /var/log/dt-deploy-drift.log
+  no_symlink /var/lib/dt-deploy-drift
   mkdir -p /var/lib/dt-deploy-drift
   chown langston:langston /var/lib/dt-deploy-drift
-  install -d -o langston -g langston -m 0700 /var/lib/dt-deploy-drift/failed-compare
+  no_symlink /var/lib/dt-deploy-drift/failed-compare
+  install_private_dir_nofollow /var/lib/dt-deploy-drift/failed-compare langston langston 0700
+  no_symlink /var/lib/dt-deploy-drift/failed-compare
   add_langston_cron dt-deploy-drift.sh "$DRIFT_CRON"
 fi
 ```
+
+`install_private_dir_nofollow` opens both parent and leaf with `O_DIRECTORY|O_NOFOLLOW`, then uses `fchown` and `fchmod` on the pinned leaf descriptor. A swap after the shell refusal therefore cannot redirect root's ownership or mode change.
+
+## STEP 4 SEND-BACK CORRECTIONS
+
+Coltrane's first code read at exact ref `c956d2b3f7f4d146954298b86664b73ac3343fb8` sent back three items. This re-dispatch folds all three without changing the diagnostic's scope:
+
+1. Root installer: pre-flight refusal, mutation-boundary refusal and descriptor-pinned `O_NOFOLLOW` creation now prevent a planted evidence-leaf symlink from redirecting root's owner/mode changes. Installer fixtures plant the link both before pre-flight and after pre-flight, and prove the target owner, mode and bytes do not change.
+2. Interrupted publication: every-run retention now matches both `compare-*.body` and `compare-*.body.tmp`; the fixture plants an aged temporary publication and an unrelated file, proving only the evidence file is removed.
+3. Missing executable controls: the Linux fixture now proves wrong-owner refusal without changing owner/mode and runs the production entry point without `DT_DRIFT_TEST_MODE=1` under an unprivileged account, proving ambient log/state/evidence/retention overrides are ignored.
+
+Coltrane also settled the residual: **no per-incident alert refresh is required.** The alert path identifies the first unresolved incident; each later failure writes its current saved path to the full log, which is the authoritative index for the protected directory's incident population.
 
 ## JUDGEMENT CALLS FOR COLTRANE TO ATTACK
 
@@ -238,13 +256,13 @@ fi
 3. Does `curl` exit status + parser result remain the correct authority when a syntactically valid JSON body arrives with HTTP 503, with the status recorded but not promoted into control flow?
 4. Is the explicit fixture-mode gate sufficient to keep path/retention overrides out of the installed run?
 5. Does the production-entry fixture discriminate all claimed non-persistence branches, including a curl failure after partial bytes, empty bytes, valid JSON with an unknown status, valid JSON with empty commits, and valid JSON with HTTP 503?
-6. **Fresh-reader residual to rule on:** the alert store's normal dedupe returns the first non-terminal `compare_api` row unchanged. The first failure after recovery names its saved file, but if another parse failure occurs before that row is resolved, its newly saved file is not added to the stored alert body. Is the first incident file plus the full local directory/log sufficient, or must this increment add a per-incident alert/body-refresh mechanism?
+6. **Settled by Coltrane:** the alert store's normal dedupe may retain the first non-terminal `compare_api` path. The alert path is explicitly the first incident; the full log is the authoritative index for later incident files. No per-incident alert refresh is added.
 
 ## FRESH-READER RECORD
 
 `REVIEWER: claim-only · name the objects that settle parse-only, secure, bounded persistence and status-non-control, then name consistent alternate states · HIT — valid JSON rejected by semantic validation also persisted; cleanup ran only on another capture; ambient overrides could redirect the fixture surfaces; alert dedupe can retain the first path; live remains the old uninstalled file · re-derived y.`
 
-Re-derivation and disposition: the first three mechanism hits are corrected in the code and discriminated by the 29-check Linux production-entry fixture (including the prior behaviours as controls). The dedupe hit was reproduced against the real alert library: two same-key adds returned one row whose body stayed `first-path`, not the second body; it remains called out as judgement call 6 for Coltrane. The live difference is expected at Step 4 and is not cited as a defect: this change is deliberately not installed before review and CI.
+Re-derivation and disposition: the first three mechanism hits are corrected in the code and discriminated by the 39-check Linux production-entry fixture (including the prior behaviours as controls). The dedupe hit was reproduced against the real alert library: two same-key adds returned one row whose body stayed `first-path`, not the second body; Coltrane accepted that behavior with the explicit first-path/log-index record above. The live difference is expected at Step 4 and is not cited as a defect: this change is deliberately not installed before review and CI.
 
 ## REVIEW GATE
 

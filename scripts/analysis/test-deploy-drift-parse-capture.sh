@@ -65,6 +65,8 @@ printf '<html>upstream unavailable</html>\n' > "$T/non-json.body"
 mkdir -p "$T/diag"
 printf 'old\n' > "$T/diag/compare-old.body"
 touch -d '5 minutes ago' "$T/diag/compare-old.body"
+printf 'interrupted\n' > "$T/diag/compare-interrupted.body.tmp"
+touch -d '5 minutes ago' "$T/diag/compare-interrupted.body.tmp"
 printf 'keep\n' > "$T/diag/unrelated.txt"
 run_fixture "$T/non-json.body" 502 "$T/diag"
 check "non-JSON fixture exits measurement-failed" test "$RC" -eq 1
@@ -78,6 +80,7 @@ else
   ok "mode assertions deferred to the Linux fixture host"
 fi
 check "old matching diagnostic is removed" test ! -e "$T/diag/compare-old.body"
+check "old interrupted publication is removed" test ! -e "$T/diag/compare-interrupted.body.tmp"
 check "unrelated file is retained" test -e "$T/diag/unrelated.txt"
 check "alert detail names the saved path" grep -Fq "saved_body=${FILES[0]};retention_cleanup=ok" "$T/out"
 check "HTTP status is diagnostic in the detail" grep -Fq 'http_status=502' "$T/out"
@@ -158,8 +161,42 @@ if [ "$POSIX_FS" -eq 1 ]; then
   else
     ok "symlink refusal writes nothing outside"
   fi
+
+  # An existing directory owned by another account is refused before chmod or publication.
+  mkdir -p "$T/wrong-owner-diag"
+  chmod 0755 "$T/wrong-owner-diag"
+  chown nobody:nogroup "$T/wrong-owner-diag"
+  run_fixture "$T/non-json.body" 502 "$T/wrong-owner-diag"
+  check "wrong-owner diagnostic directory remains measurement-failed" test "$RC" -eq 1
+  check "wrong-owner refusal is named" grep -Fq 'saved_body=FAILED(diagnostic directory owner is nobody, expected root)' "$T/out"
+  check "wrong-owner directory owner is unchanged" test "$(stat -c %U "$T/wrong-owner-diag")" = nobody
+  check "wrong-owner directory mode is unchanged" test "$(stat -c %a "$T/wrong-owner-diag")" = 755
+
+  # Without the explicit switch, ambient path and retention variables are ignored. Run as
+  # nobody so the production defaults are read-only, while the planted override directory
+  # would be writable if the gate regressed.
+  if [ "$(id -u)" -eq 0 ] && id nobody >/dev/null 2>&1; then
+    chgrp nogroup "$T" "$T/bin" "$T/non-json.body" "$T/bin/ssh" "$T/bin/git" "$T/bin/curl"
+    chmod 0750 "$T" "$T/bin" "$T/bin/ssh" "$T/bin/git" "$T/bin/curl"
+    chmod 0640 "$T/non-json.body"
+    mkdir -p "$T/ambient-diag" "$T/ambient-state"
+    chown -R nobody:nogroup "$T/ambient-diag" "$T/ambient-state"
+    sudo -u nobody env PATH="$T/bin:$PATH" \
+      DT_FIXTURE="$T/non-json.body" DT_HTTP_STATUS=502 DT_CURL_EXIT=0 \
+      DT_DRIFT_LOG="$T/ambient.log" DT_DRIFT_STATE_DIR="$T/ambient-state" \
+      DT_DRIFT_FAILED_COMPARE_DIR="$T/ambient-diag" DT_DRIFT_FAILED_COMPARE_RETENTION_MINUTES=1 \
+        bash -x "$SRC" --dry-run > "$T/out-no-test-mode" 2>&1
+    NO_MODE_RC=$?
+    check "ambient overrides without test switch still fail closed" test "$NO_MODE_RC" -eq 1
+    check "ambient diagnostic override is ignored" test -z "$(find "$T/ambient-diag" -mindepth 1 -maxdepth 1 -print -quit)"
+    check "ambient log override is ignored" test ! -e "$T/ambient.log"
+    check "production retention remains effective" grep -Fq '+ FAILED_COMPARE_RETENTION_MINUTES=20160' "$T/out-no-test-mode"
+    check "production evidence path remains effective" grep -Fq '+ FAILED_COMPARE_DIR=/var/lib/dt-deploy-drift/failed-compare' "$T/out-no-test-mode"
+  else
+    ok "no-test-mode override assertions deferred to the root Linux fixture host"
+  fi
 else
-  ok "symlink assertions deferred to the Linux fixture host"
+  ok "symlink, owner and no-test-mode assertions deferred to the Linux fixture host"
 fi
 
 printf 'RESULT: %s passed, %s failed\n' "$PASS" "$FAIL"

@@ -161,16 +161,19 @@ trap 'rm -rf "$WORK"' EXIT
 prepare_failed_compare_dir() {
   [ ! -L "$FAILED_COMPARE_DIR" ] || { echo "diagnostic directory is a symlink" >&2; return 1; }
   mkdir -p -- "$FAILED_COMPARE_DIR" || { echo "cannot create diagnostic directory" >&2; return 1; }
-  chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
   local owner
   owner="$(stat -c %U -- "$FAILED_COMPARE_DIR" 2>/dev/null)"
   [ "$owner" = "$(id -un)" ] || { echo "diagnostic directory owner is $owner, expected $(id -un)" >&2; return 1; }
+  chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
 }
 
 prune_failed_compares() {
   [ -e "$FAILED_COMPARE_DIR" ] || return 0
   prepare_failed_compare_dir || return 1
-  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f -name 'compare-*.body' \
+  # A process death between copy and rename leaves the publication's .tmp sibling. It holds
+  # the same rejected bytes, so it has the same retention bound as a completed publication.
+  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f \
+    \( -name 'compare-*.body' -o -name 'compare-*.body.tmp' \) \
     -mmin "+$FAILED_COMPARE_RETENTION_MINUTES" -delete
 }
 

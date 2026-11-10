@@ -159,6 +159,25 @@ N5=$(awk '/^MANIFEST="/{p=1;next} p&&/^"/{p=0} p&&/^bridges\|/' "$T/deploy.orig"
 [ $RC -eq 0 ] && [ ! -e "$T/opt/crew-status-post.py" ] && ls "$T"/retired/*/crew-status-post.py >/dev/null 2>&1 && ok "D5r: the planted retired poster is moved to the retired folder" || bad D5r "rc=$RC $(ls "$T/opt" | tr '\n' ' ')"
 grep -q "^COMMS_BACKEND=discord" "$T/etc/comms-active.env" && ok "D5 a fresh host is seeded with COMMS_BACKEND=discord" || bad D5s "$(grep COMMS_BACKEND "$T/etc/comms-active.env")"
 grep -q "NOT RESTARTED: discord-langston-bridge.service" "$T/out" && ! grep -q "stub systemctl restart" "$T/out" && ok "D5 the running bridges are named NOT RESTARTED; no restart issued" || bad D5b x
+
+# #1117: a planted evidence-leaf symlink is a pre-flight refusal. Root must not chown,
+# chmod or write through it before the installer reaches the per-group state step.
+mkdir -p "$T/lib/dt-deploy-drift" "$T/evidence-victim-pre"
+printf 'preflight-victim\n' > "$T/evidence-victim-pre/keep"
+chown -R root:root "$T/evidence-victim-pre"; chmod 0755 "$T/evidence-victim-pre"
+PRE_OWNER=$(stat -c %U:%G "$T/evidence-victim-pre")
+PRE_MODE=$(stat -c %a "$T/evidence-victim-pre")
+PRE_HASH=$(sha256sum "$T/evidence-victim-pre/keep" | cut -d' ' -f1)
+rm -rf "$T/lib/dt-deploy-drift/failed-compare"
+ln -s "$T/evidence-victim-pre" "$T/lib/dt-deploy-drift/failed-compare"
+run "$T/deploy.sh" --sha "$TC" --only notices
+[ $RC -eq 2 ] && grep -q "failed-compare is a symlink" "$T/out" \
+  && [ "$(stat -c %U:%G "$T/evidence-victim-pre")" = "$PRE_OWNER" ] \
+  && [ "$(stat -c %a "$T/evidence-victim-pre")" = "$PRE_MODE" ] \
+  && [ "$(sha256sum "$T/evidence-victim-pre/keep" | cut -d' ' -f1)" = "$PRE_HASH" ] \
+  && ok "D6 pre-flight symlink refusal leaves target owner, mode and contents unchanged" \
+  || bad D6-pre "rc=$RC owner=$(stat -c %U:%G "$T/evidence-victim-pre") mode=$(stat -c %a "$T/evidence-victim-pre")"
+rm -f "$T/lib/dt-deploy-drift/failed-compare"
 run "$T/deploy.sh" --sha "$TC" --only notices
 [ $RC -eq 0 ] && grep -q "install-verify: all 3 installed files equal their verified blobs" "$T/out" \
   && [ "$(stat -c %U "$T/log/dt-deploy-drift.log")" = langston ] \
@@ -281,12 +300,39 @@ cat > "$T/stub/install" <<'EOF4'
 #!/bin/sh
 for a in "$@"; do last=$a; done
 if [ -n "${FAILINSTALL:-}" ]; then case "$last" in *"$FAILINSTALL"*) echo "install: simulated failure for $last" >&2; exit 1 ;; esac; fi
-exec /usr/bin/install "$@"
+/usr/bin/install "$@" || exit $?
+if [ -n "${PLANT_DRIFT_LINK:-}" ]; then
+  case "$last" in
+    *dt-deploy-drift.sh*)
+      rm -rf -- "$PLANT_DRIFT_LINK"
+      ln -s -- "$PLANT_DRIFT_TARGET" "$PLANT_DRIFT_LINK"
+      ;;
+  esac
+fi
 EOF4
 chmod +x "$T/stub/install"
 printf '5 4 * * * /usr/local/bin/other-job\n' > "$T/crontab.txt"
 L update-ref "refs/heads/$B" "$TC"
 run "$T/deploy.sh" --sha "$TC" --only readers
+# #1117 execution-time control: plant the evidence leaf after pre-flight, while the selected
+# files are being installed. The second refusal must protect the target from root's install -d.
+rm -rf "$T/lib/dt-deploy-drift/failed-compare" "$T/evidence-victim-race"
+mkdir -p "$T/evidence-victim-race"
+printf 'race-victim\n' > "$T/evidence-victim-race/keep"
+chown -R root:root "$T/evidence-victim-race"; chmod 0755 "$T/evidence-victim-race"
+RACE_OWNER=$(stat -c %U:%G "$T/evidence-victim-race")
+RACE_MODE=$(stat -c %a "$T/evidence-victim-race")
+RACE_HASH=$(sha256sum "$T/evidence-victim-race/keep" | cut -d' ' -f1)
+PLANT_DRIFT_LINK="$T/lib/dt-deploy-drift/failed-compare" \
+PLANT_DRIFT_TARGET="$T/evidence-victim-race" \
+  bash "$T/deploy.sh" --sha "$TC" --only notices > "$T/out" 2>&1; RC=$?
+[ $RC -eq 2 ] && grep -q "failed-compare is a symlink" "$T/out" \
+  && [ "$(stat -c %U:%G "$T/evidence-victim-race")" = "$RACE_OWNER" ] \
+  && [ "$(stat -c %a "$T/evidence-victim-race")" = "$RACE_MODE" ] \
+  && [ "$(sha256sum "$T/evidence-victim-race/keep" | cut -d' ' -f1)" = "$RACE_HASH" ] \
+  && ok "#1117 execution-time symlink refusal leaves target owner, mode and contents unchanged" \
+  || bad D6-race "rc=$RC owner=$(stat -c %U:%G "$T/evidence-victim-race") mode=$(stat -c %a "$T/evidence-victim-race")"
+rm -f "$T/lib/dt-deploy-drift/failed-compare"
 # G2-D4: files are replaced by RENAME, never truncated in place (a running script keeps its inode).
 I0=$(stat -c %i "$T/bin/dt-backup-sync.sh")
 run "$T/deploy.sh" --sha "$TC" --only readers

@@ -140,6 +140,37 @@ read_cron() {
 # swapped for a symlink by the syslog group: refuse a symlink, never follow one with chown.
 no_symlink() { [ ! -L "$1" ] || die "$1 is a symlink — refusing to chown it"; }
 
+# Create or repair one private leaf without ever following a symlink at the parent or leaf.
+# The directory fd pins the object before root changes ownership or mode, closing the gap
+# between a shell test and install -d/chown/chmod on a user-writable parent.
+install_private_dir_nofollow() { # path owner group octal-mode
+  python3 - "$1" "$2" "$3" "$4" <<'PY' || die "could not safely prepare private directory $1"
+import grp, os, pwd, stat, sys
+
+path, owner, group, mode_text = sys.argv[1:]
+parent, leaf = os.path.split(path.rstrip("/"))
+if not parent or not leaf:
+    raise SystemExit(f"invalid private directory path: {path}")
+flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+pfd = os.open(parent, flags)
+try:
+    try:
+        os.mkdir(leaf, int(mode_text, 8), dir_fd=pfd)
+    except FileExistsError:
+        pass
+    fd = os.open(leaf, flags, dir_fd=pfd)
+    try:
+        if not stat.S_ISDIR(os.fstat(fd).st_mode):
+            raise NotADirectoryError(path)
+        os.fchown(fd, pwd.getpwnam(owner).pw_uid, grp.getgrnam(group).gr_gid)
+        os.fchmod(fd, int(mode_text, 8))
+    finally:
+        os.close(fd)
+finally:
+    os.close(pfd)
+PY
+}
+
 # ---- 0. arguments -------------------------------------------------------------------
 SHA=
 ONLY=bridges,notices,readers
@@ -304,7 +335,11 @@ for e in "${SELECTED[@]}"; do
   [ "$(stat -c %u "$d")" = 0 ] && [ $(( 0$(stat -c %a "$d") & 022 )) -eq 0 ] \
     || die "$d (holding $target) is not root-owned with no group/other write — refusing to install there"
 done
-if want notices; then no_symlink /var/log/dt-deploy-drift.log; fi
+if want notices; then
+  no_symlink /var/log/dt-deploy-drift.log
+  no_symlink /var/lib/dt-deploy-drift
+  no_symlink /var/lib/dt-deploy-drift/failed-compare
+fi
 if want readers; then no_symlink /var/log/dt-backup-sync.log; fi
 echo "== pre-flight: ${#SELECTED[@]} files read from $SHA, every object re-hashed (groups: $GROUPS_TXT) =="
 
@@ -482,9 +517,15 @@ if want notices; then
   # #1117). /var/lib is root-owned, so the state path cannot be swapped under root by another
   # account; the evidence leaf is 0700 and its files are 0600.
   langston_log /var/log/dt-deploy-drift.log
+  # Repeat the refusal at the mutation boundary. The leaf lives below a langston-writable
+  # state directory, so it can change after pre-flight; root must never follow it with
+  # install -d/chown/chmod.
+  no_symlink /var/lib/dt-deploy-drift
   mkdir -p /var/lib/dt-deploy-drift
   chown langston:langston /var/lib/dt-deploy-drift
-  install -d -o langston -g langston -m 0700 /var/lib/dt-deploy-drift/failed-compare
+  no_symlink /var/lib/dt-deploy-drift/failed-compare
+  install_private_dir_nofollow /var/lib/dt-deploy-drift/failed-compare langston langston 0700
+  no_symlink /var/lib/dt-deploy-drift/failed-compare
   add_langston_cron dt-deploy-drift.sh "$DRIFT_CRON"
 fi
 if want readers; then
