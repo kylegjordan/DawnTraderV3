@@ -82,6 +82,26 @@ Ten of nineteen strategies had been switched off for xStock since May, and three
 
 **Carrier chain.** Successor `d048b9eb-70a3-4b88-9669-b4e9be3294b1` is scheduled for 2026-11-10T21:30:00Z, after the next U.S. session, with the same 20-close / early-stop / backstop rules and report-to-Kyle payload. `edd68d5a` is resolved only after this record and its evidence commit are durable; it is never acknowledged. Backstop carrier `0fd961b1-2ab8-4c87-9d6a-6d5ef57a667f` remains scheduled.
 
+### 3a.4 — DAILY READ 2026-11-10 21:40Z (carrier `d048b9eb`): NO END — next post-session read registered
+**Population** (`mode = 'paper'`, `xstock_spot`, `strong_bull_trend`, opened ≥ 2026-11-07T13:20:59Z,
+filled by the registered NULL-safe predicate): **9 rows, 7 filled closes, 0 `never_filled`, 2 still open; mean
+−1.496529 %; 0 winners; 2 U.S. open sessions and 1 U.S. close session; taker 4 / maker 3.** Every filled close
+was `stop_hit`: SPG −1.6131 %, TGT −1.9437 %, MSFT −0.5310 %, APP −1.0635 %, ANET −2.1661 %, DLR
+−1.3039 %, and CDNS −1.8544 %. TSLA (maker, opened 2026-11-09T15:06:16Z) and KMB (maker, opened
+2026-11-10T17:41:32Z) remain open.
+
+**No end condition is reached:** 7 < 20 filled closes; the early-stop arm is not armed because 7 < 10; and the
+backstop remains 2026-11-28T13:20:59Z. The registered PASS/FAIL verdict is therefore **not computed**. The strategy
+stays ON and no rollback is authorized. The same query reproduced the frozen pre-change positive control exactly:
+22 rows = 14 filled closes / 3 `never_filled` / 5 open, mean −1.564493 %, 0 winners, 2 open sessions, 2 close
+sessions, taker 10 / maker 4. A wider post-fence paper xStock control returned 16 rows, so the nine-row strategy
+population is not an empty-source result.
+
+**Carrier chain.** Successor `dabb719b-6035-497e-b0da-6247e5881f64` is scheduled for
+2026-11-11T21:30:00Z with the unchanged registered population and end rules. Carrier `d048b9eb` is resolved only
+after this read and its evidence commit are durable; it is never acknowledged. Backstop carrier
+`0fd961b1-2ab8-4c87-9d6a-6d5ef57a667f` remains scheduled.
+
 ## 3b. ⛔ O3 — DECLARED AMENDMENT (2026-11-06; NEW Claude + Langston 14:34Z/14:45Z/15:1xZ + Coltrane 14:23Z/14:48Z, consensus; sent to PM Claude for Kyle's nod on timing only)
 §3's O3 clause stays as written; this adds to it. **Not a new item:** KD-7 (*"each after a check that its targets are reachable on xStock"*) and §3 already owe the target-side read; the **stop-side and friction leg** is the amendment.
 - **Cell = strategy × `xstock_spot`.** The four candidates only; strong_bull_trend gets no verdict here.
