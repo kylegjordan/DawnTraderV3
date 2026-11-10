@@ -209,3 +209,16 @@ Coltrane read exact ref `709a713df7626543d716c3216ea48e017c5fdfb1` and independe
 ### Step-8 final confirmation
 
 Coltrane returned **CONFIRMED** at exact corrected ref `368b60401b5cb96a538e00de9a1ddd8142d502e6`. He independently repeated both corrected legs: the immutable four-file census reproduced all five target zeros and both positive controls, and a fresh uniquely identified storage row existed as `BLOCKED / MONEY_HELD_UNAVAILABLE` only inside his transaction, with 0 rows across both probe identities after rollback from a separate connection. Step 8 is clear; the deployed code and fixed evidence bounds did not change during the correction rounds.
+
+## Step 9 — objective reconciliation
+
+| objective | result | evidence |
+|---|---|---|
+| OBJ-1 — one anchor-event money-held formula | GREEN | The first and fixed-cut formulas independently reconcile the anchor, straddler and realized-close terms; the focused suite covers restart, re-anchor, straddle and broken-pair shapes. |
+| OBJ-2 — every money-held consumer moved; kill switch stays session-paired | GREEN | The reviewed caller census and source fences passed; staging sizing, the OPENED audit values and the exposure cap all used the held balance, while the deployed code and focused tests preserve the kill-switch reader. |
+| OBJ-3 — null-session and live-mode behavior remains defined | GREEN | The money-held path is session-independent for paper and explicitly refuses the undefined live case; the focused refusal tests passed. |
+| OBJ-4 — new-entry size changes after exposure drains | GREEN | All 2,413 pause-window blocks named `MAX_TOTAL_EXPOSURE`; 17 entries then resumed below held, with notionals at 0.69887680-0.71217449 of the former $820 basis. |
+| §4a — expected exposure pause and recovery | GREEN | Exposure fell through closes, every resumed open remained below held before and after entry, and minimum post-open headroom was $5.704042049074. |
+| Step-4 condition (f), refusal visibility and UI | GREEN | The rolled-back storage probe left 0 residue; Coltrane confirmed the paging/carrier reach and normal Open/Closed Trades rendering. |
+
+No scope objective remains red. Step 9 needs no code, deploy or repeat-verification loop; the batch may proceed to governance.
