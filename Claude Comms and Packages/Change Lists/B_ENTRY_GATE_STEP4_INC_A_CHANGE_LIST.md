@@ -18,7 +18,7 @@
 > `server/startup/b72-warmup.ts`; `server/tests/unit/b-entry-gate-fill-economics.test.ts`;
 > `server/tests/unit/b-entry-gate.test.ts`; `server/tests/unit/b8c-switch-on-wiring.test.ts`;
 > `drizzle/migrations/2026-11-10-b-entry-gate-friction-coverage.sql` and its rollback; `MANIFEST.txt`.
-> **Proof:** 92/92 targeted tests passed; the TypeScript baseline held at 324/324. Mutation M6 (`<` → `<=` at the
+> **Proof:** 100/100 targeted tests passed; the TypeScript baseline held at 324/324. Mutation M6 (`<` → `<=` at the
 > coverage edge) made the exact-edge test red, proving the comparison fence can detect the boundary regression.
 >
 > **Fresh-reader HIT, re-derived and folded before dispatch:** maker adverse selection consumed the pWin-derived
@@ -103,8 +103,8 @@ if (_b72cPendingMaker) {
 6. **A-12's "real DI" candidate is null for all xStock at the fill** — the birth deliberately carries none (`signal-orchestrator.ts:1017-1020`), and I did not resolve an xStock DI at the fill (your "not verified" leg). It is recorded as null, never zero.
 
 ## Evidence
-- **tsc baseline:** 329 = 329 at every commit.
-- **Unit:** the batch's tests — `b-entry-gate.test.ts` 26, `b-entry-gate-fill-economics.test.ts` 11, `b-entry-gate-refresh-logs.test.ts` 5, plus `ev-reject-shadow`, `b-entry-distance-guard` (spread count 2 → 4, comment names each), `b-entry-consumption-freshness-engine` (its cold-cache fixture now supplies the new settings).
-- **Full unit suite:** 4 file failures, all pre-existing and environmental on this laptop (`b-staging-liveness-watch`, `b-tsc-baseline-fix` load errors; `b63-item12`, `b63-item16` load errors) — present with these commits stashed too. Five other files failed once in a full run and pass alone (timing).
+- **tsc baseline:** 324 = 324 at the correction head.
+- **Unit:** the correction target set is 100/100 green across `b-entry-gate`, `b-entry-gate-fill-economics`, `b8c-switch-on-wiring`, `b1250-engine-wiring`, and `b-entry-consumption-freshness-engine`; the last suite's cold-cache fixture supplies all three required `entry_gate` rows, including `entry_friction_coverage_k=1.0`.
+- **Full local suite:** 5,220 passed / 199 skipped; 11 files did not complete in this laptop environment (missing local `jsdom`, unavailable local PostgreSQL, and pre-existing watchdog/module load errors). The previous pushed CI completed 423 files and isolated its four failures to the now-corrected cold-cache fixture; the correction head still requires fresh 4-job CI.
 - **Mutations, each RED:** M1 window `>` → `>=` (2 tests); M2 P4 never refuses (1); M3 exploration not exempt at the taker (1); M4 strong-trend pool not excluded from `pWinDefaulted` (1).
 - **CI:** to be read on the pushed head before you rule (4/4 per job).

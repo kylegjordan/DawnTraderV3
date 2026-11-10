@@ -244,8 +244,8 @@ vi.mock('../../services/i1-trade-lifecycle-diagnostics.js', async (orig) => ({
 }));
 
 // B-ENTRY-GATE (#1224) P1/P1b: the taker fill now reads the per-class entry window and cheaper-side floor with
-// getCachedNumberRequired (fail-hard). This fixture runs with a cold settings cache, so it supplies those two rows at the
-// seeded values (0.25 / 0.40); every other key still goes to the real reader.
+// getCachedNumberRequired (fail-hard). This fixture runs with a cold settings cache, so it supplies those rows at the
+// seeded values (0.25 / 0.40 / 1.0); every other key still goes to the real reader.
 vi.mock('../../services/module-constants-service.js', async (orig) => {
   const actual = await orig<Record<string, any>>();
   return {
@@ -253,6 +253,7 @@ vi.mock('../../services/module-constants-service.js', async (orig) => {
     getCachedNumberRequired: (module: string, name: string, key: unknown) => {
       if (module === 'entry_gate' && name === 'entry_window_worse_side_frac') return 0.25;
       if (module === 'entry_gate' && name === 'entry_cheaper_side_floor_frac') return 0.40;
+      if (module === 'entry_gate' && name === 'entry_friction_coverage_k') return 1.0;
       // B-ENTRY-GATE (#1224) P4: the kernel's pWin settings and the class base rate, at their live values.
       if (module === 'expectancy_kernel' && name === 'pwin_floor') return 0.40;
       if (module === 'expectancy_kernel' && name === 'pwin_ceiling') return 0.60;
