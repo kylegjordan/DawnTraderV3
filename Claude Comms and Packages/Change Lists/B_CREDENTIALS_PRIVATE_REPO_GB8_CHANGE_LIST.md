@@ -9,3 +9,7 @@ The bridge installer previously requested `discord.py>=2.3`, so running an alrea
 `comms-infra/helsinki/tests/deploy_tests.sh` adds two discriminating checks: a simulated `2.7.0` result must refuse before bridge-file installation, and the pip stub must receive exactly `install -U discord.py==2.7.1`. Its positive control reads the pre-GB-8 installer and finds the former unbounded `discord.py>=2.3` requirement.
 
 No bridge package was installed and no service was installed, restarted or enabled in Step 3. The later Step-6 bridges install remains gated on review, CI, an empty review queue, and the Codex-shift rule that Langston stays off.
+
+**Step-3 evidence:** implementation ref `2b1c83999837c787b7fce277fa5f3663053dc449` is pushed. Both edited shell files pass `bash -n`. The committed root-isolated installer suite ran on Helsinki from that exact ref and passed 66/66 assertions, including `GB8-D1`, `GB8-D2`, and the pre-change `GB8-D2 CONTROL`. It ran under a private `/tmp/dtr-gb8.*` directory and deleted that directory in the same command; the post-run search found 0 such directories, while the same instrument found the known `/tmp/dtr-test` directory as its positive control.
+
+**STEP: 3 of 11 COMPLETE · NEXT STEP: 4 of 11.** Dispatch the exact pushed implementation and its 66/66 suite evidence to Coltrane. Langston and both Langston workers remain off.
