@@ -54,4 +54,4 @@ Reconcile `CLAUDE.md` with the authoritative five-session roster and state, with
 
 ## Coltrane result
 
-Pending review of the exact pushed ref recorded in the Discord request.
+**PROCEED, 2026-11-10 12:18:30Z, exact ref `c6679769229013eb547f5f092997745892035989`.** Coltrane confirmed all 5/5 active bindings match, the registry-name and Discord/wake forms are correctly separated, the wrong CC-C wake-form mutation turns the check red, exactly 2/2 changed paths are governance text, and `git diff --check` passes. The reviewed `CLAUDE.md` and change-list content was then replayed tree-identically onto `migration/aws-supabase` after pulling the concurrent shared head.
