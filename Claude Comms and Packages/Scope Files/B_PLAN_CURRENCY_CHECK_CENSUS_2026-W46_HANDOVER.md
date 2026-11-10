@@ -54,6 +54,11 @@ The empty set is supported by the same census instrument that found nine unmatch
 - Row 59g2 → `N`: parser false positive. The closed row meant a configurable consecutive-skip count, implemented and reported as four, not a plan predecessor; wording now says “upon four consecutive skips.”
 - Row 100: removed the three stale predecessor names because all three were deleted/folded into existing row 2 `B-XSTOCK-BID-TRIGGER-RELAND`, already named as row 100's first prerequisite. Replaced obsolete ordinal “row 32” with that row's current stable batch id, `B-DISK-HEADROOM`. Sequence is unchanged.
 
+## CC-INFRA owner disposition — 2026-11-10 (INFRA Codex)
+
+- `#1237` remains OPEN, but is now placed: disposition 2 folds its remaining nightly-ZIP omission into the already approved after-live `B-CODEX-CONVERSATION-BACKUP` (`#1238`) line. That one implementation covers all five Claude sessions, all five Codex chats, Langston and Coltrane, with raw backup, readable search and one restore proof required for every source. No new batch or plan row was created.
+- §0 `B-TOKEN-WATCH` correctly remains OPEN and PARKED at Step 7, research after live. The completion report that triggered the census match is `B_TOKEN_WATCH_STORAGE_COMPLETION_REPORT.md`, the closed storage sub-batch, not a completion report for the parent study. The parent row is explicitly PARKED at §0 order 19, and `PRE_LIVE_SPRINT.md` separately carries its Steps 7–11; the feed is still not pointed at the study endpoint, so closing the parent would be false.
+
 ## (g) §6 ownership recount
 The census recount over §4's seven-cell item rows is CC-C 83, CC-INFRA 55, CC-B 96, CC-A 89: 323 items total. The hand-maintained table said 83, 57, 96, 85: 321. This commit corrects CC-INFRA, CC-A, the total and the recount history; no row ownership changes are made.
 
