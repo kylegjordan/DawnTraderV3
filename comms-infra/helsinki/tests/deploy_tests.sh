@@ -160,7 +160,11 @@ N5=$(awk '/^MANIFEST="/{p=1;next} p&&/^"/{p=0} p&&/^bridges\|/' "$T/deploy.orig"
 grep -q "^COMMS_BACKEND=discord" "$T/etc/comms-active.env" && ok "D5 a fresh host is seeded with COMMS_BACKEND=discord" || bad D5s "$(grep COMMS_BACKEND "$T/etc/comms-active.env")"
 grep -q "NOT RESTARTED: discord-langston-bridge.service" "$T/out" && ! grep -q "stub systemctl restart" "$T/out" && ok "D5 the running bridges are named NOT RESTARTED; no restart issued" || bad D5b x
 run "$T/deploy.sh" --sha "$TC" --only notices
-[ $RC -eq 0 ] && grep -q "install-verify: all 3 installed files equal their verified blobs" "$T/out" && [ "$(stat -c %U "$T/log/dt-deploy-drift.log")" = langston ] && ok "D6 notices: 3 files installed + verified; drift log langston-owned" || bad D6 "rc=$RC $(tail -3 "$T/out")"
+[ $RC -eq 0 ] && grep -q "install-verify: all 3 installed files equal their verified blobs" "$T/out" \
+  && [ "$(stat -c %U "$T/log/dt-deploy-drift.log")" = langston ] \
+  && [ "$(stat -c %U:%G:%a "$T/lib/dt-deploy-drift/failed-compare")" = langston:langston:700 ] \
+  && ok "D6 notices: 3 files installed + verified; drift log and 0700 evidence dir are langston-owned" \
+  || bad D6 "rc=$RC $(tail -3 "$T/out")"
 
 
 # ================= round 2 (fresh-reader round 2 on b9ca76485) =================

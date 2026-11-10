@@ -477,12 +477,14 @@ langston_log() {   # checked in pre-flight too; this re-check is for the race
   chown -h langston:langston "$1"
 }
 if want notices; then
-  # dt-deploy-drift.sh runs hourly as langston, so its log and its main-arm cap stamp
-  # directory must be langston-writable BEFORE the first run (#1002). /var/lib is root-owned,
-  # so that path cannot be swapped under root by another account.
+  # dt-deploy-drift.sh runs hourly as langston, so its log, main-arm cap stamp and bounded
+  # parse-failure evidence directory must be langston-writable BEFORE the first run (#1002,
+  # #1117). /var/lib is root-owned, so the state path cannot be swapped under root by another
+  # account; the evidence leaf is 0700 and its files are 0600.
   langston_log /var/log/dt-deploy-drift.log
   mkdir -p /var/lib/dt-deploy-drift
   chown langston:langston /var/lib/dt-deploy-drift
+  install -d -o langston -g langston -m 0700 /var/lib/dt-deploy-drift/failed-compare
   add_langston_cron dt-deploy-drift.sh "$DRIFT_CRON"
 fi
 if want readers; then

@@ -21,7 +21,7 @@ REPO="kylegjordan/DawnTraderV3"
 API="https://api.github.com/repos/$REPO/compare"
 BRANCH="migration/aws-supabase"
 REMOTE="https://github.com/$REPO.git"
-LOG="/var/log/dt-deploy-drift.log"
+LOG="${DT_DRIFT_LOG:-/var/log/dt-deploy-drift.log}"
 
 # ⛔ EXPLICIT HOST + IDENTITY, NOT THE `staging` ALIAS. The alias lives in
 # /home/langston/.ssh/config, so it resolves ONLY when the process HOME is langston's.
@@ -53,7 +53,15 @@ SSH_OPTS="-n -i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 #   staging worktree, and only then install the cron.
 ACTOR="deploy-drift-monitor"
 ALERTS="/var/log/dawntrader/system-alerts.jsonl"
-MAIN_STAMP="/var/lib/dt-deploy-drift/main-arm.stamp"
+STATE_DIR="${DT_DRIFT_STATE_DIR:-/var/lib/dt-deploy-drift}"
+MAIN_STAMP="$STATE_DIR/main-arm.stamp"
+FAILED_COMPARE_DIR="${DT_DRIFT_FAILED_COMPARE_DIR:-$STATE_DIR/failed-compare}"
+# Fourteen days. The value is minutes so the retention control can be exercised without
+# waiting a day in the committed fixture. It is a diagnostic lifetime, never control flow.
+FAILED_COMPARE_RETENTION_MINUTES="${DT_DRIFT_FAILED_COMPARE_RETENTION_MINUTES:-20160}"
+case "$FAILED_COMPARE_RETENTION_MINUTES" in
+  ''|*[!0-9]*) echo "dt-deploy-drift: invalid failed-compare retention minutes" >&2; exit 2 ;;
+esac
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 # --dry-run performs every read and writes NOTHING TO THE ALERT STORE. It still appends to
@@ -128,6 +136,35 @@ one rung; only a resolve clears it."
 # is 1 and nothing is minted, so no row ever claims a reading that did not happen.
 WORK="$(mktemp -d /tmp/dt-drift-XXXXXX)" || { log "MEASUREMENT_FAILED operand=scratch detail=mktemp"; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
+
+# Preserve ONLY a non-empty body that reached the JSON parser and failed there. Empty bodies,
+# curl failures and every successful response keep the existing scratch-only lifecycle. The
+# installer owns the parent as langston; this function also refuses a symlink, re-asserts 0700
+# on the leaf directory and writes atomically under umask 077. The later OBJ-4 conversion is
+# the removal point for this capture because it deletes the compare API path itself (#1117).
+capture_failed_compare() {
+  local src="$1" stamp path tmp owner cleanup
+  [ -s "$src" ] || { echo "source body is empty" >&2; return 1; }
+  [ ! -L "$FAILED_COMPARE_DIR" ] || { echo "diagnostic directory is a symlink" >&2; return 1; }
+  mkdir -p -- "$FAILED_COMPARE_DIR" || { echo "cannot create diagnostic directory" >&2; return 1; }
+  chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
+  owner="$(stat -c %U -- "$FAILED_COMPARE_DIR" 2>/dev/null)"
+  [ "$owner" = "$(id -un)" ] || { echo "diagnostic directory owner is $owner, expected $(id -un)" >&2; return 1; }
+
+  stamp="${TS//:/-}"
+  path="$FAILED_COMPARE_DIR/compare-$stamp-$$.body"
+  tmp="$path.tmp"
+  umask 077
+  cp -- "$src" "$tmp" || { echo "cannot copy response body" >&2; return 1; }
+  chmod 0600 -- "$tmp" || { rm -f -- "$tmp"; echo "cannot set response-body mode" >&2; return 1; }
+  mv -- "$tmp" "$path" || { rm -f -- "$tmp"; echo "cannot publish response body" >&2; return 1; }
+
+  cleanup="ok"
+  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f -name 'compare-*.body' \
+    -mmin "+$FAILED_COMPARE_RETENTION_MINUTES" ! -path "$path" -delete \
+    || cleanup="FAILED"
+  printf '%s;retention_cleanup=%s' "$path" "$cleanup"
+}
 
 # ── MINT / RE-MINT ────────────────────────────────────────────────────────────────────
 # The alert store lives on STAGING, so the supported write path is `ssh staging` + the CLI.
@@ -221,14 +258,22 @@ HEAD_SHA="$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" 2>>"$LOG" | cut -f1)"
 # numerically SMALLER than the implicit cap, so it cannot change how many are dropped —
 # only which end we are handed.
 fetch() {
-  local url="$1" out="$2"
-  curl -sS --max-time 25 -o "$out" "$url" 2>>"$LOG"
+  local url="$1" out="$2" status_out="${3:-}"
+  if [ -n "$status_out" ]; then
+    # HTTP status is diagnostic only. The exit status still decides whether bytes landed.
+    curl -sS --max-time 25 -o "$out" -w '%{http_code}\n' "$url" > "$status_out" 2>>"$LOG"
+  else
+    curl -sS --max-time 25 -o "$out" "$url" 2>>"$LOG"
+  fi
   return $?   # EXIT STATUS, never the HTTP code — see fail_measurement's header
 }
 
-fetch "$API/$DEPLOYED...$HEAD_SHA?page=1&per_page=100" "$WORK/cmp.json" \
+COMPARE_HTTP_STATUS_FILE="$WORK/cmp.http-status"
+fetch "$API/$DEPLOYED...$HEAD_SHA?page=1&per_page=100" "$WORK/cmp.json" "$COMPARE_HTTP_STATUS_FILE" \
   || fail_measurement "compare_api" "curl exit status non-zero (the bytes did not land; an HTTP 200 would not have told us)"
 [ -s "$WORK/cmp.json" ] || fail_measurement "compare_api" "compare response empty"
+COMPARE_HTTP_STATUS="$(tr -d '\r\n' < "$COMPARE_HTTP_STATUS_FILE")"
+[ -n "$COMPARE_HTTP_STATUS" ] || COMPARE_HTTP_STATUS="unavailable"
 
 READ="$(python3 - "$WORK/cmp.json" "$WORK/rtlist.txt" <<'PY'
 import json, sys, datetime
@@ -390,7 +435,16 @@ case "$READ" in
   #   broke mint_alert: an edit in a comment region destroying a live statement, invisible to
   #   `bash -n`. One block now, so the comment cannot be orphaned from the arm again.
   ""|" ") fail_measurement "compare_reader" "the compare reader produced no output at all (python3 missing, the heredoc failing, or an uncaught exception outside its json guard)" ;;
-  PARSE_ERROR*) fail_measurement "compare_api" "${READ#PARSE_ERROR }" ;;
+  PARSE_ERROR*)
+    CAPTURE_ERROR_FILE="$WORK/compare-capture.error"
+    if SAVED_BODY="$(capture_failed_compare "$WORK/cmp.json" 2>"$CAPTURE_ERROR_FILE")"; then
+      CAPTURE_DETAIL="saved_body=$SAVED_BODY"
+    else
+      CAPTURE_ERROR="$(tr '\n' ' ' < "$CAPTURE_ERROR_FILE" | sed 's/[[:space:]]*$//')"
+      CAPTURE_DETAIL="saved_body=FAILED(${CAPTURE_ERROR:-unknown capture error})"
+    fi
+    fail_measurement "compare_api" "${READ#PARSE_ERROR }; http_status=$COMPARE_HTTP_STATUS; $CAPTURE_DETAIL; retention_minutes=$FAILED_COMPARE_RETENTION_MINUTES"
+    ;;
   ANOMALY*)
     set -- $READ
     # SAME GUARD, SAME REASON, TWENTY LINES UP. The class member Langston named got the
