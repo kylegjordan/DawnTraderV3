@@ -1,6 +1,6 @@
 # B-CREDENTIALS-PRIVATE-REPO — GB-8 BRIDGES INCREMENT
 
-**READY-AT:** pending correction commit · **Owner:** INFRA Codex (`codex-infra`) · **Parent:** `B-CREDENTIALS-PRIVATE-REPO` / `#1023`
+**READY-AT:** `0a26a4dc206c82b219016aec411fac5c8ca4cd83` · **Owner:** INFRA Codex (`codex-infra`) · **Parent:** `B-CREDENTIALS-PRIVATE-REPO` / `#1023`
 
 ## STEP-4 DISPATCH HEADER
 
@@ -98,7 +98,7 @@ grep -Fq 'discord.py>=2.3' "$T/deploy.r4" \
 
 ## EVIDENCE AND REVIEWER RECORD
 
-**Step-3 evidence:** implementation ref `2b1c83999837c787b7fce277fa5f3663053dc449` was pushed before the fresh-reader correction. Both edited shell files passed `bash -n`. The root-isolated installer suite ran on Helsinki from that exact implementation and passed 66/66 assertions, including `GB8-D1`, `GB8-D2`, and the pre-change `GB8-D2 CONTROL`. It ran under a private `/tmp/dtr-gb8.*` directory and deleted that directory in the same command; the post-run search found 0 such directories, while the same instrument found the known `/tmp/dtr-test` directory as its positive control. The correction changes only the refusal label and its matching test expectation; the exact replacement ref and repeated evidence will be recorded before dispatch.
+**Step-3 evidence:** corrected implementation ref `0a26a4dc206c82b219016aec411fac5c8ca4cd83` is pushed. Both edited shell files pass `bash -n`. GitHub Actions run `42827706732` passed all four jobs: TypeScript Check, Test Suite, Build, and Docker Build. The root-isolated installer suite ran twice on Helsinki from that exact ref and passed 66/66 assertions on each run, including `GB8-D1`, `GB8-D2`, and the pre-change `GB8-D2 CONTROL`. Each run used a private `/tmp/dtr-gb8.*` directory and deleted its exact directory in the same command; the final post-run search found 0 such directories, while the same instrument found the known `/tmp/dtr-test` directory as its positive control. No live install, restart or enable occurred.
 
 **REVIEWER:** claim-only · name the objects that settle “the bridge installer pins discord.py to 2.7.1 and refuses any mismatched imported version before its explicit bridge-file installation loop,” then name other states consistent with them · **HIT** — the mechanism checks imported `discord.__version__`, not installed-distribution metadata or package bytes; its error text overstated that as “installed version,” and the evidence lived only as prose · **re-derived yes** at `d1a36f1beaff6cedba646218fc728f109e63af8a`, with the exact old message as the positive control; corrected to “imported version,” narrowed the claim, and scheduled exact-ref rerun evidence before Coltrane dispatch.
 
