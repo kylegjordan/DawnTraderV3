@@ -244,6 +244,13 @@ The drift-alarm cell stays separate. A registered-window absence of `[11.8B][EV_
 rows may be reported only as **UNVERIFIED** unless the extraction is mutation-proved and the exact engine producer to
 durable sink path has a positive control. Adjacent `maker_taker` / `sqe_shadow` rows do not satisfy that condition.
 
+`REVIEWER: claim-only · name the objects that would settle the drift-control condition and the materially different
+states consistent with them · HIT—the correction retains the old unproved extractor and adjacent sink/counter tests,
+not a full active-engine-to-durable-row positive control · re-derived y`. Re-derivation at the deployed ref confirmed
+the static producer call and sink adapter, but the sink test mocks the batch writer, the drift test calls only the
+in-memory counter/alert latch, and the correction diff contains no drift-path or extractor change. The cell therefore
+remains UNVERIFIED unless a real exact-path event or a new controlled full-path object settles it.
+
 No batch UI surface is introduced by the correction: it writes an internal durable shadow carrier and leaves Filter
 Diagnostics explicitly out of scope. Step 7 therefore verifies the live durable carrier, settings, logs, process and
 database objects; there is no affected staging panel to navigate.
