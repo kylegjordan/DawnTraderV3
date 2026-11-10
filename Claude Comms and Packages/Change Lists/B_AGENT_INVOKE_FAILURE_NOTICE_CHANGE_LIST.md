@@ -75,3 +75,11 @@ Coltrane's re-review at `28f3c91d52b955bd5cfce1d26d8dad938255632e` found one rem
 Fresh private Helsinki run after that fold: failure-notice suite **12 passed / 0 failed**; mutation suite **10/10 caught, 0 by crash or bad anchor**; shared invoke-gate suite **1 passed / 0 failed**; real-process clean-stop gate **26 passed / 0 failed**. The private `/tmp` tree was removed by the same command that created and ran it.
 
 - The exit-vs-timeout split of the 67 could not be measured (elapsed was never recorded); C-2 records it from now on.
+
+## Step 6 partial install — Coltrane live, Langston held by crew mode (2026-11-10)
+
+- The ten install/runtime files at shared ref `e781739c96f8a0eba0aff79e6b781bd1a93bbf80` are byte-identical to Coltrane-cleared ref `18081e006ceb2785853eb7a3042a5ffd7a285334`.
+- P10's laptop gate passed on all **5 of 5 active Codex clones**: after stripping checkout CR characters, every `dt_dispatch_census.py` matched reviewed SHA-256 `03b947d9…`; each had two `langston_enqueued` source hits. The live `cc-wake-follow.py` now matches reviewed SHA-256 `a2b8e7c8…`.
+- Coltrane's bot, unit and logrotate stanza were installed from `e781739c9` under the exclusive invoke gate. The old live bot was positively identified as the KD-62 gate-bearing build before the zero-active-invoke census. Read-back: bot `af7e4901…` mode 755; unit `32005a3a…` mode 644; logrotate `70c27d96…` mode 644 and `logrotate -d` PASS. The stop handler reported **0 running invokes**; service resumed active+enabled at `2026-11-10 00:42:39Z`, `NRestarts=0`, and logged `Coltrane online`.
+- Both logrotate stanzas are installed; the Langston stanza reads back as `a3939bab…`, mode 644, debug PASS. Langston's bridge files are deliberately **not installed yet**: the reviewed installer ends by `enable --now` for both bridges, but crew mode is CODEX and requires Langston to remain inactive/disabled. No Langston worker or service was switched on.
+- `dt-deploy` was not used: this batch has no staging runtime target, and the current staging-to-shared range contains 94 commits including other sessions' work. Step 6 remains open until CLAUDE mode returns or a separately reviewed install-only bridge path exists; then the bridge group can be installed and restarted through `langston-bridge-restart` as pre-registered.
