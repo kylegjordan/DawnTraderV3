@@ -21,7 +21,24 @@ REPO="kylegjordan/DawnTraderV3"
 API="https://api.github.com/repos/$REPO/compare"
 BRANCH="migration/aws-supabase"
 REMOTE="https://github.com/$REPO.git"
-LOG="${DT_DRIFT_LOG:-/var/log/dt-deploy-drift.log}"
+TEST_MODE="${DT_DRIFT_TEST_MODE:-0}"
+case "$TEST_MODE" in
+  0|1) ;;
+  *) echo "dt-deploy-drift: DT_DRIFT_TEST_MODE must be 0 or 1" >&2; exit 2 ;;
+esac
+if [ "$TEST_MODE" = "1" ]; then
+  LOG="${DT_DRIFT_LOG:-/var/log/dt-deploy-drift.log}"
+  STATE_DIR="${DT_DRIFT_STATE_DIR:-/var/lib/dt-deploy-drift}"
+  FAILED_COMPARE_DIR="${DT_DRIFT_FAILED_COMPARE_DIR:-$STATE_DIR/failed-compare}"
+  FAILED_COMPARE_RETENTION_MINUTES="${DT_DRIFT_FAILED_COMPARE_RETENTION_MINUTES:-20160}"
+else
+  # Production locations and retention are not ambient configuration. The fixture must opt
+  # into test mode before it can redirect a write or shorten the lifetime.
+  LOG="/var/log/dt-deploy-drift.log"
+  STATE_DIR="/var/lib/dt-deploy-drift"
+  FAILED_COMPARE_DIR="$STATE_DIR/failed-compare"
+  FAILED_COMPARE_RETENTION_MINUTES="20160"
+fi
 
 # ⛔ EXPLICIT HOST + IDENTITY, NOT THE `staging` ALIAS. The alias lives in
 # /home/langston/.ssh/config, so it resolves ONLY when the process HOME is langston's.
@@ -53,12 +70,10 @@ SSH_OPTS="-n -i $SSH_ID -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
 #   staging worktree, and only then install the cron.
 ACTOR="deploy-drift-monitor"
 ALERTS="/var/log/dawntrader/system-alerts.jsonl"
-STATE_DIR="${DT_DRIFT_STATE_DIR:-/var/lib/dt-deploy-drift}"
 MAIN_STAMP="$STATE_DIR/main-arm.stamp"
-FAILED_COMPARE_DIR="${DT_DRIFT_FAILED_COMPARE_DIR:-$STATE_DIR/failed-compare}"
 # Fourteen days. The value is minutes so the retention control can be exercised without
-# waiting a day in the committed fixture. It is a diagnostic lifetime, never control flow.
-FAILED_COMPARE_RETENTION_MINUTES="${DT_DRIFT_FAILED_COMPARE_RETENTION_MINUTES:-20160}"
+# waiting a day in the committed fixture. The hourly job prunes on every run, so a matching
+# file is retained for at most fourteen days plus one hourly scheduling interval.
 case "$FAILED_COMPARE_RETENTION_MINUTES" in
   ''|*[!0-9]*) echo "dt-deploy-drift: invalid failed-compare retention minutes" >&2; exit 2 ;;
 esac
@@ -137,32 +152,47 @@ one rung; only a resolve clears it."
 WORK="$(mktemp -d /tmp/dt-drift-XXXXXX)" || { log "MEASUREMENT_FAILED operand=scratch detail=mktemp"; exit 1; }
 trap 'rm -rf "$WORK"' EXIT
 
-# Preserve ONLY a non-empty body that reached the JSON parser and failed there. Empty bodies,
-# curl failures and every successful response keep the existing scratch-only lifecycle. The
+# Preserve ONLY a non-empty body that failed JSON decoding. Empty bodies, curl failures,
+# semantically invalid JSON and every successful response keep the existing scratch-only
+# lifecycle. The
 # installer owns the parent as langston; this function also refuses a symlink, re-asserts 0700
 # on the leaf directory and writes atomically under umask 077. The later OBJ-4 conversion is
 # the removal point for this capture because it deletes the compare API path itself (#1117).
-capture_failed_compare() {
-  local src="$1" stamp path tmp owner cleanup
-  [ -s "$src" ] || { echo "source body is empty" >&2; return 1; }
+prepare_failed_compare_dir() {
   [ ! -L "$FAILED_COMPARE_DIR" ] || { echo "diagnostic directory is a symlink" >&2; return 1; }
   mkdir -p -- "$FAILED_COMPARE_DIR" || { echo "cannot create diagnostic directory" >&2; return 1; }
   chmod 0700 -- "$FAILED_COMPARE_DIR" || { echo "cannot set diagnostic directory mode" >&2; return 1; }
+  local owner
   owner="$(stat -c %U -- "$FAILED_COMPARE_DIR" 2>/dev/null)"
   [ "$owner" = "$(id -un)" ] || { echo "diagnostic directory owner is $owner, expected $(id -un)" >&2; return 1; }
+}
+
+prune_failed_compares() {
+  [ -e "$FAILED_COMPARE_DIR" ] || return 0
+  prepare_failed_compare_dir || return 1
+  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f -name 'compare-*.body' \
+    -mmin "+$FAILED_COMPARE_RETENTION_MINUTES" -delete
+}
+
+if ! PRUNE_ERROR="$(prune_failed_compares 2>&1)"; then
+  log "RETENTION_CLEANUP_FAILED path=$FAILED_COMPARE_DIR detail=${PRUNE_ERROR:-unknown cleanup error}"
+fi
+
+capture_failed_compare() {
+  local src="$1" stamp path tmp cleanup
+  [ -s "$src" ] || { echo "source body is empty" >&2; return 1; }
+  prepare_failed_compare_dir || return 1
 
   stamp="${TS//:/-}"
   path="$FAILED_COMPARE_DIR/compare-$stamp-$$.body"
   tmp="$path.tmp"
   umask 077
-  cp -- "$src" "$tmp" || { echo "cannot copy response body" >&2; return 1; }
+  cp -- "$src" "$tmp" || { rm -f -- "$tmp"; echo "cannot copy response body" >&2; return 1; }
   chmod 0600 -- "$tmp" || { rm -f -- "$tmp"; echo "cannot set response-body mode" >&2; return 1; }
   mv -- "$tmp" "$path" || { rm -f -- "$tmp"; echo "cannot publish response body" >&2; return 1; }
 
   cleanup="ok"
-  find "$FAILED_COMPARE_DIR" -maxdepth 1 -type f -name 'compare-*.body' \
-    -mmin "+$FAILED_COMPARE_RETENTION_MINUTES" ! -path "$path" -delete \
-    || cleanup="FAILED"
+  prune_failed_compares || cleanup="FAILED"
   printf '%s;retention_cleanup=%s' "$path" "$cleanup"
 }
 
@@ -280,7 +310,7 @@ import json, sys, datetime
 try:
     d = json.load(open(sys.argv[1]))
 except Exception as e:
-    print("PARSE_ERROR %s" % e); raise SystemExit(0)
+    print("JSON_PARSE_ERROR %s" % e); raise SystemExit(0)
 
 status = d.get('status')
 # VALIDATE AGAINST THE KNOWN SET, NOT AGAINST None. GitHub's ERROR bodies carry their own
@@ -435,7 +465,7 @@ case "$READ" in
   #   broke mint_alert: an edit in a comment region destroying a live statement, invisible to
   #   `bash -n`. One block now, so the comment cannot be orphaned from the arm again.
   ""|" ") fail_measurement "compare_reader" "the compare reader produced no output at all (python3 missing, the heredoc failing, or an uncaught exception outside its json guard)" ;;
-  PARSE_ERROR*)
+  JSON_PARSE_ERROR*)
     CAPTURE_ERROR_FILE="$WORK/compare-capture.error"
     if SAVED_BODY="$(capture_failed_compare "$WORK/cmp.json" 2>"$CAPTURE_ERROR_FILE")"; then
       CAPTURE_DETAIL="saved_body=$SAVED_BODY"
@@ -443,7 +473,10 @@ case "$READ" in
       CAPTURE_ERROR="$(tr '\n' ' ' < "$CAPTURE_ERROR_FILE" | sed 's/[[:space:]]*$//')"
       CAPTURE_DETAIL="saved_body=FAILED(${CAPTURE_ERROR:-unknown capture error})"
     fi
-    fail_measurement "compare_api" "${READ#PARSE_ERROR }; http_status=$COMPARE_HTTP_STATUS; $CAPTURE_DETAIL; retention_minutes=$FAILED_COMPARE_RETENTION_MINUTES"
+    fail_measurement "compare_api" "${READ#JSON_PARSE_ERROR }; http_status=$COMPARE_HTTP_STATUS; $CAPTURE_DETAIL; retention_minutes=$FAILED_COMPARE_RETENTION_MINUTES"
+    ;;
+  PARSE_ERROR*)
+    fail_measurement "compare_api" "${READ#PARSE_ERROR }; http_status=$COMPARE_HTTP_STATUS; saved_body=NOT_APPLICABLE(valid JSON rejected by response validation)"
     ;;
   ANOMALY*)
     set -- $READ

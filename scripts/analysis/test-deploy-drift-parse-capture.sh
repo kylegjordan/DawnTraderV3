@@ -46,13 +46,14 @@ while [ $# -gt 0 ]; do
 done
 cp -- "$DT_FIXTURE" "$out" || exit 93
 printf '%s\n' "${DT_HTTP_STATUS:-200}"
+exit "${DT_CURL_EXIT:-0}"
 SH
 chmod +x "$T/bin/ssh" "$T/bin/git" "$T/bin/curl"
 
 run_fixture() {
-  local fixture="$1" status="$2" diag="$3"
+  local fixture="$1" status="$2" diag="$3" curl_exit="${4:-0}"
   PATH="$T/bin:$PATH" \
-  DT_FIXTURE="$fixture" DT_HTTP_STATUS="$status" \
+  DT_DRIFT_TEST_MODE=1 DT_FIXTURE="$fixture" DT_HTTP_STATUS="$status" DT_CURL_EXIT="$curl_exit" \
   DT_DRIFT_LOG="$T/drift.log" DT_DRIFT_STATE_DIR="$T/state" \
   DT_DRIFT_FAILED_COMPARE_DIR="$diag" DT_DRIFT_FAILED_COMPARE_RETENTION_MINUTES=1 \
     bash "$SRC" --dry-run > "$T/out" 2>&1
@@ -82,6 +83,17 @@ check "alert detail names the saved path" grep -Fq "saved_body=${FILES[0]};reten
 check "HTTP status is diagnostic in the detail" grep -Fq 'http_status=502' "$T/out"
 check "retention bound is named in the detail" grep -Fq 'retention_minutes=1' "$T/out"
 
+# A transport failure can leave partial bytes, but it exits before the reader and never captures.
+mkdir -p "$T/curl-diag"
+run_fixture "$T/non-json.body" 000 "$T/curl-diag" 28
+check "curl failure exits measurement-failed" test "$RC" -eq 1
+check "curl failure remains the named operand result" grep -Fq 'DETAIL: curl exit status non-zero' "$T/out"
+if compgen -G "$T/curl-diag/compare-*.body" >/dev/null; then
+  bad "curl failure saves no body" "unexpected capture"
+else
+  ok "curl failure saves no body"
+fi
+
 # Empty bytes take the existing empty-response branch and create no persistent evidence.
 mkdir -p "$T/empty-diag"
 : > "$T/empty.body"
@@ -94,12 +106,39 @@ else
   ok "empty fixture saves no body"
 fi
 
+# Syntactically valid JSON rejected by response validation is not a JSON-decode failure.
+printf '{"message":"Not Found","status":"404"}\n' > "$T/invalid-status.json"
+mkdir -p "$T/invalid-status-diag"
+run_fixture "$T/invalid-status.json" 404 "$T/invalid-status-diag"
+check "invalid known-set status exits measurement-failed" test "$RC" -eq 1
+check "invalid status is named without a saved body" grep -Fq 'saved_body=NOT_APPLICABLE(valid JSON rejected by response validation)' "$T/out"
+if compgen -G "$T/invalid-status-diag/compare-*.body" >/dev/null; then
+  bad "valid JSON with invalid status saves no body" "unexpected capture"
+else
+  ok "valid JSON with invalid status saves no body"
+fi
+
+# A structurally inconsistent but syntactically valid response follows the same non-capture arm.
+printf '{"status":"ahead","total_commits":1,"commits":[],"files":[]}\n' > "$T/empty-commits.json"
+mkdir -p "$T/empty-commits-diag"
+run_fixture "$T/empty-commits.json" 200 "$T/empty-commits-diag"
+check "empty commits inconsistency exits measurement-failed" test "$RC" -eq 1
+check "empty commits inconsistency is named" grep -Fq 'commits[] empty; http_status=200' "$T/out"
+if compgen -G "$T/empty-commits-diag/compare-*.body" >/dev/null; then
+  bad "valid JSON with empty commits saves no body" "unexpected capture"
+else
+  ok "valid JSON with empty commits saves no body"
+fi
+
 # A valid JSON body remains authoritative even with a non-2xx status: HTTP is diagnostic only.
 printf '{"status":"identical","total_commits":0,"commits":[],"files":[]}\n' > "$T/valid.json"
 mkdir -p "$T/valid-diag"
+printf 'old-success-prune\n' > "$T/valid-diag/compare-old.body"
+touch -d '5 minutes ago' "$T/valid-diag/compare-old.body"
 run_fixture "$T/valid.json" 503 "$T/valid-diag"
 check "valid JSON controls flow, not HTTP status" test "$RC" -eq 0
 check "valid JSON reaches ZERO" grep -Fq 'ZERO deployed=' "$T/out"
+check "successful hourly run prunes expired evidence" test ! -e "$T/valid-diag/compare-old.body"
 if compgen -G "$T/valid-diag/compare-*.body" >/dev/null; then
   bad "valid JSON saves no body" "unexpected capture"
 else
