@@ -78,7 +78,7 @@ The carrier is `gateDecision.levelRebase`, not `gateDecision.chosenMode`: a mark
 - Non-UI evidence legs 1-3: **PASS at first look**, with the limited populations above.
 - Chrome Open Trades stop/target leg: **WAITING ON KYLE; not checked by Codex**.
 - Formal Step 7: **still open** through the registered five complete US sessions; alert `ac78c006` owns that read.
-- Alert `0c5f81ac`: may be resolved with the commit that records this evidence; resolving it does not close Step 7.
+- Alert `0c5f81ac`: resolved by `codex-c` at `2026-11-10T11:26:56.421Z` with evidence commit `57c6077675052b279cf240ac4d3195475a8cd6fe`; CI run `42807070563` passed all four jobs. This resolution closes the first-look reminder, not Step 7.
 
 ## Row 2 increment (4a) — INIT/USD self-clearing alert inspection, 2026-11-10
 
