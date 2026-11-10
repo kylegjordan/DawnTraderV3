@@ -1,8 +1,9 @@
-# B-TRANSCRIPT-ARCHIVE — Completion Report (sprint section 0a row 4b) — STEP 11 REVIEW
+# B-TRANSCRIPT-ARCHIVE — Completion Report (sprint section 0a row 4b) — ✅ CLOSED 2026-11-10
 
 **Owner:** Infra Claude / INFRA Codex · **change-class:** `non_architecture` · **Plan row:** section 0a row 4b · **Decision:** KD-47
 **Scope / pre-audit:** `Claude Comms and Packages/Scope Files/B_TRANSCRIPT_ARCHIVE_SCOPE.md` and `B_TRANSCRIPT_ARCHIVE_PRE_AUDIT.md` · **Change list:** `Claude Comms and Packages/Change Lists/B_TRANSCRIPT_ARCHIVE_CHANGE_LIST.md`
 **Installed runtime ref:** `fa03c15cc568d821d32e2b0c3c7711e9c7377712` · **Step-8 evidence ref:** `d98c1b7f2c319b4e19997b9f715b9c238443d988` · **Step-10 governance ref:** `0e9bb009f52f90d77b6b0cd6f241841fa18e5a3f`
+**Step-11 reviewed report ref:** `6d9535aa8720ad244f292d1c37417008dec9821f` · **Coltrane:** CONFIRMED 2026-11-10T10:36:15Z
 
 > ⚠️ **OPEN WORK OUTSIDE THIS BATCH'S SCOPE:** the five Codex stand-in chats and the Langston and Coltrane reviewer histories are not captured by this laptop Claude-session archive. Owner Infra Claude / INFRA Codex; placed home `B-CODEX-CONVERSATION-BACKUP`, issue `#1238`, first line of the `PRE_LIVE_SPRINT.md` after-live crew-tooling list. Kyle's expansion instruction includes the five Claude sessions, all five Codex stand-ins, Langston and Coltrane. Closing condition: every named session has a backed-up raw history, a readable searchable copy, and a successful restore check. Failure condition: any named session remains outside the capture path, cannot be searched, or cannot be restored.
 
@@ -42,7 +43,8 @@ DawnTrader's five Claude sessions had raw conversation logs but no single readab
 - CI `42344702242` at the installed runtime ref: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
 - CI `42792989631` at the Step-8 evidence ref: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
 - CI `42797778869` at successor ref `6acebe2649a813536fe6d42b16b99d88248ab215`, which contains the Step-10 governance ref as an ancestor: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.** The direct Step-10 run was canceled only because this successor push activated the workflow's `cancel-in-progress` rule; its lane tests had completed 27/27 with 9/9 mutations caught before cancellation.
-- Step-11 report-ref CI and Coltrane's completion ruling are added in the close-state commit after this report is pushed and reviewed.
+- CI `42799379353` at exact Step-11 report ref `6d9535aa8720ad244f292d1c37417008dec9821f`: **TypeScript Check — success; Test Suite — success; Build — success; Docker Build — success.**
+- Coltrane returned **CONFIRMED** at that exact report ref on 2026-11-10T10:36:15Z: the report closes all seven objectives against the Step-8 evidence and Step-10 governance record, preserves the evidence limits and out-of-scope work, and leaves no technical blocker. He authorized the close-state commit and exception retirement.
 
 ## 5. Numeric deltas
 
@@ -92,7 +94,7 @@ Copied from the filled Step-10 tier ledger in commit `0e9bb009f52f90d77b6b0cd6f2
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A — no rule was added or materially changed; the CLAUDE edit corrected operational backup facts. |
 | T2 | DELETED_COMPONENTS_LOG.md | Updated earlier — the shared-index cap removal and archive path are recorded. |
 | T2 | MISTAKE_PATTERNS.md | N/A — no MISTAKE trailer or weekly pass applies. |
-| T2 | GOVERNANCE_EXCEPTIONS.md | Step-11 close-state update pending — the declared-open row stays active until Coltrane confirms this report, then flips to `open-retired` before the stale-open alert is resolved. |
+| T2 | GOVERNANCE_EXCEPTIONS.md | Updated at close — the declared-open row is retired after Coltrane's exact-ref confirmation and before the stale-open alert is resolved. |
 | T2 | ALERT_HANDLING_PROTOCOL.md | N/A — no alert acknowledgement or resolution process changed. |
 | T2 | DELIVERY_BOARD_PROTOCOL.md | N/A — no board columns, fields or ownership changed; the access gap is recorded under B-CREW-ACCESS-HARDEN. |
 | T2 | CLAUDE_CODE_FEATURE_WATCH.md | N/A — no daily model or feature check ran. |
@@ -112,4 +114,4 @@ Copied from the filled Step-10 tier ledger in commit `0e9bb009f52f90d77b6b0cd6f2
 
 ## 9. Step-11 close state
 
-This report is awaiting Coltrane's exact-ref Step-11 ruling. After confirmation, the close-state commit records the report-ref CI, retires the declared-open exception, resolves alert `77afc074-1ada-4172-8607-8449ac651f56`, moves the delivery card to Complete, and changes the catalog, plan, history, task list and CURRENT POSITION from Step 11 to CLOSED. No Kyle acknowledgement is required.
+Coltrane confirmed this report at exact ref `6d9535aa8720ad244f292d1c37417008dec9821f`, and CI run `42799379353` passed all four jobs there. This close-state commit retires the declared-open exception and changes the catalog, plan, history, task list and CURRENT POSITION to CLOSED. After this commit is pushed, the owner resolves alert `77afc074-1ada-4172-8607-8449ac651f56` and moves the delivery card to Complete with `Blocked on = Nothing`; the stale reviewer-owned `Review` field remains recorded under B-CREW-ACCESS-HARDEN. No Kyle acknowledgement is required.

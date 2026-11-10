@@ -713,3 +713,10 @@ reviewer-owned field cannot be written.
 - The declared-open exception remains `open` through Step 10; Step 11 retires it before the stale-open alert is resolved. The completion report is also a Step-11 deliverable.
 
 - **Next: Step 11 — write the completion report from the Step-10 ledger, dispatch the exact governance ref to Coltrane, and apply the final close-state flips only after his confirmation.**
+
+## Step 11 COMPLETE — completion report confirmed and close authorized (2026-11-10)
+
+- Completion report pushed at exact ref `6d9535aa8720ad244f292d1c37417008dec9821f`; CI run `42799379353` passed TypeScript Check, Test Suite, Build and Docker Build.
+- Coltrane returned **CONFIRMED** at that exact ref on 2026-11-10T10:36:15Z. He found the report accurate against the Step-8 evidence and Step-10 governance record, with evidence limits and out-of-scope work preserved, and authorized exception retirement.
+- This close-state commit retires the `B-TRANSCRIPT-ARCHIVE` declared-open row and flips the catalog, history, plan, task list and session position to CLOSED. After it is pushed, owner actions are to resolve alert `77afc074-1ada-4172-8607-8449ac651f56` and move the delivery card to `Complete`, `Blocked on = Nothing`; the reviewer-owned `Review` field remains untouched and tracked under B-CREW-ACCESS-HARDEN.
+- The required expansion to the five Codex chats plus Langston and Coltrane histories is not claimed by this close. It remains placed after live under `B-CODEX-CONVERSATION-BACKUP` (`#1238`) with explicit close and failure conditions in the completion report.

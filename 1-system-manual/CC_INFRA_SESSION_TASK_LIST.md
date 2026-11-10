@@ -15,9 +15,9 @@
 | ✅ ~~`B-WAKE-OPENING-LIST`~~ (`#1241`, Kyle KD-20 + KD-21, 2026-11-04) | **CLOSED 2026-11-06** (installed `f38220b83`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_WAKE_OPENING_LIST_COMPLETION_REPORT.md`; A6 (Coltrane cannot wake Langston) with Kyle via PM; bridge-error finding folded into B-AGENT-INVOKE-FAILURE-NOTICE (#1198) |
 | ▶ **`B-LANGSTON-TWO-WORKERS`** (KD-44, Kyle 2026-11-05; plan §0a Infra order 4a) | **Step 4** — built at `82c03b2c3` (CI 4/4); Langston two parts + Coltrane concurrency pass | Langston, Coltrane | two review workers with per-batch lanes; a wait AND review-quality window before vs after (Kyle) |
 | ✅ ~~`B-LANGSTON-MEMORY-WRITE-FENCE`~~ (`#1234`, Kyle-placed 2026-11-04) | **CLOSED 2026-11-06** (installed `fe3c4ad1f`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`; the fence's page never fired (drill offered to Kyle via PM); §10.b exit-8 floor + exit-6 wording → `B-LANGSTON-TWO-WORKERS` |
-| ▶ **`B-TRANSCRIPT-ARCHIVE`** (KD-47, plan §0a Infra order 4b) | **Step 10** — all seven objectives green; Coltrane CONFIRMED Step 8 at `d98c1b7f2` | governance commit, then Coltrane Step 11 | laptop transcript archive, search, compaction capture, restart handoff and daily Drive copy; board Review-field access gap is tracked separately under B-CREW-ACCESS-HARDEN |
+| ✅ ~~`B-TRANSCRIPT-ARCHIVE`~~ (KD-47, plan §0a Infra order 4b) | **CLOSED 2026-11-10** — all seven objectives green; Coltrane CONFIRMED Step 11 at `6d9535aa` | — | report `Batch Completion/B_TRANSCRIPT_ARCHIVE_COMPLETION_REPORT.md`; Codex/reviewer-history expansion remains after live under `#1238`; board Review-field access gap remains under B-CREW-ACCESS-HARDEN |
 | ⏳ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | queued | me, after the fence | the follow-up recorder's memory fix; the `due/` steady state; the B2 version census + orphan reconciliation (Langston Step 9) |
-| ⏳ **`#1238`** Codex conversation backup | after live (Kyle D-1, 2026-11-04) | me | the ChatGPT stand-ins' conversations are not backed up |
+| ⏳ **`#1238` `B-CODEX-CONVERSATION-BACKUP`** | after live (Kyle D-1, 2026-11-04) | me | back up and restore-check all five Codex chats plus Langston and Coltrane histories |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |
 | ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (Kyle-slotted 2026-10-20; folds `#974`) | **Step 7** — installed 2026-11-05 08:21Z: his rules file 57,095 B (Langston-approved, `e319f34cf`), the installer and the size watch; loaded set 140,943 vs 143,856, canary LOADED | two consecutive daily size-watch runs under the ceiling, then Step 8 | OBJ-3 ceiling (carried from `B-LANGSTON-RELIEF`) met at install |
 | ⏸ **`B-CREW-ACCESS-HARDEN`** (`#1092`, `#924`) | **Step 9**, paused | **Kyle** — stays paused until he says otherwise (2026-11-04) | P3a fixes at `ddf7eafac` unreviewed; disposable keys stay; add `C:\DawnTraderV3-pm` to the caller census on resume (#1092) |
@@ -34,7 +34,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-TRANSCRIPT-ARCHIVE` is at Step 10; its full governance ledger and Step 11 are next. The plan remains the authority for the other open Infra work, including `B-LANGSTON-TWO-WORKERS`, `B-CREDENTIALS-PRIVATE-REPO`, the owned `aaf0b2b5` access alert, and the later queue.
+**NOW, ahead of the sprint (§0 plate):** `B-TRANSCRIPT-ARCHIVE` is closed. The plan remains the authority for the open Infra work; `B-AGENT-INVOKE-FAILURE-NOTICE` is parked at Step 6 because Langston is off, and no Langston worker is enabled during the Codex shift.
 
 | row | item | what it is for |
 |---|---|---|

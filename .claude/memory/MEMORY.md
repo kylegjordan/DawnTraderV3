@@ -60,7 +60,7 @@
 
 **★ THE HOOK LAYER IS LIVE:** measurement guards are warn-only, and `inject-due-alerts` reads the whole queue. A guard's silence is non-evidential; ACK silences an event-wait alert, so route it instead. Registry: System Impact Map "Claude Code Hook Layer".
 
-**★ THE TRANSCRIPT ARCHIVE IS LIVE (`B-TRANSCRIPT-ARCHIVE`, 2026-11-10):** the five DawnTrader Claude-session folders are distilled to readable, redacted, searchable files nightly and before compaction; SessionStart checks the latest restart handoff. Search hits are leads and misses are never evidence; raw conversations remain the deep-dive source. Registry: System Impact Map "Transcript Archive, Restart Handoff and the PreCompact Trigger".
+**★ THE TRANSCRIPT ARCHIVE IS LIVE AND CLOSED (`B-TRANSCRIPT-ARCHIVE`, 2026-11-10; Coltrane report ref `6d9535aa`):** the five DawnTrader Claude-session folders are distilled to readable, redacted, searchable files nightly and before compaction; SessionStart checks the latest restart handoff. Search hits are leads and misses are never evidence; raw conversations remain the deep-dive source. Registry: System Impact Map "Transcript Archive, Restart Handoff and the PreCompact Trigger".
 
 **★ A COMPLETION REPORT WITHOUT THE T1 TASK-LIST ROW NOW RAISES `gov-ledgerrow` (checker, 2026-09-11, `#1009`)** — add the row and it clears itself; genuinely N/A ⇒ a confirmed `na-skip` `task_lists` row.
 
