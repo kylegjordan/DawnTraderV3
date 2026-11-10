@@ -46,3 +46,44 @@
 
 ## Pre-registered Step-7 read
 Pre-audit §3 as amended by §7.5 and §8.3 (taker rows by realised `entryArm`; ≤ ~10 % `STOP_DISTANCE_AT_FILL` of window-admitted taker opens, FAIL = zero over ≥ 50; `LEVEL_SPEC_INCONSISTENT` = 0; flips both ways; active at one tick, VTS at 1e-9, not pooled).
+
+## Step 7 first look — 2026-11-10
+
+**Boundary.** Deployed `1d4be9cf7c27ab337dd68e660a56a89b737d27f0` at `2026-11-07T19:06:27Z`. This is the alert `0c5f81ac-be2d-4d68-8e47-1a97d7079356` first look after the first US session, not the registered five-session verdict. The Chrome Open Trades leg remains **UI not yet checked — waiting on Kyle** under the Codex handover rule.
+
+### 1. Durable paper taker open — PASS for the first observed taker
+
+Population: all three `closed_trades` xStock paper opens with `opened_at >=` the deploy boundary. The realised taker object is the durable fill producer `xstock_ticker_snap_walk`; the other two rows use `kraken_equities_ws_mid` and are the maker controls.
+
+| population | n | result |
+|---|---:|---|
+| post-deploy xStock paper opens | 3 | TSLA maker, SPG taker, TGT maker |
+| realised taker opens | 1 | SPG/USD, `13fa3943-e1e2-4737-8168-acc06d2d4290`, opened `2026-11-09T18:38:47.064Z` |
+| taker rows with `levelSpec`, `levelBasis`, all three plan prices, and stop/target bases | 1/1 | PASS |
+
+SPG booked at entry `233.30000000`, stop `231.12392857`, target `237.65214286`; its plan was entry `233.515`, stop `231.33892857`, target `237.86714286`. Both bases and `levelBasis` are `fill_rebased`. Recomputed stop-distance error and target-distance error are both exactly `0.000000000000` over this one taker row. The two maker controls carry the strategy's `levelSpec` and no fill-rebase metadata, which is the intended non-taker boundary.
+
+### 2. Entry-fill refusals — zero in the first-look population, instrument controlled
+
+Population: every post-deploy xStock `signal_eval_archive` row at `reject_stage = entry_fill`. Total rows: **0**; therefore `STOP_DISTANCE_AT_FILL`: **0/0**, and `LEVEL_REBASE_*`: **0/0**. Positive control using the same table and stage before deployment (`2026-11-05T00:00:00Z` to the deploy boundary) returns one BABA/USD `entry_fill` refusal at `2026-11-05T15:21:23.805Z`, reason `ask_at_or_through_stop`. The zero is therefore a readable first-look observation, not the registered PASS: the five-session gate still requires its stated denominator and must not pass on zero opportunities.
+
+### 3. VTS admitted evidence — present on the effective taker arm
+
+Population: 536 post-deploy xStock VTS admitted archive rows. **252/536** carry `gateDecision.levelRebase`; **252/252** of those have an empty `levelSpecInconsistent` set. Their capture window is `2026-11-09T01:16:20.858Z` through `2026-11-10T08:57:06.379Z`; basis split is `fill_rebased` **244/252** and `plan` **8/252**.
+
+The carrier is `gateDecision.levelRebase`, not `gateDecision.chosenMode`: a marketable maker choice can convert to the effective taker path after the policy choice. This first look therefore selects the rows by the rebase object that only that effective path writes, rather than by the earlier policy label.
+
+### First-look disposition
+
+- Non-UI evidence legs 1-3: **PASS at first look**, with the limited populations above.
+- Chrome Open Trades stop/target leg: **WAITING ON KYLE; not checked by Codex**.
+- Formal Step 7: **still open** through the registered five complete US sessions; alert `ac78c006` owns that read.
+- Alert `0c5f81ac`: may be resolved with the commit that records this evidence; resolving it does not close Step 7.
+
+## Row 2 increment (4a) — INIT/USD self-clearing alert inspection, 2026-11-10
+
+Alert `2d0884e4-9d30-4fe2-9aec-130bc10bb482` remains **active and unacknowledged**. Its one durable row was created at `2026-11-10T10:41:58.726Z` and fired at `10:49:32.090Z`; the exact VTS trade `vts_INIT_USD_vwap_pullback_1794304799204` remains open (`opened_at 09:59:59.206Z`, entry `0.15569714`, stop `0.06381143`, target `0.43135429`).
+
+The live price-cache diagnostic at `11:19:45.541Z` showed INIT/USD mark `0.1556`, source `kraken_rest`, refreshed at `11:19:11.507Z`; that diagnostic does not expose the cached bid and ask. The separate durable ticker archive, used here as the side witness rather than mislabelled as the cache, showed repeated two-sided but implausibly wide books: the latest archived row at `11:14:00.886Z` was bid `0.1460`, ask `0.1556`, spread **6.3660%**; the 20 archived observations from `10:40:14.852Z` through `11:14:00.886Z` were all wider than the VTS 2% ceiling, ranging **4.2324%-9.0698%**. A direct Kraken ticker read later showed bid `0.1474`, ask `0.1529`, last `0.1556` — still a real, unlocked two-sided book and still wider than 2% (about 3.66%).
+
+Disposition: the active refusal `no_transactable_side (implausible_spread)` is corroborated as a genuinely wide INIT/USD book, not a synthetic `bid = ask` cache row and not a missing mark. Do not change the ceiling from this one pair, and do not acknowledge or manually resolve the row; its registered machine path clears it when this trade decides or closes.
