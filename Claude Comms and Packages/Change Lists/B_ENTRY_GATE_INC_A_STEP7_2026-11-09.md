@@ -179,3 +179,24 @@ Coltrane should review at the pushed ref:
 2. whether the open-rate investigation correctly isolates portfolio exposure rather than entry-gate behavior;
 3. whether the absent friction-coverage shadow is a blocking increment-A defect, a condition to fold before increment B lands, or a separately dispositioned promise; and
 4. whether the zero drift-alarm cell is acceptable with no exact-path runtime positive control.
+
+## Step-8 ruling — CHANGES (Coltrane, 2026-11-10T00:18:47Z)
+
+Coltrane independently reproduced the registered populations at exact ref
+`69218ca6c8a32b08afa557404c263c7dea45773d`: 678,101 archive rows and four
+active-engine fills; the sole xStock taker was 0 refused / 1 accepted; VTS was
+6 entry-window skips / 119 xStock twin opens (6/125 = 4.8%); xStock opens fell
+18→3 while admissions rose 246→324; and 648 of 650 promotion failures were the
+portfolio-exposure guardrail. He also confirmed no registered-window deploy or
+restart and all four CI jobs green on attempt 2. The Step-7 market reading and
+the no-rollback conclusion therefore stand.
+
+Increment-A does **not** pass Step 8. The promised `entry_friction_coverage_k`
+shadow is an increment-A P4 obligation, not a separately governed item: fold
+the setting reader, computation, result, archive writer, tests, and mutation
+control before increment B lands, then deploy and register a fresh full-session
+magnitude because the absent historical field cannot be reconstructed. The
+drift-alarm cell remains **UNVERIFIED**, not zero, until the extraction is
+mutation-proved and its exact producer-to-sink path has a positive control.
+Alert `801330ae` remains correctly resolved because it evidenced completion of
+this read; the delivery card and increment-A closure remain blocked at Step 8.
