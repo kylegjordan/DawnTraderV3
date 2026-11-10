@@ -1,6 +1,6 @@
 # B-BALANCE-SESSION-PAIRING — Completion Report
 
-**Status:** CLOSURE CANDIDATE — awaiting Coltrane Step-11 confirmation
+**Status:** ✅ CLOSED — Step 11 confirmed by Coltrane 2026-11-10T18:30:02Z
 
 **Scope items left open:** **NONE.** All four scoped objectives and the Step-4 refusal-storage/paging/UI condition are green. The pre-registered exposure-pause observation closes **PARTIAL**, not delayed: the balance gate produced the registered pause and recovery, but an earlier full-book gate also blocked entries before candidates could reach it. Existing plan row 87a owns the corrected eligible-candidate proof method; no unrelated reviewed deployment waits for it.
 
@@ -47,6 +47,7 @@ The staging result matched the pre-registered consequence: existing exposure ini
 
 - Deployment candidate CI `42376198522` at exact runtime `e0e68dfdbd497033c8c6b22222949b13c9c3c4b1`: TypeScript Check **SUCCESS**, Test Suite **SUCCESS**, Build **SUCCESS**, Docker Build **SUCCESS**.
 - Step-10 governance CI `42871530915` at exact ref `6839b289d24aee7e070a0cb929254e14b43f6a23`: TypeScript Check **SUCCESS**, Test Suite **SUCCESS**, Build **SUCCESS**, Docker Build **SUCCESS**.
+- Step-11 candidate CI `42874563623` at exact confirmed ref `391ba05d52166ff7beea969f5ce9dad80c42abd8`: TypeScript Check **SUCCESS**, Test Suite **SUCCESS**, Build **SUCCESS**, Docker Build **SUCCESS**.
 - Focused deployed suite: **61/61 tests passed**, including the money-held formula, refusal paths, both risk checks, migration/enum storability, each producer, and the duplicate-retention-row fence.
 - Fixed staging window: **2,413/2,413** blocked attempts named `MAX_TOTAL_EXPOSURE`; **17** entries resumed; every resumed entry stayed under money held before and after it opened.
 - First live money-held result: **$583.08 = $820.00 + $0.00 straddler cost - $236.92 realized**. Fixed-cut result: **$575.04788585 = $820.00 + $0.00 - $244.95211415**.
@@ -115,4 +116,6 @@ The deployed and evidence predicates were re-run side by side at the exact fixed
 
 ## 8. Final reviewer confirmation
 
-Pending Coltrane review of the exact pushed Step-11 candidate ref. The delivery card remains blocked on Coltrane until he confirms; no Kyle acknowledgement is required after confirmation.
+Coltrane returned **CONFIRMED** at 2026-11-10T18:30:02Z against exact ref `391ba05d52166ff7beea969f5ce9dad80c42abd8`. He confirmed that §4a remains honestly PARTIAL, the fresh-reader corrections are explicit, all four `#618` residuals plus the corrected eligible-candidate proof method are placed in row 87a, the live-mode blockers remain under `#734`, and the catalog, history, plan, task list and retired exception agree. He required no document correction and ruled that Step 11 may close.
+
+Coltrane could not independently read GitHub from that invocation, so his CI ruling was explicitly limited to the supplied fact. ANALYST Codex independently read run `42874563623` per job before dispatch: TypeScript Check, Test Suite, Build and Docker Build were all successful at the exact confirmed ref. The delivery card moves to Complete / blocked on Nothing; no Kyle acknowledgement is required.
