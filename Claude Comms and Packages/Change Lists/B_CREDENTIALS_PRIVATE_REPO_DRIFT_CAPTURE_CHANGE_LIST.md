@@ -310,3 +310,50 @@ All registered conditions are green. No Step-9 correction or redeploy loop is re
 ## REVIEW GATE
 
 **STEP: 9 of 11 COMPLETE · NEXT STEP: 10 of 11.** Every registered drift-capture condition is green at the installed reviewed object; no correction, review, CI, installation or re-verification loop is required. Coltrane's independent Step-8 PROCEED remains the installed-state gate. The delivery card remains in Verification with `Blocked on = Nothing` until Step 10 begins.
+
+## STEP 10 — GOVERNANCE
+
+The diagnostic is one shipped increment of the still-open `B-CREDENTIALS-PRIVATE-REPO` parent. Governance therefore records the increment in the parent progress report and keeps the final catalog, history and completion rows blocked on `#1023`; it does not falsely close the parent.
+
+The delivery card moved to Governance with `Blocked on = Nothing` and `Review = Approved`. Langston's offline memory gained the shipped `#1117` invariant through `langston-memory-write` while the closed transcript-archive mechanics section was evicted; the measured loaded set decreased from 143,412 to 143,325 bytes, and the composer's recorded sha matches the live composed file.
+
+### GOVERNANCE LEDGER
+CHANGE-CLASS: non_architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | BLOCKED — `#1023` | the parent still has GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repo flip open, so its final catalog row waits for whole-parent close. |
+| T1 | `PHASE_HISTORY.md` | BLOCKED — `#1023` | the parent remains in flight, so no final history outcome exists yet. |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` — my rows | ✅ | both Infra rows now record the installed and independently verified `#1117` diagnostic while keeping the remaining parent work open. |
+| T1 | `PHASE_19_PLAN.md` | N/A | this letter-named pre-sprint batch has no in-flight Phase-19 row; its active placement is in `SPRINT_TO_LIVE_PLAN.md`. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ | shared memory has no drift-capture invariant to add; my position advances from Step 9 to Step 10 complete. |
+| T1 | the batch `SCOPE` | ✅ | a built-and-verified amendment records the capture boundary, privacy, retention, status semantics and OBJ-4 removal point. |
+| T1 | the batch `PRE_AUDIT` | ✅ | an amendment records the installed result against the final pre-registered conditions and confirms that no observation window applies. |
+| T1 | the `COMPLETION_REPORT` | BLOCKED — `#1023` | this progress report carries the completed diagnostic increment until the still-open parent can convert at whole-batch close. |
+| T1 | the `Observation` column | N/A | the scope and pre-audit require deterministic installed-entry checks, not a natural future incident or timed observation window. |
+| T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | `CC_INFRA_SESSION_TASK_LIST.md` records this parent and increment in working order; the other three sessions do not own it. |
+| T1 | Langston's `/home/langston/MEMORY.md` | ✅ | the shipped `#1117` invariant replaced the closed transcript-archive mechanics section; measured loaded total decreased 143,412 → 143,325 bytes. |
+| T2 | `SYSTEM_MANUAL.md` | N/A | no trading architecture, strategy logic, regime, filter, signal pipeline or quantitative rule changed. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | the live drift-monitor entry now maps the private parse-failure evidence, retention, refusal states and removal point. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1117` records the fourth item shipped while keeping the uncapped conversion and other drift items open. |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | the diff changes Helsinki diagnostic evidence, not trading behavior or the trading bug/risk registry. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | the parent remains in its existing pre-sprint position and no phase-level sequence changed. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | no governed trading parameter or adjustment policy changed. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | no constitutional authority or trading authority boundary changed. |
+| T2 | `STORAGE_POLICY.md` | N/A | the 14-day filesystem diagnostic evidence is not a hot/warm/cold per-table trading-data tier. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | no xStock, crypto, VTS or multi-asset objective changed. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no asset-class onboarding learning surfaced. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | the eleven-step method, roles and gates are unchanged; this increment followed them. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | ✅ | the change log records the Helsinki monitor's before/after evidence behavior and why it changed. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable workflow or behavioral rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` rule was added or materially changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | no component was removed; OBJ-4 conversion is the registered future removal point. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | this increment wrote no `MISTAKE:` trailer and introduced no repeated pattern. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | Kyle granted no exception to a governed rule. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | the route, acknowledgement and resolution process did not change. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | the card moved under the existing fields and ownership rules; the protocol did not change. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | no daily model or feature check ran in this increment. |
+
+## REVIEW GATE
+
+**STEP: 10 of 11 COMPLETE · NEXT STEP: 11 of 11.** Every applicable governance content update for this increment has landed or is explicitly held by the still-open parent; the full ledger is duplicated in the governance commit message and the parent progress report. The delivery card is in Governance with `Blocked on = Nothing` and `Review = Approved`.

@@ -44,6 +44,60 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 
 **STEP 11 CONFIRMED — OBJ-1 complete:** after Kyle explicitly authorized Codex-shift reviews, Coltrane independently confirmed exact ref `680e87b8d30f8909dbd8937a8687e66f78d1cf5a` on 2026-10-13. He reproduced the live seven-day token, authenticated 200 / unauthenticated 401 control, signed-in dashboard / fresh-context login redirect, timer state, source behavior and all four green CI jobs. The protected 2026-10-12 journal remained outside his shell boundary, so he relied on the exact-ref 2-of-2 scheduled-run record for that leg and said so. This closes OBJ-1 only; the shared parent card remains in Governance with `Blocked on = Nothing` because the remaining objectives below are still open.
 
+### 2C. WHAT HAS SHIPPED — `#1117` drift parse-failure evidence increment (Steps 3-10)
+
+Full implementation, review, install and verification record: `Claude Comms and Packages/Change Lists/B_CREDENTIALS_PRIVATE_REPO_DRIFT_CAPTURE_CHANGE_LIST.md`.
+
+| step | evidence |
+|---|---|
+| 3 · implementation | The monitor preserves only non-empty bodies rejected by JSON decoding, in private bounded storage, and reports the saved path plus diagnostic HTTP status without changing control flow; the installer creates the protected leaf and the production-entry fixture carries 39 assertions. |
+| 4 · Coltrane review | After one send-back and correction round, Coltrane returned PROCEED at exact reviewed ref `1accff5589667e2d06b6b8f9d715c402599d8e30`. |
+| 5 · CI | run `42813966403` on the exact reviewed ref: TypeScript Check, Test Suite, Build and Docker Build all succeeded, read per job. |
+| 6 · install | Helsinki notices group installed 2026-11-10: all three live blobs exact, evidence leaf `langston:langston 0700`, canonical hourly schedule unchanged, rollback and retired-source copies recorded in the change list; Langston and both worker units remained off. |
+| 7 · first-pass verification | the installed production entry passed 39/39 assertions and a separate real dry-run completed without writing alerts; no UI surface or natural-incident gate applies. |
+| 8 · Coltrane verification | PROCEED at exact evidence ref `266828df2fa1c263d659df38ce82998819ea59df`; Coltrane independently matched the installed blob and repeated 39/39 assertions. |
+| 9 · iterate | all eight registered conditions reconciled green; no correction, review, CI, reinstall or re-verification loop was needed. |
+| 10 · governance | the scope, pre-audit, this progress report, active plan, Infra task list, System Impact Map, Running Issues, Langston Architecture and both current memories record the shipped increment; the full ledger follows. |
+
+This increment is complete, but the parent is not: GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repository flip remain open.
+
+#### `#1117` DRIFT PARSE-CAPTURE GOVERNANCE LEDGER
+CHANGE-CLASS: non_architecture
+
+| # | document | verdict | one line |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | BLOCKED — `#1023` | the parent still has GB-8, OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repo flip open, so its final catalog row waits for whole-parent close. |
+| T1 | `PHASE_HISTORY.md` | BLOCKED — `#1023` | the parent remains in flight, so no final history outcome exists yet. |
+| T1 | `SPRINT_TO_LIVE_PLAN.md` — my rows | ✅ | both Infra rows now record the installed and independently verified `#1117` diagnostic while keeping the remaining parent work open. |
+| T1 | `PHASE_19_PLAN.md` | N/A | this letter-named pre-sprint batch has no in-flight Phase-19 row; its active placement is in `SPRINT_TO_LIVE_PLAN.md`. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_INFRA.md` | ✅ | shared memory has no drift-capture invariant to add; my position advances from Step 9 to Step 10 complete. |
+| T1 | the batch `SCOPE` | ✅ | a built-and-verified amendment records the capture boundary, privacy, retention, status semantics and OBJ-4 removal point. |
+| T1 | the batch `PRE_AUDIT` | ✅ | an amendment records the installed result against the final pre-registered conditions and confirms that no observation window applies. |
+| T1 | the `COMPLETION_REPORT` | BLOCKED — `#1023` | this progress report carries the completed diagnostic increment until the still-open parent can convert at whole-batch close. |
+| T1 | the `Observation` column | N/A | the scope and pre-audit require deterministic installed-entry checks, not a natural future incident or timed observation window. |
+| T1 | the four session task lists | ✅ mine / N/A — not mine ×3 | `CC_INFRA_SESSION_TASK_LIST.md` records this parent and increment in working order; the other three sessions do not own it. |
+| T1 | Langston's `/home/langston/MEMORY.md` | ✅ | the shipped `#1117` invariant replaced the closed transcript-archive mechanics section; measured loaded total decreased 143,412 → 143,325 bytes. |
+| T2 | `SYSTEM_MANUAL.md` | N/A | no trading architecture, strategy logic, regime, filter, signal pipeline or quantitative rule changed. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | the live drift-monitor entry now maps the private parse-failure evidence, retention, refusal states and removal point. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | `#1117` records the fourth item shipped while keeping the uncapped conversion and other drift items open. |
+| T2 | `CHANGES_AND_FIXES.md` | N/A | the diff changes Helsinki diagnostic evidence, not trading behavior or the trading bug/risk registry. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | the parent remains in its existing pre-sprint position and no phase-level sequence changed. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | no governed trading parameter or adjustment policy changed. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | no constitutional authority or trading authority boundary changed. |
+| T2 | `STORAGE_POLICY.md` | N/A | the 14-day filesystem diagnostic evidence is not a hot/warm/cold per-table trading-data tier. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | N/A | no xStock, crypto, VTS or multi-asset objective changed. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | no asset-class onboarding learning surfaced. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | the eleven-step method, roles and gates are unchanged; this increment followed them. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | ✅ | the change log records the Helsinki monitor's before/after evidence behavior and why it changed. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | no stable workflow or behavioral rule changed. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | no `CLAUDE.md` rule was added or materially changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | no component was removed; OBJ-4 conversion is the registered future removal point. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | this increment wrote no `MISTAKE:` trailer and introduced no repeated pattern. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | Kyle granted no exception to a governed rule. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | the route, acknowledgement and resolution process did not change. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | the card moved under the existing fields and ownership rules; the protocol did not change. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | no daily model or feature check ran in this increment. |
+
 ### 3. WHAT IS STILL OPEN, AND WHAT CLOSES IT (written before the work)
 | objective | closes when | fails if |
 |---|---|---|
@@ -56,7 +110,7 @@ Full review, install and verification record: `Claude Comms and Packages/Change 
 - `grep`/`ls` serve stored bytes, not re-hashed — accepted by Langston as a stated residual (every read says so); nothing behind the mirror's head is object-checked by the backup gate (its header states that reach).
 
 ### 5. GOVERNANCE FILES CHANGED SO FAR
-OBJ-4a: Scope (STEP-3 AMENDMENT + Step-4 texts) · System Impact Map · Langston Architecture · `CLAUDE.md` (§7.1) · the CLAUDE.md rule history · Running Issues · sprint plan and after-live list · my session task list · Mistake Patterns · my memory · Langston's memory and four of his files. OBJ-1: Scope (built/verified amendment) · this progress report · System Manual · System Impact Map · Running Issues (`#613`, `#1023`, `#1092`) · sprint plan · my task list · Langston Architecture · `CLAUDE.md` (§7 credential removal and `dt-api` example) · the CLAUDE.md rule history · Deleted Components Log (already landed at Step 6) · my memory · Langston's memory. **Each increment's tier ledger is below, transcribed from its governance commit.**
+OBJ-4a: Scope (STEP-3 AMENDMENT + Step-4 texts) · System Impact Map · Langston Architecture · `CLAUDE.md` (§7.1) · the CLAUDE.md rule history · Running Issues · sprint plan and after-live list · my session task list · Mistake Patterns · my memory · Langston's memory and four of his files. OBJ-1: Scope (built/verified amendment) · this progress report · System Manual · System Impact Map · Running Issues (`#613`, `#1023`, `#1092`) · sprint plan · my task list · Langston Architecture · `CLAUDE.md` (§7 credential removal and `dt-api` example) · the CLAUDE.md rule history · Deleted Components Log (already landed at Step 6) · my memory · Langston's memory. `#1117` drift parse-capture: Scope · Pre-Audit · this progress report · sprint plan · my task list · System Impact Map · Running Issues · Langston Architecture · my memory · Langston's memory. **Each increment's tier ledger is below, transcribed from its governance commit.**
 
 #### OBJ-4a GOVERNANCE LEDGER
 CHANGE-CLASS: non_architecture

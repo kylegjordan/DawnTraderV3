@@ -31,6 +31,13 @@ Three fresh-reader rounds changed four of the texts OBJ-4a's row wrote before th
 - **Delayed proof:** both 04:40Z scheduled runs in the required 2026-10-12 through 2026-10-13 population minted fresh 7-day sessions; the clean-environment reproduction exited 0 and both stored agent sessions passed. Alert `32efdab2-71ab-4571-93cb-35782ec07fc9` was resolved with commit evidence, satisfying Langston's Step-8 condition.
 - **Separate privilege follow-up:** Kyle approved clearing `testuser123.is_admin`; that work remains in `B-USER-RESOLUTION-PIN` (`#1092`) and does not reopen OBJ-1's server-held read path.
 
+## STEP-3 AMENDMENT — OBJ-4 drift parse-failure evidence as BUILT and verified (2026-11-10)
+- **Order and removal point:** this diagnostic is installed ahead of the still-unlanded OBJ-4 drift conversion; that conversion remains the named rule-18 removal point.
+- **Capture boundary:** only a non-empty compare body rejected by JSON decoding is preserved; empty bodies, transport failures and syntactically valid JSON do not persist evidence.
+- **Privacy and retention:** evidence lives under the `langston`-only `0700` drift state directory, each completed file is `0600`, symlink and wrong-owner states are refused, and completed plus interrupted publications expire after 14 days on the hourly run.
+- **Diagnostic-only status:** the failure record names the saved path and HTTP status, but status does not decide success; valid JSON returned with HTTP 503 continues through the existing parsed-result path.
+- **Installed proof:** the installed production entry passed 39 of 39 registered assertions; Coltrane independently bound the installed blob and repeated all 39 assertions. No staging UI surface or natural-incident observation gate applies.
+
 ## ROUND RECORD — the fresh-reader loop reached its CAP (3 rounds)
 - `REVIEWER r1: object (r2 at b4948145b) · Langston-ruling coverage + code-claim check · ~15 gaps · fixed in r3`
 - `REVIEWER r2: object (r3 at 8cf041381) · fix-check + cold adversarial · 4 partly, 17 new · fixed in r4`
