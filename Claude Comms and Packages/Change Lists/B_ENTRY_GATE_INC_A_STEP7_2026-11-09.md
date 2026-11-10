@@ -337,3 +337,20 @@ No affected staging panel exists: the correction adds only a durable internal sh
 keeps Filter Diagnostics out. The database, logs, live settings, running process and authenticated diagnostics endpoint
 are therefore the complete affected surfaces; no password was entered and no unrelated dashboard was treated as this
 batch's UI.
+
+## Correction Step-8 ruling — CONFIRMED (Coltrane, 2026-11-10T21:34:13Z)
+
+Coltrane independently reproduced the registered carrier gate at exact evidence ref
+`56509024d94c8a7ed987fe06b7dd9e3321dbcf7f`. His staging read found exactly 22 active-engine rows: 11 complete,
+finite and arithmetically consistent `friction_coverage_shadow` carriers plus 11 terminal `admitted` rows. All 11
+terminals matched the same symbol and arm 145–254 ms earlier; the registered 60-second check found 0 missing, while a
+100 ms mutation found 0/11 matches and proved that the instrument turns red for the failure class. The class/arm
+aggregates matched, 0/11 carriers were below `k=1`, and crypto taker remained unavailable rather than zero.
+
+The settings population independently reproduced as exactly two wildcard class rows at `1.0`, with the registered
+writer and timestamp. The complete three-file log extraction reproduced `ARCHIVE_FAILED=0` with 6 twin skips, 6 maker
+fills and 374 paper RTB-promotion rows as positive controls. Staging HEAD and liveness still identified deployed ref
+`957b13fde2fdb9b9c12791699b8fabeaa3a9afed`; the last ref move/process start remained 07:47Z, restart count 688,
+unstable restarts 0, with no session movement. Coltrane requested no carrier-gate change. The separate drift cell
+remains **UNVERIFIED**, not zero or pass, because its exact `ev_reject` path still lacks a positive control; no affected
+UI panel exists.
