@@ -10,7 +10,7 @@ The Step-7 card-reload / file-mtime / post-restart read was not performed after 
 
 - **Before deploy, positive control:** loading the Formula Health card moved `/tmp/audit_report.txt` from 03:00:00Z to 04:37:52Z and the card read “Last audit: less than a minute ago.”
 - **Immediately after deploy, A1 + N2b:** the card identified its result as the on-read fallback, named the last scheduled row as carrying no result, and returned 10 formulas / 9 passed / 1 warning / 0 failed. This was the expected pre-first-fire state.
-- **Durable scheduled writer:** a read-only 2026-11-10 query found **22 of 22** `formula_audit_cron` rows after deployment carry `totalFormulas` plus the test array. The first is 2026-10-19T03:00:00.024Z and the latest is 2026-11-09T03:00:00.013Z; the first five each carry 10 total / 9 passed / 1 warning / 0 failed and 10 test objects. This proves the scheduled-result persistence arm ran; it does not substitute for the omitted card/restart read.
+- **Durable scheduled writer, with deployment-boundary control:** the same read-only 2026-11-10 query found **0 of 138** pre-deploy `formula_audit_cron` rows carried the counts and test array, followed by **22 of 22** post-deploy rows carrying them. The pre-deploy population runs from 2026-06-01T03:00:00.012Z through 2026-10-18T03:00:00.013Z; the post-deploy population runs from 2026-10-19T03:00:00.024Z through 2026-11-09T03:00:00.013Z. All 160 rows carry `trigger_source = 'cron'`; the first five post-deploy rows each carry 10 total / 9 passed / 1 warning / 0 failed and 10 test objects. This proves the scheduled-result persistence arm began at the deployment boundary and kept running; it does not substitute for the omitted card/restart read.
 - **UI/restart leg:** **NOT READ**. No absence or zero is inferred from it.
 
 ## 2. What decision or action was taken, and by whom
@@ -21,7 +21,7 @@ Kyle ruled the main Dashboard and AI pages off-limits until the cleanup phase on
 
 | # | objective | verdict | evidence |
 |---|---|---|---|
-| 1 | Persist scheduled results in the existing fire row | **YES** | code at `ee0a3b0e4`; 22/22 post-deploy rows carry counts and tests |
+| 1 | Persist scheduled results in the existing fire row | **YES** | code at `ee0a3b0e4`; the same instrument reads 0/138 pre-deploy rows and 22/22 post-deploy rows carrying counts and tests |
 | 2 | Stop the read route from always running an audit; choose newest manual or counted scheduled result with an honest fallback | **YES in code and tests; live A1 observed** | Step-4 change list; A1 + N2b staging read; focused suite 21/21 |
 | 3 | Label what the displayed time means and qualify both `/tmp` pointers | **YES in code; A1 rendered** | staging card read after deploy; source fence in the focused suite |
 | 4 | Cover the state table, validator, writer, route, write guards and labels | **YES** | 21/21 focused tests; mutations against the original files are recorded in the change list |

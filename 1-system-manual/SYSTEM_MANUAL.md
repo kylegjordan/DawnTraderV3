@@ -9778,7 +9778,7 @@ The largest layout component. Contains:
 | `goals-engine.tsx` | 97 | Delegates to tabs | 5 tabs: Guardrails, Screeners/Filters, Strategies, Diagnostics, Coherency Rules |
 | `analytics.tsx` | 1,939 | 8+ endpoints | Market indicators, narrative feed, batch analysis, benchmarks, governance, predictive diagnostics |
 | `machine-learning.tsx` | 1,985 | 15+ endpoints | ML scores, predictive adjustments, stability analysis, safety signals, regime archive |
-| `ai-transparency.tsx` | 2,074 | 20+ endpoints | Transparency logs, screener calibration, error logs, autonomy confidence, semantic memories, orchestrator |
+| `ai-transparency.tsx` | 1,691 | 20+ endpoints | Transparency logs, screener calibration, error logs, autonomy confidence, semantic memories, orchestrator |
 | `settings.tsx` | 1,122 | `/api/user/profile`, `/api/admin/users/*` | 6 tabs: General, Walter Approvals, Users, API Keys, Audit Log, Config Snapshots |
 | `reports.tsx` | 570 | `/api/trades`, `/api/ai/reports`, `/api/reports/export` | Canned reports (tax, performance), custom reports, CSV/PDF export |
 | `briefings.tsx` | 527 | `/api/daily-briefs`, `/api/daily-briefs/today` | Current brief + historical briefs with date range navigation |
@@ -10098,7 +10098,7 @@ Two pages bypass React Query and use direct browser navigation for API calls:
 
 | Category | Largest Files | Concern |
 |----------|--------------|---------|
-| Pages | ai-transparency (2,074), machine-learning (1,985), analytics (1,939) | These are borderline monolithic — should consider component extraction |
+| Pages | ai-transparency (1,691), machine-learning (1,985), analytics (1,939) | These are borderline monolithic — should consider component extraction |
 | Components | top-bar (1,042), walter-floating-assistant (501) | TopBar is the largest single component |
 | Hooks | use-trading (461) | Acceptable for a central data hook |
 
