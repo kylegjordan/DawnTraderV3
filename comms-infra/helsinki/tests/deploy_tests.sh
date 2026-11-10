@@ -67,7 +67,9 @@ echo "stub systemctl \$*"
 if [ -n "\${HOLDLOCK:-}" ] && [ "\$1" = daemon-reload ]; then ( flock $T/mirror.git/dt-fetch.lock sleep 8 ) >/dev/null 2>&1 & sleep 0.5; fi
 exit 0
 EOF3
-printf '#!/bin/sh\nexit 0\n' > "$T/opt/venv/bin/pip"; printf '#!/bin/sh\necho 2.9.9-stub\n' > "$T/opt/venv/bin/python3"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "$PIP_LOG"\nexit 0\n' > "$T/opt/venv/bin/pip"
+printf '#!/bin/sh\necho "${DISCORD_STUB_VERSION:-2.7.1}"\n' > "$T/opt/venv/bin/python3"
+export PIP_LOG="$T/pip.args"
 # fakecrontab: langston's crontab lives in $T/crontab.txt; FAKECRON=fail makes the READ fail.
 # HOLDCRON=1 grabs the mirror's fetch lock (8 s) at the FIRST crontab read (r3 reads it only after installing).
 cat > "$T/stub/fakecrontab" <<EOF2
@@ -146,6 +148,15 @@ run "$T/deploy.sh" --sha "$OLD" --only readers
 [ $RC -eq 2 ] && grep -q "PRE-FLIGHT FAILED — nothing has been changed" "$T/out" && grep -q "comms-infra/helsinki/dt-review" "$T/out" && cmp -s "$T/bin/dt-review" "$T/before.dtr" && ok "D4 pre-flight names the missing files and changes nothing" || bad D4 "rc=$RC $(tail -3 "$T/out")"
 
 # ---- bridges and notices ----
+# GB-8: the exact discord.py version is part of the reviewed installer, and a package result
+# that does not equal that pin is a pre-install refusal rather than a silent dependency change.
+: > "$PIP_LOG"
+DISCORD_STUB_VERSION=2.7.0 run "$T/deploy.sh" --sha "$TC" --only bridges
+[ $RC -eq 2 ] && grep -q "installed version 2.7.0, expected reviewed pin 2.7.1" "$T/out" \
+  && ! grep -q '^   installed ' "$T/out" \
+  && ok "GB8-D1: discord.py result outside the reviewed pin is refused before bridge files install" \
+  || bad GB8-D1 "rc=$RC $(tail -3 "$T/out")"
+: > "$PIP_LOG"
 # D5r: plant the retired poster where an OLD installer would have put it (B-STATUS-BOARD OBJ-6, Langston C-3);
 # the bridges run must move it to the retired folder, not leave it and not delete it.
 echo stale > "$T/opt/crew-status-post.py"
@@ -159,6 +170,12 @@ N5=$(awk '/^MANIFEST="/{p=1;next} p&&/^"/{p=0} p&&/^bridges\|/' "$T/deploy.orig"
 [ $RC -eq 0 ] && [ ! -e "$T/opt/crew-status-post.py" ] && ls "$T"/retired/*/crew-status-post.py >/dev/null 2>&1 && ok "D5r: the planted retired poster is moved to the retired folder" || bad D5r "rc=$RC $(ls "$T/opt" | tr '\n' ' ')"
 grep -q "^COMMS_BACKEND=discord" "$T/etc/comms-active.env" && ok "D5 a fresh host is seeded with COMMS_BACKEND=discord" || bad D5s "$(grep COMMS_BACKEND "$T/etc/comms-active.env")"
 grep -q "NOT RESTARTED: discord-langston-bridge.service" "$T/out" && ! grep -q "stub systemctl restart" "$T/out" && ok "D5 the running bridges are named NOT RESTARTED; no restart issued" || bad D5b x
+grep -Fxq "install -U discord.py==2.7.1" "$PIP_LOG" && ! grep -Fq "discord.py>=2.3" "$T/deploy.sh" \
+  && ok "GB8-D2: bridges request only the exact reviewed discord.py 2.7.1 pin" \
+  || bad GB8-D2 "$(cat "$PIP_LOG")"
+grep -Fq 'discord.py>=2.3' "$T/deploy.r4" \
+  && ok "GB8-D2 CONTROL: the pre-GB-8 installer accepted an unbounded newer discord.py" \
+  || bad GB8-D2c "old installer no longer demonstrates the unbounded requirement"
 
 # #1117: a planted evidence-leaf symlink is a pre-flight refusal. Root must not chown,
 # chmod or write through it before the installer reaches the per-group state step.
@@ -237,7 +254,7 @@ mkdir -p "$T/units/discord-langston-bridge.service.d"; echo "[Service]" > "$T/un
 run "$T/deploy.sh" --sha "$TC" --only bridges
 [ $RC -eq 0 ] && [ ! -e "$T/opt/deploy.sh" ] && [ ! -e "$T/opt/discord-cc-bridge.service" ] && [ ! -e "$T/opt/discord-langston-bridge.service.d" ] && ok "F2-D1: bridges retires the units, the drop-in dir and the old deploy.sh" || bad F2-D1b "rc=$RC $(ls "$T/opt")"
 grep -q "UNMANAGED DROP-IN: $T/units/discord-langston-bridge.service.d/override.conf" "$T/out" && ok "F2-D9: an unmanaged drop-in is named loudly" || bad F2-D9 x
-grep -q "discord.py: 2.9.9-stub (unchanged)" "$T/out" && ok "F2-D10: an unchanged discord.py is reported as unchanged" || bad F2-D10 "$(grep discord.py "$T/out")"
+grep -q "discord.py: 2.7.1 (unchanged)" "$T/out" && ok "F2-D10: an unchanged discord.py is reported as unchanged" || bad F2-D10 "$(grep discord.py "$T/out")"
 rm -f "$T/units/discord-langston-bridge.service.d/override.conf"
 
 

@@ -384,13 +384,16 @@ if want bridges; then
   apt-get install -y python3-venv </dev/null >/dev/null 2>&1 || true
   mkdir -p "$BRIDGE_DIR"
   [ -d "$VENV" ] || python3 -m venv "$VENV"
-  # NOT tied to --sha: pip installs what PyPI serves today. Say so when a version changes.
+  # GB-8: the dependency version is reviewed with this installer. PyPI still supplies the
+  # package bytes; this pin prevents a later release from silently joining a bridges install.
+  DISCORD_PY_VERSION=2.7.1
   v0=$("$VENV/bin/python3" -c 'import discord; print(discord.__version__)' 2>/dev/null || echo none)
   "$VENV/bin/pip" install --upgrade pip >/dev/null
-  "$VENV/bin/pip" install -U "discord.py>=2.3" >/dev/null
+  "$VENV/bin/pip" install -U "discord.py==$DISCORD_PY_VERSION" >/dev/null
   v=$("$VENV/bin/python3" -c 'import discord; print(discord.__version__)')
+  [ "$v" = "$DISCORD_PY_VERSION" ] || die "discord.py installed version $v, expected reviewed pin $DISCORD_PY_VERSION"
   if [ "$v" = "$v0" ]; then echo "discord.py: $v (unchanged)"
-  else echo "   ⚠ discord.py CHANGED $v0 -> $v — from PyPI, NOT reviewed at this sha; it takes effect at the next bridge restart"; fi
+  else echo "   discord.py CHANGED $v0 -> $v — now at reviewed version pin $DISCORD_PY_VERSION; it takes effect at the next bridge restart"; fi
 fi
 
 # ---- 5. install every selected file, then VERIFY every one -------------------------------
