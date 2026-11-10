@@ -5,7 +5,7 @@ description: PM CODEX CREW HANDOVER TO CLAUDE ONLY - run the complete return fro
 
 # PM Codex transition to Claude
 
-Kyle's words in the PM Codex chat are the only trigger. PM Codex owns the preparation, order, receipts and follow-up. Kyle opens the Claude windows because nothing else can; he does not chase sessions or post a Discord switch command.
+Kyle's words in the PM Codex chat are the only trigger. PM Codex owns the preparation, order, receipts and follow-up. Kyle does not chase sessions or post a Discord switch command.
 
 ## 1. Prepare before the order
 
@@ -22,11 +22,11 @@ Do not issue the order until every clone reads 0 behind / 0 ahead and the handov
 
 1. Run `ssh root@204.168.141.77 'crew-switch start claude'`.
 2. Run `crew-switch status`. It must say CLAUDE, list OLD Claude, NEW Claude, ANALYST Claude, Infra Claude and PM Claude on duty, and show the Langston bridge active/enabled. A failed line stops the transition; report the exact readback.
-3. Tell Kyle to open these Claude windows: OLD, NEW, ANALYST, INFRA and PM. Give each the handover sheet name. Nothing can open them for him.
+3. Tell Kyle to send PM Claude one message: `We’re back on Claude. Handover sheet: <file>`. PM Claude then starts a turn in each existing OLD, NEW, ANALYST and Infra Claude session, points it to its section of the sheet, and watches for its visible pickup. Kyle does not open or message the four building sessions unless PM Claude reports that one no longer exists, is archived, or cannot be started because the Claude app is not open.
 4. Chase the open order through the existing Codex chats until every outgoing receipt is recorded. A Codex session confirms with `crew-switch ack <order> "<name>"` after its own step-boundary and push checks; PM verifies the acted-on reply rather than treating delivery as receipt. If a session no longer exists, verify its clone and position yourself and record that PM supplied the receipt, as the 2026-11-09 switch did.
 5. Re-send every unanswered Coltrane review to Langston with the original ref, question, conditions and Coltrane context. Do not translate a review into a new claim.
 6. Confirm each Claude session pulled, read its position and the handover sheet, and left its incoming receipt. Re-enable only the Claude-side scheduled items listed in the PM stop record; do not invent a fresh list.
 
 ## 3. Completion
 
-Complete only when: the switch reads CLAUDE; Langston reads active/enabled; no outgoing receipt is missing; all five Claude sessions have either confirmed or are named to Kyle to open; every clone is synced; the handover sheet and PM block are pushed; and all open Coltrane reviews have a Langston dispatch. Report one plain-language completion line to Kyle with anything he still has to open.
+Complete only when: the switch reads CLAUDE; Langston reads active/enabled; no outgoing receipt is missing; Kyle's one message has started PM Claude; PM Claude has visibly confirmed that each existing building Claude session picked up the correct batch and step, or has named the single unavailable session Kyle must open; every clone is synced; the handover sheet and PM block are pushed; and all open Coltrane reviews have a Langston dispatch. Report one plain-language completion line to Kyle with only an unavailable session, if any.

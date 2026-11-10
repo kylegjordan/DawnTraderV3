@@ -58,7 +58,7 @@ Setting yourself up touches pieces every session depends on, so it goes through 
      - `pm-slotting` — placing an agreed batch in the plan, calibration-first, in the `HOME:` form, plus the owner's task list;
      - `pm-status-report` — answering "where are we" in plain language, every claim naming its source;
      - `pm-memory-prune` — the daily prune into the archive, and keeping the index current;
-     - `pm-codex-switch` — handing over to PM Codex and back, with the receipt.
+     - `pm-transition-to-codex` and `pm-transition-to-claude` — the two directional crew handovers, their receipts and pickup proof; these replace the unbuilt `pm-codex-switch`.
      After building the skills, check that they appear in the skill listing with their descriptions; a broken description shows a heading instead.
    - **Automatic pruning into an archive, nothing ever deleted:** build a daily scheduled pruning pass (the desktop app's scheduled tasks can run it, using `pm-memory-prune`) that measures your memory file and, once it passes about 8 KB, moves closed and stale items out — each item moved WHOLE, with its date, into a dated archive file (for example `1-system-manual/pm/archive/memory/2026-11.md`), leaving a one-line pointer behind. Everything goes into git, so nothing is lost.
    - **Records, in the repo** under `1-system-manual/pm/`:

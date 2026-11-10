@@ -21,6 +21,8 @@ Kyle, 2026-11-09: "these functions - Langston responding to alerts and the hourl
 ## Resume (only on Kyle's word)
 Reverse the recorded list: re-enable the paused tasks, `crew-switch langston on`, ask every session to re-arm its wake watcher (a stopped session's watcher dies), re-arm your own, re-create the guard cron, and clear `USAGE STOP SENT` from CURRENT POSITION. If the crew is moving to ChatGPT instead, use `pm-transition-to-codex`.
 
+When the crew is returning from Codex, first read the codex-to-claude handover sheet. Start a turn in each existing OLD, NEW, ANALYST and Infra Claude session and point it to its own section. Re-arm the watchers and re-enable only the paused scheduled tasks recorded in the stop block, then check that each owner's first Discord post or commit names the batch and step in the sheet. This direct start works only for Claude sessions that still exist, are not archived, and are reachable while the Claude app is open. If one fails that test, tell Kyle to open that one session; do not make him open the others.
+
 ## Limits, stated
 - Nothing here stops Kyle's own use or another project's.
 - Coltrane runs on ChatGPT, not Claude, and is never switched off.
