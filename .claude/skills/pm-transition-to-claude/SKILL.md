@@ -15,8 +15,9 @@ Kyle's words in the PM Codex chat are the only trigger. PM Codex owns the prepar
 4. Under KD-66, read and message every existing DawnTrader Codex chat directly with its handover instruction, then watch each chat and inspect its clone and memory. A message sent during a running turn waits until that turn ends, and an accepted message is not proof it was read or acted on; require a visible reply or the resulting boundary and push. Post the complete Discord request as the durable crew record, but do not ask Kyle to paste a message into or open an existing Codex chat.
 5. Write and push `1-system-manual/pm/handovers/<YYYY-MM-DD>_codex-to-claude.md`. Give each session its batch, step, next action, pushed ref, dirty/sync state, open reviews, timed checks, deploy holds and alerts. Include Kyle's pending decisions and every unanswered Coltrane review.
 6. Update and push the PM handover block in `.claude/memory/MEMORY_PM.md`: the handover sheet, open KD acknowledgements, pending Kyle decisions, stopped Codex-side scheduled work and the next PM action.
+7. **Close the notes-copy gap before the switch order.** For `MEMORY_CC_A.md`, `MEMORY_CC_B.md`, `MEMORY_CC_C.md`, `MEMORY_CC_INFRA.md` and `MEMORY_PM.md`, replace `C:\Users\kyleg\.claude\projects\DT-SHARED-MEMORY\<file>` with the exact blob from the pushed `origin/migration/aws-supabase:.claude/memory/<file>`. Do not copy the outside file back into the repo. For every file, confirm the outside copy and pushed repo blob have the same SHA-256 hash and the same byte size, and record all five size pairs in the handover evidence. A working-tree match is not enough because line-ending conversion can change bytes.
 
-Do not issue the order until every clone reads 0 behind / 0 ahead and the handover sheet plus PM block are pushed.
+Do not issue the order until every clone reads 0 behind / 0 ahead, the handover sheet plus PM block are pushed, and all five outside notes copies match the pushed repo blobs by hash and byte size.
 
 ## 2. Issue and prove the order
 
@@ -29,4 +30,4 @@ Do not issue the order until every clone reads 0 behind / 0 ahead and the handov
 
 ## 3. Completion
 
-Complete only when: the switch reads CLAUDE; Langston reads active/enabled; no outgoing receipt is missing; Kyle's one message has started PM Claude; PM Claude has visibly confirmed that each existing building Claude session picked up the correct batch and step, or has named the single unavailable session Kyle must open; every clone is synced; the handover sheet and PM block are pushed; and all open Coltrane reviews have a Langston dispatch. Report one plain-language completion line to Kyle with only an unavailable session, if any.
+Complete only when: the switch reads CLAUDE; Langston reads active/enabled; no outgoing receipt is missing; Kyle's one message has started PM Claude; PM Claude has visibly confirmed that each existing building Claude session picked up the correct batch and step, or has named the single unavailable session Kyle must open; every clone is synced; all five outside notes copies match the pushed repo blobs by hash and byte size; the handover sheet and PM block are pushed; and all open Coltrane reviews have a Langston dispatch. Report one plain-language completion line to Kyle with only an unavailable session, if any.
