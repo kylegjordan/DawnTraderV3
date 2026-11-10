@@ -17,7 +17,7 @@
 | ✅ ~~`B-LANGSTON-MEMORY-WRITE-FENCE`~~ (`#1234`, Kyle-placed 2026-11-04) | **CLOSED 2026-11-06** (installed `fe3c4ad1f`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`; the fence's page never fired (drill offered to Kyle via PM); §10.b exit-8 floor + exit-6 wording → `B-LANGSTON-TWO-WORKERS` |
 | ✅ ~~`B-TRANSCRIPT-ARCHIVE`~~ (KD-47, plan §0a Infra order 4b) | **CLOSED 2026-11-10** — all seven objectives green; Coltrane CONFIRMED Step 11 at `6d9535aa` | — | report `Batch Completion/B_TRANSCRIPT_ARCHIVE_COMPLETION_REPORT.md`; Codex/reviewer-history expansion remains after live under `#1238`; board Review-field access gap remains under B-CREW-ACCESS-HARDEN |
 | ▶ **`B-CREDENTIALS-PRIVATE-REPO`** (`#1023`, plan §0 Infra order 6) | parent in flight; `#1117` increment closed; **GB-8 Step 5 complete**, CI `42829558680` 4/4 | crew mode | Step 6 parked because its bridge install would enable Langston while he is off; remaining parent work stays open |
-| ⏳ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | queued | me, after the fence | the follow-up recorder's memory fix; the `due/` steady state; the B2 version census + orphan reconciliation (Langston Step 9) |
+| ▶ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | **Step 3 resumed 2026-11-10**; P1 capture accepted 361,853/361,853 | Coltrane on r6, then me | next eligible non-deploy work while both Step-6 installs wait for Claude mode; index/encoding/N/arms next; no service enable or deploy |
 | ⏳ **`#1237` + `#1238` `B-CODEX-CONVERSATION-BACKUP`** | after live (Kyle D-1, 2026-11-04) | me | one backed-up, searchable and restore-checked path for all five Claude sessions, all five Codex chats, Langston and Coltrane |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |
 | ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (Kyle-slotted 2026-10-20; folds `#974`) | **Step 7** — installed 2026-11-05 08:21Z: his rules file 57,095 B (Langston-approved, `e319f34cf`), the installer and the size watch; loaded set 140,943 vs 143,856, canary LOADED | two consecutive daily size-watch runs under the ceiling, then Step 8 | OBJ-3 ceiling (carried from `B-LANGSTON-RELIEF`) met at install |
@@ -35,7 +35,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` is in flight; its `#1117` increment is closed and its GB-8 bridges increment is parked after Step 5 because Step 6 would enable Langston while he is off. `B-AGENT-INVOKE-FAILURE-NOTICE` is parked at the same boundary, and no Langston worker is enabled during the Codex shift.
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` GB-8 and `B-AGENT-INVOKE-FAILURE-NOTICE` are parked before Step 6 because either install would enable Langston while he is off; both return first in Claude mode. During that wait, `B-TOKEN-WATCH-FOLLOWUP-MEMORY` resumed at Step 3 for its non-deploy measurement work. No Langston worker is enabled during the Codex shift.
 
 | row | item | what it is for |
 |---|---|---|
