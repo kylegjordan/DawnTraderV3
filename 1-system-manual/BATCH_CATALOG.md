@@ -1420,7 +1420,7 @@ Kyle decided the retention windows: **2026-09-23** none change, because August's
 
 **RESULT.** On staging the tab shows Formula Health (10 formulas, 9 passing, 1 minor warning) and Feed Health; the page asks for none of the removed routes, and the server's "missing module" errors went from 116 that afternoon to none. **Left:** the card's "last audit" line always reads "just now" (`#1214`); the health-check address registered three times (`#1212`).
 
-## B-FORMULA-HEALTH-AUDIT-FRESHNESS (CC-B, sprint row 59g1a; `#1214`) — change-class `non_architecture` — **STEP 11 AT COLTRANE 2026-11-10** (deployed `ee0a3b0e4` 2026-10-18T04:38:39Z; record `Claude Comms and Packages/Batch Completion/B_FORMULA_HEALTH_AUDIT_FRESHNESS_COMPLETION_REPORT.md`)
+## B-FORMULA-HEALTH-AUDIT-FRESHNESS (CC-B, sprint row 59g1a; `#1214`) — change-class `non_architecture` — ✅ **CLOSED 2026-11-10 (Coltrane confirmed Step 11 at `6b43579c3`)** (deployed `ee0a3b0e4` 2026-10-18T04:38:39Z; record `Claude Comms and Packages/Batch Completion/B_FORMULA_HEALTH_AUDIT_FRESHNESS_COMPLETION_REPORT.md`)
 
 **WHAT WAS BROKEN.** Opening the Formula Health card ran a new audit, so “Last audit” always meant the page load rather than the daily scheduled audit.
 

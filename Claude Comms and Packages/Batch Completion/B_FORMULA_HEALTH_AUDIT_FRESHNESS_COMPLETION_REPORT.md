@@ -1,10 +1,10 @@
-# B-FORMULA-HEALTH-AUDIT-FRESHNESS — COMPLETION REPORT — STEP 11 AT COLTRANE
+# B-FORMULA-HEALTH-AUDIT-FRESHNESS — COMPLETION REPORT — CLOSED
 
 **Owner:** CC-B (NEW Claude / NEW Codex) · **change-class:** `non_architecture` · **Sprint row:** 59g1a · **Issue:** `#1214` · **Deployed:** `ee0a3b0e4dcfb1403a4f98c9d72c9b743f1825ea` at 2026-10-18T04:38:39Z
 
 ## 0. Honest residual — stated first
 
-The Step-7 card-reload / file-mtime / post-restart read was not performed after the first counted scheduled run. Kyle parked the main Dashboard and AI pages on 2026-10-19; CC-B then asked whether to perform this batch-specific read or drop it, received no answer before its registered expiry, and on 2026-10-20 treated it as dropped. The deployed change is harmless and remains: its durable writer can be measured, but the historical UI interaction cannot be reconstructed. Langston later recommended closing with the unread leg as the explicit disposition; Coltrane must confirm that close. This close creates no deferred batch: any future AI-page work requires a new Kyle-agreed slot in the cleanup phase.
+The Step-7 card-reload / file-mtime / post-restart read was not performed after the first counted scheduled run. Kyle parked the main Dashboard and AI pages on 2026-10-19; CC-B then asked whether to perform this batch-specific read or drop it, received no answer before its registered expiry, and on 2026-10-20 treated it as dropped. The deployed change is harmless and remains: its durable writer can be measured, but the historical UI interaction cannot be reconstructed. Langston later recommended closing with the unread leg as the explicit disposition; Coltrane confirmed that close at exact ref `6b43579c32f8faa93f33799fa2e00edcc7f938fb` on 2026-11-10. This close creates no deferred batch: any future AI-page work requires a new Kyle-agreed slot in the cleanup phase.
 
 ## 1. What data came in
 
@@ -15,7 +15,7 @@ The Step-7 card-reload / file-mtime / post-restart read was not performed after 
 
 ## 2. What decision or action was taken, and by whom
 
-Kyle ruled the main Dashboard and AI pages off-limits until the cleanup phase on 2026-10-19. CC-B applied that general rule to this batch after its direct question went unanswered: the registered UI/restart read lapsed and CC-B recorded it as dropped on 2026-10-20, rather than silently treating it as a pass. Langston recommended the close on 2026-11-08: retain the deployed implementation, record the 22/22 durable-writer result and the unread leg, retire the declared-open row, push, then resolve alerts `559f075c-f2c1-40ca-8108-5d833d9f8c36` and `86ed43a0-3e17-4fc4-8d19-aff97f9a612f`—never acknowledge them.
+Kyle ruled the main Dashboard and AI pages off-limits until the cleanup phase on 2026-10-19. CC-B applied that general rule to this batch after its direct question went unanswered: the registered UI/restart read lapsed and CC-B recorded it as dropped on 2026-10-20, rather than silently treating it as a pass. Langston recommended the close on 2026-11-08: retain the deployed implementation, record the 22/22 durable-writer result and the unread leg, retire the declared-open row, push, then resolve alerts `559f075c-f2c1-40ca-8108-5d833d9f8c36` and `86ed43a0-3e17-4fc4-8d19-aff97f9a612f`—never acknowledge them. Coltrane independently reviewed the final record and confirmed Step 11 on 2026-11-10.
 
 ## 3. Objectives
 
@@ -29,7 +29,7 @@ Kyle ruled the main Dashboard and AI pages off-limits until the cleanup phase on
 
 ## 4. CI and deploy
 
-CI run `39096976591` at exact deployed SHA `ee0a3b0e4dcfb1403a4f98c9d72c9b743f1825ea`: **Test Suite success · TypeScript Check (baseline gate) success · Build success · Docker Build success**. `dt-deploy ee0a3b0e4dcfb1403a4f98c9d72c9b743f1825ea --by cc-b` completed 2026-10-18T04:38:39Z; rollback ref `f0abf8494`.
+CI run `39096976591` at exact deployed SHA `ee0a3b0e4dcfb1403a4f98c9d72c9b743f1825ea`: **Test Suite success · TypeScript Check (baseline gate) success · Build success · Docker Build success**. Closeout CI run `42732347722` at exact confirmed ref `6b43579c32f8faa93f33799fa2e00edcc7f938fb`: **Test Suite success · TypeScript Check (baseline gate) success · Build success · Docker Build success**. `dt-deploy ee0a3b0e4dcfb1403a4f98c9d72c9b743f1825ea --by cc-b` completed 2026-10-18T04:38:39Z; rollback ref `f0abf8494`.
 
 ## 5. Numeric corrections
 
@@ -76,6 +76,8 @@ CHANGE-CLASS: non_architecture
 
 ## 7. Reviewer record
 
-Step 11 awaits Coltrane's exact-ref confirmation. No Step-11 completion boundary is claimed before that ruling. A fresh reader found the attribution collapse; the 2026-10-19 and 2026-10-20 archived CC-B conversations were re-opened and confirm Kyle's general park, CC-B's unanswered expiry/drop, and Langston's later close recommendation are distinct.
+Coltrane confirmed Step 11 at exact ref `6b43579c32f8faa93f33799fa2e00edcc7f938fb` on 2026-11-10 after the completion report added the 0/138 pre-deploy control, `RUNNING_ISSUES` separated the pre-fix and current route behavior, and every System Manual line-count reference was reconciled to 1,691. A fresh reader had earlier found the attribution collapse; the 2026-10-19 and 2026-10-20 archived CC-B conversations were re-opened and confirm Kyle's general park, CC-B's unanswered expiry/drop, and Langston's later close recommendation are distinct.
+
+**Delivery-board reconciliation:** `POST_AUDIT_ROADMAP` has no row for this batch, sprint-plan row 59g1a is closed, and the delivery card is `Complete` with `Blocked on = Nothing`; the roadmap, active plan and board therefore agree.
 
 REVIEWER: claim-only · identify the objects that settle whether the durable writer ran and whether the omitted UI/restart leg can be reconstructed · HIT — source attribution separated; writer evidence unchanged · re-derived yes
