@@ -76,7 +76,7 @@ Copied from the filled Step-10 tier ledger in commit `0e9bb009f52f90d77b6b0cd6f2
 | T1 | B_TRANSCRIPT_ARCHIVE_PRE_AUDIT.md | Updated earlier — laptop hooks, backups, archive surfaces and evidence gates were audited at Step 2. |
 | T1 | B_TRANSCRIPT_ARCHIVE_COMPLETION_REPORT.md | Updated — this Step-11 report transcribes the committed Step-10 ledger. |
 | T1 | Observation column | N/A — scope declares no post-close observation window; the scheduled run was Step-7 verification and is complete. |
-| T1 | four session task lists | `CC_INFRA_SESSION_TASK_LIST.md` updated; CC_A, CC_B and CC_C N/A because they are not the owning session. |
+| T1 | four session task lists | ✅ mine / N/A ×3 — `CC_INFRA_SESSION_TASK_LIST.md` updated; CC_A, CC_B and CC_C are not the owning session. |
 | T1 | Langston `/home/langston/MEMORY.md` | Updated — loaded set 143,472 to 143,412 bytes; reviewer-ledger and retraction counts unchanged. |
 | T2 | SYSTEM_MANUAL.md | N/A — no trading architecture, strategy, regime, filter, signal or math changed. |
 | T2 | SYSTEM_IMPACT_MAP.md | Updated — final installed components, complete measured populations, warning lifecycle and bounded Drive evidence recorded. |
