@@ -40,7 +40,7 @@ The response's hot-disk total over its readable rows was 8,397,914,112 bytes (`7
 
 The diagnostic-pool minute records discriminate the long server work from a browser-only rendering failure. At `20:40:57Z`, the diagnostic pool recorded 27 checkouts, seven holds over 25 seconds, three acquire timeouts, and 25-second holds on `pair_scan_archive`, `signal_eval_archive`, and `signal_eval_provenance`. The next four minute records continued to name 25-second holds on those same archive reads. No second UI or API retry was run after the one staging-side read.
 
-## Repository classification — ruling requested, not assumed
+## Repository classification and Coltrane ruling
 
 - `client/src/lib/api.ts` arms one 30-second abort before token validation and the fetch.
 - `client/src/pages/analytics.tsx` asks for this endpoint and refreshes it every 30 seconds.
@@ -51,7 +51,24 @@ The diagnostic-pool minute records discriminate the long server work from a brow
 
 **REVIEWER:** claim-only · *The signed-in abort belongs to already-homed `#1037` / row 119 rather than a new `B-DB-SIZE-RELIEF` implementation defect.* · HIT: the existing objects also permit the added hot-horizon read, page-wide database contention, token-validation time, or changed data shape to contribute; the new fields can be correct while their UI acceptance remains unreachable · re-derived yes — the endpoint, timeout values, two HTTP 499s, 63.52-second HTTP 200, full five-row response and pool-minute records were read directly.
 
-**Coltrane ruling requested:** whether Step 7 should carry this failed UI evidence as the existing row-119 dependency while `B-DB-SIZE-RELIEF` continues its registered 01:00Z/02:15Z checks, or whether OBJ-2 requires a current-batch correction because its UI acceptance condition is presently unreachable.
+**Coltrane ruling at exact ref `5a2a0f10e6eea3d52938447449120b23aaaf843b` (Discord `2026-11-10T21:05:05Z`): A, WITH A BINDING HOLD.** Carry the failed UI check as the existing `#1037` / row-119 dependency and do not widen this batch into the already-homed time-boxing work. Continue the registered `01:00Z` / `02:15Z` reads, but Step 7 remains unpassed and the batch cannot complete until row 119, or a separately scoped/reviewed/deployed equivalent, makes OBJ-2's acceptance reachable. The eventual rerun must show `rolling_30d` rendering, `signal_eval_archive` without `QUERY TIMEOUT`, and `PARTIAL — hot holds 15 d`. Do not repeat the UI or API request now.
+
+Coltrane independently read the screenshot at that ref, reproduced its 578,325-byte size and SHA-256, and confirmed the selected `30d` plus the exact AbortError. His ruling also confirms that the evidence does not isolate the added hot-horizon read as a new current-batch defect.
+
+## Database acquire-timeout alert during the investigation window
+
+Alert `368c45b0-5bde-4f18-b624-aecad6185758`, **Database connection acquire timed out on dawntrader_main**, was created at `2026-11-10T20:44:56.781Z` from one acquire-timeout incident at `20:44:56.625Z`. OLD Codex claimed it as `codex-a` at `21:06:07.139Z`; the row was then read back as `acknowledged`, not resolved.
+
+The runtime carrier identifies the failed caller, but not the cause of the pool pressure:
+
+- `20:44:10Z`: the paper-position check for `MRVL/USD` returned the exact pg-pool message `timeout exceeded when trying to connect`.
+- The `20:44:56Z` main-pool minute covered 1,497 checkouts: 84 waited over 1 second, 23 waited over 5 seconds, one acquire timed out, and the maximum wait was 9,900 ms. At flush it showed `open=1 total=7 idle=6 waiting=0`.
+- That minute also recorded 25,104 ms on the 15-minute xStock snapshot read, 15,564 ms on the xStock ticker snapshot read, and 11,459 ms on a `captured_at` read.
+- Four ticker-writer slot waits at `20:44:07Z` and `20:44:12Z` retained their crypto spot/perp rows for retry; they did not report those rows dropped.
+
+Positive control and recovery population: the same exact-message search found the `MRVL/USD` line, and the same minute parser found the `acquire_timeouts=1` carrier. Across 24 consecutive main-pool minute records from `20:43:56Z` through `21:06:56Z`, exactly one minute had a nonzero acquire-timeout count and the sum was one. The 22 subsequent minute records, `20:45:56Z` through `21:06:56Z`, each recorded `acquire_timeouts=0`; the last five each had `waiting=0` and maximum waits of 524 ms or less.
+
+**Causation is not assigned.** The incident overlaps this investigation, but the heavy Data Archive table reads use the diagnostic pool. The available records do not distinguish page-wide sibling requests, authentication work, normal background load, or another concurrent source as the cause of the main-pool pressure. This alert therefore does not change Coltrane's ruling or prove a new `B-DB-SIZE-RELIEF` implementation defect.
 
 ## Timed evidence still owed
 
