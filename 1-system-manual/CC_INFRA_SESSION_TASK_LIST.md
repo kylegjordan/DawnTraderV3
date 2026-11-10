@@ -16,7 +16,7 @@
 | ▶ **`B-LANGSTON-TWO-WORKERS`** (KD-44, Kyle 2026-11-05; plan §0a Infra order 4a) | **Step 4** — built at `82c03b2c3` (CI 4/4); Langston two parts + Coltrane concurrency pass | Langston, Coltrane | two review workers with per-batch lanes; a wait AND review-quality window before vs after (Kyle) |
 | ✅ ~~`B-LANGSTON-MEMORY-WRITE-FENCE`~~ (`#1234`, Kyle-placed 2026-11-04) | **CLOSED 2026-11-06** (installed `fe3c4ad1f`; Langston CONFIRMED Step 11) | — | report `Batch Completion/B_LANGSTON_MEMORY_WRITE_FENCE_COMPLETION_REPORT.md`; the fence's page never fired (drill offered to Kyle via PM); §10.b exit-8 floor + exit-6 wording → `B-LANGSTON-TWO-WORKERS` |
 | ✅ ~~`B-TRANSCRIPT-ARCHIVE`~~ (KD-47, plan §0a Infra order 4b) | **CLOSED 2026-11-10** — all seven objectives green; Coltrane CONFIRMED Step 11 at `6d9535aa` | — | report `Batch Completion/B_TRANSCRIPT_ARCHIVE_COMPLETION_REPORT.md`; Codex/reviewer-history expansion remains after live under `#1238`; board Review-field access gap remains under B-CREW-ACCESS-HARDEN |
-| ▶ **`B-CREDENTIALS-PRIVATE-REPO`** (`#1023`, plan §0 Infra order 6) | parent in flight; `#1117` increment closed; **GB-8 Step 4 complete** at graded ref `5215c529d`, Coltrane PROCEED | me | next: Step 5; OBJ-2, OBJ-3, remaining OBJ-4 readers, OBJ-6 and the private-repo flip remain open |
+| ▶ **`B-CREDENTIALS-PRIVATE-REPO`** (`#1023`, plan §0 Infra order 6) | parent in flight; `#1117` increment closed; **GB-8 Step 5 complete**, CI `42829558680` 4/4 | crew mode | Step 6 parked because its bridge install would enable Langston while he is off; remaining parent work stays open |
 | ⏳ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | queued | me, after the fence | the follow-up recorder's memory fix; the `due/` steady state; the B2 version census + orphan reconciliation (Langston Step 9) |
 | ⏳ **`#1237` + `#1238` `B-CODEX-CONVERSATION-BACKUP`** | after live (Kyle D-1, 2026-11-04) | me | one backed-up, searchable and restore-checked path for all five Claude sessions, all five Codex chats, Langston and Coltrane |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |
@@ -35,7 +35,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` is in flight; its `#1117` increment is closed and its GB-8 bridges increment is at Step 4 without any live install. `B-AGENT-INVOKE-FAILURE-NOTICE` remains parked at Step 6 because Langston is off, and no Langston worker is enabled during the Codex shift.
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` is in flight; its `#1117` increment is closed and its GB-8 bridges increment is parked after Step 5 because Step 6 would enable Langston while he is off. `B-AGENT-INVOKE-FAILURE-NOTICE` is parked at the same boundary, and no Langston worker is enabled during the Codex shift.
 
 | row | item | what it is for |
 |---|---|---|

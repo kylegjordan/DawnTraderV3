@@ -113,3 +113,9 @@ grep -Fq 'discord.py>=2.3' "$T/deploy.r4" \
 Coltrane returned **PROCEED with no correction required** at exact graded ref `5215c529d77f8f48063fdfa38c0d128a752a851b` on 2026-11-10T13:57:43Z. He confirmed that the exact request plus imported-version refusal form a coherent release-label pin, that the refusal boundary is stated honestly before the explicit bridge-file loop, and that the mismatch, exact-argument and pre-change control checks discriminate the regression. Discord message timestamp is the durable verdict record; the review cites the exact installer and test lines at the graded ref.
 
 **STEP: 4 of 11 COMPLETE · NEXT STEP: 5 of 11.** Confirm the four GitHub jobs per job at the newest code-touching commit in the graded range. Langston and both Langston workers remain off.
+
+## STEP 5 — GITHUB PUSH + CI
+
+GitHub Actions run `42829558680` at pushed Step-4 record ref `49a0dc531db5606b4c3fcd9dea6395eea927227a` completed successfully. Per-job readback: TypeScript Check (baseline gate) `success`; Test Suite `success`; Build `success`; Docker Build `success`.
+
+**STEP: 5 of 11 COMPLETE · NEXT STEP: 6 of 11.** Step 6 is parked because the reviewed bridges install enables the Langston bridge while crew mode says Langston is off. No install, restart or enable has occurred; Langston and both workers remain off.
