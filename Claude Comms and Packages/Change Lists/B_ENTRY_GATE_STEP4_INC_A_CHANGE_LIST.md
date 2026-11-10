@@ -105,6 +105,6 @@ if (_b72cPendingMaker) {
 ## Evidence
 - **tsc baseline:** 324 = 324 at the correction head.
 - **Unit:** the correction target set is 100/100 green across `b-entry-gate`, `b-entry-gate-fill-economics`, `b8c-switch-on-wiring`, `b1250-engine-wiring`, and `b-entry-consumption-freshness-engine`; the last suite's cold-cache fixture supplies all three required `entry_gate` rows, including `entry_friction_coverage_k=1.0`.
-- **Full local suite:** 5,220 passed / 199 skipped; 11 files did not complete in this laptop environment (missing local `jsdom`, unavailable local PostgreSQL, and pre-existing watchdog/module load errors). The previous pushed CI completed 423 files and isolated its four failures to the now-corrected cold-cache fixture; the correction head still requires fresh 4-job CI.
+- **Full local suite:** 5,220 passed / 199 skipped; 11 files did not complete in this laptop environment (missing local `jsdom`, unavailable local PostgreSQL, and pre-existing watchdog/module load errors). The prior pushed run isolated its four failures to the now-corrected cold-cache fixture.
 - **Mutations, each RED:** M1 window `>` → `>=` (2 tests); M2 P4 never refuses (1); M3 exploration not exempt at the taker (1); M4 strong-trend pool not excluded from `pWinDefaulted` (1).
-- **CI:** to be read on the pushed head before you rule (4/4 per job).
+- **CI:** run `42737548649` at correction ref `5b119e307ae2a09cbaad66731854d87c0aa10b6c`: Test Suite, Build, TypeScript Check, and Docker Build individually `success` (4/4).
