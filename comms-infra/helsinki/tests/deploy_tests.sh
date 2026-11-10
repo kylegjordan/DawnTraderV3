@@ -152,7 +152,7 @@ run "$T/deploy.sh" --sha "$OLD" --only readers
 # that does not equal that pin is a pre-install refusal rather than a silent dependency change.
 : > "$PIP_LOG"
 DISCORD_STUB_VERSION=2.7.0 run "$T/deploy.sh" --sha "$TC" --only bridges
-[ $RC -eq 2 ] && grep -q "installed version 2.7.0, expected reviewed pin 2.7.1" "$T/out" \
+[ $RC -eq 2 ] && grep -q "imported version 2.7.0, expected reviewed pin 2.7.1" "$T/out" \
   && ! grep -q '^   installed ' "$T/out" \
   && ok "GB8-D1: discord.py result outside the reviewed pin is refused before bridge files install" \
   || bad GB8-D1 "rc=$RC $(tail -3 "$T/out")"

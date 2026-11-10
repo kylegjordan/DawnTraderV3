@@ -391,7 +391,7 @@ if want bridges; then
   "$VENV/bin/pip" install --upgrade pip >/dev/null
   "$VENV/bin/pip" install -U "discord.py==$DISCORD_PY_VERSION" >/dev/null
   v=$("$VENV/bin/python3" -c 'import discord; print(discord.__version__)')
-  [ "$v" = "$DISCORD_PY_VERSION" ] || die "discord.py installed version $v, expected reviewed pin $DISCORD_PY_VERSION"
+  [ "$v" = "$DISCORD_PY_VERSION" ] || die "discord.py imported version $v, expected reviewed pin $DISCORD_PY_VERSION"
   if [ "$v" = "$v0" ]; then echo "discord.py: $v (unchanged)"
   else echo "   discord.py CHANGED $v0 -> $v — now at reviewed version pin $DISCORD_PY_VERSION; it takes effect at the next bridge restart"; fi
 fi
