@@ -60,6 +60,7 @@ This increment changes only that parse-failure path:
 
 - Linux isolated fixture on Helsinki, private temporary directory removed by the same remote command: **39 passed, 0 failed**.
 - Windows Git Bash fixture: **27 passed, 0 failed**; POSIX mode, owner, symlink and no-test-mode assertions explicitly defer to the Linux run.
+- Root installer regression suite from committed suite blob `0b73e04b23c510a64ec7dcb245f2061c2bcfb661` at reviewed ref `1accff5589667e2d06b6b8f9d715c402599d8e30`: **63 passed, 0 failed**, including planted pre-flight and post-pre-flight symlink controls. The first launch was rejected as evidence because its private parent blocked the `langston` subprocess; the valid rerun granted traversal only to the `langston` group and independently required a `0 fail` summary instead of trusting the suite's exit status.
 - Existing drift-shape guard: expected PASS/FAIL outcomes unchanged.
 - Existing runtime-predicate suite: **34 cases, 0 failures**; control still separates the fixed predicate from the old prefix-only form.
 - `bash -n`: monitor, installer and new fixture all parse.
@@ -266,4 +267,4 @@ Re-derivation and disposition: the first three mechanism hits are corrected in t
 
 ## REVIEW GATE
 
-**STEP: 3 of 11 · NEXT STEP: 4 of 11.** Coltrane reviews the exact pushed ref. No live file is installed at Step 3, the later OBJ-4 conversion is unchanged, and neither Langston nor a second worker is enabled.
+**STEP: 4 of 11 COMPLETE · NEXT STEP: 5 of 11.** Coltrane returned **PROCEED** at exact graded ref `1accff5589667e2d06b6b8f9d715c402599d8e30` on 2026-11-10T12:18:30Z. He cleared all three SEND-BACK items and reaffirmed that no per-incident alert refresh is required: the deduped row names the first incident and the log is authoritative for later saved paths. No live file is installed, the later OBJ-4 conversion is unchanged, and neither Langston nor a second worker is enabled.
