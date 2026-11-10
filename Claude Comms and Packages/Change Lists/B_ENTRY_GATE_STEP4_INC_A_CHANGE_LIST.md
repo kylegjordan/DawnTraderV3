@@ -67,30 +67,55 @@
 | seed | `entry_gate` 4 rows (0.25 / 0.40 × crypto_spot, xstock_spot), count-asserted; rollback file; MANIFEST; warmed in `b72-warmup`. | `drizzle/migrations/2026-11-05-b-entry-gate*.sql` |
 
 ## Load-bearing hunks
-**P1/P1b/P4 at the taker fill** (`active-execution-engine.ts`, after `entryFillShadow`, inside the one `_entryShadowRec` site):
+**P1/P1b/P4 at the taker fill** (`active-execution-engine.ts`; the settings are resolved before either arm, and the
+taker is priced on the carried levels that the position will own):
 ```ts
-const _ewKey = { exchange: '*', assetClass: _openClass, strategy: '*', regime: '*' };
-const _ewWorseSide = getCachedNumberRequired('entry_gate', 'entry_window_worse_side_frac', _ewKey);
-const _ewCheaperFloor = getCachedNumberRequired('entry_gate', 'entry_cheaper_side_floor_frac', _ewKey);
 const _ewCheaper = cheaperSideRecord(_shadow.adverseR, _ewCheaperFloor);
 const _ewRefusal = entryWindowRefusal(_shadow.adverseR, _ewWorseSide);
-const _feT = this._fillEconomics(signal, _openClass, 'taker', actualEntryPrice);
-_fillEconRec = this._fillEconRecord(_feT, 'taker', _fillExplo);
-_entryShadowRec = { …existing…, entryWindowFrac, entryWindowRefused, cheaperSideFloorFrac, remainingRiskFrac, belowCheaperFloor };
-…  // after the ENTRY_GEOMETRY refusal:
-if (_ewRefusal !== null) { …archive entry_fill…; return { opened: false, stage: 'ENTRY_WINDOW', reason: _ewRefusal }; }
-if (_feT.refuse && !_fillExplo) { return await this._refuseFillEconomics(signal, _openClass, 'taker', actualEntryPrice, _feT, { ...(_entryShadowRec ?? {}), ..._fillEconRec }); }
+const _feT = computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice,
+  stopPrice: _carriedStop, targetPrice: _carriedTarget });
+const _feTPlan = _levelRec !== null
+  ? computeFillEconomics({ ..._feInputs, arm: 'taker', fillPrice: actualEntryPrice }) : null;
+_fillEconRec = { ...this._fillEconRecord(_feT, 'taker', _fillExplo),
+  ...(_feTPlan !== null ? { netEvAtFillPlanGeometry: _feTPlan.netEvAtFill,
+    fillEconRefusedPlanGeometry: _feTPlan.refuse } : {}) };
+await this._archiveFrictionCoverageShadow(signal, _openClass, 'taker', actualEntryPrice,
+  _carriedStop, _carriedTarget, _feT);
+// The later ENTRY_GEOMETRY / level-rebase / ENTRY_WINDOW / FILL_ECONOMICS exits cannot erase this carrier.
 ```
 **P4 at the maker placement:**
 ```ts
 if (_b72cPendingMaker) {
-  actualEntryPrice = _b72cLimit; …
-  const _feM = this._fillEconomics(signal, _openClass, 'maker', _b72cLimit);
+  const _feM = computeFillEconomics({ ..._feInputs, arm: 'maker', fillPrice: _b72cLimit });
   _fillEconRec = this._fillEconRecord(_feM, 'maker', _fillExplo);
+  await this._archiveFrictionCoverageShadow(signal, _openClass, 'maker', _b72cLimit,
+    signal.stopPrice, signal.targetPrice, _feM);
   if (_feM.refuse && !_fillExplo) return await this._refuseFillEconomics(signal, _openClass, 'maker', _b72cLimit, _feM, _fillEconRec);
 }
 ```
-**P4 kernel** (`fill-economics.ts`): `decideMakerTaker({ entryPrice: fillPrice, entryPriceMaker: fillPrice, levelGeometry: 'mid', … })`; `netEvAtFill = (arm === 'taker' ? d.taker : d.maker).netEV − (arm === 'maker' ? d.adverseSelectionPct × fillPrice : 0)`; `refuse = !(netEvAtFill > 0)`.
+**P4 kernel and probability-free coverage shadow** (`fill-economics.ts`):
+```ts
+const d = decideMakerTaker({ entryPrice: i.fillPrice, entryPriceMaker: i.fillPrice,
+  levelGeometry: i.levelGeometry, stopPrice: i.stopPrice, targetPrice: i.targetPrice, ... });
+const leg = i.arm === 'taker'
+  ? computeNetExpectancyKernel({ ...,
+      totalFriction: (i.levelGeometry === 'sided'
+        ? composeAskEntrySidedExitFriction(i.costs.fee, i.costs.slippage)
+        : composeAskEntryMidExitFriction(i.costs.fee, i.costs.slippage, i.costs.spread)) * i.fillPrice })
+  : d.maker;
+const adverseSelection = i.arm === 'maker' ? d.adverseSelectionPct * i.fillPrice : 0;
+const netEvAtFill = leg.netEV - adverseSelection;
+const roundTripFrictionAtFill = leg.totalCost;
+const netRewardAtFill = leg.distTarget - roundTripFrictionAtFill;
+const frictionCoverageRatio = roundTripFrictionAtFill === 0 ? null : netRewardAtFill / roundTripFrictionAtFill;
+const frictionCoverageWouldRefuse = netRewardAtFill < i.frictionCoverageK * roundTripFrictionAtFill;
+return { ..., netEvAtFill, refuse: !(netEvAtFill > 0), netRewardAtFill,
+  roundTripFrictionAtFill, frictionCoverageRatio, frictionCoverageWouldRefuse };
+```
+The dedicated carrier writes `gate='friction_coverage_shadow'`, `accepted=true`, `shadow=true`, the arm/fill/carried
+stop/target, `k`, net reward, round-trip friction, ratio and watch-only result immediately after each successful
+evaluation. Maker adverse selection remains in deciding `netEvAtFill` but is deliberately outside the probability-free
+coverage shadow because its strength multiplier consumes the pWin-derived `signalStrength`.
 
 **The conversion** — BEFORE: `if (_entryFillPolicy === 'maker_preferred' && _b72cStoredTakerEv != null && _b72cStoredTakerEv > 0)`. AFTER: `if (_entryFillPolicy === 'maker_preferred')` — it converts and P4 decides at the price paid.
 
