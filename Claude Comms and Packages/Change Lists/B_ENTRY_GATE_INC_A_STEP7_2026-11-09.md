@@ -354,3 +354,26 @@ fills and 374 paper RTB-promotion rows as positive controls. Staging HEAD and li
 unstable restarts 0, with no session movement. Coltrane requested no carrier-gate change. The separate drift cell
 remains **UNVERIFIED**, not zero or pass, because its exact `ev_reject` path still lacks a positive control; no affected
 UI panel exists.
+
+## Correction Step-9 all-objectives check — 2026-11-10
+
+**Verdict: every increment-A objective is green; no further fix loop is required.** The check was re-run at
+`2026-11-10T21:49Z` in the current branch, whose governed runtime and targeted-test files have no diff from deployed
+ref `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`. The targeted population was eight test files and 130 tests; all eight
+files and all 130 tests passed. This supersedes the correction change list's earlier 100-test count because this
+Step-9 rerun deliberately includes the distance guard, refresh-log writer and drift-disposition suites as well.
+
+| increment-A item | object re-checked | result |
+|---|---|---|
+| P1 worse-side fill window + P1b cheaper-side shadow | boundary/wiring tests plus the registered active-fill population | exact +25% edge passes, one tick above refuses, cheaper fills never refuse; the live session retained the non-vacuous xStock taker control |
+| P3 resting-maker record + P3v VTS entry window | maker lifecycle and all three VTS call sites, plus the registered log population | watch-only maker state cannot feed cancel/drop/fill; six xStock twin skips among 125 comparable twin outcomes supplied the live VTS control |
+| P4 fill economics | pure kernel, both engine arms, exploration exemption, conversion path and registered durable rows | the actual arm at the paid price remains the deciding number; 11/11 terminal rows carried a preceding complete friction-coverage carrier and 0/11 observations were below `k=1` |
+| P4b snapshot disposition | disposition and alert-latch tests plus deployed source | missing-snapshot outcomes remain unreachable, paper remains shadow and live retains the block. The real-session drift-event cell is still **UNVERIFIED**, not green or zero; it is not used as evidence for this row because no exact-path live positive control exists |
+| P5 increment-A boundary | the ranker, shadow-pool and promoted-open target sites at the deployed ref | all three governed `entry x 1.02` fallbacks remain absent; target-less rows rank last, skip shadow simulation, or refuse `invalid_target`. A repo-wide same-pattern control still finds two unrelated 1.02 calculations elsewhere, proving the census can return positives. The SQE `InvalidTarget` rule remains explicitly in increment B |
+| P9 refresh diagnostics | ESM-writer tests and staging files | transition-only trace, SQE rejection, and warn-on-failed-write checks pass. Staging holds four dated trace files; the current file had 1,176 rows and the rejection file had one row at the read, so file existence is not inferred from an empty directory |
+| A-9 dead constant | deployed server tree, with historical specification documents as the positive control | `ENTRY_PREMIUM_BPS` remains absent from runtime server code while the same ref still finds the historical specification occurrences |
+| correction setting/carrier | live settings, durable archive, log span and deployment identity | Step 7 and Coltrane independently reproduced two class settings, 11 complete carriers, 11/11 terminal matches, complete log controls and no restart or ref movement inside the frozen session |
+
+The delivery-board item was re-read at the object: `Status=Verification`, `Review=Approved`, `Blocked on=Langston`.
+It stays in Verification through governance, as the Step-9 rule requires. Increment-B objectives P2/P6/P7/P8/P11/P12
+are outside this increment and remain on their separately reviewed ref; they are not recorded as zeros or implied done.
