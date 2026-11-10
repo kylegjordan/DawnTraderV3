@@ -222,3 +222,7 @@ Coltrane returned **CONFIRMED** at exact corrected ref `368b60401b5cb96a538e00de
 | Step-4 condition (f), refusal visibility and UI | GREEN | The rolled-back storage probe left 0 residue; Coltrane confirmed the paging/carrier reach and normal Open/Closed Trades rendering. |
 
 No scope objective remains red. Step 9 needs no code, deploy or repeat-verification loop; the batch may proceed to governance.
+
+## Step 10 — governance reconciliation (2026-11-10)
+
+The architecture records now distinguish the circuit breaker's session clock from sizing/exposure's anchor-event clock; the active path and impact map enumerate every upstream dependency, refusal, and downstream consumer; the plan and task list name Step 11 next; and the `#618` record closes only this leg while retaining four named follow-ups. The declared-open exception is retired before close, the review-ref announcement mistake is recorded under `claim-without-object`, and Langston's loaded memory is updated under its no-growth fence. The completion report remains a Step 11 artifact.

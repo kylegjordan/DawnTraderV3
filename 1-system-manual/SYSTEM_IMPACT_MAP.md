@@ -753,13 +753,15 @@ Kill-switch is **DB-backed per-mode**: `isKillSwitchTripped(mode)` (`guardrail-p
 - **Upstream**: guardrails_v2 (full-row-or-null via `storage.getGuardrailsV2`), VTS learning repository, Price Cache, volatility metrics, per-class pattern-pool guardrails dispatch
 - **Downstream**: Active Execution Engine + signal orchestrator (size determination); the promotion loop's slot count (`deriveSlotCount`, and its `BOOK_FULL` line, `#698` am.5); `checkMaxTotalExposure` (the money cap); rtb-metrics (refusal rail); system-alerts (rail threshold)
 - **Blast Radius**: **HIGH** — determines how much capital is at risk per trade
+- **`B-BALANCE-SESSION-PAIRING` capital source (`getMoneyHeld`, deployed `e0e68dfdb`, 2026-11-07):** paper sizing no longer inherits the daily-loss circuit breaker's engine-session clock. The source is one anchor event paired by `(mode, anchor_version)`, plus entry cost for positions already open at that event, plus the all-row realized-P/L aggregate since the event. Upstream writers are `portfolio-anchor-service.executeReanchor` for the paired state/event and the B75 retention policy for `closed_trades`; downstream readers are both class sizing producers, `buildSettingsFromGuardrails`, the position-size and max-exposure gates, pre-execution validation, and execution-attempt evidence. A missing/broken pair, invalid term, ambiguous retention row, aged-out anchor, or undefined live meaning is a typed refusal, never zero. **Blast radius: CRITICAL** — this amount sizes every new paper position and sets the 100% exposure ceiling. The daily-loss budget remains on `getPortfolioBalanceV2`, intentionally session-paired. Residual automatic-anchor semantics and the missing persistent refusal rail remain on `#618`.
 
 ### 6.4 Pre-Execution Validator / Trade Safety
 - **File**: `server/services/pre-execution-validator.ts`, `server/services/trade-safety.ts`
 - **What**: Final gate before trade execution. Currently a three-gate system (guardrails + EV + goal alignment). Goal alignment to be removed (Wave 4.5) → becomes two-gate.
-- **Upstream**: Guardrails V2 policies, portfolio state, position history
+- **Upstream**: Guardrails V2 policies, `getMoneyHeld` (paper capital at cost), position history
 - **Downstream**: Paper Execution Engine (allow/deny)
 - **Blast Radius**: **HIGH** — blocks or allows every trade
+- **Money-held gate:** `checkPositionSizeCap` and `checkMaxTotalExposure` refuse a null/non-finite held balance; the exposure numerator refuses invalid open-position price/quantity and a candidate without `preComputedNotional` instead of silently counting zero exposure or one share. A typed failure is recorded as `MONEY_HELD_UNAVAILABLE`.
 
 ### 6.5 Trailing Exit Controller
 - **File**: Referenced in Phase 5 (Directive 9.2.A)
