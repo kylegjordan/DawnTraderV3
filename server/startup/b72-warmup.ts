@@ -76,7 +76,7 @@ const PREFETCH_MODULES = [
   // Slice 4 — HIGH-risk:
   'sqe_config',           // SQE primary admission gates (precedence: screener_filters → sqe_config → static mirror)
   'expectancy_kernel',    // pWin floor/ceiling (caller-injected into pure-math kernel)
-  'entry_gate',           // B-ENTRY-GATE (#1224): entry window + cheaper-side floor, read at the taker fill
+  'entry_gate',           // B-ENTRY-GATE (#1224): entry window + cheaper-side + friction-coverage shadows at the fill
   'directional_integrity',// DI→pWin scaling factor (caller-injected)
   // B72.1 — strategy-modes naming reseed:
   'governance_modes',     // strategy-modes confidence floors (NORMAL/DEFENSIVE/SURVIVAL)

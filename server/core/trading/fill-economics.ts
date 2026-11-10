@@ -74,6 +74,11 @@ export interface FillEconomicsInput {
   /** `scoring_base.flat_pwin_base` for the class — the measured base rate, for the A-12 shadow only. */
   measuredBasePWin: number;
   /**
+   * B-ENTRY-GATE OBJ-4 watch-only floor. A value of `k` asks whether the reward left after the
+   * arm's round-trip friction is at least `k` further friction units. It is recorded only.
+   */
+  frictionCoverageK: number;
+  /**
    * Row `8c` P4 (S7) — the triple's geometry, REQUIRED (read with `levelGeometryOf`): `'sided'` (a crypto triple whose
    * exits are on the bid) charges no spread on top of the fill, because the spread is in the geometry; `'mid'` keeps the
    * historic arithmetic.
@@ -105,12 +110,23 @@ export interface FillEconomics {
   refuse: boolean;
   /** A-12 shadow: what the missing-win-probability leg WOULD refuse. Never decides in this batch. */
   missingPWinWouldRefuse: boolean;
+  /** Gross distance to target less this arm's round-trip friction, in price units. */
+  netRewardAtFill: number;
+  /** This arm's complete round-trip friction at the fill, in price units. */
+  roundTripFrictionAtFill: number;
+  /** `netRewardAtFill / roundTripFrictionAtFill`; null only when friction is exactly zero. */
+  frictionCoverageRatio: number | null;
+  /** OBJ-4 watch-only result: net reward is below `k` friction units. Never decides in increment A. */
+  frictionCoverageWouldRefuse: boolean;
+  /** The DB-resolved comparator recorded beside the result. */
+  frictionCoverageK: number;
 }
 
 export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
-  for (const [k, v] of Object.entries({ fillPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice, measuredBasePWin: i.measuredBasePWin })) {
+  for (const [k, v] of Object.entries({ fillPrice: i.fillPrice, stopPrice: i.stopPrice, targetPrice: i.targetPrice, measuredBasePWin: i.measuredBasePWin, frictionCoverageK: i.frictionCoverageK })) {
     if (!Number.isFinite(v)) throw new Error(`computeFillEconomics: ${k} must be finite, got ${String(v)}`);
   }
+  if (i.frictionCoverageK < 0) throw new Error(`computeFillEconomics: frictionCoverageK must be non-negative, got ${i.frictionCoverageK}`);
   const d = decideMakerTaker({
     entryPrice: i.fillPrice,
     entryPriceMaker: i.fillPrice,
@@ -145,6 +161,14 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
   // Maker, conditional on filling: the adverse-selection cost applies; pFill and the non-fill cost do not.
   const adverseSelection = i.arm === 'maker' ? d.adverseSelectionPct * i.fillPrice : 0;
   const netEvAtFill = leg.netEV - adverseSelection;
+  // OBJ-4 friction coverage is deliberately probability-free. `leg.totalCost` is the arm's round-trip friction;
+  // maker adverse selection is an additional fill-contingent cost, so it belongs in both the net reward and the
+  // comparator denominator. The scope's `>=` edge passes; this remains WATCH-ONLY until its measured distribution
+  // returns to Kyle.
+  const roundTripFrictionAtFill = leg.totalCost + adverseSelection;
+  const netRewardAtFill = leg.distTarget - roundTripFrictionAtFill;
+  const frictionCoverageRatio = roundTripFrictionAtFill === 0 ? null : netRewardAtFill / roundTripFrictionAtFill;
+  const frictionCoverageWouldRefuse = netRewardAtFill < i.frictionCoverageK * roundTripFrictionAtFill;
   const pWinDefaulted = i.sourcePool === 'quant-strong_trend' ? i.dbsScore === undefined : i.DI === undefined;
   const p = i.measuredBasePWin;
   const netEvAtMeasuredBase = p * leg.distTarget - (1 - p) * leg.distStop - leg.totalCost - adverseSelection;
@@ -156,6 +180,11 @@ export function computeFillEconomics(i: FillEconomicsInput): FillEconomics {
     netEvAtRealDi: i.DI === undefined ? null : netEvAtFill,
     refuse: !(netEvAtFill > 0),
     missingPWinWouldRefuse: pWinDefaulted,
+    netRewardAtFill,
+    roundTripFrictionAtFill,
+    frictionCoverageRatio,
+    frictionCoverageWouldRefuse,
+    frictionCoverageK: i.frictionCoverageK,
     // Step-4 C-6: a refusal can rest on a placeholder spread; say which one it used (#546).
     spreadSource: i.costs.spreadSource ?? null,
   };

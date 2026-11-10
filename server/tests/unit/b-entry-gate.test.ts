@@ -158,6 +158,7 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
     expect(resolve).toBeGreaterThan(0);
     expect(fill).toBeGreaterThan(resolve);
     expect(src).toMatch(/_ewWorseSide = getCachedNumberRequired\('entry_gate', 'entry_window_worse_side_frac', _ewKey\)/);
+    expect(src).toMatch(/frictionCoverageK: getCachedNumberRequired\('entry_gate', 'entry_friction_coverage_k', ck\)/);
     expect(src).toMatch(/catch \(settingsErr\) \{[\s\S]{0,400}recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', why\)[\s\S]{0,120}return \{ opened: false/);
     // no settings read left between the fill and the window decision
     const seg = src.slice(fill, src.indexOf("stage: 'ENTRY_WINDOW'"));
@@ -176,6 +177,11 @@ describe('P4 — the economic test at the price paid, wired at both arms', () =>
   it('both refusals and the admitted row carry the record; FILL_ECONOMICS is a counted stage', () => {
     expect(src).toMatch(/\.\.\.\(_fillEconRec \?\? \{\}\), /);
     expect(src).toMatch(/recordOpenFailed\(signal\.symbol, signal\.strategy, 'FILL_ECONOMICS', reason\)/);
+  });
+  it('the friction-coverage shadow is archived on every evaluated fill and never enters a refusal branch', () => {
+    expect(src).toMatch(/frictionCoverageK: fe\.frictionCoverageK[\s\S]{0,400}frictionCoverageWouldRefuse: fe\.frictionCoverageWouldRefuse/);
+    expect(src).toMatch(/reason: _geom,[\s\S]{0,300}\.\.\.\(_entryShadowRec \?\? \{\}\), \.\.\.\(_fillEconRec \?\? \{\}\)/);
+    expect(src).not.toMatch(/if \([^)]*frictionCoverageWouldRefuse/);
   });
 });
 
@@ -198,5 +204,23 @@ describe('the stage is counted, so attempts still reconcile (P19-B6.5e)', () => 
     const before = rtbMetricsService.getStats().openFailedByStage.ENTRY_WINDOW ?? 0;
     rtbMetricsService.recordOpenFailed('TEST/USD', 'vwap_pullback', 'ENTRY_WINDOW', 'entry_window');
     expect(rtbMetricsService.getStats().openFailedByStage.ENTRY_WINDOW).toBe(before + 1);
+  });
+});
+
+describe('OBJ-4 friction-coverage setting registration', () => {
+  const forward = readFileSync(new URL('../../../drizzle/migrations/2026-11-10-b-entry-gate-friction-coverage.sql', import.meta.url), 'utf8');
+  const rollback = readFileSync(new URL('../../../drizzle/migrations/2026-11-10-b-entry-gate-friction-coverage-rollback.sql', import.meta.url), 'utf8');
+  const manifest = readFileSync(new URL('../../../drizzle/migrations/MANIFEST.txt', import.meta.url), 'utf8');
+  it('seeds one class-specific k=1 observation row for each spot class', () => {
+    expect(forward.match(/\('entry_gate', 'entry_friction_coverage_k'/g)).toHaveLength(2);
+    expect(forward).toMatch(/'1\.0'::jsonb, 'crypto_spot'/);
+    expect(forward).toMatch(/'1\.0'::jsonb, 'xstock_spot'/);
+    expect(forward).toMatch(/expected 2 rows/);
+  });
+  it('registers only the forward migration and keeps the rollback exact', () => {
+    expect(manifest).toMatch(/^2026-11-10-b-entry-gate-friction-coverage\.sql$/m);
+    expect(manifest).not.toMatch(/2026-11-10-b-entry-gate-friction-coverage-rollback\.sql/);
+    expect(rollback).toMatch(/constant_name = 'entry_friction_coverage_k'/);
+    expect(rollback).toMatch(/asset_class IN \('crypto_spot', 'xstock_spot'\)/);
   });
 });

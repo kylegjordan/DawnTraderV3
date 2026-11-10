@@ -1,5 +1,26 @@
 # B-ENTRY-GATE (#1224) — STEP 4 CHANGE LIST, INCREMENT A (at the fill)
 
+> **r4 correction (2026-11-10): Coltrane's Step-8 CHANGES on the first-full-session read.** Increment A had promised
+> the OBJ-4 friction-coverage shadow but shipped no setting reader, computation, result or archive field. This correction
+> folds the obligation into increment A before increment B lands. `entry_friction_coverage_k` is seeded per class at
+> **1.0 as WATCH-ONLY**; every evaluated fill now records the probability-free net reward after the realised arm's
+> complete friction, the friction amount, their ratio, `k`, and whether the observation falls below `k`. The full ratio
+> is the durable measurement; `k=1` is an observation line, never an open/refuse input.
+>
+> **Exact computation:** `roundTripFrictionAtFill = kernel totalCost + maker adverseSelection` (the second term is zero
+> for takers); `netRewardAtFill = distTarget - roundTripFrictionAtFill`;
+> `frictionCoverageWouldRefuse = netRewardAtFill < k * roundTripFrictionAtFill`. The scope's exact `>=` edge passes.
+> The reader is fail-hard in the existing pre-fill settings guard, so an absent class row becomes the already-counted
+> `FILL_ECONOMICS` refusal rather than a fallback. The record reaches admitted, entry-window, entry-geometry,
+> level-refusal and fill-economics archive outcomes whenever economics was evaluated.
+>
+> **Files:** `server/core/trading/fill-economics.ts`; `server/services/active-execution-engine.ts`;
+> `server/startup/b72-warmup.ts`; `server/tests/unit/b-entry-gate-fill-economics.test.ts`;
+> `server/tests/unit/b-entry-gate.test.ts`; `server/tests/unit/b8c-switch-on-wiring.test.ts`;
+> `drizzle/migrations/2026-11-10-b-entry-gate-friction-coverage.sql` and its rollback; `MANIFEST.txt`.
+> **Proof:** 91/91 targeted tests passed; the TypeScript baseline held at 324/324. Mutation M6 (`<` → `<=` at the
+> coverage edge) made the exact-edge test red, proving the comparison fence can detect the boundary regression.
+
 > **r3 (2026-11-05 ~16:00Z): Langston's PROCEED (msg 1567911217417429013, graded at head `c67740745`, Review = Approved) — his three conditions and four record items, against the r2 code.**
 > - **C-1** (window-refused row lacks the EV legs): **already in r2** — `..._fillEconRec` is spread on the `ENTRY_WINDOW` row and `_fillEconRec` is assigned from `_feT` before the refusal (r2's own C-5). His graded head predates `db4152691`.
 > - **C-2** the P3 watch-only `entry_gate` read inside `_processPendingMaker` is now in its own `try`/`catch` (`RECORD_FAILED`), ending before `_quoteArrivedAtMs`, so a missing row can no longer abort the resting order's fill/deadline handling for the tick. The open path's read stays fail-hard. Fenced.

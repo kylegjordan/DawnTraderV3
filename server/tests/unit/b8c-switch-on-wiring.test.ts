@@ -122,7 +122,7 @@ describe('8c P4 (amendment 5) — the spread is counted once at every site that 
       arm: 'taker' as const, fillPrice: 100, stopPrice: 96, targetPrice: 108,
       costs: { fee: 0.004, slippage: 0.0005, spread: 0.002 } as any, feeRateMaker: 0.002, feeRateTaker: 0.004,
       DI: 20, sourcePool: undefined, dbsScore: undefined, minPWin: 0.40, maxPWin: 0.60, diPWinFactor: 200,
-      signalStrength: 0.3, urgencyClass: 'neutral' as const, haircut, measuredBasePWin: 0.317,
+      signalStrength: 0.3, urgencyClass: 'neutral' as const, haircut, measuredBasePWin: 0.317, frictionCoverageK: 1,
     };
     const mid = computeFillEconomics({ ...base, levelGeometry: 'mid' });
     const sided = computeFillEconomics({ ...base, levelGeometry: 'sided' });

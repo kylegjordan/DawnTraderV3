@@ -2051,6 +2051,7 @@ export class ActiveExecutionEngine {
       urgencyClass: entryUrgencyClassForFamily(STRATEGY_FAMILY_MAP[normalizeStrategy(signal.strategy)]),
       haircut: resolveMakerTakerHaircut(assetClass),
       measuredBasePWin: base,
+      frictionCoverageK: getCachedNumberRequired('entry_gate', 'entry_friction_coverage_k', ck),
       levelGeometry: levelGeometryOf(signal.metadata), // row `8c` P4 (S7)
     };
   }
@@ -2061,6 +2062,13 @@ export class ActiveExecutionEngine {
       fillEconExplorationShadow: fe.refuse && exploration,
       // A-12 (Kyle's KD-11 decision owed): recorded, never decides.
       pWinDefaulted: fe.pWinDefaulted, netEvAtMeasuredBase: fe.netEvAtMeasuredBase, netEvAtRealDi: fe.netEvAtRealDi, missingPWinWouldRefuse: fe.missingPWinWouldRefuse,
+      // OBJ-4 friction-coverage floor: probability-free and WATCH-ONLY. These fields are on every evaluated fill row;
+      // `frictionCoverageWouldRefuse` never enters an open/refuse branch in increment A.
+      frictionCoverageK: fe.frictionCoverageK,
+      netRewardAtFill: fe.netRewardAtFill,
+      roundTripFrictionAtFill: fe.roundTripFrictionAtFill,
+      frictionCoverageRatio: fe.frictionCoverageRatio,
+      frictionCoverageWouldRefuse: fe.frictionCoverageWouldRefuse,
       // Step-4 r3 C-3 (Langston): the comparator's provenance travels with every row, so the KD-11 pack cannot read it as
       // "EV at the real win rate". `scoring_base.flat_pwin_base` (migration 2026-07-13-p19-b8-5a-scoring-base.sql) is a
       // PINNED PLACEHOLDER, not a calibration: n=12,140 post-B62 VTS closes, carrying the VTS-era contamination (mode-scaled
@@ -6555,7 +6563,7 @@ export class ActiveExecutionEngine {
           mode: tradingModeToRunMode(this.mode), symbol: signal.symbol, exchange: 'kraken', assetClass: _openClass,
           source: 'active-execution-engine', strategy: signal.strategy, rejectStage: 'entry_fill', confidenceModulated: signal.confidence,
           gateDecision: { gate: 'entry_fill', accepted: false, reason: _geom, fillPrice: actualEntryPrice, entryPrice: actualEntryPrice, entryArm: 'taker',
-            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...(_entryShadowRec ?? {}) },
+            stopPrice: signal.stopPrice, targetPrice: signal.targetPrice, ...(_entryShadowRec ?? {}), ...(_fillEconRec ?? {}) },
         });
       } catch (archErr) {
         // The refusal above is already counted and logged; an archive failure must never read as "no refusal happened".

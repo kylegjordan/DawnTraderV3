@@ -17,6 +17,7 @@ const base: FillEconomicsInput = {
   costs: { fee: 0.004, slippage: 0.0005, spread: 0.001 } as any, feeRateMaker: 0.002, feeRateTaker: 0.004,
   DI: 20, sourcePool: undefined, dbsScore: undefined, minPWin: 0.40, maxPWin: 0.60, diPWinFactor: 200,
   signalStrength: 0.3, urgencyClass: 'neutral', haircut, measuredBasePWin: 0.317, levelGeometry: 'mid',
+  frictionCoverageK: 1,
 };
 
 describe('P4 — the deciding number is net EV at the PRICE PAID for the ARM THAT FILLS', () => {
@@ -107,5 +108,35 @@ describe('A-12 — the missing-win-probability leg is RECORDED, never decides (K
   });
   it('a non-finite price throws rather than guessing', () => {
     expect(() => computeFillEconomics({ ...base, fillPrice: Number.NaN })).toThrow();
+  });
+});
+
+describe('OBJ-4 — friction coverage is a probability-free WATCH-ONLY result', () => {
+  it('records net reward, complete round-trip friction, ratio, k, and the shadow result', () => {
+    const r = computeFillEconomics(base);
+    // Base taker: target distance 8; ask-entry/mid-exit friction = 0.009 * 100 = 0.9.
+    expect(r.roundTripFrictionAtFill).toBeCloseTo(0.9, 12);
+    expect(r.netRewardAtFill).toBeCloseTo(7.1, 12);
+    expect(r.frictionCoverageRatio).toBeCloseTo(7.1 / 0.9, 12);
+    expect(r.frictionCoverageK).toBe(1);
+    expect(r.frictionCoverageWouldRefuse).toBe(false);
+  });
+  it('the exact >= edge passes and one price tick below it would refuse (comparison mutation control)', () => {
+    // Friction is exactly 1. At target distance 2, net reward is 1 = 1 * friction.
+    const exactCost = { fee: 0.005, slippage: 0, spread: 0 } as any;
+    const edge = computeFillEconomics({ ...base, costs: exactCost, DI: 40, stopPrice: 99.99, targetPrice: 102 });
+    const below = computeFillEconomics({ ...base, costs: exactCost, DI: 40, stopPrice: 99.99, targetPrice: 101.99 });
+    expect(edge.netEvAtFill).toBeGreaterThan(0);
+    expect(edge.frictionCoverageWouldRefuse).toBe(false);
+    expect(below.netEvAtFill).toBeGreaterThan(0);
+    expect(below.frictionCoverageWouldRefuse).toBe(true);
+  });
+  it('the shadow never changes the deciding P4 refusal', () => {
+    const r = computeFillEconomics({ ...base, costs: { fee: 0.005, slippage: 0, spread: 0 } as any, DI: 40, stopPrice: 99.99, targetPrice: 101.99 });
+    expect(r.frictionCoverageWouldRefuse).toBe(true);
+    expect(r.refuse).toBe(false);
+  });
+  it('rejects an invalid k instead of silently substituting a threshold', () => {
+    expect(() => computeFillEconomics({ ...base, frictionCoverageK: -1 })).toThrow(/frictionCoverageK must be non-negative/);
   });
 });
