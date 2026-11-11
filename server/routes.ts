@@ -13410,6 +13410,7 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.get('/active-engine/diagnostics/xstock-dispatch', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { getXstockActiveDispatchStats } = await import('./asset_classes/xstock_spot/active-dispatch.js');
+      res.set('Cache-Control', 'no-store, max-age=0');
       res.json({
         schema: 'xstock-active-dispatch/v1',
         observedAt: new Date().toISOString(),

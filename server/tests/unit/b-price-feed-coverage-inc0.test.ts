@@ -145,6 +145,7 @@ describe('Step-7 exact dispatch boundary — authenticated, read-only production
     expect(body).toMatch(/stats: getXstockActiveDispatchStats\(\)/);
   });
   it('carries the process controls required for same-process boundary deltas', () => {
+    expect(body).toMatch(/res\.set\('Cache-Control', 'no-store, max-age=0'\)/);
     expect(body).toMatch(/processPid: process\.pid/);
     expect(body).toMatch(/processUptimeSeconds: process\.uptime\(\)/);
     expect(body).toMatch(/observedAt: new Date\(\)\.toISOString\(\)/);
