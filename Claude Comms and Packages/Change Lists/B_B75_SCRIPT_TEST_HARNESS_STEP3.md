@@ -65,6 +65,10 @@ Coltrane returned **SENT BACK** at exact ref `48021b5ba1ee5fea187bc6c96c69b97070
 1. **Locked guards did not cover a newly inserted, previously unenumerated old month — fixed.** After taking the source write lock, the finalizer now re-derives every UTC month label reachable by the cutoff-wide DELETE and requires that complete set to be covered by the guards before it recounts, deletes or marks active. A fake insertion of an unenumerated older month produces `BEGIN → LOCK → population → ROLLBACK`; delete and active marking remain unreachable.
 2. **Remaining cold/rehydrate gates were unexecuted — fixed.** The harness now has 42 cases. The cold lane executes `data_lifecycle.cold_rotator_dry_run`, both positive-integer CLI flags, oldest-first limit behavior and invalid-value refusal. Rehydrate executes the private-output rule, `--disk-file` byte/newline restoration, numeric aggregation, mismatch-only accounting and exit 2. The old source-text aggregate/exit assertion is removed.
 
+## Step-4 round 3 — APPROVED
+
+Coltrane **APPROVED** exact review ref `6ee19aeb5bcb9940ec60a1f744149d9831169642`. He confirmed the locked full-population fence and its unguarded-month rollback mutation, and confirmed that the 42-case harness executes the remaining cold and rehydrate gates while preserving the prior CLI behavior. CI run `42988331327` was independently verified by NEW Codex with all four jobs green: Test Suite, TypeScript Check, Build and Docker Build.
+
 ## Load-bearing diff excerpts
 
 ### A. Importing a command no longer executes it
