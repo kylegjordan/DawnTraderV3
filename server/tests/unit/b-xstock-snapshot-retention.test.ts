@@ -279,9 +279,20 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION table orchestration', () => {
       bytesCompressed: 50,
       reused: false,
       selector: snap,
+      exportDurationMs: 1,
+      archiveDurationMs: 2,
+      readbackDurationMs: 3,
     });
     const deleteObject = vi.fn()
-      .mockResolvedValueOnce({ deletedRows: 1, lockedDurationMs: 10 })
+      .mockResolvedValueOnce({
+        deletedRows: 1,
+        provenKeyLoadDurationMs: 1,
+        lockWaitDurationMs: 2,
+        compareDeleteDurationMs: 3,
+        commitDurationMs: 1,
+        lockedDurationMs: 10,
+        postCommitProofDurationMs: 1,
+      })
       .mockRejectedValueOnce(new Error('same-count key replacement'));
     const raiseAlert = vi.fn();
     const result = await sweepSnapshotTable(config(true), 'xstock_spot_ohlc_15m_snapshot', {
@@ -385,6 +396,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     await expect(deleteSnapshotProvenObject({ query } as never, {
       manifestId: 'manifest-1', partitionLabel: '2026-10-01-proof', proof,
       provenObjectPath: file, exportedPath: 'unused', bytesCompressed: 1, reused: false, selector: selector(),
+      exportDurationMs: 1, archiveDurationMs: 2, readbackDurationMs: 3,
     })).resolves.toMatchObject({ deletedRows: 1 });
     expect(calls).toEqual(expect.arrayContaining([
       'BEGIN', "SET LOCAL lock_timeout = '1s'", "SET LOCAL statement_timeout = '5s'",
@@ -402,6 +414,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     const archived = {
       manifestId: 'manifest-1', partitionLabel: '2026-10-01-proof', proof,
       provenObjectPath: file, exportedPath: 'unused', bytesCompressed: 1, reused: false, selector: selector(),
+      exportDurationMs: 1, archiveDurationMs: 2, readbackDurationMs: 3,
     };
     const makeQuery = (mode: 'lock-timeout' | 'count-mismatch') => {
       const calls: string[] = [];
