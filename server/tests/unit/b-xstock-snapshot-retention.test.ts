@@ -28,6 +28,7 @@ import {
 import { recordExactArchiveEvidence } from '../../services/data-archive/exact-archive-evidence.js';
 import {
   rehydrateChosenObject,
+  querySnapshotExpectedLabels,
   writeSnapshotRehydrateRunIndex,
   type RehydrateArgs,
   type RehydrateManifestRow,
@@ -552,6 +553,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       requested_to_exclusive: '2026-10-02T00:00:00.000Z',
       restore_cold: false,
       expected_label_count: 1,
+      expected_partition_labels: ['2026-10-01-proof'],
       complete: true,
       labels: [{
         partition_label: '2026-10-01-proof', manifest_id: 'manifest-1', tier: 'warm', result: 'downloaded',
@@ -627,6 +629,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     fs.writeFileSync(indexPath, JSON.stringify({
       ...baseIndex,
       expected_label_count: 2,
+      expected_partition_labels: ['2026-10-01-proof', '2026-10-02-proof'],
       labels: [...baseIndex.labels, {
         partition_label: '2026-10-02-proof', manifest_id: 'manifest-2', tier: 'warm', result: 'downloaded',
         output_file: 'xstock_spot_ohlc_15m_snapshot_2026-10-02-proof.jsonl.gz',
@@ -636,6 +639,44 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     }));
     await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
       .rejects.toThrow(/object is missing/);
+  });
+
+  it('refuses a complete run when the manifest result omits an independently proven interval label', async () => {
+    const args: RehydrateArgs = {
+      table: 'xstock_spot_ohlc_15m_snapshot',
+      from: new Date('2026-10-01T00:00:00.000Z'),
+      to: new Date('2026-10-02T23:59:59.999Z'),
+      out: fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-snapshot-index-')),
+      restoreCold: false,
+    };
+    tempDirs.push(args.out);
+    const expectedLabels = await querySnapshotExpectedLabels({
+      query: vi.fn(async () => ({ rows: [
+        { partition_label: '2026-10-01-proof' },
+        { partition_label: '2026-10-02-proof' },
+      ] })),
+    } as never, args);
+    const selectedManifest = {
+      id: 'manifest-1',
+      partition_label: '2026-10-01-proof',
+      tier: 'warm',
+      min_ts: new Date('2026-10-01T00:00:00.000Z'),
+      max_ts: new Date('2026-10-02T00:00:00.000Z'),
+    } as RehydrateManifestRow;
+    const manifestResult = [{
+      label: '2026-10-01-proof',
+      download: selectedManifest,
+      all: [selectedManifest],
+    }];
+    const index = writeSnapshotRehydrateRunIndex(args, expectedLabels, manifestResult, [{
+      kind: 'downloaded', bytes: 10, rowCount: 1, basisProven: true,
+    }]);
+
+    expect(index.expected_partition_labels).toEqual(['2026-10-01-proof', '2026-10-02-proof']);
+    expect(index.labels.map((label) => label.partition_label)).toEqual(['2026-10-01-proof']);
+    expect(index.complete).toBe(false);
+    await expect(loadProvenRehydratedSnapshot(args.out, args.table))
+      .rejects.toThrow(/incomplete or invalid/);
   });
 
   it('loads only parsed downloaded keys into the typed pre-lock temp table', async () => {
@@ -891,7 +932,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       downloadWarmFile: vi.fn(), isColdConfigured: vi.fn(() => true),
       downloadCold: storage.downloadCold,
     } as never);
-    writeSnapshotRehydrateRunIndex(args, [choice], [result]);
+    writeSnapshotRehydrateRunIndex(args, [choice.label], [choice], [result]);
     await expect(loadProvenRehydratedSnapshot(out, snap.table, {
       from: snap.dayStart, toExclusive: snap.dayEnd,
     })).resolves.toMatchObject({ rows: [canonicalRow()], proofs: [proof] });

@@ -181,6 +181,29 @@ async function queryManifest(
   }));
 }
 
+/**
+ * Derive the requested snapshot object's expected label set from the append-only
+ * exact-evidence ledger, independently of the lifecycle rows returned by
+ * queryManifest. A missing/filtered manifest therefore cannot shrink the set
+ * that the run index calls complete. Legitimately empty UTC days add no label.
+ */
+export async function querySnapshotExpectedLabels(
+  client: Pick<pg.Client, 'query'>,
+  args: RehydrateArgs,
+): Promise<string[]> {
+  if (!isXstockSnapshotTable(args.table)) return [];
+  const result = await client.query(
+    `SELECT DISTINCT partition_label
+       FROM data_archive_exact_evidence
+      WHERE source_table = $1
+        AND cursor_contract = $2
+        AND tstzrange(day_start, day_end, '[)') && tstzrange($3::timestamptz, $4::timestamptz, '[]')
+      ORDER BY partition_label ASC`,
+    [args.table, XSTOCK_SNAPSHOT_CURSOR_CONTRACT, args.from, args.to],
+  );
+  return result.rows.map((row) => String(row.partition_label));
+}
+
 function parseSupabaseUri(uri: string): { bucket: string; path: string } {
   // 'supabase://<bucket>/<path>'
   const m = /^supabase:\/\/([^/]+)\/(.+)$/.exec(uri);
@@ -246,6 +269,7 @@ function isXstockSnapshotTable(table: string): table is XstockSnapshotTable {
 
 export function writeSnapshotRehydrateRunIndex(
   args: RehydrateArgs,
+  expectedPartitionLabels: string[],
   choices: LabelChoice<RehydrateManifestRow>[],
   results: RehydrateObjectResult[],
 ): SnapshotRehydrateRunIndex {
@@ -271,8 +295,15 @@ export function writeSnapshotRehydrateRunIndex(
       max_ts: download ? new Date(download.max_ts).toISOString() : null,
     };
   });
-  const complete = results.length === choices.length
-    && choices.length > 0
+  const expectedLabels = [...expectedPartitionLabels].sort();
+  const selectedLabels = choices.map((choice) => choice.label).sort();
+  const labelCoverageMatches = expectedLabels.length === selectedLabels.length
+    && new Set(expectedLabels).size === expectedLabels.length
+    && new Set(selectedLabels).size === selectedLabels.length
+    && expectedLabels.every((label, index) => label === selectedLabels[index]);
+  const complete = labelCoverageMatches
+    && results.length === choices.length
+    && expectedLabels.length > 0
     && results.every((result) => result.kind === 'downloaded' && result.basisProven === true)
     && labels.every((label) => label.output_file !== null && label.sidecar_file !== null);
   const runIndex: SnapshotRehydrateRunIndex = {
@@ -281,7 +312,8 @@ export function writeSnapshotRehydrateRunIndex(
     requested_from: args.from.toISOString(),
     requested_to_exclusive: new Date(args.to.getTime() + 1).toISOString(),
     restore_cold: args.restoreCold,
-    expected_label_count: choices.length,
+    expected_label_count: expectedLabels.length,
+    expected_partition_labels: expectedLabels,
     complete,
     labels,
   };
@@ -577,14 +609,16 @@ async function runRehydrateCliBody(): Promise<void> {
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
   let rows;
+  let expectedSnapshotLabels: string[] = [];
   try {
+    expectedSnapshotLabels = await querySnapshotExpectedLabels(ctl, args);
     rows = await queryManifest(ctl, args);
   } finally {
     await ctl.end();
   }
 
   if (rows.length === 0) {
-    if (isXstockSnapshotTable(args.table)) writeSnapshotRehydrateRunIndex(args, [], []);
+    if (isXstockSnapshotTable(args.table)) writeSnapshotRehydrateRunIndex(args, expectedSnapshotLabels, [], []);
     console.log(
       `[B75 rehydrate] no manifest rows for table=${args.table} between ${args.from.toISOString()} and ${args.to.toISOString()}`,
     );
@@ -608,7 +642,9 @@ async function runRehydrateCliBody(): Promise<void> {
   for (const choice of choices) {
     results.push(await rehydrateChosenObject(args, choice, storage));
   }
-  if (isXstockSnapshotTable(args.table)) writeSnapshotRehydrateRunIndex(args, choices, results);
+  if (isXstockSnapshotTable(args.table)) {
+    writeSnapshotRehydrateRunIndex(args, expectedSnapshotLabels, choices, results);
+  }
   finishRehydrateRun(summarizeRehydrateResults(results));
 }
 
