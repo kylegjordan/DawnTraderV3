@@ -73,6 +73,14 @@ Coltrane **APPROVED** exact review ref `6ee19aeb5bcb9940ec60a1f744149d9831169642
 
 The approved history advanced `migration/aws-supabase` to exact ref `570584941c6da53bdb1fca24d4d095814cc98179`. CI run `42989947651` completed with all four jobs individually green: Test Suite, TypeScript Check, Build and Docker Build.
 
+## Step 6 — staging deploy
+
+The Step-5 boundary ref `76f88f48e76b4314fc065e1e9686f51792df2c11` passed shared-branch CI run `42990517806`, with Test Suite, TypeScript Check, Build and Docker Build individually green. Before deploy, local HEAD and `origin/migration/aws-supabase` both resolved to that exact ref with a `0 0` ahead/behind count.
+
+The prior staging record and staging HEAD both resolved to `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`. The intervening DawnTrader runtime population contains this batch's four command-script changes; the other shared-history changes are documentation or external crew tooling and do not add another owner's DawnTrader process change. None of the four command modules is imported by the main server process, so the batch has no command-specific warm-up dependency. The required restart still clears the live engine's ordinary in-memory windows; Step 7 must therefore use only this batch's fake-I/O/import/CLI proof and must not treat a warm-up-dependent trading read as batch evidence.
+
+`dt-deploy 76f88f48e76b4314fc065e1e9686f51792df2c11 --by codex-b` completed at `2026-11-11T08:56:48Z`. Its terminal assertion reported the exact ref live with the engine resumed. A fresh read of `/home/deploy/dawntrader-deploy.record` and staging `git rev-parse HEAD` both returned the exact 40-character ref; the record carries `deployed_by_claimed=codex-b`, restart count 689, a 13-second bounded check-failure window, and migration completion at `2026-11-11T08:56:35Z`.
+
 ## Load-bearing diff excerpts
 
 ### A. Importing a command no longer executes it
