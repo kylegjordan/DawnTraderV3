@@ -141,3 +141,9 @@ With the registered controls green, the reviewed setter restored `xstock_spot_oh
 **REVIEWER:** claim-only · whether other states of the world remain consistent with the Stage-B evidence and restoration claim · HIT: zero proof-table retention echo · re-derived yes; Coltrane's corrected-ref review at `9c232581d` confirmed that the hit applies a superseded bullet, the binding eligible-set carrier passes, and no repeat proof is required. It sent back only the earlier record's backdated attribution. The final record-only correction at `5aeab2c830b6e8deefd010f7171862101a58b2f4` removes that attribution; Coltrane CONFIRMED that exact ref and found zero production-code paths changed. The optional logger/test remain removed so the batch stays within its approved no-code scope.
 
 **Step 7 CLOSED. Next: Step 8 independent second-pass verification at the exact Step-7 boundary. No deploy or OBJ-4 flip occurs first.**
+
+## P7 — Step 8 independent second pass PASS (Coltrane, 2026-11-11)
+
+Coltrane independently reproduced staging at exact boundary ref `10d95d3f8d893f2baad034fa9e9e5d4064241a58`: deployed ref and clean sweep hashes; the exact 22-child run and 28,351,709,184-byte sum; April plus May and no June; all 21 manifest/evidence objects and their 3,000,011 rows; the May-1 113,256-line restore and SHA-256; all six lock-sampler counts; the numeric 365 restore row; and zero target-table eligibility at the next production instant. He returned **CONFIRMED — Step 8 PASS**. Stage B PASS, restoration, and the no-repeat ruling stand.
+
+**Step 8 CLOSED. Next: Step 9 iteration against the independently confirmed outcome.**
