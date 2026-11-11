@@ -20,7 +20,7 @@ interface SnapshotCompletenessSidecar {
   } | null;
 }
 
-export const XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX = 'xstock-snapshot-rehydrate-run/v1';
+export const XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX = 'xstock-snapshot-rehydrate-run/v2';
 export const XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE = 'xstock-snapshot-rehydrate-run.json';
 
 export interface SnapshotRehydrateRunIndexLabel {
@@ -42,6 +42,7 @@ export interface SnapshotRehydrateRunIndex {
   requested_to_exclusive: string;
   restore_cold: boolean;
   expected_label_count: number;
+  expected_partition_labels: string[];
   complete: boolean;
   labels: SnapshotRehydrateRunIndexLabel[];
 }
@@ -75,9 +76,18 @@ export async function loadProvenRehydratedSnapshot(
       || index.complete !== true
       || !Number.isFinite(requestedFrom.getTime())
       || !Number.isFinite(requestedToExclusive.getTime())
+      || !Array.isArray(index.expected_partition_labels)
+      || index.expected_label_count !== index.expected_partition_labels.length
       || index.expected_label_count !== index.labels?.length
       || index.labels.length === 0) {
     throw new Error(`rehydrate run index is incomplete or invalid for ${table}: ${indexPath}`);
+  }
+  const expectedLabels = [...index.expected_partition_labels].sort();
+  const downloadedLabels = index.labels.map((label) => label.partition_label).sort();
+  if (new Set(expectedLabels).size !== expectedLabels.length
+      || new Set(downloadedLabels).size !== downloadedLabels.length
+      || expectedLabels.some((label, indexPosition) => label !== downloadedLabels[indexPosition])) {
+    throw new Error(`rehydrate run index does not match independently proven labels for ${table}: ${indexPath}`);
   }
   if (requiredRange && (requestedFrom.getTime() > requiredRange.from.getTime()
       || requestedToExclusive.getTime() < requiredRange.toExclusive.getTime())) {
