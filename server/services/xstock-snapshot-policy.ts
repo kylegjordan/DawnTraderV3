@@ -20,6 +20,18 @@ export interface XstockSnapshotPolicy {
   bucketSeconds: number;
 }
 
+export interface XstockSnapshotRetentionPolicy {
+  hotRetentionDays: number;
+  keepFloorRows: number;
+}
+
+export interface XstockSnapshotLifecycleConfig {
+  byTable: Map<XstockSnapshotTable, XstockSnapshotRetentionPolicy>;
+  mutationEnabled: boolean;
+}
+
+export const XSTOCK_SNAPSHOT_MUTATION_KEY = 'xstock_snapshot_retention.mutation_enabled' as const;
+
 export const XSTOCK_SNAPSHOT_POLICIES: readonly XstockSnapshotPolicy[] = [
   {
     intervalMinutes: 15,
@@ -52,4 +64,49 @@ export function assertSnapshotFloorCoversLiveCap(table: XstockSnapshotTable, kee
       + 'prewarm/retention refused before any write or delete',
     );
   }
+}
+
+export function xstockSnapshotLifecycleKeys(): string[] {
+  return [
+    ...XSTOCK_SNAPSHOT_POLICIES.flatMap((policy) => [
+      `${policy.table}.hot_retention_days`,
+      `${policy.table}.keep_floor_rows`,
+    ]),
+    XSTOCK_SNAPSHOT_MUTATION_KEY,
+  ];
+}
+
+export function parseXstockSnapshotLifecycleConfig(
+  values: ReadonlyMap<string, unknown>,
+  narrowScopeNames: readonly string[],
+): XstockSnapshotLifecycleConfig {
+  const keys = new Set(xstockSnapshotLifecycleKeys());
+  const narrow = narrowScopeNames.filter((name) => keys.has(name));
+  if (narrow.length > 0) {
+    throw new Error(
+      `snapshot lifecycle keys must exist only at exact wildcard scope; found narrow rows for ${narrow.join(',')}`,
+    );
+  }
+
+  const positiveInteger = (key: string): number => {
+    const value = values.get(key);
+    if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+      throw new Error(`missing or invalid positive-integer data_lifecycle.${key}`);
+    }
+    return value;
+  };
+
+  const byTable = new Map<XstockSnapshotTable, XstockSnapshotRetentionPolicy>();
+  for (const policy of XSTOCK_SNAPSHOT_POLICIES) {
+    const hotRetentionDays = positiveInteger(`${policy.table}.hot_retention_days`);
+    const keepFloorRows = positiveInteger(`${policy.table}.keep_floor_rows`);
+    assertSnapshotFloorCoversLiveCap(policy.table, keepFloorRows);
+    byTable.set(policy.table, { hotRetentionDays, keepFloorRows });
+  }
+
+  const mutationEnabled = values.get(XSTOCK_SNAPSHOT_MUTATION_KEY);
+  if (typeof mutationEnabled !== 'boolean') {
+    throw new Error(`missing or non-boolean data_lifecycle.${XSTOCK_SNAPSHOT_MUTATION_KEY}`);
+  }
+  return { byTable, mutationEnabled };
 }

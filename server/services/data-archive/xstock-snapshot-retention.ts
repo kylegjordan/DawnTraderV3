@@ -67,6 +67,27 @@ function quoteSnapshotTable(table: XstockSnapshotTable): string {
   return `"${table}"`;
 }
 
+function quoteInternalTempTable(table: string): string {
+  if (!/^b75_snapshot_[a-z0-9_]+$/.test(table)) {
+    throw new Error(`unsupported snapshot temp table: ${table}`);
+  }
+  return `"${table}"`;
+}
+
+function snapshotRankedCtes(table: XstockSnapshotTable): string {
+  const quoted = quoteSnapshotTable(table);
+  return `ranked AS MATERIALIZED (
+    SELECT symbol, bucket_ts,
+           row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC) AS retained_rank
+      FROM ${quoted}
+  ), floor_boundary AS MATERIALIZED (
+    SELECT symbol, min(bucket_ts) AS oldest_kept_bucket
+      FROM ranked
+     WHERE retained_rank <= $1
+     GROUP BY symbol
+  )`;
+}
+
 export function assertSnapshotSelector(selector: XstockSnapshotSelector): void {
   quoteSnapshotTable(selector.table);
   assertSnapshotFloorCoversLiveCap(selector.table, selector.keepFloorRows);
@@ -142,16 +163,7 @@ export function snapshotCanonicalJsonExpression(alias = 's'): string {
 export function snapshotPopulationSql(selector: XstockSnapshotSelector): string {
   assertSnapshotSelector(selector);
   const table = quoteSnapshotTable(selector.table);
-  return `WITH ranked AS MATERIALIZED (
-    SELECT symbol, bucket_ts,
-           row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC) AS retained_rank
-      FROM ${table}
-  ), floor_boundary AS MATERIALIZED (
-    SELECT symbol, min(bucket_ts) AS oldest_kept_bucket
-      FROM ranked
-     WHERE retained_rank <= $1
-     GROUP BY symbol
-  )
+  return `WITH ${snapshotRankedCtes(selector.table)}
   SELECT s.symbol,
          s.bucket_ts,
          to_char(s.bucket_ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS bucket_ts_text,
@@ -167,6 +179,112 @@ export function snapshotPopulationSql(selector: XstockSnapshotSelector): string 
 export function snapshotPopulationParams(selector: XstockSnapshotSelector): unknown[] {
   assertSnapshotSelector(selector);
   return [selector.keepFloorRows, selector.dayStart, selector.dayEnd, selector.cutoffAt];
+}
+
+export function snapshotEligibleDaysSql(tableName: XstockSnapshotTable): string {
+  const table = quoteSnapshotTable(tableName);
+  return `WITH ${snapshotRankedCtes(tableName)}
+  SELECT date_trunc('day', s.bucket_ts) AS day_start,
+         count(*)::bigint AS eligible_rows,
+         min(s.bucket_ts) AS oldest_key,
+         max(s.bucket_ts) AS newest_key
+    FROM ${table} s
+    JOIN floor_boundary f USING (symbol)
+   WHERE s.bucket_ts < $2
+     AND s.bucket_ts < f.oldest_kept_bucket
+   GROUP BY date_trunc('day', s.bucket_ts)
+   ORDER BY day_start ASC`;
+}
+
+/**
+ * One data-modifying statement after the caller takes SHARE lock.  It proves
+ * the current frozen population, deletes only downloaded/proven keys, and
+ * activates the matching manifest row.  A caller must roll back unless every
+ * returned gate/count is exact.
+ */
+export function snapshotLockedDeleteSql(
+  selector: XstockSnapshotSelector,
+  provenKeysTable = 'b75_snapshot_proven_keys',
+): string {
+  assertSnapshotSelector(selector);
+  const source = quoteSnapshotTable(selector.table);
+  const proven = quoteInternalTempTable(provenKeysTable);
+  const currentPopulation = snapshotPopulationSql(selector);
+  return `WITH current_rows AS MATERIALIZED (
+    ${currentPopulation}
+  ), current_proof AS (
+    SELECT count(*)::bigint AS row_count,
+           encode(digest(COALESCE(string_agg(
+             int4send(octet_length(convert_to(symbol, 'UTF8'))) || convert_to(symbol, 'UTF8') ||
+             int4send(octet_length(convert_to(bucket_ts_text, 'UTF8'))) || convert_to(bucket_ts_text, 'UTF8'),
+             ''::bytea ORDER BY symbol, bucket_ts
+           ), ''::bytea), 'sha256'), 'hex') AS ordered_key_sha256,
+           encode(digest(COALESCE(string_agg(
+             convert_to(canonical_json || E'\\n', 'UTF8'),
+             ''::bytea ORDER BY symbol, bucket_ts
+           ), ''::bytea), 'sha256'), 'hex') AS full_row_sha256
+      FROM current_rows
+  ), proof_gate AS (
+    SELECT row_count,
+           ordered_key_sha256,
+           full_row_sha256,
+           row_count = $5::bigint
+             AND ordered_key_sha256 = $6
+             AND full_row_sha256 = $7 AS matches
+      FROM current_proof
+  ), deleted AS (
+    DELETE FROM ${source} target
+     USING ${proven} proven, proof_gate gate
+     WHERE gate.matches
+       AND target.symbol = proven.symbol
+       AND target.bucket_ts = proven.bucket_ts
+     RETURNING target.symbol, target.bucket_ts
+  ), delete_count AS (
+    SELECT count(*)::bigint AS row_count FROM deleted
+  ), marked AS (
+    UPDATE data_archive_manifest manifest
+       SET state = 'active', hot_partition_dropped_at = NOW()
+      FROM proof_gate gate, delete_count removed
+     WHERE manifest.id = $8
+       AND manifest.state = 'verified'
+       AND manifest.completeness_basis = 'source-count-matched'
+       AND gate.matches
+       AND removed.row_count = $5::bigint
+     RETURNING manifest.id
+  )
+  SELECT gate.matches AS proof_matches,
+         gate.row_count::text AS current_row_count,
+         gate.ordered_key_sha256,
+         gate.full_row_sha256,
+         removed.row_count::text AS deleted_row_count,
+         (SELECT count(*)::text FROM marked) AS manifest_rows_marked
+    FROM proof_gate gate
+    CROSS JOIN delete_count removed`;
+}
+
+export function snapshotLockedDeleteParams(
+  selector: XstockSnapshotSelector,
+  proof: XstockSnapshotProof,
+  manifestId: string,
+): unknown[] {
+  return [
+    ...snapshotPopulationParams(selector),
+    proof.sourceRowCount,
+    proof.orderedKeySha256,
+    proof.fullRowSha256,
+    manifestId,
+  ];
+}
+
+export function snapshotProvenKeyAbsenceSql(
+  tableName: XstockSnapshotTable,
+  provenKeysTable = 'b75_snapshot_proven_keys',
+): string {
+  const source = quoteSnapshotTable(tableName);
+  const proven = quoteInternalTempTable(provenKeysTable);
+  return `SELECT count(*)::bigint AS remaining_rows
+    FROM ${source} source
+    JOIN ${proven} proven USING (symbol, bucket_ts)`;
 }
 
 export function snapshotSchemaValidationSql(): string {

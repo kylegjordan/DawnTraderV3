@@ -34,6 +34,7 @@ import {
   snapshotPopulationParams,
   snapshotPopulationSql,
   snapshotSchemaValidationSql,
+  type XstockSnapshotCanonicalRow,
   type XstockSnapshotProof,
   type XstockSnapshotSelector,
 } from './xstock-snapshot-retention.js';
@@ -463,7 +464,10 @@ export async function countGzipJsonlLines(filePath: string): Promise<number> {
  * Validate and fingerprint the bytes downloaded from storage.  Digests cover
  * the raw canonical line bytes, not a JSON parse/stringify round-trip.
  */
-export async function inspectGzipSnapshotJsonl(filePath: string): Promise<XstockSnapshotProof> {
+export async function inspectGzipSnapshotJsonl(
+  filePath: string,
+  onRow?: (row: XstockSnapshotCanonicalRow) => void | Promise<void>,
+): Promise<XstockSnapshotProof> {
   const input = fs.createReadStream(filePath);
   const gunzip = zlib.createGunzip();
   input.pipe(gunzip);
@@ -490,7 +494,7 @@ export async function inspectGzipSnapshotJsonl(filePath: string): Promise<Xstock
         );
       }
       assertCanonicalSnapshotObject(parsed);
-      const row = parsed as { symbol: string; bucket_ts: string };
+      const row = parsed as XstockSnapshotCanonicalRow;
       if (previous && (row.symbol < previous[0]
           || (row.symbol === previous[0] && row.bucket_ts <= previous[1]))) {
         throw new ArchiveReadbackMismatchError('snapshot JSONL keys are duplicate or out of order');
@@ -499,6 +503,7 @@ export async function inspectGzipSnapshotJsonl(filePath: string): Promise<Xstock
       appendSnapshotKey(keyHash, row.symbol, row.bucket_ts);
       rowHash.update(raw);
       rowHash.update(Buffer.from('\n'));
+      if (onRow) await onRow(row);
       rowCount++;
     }
   }
@@ -510,6 +515,53 @@ export async function inspectGzipSnapshotJsonl(filePath: string): Promise<Xstock
     orderedKeySha256: keyHash.digest('hex'),
     fullRowSha256: rowHash.digest('hex'),
   };
+}
+
+/**
+ * Parse the downloaded object before any source lock and load only its proven
+ * primary keys into a typed session temp table.  The final delete joins this
+ * table; it never re-evaluates a rolling predicate as its delete target.
+ */
+export async function loadSnapshotProvenKeys(
+  client: Pick<pg.Client, 'query'>,
+  filePath: string,
+): Promise<XstockSnapshotProof> {
+  await client.query(
+    `CREATE TEMP TABLE IF NOT EXISTS b75_snapshot_proven_keys (
+       symbol text NOT NULL,
+       bucket_ts timestamptz NOT NULL,
+       PRIMARY KEY (symbol, bucket_ts)
+     ) ON COMMIT PRESERVE ROWS`,
+  );
+  await client.query('TRUNCATE b75_snapshot_proven_keys');
+
+  const symbols: string[] = [];
+  const bucketTimestamps: string[] = [];
+  const flush = async (): Promise<void> => {
+    if (symbols.length === 0) return;
+    await client.query(
+      `INSERT INTO b75_snapshot_proven_keys (symbol, bucket_ts)
+       SELECT * FROM unnest($1::text[], $2::timestamptz[])`,
+      [symbols.splice(0), bucketTimestamps.splice(0)],
+    );
+  };
+
+  const proof = await inspectGzipSnapshotJsonl(filePath, async (row) => {
+    symbols.push(row.symbol);
+    bucketTimestamps.push(row.bucket_ts);
+    if (symbols.length >= 1000) await flush();
+  });
+  await flush();
+
+  const loaded = Number((await client.query(
+    'SELECT count(*)::bigint AS row_count FROM b75_snapshot_proven_keys',
+  )).rows[0]?.row_count ?? 0);
+  if (loaded !== proof.sourceRowCount) {
+    throw new ArchiveReadbackMismatchError(
+      `snapshot proven-key load count mismatch: object=${proof.sourceRowCount} temp=${loaded}`,
+    );
+  }
+  return proof;
 }
 
 /**

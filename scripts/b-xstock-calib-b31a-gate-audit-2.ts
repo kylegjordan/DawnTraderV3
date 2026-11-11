@@ -49,6 +49,7 @@
  */
 
 import pg from 'pg';
+import { HOT_HORIZON_SQL, decideEraWithWarmup, parseHorizonRows } from '../server/services/data-archive/hot-horizon.js';
 const { Client } = pg;
 
 const WINDOW_DAYS = 7;
@@ -201,6 +202,16 @@ async function main(): Promise<void> {
 
   // 60m snapshots (for ATR + pattern replication) — load a touch before window for ATR warmup.
   const warmISO = new Date(startMs - 3 * 86_400_000).toISOString();
+  const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
+  const snapshotEra = decideEraWithWarmup(
+    startISO,
+    3 * 86_400_000,
+    ['xstock_spot_ohlc_60m_snapshot'],
+    parseHorizonRows(horizonRows),
+    Date.now(),
+  );
+  if (!snapshotEra.ok) throw new Error(`[B31A-2] ${snapshotEra.message}`);
+  console.log(`[B31A-2] snapshot window is inside the ${snapshotEra.horizonDays}d hot horizon.`);
   const b60Res = await client.query<{ symbol: string; bucket_ts: string; open: string; high: string; low: string; close: string }>(
     `SELECT symbol, bucket_ts, open, high, low, close FROM xstock_spot_ohlc_60m_snapshot
       WHERE bucket_ts >= $1 AND bucket_ts <= $2 ORDER BY symbol, bucket_ts`, [warmISO, maxISO]);

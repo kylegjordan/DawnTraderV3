@@ -54,7 +54,11 @@ import 'dotenv/config';
 import pg from 'pg';
 import { XSTOCK_SPOT_REGISTRY } from '../shared/asset-classes.js';
 import { attachPoolGuards } from '../server/db-pool-guards.js';
-import { XSTOCK_SNAPSHOT_POLICIES } from '../server/services/xstock-snapshot-policy.js';
+import {
+  XSTOCK_SNAPSHOT_POLICIES,
+  parseXstockSnapshotLifecycleConfig,
+  xstockSnapshotLifecycleKeys,
+} from '../server/services/xstock-snapshot-policy.js';
 
 const { Pool } = pg;
 
@@ -101,6 +105,20 @@ interface LegacyBucketRow {
   bar_close: string;
   bar_volume: string;
   source_bar_count: string;
+}
+
+export function assertPrewarmRowsWithinCap(rows: readonly LegacyBucketRow[], maxBars: number): void {
+  if (!Number.isInteger(maxBars) || maxBars <= 0 || rows.length > maxBars) {
+    throw new Error(`[B-NEW-34b] prewarm selected ${rows.length} rows above live cap ${maxBars}; write refused`);
+  }
+  let previous = -Infinity;
+  for (const row of rows) {
+    const bucket = new Date(row.bucket_ts).getTime();
+    if (!Number.isFinite(bucket) || bucket <= previous) {
+      throw new Error('[B-NEW-34b] prewarm rows are not unique and ascending; write refused');
+    }
+    previous = bucket;
+  }
 }
 
 async function aggregateLegacySymbol(
@@ -271,6 +289,29 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
   for (const interval of SNAPSHOT_INTERVALS) upsertsByInterval[interval.label] = 0;
 
   try {
+    const lifecycleKeys = xstockSnapshotLifecycleKeys();
+    const [exactRows, narrowRows] = await Promise.all([
+      pool.query<{ constant_name: string; value: unknown }>(
+        `SELECT constant_name, value FROM module_constants
+          WHERE module_name = 'data_lifecycle'
+            AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
+            AND constant_name = ANY($1::text[])`,
+        [lifecycleKeys],
+      ),
+      pool.query<{ constant_name: string }>(
+        `SELECT constant_name FROM module_constants
+          WHERE module_name = 'data_lifecycle'
+            AND constant_name = ANY($1::text[])
+            AND (exchange IS DISTINCT FROM '*' OR asset_class IS DISTINCT FROM '*'
+              OR strategy IS DISTINCT FROM '*' OR regime IS DISTINCT FROM '*')`,
+        [lifecycleKeys],
+      ),
+    ]);
+    parseXstockSnapshotLifecycleConfig(
+      new Map(exactRows.rows.map((row) => [row.constant_name, row.value])),
+      narrowRows.rows.map((row) => row.constant_name),
+    );
+
     for (const symbol of targetSymbols) {
       let symbolHadData = false;
       for (const interval of SNAPSHOT_INTERVALS) {
@@ -282,6 +323,7 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
             interval.bucketSeconds,
             interval.maxBars,
           );
+          assertPrewarmRowsWithinCap(bars, interval.maxBars);
           if (bars.length === 0) continue;
           symbolHadData = true;
           totalBuckets += bars.length;
