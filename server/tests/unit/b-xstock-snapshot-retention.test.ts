@@ -22,6 +22,7 @@ import {
   type XstockSnapshotSelector,
 } from '../../services/data-archive/xstock-snapshot-retention.js';
 import {
+  exportPartition,
   inspectGzipSnapshotJsonl,
   loadSnapshotProvenKeys,
 } from '../../services/data-archive/partition-exporter.js';
@@ -35,6 +36,7 @@ import {
 } from '../../scripts/b75-rehydrate.js';
 import { rotateColdCandidate } from '../../scripts/b75-cold-rotator.js';
 import {
+  archiveSnapshotObject,
   deleteSnapshotProvenObject,
   parseRetentionSweepArgs,
   storedSnapshotEvidenceMatches,
@@ -321,6 +323,89 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION table orchestration', () => {
       query: vi.fn(async () => ({ rows: [] })),
     };
   }
+
+  it('carries the projected bucket timestamps through export into exact manifest bounds', async () => {
+    const firstTs = '2026-10-01T00:00:00.123456Z';
+    const lastTs = '2026-10-01T23:45:00.654321Z';
+    const rows = [
+      canonicalRow({ bucket_ts: firstTs }),
+      canonicalRow({ bucket_ts: lastTs }),
+    ];
+    let fetched = false;
+    const exporter = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('clock_timestamp() AS observed_at')) {
+          return { rows: [{ observed_at: new Date('2026-11-11T12:00:00Z') }] };
+        }
+        if (sql.includes('information_schema.columns')) {
+          return { rows: XSTOCK_SNAPSHOT_EXPECTED_COLUMNS.map((column_name) => ({ column_name })) };
+        }
+        if (sql.includes('count(*)::bigint AS source_count')) return { rows: [{ source_count: '2' }] };
+        if (sql.startsWith('FETCH FORWARD')) {
+          if (fetched) return { rows: [] };
+          fetched = true;
+          return {
+            rows: rows.map((row) => ({
+              symbol: row.symbol,
+              bucket_ts: row.bucket_ts,
+              bucket_ts_text: row.bucket_ts,
+              canonical_json: JSON.stringify(row),
+            })),
+          };
+        }
+        return { rows: [] };
+      }),
+    };
+    const snap = selector();
+    const exported = await exportPartition(exporter as never, {
+      sourceTable: snap.table,
+      partitionLabel: `manifest-bounds-${crypto.randomUUID()}`,
+      rangeStart: snap.dayStart,
+      rangeEnd: snap.dayEnd,
+      timestampColumn: 'bucket_ts',
+      snapshotSelector: snap,
+    });
+    const uploadedUpdates: unknown[][] = [];
+    const ctl = {
+      query: vi.fn(async (sql: string, params?: unknown[]) => {
+        if (sql.includes('SELECT id, state, storage_uri')) return { rows: [] };
+        if (sql.startsWith('INSERT INTO data_archive_manifest')) return { rows: [{ id: 'manifest-bounds-1' }] };
+        if (sql.includes("SET state = 'uploaded'")) uploadedUpdates.push(params ?? []);
+        return { rows: [] };
+      }),
+    };
+    const storage = {
+      uploadWarmFile: vi.fn(async () => ({ checksum: exported.checksum })),
+      downloadWarmFile: vi.fn(async (_bucket: string, _object: string, local: string) => {
+        fs.copyFileSync(exported.localPath, local);
+        return { checksum: exported.checksum, bytes: exported.bytesCompressed };
+      }),
+    };
+    let outcome: Awaited<ReturnType<typeof archiveSnapshotObject>> | undefined;
+    try {
+      outcome = await archiveSnapshotObject(
+        storage as never,
+        exporter as never,
+        ctl as never,
+        config(false),
+        snap,
+        {
+          exportPartition: vi.fn(async () => exported),
+          recordExactArchiveEvidence: vi.fn(async () => undefined),
+        },
+      );
+      expect(exported.minTs).toEqual(new Date(firstTs));
+      expect(exported.maxTs).toEqual(new Date(lastTs));
+      expect(uploadedUpdates).toHaveLength(1);
+      expect(uploadedUpdates[0][3]).toEqual(new Date(firstTs));
+      expect(uploadedUpdates[0][4]).toEqual(new Date(lastTs));
+      expect(ctl.query.mock.calls.some(([sql]) => String(sql).includes("SET state = 'verified'"))).toBe(true);
+    } finally {
+      for (const file of [outcome?.provenObjectPath, outcome?.exportedPath, exported.localPath]) {
+        if (file) fs.rmSync(file, { force: true });
+      }
+    }
+  });
 
   it('performs zero vacuums for a dry read with no deletion', async () => {
     const ctl = fakeClient();

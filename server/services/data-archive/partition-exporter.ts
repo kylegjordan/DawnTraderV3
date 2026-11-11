@@ -230,7 +230,7 @@ export async function exportPartition(
           if (!gzip.write(line)) await new Promise<void>((resolve) => gzip.once('drain', resolve));
           bytesUncompressed += Buffer.byteLength(line, 'utf8');
           rowCount++;
-          const tsDate = new Date(String(row.bucket_ts_cursor));
+          const tsDate = new Date(String(row.bucket_ts));
           if (minTs === null || tsDate < minTs) minTs = tsDate;
           if (maxTs === null || tsDate > maxTs) maxTs = tsDate;
         }
