@@ -61,6 +61,12 @@ import {
   XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
   snapshotProofMatches,
 } from '../services/data-archive/xstock-snapshot-retention.js';
+import {
+  XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX,
+  XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE,
+  type SnapshotRehydrateRunIndex,
+} from '../services/data-archive/rehydrated-snapshot-input.js';
+import type { XstockSnapshotTable } from '../services/xstock-snapshot-policy.js';
 
 const { Client } = pg;
 
@@ -232,6 +238,58 @@ export interface RehydrateSummary {
   totalBytes: number;
   unproven: string[];
   mismatched: string[];
+}
+
+function isXstockSnapshotTable(table: string): table is XstockSnapshotTable {
+  return table === 'xstock_spot_ohlc_15m_snapshot' || table === 'xstock_spot_ohlc_60m_snapshot';
+}
+
+export function writeSnapshotRehydrateRunIndex(
+  args: RehydrateArgs,
+  choices: LabelChoice<RehydrateManifestRow>[],
+  results: RehydrateObjectResult[],
+): SnapshotRehydrateRunIndex {
+  if (!isXstockSnapshotTable(args.table)) {
+    throw new Error(`[B75 rehydrate] cannot write a snapshot run index for ${args.table}`);
+  }
+  const table = args.table;
+  const labels = choices.map((choice, index) => {
+    const result = results[index];
+    const download = choice.download;
+    const outputFile = download && result?.kind === 'downloaded'
+      ? `${table}_${choice.label}.jsonl.gz`
+      : null;
+    return {
+      partition_label: choice.label,
+      manifest_id: download?.id ?? null,
+      tier: download?.tier ?? null,
+      result: result?.kind ?? 'skipped' as const,
+      output_file: outputFile,
+      sidecar_file: outputFile ? `${outputFile}.completeness.json` : null,
+      row_count: result && result.kind !== 'skipped' && result.kind !== 'skipped-cold' ? result.rowCount : 0,
+      min_ts: download ? new Date(download.min_ts).toISOString() : null,
+      max_ts: download ? new Date(download.max_ts).toISOString() : null,
+    };
+  });
+  const complete = results.length === choices.length
+    && choices.length > 0
+    && results.every((result) => result.kind === 'downloaded' && result.basisProven === true)
+    && labels.every((label) => label.output_file !== null && label.sidecar_file !== null);
+  const runIndex: SnapshotRehydrateRunIndex = {
+    contract: XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX,
+    table,
+    requested_from: args.from.toISOString(),
+    requested_to_exclusive: new Date(args.to.getTime() + 1).toISOString(),
+    restore_cold: args.restoreCold,
+    expected_label_count: choices.length,
+    complete,
+    labels,
+  };
+  const target = path.join(args.out, XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE);
+  const temporary = `${target}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(runIndex, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(temporary, target);
+  return runIndex;
 }
 
 export function summarizeRehydrateResults(results: RehydrateObjectResult[]): RehydrateSummary {
@@ -512,6 +570,9 @@ async function runRehydrateCliBody(): Promise<void> {
     process.exit(1);
     return;
   }
+  if (isXstockSnapshotTable(args.table)) {
+    fs.rmSync(path.join(args.out, XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE), { force: true });
+  }
 
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
@@ -523,6 +584,7 @@ async function runRehydrateCliBody(): Promise<void> {
   }
 
   if (rows.length === 0) {
+    if (isXstockSnapshotTable(args.table)) writeSnapshotRehydrateRunIndex(args, [], []);
     console.log(
       `[B75 rehydrate] no manifest rows for table=${args.table} between ${args.from.toISOString()} and ${args.to.toISOString()}`,
     );
@@ -546,6 +608,7 @@ async function runRehydrateCliBody(): Promise<void> {
   for (const choice of choices) {
     results.push(await rehydrateChosenObject(args, choice, storage));
   }
+  if (isXstockSnapshotTable(args.table)) writeSnapshotRehydrateRunIndex(args, choices, results);
   finishRehydrateRun(summarizeRehydrateResults(results));
 }
 

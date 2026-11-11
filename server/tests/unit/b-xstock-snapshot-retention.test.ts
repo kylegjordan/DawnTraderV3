@@ -28,9 +28,11 @@ import {
 import { recordExactArchiveEvidence } from '../../services/data-archive/exact-archive-evidence.js';
 import {
   rehydrateChosenObject,
+  writeSnapshotRehydrateRunIndex,
   type RehydrateArgs,
   type RehydrateManifestRow,
 } from '../../scripts/b75-rehydrate.js';
+import { rotateColdCandidate } from '../../scripts/b75-cold-rotator.js';
 import {
   deleteSnapshotProvenObject,
   parseRetentionSweepArgs,
@@ -44,8 +46,16 @@ import {
   assertSnapshotFloorCoversLiveCap,
   parseXstockSnapshotLifecycleConfig,
 } from '../../services/xstock-snapshot-policy.js';
-import { loadProvenRehydratedSnapshot } from '../../services/data-archive/rehydrated-snapshot-input.js';
-import { assertPrewarmRowsWithinCap } from '../../../scripts/b-new-34b-prewarm-snapshot.js';
+import {
+  XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX,
+  XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE,
+  loadProvenRehydratedSnapshot,
+} from '../../services/data-archive/rehydrated-snapshot-input.js';
+import {
+  assertPrewarmRowsWithinCap,
+  runAvailabilityPrewarm,
+  runPrewarm,
+} from '../../../scripts/b-new-34b-prewarm-snapshot.js';
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -156,6 +166,27 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
     expect(src).toMatch(/ORDER BY bucket_ts DESC\s+LIMIT \$3/);
     expect(src.indexOf('assertPrewarmRowsWithinCap(bars, interval.maxBars)'))
       .toBeLessThan(src.indexOf('await upsertLegacySnapshot(pool, symbol, bars, interval.table)'));
+  });
+
+  it('refuses a below-cap lifecycle floor before either prewarm writer can write', async () => {
+    const values = lifecycleValues();
+    values.set('xstock_spot_ohlc_15m_snapshot.keep_floor_rows', 239);
+    const lifecycleClient = {
+      query: vi.fn(async (sql: string) => ({
+        rows: sql.includes('IS DISTINCT FROM')
+          ? []
+          : Array.from(values, ([constant_name, value]) => ({ constant_name, value })),
+      })),
+    };
+    const options = {
+      connectionString: process.env.DATABASE_URL ?? 'postgres://unused',
+      symbols: ['CORZ/USD'],
+      dryRun: true,
+      lifecycleClient: lifecycleClient as never,
+    };
+    await expect(runPrewarm(options)).rejects.toThrow(/below live cap 240/);
+    await expect(runAvailabilityPrewarm(options)).rejects.toThrow(/below live cap 240/);
+    expect(lifecycleClient.query).toHaveBeenCalledTimes(4);
   });
 
   it('freezes the cutoff at the complete UTC-day boundary', () => {
@@ -513,6 +544,22 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
         full_row_sha256: proof.fullRowSha256,
       },
     }));
+    const indexPath = path.join(scratch, XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE);
+    const baseIndex = {
+      contract: XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX,
+      table: 'xstock_spot_ohlc_15m_snapshot',
+      requested_from: '2026-10-01T00:00:00.000Z',
+      requested_to_exclusive: '2026-10-02T00:00:00.000Z',
+      restore_cold: false,
+      expected_label_count: 1,
+      complete: true,
+      labels: [{
+        partition_label: '2026-10-01-proof', manifest_id: 'manifest-1', tier: 'warm', result: 'downloaded',
+        output_file: path.basename(file), sidecar_file: `${path.basename(file)}.completeness.json`,
+        row_count: 1, min_ts: '2026-10-01T00:00:00.000Z', max_ts: '2026-10-02T00:00:00.000Z',
+      }],
+    };
+    fs.writeFileSync(indexPath, JSON.stringify(baseIndex));
     await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
       .resolves.toMatchObject({ files: [file], rows: [row], proofs: [proof] });
     fs.writeFileSync(`${file}.completeness.json`, JSON.stringify({
@@ -567,6 +614,28 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     }));
     await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
       .rejects.toThrow(/proof does not match/);
+
+    fs.writeFileSync(`${file}.completeness.json`, JSON.stringify({
+      table: 'xstock_spot_ohlc_15m_snapshot', proven: true, checksum_ok: true,
+      row_count: proof.sourceRowCount,
+      snapshot_selector: {
+        cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+        ordered_key_sha256: proof.orderedKeySha256,
+        full_row_sha256: proof.fullRowSha256,
+      },
+    }));
+    fs.writeFileSync(indexPath, JSON.stringify({
+      ...baseIndex,
+      expected_label_count: 2,
+      labels: [...baseIndex.labels, {
+        partition_label: '2026-10-02-proof', manifest_id: 'manifest-2', tier: 'warm', result: 'downloaded',
+        output_file: 'xstock_spot_ohlc_15m_snapshot_2026-10-02-proof.jsonl.gz',
+        sidecar_file: 'xstock_spot_ohlc_15m_snapshot_2026-10-02-proof.jsonl.gz.completeness.json',
+        row_count: 1, min_ts: '2026-10-02T00:00:00.000Z', max_ts: '2026-10-03T00:00:00.000Z',
+      }],
+    }));
+    await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
+      .rejects.toThrow(/object is missing/);
   });
 
   it('loads only parsed downloaded keys into the typed pre-lock temp table', async () => {
@@ -686,5 +755,77 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     const restored = path.join(out, `${snap.table}_${manifest.partition_label}.jsonl.gz`);
     expect(JSON.parse(fs.readFileSync(`${restored}.completeness.json`, 'utf8')))
       .toMatchObject({ proven: true, snapshot_selector: { ordered_key_sha256: proof.orderedKeySha256 } });
+  });
+
+  it('carries a warm snapshot proof to the active cold manifest and restores the whole proven run', async () => {
+    const source = gzipRows([canonicalRow()]);
+    const compressed = fs.readFileSync(source);
+    const checksum = crypto.createHash('sha256').update(compressed).digest('hex');
+    const proof = await inspectGzipSnapshotJsonl(source);
+    const snap = selector();
+    let proofCopied = false;
+    const query = vi.fn(async (sql: string) => {
+      if (sql.startsWith('INSERT INTO data_archive_manifest')) {
+        return { rows: [{ id: 'cold-manifest-1', completeness_basis: 'source-count-matched' }] };
+      }
+      if (sql.startsWith('INSERT INTO data_archive_exact_evidence')) {
+        proofCopied = true;
+        return { rows: [] };
+      }
+      if (sql.startsWith('SELECT EXISTS')) return { rows: [{ exact: proofCopied }] };
+      return { rows: [] };
+    });
+    const storage = {
+      downloadWarm: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
+      uploadCold: vi.fn(async () => ({ checksum })),
+      downloadCold: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
+      deleteWarm: vi.fn(async () => {}),
+    };
+    await rotateColdCandidate({
+      id: 'warm-manifest-1', source_table: snap.table,
+      partition_label: snapshotDayLabel(snap.dayStart, proof.orderedKeySha256),
+      storage_uri: 'supabase://warm/snapshot.jsonl.gz', row_count: 1,
+      bytes_compressed: compressed.length, checksum, created_at: new Date('2026-10-02T00:00:00Z'),
+    }, {
+      warmRetentionDays: 30, perTableWarmRetentionDays: new Map(), coldRotatorDryRun: false,
+      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
+    }, {
+      storage: storage as never,
+      createClient: () => ({
+        connect: vi.fn().mockResolvedValue(undefined),
+        end: vi.fn().mockResolvedValue(undefined),
+        query,
+      } as never),
+    });
+    expect(proofCopied).toBe(true);
+    expect(storage.deleteWarm).toHaveBeenCalledTimes(1);
+
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-snapshot-cold-restore-'));
+    fs.chmodSync(out, 0o700);
+    tempDirs.push(out);
+    const args: RehydrateArgs = {
+      table: snap.table, from: snap.dayStart, to: new Date(snap.dayEnd.getTime() - 1),
+      out, restoreCold: true, diskFile: false,
+    };
+    const manifest: RehydrateManifestRow = {
+      id: 'cold-manifest-1', partition_label: snapshotDayLabel(snap.dayStart, proof.orderedKeySha256),
+      tier: 'cold', state: 'active', storage_uri: `b2://cold/${snap.table}/snapshot.jsonl.gz`,
+      row_count: 1, bytes_compressed: compressed.length, min_ts: snap.dayStart, max_ts: snap.dayEnd,
+      checksum, completeness_basis: 'source-count-matched', format: 'jsonl.gz', original_partition_size_bytes: null,
+      cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+      selector_contract: XSTOCK_SNAPSHOT_SELECTOR_CONTRACT, selector_version: 1,
+      frozen_cutoff_at: snap.cutoffAt, ranking_observed_at: snap.rankingObservedAt,
+      keep_floor_rows: snap.keepFloorRows, day_start: snap.dayStart, day_end: snap.dayEnd,
+      ordered_key_sha256: proof.orderedKeySha256, full_row_sha256: proof.fullRowSha256,
+    };
+    const choice = { label: manifest.partition_label, download: manifest, all: [manifest] };
+    const result = await rehydrateChosenObject(args, choice, {
+      downloadWarmFile: vi.fn(), isColdConfigured: vi.fn(() => true),
+      downloadCold: storage.downloadCold,
+    } as never);
+    writeSnapshotRehydrateRunIndex(args, [choice], [result]);
+    await expect(loadProvenRehydratedSnapshot(out, snap.table, {
+      from: snap.dayStart, toExclusive: snap.dayEnd,
+    })).resolves.toMatchObject({ rows: [canonicalRow()], proofs: [proof] });
   });
 });

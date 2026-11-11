@@ -795,11 +795,20 @@ describe('cold rotation state machine', () => {
     };
     const client = {
       connect: vi.fn(), end: vi.fn().mockResolvedValue(undefined),
-      query: vi.fn(async (sql: string) => { events.push(sql.startsWith('INSERT') ? 'cold-manifest' : 'warm-migrated'); return { rows: [] }; }),
+      query: vi.fn(async (sql: string) => {
+        if (sql === 'BEGIN') { events.push('begin'); return { rows: [] }; }
+        if (sql.startsWith('INSERT INTO data_archive_manifest')) {
+          events.push('cold-manifest');
+          return { rows: [{ id: 'cold-1', completeness_basis: 'unrecorded' }] };
+        }
+        if (sql.startsWith('UPDATE data_archive_manifest')) { events.push('warm-migrated'); return { rows: [] }; }
+        if (sql === 'COMMIT') { events.push('commit'); return { rows: [] }; }
+        throw new Error(`unexpected SQL: ${sql}`);
+      }),
     };
     await expect(rotateColdCandidate(candidate, cfg, { storage: storage as never, createClient: () => client as never }))
       .resolves.toBe(8);
-    expect(events).toEqual(['warm-read', 'cold-upload', 'cold-read', 'cold-manifest', 'warm-migrated', 'warm-delete']);
+    expect(events).toEqual(['warm-read', 'cold-upload', 'cold-read', 'begin', 'cold-manifest', 'warm-migrated', 'commit', 'warm-delete']);
   });
 
   it('keeps warm on checksum failure and continues to the next candidate', async () => {
@@ -812,7 +821,12 @@ describe('cold rotation state machine', () => {
       downloadCold: vi.fn().mockResolvedValue({ checksum: 'ck', data: Buffer.from('x'), bytes: 1 }),
       deleteWarm: vi.fn(async (_bucket: string, objectPath: string) => { deleted.push(objectPath); }),
     };
-    const client = { connect: vi.fn(), end: vi.fn().mockResolvedValue(undefined), query: vi.fn().mockResolvedValue({ rows: [] }) };
+    const client = {
+      connect: vi.fn(), end: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn(async (sql: string) => sql.startsWith('INSERT INTO data_archive_manifest')
+        ? { rows: [{ id: 'cold-good', completeness_basis: 'unrecorded' }] }
+        : { rows: [] }),
+    };
     const bad = { ...candidate, id: 'bad', storage_uri: 'supabase://warm/bad' };
     const good = { ...candidate, id: 'good', partition_label: '2025-02', storage_uri: 'supabase://warm/good' };
     const result = await runColdRotationCandidates([bad, good], cfg, {

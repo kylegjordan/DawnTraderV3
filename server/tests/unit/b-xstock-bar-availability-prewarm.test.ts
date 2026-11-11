@@ -14,6 +14,19 @@ vi.mock('../../services/xstock-ohlc-cache.js', () => ({
 
 import { runAvailabilityPrewarm } from '../../../scripts/b-new-34b-prewarm-snapshot.js';
 
+function lifecycleClient() {
+  const rows = [
+    ['xstock_spot_ohlc_15m_snapshot.hot_retention_days', 30],
+    ['xstock_spot_ohlc_15m_snapshot.keep_floor_rows', 240],
+    ['xstock_spot_ohlc_60m_snapshot.hot_retention_days', 30],
+    ['xstock_spot_ohlc_60m_snapshot.keep_floor_rows', 60],
+    ['xstock_snapshot_retention.mutation_enabled', false],
+  ].map(([constant_name, value]) => ({ constant_name, value }));
+  return {
+    query: vi.fn(async (sql: string) => ({ rows: sql.includes('IS DISTINCT FROM') ? [] : rows })),
+  };
+}
+
 beforeEach(() => {
   preview.mockReset();
   prewarm.mockReset();
@@ -35,7 +48,9 @@ describe('B-XSTOCK-BAR-AVAILABILITY restart/prewarm contract', () => {
         snapshotRowsWritten: 4,
       });
 
-    const result = await runAvailabilityPrewarm({ symbols: ['CORZ/USD'], lookbackDays: 14 });
+    const result = await runAvailabilityPrewarm({
+      symbols: ['CORZ/USD'], lookbackDays: 14, lifecycleClient: lifecycleClient() as never,
+    });
     expect(prewarm.mock.calls).toEqual([
       ['CORZ/USD', 60, 336],
       ['CORZ/USD', 15, 336],
@@ -60,6 +75,7 @@ describe('B-XSTOCK-BAR-AVAILABILITY restart/prewarm contract', () => {
       symbols: ['CORZ/USD'],
       lookbackDays: 2,
       dryRun: true,
+      lifecycleClient: lifecycleClient() as never,
     });
     expect(preview.mock.calls).toEqual([
       [['CORZ/USD'], 60, 48],
