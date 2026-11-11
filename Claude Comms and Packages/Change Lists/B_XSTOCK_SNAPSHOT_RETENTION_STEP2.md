@@ -21,9 +21,15 @@ It settles these implementation boundaries:
 3. deterministic day + ordered-key-digest object labels;
 4. source/export/download count, ordered-key digest, full-row digest and compressed checksum proof;
 5. a short writer-excluding compare/proven-key-delete transaction;
-6. one existing B75 scheduler and run lock, plus a manual `--snapshot-only` mode for the supervised initial backlog;
+6. one existing B75 scheduler behind a shared kernel-held cron/manual lock, plus a manual `--snapshot-only` mode for the supervised initial backlog;
 7. explicit recent-hot, historical-rehydrate and dormant consumer classes;
-8. ordinary VACUUM/ANALYZE reported honestly, with no physical-shrink promise.
+8. ordinary VACUUM/ANALYZE once per table/run after its object loop, reported honestly with no physical-shrink promise.
+
+## Coltrane correction incorporated
+
+The first review found that B75's current six-hour timestamp lock can unlink a still-live backlog run and that the old holder can later remove its successor's lock. The plan now replaces that path with a stable kernel-held `flock` shared by cron and manual invocations: the operating system releases it on exit/crash, and application code neither age-reclaims nor unlinks it. Red process tests cover a live holder beyond six hours, crash recovery, successor safety and cron/manual contention.
+
+The plan also settles vacuum frequency as zero for a no-delete table and exactly once per table per invocation after the complete object loop, never once per object.
 
 ## Load-bearing claims for review
 
