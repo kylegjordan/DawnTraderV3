@@ -913,6 +913,12 @@ export interface SnapshotArchiveOutcome {
   readbackDurationMs: number;
 }
 
+export interface SnapshotArchiveDependencies {
+  exportPartition: typeof exportPartition;
+  inspectGzipSnapshotJsonl: typeof inspectGzipSnapshotJsonl;
+  recordExactArchiveEvidence: typeof recordExactArchiveEvidence;
+}
+
 /**
  * Snapshot-specific adapter around the existing exporter, manifest, storage
  * and exact-evidence state machine.  The label is not known until the current
@@ -924,10 +930,17 @@ export async function archiveSnapshotObject(
   ctlClient: pg.Client,
   cfg: B75SweepConfig,
   selector: XstockSnapshotSelector,
+  dependencyOverrides: Partial<SnapshotArchiveDependencies> = {},
 ): Promise<SnapshotArchiveOutcome> {
+  const dependencies: SnapshotArchiveDependencies = {
+    exportPartition,
+    inspectGzipSnapshotJsonl,
+    recordExactArchiveEvidence,
+    ...dependencyOverrides,
+  };
   const provisionalLabel = `${selector.dayStart.toISOString().slice(0, 10)}-${RUN_ID}`;
   const exportStartedAt = Date.now();
-  const exportRes = await exportPartition(exportClient, {
+  const exportRes = await dependencies.exportPartition(exportClient, {
     sourceTable: selector.table,
     partitionLabel: provisionalLabel,
     rangeStart: selector.dayStart,
@@ -980,7 +993,7 @@ export async function archiveSnapshotObject(
           `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: stored checksum=${existing!.checksum} readback=${download.checksum}`,
         );
       }
-      const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+      const downloadedProof = await dependencies.inspectGzipSnapshotJsonl(verifyPath);
       const readbackDurationMs = Date.now() - readbackStartedAt;
       if (!snapshotProofMatches(downloadedProof, proof)) {
         throw new ArchiveReadbackMismatchError(
@@ -1029,7 +1042,7 @@ export async function archiveSnapshotObject(
         `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: upload/readback checksum mismatch`,
       );
     }
-    const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+    const downloadedProof = await dependencies.inspectGzipSnapshotJsonl(verifyPath);
     const readbackDurationMs = Date.now() - readbackStartedAt;
     if (!snapshotProofMatches(downloadedProof, proof)) {
       throw new ArchiveReadbackMismatchError(
@@ -1069,7 +1082,7 @@ export async function archiveSnapshotObject(
     );
     await ctlClient.query('BEGIN');
     try {
-      await recordExactArchiveEvidence(ctlClient, evidence);
+      await dependencies.recordExactArchiveEvidence(ctlClient, evidence);
       await ctlClient.query(
         `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
         [manifestId, PROVEN_BASIS],
