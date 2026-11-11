@@ -147,3 +147,7 @@ With the registered controls green, the reviewed setter restored `xstock_spot_oh
 Coltrane independently reproduced staging at exact boundary ref `10d95d3f8d893f2baad034fa9e9e5d4064241a58`: deployed ref and clean sweep hashes; the exact 22-child run and 28,351,709,184-byte sum; April plus May and no June; all 21 manifest/evidence objects and their 3,000,011 rows; the May-1 113,256-line restore and SHA-256; all six lock-sampler counts; the numeric 365 restore row; and zero target-table eligibility at the next production instant. He returned **CONFIRMED — Step 8 PASS**. Stage B PASS, restoration, and the no-repeat ruling stand.
 
 **Step 8 CLOSED. Next: Step 9 iteration against the independently confirmed outcome.**
+
+## P8 — Step 9 pre-flip reader gate PASS (INFRA Codex, 2026-11-11)
+
+P7's live dependency is still exactly one four-wildcard `max_hold_switch.enabled_vts` row with JSON boolean `true`, attributed to `p19-b8.5j`. The deployed ref remains `957b13fde2fdb9b9c12791699b8fabeaa3a9afed`. The required history from `54d671bb7` across the six direct runtime reader files found changes in only two: the Drift Dashboard reader gained hot-horizon display and diagnostic-pool failure handling without changing `WINDOW_TO_MS` or `rolling_30d`; the prewarm reader gained a statement timeout without changing its 14-day window. The other four reader files are unchanged. **No new lookback exists, so §1.6 stays closed and P7 PASS permits P8's reviewed three-row flip.**
