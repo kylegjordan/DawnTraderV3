@@ -3,7 +3,9 @@
 > Per-session notebook (cap 10 KB; rules file + this ≤ 18 KB). Rules: `1-system-manual/PM_CLAUDE_RULES.md`. Startup prompt: `Claude Comms and Packages/PM_CLAUDE_STARTUP_PROMPT.md`. Clone: `C:\DawnTraderV3-pm`. Records: `1-system-manual/pm/` (DECISIONS.md, reviews/).
 
 # ▶▶ CURRENT POSITION — READ FIRST
-- **CODEX USAGE STOP LINE (KD-71, Kyle 2026-11-10): 92% of the weekly Codex allowance USED.** Account meter read 75% used at 2026-11-11T00:04Z; current reset is 2026-11-11T08:22:04Z (09:22:04 Europe/Warsaw). The active PM heartbeat reads the account meter first. Below 92%, keep the crew moving. At or above 92%, run `pm-codex-usage-stop`, stop the four building chats, PM Codex, Coltrane and active Codex automations at safe boundaries, and keep them stopped through the reset. Do not use either available rate-limit reset credit. Resume remains governed by the skill's explicit Kyle-resume rule.
+- **CODEX USAGE STOP LINE (KD-71, Kyle 2026-11-10): 92% of the weekly Codex allowance USED.** Account meter read 76% used at 2026-11-11T07:23Z; current reset is 2026-11-11T08:22:04Z (09:22:04 Europe/Warsaw). The active PM heartbeat reads the account meter first. Below 92%, keep the crew moving. At or above 92%, run `pm-codex-usage-stop`, stop the four building chats, PM Codex, Coltrane and active Codex automations at safe boundaries, and keep them stopped through the reset. Do not use either available rate-limit reset credit. Resume remains governed by the skill's explicit Kyle-resume rule.
+- **KD-67 NUDGE:** 2026-11-11T07:23:57Z — OLD nudge 1, stall `old-db-size-relief-overnight-reads-20261111`; visible receipt and live recovery of both missed Step-7 reads observed. No second nudge.
+- **KD-67 NUDGE:** 2026-11-11T07:23:57Z — INFRA nudge 1, stall `infra-disk-headroom-overnight-proof-20261111`; visible receipt, Windows-update cause, archive catch-up and Stage-B proof work observed. No second nudge.
 - Archived 2026-11-11 · kd67-db-pool-alert-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-10 · kd67-new-final-read-cleared → `1-system-manual/pm/archive/memory/2026-11.md`
 - Archived 2026-11-10 · kd71-direction-progressed → `1-system-manual/pm/archive/memory/2026-11.md`
@@ -32,7 +34,7 @@
 - Archived 2026-11-04 · done-today-2026-11-04 → `1-system-manual/pm/archive/memory/2026-11.md`
 
 # OPEN
-- Waking: the app's `SendMessage` needs a session's `local_…` id; `list_sessions` gives them. Live 2026-11-04: OLD `local_66dbb030…`, NEW `local_0fe1c46a…`, ANALYST `local_4dfcc10e…`, INFRA `local_1a70b6ce…`.
+- Archived 2026-11-04 · stale-local-session-ids → `1-system-manual/pm/archive/memory/2026-11.md`
 - Hourly "Wake watcher heartbeat" sessions pile up unarchived in the sidebar — ask Kyle whether to archive.
 - Next analysis owed to Kyle: issues opened vs closed and batches opened vs closed per week since 2026-09-28.
 
