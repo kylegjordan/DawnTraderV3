@@ -127,6 +127,8 @@ export interface ExportResult {
   sourceRowCount: number | null;
   /** Exact mutable-snapshot proof; absent for every generic B75 lane. */
   snapshotProof?: XstockSnapshotProof;
+  /** Observation time captured by the same REPEATABLE READ snapshot as snapshotProof. */
+  snapshotObservedAt?: Date;
 }
 
 function ensureDir(p: string): void {
@@ -179,9 +181,14 @@ export async function exportPartition(
   let maxTs: Date | null = null;
   let sourceRowCount: number | null = null;
   let snapshotProof: XstockSnapshotProof | undefined;
+  let snapshotObservedAt: Date | undefined;
 
   try {
     if (req.snapshotSelector) {
+      const observation = await client.query<{ observed_at: Date }>(
+        'SELECT clock_timestamp() AS observed_at, txid_current_snapshot()::text AS snapshot_id',
+      );
+      snapshotObservedAt = new Date(observation.rows[0].observed_at);
       const schema = await client.query(
         snapshotSchemaValidationSql(),
         [req.snapshotSelector.table],
@@ -435,6 +442,7 @@ export async function exportPartition(
     checksum,
     sourceRowCount,
     snapshotProof,
+    snapshotObservedAt,
   };
 }
 

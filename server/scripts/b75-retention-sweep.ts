@@ -937,11 +937,15 @@ export async function archiveSnapshotObject(
     snapshotSelector: selector,
   });
   const exportDurationMs = Date.now() - exportStartedAt;
-  if (!exportRes.snapshotProof) {
+  if (!exportRes.snapshotProof || !exportRes.snapshotObservedAt) {
     try { fs.unlinkSync(exportRes.localPath); } catch { /* already absent */ }
-    throw new Error(`[B75 sweep][snapshot] ${selector.table}: exporter omitted snapshot proof`);
+    throw new Error(`[B75 sweep][snapshot] ${selector.table}: exporter omitted snapshot proof or observation time`);
   }
   const proof = exportRes.snapshotProof;
+  const observedSelector: XstockSnapshotSelector = {
+    ...selector,
+    rankingObservedAt: exportRes.snapshotObservedAt,
+  };
   const partitionLabel = snapshotDayLabel(selector.dayStart, proof.orderedKeySha256);
   const objPath = `${cfg.warmPrefix}/${selector.table}/${partitionLabel}.jsonl.gz`;
   const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
@@ -1046,7 +1050,7 @@ export async function archiveSnapshotObject(
       snapshot: {
         ...proof,
         cutoffAt: selector.cutoffAt,
-        rankingObservedAt: selector.rankingObservedAt,
+        rankingObservedAt: observedSelector.rankingObservedAt,
         keepFloorRows: selector.keepFloorRows,
         dayStart: selector.dayStart,
         dayEnd: selector.dayEnd,
@@ -1084,7 +1088,7 @@ export async function archiveSnapshotObject(
       exportedPath: exportRes.localPath,
       bytesCompressed: exportRes.bytesCompressed,
       reused: false,
-      selector,
+      selector: observedSelector,
       exportDurationMs,
       archiveDurationMs,
       readbackDurationMs,
