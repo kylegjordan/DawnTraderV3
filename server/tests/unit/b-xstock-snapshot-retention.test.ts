@@ -844,17 +844,40 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       'ranking_observed_at', 'keep_floor_rows', 'day_start', 'day_end',
       'ordered_key_sha256', 'full_row_sha256',
     ] as const satisfies readonly (keyof RehydrateManifestRow)[];
+    const equalityFields = [
+      'source_table', 'partition_label', 'tier',
+      'source_row_count', 'exported_row_count', 'downloaded_row_count',
+      'producing_build_sha', 'object_checksum',
+      ...proofFields,
+    ] as const;
+    type EqualityField = typeof equalityFields[number];
+    const warmEvidence: Record<EqualityField, unknown> = {
+      source_table: snap.table,
+      partition_label: warmManifest.partition_label,
+      tier: 'warm',
+      source_row_count: 1,
+      exported_row_count: 1,
+      downloaded_row_count: 1,
+      producing_build_sha: 'test-build-sha',
+      object_checksum: checksum,
+      ...Object.fromEntries(proofFields.map((field) => [field, warmManifest[field]])),
+    } as Record<EqualityField, unknown>;
+    const expectedColdEvidence: Record<EqualityField, unknown> = {
+      ...warmEvidence,
+      tier: 'cold',
+    };
     const events: string[] = [];
     let persistedCold: RehydrateManifestRow | null = null;
+    let persistedColdEvidence: Partial<Record<EqualityField, unknown>> | null = null;
     let warmMigrated = false;
     let corruptCopiedProof = false;
-    const proofMatches = (): boolean => persistedCold !== null && proofFields.every((field) => {
-      const warmValue = warmManifest[field];
-      const coldValue = persistedCold?.[field];
-      if (warmValue instanceof Date && coldValue instanceof Date) {
-        return warmValue.getTime() === coldValue.getTime();
+    const proofMatches = (): boolean => persistedColdEvidence !== null && equalityFields.every((field) => {
+      const expectedValue = expectedColdEvidence[field];
+      const coldValue = persistedColdEvidence?.[field];
+      if (expectedValue instanceof Date && coldValue instanceof Date) {
+        return expectedValue.getTime() === coldValue.getTime();
       }
-      return warmValue === coldValue;
+      return expectedValue === coldValue;
     });
     const query = vi.fn(async (sql: string, params?: unknown[]) => {
       const statement = sql.trim();
@@ -884,20 +907,28 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
         if (targetColumns.length !== sourceExpressions.length) {
           throw new Error('production evidence-copy target/source projection lengths differ');
         }
-        const copied = { ...persistedCold } as RehydrateManifestRow & Record<string, unknown>;
-        for (const field of proofFields) {
+        const copied: Partial<Record<EqualityField, unknown>> = {};
+        for (const field of equalityFields) {
           const position = targetColumns.indexOf(field);
-          if (position >= 0 && sourceExpressions[position] === field) copied[field] = warmManifest[field];
+          if (position < 0) continue;
+          const sourceExpression = sourceExpressions[position];
+          if (sourceExpression === field) copied[field] = warmEvidence[field];
+          if (field === 'tier' && sourceExpression === "'cold'") copied[field] = 'cold';
         }
         if (corruptCopiedProof) copied.full_row_sha256 = 'mismatched-full-row-proof';
-        persistedCold = copied;
+        persistedColdEvidence = copied;
+        persistedCold = {
+          ...persistedCold,
+          ...Object.fromEntries(proofFields.map((field) => [field, copied[field] ?? null])),
+        };
         return { rows: [] };
       }
       if (sql.startsWith('SELECT EXISTS')) {
         events.push('proof-compare');
-        for (const field of proofFields) {
+        for (const field of equalityFields.filter((candidate) => candidate !== 'tier')) {
           expect(sql).toMatch(new RegExp(`cold\\.${field}[\\s\\S]{1,50}warm\\.${field}`));
         }
+        expect(sql).toMatch(/cold\.tier\s*=\s*'cold'/);
         return { rows: [{ exact: proofMatches() }] };
       }
       if (sql.startsWith('UPDATE data_archive_manifest')) {
@@ -946,6 +977,9 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     for (const field of proofFields) {
       expect(persistedCold[field]).toEqual(warmManifest[field]);
     }
+    for (const field of equalityFields) {
+      expect(persistedColdEvidence?.[field]).toEqual(expectedColdEvidence[field]);
+    }
     expect(storage.deleteWarm).toHaveBeenCalledTimes(1);
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-snapshot-cold-restore-'));
@@ -968,6 +1002,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
 
     events.length = 0;
     persistedCold = null;
+    persistedColdEvidence = null;
     warmMigrated = false;
     corruptCopiedProof = true;
     storage.deleteWarm.mockClear();
