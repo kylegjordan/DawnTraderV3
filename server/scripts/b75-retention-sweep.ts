@@ -908,6 +908,9 @@ export interface SnapshotArchiveOutcome {
   bytesCompressed: number;
   reused: boolean;
   selector: XstockSnapshotSelector;
+  exportDurationMs: number;
+  archiveDurationMs: number;
+  readbackDurationMs: number;
 }
 
 /**
@@ -923,6 +926,7 @@ export async function archiveSnapshotObject(
   selector: XstockSnapshotSelector,
 ): Promise<SnapshotArchiveOutcome> {
   const provisionalLabel = `${selector.dayStart.toISOString().slice(0, 10)}-${RUN_ID}`;
+  const exportStartedAt = Date.now();
   const exportRes = await exportPartition(exportClient, {
     sourceTable: selector.table,
     partitionLabel: provisionalLabel,
@@ -932,6 +936,7 @@ export async function archiveSnapshotObject(
     compressionLevel: 6,
     snapshotSelector: selector,
   });
+  const exportDurationMs = Date.now() - exportStartedAt;
   if (!exportRes.snapshotProof) {
     try { fs.unlinkSync(exportRes.localPath); } catch { /* already absent */ }
     throw new Error(`[B75 sweep][snapshot] ${selector.table}: exporter omitted snapshot proof`);
@@ -943,135 +948,147 @@ export async function archiveSnapshotObject(
   const verifyPath = `${exportRes.localPath}.verify`;
 
   try {
-  const existing = await getManifestRow(ctlClient, selector.table, partitionLabel, 'warm');
-  const needs = decisionNeeds(existing);
-  const evidenceExists = existing && needs.evidence
-    ? await evidenceExistsForManifest(ctlClient, existing.id)
-    : false;
-  const decision = decideExistingCopy(existing, evidenceExists, proof.sourceRowCount > 0);
-  if (decision.kind === 'refuse') {
-    throw new NonProvenExistingCopyError(decision.reason, selector.table, partitionLabel);
-  }
-  if (decision.kind === 'skip') {
-    throw new Error(
-      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current eligible rows cannot skip ${decision.reason}`,
-    );
-  }
-
-  if (decision.kind === 'reuse') {
-    const stored = await getStoredSnapshotEvidence(ctlClient, existing!.id);
-    if (!stored || !storedSnapshotEvidenceMatches(stored, selector, proof)) {
-      throw new NonProvenExistingCopyError('reuse-count-changed', selector.table, partitionLabel);
+    const existing = await getManifestRow(ctlClient, selector.table, partitionLabel, 'warm');
+    const needs = decisionNeeds(existing);
+    const evidenceExists = existing && needs.evidence
+      ? await evidenceExistsForManifest(ctlClient, existing.id)
+      : false;
+    const decision = decideExistingCopy(existing, evidenceExists, proof.sourceRowCount > 0);
+    if (decision.kind === 'refuse') {
+      throw new NonProvenExistingCopyError(decision.reason, selector.table, partitionLabel);
     }
-    const remote = parseWarmStorageUri(existing!.storage_uri);
-    const download = await storage.downloadWarmFile(remote.bucket, remote.objectPath, verifyPath);
-    if (download.checksum !== existing!.checksum) {
+    if (decision.kind === 'skip') {
+      throw new Error(
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current eligible rows cannot skip ${decision.reason}`,
+      );
+    }
+
+    if (decision.kind === 'reuse') {
+      const stored = await getStoredSnapshotEvidence(ctlClient, existing!.id);
+      if (!stored || !storedSnapshotEvidenceMatches(stored, selector, proof)) {
+        throw new NonProvenExistingCopyError('reuse-count-changed', selector.table, partitionLabel);
+      }
+      const remote = parseWarmStorageUri(existing!.storage_uri);
+      const readbackStartedAt = Date.now();
+      const download = await storage.downloadWarmFile(remote.bucket, remote.objectPath, verifyPath);
+      if (download.checksum !== existing!.checksum) {
+        throw new ChecksumMismatchError(
+          `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: stored checksum=${existing!.checksum} readback=${download.checksum}`,
+        );
+      }
+      const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+      const readbackDurationMs = Date.now() - readbackStartedAt;
+      if (!snapshotProofMatches(downloadedProof, proof)) {
+        throw new ArchiveReadbackMismatchError(
+          `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current, stored and downloaded proofs differ`,
+        );
+      }
+      return {
+        manifestId: existing!.id,
+        partitionLabel,
+        proof,
+        provenObjectPath: verifyPath,
+        exportedPath: exportRes.localPath,
+        bytesCompressed: 0,
+        reused: true,
+        selector: { ...selector, rankingObservedAt: stored.ranking_observed_at },
+        exportDurationMs,
+        archiveDurationMs: 0,
+        readbackDurationMs,
+      };
+    }
+
+    const manifestId = await upsertManifestPending(
+      ctlClient,
+      selector.table,
+      partitionLabel,
+      storageUri,
+      selector.dayStart,
+      selector.dayEnd,
+    );
+    const fileSize = fs.statSync(exportRes.localPath).size;
+    if (fileSize > HARD_CAP_BYTES) {
+      throw new Error(
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: compressed size ${fileSize}B exceeds ${HARD_CAP_BYTES}B`,
+      );
+    }
+    const archiveStartedAt = Date.now();
+    const upload = await storage.uploadWarmFile(cfg.warmBucket, objPath, exportRes.localPath, {
+      size: fileSize,
+      checksum: exportRes.checksum,
+    });
+    const archiveDurationMs = Date.now() - archiveStartedAt;
+    const readbackStartedAt = Date.now();
+    const download = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
+    if (upload.checksum !== exportRes.checksum || download.checksum !== exportRes.checksum) {
       throw new ChecksumMismatchError(
-        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: stored checksum=${existing!.checksum} readback=${download.checksum}`,
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: upload/readback checksum mismatch`,
       );
     }
     const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+    const readbackDurationMs = Date.now() - readbackStartedAt;
     if (!snapshotProofMatches(downloadedProof, proof)) {
       throw new ArchiveReadbackMismatchError(
-        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current, stored and downloaded proofs differ`,
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: downloaded key/content proof mismatch`,
       );
     }
+
+    const evidence: ExactArchiveEvidenceInput = {
+      manifestId,
+      sourceTable: selector.table,
+      partitionLabel,
+      tier: 'warm',
+      cursorContract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+      sourceRowCount: proof.sourceRowCount,
+      exportedRowCount: exportRes.rowCount,
+      downloadedRowCount: downloadedProof.sourceRowCount,
+      objectChecksum: exportRes.checksum,
+      snapshot: {
+        ...proof,
+        cutoffAt: selector.cutoffAt,
+        rankingObservedAt: selector.rankingObservedAt,
+        keepFloorRows: selector.keepFloorRows,
+        dayStart: selector.dayStart,
+        dayEnd: selector.dayEnd,
+      },
+    };
+    assertExactArchiveEquality(evidence);
+    await updateManifestUploaded(
+      ctlClient,
+      manifestId,
+      exportRes.rowCount,
+      exportRes.bytesCompressed,
+      exportRes.minTs,
+      exportRes.maxTs,
+      exportRes.checksum,
+      exportRes.bytesUncompressed,
+    );
+    await ctlClient.query('BEGIN');
+    try {
+      await recordExactArchiveEvidence(ctlClient, evidence);
+      await ctlClient.query(
+        `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
+        [manifestId, PROVEN_BASIS],
+      );
+      await updateManifestVerified(ctlClient, manifestId);
+      await ctlClient.query('COMMIT');
+    } catch (err) {
+      await ctlClient.query('ROLLBACK').catch(() => {});
+      throw err;
+    }
     return {
-      manifestId: existing!.id,
+      manifestId,
       partitionLabel,
       proof,
       provenObjectPath: verifyPath,
       exportedPath: exportRes.localPath,
-      bytesCompressed: 0,
-      reused: true,
-      selector: { ...selector, rankingObservedAt: stored.ranking_observed_at },
+      bytesCompressed: exportRes.bytesCompressed,
+      reused: false,
+      selector,
+      exportDurationMs,
+      archiveDurationMs,
+      readbackDurationMs,
     };
-  }
-
-  const manifestId = await upsertManifestPending(
-    ctlClient,
-    selector.table,
-    partitionLabel,
-    storageUri,
-    selector.dayStart,
-    selector.dayEnd,
-  );
-  const fileSize = fs.statSync(exportRes.localPath).size;
-  if (fileSize > HARD_CAP_BYTES) {
-    throw new Error(
-      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: compressed size ${fileSize}B exceeds ${HARD_CAP_BYTES}B`,
-    );
-  }
-  const upload = await storage.uploadWarmFile(cfg.warmBucket, objPath, exportRes.localPath, {
-    size: fileSize,
-    checksum: exportRes.checksum,
-  });
-  const download = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
-  if (upload.checksum !== exportRes.checksum || download.checksum !== exportRes.checksum) {
-    throw new ChecksumMismatchError(
-      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: upload/readback checksum mismatch`,
-    );
-  }
-  const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
-  if (!snapshotProofMatches(downloadedProof, proof)) {
-    throw new ArchiveReadbackMismatchError(
-      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: downloaded key/content proof mismatch`,
-    );
-  }
-
-  const evidence: ExactArchiveEvidenceInput = {
-    manifestId,
-    sourceTable: selector.table,
-    partitionLabel,
-    tier: 'warm',
-    cursorContract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
-    sourceRowCount: proof.sourceRowCount,
-    exportedRowCount: exportRes.rowCount,
-    downloadedRowCount: downloadedProof.sourceRowCount,
-    objectChecksum: exportRes.checksum,
-    snapshot: {
-      ...proof,
-      cutoffAt: selector.cutoffAt,
-      rankingObservedAt: selector.rankingObservedAt,
-      keepFloorRows: selector.keepFloorRows,
-      dayStart: selector.dayStart,
-      dayEnd: selector.dayEnd,
-    },
-  };
-  assertExactArchiveEquality(evidence);
-  await updateManifestUploaded(
-    ctlClient,
-    manifestId,
-    exportRes.rowCount,
-    exportRes.bytesCompressed,
-    exportRes.minTs,
-    exportRes.maxTs,
-    exportRes.checksum,
-    exportRes.bytesUncompressed,
-  );
-  await ctlClient.query('BEGIN');
-  try {
-    await recordExactArchiveEvidence(ctlClient, evidence);
-    await ctlClient.query(
-      `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
-      [manifestId, PROVEN_BASIS],
-    );
-    await updateManifestVerified(ctlClient, manifestId);
-    await ctlClient.query('COMMIT');
-  } catch (err) {
-    await ctlClient.query('ROLLBACK').catch(() => {});
-    throw err;
-  }
-  return {
-    manifestId,
-    partitionLabel,
-    proof,
-    provenObjectPath: verifyPath,
-    exportedPath: exportRes.localPath,
-    bytesCompressed: exportRes.bytesCompressed,
-    reused: false,
-    selector,
-  };
   } catch (err) {
     try { fs.unlinkSync(verifyPath); } catch { /* already absent */ }
     try { fs.unlinkSync(exportRes.localPath); } catch { /* already absent */ }
@@ -1081,7 +1098,12 @@ export async function archiveSnapshotObject(
 
 export interface SnapshotDeleteOutcome {
   deletedRows: number;
+  provenKeyLoadDurationMs: number;
+  lockWaitDurationMs: number;
+  compareDeleteDurationMs: number;
+  commitDurationMs: number;
   lockedDurationMs: number;
+  postCommitProofDurationMs: number;
 }
 
 export async function deleteSnapshotProvenObject(
@@ -1089,24 +1111,33 @@ export async function deleteSnapshotProvenObject(
   archived: SnapshotArchiveOutcome,
 ): Promise<SnapshotDeleteOutcome> {
   const selector = archived.selector;
+  const provenKeyLoadStartedAt = Date.now();
   const downloadedProof = await loadSnapshotProvenKeys(client, archived.provenObjectPath);
+  const provenKeyLoadDurationMs = Date.now() - provenKeyLoadStartedAt;
   if (!snapshotProofMatches(downloadedProof, archived.proof)) {
     throw new ArchiveReadbackMismatchError(
       `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: pre-lock object proof changed`,
     );
   }
 
-  const lockedAt = Date.now();
+  let lockWaitDurationMs = 0;
+  let compareDeleteDurationMs = 0;
+  let commitDurationMs = 0;
+  let lockedDurationMs = 0;
   let deletedRows: number;
   await client.query('BEGIN');
   try {
     await client.query("SET LOCAL lock_timeout = '1s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
+    const lockStartedAt = Date.now();
     await client.query(`LOCK TABLE ${quoteIdent(selector.table)} IN SHARE MODE`);
+    lockWaitDurationMs = Date.now() - lockStartedAt;
+    const compareDeleteStartedAt = Date.now();
     const result = await client.query(
       snapshotLockedDeleteSql(selector),
       snapshotLockedDeleteParams(selector, archived.proof, archived.manifestId),
     );
+    compareDeleteDurationMs = Date.now() - compareDeleteStartedAt;
     const row = result.rows[0];
     deletedRows = Number(row?.deleted_row_count ?? -1);
     if (row?.proof_matches !== true
@@ -1117,21 +1148,33 @@ export async function deleteSnapshotProvenObject(
         `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: locked proof/delete gate refused`,
       );
     }
+    const commitStartedAt = Date.now();
     await client.query('COMMIT');
+    commitDurationMs = Date.now() - commitStartedAt;
+    lockedDurationMs = Date.now() - lockStartedAt;
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});
     throw err;
   }
-  const lockedDurationMs = Date.now() - lockedAt;
+  const postCommitProofStartedAt = Date.now();
   const remaining = Number((await client.query(
     snapshotProvenKeyAbsenceSql(selector.table),
   )).rows[0]?.remaining_rows ?? -1);
+  const postCommitProofDurationMs = Date.now() - postCommitProofStartedAt;
   if (remaining !== 0) {
     throw new ArchiveReadbackMismatchError(
       `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: ${remaining} proven key(s) remain after commit`,
     );
   }
-  return { deletedRows, lockedDurationMs };
+  return {
+    deletedRows,
+    provenKeyLoadDurationMs,
+    lockWaitDurationMs,
+    compareDeleteDurationMs,
+    commitDurationMs,
+    lockedDurationMs,
+    postCommitProofDurationMs,
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1863,7 +1906,11 @@ export async function sweepSnapshotTable(
         console.log(
           `[B75 sweep][snapshot] ${table}/${archived.partitionLabel}: `
           + `${archived.reused ? 'reused' : 'archived'} rows=${deletion.deletedRows} `
-          + `bytes_gzip=${archived.bytesCompressed} locked_ms=${deletion.lockedDurationMs}`,
+          + `bytes_gzip=${archived.bytesCompressed} export_ms=${archived.exportDurationMs} `
+          + `archive_ms=${archived.archiveDurationMs} readback_ms=${archived.readbackDurationMs} `
+          + `proven_key_load_ms=${deletion.provenKeyLoadDurationMs} lock_wait_ms=${deletion.lockWaitDurationMs} `
+          + `compare_delete_ms=${deletion.compareDeleteDurationMs} commit_ms=${deletion.commitDurationMs} `
+          + `locked_ms=${deletion.lockedDurationMs} post_commit_proof_ms=${deletion.postCommitProofDurationMs}`,
         );
       } catch (err) {
         failed = true;
