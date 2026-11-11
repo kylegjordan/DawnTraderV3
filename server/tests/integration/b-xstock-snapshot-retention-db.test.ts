@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import pg from 'pg';
+import path from 'node:path';
 import {
   appendSnapshotKey,
   snapshotLockedDeleteParams,
@@ -11,6 +13,7 @@ import {
   type XstockSnapshotProof,
   type XstockSnapshotSelector,
 } from '../../services/data-archive/xstock-snapshot-retention.js';
+import { exportPartition } from '../../services/data-archive/partition-exporter.js';
 
 // B-XSTOCK-SNAPSHOT-RETENTION P9: execute the shipped generated SQL on real
 // PostgreSQL. CI supplies the migrated service database; without one this suite
@@ -188,6 +191,46 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
     expect((await client.query(snapshotProvenKeyAbsenceSql(selector.table))).rows[0].remaining_rows).toBe('0');
   });
 
+  it('binds ranking observation to the export snapshot when a writer lands after discovery', async () => {
+    const discovery = await client.query(
+      `SELECT clock_timestamp() AS observed_at, count(*)::int AS n
+         FROM (${snapshotPopulationSql(selector)}) population`,
+      snapshotPopulationParams(selector),
+    );
+    expect(discovery.rows[0].n).toBe(2);
+
+    const writer = new pg.Client({ connectionString: url });
+    await writer.connect();
+    try {
+      await writer.query(`SET search_path TO ${schema}, public`);
+      await writer.query(`
+        INSERT INTO xstock_spot_ohlc_15m_snapshot
+          (symbol, bucket_ts, open, high, low, close, volume, source_bar_count, captured_at)
+        VALUES ('B-XSSR/USD', '2025-01-01T00:02:00Z', 1, 1, 1, 1, 1, 1, '2025-02-02T00:00:00Z')
+      `);
+    } finally {
+      await writer.end();
+    }
+
+    const exported = await exportPartition(client, {
+      sourceTable: selector.table,
+      partitionLabel: `writer-after-discovery-${process.pid}`,
+      rangeStart: selector.dayStart,
+      rangeEnd: selector.dayEnd,
+      timestampColumn: 'bucket_ts',
+      snapshotSelector: selector,
+    });
+    try {
+      expect(exported.snapshotProof?.sourceRowCount).toBe(3);
+      expect(exported.snapshotObservedAt).toBeInstanceOf(Date);
+      expect(exported.snapshotObservedAt!.getTime())
+        .toBeGreaterThanOrEqual(new Date(discovery.rows[0].observed_at).getTime());
+      expect(exported.snapshotObservedAt!.getTime()).not.toBe(selector.rankingObservedAt.getTime());
+    } finally {
+      fs.rmSync(exported.localPath, { force: true });
+    }
+  });
+
   it('refuses same-count key replacement, content replacement and recent floor displacement before deletion', async () => {
     const mutations = [
       async () => {
@@ -272,5 +315,63 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
     await expect(client.query('TRUNCATE data_archive_exact_evidence')).rejects.toThrow(/append-only/);
     await client.query('ROLLBACK').catch(() => {});
     expect((await client.query('SELECT count(*)::int AS n FROM data_archive_exact_evidence')).rows[0].n).toBe(1);
+  });
+
+  it('preserves seeded disk-file cursor evidence through the forward migration and rollback', async () => {
+    await client.query('DROP TABLE data_archive_exact_evidence CASCADE');
+    await client.query('DROP TABLE IF EXISTS module_constants CASCADE');
+    await client.query(`
+      CREATE TABLE module_constants (
+        module_name text NOT NULL, exchange text NOT NULL, asset_class text NOT NULL,
+        strategy text NOT NULL, regime text NOT NULL, constant_name text NOT NULL,
+        value jsonb NOT NULL, updated_by text NOT NULL, updated_at timestamptz NOT NULL,
+        UNIQUE (module_name, exchange, asset_class, strategy, regime, constant_name)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE data_archive_exact_evidence (
+        source_table text NOT NULL,
+        partition_label text NOT NULL,
+        cursor_contract text NOT NULL,
+        CONSTRAINT data_archive_exact_evidence_cursor_contract_check
+          CHECK (cursor_contract IN (
+            'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid',
+            'text-ts-tiegroup-v1',
+            'disk-file-lines-v1'
+          ))
+      )
+    `);
+    await client.query(
+      `INSERT INTO data_archive_exact_evidence VALUES ('disk_file.exports', 'seed.ndjson', 'disk-file-lines-v1')`,
+    );
+
+    const migrationSql = fs.readFileSync(
+      path.resolve(process.cwd(), 'drizzle/migrations/2026-11-11-b-xstock-snapshot-retention.sql'),
+      'utf8',
+    ).replace(/^\s*BEGIN;\s*/, '').replace(/\s*COMMIT;\s*$/, '');
+    const rollbackSql = fs.readFileSync(
+      path.resolve(process.cwd(), 'drizzle/migrations/2026-11-11-b-xstock-snapshot-retention-rollback.sql'),
+      'utf8',
+    ).replace(/^\s*BEGIN;\s*/, '').replace(/\s*COMMIT;\s*$/, '');
+
+    await client.query(migrationSql);
+    expect((await client.query(
+      "SELECT count(*)::int AS n FROM data_archive_exact_evidence WHERE cursor_contract = 'disk-file-lines-v1'",
+    )).rows[0].n).toBe(1);
+    await client.query(rollbackSql);
+    await client.query(
+      `INSERT INTO data_archive_exact_evidence VALUES ('disk_file.exports', 'second.ndjson', 'disk-file-lines-v1')`,
+    );
+    expect((await client.query(
+      "SELECT count(*)::int AS n FROM data_archive_exact_evidence WHERE cursor_contract = 'disk-file-lines-v1'",
+    )).rows[0].n).toBe(2);
+    const selectorColumns = await client.query(`
+      SELECT count(*)::int AS n
+        FROM information_schema.columns
+       WHERE table_schema = current_schema()
+         AND table_name = 'data_archive_exact_evidence'
+         AND column_name IN ('selector_contract', 'ordered_key_sha256', 'full_row_sha256')
+    `);
+    expect(selectorColumns.rows[0].n).toBe(0);
   });
 });

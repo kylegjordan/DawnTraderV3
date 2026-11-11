@@ -71,6 +71,7 @@ ALTER TABLE data_archive_exact_evidence
   ADD CONSTRAINT data_archive_exact_evidence_cursor_contract_check CHECK (cursor_contract IN (
     'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid',
     'text-ts-tiegroup-v1',
+    'disk-file-lines-v1',
     'xstock-snapshot-jsonb-v1:symbol+bucket_ts'
   ));
 

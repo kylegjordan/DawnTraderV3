@@ -189,7 +189,8 @@ export async function rotateColdCandidate(
   const ctlClient = deps.createClient();
   await ctlClient.connect();
   try {
-    await ctlClient.query(
+    await ctlClient.query('BEGIN');
+    const coldManifest = await ctlClient.query<{ id: string; completeness_basis: string | null }>(
       `INSERT INTO data_archive_manifest (
          source_table, partition_label, tier, state, storage_uri,
          min_ts, max_ts, date_range_start, date_range_end,
@@ -203,15 +204,77 @@ export async function rotateColdCandidate(
          WHERE id = $1
          ON CONFLICT (source_table, partition_label, tier) DO UPDATE
            SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
-               completeness_basis = EXCLUDED.completeness_basis`,
+               completeness_basis = EXCLUDED.completeness_basis
+       RETURNING id, completeness_basis`,
       [candidate.id, coldUri],
     );
+    const coldManifestRow = coldManifest.rows[0];
+    if (!coldManifestRow) {
+      throw new Error(`[B75 rotator] warm manifest ${candidate.id} disappeared before cold manifest creation`);
+    }
+    if (coldManifestRow.completeness_basis === 'source-count-matched') {
+      await ctlClient.query(
+        `INSERT INTO data_archive_exact_evidence (
+           manifest_id, source_table, partition_label, tier,
+           source_row_count, exported_row_count, downloaded_row_count,
+           cursor_contract, producing_build_sha, object_checksum,
+           selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+           keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
+         )
+         SELECT $2, source_table, partition_label, 'cold',
+                source_row_count, exported_row_count, downloaded_row_count,
+                cursor_contract, producing_build_sha, object_checksum,
+                selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+                keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
+           FROM data_archive_exact_evidence
+          WHERE manifest_id = $1
+         ON CONFLICT (manifest_id) DO NOTHING`,
+        [candidate.id, coldManifestRow.id],
+      );
+      const proof = await ctlClient.query<{ exact: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+             FROM data_archive_exact_evidence warm
+             JOIN data_archive_exact_evidence cold
+               ON cold.manifest_id = $2
+              AND cold.source_table = warm.source_table
+              AND cold.partition_label = warm.partition_label
+              AND cold.tier = 'cold'
+              AND cold.source_row_count = warm.source_row_count
+              AND cold.exported_row_count = warm.exported_row_count
+              AND cold.downloaded_row_count = warm.downloaded_row_count
+              AND cold.cursor_contract = warm.cursor_contract
+              AND cold.producing_build_sha = warm.producing_build_sha
+              AND cold.object_checksum = warm.object_checksum
+              AND cold.selector_contract IS NOT DISTINCT FROM warm.selector_contract
+              AND cold.selector_version IS NOT DISTINCT FROM warm.selector_version
+              AND cold.frozen_cutoff_at IS NOT DISTINCT FROM warm.frozen_cutoff_at
+              AND cold.ranking_observed_at IS NOT DISTINCT FROM warm.ranking_observed_at
+              AND cold.keep_floor_rows IS NOT DISTINCT FROM warm.keep_floor_rows
+              AND cold.day_start IS NOT DISTINCT FROM warm.day_start
+              AND cold.day_end IS NOT DISTINCT FROM warm.day_end
+              AND cold.ordered_key_sha256 IS NOT DISTINCT FROM warm.ordered_key_sha256
+              AND cold.full_row_sha256 IS NOT DISTINCT FROM warm.full_row_sha256
+            WHERE warm.manifest_id = $1
+         ) AS exact`,
+        [candidate.id, coldManifestRow.id],
+      );
+      if (proof.rows[0]?.exact !== true) {
+        throw new Error(
+          `[B75 rotator] proven warm object ${candidate.id} has no exact selector/equality proof for cold manifest ${coldManifestRow.id}`,
+        );
+      }
+    }
     await ctlClient.query(
       `UPDATE data_archive_manifest
          SET state = 'migrated', tier_changed_at = NOW()
        WHERE id = $1`,
       [candidate.id],
     );
+    await ctlClient.query('COMMIT');
+  } catch (err) {
+    await ctlClient.query('ROLLBACK').catch(() => {});
+    throw err;
   } finally {
     await ctlClient.end().catch(() => {});
   }

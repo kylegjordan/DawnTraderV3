@@ -20,29 +20,89 @@ interface SnapshotCompletenessSidecar {
   } | null;
 }
 
+export const XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX = 'xstock-snapshot-rehydrate-run/v1';
+export const XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE = 'xstock-snapshot-rehydrate-run.json';
+
+export interface SnapshotRehydrateRunIndexLabel {
+  partition_label: string;
+  manifest_id: string | null;
+  tier: string | null;
+  result: 'downloaded' | 'mismatch' | 'skipped-cold' | 'skipped';
+  output_file: string | null;
+  sidecar_file: string | null;
+  row_count: number;
+  min_ts: string | null;
+  max_ts: string | null;
+}
+
+export interface SnapshotRehydrateRunIndex {
+  contract: typeof XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX;
+  table: XstockSnapshotTable;
+  requested_from: string;
+  requested_to_exclusive: string;
+  restore_cold: boolean;
+  expected_label_count: number;
+  complete: boolean;
+  labels: SnapshotRehydrateRunIndexLabel[];
+}
+
 export interface ProvenRehydratedSnapshot {
   files: string[];
   rows: XstockSnapshotCanonicalRow[];
   proofs: XstockSnapshotProof[];
 }
 
-function snapshotFiles(inputPath: string, table: XstockSnapshotTable): string[] {
+function inputDirectory(inputPath: string): { directory: string; selectedFile: string | null } {
   const stat = fs.statSync(inputPath);
-  if (stat.isFile()) return [inputPath];
+  if (stat.isFile()) return { directory: path.dirname(inputPath), selectedFile: path.resolve(inputPath) };
   if (!stat.isDirectory()) throw new Error(`rehydrated snapshot input is neither a file nor directory: ${inputPath}`);
-  const prefix = `${table}_`;
-  return fs.readdirSync(inputPath)
-    .filter((name) => name.startsWith(prefix) && name.endsWith('.jsonl.gz'))
-    .sort()
-    .map((name) => path.join(inputPath, name));
+  return { directory: inputPath, selectedFile: null };
 }
 
 export async function loadProvenRehydratedSnapshot(
   inputPath: string,
   table: XstockSnapshotTable,
+  requiredRange?: { from: Date; toExclusive: Date },
 ): Promise<ProvenRehydratedSnapshot> {
-  const files = snapshotFiles(inputPath, table);
-  if (files.length === 0) throw new Error(`no rehydrated ${table} snapshot objects found at ${inputPath}`);
+  const { directory, selectedFile } = inputDirectory(inputPath);
+  const indexPath = path.join(directory, XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX_FILE);
+  if (!fs.existsSync(indexPath)) throw new Error(`missing rehydrate run index for ${inputPath}`);
+  const index = JSON.parse(fs.readFileSync(indexPath, 'utf8')) as SnapshotRehydrateRunIndex;
+  const requestedFrom = new Date(index.requested_from);
+  const requestedToExclusive = new Date(index.requested_to_exclusive);
+  if (index.contract !== XSTOCK_SNAPSHOT_REHYDRATE_RUN_INDEX
+      || index.table !== table
+      || index.complete !== true
+      || !Number.isFinite(requestedFrom.getTime())
+      || !Number.isFinite(requestedToExclusive.getTime())
+      || index.expected_label_count !== index.labels?.length
+      || index.labels.length === 0) {
+    throw new Error(`rehydrate run index is incomplete or invalid for ${table}: ${indexPath}`);
+  }
+  if (requiredRange && (requestedFrom.getTime() > requiredRange.from.getTime()
+      || requestedToExclusive.getTime() < requiredRange.toExclusive.getTime())) {
+    throw new Error(`rehydrate run index does not cover the required ${table} replay window`);
+  }
+
+  const files = index.labels.map((label) => {
+    if (label.result !== 'downloaded' || !label.output_file || !label.sidecar_file
+        || label.sidecar_file !== `${label.output_file}.completeness.json`) {
+      throw new Error(`rehydrate run index contains an incomplete label: ${label.partition_label}`);
+    }
+    const file = path.resolve(directory, label.output_file);
+    const sidecar = path.resolve(directory, label.sidecar_file);
+    if (path.dirname(file) !== path.resolve(directory) || path.dirname(sidecar) !== path.resolve(directory)) {
+      throw new Error(`rehydrate run index contains a path outside its output directory: ${label.partition_label}`);
+    }
+    if (!fs.existsSync(file) || !fs.existsSync(sidecar)) {
+      throw new Error(`rehydrate run index object is missing: ${label.partition_label}`);
+    }
+    return file;
+  });
+  if (new Set(files).size !== files.length) throw new Error('rehydrate run index repeats an output object');
+  if (selectedFile && (files.length !== 1 || files[0] !== selectedFile)) {
+    throw new Error('a single snapshot file cannot stand in for the complete rehydrate run');
+  }
 
   const rows: XstockSnapshotCanonicalRow[] = [];
   const proofs: XstockSnapshotProof[] = [];

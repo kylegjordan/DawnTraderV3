@@ -308,10 +308,13 @@ async function main(): Promise<void> {
 
   let rehydrated: RehydratedBarsBySymbol | null = null;
   if (B1A_REHYDRATED_INPUT) {
-    const loaded = await loadProvenRehydratedSnapshot(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE);
-    rehydrated = new Map();
     const rehydratedFromMs = Date.parse(REPLAY_START) - 60 * 60 * 60_000;
     const rehydratedToMs = Date.parse(REPLAY_END);
+    const loaded = await loadProvenRehydratedSnapshot(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE, {
+      from: new Date(rehydratedFromMs),
+      toExclusive: new Date(rehydratedToMs),
+    });
+    rehydrated = new Map();
     for (const row of loaded.rows) {
       const bucketMs = Date.parse(row.bucket_ts);
       if (bucketMs < rehydratedFromMs || bucketMs >= rehydratedToMs) continue;

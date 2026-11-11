@@ -231,6 +231,41 @@ export interface RunPrewarmOptions {
   symbols?: string[];
   dryRun?: boolean;
   connectionString?: string;
+  /** Test/embedded seam; production defaults to the writer's own application database client. */
+  lifecycleClient?: SnapshotLifecycleQueryClient;
+}
+
+export interface SnapshotLifecycleQueryClient {
+  query<T extends pg.QueryResultRow = any>(text: string, values?: any[]): Promise<pg.QueryResult<T>>;
+}
+
+/** Every snapshot writer must refuse lifecycle settings that would allow the
+ * retention lane to delete below a live consumer's required history. */
+export async function validateSnapshotLifecycleForPrewarm(
+  client: SnapshotLifecycleQueryClient,
+): Promise<void> {
+  const lifecycleKeys = xstockSnapshotLifecycleKeys();
+  const [exactRows, narrowRows] = await Promise.all([
+    client.query<{ constant_name: string; value: unknown }>(
+      `SELECT constant_name, value FROM module_constants
+        WHERE module_name = 'data_lifecycle'
+          AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
+          AND constant_name = ANY($1::text[])`,
+      [lifecycleKeys],
+    ),
+    client.query<{ constant_name: string }>(
+      `SELECT constant_name FROM module_constants
+        WHERE module_name = 'data_lifecycle'
+          AND constant_name = ANY($1::text[])
+          AND (exchange IS DISTINCT FROM '*' OR asset_class IS DISTINCT FROM '*'
+            OR strategy IS DISTINCT FROM '*' OR regime IS DISTINCT FROM '*')`,
+      [lifecycleKeys],
+    ),
+  ]);
+  parseXstockSnapshotLifecycleConfig(
+    new Map(exactRows.rows.map((row) => [row.constant_name, row.value])),
+    narrowRows.rows.map((row) => row.constant_name),
+  );
 }
 
 export interface RunPrewarmResult {
@@ -289,28 +324,7 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
   for (const interval of SNAPSHOT_INTERVALS) upsertsByInterval[interval.label] = 0;
 
   try {
-    const lifecycleKeys = xstockSnapshotLifecycleKeys();
-    const [exactRows, narrowRows] = await Promise.all([
-      pool.query<{ constant_name: string; value: unknown }>(
-        `SELECT constant_name, value FROM module_constants
-          WHERE module_name = 'data_lifecycle'
-            AND exchange = '*' AND asset_class = '*' AND strategy = '*' AND regime = '*'
-            AND constant_name = ANY($1::text[])`,
-        [lifecycleKeys],
-      ),
-      pool.query<{ constant_name: string }>(
-        `SELECT constant_name FROM module_constants
-          WHERE module_name = 'data_lifecycle'
-            AND constant_name = ANY($1::text[])
-            AND (exchange IS DISTINCT FROM '*' OR asset_class IS DISTINCT FROM '*'
-              OR strategy IS DISTINCT FROM '*' OR regime IS DISTINCT FROM '*')`,
-        [lifecycleKeys],
-      ),
-    ]);
-    parseXstockSnapshotLifecycleConfig(
-      new Map(exactRows.rows.map((row) => [row.constant_name, row.value])),
-      narrowRows.rows.map((row) => row.constant_name),
-    );
+    await validateSnapshotLifecycleForPrewarm(options.lifecycleClient ?? pool);
 
     for (const symbol of targetSymbols) {
       let symbolHadData = false;
@@ -401,6 +415,9 @@ export async function runAvailabilityPrewarm(
     `${lookbackDays} days lookback, dry-run=${dryRun}`,
   );
   const startMs = Date.now();
+
+  const lifecycleClient = options.lifecycleClient ?? (await import('../server/db.js')).pool;
+  await validateSnapshotLifecycleForPrewarm(lifecycleClient);
 
   // Dynamic imports keep dotenv initialization ahead of server/db.ts for the
   // standalone CLI while reusing the already-initialized pool in lifecycle.
