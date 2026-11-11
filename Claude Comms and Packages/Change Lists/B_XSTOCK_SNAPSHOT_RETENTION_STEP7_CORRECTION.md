@@ -48,3 +48,26 @@ The first mutation-enabled object then exposed a separate final-lock cost: the f
 The same supervised run independently received a transient Cloudflare 520 during a later sixty-minute warm upload. Before that transport failure, 28 objects / 138,501 rows completed archive, downloaded readback, exact proof, locked delete, post-delete absence, and one table-level vacuum; observed locked durations were 604–1,518 ms. The run stopped that table on the failed object and exited nonzero. Mutation was returned to false at `2026-11-11T19:10:33.550736Z` before any retry. A positive-control storage listing found all 28 completed objects and no failed `2026-06-16` object; the exact failed-attempt manifest `18caf058-cad2-4740-81f2-d1de2f8254b8` was still `pending` with row count zero, empty checksum, `unrecorded` completeness and zero exact-evidence rows. That one empty control row was removed in a guarded transaction so the supervised retry can recreate it; all 28 active controls remained.
 
 REVIEWER: claim-only · what objects settle whether the inherited two-minute bound caused the failure and whether the dedicated 300/310-second client bounds preserve the five-second delete gate; what other states remain consistent · HIT: completion and exact canceled statement were unproven, five seconds bounded a statement rather than whole transaction, and the original test did not exercise client construction · re-derived yes — live role `SHOW statement_timeout=2min`, run/alert `c82fb1fa…`/`b54dd656…`, source/test objects; claims narrowed, actual client constructed in test, stage logging added, same live rerun retained as the completion gate
+
+## Completed Step 7 live result (2026-11-11)
+
+The optimized ranked-floor correction landed at `fbbe0b5e4af86be3a87fa0d6c2362f3e7bc899e4`, was approved by Coltrane at that exact ref, passed all four jobs in CI run `43086693898`, and was deployed to staging at `2026-11-11T19:26:33Z` by `codex-c`. The deploy resumed the engine after a 14-second bounded check-failure window; the deployed repository ref and build stamp both matched. UI verification is N/A because this server-side lifecycle batch has no UI surface or UI consumer of the snapshot/archive control tables.
+
+The supervised apply retained the original one-second lock-acquisition and five-second locked-statement bounds. Natural writer activity sometimes won the lock, so the affected table refused that object without deleting it and the same proven backlog was resumed in the next supervised invocation rather than weakening the bounds. Across the completed invocations:
+
+- the 15-minute lane deleted exactly `231,556 + 447,677 + 431,930 + 434,855 + 251,951 + 365,694 = 2,163,663` rows, equal to its full pre-registered eligible population;
+- the 60-minute lane deleted exactly `138,501 + 435,022 = 573,523` rows, equal to its full pre-registered eligible population;
+- the terminal run `be8fdd16-0ed3-4417-ae39-060c459ff0c0` ended with `snapshot_deleted=365694 snapshot_failed=0`; and
+- ordinary `VACUUM` made the deleted pages reusable but, as expected, did not claim an operating-system allocation reduction while live writers continued.
+
+The final independent database read found zero remaining eligible rows and zero eligible symbols in both snapshot tables under the same frozen `2026-10-12T00:00:00Z` cutoff and ranked floors. Its positive controls found 495 represented symbols in each live table, plus 100 active 15-minute manifests covering 2,163,663 rows and 111 active 60-minute manifests covering 573,523 rows. Every one of those 211 manifests has one exact-evidence row with source, exported, and downloaded counts equal and both ordered-key and full-row digests present.
+
+The live snapshot writers continued after the apply boundary: a later read found 11,281 new 15-minute captures and 360 new 60-minute captures after `2026-11-11T19:47:47.411Z`. The immediately registered post-writer retention run `793f45b9-eaef-494d-98a1-a92130701686` then found no new eligible object and ended `snapshot_deleted=0 snapshot_failed=0` in 1.887 seconds. The mutation switch remains enabled for normal scheduled lifecycle work.
+
+The availability anchor remained `2026-11-09T00:05:00Z` under `b-xstock-bar-availability-r2-rerun`. The pre/post census showed no loss of availability or provenance state: revision events, flush admissions/completions, writer boots/handoffs, and archive evidence all advanced or held; the archive-evidence population increased by exactly 211, matching the 211 completed objects. KD-19 alert `7e20ed0f-692a-4899-8af3-c3db071bd97a`, the availability final gate `3306c5c3-70d7-44c8-8e6f-44bb728417e8`, and daily tally alerts `507072de-132a-49f1-8c69-47a669985a41`, `0bf1414d-0630-42bd-bd08-1a038b5460a1`, and `39fa19de-21de-4331-b907-2c359cdda1f3` remain unacknowledged in their existing event-wait states. The two transient retention-failure alerts resolved only after their lanes completed.
+
+### Known limits carried into Step 8
+
+- The result proves the registered backlog and the next post-writer run; it does not predict future storage or database outages.
+- Lock contention remains deliberately fail-closed. A busy writer can defer one object to the next run, but cannot authorize an unproved delete.
+- Ordinary vacuum reuses space inside the database and is not a claim that allocated files shrink immediately.
