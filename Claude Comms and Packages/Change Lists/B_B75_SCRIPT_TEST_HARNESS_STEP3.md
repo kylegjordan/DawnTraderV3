@@ -94,6 +94,12 @@ The prior staging record and staging HEAD both resolved to `957b13fde2fdb9b9c127
 
 `REVIEWER: claim-only · name the objects that settle whether bounded deployed fake-I/O/import evidence proves the four import guards and approved safety gates without a real archive action, and name other states consistent with them · HIT — exact deployed-ref anchoring plus the fresh-import spies, direct-entry/wrapper positive controls, complete 42-case census and ordered fake events are the settling objects; those objects remain consistent with production provider/credential/scheduler/concurrency failures and prove no real end-to-end archive outcome · re-derived yes (items 1–6 and pre-audit P7/P9 preserve exactly that boundary)`
 
+## Step 8 — independent second-pass verification
+
+Coltrane **CONFIRMED** exact evidence ref `427df5e5989129da3e88f776a4d2c7ad3f2b6563` and returned **Step 8 PASS within the approved fake-I/O/import boundary**. He independently re-read the deploy record and deployed repository before and after his run, reproduced the credential-isolated **42 of 42 cases in 1 test file**, reproduced the separate `IMPORT_OK=4` process with no command/refusal/file/exit output, and measured **0 residual `/tmp/b75-harness-*` directories** after the same run positively named three private test directories.
+
+His independent runtime population contained exactly **1 online DawnTrader process**, restart count 689 and unstable restarts 0; liveness returned both engine booleans true and the exact deployed ref `76f88f48e76b4314fc065e1e9686f51792df2c11`. He explicitly preserved the same boundary as Step 7: the evidence proves the deployed fake seams and import guard, not live provider, scheduler, credential, concurrency or real archive/delete behaviour. No correction was requested.
+
 ## Load-bearing diff excerpts
 
 ### A. Importing a command no longer executes it
