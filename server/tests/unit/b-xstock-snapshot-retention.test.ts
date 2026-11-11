@@ -763,29 +763,99 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     const checksum = crypto.createHash('sha256').update(compressed).digest('hex');
     const proof = await inspectGzipSnapshotJsonl(source);
     const snap = selector();
-    let proofCopied = false;
-    const query = vi.fn(async (sql: string) => {
+    const warmManifest: RehydrateManifestRow = {
+      id: 'warm-manifest-1', partition_label: snapshotDayLabel(snap.dayStart, proof.orderedKeySha256),
+      tier: 'warm', state: 'active', storage_uri: 'supabase://warm/snapshot.jsonl.gz',
+      row_count: 1, bytes_compressed: compressed.length, min_ts: snap.dayStart, max_ts: snap.dayEnd,
+      checksum, completeness_basis: 'source-count-matched', format: 'jsonl.gz',
+      original_partition_size_bytes: null, cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+      selector_contract: XSTOCK_SNAPSHOT_SELECTOR_CONTRACT, selector_version: 1,
+      frozen_cutoff_at: snap.cutoffAt, ranking_observed_at: snap.rankingObservedAt,
+      keep_floor_rows: snap.keepFloorRows, day_start: snap.dayStart, day_end: snap.dayEnd,
+      ordered_key_sha256: proof.orderedKeySha256, full_row_sha256: proof.fullRowSha256,
+    };
+    const proofFields = [
+      'cursor_contract', 'selector_contract', 'selector_version', 'frozen_cutoff_at',
+      'ranking_observed_at', 'keep_floor_rows', 'day_start', 'day_end',
+      'ordered_key_sha256', 'full_row_sha256',
+    ] as const satisfies readonly (keyof RehydrateManifestRow)[];
+    const events: string[] = [];
+    let persistedCold: RehydrateManifestRow | null = null;
+    let warmMigrated = false;
+    let corruptCopiedProof = false;
+    const proofMatches = (): boolean => persistedCold !== null && proofFields.every((field) => {
+      const warmValue = warmManifest[field];
+      const coldValue = persistedCold?.[field];
+      if (warmValue instanceof Date && coldValue instanceof Date) {
+        return warmValue.getTime() === coldValue.getTime();
+      }
+      return warmValue === coldValue;
+    });
+    const query = vi.fn(async (sql: string, params?: unknown[]) => {
+      const statement = sql.trim();
+      if (statement === 'BEGIN') {
+        events.push('begin');
+        return { rows: [] };
+      }
       if (sql.startsWith('INSERT INTO data_archive_manifest')) {
+        events.push('cold-manifest');
+        persistedCold = {
+          ...warmManifest,
+          id: 'cold-manifest-1',
+          tier: 'cold',
+          state: 'active',
+          storage_uri: String(params?.[1]),
+        };
         return { rows: [{ id: 'cold-manifest-1', completeness_basis: 'source-count-matched' }] };
       }
       if (sql.startsWith('INSERT INTO data_archive_exact_evidence')) {
-        proofCopied = true;
+        events.push('proof-copy');
+        if (!persistedCold) throw new Error('cold manifest must exist before proof copy');
+        persistedCold = {
+          ...persistedCold,
+          cursor_contract: warmManifest.cursor_contract,
+          selector_contract: warmManifest.selector_contract,
+          selector_version: warmManifest.selector_version,
+          frozen_cutoff_at: warmManifest.frozen_cutoff_at,
+          ranking_observed_at: warmManifest.ranking_observed_at,
+          keep_floor_rows: warmManifest.keep_floor_rows,
+          day_start: warmManifest.day_start,
+          day_end: warmManifest.day_end,
+          ordered_key_sha256: warmManifest.ordered_key_sha256,
+          full_row_sha256: corruptCopiedProof ? 'mismatched-full-row-proof' : warmManifest.full_row_sha256,
+        };
         return { rows: [] };
       }
-      if (sql.startsWith('SELECT EXISTS')) return { rows: [{ exact: proofCopied }] };
+      if (sql.startsWith('SELECT EXISTS')) {
+        events.push('proof-compare');
+        return { rows: [{ exact: proofMatches() }] };
+      }
+      if (sql.startsWith('UPDATE data_archive_manifest')) {
+        events.push('warm-migrate');
+        warmMigrated = true;
+        return { rows: [] };
+      }
+      if (statement === 'COMMIT') {
+        events.push('commit');
+        return { rows: [] };
+      }
+      if (statement === 'ROLLBACK') {
+        events.push('rollback');
+        return { rows: [] };
+      }
       return { rows: [] };
     });
     const storage = {
       downloadWarm: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
       uploadCold: vi.fn(async () => ({ checksum })),
       downloadCold: vi.fn(async () => ({ checksum, data: compressed, bytes: compressed.length })),
-      deleteWarm: vi.fn(async () => {}),
+      deleteWarm: vi.fn(async () => { events.push('delete-warm'); }),
     };
     await rotateColdCandidate({
-      id: 'warm-manifest-1', source_table: snap.table,
-      partition_label: snapshotDayLabel(snap.dayStart, proof.orderedKeySha256),
-      storage_uri: 'supabase://warm/snapshot.jsonl.gz', row_count: 1,
-      bytes_compressed: compressed.length, checksum, created_at: new Date('2026-10-02T00:00:00Z'),
+      id: warmManifest.id, source_table: snap.table, partition_label: warmManifest.partition_label,
+      storage_uri: warmManifest.storage_uri, row_count: warmManifest.row_count,
+      bytes_compressed: warmManifest.bytes_compressed, checksum,
+      created_at: new Date('2026-10-02T00:00:00Z'),
     }, {
       warmRetentionDays: 30, perTableWarmRetentionDays: new Map(), coldRotatorDryRun: false,
       warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
@@ -797,7 +867,15 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
         query,
       } as never),
     });
-    expect(proofCopied).toBe(true);
+    expect(warmMigrated).toBe(true);
+    expect(events).toEqual([
+      'begin', 'cold-manifest', 'proof-copy', 'proof-compare', 'warm-migrate', 'commit', 'delete-warm',
+    ]);
+    expect(persistedCold).not.toBeNull();
+    if (!persistedCold) throw new Error('rotation did not persist a cold manifest');
+    for (const field of proofFields) {
+      expect(persistedCold[field]).toEqual(warmManifest[field]);
+    }
     expect(storage.deleteWarm).toHaveBeenCalledTimes(1);
 
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'xstock-snapshot-cold-restore-'));
@@ -807,17 +885,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       table: snap.table, from: snap.dayStart, to: new Date(snap.dayEnd.getTime() - 1),
       out, restoreCold: true, diskFile: false,
     };
-    const manifest: RehydrateManifestRow = {
-      id: 'cold-manifest-1', partition_label: snapshotDayLabel(snap.dayStart, proof.orderedKeySha256),
-      tier: 'cold', state: 'active', storage_uri: `b2://cold/${snap.table}/snapshot.jsonl.gz`,
-      row_count: 1, bytes_compressed: compressed.length, min_ts: snap.dayStart, max_ts: snap.dayEnd,
-      checksum, completeness_basis: 'source-count-matched', format: 'jsonl.gz', original_partition_size_bytes: null,
-      cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
-      selector_contract: XSTOCK_SNAPSHOT_SELECTOR_CONTRACT, selector_version: 1,
-      frozen_cutoff_at: snap.cutoffAt, ranking_observed_at: snap.rankingObservedAt,
-      keep_floor_rows: snap.keepFloorRows, day_start: snap.dayStart, day_end: snap.dayEnd,
-      ordered_key_sha256: proof.orderedKeySha256, full_row_sha256: proof.fullRowSha256,
-    };
+    const manifest = persistedCold;
     const choice = { label: manifest.partition_label, download: manifest, all: [manifest] };
     const result = await rehydrateChosenObject(args, choice, {
       downloadWarmFile: vi.fn(), isColdConfigured: vi.fn(() => true),
@@ -827,5 +895,30 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     await expect(loadProvenRehydratedSnapshot(out, snap.table, {
       from: snap.dayStart, toExclusive: snap.dayEnd,
     })).resolves.toMatchObject({ rows: [canonicalRow()], proofs: [proof] });
+
+    events.length = 0;
+    persistedCold = null;
+    warmMigrated = false;
+    corruptCopiedProof = true;
+    storage.deleteWarm.mockClear();
+    await expect(rotateColdCandidate({
+      id: warmManifest.id, source_table: snap.table, partition_label: warmManifest.partition_label,
+      storage_uri: warmManifest.storage_uri, row_count: warmManifest.row_count,
+      bytes_compressed: warmManifest.bytes_compressed, checksum,
+      created_at: new Date('2026-10-02T00:00:00Z'),
+    }, {
+      warmRetentionDays: 30, perTableWarmRetentionDays: new Map(), coldRotatorDryRun: false,
+      warmBucket: 'warm', warmPrefix: 'archive', coldBucket: 'cold', coldPrefix: '', coldProvider: 'b2',
+    }, {
+      storage: storage as never,
+      createClient: () => ({
+        connect: vi.fn().mockResolvedValue(undefined),
+        end: vi.fn().mockResolvedValue(undefined),
+        query,
+      } as never),
+    })).rejects.toThrow('has no exact selector/equality proof');
+    expect(warmMigrated).toBe(false);
+    expect(storage.deleteWarm).not.toHaveBeenCalled();
+    expect(events).toEqual(['begin', 'cold-manifest', 'proof-copy', 'proof-compare', 'rollback']);
   });
 });
