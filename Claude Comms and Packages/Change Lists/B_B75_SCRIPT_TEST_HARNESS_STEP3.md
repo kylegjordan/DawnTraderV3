@@ -2,6 +2,8 @@
 
 **Batch:** `B-B75-SCRIPT-TEST-HARNESS` · **Issue:** `#1208` · **Change class:** `non_architecture` · **Plan:** `Scope Files/B_B75_SCRIPT_TEST_HARNESS_PRE_AUDIT.md` P1–P9.
 
+**ROUND-2 IMPLEMENTATION REF:** `0fcc54a71da11a0a1cfb3300110e82d58f311fea` (the review ref additionally carries this evidence-only update; the dispatch names that final exact ref).
+
 ## Step-4 dispatch header
 
 **DECLARED CHANGE-CLASS:** `non_architecture`
