@@ -4,7 +4,7 @@
 
 **DECLARED CHANGE-CLASS:** `architecture`
 
-**IMPLEMENTATION DIFF:** approved Step-2 boundary `891e867093e602e2192f8cb55885764446f200ac` through corrected implementation/refinement head `205c2108555652751514bba2c18ecd09dba35c31`
+**IMPLEMENTATION DIFF:** approved Step-2 boundary `891e867093e602e2192f8cb55885764446f200ac` through corrected implementation/refinement head `905dc4cb6f13517995158d25d0d6b99584df42b7`
 
 **REVIEW BRANCH:** `origin/review/b-xstock-snapshot-retention-step4-codex` (the Discord dispatch names the exact review-ready head containing this packet)
 
@@ -44,7 +44,7 @@ The initial backlog is supervised through `--snapshot-only`; mutation is disable
 
 ## Change-set census
 
-The corrected object reviewed is the complete `891e86709..205c21085` diff: **28 files, 4,219 insertions, 164 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column, cold-proof, interval-label, and live-prewarm proof added after Coltrane's split re-review rulings.
+The corrected object reviewed is the complete `891e86709..905dc4cb6` diff: **28 files, 4,225 insertions, 164 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column, cold-proof, interval-label, and live-prewarm proof added after Coltrane's split re-review rulings.
 
 - Database contract: forward migration, rollback migration, and migration manifest.
 - Lifecycle/prewarm: shared snapshot policy, legacy prewarm, xStock cache policy binding.
@@ -313,7 +313,7 @@ The loader independently verifies the table identity, proven/checksum flags, cur
 
 ## Coltrane sent-back findings and corrections
 
-Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected; the split re-review then required complete rollback-column proof, an end-to-end cold-proof handoff, an independently derived interval-label set, and live-path prewarm writer spies. Those final proof corrections are `a68c9f037`, `8cf03a9f8`, `852f5212f`, and `205c21085`; this section is part of the stateless re-review context.
+Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected; the split re-review then required complete rollback-column proof, an end-to-end cold-proof handoff, an independently derived interval-label set, and live-path prewarm writer spies. Those final proof corrections are `a68c9f037`, `8cf03a9f8`, `852f5212f`, `205c21085`, and the SQL-projection-derived cold proof `905dc4cb6`; this section is part of the stateless re-review context.
 
 ### C1 — preserve every pre-existing evidence cursor contract
 
@@ -330,7 +330,7 @@ CHECK (cursor_contract IN (
 
 ### C2 — carry immutable snapshot proof across warm-to-cold rotation
 
-Warm-to-cold manifest creation, exact proof copy, exact proof comparison, and warm-state transition now share one database transaction. A `source-count-matched` warm object cannot be marked migrated or deleted unless the active cold manifest has an exact copy of all equality, selector, cutoff, floor, day, key-digest, and full-row-digest fields. The executable test rotates a proven warm snapshot, restores the resulting active cold object, writes the run index, and loads it through the historical-reader proof gate.
+Warm-to-cold manifest creation, exact proof copy, exact proof comparison, and warm-state transition now share one database transaction. A `source-count-matched` warm object cannot be marked migrated or deleted unless the active cold manifest has an exact copy of all equality, selector, cutoff, floor, day, key-digest, and full-row-digest fields. The executable test derives its persisted cold proof from the production copy statement's actual target/source projection, requires every production comparison predicate, restores that resulting active cold object, writes the run index, and loads it through the historical-reader proof gate. Omitting a field from the production projection or comparison now turns the test red; a separate corrupted-field arm still proves rollback before migration or warm deletion.
 
 ```ts
 await ctlClient.query('BEGIN');
@@ -408,7 +408,7 @@ For each mutation the test requires `proof_matches=false`, zero deleted rows, ze
 
 ## Verification at the implementation ref
 
-- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43052942365` is tied to exact correction head `205c2108555652751514bba2c18ecd09dba35c31` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files and 5,543/5,543 tests passed; all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
+- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43055149049` is tied to exact correction head `905dc4cb6f13517995158d25d0d6b99584df42b7` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files and 5,543/5,543 tests passed; all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
 - The current focused snapshot-retention population was 27/27 tests passed, including the independently proven interval-label omission and live-path prewarm writer-spy mutations. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
 - Those six database cases cover positive atomic delete; three proof-changing mutations; wrong-session proven-key refusal; append-only evidence DELETE/TRUNCATE refusal; writer-between-discovery-and-export snapshot timing; and disk-file cursor preservation through the forward migration and rollback.
 - TypeScript baseline remained 324 current findings against 324 expected findings, with no new regression.
