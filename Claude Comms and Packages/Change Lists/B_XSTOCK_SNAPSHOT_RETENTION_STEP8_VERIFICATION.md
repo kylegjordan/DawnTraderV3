@@ -203,3 +203,17 @@ Use the whole `/var/log/dawntrader/system-alerts.jsonl`, not a tail. The positiv
 - This proves the registered backlog and the next post-writer run, not future storage or database availability.
 - Writer contention remains fail-closed and may defer one object to a later run.
 - Ordinary vacuum makes deleted pages reusable but does not promise immediate allocated-file shrinkage.
+
+## Coltrane Step 8 verdict
+
+**PROCEED at exact ref `33e5162af1fbb460fddec9b204322fcb9fe8528e` (2026-11-11T20:19:54Z).** Coltrane independently reached every registered leg through his own staging access:
+
+- deployed repository and build stamp both matched `fbbe0b5e4af86be3a87fa0d6c2362f3e7bc899e4`;
+- log totals reproduced exactly 2,163,663 deleted 15-minute rows and 573,523 deleted 60-minute rows;
+- database evidence reproduced 100 / 2,163,663 / 100 / 100 for 15-minute manifests, rows, evidence rows and complete proofs, and 111 / 573,523 / 111 / 111 for 60-minute;
+- the frozen selector returned zero eligible rows and zero eligible symbols in both tables, against live positive controls of 536,563 15-minute rows and 129,546 60-minute rows across all 495 symbols, plus 11,832 and 489 post-apply writer rows respectively;
+- the terminal and post-writer runs reproduced with zero terminal failure, and the latter with zero deletes and zero failures;
+- mutation remained true, the availability anchor remained unchanged, all five event-wait alerts remained unacknowledged, and the two retention-failure alerts were resolved with successful-run evidence; and
+- source plus the five lock-timeout runs independently proved the one-second/five-second fail-closed path was exercised before later completion.
+
+No leg was ruled on a reported fact. UI remains N/A. The verdict preserves all three known limits above.
