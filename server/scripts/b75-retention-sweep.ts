@@ -121,6 +121,27 @@ const { Client } = pg;
  *  (~300–500 MB/day) — documented boundary in RUNNING_ISSUES. */
 const HARD_CAP_BYTES = 5 * 1024 * 1024 * 1024;
 
+/** The snapshot backlog ranks a multi-million-row mutable table before it can
+ * stream one exact day.  Supabase's role default is 2 minutes, which the first
+ * staging dry read proved is too short for the 15-minute table under live load.
+ * Keep this standalone client's server cancellation explicit and finite, and
+ * keep the pg client timeout later so it can never abandon an uncancelled query.
+ * The final writer-excluding compare/delete statement remains separately
+ * server-bounded to 5 seconds below. */
+export const SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS = 300_000;
+export const SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS = 310_000;
+if (!(SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS < SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS)) {
+  throw new Error('[B75 sweep] snapshot statement_timeout must be below query_timeout');
+}
+
+export function createSnapshotSweepClient(): pg.Client {
+  return new Client({
+    connectionString: process.env.DATABASE_URL,
+    statement_timeout: SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS,
+    query_timeout: SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS,
+  });
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Table inventory — one row per B74 archive table
 // ───────────────────────────────────────────────────────────────────────────
@@ -1855,7 +1876,7 @@ export async function sweepSnapshotTable(
   cfg: B75SweepConfig,
   table: XstockSnapshotTable,
   deps: SnapshotTableSweepDependencies = {
-    createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+    createClient: createSnapshotSweepClient,
     getStorageClient,
     listSelectors: listSnapshotSelectors,
     exportPartition,
@@ -1886,7 +1907,9 @@ export async function sweepSnapshotTable(
     console.log(
       `[B75 sweep][snapshot] ${table}: mode=${cfg.snapshotMutationEnabled ? 'apply' : 'dry-read'} `
       + `cutoff=${frozenSnapshotCutoff(rankingObservedAt, config.hotRetentionDays).toISOString()} `
-      + `floor=${config.keepFloorRows} objects=${selectors.length}`,
+      + `floor=${config.keepFloorRows} objects=${selectors.length} `
+      + `statement_timeout_ms=${SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS} `
+      + `query_timeout_ms=${SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS}`,
     );
 
     for (const selector of selectors) {
@@ -1895,6 +1918,7 @@ export async function sweepSnapshotTable(
       let provenPath: string | null = null;
       try {
         if (!cfg.snapshotMutationEnabled) {
+          const exportStartedAt = deps.now();
           const dry = await deps.exportPartition(exportClient, {
             sourceTable: selector.table,
             partitionLabel: `${selector.dayStart.toISOString().slice(0, 10)}-dry-${RUN_ID}`,
@@ -1909,7 +1933,8 @@ export async function sweepSnapshotTable(
           console.log(
             `[B75 sweep][snapshot] ${table}/${selector.dayStart.toISOString().slice(0, 10)}: `
             + `dry rows=${dry.snapshotProof.sourceRowCount} bytes_jsonl=${dry.bytesUncompressed} `
-            + `bytes_gzip=${dry.bytesCompressed} key_sha256=${dry.snapshotProof.orderedKeySha256}`,
+            + `bytes_gzip=${dry.bytesCompressed} key_sha256=${dry.snapshotProof.orderedKeySha256} `
+            + `export_ms=${deps.now() - exportStartedAt}`,
           );
           continue;
         }

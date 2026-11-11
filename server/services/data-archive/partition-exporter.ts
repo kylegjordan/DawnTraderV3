@@ -182,25 +182,30 @@ export async function exportPartition(
   let sourceRowCount: number | null = null;
   let snapshotProof: XstockSnapshotProof | undefined;
   let snapshotObservedAt: Date | undefined;
+  let snapshotStage = 'not-started';
 
   try {
     if (req.snapshotSelector) {
+      snapshotStage = 'observation';
       const observation = await client.query<{ observed_at: Date }>(
         'SELECT clock_timestamp() AS observed_at, txid_current_snapshot()::text AS snapshot_id',
       );
       snapshotObservedAt = new Date(observation.rows[0].observed_at);
+      snapshotStage = 'schema';
       const schema = await client.query(
         snapshotSchemaValidationSql(),
         [req.snapshotSelector.table],
       );
       assertSnapshotSchemaColumns(schema.rows as Array<{ column_name: string }>);
 
+      snapshotStage = 'source_count';
       sourceRowCount = Number((await client.query(
         `SELECT count(*)::bigint AS source_count
            FROM (${snapshotPopulationSql(req.snapshotSelector)}) snapshot_population`,
         snapshotPopulationParams(req.snapshotSelector),
       )).rows[0]?.source_count ?? 0);
 
+      snapshotStage = 'cursor_declare';
       await client.query(
         `DECLARE b75_snapshot_export_population NO SCROLL CURSOR FOR
          ${snapshotPopulationSql(req.snapshotSelector)}
@@ -216,6 +221,7 @@ export async function exportPartition(
       const BATCH = 1000;
 
       while (true) {
+        snapshotStage = 'cursor_fetch';
         const page: pg.QueryResult<any> = await client.query(
           `FETCH FORWARD ${BATCH} FROM b75_snapshot_export_population`,
         );
@@ -238,6 +244,7 @@ export async function exportPartition(
         if (page.rows.length < BATCH) break;
       }
 
+      snapshotStage = 'gzip_finalize';
       gzip.end();
       await new Promise<void>((resolve, reject) => {
         out.on('close', resolve);
@@ -389,6 +396,7 @@ export async function exportPartition(
     });
     }
 
+    snapshotStage = 'row_count_gate';
     if (rowCount !== sourceRowCount) {
       const exportMode = req.snapshotSelector ? 'snapshot' : exactTieCol ? 'exact' : 'legacy';
       throw new ExportRowCountMismatchError(
@@ -397,6 +405,7 @@ export async function exportPartition(
       );
     }
 
+    snapshotStage = 'commit';
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {
@@ -407,6 +416,11 @@ export async function exportPartition(
       fs.unlinkSync(localPath);
     } catch {
       // ignore
+    }
+    if (req.snapshotSelector && err instanceof Error && !err.message.includes('snapshot stage=')) {
+      // Preserve the original error class (especially ExportRowCountMismatchError)
+      // while making a future timeout identify the exact statement family.
+      err.message = `[B75 partition-exporter] snapshot stage=${snapshotStage}: ${err.message}`;
     }
     throw err;
   }

@@ -37,8 +37,11 @@ import {
 import { rotateColdCandidate } from '../../scripts/b75-cold-rotator.js';
 import {
   archiveSnapshotObject,
+  createSnapshotSweepClient,
   deleteSnapshotProvenObject,
   parseRetentionSweepArgs,
+  SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS,
+  SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS,
   storedSnapshotEvidenceMatches,
   sweepSnapshotTable,
   type B75SweepConfig,
@@ -63,6 +66,43 @@ import {
 const tempDirs: string[] = [];
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+describe('B-XSTOCK-SNAPSHOT-RETENTION standalone read bounds', () => {
+  it('gives the ranked export a finite server bound before the later client bound', () => {
+    expect(SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS).toBe(300_000);
+    expect(SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS).toBe(310_000);
+    expect(SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS).toBeLessThan(SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS);
+
+    const client = createSnapshotSweepClient();
+    expect(client.connectionParameters.statement_timeout).toBe(SNAPSHOT_SWEEP_STATEMENT_TIMEOUT_MS);
+    expect(client.connectionParameters.query_timeout).toBe(SNAPSHOT_SWEEP_QUERY_TIMEOUT_MS);
+  });
+
+  it('names the exact snapshot statement family when the database cancels it', async () => {
+    const exporter = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('clock_timestamp() AS observed_at')) {
+          return { rows: [{ observed_at: new Date('2026-11-11T12:00:00Z') }] };
+        }
+        if (sql.includes('information_schema.columns')) {
+          return { rows: XSTOCK_SNAPSHOT_EXPECTED_COLUMNS.map((column_name) => ({ column_name })) };
+        }
+        if (sql.includes('count(*)::bigint AS source_count')) return { rows: [{ source_count: '1' }] };
+        if (sql.startsWith('FETCH FORWARD')) throw new Error('canceling statement due to statement timeout');
+        return { rows: [] };
+      }),
+    };
+    const snap = selector();
+    await expect(exportPartition(exporter as never, {
+      sourceTable: snap.table,
+      partitionLabel: `timeout-stage-${crypto.randomUUID()}`,
+      rangeStart: snap.dayStart,
+      rangeEnd: snap.dayEnd,
+      timestampColumn: 'bucket_ts',
+      snapshotSelector: snap,
+    })).rejects.toThrow(/snapshot stage=cursor_fetch: canceling statement due to statement timeout/);
+  });
 });
 
 function selector(overrides: Partial<XstockSnapshotSelector> = {}): XstockSnapshotSelector {
