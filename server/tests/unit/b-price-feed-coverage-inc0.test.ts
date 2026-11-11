@@ -129,6 +129,28 @@ describe('the engine seam — wired once, xStock only, before warmth, with no co
   });
 });
 
+describe('Step-7 exact dispatch boundary — authenticated, read-only production getter', () => {
+  const routes = readFileSync(join(__dirname, '../../routes.ts'), 'utf8');
+  const a = routes.indexOf("apiRouter.get('/active-engine/diagnostics/xstock-dispatch'");
+  const end = routes.indexOf("\n  });", a);
+  const body = routes.slice(a, end);
+  it('CONTROL: the route body was located', () => {
+    expect(a).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(a);
+    expect(body.length).toBeGreaterThan(300);
+  });
+  it('is authenticated and reads the exact existing getter', () => {
+    expect(body).toMatch(/xstock-dispatch', authenticateToken/);
+    expect(body).toMatch(/getXstockActiveDispatchStats/);
+    expect(body).toMatch(/stats: getXstockActiveDispatchStats\(\)/);
+  });
+  it('carries the process controls required for same-process boundary deltas', () => {
+    expect(body).toMatch(/processPid: process\.pid/);
+    expect(body).toMatch(/processUptimeSeconds: process\.uptime\(\)/);
+    expect(body).toMatch(/observedAt: new Date\(\)\.toISOString\(\)/);
+  });
+});
+
 describe('no control characters in increment 0\'s own files (the heredoc-backspace corruption class)', () => {
   // Same detector as b-xstock-feed-sanity-fence.test.ts's F-CTRL, which covers THAT batch's files only (Langston r3 note).
   const CONTROL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;

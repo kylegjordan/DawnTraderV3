@@ -13403,6 +13403,26 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
     }
   });
 
+  // B-PRICE-FEED-COVERAGE increment 0, Step 7: the exact xStock dispatch-admission
+  // counter is process-local. Expose its existing getter read-only so a full-session
+  // boundary read can prove the numerator against the SAME process (pid + uptime),
+  // rather than substituting the downstream active-funnel population.
+  apiRouter.get('/active-engine/diagnostics/xstock-dispatch', authenticateToken, async (_req: AuthenticatedRequest, res) => {
+    try {
+      const { getXstockActiveDispatchStats } = await import('./asset_classes/xstock_spot/active-dispatch.js');
+      res.json({
+        schema: 'xstock-active-dispatch/v1',
+        observedAt: new Date().toISOString(),
+        processPid: process.pid,
+        processUptimeSeconds: process.uptime(),
+        stats: getXstockActiveDispatchStats(),
+      });
+    } catch (error) {
+      console.error('[xstock-dispatch-diagnostics] Error:', error);
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch xStock dispatch diagnostics' });
+    }
+  });
+
   // REB 2.8.3: Latest FX5 scan data from Stage-3 cache (REST endpoint for Filter Insights)
   apiRouter.get('/active-engine/diagnostics/scan-latest', authenticateToken, async (req: AuthenticatedRequest, res) => {
     try {
