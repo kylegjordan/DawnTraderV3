@@ -90,7 +90,7 @@ The post-run partition-catalog read found zero of those 16 hot children. Positiv
 
 At `2026-11-11T07:28:53.049Z`, the same `pg_database_size(current_database())` measurement used for the starting point read the whole `postgres` database as **119,199,132,819 bytes = 113,677.2 MiB**. The prior whole-database measurement was 143,095,196,819 bytes = 136,466.2 MiB at `2026-11-10T08:13:53Z`; the measured whole-database difference across those two reads is 23,896,064,000 bytes = 22,789.1 MiB lower.
 
-The new value is 19,442.8 MiB below the 133,120 MiB warning line. Alert `c0a0b00d-4868-41e5-b8b3-8c8adaff6724` was re-read as `active`, unacknowledged and unresolved after the measurement. It is now eligible for resolution — never acknowledgement — once this evidence has a pushed ref.
+The new value is 19,442.8 MiB below the 133,120 MiB warning line. Alert `c0a0b00d-4868-41e5-b8b3-8c8adaff6724` was first re-read as `active`, unacknowledged and unresolved after the measurement, then resolved by `codex-a` at `2026-11-11T07:32:15.341Z` with the pushed evidence ref `5c5bfa516`. A whole-file row readback confirmed `state=resolved`, `resolved_by_claimed=codex-a`, `resolved_by_transport=cli` and the same evidence ref; the positive-control due-queue read completed on `dawntrader-staging` with 14 other due rows and this warning absent.
 
 ## Remaining binding hold
 
