@@ -120,6 +120,22 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
     expect(HOT_HORIZON_SQL).toContain(DATA_LIFECYCLE_SCOPE_SQL);
   });
 
+  it('logs every partitioned parent retention value before listing children, including the non-empty branch', () => {
+    const sweep = fs.readFileSync(path.join(ROOT, 'server/scripts/b75-retention-sweep.ts'), 'utf8');
+    const loop = sweep.slice(
+      sweep.indexOf('for (const spec of PARTITIONED_TABLES)'),
+      sweep.indexOf('for (const spec of PLAIN_TABLES)'),
+    );
+    const retentionLog = loop.indexOf(
+      '`[B75 sweep] ${spec.parent}: retentionDays=${retentionDays} cutoff=${cutoff.toISOString()}',
+    );
+    const list = loop.indexOf('oldPartitions = await listOldPartitions');
+    const emptyBranch = loop.indexOf('if (oldPartitions.length === 0)');
+    expect(retentionLog).toBeGreaterThan(-1);
+    expect(retentionLog).toBeLessThan(list);
+    expect(list).toBeLessThan(emptyBranch);
+  });
+
   it('the three enforcing readers use the shared value test, and wildcard readers use the shared scope predicate', () => {
     const eligibility = fs.readFileSync(path.join(ROOT, 'scripts/analysis/b_disk_headroom_eligibility.ts'), 'utf8');
     expect(eligibility).toContain('DATA_LIFECYCLE_SCOPE_SQL');
