@@ -100,6 +100,22 @@ Coltrane **CONFIRMED** exact evidence ref `427df5e5989129da3e88f776a4d2c7ad3f2b6
 
 His independent runtime population contained exactly **1 online DawnTrader process**, restart count 689 and unstable restarts 0; liveness returned both engine booleans true and the exact deployed ref `76f88f48e76b4314fc065e1e9686f51792df2c11`. He explicitly preserved the same boundary as Step 7: the evidence proves the deployed fake seams and import guard, not live provider, scheduler, credential, concurrency or real archive/delete behaviour. No correction was requested.
 
+## Step 9 — objective reconciliation
+
+**Verdict: all 7 of 7 scope objectives are green; no correction/review/deploy loop is required.** The same focused instrument that would expose an unmet executable objective passed **42 of 42 cases in 1 harness file** at the Step-9 head. The two predecessor controls also passed **66 of 66 cases in 2 files**, and exact-head CI run `42993595837` passed TypeScript Check, Test Suite, Build and Docker Build individually.
+
+| objective | exact object and complete Step-9 disposition |
+|---|---|
+| OBJ-1 — import safety | **GREEN.** One shared direct-entry predicate is imported by all four command modules; the fresh-import case arms database, storage, file, alert and exit spies before importing all four and observes no work, while direct/different/absent entry cases positively exercise the predicate. The separate staging process also returned exactly `IMPORT_OK=4`. |
+| OBJ-2 — retention gates | **GREEN.** The 10-case retention population executes changed-recount refusal, one-control-transaction proof order, whole/plain completeness fences, rollback, keyed alert/resolve edges and lock release. Whole and plain success controls reach their removers only after proof; their paired failures leave the source in place. |
+| OBJ-3 — context gate | **GREEN.** The 7-case context population executes reuse recount, 413-to-cold proof, complete-month handoff, the same-client locked population/recount/delete/active transaction, earlier-empty recheck and unguarded-old-month rollback. The latter two are the mutations that distinguish the audit defect and Coltrane's second-round finding from a safe delete. |
+| OBJ-4 — cold rotation | **GREEN.** The 5-case cold population executes configured dry-run, both positive-integer flags and refusal, candidate exclusion/order, cold readback plus both manifest writes before warm deletion, inherited basis and continue-after-failure. |
+| OBJ-5 — rehydrate safety | **GREEN.** The 6-case rehydrate population executes matched sidecar output, private-output refusal, `--disk-file` byte/newline checks, corrupt-name and stale-sidecar cleanup, cold refusal, numeric single-bucket aggregation and mismatch exit 2. Only the `downloaded` result arm can carry proof. |
+| OBJ-6 — executable replacement | **GREEN.** The harness executes the safety decisions even when their source strings remain present. The predecessor file now labels its retained source checks as compatibility alarms rather than destructive-gate proof; its executable replacement and both predecessor controls pass together. |
+| OBJ-7 — direct-run compatibility | **GREEN.** All four wrappers execute success, missing-setting refusal and fatal rejection under fakes; the before/after command ledger remains unchanged. The exact-ref production-server import census returns no import caller for the four commands, while the companion archive module provides the positive import control; no cron command changed and no real external service was called. |
+
+The reconciliation preserves the approved non-goal: passing all seven objectives does not convert the fake-I/O proof into a claim about a real archive, delete, rotation, VACUUM, restore, provider, credential, scheduler or concurrency outcome.
+
 ## Load-bearing diff excerpts
 
 ### A. Importing a command no longer executes it
