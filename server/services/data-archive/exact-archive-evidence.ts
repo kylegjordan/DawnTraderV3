@@ -13,6 +13,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { ArchiveReadbackMismatchError } from './archive-completeness.js';
+import {
+  XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+  XSTOCK_SNAPSHOT_SELECTOR_CONTRACT,
+  XSTOCK_SNAPSHOT_SELECTOR_VERSION,
+  type XstockSnapshotProof,
+} from './xstock-snapshot-retention.js';
 
 export const XSTOCK_EXACT_ARCHIVE_CURSOR_CONTRACT =
   'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid' as const;
@@ -29,10 +35,21 @@ export interface ExactArchiveEvidenceInput {
   downloadedRowCount: number;
   objectChecksum: string;
   producingBuildSha?: string;
+  snapshot?: XstockSnapshotProof & {
+    cutoffAt: Date;
+    rankingObservedAt: Date;
+    keepFloorRows: number;
+    dayStart: Date;
+    dayEnd: Date;
+  };
 }
 
 interface QueryClient {
   query(sql: string, params?: unknown[]): Promise<{ rows: Array<Record<string, unknown>> }>;
+}
+
+function storedTimeMs(value: unknown): number {
+  return value instanceof Date ? value.getTime() : new Date(String(value)).getTime();
 }
 
 export function assertExactArchiveEquality(input: Pick<
@@ -78,13 +95,23 @@ export async function recordExactArchiveEvidence(
   }
   if (!input.objectChecksum) throw new Error('[B75 sweep] exact archive checksum is empty');
   if (!input.cursorContract) throw new Error('[B75 sweep] exact archive cursor contract is empty');
+  if (input.cursorContract === XSTOCK_SNAPSHOT_CURSOR_CONTRACT && !input.snapshot) {
+    throw new Error('[B75 sweep] snapshot archive evidence is missing its selector/digest proof');
+  }
+  if (input.cursorContract !== XSTOCK_SNAPSHOT_CURSOR_CONTRACT && input.snapshot) {
+    throw new Error('[B75 sweep] generic archive evidence cannot carry snapshot selector fields');
+  }
+  const snapshot = input.snapshot;
 
   await client.query(
     `INSERT INTO data_archive_exact_evidence (
        manifest_id, source_table, partition_label, tier,
        source_row_count, exported_row_count, downloaded_row_count,
-       cursor_contract, producing_build_sha, object_checksum
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       cursor_contract, producing_build_sha, object_checksum,
+       selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+       keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+               $11, $12, $13, $14, $15, $16, $17, $18, $19)
      ON CONFLICT (manifest_id) DO NOTHING`,
     [
       input.manifestId,
@@ -97,12 +124,23 @@ export async function recordExactArchiveEvidence(
       input.cursorContract,
       producingBuildSha,
       input.objectChecksum,
+      snapshot ? XSTOCK_SNAPSHOT_SELECTOR_CONTRACT : null,
+      snapshot ? XSTOCK_SNAPSHOT_SELECTOR_VERSION : null,
+      snapshot?.cutoffAt ?? null,
+      snapshot?.rankingObservedAt ?? null,
+      snapshot?.keepFloorRows ?? null,
+      snapshot?.dayStart ?? null,
+      snapshot?.dayEnd ?? null,
+      snapshot?.orderedKeySha256 ?? null,
+      snapshot?.fullRowSha256 ?? null,
     ],
   );
   const result = await client.query(
     `SELECT source_table, partition_label, tier,
             source_row_count::text, exported_row_count::text, downloaded_row_count::text,
-            cursor_contract, producing_build_sha, object_checksum
+            cursor_contract, producing_build_sha, object_checksum,
+            selector_contract, selector_version, frozen_cutoff_at, ranking_observed_at,
+            keep_floor_rows, day_start, day_end, ordered_key_sha256, full_row_sha256
        FROM data_archive_exact_evidence
       WHERE manifest_id = $1`,
     [input.manifestId],
@@ -116,7 +154,26 @@ export async function recordExactArchiveEvidence(
     && Number(stored.exported_row_count) === input.exportedRowCount
     && Number(stored.downloaded_row_count) === input.downloadedRowCount
     && stored.cursor_contract === input.cursorContract
-    && stored.object_checksum === input.objectChecksum;
+    && stored.object_checksum === input.objectChecksum
+    && (snapshot
+      ? stored.selector_contract === XSTOCK_SNAPSHOT_SELECTOR_CONTRACT
+        && Number(stored.selector_version) === XSTOCK_SNAPSHOT_SELECTOR_VERSION
+        && storedTimeMs(stored.frozen_cutoff_at) === snapshot.cutoffAt.getTime()
+        && storedTimeMs(stored.ranking_observed_at) === snapshot.rankingObservedAt.getTime()
+        && Number(stored.keep_floor_rows) === snapshot.keepFloorRows
+        && storedTimeMs(stored.day_start) === snapshot.dayStart.getTime()
+        && storedTimeMs(stored.day_end) === snapshot.dayEnd.getTime()
+        && stored.ordered_key_sha256 === snapshot.orderedKeySha256
+        && stored.full_row_sha256 === snapshot.fullRowSha256
+      : stored.selector_contract == null
+        && stored.selector_version == null
+        && stored.frozen_cutoff_at == null
+        && stored.ranking_observed_at == null
+        && stored.keep_floor_rows == null
+        && stored.day_start == null
+        && stored.day_end == null
+        && stored.ordered_key_sha256 == null
+        && stored.full_row_sha256 == null);
   if (!exact) {
     throw new Error(
       `[B75 sweep] exact archive evidence replay does not match original proof `
