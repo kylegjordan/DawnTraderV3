@@ -89,12 +89,12 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
     await client.query(`
       CREATE TRIGGER trg_guard_data_archive_exact_evidence_mutation
       BEFORE UPDATE OR DELETE ON data_archive_exact_evidence
-      FOR EACH ROW EXECUTE FUNCTION public.guard_xstock_bar_archive_exact_evidence_mutation()
+      FOR EACH ROW EXECUTE FUNCTION public.guard_xstock_bar_projection_evidence_mutation()
     `);
     await client.query(`
       CREATE TRIGGER trg_guard_data_archive_exact_evidence_truncate
       BEFORE TRUNCATE ON data_archive_exact_evidence
-      FOR EACH STATEMENT EXECUTE FUNCTION public.guard_xstock_bar_archive_exact_evidence_mutation()
+      FOR EACH STATEMENT EXECUTE FUNCTION public.guard_xstock_bar_projection_evidence_mutation()
     `);
     await client.query(`
       INSERT INTO xstock_spot_ohlc_15m_snapshot (
@@ -262,9 +262,9 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
 
   it('executes the shipped append-only evidence guard against deletion and truncation', async () => {
     const guard = await client.query(
-      "SELECT to_regprocedure('public.guard_xstock_bar_archive_exact_evidence_mutation()')::text AS fn",
+      "SELECT to_regprocedure('public.guard_xstock_bar_projection_evidence_mutation()')::text AS fn",
     );
-    expect(guard.rows[0].fn).toBe('guard_xstock_bar_archive_exact_evidence_mutation()');
+    expect(guard.rows[0].fn).toBe('guard_xstock_bar_projection_evidence_mutation()');
     await client.query('INSERT INTO data_archive_exact_evidence (id) VALUES (1)');
     await expect(client.query('DELETE FROM data_archive_exact_evidence WHERE id = 1'))
       .rejects.toThrow(/append-only/);
