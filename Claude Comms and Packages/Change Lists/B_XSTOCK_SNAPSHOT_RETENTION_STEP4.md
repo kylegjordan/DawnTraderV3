@@ -4,7 +4,7 @@
 
 **DECLARED CHANGE-CLASS:** `architecture`
 
-**IMPLEMENTATION DIFF:** approved Step-2 boundary `891e867093e602e2192f8cb55885764446f200ac` through corrected implementation/refinement head `d0fe95af826f8982710fb5b1bc6efa1c93ae3145`
+**IMPLEMENTATION DIFF:** approved Step-2 boundary `891e867093e602e2192f8cb55885764446f200ac` through corrected implementation/refinement head `704a834547d76e288fc56bde8ad3aa60bd9660ec`
 
 **REVIEW BRANCH:** `origin/review/b-xstock-snapshot-retention-step4-codex` (the Discord dispatch names the exact review-ready head containing this packet)
 
@@ -44,7 +44,7 @@ The initial backlog is supervised through `--snapshot-only`; mutation is disable
 
 ## Change-set census
 
-The corrected object reviewed is the complete `891e86709..d0fe95af8` diff: **28 files, 4,260 insertions, 164 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column, cold-proof, interval-label, and live-prewarm proof added after Coltrane's split re-review rulings.
+The corrected object reviewed is the complete `891e86709..704a83454` diff: **28 files, 4,358 insertions, 164 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the corrections below, and the complete rollback-column, cold-proof, interval-label, live-prewarm, and exported-manifest-bound proof added after Coltrane's review rulings.
 
 - Database contract: forward migration, rollback migration, and migration manifest.
 - Lifecycle/prewarm: shared snapshot policy, legacy prewarm, xStock cache policy binding.
@@ -313,7 +313,7 @@ The loader independently verifies the table identity, proven/checksum flags, cur
 
 ## Coltrane sent-back findings and corrections
 
-Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected; the split re-review then required complete rollback-column proof, an end-to-end cold-proof handoff, an independently derived interval-label set, and live-path prewarm writer spies. Those final proof corrections are `a68c9f037`, `8cf03a9f8`, `852f5212f`, `205c21085`, the SQL-projection-derived cold proof `905dc4cb6`, and full equality-field coverage `d0fe95af8`; this section is part of the stateless re-review context.
+Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected; the split re-review then required complete rollback-column proof, an end-to-end cold-proof handoff, an independently derived interval-label set, and live-path prewarm writer spies. The final gate also found and sent back a projected-timestamp field mismatch before approval. Those proof corrections are `a68c9f037`, `8cf03a9f8`, `852f5212f`, `205c21085`, the SQL-projection-derived cold proof `905dc4cb6`, full equality-field coverage `d0fe95af8`, and exported-manifest bounds `704a83454`; this section is part of the stateless re-review context.
 
 ### C1 — preserve every pre-existing evidence cursor contract
 
@@ -380,6 +380,16 @@ await validateSnapshotLifecycleForPrewarm(lifecycleClient);
 // availability preview/cache imports and writes occur only after this guard
 ```
 
+### C6 — carry the projected bucket timestamps into the manifest bounds
+
+The snapshot population projects `bucket_ts`; the exporter now reads that exact field when calculating the nonempty object's first and last timestamps. The executed regression drives two projected rows through the real exporter, requires their exact first/last bounds, passes that exported object through `archiveSnapshotObject`, and asserts those same bounds are the `min_ts`/`max_ts` parameters in the uploaded-state manifest update before verified state. Reading the former nonexistent `bucket_ts_cursor` field makes the regression fail before the manifest can be represented as correctly bounded.
+
+```ts
+const tsDate = new Date(String(row.bucket_ts));
+if (minTs === null || tsDate < minTs) minTs = tsDate;
+if (maxTs === null || tsDate > maxTs) maxTs = tsDate;
+```
+
 ### 7. NEW — real PostgreSQL red mutations execute the shipped gate
 
 ```ts
@@ -408,8 +418,8 @@ For each mutation the test requires `proof_matches=false`, zero deleted rows, ze
 
 ## Verification at the implementation ref
 
-- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43057217117` is tied to exact correction head `d0fe95af826f8982710fb5b1bc6efa1c93ae3145` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full suite and all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
-- The current focused snapshot-retention population was 27/27 tests passed, including the independently proven interval-label omission and live-path prewarm writer-spy mutations. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
+- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43060881333` is tied to exact correction head `704a834547d76e288fc56bde8ad3aa60bd9660ec` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full suite and all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
+- The current focused snapshot-retention population was 28/28 tests passed, including independently proven interval-label omission, live-path prewarm writer-spy mutations, and the executed exporter-to-manifest bound handoff. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
 - Those six database cases cover positive atomic delete; three proof-changing mutations; wrong-session proven-key refusal; append-only evidence DELETE/TRUNCATE refusal; writer-between-discovery-and-export snapshot timing; and disk-file cursor preservation through the forward migration and rollback.
 - TypeScript baseline remained 324 current findings against 324 expected findings, with no new regression.
 
