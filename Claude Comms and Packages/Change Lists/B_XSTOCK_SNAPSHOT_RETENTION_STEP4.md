@@ -4,9 +4,9 @@
 
 **DECLARED CHANGE-CLASS:** `architecture`
 
-**IMPLEMENTATION DIFF:** approved Step-2 boundary `8a4d195a8` through implementation ref `d3c4f73801146f6bc5529bca3f82daf8660d01df`
+**IMPLEMENTATION DIFF:** approved Step-2 boundary `a6cade290` through corrected implementation ref `c16ee17ad49c0f67420f234ce8877505680de6e3`
 
-**REVIEW BRANCH:** `origin/migration/b-xstock-snapshot-retention-step2-codex` (the Discord dispatch names the exact review-ready head containing this packet)
+**REVIEW BRANCH:** `origin/review/b-xstock-snapshot-retention-step4-codex` (the Discord dispatch names the exact review-ready head containing this packet)
 
 **STEP-2 REFERENCE:** `Claude Comms and Packages/Scope Files/B_XSTOCK_SNAPSHOT_RETENTION_PRE_AUDIT.md`
 
@@ -44,7 +44,7 @@ The initial backlog is supervised through `--snapshot-only`; mutation is disable
 
 ## Change-set census
 
-The object reviewed is the complete `8a4d195a8..d3c4f7380` diff: **24 files, 3,062 insertions, 149 deletions**.
+The corrected object reviewed is the complete `a6cade290..c16ee17ad` diff: **28 files, 3,911 insertions, 156 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, and the five corrections below.
 
 - Database contract: forward migration, rollback migration, and migration manifest.
 - Lifecycle/prewarm: shared snapshot policy, legacy prewarm, xStock cache policy binding.
@@ -309,7 +309,75 @@ if (B1A_REHYDRATED_INPUT) {
 }
 ```
 
-The loader independently verifies the table identity, proven/checksum flags, cursor contract, row count, ordered-key digest, full-row digest, and duplicate-key absence against each downloaded object and sidecar.
+The loader independently verifies the table identity, proven/checksum flags, cursor contract, row count, ordered-key digest, full-row digest, and duplicate-key absence against each downloaded object and sidecar. It also requires the atomic run index described below, so a valid individual object can no longer stand in for a partial replay request.
+
+## Coltrane sent-back findings and corrections
+
+Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected across `91c9f152c2f6e0eb216360df950d44005e76e8ce` and the CI-path correction `c16ee17ad49c0f67420f234ce8877505680de6e3`; this section is part of the stateless re-review context.
+
+### C1 — preserve every pre-existing evidence cursor contract
+
+Both the forward and rollback migrations retain `disk-file-lines-v1` when rebuilding the evidence constraint. The real-PostgreSQL suite seeds disk-file evidence, applies the forward migration and rollback, proves the seeded row remains valid, inserts a second disk-file row after rollback, and proves the selector-only columns were removed only after the zero-snapshot-proof rollback arm.
+
+```sql
+CHECK (cursor_contract IN (
+  'jsonb-text-v1:arrived_at-timestamptz+revision_id-uuid',
+  'text-ts-tiegroup-v1',
+  'disk-file-lines-v1',
+  'xstock-snapshot-jsonb-v1:symbol+bucket_ts'
+));
+```
+
+### C2 — carry immutable snapshot proof across warm-to-cold rotation
+
+Warm-to-cold manifest creation, exact proof copy, exact proof comparison, and warm-state transition now share one database transaction. A `source-count-matched` warm object cannot be marked migrated or deleted unless the active cold manifest has an exact copy of all equality, selector, cutoff, floor, day, key-digest, and full-row-digest fields. The executable test rotates a proven warm snapshot, restores the resulting active cold object, writes the run index, and loads it through the historical-reader proof gate.
+
+```ts
+await ctlClient.query('BEGIN');
+// create/refresh the cold manifest, copy append-only evidence, and compare every field
+if (proof.rows[0]?.exact !== true) {
+  throw new Error('[B75 rotator] proven warm object has no exact proof for its cold manifest');
+}
+await ctlClient.query(`UPDATE data_archive_manifest SET state = 'migrated' WHERE id = $1`, [candidate.id]);
+await ctlClient.query('COMMIT');
+// Warm storage deletion remains after the committed database transition.
+```
+
+### C3 — bind historical replay to the whole requested rehydrate run
+
+The rehydrate command removes any stale prior index before work and atomically writes one run index after all selected labels finish. `complete=true` requires every selected label to be downloaded and proven, with zero skipped, cold-skipped, mismatch, missing, or unproven objects. The historical loader requires that index, verifies its requested interval covers B1a's 60-hour warmup plus fixed replay window, and reads exactly the indexed files; the red test marks two objects complete while omitting one file and requires refusal.
+
+```ts
+const complete = results.length === choices.length
+  && choices.length > 0
+  && results.every((result) => result.kind === 'downloaded' && result.basisProven === true);
+
+const loaded = await loadProvenRehydratedSnapshot(input, SNAPSHOT_TABLE, {
+  from: new Date(rehydratedFromMs),
+  toExclusive: new Date(rehydratedToMs),
+});
+```
+
+### C4 — record each export's actual repeatable-read observation time
+
+The exporter now establishes its repeatable-read snapshot and captures its time together, returns that time with the proof, and the archive evidence stores it instead of the earlier table-loop timestamp. The export stays read-only: an independent population count and a forward-only database cursor read the same repeatable-read snapshot, avoiding a temporary-table write inside the read-only transaction. The real-PostgreSQL writer-between-discovery-and-export test first observes two eligible rows, commits a third eligible row from another session, then requires the export snapshot to contain three rows and carry its own later observation time.
+
+```ts
+const observation = await client.query(
+  'SELECT clock_timestamp() AS observed_at, txid_current_snapshot()::text AS snapshot_id',
+);
+snapshotObservedAt = new Date(observation.rows[0].observed_at);
+```
+
+### C5 — share the lifecycle/floor refusal across both prewarm writers
+
+The exact wildcard/narrow-row lifecycle check is now one shared guard. The legacy and revision-aware prewarm paths both call it before any aggregate preview or snapshot write. The executable red test supplies a 239-row floor for the 240-row live cap and requires both writers to refuse before their write paths run.
+
+```ts
+const lifecycleClient = options.lifecycleClient ?? (await import('../server/db.js')).pool;
+await validateSnapshotLifecycleForPrewarm(lifecycleClient);
+// availability preview/cache imports and writes occur only after this guard
+```
 
 ### 7. NEW — real PostgreSQL red mutations execute the shipped gate
 
@@ -339,9 +407,9 @@ For each mutation the test requires `proof_matches=false`, zero deleted rows, ze
 
 ## Verification at the implementation ref
 
-- CI run `43030443074` is tied to head `d3c4f73801146f6bc5529bca3f82daf8660d01df` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build.
-- The focused local population was 45 tests across snapshot-retention and hot-horizon suites; all passed.
-- The real-PostgreSQL CI suite exercised four database cases: positive atomic delete, three proof-changing mutations, wrong-session temp-table refusal, and append-only evidence deletion/truncation refusal.
+- CI run `43039193387` is tied to head `c16ee17ad49c0f67420f234ce8877505680de6e3` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files passed.
+- The focused local population was 91 tests across snapshot retention, prewarm, B75 harness, and hot-horizon suites; all 91 passed. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
+- Those six database cases cover positive atomic delete; three proof-changing mutations; wrong-session proven-key refusal; append-only evidence DELETE/TRUNCATE refusal; writer-between-discovery-and-export snapshot timing; and disk-file cursor preservation through the forward migration and rollback.
 - TypeScript baseline remained 324 current findings against 324 expected findings, with no new regression.
 
 ## Judgement calls to attack
