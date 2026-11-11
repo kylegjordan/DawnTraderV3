@@ -29,6 +29,7 @@ The run therefore refused safely but did not satisfy the full dry-read gate. Mut
 ## Local evidence
 
 - Focused unit suite: 30 passed; Linux-only process lock tests 3 skipped on Windows; database integration tests 6 skipped without the integration database.
+- Whole-tree database-client census: the new B75 snapshot client is the third one-connection client with ordered server/client bounds; the census pin now counts all three.
 - TypeScript baseline: current 324 errors, baseline 324 errors, no regression.
 - `.claude/launch.json` remains untracked and untouched.
 
