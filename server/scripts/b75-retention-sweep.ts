@@ -26,8 +26,9 @@
  * stable-hotBytes resume guard, and the distinct-dates DROP gate are all correct
  * ONLY because an eligible partition is write-sealed (no concurrent mutation).
  *
- * Cron line (root crontab on staging — installed in B-NEW-47 Step 6):
- *   15 2 * * * su - deploy -c "cd /home/deploy/dawntrader && /usr/bin/npx tsx server/scripts/b75-retention-sweep.ts" >> /var/log/dawntrader/b75-retention.log 2>&1
+ * Cron line (root crontab on staging; B-XSTOCK-SNAPSHOT-RETENTION replaces the
+ * unsafe timestamp/unlink lock with the shared kernel-lock launcher):
+ *   15 2 * * * su - deploy -c "cd /home/deploy/dawntrader && server/scripts/b75-retention-run.sh" >> /var/log/dawntrader/b75-retention.log 2>&1
  *
  * State machine (data_archive_manifest.state): pending → uploaded → verified → active
  * Resume (B-B75-EXPORT-COMPLETENESS #1195): what happens to a label that already has
@@ -1411,72 +1412,6 @@ export async function sweepPlainTables(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Run-lock (B-STORAGE-HARDEN Wave C, Langston Step-2 cond B) — overlap guard.
-// Adding the B70 analytics tables (esp. signal_eval_archive ~14.5 GB/mo, per-day
-// sliced) grows a first-tiering pass to ~1-2h once eligible (~Sept). That's well
-// under the 24h daily cadence, but a single O_EXCL lockfile guarantees a slow
-// pass can never overlap the next day's trigger (double-processing). Stale lock
-// (holder crashed) older than SWEEP_LOCK_STALE_MS is force-reclaimed.
-// ───────────────────────────────────────────────────────────────────────────
-const SWEEP_LOCK_FILE = process.env.B75_SWEEP_LOCK_FILE ?? '/tmp/b75-retention-sweep.lock';
-const SWEEP_LOCK_STALE_MS = 6 * 60 * 60 * 1000; // 6h — a real pass is ~1-2h; older = crashed holder
-
-/** Returns true if the lock was acquired; false if a live run already holds it. */
-function acquireSweepLock(): boolean {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const fd = fs.openSync(SWEEP_LOCK_FILE, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY, 0o644);
-      fs.writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
-      fs.closeSync(fd);
-      return true;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-      // Lock exists — reclaim only if stale (crashed holder).
-      try {
-        const ageMs = Date.now() - fs.statSync(SWEEP_LOCK_FILE).mtimeMs;
-        if (ageMs > SWEEP_LOCK_STALE_MS) {
-          console.warn(`[B75 sweep] stale run-lock (age ${(ageMs / 3_600_000).toFixed(1)}h) — force-reclaiming`);
-          fs.unlinkSync(SWEEP_LOCK_FILE);
-          continue; // retry the create
-        }
-      } catch { /* lock vanished between stat and now — retry */ continue; }
-      return false; // fresh lock held by a live run
-    }
-  }
-  return false;
-}
-
-function releaseSweepLock(): void {
-  try {
-    fs.unlinkSync(SWEEP_LOCK_FILE);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error('[B75 sweep] failed to release run-lock:', err);
-    }
-  }
-}
-
-export interface SweepLockDependencies {
-  acquire: () => boolean;
-  release: () => void;
-  run: () => Promise<boolean>;
-}
-
-/** Execute the sweep while holding the overlap lock.  The returned failure flag
- * is deliberately observed only after this function's `finally` has released
- * the lock. */
-export async function runWithSweepLock(
-  deps: SweepLockDependencies,
-): Promise<{ acquired: boolean; hadFailures: boolean }> {
-  if (!deps.acquire()) return { acquired: false, hadFailures: false };
-  try {
-    return { acquired: true, hadFailures: await deps.run() };
-  } finally {
-    deps.release();
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────────
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1487,16 +1422,7 @@ export interface RetentionSweepCliDependencies {
 }
 
 async function runRetentionSweepCliBody(): Promise<void> {
-  const result = await runWithSweepLock({
-    acquire: acquireSweepLock,
-    release: releaseSweepLock,
-    run: runSweep,
-  });
-  if (!result.acquired) {
-    console.log('[B75 sweep] another run still holds the lock — skipping this tick (overlap guard)');
-    return;
-  }
-  if (result.hadFailures) process.exit(1);
+  if (await runSweep()) process.exit(1);
 }
 
 export async function runRetentionSweepCli(
@@ -1506,6 +1432,11 @@ export async function runRetentionSweepCli(
     run: runRetentionSweepCliBody,
   },
 ): Promise<void> {
+  if (deps.env.B75_SWEEP_LOCK_HELD !== '1') {
+    console.error('[B75 sweep] REFUSED: invoke through server/scripts/b75-retention-run.sh so cron and manual runs share the kernel lock');
+    deps.exit(1);
+    return;
+  }
   if (!deps.env.DATABASE_URL) {
     console.error('[B75 sweep] DATABASE_URL not set');
     deps.exit(1);
