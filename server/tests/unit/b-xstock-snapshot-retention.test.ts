@@ -866,6 +866,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
         events.push('cold-manifest');
         persistedCold = {
           ...warmManifest,
+          ...Object.fromEntries(proofFields.map((field) => [field, null])),
           id: 'cold-manifest-1',
           tier: 'cold',
           state: 'active',
@@ -876,23 +877,27 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
       if (sql.startsWith('INSERT INTO data_archive_exact_evidence')) {
         events.push('proof-copy');
         if (!persistedCold) throw new Error('cold manifest must exist before proof copy');
-        persistedCold = {
-          ...persistedCold,
-          cursor_contract: warmManifest.cursor_contract,
-          selector_contract: warmManifest.selector_contract,
-          selector_version: warmManifest.selector_version,
-          frozen_cutoff_at: warmManifest.frozen_cutoff_at,
-          ranking_observed_at: warmManifest.ranking_observed_at,
-          keep_floor_rows: warmManifest.keep_floor_rows,
-          day_start: warmManifest.day_start,
-          day_end: warmManifest.day_end,
-          ordered_key_sha256: warmManifest.ordered_key_sha256,
-          full_row_sha256: corruptCopiedProof ? 'mismatched-full-row-proof' : warmManifest.full_row_sha256,
-        };
+        const projection = /INSERT INTO data_archive_exact_evidence\s*\(([\s\S]*?)\)\s*SELECT\s+([\s\S]*?)\s+FROM data_archive_exact_evidence/.exec(sql);
+        if (!projection) throw new Error('could not parse production evidence-copy projection');
+        const targetColumns = projection[1].split(',').map((column) => column.trim());
+        const sourceExpressions = projection[2].split(',').map((expression) => expression.trim());
+        if (targetColumns.length !== sourceExpressions.length) {
+          throw new Error('production evidence-copy target/source projection lengths differ');
+        }
+        const copied = { ...persistedCold } as RehydrateManifestRow & Record<string, unknown>;
+        for (const field of proofFields) {
+          const position = targetColumns.indexOf(field);
+          if (position >= 0 && sourceExpressions[position] === field) copied[field] = warmManifest[field];
+        }
+        if (corruptCopiedProof) copied.full_row_sha256 = 'mismatched-full-row-proof';
+        persistedCold = copied;
         return { rows: [] };
       }
       if (sql.startsWith('SELECT EXISTS')) {
         events.push('proof-compare');
+        for (const field of proofFields) {
+          expect(sql).toMatch(new RegExp(`cold\\.${field}[\\s\\S]{1,50}warm\\.${field}`));
+        }
         return { rows: [{ exact: proofMatches() }] };
       }
       if (sql.startsWith('UPDATE data_archive_manifest')) {
