@@ -370,7 +370,17 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
         FROM information_schema.columns
        WHERE table_schema = current_schema()
          AND table_name = 'data_archive_exact_evidence'
-         AND column_name IN ('selector_contract', 'ordered_key_sha256', 'full_row_sha256')
+         AND column_name IN (
+           'selector_contract',
+           'selector_version',
+           'frozen_cutoff_at',
+           'ranking_observed_at',
+           'keep_floor_rows',
+           'day_start',
+           'day_end',
+           'ordered_key_sha256',
+           'full_row_sha256'
+         )
     `);
     expect(selectorColumns.rows[0].n).toBe(0);
   });
