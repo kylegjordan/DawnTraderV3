@@ -71,6 +71,7 @@ import { computeDirectionalBias } from '../server/core/metrics/directional-bias.
 import { DEFAULT_DBS_CONFIG } from '../server/types/directional-bias.types.js';
 import type { OHLCData, RegimeConfig } from '../server/types/market-regime.types.js';
 import type { AssetClass } from '../shared/asset-classes.js';
+import { HOT_HORIZON_SQL, decideEraWithWarmup, parseHorizonRows } from '../server/services/data-archive/hot-horizon.js';
 import {
   RBS_VOL_MAX_XSTOCK,
   RBS_DX_MAX_XSTOCK,
@@ -283,7 +284,18 @@ async function main(): Promise<void> {
   const symbols = await fetchLiveUniverseSymbols(client);
   const maxTs = await fetchMaxTs(client);
   const cutoff7d = maxTs - MATCH_WINDOW_DAYS * 86_400_000;
-  console.log(`[B3-AUDIT] ${symbols.length} live-universe symbols | maxTs=${new Date(maxTs).toISOString()} | 7d match cutoff=${new Date(cutoff7d).toISOString()}`);
+  const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
+  const snapshotEra = decideEraWithWarmup(
+    new Date(cutoff7d).toISOString(),
+    WINDOW_BARS * 60 * 60_000,
+    ['xstock_spot_ohlc_60m_snapshot'],
+    parseHorizonRows(horizonRows),
+    Date.now(),
+  );
+  if (!snapshotEra.ok) throw new Error(`[B3-AUDIT] ${snapshotEra.message}`);
+  const hotStartIso = snapshotEra.horizonStartIso;
+  console.log(`[B3-AUDIT] ${symbols.length} live-universe symbols | maxTs=${new Date(maxTs).toISOString()} | `
+    + `7d match cutoff=${new Date(cutoff7d).toISOString()} | current hot window starts ${hotStartIso}`);
 
   const out = createWriteStream(OUT_PATH);
   out.write('symbol,bucket_ts,regime,confidence,vol,mom,dx,dbs,sentinel,session,is_holiday,rbs_miss_only_dx,in_7d\n');
@@ -299,8 +311,10 @@ async function main(): Promise<void> {
   for (const symbol of symbols) {
     const ohlcRes = await client.query<{ bucket_ts: string; open: string; high: string; low: string; close: string; volume: string }>(
       `SELECT bucket_ts, open, high, low, close, volume
-         FROM xstock_spot_ohlc_60m_snapshot WHERE symbol = $1 ORDER BY bucket_ts ASC`,
-      [symbol],
+         FROM xstock_spot_ohlc_60m_snapshot
+        WHERE symbol = $1 AND bucket_ts >= $2
+        ORDER BY bucket_ts ASC`,
+      [symbol, hotStartIso],
     );
     const bars: Array<OHLCData & { _ts: string }> = ohlcRes.rows.map((r) => ({
       timestamp: new Date(r.bucket_ts).getTime(),
@@ -366,7 +380,7 @@ async function main(): Promise<void> {
   // window (aligned to LIVE_7D). The full-window run is for the richer input +
   // near-miss distribution analysis, where the match line is informational only.
   printSummary('★ LAST 7 DAYS — PRE-REGISTERED MATCH VERDICT (aligned to LIVE_7D)', agg7d);
-  printSummary('FULL WINDOW (~27d, broader input + near-miss analysis; match line informational)', aggAll);
+  printSummary(`CURRENT HOT WINDOW (from ${hotStartIso}; broader input + near-miss analysis; match line informational)`, aggAll);
   printSummary('US-RTH session, full window (13:30-20:00 UTC; analytical only — xStocks 24/5)', aggRth);
   printSummary('OFF-HOURS session, full window', aggOff);
   if (aggHoliday.total > 0) printSummary(`HOLIDAY segment (Memorial Day ${MEMORIAL_DAY_UTC})`, aggHoliday);

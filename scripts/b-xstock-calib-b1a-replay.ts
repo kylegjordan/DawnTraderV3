@@ -42,6 +42,8 @@ import pg from 'pg';
 const { Client } = pg;
 import { createWriteStream } from 'node:fs';
 import { calculatePairRegime } from '../server/core/metrics/market-regime.js';
+import { HOT_HORIZON_SQL, decideEraWithWarmup, parseHorizonRows } from '../server/services/data-archive/hot-horizon.js';
+import { loadProvenRehydratedSnapshot } from '../server/services/data-archive/rehydrated-snapshot-input.js';
 import type { OHLCData, RegimeConfig } from '../server/types/market-regime.types.js';
 import type { AssetClass } from '../shared/asset-classes.js';
 
@@ -55,8 +57,20 @@ const REPLAY_END = '2026-05-15 23:00:00+00';
 //   - `computeVolatility`: at least 2 bars
 // 30-bar minimum yields wider replay corpus given limited per-symbol OHLC history.
 const OHLC_LOOKBACK_BARS = 30;
+const SNAPSHOT_TABLE = 'xstock_spot_ohlc_60m_snapshot' as const;
+const B1A_REHYDRATED_INPUT = process.env.B1A_REHYDRATED_SNAPSHOT_PATH;
 
 const OUT_PATH = './scripts/b-xstock-calib-b1a-replay-output.csv';
+
+interface RehydratedBar {
+  bucket_ts: string;
+  open: string;
+  high: string;
+  low: string;
+  close: string;
+  volume: string;
+}
+type RehydratedBarsBySymbol = Map<string, RehydratedBar[]>;
 
 // ── Build RegimeConfig from module_constants ───────────────────────────────
 async function buildXstockRegimeConfig(client: Client): Promise<RegimeConfig> {
@@ -95,7 +109,8 @@ async function buildXstockRegimeConfig(client: Client): Promise<RegimeConfig> {
 }
 
 // ── Fetch distinct symbols in replay window ────────────────────────────────
-async function fetchAllSymbols(client: Client): Promise<string[]> {
+async function fetchAllSymbols(client: Client, rehydrated: RehydratedBarsBySymbol | null): Promise<string[]> {
+  if (rehydrated) return [...rehydrated.keys()].sort();
   const r = await client.query<{ symbol: string }>(
     `SELECT DISTINCT symbol
        FROM xstock_spot_ohlc_60m_snapshot
@@ -124,9 +139,11 @@ async function replayOneSymbol(
   regimeConfig: RegimeConfig,
   out: NodeJS.WritableStream,
   agg: AggregatedStats,
+  rehydrated: RehydratedBarsBySymbol | null,
 ): Promise<number> {
   // Fetch OHLC bars with 60-bar prefix before replay window for lookback
-  const ohlcRes = await client.query<{
+  const hotRows = rehydrated?.get(symbol);
+  const ohlcRes = hotRows ? { rows: hotRows } : await client.query<{
     bucket_ts: string;
     open: string;
     high: string;
@@ -289,11 +306,45 @@ async function main(): Promise<void> {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
+  let rehydrated: RehydratedBarsBySymbol | null = null;
+  if (B1A_REHYDRATED_INPUT) {
+    const loaded = await loadProvenRehydratedSnapshot(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE);
+    rehydrated = new Map();
+    const rehydratedFromMs = Date.parse(REPLAY_START) - 60 * 60 * 60_000;
+    const rehydratedToMs = Date.parse(REPLAY_END);
+    for (const row of loaded.rows) {
+      const bucketMs = Date.parse(row.bucket_ts);
+      if (bucketMs < rehydratedFromMs || bucketMs >= rehydratedToMs) continue;
+      const bars = rehydrated.get(row.symbol) ?? [];
+      bars.push({
+        bucket_ts: row.bucket_ts,
+        open: String(row.open), high: String(row.high), low: String(row.low), close: String(row.close), volume: String(row.volume),
+      });
+      rehydrated.set(row.symbol, bars);
+    }
+    if (rehydrated.size === 0) throw new Error('[B1A] proven rehydrated input contains no rows for the fixed replay era');
+    console.log(`[B1A] loaded ${loaded.rows.length.toLocaleString()} rows from ${loaded.files.length} proven rehydrated snapshot object(s).`);
+  } else {
+    const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
+    const era = decideEraWithWarmup(
+      new Date(REPLAY_START).toISOString(),
+      60 * 60 * 60_000,
+      [SNAPSHOT_TABLE],
+      parseHorizonRows(horizonRows),
+      Date.now(),
+    );
+    if (!era.ok) {
+      throw new Error(`[B1A] fixed historical replay requires proven rehydrated snapshot input. ${era.message} `
+        + 'Set B1A_REHYDRATED_SNAPSHOT_PATH to that downloaded file or directory.');
+    }
+    throw new Error('[B1A] fixed historical replay may not read the mutable hot snapshot table; set B1A_REHYDRATED_SNAPSHOT_PATH.');
+  }
+
   console.log('[B1A] Connected. Building xstock_spot RegimeConfig from module_constants...');
   const regimeConfig = await buildXstockRegimeConfig(client);
   console.log(`[B1A] RegimeConfig: ${JSON.stringify(regimeConfig)}`);
 
-  const symbols = await fetchAllSymbols(client);
+  const symbols = await fetchAllSymbols(client, rehydrated);
   console.log(`[B1A] ${symbols.length} symbols in replay window ${REPLAY_START} → ${REPLAY_END}`);
 
   const out = createWriteStream(OUT_PATH);
@@ -304,7 +355,7 @@ async function main(): Promise<void> {
   let totalWritten = 0;
   for (const symbol of symbols) {
     try {
-      const n = await replayOneSymbol(client, symbol, regimeConfig, out, agg);
+      const n = await replayOneSymbol(client, symbol, regimeConfig, out, agg, rehydrated);
       totalWritten += n;
     } catch (err) {
       console.warn(`[B1A][ERR] ${symbol}: ${err instanceof Error ? err.message : String(err)}`);

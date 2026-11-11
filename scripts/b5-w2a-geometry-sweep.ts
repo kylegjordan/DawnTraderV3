@@ -37,6 +37,7 @@
 import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
+import { HOT_HORIZON_SQL, decideEraWithWarmup, parseHorizonRows } from '../server/services/data-archive/hot-horizon.js';
 const { Client } = pg;
 
 // ── Tunables ─────────────────────────────────────────────────────────────────
@@ -299,6 +300,16 @@ async function main(): Promise<void> {
 
   // 1m bars (with ATR/24h warmup before window start)
   const warmISO = new Date(startMs - 2 * 86_400_000).toISOString();
+  const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
+  const snapshotEra = decideEraWithWarmup(
+    startISO,
+    2 * 86_400_000,
+    ['xstock_spot_ohlc_15m_snapshot'],
+    parseHorizonRows(horizonRows),
+    Date.now(),
+  );
+  if (!snapshotEra.ok) throw new Error(`[W2A] ${snapshotEra.message}`);
+  console.log(`[W2A] snapshot window is inside the ${snapshotEra.horizonDays}d hot horizon.`);
   console.log('[W2A] loading 1m bars…');
   const barRes = await client.query<{ symbol: string; interval_begin: string; open: string; high: string; low: string; close: string }>(
     `SELECT symbol, interval_begin, open, high, low, close FROM xstock_spot_ohlc_1m

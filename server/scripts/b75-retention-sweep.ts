@@ -49,6 +49,8 @@ import {
   countGzipJsonlLines,
   exportPartition,
   ExportRowCountMismatchError,
+  inspectGzipSnapshotJsonl,
+  loadSnapshotProvenKeys,
 } from '../services/data-archive/partition-exporter.js';
 import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import { DATA_LIFECYCLE_SCOPE_SQL, parseLifecycleNumber } from '../services/data-archive/hot-horizon.js';
@@ -87,6 +89,24 @@ import {
   type SweepFailureClass,
 } from '../services/data-archive/archive-completeness.js';
 import { isDirectEntry } from './direct-entry.js';
+import {
+  parseXstockSnapshotLifecycleConfig,
+  XSTOCK_SNAPSHOT_POLICIES,
+  type XstockSnapshotTable,
+} from '../services/xstock-snapshot-policy.js';
+import {
+  XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+  frozenSnapshotCutoff,
+  snapshotDayLabel,
+  snapshotEligibleDaysSql,
+  snapshotLockedDeleteParams,
+  snapshotLockedDeleteSql,
+  snapshotPopulationParams,
+  snapshotProvenKeyAbsenceSql,
+  snapshotProofMatches,
+  type XstockSnapshotProof,
+  type XstockSnapshotSelector,
+} from '../services/data-archive/xstock-snapshot-retention.js';
 
 /** One id per run, printed on the started line and cited as resolve evidence. */
 const RUN_ID = crypto.randomUUID();
@@ -218,11 +238,16 @@ export interface B75SweepConfig {
   warmPrefix: string;
   retentionByTable: Map<string, number>;
   sliceThresholdHotBytes: number;
+  snapshotByTable: Map<XstockSnapshotTable, {
+    hotRetentionDays: number;
+    keepFloorRows: number;
+  }>;
+  snapshotMutationEnabled: boolean;
 }
 
 const NARROW_LIFECYCLE_SCOPE_ALERT_KEY = 'b75-retention-sweep:data-lifecycle-narrow-scope';
 
-async function loadConfig(client: pg.Client): Promise<B75SweepConfig> {
+export async function loadConfig(client: pg.Client): Promise<B75SweepConfig> {
   const narrow = await client.query(
     `SELECT constant_name FROM module_constants
        WHERE module_name = 'data_lifecycle'
@@ -282,12 +307,16 @@ async function loadConfig(client: pg.Client): Promise<B75SweepConfig> {
     retentionByTable.set(spec.table, reqNum(spec.retentionConstantName));
   }
 
+  const snapshot = parseXstockSnapshotLifecycleConfig(map, narrowNames);
+
   return {
     warmBucket: reqStr('warm_bucket'),
     warmPrefix: reqStr('warm_prefix'),
     retentionByTable,
     // B-NEW-47: DB-governed, fail-hard-if-empty (Langston Step-2 Q-A).
     sliceThresholdHotBytes: reqNum('slice_threshold_hot_bytes'),
+    snapshotByTable: snapshot.byTable,
+    snapshotMutationEnabled: snapshot.mutationEnabled,
   };
 }
 
@@ -801,6 +830,308 @@ export async function archiveB75Object(
       }
     }
   }
+}
+
+interface StoredSnapshotEvidence {
+  cursor_contract: string;
+  selector_contract: string;
+  selector_version: number;
+  frozen_cutoff_at: Date;
+  ranking_observed_at: Date;
+  keep_floor_rows: number;
+  day_start: Date;
+  day_end: Date;
+  source_row_count: number;
+  ordered_key_sha256: string;
+  full_row_sha256: string;
+}
+
+async function getStoredSnapshotEvidence(
+  client: pg.Client,
+  manifestId: string,
+): Promise<StoredSnapshotEvidence | null> {
+  const result = await client.query(
+    `SELECT cursor_contract, selector_contract, selector_version,
+            frozen_cutoff_at, ranking_observed_at, keep_floor_rows,
+            day_start, day_end, source_row_count::text,
+            ordered_key_sha256, full_row_sha256
+       FROM data_archive_exact_evidence
+      WHERE manifest_id = $1`,
+    [manifestId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    selector_version: Number(row.selector_version),
+    keep_floor_rows: Number(row.keep_floor_rows),
+    source_row_count: Number(row.source_row_count),
+    frozen_cutoff_at: new Date(row.frozen_cutoff_at),
+    ranking_observed_at: new Date(row.ranking_observed_at),
+    day_start: new Date(row.day_start),
+    day_end: new Date(row.day_end),
+  } as StoredSnapshotEvidence;
+}
+
+function storedSnapshotEvidenceMatches(
+  stored: StoredSnapshotEvidence,
+  selector: XstockSnapshotSelector,
+  proof: XstockSnapshotProof,
+): boolean {
+  return stored.cursor_contract === XSTOCK_SNAPSHOT_CURSOR_CONTRACT
+    && stored.selector_contract === 'xstock-snapshot-ranked-day/v1'
+    && stored.selector_version === 1
+    && stored.frozen_cutoff_at.getTime() === selector.cutoffAt.getTime()
+    && Number.isFinite(stored.ranking_observed_at.getTime())
+    && stored.keep_floor_rows === selector.keepFloorRows
+    && stored.day_start.getTime() === selector.dayStart.getTime()
+    && stored.day_end.getTime() === selector.dayEnd.getTime()
+    && snapshotProofMatches({
+      sourceRowCount: stored.source_row_count,
+      orderedKeySha256: stored.ordered_key_sha256,
+      fullRowSha256: stored.full_row_sha256,
+    }, proof);
+}
+
+function parseWarmStorageUri(uri: string): { bucket: string; objectPath: string } {
+  const match = /^supabase:\/\/([^/]+)\/(.+)$/.exec(uri);
+  if (!match) throw new Error(`[B75 sweep] unsupported warm storage URI: ${uri}`);
+  return { bucket: match[1], objectPath: match[2] };
+}
+
+export interface SnapshotArchiveOutcome {
+  manifestId: string;
+  partitionLabel: string;
+  proof: XstockSnapshotProof;
+  provenObjectPath: string;
+  exportedPath: string;
+  bytesCompressed: number;
+  reused: boolean;
+  selector: XstockSnapshotSelector;
+}
+
+/**
+ * Snapshot-specific adapter around the existing exporter, manifest, storage
+ * and exact-evidence state machine.  The label is not known until the current
+ * ordered-key digest exists, so export precedes the existing-copy decision.
+ */
+export async function archiveSnapshotObject(
+  storage: StorageClient,
+  exportClient: pg.Client,
+  ctlClient: pg.Client,
+  cfg: B75SweepConfig,
+  selector: XstockSnapshotSelector,
+): Promise<SnapshotArchiveOutcome> {
+  const provisionalLabel = `${selector.dayStart.toISOString().slice(0, 10)}-${RUN_ID}`;
+  const exportRes = await exportPartition(exportClient, {
+    sourceTable: selector.table,
+    partitionLabel: provisionalLabel,
+    rangeStart: selector.dayStart,
+    rangeEnd: selector.dayEnd,
+    timestampColumn: 'bucket_ts',
+    compressionLevel: 6,
+    snapshotSelector: selector,
+  });
+  if (!exportRes.snapshotProof) {
+    try { fs.unlinkSync(exportRes.localPath); } catch { /* already absent */ }
+    throw new Error(`[B75 sweep][snapshot] ${selector.table}: exporter omitted snapshot proof`);
+  }
+  const proof = exportRes.snapshotProof;
+  const partitionLabel = snapshotDayLabel(selector.dayStart, proof.orderedKeySha256);
+  const objPath = `${cfg.warmPrefix}/${selector.table}/${partitionLabel}.jsonl.gz`;
+  const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
+  const verifyPath = `${exportRes.localPath}.verify`;
+
+  try {
+  const existing = await getManifestRow(ctlClient, selector.table, partitionLabel, 'warm');
+  const needs = decisionNeeds(existing);
+  const evidenceExists = existing && needs.evidence
+    ? await evidenceExistsForManifest(ctlClient, existing.id)
+    : false;
+  const decision = decideExistingCopy(existing, evidenceExists, proof.sourceRowCount > 0);
+  if (decision.kind === 'refuse') {
+    throw new NonProvenExistingCopyError(decision.reason, selector.table, partitionLabel);
+  }
+  if (decision.kind === 'skip') {
+    throw new Error(
+      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current eligible rows cannot skip ${decision.reason}`,
+    );
+  }
+
+  if (decision.kind === 'reuse') {
+    const stored = await getStoredSnapshotEvidence(ctlClient, existing!.id);
+    if (!stored || !storedSnapshotEvidenceMatches(stored, selector, proof)) {
+      throw new NonProvenExistingCopyError('reuse-count-changed', selector.table, partitionLabel);
+    }
+    const remote = parseWarmStorageUri(existing!.storage_uri);
+    const download = await storage.downloadWarmFile(remote.bucket, remote.objectPath, verifyPath);
+    if (download.checksum !== existing!.checksum) {
+      throw new ChecksumMismatchError(
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: stored checksum=${existing!.checksum} readback=${download.checksum}`,
+      );
+    }
+    const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+    if (!snapshotProofMatches(downloadedProof, proof)) {
+      throw new ArchiveReadbackMismatchError(
+        `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: current, stored and downloaded proofs differ`,
+      );
+    }
+    return {
+      manifestId: existing!.id,
+      partitionLabel,
+      proof,
+      provenObjectPath: verifyPath,
+      exportedPath: exportRes.localPath,
+      bytesCompressed: 0,
+      reused: true,
+      selector: { ...selector, rankingObservedAt: stored.ranking_observed_at },
+    };
+  }
+
+  const manifestId = await upsertManifestPending(
+    ctlClient,
+    selector.table,
+    partitionLabel,
+    storageUri,
+    selector.dayStart,
+    selector.dayEnd,
+  );
+  const fileSize = fs.statSync(exportRes.localPath).size;
+  if (fileSize > HARD_CAP_BYTES) {
+    throw new Error(
+      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: compressed size ${fileSize}B exceeds ${HARD_CAP_BYTES}B`,
+    );
+  }
+  const upload = await storage.uploadWarmFile(cfg.warmBucket, objPath, exportRes.localPath, {
+    size: fileSize,
+    checksum: exportRes.checksum,
+  });
+  const download = await storage.downloadWarmFile(cfg.warmBucket, objPath, verifyPath);
+  if (upload.checksum !== exportRes.checksum || download.checksum !== exportRes.checksum) {
+    throw new ChecksumMismatchError(
+      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: upload/readback checksum mismatch`,
+    );
+  }
+  const downloadedProof = await inspectGzipSnapshotJsonl(verifyPath);
+  if (!snapshotProofMatches(downloadedProof, proof)) {
+    throw new ArchiveReadbackMismatchError(
+      `[B75 sweep][snapshot] ${selector.table}/${partitionLabel}: downloaded key/content proof mismatch`,
+    );
+  }
+
+  const evidence: ExactArchiveEvidenceInput = {
+    manifestId,
+    sourceTable: selector.table,
+    partitionLabel,
+    tier: 'warm',
+    cursorContract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+    sourceRowCount: proof.sourceRowCount,
+    exportedRowCount: exportRes.rowCount,
+    downloadedRowCount: downloadedProof.sourceRowCount,
+    objectChecksum: exportRes.checksum,
+    snapshot: {
+      ...proof,
+      cutoffAt: selector.cutoffAt,
+      rankingObservedAt: selector.rankingObservedAt,
+      keepFloorRows: selector.keepFloorRows,
+      dayStart: selector.dayStart,
+      dayEnd: selector.dayEnd,
+    },
+  };
+  assertExactArchiveEquality(evidence);
+  await updateManifestUploaded(
+    ctlClient,
+    manifestId,
+    exportRes.rowCount,
+    exportRes.bytesCompressed,
+    exportRes.minTs,
+    exportRes.maxTs,
+    exportRes.checksum,
+    exportRes.bytesUncompressed,
+  );
+  await ctlClient.query('BEGIN');
+  try {
+    await recordExactArchiveEvidence(ctlClient, evidence);
+    await ctlClient.query(
+      `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
+      [manifestId, PROVEN_BASIS],
+    );
+    await updateManifestVerified(ctlClient, manifestId);
+    await ctlClient.query('COMMIT');
+  } catch (err) {
+    await ctlClient.query('ROLLBACK').catch(() => {});
+    throw err;
+  }
+  return {
+    manifestId,
+    partitionLabel,
+    proof,
+    provenObjectPath: verifyPath,
+    exportedPath: exportRes.localPath,
+    bytesCompressed: exportRes.bytesCompressed,
+    reused: false,
+    selector,
+  };
+  } catch (err) {
+    try { fs.unlinkSync(verifyPath); } catch { /* already absent */ }
+    try { fs.unlinkSync(exportRes.localPath); } catch { /* already absent */ }
+    throw err;
+  }
+}
+
+export interface SnapshotDeleteOutcome {
+  deletedRows: number;
+  lockedDurationMs: number;
+}
+
+export async function deleteSnapshotProvenObject(
+  client: pg.Client,
+  archived: SnapshotArchiveOutcome,
+): Promise<SnapshotDeleteOutcome> {
+  const selector = archived.selector;
+  const downloadedProof = await loadSnapshotProvenKeys(client, archived.provenObjectPath);
+  if (!snapshotProofMatches(downloadedProof, archived.proof)) {
+    throw new ArchiveReadbackMismatchError(
+      `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: pre-lock object proof changed`,
+    );
+  }
+
+  const lockedAt = Date.now();
+  let deletedRows: number;
+  await client.query('BEGIN');
+  try {
+    await client.query("SET LOCAL lock_timeout = '1s'");
+    await client.query("SET LOCAL statement_timeout = '5s'");
+    await client.query(`LOCK TABLE ${quoteIdent(selector.table)} IN SHARE MODE`);
+    const result = await client.query(
+      snapshotLockedDeleteSql(selector),
+      snapshotLockedDeleteParams(selector, archived.proof, archived.manifestId),
+    );
+    const row = result.rows[0];
+    deletedRows = Number(row?.deleted_row_count ?? -1);
+    if (row?.proof_matches !== true
+      || Number(row?.current_row_count ?? -1) !== archived.proof.sourceRowCount
+      || deletedRows !== archived.proof.sourceRowCount
+      || Number(row?.manifest_rows_marked ?? 0) !== 1) {
+      throw new ArchiveReadbackMismatchError(
+        `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: locked proof/delete gate refused`,
+      );
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  }
+  const lockedDurationMs = Date.now() - lockedAt;
+  const remaining = Number((await client.query(
+    snapshotProvenKeyAbsenceSql(selector.table),
+  )).rows[0]?.remaining_rows ?? -1);
+  if (remaining !== 0) {
+    throw new ArchiveReadbackMismatchError(
+      `[B75 sweep][snapshot] ${selector.table}/${archived.partitionLabel}: ${remaining} proven key(s) remain after commit`,
+    );
+  }
+  return { deletedRows, lockedDurationMs };
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1412,6 +1743,180 @@ export async function sweepPlainTables(
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// B-XSTOCK-SNAPSHOT-RETENTION — ranked snapshot lane
+// ───────────────────────────────────────────────────────────────────────────
+
+export interface SnapshotTableSweepResult {
+  table: XstockSnapshotTable;
+  objectsExamined: number;
+  rowsDeleted: number;
+  bytesArchived: number;
+  failed: boolean;
+}
+
+export interface SnapshotTableSweepDependencies {
+  createClient: () => pg.Client;
+  getStorageClient: typeof getStorageClient;
+  listSelectors: typeof listSnapshotSelectors;
+  exportPartition: typeof exportPartition;
+  archiveObject: typeof archiveSnapshotObject;
+  deleteObject: typeof deleteSnapshotProvenObject;
+  raiseAlert: typeof raiseSweepAlert;
+  resolveAlerts: typeof resolveSweepAlerts;
+  unlinkFile: (filePath: string) => void;
+  now: () => number;
+}
+
+export async function listSnapshotSelectors(
+  client: pg.Client,
+  table: XstockSnapshotTable,
+  config: { hotRetentionDays: number; keepFloorRows: number },
+  rankingObservedAt: Date,
+): Promise<XstockSnapshotSelector[]> {
+  const cutoffAt = frozenSnapshotCutoff(rankingObservedAt, config.hotRetentionDays);
+  const result = await client.query(
+    snapshotEligibleDaysSql(table),
+    [config.keepFloorRows, cutoffAt],
+  );
+  return result.rows.map((row) => {
+    const dayStart = new Date(row.day_start);
+    return {
+      table,
+      keepFloorRows: config.keepFloorRows,
+      cutoffAt,
+      rankingObservedAt,
+      dayStart,
+      dayEnd: new Date(dayStart.getTime() + 86_400_000),
+    };
+  });
+}
+
+export async function sweepSnapshotTable(
+  cfg: B75SweepConfig,
+  table: XstockSnapshotTable,
+  deps: SnapshotTableSweepDependencies = {
+    createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+    getStorageClient,
+    listSelectors: listSnapshotSelectors,
+    exportPartition,
+    archiveObject: archiveSnapshotObject,
+    deleteObject: deleteSnapshotProvenObject,
+    raiseAlert: raiseSweepAlert,
+    resolveAlerts: resolveSweepAlerts,
+    unlinkFile: (filePath) => fs.unlinkSync(filePath),
+    now: Date.now,
+  },
+): Promise<SnapshotTableSweepResult> {
+  const config = cfg.snapshotByTable.get(table);
+  if (!config) throw new Error(`[B75 sweep][snapshot] missing config for ${table}`);
+
+  const ctlClient = deps.createClient();
+  const exportClient = deps.createClient();
+  await ctlClient.connect();
+  await exportClient.connect();
+  const storage = deps.getStorageClient();
+  const rankingObservedAt = new Date(deps.now());
+  let objectsExamined = 0;
+  let rowsDeleted = 0;
+  let bytesArchived = 0;
+  let failed = false;
+
+  try {
+    const selectors = await deps.listSelectors(ctlClient, table, config, rankingObservedAt);
+    console.log(
+      `[B75 sweep][snapshot] ${table}: mode=${cfg.snapshotMutationEnabled ? 'apply' : 'dry-read'} `
+      + `cutoff=${frozenSnapshotCutoff(rankingObservedAt, config.hotRetentionDays).toISOString()} `
+      + `floor=${config.keepFloorRows} objects=${selectors.length}`,
+    );
+
+    for (const selector of selectors) {
+      objectsExamined++;
+      let exportedPath: string | null = null;
+      let provenPath: string | null = null;
+      try {
+        if (!cfg.snapshotMutationEnabled) {
+          const dry = await deps.exportPartition(exportClient, {
+            sourceTable: selector.table,
+            partitionLabel: `${selector.dayStart.toISOString().slice(0, 10)}-dry-${RUN_ID}`,
+            rangeStart: selector.dayStart,
+            rangeEnd: selector.dayEnd,
+            timestampColumn: 'bucket_ts',
+            compressionLevel: 6,
+            snapshotSelector: selector,
+          });
+          exportedPath = dry.localPath;
+          if (!dry.snapshotProof) throw new Error('snapshot dry read omitted exact proof');
+          console.log(
+            `[B75 sweep][snapshot] ${table}/${selector.dayStart.toISOString().slice(0, 10)}: `
+            + `dry rows=${dry.snapshotProof.sourceRowCount} bytes_jsonl=${dry.bytesUncompressed} `
+            + `bytes_gzip=${dry.bytesCompressed} key_sha256=${dry.snapshotProof.orderedKeySha256}`,
+          );
+          continue;
+        }
+
+        const archived = await deps.archiveObject(storage, exportClient, ctlClient, cfg, selector);
+        exportedPath = archived.exportedPath;
+        provenPath = archived.provenObjectPath;
+        const deletion = await deps.deleteObject(ctlClient, archived);
+        rowsDeleted += deletion.deletedRows;
+        bytesArchived += archived.bytesCompressed;
+        console.log(
+          `[B75 sweep][snapshot] ${table}/${archived.partitionLabel}: `
+          + `${archived.reused ? 'reused' : 'archived'} rows=${deletion.deletedRows} `
+          + `bytes_gzip=${archived.bytesCompressed} locked_ms=${deletion.lockedDurationMs}`,
+        );
+      } catch (err) {
+        failed = true;
+        const reason = err instanceof Error ? err.message : String(err);
+        console.error(`[B75 sweep][snapshot] ${table}: stopped after object failure — ${reason}`);
+        await deps.raiseAlert(
+          `B75 snapshot retention failed: ${table}`,
+          `The ranked snapshot lane stopped this table before its next object. Reason: ${reason}`,
+          'warning',
+          { batch: 'B-XSTOCK-SNAPSHOT-RETENTION', table, run_id: RUN_ID },
+          `b75-snapshot:${table}:failure`,
+        );
+        break;
+      } finally {
+        if (provenPath) {
+          try { deps.unlinkFile(provenPath); } catch { /* already absent */ }
+        }
+        if (exportedPath) {
+          try { deps.unlinkFile(exportedPath); } catch { /* already absent */ }
+        }
+      }
+    }
+
+    if (rowsDeleted > 0) {
+      const vacuumStartedAt = deps.now();
+      await ctlClient.query(`VACUUM (ANALYZE) ${quoteIdent(table)}`);
+      console.log(
+        `[B75 sweep][snapshot] ${table}: vacuum_count=1 rows_deleted=${rowsDeleted} `
+        + `vacuum_ms=${deps.now() - vacuumStartedAt} physical_allocation_unchanged_expected=true`,
+      );
+    } else {
+      console.log(`[B75 sweep][snapshot] ${table}: vacuum_count=0 rows_deleted=0`);
+    }
+    if (!failed) {
+      await deps.resolveAlerts([`b75-snapshot:${table}:failure`], `the ${table} snapshot lane`);
+    }
+    return { table, objectsExamined, rowsDeleted, bytesArchived, failed };
+  } finally {
+    await exportClient.end().catch(() => {});
+    await ctlClient.end().catch(() => {});
+  }
+}
+
+export function parseRetentionSweepArgs(argv: string[]): { snapshotOnly: boolean } {
+  let snapshotOnly = false;
+  for (const arg of argv) {
+    if (arg === '--snapshot-only') snapshotOnly = true;
+    else throw new Error(`[B75 sweep] unknown argument: ${arg}`);
+  }
+  return { snapshotOnly };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
@@ -1422,7 +1927,7 @@ export interface RetentionSweepCliDependencies {
 }
 
 async function runRetentionSweepCliBody(): Promise<void> {
-  if (await runSweep()) process.exit(1);
+  if (await runSweep(parseRetentionSweepArgs(process.argv.slice(2)))) process.exit(1);
 }
 
 export async function runRetentionSweepCli(
@@ -1450,7 +1955,7 @@ export async function runRetentionSweepCli(
   await deps.run();
 }
 
-async function runSweep(): Promise<boolean> {
+async function runSweep(options: { snapshotOnly: boolean } = { snapshotOnly: false }): Promise<boolean> {
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
   let cfg: B75SweepConfig;
@@ -1471,7 +1976,8 @@ async function runSweep(): Promise<boolean> {
     `[B75 sweep] started at ${startedAt.toISOString()} run_id=${RUN_ID} slice_threshold_hot_bytes=${cfg.sliceThresholdHotBytes}`,
   );
 
-  for (const spec of PARTITIONED_TABLES) {
+  if (!options.snapshotOnly) {
+    for (const spec of PARTITIONED_TABLES) {
     const retentionDays = cfg.retentionByTable.get(spec.parent)!;
     const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
     const cutoffMonth = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
@@ -1520,25 +2026,36 @@ async function runSweep(): Promise<boolean> {
         );
       }
     }
+    }
   }
 
   // P19-B5c: plain (non-partitioned) retention pass — runs after the partition
   // sweep so B75 remains the single retention owner for all archive tables.
-  const plainResult = await sweepPlainTables(cfg);
+  const plainResult = options.snapshotOnly
+    ? { deleted: 0, failed: 0 }
+    : await sweepPlainTables(cfg);
+
+  const snapshotResults: SnapshotTableSweepResult[] = [];
+  for (const policy of XSTOCK_SNAPSHOT_POLICIES) {
+    snapshotResults.push(await sweepSnapshotTable(cfg, policy.table));
+  }
+  const snapshotRowsDeleted = snapshotResults.reduce((sum, result) => sum + result.rowsDeleted, 0);
+  const snapshotFailed = snapshotResults.filter((result) => result.failed).length;
 
   const totalMs = Date.now() - startedAt.getTime();
   console.log(
     `[B75 sweep] DONE — examined=${partitionsExamined} dropped=${partitionsDropped} ` +
       `failed=${partitionsFailed} bytes_freed=${bytesFreedTotal} ` +
       `bytes_archived=${bytesArchivedTotal} plain_deleted=${plainResult.deleted} ` +
-      `plain_failed=${plainResult.failed} duration_ms=${totalMs}`,
+      `plain_failed=${plainResult.failed} snapshot_deleted=${snapshotRowsDeleted} `
+      + `snapshot_failed=${snapshotFailed} duration_ms=${totalMs}`,
   );
   // Reaching DONE is the fatal key's resolve edge: a run that completes has not crashed.
   await resolveSweepAlerts([FATAL_ALERT_KEY], 'the whole sweep (reached DONE)');
 
   // Return the failure flag; main() releases the run-lock (finally) THEN exits
   // non-zero. A fatal throw propagates through main()'s finally to the catch below.
-  return partitionsFailed > 0 || plainResult.failed > 0;
+  return partitionsFailed > 0 || plainResult.failed > 0 || snapshotFailed > 0;
 }
 
 export interface RetentionSweepProcessDependencies {

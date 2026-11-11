@@ -56,6 +56,11 @@ import { DISK_FILE_FORMAT, DISK_FILE_SOURCE_PREFIX, digestFile } from '../servic
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { isDirectEntry } from './direct-entry.js';
+import { inspectGzipSnapshotJsonl } from '../services/data-archive/partition-exporter.js';
+import {
+  XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+  snapshotProofMatches,
+} from '../services/data-archive/xstock-snapshot-retention.js';
 
 const { Client } = pg;
 
@@ -121,6 +126,16 @@ export interface RehydrateManifestRow {
   completeness_basis: string | null;
   format: string;
   original_partition_size_bytes: number | null;
+  cursor_contract?: string | null;
+  selector_contract?: string | null;
+  selector_version?: number | null;
+  frozen_cutoff_at?: Date | null;
+  ranking_observed_at?: Date | null;
+  keep_floor_rows?: number | null;
+  day_start?: Date | null;
+  day_end?: Date | null;
+  ordered_key_sha256?: string | null;
+  full_row_sha256?: string | null;
 }
 
 async function queryManifest(
@@ -128,13 +143,21 @@ async function queryManifest(
   args: RehydrateArgs,
 ): Promise<RehydrateManifestRow[]> {
   const r = await client.query(
-    `SELECT id, partition_label, tier, state, storage_uri, row_count, bytes_compressed,
-            min_ts, max_ts, checksum, completeness_basis, format, original_partition_size_bytes
-       FROM data_archive_manifest
-      WHERE source_table = $1
-        AND state IN ('verified', 'active', 'migrating', 'migrated')
-        AND tstzrange(min_ts, max_ts, '[]') && tstzrange($2::timestamptz, $3::timestamptz, '[]')
-      ORDER BY min_ts ASC, tier ASC`,
+    `SELECT manifest.id, manifest.partition_label, manifest.tier, manifest.state,
+            manifest.storage_uri, manifest.row_count, manifest.bytes_compressed,
+            manifest.min_ts, manifest.max_ts, manifest.checksum,
+            manifest.completeness_basis, manifest.format,
+            manifest.original_partition_size_bytes,
+            evidence.cursor_contract, evidence.selector_contract, evidence.selector_version,
+            evidence.frozen_cutoff_at, evidence.ranking_observed_at,
+            evidence.keep_floor_rows, evidence.day_start, evidence.day_end,
+            evidence.ordered_key_sha256, evidence.full_row_sha256
+       FROM data_archive_manifest manifest
+       LEFT JOIN data_archive_exact_evidence evidence ON evidence.manifest_id = manifest.id
+      WHERE manifest.source_table = $1
+        AND manifest.state IN ('verified', 'active', 'migrating', 'migrated')
+        AND tstzrange(manifest.min_ts, manifest.max_ts, '[]') && tstzrange($2::timestamptz, $3::timestamptz, '[]')
+      ORDER BY manifest.min_ts ASC, manifest.tier ASC`,
     [args.table, args.from, args.to],
   );
   // row_count and bytes_compressed are BIGINT, which node-postgres returns as STRINGS, so
@@ -147,6 +170,8 @@ async function queryManifest(
     row_count: Number(row.row_count),
     bytes_compressed: Number(row.bytes_compressed),
     original_partition_size_bytes: row.original_partition_size_bytes == null ? null : Number(row.original_partition_size_bytes),
+    selector_version: row.selector_version == null ? null : Number(row.selector_version),
+    keep_floor_rows: row.keep_floor_rows == null ? null : Number(row.keep_floor_rows),
   }));
 }
 
@@ -296,7 +321,7 @@ export async function rehydrateChosenObject(
     return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
   }
 
-  const proven = isProvenBasis(download.completeness_basis);
+  let proven = isProvenBasis(download.completeness_basis);
   const basis = download.completeness_basis ?? 'unrecorded';
   const rowsLabel = proven ? 'rows' : 'rows(unproven)';
   const isDiskFile = download.format === DISK_FILE_FORMAT;
@@ -351,6 +376,35 @@ export async function rehydrateChosenObject(
       outPath = restored;
     }
   }
+  if (checksumOk && !isDiskFile && download.cursor_contract === XSTOCK_SNAPSHOT_CURSOR_CONTRACT) {
+    try {
+      const snapshot = await inspectGzipSnapshotJsonl(localPath);
+      const evidenceComplete = download.selector_contract === 'xstock-snapshot-ranked-day/v1'
+        && download.selector_version === 1
+        && download.frozen_cutoff_at != null
+        && download.ranking_observed_at != null
+        && download.keep_floor_rows != null
+        && download.day_start != null
+        && download.day_end != null
+        && download.ordered_key_sha256 != null
+        && download.full_row_sha256 != null;
+      if (!evidenceComplete || !snapshotProofMatches(snapshot, {
+        sourceRowCount: download.row_count,
+        orderedKeySha256: download.ordered_key_sha256 ?? '',
+        fullRowSha256: download.full_row_sha256 ?? '',
+      })) {
+        checksumOk = false;
+        proven = false;
+        console.error(`[B75 rehydrate] ${label}: snapshot selector/key/content proof mismatch`);
+      }
+    } catch (err) {
+      checksumOk = false;
+      proven = false;
+      console.error(
+        `[B75 rehydrate] ${label}: snapshot object validation failed — ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
   if (!checksumOk) {
     outPath = `${localPath}.CORRUPT`;
     fs.renameSync(localPath, outPath);
@@ -376,6 +430,18 @@ export async function rehydrateChosenObject(
         : 'the exported count only; rows may be missing inside the day (#1195)',
       min_ts: download.min_ts,
       max_ts: download.max_ts,
+      snapshot_selector: download.cursor_contract === XSTOCK_SNAPSHOT_CURSOR_CONTRACT ? {
+        cursor_contract: download.cursor_contract,
+        selector_contract: download.selector_contract,
+        selector_version: download.selector_version,
+        frozen_cutoff_at: download.frozen_cutoff_at,
+        ranking_observed_at: download.ranking_observed_at,
+        keep_floor_rows: download.keep_floor_rows,
+        day_start: download.day_start,
+        day_end: download.day_end,
+        ordered_key_sha256: download.ordered_key_sha256,
+        full_row_sha256: download.full_row_sha256,
+      } : null,
       other_objects: all.filter((r) => r !== download).map((r) => ({
         tier: r.tier,
         state: r.state,

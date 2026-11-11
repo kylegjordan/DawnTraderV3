@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { decideEra, parseHorizonRows, parseLifecycleNumber, DATA_LIFECYCLE_SCOPE_SQL, HOT_HORIZON_SQL } from '../../services/data-archive/hot-horizon.js';
+import {
+  decideEra,
+  decideEraWithWarmup,
+  hotRehydrateInstruction,
+  parseHorizonRows,
+  parseLifecycleNumber,
+  DATA_LIFECYCLE_SCOPE_SQL,
+  HOT_HORIZON_SQL,
+} from '../../services/data-archive/hot-horizon.js';
 
 // B-DB-SIZE-RELIEF OBJ-3 (pre-audit P6 / F8): a by-hand reader of the HOT tables states what it read and refuses an
 // era it cannot serve; a JOIN of two tables is limited by the SHORTER horizon.
@@ -21,6 +29,8 @@ describe('decideEra', () => {
     if (d.ok) return;
     expect(d.message).toMatch(/WARM tier/);
     expect(d.message).toMatch(/b75-rehydrate\.ts/);
+    expect(d.message).toContain('--table signal_eval_archive --from 2026-06-08 --to 2026-11-06');
+    expect(d.message).toContain('--table signal_eval_provenance --from 2026-06-08 --to 2026-11-06');
     expect(d.message).toMatch(/15 d, set by signal_eval_archive/);
     expect(d.earliestServableIso).toBe('2026-11-06T00:00:00.000Z'); // next UTC midnight after 2026-11-05T12:00Z
   });
@@ -59,6 +69,26 @@ describe('decideEra', () => {
     const era = '2026-11-06T00:00:00Z'; // exactly the earliest servable era at NOW
     expect(decideEra(era, JOINED, H, NOW).ok).toBe(true);
     expect(decideEra(era, JOINED, H, NOW + 86_400_000).ok).toBe(false);
+  });
+
+  it('REFUSES a requested window whose warmup crosses the hot horizon', () => {
+    const requested = '2026-11-06T00:00:00Z';
+    expect(decideEra(requested, JOINED, H, NOW).ok).toBe(true);
+    const d = decideEraWithWarmup(requested, 86_400_000, JOINED, H, NOW);
+    expect(d.ok).toBe(false);
+    if (d.ok) return;
+    expect(d.message).toContain('needs 86400000ms of prior bars');
+    expect(d.message).toContain('--from 2026-11-05');
+  });
+
+  it('builds one concrete restore command per required table', () => {
+    expect(hotRehydrateInstruction(JOINED, '2026-10-01T12:00:00Z', '2026-10-03T00:00:00Z'))
+      .toBe(
+        'npx tsx server/scripts/b75-rehydrate.ts --table signal_eval_archive --from 2026-10-01 --to 2026-10-03 '
+        + '--out ~/rehydrated/signal_eval_archive ; '
+        + 'npx tsx server/scripts/b75-rehydrate.ts --table signal_eval_provenance --from 2026-10-01 --to 2026-10-03 '
+        + '--out ~/rehydrated/signal_eval_provenance',
+      );
   });
 });
 
@@ -127,17 +157,43 @@ describe('increment 4 — the ENFORCER and the READERS share one scope filter an
 
 describe('wiring', () => {
   const ROOT = path.join(__dirname, '../../..');
+
+  it('every configurable xStock snapshot reader checks its full requested window plus warmup before reading snapshots', () => {
+    const cases = [
+      ['scripts/b-xstock-calib-b31a-gate-audit-2.ts', '3 * 86_400_000', 'xstock_spot_ohlc_60m_snapshot'],
+      ['scripts/b5-w2a-geometry-sweep.ts', '2 * 86_400_000', 'xstock_spot_ohlc_15m_snapshot'],
+      ['scripts/b-xstock-calib-b3-regime-audit.ts', 'WINDOW_BARS * 60 * 60_000', 'xstock_spot_ohlc_60m_snapshot'],
+    ] as const;
+    for (const [relative, warmup, table] of cases) {
+      const src = fs.readFileSync(path.join(ROOT, relative), 'utf8');
+      const check = src.indexOf('decideEraWithWarmup(');
+      const read = src.indexOf(`FROM ${table}`, check);
+      expect(check, relative).toBeGreaterThan(-1);
+      expect(src, relative).toContain(warmup);
+      expect(check, relative).toBeLessThan(read);
+    }
+  });
+
+  it('the fixed May replay refuses the hot table and accepts only proven rehydrated snapshot input', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'scripts/b-xstock-calib-b1a-replay.ts'), 'utf8');
+    expect(src).toContain('B1A_REHYDRATED_SNAPSHOT_PATH');
+    expect(src).toContain('loadProvenRehydratedSnapshot(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE)');
+    expect(src).toContain('fixed historical replay may not read the mutable hot snapshot table');
+    expect(src.indexOf('loadProvenRehydratedSnapshot(')).toBeLessThan(src.indexOf('fetchAllSymbols(client, rehydrated)'));
+  });
+
   it('the replay script reads the horizons for BOTH joined tables and exits non-zero on a refusal', () => {
     const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
-    expect(src).toMatch(/decideEra\(ERA_START, \['signal_eval_archive', 'signal_eval_provenance'\]/);
+    expect(src).toContain("const HOT_TABLES = ['signal_eval_archive', 'signal_eval_provenance', SNAPSHOT_TABLE]");
+    expect(src).toMatch(/decideEraWithWarmup\(ERA_START, SNAPSHOT_WARMUP_MS, HOT_TABLES/);
     expect(src).toMatch(/if \(!era\.ok\) \{[\s\S]{0,120}process\.exit\(2\)/);
     // the check runs BEFORE the first archive query
-    expect(src.indexOf('decideEra(ERA_START')).toBeLessThan(src.indexOf('FROM signal_eval_archive b'));
+    expect(src.indexOf('decideEraWithWarmup(ERA_START')).toBeLessThan(src.indexOf('FROM signal_eval_archive b'));
   });
 
   it('the replay script RE-CHECKS the era at the END of the run and exits 3 if a sweep may have truncated it', () => {
     const src = fs.readFileSync(path.join(ROOT, 'scripts/b5-w20c-provenance-replay.ts'), 'utf8');
-    const iEnd = src.indexOf('const endEra = decideEra(ERA_START');
+    const iEnd = src.indexOf('const endEra = decideEraWithWarmup(ERA_START');
     expect(iEnd).toBeGreaterThan(-1);
     // after the LAST archive read: the sampling joins (gate 3 F2 — 'FROM signal_eval_archive' is the FIRST read only)
     expect(src.lastIndexOf('signal_eval_archive b ON')).toBeGreaterThan(src.indexOf('FROM signal_eval_archive'));
