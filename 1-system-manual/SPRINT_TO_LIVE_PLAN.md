@@ -31,7 +31,7 @@
 | P1a — entry | 2 | B-CRYPTO-BIRTH-FEED | CC-B (New Claude) | none | #1060 | Kyle 2026-10-07 | MOVED into B-ENTRY-GATE (#1224) by Kyle's locked list, 2026-10-20 (row 39a keeps its sprint place) | nothing |
 | CC-B list | 1 | B-BOOK-CHECKSUM-CIRCUIT-BREAKER | CC-B (New Claude) | none | #1220 | Kyle 2026-10-20 (locked) | ✅ CLOSED 2026-10-20 (Langston Step 8 and Step 11; deployed 725a7f3f5) | nothing |
 | CC-B list | 2 | B-ENTRY-GATE | CC-B (New Claude) | none | #1224 | Kyle 2026-10-20 (locked); questions decided 2026-11-04 (KD-10, KD-11) | IN FLIGHT — Step 1 (scope r1 sent back 2026-10-21; r2 waits behind B-CRYPTO-FEED-WATCHDOG, Kyle 2026-11-04) | nothing (Kyle decided both questions 2026-11-04: the window checks the worse side only, plus a cheaper-side floor of about 40% of the planned room to the stop, watch-only first (KD-10); profit after real fees must be positive, Langston's Reply A (KD-11)) |
-| CC-B list | 3 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-SQE-FEED-FANOUT) | nothing |
+| CC-B list | 3 | B-PRICE-FEED-COVERAGE | CC-B (New Claude) | none | #1222 | Kyle 2026-10-20 (locked) | IN FLIGHT — increment 0 Step 6; byte-identical landing from reviewed ref `d1fd2974d`, then fresh four-job CI, Coltrane's landed-ref read and staging deploy (absorbs B-SQE-FEED-FANOUT) | nothing |
 | CC-B list | 4 | B-PLAN-PRICE-BASIS | CC-B (New Claude) | none | #1223, #1221 | Kyle 2026-10-20 (locked) | QUEUED (absorbs B-STRATEGY-INPUT-FIXES) | nothing |
 | CC-B list | 5 | B-BOOK-TRUST-FLEET-GUARD | CC-B (New Claude) | none | #1226 | Kyle 2026-10-20 (delegated slot) | QUEUED | nothing |
 | CC-A list | 1 | B-MUTATING-ROUTES-AUTH | CC-A (Old Claude) | none | #1228 | Kyle 2026-10-21 (option 2) | ✅ DONE 2026-10-21 (verified on staging, d307debe5) | nothing |
@@ -50,7 +50,7 @@
 | 3 — feed | 1 | B-XSTOCK-LIVE-FEED | CC-C (Analyst Claude) | none | #960, #1175 | Kyle 2026-10-07 | MOVED out of the pre-sprint into the sprint (Kyle 2026-10-07; row 31 keeps its place) | nothing |
 | 3 — feed | 2 | CORZ investigation | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | ✅ DONE | nothing |
 | 3 — feed | 4 | B-B75-EXPORT-COMPLETENESS | CC-A (Old Claude) | none | #1195 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-18 (report B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md) | nothing |
-| 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | ✅ CLOSED 2026-11-11 (report B_B75_SCRIPT_TEST_HARNESS_COMPLETION_REPORT.md; Step 11 pending at governance ref) | nothing |
+| 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | ✅ CLOSED 2026-11-11 (report B_B75_SCRIPT_TEST_HARNESS_COMPLETION_REPORT.md; Coltrane Step 11 CONFIRMED exact ref `86d0c8377995532de6e986915eb36ceabea377cf`) | nothing |
 | 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | QUEUED | nothing |
 | 3 — feed | 7 | B-CRON-MISSED-CATCHUP | CC-C (Analyst Claude) | none | #691 | Kyle 2026-10-07 | QUEUED | nothing |
 | 4 — paper truth | 1 | B-OPEN-REFUSAL-DURABLE-ROW | CC-C (Analyst Claude) | 8a | #1083 | Kyle 2026-10-07 | row | nothing |
