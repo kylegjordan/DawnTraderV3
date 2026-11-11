@@ -13,7 +13,8 @@ The pushed commit carrying this file is the exact review ref named in the Discor
   - sets seven numbered objectives and executable verification criteria;
   - scopes the existing B75 move-not-delete path, not a second archiver;
   - preserves a governed 30-day hot window plus 240/60 per-symbol live floors;
-  - requires exact archive/download/count/checksum evidence before bounded cleanup;
+  - requires one frozen cutoff/ranking instant plus exact archive/download/count/key-set/content-digest evidence before proven-key cleanup;
+  - refuses same-count key swaps, in-place content replacement, floor displacement, and cutoff drift before deletion;
   - carries legacy and future certified availability rows without touching immutable evidence;
   - makes historical readers refuse or rehydrate outside the hot horizon;
   - records direct SIM, System Manual, ledger, completion-report, runtime and provenance reads.
@@ -39,3 +40,4 @@ The pushed commit carrying this file is the exact review ref named in the Discor
 4. Are the availability and decision-provenance boundaries correct: snapshot rows may age, but raw revisions, aggregate revisions, window manifests, refresh/decision provenance and B75 exact evidence do not?
 5. Does the scope honestly separate a logical row bound/free-space reuse from physical file shrink, with the physical mechanism deferred to the Step-2 measured design?
 6. Are the current replay/calibration readers correctly classified as recent-hot, rehydrate-required, or dormant rather than used to justify unbounded hot storage?
+7. Does the corrected proof/delete contract close the predecessor's same-count-replacement exclusion by freezing one population, comparing every ordered key and full row, and deleting only those proven keys?
