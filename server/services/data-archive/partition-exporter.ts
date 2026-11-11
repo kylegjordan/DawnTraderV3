@@ -195,18 +195,18 @@ export async function exportPartition(
       );
       assertSnapshotSchemaColumns(schema.rows as Array<{ column_name: string }>);
 
+      sourceRowCount = Number((await client.query(
+        `SELECT count(*)::bigint AS source_count
+           FROM (${snapshotPopulationSql(req.snapshotSelector)}) snapshot_population`,
+        snapshotPopulationParams(req.snapshotSelector),
+      )).rows[0]?.source_count ?? 0);
+
       await client.query(
-        `CREATE TEMP TABLE b75_snapshot_export_population ON COMMIT DROP AS
-         ${snapshotPopulationSql(req.snapshotSelector)}`,
+        `DECLARE b75_snapshot_export_population NO SCROLL CURSOR FOR
+         ${snapshotPopulationSql(req.snapshotSelector)}
+         ORDER BY symbol ASC, bucket_ts ASC`,
         snapshotPopulationParams(req.snapshotSelector),
       );
-      await client.query(
-        'CREATE UNIQUE INDEX ON b75_snapshot_export_population (symbol, bucket_ts)',
-      );
-
-      sourceRowCount = Number((await client.query(
-        'SELECT count(*)::bigint AS source_count FROM b75_snapshot_export_population',
-      )).rows[0]?.source_count ?? 0);
 
       const out = fs.createWriteStream(localPath);
       const gzip = zlib.createGzip({ level: compressionLevel });
@@ -214,25 +214,11 @@ export async function exportPartition(
       const keyHash = crypto.createHash('sha256');
       const rowHash = crypto.createHash('sha256');
       const BATCH = 1000;
-      let lastSymbol: string | null = null;
-      let lastBucketTs: string | null = null;
 
       while (true) {
-        const page: pg.QueryResult<any> = lastSymbol === null
-          ? await client.query(
-            `SELECT symbol, bucket_ts::text AS bucket_ts_cursor, bucket_ts_text, canonical_json
-               FROM b75_snapshot_export_population
-              ORDER BY symbol ASC, bucket_ts ASC
-              LIMIT ${BATCH}`,
-          )
-          : await client.query(
-            `SELECT symbol, bucket_ts::text AS bucket_ts_cursor, bucket_ts_text, canonical_json
-               FROM b75_snapshot_export_population
-              WHERE (symbol, bucket_ts) > ($1, $2::timestamptz)
-              ORDER BY symbol ASC, bucket_ts ASC
-              LIMIT ${BATCH}`,
-            [lastSymbol, lastBucketTs],
-          );
+        const page: pg.QueryResult<any> = await client.query(
+          `FETCH FORWARD ${BATCH} FROM b75_snapshot_export_population`,
+        );
         if (page.rows.length === 0) break;
 
         for (const row of page.rows) {
@@ -249,9 +235,6 @@ export async function exportPartition(
           if (maxTs === null || tsDate > maxTs) maxTs = tsDate;
         }
 
-        const last: any = page.rows[page.rows.length - 1];
-        lastSymbol = String(last.symbol);
-        lastBucketTs = String(last.bucket_ts_cursor);
         if (page.rows.length < BATCH) break;
       }
 

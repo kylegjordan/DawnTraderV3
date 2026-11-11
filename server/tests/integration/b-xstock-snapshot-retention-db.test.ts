@@ -319,9 +319,9 @@ describe.skipIf(!DB)('B-XSTOCK-SNAPSHOT-RETENTION real PostgreSQL proof/delete g
 
   it('preserves seeded disk-file cursor evidence through the forward migration and rollback', async () => {
     await client.query('DROP TABLE data_archive_exact_evidence CASCADE');
-    await client.query('DROP TABLE IF EXISTS module_constants CASCADE');
+    await client.query(`DROP TABLE IF EXISTS ${schema}.module_constants CASCADE`);
     await client.query(`
-      CREATE TABLE module_constants (
+      CREATE TABLE ${schema}.module_constants (
         module_name text NOT NULL, exchange text NOT NULL, asset_class text NOT NULL,
         strategy text NOT NULL, regime text NOT NULL, constant_name text NOT NULL,
         value jsonb NOT NULL, updated_by text NOT NULL, updated_at timestamptz NOT NULL,
