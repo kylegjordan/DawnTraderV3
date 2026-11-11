@@ -14,7 +14,6 @@ import {
   removePlainArchiveSource,
   runRetentionSweepCli,
   runRetentionSweepProcess,
-  runWithSweepLock,
   sweepPlainTables,
   type B75ArchiveObjectDependencies,
   type B75ArchiveTableSpec,
@@ -219,7 +218,7 @@ describe.each(cliContracts)('$name CLI contract', ({ runCli, runProcess, fatalRa
     const run = vi.fn().mockResolvedValue(undefined);
     const exit = vi.fn();
     await runCli({
-      env: { DATABASE_URL: 'fake', SUPABASE_SERVICE_ROLE_KEY: 'fake' },
+      env: { DATABASE_URL: 'fake', SUPABASE_SERVICE_ROLE_KEY: 'fake', B75_SWEEP_LOCK_HELD: '1' },
       exit,
       run,
     });
@@ -245,6 +244,18 @@ describe.each(cliContracts)('$name CLI contract', ({ runCli, runProcess, fatalRa
 });
 
 describe('retention executable gates', () => {
+  it('refuses a direct unmarked invocation before database or storage work', async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn();
+    await runRetentionSweepCli({
+      env: { DATABASE_URL: 'fake', SUPABASE_SERVICE_ROLE_KEY: 'fake' },
+      exit,
+      run,
+    });
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it('recounts a reused proof and refuses a changed source before export or storage', async () => {
     const ctl = {
       query: vi.fn().mockResolvedValue({
@@ -332,24 +343,6 @@ describe('retention executable gates', () => {
       vacuum: async () => { events.push('vacuum'); },
     })).resolves.toBe(5002);
     expect(events).toEqual(['delete', 'delete', 'active', 'vacuum']);
-  });
-
-  it('releases the overlap lock before returning failure or rethrowing fatal', async () => {
-    const events: string[] = [];
-    await expect(runWithSweepLock({
-      acquire: () => { events.push('acquire'); return true; },
-      run: async () => { events.push('run'); return true; },
-      release: () => { events.push('release'); },
-    })).resolves.toEqual({ acquired: true, hadFailures: true });
-    expect(events).toEqual(['acquire', 'run', 'release']);
-
-    events.length = 0;
-    await expect(runWithSweepLock({
-      acquire: () => true,
-      run: async () => { events.push('run'); throw new Error('fatal'); },
-      release: () => { events.push('release'); },
-    })).rejects.toThrow('fatal');
-    expect(events).toEqual(['run', 'release']);
   });
 
   it('executes the whole-partition archive, drop, active, and resolve chain', async () => {
