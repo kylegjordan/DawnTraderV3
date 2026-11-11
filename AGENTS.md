@@ -61,7 +61,7 @@ You run as Kyle's Windows user, so you have what the Claude crew has. With **Ful
 - **The staging app's API:** the authenticated call in `CLAUDE.md` §7 (the test account is for API calls only).
 - **GitHub:** `& "C:\Program Files\GitHub CLI\gh.exe" ...` is logged in as `kylegjordan` (CI runs, per-job results); `git push` uses Kyle's saved credentials.
 - **Discord:** `cc-send` on Langston's box, as in §3.
-- ⚠️ **The staging site in a browser (Step 7's UI check) is the one gap.** The Claude crew uses Kyle's own logged-in Chrome; you must **never type a password into a login form**. So do Step 7 with the API, logs and database, label it **"UI not yet checked"**, and ask Kyle to look at the page — or leave the UI check for when Claude returns.
+- **The staging site in Chrome is available through the Computer Use skill when Kyle's signed-in tab already exists.** Use that access for Step 7 UI checks and PM handoffs instead of asking Kyle to foreground or navigate an available tab. PM Codex may foreground the signed-in Dawn Trader tab and directly release the owning builder, then verifies visible receipt or progress. Never type a password into a login form; ask Kyle only when authentication has expired, the required tab does not exist, or browser control is unavailable.
 
 ## 4. No shift limits: the whole workflow, end to end (Kyle, 2026-10-13)
 - You build, get Coltrane's review, **deploy to staging yourself** (`dt-deploy <sha> --by codex-a` etc.: your own name, never the Claude one), verify and close, exactly as the Claude crew does. Your names are live on staging's deploy and alert tools since 2026-10-13 (`B-CODEX-FAILOVER`).
