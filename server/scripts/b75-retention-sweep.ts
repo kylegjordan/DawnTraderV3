@@ -832,7 +832,7 @@ export async function archiveB75Object(
   }
 }
 
-interface StoredSnapshotEvidence {
+export interface StoredSnapshotEvidence {
   cursor_contract: string;
   selector_contract: string;
   selector_version: number;
@@ -873,7 +873,7 @@ async function getStoredSnapshotEvidence(
   } as StoredSnapshotEvidence;
 }
 
-function storedSnapshotEvidenceMatches(
+export function storedSnapshotEvidenceMatches(
   stored: StoredSnapshotEvidence,
   selector: XstockSnapshotSelector,
   proof: XstockSnapshotProof,
