@@ -408,8 +408,8 @@ For each mutation the test requires `proof_matches=false`, zero deleted rows, ze
 
 ## Verification at the implementation ref
 
-- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43048110149` is tied to exact correction head `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files and 5,542/5,542 tests passed; all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
-- The focused local population was 91 tests across snapshot retention, prewarm, B75 harness, and hot-horizon suites; all 91 passed. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
+- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43052942365` is tied to exact correction head `205c2108555652751514bba2c18ecd09dba35c31` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files and 5,543/5,543 tests passed; all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
+- The current focused snapshot-retention population was 27/27 tests passed, including the independently proven interval-label omission and live-path prewarm writer-spy mutations. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
 - Those six database cases cover positive atomic delete; three proof-changing mutations; wrong-session proven-key refusal; append-only evidence DELETE/TRUNCATE refusal; writer-between-discovery-and-export snapshot timing; and disk-file cursor preservation through the forward migration and rollback.
 - TypeScript baseline remained 324 current findings against 324 expected findings, with no new regression.
 
