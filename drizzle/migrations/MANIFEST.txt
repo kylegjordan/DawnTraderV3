@@ -249,3 +249,4 @@
 2026-11-08-b-db-size-relief-retention.sql
 2026-11-08-b-db-size-relief-daily-cutover.sql
 2026-11-10-b-entry-gate-friction-coverage.sql
+2026-11-11-b-xstock-snapshot-retention.sql
