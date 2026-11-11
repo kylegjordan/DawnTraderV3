@@ -69,6 +69,10 @@ Coltrane returned **SENT BACK** at exact ref `48021b5ba1ee5fea187bc6c96c69b97070
 
 Coltrane **APPROVED** exact review ref `6ee19aeb5bcb9940ec60a1f744149d9831169642`. He confirmed the locked full-population fence and its unguarded-month rollback mutation, and confirmed that the 42-case harness executes the remaining cold and rehydrate gates while preserving the prior CLI behavior. CI run `42988331327` was independently verified by NEW Codex with all four jobs green: Test Suite, TypeScript Check, Build and Docker Build.
 
+## Step 5 — shared-branch CI
+
+The approved history advanced `migration/aws-supabase` to exact ref `570584941c6da53bdb1fca24d4d095814cc98179`. CI run `42989947651` completed with all four jobs individually green: Test Suite, TypeScript Check, Build and Docker Build.
+
 ## Load-bearing diff excerpts
 
 ### A. Importing a command no longer executes it
