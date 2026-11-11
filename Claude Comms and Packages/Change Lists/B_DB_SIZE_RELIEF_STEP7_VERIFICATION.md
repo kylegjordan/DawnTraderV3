@@ -72,8 +72,26 @@ Positive control and recovery population: the same exact-message search found th
 
 **Alert disposition:** resolved by `codex-a` at `2026-11-10T21:09:07.114Z` with evidence ref `e9ce7d63345cb1376b7434db60b2aaa70b2445cb`; a whole-file row readback confirmed `state=resolved`, the same actor, and the same evidence ref. This closes the single recovered point incident after 22 quiet minute records. It does not claim the existing `#1037` condition is fixed, and a new acquire-timeout incident can now create a fresh row under the same key.
 
-## Timed evidence still owed
+## First post-deploy daily-partition creator — PASS
 
-- First post-deploy `01:00Z` daily-partition creator result.
-- First post-deploy `02:15Z` retention sweep result, followed by a fresh whole-database measurement.
-- Database warning `c0a0b00d-4868-41e5-b8b3-8c8adaff6724` remains active and unacknowledged unless that fresh whole-database measurement is below 133,120 MiB.
+The `2026-11-11` run started at `01:00:03.349Z` and completed normally. It created the six expected `2026-11-25` forward partitions for the already-live daily tables, self-healed none, and recorded **90 pre-cutover day skips** for the six `B-DB-SIZE-RELIEF` parents whose daily era begins on `2026-12-01`.
+
+Positive control: the immediately preceding `2026-11-10T01:00:02.807Z` run in the same log created six `2026-11-24` partitions and recorded zero pre-cutover skips because it ran before the reviewed deployment. The changed first-post-deploy result therefore exercised the deployed registry entries rather than merely proving that the cron fired.
+
+## First post-deploy retention sweep — PASS
+
+Run `debd1b0e-a60b-4665-aac8-e778a9d7cb90` started at `2026-11-11T02:15:02.506Z` and reached its `DONE` line after 4,384,109 ms. Population: all 22 partitions examined by that run. It dropped all 22 after archive verification, recorded `failed=0` and `plain_failed=0`, freed 28,351,709,184 hot bytes, archived 1,045,738,984 compressed bytes, and deleted 144,480 eligible plain-table rows.
+
+The `signal_eval_archive` share was the complete 16-day backlog from `2026-10-11` through `2026-10-26`: 36,117,551 rows, 22,374,408,192 hot bytes and 715,155,153 compressed warm bytes. A post-run read found all 16 corresponding warm-manifest rows in `active` state; all 16 had verification timestamps, hot-drop timestamps, non-empty checksums and `source-count-matched` completeness evidence.
+
+The post-run partition-catalog read found zero of those 16 hot children. Positive control: the next retained child, `signal_eval_archive_2026_10_27`, was present in the same catalog read. The retention setting read back as 15 days, written by `b-db-size-relief-obj1` at `2026-11-10T07:47:51.217Z`.
+
+## Whole-database measurement and warning disposition
+
+At `2026-11-11T07:28:53.049Z`, the same `pg_database_size(current_database())` measurement used for the starting point read the whole `postgres` database as **119,199,132,819 bytes = 113,677.2 MiB**. The prior whole-database measurement was 143,095,196,819 bytes = 136,466.2 MiB at `2026-11-10T08:13:53Z`; the measured whole-database difference across those two reads is 23,896,064,000 bytes = 22,789.1 MiB lower.
+
+The new value is 19,442.8 MiB below the 133,120 MiB warning line. Alert `c0a0b00d-4868-41e5-b8b3-8c8adaff6724` was re-read as `active`, unacknowledged and unresolved after the measurement. It is now eligible for resolution — never acknowledgement — once this evidence has a pushed ref.
+
+## Remaining binding hold
+
+The timed backend evidence is complete, but **Step 7 is not passed**. Coltrane's binding Data Archive UI hold remains exactly as ruled: do not repeat the UI or API request now, and do not advance the batch until `#1037` / sprint row 119, or a separately scoped, reviewed and deployed equivalent, makes the registered 30-day UI acceptance reachable. The deploy hold at and after `a2f5cbc6d` also remains.
