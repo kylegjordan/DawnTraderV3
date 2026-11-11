@@ -27,6 +27,16 @@ import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import pg from 'pg';
 import { ArchiveReadbackMismatchError } from './archive-completeness.js';
+import {
+  appendSnapshotKey,
+  assertCanonicalSnapshotObject,
+  assertSnapshotSchemaColumns,
+  snapshotPopulationParams,
+  snapshotPopulationSql,
+  snapshotSchemaValidationSql,
+  type XstockSnapshotProof,
+  type XstockSnapshotSelector,
+} from './xstock-snapshot-retention.js';
 
 const TMP_BASE = process.env.B75_EXPORT_TMP_DIR ?? '/tmp/b75-export';
 /** Legacy-mode cursor column: the timestamp as database text, stripped before the row is written. */
@@ -89,6 +99,12 @@ export interface ExportRequest {
   exactCursorTieBreakerColumn?: string;
   /** Allow-listed PostgreSQL type for the text transport of the exact cursor. */
   exactCursorTieBreakerType?: 'uuid';
+  /**
+   * B-XSTOCK-SNAPSHOT-RETENTION: optional ranked-day population adapter.
+   * It replaces the ordinary time-range SELECT while retaining this exporter's
+   * transaction, gzip, checksum and local-file lifecycle.
+   */
+  snapshotSelector?: XstockSnapshotSelector;
 }
 
 export interface ExportResult {
@@ -108,6 +124,8 @@ export interface ExportResult {
   checksum: string;
   /** Same-snapshot source count (both modes since #1195; an export that differs throws). */
   sourceRowCount: number | null;
+  /** Exact mutable-snapshot proof; absent for every generic B75 lane. */
+  snapshotProof?: XstockSnapshotProof;
 }
 
 function ensureDir(p: string): void {
@@ -128,6 +146,14 @@ export async function exportPartition(
   const target = req.partitionTableName ?? req.sourceTable;
   const compressionLevel = req.compressionLevel ?? 6;
   const exactTieCol = req.exactCursorTieBreakerColumn;
+  if (req.snapshotSelector && exactTieCol) {
+    throw new Error('[B75 partition-exporter] snapshot adapter and generic exact cursor are mutually exclusive');
+  }
+  if (req.snapshotSelector && (
+    req.snapshotSelector.table !== req.sourceTable
+    || req.snapshotSelector.dayStart.getTime() !== req.rangeStart.getTime()
+    || req.snapshotSelector.dayEnd.getTime() !== req.rangeEnd.getTime()
+  )) throw new Error('[B75 partition-exporter] snapshot selector does not match export source/range');
   if (exactTieCol && req.exactCursorTieBreakerType !== 'uuid') {
     throw new Error('[B75 partition-exporter] exact cursor tie-breaker type must be allow-listed uuid');
   }
@@ -151,8 +177,87 @@ export async function exportPartition(
   let minTs: Date | null = null;
   let maxTs: Date | null = null;
   let sourceRowCount: number | null = null;
+  let snapshotProof: XstockSnapshotProof | undefined;
 
   try {
+    if (req.snapshotSelector) {
+      const schema = await client.query(
+        snapshotSchemaValidationSql(),
+        [req.snapshotSelector.table],
+      );
+      assertSnapshotSchemaColumns(schema.rows as Array<{ column_name: string }>);
+
+      await client.query(
+        `CREATE TEMP TABLE b75_snapshot_export_population ON COMMIT DROP AS
+         ${snapshotPopulationSql(req.snapshotSelector)}`,
+        snapshotPopulationParams(req.snapshotSelector),
+      );
+      await client.query(
+        'CREATE UNIQUE INDEX ON b75_snapshot_export_population (symbol, bucket_ts)',
+      );
+
+      sourceRowCount = Number((await client.query(
+        'SELECT count(*)::bigint AS source_count FROM b75_snapshot_export_population',
+      )).rows[0]?.source_count ?? 0);
+
+      const out = fs.createWriteStream(localPath);
+      const gzip = zlib.createGzip({ level: compressionLevel });
+      gzip.pipe(out);
+      const keyHash = crypto.createHash('sha256');
+      const rowHash = crypto.createHash('sha256');
+      const BATCH = 1000;
+      let lastSymbol: string | null = null;
+      let lastBucketTs: string | null = null;
+
+      while (true) {
+        const page: pg.QueryResult<any> = lastSymbol === null
+          ? await client.query(
+            `SELECT symbol, bucket_ts::text AS bucket_ts_cursor, bucket_ts_text, canonical_json
+               FROM b75_snapshot_export_population
+              ORDER BY symbol ASC, bucket_ts ASC
+              LIMIT ${BATCH}`,
+          )
+          : await client.query(
+            `SELECT symbol, bucket_ts::text AS bucket_ts_cursor, bucket_ts_text, canonical_json
+               FROM b75_snapshot_export_population
+              WHERE (symbol, bucket_ts) > ($1, $2::timestamptz)
+              ORDER BY symbol ASC, bucket_ts ASC
+              LIMIT ${BATCH}`,
+            [lastSymbol, lastBucketTs],
+          );
+        if (page.rows.length === 0) break;
+
+        for (const row of page.rows) {
+          const symbol = String(row.symbol);
+          const bucketTsText = String(row.bucket_ts_text);
+          const line = `${String(row.canonical_json)}\n`;
+          appendSnapshotKey(keyHash, symbol, bucketTsText);
+          rowHash.update(Buffer.from(line, 'utf8'));
+          if (!gzip.write(line)) await new Promise<void>((resolve) => gzip.once('drain', resolve));
+          bytesUncompressed += Buffer.byteLength(line, 'utf8');
+          rowCount++;
+          const tsDate = new Date(String(row.bucket_ts_cursor));
+          if (minTs === null || tsDate < minTs) minTs = tsDate;
+          if (maxTs === null || tsDate > maxTs) maxTs = tsDate;
+        }
+
+        const last: any = page.rows[page.rows.length - 1];
+        lastSymbol = String(last.symbol);
+        lastBucketTs = String(last.bucket_ts_cursor);
+        if (page.rows.length < BATCH) break;
+      }
+
+      gzip.end();
+      await new Promise<void>((resolve, reject) => {
+        out.on('close', resolve);
+        out.on('error', reject);
+      });
+      snapshotProof = {
+        sourceRowCount,
+        orderedKeySha256: keyHash.digest('hex'),
+        fullRowSha256: rowHash.digest('hex'),
+      };
+    } else {
     // KEYSET pagination via timestamp cursor — uses the existing timestamp
     // index directly without a composite (ts, id) index. The earlier
     // (ts, id) tuple form created an OR-condition the planner couldn't
@@ -291,10 +396,12 @@ export async function exportPartition(
       out.on('close', () => resolve());
       out.on('error', reject);
     });
+    }
 
     if (rowCount !== sourceRowCount) {
+      const exportMode = req.snapshotSelector ? 'snapshot' : exactTieCol ? 'exact' : 'legacy';
       throw new ExportRowCountMismatchError(
-        `[B75 partition-exporter] ${exactTieCol ? 'exact' : 'legacy'} source/export row-count mismatch `
+        `[B75 partition-exporter] ${exportMode} source/export row-count mismatch `
         + `${req.sourceTable}/${req.partitionLabel}: source=${sourceRowCount} exported=${rowCount}`,
       );
     }
@@ -326,6 +433,7 @@ export async function exportPartition(
     maxTs: maxTs ?? new Date(req.rangeEnd.getTime() - 1),
     checksum,
     sourceRowCount,
+    snapshotProof,
   };
 }
 
@@ -349,6 +457,59 @@ export async function countGzipJsonlLines(filePath: string): Promise<number> {
     throw new ArchiveReadbackMismatchError(`[B75 partition-exporter] JSONL object has an unterminated final row: ${filePath}`);
   }
   return lines;
+}
+
+/**
+ * Validate and fingerprint the bytes downloaded from storage.  Digests cover
+ * the raw canonical line bytes, not a JSON parse/stringify round-trip.
+ */
+export async function inspectGzipSnapshotJsonl(filePath: string): Promise<XstockSnapshotProof> {
+  const input = fs.createReadStream(filePath);
+  const gunzip = zlib.createGunzip();
+  input.pipe(gunzip);
+  const keyHash = crypto.createHash('sha256');
+  const rowHash = crypto.createHash('sha256');
+  let pending = Buffer.alloc(0);
+  let rowCount = 0;
+  let previous: [string, string] | null = null;
+
+  for await (const chunk of gunzip) {
+    pending = Buffer.concat([pending, chunk as Buffer]);
+    while (true) {
+      const newline = pending.indexOf(0x0a);
+      if (newline < 0) break;
+      const raw = pending.subarray(0, newline);
+      pending = pending.subarray(newline + 1);
+      if (raw.length === 0) throw new ArchiveReadbackMismatchError('snapshot JSONL contains an empty row');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw.toString('utf8'));
+      } catch (err) {
+        throw new ArchiveReadbackMismatchError(
+          `snapshot JSONL row is malformed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      assertCanonicalSnapshotObject(parsed);
+      const row = parsed as { symbol: string; bucket_ts: string };
+      if (previous && (row.symbol < previous[0]
+          || (row.symbol === previous[0] && row.bucket_ts <= previous[1]))) {
+        throw new ArchiveReadbackMismatchError('snapshot JSONL keys are duplicate or out of order');
+      }
+      previous = [row.symbol, row.bucket_ts];
+      appendSnapshotKey(keyHash, row.symbol, row.bucket_ts);
+      rowHash.update(raw);
+      rowHash.update(Buffer.from('\n'));
+      rowCount++;
+    }
+  }
+  if (pending.length > 0) {
+    throw new ArchiveReadbackMismatchError(`snapshot JSONL object has an unterminated final row: ${filePath}`);
+  }
+  return {
+    sourceRowCount: rowCount,
+    orderedKeySha256: keyHash.digest('hex'),
+    fullRowSha256: rowHash.digest('hex'),
+  };
 }
 
 /**

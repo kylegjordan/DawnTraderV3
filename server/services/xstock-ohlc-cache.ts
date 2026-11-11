@@ -50,6 +50,7 @@ import {
   type XstockAvailabilityInterval,
 } from '../asset_classes/xstock_spot/availability-aggregator.js';
 import { XSTOCK_BAR_AVAILABILITY_CONTRACT } from './passive-archive/xstock-bar-availability.js';
+import { xstockSnapshotPolicy } from './xstock-snapshot-policy.js';
 
 interface CacheEntry {
   bars: OHLCData[];
@@ -104,7 +105,8 @@ const WRITE_BACK_RECENT_BUCKETS = NARROW_OVERLAY_HOURS_60M;
 // the 60-min path used as a bare `60` literal pre-B.4 (readSnapshotBars
 // `rn <= 60`, mergeBars `slice(-60)`) — naming it changes no behavior. Mirrors
 // MAX_BARS_60M in ohlc-aggregator.ts (the aggregator's own return-array cap).
-const MAX_BARS_60M = 60;
+const SNAPSHOT_POLICY_60M = xstockSnapshotPolicy(60);
+const MAX_BARS_60M = SNAPSHOT_POLICY_60M.liveCapRows;
 
 // B.4 foundation (2026-06-03): 15-min evaluation-bar read path (additive,
 // xStock-only). Mirrors the 60-min snapshot-first shape EXACTLY — only the
@@ -124,15 +126,16 @@ const MAX_BARS_60M = 60;
 //     live-overlay bucket count (same rationale as WRITE_BACK_RECENT_BUCKETS:
 //     write back exactly the fresh-live buckets, no more, no less).
 const NARROW_OVERLAY_HOURS_15M = 6;
-const MAX_BARS_15M = 240;
+const SNAPSHOT_POLICY_15M = xstockSnapshotPolicy(15);
+const MAX_BARS_15M = SNAPSHOT_POLICY_15M.liveCapRows;
 const WRITE_BACK_RECENT_BUCKETS_15M = 24;
 
 // B.4 foundation (2026-06-03): snapshot table names, kept as named constants so
 // the parameterized read/write/merge helpers below stay table-agnostic and the
 // 60-min path remains bit-identical (it passes the 60-min table + cap, the 15m
 // path passes the 15m table + cap).
-const SNAPSHOT_TABLE_60M = 'xstock_spot_ohlc_60m_snapshot';
-const SNAPSHOT_TABLE_15M = 'xstock_spot_ohlc_15m_snapshot';
+const SNAPSHOT_TABLE_60M = SNAPSHOT_POLICY_60M.table;
+const SNAPSHOT_TABLE_15M = SNAPSHOT_POLICY_15M.table;
 
 interface SnapshotRow {
   symbol: string;

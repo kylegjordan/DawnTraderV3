@@ -54,6 +54,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import { XSTOCK_SPOT_REGISTRY } from '../shared/asset-classes.js';
 import { attachPoolGuards } from '../server/db-pool-guards.js';
+import { XSTOCK_SNAPSHOT_POLICIES } from '../server/services/xstock-snapshot-policy.js';
 
 const { Pool } = pg;
 
@@ -65,16 +66,6 @@ function getFlag(args: string[], name: string): string | undefined {
 function hasFlag(args: string[], name: string): boolean {
   return args.indexOf(`--${name}`) >= 0;
 }
-
-// Per-symbol read/write cap — matches MAX_BARS_60M in ohlc-aggregator.ts.
-// This does not delete historical snapshot rows; #1194 owns retention.
-const MAX_BARS_60M = 60;
-
-// B.4 foundation (2026-06-04): 15-minute snapshot cap — matches MAX_BARS_15M in
-// ohlc-aggregator.ts (the 15m cache read cap). Sized to the DEEPEST 15m consumer
-// = DBS lookback 192 bars + margin. This caps each prewarm selection, not the
-// table's retained history; #1194 owns deletion. 240 × 15min = 60h per symbol.
-const MAX_BARS_15M = 240;
 
 /**
  * B.4 foundation (2026-06-04): the prewarm now warms BOTH snapshot substrates
@@ -92,16 +83,15 @@ interface SnapshotInterval {
   maxBars: number;
   table: string;
 }
-const SNAPSHOT_INTERVALS: SnapshotInterval[] = [
-  {
-    label: '60m', intervalMinutes: 60, bucketSeconds: 3600,
-    maxBars: MAX_BARS_60M, table: 'xstock_spot_ohlc_60m_snapshot',
-  },
-  {
-    label: '15m', intervalMinutes: 15, bucketSeconds: 900,
-    maxBars: MAX_BARS_15M, table: 'xstock_spot_ohlc_15m_snapshot',
-  },
-];
+const SNAPSHOT_INTERVALS: SnapshotInterval[] = [...XSTOCK_SNAPSHOT_POLICIES]
+  .sort((a, b) => b.intervalMinutes - a.intervalMinutes)
+  .map((policy) => ({
+    label: policy.label,
+    intervalMinutes: policy.intervalMinutes,
+    bucketSeconds: policy.bucketSeconds,
+    maxBars: policy.liveCapRows,
+    table: policy.table,
+  }));
 
 interface LegacyBucketRow {
   bucket_ts: Date;

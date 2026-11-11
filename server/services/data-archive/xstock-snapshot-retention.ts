@@ -1,0 +1,208 @@
+/**
+ * B-XSTOCK-SNAPSHOT-RETENTION (#1194) — exact ranked-day selector contract.
+ *
+ * The two allow-listed snapshot tables are mutable UPSERT stores.  A time-range
+ * count is therefore not a deletion proof.  This module owns the single selector
+ * and canonical-row SQL used by export and by the final locked recheck/delete.
+ */
+
+import crypto from 'node:crypto';
+import {
+  XSTOCK_SNAPSHOT_POLICIES,
+  assertSnapshotFloorCoversLiveCap,
+  type XstockSnapshotTable,
+} from '../xstock-snapshot-policy.js';
+
+export const XSTOCK_SNAPSHOT_CURSOR_CONTRACT = 'xstock-snapshot-jsonb-v1:symbol+bucket_ts' as const;
+export const XSTOCK_SNAPSHOT_SELECTOR_CONTRACT = 'xstock-snapshot-ranked-day/v1' as const;
+export const XSTOCK_SNAPSHOT_SELECTOR_VERSION = 1 as const;
+export const XSTOCK_SNAPSHOT_EXPECTED_COLUMNS = [
+  'symbol', 'bucket_ts', 'open', 'high', 'low', 'close', 'volume', 'source_bar_count', 'captured_at',
+  'aggregate_revision_id', 'aggregate_hash', 'source_revision_set_hash', 'source_max_visible_by',
+  'source_max_visible_seq', 'read_observed_at', 'read_observed_seq', 'certificate_primary_identity',
+  'availability_contract_version', 'eligibility_state',
+] as const;
+
+export interface XstockSnapshotSelector {
+  table: XstockSnapshotTable;
+  keepFloorRows: number;
+  cutoffAt: Date;
+  rankingObservedAt: Date;
+  dayStart: Date;
+  dayEnd: Date;
+}
+
+export interface XstockSnapshotProof {
+  sourceRowCount: number;
+  orderedKeySha256: string;
+  fullRowSha256: string;
+}
+
+export interface XstockSnapshotCanonicalRow {
+  symbol: string;
+  bucket_ts: string;
+  open: string | number;
+  high: string | number;
+  low: string | number;
+  close: string | number;
+  volume: string | number;
+  source_bar_count: number;
+  captured_at: string;
+  aggregate_revision_id: string | null;
+  aggregate_hash: string | null;
+  source_revision_set_hash: string | null;
+  source_max_visible_by: string | null;
+  source_max_visible_seq: number | string | null;
+  read_observed_at: string | null;
+  read_observed_seq: number | string | null;
+  certificate_primary_identity: string | null;
+  availability_contract_version: string | null;
+  eligibility_state: string | null;
+}
+
+function quoteSnapshotTable(table: XstockSnapshotTable): string {
+  if (!XSTOCK_SNAPSHOT_POLICIES.some((policy) => policy.table === table)) {
+    throw new Error(`unsupported xStock snapshot table: ${table}`);
+  }
+  return `"${table}"`;
+}
+
+export function assertSnapshotSelector(selector: XstockSnapshotSelector): void {
+  quoteSnapshotTable(selector.table);
+  assertSnapshotFloorCoversLiveCap(selector.table, selector.keepFloorRows);
+  if (selector.cutoffAt.getTime() !== Date.UTC(
+    selector.cutoffAt.getUTCFullYear(), selector.cutoffAt.getUTCMonth(), selector.cutoffAt.getUTCDate(),
+  )) throw new Error('snapshot cutoff must be a complete UTC-day boundary');
+  if (selector.dayStart.getTime() !== Date.UTC(
+    selector.dayStart.getUTCFullYear(), selector.dayStart.getUTCMonth(), selector.dayStart.getUTCDate(),
+  )) throw new Error('snapshot day start must be a UTC-day boundary');
+  if (selector.dayEnd.getTime() - selector.dayStart.getTime() !== 86_400_000) {
+    throw new Error('snapshot day range must be exactly one UTC day');
+  }
+  if (selector.dayEnd > selector.cutoffAt) throw new Error('snapshot day must be wholly older than the frozen cutoff');
+  if (!Number.isFinite(selector.rankingObservedAt.getTime())) throw new Error('snapshot ranking instant is invalid');
+}
+
+export function frozenSnapshotCutoff(observedAt: Date, hotRetentionDays: number): Date {
+  if (!Number.isInteger(hotRetentionDays) || hotRetentionDays <= 0) {
+    throw new Error(`snapshot hot retention days must be a positive integer, got ${hotRetentionDays}`);
+  }
+  const shifted = new Date(observedAt.getTime() - hotRetentionDays * 86_400_000);
+  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()));
+}
+
+export function snapshotDayLabel(dayStart: Date, orderedKeySha256: string): string {
+  if (!/^[0-9a-f]{64}$/.test(orderedKeySha256)) throw new Error('snapshot ordered-key digest is invalid');
+  return `${dayStart.toISOString().slice(0, 10)}-${orderedKeySha256}`;
+}
+
+export function appendLengthFramedUtf8(hash: crypto.Hash, value: string): void {
+  const bytes = Buffer.from(value, 'utf8');
+  const length = Buffer.allocUnsafe(4);
+  length.writeUInt32BE(bytes.length, 0);
+  hash.update(length);
+  hash.update(bytes);
+}
+
+export function appendSnapshotKey(hash: crypto.Hash, symbol: string, bucketTsText: string): void {
+  appendLengthFramedUtf8(hash, symbol);
+  appendLengthFramedUtf8(hash, bucketTsText);
+}
+
+export function snapshotCanonicalJsonExpression(alias = 's'): string {
+  const ts = (column: string) =>
+    `CASE WHEN ${alias}.${column} IS NULL THEN NULL ELSE to_char(${alias}.${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') END`;
+  return `jsonb_build_object(
+    'symbol', ${alias}.symbol,
+    'bucket_ts', ${ts('bucket_ts')},
+    'open', ${alias}.open,
+    'high', ${alias}.high,
+    'low', ${alias}.low,
+    'close', ${alias}.close,
+    'volume', ${alias}.volume,
+    'source_bar_count', ${alias}.source_bar_count,
+    'captured_at', ${ts('captured_at')},
+    'aggregate_revision_id', ${alias}.aggregate_revision_id,
+    'aggregate_hash', ${alias}.aggregate_hash,
+    'source_revision_set_hash', ${alias}.source_revision_set_hash,
+    'source_max_visible_by', ${ts('source_max_visible_by')},
+    'source_max_visible_seq', ${alias}.source_max_visible_seq,
+    'read_observed_at', ${ts('read_observed_at')},
+    'read_observed_seq', ${alias}.read_observed_seq,
+    'certificate_primary_identity', ${alias}.certificate_primary_identity,
+    'availability_contract_version', ${alias}.availability_contract_version,
+    'eligibility_state', ${alias}.eligibility_state
+  )::text`;
+}
+
+/**
+ * The same ranked population is used for export and locked recheck.  The floor
+ * is materialized once so PostgreSQL cannot rerun the window subplan per row.
+ */
+export function snapshotPopulationSql(selector: XstockSnapshotSelector): string {
+  assertSnapshotSelector(selector);
+  const table = quoteSnapshotTable(selector.table);
+  return `WITH ranked AS MATERIALIZED (
+    SELECT symbol, bucket_ts,
+           row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC) AS retained_rank
+      FROM ${table}
+  ), floor_boundary AS MATERIALIZED (
+    SELECT symbol, min(bucket_ts) AS oldest_kept_bucket
+      FROM ranked
+     WHERE retained_rank <= $1
+     GROUP BY symbol
+  )
+  SELECT s.symbol,
+         s.bucket_ts,
+         to_char(s.bucket_ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS bucket_ts_text,
+         ${snapshotCanonicalJsonExpression('s')} AS canonical_json
+    FROM ${table} s
+    JOIN floor_boundary f USING (symbol)
+   WHERE s.bucket_ts >= $2
+     AND s.bucket_ts < $3
+     AND s.bucket_ts < $4
+     AND s.bucket_ts < f.oldest_kept_bucket`;
+}
+
+export function snapshotPopulationParams(selector: XstockSnapshotSelector): unknown[] {
+  assertSnapshotSelector(selector);
+  return [selector.keepFloorRows, selector.dayStart, selector.dayEnd, selector.cutoffAt];
+}
+
+export function snapshotSchemaValidationSql(): string {
+  return `SELECT column_name
+    FROM information_schema.columns
+   WHERE table_schema = current_schema()
+     AND table_name = $1
+   ORDER BY ordinal_position`;
+}
+
+export function assertSnapshotSchemaColumns(rows: Array<{ column_name: string }>): void {
+  const actual = rows.map((row) => row.column_name);
+  const expected = [...XSTOCK_SNAPSHOT_EXPECTED_COLUMNS];
+  if (actual.length !== expected.length || actual.some((column, index) => column !== expected[index])) {
+    throw new Error(
+      `snapshot schema mismatch: expected ${expected.join(',')} but found ${actual.join(',') || '<none>'}`,
+    );
+  }
+}
+
+export function assertCanonicalSnapshotObject(value: unknown): asserts value is XstockSnapshotCanonicalRow {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('snapshot JSONL row is not an object');
+  const keys = Object.keys(value as Record<string, unknown>).sort();
+  const expected = [...XSTOCK_SNAPSHOT_EXPECTED_COLUMNS].sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) {
+    throw new Error(`snapshot JSONL row has unexpected fields: ${keys.join(',')}`);
+  }
+  const row = value as Record<string, unknown>;
+  if (typeof row.symbol !== 'string' || row.symbol.length === 0) throw new Error('snapshot JSONL symbol is invalid');
+  if (typeof row.bucket_ts !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.bucket_ts)) {
+    throw new Error('snapshot JSONL bucket_ts is not UTC microsecond text');
+  }
+}
+
+export function snapshotProofMatches(a: XstockSnapshotProof, b: XstockSnapshotProof): boolean {
+  return a.sourceRowCount === b.sourceRowCount
+    && a.orderedKeySha256 === b.orderedKeySha256
+    && a.fullRowSha256 === b.fullRowSha256;
+}
