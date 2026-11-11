@@ -54,6 +54,8 @@ import 'dotenv/config';
 import pg from 'pg';
 import { XSTOCK_SPOT_REGISTRY } from '../shared/asset-classes.js';
 import { attachPoolGuards } from '../server/db-pool-guards.js';
+import type { XstockAvailabilityInterval } from '../server/asset_classes/xstock_spot/availability-aggregator.js';
+import type { XstockAvailabilityPrewarmResult } from '../server/services/xstock-ohlc-cache.js';
 import {
   XSTOCK_SNAPSHOT_POLICIES,
   parseXstockSnapshotLifecycleConfig,
@@ -233,6 +235,16 @@ export interface RunPrewarmOptions {
   connectionString?: string;
   /** Test/embedded seam; production defaults to the writer's own application database client. */
   lifecycleClient?: SnapshotLifecycleQueryClient;
+  /** Test seams for proving that lifecycle refusal precedes both live writer paths. */
+  dependencies?: {
+    aggregateLegacySymbol?: typeof aggregateLegacySymbol;
+    upsertLegacySnapshot?: typeof upsertLegacySnapshot;
+    prewarmAvailabilitySnapshot?: (
+      symbol: string,
+      intervalMinutes: XstockAvailabilityInterval,
+      lookbackHours: number,
+    ) => Promise<XstockAvailabilityPrewarmResult>;
+  };
 }
 
 export interface SnapshotLifecycleQueryClient {
@@ -325,12 +337,14 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
 
   try {
     await validateSnapshotLifecycleForPrewarm(options.lifecycleClient ?? pool);
+    const aggregateLegacy = options.dependencies?.aggregateLegacySymbol ?? aggregateLegacySymbol;
+    const upsertLegacy = options.dependencies?.upsertLegacySnapshot ?? upsertLegacySnapshot;
 
     for (const symbol of targetSymbols) {
       let symbolHadData = false;
       for (const interval of SNAPSHOT_INTERVALS) {
         try {
-          const bars = await aggregateLegacySymbol(
+          const bars = await aggregateLegacy(
             pool,
             symbol,
             lookbackDays,
@@ -343,7 +357,7 @@ export async function runPrewarm(options: RunPrewarmOptions = {}): Promise<RunPr
           totalBuckets += bars.length;
           const written = dryRun
             ? bars.length
-            : await upsertLegacySnapshot(pool, symbol, bars, interval.table);
+            : await upsertLegacy(pool, symbol, bars, interval.table);
           totalUpserts += written;
           upsertsByInterval[interval.label] += written;
         } catch (error) {
@@ -421,10 +435,14 @@ export async function runAvailabilityPrewarm(
 
   // Dynamic imports keep dotenv initialization ahead of server/db.ts for the
   // standalone CLI while reusing the already-initialized pool in lifecycle.
-  const [{ previewAvailableXstockOHLC }, { xstockOhlcCache }] = await Promise.all([
-    import('../server/asset_classes/xstock_spot/availability-aggregator.js'),
-    import('../server/services/xstock-ohlc-cache.js'),
-  ]);
+  const previewAvailableXstockOHLC = dryRun
+    ? (await import('../server/asset_classes/xstock_spot/availability-aggregator.js')).previewAvailableXstockOHLC
+    : null;
+  let prewarmAvailabilitySnapshot = options.dependencies?.prewarmAvailabilitySnapshot ?? null;
+  if (!dryRun && !prewarmAvailabilitySnapshot) {
+    const { xstockOhlcCache } = await import('../server/services/xstock-ohlc-cache.js');
+    prewarmAvailabilitySnapshot = xstockOhlcCache.prewarmAvailabilitySnapshot.bind(xstockOhlcCache);
+  }
 
   let totalBuckets = 0;
   let totalUpserts = 0;
@@ -448,7 +466,7 @@ export async function runAvailabilityPrewarm(
       try {
         const lookbackHours = lookbackDays * 24;
         if (dryRun) {
-          const preview = await previewAvailableXstockOHLC(
+          const preview = await previewAvailableXstockOHLC!(
             [symbol],
             iv.intervalMinutes,
             lookbackHours,
@@ -463,7 +481,7 @@ export async function runAvailabilityPrewarm(
           upsertsByInterval[iv.label] += eligible;
           continue;
         }
-        const prewarm = await xstockOhlcCache.prewarmAvailabilitySnapshot(
+        const prewarm = await prewarmAvailabilitySnapshot!(
           symbol,
           iv.intervalMinutes,
           lookbackHours,
