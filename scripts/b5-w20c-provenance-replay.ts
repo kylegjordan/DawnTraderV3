@@ -30,7 +30,7 @@ import { warmModuleConstantsForSyncCallers } from '../server/startup/b72-warmup.
 import { computeDirectionalBias } from '../server/core/metrics/directional-bias.js';
 import { DEFAULT_DBS_CONFIG, type DBSConfig } from '../server/types/directional-bias.types.js';
 import { getConstant } from '../server/services/module-constants-service.js';
-import { HOT_HORIZON_SQL, parseHorizonRows, decideEra } from '../server/services/data-archive/hot-horizon.js';
+import { HOT_HORIZON_SQL, parseHorizonRows, decideEraWithWarmup } from '../server/services/data-archive/hot-horizon.js';
 
 const { Client } = pg;
 const strategyEngine = new StrategyEngine();
@@ -47,6 +47,9 @@ const SAMPLE_CAP = Number(process.env.W20C_SAMPLE ?? 3000);
 const ERA_START = process.env.W20C_ERA_START ?? '2026-06-08T00:00:00Z';   // first full capture day
 // reorg-B3.3x (xStock 'tag' un-strangle) deploy: commit 53f601b93, 2026-06-24T21:50Z (+2h TZ).
 const B33X_TAG_CUTOVER_MS = Date.parse(process.env.W20C_TAG_CUTOVER ?? '2026-06-24T22:10:00Z');
+const SNAPSHOT_TABLE = 'xstock_spot_ohlc_15m_snapshot';
+const SNAPSHOT_WARMUP_MS = MAX_BARS_15M * 15 * 60_000;
+const HOT_TABLES = ['signal_eval_archive', 'signal_eval_provenance', SNAPSHOT_TABLE];
 const NEUTRAL_DBS = { score: 0, category: 'NEUTRAL', slope: 0 };
 
 // ── The live scanner's per-cycle DBS recipe, reconstructed per decision ──
@@ -122,11 +125,11 @@ async function main(): Promise<void> {
   await client.query(`SET statement_timeout = 0`);
 
   // B-DB-SIZE-RELIEF OBJ-3 (pre-audit P6 / F8): say what this run can actually read. Both tables are queried in their
-  // HOT partitions only; the C1 LEFT JOIN and the INNER samples join them, so the readable window is the SHORTER of the
-  // two hot horizons. An era older than that would silently report a truncated population under an era label —
+  // HOT partitions only; the C1 LEFT JOIN, INNER samples and settled-bar replay use three hot tables, so the readable
+  // window is the SHORTEST of their horizons. An era older than that would silently report a truncated population under an era label —
   // the script refuses instead and names the earliest era it can serve.
   const horizonRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
-  const era = decideEra(ERA_START, ['signal_eval_archive', 'signal_eval_provenance'], parseHorizonRows(horizonRows), Date.now());
+  const era = decideEraWithWarmup(ERA_START, SNAPSHOT_WARMUP_MS, HOT_TABLES, parseHorizonRows(horizonRows), Date.now());
   console.log(`[W20C] hot horizons: ${Object.entries(era.perTable).map(([t, d]) => `${t}=${d ?? 'UNKNOWN'} d`).join(', ')}`);
   if (!era.ok) {
     console.error(`[W20C] ${era.message}`);
@@ -218,7 +221,8 @@ async function main(): Promise<void> {
 
   // ── Replay each captured decision from its provenance ──
   let t1Match = 0, t1Total = 0, t2Match = 0, t2Total = 0;
-  let dropped = 0, droppedNoSettledRef = 0, droppedThin = 0, lookAheadViolations = 0;
+  let dropped = 0, droppedNoSettledRef = 0, droppedThin = 0, unavailableSnapshotHistory = 0, lookAheadViolations = 0;
+  const unavailableSnapshotSamples: string[] = [];
   let archiveFiredHarnessNoFire = 0, archiveNoFireHarnessFired = 0;
   const missedFiredReason = new Map<string, number>();
   const reasonConfusion = new Map<string, number>();
@@ -230,7 +234,12 @@ async function main(): Promise<void> {
 
   for (const d of decisions) {
     const snap = snapBySym.get(d.symbol);
-    if (!snap || snap.length === 0 || d.settledBucketMs === null) { droppedNoSettledRef++; continue; }
+    if (d.settledBucketMs === null) { droppedNoSettledRef++; continue; }
+    if (!snap || snap.length === 0) {
+      unavailableSnapshotHistory++;
+      if (unavailableSnapshotSamples.length < 10) unavailableSnapshotSamples.push(`${d.symbol} @${new Date(d.capturedMs).toISOString()}: no hot snapshot rows`);
+      continue;
+    }
     // Look-ahead guard on the CAPTURED inputs themselves: the settled reference
     // must be STRICTLY pre-forming. NOT contiguity — xStock is 24/5, so across
     // the weekend dark window (Fri close → Sun open) the newest settled bucket
@@ -240,8 +249,19 @@ async function main(): Promise<void> {
     if (d.forming && d.settledBucketMs >= d.forming.timestamp) { lookAheadViolations++; continue; }
     // exactly the settled set the engine saw: bars <= settled_bucket_ts, last N
     let settled = snap.filter(b => b.timestamp <= d.settledBucketMs!);
-    if (d.settledBarCount !== null && d.settledBarCount >= 0) settled = settled.slice(-Math.min(d.settledBarCount, MAX_BARS_15M));
-    else settled = settled.slice(-MAX_BARS_15M);
+    const expectedSettled = d.settledBarCount !== null && d.settledBarCount >= 0
+      ? Math.min(d.settledBarCount, MAX_BARS_15M)
+      : null;
+    settled = settled.slice(-(expectedSettled ?? MAX_BARS_15M));
+    if (expectedSettled !== null && settled.length !== expectedSettled) {
+      unavailableSnapshotHistory++;
+      if (unavailableSnapshotSamples.length < 10) {
+        unavailableSnapshotSamples.push(
+          `${d.symbol} @${new Date(d.capturedMs).toISOString()}: captured=${expectedSettled} hot=${settled.length}`,
+        );
+      }
+      continue;
+    }
     const bars = d.forming ? [...settled, d.forming].slice(-MAX_BARS_15M) : settled.slice(-MAX_BARS_15M);
     if (bars.length < 30) { droppedThin++; continue; }
 
@@ -326,6 +346,16 @@ async function main(): Promise<void> {
     }
   }
 
+  if (unavailableSnapshotHistory > 0) {
+    const banner = `[W20C] REFUSED: ${unavailableSnapshotHistory} captured settled-bar reference(s) are no longer complete in `
+      + `the hot snapshot table. This is unavailable history, not genuinely thin captured input. Rehydrate the proven snapshot objects first. `
+      + `Samples: ${unavailableSnapshotSamples.join(' | ')}`;
+    console.log(banner);
+    console.error(banner);
+    await client.end();
+    process.exit(4);
+  }
+
   const pct = (a: number, b: number) => b === 0 ? 'n/a' : `${(100 * a / b).toFixed(2)}% (${a}/${b})`;
   console.log(`\n============ B-NEW-53 PROOF-OF-CAPTURE PARITY (provenance-fed, vwap_pullback) ============`);
   console.log(`PROVENANCE COVERAGE (C1, separate): ${pct(coveredN, baseN)} of base decisions since ${ERA_START}`);
@@ -361,7 +391,7 @@ async function main(): Promise<void> {
   // check evaluates the run's MAXIMUM cutoff — an era inside it now was inside every cutoff the run lived through. If it
   // is not, the numbers above may be over a truncated population: say so ON STDOUT TOO and exit non-zero.
   const endRows = (await client.query(HOT_HORIZON_SQL)).rows as Array<{ constant_name: string; value: unknown }>;
-  const endEra = decideEra(ERA_START, ['signal_eval_archive', 'signal_eval_provenance'], parseHorizonRows(endRows), Date.now());
+  const endEra = decideEraWithWarmup(ERA_START, SNAPSHOT_WARMUP_MS, HOT_TABLES, parseHorizonRows(endRows), Date.now());
   if (!endEra.ok) {
     const banner = `[W20C] POPULATION MAY BE TRUNCATED: the era was servable at the start but not at the end of this run — `
       + `the retention sweep may have tiered rows out while it was reading. ${endEra.message}`;

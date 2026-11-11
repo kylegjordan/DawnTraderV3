@@ -41,6 +41,19 @@ export type EraDecision =
   | { ok: true; horizonDays: number; limitingTable: string; horizonStartIso: string; perTable: Record<string, number> }
   | { ok: false; message: string; earliestServableIso: string | null; perTable: Record<string, number | null> };
 
+export function hotRehydrateInstruction(
+  tables: string[],
+  fromIso: string,
+  toIso: string,
+): string {
+  const from = new Date(fromIso).toISOString().slice(0, 10);
+  const to = new Date(toIso).toISOString().slice(0, 10);
+  return tables.map((table) =>
+    `npx tsx server/scripts/b75-rehydrate.ts --table ${table} --from ${from} --to ${to} `
+    + `--out ~/rehydrated/${table}`,
+  ).join(' ; ');
+}
+
 /**
  * Parse the HOT_HORIZON_SQL rows into table → days. A key whose value the sweep would NOT enforce (parseLifecycleNumber)
  * maps to null — PRESENT BUT MALFORMED — so it is never confused with an ABSENT key (Langston gate 3 F3: "no key" sends
@@ -84,7 +97,35 @@ export function decideEra(eraStartIso: string, tables: string[], horizons: Map<s
     return { ok: false, earliestServableIso: earliest, perTable,
       message: `REFUSED: era start ${eraStartIso} is older than the hot horizon (${horizonDays} d, set by ${limitingTable}; hot from `
         + `${new Date(horizonStartMs).toISOString()}). Rows before that are in the WARM tier (Supabase Storage), readable only via `
-        + `server/scripts/b75-rehydrate.ts. Re-run with an era at or after ${earliest}, or rehydrate the older days first.` };
+        + `server/scripts/b75-rehydrate.ts. Re-run with an era at or after ${earliest}, or restore the proven objects first: `
+        + hotRehydrateInstruction(tables, eraStartIso, earliest) };
   }
   return { ok: true, horizonDays, limitingTable, horizonStartIso: new Date(horizonStartMs).toISOString(), perTable: perTable as Record<string, number> };
+}
+
+export function decideEraWithWarmup(
+  requestedStartIso: string,
+  warmupMs: number,
+  tables: string[],
+  horizons: Map<string, number | null>,
+  nowMs: number,
+): EraDecision {
+  const requestedStart = Date.parse(requestedStartIso);
+  if (!Number.isFinite(requestedStart) || !Number.isFinite(warmupMs) || warmupMs < 0) {
+    return {
+      ok: false,
+      earliestServableIso: null,
+      perTable: Object.fromEntries(tables.map((table) => [table, horizons.get(table) ?? null])),
+      message: `REFUSED: invalid requested start or warmup (${requestedStartIso}, ${warmupMs}ms).`,
+    };
+  }
+  const effectiveStart = new Date(requestedStart - warmupMs).toISOString();
+  const decision = decideEra(effectiveStart, tables, horizons, nowMs);
+  if (!decision.ok) {
+    return {
+      ...decision,
+      message: `${decision.message} Requested window starts ${requestedStartIso} and needs ${warmupMs}ms of prior bars.`,
+    };
+  }
+  return decision;
 }
