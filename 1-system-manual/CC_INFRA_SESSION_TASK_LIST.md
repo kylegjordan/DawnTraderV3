@@ -18,7 +18,7 @@
 | ✅ ~~`B-TRANSCRIPT-ARCHIVE`~~ (KD-47, plan §0a Infra order 4b) | **CLOSED 2026-11-10** — all seven objectives green; Coltrane CONFIRMED Step 11 at `6d9535aa` | — | report `Batch Completion/B_TRANSCRIPT_ARCHIVE_COMPLETION_REPORT.md`; Codex/reviewer-history expansion remains after live under `#1238`; board Review-field access gap remains under B-CREW-ACCESS-HARDEN |
 | ▶ **`B-CREDENTIALS-PRIVATE-REPO`** (`#1023`, plan §0 Infra order 6) | parent in flight; `#1117` increment closed; **GB-8 Step 5 complete**, CI `42829558680` 4/4 | crew mode | Step 6 parked because its bridge install would enable Langston while he is off; remaining parent work stays open |
 | ▶ **`B-TOKEN-WATCH-FOLLOWUP-MEMORY`** (`#1132`, order 5 in my §0a list) | **Step 5 complete 2026-11-10**; CI `42843060525` 4/4 | me, Step 6 | next eligible work while both Langston-enabling Step-6 installs wait for Claude mode; index/encoding/N/arms next; no Langston service enable |
-| ▶ **`B-DISK-HEADROOM`** (plan row 6) | **Step 7; Stage B PASS 2026-11-11** | Coltrane corrected-ref confirmation | exact 22-child run freed 28,351,709,184 B with `failed=0`; all archive/rehydrate/lock controls pass; restored to 365; binding eligible-set carrier needs no repeat proof |
+| ▶ **`B-DISK-HEADROOM`** (plan row 6) | **Step 8; Stage B PASS 2026-11-11** | Coltrane second-pass verification | exact 22-child run freed 28,351,709,184 B with `failed=0`; all archive/rehydrate/lock controls pass; restored to 365; Step-7 record confirmed at `5aeab2c83` |
 | ⏳ **`#1237` + `#1238` `B-CODEX-CONVERSATION-BACKUP`** | after live (Kyle D-1, 2026-11-04) | me | one backed-up, searchable and restore-checked path for all five Claude sessions, all five Codex chats, Langston and Coltrane |
 | ✅ ~~`B-LANGSTON-RELIEF`~~ (sprint §0 row, Kyle 2026-10-16) | **CLOSED 2026-11-05** (Langston CONFIRMED 2026-11-05T03:04:32Z) | — | report `Batch Completion/B_LANGSTON_RELIEF_COMPLETION_REPORT.md`; the ceiling carried to `B-LANGSTON-CLAUDEMD-RESIDUAL` (Kyle option A) |
 | ⏳ **`B-LANGSTON-CLAUDEMD-RESIDUAL`** (Kyle-slotted 2026-10-20; folds `#974`) | **Step 7** — installed 2026-11-05 08:21Z: his rules file 57,095 B (Langston-approved, `e319f34cf`), the installer and the size watch; loaded set 140,943 vs 143,856, canary LOADED | two consecutive daily size-watch runs under the ceiling, then Step 8 | OBJ-3 ceiling (carried from `B-LANGSTON-RELIEF`) met at install |
@@ -36,7 +36,7 @@
 
 > ⛔ **The order and the text below are COPIED from the sprint plan's row numbers — if they differ, the plan wins.** `PHASE_19_PLAN.md` no longer orders this work (Kyle, 2026-09-28: one list, in order).
 
-**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` GB-8, `B-AGENT-INVOKE-FAILURE-NOTICE`, and `B-TOKEN-WATCH-FOLLOWUP-MEMORY` are preserved at their install/deploy boundaries. `B-DISK-HEADROOM` Stage B passed on the binding exact-eligible-set carrier and is restored to 365; Step 7 awaits only Coltrane's corrected-ref confirmation, with no deploy or OBJ-4 flip first. No Langston worker is enabled during the Codex shift.
+**NOW, ahead of the sprint (§0 plate):** `B-CREDENTIALS-PRIVATE-REPO` GB-8, `B-AGENT-INVOKE-FAILURE-NOTICE`, and `B-TOKEN-WATCH-FOLLOWUP-MEMORY` are preserved at their install/deploy boundaries. `B-DISK-HEADROOM` Stage B passed on the binding exact-eligible-set carrier and is restored to 365; Step 7 is confirmed and Step 8 is the independent second pass, with no deploy or OBJ-4 flip first. No Langston worker is enabled during the Codex shift.
 
 | row | item | what it is for |
 |---|---|---|
