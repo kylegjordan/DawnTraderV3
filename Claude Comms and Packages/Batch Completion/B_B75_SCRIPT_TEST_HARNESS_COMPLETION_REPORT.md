@@ -4,7 +4,7 @@
 
 ## 0. Honest boundary — stated first
 
-This batch proves the four B75 commands' import behavior and safety-gate orchestration through injected fakes. It did not invoke a real archive, source delete, warm delete, VACUUM, restore, database write or storage provider. It therefore does not claim production-provider semantics, credential or scheduler behavior, permission setup, real lock concurrency or protection against a same-count row replacement. The context command remains unscheduled, and its buffered-upload risk remains open under separate issue `#169`.
+This batch proves the four B75 commands' ordinary imported-module behavior and safety-gate orchestration through injected fakes. It did not invoke a real archive, source delete, warm delete, VACUUM, restore, database write or storage provider. It therefore does not claim production-provider semantics, credential or scheduler behavior, permission setup, real lock concurrency or protection against a same-count row replacement. The fresh-import test arms the known database-constructor, storage, alert, file-read/write/open and process-exit surfaces; an unobserved side effect in a transitive import outside that spy set remains possible. A launcher that deliberately makes `process.argv[1]` equal the command module path is treated as direct execution by contract. The context command remains unscheduled, and its buffered-upload risk remains open under separate issue `#169`.
 
 ## 1. What shipped
 
@@ -41,7 +41,7 @@ At Step 8, Coltrane **CONFIRMED** exact evidence ref `427df5e5989129da3e88f776a4
 - Runtime continuity: **1 of 1 DawnTrader process online**, restart count 689, unstable restarts 0; no restart during the evidence window.
 - Shared-deploy CI run `42990517806` at the exact deployed ref: TypeScript Check, Test Suite, Build and Docker Build all succeeded.
 - Step-9 CI run `42994513989` at exact ref `65941452ecce5b3b94f70afa6ed6201090123d69`: TypeScript Check, Test Suite, Build and Docker Build all succeeded.
-- Governance-head CI is recorded after this report's exact commit finishes all four jobs.
+- Governance ref `20bc6d007fb9282cf55318872afca3ef35b548eb`: feature-branch CI run `42996997586` and shared-branch CI run `42997512178` each completed with TypeScript Check, Test Suite, Build and Docker Build all successful.
 
 ## 5. Governance files changed — Step-10 ledger
 
@@ -83,6 +83,6 @@ CHANGE-CLASS: non_architecture
 
 ## 6. Delivery and remaining state
 
-The delivery card is in Governance with `Blocked on = Nothing` for this Step-10 boundary. After the exact governance ref passes all four CI jobs it goes to Coltrane for Step 11 and temporarily blocks on Coltrane; confirmation moves it to Complete / Nothing. `#1208` is closed by this batch. `#169` remains open and is not narrowed: it owns context scheduling plus the existing buffered-upload risk.
+The delivery card is in Governance with `Blocked on = Langston`, the board's reviewer-wait option, for Coltrane's Step-11 read this shift. Confirmation moves it to Complete / Nothing. `#1208` is closed by this batch. `#169` remains open and is not narrowed: it owns context scheduling plus the existing buffered-upload risk.
 
-REVIEWER: claim-only · identify the objects that settle whether this close proves executable gate behavior without proving real archive/provider/scheduler outcomes, and whether every governance row matches the declared non-architecture class · HIT — the exact-ref 42-case harness, independent import probe, ordered fake events and full ledger settle the bounded claim; the explicit safety boundary and still-open `#169` preserve the unproven states · re-derived yes
+REVIEWER: claim-only · identify the objects that settle whether this close proves executable gate behavior without proving real archive/provider/scheduler outcomes, and name other states consistent with them · HIT — the selected objects are the approved scope/pre-audit, shared predicate, four guarded command blobs, 42-case harness, exact-head CI and bounded staging record; other consistent states include a transitive-import side effect outside the armed spies and a launcher whose argv entry deliberately equals the module path, so both are now explicit in §0 · re-derived yes at `20bc6d007fb9282cf55318872afca3ef35b548eb` with the predicate's true/different/absent positive controls, all four guard sites, the complete spy set, ordered context rollback cases and four green jobs
