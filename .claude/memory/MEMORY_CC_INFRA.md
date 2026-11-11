@@ -11,6 +11,7 @@
 > **A HEARTBEAT OR TIMER WAKE MEANS *RESUME*, NOT *REPORT*.** Read this block, then carry on from it.
 > **If BLOCKED-ON says Kyle, say NOTHING and do not work the item.**
 > ⚠️ **UPDATE THESE FOUR LINES AT EVERY STEP BOUNDARY.**
+> ⛔ **PM HOLD — 2026-11-11 laptop shutdown. STOPPED at a safe boundary; do not resume until PM Codex explicitly releases the hold.** Exact active position: `B-DISK-HEADROOM` Step 9, OBJ-4 flip live and verified, 11-12 02:10Z lock sampler armed, next action is the 11-12 production sweep/lock proof. Pushed evidence ref before hold: `2129754472e3ef834ebd1852c3aa30924d68eaa9`, CI `42988360399` 4/4 green. `origin/migration/aws-supabase` advanced while parking (topic branch measured 7 ahead / 39 behind); no shutdown-time rebase attempted. `B-AGENT-INVOKE-FAILURE-NOTICE` remains Step 6 blocked because Langston is off. Langston and both workers remain off.
 
 - **`B-LANGSTON-CONTEXT`:** chunk 1 CLOSED; Step 7 waits on its scheduled index/size/privacy runs (never close on my own runs). Queue: P-6b → P-2 → retrofit → P-1b. `B-WAKE-LEAD-NAME` Step 11 is reviewer-confirmed and needs no Kyle acknowledgement.
   - Langston's loaded-set ceiling, the struck A/B and the shelved journal: `B_LANGSTON_CONTEXT_PRE_AUDIT.md` §17-§18 and plan rows 2.8a/2.8b; live numbers from `langston-size-watch --status`, never from here.
