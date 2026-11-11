@@ -261,11 +261,15 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
       .toBe('2026-10-12T00:00:00.000Z');
   });
 
-  it('builds one materialized rank-floor selector and refuses drifted phases', () => {
+  it('builds one materialized index-bounded rank-floor selector and refuses drifted phases', () => {
     const sql = snapshotPopulationSql(selector());
-    expect(sql).toContain('WITH ranked AS MATERIALIZED');
+    expect(sql).toContain('WITH symbols AS MATERIALIZED');
     expect(sql).toContain('floor_boundary AS MATERIALIZED');
-    expect(sql).toContain('row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC)');
+    expect(sql).toContain('CROSS JOIN LATERAL');
+    expect(sql).toContain('ORDER BY floor_row.bucket_ts DESC');
+    expect(sql).toContain('LIMIT $1');
+    expect(sql).toContain('min(bucket_ts) AS oldest_kept_bucket');
+    expect(sql).not.toContain('OFFSET');
     expect(sql).toContain('s.bucket_ts < f.oldest_kept_bucket');
     expect(sql).toContain("'source_revision_set_hash'");
     expect(() => snapshotPopulationSql(selector({ dayEnd: new Date('2026-10-03T00:00:00Z') })))
@@ -307,7 +311,10 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
     const snap = selector();
     const days = snapshotEligibleDaysSql(snap.table);
     const locked = snapshotLockedDeleteSql(snap);
-    expect(days).toContain('row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC)');
+    expect(days).toContain('CROSS JOIN LATERAL');
+    expect(days).toContain('ORDER BY floor_row.bucket_ts DESC');
+    expect(days).toContain('LIMIT $1');
+    expect(days).not.toContain('OFFSET');
     expect(days).toContain('s.bucket_ts < f.oldest_kept_bucket');
     expect(locked).toContain('WITH current_rows AS MATERIALIZED');
     expect(locked).toContain('int4send(octet_length(convert_to(symbol');

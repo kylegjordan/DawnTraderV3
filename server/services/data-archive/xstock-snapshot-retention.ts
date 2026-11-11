@@ -76,15 +76,22 @@ function quoteInternalTempTable(table: string): string {
 
 function snapshotRankedCtes(table: XstockSnapshotTable): string {
   const quoted = quoteSnapshotTable(table);
-  return `ranked AS MATERIALIZED (
-    SELECT symbol, bucket_ts,
-           row_number() OVER (PARTITION BY symbol ORDER BY bucket_ts DESC) AS retained_rank
+  return `symbols AS MATERIALIZED (
+    SELECT DISTINCT symbol
       FROM ${quoted}
   ), floor_boundary AS MATERIALIZED (
-    SELECT symbol, min(bucket_ts) AS oldest_kept_bucket
-      FROM ranked
-     WHERE retained_rank <= $1
-     GROUP BY symbol
+    SELECT symbols.symbol, boundary.oldest_kept_bucket
+      FROM symbols
+      CROSS JOIN LATERAL (
+        SELECT min(bucket_ts) AS oldest_kept_bucket
+          FROM (
+            SELECT floor_row.bucket_ts
+              FROM ${quoted} floor_row
+             WHERE floor_row.symbol = symbols.symbol
+             ORDER BY floor_row.bucket_ts DESC
+             LIMIT $1
+          ) retained
+      ) boundary
   )`;
 }
 
@@ -158,7 +165,9 @@ export function snapshotCanonicalJsonExpression(alias = 's'): string {
 
 /**
  * The same ranked population is used for export and locked recheck.  The floor
- * is materialized once so PostgreSQL cannot rerun the window subplan per row.
+ * is materialized once from each symbol's index-bounded newest-N rows so the
+ * final writer-excluding proof does not rank the entire mutable table.  Taking
+ * min(newest N) also preserves the oldest available row for short histories.
  */
 export function snapshotPopulationSql(selector: XstockSnapshotSelector): string {
   assertSnapshotSelector(selector);
