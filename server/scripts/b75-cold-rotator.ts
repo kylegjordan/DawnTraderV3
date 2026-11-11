@@ -28,11 +28,12 @@
 
 import 'dotenv/config';
 import pg from 'pg';
-import { getStorageClient } from '../services/data-archive/storage-client.js';
+import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
+import { isDirectEntry } from './direct-entry.js';
 
 const { Client } = pg;
 
-interface Cfg {
+export interface ColdRotatorConfig {
   warmRetentionDays: number;
   /** B-STORAGE-HARDEN Wave D: optional per-table warm-window overrides, keyed by
    *  source_table. Read from `data_lifecycle.<table>.warm_retention_days`. Empty
@@ -49,11 +50,11 @@ interface Cfg {
 
 /** The warm-retention window (days) that applies to a given source_table: its
  *  per-table override if present, else the global default. */
-function warmWindowForTable(cfg: Cfg, sourceTable: string): number {
+function warmWindowForTable(cfg: ColdRotatorConfig, sourceTable: string): number {
   return cfg.perTableWarmRetentionDays.get(sourceTable) ?? cfg.warmRetentionDays;
 }
 
-async function loadConfig(client: pg.Client): Promise<Cfg> {
+async function loadConfig(client: pg.Client): Promise<ColdRotatorConfig> {
   const r = await client.query(
     `SELECT constant_name, value FROM module_constants WHERE module_name = 'data_lifecycle'`,
   );
@@ -108,7 +109,7 @@ async function loadConfig(client: pg.Client): Promise<Cfg> {
   };
 }
 
-interface Candidate {
+export interface ColdRotationCandidate {
   id: string;
   source_table: string;
   partition_label: string;
@@ -119,12 +120,15 @@ interface Candidate {
   created_at: Date;
 }
 
-async function listCandidates(client: pg.Client, cfg: Cfg): Promise<Candidate[]> {
+export async function listColdRotationCandidates(
+  client: pg.Client,
+  cfg: ColdRotatorConfig,
+  nowMs = Date.now(),
+): Promise<ColdRotationCandidate[]> {
   // Wave D per-table windows: prefilter in SQL by the SHORTEST applicable window
   // (so no eligible row is excluded), then refine per-table in JS. With NO
   // per-table overrides, minWindow == default → this is exactly the historical
   // `created_at < now - default` single-cutoff behavior.
-  const nowMs = Date.now();
   const windows = [cfg.warmRetentionDays, ...cfg.perTableWarmRetentionDays.values()];
   const minWindowDays = Math.min(...windows);
   const prefilterCutoff = new Date(nowMs - minWindowDays * 86_400_000);
@@ -146,12 +150,106 @@ async function listCandidates(client: pg.Client, cfg: Cfg): Promise<Candidate[]>
     [prefilterCutoff],
   );
   // Per-table refine: keep only rows past THEIR own warm window.
-  return (r.rows as Candidate[]).filter(
+  return (r.rows as ColdRotationCandidate[]).filter(
     (row) => row.created_at.getTime() < nowMs - warmWindowForTable(cfg, row.source_table) * 86_400_000,
   );
 }
 
-async function main(): Promise<void> {
+export interface ColdRotationDependencies {
+  storage: Pick<StorageClient, 'downloadWarm' | 'uploadCold' | 'downloadCold' | 'deleteWarm'>;
+  createClient: () => pg.Client;
+}
+
+/** Execute one warm-to-cold state transition. Warm deletion is deliberately
+ * outside and after both manifest writes so every thrown mutation leaves the
+ * warm copy in place. */
+export async function rotateColdCandidate(
+  candidate: ColdRotationCandidate,
+  cfg: ColdRotatorConfig,
+  deps: ColdRotationDependencies,
+): Promise<number> {
+  const { bucket: warmBucket, path: warmPath } = parseSupabaseUri(candidate.storage_uri);
+  const warmObj = await deps.storage.downloadWarm(warmBucket, warmPath);
+  if (warmObj.checksum !== candidate.checksum) {
+    throw new Error(
+      `[B75 rotator] warm-tier checksum drift: manifest=${candidate.checksum} actual=${warmObj.checksum}`,
+    );
+  }
+
+  const coldPath = `${candidate.source_table}/${candidate.partition_label}.jsonl.gz`;
+  await deps.storage.uploadCold(cfg.coldBucket, coldPath, warmObj.data);
+  const coldObj = await deps.storage.downloadCold(cfg.coldBucket, coldPath);
+  if (coldObj.checksum !== candidate.checksum) {
+    throw new Error(
+      `[B75 rotator] cold-tier post-upload checksum mismatch: expected=${candidate.checksum} got=${coldObj.checksum}`,
+    );
+  }
+
+  const coldUri = `b2://${cfg.coldBucket}/${coldPath}`;
+  const ctlClient = deps.createClient();
+  await ctlClient.connect();
+  try {
+    await ctlClient.query(
+      `INSERT INTO data_archive_manifest (
+         source_table, partition_label, tier, state, storage_uri,
+         min_ts, max_ts, date_range_start, date_range_end,
+         row_count, bytes_compressed, original_partition_size_bytes,
+         checksum, format, compression, verified_at, completeness_basis
+       ) SELECT source_table, partition_label, 'cold', 'active', $2,
+                min_ts, max_ts, date_range_start, date_range_end,
+                row_count, bytes_compressed, original_partition_size_bytes,
+                checksum, format, compression, NOW(), completeness_basis
+          FROM data_archive_manifest
+         WHERE id = $1
+         ON CONFLICT (source_table, partition_label, tier) DO UPDATE
+           SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
+               completeness_basis = EXCLUDED.completeness_basis`,
+      [candidate.id, coldUri],
+    );
+    await ctlClient.query(
+      `UPDATE data_archive_manifest
+         SET state = 'migrated', tier_changed_at = NOW()
+       WHERE id = $1`,
+      [candidate.id],
+    );
+  } finally {
+    await ctlClient.end().catch(() => {});
+  }
+
+  await deps.storage.deleteWarm(warmBucket, warmPath);
+  return Number(candidate.bytes_compressed);
+}
+
+export async function runColdRotationCandidates(
+  candidates: ColdRotationCandidate[],
+  cfg: ColdRotatorConfig,
+  deps: ColdRotationDependencies,
+): Promise<{ rotated: number; failed: number; bytesMoved: number }> {
+  let rotated = 0;
+  let failed = 0;
+  let bytesMoved = 0;
+  for (const candidate of candidates) {
+    const itemStart = Date.now();
+    try {
+      console.log(
+        `[B75 rotator] rotating ${candidate.source_table}/${candidate.partition_label} (${candidate.bytes_compressed} bytes)`,
+      );
+      bytesMoved += await rotateColdCandidate(candidate, cfg, deps);
+      rotated++;
+      console.log(
+        `[B75 rotator] ${candidate.source_table}/${candidate.partition_label}: rotated bytes=${candidate.bytes_compressed} duration_ms=${Date.now() - itemStart}`,
+      );
+    } catch (err) {
+      failed++;
+      console.error(
+        `[B75 rotator] ${candidate.source_table}/${candidate.partition_label}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+  return { rotated, failed, bytesMoved };
+}
+
+export async function runColdRotatorCli(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('[B75 rotator] DATABASE_URL not set');
     process.exit(1);
@@ -165,7 +263,7 @@ async function main(): Promise<void> {
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
 
-  let cfg: Cfg;
+  let cfg: ColdRotatorConfig;
   try {
     cfg = await loadConfig(ctl);
   } finally {
@@ -200,9 +298,9 @@ async function main(): Promise<void> {
 
   const listClient = new Client({ connectionString: process.env.DATABASE_URL });
   await listClient.connect();
-  let candidates: Candidate[];
+  let candidates: ColdRotationCandidate[];
   try {
-    candidates = await listCandidates(listClient, cfg);
+    candidates = await listColdRotationCandidates(listClient, cfg);
   } finally {
     await listClient.end();
   }
@@ -263,105 +361,10 @@ async function main(): Promise<void> {
   // no half-state). The crashed warm row stays state='active' (not deleted)
   // for safe retry.
 
-  let rotated = 0;
-  let failed = 0;
-  let bytesMoved = 0;
-  for (const c of candidates) {
-    const itemStart = Date.now();
-    try {
-      const { bucket: warmBucket, path: warmPath } = parseSupabaseUri(c.storage_uri);
-      console.log(
-        `[B75 rotator] rotating ${c.source_table}/${c.partition_label} (${c.bytes_compressed} bytes)`,
-      );
-
-      // Step 1: download from warm
-      const warmObj = await storage.downloadWarm(warmBucket, warmPath);
-      if (warmObj.checksum !== c.checksum) {
-        throw new Error(
-          `[B75 rotator] warm-tier checksum drift: manifest=${c.checksum} actual=${warmObj.checksum}`,
-        );
-      }
-
-      // Step 2: upload to cold (B2). Cold path mirrors warm structure but no 'warm/' prefix
-      const coldPath = `${c.source_table}/${c.partition_label}.jsonl.gz`;
-      await storage.uploadCold(cfg.coldBucket, coldPath, warmObj.data);
-
-      // Verify by re-download
-      const coldObj = await storage.downloadCold(cfg.coldBucket, coldPath);
-      if (coldObj.checksum !== c.checksum) {
-        throw new Error(
-          `[B75 rotator] cold-tier post-upload checksum mismatch: expected=${c.checksum} got=${coldObj.checksum}`,
-        );
-      }
-
-      // Step 3: INSERT cold manifest row
-      const coldUri = `b2://${cfg.coldBucket}/${coldPath}`;
-      const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
-      await ctlClient.connect();
-      try {
-        await ctlClient.query(
-          `INSERT INTO data_archive_manifest (
-             source_table, partition_label, tier, state, storage_uri,
-             min_ts, max_ts, date_range_start, date_range_end,
-             row_count, bytes_compressed, original_partition_size_bytes,
-             checksum, format, compression, verified_at, completeness_basis
-           ) SELECT source_table, partition_label, 'cold', 'active', $2,
-                    min_ts, max_ts, date_range_start, date_range_end,
-                    row_count, bytes_compressed, original_partition_size_bytes,
-                    checksum, format, compression, NOW(), completeness_basis
-              FROM data_archive_manifest
-             WHERE id = $1
-             ON CONFLICT (source_table, partition_label, tier) DO UPDATE
-               SET state = 'active', storage_uri = EXCLUDED.storage_uri, verified_at = NOW(),
-                   completeness_basis = EXCLUDED.completeness_basis`,
-          // B-B75-EXPORT-COMPLETENESS (#1195): the cold copy is byte-identical to the warm
-          // one (checksum-verified above), so it carries the warm row's completeness_basis
-          // in BOTH the insert and the conflict update — otherwise a pre-existing cold row
-          // would keep 'unrecorded'. It writes no evidence of its own: the manifest tie
-          // trigger admits 'source-count-matched' on (source_table, partition_label), so
-          // the cold row inherits the warm export's proof (Langston Step-2 B-3).
-          // B-STORAGE-HARDEN OBJ-1 fixes (both surfaced by the first real rotation —
-          // cold was dry-run since B75, so the Phase-2 path had never executed):
-          //  (r3) the SQL used $1/$3 with a stray unreferenced null at $2 → Postgres
-          //       "could not determine data type of parameter $2"; $2 now carries the
-          //       cold URI, the null placeholder is gone.
-          //  (r4) the cold row was inserted state='active' with verified_at NULL — but
-          //       the B2 round-trip WAS verified at Step 2 above (downloadCold +
-          //       checksum match, which is why we reach this INSERT at all). Stamp
-          //       verified_at=NOW() so the manifest's audit trail reflects the
-          //       confirmed cold round-trip (Langston Step-8: verified_at is the ONLY
-          //       DB proof a cold copy landed intact — a last-copy-of-record archive
-          //       must not read 'active' on a local-checksum-only basis).
-          [c.id, coldUri],
-        );
-
-        // Step 4: UPDATE warm row → migrated
-        await ctlClient.query(
-          `UPDATE data_archive_manifest
-             SET state = 'migrated', tier_changed_at = NOW()
-           WHERE id = $1`,
-          [c.id],
-        );
-      } finally {
-        await ctlClient.end().catch(() => {});
-      }
-
-      // Step 5: deleteWarm (only after manifest cold-row + warm-row update committed)
-      await storage.deleteWarm(warmBucket, warmPath);
-
-      rotated++;
-      bytesMoved += Number(c.bytes_compressed); // #432: pg returns BIGINT as string → coerce, else "0"+"N" concatenates
-      console.log(
-        `[B75 rotator] ${c.source_table}/${c.partition_label}: rotated bytes=${c.bytes_compressed} duration_ms=${Date.now() - itemStart}`,
-      );
-    } catch (err) {
-      failed++;
-      console.error(
-        `[B75 rotator] ${c.source_table}/${c.partition_label}: FAILED — ${err instanceof Error ? err.message : String(err)}`,
-      );
-      // Continue with next candidate; failed rotations retry next month.
-    }
-  }
+  const { rotated, failed, bytesMoved } = await runColdRotationCandidates(candidates, cfg, {
+    storage,
+    createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+  });
 
   console.log(
     `[B75 rotator] DONE candidates=${candidates.length} rotated=${rotated} failed=${failed} ` +
@@ -390,7 +393,9 @@ function parseIntFlag(argv: string[], name: string): number | null {
   return n;
 }
 
-main().catch((err) => {
-  console.error('[B75 rotator] fatal:', err);
-  process.exit(1);
-});
+if (isDirectEntry(import.meta.url)) {
+  runColdRotatorCli().catch((err) => {
+    console.error('[B75 rotator] fatal:', err);
+    process.exit(1);
+  });
+}

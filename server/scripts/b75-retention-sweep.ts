@@ -85,6 +85,7 @@ import {
   sweepFailureClass,
   type SweepFailureClass,
 } from '../services/data-archive/archive-completeness.js';
+import { isDirectEntry } from './direct-entry.js';
 
 /** One id per run, printed on the started line and cited as resolve evidence. */
 const RUN_ID = crypto.randomUUID();
@@ -103,7 +104,7 @@ const HARD_CAP_BYTES = 5 * 1024 * 1024 * 1024;
 // Table inventory — one row per B74 archive table
 // ───────────────────────────────────────────────────────────────────────────
 
-interface B74TableSpec {
+export interface B75ArchiveTableSpec {
   parent: string;
   timestampColumn: string;
   retentionConstantName: string; // key in module_constants under data_lifecycle
@@ -119,7 +120,7 @@ interface B74TableSpec {
 // (zero manifest rows for any *_ohlc_1m table, ever — measured 2026-08-17).
 // The crypto_perp pair joins the family born daily-partitioned at 30-day hot
 // (P19-B-PERPFEED OBJ-2; the departure from 365 is deliberate — warm preserves).
-const B74_TABLES: B74TableSpec[] = [
+const B74_TABLES: B75ArchiveTableSpec[] = [
   { parent: 'xstock_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_spot_ticker_snap.hot_retention_days' },
   { parent: 'xstock_perp_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'xstock_perp_ticker_snap.hot_retention_days' },
   { parent: 'crypto_spot_ticker_snap', timestampColumn: 'captured_at', retentionConstantName: 'crypto_spot_ticker_snap.hot_retention_days' },
@@ -148,7 +149,7 @@ const B74_TABLES: B74TableSpec[] = [
 // plain) aborts the WHOLE night's sweep. That is the safe fail-hard behaviour — and it is why a rollback that restores a
 // table entry must restore its seed row FIRST (B-CLUSTER-BUS-PERSIST-DISPOSITION: run the rollback SQL, then revert the
 // code). Corrected 2026-10-11; it read "a B70 config gap fails ONLY that table's reqNum, never a B74 table".
-const B70_TABLES: B74TableSpec[] = [
+const B70_TABLES: B75ArchiveTableSpec[] = [
   { parent: 'signal_eval_archive',     timestampColumn: 'captured_at', retentionConstantName: 'signal_eval_archive.hot_retention_days' },
   { parent: 'pair_scan_archive',       timestampColumn: 'captured_at', retentionConstantName: 'pair_scan_archive.hot_retention_days' },
   { parent: 'exit_decision_archive',   timestampColumn: 'captured_at', retentionConstantName: 'exit_decision_archive.hot_retention_days' },
@@ -160,7 +161,7 @@ const B70_TABLES: B74TableSpec[] = [
 // All monthly-partitioned archive tables processed by the same export→warm→drop
 // loop (B74 market-data + B70 analytics). Handling is identical — only the
 // per-table timestamp column + retention constant differ.
-const PARTITIONED_TABLES: B74TableSpec[] = [...B74_TABLES, ...B70_TABLES];
+const PARTITIONED_TABLES: B75ArchiveTableSpec[] = [...B74_TABLES, ...B70_TABLES];
 
 // ───────────────────────────────────────────────────────────────────────────
 // P19-B5c — PLAIN (non-partitioned) retention tables
@@ -211,7 +212,7 @@ const PLAIN_DELETE_BATCH = 5000;
 // Config loader
 // ───────────────────────────────────────────────────────────────────────────
 
-interface SweepConfig {
+export interface B75SweepConfig {
   warmBucket: string;
   warmPrefix: string;
   retentionByTable: Map<string, number>;
@@ -220,7 +221,7 @@ interface SweepConfig {
 
 const NARROW_LIFECYCLE_SCOPE_ALERT_KEY = 'b75-retention-sweep:data-lifecycle-narrow-scope';
 
-async function loadConfig(client: pg.Client): Promise<SweepConfig> {
+async function loadConfig(client: pg.Client): Promise<B75SweepConfig> {
   const narrow = await client.query(
     `SELECT constant_name FROM module_constants
        WHERE module_name = 'data_lifecycle'
@@ -542,7 +543,7 @@ async function dropPartition(client: pg.Client, partitionTable: string): Promise
  *  a crash can never leave the partition dropped while the manifest is stuck at
  *  'verified' (which listOldPartitions would never revisit). markFn performs the
  *  state flip on the SAME client inside the tx. */
-async function dropAndMarkActive(
+export async function dropAndMarkActive(
   ctlClient: pg.Client,
   partitionTable: string,
   markFn: () => Promise<void>,
@@ -556,6 +557,19 @@ async function dropAndMarkActive(
     await ctlClient.query('ROLLBACK').catch(() => {});
     throw err;
   }
+}
+
+export function missingProvenArchiveLabels(
+  labels: string[],
+  rows: Array<{ partition_label: string; state: string; completeness_basis: string | null }>,
+): string[] {
+  const proven = new Set(
+    rows
+      .filter((row) => (row.state === 'verified' || row.state === 'active')
+        && isProvenBasis(row.completeness_basis))
+      .map((row) => row.partition_label),
+  );
+  return labels.filter((label) => !proven.has(label));
 }
 
 function quoteIdent(name: string): string {
@@ -575,7 +589,7 @@ function quoteIdent(name: string): string {
  *  it (no drop, no manifest write), so `hot_partition_dropped_at` is never re-stamped
  *  and a `migrated` row is never flipped back to `active` (Langston Step-2 C-1).
  *  (The old `reused: boolean` field had no reader and is gone — rule 18.) */
-type ArchiveOutcome =
+export type B75ArchiveOutcome =
   | { kind: 'exported' | 'reused'; manifestId: string; rowCount: number; bytesCompressed: number }
   | { kind: 'skipped'; manifestId: string; reason: 'already-active' | 'already-migrated' };
 
@@ -583,19 +597,42 @@ class ChecksumMismatchError extends Error {
   readonly isChecksumMismatch = true;
 }
 
-async function archiveOneObject(
+export interface B75ArchiveObjectDependencies {
+  exportPartition: typeof exportPartition;
+  evidenceExistsForManifest: typeof evidenceExistsForManifest;
+  proofCountStillMatches: typeof proofCountStillMatches;
+  recordExactArchiveEvidence: typeof recordExactArchiveEvidence;
+  countGzipJsonlLines: typeof countGzipJsonlLines;
+  assertExactArchiveEquality: typeof assertExactArchiveEquality;
+  statSize: (filePath: string) => number;
+  unlinkFile: (filePath: string) => void;
+}
+
+const DEFAULT_ARCHIVE_OBJECT_DEPS: B75ArchiveObjectDependencies = {
+  exportPartition,
+  evidenceExistsForManifest,
+  proofCountStillMatches,
+  recordExactArchiveEvidence,
+  countGzipJsonlLines,
+  assertExactArchiveEquality,
+  statSize: (filePath) => fs.statSync(filePath).size,
+  unlinkFile: (filePath) => fs.unlinkSync(filePath),
+};
+
+export async function archiveB75Object(
   storage: StorageClient,
   exportClient: pg.Client,
   ctlClient: pg.Client,
-  cfg: SweepConfig,
-  spec: B74TableSpec,
+  cfg: B75SweepConfig,
+  spec: B75ArchiveTableSpec,
   label: string,
   rangeStart: Date,
   rangeEnd: Date,
   partitionTableName: string,
   originalSizeBytes: number,
   extraPredicate?: string, // B-TRADE-TIER-REGISTER: plain-table subset export
-): Promise<ArchiveOutcome> {
+  deps: B75ArchiveObjectDependencies = DEFAULT_ARCHIVE_OBJECT_DEPS,
+): Promise<B75ArchiveOutcome> {
   const objPath = `${cfg.warmPrefix}/${spec.parent}/${label}.jsonl.gz`;
   const storageUri = `supabase://${cfg.warmBucket}/${objPath}`;
 
@@ -604,7 +641,7 @@ async function archiveOneObject(
   // is MEASURED (the whole path enumerates children by name, not by rows).
   const existing = await getManifestRow(ctlClient, spec.parent, label, 'warm');
   const needs = decisionNeeds(existing);
-  const evidenceExists = existing && needs.evidence ? await evidenceExistsForManifest(ctlClient, existing.id) : false;
+  const evidenceExists = existing && needs.evidence ? await deps.evidenceExistsForManifest(ctlClient, existing.id) : false;
   const rowsPresent = needs.rows
     ? await labelRowsPresent(ctlClient, partitionTableName, spec.timestampColumn, rangeStart, rangeEnd, extraPredicate)
     : false;
@@ -620,7 +657,7 @@ async function archiveOneObject(
     // that acts destructively on the CURRENT source from a proof taken EARLIER, so the
     // source is counted again over the exporter's own population and compared with the
     // proof's stored source_row_count. Resume-only (no `verified` rows exist today).
-    const same = await proofCountStillMatches(ctlClient, existing!.id, {
+    const same = await deps.proofCountStillMatches(ctlClient, existing!.id, {
       target: quoteIdent(partitionTableName),
       tsCol: quoteIdent(spec.timestampColumn),
       rangeStart,
@@ -640,7 +677,7 @@ async function archiveOneObject(
     rangeEnd,
   );
 
-  const exportRes = await exportPartition(exportClient, {
+  const exportRes = await deps.exportPartition(exportClient, {
     sourceTable: spec.parent,
     partitionLabel: label,
     rangeStart,
@@ -655,7 +692,7 @@ async function archiveOneObject(
 
   let verifyPath: string | null = null;
   try {
-    const fileSize = fs.statSync(exportRes.localPath).size;
+    const fileSize = deps.statSize(exportRes.localPath);
     if (fileSize > HARD_CAP_BYTES) {
       // Fail fast BEFORE streaming a doomed upload (fold-in #3 — no sub-day fallback).
       throw new Error(
@@ -684,7 +721,7 @@ async function archiveOneObject(
     // exact lane. Source table, tier and contract come from the export — never literals
     // (Langston Step-1 condition 1). The downloaded count is read from the verified
     // download, so the proof covers the bytes as landed.
-    const downloadedLineCount = await countGzipJsonlLines(verifyPath);
+    const downloadedLineCount = await deps.countGzipJsonlLines(verifyPath);
     const evidence: ExactArchiveEvidenceInput = {
       manifestId,
       sourceTable: spec.parent,
@@ -700,7 +737,7 @@ async function archiveOneObject(
     };
     // Corruption blocks even the mutable uploaded transition. The immutable
     // proof itself lands after bounds validation and before verified/drop.
-    assertExactArchiveEquality(evidence);
+    deps.assertExactArchiveEquality(evidence);
 
     await updateManifestUploaded(
       ctlClient,
@@ -732,7 +769,7 @@ async function archiveOneObject(
     // (`trg_data_archive_manifest_basis_requires_evidence` refuses the stamp otherwise).
     await ctlClient.query('BEGIN');
     try {
-      await recordExactArchiveEvidence(ctlClient, evidence);
+      await deps.recordExactArchiveEvidence(ctlClient, evidence);
       await ctlClient.query(
         `UPDATE data_archive_manifest SET completeness_basis = $2 WHERE id = $1`,
         [manifestId, PROVEN_BASIS],
@@ -751,13 +788,13 @@ async function archiveOneObject(
     };
   } finally {
     try {
-      fs.unlinkSync(exportRes.localPath);
+      deps.unlinkFile(exportRes.localPath);
     } catch {
       // ignore
     }
     if (verifyPath) {
       try {
-        fs.unlinkSync(verifyPath);
+        deps.unlinkFile(verifyPath);
       } catch {
         // ignore
       }
@@ -788,9 +825,9 @@ interface ProcessResult {
 }
 
 async function processPartition(
-  spec: B74TableSpec,
+  spec: B75ArchiveTableSpec,
   partition: PartitionRow,
-  cfg: SweepConfig,
+  cfg: B75SweepConfig,
 ): Promise<ProcessResult> {
   const start = Date.now();
 
@@ -837,9 +874,9 @@ async function processPartition(
       // B-B75-EXPORT-COMPLETENESS (Langston Step-2 r3): the `already-active` short-
       // circuit that lived here returned BEFORE the resume decision, so an `active`
       // label with live rows was silently skipped. The whole path now goes through
-      // archiveOneObject's one decision; an empty `active`/`migrated` label comes
+      // archiveB75Object's one decision; an empty `active`/`migrated` label comes
       // back `skipped` and is returned here BEFORE any drop or manifest write.
-      const outcome = await archiveOneObject(
+      const outcome = await archiveB75Object(
         storage,
         exportClient,
         ctlClient,
@@ -895,7 +932,7 @@ async function processPartition(
     const skippedLabels = new Set<string>();
     for (const day of presentDates) {
       const dEnd = new Date(day.getTime() + 86_400_000);
-      const outcome = await archiveOneObject(
+      const outcome = await archiveB75Object(
         storage,
         exportClient,
         ctlClient,
@@ -932,12 +969,7 @@ async function processPartition(
         WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
       [spec.parent, presentLabels],
     );
-    const verifiedSet = new Set(
-      stateRows.rows
-        .filter((r) => (r.state === 'verified' || r.state === 'active') && isProvenBasis(r.completeness_basis))
-        .map((r) => r.partition_label as string),
-    );
-    const missing = presentLabels.filter((l) => !verifiedSet.has(l));
+    const missing = missingProvenArchiveLabels(presentLabels, stateRows.rows);
     if (missing.length > 0) {
       throw new Error(
         `[B75 sweep] DROP gate BLOCKED ${spec.parent}/${partition.partitionLabel}: ` +
@@ -1053,6 +1085,29 @@ function failureClassText(cls: SweepFailureClass, refuseReason?: string): string
   }
 }
 
+export interface PlainArchiveRemovalDependencies {
+  deleteBatch: () => Promise<number>;
+  markActive: () => Promise<void>;
+  vacuum: () => Promise<void>;
+}
+
+/** Run every bounded delete batch before the manifest state change, then
+ * vacuum. A thrown archive/proof error occurs before this helper is called. */
+export async function removePlainArchiveSource(
+  batchSize: number,
+  deps: PlainArchiveRemovalDependencies,
+): Promise<number> {
+  let deleted = 0;
+  while (true) {
+    const count = await deps.deleteBatch();
+    deleted += count;
+    if (count < batchSize) break;
+  }
+  await deps.markActive();
+  await deps.vacuum();
+  return deleted;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // P19-B5c — plain-table age-delete pass
 // ───────────────────────────────────────────────────────────────────────────
@@ -1065,7 +1120,7 @@ function failureClassText(cls: SweepFailureClass, refuseReason?: string): string
  * `hot_retention_days` are simply removed. Per-table failure is isolated +
  * alerted; the partition sweep + the other plain tables continue.
  */
-async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; failed: number }> {
+async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number; failed: number }> {
   let deletedTotal = 0;
   let failed = 0;
 
@@ -1125,7 +1180,7 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
             for (const day of present) {
               const label = day.toISOString().slice(0, 10);
               const dayEnd = new Date(day.getTime() + 86_400_000);
-              const outcome = await archiveOneObject(
+              const outcome = await archiveB75Object(
                 storage, exportClient, ctl, cfg,
                 { parent: spec.table, timestampColumn: spec.timestampColumn, retentionConstantName: spec.retentionConstantName },
                 label, day, dayEnd, spec.table, 0, spec.extraPredicate,
@@ -1149,12 +1204,7 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
               WHERE source_table = $1 AND tier = 'warm' AND partition_label = ANY($2::text[])`,
             [spec.table, labels],
           );
-          const okSet = new Set(
-            stateRows.rows
-              .filter((r) => (r.state === 'verified' || r.state === 'active') && isProvenBasis(r.completeness_basis))
-              .map((r) => r.partition_label as string),
-          );
-          const missing = labels.filter((l) => !okSet.has(l));
+          const missing = missingProvenArchiveLabels(labels, stateRows.rows);
           if (missing.length > 0) {
             throw new Error(
               `[B75 sweep][plain-archive] ${spec.table}: ${missing.length} present day(s) lack a verified, proven manifest row ` +
@@ -1195,34 +1245,24 @@ async function sweepPlainTables(cfg: SweepConfig): Promise<{ deleted: number; fa
         }
       }
 
-      // Delete the oldest rows in bounded batches (the timestamp index serves
-      // the predicate; deleting by PK avoids long row-lock windows).
-      // Identifiers come from the static PLAIN_RETENTION_TABLES allow-list.
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const r = await ctl.query(
-          `DELETE FROM ${spec.table}
-            WHERE id IN (
-              SELECT id FROM ${spec.table}
-               WHERE ${spec.timestampColumn} < $1${extraAnd}
-               ORDER BY ${spec.timestampColumn} ASC
-               LIMIT $2
-            )`,
-          [cutoff, PLAIN_DELETE_BATCH],
-        );
-        const n = r.rowCount ?? 0;
-        tableDeleted += n;
-        if (n < PLAIN_DELETE_BATCH) break;
-      }
-      // A14: the archived days' source rows are now gone, so their labels become
-      // `active` — the same meaning as the partition lane's (source removed).
-      // `hot_partition_dropped_at` is stamped here as "deleted at" for this lane.
-      // `markLabelsActive` only flips `verified` rows, so an already-active label is
-      // never re-stamped. A late row for one of these days then refuses at the
-      // resume decision instead of being reused and age-deleted unarchived.
-      await markLabelsActive(ctl, spec.table, archivedLabels);
+      tableDeleted = await removePlainArchiveSource(PLAIN_DELETE_BATCH, {
+        deleteBatch: async () => {
+          const r = await ctl.query(
+            `DELETE FROM ${spec.table}
+              WHERE id IN (
+                SELECT id FROM ${spec.table}
+                 WHERE ${spec.timestampColumn} < $1${extraAnd}
+                 ORDER BY ${spec.timestampColumn} ASC
+                 LIMIT $2
+              )`,
+            [cutoff, PLAIN_DELETE_BATCH],
+          );
+          return r.rowCount ?? 0;
+        },
+        markActive: () => markLabelsActive(ctl, spec.table, archivedLabels),
+        vacuum: async () => { await ctl.query(`VACUUM ${spec.table}`); },
+      });
       deletedTotal += tableDeleted;
-      await ctl.query(`VACUUM ${spec.table}`); // not in a txn; plain VACUUM — no exclusive lock
       console.log(
         `[B75 sweep][plain] ${spec.table}: deleted ${tableDeleted} rows older than ` +
           `${cutoff.toISOString()} (retentionDays=${retentionDays}${spec.archive ? ', day-floored archive lane' : ', exact cutoff'}) + VACUUM`,
@@ -1304,11 +1344,31 @@ function releaseSweepLock(): void {
   }
 }
 
+export interface SweepLockDependencies {
+  acquire: () => boolean;
+  release: () => void;
+  run: () => Promise<boolean>;
+}
+
+/** Execute the sweep while holding the overlap lock.  The returned failure flag
+ * is deliberately observed only after this function's `finally` has released
+ * the lock. */
+export async function runWithSweepLock(
+  deps: SweepLockDependencies,
+): Promise<{ acquired: boolean; hadFailures: boolean }> {
+  if (!deps.acquire()) return { acquired: false, hadFailures: false };
+  try {
+    return { acquired: true, hadFailures: await deps.run() };
+  } finally {
+    deps.release();
+  }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
-async function main(): Promise<void> {
+export async function runRetentionSweepCli(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('[B75 sweep] DATABASE_URL not set');
     process.exit(1);
@@ -1318,25 +1378,22 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (!acquireSweepLock()) {
+  const result = await runWithSweepLock({
+    acquire: acquireSweepLock,
+    release: releaseSweepLock,
+    run: runSweep,
+  });
+  if (!result.acquired) {
     console.log('[B75 sweep] another run still holds the lock — skipping this tick (overlap guard)');
     return;
   }
-  // Release the lock in finally (NOT via process.exit inside runSweep — that would
-  // bypass finally and leave the lock stuck until stale). Exit non-zero AFTER release.
-  let hadFailures = false;
-  try {
-    hadFailures = await runSweep();
-  } finally {
-    releaseSweepLock();
-  }
-  if (hadFailures) process.exit(1);
+  if (result.hadFailures) process.exit(1);
 }
 
 async function runSweep(): Promise<boolean> {
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
-  let cfg: SweepConfig;
+  let cfg: B75SweepConfig;
   try {
     cfg = await loadConfig(ctl);
   } finally {
@@ -1455,15 +1512,17 @@ async function runSweep(): Promise<boolean> {
   return partitionsFailed > 0 || plainResult.failed > 0;
 }
 
-main().catch(async (err) => {
-  console.error('[B75 sweep] fatal:', err);
-  await raiseSweepAlert(
-    'B75 retention sweep CRASHED',
-    `The nightly storage archive sweep crashed before completing. No partition is left half-dropped ` +
-      `(DROP only happens after verify). Reason: ${err instanceof Error ? err.message : String(err)}`,
-    'critical',
-    { fatal: true },
-    FATAL_ALERT_KEY,
-  );
-  process.exit(1);
-});
+if (isDirectEntry(import.meta.url)) {
+  runRetentionSweepCli().catch(async (err) => {
+    console.error('[B75 sweep] fatal:', err);
+    await raiseSweepAlert(
+      'B75 retention sweep CRASHED',
+      `The nightly storage archive sweep crashed before completing. No partition is left half-dropped ` +
+        `(DROP only happens after verify). Reason: ${err instanceof Error ? err.message : String(err)}`,
+      'critical',
+      { fatal: true },
+      FATAL_ALERT_KEY,
+    );
+    process.exit(1);
+  });
+}
