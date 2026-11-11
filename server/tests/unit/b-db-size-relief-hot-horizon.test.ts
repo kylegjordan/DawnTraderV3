@@ -177,7 +177,7 @@ describe('wiring', () => {
   it('the fixed May replay refuses the hot table and accepts only proven rehydrated snapshot input', () => {
     const src = fs.readFileSync(path.join(ROOT, 'scripts/b-xstock-calib-b1a-replay.ts'), 'utf8');
     expect(src).toContain('B1A_REHYDRATED_SNAPSHOT_PATH');
-    expect(src).toContain('loadProvenRehydratedSnapshot(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE)');
+    expect(src).toMatch(/loadProvenRehydratedSnapshot\(B1A_REHYDRATED_INPUT, SNAPSHOT_TABLE, \{/);
     expect(src).toContain('fixed historical replay may not read the mutable hot snapshot table');
     expect(src.indexOf('loadProvenRehydratedSnapshot(')).toBeLessThan(src.indexOf('fetchAllSymbols(client, rehydrated)'));
   });
