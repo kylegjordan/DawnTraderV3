@@ -4,7 +4,7 @@
 
 **DECLARED CHANGE-CLASS:** `architecture`
 
-**IMPLEMENTATION DIFF:** approved Step-2 boundary `0f7b31e21ac82239842c474fa9c8bb4815483b35` through corrected implementation/refinement head `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73`
+**IMPLEMENTATION DIFF:** approved Step-2 boundary `891e867093e602e2192f8cb55885764446f200ac` through corrected implementation/refinement head `205c2108555652751514bba2c18ecd09dba35c31`
 
 **REVIEW BRANCH:** `origin/review/b-xstock-snapshot-retention-step4-codex` (the Discord dispatch names the exact review-ready head containing this packet)
 
@@ -44,7 +44,7 @@ The initial backlog is supervised through `--snapshot-only`; mutation is disable
 
 ## Change-set census
 
-The corrected object reviewed is the complete `0f7b31e21..05e95c195` diff: **28 files, 3,989 insertions, 156 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column proof added after Coltrane's split re-review ruling.
+The corrected object reviewed is the complete `891e86709..205c21085` diff: **28 files, 4,219 insertions, 164 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column, cold-proof, interval-label, and live-prewarm proof added after Coltrane's split re-review rulings.
 
 - Database contract: forward migration, rollback migration, and migration manifest.
 - Lifecycle/prewarm: shared snapshot policy, legacy prewarm, xStock cache policy binding.
@@ -313,7 +313,7 @@ The loader independently verifies the table identity, proven/checksum flags, cur
 
 ## Coltrane sent-back findings and corrections
 
-Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected across `3de31883043c7a864b09bd56db1669a087f81095`, the CI-path correction `b560f7f0c61584004e8112b5554c434331178568`, and the complete rollback-column proof `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73`; this section is part of the stateless re-review context.
+Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected; the split re-review then required complete rollback-column proof, an end-to-end cold-proof handoff, an independently derived interval-label set, and live-path prewarm writer spies. Those final proof corrections are `a68c9f037`, `8cf03a9f8`, `852f5212f`, and `205c21085`; this section is part of the stateless re-review context.
 
 ### C1 — preserve every pre-existing evidence cursor contract
 
@@ -345,11 +345,12 @@ await ctlClient.query('COMMIT');
 
 ### C3 — bind historical replay to the whole requested rehydrate run
 
-The rehydrate command removes any stale prior index before work and atomically writes one run index after all selected labels finish. `complete=true` requires every selected label to be downloaded and proven, with zero skipped, cold-skipped, mismatch, missing, or unproven objects. The historical loader requires that index, verifies its requested interval covers B1a's 60-hour warmup plus fixed replay window, and reads exactly the indexed files; the red test marks two objects complete while omitting one file and requires refusal.
+The rehydrate command removes any stale prior index before work and derives the interval's expected label set independently from the append-only exact-evidence ledger, not from the downloadable manifest result. It atomically writes a version-2 run index after all selected labels finish; `complete=true` now requires the independently proven label set to match the selected set exactly and every selected object to be downloaded and proven, with zero skipped, cold-skipped, mismatch, missing, or unproven objects. The historical loader requires that index, rechecks the expected-versus-downloaded label sets, verifies its requested interval covers B1a's 60-hour warmup plus fixed replay window, and reads exactly the indexed files. One red arm omits an indexed file; the new mutation returns two independently proven interval labels but only one manifest result and requires the run to remain incomplete.
 
 ```ts
-const complete = results.length === choices.length
-  && choices.length > 0
+const complete = labelCoverageMatches
+  && results.length === choices.length
+  && expectedLabels.length > 0
   && results.every((result) => result.kind === 'downloaded' && result.basisProven === true);
 
 const loaded = await loadProvenRehydratedSnapshot(input, SNAPSHOT_TABLE, {
@@ -371,7 +372,7 @@ snapshotObservedAt = new Date(observation.rows[0].observed_at);
 
 ### C5 — share the lifecycle/floor refusal across both prewarm writers
 
-The exact wildcard/narrow-row lifecycle check is now one shared guard. The legacy and revision-aware prewarm paths both call it before any aggregate preview or snapshot write. The executable red test supplies a 239-row floor for the 240-row live cap and requires both writers to refuse before their write paths run.
+The exact wildcard/narrow-row lifecycle check is now one shared guard. The legacy and revision-aware prewarm paths both call it before any aggregate preview or snapshot write. The executable red test now runs both writers in live mode with injected legacy-aggregate, legacy-upsert, and revision-aware-prewarm spies: a 239-row floor for the 240-row live cap requires rejection with all three spies untouched. Its positive-control arm restores the 240-row floor and requires two interval calls through each writer path, proving the zero-call refusal is discriminating rather than a dry-run bypass.
 
 ```ts
 const lifecycleClient = options.lifecycleClient ?? (await import('../server/db.js')).pool;
