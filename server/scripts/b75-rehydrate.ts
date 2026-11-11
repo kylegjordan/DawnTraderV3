@@ -46,15 +46,20 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
 import pg from 'pg';
-import { getStorageClient, sha256Hex } from '../services/data-archive/storage-client.js';
-import { chooseObjectsByLabel, isProvenBasis } from '../services/data-archive/archive-completeness.js';
+import { getStorageClient, sha256Hex, type StorageClient } from '../services/data-archive/storage-client.js';
+import {
+  chooseObjectsByLabel,
+  isProvenBasis,
+  type LabelChoice,
+} from '../services/data-archive/archive-completeness.js';
 import { DISK_FILE_FORMAT, DISK_FILE_SOURCE_PREFIX, digestFile } from '../services/data-archive/disk-file-tiering.js';
 import zlib from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
+import { isDirectEntry } from './direct-entry.js';
 
 const { Client } = pg;
 
-interface Args {
+export interface RehydrateArgs {
   table: string;
   from: Date;
   to: Date;
@@ -64,8 +69,8 @@ interface Args {
   diskFile: boolean;
 }
 
-function parseArgs(argv: string[]): Args {
-  const args: Partial<Args> = { restoreCold: false, diskFile: false };
+function parseArgs(argv: string[]): RehydrateArgs {
+  const args: Partial<RehydrateArgs> = { restoreCold: false, diskFile: false };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--table') args.table = argv[++i];
@@ -91,7 +96,7 @@ function parseArgs(argv: string[]): Args {
     console.error('[B75 rehydrate] invalid --from/--to date (use YYYY-MM-DD)');
     process.exit(1);
   }
-  return args as Args;
+  return args as RehydrateArgs;
 }
 
 function printUsage(): void {
@@ -102,26 +107,26 @@ function printUsage(): void {
   );
 }
 
+export interface RehydrateManifestRow {
+  id: string;
+  partition_label: string;
+  tier: string;
+  state: string;
+  storage_uri: string;
+  row_count: number;
+  bytes_compressed: number;
+  min_ts: Date;
+  max_ts: Date;
+  checksum: string;
+  completeness_basis: string | null;
+  format: string;
+  original_partition_size_bytes: number | null;
+}
+
 async function queryManifest(
   client: pg.Client,
-  args: Args,
-): Promise<
-  Array<{
-    id: string;
-    partition_label: string;
-    tier: string;
-    state: string;
-    storage_uri: string;
-    row_count: number;
-    bytes_compressed: number;
-    min_ts: Date;
-    max_ts: Date;
-    checksum: string;
-    completeness_basis: string | null;
-    format: string;
-    original_partition_size_bytes: number | null;
-  }>
-> {
+  args: RehydrateArgs,
+): Promise<RehydrateManifestRow[]> {
   const r = await client.query(
     `SELECT id, partition_label, tier, state, storage_uri, row_count, bytes_compressed,
             min_ts, max_ts, checksum, completeness_basis, format, original_partition_size_bytes
@@ -152,7 +157,139 @@ function parseSupabaseUri(uri: string): { bucket: string; path: string } {
   return { bucket: m[1], path: m[2] };
 }
 
-async function main(): Promise<void> {
+export interface RehydrateObjectResult {
+  kind: 'downloaded' | 'skipped-cold' | 'mismatch' | 'skipped';
+  bytes: number;
+  rowCount: number;
+  proven: boolean;
+  description?: string;
+}
+
+/** Rehydrate one chosen label.  The return value, rather than process exit,
+ * carries checksum and accounting state back to the thin CLI wrapper. */
+export async function rehydrateChosenObject(
+  args: RehydrateArgs,
+  choice: LabelChoice<RehydrateManifestRow>,
+  storage: Pick<StorageClient, 'downloadWarmFile' | 'isColdConfigured' | 'downloadCold'>,
+): Promise<RehydrateObjectResult> {
+  const { label, download, all } = choice;
+  if (all.length > 1) {
+    const listed = all.map((r) => `${r.tier}/${r.state}/${r.completeness_basis ?? 'null'}`).join(', ');
+    console.warn(
+      `[B75 rehydrate] ${label}: ${all.length} objects (${listed}); ` +
+        `downloading ${download ? `${download.tier}` : 'none'} — the other copy exists and is listed here`,
+    );
+  }
+  if (!download) {
+    console.warn(`[B75 rehydrate] ${label}: no downloadable object (every row is a rotated-away warm copy)`);
+    return { kind: 'skipped', bytes: 0, rowCount: 0, proven: false };
+  }
+  if (download.tier === 'cold' && !args.restoreCold) {
+    console.warn(`[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`);
+    return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven: false };
+  }
+
+  const proven = isProvenBasis(download.completeness_basis);
+  const basis = download.completeness_basis ?? 'unrecorded';
+  const rowsLabel = proven ? 'rows' : 'rows(unproven)';
+  const isDiskFile = download.format === DISK_FILE_FORMAT;
+  if (isDiskFile !== args.diskFile) {
+    console.warn(`[B75 rehydrate] ${label}: format ${download.format} needs ${isDiskFile ? '' : 'no '}--disk-file; skipping`);
+    return { kind: 'skipped', bytes: 0, rowCount: 0, proven };
+  }
+
+  const localPath = isDiskFile
+    ? path.join(args.out, `${label}.gz`)
+    : path.join(args.out, `${args.table}_${label}.jsonl.gz`);
+  let bytes = 0;
+  let checksumOk = false;
+  if (download.tier === 'warm') {
+    const { bucket, path: objPath } = parseSupabaseUri(download.storage_uri);
+    const dl = await storage.downloadWarmFile(bucket, objPath, localPath);
+    bytes = dl.bytes;
+    checksumOk = dl.checksum === download.checksum;
+  } else {
+    if (!storage.isColdConfigured()) {
+      console.warn(`[B75 rehydrate] ${label} (cold): cold storage not configured; skipping`);
+      return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven };
+    }
+    const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(download.storage_uri);
+    if (!m) {
+      console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${download.storage_uri}`);
+      return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven };
+    }
+    const data = await storage.downloadCold(m[1], m[2]);
+    fs.writeFileSync(localPath, data.data);
+    bytes = data.bytes;
+    checksumOk = sha256Hex(data.data) === download.checksum;
+  }
+
+  let outPath = localPath;
+  const restored = path.join(args.out, label);
+  const goodSidecar = `${isDiskFile ? restored : localPath}.completeness.json`;
+  if (checksumOk && isDiskFile) {
+    await pipeline(fs.createReadStream(localPath), zlib.createGunzip(), fs.createWriteStream(restored));
+    const digest = await digestFile(restored);
+    const sizeOk = download.original_partition_size_bytes == null
+      || digest.bytes === download.original_partition_size_bytes;
+    if (digest.newlines !== download.row_count || !sizeOk) {
+      checksumOk = false;
+      fs.renameSync(restored, `${restored}.CORRUPT`);
+      console.error(
+        `[B75 rehydrate] ${label}: restored file has ${digest.newlines} newlines / ${digest.bytes} bytes; ` +
+          `manifest says ${download.row_count} / ${download.original_partition_size_bytes}`,
+      );
+    } else {
+      fs.rmSync(localPath, { force: true });
+      outPath = restored;
+    }
+  }
+  if (!checksumOk) {
+    outPath = `${localPath}.CORRUPT`;
+    fs.renameSync(localPath, outPath);
+    fs.rmSync(goodSidecar, { force: true });
+  }
+
+  console.log(
+    `[B75 rehydrate] ${label} (${download.tier}): ${rowsLabel}=${download.row_count} completeness=${basis} ` +
+      `bytes=${bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${outPath}`,
+  );
+  fs.writeFileSync(
+    `${outPath}.completeness.json`,
+    JSON.stringify({
+      table: args.table,
+      partition_label: label,
+      tier: download.tier,
+      completeness_basis: basis,
+      proven,
+      checksum_ok: checksumOk,
+      row_count: download.row_count,
+      row_count_meaning: proven
+        ? 'source = exported = downloaded, stored as evidence (data_archive_exact_evidence)'
+        : 'the exported count only; rows may be missing inside the day (#1195)',
+      min_ts: download.min_ts,
+      max_ts: download.max_ts,
+      other_objects: all.filter((r) => r !== download).map((r) => ({
+        tier: r.tier,
+        state: r.state,
+        completeness_basis: r.completeness_basis,
+      })),
+    }, null, 1),
+  );
+
+  const description = checksumOk
+    ? (proven ? undefined : `${label} (${new Date(download.min_ts).toISOString()} → ${new Date(download.max_ts).toISOString()}, ${basis})`)
+    : `${label} (${download.tier}, ${basis})`;
+  return {
+    kind: checksumOk ? 'downloaded' : 'mismatch',
+    bytes,
+    rowCount: download.row_count,
+    proven,
+    description,
+  };
+}
+
+export async function runRehydrateCli(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('[B75 rehydrate] DATABASE_URL not set');
     process.exit(1);
@@ -226,136 +363,25 @@ async function main(): Promise<void> {
       `cold=${rows.filter((r) => r.tier === 'cold').length} labels=${choices.length}`,
   );
 
-  for (const { label, download, all } of choices) {
-    if (all.length > 1) {
-      const listed = all.map((r) => `${r.tier}/${r.state}/${r.completeness_basis ?? 'null'}`).join(', ');
-      console.warn(
-        `[B75 rehydrate] ${label}: ${all.length} objects (${listed}); ` +
-          `downloading ${download ? `${download.tier}` : 'none'} — the other copy exists and is listed here`,
-      );
-    }
-    if (!download) {
-      console.warn(`[B75 rehydrate] ${label}: no downloadable object (every row is a rotated-away warm copy)`);
-      continue;
-    }
-    if (download.tier === 'cold' && !args.restoreCold) {
-      console.warn(`[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`);
+  for (const choice of choices) {
+    const result = await rehydrateChosenObject(args, choice, storage);
+    if (result.kind === 'skipped-cold') {
       skippedCold++;
       continue;
     }
-    const proven = isProvenBasis(download.completeness_basis);
-    const basis = download.completeness_basis ?? 'unrecorded';
-    const rowsLabel = proven ? 'rows' : 'rows(unproven)';
-    // The object's FORMAT decides its local name and handling, never the storage key's extension: the
-    // cold rotator names every cold key `.jsonl.gz` (B-DISK-FILE-TIERING, Langston Step 2 C2).
-    const isDiskFile = download.format === DISK_FILE_FORMAT;
-    if (isDiskFile !== args.diskFile) {
-      console.warn(`[B75 rehydrate] ${label}: format ${download.format} needs ${isDiskFile ? '' : 'no '}--disk-file; skipping`);
-      continue;
-    }
-    const localPath = isDiskFile
-      ? path.join(args.out, `${label}.gz`) // label = the original file name, whole (P2)
-      : path.join(args.out, `${args.table}_${label}.jsonl.gz`);
-    let bytes = 0;
-    let checksumOk = false;
+    if (result.kind === 'skipped') continue;
 
-    if (download.tier === 'warm') {
-      const { bucket, path: objPath } = parseSupabaseUri(download.storage_uri);
-      // B-NEW-47: stream to file (no whole-object Buffer); checksum computed
-      // from the on-disk bytes (second read-pass inside downloadWarmFile).
-      const dl = await storage.downloadWarmFile(bucket, objPath, localPath);
-      bytes = dl.bytes;
-      checksumOk = dl.checksum === download.checksum;
-    } else {
-      if (!storage.isColdConfigured()) {
-        console.warn(`[B75 rehydrate] ${label} (cold): cold storage not configured; skipping`);
-        skippedCold++;
-        continue;
-      }
-      // Cold URI format: 'b2://<bucket>/<path>'
-      const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(download.storage_uri);
-      if (!m) {
-        console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${download.storage_uri}`);
-        skippedCold++;
-        continue;
-      }
-      const data = await storage.downloadCold(m[1], m[2]);
-      fs.writeFileSync(localPath, data.data);
-      bytes = data.bytes;
-      checksumOk = sha256Hex(data.data) === download.checksum;
-    }
-
-    // Langston Step-4 gate C rider (C-1): a mismatched file must not sit under the good
-    // name — a consumer globbing `<table>_*.jsonl.gz` (as this header instructs) would pick
-    // it up. Keep it for diagnosis, but rename it out of the glob.
-    let outPath = localPath;
-    // The good-named object and its sidecar: for a disk file that is the RESTORED original, not the .gz — one
-    // name computed once, so the stale-sidecar removal below can never target the wrong file (Langston part 3).
-    const restored = path.join(args.out, label);
-    const goodSidecar = `${isDiskFile ? restored : localPath}.completeness.json`;
-    if (checksumOk && isDiskFile) {
-      // Inflate to the original name, then read THAT file and check it against the manifest: its newline
-      // count is the evidence row's (row_count) and its size the original's (original_partition_size_bytes),
-      // so a short or padded restore is caught, not trusted.
-      await pipeline(fs.createReadStream(localPath), zlib.createGunzip(), fs.createWriteStream(restored));
-      const d = await digestFile(restored);
-      const sizeOk = download.original_partition_size_bytes == null || d.bytes === download.original_partition_size_bytes;
-      if (d.newlines !== download.row_count || !sizeOk) {
-        checksumOk = false;
-        fs.renameSync(restored, `${restored}.CORRUPT`);
-        console.error(`[B75 rehydrate] ${label}: restored file has ${d.newlines} newlines / ${d.bytes} bytes; manifest says ${download.row_count} / ${download.original_partition_size_bytes}`);
-      } else {
-        fs.rmSync(localPath, { force: true });
-        outPath = restored;
-      }
-    }
-    if (!checksumOk) {
-      outPath = `${localPath}.CORRUPT`;
-      fs.renameSync(localPath, outPath);
-      // A reused --out directory may hold an earlier run's good-named sidecar; remove it so
-      // no checksum_ok:true record is left with no object behind it (Langston gate C record 1).
-      fs.rmSync(goodSidecar, { force: true });
-    }
-
-    console.log(
-      `[B75 rehydrate] ${label} (${download.tier}): ${rowsLabel}=${download.row_count} completeness=${basis} ` +
-        `bytes=${bytes} checksum=${checksumOk ? 'OK' : 'MISMATCH'} → ${outPath}`,
-    );
-    fs.writeFileSync(
-      `${outPath}.completeness.json`,
-      JSON.stringify({
-        table: args.table,
-        partition_label: label,
-        tier: download.tier,
-        completeness_basis: basis,
-        // The basis proves the EXPORT; checksum_ok is whether the file now on disk is that
-        // object. A sidecar with proven=true and checksum_ok=false is NOT a usable copy.
-        proven,
-        checksum_ok: checksumOk,
-        row_count: download.row_count,
-        row_count_meaning: proven
-          ? 'source = exported = downloaded, stored as evidence (data_archive_exact_evidence)'
-          : 'the exported count only; rows may be missing inside the day (#1195)',
-        min_ts: download.min_ts,
-        max_ts: download.max_ts,
-        other_objects: all.filter((r) => r !== download).map((r) => ({
-          tier: r.tier, state: r.state, completeness_basis: r.completeness_basis,
-        })),
-      }, null, 1),
-    );
-    // Langston Step-4 gate C (C-1): the deciding predicate rides every aggregate that uses
-    // it. A checksum mismatch counts in neither proven nor unproven — it has its own bucket.
-    if (!checksumOk) {
-      mismatchRows += download.row_count;
-      mismatched.push(`${label} (${download.tier}, ${basis})`);
-    } else if (proven) {
-      provenRows += download.row_count;
-    } else {
-      unprovenRows += download.row_count;
-      unproven.push(`${label} (${new Date(download.min_ts).toISOString()} → ${new Date(download.max_ts).toISOString()}, ${basis})`);
-    }
     downloaded++;
-    totalBytes += bytes;
+    totalBytes += result.bytes;
+    if (result.kind === 'mismatch') {
+      mismatchRows += result.rowCount;
+      if (result.description) mismatched.push(result.description);
+    } else if (result.proven) {
+      provenRows += result.rowCount;
+    } else {
+      unprovenRows += result.rowCount;
+      if (result.description) unproven.push(result.description);
+    }
   }
 
   for (const u of unproven) {
@@ -374,7 +400,9 @@ async function main(): Promise<void> {
   if (mismatched.length > 0) process.exit(2);
 }
 
-main().catch((err) => {
-  console.error('[B75 rehydrate] fatal:', err);
-  process.exit(1);
-});
+if (isDirectEntry(import.meta.url)) {
+  runRehydrateCli().catch((err) => {
+    console.error('[B75 rehydrate] fatal:', err);
+    process.exit(1);
+  });
+}

@@ -22,9 +22,10 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import pg from 'pg';
 import { countGzipJsonlLines, exportPartition } from '../services/data-archive/partition-exporter.js';
-import { getStorageClient } from '../services/data-archive/storage-client.js';
+import { getStorageClient, type StorageClient } from '../services/data-archive/storage-client.js';
 import {
   evidenceExistsForManifest,
+  proofCountStillMatches,
   recordExactArchiveEvidence,
 } from '../services/data-archive/exact-archive-evidence.js';
 import {
@@ -34,13 +35,14 @@ import {
   NonProvenExistingCopyError,
   PROVEN_BASIS,
 } from '../services/data-archive/archive-completeness.js';
+import { isDirectEntry } from './direct-entry.js';
 
 const { Client } = pg;
 
 const SOURCE_TABLE = 'context_bridge_log';
 const TS_COLUMN = 'timestamp';
 
-interface Cfg {
+export interface ContextBridgeConfig {
   retentionDays: number;
   batchSize: number;
   pauseMs: number;
@@ -49,7 +51,7 @@ interface Cfg {
   coldBucket: string;
 }
 
-async function loadConfig(client: pg.Client): Promise<Cfg> {
+async function loadConfig(client: pg.Client): Promise<ContextBridgeConfig> {
   const r = await client.query(
     `SELECT constant_name, value FROM module_constants WHERE module_name = 'data_lifecycle'`,
   );
@@ -81,7 +83,7 @@ async function loadConfig(client: pg.Client): Promise<Cfg> {
   };
 }
 
-interface MonthRange {
+export interface ContextMonthRange {
   label: string; // 'YYYY-MM'
   start: Date;
   end: Date;
@@ -98,7 +100,7 @@ interface MonthRange {
 async function listMonthsToExport(
   client: pg.Client,
   cutoff: Date,
-): Promise<{ months: MonthRange[]; oldestTs: Date | null }> {
+): Promise<{ months: ContextMonthRange[]; oldestTs: Date | null }> {
   const r = await client.query(
     `SELECT MIN(${TS_COLUMN}) AS oldest FROM ${SOURCE_TABLE}
        WHERE ${TS_COLUMN} < $1`,
@@ -107,7 +109,7 @@ async function listMonthsToExport(
   const oldest = r.rows[0]?.oldest as Date | null;
   if (!oldest) return { months: [], oldestTs: null };
 
-  const months: MonthRange[] = [];
+  const months: ContextMonthRange[] = [];
   let cursor = new Date(Date.UTC(oldest.getUTCFullYear(), oldest.getUTCMonth(), 1));
   while (true) {
     const next = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
@@ -140,7 +142,7 @@ async function getManifestState(
 }
 
 /** One LIMIT 1 probe: does the month still hold source rows? (the decision's input). */
-async function monthRowsPresent(client: pg.Client, month: MonthRange): Promise<boolean> {
+async function monthRowsPresent(client: pg.Client, month: ContextMonthRange): Promise<boolean> {
   const r = await client.query(
     `SELECT 1 FROM ${SOURCE_TABLE} WHERE "${TS_COLUMN}" >= $1 AND "${TS_COLUMN}" < $2 LIMIT 1`,
     [month.start, month.end],
@@ -148,11 +150,34 @@ async function monthRowsPresent(client: pg.Client, month: MonthRange): Promise<b
   return r.rows.length > 0;
 }
 
-async function exportAndUploadMonth(
+export interface ContextMonthDependencies {
+  exportPartition: typeof exportPartition;
+  getStorageClient: () => StorageClient;
+  readFile: typeof fs.readFileSync;
+  unlinkFile: typeof fs.unlinkSync;
+  countGzipJsonlLines: typeof countGzipJsonlLines;
+  evidenceExistsForManifest: typeof evidenceExistsForManifest;
+  proofCountStillMatches: typeof proofCountStillMatches;
+  recordExactArchiveEvidence: typeof recordExactArchiveEvidence;
+}
+
+const DEFAULT_CONTEXT_MONTH_DEPS: ContextMonthDependencies = {
+  exportPartition,
+  getStorageClient,
+  readFile: fs.readFileSync,
+  unlinkFile: fs.unlinkSync,
+  countGzipJsonlLines,
+  evidenceExistsForManifest,
+  proofCountStillMatches,
+  recordExactArchiveEvidence,
+};
+
+export async function exportAndUploadContextMonth(
   exportClient: pg.Client,
   ctlClient: pg.Client,
-  cfg: Cfg,
-  month: MonthRange,
+  cfg: ContextBridgeConfig,
+  month: ContextMonthRange,
+  deps: ContextMonthDependencies = DEFAULT_CONTEXT_MONTH_DEPS,
 ): Promise<{ rowCount: number; bytesCompressed: number }> {
   // B-B75-EXPORT-COMPLETENESS (#1195): the same one decision as the B75 sweep. A month
   // already archived and deleted (`active`) with NO rows skips, as before; WITH rows it
@@ -160,18 +185,31 @@ async function exportAndUploadMonth(
   // them unarchived. A refusal throws, so main() exits before its delete step.
   const existing = await getManifestState(ctlClient, month.label);
   const needs = decisionNeeds(existing);
-  const evidenceExists = existing && needs.evidence ? await evidenceExistsForManifest(ctlClient, existing.id) : false;
+  const evidenceExists = existing && needs.evidence ? await deps.evidenceExistsForManifest(ctlClient, existing.id) : false;
   const rowsPresent = needs.rows ? await monthRowsPresent(ctlClient, month) : false;
   const decision = decideExistingCopy(existing, evidenceExists, rowsPresent);
   if (decision.kind === 'refuse') {
     throw new NonProvenExistingCopyError(decision.reason, SOURCE_TABLE, month.label);
   }
-  if (decision.kind === 'skip' || decision.kind === 'reuse') {
-    console.log(`[B75 ctx-bridge] ${month.label}: ${decision.kind === 'skip' ? decision.reason : 'proven copy reused'} (skipped)`);
+  if (decision.kind === 'skip') {
+    console.log(`[B75 ctx-bridge] ${month.label}: ${decision.reason} (skipped)`);
+    return { rowCount: 0, bytesCompressed: 0 };
+  }
+  if (decision.kind === 'reuse') {
+    const same = await deps.proofCountStillMatches(ctlClient, existing!.id, {
+      target: `"${SOURCE_TABLE}"`,
+      tsCol: `"${TS_COLUMN}"`,
+      rangeStart: month.start,
+      rangeEnd: month.end,
+    });
+    if (!same) {
+      throw new NonProvenExistingCopyError('reuse-count-changed', SOURCE_TABLE, month.label);
+    }
+    console.log(`[B75 ctx-bridge] ${month.label}: proven copy reused after source recount (skipped)`);
     return { rowCount: 0, bytesCompressed: 0 };
   }
 
-  const exportRes = await exportPartition(exportClient, {
+  const exportRes = await deps.exportPartition(exportClient, {
     sourceTable: SOURCE_TABLE,
     partitionLabel: month.label,
     rangeStart: month.start,
@@ -207,8 +245,8 @@ async function exportAndUploadMonth(
 
   // Upload + verify. If warm rejects with 413 (Supabase project file_size_limit
   // exceeded), fall back to cold tier (B2 supports 5 GB single-call).
-  const data = fs.readFileSync(exportRes.localPath);
-  const storage = getStorageClient();
+  const data = deps.readFile(exportRes.localPath);
+  const storage = deps.getStorageClient();
   let upload;
   let actualBucket = cfg.warmBucket;
   let actualPath = `${cfg.warmPrefix}/${SOURCE_TABLE}/${month.label}.jsonl.gz`;
@@ -259,10 +297,10 @@ async function exportAndUploadMonth(
   // downloaded count is taken from the local file, which the read-back checksum above
   // has just shown byte-identical to the stored object. The tier is where the object
   // actually landed — `cold` after the 413 fallback (Langston Step-1 condition 1).
-  const downloadedRowCount = await countGzipJsonlLines(exportRes.localPath);
+  const downloadedRowCount = await deps.countGzipJsonlLines(exportRes.localPath);
   await ctlClient.query('BEGIN');
   try {
-    await recordExactArchiveEvidence(ctlClient, {
+    await deps.recordExactArchiveEvidence(ctlClient, {
       manifestId,
       sourceTable: SOURCE_TABLE,
       partitionLabel: month.label,
@@ -307,7 +345,7 @@ async function exportAndUploadMonth(
 
   // Cleanup local temp
   try {
-    fs.unlinkSync(exportRes.localPath);
+    deps.unlinkFile(exportRes.localPath);
   } catch {
     // ignore
   }
@@ -321,7 +359,7 @@ async function exportAndUploadMonth(
 
 async function deleteOldRows(
   client: pg.Client,
-  cfg: Cfg,
+  cfg: ContextBridgeConfig,
   cutoff: Date,
 ): Promise<{ deleted: number }> {
   let totalDeleted = 0;
@@ -368,7 +406,40 @@ async function vacuumTable(client: pg.Client): Promise<void> {
   await client.query(`VACUUM ${SOURCE_TABLE}`);
 }
 
-async function main(): Promise<void> {
+export interface ContextBridgeCycleDependencies {
+  archiveMonth: (month: ContextMonthRange) => Promise<{ rowCount: number; bytesCompressed: number }>;
+  deleteRows: (cutoff: Date) => Promise<{ deleted: number }>;
+  markActive: (labels: string[]) => Promise<void>;
+  vacuum: () => Promise<void>;
+}
+
+/**
+ * The outer deletion fence.  A month is admitted to `completedLabels` only
+ * after export or a successful reuse recount.  Any month failure rejects this
+ * function before delete, active marking, or VACUUM can be reached.
+ */
+export async function runContextBridgeCycle(
+  months: ContextMonthRange[],
+  deleteCutoff: Date,
+  deps: ContextBridgeCycleDependencies,
+): Promise<{ archivedRows: number; archivedBytes: number; deleted: number; completedLabels: string[] }> {
+  let archivedRows = 0;
+  let archivedBytes = 0;
+  const completedLabels: string[] = [];
+  for (const month of months) {
+    const result = await deps.archiveMonth(month);
+    archivedRows += result.rowCount;
+    archivedBytes += result.bytesCompressed;
+    completedLabels.push(month.label);
+  }
+
+  const { deleted } = await deps.deleteRows(deleteCutoff);
+  await deps.markActive(completedLabels);
+  await deps.vacuum();
+  return { archivedRows, archivedBytes, deleted, completedLabels };
+}
+
+export async function runContextBridgeLogTtlCli(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('[B75 ctx-bridge] DATABASE_URL not set');
     process.exit(1);
@@ -381,7 +452,7 @@ async function main(): Promise<void> {
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
-  let cfg: Cfg;
+  let cfg: ContextBridgeConfig;
   try {
     cfg = await loadConfig(ctl);
   } finally {
@@ -404,7 +475,7 @@ async function main(): Promise<void> {
   // Step 1: enumerate whole months to archive
   const listClient = new Client({ connectionString: process.env.DATABASE_URL });
   await listClient.connect();
-  let monthsToExport: MonthRange[];
+  let monthsToExport: ContextMonthRange[];
   try {
     const r = await listMonthsToExport(listClient, cutoff);
     monthsToExport = r.months;
@@ -417,65 +488,62 @@ async function main(): Promise<void> {
     await listClient.end();
   }
 
-  // Step 2: export+verify each month
-  let totalArchivedRows = 0;
-  let totalArchivedBytes = 0;
-  const monthLabels: string[] = [];
-  for (const month of monthsToExport) {
-    const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
-    const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
-    await exportClient.connect();
-    await ctlClient.connect();
-    try {
-      const { rowCount, bytesCompressed } = await exportAndUploadMonth(
-        exportClient,
-        ctlClient,
-        cfg,
-        month,
-      );
-      totalArchivedRows += rowCount;
-      totalArchivedBytes += bytesCompressed;
-      monthLabels.push(month.label);
-    } finally {
-      await exportClient.end().catch(() => {});
-      await ctlClient.end().catch(() => {});
-    }
-  }
-
-  // Step 3: delete only rows whose whole month has been exported to warm tier
-  // (deleteCutoff = month-start of retention cutoff). Partial-month tail stays
-  // in hot tier until next sweep when its month becomes whole. B2 fix.
-  const delClient = new Client({ connectionString: process.env.DATABASE_URL });
-  await delClient.connect();
-  let deleted = 0;
-  try {
-    const r = await deleteOldRows(delClient, cfg, deleteCutoff);
-    deleted = r.deleted;
-    console.log(`[B75 ctx-bridge] deleted=${deleted} rows`);
-    await markMonthsActive(delClient, monthLabels);
-  } finally {
-    await delClient.end();
-  }
-
-  // Step 4: VACUUM (separate connection — VACUUM cannot run in tx)
-  const vacClient = new Client({ connectionString: process.env.DATABASE_URL });
-  await vacClient.connect();
-  try {
-    console.log('[B75 ctx-bridge] running VACUUM context_bridge_log ...');
-    await vacuumTable(vacClient);
-    console.log('[B75 ctx-bridge] VACUUM complete');
-  } finally {
-    await vacClient.end();
-  }
+  const result = await runContextBridgeCycle(monthsToExport, deleteCutoff, {
+    archiveMonth: async (month) => {
+      const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
+      const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
+      await exportClient.connect();
+      await ctlClient.connect();
+      try {
+        return await exportAndUploadContextMonth(exportClient, ctlClient, cfg, month);
+      } finally {
+        await exportClient.end().catch(() => {});
+        await ctlClient.end().catch(() => {});
+      }
+    },
+    deleteRows: async (cutoff) => {
+      const client = new Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        const deleted = await deleteOldRows(client, cfg, cutoff);
+        console.log(`[B75 ctx-bridge] deleted=${deleted.deleted} rows`);
+        return deleted;
+      } finally {
+        await client.end();
+      }
+    },
+    markActive: async (labels) => {
+      const client = new Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        await markMonthsActive(client, labels);
+      } finally {
+        await client.end();
+      }
+    },
+    vacuum: async () => {
+      const client = new Client({ connectionString: process.env.DATABASE_URL });
+      await client.connect();
+      try {
+        console.log('[B75 ctx-bridge] running VACUUM context_bridge_log ...');
+        await vacuumTable(client);
+        console.log('[B75 ctx-bridge] VACUUM complete');
+      } finally {
+        await client.end();
+      }
+    },
+  });
 
   const totalMs = Date.now() - startedAt.getTime();
   console.log(
-    `[B75 ctx-bridge] DONE — months_archived=${monthsToExport.length} rows_archived=${totalArchivedRows} ` +
-      `bytes_archived=${totalArchivedBytes} rows_deleted=${deleted} duration_ms=${totalMs}`,
+    `[B75 ctx-bridge] DONE — months_archived=${monthsToExport.length} rows_archived=${result.archivedRows} ` +
+      `bytes_archived=${result.archivedBytes} rows_deleted=${result.deleted} duration_ms=${totalMs}`,
   );
 }
 
-main().catch((err) => {
-  console.error('[B75 ctx-bridge] fatal:', err);
-  process.exit(1);
-});
+if (isDirectEntry(import.meta.url)) {
+  runContextBridgeLogTtlCli().catch((err) => {
+    console.error('[B75 ctx-bridge] fatal:', err);
+    process.exit(1);
+  });
+}

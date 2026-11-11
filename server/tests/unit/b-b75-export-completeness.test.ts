@@ -3,10 +3,11 @@
  * decision, the alert keys, the rehydrate tier choice, the generalised evidence writer,
  * and the wiring of each into the four archive scripts and two migrations.
  *
- * The pure rules are tested by behaviour. The scripts run `main()` at import, so their
- * wiring is tested by structure (order and presence at the source), as
- * b-trade-tier-register.test.ts and b-xstock-bar-availability-observation.test.ts do.
- * The live behaviour is observed at Step 7 on the first nightly sweep.
+ * The pure rules remain here. B-B75-SCRIPT-TEST-HARNESS made the four commands
+ * import-safe and moved their destructive wiring proof to executed fake-I/O tests
+ * in b-b75-script-test-harness.test.ts. The older source checks retained below
+ * are compatibility alarms for exact SQL/log/key/CLI shapes; they are no longer
+ * counted as proof that a destructive gate executes.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -277,7 +278,7 @@ describe('the generalised evidence writer (Langston Step-1 condition 1, JC-4)', 
 });
 
 describe('sweep wiring (structure at the source)', () => {
-  const archive = fnBody(SWEEP, 'async function archiveOneObject(');
+  const archive = fnBody(SWEEP, 'export async function archiveB75Object(');
   const process_ = fnBody(SWEEP, 'async function processPartition(');
   const plain = fnBody(SWEEP, 'async function sweepPlainTables(');
 
@@ -321,8 +322,8 @@ describe('sweep wiring (structure at the source)', () => {
     expect(whole.slice(skip, drop)).toMatch(/return \{\s*status: 'skipped'/);
   });
   it('gates (a) and (b) require a proven basis, not only a state', () => {
-    expect(process_).toMatch(/\(r\.state === 'verified' \|\| r\.state === 'active'\) && isProvenBasis\(r\.completeness_basis\)/);
-    expect(plain).toMatch(/\(r\.state === 'verified' \|\| r\.state === 'active'\) && isProvenBasis\(r\.completeness_basis\)/);
+    expect(process_).toContain('missingProvenArchiveLabels(presentLabels, stateRows.rows)');
+    expect(plain).toContain('missingProvenArchiveLabels(labels, stateRows.rows)');
     expect(plain).toContain('DELETE REFUSED this run');
     expect(plain).not.toContain('DELETE SKIPPED this run');
   });
@@ -388,7 +389,7 @@ describe('the other lanes and readers', () => {
     expect(CTX.indexOf('completeness_basis = $7', b)).toBeGreaterThan(CTX.indexOf('recordExactArchiveEvidence(', b));
     // gate C, C-2 (r2): the transaction is on ctlClient throughout — sliced to the one lane
     // function, and the verified UPDATE is IN the chain, so moving it to exportClient fails.
-    const lane = fnBody(CTX, 'async function exportAndUploadMonth(');
+    const lane = fnBody(CTX, 'export async function exportAndUploadContextMonth(');
     expect(lane.match(/query\('BEGIN'\)/g)).toHaveLength(1);
     expect(lane.match(/query\('COMMIT'\)/g)).toHaveLength(1);
     expect(lane).toMatch(
@@ -420,11 +421,11 @@ describe('the other lanes and readers', () => {
   it('rehydrate: a checksum mismatch rides the sidecar and the aggregate, and fails the run (gate C, C-1)', () => {
     expect(REHYDRATE).toContain('checksum_ok: checksumOk,');
     // the mismatch branch comes FIRST, so a corrupt proven object never reaches rows_proven
-    const bucket = REHYDRATE.indexOf('if (!checksumOk) {');
-    const provenAdd = REHYDRATE.indexOf('provenRows += download.row_count');
+    const bucket = REHYDRATE.indexOf("if (result.kind === 'mismatch')");
+    const provenAdd = REHYDRATE.indexOf('provenRows += result.rowCount');
     expect(bucket).toBeGreaterThan(0);
     expect(provenAdd).toBeGreaterThan(bucket);
-    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= download\.row_count;[\s\S]*\} else if \(proven\) \{/);
+    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= result\.rowCount;[\s\S]*\} else if \(result\.proven\) \{/);
     expect(REHYDRATE).toContain('rows_checksum_mismatch=');
     expect(REHYDRATE).toContain('if (mismatched.length > 0) process.exit(2);');
     // the rider: a mismatched file is renamed out of the <table>_*.jsonl.gz glob

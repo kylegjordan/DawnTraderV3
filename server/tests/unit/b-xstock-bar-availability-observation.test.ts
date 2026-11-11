@@ -222,7 +222,7 @@ describe('B-XSTOCK-BAR-AVAILABILITY observation gate', () => {
     expect(sweep).toContain("exactCursorTieBreakerColumn: 'revision_id'");
     expect(sweep).toContain("exactCursorTieBreakerType: 'uuid'");
     const uploadedAt = sweep.indexOf('await updateManifestUploaded');
-    const evidenceAt = sweep.indexOf('await recordExactArchiveEvidence', uploadedAt);
+    const evidenceAt = sweep.indexOf('await deps.recordExactArchiveEvidence', uploadedAt);
     const verifiedAt = sweep.indexOf('await updateManifestVerified', evidenceAt);
     expect(evidenceAt).toBeGreaterThan(0);
     expect(evidenceAt).toBeGreaterThan(uploadedAt);
