@@ -31,9 +31,22 @@ describe('8a-P4b — J1: the sides are captured once, from the frame the guard j
     expect(count(/\bxsAsk = /g)).toBe(2);
   });
 
-  it('no second read of the equity tick was added (a later frame would be unjudged)', () => {
-    // The ONE read is the exit loop's; `8a-P4b` must not add another.
-    expect(count(/getLatestEquityTick\(/g)).toBe(1);
+  it('the exit loop still reads the equity tick exactly once (a later exit frame would be unjudged)', () => {
+    // B-PRICE-FEED-COVERAGE increment 0 adds one independent ENTRY-depth freshness read. Keep this fence on its
+    // original object: the per-position EXIT loop must still read once and carry that judged frame to X1/X2/X3.
+    const exitLoopStart = AEE.indexOf('for (const position of openPositions) {');
+    const exitLoopEnd = AEE.indexOf('void this._runVenueQuietSweep(', exitLoopStart);
+    expect(exitLoopStart).toBeGreaterThan(0);
+    expect(exitLoopEnd).toBeGreaterThan(exitLoopStart);
+    expect((AEE.slice(exitLoopStart, exitLoopEnd).match(/getLatestEquityTick\(/g) ?? []).length).toBe(1);
+
+    // Positive controls: the new entry-depth gate owns the other read, and there are exactly two in the engine.
+    const entryGateStart = AEE.indexOf('private async _evaluateOpenDepthGate(');
+    const entryGateEnd = AEE.indexOf('private ', entryGateStart + 1);
+    expect(entryGateStart).toBeGreaterThan(0);
+    expect(entryGateEnd).toBeGreaterThan(entryGateStart);
+    expect((AEE.slice(entryGateStart, entryGateEnd).match(/getLatestEquityTick\(/g) ?? []).length).toBe(1);
+    expect(count(/getLatestEquityTick\(/g)).toBe(2);
   });
 
   it('the validated capture sits AFTER the unvalidated refusal, so only an admitted frame is captured', () => {
