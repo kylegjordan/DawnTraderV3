@@ -1,5 +1,13 @@
 # DawnTrader: Changes, Fixes & Improvements Registry
 
+## FIX-2026-11-11-A — `B-B75-SCRIPT-TEST-HARNESS` (`#1208`, CC-B): context archive reuse could reach the cutoff delete without a final complete-population proof
+
+**CLASS: `non_architecture`. SYMPTOM:** the four B75 command files ran their process entry at import, so tests could assert source structure but could not execute their command and orchestration gates against fakes. During that conversion the context lane exposed a real safety gap: its reuse recount happened before the final cutoff delete, on a separate client, and did not prove that every old month reachable by the delete had been enumerated and guarded.
+
+**FIX:** one shared direct-entry predicate makes all four commands import-safe; injected process and I/O seams preserve direct-run behavior. The context finalizer now takes a source-write lock, re-derives the full cutoff-month population, refuses an unguarded month, recounts every guard, and performs delete plus active marking on one client and transaction; any failure rolls back before source removal.
+
+**Verified:** the focused fake-I/O harness passes 42 of 42 cases, including changed-count and newly inserted old-month rollback mutations; the two predecessor suites pass 66 of 66. On deployed ref `76f88f48e76b4314fc065e1e9686f51792df2c11`, a credential-isolated run passed 42/42 and a separate import probe returned exactly `IMPORT_OK=4`; Coltrane independently reproduced both at evidence ref `427df5e5989129da3e88f776a4d2c7ad3f2b6563`. **Boundary:** no real archive, delete, provider, credential, scheduler or concurrency outcome is claimed; context scheduling and buffered I/O remain open in `#169`.
+
 ## FIX-2026-11-10-A — `B-TRANSCRIPT-ARCHIVE` (KD-47, Infra Claude): an in-place rewrite of a raw conversation could make the archive silently skip later lines
 
 **CLASS: `non_architecture`. SYMPTOM:** the archive resumed each raw conversation at its saved byte offset. The existing trim, deduplication and distillation tools rewrite raw files in place, so a rewrite could move that offset into unrelated bytes; a reproduced shorter rewrite followed by 20 new lines archived only 1 and silently lost 19 from the readable copy, while the raw source remained intact.

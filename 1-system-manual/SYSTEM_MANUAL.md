@@ -12289,13 +12289,19 @@ Future ML/analytics schedulers query the manifest once instead of needing to kno
 
 **The rehydrate CLI** prints each object's basis, keeps proven and unproven row totals apart, and writes a completeness sidecar beside each file. **A consumer must read the sidecar, not assume a downloaded day is whole.**
 
+### Executable command gates (B-B75-SCRIPT-TEST-HARNESS, 2026-11-11, `#1208`)
+
+The retention sweep, context lane, cold rotator and rehydrate command are import-safe: importing their modules does not start a command. Their process wrappers and lane orchestration are driven by a 42-case fake-I/O harness, while direct execution preserves the CLI success, configuration-refusal and fatal-exit contracts.
+
+The context lane's final delete fence uses one connected client and transaction. It locks `context_bridge_log` against source writes, re-derives the complete UTC-month population selected by the cutoff, requires a guard for every month, recounts every guard, then deletes the cutoff population and marks the same labels active. Any missing month, changed count, delete failure or active-mark failure rolls back before source removal; VACUUM remains after commit. This is executable fake-I/O proof, not a claim about real storage providers, credentials, scheduler permissions or production lock concurrency. The context command remains unscheduled under separate issue `#169`.
+
 ## Sweep schedule
 
 | Cron | Script | Action |
 |---|---|---|
 | ~~`0 2 * * *`~~ | ~~`b70-retention-sweep.ts`~~ | **DELETED B-STORAGE-HARDEN Wave C** — B70 DROP retired; the 5 B70 tables now tier via `b75-retention-sweep` (below) |
 | `15 2 * * *` | `b75-retention-sweep.ts` | B74 6 tables **+ the 5 B70 analytics tables** (Wave C) — export-then-drop-after-verify fence (move-not-delete), O_EXCL run-lock |
-| `30 2 * * *` | `context-bridge-log-ttl.ts` | Month-grouped export + DELETE rounded to month-start + tail VACUUM |
+| `30 2 * * *` **DESIGN ONLY — NOT INSTALLED (`#169`)** | `context-bridge-log-ttl.ts` | Month-grouped export + DELETE rounded to month-start + tail VACUUM; manual command only until its separate scheduler/OOM work lands |
 | `0 3 1 * *` | `b75-cold-rotator.ts` | Monthly warm→cold rotation (objects > `default_warm_retention_days=365`; table-agnostic — covers B74 + B70 + ctx-bridge) |
 | `0 4 * * 1` | `b75-cold-liveness.ts` | Weekly cold round-trip canary (B-STORAGE-HARDEN Wave A) |
 | `0 5 * * *` | `b-storage-archival-health.ts` | Daily cron-silence + failed>0 watchdog → §10.5 (Wave A) **+ daily-partition forward-coverage check (Wave D — alert if `xstock_spot_ticker_snap` daily runway < 4 days ahead)** |

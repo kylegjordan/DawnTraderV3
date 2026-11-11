@@ -2501,7 +2501,7 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 
 ### B75 hot-path / cron impact
 
-- **Cron entries** — CORRECTION (B-NEW-47, 2026-06-01): the schedule below was the *intended* design but, prior to B-NEW-47, the ONLY archive cron actually installed (in ROOT's crontab, not `/etc/cron.d/dawntrader`) was `b70-retention-sweep` (`0 2 * * *`) + `b70-create-monthly-partitions`. `b75-retention-sweep`, `context-bridge-log-ttl`, and `b75-cold-rotator` were NEVER scheduled. **B-NEW-47 installs `b75-retention-sweep` in ROOT crontab `15 2 * * *`.** `context-bridge-log-ttl` + `b75-cold-rotator` remain UNSCHEDULED (cold stays dry-run for 365 d; ctx-bridge is a separate small-table sweep — RI #169).
+- **Cron entries** — CORRECTION (B-NEW-47, 2026-06-01; reconciled 2026-11-11): the schedule below began as the intended design. **Installed now in ROOT's crontab:** `b75-retention-sweep` at `15 2 * * *`, `b75-cold-rotator` at `0 3 1 * *`, the cold liveness canary at `0 4 * * 1`, and archival health at `0 5 * * *`. **Not installed:** `context-bridge-log-ttl`; its `30 2 * * *` line remains design-only under `#169`.
   - `15 2 * * *` — `b75-retention-sweep.ts` (B74 6 tables, adaptive slicing) — **installed B-NEW-47**
   - `30 2 * * *` — `context-bridge-log-ttl.ts` — NOT installed (deferred)
   - `0 3 1 * *` — `b75-cold-rotator.ts` — **★ INSTALLED + cold tier ACTIVATED B-STORAGE-HARDEN Wave A (2026-07-08)** — `cold_rotator_dry_run` flipped false; proven end-to-end by a bounded real rotation (`context_bridge_log/2026-01` → cold, rehydrate-verify checksum match, warm→migrated). Buffered `downloadWarm`/`uploadCold` path (not the streaming `*File` path) loads a single warm object into memory during rotation — bounded today by per-day warm slicing (largest ~503 MB « the 3.7 GB box); revisit if a single object nears RAM. New optional CLI flags `--limit N` / `--warm-retention-days D` (non-persistent) for bounded controlled rotation. Rotator now emits a terminal `DONE` line on EVERY exit path (empty/dry-run/rotation) so the health watchdog can distinguish "nothing to do" from "crashed".
@@ -2570,6 +2570,14 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 
 **First live run:** 2026-10-18 02:15Z, run_id `6f7ef0d4-990e-4766-b1f5-9ae9f346c81a`. 4 of 4 new objects `source-count-matched`, with one evidence row each; census 568 / 4 / 4 / 0.
 
+### ★ B-B75-SCRIPT-TEST-HARNESS (2026-11-11, `#1208`, CC-B; deployed `76f88f48e7`) — IMPORT-SAFE COMMANDS AND EXECUTABLE FAKE-I/O GATES
+
+**Changed command surfaces:** `b75-retention-sweep.ts`, `context-bridge-log-ttl.ts`, `b75-cold-rotator.ts` and `b75-rehydrate.ts` use the shared `direct-entry.ts` predicate. Import is side-effect-free; direct execution still enters each command's process wrapper. The injected seams cover command configuration, database/storage/file/alert/exit adapters and lane orchestration without calling real providers.
+
+**Context deletion fence:** the context lane locks the source against writes, re-derives every UTC month reachable by the cutoff-wide DELETE, rejects any month absent from the admitted guard set, recounts every guard, and performs DELETE plus active marking on one client and transaction. Failure rolls back before source removal. This closes the structure-only test gap and the discovered reuse-count/final-population defect.
+
+**Verification boundary:** the focused harness executes 42 cases and the predecessor controls execute 66 cases. The deployed read also proves all four modules import silently under credential isolation. These prove fake-I/O ordering and refusal behavior only; they do not prove live provider, credential, scheduler, permission, real concurrency or archive/delete outcomes. The context job remains manual and `#169` remains open.
+
 ### B75 known limitations / deferred to B75.x
 
 - ~~**Keyset pagination**~~ — RESOLVED (partition-exporter uses a keyset timestamp cursor; the LIMIT/OFFSET O(N²) concern is gone).
@@ -2582,7 +2590,7 @@ Tiered hot/warm/cold storage architecture per Kyle directive 2026-05-06: "we don
 ```
 0  2 * * * deploy ... b70-retention-sweep.ts ...      (B70 archive tables, unchanged)
 15 2 * * * deploy ... b75-retention-sweep.ts ...      (B74 export-then-drop)
-30 2 * * * deploy ... context-bridge-log-ttl.ts ...   (export-then-TTL+VACUUM)
+30 2 * * * deploy ... context-bridge-log-ttl.ts ...   (DESIGN ONLY; not installed, #169)
 45 2 * * * deploy ... pg_dump data_archive_manifest ... (manifest backup, deferred install)
 0  3 1 * * deploy ... b75-cold-rotator.ts ...         (monthly warm→cold)
 ```
