@@ -166,7 +166,7 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../../scripts/b-new-34b-prewarm-snapshot.ts'), 'utf8');
     expect(src).toMatch(/ORDER BY bucket_ts DESC\s+LIMIT \$3/);
     expect(src.indexOf('assertPrewarmRowsWithinCap(bars, interval.maxBars)'))
-      .toBeLessThan(src.indexOf('await upsertLegacySnapshot(pool, symbol, bars, interval.table)'));
+      .toBeLessThan(src.indexOf('await upsertLegacy(pool, symbol, bars, interval.table)'));
   });
 
   it('refuses a below-cap lifecycle floor before either prewarm writer can write', async () => {
@@ -179,15 +179,39 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
           : Array.from(values, ([constant_name, value]) => ({ constant_name, value })),
       })),
     };
+    const aggregateLegacySymbol = vi.fn(async () => [{
+      bucket_ts: new Date('2026-10-01T00:00:00.000Z'),
+      bar_open: '1', bar_high: '1', bar_low: '1', bar_close: '1', bar_volume: '1', source_bar_count: '1',
+    }]);
+    const upsertLegacySnapshot = vi.fn(async () => 1);
+    const prewarmAvailabilitySnapshot = vi.fn(async () => ({
+      bucketsRead: 1, eligibleBuckets: 1, snapshotRowsWritten: 1, ineligibleBuckets: 0,
+    }));
     const options = {
       connectionString: process.env.DATABASE_URL ?? 'postgres://unused',
       symbols: ['CORZ/USD'],
-      dryRun: true,
+      dryRun: false,
       lifecycleClient: lifecycleClient as never,
+      dependencies: {
+        aggregateLegacySymbol: aggregateLegacySymbol as never,
+        upsertLegacySnapshot: upsertLegacySnapshot as never,
+        prewarmAvailabilitySnapshot,
+      },
     };
     await expect(runPrewarm(options)).rejects.toThrow(/below live cap 240/);
     await expect(runAvailabilityPrewarm(options)).rejects.toThrow(/below live cap 240/);
     expect(lifecycleClient.query).toHaveBeenCalledTimes(4);
+    expect(aggregateLegacySymbol).not.toHaveBeenCalled();
+    expect(upsertLegacySnapshot).not.toHaveBeenCalled();
+    expect(prewarmAvailabilitySnapshot).not.toHaveBeenCalled();
+
+    values.set('xstock_spot_ohlc_15m_snapshot.keep_floor_rows', 240);
+    await expect(runPrewarm(options)).resolves.toMatchObject({ totalUpserts: 2, dryRun: false });
+    await expect(runAvailabilityPrewarm(options)).resolves.toMatchObject({ totalUpserts: 2, dryRun: false });
+    expect(lifecycleClient.query).toHaveBeenCalledTimes(8);
+    expect(aggregateLegacySymbol).toHaveBeenCalledTimes(2);
+    expect(upsertLegacySnapshot).toHaveBeenCalledTimes(2);
+    expect(prewarmAvailabilitySnapshot).toHaveBeenCalledTimes(2);
   });
 
   it('freezes the cutoff at the complete UTC-day boundary', () => {
