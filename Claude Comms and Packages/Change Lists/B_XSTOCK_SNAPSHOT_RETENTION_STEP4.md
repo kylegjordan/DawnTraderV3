@@ -4,7 +4,7 @@
 
 **DECLARED CHANGE-CLASS:** `architecture`
 
-**IMPLEMENTATION DIFF:** approved Step-2 boundary `410459105cd858563120356542dd672b853d2c41` through corrected implementation ref `96c403c89c31b8bfb110f08d81bab29dbd31c78b`
+**IMPLEMENTATION DIFF:** approved Step-2 boundary `0f7b31e21ac82239842c474fa9c8bb4815483b35` through corrected implementation/refinement head `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73`
 
 **REVIEW BRANCH:** `origin/review/b-xstock-snapshot-retention-step4-codex` (the Discord dispatch names the exact review-ready head containing this packet)
 
@@ -44,7 +44,7 @@ The initial backlog is supervised through `--snapshot-only`; mutation is disable
 
 ## Change-set census
 
-The corrected object reviewed is the complete `410459105..96c403c89` diff: **28 files, 3,911 insertions, 156 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, and the five corrections below.
+The corrected object reviewed is the complete `0f7b31e21..05e95c195` diff: **28 files, 3,989 insertions, 156 deletions**. This includes the Step-3 implementation/boundary records, the earlier review packet, the five corrections below, and the complete rollback-column proof added after Coltrane's split re-review ruling.
 
 - Database contract: forward migration, rollback migration, and migration manifest.
 - Lifecycle/prewarm: shared snapshot policy, legacy prewarm, xStock cache policy binding.
@@ -313,11 +313,11 @@ The loader independently verifies the table identity, proven/checksum flags, cur
 
 ## Coltrane sent-back findings and corrections
 
-Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected across `b5419b6dfb126ef495ce4772592554aeb905125c` and the CI-path correction `96c403c89c31b8bfb110f08d81bab29dbd31c78b`; this section is part of the stateless re-review context.
+Coltrane returned five blocking findings against the first Step-4 ref. All five are accepted and corrected across `3de31883043c7a864b09bd56db1669a087f81095`, the CI-path correction `b560f7f0c61584004e8112b5554c434331178568`, and the complete rollback-column proof `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73`; this section is part of the stateless re-review context.
 
 ### C1 — preserve every pre-existing evidence cursor contract
 
-Both the forward and rollback migrations retain `disk-file-lines-v1` when rebuilding the evidence constraint. The real-PostgreSQL suite seeds disk-file evidence, applies the forward migration and rollback, proves the seeded row remains valid, inserts a second disk-file row after rollback, and proves the selector-only columns were removed only after the zero-snapshot-proof rollback arm.
+Both the forward and rollback migrations retain `disk-file-lines-v1` when rebuilding the evidence constraint. The real-PostgreSQL suite seeds disk-file evidence, applies the forward migration and rollback, proves the seeded row remains valid, inserts a second disk-file row after rollback, and now asserts that all nine selector-only columns were removed only after the zero-snapshot-proof rollback arm. This closes Coltrane's split-review finding that the first test asserted only three of those nine columns.
 
 ```sql
 CHECK (cursor_contract IN (
@@ -407,7 +407,7 @@ For each mutation the test requires `proof_matches=false`, zero deleted rows, ze
 
 ## Verification at the implementation ref
 
-- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43042773836` is tied to branch head `87053a0a82b68b7c7395d849fefa82c4b9a757a0`, which contains implementation ref `96c403c89c31b8bfb110f08d81bab29dbd31c78b`, and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files passed.
+- After rebasing cleanly onto current `origin/migration/aws-supabase`, CI run `43048110149` is tied to exact correction head `05e95c195ee6076d76a4d74c36c3efbbcf4dbc73` and passed all four jobs: TypeScript Check, Test Suite, Build, Docker Build. Its full Vitest population was 429/429 test files and 5,542/5,542 tests passed; all six real-PostgreSQL snapshot-retention cases passed, including the complete nine-column rollback assertion.
 - The focused local population was 91 tests across snapshot retention, prewarm, B75 harness, and hot-horizon suites; all 91 passed. The six real-PostgreSQL cases were skipped locally because no local database was configured, then all six passed in CI.
 - Those six database cases cover positive atomic delete; three proof-changing mutations; wrong-session proven-key refusal; append-only evidence DELETE/TRUNCATE refusal; writer-between-discovery-and-export snapshot timing; and disk-file cursor preservation through the forward migration and rollback.
 - TypeScript baseline remained 324 current findings against 324 expected findings, with no new regression.
