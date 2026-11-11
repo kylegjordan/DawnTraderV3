@@ -21,35 +21,37 @@ A row is cleanup-eligible only when it is outside **both** protections. Step 2 m
 
 ### OBJ-1 — Establish one governed retention contract for both snapshot tables
 
-Add explicit wildcard `data_lifecycle` retention constants for the 15-minute and 60-minute snapshot tables, initially 30 days, and one shared selector that applies the time horizon plus the per-symbol floor. The selector must use deterministic `(symbol, bucket_ts)` ordering and must return the same population to the dry run, archive count, proof comparison, and delete.
+Add explicit wildcard `data_lifecycle` retention constants for the 15-minute and 60-minute snapshot tables, initially 30 days, and one shared selector that applies the time horizon plus the per-symbol floor. Each archive object must freeze one cutoff/ranking instant and materialize one deterministic population ordered by `(symbol, bucket_ts)`; the dry run, export, downloaded proof, and delete must all consume that frozen identity rather than re-evaluate a moving retention predicate.
 
 **Verified by:**
 
 - a current database read names the configured horizon and the two per-symbol floors;
 - exact fixture populations cover a liquid symbol, an inactive symbol whose newest rows are older than 30 days, ties at the cutoff, fewer-than-floor history, and concurrent recent inserts;
 - a mutation that changes `240`, `60`, the cutoff comparison, or the selector used by only one phase fails the population-identity tests;
+- cutoff drift and a recent insert that pushes the prior floor row into eligibility cannot change an already frozen object population;
 - missing, narrow-scope, non-numeric, non-positive, or contradictory configuration fails closed before archive or delete.
 
 ### OBJ-2 — Reuse B75’s proven move-not-delete path
 
-Register both unpartitioned snapshot tables in the B75 plain-archive lane, or add the narrowest equivalent selector seam to that lane, while keeping `data_archive_manifest`, `data_archive_exact_evidence`, `archive-completeness.ts`, the exporter, storage client, cold rotator, and rehydrate CLI as the single lifecycle implementation. Every archived object must contain the complete snapshot row, including the availability columns when populated.
+Register both unpartitioned snapshot tables in the B75 plain-archive lane, or add the narrowest equivalent selector seam to that lane, while keeping `data_archive_manifest`, `data_archive_exact_evidence`, `archive-completeness.ts`, the exporter, storage client, cold rotator, and rehydrate CLI as the single lifecycle implementation. Every archived object must contain the complete snapshot row, including the availability columns when populated, and its proof must bind the complete ordered `(symbol, bucket_ts)` key set plus a canonical full-row content digest at the frozen cutoff/ranking instant.
 
 **Verified by fake I/O and database fixtures:**
 
-- the selected source count equals the exported and downloaded count before a manifest row can become `source-count-matched` and `verified`;
-- checksum or count mismatch, an existing unproven/closed-out copy, changed source recount, upload/readback failure, or evidence failure performs no delete;
+- the selected source count, complete ordered key set, and canonical full-row content digest equal the exported and downloaded proof before a manifest row can become `source-count-matched` and `verified`;
+- checksum, count, key-set, or content-digest mismatch; an existing unproven/closed-out copy; changed source proof; upload/readback failure; or evidence failure performs no delete;
 - a verified, still-matching copy is reusable only under the existing B75 decision and alert rules;
 - rehydrate returns the archived rows with the completeness sidecar, and a sampled archived object reproduces its row count and content digest;
-- the existing B75 42-case harness and predecessor suites stay green, with new cases for the ranked keep-floor selector.
+- the existing B75 42-case harness and predecessor suites stay green, with new cases for the ranked keep-floor selector and red mutations for same-count key replacement and in-place UPSERT/content replacement.
 
 ### OBJ-3 — Prune only the exact proven population
 
-After archive proof, delete cleanup-eligible rows in bounded transactions and vacuum/analyze the tables without blocking the live scanner or lifecycle prewarm beyond a measured, reviewed ceiling. The deletion gate must re-derive the exact eligible population immediately before removal under the lock/isolation shape settled at Step 2; a changed population refuses and leaves all rows hot.
+After archive proof, delete only the frozen, proven `(symbol, bucket_ts)` key set in bounded transactions and vacuum/analyze the tables without blocking the live scanner or lifecycle prewarm beyond a measured, reviewed ceiling. Immediately before removal, the gate must compare the hot source against the downloaded archive's complete ordered key set and canonical full-row content digest under the lock/isolation shape settled at Step 2. It must never issue deletion from a newly evaluated rolling cutoff or ranking predicate; any mismatch refuses before deletion and leaves both the proven rows and any newly eligible rows hot.
 
 **Verified by:**
 
 - before/after exact counts show every remaining row is within the hot horizon or its symbol’s keep floor;
-- the archived count equals the deleted count for each object and the post-delete absence check names the same key set;
+- the complete pre-delete ordered key set and full-row content digest equal the downloaded proof, deletion targets that proven key set, the archived count equals the deleted count for each object, and the post-delete absence check names that same key set;
+- red mutations cover same-count key replacement, in-place UPSERT/content replacement, a recent insert that pushes the prior floor row into eligibility, and cutoff drift; each mismatch refuses before deletion and proves both the frozen population and newly eligible rows remain hot;
 - forced cache write-back and prewarm activity at each boundary cannot delete a newly written row, omit an eligible row from the archive, or resurrect an already closed-out archive label silently;
 - statement timeouts, lock waits, batch duration and rows per transaction are bounded and reported over the measured cleanup population;
 - heap, index, dead-row and total-relation bytes are reported before and after. Ordinary `VACUUM` is not claimed to return disk to the operating system; if physical reclamation is needed, Step 2 must choose and review an online rewrite/reindex or a maintenance-window operation before it is run.
@@ -95,7 +97,7 @@ Deploy the reviewed retention code, run a dry-read first, archive and clean the 
 **Verified by:**
 
 - the initial dry-read reports both tables, all 495 currently represented symbols, candidate counts, oldest/newest keys, and estimated bytes without mutation;
-- the supervised cleanup proves archive, downloaded readback, exact evidence, delete, vacuum/analyze, and post-delete per-symbol/horizon invariants in that order;
+- the supervised cleanup proves frozen cutoff/ranking instant, archive, downloaded readback, complete key-set/content-digest equality, exact evidence, proven-key deletion, vacuum/analyze, and post-delete per-symbol/horizon invariants in that order;
 - a later natural cache/prewarm writer cycle followed by the next retention read shows no out-of-contract row and no archive refusal/alert;
 - TypeScript Check, Test Suite, Build, and Docker Build pass individually at the deployed ref;
 - API/log/database checks are recorded; UI is **N/A**, not represented as checked.
@@ -251,7 +253,7 @@ The Step-2 census may narrow this set. It may not introduce a second scheduler, 
 
 ## 7. Safety, rollback, and deployment posture
 
-The first run is dry-read only. The first mutating run is supervised and stops before deletion unless the archive object is downloaded, checksummed, exact-count proven, stamped, and re-counted against the same selector. A rollback disables future snapshot retention and removes only the new registration/config/seams; it does not delete archive evidence or warm/cold objects and does not try to reconstruct already archived rows automatically.
+The first run is dry-read only. The first mutating run is supervised and stops before deletion unless the archive object is downloaded, checksummed, and proven equal to the hot source by count, complete ordered key set, and canonical full-row content digest at the object's frozen cutoff/ranking instant. Deletion then uses only that proven key set; it never re-runs the rolling selector. A rollback disables future snapshot retention and removes only the new registration/config/seams; it does not delete archive evidence or warm/cold objects and does not try to reconstruct already archived rows automatically.
 
 Normal reviewed deployments may continue during the existing xStock-bar window under that batch’s recorded continuity rule. This batch does not reset or close that window. If cleanup or a deployment produces an availability continuity fault, the xStock-bar batch’s own gate governs the consequence; this batch does not waive it.
 
