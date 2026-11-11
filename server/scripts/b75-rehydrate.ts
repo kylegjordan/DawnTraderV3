@@ -169,6 +169,109 @@ export type RehydrateObjectResult =
   | { kind: 'skipped-cold'; bytes: 0; rowCount: 0 }
   | { kind: 'skipped'; bytes: 0; rowCount: 0 };
 
+export interface RehydrateOutputDependencies {
+  lstat: typeof fs.lstatSync;
+  mkdir: typeof fs.mkdirSync;
+}
+
+/** Enforce the existing private output-directory rule without exiting, so the
+ * direct CLI remains the sole owner of the refusal exit code. */
+export function ensurePrivateRehydrateOutput(
+  out: string,
+  deps: RehydrateOutputDependencies = { lstat: fs.lstatSync, mkdir: fs.mkdirSync },
+): string | null {
+  let outStat: fs.Stats | null = null;
+  try {
+    outStat = deps.lstat(out);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+  }
+  if (outStat) {
+    if (outStat.isSymbolicLink()) return 'is a symbolic link';
+    if (!outStat.isDirectory()) return 'is not a directory';
+    if ((outStat.mode & 0o077) !== 0) {
+      return `is mode ${(outStat.mode & 0o777).toString(8)} (group or others can reach it): run chmod 0700 ${out} first`;
+    }
+  } else {
+    deps.mkdir(out, { recursive: true, mode: 0o700 });
+  }
+  return null;
+}
+
+export interface RehydrateSummary {
+  downloaded: number;
+  skippedCold: number;
+  provenRows: number;
+  unprovenRows: number;
+  mismatchRows: number;
+  totalBytes: number;
+  unproven: string[];
+  mismatched: string[];
+}
+
+export function summarizeRehydrateResults(results: RehydrateObjectResult[]): RehydrateSummary {
+  const summary: RehydrateSummary = {
+    downloaded: 0,
+    skippedCold: 0,
+    provenRows: 0,
+    unprovenRows: 0,
+    mismatchRows: 0,
+    totalBytes: 0,
+    unproven: [],
+    mismatched: [],
+  };
+  for (const result of results) {
+    if (result.kind === 'skipped-cold') {
+      summary.skippedCold++;
+      continue;
+    }
+    if (result.kind === 'skipped') continue;
+    summary.downloaded++;
+    summary.totalBytes += result.bytes;
+    if (result.kind === 'mismatch') {
+      summary.mismatchRows += result.rowCount;
+      summary.mismatched.push(result.description);
+    } else if (result.basisProven) {
+      summary.provenRows += result.rowCount;
+    } else {
+      summary.unprovenRows += result.rowCount;
+      if (result.description) summary.unproven.push(result.description);
+    }
+  }
+  return summary;
+}
+
+export interface RehydrateFinishDependencies {
+  warn: (message: string) => void;
+  error: (message: string) => void;
+  log: (message: string) => void;
+  exit: (code: number) => void;
+}
+
+export function finishRehydrateRun(
+  summary: RehydrateSummary,
+  deps: RehydrateFinishDependencies = {
+    warn: (message) => console.warn(message),
+    error: (message) => console.error(message),
+    log: (message) => console.log(message),
+    exit: (code) => process.exit(code),
+  },
+): void {
+  for (const item of summary.unproven) {
+    deps.warn(`[B75 rehydrate] WARNING: ${item} is NOT proven complete — rows may be missing inside it (#1195)`);
+  }
+  for (const item of summary.mismatched) {
+    deps.error(`[B75 rehydrate] CHECKSUM MISMATCH: ${item} — the file on disk is NOT the archived object; do not use it`);
+  }
+  deps.log(
+    `[B75 rehydrate] DONE downloaded=${summary.downloaded} skipped_cold=${summary.skippedCold} ` +
+      `rows_proven=${summary.provenRows} rows_unproven=${summary.unprovenRows} ` +
+      `rows_checksum_mismatch=${summary.mismatchRows} unproven_objects=${summary.unproven.length} ` +
+      `mismatched_objects=${summary.mismatched.length} total_bytes=${summary.totalBytes}`,
+  );
+  if (summary.mismatched.length > 0) deps.exit(2);
+}
+
 /** Rehydrate one chosen label.  The return value, rather than process exit,
  * carries checksum and accounting state back to the thin CLI wrapper. */
 export async function rehydrateChosenObject(
@@ -337,22 +440,11 @@ async function runRehydrateCliBody(): Promise<void> {
   // operator chmods it — this script never silently changes their folder); otherwise it is created 0700.
   // NOT checked (Langston, 2026-11-04): who owns the folder (uid is not compared), and links in a PARENT of
   // --out — mkdirSync creates through a symlinked parent. --out is operator-typed and normally under ~/.
-  const refuseOut = (why: string): never => {
-    console.error(`[B75 rehydrate] --out ${args.out} ${why}; refusing — use a private folder you own`);
+  const outputRefusal = ensurePrivateRehydrateOutput(args.out);
+  if (outputRefusal) {
+    console.error(`[B75 rehydrate] --out ${args.out} ${outputRefusal}; refusing — use a private folder you own`);
     process.exit(1);
-  };
-  let outStat: fs.Stats | null = null;
-  try {
-    outStat = fs.lstatSync(args.out);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-  }
-  if (outStat) {
-    if (outStat.isSymbolicLink()) refuseOut('is a symbolic link');
-    if (!outStat.isDirectory()) refuseOut('is not a directory');
-    if ((outStat.mode & 0o077) !== 0) refuseOut(`is mode ${(outStat.mode & 0o777).toString(8)} (group or others can reach it): run chmod 0700 ${args.out} first`);
-  } else {
-    fs.mkdirSync(args.out, { recursive: true, mode: 0o700 });
+    return;
   }
 
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
@@ -375,14 +467,7 @@ async function runRehydrateCliBody(): Promise<void> {
   // every tier's row so a mixed label is visible, never silently one copy.
   const choices = chooseObjectsByLabel(rows);
   const storage = getStorageClient();
-  let downloaded = 0;
-  let skippedCold = 0;
-  let provenRows = 0;
-  let unprovenRows = 0;
-  let mismatchRows = 0;
-  let totalBytes = 0;
-  const unproven: string[] = [];
-  const mismatched: string[] = [];
+  const results: RehydrateObjectResult[] = [];
 
   console.log(
     `[B75 rehydrate] table=${args.table} window=${args.from.toISOString().slice(0, 10)}..${args.to.toISOString().slice(0, 10)} → ${args.out}`,
@@ -393,40 +478,9 @@ async function runRehydrateCliBody(): Promise<void> {
   );
 
   for (const choice of choices) {
-    const result = await rehydrateChosenObject(args, choice, storage);
-    if (result.kind === 'skipped-cold') {
-      skippedCold++;
-      continue;
-    }
-    if (result.kind === 'skipped') continue;
-
-    downloaded++;
-    totalBytes += result.bytes;
-    if (result.kind === 'mismatch') {
-      mismatchRows += result.rowCount;
-      if (result.description) mismatched.push(result.description);
-    } else if (result.basisProven) {
-      provenRows += result.rowCount;
-    } else {
-      unprovenRows += result.rowCount;
-      if (result.description) unproven.push(result.description);
-    }
+    results.push(await rehydrateChosenObject(args, choice, storage));
   }
-
-  for (const u of unproven) {
-    console.warn(`[B75 rehydrate] WARNING: ${u} is NOT proven complete — rows may be missing inside it (#1195)`);
-  }
-  for (const m of mismatched) {
-    console.error(`[B75 rehydrate] CHECKSUM MISMATCH: ${m} — the file on disk is NOT the archived object; do not use it`);
-  }
-  console.log(
-    `[B75 rehydrate] DONE downloaded=${downloaded} skipped_cold=${skippedCold} ` +
-      `rows_proven=${provenRows} rows_unproven=${unprovenRows} rows_checksum_mismatch=${mismatchRows} ` +
-      `unproven_objects=${unproven.length} mismatched_objects=${mismatched.length} total_bytes=${totalBytes}`,
-  );
-  // A mismatched download is a failed rehydrate: exit non-zero so a wrapping scheduler
-  // cannot read the run as clean.
-  if (mismatched.length > 0) process.exit(2);
+  finishRehydrateRun(summarizeRehydrateResults(results));
 }
 
 export interface RehydrateProcessDependencies {

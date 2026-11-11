@@ -51,10 +51,17 @@ The document-set census below is the state at Step 4. Rows whose work belongs to
 Coltrane returned **SENT BACK** at exact ref `be3948cab048e4599dce4fe1a49ba780cdf83f23`. No point is hidden or downgraded:
 
 1. **Separate-client context TOCTOU — fixed.** Every admitted month now carries a final deletion guard. The source table is write-locked, every proven month is recounted (and every earlier empty skip is rechecked), then cutoff DELETE and active marking run in one transaction on one client. A mismatch rolls back before deletion; VACUUM remains after commit because PostgreSQL forbids it inside a transaction.
-2. **Approved harness population missing — fixed.** The harness now has 36 cases: 2 direct-entry/fresh-import, 12 four-command CLI contracts, 10 retention, 6 context, 3 cold-rotation and 3 rehydrate. The retention population executes whole-partition and plain-archive orchestration through remove plus keyed resolve/alert edges. The fresh-import case arms database/storage/file/alert/exit spies before resetting and importing all four modules.
+2. **Approved harness population missing — fixed in the round-1 correction.** That correction had 36 cases: 2 direct-entry/fresh-import, 12 four-command CLI contracts, 10 retention, 6 context, 3 cold-rotation and 3 rehydrate. The retention population executes whole-partition and plain-archive orchestration through remove plus keyed resolve/alert edges. The fresh-import case arms database/storage/file/alert/exit spies before resetting and importing all four modules.
 3. **Context delete/active client boundary changed — fixed.** The production adapter again uses one connected client for DELETE and active marking; the final proof and lock now share that client as well.
 4. **Direct-entry predicate sound, declared gates missing — fixed by items 1–3.** The predicate remains unchanged and every command wrapper now executes success, environment-refusal and fatal-rejection contracts through fakes.
 5. **Ambiguous rehydrate proof result — fixed.** `RehydrateObjectResult` is now discriminated: only `downloaded` can carry `basisProven`; `mismatch` cannot carry any proof boolean. The CLI can therefore aggregate proven rows only from the downloaded arm.
+
+## Step-4 round 2 — SENT BACK and disposition
+
+Coltrane returned **SENT BACK** at exact ref `48021b5ba1ee5fea187bc6c96c69b970703c03c3`. Both points are preserved and closed in this correction:
+
+1. **Locked guards did not cover a newly inserted, previously unenumerated old month — fixed.** After taking the source write lock, the finalizer now re-derives every UTC month label reachable by the cutoff-wide DELETE and requires that complete set to be covered by the guards before it recounts, deletes or marks active. A fake insertion of an unenumerated older month produces `BEGIN → LOCK → population → ROLLBACK`; delete and active marking remain unreachable.
+2. **Remaining cold/rehydrate gates were unexecuted — fixed.** The harness now has 42 cases. The cold lane executes `data_lifecycle.cold_rotator_dry_run`, both positive-integer CLI flags, oldest-first limit behavior and invalid-value refusal. Rehydrate executes the private-output rule, `--disk-file` byte/newline restoration, numeric aggregation, mismatch-only accounting and exit 2. The old source-text aggregate/exit assertion is removed.
 
 ## Load-bearing diff excerpts
 
@@ -172,7 +179,7 @@ await deps.vacuum();
 return { archivedRows, archivedBytes, deleted, completedLabels };
 ```
 
-The production `finalize` adapter opens one client. Its implementation runs `BEGIN`, locks `context_bridge_log` against source writes, rechecks each guard, calls the existing batched delete, marks the same completed labels active, and commits. Any guard, delete or mark failure rolls the transaction back; VACUUM starts only after that client has committed.
+The production `finalize` adapter opens one client. Its implementation runs `BEGIN`, locks `context_bridge_log` against source writes, re-derives the complete UTC-month set selected by `timestamp < deleteCutoff`, rejects any label absent from the guards, rechecks each guard, calls the existing batched delete, marks the same completed labels active, and commits. Any population, guard, delete or mark failure rolls the transaction back; VACUUM starts only after that client has committed.
 
 ### D. The new test drives the failure edge, not its source text
 
@@ -195,6 +202,18 @@ expect(events).toEqual([
   'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
   'proof', 'ROLLBACK',
 ]);
+
+await expect(finalizeContextDeletion(
+  client, contextCfg, month.end, [month.label], [guard], {
+    listDeletePopulationLabels: vi.fn(async () => ['2025-12', month.label]),
+    proofCountStillMatches: vi.fn(),
+    rowsPresent: vi.fn(),
+    deleteRows,
+    markActive,
+  },
+)).rejects.toThrow('unguarded month(s): 2025-12');
+expect(deleteRows).not.toHaveBeenCalled();
+expect(markActive).not.toHaveBeenCalled();
 ```
 
 ## Judgement calls for review
@@ -203,12 +222,12 @@ expect(events).toEqual([
 
 `REVIEWER: claim-only · name the objects that settle whether a proven reused context month can reach delete/active/VACUUM only while its exact-range recount still matches, and name other states consistent with them · HIT — count equality permits identity replacement, and separate clients permit post-recount source mutation before delete; earlier-month side effects and post-delete mark/VACUUM failures are also non-atomic states · re-derived yes (pre-audit A3/P3 plus the first exact implementation ref 8fd2f526fec7d6f1c43625d28ff269f1dd78d120; count identity remains the approved boundary, separate-client TOCTOU is fixed in this corrected ref)`
 
-1. Attack whether `SHARE ROW EXCLUSIVE` plus a same-client transaction actually closes every count-changing write window while preserving the deliberate count-equal identity boundary, and whether the `must-be-empty` guard correctly closes the corresponding active/migrated skip race.
-2. Attack whether the correction preserves the predecessor's single-client DELETE→active boundary and leaves VACUUM at the only legal post-commit point.
+1. Attack whether the locked UTC-month population query covers every row reachable by the cutoff-wide DELETE, including an empty first enumeration followed by a backdated insert, while preserving the deliberate count-equal identity boundary.
+2. Attack whether `SHARE ROW EXCLUSIVE`, the complete-population check and the per-guard recount/empty checks share the same client and transaction as DELETE→active, with VACUUM only post-commit.
 3. Attack whether the fresh-import probe is genuinely fresh and arms all database/storage/file/alert/exit fakes before module evaluation.
 4. Attack whether the partition/plain success and failure cases execute the real orchestration and keyed resolve/alert edges, rather than only helpers.
-5. Attack whether every CLI process wrapper preserves its direct command contract, especially retention's fatal alert and rehydrate's mismatch exit 2.
-6. Attack whether the discriminated rehydrate result makes it impossible for a mismatch to be consumed as proven.
+5. Attack whether the cold dry-run and both CLI flag tests execute the production-default helpers and preserve zero-mutation/oldest-first/positive-integer behavior.
+6. Attack whether rehydrate's private-output, `--disk-file`, aggregate and exit-2 tests execute the production helpers, and whether the discriminated result prevents a mismatch from becoming proven.
 
 ## 1. Direct-run compatibility ledger
 
@@ -228,29 +247,29 @@ The implementation census found **0 production import statements** for the four 
 ## 2. Executable seams and production adapters
 
 - Retention exports the existing object lane, whole/sliced partition coordinator, keyed partition settlement, plain-table coordinator, transactional DROP/active gate, plain-table removal coordinator, proof-set evaluator and lock wrapper. Production calls still use the same PostgreSQL, storage, evidence, exporter, alert and filesystem implementations; tests substitute only explicit dependencies.
-- Context exports the month lane, outer cycle and final destructive boundary. A `reuse` first invokes the existing exact-range source recount; every success also carries a final guard. The finalizer begins a transaction on one client, excludes source writes, rechecks every proven or earlier-empty month, then executes cutoff-wide DELETE and active marking before commit. VACUUM is post-commit.
+- Context exports the month lane, outer cycle and final destructive boundary. A `reuse` first invokes the existing exact-range source recount; every success also carries a final guard. The finalizer begins a transaction on one client, excludes source writes, re-derives the complete UTC-month population reachable by the cutoff DELETE, refuses any unguarded label, rechecks every proven or earlier-empty guarded month, then executes cutoff-wide DELETE and active marking before commit. VACUUM is post-commit.
 - Cold rotation exports candidate selection, one-candidate rotation and the continue-on-failure runner. Warm deletion occurs only after warm checksum, cold upload/readback, cold manifest write carrying `completeness_basis`, and warm `migrated` update.
 - Rehydrate exports a discriminated per-label lane. It returns `downloaded`, `skipped-cold`, `mismatch`, or an explicit non-download `skipped` result; only `downloaded` can carry `basisProven`. The CLI aggregates totals and maps any mismatch to exit 2. A mismatch remains outside the good-name glob, removes the stale good sidecar, and contributes to neither proven nor unproven totals.
 
 ## 3. Behavioural harness
 
-`server/tests/unit/b-b75-script-test-harness.test.ts` executes the real exported gates with fake clients/storage and private temporary folders. Its **36** cases cover:
+`server/tests/unit/b-b75-script-test-harness.test.ts` executes the real exported gates with fake clients/storage and private temporary folders. Its **42** cases cover:
 
 - 2 direct-entry/import cases: match/mismatch/absent argv, plus a fresh module-cache reset where database, storage, file, alert and exit spies are armed before all four imports;
 - 12 CLI cases: success, missing-setting refusal and fatal rejection for each of the four commands, including retention's fatal-key alert;
 - 10 retention cases: reuse recount mismatch, evidence→basis→verified transaction order, DROP/active rollback, full proven-label set, bounded plain deletion, lock release, whole-partition archive→drop→active→resolve, partition failure→alert, plain archive→proof gate→delete→active→VACUUM→resolve, and plain failure→alert with no delete;
-- 6 context cases: reuse recount, 413 proof at the actual cold tier, outer month fence, completed-month finalizer handoff, same-client locked recount→delete→active with rollback on count change, and locked recheck of an earlier empty skip;
-- 3 cold-rotation cases: candidate exclusion/window selection, warm/cold checksums plus inherited manifest basis with both manifest writes before warm deletion, and continue-after-failure;
-- 3 rehydrate cases: good-file sidecar, mismatch quarantine/stale-sidecar removal with no proof field, and cold refusal without `--restore-cold`.
+- 7 context cases: reuse recount, 413 proof at the actual cold tier, outer month fence, completed-month finalizer handoff, same-client locked population/recount→delete→active with rollback on count change, locked recheck of an earlier empty skip, and refusal of an unenumerated old month in the locked delete population;
+- 5 cold-rotation cases: configured dry-run zero-mutation result, positive-integer flag meaning/refusal plus oldest-first limiting, candidate exclusion/window selection, warm/cold checksums plus inherited manifest basis with both manifest writes before warm deletion, and continue-after-failure;
+- 6 rehydrate cases: good-file sidecar, private-output enforcement, `--disk-file` byte/newline restore, mismatch quarantine/stale-sidecar removal with no proof field, cold refusal without `--restore-cold`, and numeric aggregate/mismatch exit 2.
 
 The predecessor suite remains as a compatibility alarm for exact SQL/log/key/CLI shapes; it is no longer the safety proof for the executed gates.
 
 ## 4. Local verification at the corrected Step-4 worktree
 
-- The dedicated executable harness passed **36 of 36 cases in 1 test file**.
-- The affected compatibility population passed **220 of 220 cases across 11 test files**: the B75 count/completeness/harness set plus the eight directly adjacent retention, heartbeat, trade-tier and xStock archive-observation files selected in the review command.
+- The dedicated executable harness passed **42 of 42 cases in 1 test file**.
+- The affected compatibility population passed **226 of 226 cases across 11 test files**: the B75 count/completeness/harness set plus the eight directly adjacent retention, heartbeat, trade-tier and xStock archive-observation files selected in the review command.
 - `check-tsc-baseline.mjs` measured **324 current TypeScript errors against the repository baseline population of 324**, with no new or changed error identity.
-- `git diff --check` returned clean over the **9 tracked correction/boundary files**. The user-owned untracked `.claude/launch.json` is outside the batch and is not staged.
+- `git diff --check` returned clean over the **8 tracked round-2 correction/boundary files**. The user-owned untracked `.claude/launch.json` is outside the batch and is not staged.
 
 These are pre-commit local controls. The corrected exact ref still requires all four GitHub CI jobs before redispatch; the review request will name that run and each job result.
 

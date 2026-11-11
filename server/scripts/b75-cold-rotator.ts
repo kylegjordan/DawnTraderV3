@@ -249,6 +249,26 @@ export async function runColdRotationCandidates(
   return { rotated, failed, bytesMoved };
 }
 
+export interface ColdRotationPlanDependencies {
+  runCandidates: typeof runColdRotationCandidates;
+  rotationDependencies: ColdRotationDependencies;
+}
+
+/** Execute the terminal dry-run/real-rotation decision without duplicating the
+ * candidate lane. A dry run returns the same zero-success totals and cannot
+ * reach storage or manifest mutation through `runCandidates`. */
+export async function runColdRotationPlan(
+  candidates: ColdRotationCandidate[],
+  cfg: ColdRotatorConfig,
+  coldConfigured: boolean,
+  deps: ColdRotationPlanDependencies,
+): Promise<{ dryRun: boolean; rotated: number; failed: number; bytesMoved: number }> {
+  const dryRun = cfg.coldRotatorDryRun || !coldConfigured;
+  if (dryRun) return { dryRun: true, rotated: 0, failed: 0, bytesMoved: 0 };
+  const result = await deps.runCandidates(candidates, cfg, deps.rotationDependencies);
+  return { dryRun: false, ...result };
+}
+
 export interface ColdRotatorCliDependencies {
   env: NodeJS.ProcessEnv;
   exit: (code: number) => void;
@@ -289,18 +309,7 @@ async function runColdRotatorCliBody(): Promise<void> {
 
   // B-STORAGE-HARDEN OBJ-1: optional CLI overrides (bounded/controlled rotation).
   const argv = process.argv.slice(2);
-  const limitOverride = parseIntFlag(argv, '--limit');
-  const warmRetentionOverride = parseIntFlag(argv, '--warm-retention-days');
-  if (warmRetentionOverride !== null) {
-    console.log(
-      `[B75 rotator] warm-retention override (CLI): ${cfg.warmRetentionDays} → ${warmRetentionOverride} days ` +
-        `(single global window; per-table overrides ignored for this run)`,
-    );
-    cfg.warmRetentionDays = warmRetentionOverride;
-    // The CLI override is a deliberate single-window run (bounded proof / manual
-    // batch) — clear per-table overrides so every table uses exactly this value.
-    cfg.perTableWarmRetentionDays.clear();
-  }
+  const { limitOverride } = applyColdRotatorCliOverrides(cfg, argv);
 
   const storage = getStorageClient();
   const coldConfigured = storage.isColdConfigured();
@@ -327,7 +336,7 @@ async function runColdRotatorCliBody(): Promise<void> {
     console.log(
       `[B75 rotator] limiting ${candidates.length} candidates → ${limitOverride} (CLI --limit; oldest-first)`,
     );
-    candidates = candidates.slice(0, limitOverride);
+    candidates = applyColdRotationLimit(candidates, limitOverride);
   }
 
   if (candidates.length === 0) {
@@ -351,7 +360,15 @@ async function runColdRotatorCliBody(): Promise<void> {
     );
   }
 
-  if (dryRun) {
+  const plan = await runColdRotationPlan(candidates, cfg, coldConfigured, {
+    runCandidates: runColdRotationCandidates,
+    rotationDependencies: {
+      storage,
+      createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+    },
+  });
+
+  if (plan.dryRun) {
     console.log(
       '[B75 rotator] DRY RUN — no rotations performed. ' +
         'Set data_lifecycle.cold_rotator_dry_run=false AND configure B2 credentials to enable.',
@@ -378,10 +395,7 @@ async function runColdRotatorCliBody(): Promise<void> {
   // no half-state). The crashed warm row stays state='active' (not deleted)
   // for safe retry.
 
-  const { rotated, failed, bytesMoved } = await runColdRotationCandidates(candidates, cfg, {
-    storage,
-    createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
-  });
+  const { rotated, failed, bytesMoved } = plan;
 
   console.log(
     `[B75 rotator] DONE candidates=${candidates.length} rotated=${rotated} failed=${failed} ` +
@@ -398,16 +412,56 @@ function parseSupabaseUri(uri: string): { bucket: string; path: string } {
 
 /** Parse an optional `--flag N` integer CLI arg. Returns null if absent; exits on
  *  a present-but-invalid value (positive integers only). */
-function parseIntFlag(argv: string[], name: string): number | null {
+export interface ColdRotatorFlagDependencies {
+  error: (message: string) => void;
+  exit: (code: number) => void;
+}
+
+export function parseIntFlag(
+  argv: string[],
+  name: string,
+  deps: ColdRotatorFlagDependencies = {
+    error: (message) => console.error(message),
+    exit: (code) => process.exit(code),
+  },
+): number | null {
   const i = argv.indexOf(name);
   if (i < 0) return null;
   const raw = argv[i + 1];
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
-    console.error(`[B75 rotator] ${name} requires a positive integer, got: ${raw ?? '(missing)'}`);
-    process.exit(1);
+    deps.error(`[B75 rotator] ${name} requires a positive integer, got: ${raw ?? '(missing)'}`);
+    deps.exit(1);
+    return null;
   }
   return n;
+}
+
+export function applyColdRotatorCliOverrides(
+  cfg: ColdRotatorConfig,
+  argv: string[],
+  deps?: ColdRotatorFlagDependencies,
+): { limitOverride: number | null; warmRetentionOverride: number | null } {
+  const limitOverride = parseIntFlag(argv, '--limit', deps);
+  const warmRetentionOverride = parseIntFlag(argv, '--warm-retention-days', deps);
+  if (warmRetentionOverride !== null) {
+    console.log(
+      `[B75 rotator] warm-retention override (CLI): ${cfg.warmRetentionDays} → ${warmRetentionOverride} days ` +
+        `(single global window; per-table overrides ignored for this run)`,
+    );
+    cfg.warmRetentionDays = warmRetentionOverride;
+    // The CLI override is a deliberate single-window run (bounded proof / manual
+    // batch) — clear per-table overrides so every table uses exactly this value.
+    cfg.perTableWarmRetentionDays.clear();
+  }
+  return { limitOverride, warmRetentionOverride };
+}
+
+export function applyColdRotationLimit(
+  candidates: ColdRotationCandidate[],
+  limitOverride: number | null,
+): ColdRotationCandidate[] {
+  return limitOverride === null ? candidates : candidates.slice(0, limitOverride);
 }
 
 export interface ColdRotatorProcessDependencies {

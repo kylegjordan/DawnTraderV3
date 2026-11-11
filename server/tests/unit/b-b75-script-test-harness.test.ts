@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { pathToFileURL } from 'node:url';
 import { isDirectEntry } from '../../scripts/direct-entry.js';
 import {
@@ -35,22 +36,30 @@ import {
   type ContextMonthRange,
 } from '../../scripts/context-bridge-log-ttl.js';
 import {
+  applyColdRotationLimit,
+  applyColdRotatorCliOverrides,
   listColdRotationCandidates,
+  parseIntFlag,
   rotateColdCandidate,
   runColdRotatorCli,
   runColdRotatorProcess,
   runColdRotationCandidates,
+  runColdRotationPlan,
   type ColdRotationCandidate,
   type ColdRotatorConfig,
 } from '../../scripts/b75-cold-rotator.js';
 import {
+  ensurePrivateRehydrateOutput,
+  finishRehydrateRun,
   rehydrateChosenObject,
   runRehydrateCli,
   runRehydrateProcess,
+  summarizeRehydrateResults,
   type RehydrateArgs,
   type RehydrateManifestRow,
 } from '../../scripts/b75-rehydrate.js';
 import { NonProvenExistingCopyError } from '../../services/data-archive/archive-completeness.js';
+import { DISK_FILE_FORMAT } from '../../services/data-archive/disk-file-tiering.js';
 
 const privateDirs: string[] = [];
 afterEach(() => {
@@ -620,6 +629,7 @@ describe('context lane deletion fence', () => {
     });
     const guard: ContextDeletionGuard = { kind: 'proven-count', manifestId: 'ctx-1', month };
     const deps: ContextFinalizeDependencies = {
+      listDeletePopulationLabels: vi.fn().mockResolvedValue([month.label]),
       proofCountStillMatches: proof,
       rowsPresent: vi.fn(),
       deleteRows,
@@ -672,6 +682,7 @@ describe('context lane deletion fence', () => {
       [month.label],
       [guard],
       {
+        listDeletePopulationLabels: vi.fn().mockResolvedValue([month.label]),
         proofCountStillMatches: vi.fn(),
         rowsPresent,
         deleteRows,
@@ -682,6 +693,39 @@ describe('context lane deletion fence', () => {
       'BEGIN',
       'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
       'rows-present',
+      'ROLLBACK',
+    ]);
+    expect(deleteRows).not.toHaveBeenCalled();
+    expect(markActive).not.toHaveBeenCalled();
+  });
+
+  it('rolls back before delete when the locked cutoff population gains an unguarded old month', async () => {
+    const events: string[] = [];
+    const client = { query: vi.fn(async (sql: string) => { events.push(sql); return { rows: [] }; }) };
+    const deleteRows = vi.fn();
+    const markActive = vi.fn();
+    const guard: ContextDeletionGuard = { kind: 'proven-count', manifestId: 'ctx-1', month };
+    await expect(finalizeContextDeletion(
+      client as never,
+      contextCfg,
+      month.end,
+      [month.label],
+      [guard],
+      {
+        listDeletePopulationLabels: vi.fn(async () => {
+          events.push('population');
+          return ['2025-12', month.label];
+        }),
+        proofCountStillMatches: vi.fn(),
+        rowsPresent: vi.fn(),
+        deleteRows,
+        markActive,
+      },
+    )).rejects.toThrow('unguarded month(s): 2025-12');
+    expect(events).toEqual([
+      'BEGIN',
+      'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
+      'population',
       'ROLLBACK',
     ]);
     expect(deleteRows).not.toHaveBeenCalled();
@@ -701,6 +745,40 @@ describe('cold rotation state machine', () => {
     storage_uri: 'supabase://warm/archive/fast_table/2025-01.jsonl.gz',
     row_count: 2, bytes_compressed: 8, checksum: 'ck', created_at: new Date('2025-01-01T00:00:00Z'),
   };
+
+  it('honors data_lifecycle.cold_rotator_dry_run with terminal zero-success and no rotation I/O', async () => {
+    const runCandidates = vi.fn();
+    const dryRunCfg = { ...cfg, coldRotatorDryRun: true };
+    await expect(runColdRotationPlan([candidate], dryRunCfg, true, {
+      runCandidates,
+      rotationDependencies: { storage: {} as never, createClient: vi.fn() },
+    })).resolves.toEqual({ dryRun: true, rotated: 0, failed: 0, bytesMoved: 0 });
+    expect(runCandidates).not.toHaveBeenCalled();
+  });
+
+  it('preserves limit and warm-retention flag meaning and refuses invalid positive integers', () => {
+    const localCfg: ColdRotatorConfig = {
+      ...cfg,
+      warmRetentionDays: 365,
+      perTableWarmRetentionDays: new Map([['fast_table', 30]]),
+    };
+    expect(applyColdRotatorCliOverrides(localCfg, [
+      '--limit', '2', '--warm-retention-days', '45',
+    ])).toEqual({ limitOverride: 2, warmRetentionOverride: 45 });
+    expect(localCfg.warmRetentionDays).toBe(45);
+    expect(localCfg.perTableWarmRetentionDays.size).toBe(0);
+    expect(applyColdRotationLimit([
+      candidate,
+      { ...candidate, id: 'second' },
+      { ...candidate, id: 'third' },
+    ], 2).map((item) => item.id)).toEqual(['warm-1', 'second']);
+
+    const exit = vi.fn();
+    const error = vi.fn();
+    expect(parseIntFlag(['--limit', '0'], '--limit', { exit, error })).toBeNull();
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('requires a positive integer'));
+  });
 
   it('filters by the table window and keeps the NOT-EXISTS cold-row query gate', async () => {
     let sql = '';
@@ -791,6 +869,55 @@ describe('rehydrate file safety and accounting', () => {
     expect(JSON.parse(fs.readFileSync(`${good}.completeness.json`, 'utf8'))).toMatchObject({ proven: true, checksum_ok: true });
   });
 
+  it('enforces the private output rule before any restore work', () => {
+    const privateStat = {
+      mode: 0o40700,
+      isSymbolicLink: () => false,
+      isDirectory: () => true,
+    } as fs.Stats;
+    const publicStat = { ...privateStat, mode: 0o40755 } as fs.Stats;
+    expect(ensurePrivateRehydrateOutput('/private', {
+      lstat: vi.fn().mockReturnValue(privateStat),
+      mkdir: vi.fn(),
+    })).toBeNull();
+    expect(ensurePrivateRehydrateOutput('/public', {
+      lstat: vi.fn().mockReturnValue(publicStat),
+      mkdir: vi.fn(),
+    })).toContain('group or others can reach it');
+  });
+
+  it('executes --disk-file restore under the original name only after byte and newline checks pass', async () => {
+    const out = makeDir();
+    const original = Buffer.from('a\nb\n');
+    const compressed = zlib.gzipSync(original);
+    const manifest = row({
+      partition_label: 'original.ndjson',
+      format: DISK_FILE_FORMAT,
+      row_count: 2,
+      original_partition_size_bytes: original.length,
+    });
+    const storage = {
+      downloadWarmFile: vi.fn(async (_bucket: string, _object: string, local: string) => {
+        fs.writeFileSync(local, compressed);
+        return { checksum: 'ck', bytes: compressed.length };
+      }),
+      isColdConfigured: vi.fn(),
+      downloadCold: vi.fn(),
+    };
+    const result = await rehydrateChosenObject({
+      ...args(out),
+      table: 'disk_file.exports',
+      diskFile: true,
+    }, {
+      label: manifest.partition_label,
+      download: manifest,
+      all: [manifest],
+    }, storage as never);
+    expect(result).toMatchObject({ kind: 'downloaded', rowCount: 2, basisProven: true });
+    expect(fs.readFileSync(path.join(out, manifest.partition_label))).toEqual(original);
+    expect(fs.existsSync(path.join(out, `${manifest.partition_label}.gz`))).toBe(false);
+  });
+
   it('renames a mismatch out of the good glob, removes stale good sidecar, and never reports it proven', async () => {
     const out = makeDir();
     const manifest = row();
@@ -823,5 +950,30 @@ describe('rehydrate file safety and accounting', () => {
       label: manifest.partition_label, download: manifest, all: [manifest],
     }, storage as never)).resolves.toMatchObject({ kind: 'skipped-cold' });
     expect(storage.downloadCold).not.toHaveBeenCalled();
+  });
+
+  it('aggregates each result into one numeric bucket and maps any mismatch to exit 2', () => {
+    const summary = summarizeRehydrateResults([
+      { kind: 'downloaded', bytes: 10, rowCount: 9, basisProven: true },
+      { kind: 'downloaded', bytes: 11, rowCount: 8, basisProven: false, description: 'unproven' },
+      { kind: 'mismatch', bytes: 12, rowCount: 7, description: 'corrupt' },
+      { kind: 'skipped-cold', bytes: 0, rowCount: 0 },
+      { kind: 'skipped', bytes: 0, rowCount: 0 },
+    ]);
+    expect(summary).toEqual({
+      downloaded: 3,
+      skippedCold: 1,
+      provenRows: 9,
+      unprovenRows: 8,
+      mismatchRows: 7,
+      totalBytes: 33,
+      unproven: ['unproven'],
+      mismatched: ['corrupt'],
+    });
+    const exit = vi.fn();
+    const log = vi.fn();
+    finishRehydrateRun(summary, { warn: vi.fn(), error: vi.fn(), log, exit });
+    expect(exit).toHaveBeenCalledWith(2);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('rows_checksum_mismatch=7'));
   });
 });

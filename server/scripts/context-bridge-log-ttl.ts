@@ -164,6 +164,19 @@ async function monthRowsPresent(client: pg.Client, month: ContextMonthRange): Pr
   return r.rows.length > 0;
 }
 
+/** Re-derive the complete UTC-month population reachable by the cutoff-wide
+ * DELETE. Called only after the source write lock is held. */
+async function listDeletePopulationLabels(client: pg.Client, cutoff: Date): Promise<string[]> {
+  const r = await client.query(
+    `SELECT DISTINCT to_char("${TS_COLUMN}" AT TIME ZONE 'UTC', 'YYYY-MM') AS label
+       FROM ${SOURCE_TABLE}
+      WHERE "${TS_COLUMN}" < $1
+      ORDER BY label`,
+    [cutoff],
+  );
+  return r.rows.map((row) => String(row.label));
+}
+
 export interface ContextMonthDependencies {
   exportPartition: typeof exportPartition;
   getStorageClient: () => StorageClient;
@@ -437,6 +450,7 @@ async function vacuumTable(client: pg.Client): Promise<void> {
 }
 
 export interface ContextFinalizeDependencies {
+  listDeletePopulationLabels: typeof listDeletePopulationLabels;
   proofCountStillMatches: typeof proofCountStillMatches;
   rowsPresent: typeof monthRowsPresent;
   deleteRows: typeof deleteOldRows;
@@ -444,6 +458,7 @@ export interface ContextFinalizeDependencies {
 }
 
 const DEFAULT_CONTEXT_FINALIZE_DEPS: ContextFinalizeDependencies = {
+  listDeletePopulationLabels,
   proofCountStillMatches,
   rowsPresent: monthRowsPresent,
   deleteRows: deleteOldRows,
@@ -477,6 +492,14 @@ export async function finalizeContextDeletion(
     // table. Once acquired, the final recount/empty check and DELETE share one
     // write-free interval on this client.
     await client.query(`LOCK TABLE ${SOURCE_TABLE} IN SHARE ROW EXCLUSIVE MODE`);
+    const deletePopulationLabels = await deps.listDeletePopulationLabels(client, cutoff);
+    const guardedLabelSet = new Set(guardedLabels);
+    const unguardedLabels = deletePopulationLabels.filter((label) => !guardedLabelSet.has(label));
+    if (unguardedLabels.length > 0) {
+      throw new Error(
+        `[B75 ctx-bridge] cutoff delete includes unguarded month(s): ${unguardedLabels.join(', ')}`,
+      );
+    }
     for (const guard of guards) {
       if (guard.kind === 'proven-count') {
         const same = await deps.proofCountStillMatches(client, guard.manifestId, {

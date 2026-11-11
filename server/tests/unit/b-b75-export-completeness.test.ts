@@ -420,17 +420,11 @@ describe('the other lanes and readers', () => {
     expect(q).toMatch(/bytes_compressed: Number\(row\.bytes_compressed\)/);
     expect(q).not.toMatch(/return r\.rows;/);
   });
-  it('rehydrate: a checksum mismatch rides the sidecar and the aggregate, and fails the run (gate C, C-1)', () => {
+  it('rehydrate: mismatch output keeps the static corrupt-name and sidecar contract (gate C, C-1)', () => {
     expect(REHYDRATE).toContain('checksum_ok: checksumOk,');
-    // the mismatch branch comes FIRST, so a corrupt proven object never reaches rows_proven
-    const bucket = REHYDRATE.indexOf("if (result.kind === 'mismatch')");
-    const provenAdd = REHYDRATE.indexOf('provenRows += result.rowCount');
-    expect(bucket).toBeGreaterThan(0);
-    expect(provenAdd).toBeGreaterThan(bucket);
-    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= result\.rowCount;[\s\S]*\} else if \(result\.basisProven\) \{/);
     expect(REHYDRATE).toContain('rows_checksum_mismatch=');
-    expect(REHYDRATE).toContain('if (mismatched.length > 0) process.exit(2);');
-    // the rider: a mismatched file is renamed out of the <table>_*.jsonl.gz glob
+    // Executable aggregate/exit-2 proof now lives in b-b75-script-test-harness.
+    // This source contract retains only the stable output names.
     expect(REHYDRATE).toMatch(/if \(!checksumOk\) \{\s*outPath = `\$\{localPath\}\.CORRUPT`;\s*fs\.renameSync\(localPath, outPath\);/);
     expect(REHYDRATE).toContain('`${outPath}.completeness.json`');
     // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 1): the stale good-named sidecar removed on a mismatch is
