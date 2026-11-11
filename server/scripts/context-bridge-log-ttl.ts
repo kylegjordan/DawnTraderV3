@@ -89,6 +89,20 @@ export interface ContextMonthRange {
   end: Date;
 }
 
+export type ContextDeletionGuard =
+  | { kind: 'proven-count'; manifestId: string; month: ContextMonthRange }
+  | {
+      kind: 'must-be-empty';
+      month: ContextMonthRange;
+      reason: 'active-rows-present' | 'migrated-rows-present';
+    };
+
+export interface ContextMonthResult {
+  rowCount: number;
+  bytesCompressed: number;
+  deletionGuard: ContextDeletionGuard;
+}
+
 /**
  * Enumerate the YYYY-MM month buckets covered by [oldestRow, cutoff). Skips
  * the partial cutoff month — only WHOLE months get exported as a single file.
@@ -178,7 +192,7 @@ export async function exportAndUploadContextMonth(
   cfg: ContextBridgeConfig,
   month: ContextMonthRange,
   deps: ContextMonthDependencies = DEFAULT_CONTEXT_MONTH_DEPS,
-): Promise<{ rowCount: number; bytesCompressed: number }> {
+): Promise<ContextMonthResult> {
   // B-B75-EXPORT-COMPLETENESS (#1195): the same one decision as the B75 sweep. A month
   // already archived and deleted (`active`) with NO rows skips, as before; WITH rows it
   // refuses — those rows are not in the archived copy, and the delete below would remove
@@ -193,7 +207,15 @@ export async function exportAndUploadContextMonth(
   }
   if (decision.kind === 'skip') {
     console.log(`[B75 ctx-bridge] ${month.label}: ${decision.reason} (skipped)`);
-    return { rowCount: 0, bytesCompressed: 0 };
+    return {
+      rowCount: 0,
+      bytesCompressed: 0,
+      deletionGuard: {
+        kind: 'must-be-empty',
+        month,
+        reason: decision.reason === 'already-active' ? 'active-rows-present' : 'migrated-rows-present',
+      },
+    };
   }
   if (decision.kind === 'reuse') {
     const same = await deps.proofCountStillMatches(ctlClient, existing!.id, {
@@ -206,7 +228,11 @@ export async function exportAndUploadContextMonth(
       throw new NonProvenExistingCopyError('reuse-count-changed', SOURCE_TABLE, month.label);
     }
     console.log(`[B75 ctx-bridge] ${month.label}: proven copy reused after source recount (skipped)`);
-    return { rowCount: 0, bytesCompressed: 0 };
+    return {
+      rowCount: 0,
+      bytesCompressed: 0,
+      deletionGuard: { kind: 'proven-count', manifestId: existing!.id, month },
+    };
   }
 
   const exportRes = await deps.exportPartition(exportClient, {
@@ -354,7 +380,11 @@ export async function exportAndUploadContextMonth(
     `[B75 ctx-bridge] ${month.label}: exported rows=${exportRes.rowCount} bytes=${exportRes.bytesCompressed}`,
   );
 
-  return { rowCount: exportRes.rowCount, bytesCompressed: exportRes.bytesCompressed };
+  return {
+    rowCount: exportRes.rowCount,
+    bytesCompressed: exportRes.bytesCompressed,
+    deletionGuard: { kind: 'proven-count', manifestId, month },
+  };
 }
 
 async function deleteOldRows(
@@ -406,10 +436,84 @@ async function vacuumTable(client: pg.Client): Promise<void> {
   await client.query(`VACUUM ${SOURCE_TABLE}`);
 }
 
+export interface ContextFinalizeDependencies {
+  proofCountStillMatches: typeof proofCountStillMatches;
+  rowsPresent: typeof monthRowsPresent;
+  deleteRows: typeof deleteOldRows;
+  markActive: typeof markMonthsActive;
+}
+
+const DEFAULT_CONTEXT_FINALIZE_DEPS: ContextFinalizeDependencies = {
+  proofCountStillMatches,
+  rowsPresent: monthRowsPresent,
+  deleteRows: deleteOldRows,
+  markActive: markMonthsActive,
+};
+
+/**
+ * Re-check every admitted month while source writes are excluded, then delete
+ * and mark the same labels through the same client. This closes the interval
+ * between the earlier archive/reuse decision and the destructive boundary.
+ */
+export async function finalizeContextDeletion(
+  client: pg.Client,
+  cfg: ContextBridgeConfig,
+  cutoff: Date,
+  monthLabels: string[],
+  guards: ContextDeletionGuard[],
+  deps: ContextFinalizeDependencies = DEFAULT_CONTEXT_FINALIZE_DEPS,
+): Promise<{ deleted: number }> {
+  const guardedLabels = guards.map((guard) => guard.month.label);
+  if (
+    guardedLabels.length !== monthLabels.length ||
+    guardedLabels.some((label, index) => label !== monthLabels[index])
+  ) {
+    throw new Error('[B75 ctx-bridge] deletion labels do not match their final proof guards');
+  }
+
+  await client.query('BEGIN');
+  try {
+    // SHARE ROW EXCLUSIVE conflicts with INSERT/UPDATE/DELETE on the source
+    // table. Once acquired, the final recount/empty check and DELETE share one
+    // write-free interval on this client.
+    await client.query(`LOCK TABLE ${SOURCE_TABLE} IN SHARE ROW EXCLUSIVE MODE`);
+    for (const guard of guards) {
+      if (guard.kind === 'proven-count') {
+        const same = await deps.proofCountStillMatches(client, guard.manifestId, {
+          target: `"${SOURCE_TABLE}"`,
+          tsCol: `"${TS_COLUMN}"`,
+          rangeStart: guard.month.start,
+          rangeEnd: guard.month.end,
+        });
+        if (!same) {
+          throw new NonProvenExistingCopyError(
+            'reuse-count-changed',
+            SOURCE_TABLE,
+            guard.month.label,
+          );
+        }
+      } else if (await deps.rowsPresent(client, guard.month)) {
+        throw new NonProvenExistingCopyError(guard.reason, SOURCE_TABLE, guard.month.label);
+      }
+    }
+
+    const result = await deps.deleteRows(client, cfg, cutoff);
+    await deps.markActive(client, monthLabels);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  }
+}
+
 export interface ContextBridgeCycleDependencies {
-  archiveMonth: (month: ContextMonthRange) => Promise<{ rowCount: number; bytesCompressed: number }>;
-  deleteRows: (cutoff: Date) => Promise<{ deleted: number }>;
-  markActive: (labels: string[]) => Promise<void>;
+  archiveMonth: (month: ContextMonthRange) => Promise<ContextMonthResult>;
+  finalize: (
+    cutoff: Date,
+    labels: string[],
+    guards: ContextDeletionGuard[],
+  ) => Promise<{ deleted: number }>;
   vacuum: () => Promise<void>;
 }
 
@@ -426,29 +530,47 @@ export async function runContextBridgeCycle(
   let archivedRows = 0;
   let archivedBytes = 0;
   const completedLabels: string[] = [];
+  const deletionGuards: ContextDeletionGuard[] = [];
   for (const month of months) {
     const result = await deps.archiveMonth(month);
     archivedRows += result.rowCount;
     archivedBytes += result.bytesCompressed;
     completedLabels.push(month.label);
+    deletionGuards.push(result.deletionGuard);
   }
 
-  const { deleted } = await deps.deleteRows(deleteCutoff);
-  await deps.markActive(completedLabels);
+  const { deleted } = await deps.finalize(deleteCutoff, completedLabels, deletionGuards);
   await deps.vacuum();
   return { archivedRows, archivedBytes, deleted, completedLabels };
 }
 
-export async function runContextBridgeLogTtlCli(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    console.error('[B75 ctx-bridge] DATABASE_URL not set');
-    process.exit(1);
-  }
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[B75 ctx-bridge] SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+export interface ContextBridgeCliDependencies {
+  env: NodeJS.ProcessEnv;
+  exit: (code: number) => void;
+  run: () => Promise<void>;
+}
 
+export async function runContextBridgeLogTtlCli(
+  deps: ContextBridgeCliDependencies = {
+    env: process.env,
+    exit: (code) => process.exit(code),
+    run: runContextBridgeLogTtlCliBody,
+  },
+): Promise<void> {
+  if (!deps.env.DATABASE_URL) {
+    console.error('[B75 ctx-bridge] DATABASE_URL not set');
+    deps.exit(1);
+    return;
+  }
+  if (!deps.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[B75 ctx-bridge] SUPABASE_SERVICE_ROLE_KEY not set');
+    deps.exit(1);
+    return;
+  }
+  await deps.run();
+}
+
+async function runContextBridgeLogTtlCliBody(): Promise<void> {
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
@@ -501,22 +623,13 @@ export async function runContextBridgeLogTtlCli(): Promise<void> {
         await ctlClient.end().catch(() => {});
       }
     },
-    deleteRows: async (cutoff) => {
+    finalize: async (cutoff, labels, guards) => {
       const client = new Client({ connectionString: process.env.DATABASE_URL });
       await client.connect();
       try {
-        const deleted = await deleteOldRows(client, cfg, cutoff);
+        const deleted = await finalizeContextDeletion(client, cfg, cutoff, labels, guards);
         console.log(`[B75 ctx-bridge] deleted=${deleted.deleted} rows`);
         return deleted;
-      } finally {
-        await client.end();
-      }
-    },
-    markActive: async (labels) => {
-      const client = new Client({ connectionString: process.env.DATABASE_URL });
-      await client.connect();
-      try {
-        await markMonthsActive(client, labels);
       } finally {
         await client.end();
       }
@@ -541,9 +654,25 @@ export async function runContextBridgeLogTtlCli(): Promise<void> {
   );
 }
 
-if (isDirectEntry(import.meta.url)) {
-  runContextBridgeLogTtlCli().catch((err) => {
+export interface ContextBridgeProcessDependencies {
+  runCli: () => Promise<void>;
+  exit: (code: number) => void;
+}
+
+export async function runContextBridgeLogTtlProcess(
+  deps: ContextBridgeProcessDependencies = {
+    runCli: () => runContextBridgeLogTtlCli(),
+    exit: (code) => process.exit(code),
+  },
+): Promise<void> {
+  try {
+    await deps.runCli();
+  } catch (err) {
     console.error('[B75 ctx-bridge] fatal:', err);
-    process.exit(1);
-  });
+    deps.exit(1);
+  }
+}
+
+if (isDirectEntry(import.meta.url)) {
+  void runContextBridgeLogTtlProcess();
 }

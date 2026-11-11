@@ -157,13 +157,17 @@ function parseSupabaseUri(uri: string): { bucket: string; path: string } {
   return { bucket: m[1], path: m[2] };
 }
 
-export interface RehydrateObjectResult {
-  kind: 'downloaded' | 'skipped-cold' | 'mismatch' | 'skipped';
-  bytes: number;
-  rowCount: number;
-  proven: boolean;
-  description?: string;
-}
+export type RehydrateObjectResult =
+  | {
+      kind: 'downloaded';
+      bytes: number;
+      rowCount: number;
+      basisProven: boolean;
+      description?: string;
+    }
+  | { kind: 'mismatch'; bytes: number; rowCount: number; description: string }
+  | { kind: 'skipped-cold'; bytes: 0; rowCount: 0 }
+  | { kind: 'skipped'; bytes: 0; rowCount: 0 };
 
 /** Rehydrate one chosen label.  The return value, rather than process exit,
  * carries checksum and accounting state back to the thin CLI wrapper. */
@@ -182,11 +186,11 @@ export async function rehydrateChosenObject(
   }
   if (!download) {
     console.warn(`[B75 rehydrate] ${label}: no downloadable object (every row is a rotated-away warm copy)`);
-    return { kind: 'skipped', bytes: 0, rowCount: 0, proven: false };
+    return { kind: 'skipped', bytes: 0, rowCount: 0 };
   }
   if (download.tier === 'cold' && !args.restoreCold) {
     console.warn(`[B75 rehydrate] ${label} (cold): use --restore-cold to attempt cold-tier download`);
-    return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven: false };
+    return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
   }
 
   const proven = isProvenBasis(download.completeness_basis);
@@ -195,7 +199,7 @@ export async function rehydrateChosenObject(
   const isDiskFile = download.format === DISK_FILE_FORMAT;
   if (isDiskFile !== args.diskFile) {
     console.warn(`[B75 rehydrate] ${label}: format ${download.format} needs ${isDiskFile ? '' : 'no '}--disk-file; skipping`);
-    return { kind: 'skipped', bytes: 0, rowCount: 0, proven };
+    return { kind: 'skipped', bytes: 0, rowCount: 0 };
   }
 
   const localPath = isDiskFile
@@ -211,12 +215,12 @@ export async function rehydrateChosenObject(
   } else {
     if (!storage.isColdConfigured()) {
       console.warn(`[B75 rehydrate] ${label} (cold): cold storage not configured; skipping`);
-      return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven };
+      return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
     }
     const m = /^b2:\/\/([^/]+)\/(.+)$/.exec(download.storage_uri);
     if (!m) {
       console.warn(`[B75 rehydrate] ${label} (cold): cannot parse cold URI: ${download.storage_uri}`);
-      return { kind: 'skipped-cold', bytes: 0, rowCount: 0, proven };
+      return { kind: 'skipped-cold', bytes: 0, rowCount: 0 };
     }
     const data = await storage.downloadCold(m[1], m[2]);
     fs.writeFileSync(localPath, data.data);
@@ -280,25 +284,50 @@ export async function rehydrateChosenObject(
   const description = checksumOk
     ? (proven ? undefined : `${label} (${new Date(download.min_ts).toISOString()} → ${new Date(download.max_ts).toISOString()}, ${basis})`)
     : `${label} (${download.tier}, ${basis})`;
+  if (!checksumOk) {
+    return {
+      kind: 'mismatch',
+      bytes,
+      rowCount: download.row_count,
+      description: description!,
+    };
+  }
   return {
-    kind: checksumOk ? 'downloaded' : 'mismatch',
+    kind: 'downloaded',
     bytes,
     rowCount: download.row_count,
-    proven,
+    basisProven: proven,
     description,
   };
 }
 
-export async function runRehydrateCli(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    console.error('[B75 rehydrate] DATABASE_URL not set');
-    process.exit(1);
-  }
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[B75 rehydrate] SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+export interface RehydrateCliDependencies {
+  env: NodeJS.ProcessEnv;
+  exit: (code: number) => void;
+  run: () => Promise<void>;
+}
 
+export async function runRehydrateCli(
+  deps: RehydrateCliDependencies = {
+    env: process.env,
+    exit: (code) => process.exit(code),
+    run: runRehydrateCliBody,
+  },
+): Promise<void> {
+  if (!deps.env.DATABASE_URL) {
+    console.error('[B75 rehydrate] DATABASE_URL not set');
+    deps.exit(1);
+    return;
+  }
+  if (!deps.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[B75 rehydrate] SUPABASE_SERVICE_ROLE_KEY not set');
+    deps.exit(1);
+    return;
+  }
+  await deps.run();
+}
+
+async function runRehydrateCliBody(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   // B-DISK-FILE-TIERING (Langston Step 4 part 3, CHANGE 4 + its condition): the output folder must be private.
@@ -376,7 +405,7 @@ export async function runRehydrateCli(): Promise<void> {
     if (result.kind === 'mismatch') {
       mismatchRows += result.rowCount;
       if (result.description) mismatched.push(result.description);
-    } else if (result.proven) {
+    } else if (result.basisProven) {
       provenRows += result.rowCount;
     } else {
       unprovenRows += result.rowCount;
@@ -400,9 +429,25 @@ export async function runRehydrateCli(): Promise<void> {
   if (mismatched.length > 0) process.exit(2);
 }
 
-if (isDirectEntry(import.meta.url)) {
-  runRehydrateCli().catch((err) => {
+export interface RehydrateProcessDependencies {
+  runCli: () => Promise<void>;
+  exit: (code: number) => void;
+}
+
+export async function runRehydrateProcess(
+  deps: RehydrateProcessDependencies = {
+    runCli: () => runRehydrateCli(),
+    exit: (code) => process.exit(code),
+  },
+): Promise<void> {
+  try {
+    await deps.runCli();
+  } catch (err) {
     console.error('[B75 rehydrate] fatal:', err);
-    process.exit(1);
-  });
+    deps.exit(1);
+  }
+}
+
+if (isDirectEntry(import.meta.url)) {
+  void runRehydrateProcess();
 }

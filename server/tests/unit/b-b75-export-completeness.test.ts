@@ -334,9 +334,11 @@ describe('sweep wiring (structure at the source)', () => {
     expect(mark).toBeGreaterThan(del);
     expect(plain.indexOf('let archivedLabels')).toBeLessThan(plain.indexOf('if (spec.archive)'));
   });
-  it('every raiseSweepAlert call carries a dedupe key, and each has a resolve edge', () => {
-    const calls = SWEEP.match(/await raiseSweepAlert\(/g) ?? [];
-    expect(calls).toHaveLength(4);
+  it('every keyed alert path remains wired to the production raiser and its resolve edge', () => {
+    // The behavioural harness executes the injected partition/plain/fatal edges.
+    // This compatibility fence keeps the production-default adapter and keys.
+    expect(SWEEP).toContain('raiseAlert: raiseSweepAlert');
+    expect(SWEEP).toContain('await deps.raiseAlert(');
     expect(SWEEP).toContain('NARROW_LIFECYCLE_SCOPE_ALERT_KEY,');
     expect(SWEEP).toContain('partitionAlertKey(spec.parent, partition.partitionLabel, cls),');
     expect(SWEEP).toContain('plainAlertKey(spec.table, cls),');
@@ -425,7 +427,7 @@ describe('the other lanes and readers', () => {
     const provenAdd = REHYDRATE.indexOf('provenRows += result.rowCount');
     expect(bucket).toBeGreaterThan(0);
     expect(provenAdd).toBeGreaterThan(bucket);
-    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= result\.rowCount;[\s\S]*\} else if \(result\.proven\) \{/);
+    expect(REHYDRATE.slice(bucket, provenAdd)).toMatch(/mismatchRows \+= result\.rowCount;[\s\S]*\} else if \(result\.basisProven\) \{/);
     expect(REHYDRATE).toContain('rows_checksum_mismatch=');
     expect(REHYDRATE).toContain('if (mismatched.length > 0) process.exit(2);');
     // the rider: a mismatched file is renamed out of the <table>_*.jsonl.gz glob

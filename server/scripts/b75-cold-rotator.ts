@@ -249,16 +249,33 @@ export async function runColdRotationCandidates(
   return { rotated, failed, bytesMoved };
 }
 
-export async function runColdRotatorCli(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    console.error('[B75 rotator] DATABASE_URL not set');
-    process.exit(1);
-  }
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[B75 rotator] SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+export interface ColdRotatorCliDependencies {
+  env: NodeJS.ProcessEnv;
+  exit: (code: number) => void;
+  run: () => Promise<void>;
+}
 
+export async function runColdRotatorCli(
+  deps: ColdRotatorCliDependencies = {
+    env: process.env,
+    exit: (code) => process.exit(code),
+    run: runColdRotatorCliBody,
+  },
+): Promise<void> {
+  if (!deps.env.DATABASE_URL) {
+    console.error('[B75 rotator] DATABASE_URL not set');
+    deps.exit(1);
+    return;
+  }
+  if (!deps.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[B75 rotator] SUPABASE_SERVICE_ROLE_KEY not set');
+    deps.exit(1);
+    return;
+  }
+  await deps.run();
+}
+
+async function runColdRotatorCliBody(): Promise<void> {
   const startedAt = new Date();
   const ctl = new Client({ connectionString: process.env.DATABASE_URL });
   await ctl.connect();
@@ -393,9 +410,25 @@ function parseIntFlag(argv: string[], name: string): number | null {
   return n;
 }
 
-if (isDirectEntry(import.meta.url)) {
-  runColdRotatorCli().catch((err) => {
+export interface ColdRotatorProcessDependencies {
+  runCli: () => Promise<void>;
+  exit: (code: number) => void;
+}
+
+export async function runColdRotatorProcess(
+  deps: ColdRotatorProcessDependencies = {
+    runCli: () => runColdRotatorCli(),
+    exit: (code) => process.exit(code),
+  },
+): Promise<void> {
+  try {
+    await deps.runCli();
+  } catch (err) {
     console.error('[B75 rotator] fatal:', err);
-    process.exit(1);
-  });
+    deps.exit(1);
+  }
+}
+
+if (isDirectEntry(import.meta.url)) {
+  void runColdRotatorProcess();
 }

@@ -8,28 +8,45 @@ import {
   archiveB75Object,
   dropAndMarkActive,
   missingProvenArchiveLabels,
+  processPartition,
+  processPartitionAndSettle,
   removePlainArchiveSource,
+  runRetentionSweepCli,
+  runRetentionSweepProcess,
   runWithSweepLock,
+  sweepPlainTables,
   type B75ArchiveObjectDependencies,
   type B75ArchiveTableSpec,
   type B75SweepConfig,
+  type PartitionRow,
+  type ProcessPartitionDependencies,
+  type SweepPlainDependencies,
 } from '../../scripts/b75-retention-sweep.js';
 import {
   exportAndUploadContextMonth,
+  finalizeContextDeletion,
   runContextBridgeCycle,
+  runContextBridgeLogTtlCli,
+  runContextBridgeLogTtlProcess,
   type ContextBridgeConfig,
+  type ContextDeletionGuard,
+  type ContextFinalizeDependencies,
   type ContextMonthDependencies,
   type ContextMonthRange,
 } from '../../scripts/context-bridge-log-ttl.js';
 import {
   listColdRotationCandidates,
   rotateColdCandidate,
+  runColdRotatorCli,
+  runColdRotatorProcess,
   runColdRotationCandidates,
   type ColdRotationCandidate,
   type ColdRotatorConfig,
 } from '../../scripts/b75-cold-rotator.js';
 import {
   rehydrateChosenObject,
+  runRehydrateCli,
+  runRehydrateProcess,
   type RehydrateArgs,
   type RehydrateManifestRow,
 } from '../../scripts/b75-rehydrate.js';
@@ -106,13 +123,115 @@ describe('direct entry boundary', () => {
     expect(isDirectEntry(moduleUrl, undefined)).toBe(false);
   });
 
-  it('all four command modules imported without constructing a production client', () => {
-    // The imports at the top of this test are the positive probe. Before the
-    // guard they entered main(), validated live credentials, and exited.
-    expect(archiveB75Object).toBeTypeOf('function');
-    expect(exportAndUploadContextMonth).toBeTypeOf('function');
-    expect(rotateColdCandidate).toBeTypeOf('function');
-    expect(rehydrateChosenObject).toBeTypeOf('function');
+  it('fresh-imports all four commands after every production side-effect spy is armed', async () => {
+    vi.resetModules();
+    const clientConstructor = vi.fn(function FakeClient() {
+      return { connect: vi.fn(), end: vi.fn(), query: vi.fn() };
+    });
+    const storageConstructor = vi.fn();
+    const addAlert = vi.fn();
+    const resolveAlerts = vi.fn();
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const open = vi.spyOn(fs, 'openSync').mockImplementation(() => { throw new Error('real file open'); });
+    const write = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => { throw new Error('real file write'); });
+    const read = vi.spyOn(fs, 'readFileSync').mockImplementation(() => { throw new Error('real file read'); });
+
+    vi.doMock('pg', () => ({ default: { Client: clientConstructor } }));
+    vi.doMock('../../services/data-archive/storage-client.js', () => ({
+      getStorageClient: storageConstructor,
+      sha256Hex: vi.fn(),
+    }));
+    vi.doMock('../../services/system-alerts.js', () => ({
+      addAlert,
+      resolveAlertsByDedupeKey: resolveAlerts,
+    }));
+
+    try {
+      const modules = await Promise.all([
+        import('../../scripts/b75-retention-sweep.js'),
+        import('../../scripts/context-bridge-log-ttl.js'),
+        import('../../scripts/b75-cold-rotator.js'),
+        import('../../scripts/b75-rehydrate.js'),
+      ]);
+      expect(modules.map((mod) => typeof mod)).toEqual(['object', 'object', 'object', 'object']);
+      expect(clientConstructor).not.toHaveBeenCalled();
+      expect(storageConstructor).not.toHaveBeenCalled();
+      expect(addAlert).not.toHaveBeenCalled();
+      expect(resolveAlerts).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+      expect(exit).not.toHaveBeenCalled();
+    } finally {
+      vi.doUnmock('pg');
+      vi.doUnmock('../../services/data-archive/storage-client.js');
+      vi.doUnmock('../../services/system-alerts.js');
+      vi.resetModules();
+    }
+  });
+});
+
+type CliContract = {
+  name: string;
+  fatalRaisesAlert: boolean;
+  runCli: (deps: { env: NodeJS.ProcessEnv; exit: (code: number) => void; run: () => Promise<void> }) => Promise<void>;
+  runProcess: (runCli: () => Promise<void>, exit: (code: number) => void, alert: ReturnType<typeof vi.fn>) => Promise<void>;
+};
+
+const cliContracts: CliContract[] = [
+  {
+    name: 'retention',
+    fatalRaisesAlert: true,
+    runCli: (deps) => runRetentionSweepCli(deps),
+    runProcess: (runCli, exit, alert) => runRetentionSweepProcess({ runCli, exit, raiseAlert: alert }),
+  },
+  {
+    name: 'context',
+    fatalRaisesAlert: false,
+    runCli: (deps) => runContextBridgeLogTtlCli(deps),
+    runProcess: (runCli, exit) => runContextBridgeLogTtlProcess({ runCli, exit }),
+  },
+  {
+    name: 'cold rotator',
+    fatalRaisesAlert: false,
+    runCli: (deps) => runColdRotatorCli(deps),
+    runProcess: (runCli, exit) => runColdRotatorProcess({ runCli, exit }),
+  },
+  {
+    name: 'rehydrate',
+    fatalRaisesAlert: false,
+    runCli: (deps) => runRehydrateCli(deps),
+    runProcess: (runCli, exit) => runRehydrateProcess({ runCli, exit }),
+  },
+];
+
+describe.each(cliContracts)('$name CLI contract', ({ runCli, runProcess, fatalRaisesAlert }) => {
+  it('runs the injected command body when both required settings exist', async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn();
+    await runCli({
+      env: { DATABASE_URL: 'fake', SUPABASE_SERVICE_ROLE_KEY: 'fake' },
+      exit,
+      run,
+    });
+    expect(run).toHaveBeenCalledOnce();
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('refuses a missing setting before the command body', async () => {
+    const run = vi.fn().mockResolvedValue(undefined);
+    const exit = vi.fn();
+    await runCli({ env: {}, exit, run });
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('maps a fatal rejection to exit 1 and preserves the retention fatal alert edge', async () => {
+    const exit = vi.fn();
+    const alert = vi.fn().mockResolvedValue(undefined);
+    await runProcess(vi.fn().mockRejectedValue(new Error('fatal')), exit, alert);
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(alert).toHaveBeenCalledTimes(fatalRaisesAlert ? 1 : 0);
   });
 });
 
@@ -223,6 +342,171 @@ describe('retention executable gates', () => {
     })).rejects.toThrow('fatal');
     expect(events).toEqual(['run', 'release']);
   });
+
+  it('executes the whole-partition archive, drop, active, and resolve chain', async () => {
+    const events: string[] = [];
+    const client = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      end: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    };
+    const partition: PartitionRow = {
+      parent: sweepSpec.parent,
+      child: 'closed_trades_2026_01',
+      partitionLabel: '2026-01',
+      rangeStart: month.start,
+      rangeEnd: month.end,
+    };
+    const processDeps: ProcessPartitionDependencies = {
+      createClient: () => client as never,
+      partitionHotBytes: vi.fn().mockResolvedValue(100),
+      listMonthLabels: vi.fn().mockResolvedValue([]),
+      getStorageClient: vi.fn().mockReturnValue({}),
+      archiveObject: vi.fn(async () => {
+        events.push('archive');
+        return { kind: 'exported', manifestId: 'm1', rowCount: 3, bytesCompressed: 7 };
+      }),
+      dropAndMarkActive: vi.fn(async (_client, _child, markActive) => {
+        events.push('drop');
+        await markActive();
+      }),
+      updateManifestActive: vi.fn(async () => { events.push('active'); }),
+      listPresentDates: vi.fn().mockResolvedValue([]),
+      markLabelsActive: vi.fn(),
+      now: vi.fn().mockReturnValueOnce(100).mockReturnValue(110),
+    };
+    const resolveAlerts = vi.fn(async () => { events.push('resolve'); });
+    const raiseAlert = vi.fn();
+    const result = await processPartitionAndSettle(sweepSpec, partition, sweepCfg, {
+      process: (spec, item, cfg) => processPartition(spec, item, cfg, processDeps),
+      resolveAlerts,
+      raiseAlert,
+    });
+    expect(result).toMatchObject({ status: 'dropped', rowCount: 3, bytesWarm: 7 });
+    expect(events).toEqual(['archive', 'drop', 'active', 'resolve']);
+    expect(raiseAlert).not.toHaveBeenCalled();
+  });
+
+  it('keeps a partition and raises its keyed alert when archiving fails', async () => {
+    const events: string[] = [];
+    const client = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      end: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue({ rows: [] }),
+    };
+    const partition: PartitionRow = {
+      parent: sweepSpec.parent,
+      child: 'closed_trades_2026_01',
+      partitionLabel: '2026-01',
+      rangeStart: month.start,
+      rangeEnd: month.end,
+    };
+    const drop = vi.fn();
+    const processDeps: ProcessPartitionDependencies = {
+      createClient: () => client as never,
+      partitionHotBytes: vi.fn().mockResolvedValue(100),
+      listMonthLabels: vi.fn().mockResolvedValue([]),
+      getStorageClient: vi.fn().mockReturnValue({}),
+      archiveObject: vi.fn(async () => { events.push('archive'); throw new Error('proof refused'); }),
+      dropAndMarkActive: drop,
+      updateManifestActive: vi.fn(),
+      listPresentDates: vi.fn().mockResolvedValue([]),
+      markLabelsActive: vi.fn(),
+      now: vi.fn().mockReturnValueOnce(100).mockReturnValue(110),
+    };
+    const resolveAlerts = vi.fn();
+    const raiseAlert = vi.fn(async () => { events.push('alert'); });
+    const result = await processPartitionAndSettle(sweepSpec, partition, sweepCfg, {
+      process: (spec, item, cfg) => processPartition(spec, item, cfg, processDeps),
+      resolveAlerts,
+      raiseAlert,
+    });
+    expect(result.status).toBe('failed');
+    expect(events).toEqual(['archive', 'alert']);
+    expect(drop).not.toHaveBeenCalled();
+    expect(resolveAlerts).not.toHaveBeenCalled();
+  });
+
+  it('executes the plain archive, proof gate, delete, active, vacuum, and resolve chain', async () => {
+    const events: string[] = [];
+    const day = new Date('2026-01-01T00:00:00Z');
+    const ctl = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      end: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT MIN')) return { rows: [{ min_ts: day }] };
+        if (sql.includes('SELECT partition_label')) {
+          return { rows: [{ partition_label: '2026-01-01', state: 'verified', completeness_basis: 'source-count-matched' }] };
+        }
+        if (sql.includes('DELETE FROM')) { events.push('delete'); return { rows: [], rowCount: 1 }; }
+        if (sql.includes('VACUUM')) events.push('vacuum');
+        return { rows: [], rowCount: 1 };
+      }),
+    };
+    const exportClient = { connect: vi.fn(), end: vi.fn(), query: vi.fn() };
+    const clients = [ctl, exportClient];
+    const spec = {
+      table: 'plain_archive', timestampColumn: 'captured_at',
+      retentionConstantName: 'plain_archive.hot_retention_days', archive: true,
+    };
+    const cfg = { ...sweepCfg, retentionByTable: new Map([[spec.table, 30]]) };
+    const resolveAlerts = vi.fn(async () => { events.push('resolve'); });
+    const raiseAlert = vi.fn();
+    const deps: SweepPlainDependencies = {
+      specs: [spec],
+      createClient: () => clients.shift() as never,
+      listPresentDates: vi.fn().mockResolvedValue([day]),
+      getStorageClient: vi.fn().mockReturnValue({}),
+      archiveObject: vi.fn(async () => {
+        events.push('archive');
+        return { kind: 'exported', manifestId: 'p1', rowCount: 1, bytesCompressed: 2 };
+      }),
+      removeSource: removePlainArchiveSource,
+      markLabelsActive: vi.fn(async () => { events.push('active'); }),
+      resolveAlerts,
+      raiseAlert,
+      now: () => new Date('2026-03-01T00:00:00Z').getTime(),
+    };
+    await expect(sweepPlainTables(cfg, deps)).resolves.toEqual({ deleted: 1, failed: 0 });
+    expect(events).toEqual(['archive', 'delete', 'active', 'vacuum', 'resolve']);
+    expect(raiseAlert).not.toHaveBeenCalled();
+  });
+
+  it('keeps plain rows and raises the keyed alert when archive proof fails', async () => {
+    const day = new Date('2026-01-01T00:00:00Z');
+    const ctl = {
+      connect: vi.fn(), end: vi.fn(),
+      query: vi.fn(async (sql: string) => sql.includes('SELECT MIN')
+        ? { rows: [{ min_ts: day }] }
+        : { rows: [], rowCount: 0 }),
+    };
+    const exportClient = { connect: vi.fn(), end: vi.fn(), query: vi.fn() };
+    const clients = [ctl, exportClient];
+    const spec = {
+      table: 'plain_archive', timestampColumn: 'captured_at',
+      retentionConstantName: 'plain_archive.hot_retention_days', archive: true,
+    };
+    const cfg = { ...sweepCfg, retentionByTable: new Map([[spec.table, 30]]) };
+    const removeSource = vi.fn();
+    const resolveAlerts = vi.fn();
+    const raiseAlert = vi.fn().mockResolvedValue(undefined);
+    const deps: SweepPlainDependencies = {
+      specs: [spec],
+      createClient: () => clients.shift() as never,
+      listPresentDates: vi.fn().mockResolvedValue([day]),
+      getStorageClient: vi.fn().mockReturnValue({}),
+      archiveObject: vi.fn().mockRejectedValue(new Error('checksum mismatch')),
+      removeSource,
+      markLabelsActive: vi.fn(),
+      resolveAlerts,
+      raiseAlert,
+      now: () => new Date('2026-03-01T00:00:00Z').getTime(),
+    };
+    await expect(sweepPlainTables(cfg, deps)).resolves.toEqual({ deleted: 0, failed: 1 });
+    expect(removeSource).not.toHaveBeenCalled();
+    expect(resolveAlerts).not.toHaveBeenCalled();
+    expect(raiseAlert).toHaveBeenCalledOnce();
+  });
 });
 
 describe('context lane deletion fence', () => {
@@ -247,15 +531,18 @@ describe('context lane deletion fence', () => {
     const deps = contextDeps({ proofCountStillMatches: vi.fn().mockResolvedValue(true) });
     await expect(exportAndUploadContextMonth(
       {} as never, ctl as never, contextCfg, month, deps,
-    )).resolves.toEqual({ rowCount: 0, bytesCompressed: 0 });
+    )).resolves.toMatchObject({
+      rowCount: 0,
+      bytesCompressed: 0,
+      deletionGuard: { kind: 'proven-count', manifestId: 'ctx-1', month },
+    });
 
-    const later = { deleteRows: vi.fn(), markActive: vi.fn(), vacuum: vi.fn() };
+    const later = { finalize: vi.fn(), vacuum: vi.fn() };
     await expect(runContextBridgeCycle([month], month.end, {
       archiveMonth: vi.fn().mockRejectedValue(new Error('recount mismatch')),
       ...later,
     })).rejects.toThrow('recount mismatch');
-    expect(later.deleteRows).not.toHaveBeenCalled();
-    expect(later.markActive).not.toHaveBeenCalled();
+    expect(later.finalize).not.toHaveBeenCalled();
     expect(later.vacuum).not.toHaveBeenCalled();
   });
 
@@ -295,13 +582,110 @@ describe('context lane deletion fence', () => {
     const events: string[] = [];
     const second = { ...month, label: '2026-02', start: month.end, end: new Date('2026-03-01T00:00:00Z') };
     const result = await runContextBridgeCycle([month, second], second.end, {
-      archiveMonth: async (item) => { events.push(`archive:${item.label}`); return { rowCount: 2, bytesCompressed: 3 }; },
-      deleteRows: async () => { events.push('delete'); return { deleted: 4 }; },
-      markActive: async (labels) => { events.push(`active:${labels.join(',')}`); },
+      archiveMonth: async (item) => {
+        events.push(`archive:${item.label}`);
+        return {
+          rowCount: 2,
+          bytesCompressed: 3,
+          deletionGuard: { kind: 'proven-count', manifestId: `m:${item.label}`, month: item },
+        };
+      },
+      finalize: async (_cutoff, labels, guards) => {
+        events.push(`finalize:${labels.join(',')}:${guards.length}`);
+        return { deleted: 4 };
+      },
       vacuum: async () => { events.push('vacuum'); },
     });
-    expect(events).toEqual(['archive:2026-01', 'archive:2026-02', 'delete', 'active:2026-01,2026-02', 'vacuum']);
+    expect(events).toEqual(['archive:2026-01', 'archive:2026-02', 'finalize:2026-01,2026-02:2', 'vacuum']);
     expect(result).toEqual({ archivedRows: 4, archivedBytes: 6, deleted: 4, completedLabels: ['2026-01', '2026-02'] });
+  });
+
+  it('locks, recounts, deletes, and marks active on one client, rolling back a changed count', async () => {
+    const events: string[] = [];
+    const client = { query: vi.fn(async (sql: string) => { events.push(sql); return { rows: [] }; }) };
+    let proofMatches = true;
+    const proof = vi.fn(async (receivedClient) => {
+      expect(receivedClient).toBe(client);
+      events.push('proof');
+      return proofMatches;
+    });
+    const deleteRows = vi.fn(async (receivedClient) => {
+      expect(receivedClient).toBe(client);
+      events.push('delete');
+      return { deleted: 3 };
+    });
+    const markActive = vi.fn(async (receivedClient) => {
+      expect(receivedClient).toBe(client);
+      events.push('active');
+    });
+    const guard: ContextDeletionGuard = { kind: 'proven-count', manifestId: 'ctx-1', month };
+    const deps: ContextFinalizeDependencies = {
+      proofCountStillMatches: proof,
+      rowsPresent: vi.fn(),
+      deleteRows,
+      markActive,
+    };
+    await expect(finalizeContextDeletion(
+      client as never, contextCfg, month.end, [month.label], [guard], deps,
+    )).resolves.toEqual({ deleted: 3 });
+    expect(events).toEqual([
+      'BEGIN',
+      'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
+      'proof',
+      'delete',
+      'active',
+      'COMMIT',
+    ]);
+
+    events.length = 0;
+    proofMatches = false;
+    await expect(finalizeContextDeletion(
+      client as never, contextCfg, month.end, [month.label], [guard], deps,
+    )).rejects.toBeInstanceOf(NonProvenExistingCopyError);
+    expect(events).toEqual([
+      'BEGIN',
+      'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
+      'proof',
+      'ROLLBACK',
+    ]);
+  });
+
+  it('rechecks an earlier empty skip under the same lock before deletion', async () => {
+    const events: string[] = [];
+    const client = { query: vi.fn(async (sql: string) => { events.push(sql); return { rows: [] }; }) };
+    const rowsPresent = vi.fn(async (receivedClient) => {
+      expect(receivedClient).toBe(client);
+      events.push('rows-present');
+      return true;
+    });
+    const deleteRows = vi.fn();
+    const markActive = vi.fn();
+    const guard: ContextDeletionGuard = {
+      kind: 'must-be-empty',
+      month,
+      reason: 'active-rows-present',
+    };
+    await expect(finalizeContextDeletion(
+      client as never,
+      contextCfg,
+      month.end,
+      [month.label],
+      [guard],
+      {
+        proofCountStillMatches: vi.fn(),
+        rowsPresent,
+        deleteRows,
+        markActive,
+      },
+    )).rejects.toBeInstanceOf(NonProvenExistingCopyError);
+    expect(events).toEqual([
+      'BEGIN',
+      'LOCK TABLE context_bridge_log IN SHARE ROW EXCLUSIVE MODE',
+      'rows-present',
+      'ROLLBACK',
+    ]);
+    expect(deleteRows).not.toHaveBeenCalled();
+    expect(markActive).not.toHaveBeenCalled();
   });
 });
 
@@ -402,7 +786,7 @@ describe('rehydrate file safety and accounting', () => {
       label: manifest.partition_label, download: manifest, all: [manifest],
     }, storage as never);
     const good = path.join(out, 'closed_trades_2026-01.jsonl.gz');
-    expect(result).toEqual({ kind: 'downloaded', bytes: 7, rowCount: 7, proven: true, description: undefined });
+    expect(result).toEqual({ kind: 'downloaded', bytes: 7, rowCount: 7, basisProven: true, description: undefined });
     expect(fs.existsSync(good)).toBe(true);
     expect(JSON.parse(fs.readFileSync(`${good}.completeness.json`, 'utf8'))).toMatchObject({ proven: true, checksum_ok: true });
   });
@@ -422,7 +806,8 @@ describe('rehydrate file safety and accounting', () => {
     const result = await rehydrateChosenObject(args(out), {
       label: manifest.partition_label, download: manifest, all: [manifest],
     }, storage as never);
-    expect(result).toMatchObject({ kind: 'mismatch', rowCount: 7, proven: true });
+    expect(result).toMatchObject({ kind: 'mismatch', rowCount: 7 });
+    expect('basisProven' in result).toBe(false);
     expect(fs.existsSync(good)).toBe(false);
     expect(fs.existsSync(`${good}.completeness.json`)).toBe(false);
     expect(fs.existsSync(`${good}.CORRUPT`)).toBe(true);

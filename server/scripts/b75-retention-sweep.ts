@@ -174,7 +174,7 @@ const PARTITIONED_TABLES: B75ArchiveTableSpec[] = [...B74_TABLES, ...B70_TABLES]
 // cron / one script) without partitioning a small derived-telemetry table.
 // Table identifiers below are a STATIC allow-list (never user input) — safe to
 // interpolate into the DELETE/VACUUM (Postgres has no bind param for an ident).
-interface PlainRetentionTableSpec {
+export interface PlainRetentionTableSpec {
   table: string;
   timestampColumn: string;
   retentionConstantName: string; // key in module_constants under data_lifecycle
@@ -294,7 +294,7 @@ async function loadConfig(client: pg.Client): Promise<B75SweepConfig> {
 // Partition listing
 // ───────────────────────────────────────────────────────────────────────────
 
-interface PartitionRow {
+export interface PartitionRow {
   parent: string;
   child: string;
   partitionLabel: string; // 'YYYY-MM'
@@ -806,7 +806,7 @@ export async function archiveB75Object(
 // Per-partition processing
 // ───────────────────────────────────────────────────────────────────────────
 
-interface ProcessResult {
+export interface ProcessResult {
   status: 'dropped' | 'skipped' | 'failed';
   mode: 'whole' | 'sliced' | 'n/a';
   bytesHot: number;
@@ -824,19 +824,46 @@ interface ProcessResult {
   reused?: boolean;
 }
 
-async function processPartition(
+export interface ProcessPartitionDependencies {
+  createClient: () => pg.Client;
+  partitionHotBytes: typeof partitionHotBytes;
+  listMonthLabels: typeof listMonthLabels;
+  getStorageClient: typeof getStorageClient;
+  archiveObject: typeof archiveB75Object;
+  dropAndMarkActive: typeof dropAndMarkActive;
+  updateManifestActive: typeof updateManifestActive;
+  listPresentDates: typeof listPresentDates;
+  markLabelsActive: typeof markLabelsActive;
+  now: () => number;
+}
+
+const DEFAULT_PROCESS_PARTITION_DEPS: ProcessPartitionDependencies = {
+  createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+  partitionHotBytes,
+  listMonthLabels,
+  getStorageClient,
+  archiveObject: archiveB75Object,
+  dropAndMarkActive,
+  updateManifestActive,
+  listPresentDates,
+  markLabelsActive,
+  now: Date.now,
+};
+
+export async function processPartition(
   spec: B75ArchiveTableSpec,
   partition: PartitionRow,
   cfg: B75SweepConfig,
+  deps: ProcessPartitionDependencies = DEFAULT_PROCESS_PARTITION_DEPS,
 ): Promise<ProcessResult> {
-  const start = Date.now();
+  const start = deps.now();
 
   // Fresh clients per partition: exportClient runs each export's REPEATABLE READ
   // READ ONLY snapshot (opened + committed INSIDE exportPartition, once per
   // object — not one long snapshot across the partition); ctlClient runs
   // manifest/DDL on a separate connection.
-  const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
-  const ctlClient = new Client({ connectionString: process.env.DATABASE_URL });
+  const exportClient = deps.createClient();
+  const ctlClient = deps.createClient();
   await exportClient.connect();
   await ctlClient.connect();
 
@@ -844,7 +871,7 @@ async function processPartition(
   let bytesHot = 0;
 
   try {
-    bytesHot = await partitionHotBytes(ctlClient, partition.child);
+    bytesHot = await deps.partitionHotBytes(ctlClient, partition.child);
 
     // Decide whole-vs-sliced. The resume invariant guard OVERRIDES the live
     // threshold so a half-swept month never mixes month + day labels.
@@ -863,11 +890,11 @@ async function processPartition(
     // "Wave D daily-partition through the month-oriented machinery" golden test
     // (b-new-47-sweep-helpers.test.ts) — keep it green if you refactor
     // decideSliceMode / deriveModeFromLabels / enumerateUtcDays.
-    const existingLabels = await listMonthLabels(ctlClient, spec.parent, partition.partitionLabel);
+    const existingLabels = await deps.listMonthLabels(ctlClient, spec.parent, partition.partitionLabel);
     const resumeMode = deriveModeFromLabels(partition.partitionLabel, existingLabels);
     mode = resumeMode ?? decideSliceMode(bytesHot, cfg.sliceThresholdHotBytes);
 
-    const storage = getStorageClient();
+    const storage = deps.getStorageClient();
 
     if (mode === 'whole') {
       // ─── WHOLE PATH ───────────────────────────────────────────────────────
@@ -876,7 +903,7 @@ async function processPartition(
       // label with live rows was silently skipped. The whole path now goes through
       // archiveB75Object's one decision; an empty `active`/`migrated` label comes
       // back `skipped` and is returned here BEFORE any drop or manifest write.
-      const outcome = await archiveB75Object(
+      const outcome = await deps.archiveObject(
         storage,
         exportClient,
         ctlClient,
@@ -896,12 +923,12 @@ async function processPartition(
           bytesWarm: 0,
           rowCount: 0,
           slices: 0,
-          durationMs: Date.now() - start,
+          durationMs: deps.now() - start,
           reason: outcome.reason,
         };
       }
-      await dropAndMarkActive(ctlClient, partition.child, () =>
-        updateManifestActive(ctlClient, outcome.manifestId),
+      await deps.dropAndMarkActive(ctlClient, partition.child, () =>
+        deps.updateManifestActive(ctlClient, outcome.manifestId),
       );
       return {
         status: 'dropped',
@@ -910,7 +937,7 @@ async function processPartition(
         bytesWarm: outcome.bytesCompressed,
         rowCount: outcome.rowCount,
         slices: 1,
-        durationMs: Date.now() - start,
+        durationMs: deps.now() - start,
         reused: outcome.kind === 'reused',
       };
     }
@@ -918,7 +945,7 @@ async function processPartition(
     // ─── SLICED PATH ─────────────────────────────────────────────────────────
     // Enumerate distinct dates present (cheap per-day index probes), archive each
     // day as its own object, then DROP only after EVERY present date is verified.
-    const presentDates = await listPresentDates(
+    const presentDates = await deps.listPresentDates(
       ctlClient,
       partition.child,
       spec.timestampColumn,
@@ -932,7 +959,7 @@ async function processPartition(
     const skippedLabels = new Set<string>();
     for (const day of presentDates) {
       const dEnd = new Date(day.getTime() + 86_400_000);
-      const outcome = await archiveB75Object(
+      const outcome = await deps.archiveObject(
         storage,
         exportClient,
         ctlClient,
@@ -977,8 +1004,8 @@ async function processPartition(
       );
     }
 
-    await dropAndMarkActive(ctlClient, partition.child, () =>
-      markLabelsActive(ctlClient, spec.parent, presentLabels),
+    await deps.dropAndMarkActive(ctlClient, partition.child, () =>
+      deps.markLabelsActive(ctlClient, spec.parent, presentLabels),
     );
 
     return {
@@ -988,7 +1015,7 @@ async function processPartition(
       bytesWarm,
       rowCount,
       slices: presentLabels.length,
-      durationMs: Date.now() - start,
+      durationMs: deps.now() - start,
     };
   } catch (err) {
     const isChecksumMismatch = err instanceof ChecksumMismatchError;
@@ -1003,7 +1030,7 @@ async function processPartition(
       bytesWarm: 0,
       rowCount: 0,
       slices: 0,
-      durationMs: Date.now() - start,
+      durationMs: deps.now() - start,
       reason: err instanceof Error ? err.message : String(err),
       isChecksumMismatch,
       isCountMismatch,
@@ -1085,6 +1112,62 @@ function failureClassText(cls: SweepFailureClass, refuseReason?: string): string
   }
 }
 
+export interface PartitionSettlementDependencies {
+  process: (
+    spec: B75ArchiveTableSpec,
+    partition: PartitionRow,
+    cfg: B75SweepConfig,
+  ) => Promise<ProcessResult>;
+  resolveAlerts: typeof resolveSweepAlerts;
+  raiseAlert: typeof raiseSweepAlert;
+}
+
+const DEFAULT_PARTITION_SETTLEMENT_DEPS: PartitionSettlementDependencies = {
+  process: processPartition,
+  resolveAlerts: resolveSweepAlerts,
+  raiseAlert: raiseSweepAlert,
+};
+
+/** Execute one partition and take its keyed resolve/alert edge before returning
+ * the result to the run-level counters and log formatter. */
+export async function processPartitionAndSettle(
+  spec: B75ArchiveTableSpec,
+  partition: PartitionRow,
+  cfg: B75SweepConfig,
+  deps: PartitionSettlementDependencies = DEFAULT_PARTITION_SETTLEMENT_DEPS,
+): Promise<ProcessResult> {
+  const res = await deps.process(spec, partition, cfg);
+  if (res.status !== 'failed') {
+    await deps.resolveAlerts(
+      AUTO_RESOLVED_CLASSES.map((cls) => partitionAlertKey(spec.parent, partition.partitionLabel, cls)),
+      `${spec.parent}/${partition.partitionLabel} (${res.status})`,
+    );
+    return res;
+  }
+
+  const cls = sweepFailureClass(res);
+  await deps.raiseAlert(
+    `B75 retention sweep FAILED: ${spec.parent}/${partition.partitionLabel}`,
+    `The nightly storage archive sweep could not move partition ${partition.partitionLabel} of ${spec.parent} ` +
+      `to warm storage. mode=${res.mode}. The hot partition was NOT dropped (data is safe` +
+      `${cls === 'non-proven-existing' ? `; it holds ${res.bytesHot} bytes on the database disk` : ''}). ` +
+      `Reason: ${res.reason}. ${failureClassText(cls, res.reason)}`,
+    cls === 'checksum' || cls === 'non-proven-existing' ? 'critical' : 'warning',
+    {
+      parent: spec.parent,
+      partition_label: partition.partitionLabel,
+      child: partition.child,
+      mode: res.mode,
+      failure_class: cls,
+      is_checksum_mismatch: Boolean(res.isChecksumMismatch),
+      is_count_mismatch: Boolean(res.isCountMismatch),
+      is_non_proven: Boolean(res.isNonProven),
+    },
+    partitionAlertKey(spec.parent, partition.partitionLabel, cls),
+  );
+  return res;
+}
+
 export interface PlainArchiveRemovalDependencies {
   deleteBatch: () => Promise<number>;
   markActive: () => Promise<void>;
@@ -1120,18 +1203,47 @@ export async function removePlainArchiveSource(
  * `hot_retention_days` are simply removed. Per-table failure is isolated +
  * alerted; the partition sweep + the other plain tables continue.
  */
-async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number; failed: number }> {
+export interface SweepPlainDependencies {
+  specs: readonly PlainRetentionTableSpec[];
+  createClient: () => pg.Client;
+  listPresentDates: typeof listPresentDates;
+  getStorageClient: typeof getStorageClient;
+  archiveObject: typeof archiveB75Object;
+  removeSource: typeof removePlainArchiveSource;
+  markLabelsActive: typeof markLabelsActive;
+  resolveAlerts: typeof resolveSweepAlerts;
+  raiseAlert: typeof raiseSweepAlert;
+  now: () => number;
+}
+
+const DEFAULT_SWEEP_PLAIN_DEPS: SweepPlainDependencies = {
+  specs: PLAIN_RETENTION_TABLES,
+  createClient: () => new Client({ connectionString: process.env.DATABASE_URL }),
+  listPresentDates,
+  getStorageClient,
+  archiveObject: archiveB75Object,
+  removeSource: removePlainArchiveSource,
+  markLabelsActive,
+  resolveAlerts: resolveSweepAlerts,
+  raiseAlert: raiseSweepAlert,
+  now: Date.now,
+};
+
+export async function sweepPlainTables(
+  cfg: B75SweepConfig,
+  deps: SweepPlainDependencies = DEFAULT_SWEEP_PLAIN_DEPS,
+): Promise<{ deleted: number; failed: number }> {
   let deletedTotal = 0;
   let failed = 0;
 
-  for (const spec of PLAIN_RETENTION_TABLES) {
+  for (const spec of deps.specs) {
     const retentionDays = cfg.retentionByTable.get(spec.table);
     if (retentionDays === undefined) {
       failed++;
       console.error(`[B75 sweep][plain] ${spec.table}: no retention configured — skipping`);
       continue;
     }
-    const rawCutoff = new Date(Date.now() - retentionDays * 86_400_000);
+    const rawCutoff = new Date(deps.now() - retentionDays * 86_400_000);
     // B-B75-EXPORT-COMPLETENESS (Langston gate B BLOCKER-2): for an archive:true table the
     // labels archived and the rows deleted must be the SAME rows. The day scan exports whole
     // days [day, day+1), so the delete (and the tally) use the day-floor of the cutoff —
@@ -1141,7 +1253,7 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
     const cutoff = spec.archive
       ? new Date(Date.UTC(rawCutoff.getUTCFullYear(), rawCutoff.getUTCMonth(), rawCutoff.getUTCDate()))
       : rawCutoff;
-    const ctl = new Client({ connectionString: process.env.DATABASE_URL });
+    const ctl = deps.createClient();
     await ctl.connect();
     try {
       let tableDeleted = 0;
@@ -1167,20 +1279,20 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
         );
         const minTs = minRes.rows[0]?.min_ts ? new Date(minRes.rows[0].min_ts) : null;
         const scanStart = minTs ? new Date(Date.UTC(minTs.getUTCFullYear(), minTs.getUTCMonth(), minTs.getUTCDate())) : cutoff;
-        const present = minTs === null ? [] : await listPresentDates(
+        const present = minTs === null ? [] : await deps.listPresentDates(
           ctl, spec.table, spec.timestampColumn, scanStart, cutoff, spec.extraPredicate,
         );
         if (present.length === 0) {
           console.log(`[B75 sweep][plain-archive] ${spec.table}: no age-eligible rows — nothing to archive`);
         } else {
-          const storage = getStorageClient();
-          const exportClient = new Client({ connectionString: process.env.DATABASE_URL });
+          const storage = deps.getStorageClient();
+          const exportClient = deps.createClient();
           await exportClient.connect();
           try {
             for (const day of present) {
               const label = day.toISOString().slice(0, 10);
               const dayEnd = new Date(day.getTime() + 86_400_000);
-              const outcome = await archiveB75Object(
+              const outcome = await deps.archiveObject(
                 storage, exportClient, ctl, cfg,
                 { parent: spec.table, timestampColumn: spec.timestampColumn, retentionConstantName: spec.retentionConstantName },
                 label, day, dayEnd, spec.table, 0, spec.extraPredicate,
@@ -1245,7 +1357,7 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
         }
       }
 
-      tableDeleted = await removePlainArchiveSource(PLAIN_DELETE_BATCH, {
+      tableDeleted = await deps.removeSource(PLAIN_DELETE_BATCH, {
         deleteBatch: async () => {
           const r = await ctl.query(
             `DELETE FROM ${spec.table}
@@ -1259,7 +1371,7 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
           );
           return r.rowCount ?? 0;
         },
-        markActive: () => markLabelsActive(ctl, spec.table, archivedLabels),
+        markActive: () => deps.markLabelsActive(ctl, spec.table, archivedLabels),
         vacuum: async () => { await ctl.query(`VACUUM ${spec.table}`); },
       });
       deletedTotal += tableDeleted;
@@ -1267,7 +1379,7 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
         `[B75 sweep][plain] ${spec.table}: deleted ${tableDeleted} rows older than ` +
           `${cutoff.toISOString()} (retentionDays=${retentionDays}${spec.archive ? ', day-floored archive lane' : ', exact cutoff'}) + VACUUM`,
       );
-      await resolveSweepAlerts(
+      await deps.resolveAlerts(
         AUTO_RESOLVED_CLASSES.map((cls) => plainAlertKey(spec.table, cls)),
         `plain table ${spec.table}`,
       );
@@ -1282,7 +1394,7 @@ async function sweepPlainTables(cfg: B75SweepConfig): Promise<{ deleted: number;
         isCountMismatch: err instanceof ExportRowCountMismatchError || err instanceof ArchiveReadbackMismatchError,
         isNonProven: err instanceof NonProvenExistingCopyError,
       });
-      await raiseSweepAlert(
+      await deps.raiseAlert(
         `B75 plain-table retention FAILED: ${spec.table}`,
         `The nightly archive-and-age-delete for plain table ${spec.table} failed. Old rows were NOT removed ` +
           `(data is safe). Reason: ${reason}. ${failureClassText(cls, reason)}`,
@@ -1368,16 +1480,13 @@ export async function runWithSweepLock(
 // Main
 // ───────────────────────────────────────────────────────────────────────────
 
-export async function runRetentionSweepCli(): Promise<void> {
-  if (!process.env.DATABASE_URL) {
-    console.error('[B75 sweep] DATABASE_URL not set');
-    process.exit(1);
-  }
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('[B75 sweep] SUPABASE_SERVICE_ROLE_KEY not set');
-    process.exit(1);
-  }
+export interface RetentionSweepCliDependencies {
+  env: NodeJS.ProcessEnv;
+  exit: (code: number) => void;
+  run: () => Promise<void>;
+}
 
+async function runRetentionSweepCliBody(): Promise<void> {
   const result = await runWithSweepLock({
     acquire: acquireSweepLock,
     release: releaseSweepLock,
@@ -1388,6 +1497,26 @@ export async function runRetentionSweepCli(): Promise<void> {
     return;
   }
   if (result.hadFailures) process.exit(1);
+}
+
+export async function runRetentionSweepCli(
+  deps: RetentionSweepCliDependencies = {
+    env: process.env,
+    exit: (code) => process.exit(code),
+    run: runRetentionSweepCliBody,
+  },
+): Promise<void> {
+  if (!deps.env.DATABASE_URL) {
+    console.error('[B75 sweep] DATABASE_URL not set');
+    deps.exit(1);
+    return;
+  }
+  if (!deps.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('[B75 sweep] SUPABASE_SERVICE_ROLE_KEY not set');
+    deps.exit(1);
+    return;
+  }
+  await deps.run();
 }
 
 async function runSweep(): Promise<boolean> {
@@ -1439,15 +1568,7 @@ async function runSweep(): Promise<boolean> {
       console.log(
         `[B75 sweep] ${spec.parent}: processing partition=${partition.partitionLabel} child=${partition.child}`,
       );
-      const res = await processPartition(spec, partition, cfg);
-      if (res.status !== 'failed') {
-        // A drop or a no-write skip is a success for this (parent, label): clear any
-        // auto-resolvable row it minted on an earlier night.
-        await resolveSweepAlerts(
-          AUTO_RESOLVED_CLASSES.map((cls) => partitionAlertKey(spec.parent, partition.partitionLabel, cls)),
-          `${spec.parent}/${partition.partitionLabel} (${res.status})`,
-        );
-      }
+      const res = await processPartitionAndSettle(spec, partition, cfg);
       if (res.status === 'dropped') {
         partitionsDropped++;
         bytesFreedTotal += res.bytesHot;
@@ -1465,29 +1586,6 @@ async function runSweep(): Promise<boolean> {
         partitionsFailed++;
         console.error(
           `[B75 sweep] ${spec.parent}/${partition.partitionLabel}: FAILED — ${res.reason} (duration_ms=${res.durationMs})`,
-        );
-        // B-B75-EXPORT-COMPLETENESS: four classes, so a refusal never lands in the
-        // "likely transient" arm (Langston Step-2 B-2). A refusal is critical: it keeps
-        // the hot partition, so it grows the database disk every night it repeats.
-        const cls = sweepFailureClass(res);
-        await raiseSweepAlert(
-          `B75 retention sweep FAILED: ${spec.parent}/${partition.partitionLabel}`,
-          `The nightly storage archive sweep could not move partition ${partition.partitionLabel} of ${spec.parent} ` +
-            `to warm storage. mode=${res.mode}. The hot partition was NOT dropped (data is safe` +
-            `${cls === 'non-proven-existing' ? `; it holds ${res.bytesHot} bytes on the database disk` : ''}). ` +
-            `Reason: ${res.reason}. ${failureClassText(cls, res.reason)}`,
-          cls === 'checksum' || cls === 'non-proven-existing' ? 'critical' : 'warning',
-          {
-            parent: spec.parent,
-            partition_label: partition.partitionLabel,
-            child: partition.child,
-            mode: res.mode,
-            failure_class: cls,
-            is_checksum_mismatch: Boolean(res.isChecksumMismatch),
-            is_count_mismatch: Boolean(res.isCountMismatch),
-            is_non_proven: Boolean(res.isNonProven),
-          },
-          partitionAlertKey(spec.parent, partition.partitionLabel, cls),
         );
       }
     }
@@ -1512,10 +1610,24 @@ async function runSweep(): Promise<boolean> {
   return partitionsFailed > 0 || plainResult.failed > 0;
 }
 
-if (isDirectEntry(import.meta.url)) {
-  runRetentionSweepCli().catch(async (err) => {
+export interface RetentionSweepProcessDependencies {
+  runCli: () => Promise<void>;
+  raiseAlert: typeof raiseSweepAlert;
+  exit: (code: number) => void;
+}
+
+export async function runRetentionSweepProcess(
+  deps: RetentionSweepProcessDependencies = {
+    runCli: () => runRetentionSweepCli(),
+    raiseAlert: raiseSweepAlert,
+    exit: (code) => process.exit(code),
+  },
+): Promise<void> {
+  try {
+    await deps.runCli();
+  } catch (err) {
     console.error('[B75 sweep] fatal:', err);
-    await raiseSweepAlert(
+    await deps.raiseAlert(
       'B75 retention sweep CRASHED',
       `The nightly storage archive sweep crashed before completing. No partition is left half-dropped ` +
         `(DROP only happens after verify). Reason: ${err instanceof Error ? err.message : String(err)}`,
@@ -1523,6 +1635,10 @@ if (isDirectEntry(import.meta.url)) {
       { fatal: true },
       FATAL_ALERT_KEY,
     );
-    process.exit(1);
-  });
+    deps.exit(1);
+  }
+}
+
+if (isDirectEntry(import.meta.url)) {
+  void runRetentionSweepProcess();
 }
