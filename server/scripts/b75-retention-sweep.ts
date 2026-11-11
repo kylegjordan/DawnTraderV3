@@ -1359,6 +1359,15 @@ async function runSweep(): Promise<boolean> {
     const cutoff = new Date(Date.now() - retentionDays * 86_400_000);
     const cutoffMonth = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth(), 1));
 
+    // B-DISK-HEADROOM Step-7 finding: the old code named retentionDays only on the EMPTY branch. A proof table with
+    // eligible children therefore logged every child and drop but not the configuration that made them eligible.
+    // Emit the loaded value before listing, so every parent carries the same positive evidence whether it is empty or not.
+    console.log(
+      `[B75 sweep] ${spec.parent}: retentionDays=${retentionDays} cutoff=${cutoff.toISOString()} cutoffMonth=${cutoffMonth
+        .toISOString()
+        .slice(0, 10)}`,
+    );
+
     const ctlList = new Client({ connectionString: process.env.DATABASE_URL });
     await ctlList.connect();
     let oldPartitions: PartitionRow[];
