@@ -34,6 +34,7 @@ import {
 import {
   deleteSnapshotProvenObject,
   parseRetentionSweepArgs,
+  storedSnapshotEvidenceMatches,
   sweepSnapshotTable,
   type B75SweepConfig,
 } from '../../scripts/b75-retention-sweep.js';
@@ -173,6 +174,35 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION ranked selector', () => {
       .toThrow(/exactly one UTC day/);
     expect(() => snapshotPopulationSql(selector({ cutoffAt: new Date('2026-10-12T01:00:00Z') })))
       .toThrow(/complete UTC-day boundary/);
+    expect(() => snapshotPopulationSql(selector({
+      dayStart: new Date('2026-10-12T00:00:00Z'),
+      dayEnd: new Date('2026-10-13T00:00:00Z'),
+    }))).toThrow(/wholly older than the frozen cutoff/);
+  });
+
+  it('refuses reuse when the stored cutoff, floor, day, or immutable proof drifts', () => {
+    const snap = selector();
+    const proof = { sourceRowCount: 2, orderedKeySha256: 'a'.repeat(64), fullRowSha256: 'b'.repeat(64) };
+    const stored = {
+      cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+      selector_contract: XSTOCK_SNAPSHOT_SELECTOR_CONTRACT,
+      selector_version: 1,
+      frozen_cutoff_at: snap.cutoffAt,
+      ranking_observed_at: snap.rankingObservedAt,
+      keep_floor_rows: snap.keepFloorRows,
+      day_start: snap.dayStart,
+      day_end: snap.dayEnd,
+      source_row_count: proof.sourceRowCount,
+      ordered_key_sha256: proof.orderedKeySha256,
+      full_row_sha256: proof.fullRowSha256,
+    };
+    expect(storedSnapshotEvidenceMatches(stored, snap, proof)).toBe(true);
+    expect(storedSnapshotEvidenceMatches({ ...stored, frozen_cutoff_at: new Date('2026-10-11T00:00:00Z') }, snap, proof))
+      .toBe(false);
+    expect(storedSnapshotEvidenceMatches({ ...stored, keep_floor_rows: 241 }, snap, proof)).toBe(false);
+    expect(storedSnapshotEvidenceMatches({ ...stored, day_start: new Date('2026-09-30T00:00:00Z') }, snap, proof))
+      .toBe(false);
+    expect(storedSnapshotEvidenceMatches({ ...stored, full_row_sha256: 'c'.repeat(64) }, snap, proof)).toBe(false);
   });
 
   it('reuses the ranked contract for day discovery and one gated proven-key delete statement', () => {
@@ -310,6 +340,28 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION table orchestration', () => {
     expect(result).toMatchObject({ objectsExamined: 2, rowsDeleted: 1, failed: true });
     expect(ctl.query.mock.calls.filter(([sql]) => String(sql).startsWith('VACUUM'))).toHaveLength(1);
     expect(raiseAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('cannot reach delete or vacuum when archive/readback proof fails first', async () => {
+    const ctl = fakeClient();
+    const exporter = fakeClient();
+    const clients = [ctl, exporter];
+    const deleteObject = vi.fn();
+    const result = await sweepSnapshotTable(config(true), 'xstock_spot_ohlc_15m_snapshot', {
+      createClient: vi.fn(() => clients.shift() as never),
+      getStorageClient: vi.fn(() => ({} as never)),
+      listSelectors: vi.fn(async () => [selector()]),
+      exportPartition: vi.fn() as never,
+      archiveObject: vi.fn(async () => { throw new Error('checksum mismatch'); }) as never,
+      deleteObject: deleteObject as never,
+      raiseAlert: vi.fn() as never,
+      resolveAlerts: vi.fn() as never,
+      unlinkFile: vi.fn(),
+      now: vi.fn(() => Date.parse('2026-11-11T12:00:00Z')),
+    });
+    expect(result).toMatchObject({ objectsExamined: 1, rowsDeleted: 0, failed: true });
+    expect(deleteObject).not.toHaveBeenCalled();
+    expect(ctl.query.mock.calls.some(([sql]) => String(sql).startsWith('VACUUM'))).toBe(false);
   });
 });
 
@@ -476,6 +528,45 @@ describe('B-XSTOCK-SNAPSHOT-RETENTION canonical archive proof', () => {
     }));
     await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
       .rejects.toThrow(/not proven/);
+    fs.writeFileSync(`${file}.completeness.json`, JSON.stringify({
+      table: 'xstock_spot_ohlc_15m_snapshot',
+      proven: true,
+      checksum_ok: false,
+      row_count: proof.sourceRowCount,
+      snapshot_selector: {
+        cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+        ordered_key_sha256: proof.orderedKeySha256,
+        full_row_sha256: proof.fullRowSha256,
+      },
+    }));
+    await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
+      .rejects.toThrow(/not proven/);
+    fs.writeFileSync(`${file}.completeness.json`, JSON.stringify({
+      table: 'xstock_spot_ohlc_15m_snapshot',
+      proven: true,
+      checksum_ok: true,
+      row_count: proof.sourceRowCount + 1,
+      snapshot_selector: {
+        cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+        ordered_key_sha256: proof.orderedKeySha256,
+        full_row_sha256: proof.fullRowSha256,
+      },
+    }));
+    await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
+      .rejects.toThrow(/proof does not match/);
+    fs.writeFileSync(`${file}.completeness.json`, JSON.stringify({
+      table: 'xstock_spot_ohlc_15m_snapshot',
+      proven: true,
+      checksum_ok: true,
+      row_count: proof.sourceRowCount,
+      snapshot_selector: {
+        cursor_contract: XSTOCK_SNAPSHOT_CURSOR_CONTRACT,
+        ordered_key_sha256: 'c'.repeat(64),
+        full_row_sha256: proof.fullRowSha256,
+      },
+    }));
+    await expect(loadProvenRehydratedSnapshot(scratch, 'xstock_spot_ohlc_15m_snapshot'))
+      .rejects.toThrow(/proof does not match/);
   });
 
   it('loads only parsed downloaded keys into the typed pre-lock temp table', async () => {
