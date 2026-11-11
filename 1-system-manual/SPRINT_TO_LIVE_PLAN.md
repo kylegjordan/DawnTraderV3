@@ -51,7 +51,7 @@
 | 3 — feed | 2 | CORZ investigation | CC-C (Analyst Claude) | none |  | Kyle 2026-10-07 | ✅ DONE | nothing |
 | 3 — feed | 4 | B-B75-EXPORT-COMPLETENESS | CC-A (Old Claude) | none | #1195 | Kyle 2026-10-07 | ✅ CLOSED 2026-10-18 (report B_B75_EXPORT_COMPLETENESS_COMPLETION_REPORT.md) | nothing |
 | 3 — feed | 5 | B-B75-SCRIPT-TEST-HARNESS | CC-B (New Claude) | none | #1208 | Langston 2026-10-17 (placed) | ✅ CLOSED 2026-11-11 (report B_B75_SCRIPT_TEST_HARNESS_COMPLETION_REPORT.md; Coltrane Step 11 CONFIRMED exact ref `86d0c8377995532de6e986915eb36ceabea377cf`) | nothing |
-| 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | STEP 1 — scope with Coltrane | Coltrane |
+| 3 — feed | 6 | B-XSTOCK-SNAPSHOT-RETENTION | CC-C (Analyst Claude) | none | #1194 | Kyle 2026-10-07 | STEP 2 — pre-implementation audit and implementation plan; Step 1 approved by Coltrane at `ce2b740ea55fbc715d35cc10685c109b90b6cc30` | nothing |
 | 3 — feed | 7 | B-CRON-MISSED-CATCHUP | CC-C (Analyst Claude) | none | #691 | Kyle 2026-10-07 | QUEUED | nothing |
 | 4 — paper truth | 1 | B-OPEN-REFUSAL-DURABLE-ROW | CC-C (Analyst Claude) | 8a | #1083 | Kyle 2026-10-07 | row | nothing |
 | 4 — paper truth | 2 | the main Dashboard 0-trades read | CC-B (New Claude) | none | #903 | Kyle 2026-10-07 | WITHDRAWN (Kyle 2026-10-19: the main Dashboard is off-limits) | nothing |
