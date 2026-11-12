@@ -229,3 +229,20 @@ At Step 10 update the System Impact Map, System Manual, Batch Catalog, Running I
 Today the scheduler can notice that it missed an alarm, but it has no safe way to decide whether that alarm's work already started. The fix gives every alarm a durable ticket—job name plus the time it was supposed to run—and makes both the normal ring and the late/missed ring use the same ticket desk and the same one-at-a-time line.
 
 Not every missed job should be replayed. A formula check can still be useful a few hours late, while putting today's market snapshot into an old five-minute bucket would create false history. The policy therefore either runs one recent, honest catch-up or records exactly why it refused; uncertain work after a crash is handed to a person instead of being repeated blindly.
+
+## 11. Step 10 plan-to-implementation reconciliation (2026-11-12)
+
+| plan item | landed result |
+|---|---|
+| P1 | `scheduled_job_occurrences` landed with microsecond boundary identity, unique `(job_name,scheduled_for)`, terminal-state checks and unfinished-row indexing. |
+| P2 | The registry now carries one typed recovery contract; natural callbacks use their task boundary and missed events reconstruct and validate the previous calendar occurrence. |
+| P3 | One FIFO/advisory-lock lane per job serializes scheduled, boot and manual work; the central `b-cron-missed-catchup/v1` policy records every admitted or refused boundary. |
+| P4 | Claimed-before-work rows resume; prior-process running rows become `indeterminate`; admission/lock failure refuses the core and stops that job lane rather than guessing. |
+| P5 | Exactly six production schedules use the shared runner without changing cadence, enablement, jitter, timezone, Q-D `noOverlap` or business purpose. |
+| P6 | `scheduled_tasks_audit` remains success/error fire evidence; new rows carry true `scheduled_for`, actual `fired_at`, source, occurrence id, lag, duration and policy version. |
+| P7 | Canonical machine actor `cron-recovery` resolves only the exact succeeded `cron_stale` key over engine transport; failure, skip, indeterminate, wrong-boundary and `cron_verifier_blind` cases remain open. |
+| P8 | Focused recovery, alert-store and Formula Health suites passed 70/70, including the required race, crash, policy, consumer and alert mutations. |
+| P9 | The deployed exact-ref harness reconciled 11/11 identities, 6 success / 3 skip / 1 fail / 1 indeterminate, seven execution audit rows and one race core call; the six real schedules remained armed and healthy. |
+| P10 | Step 10 updates the scheduler architecture, component map, lifecycle records and issue/risk registers; `#691` remains open until the Step 11 completion report is confirmed. |
+
+Coltrane independently confirmed Step 8 at exact evidence ref `bc945a098edb5a6d807c6696a6ef20678b4ed11e`, and Step 9 found every approved objective GREEN against deployed runtime `4e66ea904edf690e144035c959cbd335241f7651`. The deterministic harness is the pre-registered close mechanism, so no observation window or deployment hold remains. The known limits are the intended fail-closed boundaries: no fabricated Q-D history, no backlog burst, no work without durable admission, and no automatic replay after a core may have started.
