@@ -1,7 +1,7 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`bcdd386385e2dc2eeb51e6ba7e0ad3f669a40242` on branch
+`faa5b4b98efbc47de6278939faa8077ad0bf0be7` on branch
 `migration/b-cron-missed-catchup-step3-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 repair complete; return to Step 4 review
+Status: Step 3 second repair complete after Coltrane sent back the first repair; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -56,14 +56,14 @@ was allowed to leave the draft stage.
 
 ## Re-derived defects and structural repairs
 
-1. **Exact stale-alert resolution could be lost.** A successful recovered
-   occurrence tried the exact resolution once. A temporary alert-store failure,
-   or an alert written just after that attempt, could leave the exact row open.
-   Successful missed recoveries now retain a durable pending-resolution marker
-   in the occurrence ledger. Every scheduled, auxiliary and startup lock holder
-   retries it; the marker clears only after the exact alert row is resolved.
-   Exact scheduled-boundary alerts are one-shot, so an in-flight verifier cannot
-   recreate the same immutable occurrence after its resolution.
+1. **Exact stale-alert resolution could be lost.** A successful occurrence now
+   records a durable pending-resolution marker, whether it arrived naturally or
+   through catch-up. Every scheduled, auxiliary and startup lock holder retries
+   an alert-store failure. The verifier's final history read and alert mint now
+   run under the same cross-process job lock as execution, so an empty resolve is
+   an honest terminal `no_open_alert` outcome rather than either a leaking marker
+   or a window in which a stale read can mint afterward. Exact calendar-boundary
+   alerts remain one-shot; interval-fallback keys remain reusable after resolve.
 2. **The verifier could certify the wrong evidence.** It used the latest start
    time without requiring success, so an error or an older boundary starting
    late could make a missed boundary appear healthy. It now reads only the
@@ -81,7 +81,8 @@ was allowed to leave the draft stage.
 ## Verification at the repair boundary
 
 - Focused runner, alert-store, verifier and Formula Health suites: 4 files,
-  90 tests passed, including retry, one-shot and already-resolved branches.
+  94 tests passed, including retry, natural-success cleanup, empty-resolve
+  termination, separate-runner lock ordering and fallback recurrence branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
@@ -90,12 +91,12 @@ was allowed to leave the draft stage.
 
 ## Honest residual carried forward
 
-The deterministic staging race proves one core execution inside one process and
-the database uniqueness constraint is separately exercised. It does not imitate
-a second operating-system process losing its database-lock session while the
-core is already running. That destructive fault is not required by the
-registered scope and will be stated as a proof limit rather than represented as
-covered.
+The deterministic staging race proves one core execution inside one process;
+the new separate-runner control proves that verifier work waits behind a core
+through the shared lock contract. It still does not imitate a second operating-
+system process losing its database-lock session while the core is already
+running. That destructive fault is not required by the registered scope and
+will be stated as a proof limit rather than represented as covered.
 
 ## Claim-only reader record
 
@@ -106,10 +107,12 @@ independently re-derived from the code before implementation.
 
 ## Repair change-set census
 
-Against the parent of implementation object `bcdd386385e2dc2eeb51e6ba7e0ad3f669a40242`,
-exactly nine tracked paths changed: one new repair record and eight modified
-paths; zero tracked paths were deleted. `.claude/launch.json` remains an
-unrelated untracked file and is not in the review ref.
+Across the repair range from the parent of
+`bcdd386385e2dc2eeb51e6ba7e0ad3f669a40242` through implementation object
+`faa5b4b98efbc47de6278939faa8077ad0bf0be7`, exactly nine tracked paths changed:
+one new repair record and eight modified paths; zero tracked paths were deleted.
+`.claude/launch.json` remains an unrelated untracked file and is not in the
+review ref.
 
 ### NEW
 
@@ -150,32 +153,35 @@ if (result.status === 'succeeded' && result.occurrenceId) {
 }
 ```
 
-After, only a successful missed recovery installs a durable carrier; every job
-lock holder retries it, and an already-resolved exact row also closes the
-carrier after a prior marker-write failure:
+After, every successful scheduled occurrence installs a durable carrier. Every
+job lock holder retries it; the terminal record distinguishes an open row that
+was resolved from an empty result that is now safe because minting uses the same
+lock:
 
 ```ts
-...(status === 'succeeded' && item.source === 'missed_catchup'
-  ? { stale_resolve_pending: true }
-  : {}),
+...(status === 'succeeded' ? { stale_resolve_pending: true } : {}),
 
 const resolved = await this.deps.resolveByKey(
   key, CRON_RECOVERY_ACTOR, evidence, 'engine',
 );
-if (resolved.length > 0 || this.deps.hasResolvedByKey?.(key) === true) {
-  await store.markStaleResolvePersisted(row.id, this.now());
-}
+await store.markStaleResolvePersisted(
+  row.id,
+  this.now(),
+  resolved.length > 0 ? 'resolved_open_alert' : 'no_open_alert',
+);
 ```
 
-The verifier marks this immutable scheduled-boundary identity one-shot, so an
-in-flight stale read cannot recreate it after recovery:
+The verifier performs its final history recheck and alert mint in the runner's
+cross-process job lock. Only a parsed calendar boundary is marked one-shot:
 
 ```ts
-await addAlert({
-  dedupe_key: dedupeKey,
-  one_shot: true,
-  // exact occurrence title, body and metadata
+await cronOccurrenceRunner.runAuxiliary(job.name, 'on-read', async () => {
+  const lockedRead = await queryLastFires([job.name]);
+  // re-evaluate under the lock, then mint only if the boundary is still stale
+  await emitStaleAlert(/* exact occurrence */, true);
 });
+
+await emitStaleAlert(/* interval fallback */, false);
 ```
 
 ### 2. MODIFIED — verifier health requires a successful scheduled boundary
@@ -243,7 +249,8 @@ The occurrence ledger and fire audit still receive `scheduledFor`; Q-D uses
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
-   ordering still leave an exact recovered occurrence open or re-created?
+   ordering still leave an exact successful occurrence open or re-created now
+   that both sides use the same cross-process job lock?
 2. Is `one_shot` correctly limited to immutable scheduled-boundary identities,
    without changing ordinary recurring alert behavior?
 3. Does the successful-boundary union reject error rows and late starts while
@@ -252,6 +259,7 @@ The occurrence ledger and fire audit still receive `scheduledFor`; Q-D uses
    its age/session guard has expired?
 5. Does Q-D now retain both truths: scheduled identity for provenance and actual
    start for current-snapshot business logic?
-6. Is the same-process deterministic race plus the database uniqueness proof an
-   honest sufficient scope close while the separate-process/mid-core-lock-loss
-   behavior remains explicitly unclaimed?
+6. Is the same-process deterministic race, separate-runner lock-order control
+   and database uniqueness proof an honest sufficient scope close while the
+   operating-system-process/mid-core-lock-loss behavior remains explicitly
+   unclaimed?
