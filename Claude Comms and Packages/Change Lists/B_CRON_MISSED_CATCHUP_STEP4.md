@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `ddecdf22983eba8af679818d5cba139fa95bfe52` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
+**READY-AT (implementation object):** `3c78bd1a57d04b653ab4adf5f289e927f4d4cd0e` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -456,6 +456,30 @@ locked = await this.deps.store.withJobLock(jobName, async (store) => {
 
 The requested red-first arm reproduced the prior gap with a durable `indeterminate` row and zero alert calls. It now proves the exact dedupe key, occurrence ID, status and reason survive a post-callback release failure, and separately proves the job lane remains stopped.
 
+### 4e. FIFTH SENT-BACK CORRECTION — alert-store refusal leaves a durable restart carrier
+
+Coltrane's fifth substantive round at exact ref `ddecdf22983eba8af679818d5cba139fa95bfe52` found that moving alert creation before advisory release did not cover an alert-store rejection. The helper still swallowed `addAlert` failure after the row became terminal, so later startups could not rediscover the former `running` row and claimed work could resume without the required manual-decision carrier.
+
+READY-AT makes that dependency durable. Reconciliation sets `decision_alert_pending=true` in the same row update that records `indeterminate`. Every startup then loads all pending indeterminate rows for the job, persists each exact deterministic alert, and clears the pending marker only after success. A failure stops preparation and leaves the marker for a replacement process; claimed rows are loaded only after the pending set is empty:
+
+```ts
+await store.reconcileRunning(jobName, this.ownerInstanceId, at);
+const indeterminate = await store.loadPendingDecisionAlerts(jobName);
+for (const row of indeterminate) {
+  await this.persistDecisionAlert({
+    jobName,
+    scheduledFor: row.scheduledFor,
+    status: 'indeterminate',
+    occurrenceId: row.id,
+    reason: row.reason ?? 'prior_process_died_after_start',
+  });
+  await store.markDecisionAlertPersisted(row.id, this.now());
+}
+return { indeterminate, claimed: await store.loadClaimed(jobName) };
+```
+
+The new red-first arm first showed the old runner swallowing the alert-store refusal and completing reconciliation. It now proves the first runner stops with a durable pending marker and no claimed execution; a replacement runner rediscovers the terminal row, recreates the exact alert by deterministic dedupe key, records `decision_alert_persisted_at`, clears the pending marker, and only then resumes claimed work.
+
 ### 5. NEW — exact stale occurrence only, after durable success
 
 ```ts
@@ -498,9 +522,9 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 ## Verification already run for corrected READY-AT
 
-- GitHub CI run `43161494593` at READY-AT passed TypeScript Check, Test Suite, Build and Docker Build individually. Prior runs are not used to certify READY-AT.
+- GitHub CI run `43163081347` at READY-AT passed TypeScript Check, Test Suite, Build and Docker Build individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Corrected recovery, alert-store and Formula Health suites: 65/65 passed across the three named files.
+- Corrected recovery, alert-store and Formula Health suites: 66/66 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -518,6 +542,7 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return while the same identity is unfinished or before persisting a decision for a different identity?
 10. Does every advisory-release failure shape (query rejection or false release result) destroy the affected pooled client, propagate out of the lock boundary, and stop the job lane after work may already have completed?
 11. If startup reconciliation changes a prior-owner `running` row before advisory release fails, is its exact durable alert carrier already present while claimed work remains unable to start?
+12. If the alert store itself rejects after the durable transition, does the pending marker survive for deterministic replacement-startup retry, and can claimed work start before every marker clears?
 
 ## One-pass fresh-reader record
 
@@ -532,4 +557,5 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 - Coltrane's second substantive round at implementation ref `13fecfc11a35ea4f128815aa6a54bacae8d6edee` returned two corrections: an ordinary auxiliary callback failure must not stop the recovery lane, and a same-identity rolling-process contender must remain pending while the row is `claimed` or `running`. Both are corrected in READY-AT with the three requested red-first arms and a separate real lock-session failure arm.
 - Coltrane's third substantive round at implementation ref `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` returned two corrections: unfinished prior-owner identity recovery must not depend on first observing contention, and advisory-unlock failure must propagate, destroy the uncertain pooled client and stop the lane. Both are corrected in READY-AT; the independent reader additionally found and closed the non-throwing false-release arm before redispatch.
 - Coltrane's fourth substantive round at implementation ref `455e93a26b12c69e5f1848e2cd308cb8e50129c8` returned one correction: a post-reconciliation advisory-release failure must not suppress the exact alert for a row already changed to `indeterminate`. READY-AT emits that carrier before release and keeps the release failure fatal; the requested red-first proof covers the durable row, exact alert and stopped lane together.
+- Coltrane's fifth substantive round at implementation ref `ddecdf22983eba8af679818d5cba139fa95bfe52` returned one correction: alert-store rejection must leave a durable carrier that replacement startup can rediscover, and claimed work must not resume first. READY-AT adds the pending/persisted marker lifecycle and the requested two-runner red-first proof.
 - Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
