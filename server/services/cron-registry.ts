@@ -30,6 +30,37 @@
 
 import type { ScheduledTask } from 'node-cron';
 
+export type CronOccurrenceSource = 'natural' | 'missed_catchup';
+export type CronAuxiliarySource = 'boot' | 'manual';
+export type CronRecoveryPolicyKey =
+  | 'formula_audit_cron'
+  | 'feed_integrity_cron'
+  | 'awareness_state_update_cron'
+  | 'awareness_reflection_cron'
+  | 'xstock_qd_probe_cron'
+  | 'xstock_universe_discovery_cron';
+
+export interface CronScheduledRunContext {
+  scheduledFor: Date;
+  firedAt: Date;
+  triggerSource: 'cron' | 'missed_catchup';
+  occurrenceId: string;
+  policyVersion: string;
+}
+
+export interface CronJobRunResult {
+  /** Job-specific terminal evidence copied into scheduled_tasks_audit.meta. */
+  meta?: Record<string, unknown>;
+}
+
+export interface CronRecoveryRegistration {
+  policyKey: CronRecoveryPolicyKey;
+  run: (context: CronScheduledRunContext) => Promise<CronJobRunResult | void>;
+  /** Work such as feed jitter that must happen after durable claim but before
+   * the core is marked running. A crash here is therefore safely retryable. */
+  beforeRun?: (source: CronOccurrenceSource) => Promise<Record<string, unknown> | void>;
+}
+
 export interface RegisteredCronJob {
   /** Unique name for this schedule. Must match the task_name written to
    * scheduled_tasks_audit on fire. Snake_case convention. Examples:
@@ -53,6 +84,10 @@ export interface RegisteredCronJob {
    * env-gated (e.g., FORMULA_AUDIT_ENABLED=false), it should NOT register
    * — but we leave the optional flag for diagnostic purposes if needed. */
   enabled: boolean;
+  /** B-CRON-MISSED-CATCHUP: the shared natural/missed occurrence contract.
+   * Optional only so synthetic legacy unit fixtures can still model the
+   * observation-only registry; every production cron registration supplies it. */
+  recovery?: CronRecoveryRegistration;
 }
 
 const registry = new Map<string, RegisteredCronJob>();

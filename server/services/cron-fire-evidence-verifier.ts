@@ -278,9 +278,9 @@ async function emitStaleAlert(
         `Last recorded fire: ${lastFire?.toISOString() ?? 'NEVER'}.\n\n` +
         `B-NEW-51: this check is now CADENCE-AWARE (compares against the schedule's actual calendar ` +
         `occurrence via cron-parser, not a fixed interval) and DE-DUPLICATED (one alert per missed ` +
-        `occurrence, not one per 15-min cycle). NOTE: a PM2 restart does NOT fix a calendar/arming miss — ` +
-        `if a missed occurrence has no later occurrence yet, this clears automatically on the next ` +
-        `successful fire. See SIM §9.10.c.\n\n` +
+        `occurrence, not one per 15-min cycle). NOTE: a process restart or a later natural fire does NOT ` +
+        `erase this missed occurrence. Only successful recovery of this exact scheduled occurrence clears ` +
+        `the alert; a skipped, failed or indeterminate recovery remains open. See SIM §9.10.c.\n\n` +
         `Investigate: SELECT * FROM scheduled_tasks_audit WHERE task_name = '${jobName}' ` +
         `ORDER BY fired_at DESC LIMIT 5;`,
       metadata: {

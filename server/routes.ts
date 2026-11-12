@@ -8210,7 +8210,12 @@ export async function registerRoutes(app: Express): Promise<{ httpServer: Server
   apiRouter.post('/internal/universe-discovery/refresh', authenticateToken, async (_req: AuthenticatedRequest, res) => {
     try {
       const { runDiscovery } = await import('./services/xstock-universe-discoverer.js');
-      const result = await runDiscovery('manual_endpoint');
+      const { cronOccurrenceRunner } = await import('./services/cron-occurrence-runner.js');
+      const result = await cronOccurrenceRunner.runAuxiliary(
+        'xstock_universe_discovery_cron',
+        'manual',
+        () => runDiscovery('manual_endpoint'),
+      );
       res.json({
         ok: true,
         run_id: result.runId,
@@ -14953,7 +14958,12 @@ Provide specific, actionable recommendations.`,
       console.log('[AUDIT] Manual formula audit triggered by user:', req.user!.username);
       
       const { runFormulaAudit } = await import('./jobs/formula-auto-audit');
-      const result = await runFormulaAudit('manual');
+      const { cronOccurrenceRunner } = await import('./services/cron-occurrence-runner.js');
+      const result = await cronOccurrenceRunner.runAuxiliary(
+        'formula_audit_cron',
+        'manual',
+        () => runFormulaAudit('manual'),
+      );
       
       res.json({ 
         ok: true,
@@ -15008,7 +15018,12 @@ Provide specific, actionable recommendations.`,
       console.log('[FEED-HEALTH] Manual check triggered by user:', req.user!.username);
       
       const { runFeedIntegrityCheck } = await import('./jobs/feed-integrity-auto-check');
-      const report = await runFeedIntegrityCheck('manual');
+      const { cronOccurrenceRunner } = await import('./services/cron-occurrence-runner.js');
+      const report = await cronOccurrenceRunner.runAuxiliary(
+        'feed_integrity_cron',
+        'manual',
+        () => runFeedIntegrityCheck('manual'),
+      );
       
       res.json({ 
         ok: true,
@@ -18856,8 +18871,12 @@ Please:
   apiRouter.post('/awareness/reflect', authenticateToken, requireAdmin, async (req: AuthenticatedRequest, res) => {
     try {
       const { awarenessCore } = await import('./services/awareness-core');
-      
-      const reflection = await awarenessCore.reflectAndRespond();
+      const { cronOccurrenceRunner } = await import('./services/cron-occurrence-runner.js');
+      const reflection = await cronOccurrenceRunner.runAuxiliary(
+        'awareness_reflection_cron',
+        'manual',
+        () => awarenessCore.reflectAndRespond(),
+      );
       
       res.json({ ok: true, reflection });
     } catch (error: any) {

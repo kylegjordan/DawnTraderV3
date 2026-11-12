@@ -11,7 +11,10 @@ import { awarenessCore } from './awareness-core';
 // B-NEW-49 (2026-05-31): cron-registry + fire-evidence wiring per scope §1.5.
 import { cronRegistry } from './cron-registry.js';
 import { logCronArm } from './cron-arm-logger.js';
-import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
+import { cronOccurrenceRunner } from './cron-occurrence-runner.js';
+
+const STATE_JOB = 'awareness_state_update_cron';
+const REFLECTION_JOB = 'awareness_reflection_cron';
 
 let stateUpdateTask: ScheduledTask | null = null;
 let reflectionTask: ScheduledTask | null = null;
@@ -24,57 +27,13 @@ export function initializeAwarenessScheduler() {
   console.log('[AwarenessScheduler] 🧭 Initializing awareness scheduler...');
 
   // Every hour: Update awareness state
-  stateUpdateTask = cron.schedule('0 * * * *', async () => {
-    console.log('[AwarenessScheduler] ⏰ Hourly awareness state update triggered');
-    // B-NEW-49: fire-evidence write to scheduled_tasks_audit (in addition
-    // to the awareness_state_log row written by updateAwarenessState).
-    const firedAt = new Date();
-    const startMs = firedAt.getTime();
-    let status: 'success' | 'error' = 'success';
-    let errorMessage: string | undefined;
-    try {
-      await awarenessCore.updateAwarenessState();
-      console.log('[AwarenessScheduler] ✅ Hourly state update complete');
-    } catch (error) {
-      status = 'error';
-      errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[AwarenessScheduler] ❌ Hourly state update failed:', error);
-    } finally {
-      await scheduledJobsAudit.writeFireRow({
-        jobName: 'awareness_state_update_cron',
-        scheduledFor: firedAt,
-        firedAt,
-        status,
-        errorMessage,
-        meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs },
-      });
-    }
+  stateUpdateTask = cron.schedule('0 * * * *', async (context) => {
+    await cronOccurrenceRunner.runNatural(STATE_JOB, context.date);
   });
 
   // Every 6 hours: Run deep self-reflection
-  reflectionTask = cron.schedule('0 */6 * * *', async () => {
-    console.log('[AwarenessScheduler] ⏰ 6-hour deep reflection triggered');
-    const firedAt = new Date();
-    const startMs = firedAt.getTime();
-    let status: 'success' | 'error' = 'success';
-    let errorMessage: string | undefined;
-    try {
-      const reflection = await awarenessCore.reflectAndRespond();
-      console.log(`[AwarenessScheduler] ✅ Reflection complete - ${reflection.patterns.length} patterns, ${reflection.insights.length} insights`);
-    } catch (error) {
-      status = 'error';
-      errorMessage = error instanceof Error ? error.message : String(error);
-      console.error('[AwarenessScheduler] ❌ Reflection failed:', error);
-    } finally {
-      await scheduledJobsAudit.writeFireRow({
-        jobName: 'awareness_reflection_cron',
-        scheduledFor: firedAt,
-        firedAt,
-        status,
-        errorMessage,
-        meta: { trigger_source: 'cron', duration_ms: Date.now() - startMs },
-      });
-    }
+  reflectionTask = cron.schedule('0 */6 * * *', async (context) => {
+    await cronOccurrenceRunner.runNatural(REFLECTION_JOB, context.date);
   });
 
   console.log('[AwarenessScheduler] ✅ Awareness scheduler initialized');
@@ -83,30 +42,55 @@ export function initializeAwarenessScheduler() {
 
   // B-NEW-49: register both schedules with cron-registry + emit arm-logger.
   cronRegistry.register({
-    name: 'awareness_state_update_cron',
+    name: STATE_JOB,
     task: stateUpdateTask,
     expression: '0 * * * *',
     timezone: 'UTC',
     intervalSeconds: 3600,  // hourly
     enabled: true,
+    recovery: {
+      policyKey: STATE_JOB,
+      run: async () => {
+        console.log('[AwarenessScheduler] ⏰ Hourly awareness state update triggered');
+        await awarenessCore.updateAwarenessState();
+        console.log('[AwarenessScheduler] ✅ Hourly state update complete');
+      },
+    },
   });
-  logCronArm(cronRegistry.get('awareness_state_update_cron')!);
+  stateUpdateTask.on('execution:missed', (context) => {
+    cronOccurrenceRunner.dispatchMissed(STATE_JOB, context.date);
+  });
+  logCronArm(cronRegistry.get(STATE_JOB)!);
+  cronOccurrenceRunner.dispatchReconciliation(STATE_JOB);
 
   cronRegistry.register({
-    name: 'awareness_reflection_cron',
+    name: REFLECTION_JOB,
     task: reflectionTask,
     expression: '0 */6 * * *',
     timezone: 'UTC',
     intervalSeconds: 21600,  // 6h
     enabled: true,
+    recovery: {
+      policyKey: REFLECTION_JOB,
+      run: async () => {
+        console.log('[AwarenessScheduler] ⏰ 6-hour deep reflection triggered');
+        const reflection = await awarenessCore.reflectAndRespond();
+        console.log(`[AwarenessScheduler] ✅ Reflection complete - ${reflection.patterns.length} patterns, ${reflection.insights.length} insights`);
+        return { meta: { patterns: reflection.patterns.length, insights: reflection.insights.length } };
+      },
+    },
   });
-  logCronArm(cronRegistry.get('awareness_reflection_cron')!);
+  reflectionTask.on('execution:missed', (context) => {
+    cronOccurrenceRunner.dispatchMissed(REFLECTION_JOB, context.date);
+  });
+  logCronArm(cronRegistry.get(REFLECTION_JOB)!);
+  cronOccurrenceRunner.dispatchReconciliation(REFLECTION_JOB);
   
   // Run initial state update on startup
   setTimeout(async () => {
     console.log('[AwarenessScheduler] 🚀 Running initial awareness state update...');
     try {
-      await awarenessCore.updateAwarenessState();
+      await cronOccurrenceRunner.runAuxiliary(STATE_JOB, 'boot', () => awarenessCore.updateAwarenessState());
       console.log('[AwarenessScheduler] ✅ Initial state update complete');
     } catch (error) {
       console.error('[AwarenessScheduler] ❌ Initial state update failed:', error);

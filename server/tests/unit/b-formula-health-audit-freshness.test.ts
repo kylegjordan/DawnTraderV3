@@ -157,8 +157,10 @@ const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 describe('wiring', () => {
   it('the daily run writes its result into the fire row meta, beside trigger_source', () => {
     const src = read('server/jobs/formula-auto-audit.ts');
-    expect(src).toMatch(/resultMeta = \{ \.\.\.countedMetaFromReport\(result\) \}/);
-    expect(src).toMatch(/meta: \{ trigger_source: 'cron', duration_ms: Date\.now\(\) - startMs, \.\.\.resultMeta \}/);
+    const runner = read('server/services/cron-occurrence-runner.ts');
+    expect(src).toMatch(/return \{ meta: \{ \.\.\.countedMetaFromReport\(result\) \} \};/);
+    expect(runner).toMatch(/trigger_source: item\.source === 'natural' \? 'cron' : 'missed_catchup'/);
+    expect(runner).toMatch(/\.\.\.resultMeta,/);
   });
   it('the card read runs the audit only on the branch where nothing is shown', () => {
     const src = read('server/routes.ts');

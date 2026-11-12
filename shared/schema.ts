@@ -78,6 +78,34 @@ export const alignmentStatusEnum = pgEnum("alignment_status", ["compliant", "at_
 export const policyTypeEnum = pgEnum("policy_type", ["ethical", "functional", "operational", "risk"]);
 export const alignmentVerificationResultEnum = pgEnum("alignment_verification_result", ["approved", "flagged", "rejected"]);
 export const valueCategoryEnum = pgEnum("value_category", ["safety", "fairness", "transparency", "accountability", "user_welfare"]);
+
+// B-CRON-MISSED-CATCHUP (#691): durable identity and state for real node-cron
+// occurrences. scheduled_tasks_audit intentionally remains the separate,
+// best-effort terminal fire-evidence stream consumed by Formula Health and the
+// cadence verifier.
+export const scheduledJobOccurrences = pgTable("scheduled_job_occurrences", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobName: text("job_name").notNull(),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true, precision: 6 }).notNull(),
+  firstSource: text("first_source").notNull(),
+  policyVersion: text("policy_version").notNull(),
+  status: text("status").notNull(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true, precision: 6 }).notNull().default(sql`clock_timestamp()`),
+  startedAt: timestamp("started_at", { withTimezone: true, precision: 6 }),
+  completedAt: timestamp("completed_at", { withTimezone: true, precision: 6 }),
+  lagMs: bigint("lag_ms", { mode: "number" }).notNull(),
+  reason: text("reason"),
+  errorMessage: text("error_message"),
+  attemptId: uuid("attempt_id"),
+  ownerInstanceId: uuid("owner_instance_id"),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+}, (table) => ({
+  identityUnique: uniqueIndex("scheduled_job_occurrences_identity_unique").on(table.jobName, table.scheduledFor),
+  jobBoundaryIdx: index("scheduled_job_occurrences_job_boundary_idx").on(table.jobName, table.scheduledFor.desc()),
+  unfinishedIdx: index("scheduled_job_occurrences_unfinished_idx")
+    .on(table.status, table.claimedAt)
+    .where(sql`${table.status} IN ('claimed', 'running')`),
+}));
 export const planStatusEnum = pgEnum("plan_status", ["draft", "active", "paused", "completed"]);
 export const learningPhaseEnum = pgEnum("learning_phase", ["observation", "adjustment", "evaluation"]);
 

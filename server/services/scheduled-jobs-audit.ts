@@ -35,7 +35,7 @@ import { db } from '../db.js';
 export interface ScheduledJobAuditMeta {
   /** Distinguishes cron-path / poll-path / boot-path fires.
    * Match B-NEW-36 poll-reconcile convention. */
-  trigger_source?: 'cron' | 'poll' | 'boot';
+  trigger_source?: 'cron' | 'missed_catchup' | 'poll' | 'boot';
   /** Fire duration in milliseconds (callback start → callback resolve). */
   duration_ms?: number;
   /** Free-form per-job context. */

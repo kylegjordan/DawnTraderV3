@@ -30,7 +30,7 @@
 import * as cron from 'node-cron';
 import { cronRegistry } from './cron-registry.js';
 import { logCronArm } from './cron-arm-logger.js';
-import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
+import { cronOccurrenceRunner } from './cron-occurrence-runner.js';
 import {
   loadQdProbeConfig,
   runQdProbeOnce,
@@ -61,40 +61,8 @@ export async function registerXstockQdProbeCron(): Promise<void> {
 
   _cronTask = cron.schedule(
     expression,
-    async () => {
-      const firedAt = new Date();
-      const startMs = firedAt.getTime();
-      let status: 'success' | 'error' = 'success';
-      let errorMessage: string | undefined;
-      let summary: QdProbeFireSummary | null = null;
-      try {
-        summary = await runQdProbeOnce(firedAt, config);
-      } catch (err) {
-        status = 'error';
-        errorMessage = err instanceof Error ? err.message : String(err);
-        console.error(
-          '[P19-B5c][qd-probe][cron] fire threw:',
-          err instanceof Error ? `${err.message}\n${err.stack}` : String(err),
-        );
-      } finally {
-        await scheduledJobsAudit.writeFireRow({
-          jobName: JOB_NAME,
-          scheduledFor: firedAt,
-          firedAt,
-          status,
-          errorMessage,
-          meta: {
-            trigger_source: 'cron',
-            duration_ms: Date.now() - startMs,
-            // D7 observability: weekend-vs-breakage + coverage (null on error fire).
-            market_open: summary ? summary.marketOpen : null,
-            universe_size: summary ? summary.universeSize : null,
-            rows_written: summary ? summary.rowsWritten : null,
-            symbols_skipped_no_snap: summary ? summary.symbolsSkippedNoSnap : null,
-            symbols_stale: summary ? summary.symbolsStale : null,
-          },
-        });
-      }
+    async (context) => {
+      await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
     },
     // B-DB-POOL-GUARD P5-3 (Langston C-4): a fire that would start while the previous one still runs is SKIPPED by
     // node-cron (4.2.1 `noOverlap`), so the burst cap cannot be doubled by two overlapping runs.
@@ -116,8 +84,27 @@ export async function registerXstockQdProbeCron(): Promise<void> {
     timezone: 'UTC',
     intervalSeconds,
     enabled: true,
+    recovery: {
+      policyKey: JOB_NAME,
+      run: async (context) => {
+        const summary: QdProbeFireSummary = await runQdProbeOnce(context.scheduledFor, config);
+        return {
+          meta: {
+            market_open: summary.marketOpen,
+            universe_size: summary.universeSize,
+            rows_written: summary.rowsWritten,
+            symbols_skipped_no_snap: summary.symbolsSkippedNoSnap,
+            symbols_stale: summary.symbolsStale,
+          },
+        };
+      },
+    },
+  });
+  _cronTask.on('execution:missed', (context) => {
+    cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
   });
   logCronArm(cronRegistry.get(JOB_NAME)!);
+  cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
 }
 
 export function stopXstockQdProbeCron(): void {

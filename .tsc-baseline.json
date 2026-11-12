@@ -143,7 +143,7 @@
           "Property 'healthScore' does not exist on type '{ metadata: unknown; id: string; role: \"coordinator\" | \"trading\" | \"analysis\" | \"research\" | \"compliance\" | \"general\"; name: string; version: string | null; status: \"offline\" | \"degraded\" | \"healthy\" | \"draining\"; createdAt: Date; updatedAt: Date; lastH": 1,
           "Property 'completedAt' does not exist on type 'PgTableWithColumns<{ name: \"cluster_result_log\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"cluster_result_log\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefault: true; i": 1,
           "Property 'conflictId' does not exist on type '{ id: string; sessionId: string; conflictingSources: string[]; conflictingVerdicts: unknown; resolutionStatus: \"open\" | \"resolved\" | \"escalated\"; resolutionMethod: string | null; resolutionRationale: string | null; finalVerdict: \"approved\" | \"rejected\" |": 1,
-          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"conservative\" | \"optimistic\" | \"maximum\" | \"custom\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string; tradesPerDayEst: string; targetD": 1,
+          "Property 'presetName' does not exist on type '{ id: string; name: \"baseline\" | \"custom\" | \"conservative\" | \"optimistic\" | \"maximum\"; mode: \"live\" | \"paper\"; createdAt: Date | null; updatedAt: Date | null; symbolCooldownMinutes: number; dailyLossKillSwitchPct: string; tradesPerDayEst: string; targetD": 1,
           "Property 'getPortfolioBalance' does not exist on type 'DatabaseStorage'.": 1
         },
         "TS2769": {
@@ -212,7 +212,7 @@
           "Object literal may only specify known properties, and 'currentValue' does not exist in type '{ mode: \"live\" | \"paper\"; userId: string; oldValue: string; variableName: string; variableCategory: string; proposedValue: string; confidenceScore: number; status?: string | null | undefined; reason?: string": 1
         },
         "TS2561": {
-          "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; status: string | null; userId: string; reason: string | null; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedVal": 2
+          "Object literal may only specify known properties, but 'reviewedAt' does not exist in type 'Partial<{ id: string; mode: \"live\" | \"paper\"; status: string | null; reason: string | null; userId: string; oldValue: string; appliedAt: Date | null; variableName: string; variableCategory: string; proposedVal": 2
         }
       }
     },
@@ -404,7 +404,7 @@
           "Property 'conflictId' does not exist on type 'PgTableWithColumns<{ name: \"ethics_conflict_register\"; schema: undefined; columns: { id: PgColumn<{ name: \"id\"; tableName: \"ethics_conflict_register\"; dataType: \"string\"; columnType: \"PgVarchar\"; data: string; driverParam: string; notNull: true; hasDefau": 1
         },
         "TS2322": {
-          "Type '\"rejected\" | \"resolved\" | \"escalated\"' is not assignable to type '\"open\" | \"resolved\" | \"escalated\" | SQL<unknown> | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | undefined'.": 1
+          "Type '\"rejected\" | \"resolved\" | \"escalated\"' is not assignable to type '\"open\" | SQL<unknown> | \"resolved\" | \"escalated\" | PgColumn<ColumnBaseConfig<ColumnDataType, string>, {}, {}> | undefined'.": 1
         }
       }
     },
@@ -661,6 +661,6 @@
       }
     }
   ],
-  "last_synced_at_iso": "2026-11-05T22:47:58.432Z",
-  "last_synced_by_batch": "B-CLOSE-WRITER-COSTS"
+  "last_synced_at_iso": "2026-11-12T03:29:32.483Z",
+  "last_synced_by_batch": "B-CRON-MISSED-CATCHUP"
 }
