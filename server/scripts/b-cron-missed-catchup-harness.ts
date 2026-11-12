@@ -6,6 +6,7 @@
  * rows are retained as verification evidence; expected synthetic breakage
  * alerts are resolved before exit by the explicit operator actor.
  */
+import 'dotenv/config';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
