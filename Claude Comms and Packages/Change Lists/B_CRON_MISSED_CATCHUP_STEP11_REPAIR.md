@@ -497,6 +497,59 @@ affected UI surface to navigate for this repair. The checkable surface is the
 running verifier log plus the durable audit, occurrence and alert records read
 above.
 
+### Step 8 reproduction commands
+
+Run these on staging as `deploy` from `/home/deploy/dawntrader` after loading
+the environment where needed:
+
+```bash
+cat /home/deploy/dawntrader-deploy.record
+
+grep '2026-11-12 12:13:00.*CRON-FIRE-VERIFIER' \
+  /var/log/dawntrader/out.log
+grep '2026-11-12 12:30:33.*CRON-FIRE-VERIFIER' \
+  /var/log/dawntrader/out.log
+grep '2026-11-12 12:30:33.*CRON-FIRE-VERIFIER' \
+  /var/log/dawntrader/error.log
+
+psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off <<'SQL'
+SELECT task_name, status, scheduled_for, fired_at,
+       meta->>'occurrence_id' AS occurrence_id,
+       meta->>'trigger_source' AS trigger_source
+FROM scheduled_tasks_audit
+WHERE task_name IN (
+  'formula_audit_cron',
+  'xstock_universe_discovery_cron',
+  'awareness_reflection_cron'
+)
+AND scheduled_for >= '2026-11-12T00:00:00Z'
+ORDER BY task_name, scheduled_for;
+
+SELECT job_name, status, scheduled_for, first_source, id
+FROM scheduled_job_occurrences
+WHERE job_name IN (
+  'formula_audit_cron',
+  'xstock_universe_discovery_cron',
+  'awareness_reflection_cron'
+)
+AND scheduled_for >= '2026-11-12T00:00:00Z'
+ORDER BY job_name, scheduled_for;
+SQL
+
+npm run -s system-alerts -- list --state resolved | grep -E \
+  '7e07b671|475e1e6e|faf3be74'
+```
+
+From a repo clone at the evidence ref, the due-queue read is:
+
+```bash
+ssh deploy@188.245.193.8 'python3 -' < scripts/due-alerts.py \
+  | grep -E '1ae9a06b|7e07b671|475e1e6e|faf3be74|^COUNT'
+```
+
+The expected positive control is the still-due `1ae9a06b` row plus a nonzero
+`COUNT`; none of the three resolved target IDs may appear.
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
