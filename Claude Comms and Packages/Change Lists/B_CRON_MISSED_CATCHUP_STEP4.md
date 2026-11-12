@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `13fecfc11a35ea4f128815aa6a54bacae8d6edee` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
+**READY-AT (implementation object):** `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -34,13 +34,14 @@
 
 ## Change-set census
 
-From the current shared base (`dacbd982562a9aa87cb9eff9af87012ec51700c6`) through READY-AT, exactly 23 tracked paths changed: 7 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only; the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review.
+From the current shared base (`54cfd329d60fc5988fff9631204681878c5530f9`) through READY-AT, exactly 24 tracked paths changed: 8 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only, one added path is this Step-4 review package, and the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review.
 
 ### NEW
 
 - `drizzle/migrations/2026-11-12-b-cron-missed-catchup.sql`
 - `drizzle/migrations/2026-11-12-b-cron-missed-catchup-rollback.sql`
 - `Claude Comms and Packages/Change Lists/B_CRON_MISSED_CATCHUP_STEP3.md`
+- `Claude Comms and Packages/Change Lists/B_CRON_MISSED_CATCHUP_STEP4.md`
 - `server/services/cron-occurrence-runner.ts`
 - `server/scripts/b-cron-missed-catchup-harness.ts`
 - `server/tests/unit/b-cron-missed-catchup.test.ts`
@@ -313,7 +314,9 @@ while (true) {
   }
   try {
     const existing = await this.deps.store.find(item.jobName, item.scheduledFor);
-    if (existing) {
+    if (existing?.status === 'claimed' || existing?.status === 'running') {
+      contendedUnfinishedIdentity = true;
+    } else if (existing) {
       result = {
         jobName: item.jobName,
         scheduledFor: item.scheduledFor,
@@ -333,6 +336,54 @@ while (true) {
 ```
 
 The source fence now requires six dormant tasks, six preparation calls, six starts, and proves every start occurs after every preparation in its module. Red-first behavioral tests prove scheduled and auxiliary work remain blocked during startup reconciliation, a deferred reconciliation eventually completes, and a different scheduled identity remains pending until it can persist and execute.
+
+### 4b. SECOND SENT-BACK CORRECTION — business failure does not poison recovery, unfinished identity does not disappear
+
+Coltrane's second substantive round found that an ordinary auxiliary callback rejection was being classified as a lock-session failure and permanently stopping that job lane. READY-AT now carries the callback failure across the lock boundary as its own typed value: the auxiliary caller receives its original error, the lock is released, and the job lane remains usable; a real lock/session failure still latches the lane stopped.
+
+```ts
+locked = await this.deps.store.withJobLock(item.jobName, async () => {
+  try {
+    return await item.run();
+  } catch (err) {
+    throw new AuxiliaryCallbackFailure(err);
+  }
+});
+// ...
+if (err instanceof AuxiliaryCallbackFailure) throw err.error;
+throw this.stopLane(item.jobName, 'auxiliary_lock_session', err);
+```
+
+The same review found that a rolling-process contender returned `duplicate` when its unlocked identity read found `claimed` or `running`, even though neither state is a durable decision. READY-AT now keeps those two states pending. Once the contender acquires the released job lock, it resumes `claimed`; it marks an abandoned prior-owner `running` identity `indeterminate` with exact occurrence evidence. Immediate duplicate return is limited to terminal states.
+
+```ts
+if (
+  !claim.inserted
+  && claim.row.status === 'running'
+  && contendedUnfinishedIdentity
+  && claim.row.ownerInstanceId !== this.ownerInstanceId
+) {
+  const abandoned = await store.markIndeterminate(
+    claim.row.id,
+    decisionAt,
+    'prior_process_died_after_start',
+    { reconciled_by_owner_instance_id: this.ownerInstanceId },
+  );
+  return {
+    jobName: item.jobName,
+    scheduledFor: item.scheduledFor,
+    status: 'indeterminate' as const,
+    occurrenceId: abandoned.id,
+    completedAt: abandoned.completedAt ?? decisionAt,
+    reason: abandoned.reason ?? 'prior_process_died_after_start',
+  };
+}
+
+const resumeClaimed = claim.row.status === 'claimed'
+  && (item.resumeClaimed || contendedUnfinishedIdentity);
+```
+
+The three requested red-first behavioral arms failed before the correction and now prove: an auxiliary business error leaves the lane usable; a same-identity `claimed` contender resumes after rolling-process overlap; and a same-identity `running` contender records `indeterminate`. A separate positive proof shows an actual auxiliary lock-session failure still stops the lane.
 
 ### 5. NEW — exact stale occurrence only, after durable success
 
@@ -376,9 +427,9 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 ## Verification already run for corrected READY-AT
 
-- GitHub CI run `43155519026` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
+- GitHub CI run `43157579095` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Corrected recovery, alert-store and Formula Health suites: 56/56 passed across the three named files.
+- Corrected recovery, alert-store and Formula Health suites: 59/59 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -389,11 +440,11 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 2. Is `claimed` safely retryable while prior-owner `running` must become `indeterminate`, given the six cores' side effects?
 3. Are the six age/backlog/session limits fail-closed without converting present-time inputs into false historical evidence?
 4. Does placing feed jitter after durable claim but before `running` preserve retry truth and still keep enough time before the next boundary?
-5. Are all production natural, missed, boot, manual and Formula Health on-read callers routed through the lane, with no fake ledger identity for auxiliary work?
+5. Are all production natural, missed, boot, manual and Formula Health on-read callers routed through the lane, with no fake ledger identity for auxiliary work, and is ordinary auxiliary business failure cleanly separated from a lock/session failure?
 6. Can any non-success path resolve a stale row, or can any successful occurrence resolve the wrong boundary, job, or `cron_verifier_blind` row?
 7. Does a terminal-write ambiguity remain visible and non-retryable even if the subsequent indeterminate write also fails?
 8. Is the exact-ref harness sufficiently side-effect-free and strong enough to close Step 7 without altering the host clock or waiting for a natural miss?
-9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return before either finding the same durable identity or persisting a decision for a different one?
+9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return while the same identity is unfinished or before persisting a decision for a different identity?
 
 ## One-pass fresh-reader record
 
@@ -403,4 +454,5 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 - Coltrane's first invocation returned `SENT BACK` ungraded because the exact objects were not yet in the governed review mirror. The unchanged object was then exposed on `review/b-cron-missed-catchup-step4-codex`.
 - Coltrane's substantive round at implementation ref `0c82f89efef435edaded754b8a7898dbef0762ee` returned three corrections: dormant schedules must not start before reconciliation; reconciliation contention must retry rather than disappear; and a different scheduled identity must remain pending through advisory-lock contention until it can persist a decision. All three are corrected in READY-AT with the three requested red-first proofs.
+- Coltrane's second substantive round at implementation ref `13fecfc11a35ea4f128815aa6a54bacae8d6edee` returned two corrections: an ordinary auxiliary callback failure must not stop the recovery lane, and a same-identity rolling-process contender must remain pending while the row is `claimed` or `running`. Both are corrected in READY-AT with the three requested red-first arms and a separate real lock-session failure arm.
 - Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
