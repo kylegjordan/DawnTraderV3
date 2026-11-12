@@ -53,3 +53,41 @@ Every approved objective is green against the same runtime object. No repair loo
 ## Next step
 
 Step 10 reconciles the finished scheduler-recovery design, verified limits and durable evidence across every applicable governance record.
+
+## Step-11 repair re-evaluation — 2026-11-12
+
+**Repaired deployed runtime:** `cd2b794dec63bea0771e32b733263b7ae516e6b8`
+
+**Independent Step-8 evidence:** Coltrane PROCEED at corrected evidence ref
+`3a2097653165c240d80644886a7a1ef80a09426c`
+
+The Step-11 repair changed only the fire-evidence verifier and its unit and
+integration proof. The deployed repair-to-record comparison contains zero
+changed runtime paths, so the fresh measurement below is against the same
+runtime object that Coltrane verified.
+
+The measurement that made OBJ-6 red was rerun with the same two-stream
+verifier instrument at `2026-11-12T12:45:32Z`. It returned exactly six healthy
+decisions across the six registered jobs. The two legacy rows were accepted
+at their real callback-start timestamps (`03:00:00.023Z` and
+`06:00:00.018Z`), while the current awareness rows retained exact scheduled
+identity. The same pass contained zero verifier error-stream lines; the
+`11:13Z` three-row stale pass is the positive control that the error stream and
+filter expose a red result when one exists.
+
+| objective | repair verdict | discriminating evidence |
+|---|---|---|
+| OBJ-1 — true occurrence identity | **GREEN, unchanged** | The repair changes no registry, occurrence reconstruction or natural callback path. |
+| OBJ-2 — one durable attempt per identity | **GREEN, unchanged** | The repair changes no claim, uniqueness, retry or terminal-state path. |
+| OBJ-3 — serialized, bounded recovery | **GREEN, unchanged** | The repair changes no queue, age, backlog or input-honesty policy. |
+| OBJ-4 — all six schedules, unchanged purpose | **GREEN, unchanged** | The repair changes no job registration or job core. The fresh verifier pass found exactly six healthy registered jobs. |
+| OBJ-5 — truthful stale-alert recovery | **GREEN after repair** | Coltrane found zero verifier alerts created after deployment against three pre-deploy stale rows as the positive control. All three false rows are resolved with the deployed SHA, and a fresh due-row read excluded them while returning 17 other rows. |
+| OBJ-6 — compatible consumers and observable schedule truth | **GREEN after repair** | The fresh same-instrument pass accepted both real pre-boot legacy clock shapes and current exact durable evidence. Post-boot legacy-shaped and genuinely missing boundaries remain rejection controls in the production-path proof. |
+| OBJ-7 — deterministic, non-blocking staging proof | **GREEN, unchanged** | The repair required no natural wait or host-clock change; exact-ref CI, deployment, live verification and independent reproduction all completed while unrelated work remained unblocked. |
+
+### Repair iterate decision
+
+Every approved objective is green on the repaired runtime. No further repair,
+deployment or observation window is required. Step 10 must amend the existing
+governance reconciliation with the legacy-clock compatibility rule, its strict
+pre-boot boundary, and the independently verified outcome.
