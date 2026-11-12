@@ -257,3 +257,9 @@ At Step 10 update System Impact Map, System Manual, SIM component rows, Batch Ca
 The tables grew because “keep the latest 240 or 60” limited what each run read and wrote, not what stayed stored. The plan keeps the last 30 days plus those minimum per-symbol floors, but first moves every older row through the same verified B75 archive system used elsewhere.
 
 Because these tables keep changing while the app runs, a row count is not enough proof. Each archived day will carry a fingerprint of every key and every full row; deletion gets a short writer pause, rechecks those fingerprints, and removes only the proven keys. Old analysis tools will either stay inside the hot window or stop with an exact rehydrate instruction instead of quietly analysing an incomplete slice.
+
+## 10. Step 10 final-design reconciliation (2026-11-12)
+
+The implementation matches P1-P10 without a repair loop. Staging reads back the five exact wildcard lifecycle values as 30 days, 240/60 per-symbol floors and mutation enabled; the frozen selector is empty after the initial apply while 495-symbol positive controls remain present. Every one of the 100 fifteen-minute and 111 sixty-minute objects is source-count-matched, and the exact archived row totals are 2,163,663 and 573,523 respectively.
+
+Known limits remain explicit: the proof covers the registered backlog and the next post-writer run, not all future storage/database availability; lock contention deliberately defers work rather than weakening proof; and ordinary vacuum makes pages reusable but need not shrink the relation file immediately. Step 11 will transcribe the Step-10 tier ledger into the completion report; it will not close or acknowledge any separate event/window wait.

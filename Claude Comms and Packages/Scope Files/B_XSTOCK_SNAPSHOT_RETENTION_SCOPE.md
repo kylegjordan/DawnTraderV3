@@ -260,3 +260,9 @@ Normal reviewed deployments may continue during the existing xStock-bar window u
 ## 8. Step boundary
 
 Step 1 ends only when Coltrane approves this scope at an exact pushed ref. Step 2 then audits the selector, every writer/reader/deleter, the B75 transaction/lock shape, the physical-reclamation options, and the live database population before any implementation begins.
+
+## 9. Step 10 disposition (2026-11-12)
+
+All seven scoped objectives are green at Coltrane's exact Step-8 evidence ref `33e5162af1fbb460fddec9b204322fcb9fe8528e`. The deployed contract is 30 complete UTC hot days plus the newest 240 fifteen-minute / 60 sixty-minute rows per symbol; 2,163,663 fifteen-minute rows in 100 objects and 573,523 sixty-minute rows in 111 objects were archived, read back, proven and removed with zero eligible remainder at the frozen read.
+
+The live writers advanced afterward and the next retention run deleted zero. The xStock-bar observation waits, KD-19 and `#1250` remain separate and unchanged; Step 11 creates the completion report and asks Coltrane to confirm the final package.
