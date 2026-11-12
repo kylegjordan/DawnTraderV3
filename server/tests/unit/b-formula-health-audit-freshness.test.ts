@@ -168,6 +168,9 @@ describe('wiring', () => {
     expect(route.match(/runAudit\(\)/g)).toHaveLength(1);
     expect(route.indexOf('if (decision.shown)')).toBeGreaterThan(-1);
     expect(route.indexOf('runAudit()')).toBeGreaterThan(route.indexOf('} else {', route.indexOf('if (decision.shown)')));
+    expect(route).toMatch(
+      /cronOccurrenceRunner\.runAuxiliary\(\s*'formula_audit_cron',\s*'on-read',\s*\(\) => formulaAuditService\.runAudit\(\),\s*\)/,
+    );
     expect(route).not.toMatch(/as any/);
   });
   it('the card names the source, shows the note, and both /tmp pointers carry the clause', () => {

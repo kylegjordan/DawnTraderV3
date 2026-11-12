@@ -31,7 +31,7 @@
 import type { ScheduledTask } from 'node-cron';
 
 export type CronOccurrenceSource = 'natural' | 'missed_catchup';
-export type CronAuxiliarySource = 'boot' | 'manual';
+export type CronAuxiliarySource = 'boot' | 'manual' | 'on-read';
 export type CronRecoveryPolicyKey =
   | 'formula_audit_cron'
   | 'feed_integrity_cron'

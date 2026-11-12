@@ -14929,7 +14929,12 @@ Provide specific, actionable recommendations.`,
         report = decision.shown.result;
       } else {
         console.log('[AUDIT] No scheduled or manual result to show — running the formula audit for this read');
-        const run = await formulaAuditService.runAudit();
+        const { cronOccurrenceRunner } = await import('./services/cron-occurrence-runner.js');
+        const run = await cronOccurrenceRunner.runAuxiliary(
+          'formula_audit_cron',
+          'on-read',
+          () => formulaAuditService.runAudit(),
+        );
         runType = 'on-read';
         report = run;
       }

@@ -2,7 +2,7 @@
  * B-CRON-MISSED-CATCHUP (#691): durable admission, boundary reconstruction,
  * bounded replay, crash truth and six-site registration fences.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
@@ -470,33 +470,45 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
   });
 
   it('finds exactly six production schedules, each with recovery and a missed listener', () => {
-    const files = [
-      'server/jobs/formula-auto-audit.ts',
-      'server/jobs/feed-integrity-auto-check.ts',
-      'server/services/awareness-scheduler.ts',
-      'server/services/xstock-qd-probe-cron.ts',
-      'server/services/xstock-universe-cron.ts',
-    ];
+    const productionTypescript = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+      .flatMap((entry) => {
+        const path = resolve(dir, entry.name);
+        if (entry.isDirectory()) return entry.name === 'tests' ? [] : productionTypescript(path);
+        return entry.isFile() && entry.name.endsWith('.ts') ? [path] : [];
+      });
+    const files = productionTypescript(resolve('server'));
     let scheduleCalls = 0;
     let recoveryProperties = 0;
     let missedListeners = 0;
     for (const file of files) {
+      let fileScheduleCalls = 0;
+      let fileRecoveryProperties = 0;
+      let fileMissedListeners = 0;
       const source = readFileSync(resolve(file), 'utf8');
       const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
       const visit = (node: ts.Node): void => {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-          if (node.expression.name.text === 'schedule') scheduleCalls += 1;
+          if (node.expression.name.text === 'schedule') fileScheduleCalls += 1;
           if (
             node.expression.name.text === 'on'
             && node.arguments[0]
             && ts.isStringLiteral(node.arguments[0])
             && node.arguments[0].text === 'execution:missed'
-          ) missedListeners += 1;
+          ) fileMissedListeners += 1;
         }
-        if (ts.isPropertyAssignment(node) && node.name.getText(tree) === 'recovery') recoveryProperties += 1;
+        if (ts.isPropertyAssignment(node) && node.name.getText(tree) === 'recovery') fileRecoveryProperties += 1;
         ts.forEachChild(node, visit);
       };
       visit(tree);
+      if (fileScheduleCalls > 0) {
+        expect(
+          { recoveryProperties: fileRecoveryProperties, missedListeners: fileMissedListeners },
+          `production schedule wiring in ${file}`,
+        ).toEqual({ recoveryProperties: fileScheduleCalls, missedListeners: fileScheduleCalls });
+        scheduleCalls += fileScheduleCalls;
+        recoveryProperties += fileRecoveryProperties;
+        missedListeners += fileMissedListeners;
+      }
     }
     expect({ scheduleCalls, recoveryProperties, missedListeners }).toEqual({
       scheduleCalls: 6,
