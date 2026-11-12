@@ -1,7 +1,7 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`bbdb7592ad7d81b200ebe260c5011058505eab63` on branch
+`e716c815b4e64e99510ae06c02ea205cb4be4187` on branch
 `migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 fifth repair complete after Coltrane found that the durable running transition still preceded the final eligibility check; return to Step 4 review
+Status: Step 3 sixth repair complete after Coltrane found that sub-grace schedules were permanently unjudgeable; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -72,7 +72,10 @@ was allowed to leave the draft stage.
    time without requiring success, so an error or an older boundary starting
    late could make a missed boundary appear healthy. It now reads only the
    latest successful scheduled boundary across the audit stream and occurrence
-   ledger.
+   ledger. Its ten-minute latency grace now selects the newest calendar
+   boundary whose evidence window has elapsed. This keeps five-minute jobs
+   judgeable and requires evidence at that mature boundary or later; grace is
+   never subtracted from the evidence floor.
 3. **Eligibility could expire before core work began.** The catch-up policy was
    decided before lock wait and pre-run work, and an earlier repair still left
    one awaited durable transition after its final check. It is now decided
@@ -88,15 +91,16 @@ was allowed to leave the draft stage.
 ## Verification at the repair boundary
 
 - Focused runner, alert-store, verifier and Formula Health suites: 4 files,
-  100 tests passed, including retry, natural-success cleanup, empty-resolve
+  102 tests passed, including retry, natural-success cleanup, empty-resolve
   termination, split-store provenance retry, contradictory-state refusal,
   separate-runner lock ordering, fail-once verifier recovery, stopped-lane
-  independence, delayed-running-transition expiry and fallback recurrence
-  branches.
+  independence, delayed-running-transition expiry, mature five-minute
+  boundaries and fallback recurrence branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
-  start-time expiry, successful-boundary filtering and the Q-D clock split.
+  start-time expiry, successful-boundary filtering, both five-minute production
+  schedules and the Q-D clock split.
 - `git diff --check`: clean.
 
 ## Honest residual carried forward
@@ -139,11 +143,22 @@ retain the table's state-shape contract, and never calls the core. The new
 control advances Q-D across its age ceiling inside the running transition and
 proves the terminal skip and zero core calls.
 
+Coltrane sent the fifth repair back at exact implementation
+`bbdb7592ad7d81b200ebe260c5011058505eab63` with one blocker. The verifier chose
+the occurrence immediately before each check and then skipped it whenever it
+was inside the ten-minute latency grace. A job running every five minutes could
+therefore never reach an evidence judgement, and subtracting grace from the
+evidence floor could also let the prior five-minute success certify a missed
+boundary. The sixth repair selects the newest occurrence at or before the
+grace cutoff and requires successful scheduled-boundary evidence at that exact
+mature boundary or later. Red/green controls cover both five-minute production
+jobs and the prior every-minute grace-blind case.
+
 ## Repair change-set census
 
 Across the repair range from the parent of
 `49de4df1d3bb506fc6beb3c25894649beb53b5f3` through implementation object
-`bbdb7592ad7d81b200ebe260c5011058505eab63`, exactly ten tracked paths changed:
+`e716c815b4e64e99510ae06c02ea205cb4be4187`, exactly ten tracked paths changed:
 one new repair record and nine modified paths; zero tracked paths were deleted.
 `.claude/launch.json` remains an unrelated untracked file and is not in the
 review ref.
@@ -329,6 +344,31 @@ the lock session and proves the next pass mints the exact stale alert. The
 runner control also proves its own lock failure is retryable and that a
 separately stopped execution lane does not block later verifier locking.
 
+### 6. MODIFIED — latency grace advances to a mature boundary
+
+Before, the verifier always selected the occurrence immediately before `now`
+and skipped it if it was less than ten minutes old. Every five-minute job was
+therefore permanently inside grace. It also subtracted grace from the evidence
+floor, which admitted the prior five-minute success. Now both the candidate
+read and locked recheck select the newest boundary whose evidence window has
+elapsed, and evidence must be at that boundary or later:
+
+```ts
+const matureOccurrence = computePrevFire(
+  job.expression,
+  job.timezone,
+  new Date(now - FIRE_LATENCY_GRACE_MS + 1),
+);
+
+const isStale = lastSuccessfulBoundary === null
+  || lastSuccessfulBoundary.getTime() < matureOccurrence.getTime();
+```
+
+For feed integrity and Q-D at 15:00, the mature five-minute boundary is 14:50.
+A 14:45 success now alerts on 14:50; a 14:50 success is healthy. The same
+calendar selection and exact evidence floor are repeated under the shared job
+lock before minting.
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
@@ -338,7 +378,9 @@ separately stopped execution lane does not block later verifier locking.
 2. Is `one_shot` correctly limited to immutable scheduled-boundary identities,
    without changing ordinary recurring alert behavior?
 3. Does the successful-boundary union reject error rows and late starts while
-   retaining truth when the failure-safe audit write is missing?
+   retaining truth when the failure-safe audit write is missing, and does the
+   mature-boundary grace remain judgeable for every cadence shorter than ten
+   minutes without accepting the prior boundary?
 4. Can lock wait, pre-run work or the durable running transition still let a
    catch-up enter core after its age/session guard has expired, and is the
    post-admission expiry record truthful and schema-valid?
