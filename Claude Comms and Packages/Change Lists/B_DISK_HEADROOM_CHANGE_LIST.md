@@ -162,7 +162,7 @@ The deployed-ref eligibility instrument was run first with all three values over
 
 Positive controls before arming: the prior proof log exists at 16,331 bytes; the 20261112 target log and target unit were absent; the unit query found `cron.service`. `b-disk-headroom-sampler-20261112.timer` is active for `2026-11-12 02:10:00 UTC`, `AccuracyUSec=1s`, and triggers a service as `deploy:deploy` in `/home/deploy` with `/bin/bash /home/deploy/b_disk_headroom_lock_sampler.sh 2026-11-12T05:15:00Z /home/deploy/b_disk_headroom_locks_20261112.log`.
 
-**WAIT:** after the production sweep, P8 still needs the exact 14-child target population, manifest/exact-evidence and hot-absence proof, plus the sampler's ticks, positive controls and zero-wait/lock counts. P9's registered direct peak reading remains due on 2026-12-01 before the 02:15Z sweep; no months figure is permitted.
+**WAIT:** after the production sweep, P8 still needs the exact 14-child target population, manifest/exact-evidence and hot-absence proof, plus the sampler's ticks, positive controls and zero-wait/lock counts. P9's direct peak reading remains due on 2026-12-01 before the 02:15Z sweep; its alert-store carrier is proved in P11. No months figure is permitted.
 
 ## P10 — Step 9 OBJ-4 production proof PASS (INFRA Codex, 2026-11-12)
 
@@ -174,4 +174,12 @@ Positive controls before arming: the prior proof log exists at 16,331 bytes; the
 
 **Lock scope.** `/home/deploy/b_disk_headroom_locks_20261112.log` covers 02:10:00Z through the registered post-exit stop at 03:40:33Z: **528 ticks**, zero sample failures, zero wait/lock rows, zero not-granted rows, and **36 `ACTIVE-ON-BARS` positive controls**. It contains five granted `AccessExclusiveLock` rows at the same 02:30:15Z tick, all pid 4097765 and all from the single `DROP TABLE IF EXISTS xstock_spot_ohlc_1m_2026_06` transaction (parent, child, and three child indexes). They are observed granted DROP locks, not waiters; no blocked session was recorded.
 
-**OBJ-4 production proof PASS. Step 9 remains open only for P9's registered 2026-12-01 direct pre-sweep peak reading and its attributed table-size comparison. No months figure is permitted.**
+**OBJ-4 production proof PASS. Step 9 remains open only for P9's 2026-12-01 direct pre-sweep peak reading and its attributed table-size comparison. Its alert-store carrier is proved in P11. No months figure is permitted.**
+
+## P11 — Step 9 P9 timed carrier armed and proved (INFRA Codex, 2026-11-12)
+
+The boundary check read the whole system-alert store for the exact `2026-12-01` instant and the B-DISK/direct-peak terms. It found the separate CC-A sampled-peak decider at 09:00Z as a positive control, but no CC-INFRA direct-read row before the 02:15Z sweep. The earlier record's word “registered” therefore described the approved plan, not a live carrier; P9 was not yet safely waiting.
+
+Alert `f8188c60-c0db-4fc2-a316-b6a4c8e59d68` is now scheduled for `2026-12-01T02:05:00Z`, ten minutes before the sweep, with dedupe key `b-disk-headroom-p9-direct-peak-2026-12-01`. Its body requires the direct database-size reading, the November sampled series with its expected count and phase bound, the per-table/per-partition comparison against the 2026-11-07 baseline, separate attribution of B-DB-SIZE-RELIEF, and the no-months-figure boundary. A direct read-back returned the exact row in `scheduled` state with `fired_at`, `acknowledged_at`, and `resolved_at` all null, owner metadata `CC-INFRA`, and the exact trigger/sweep instants. P9 is now genuinely armed.
+
+MISTAKE: wrong-object [B-DISK-HEADROOM] — the approved plan text was treated as proof that its timed alert existed; the alert store held no P9 carrier, now armed and read back as `f8188c60-c0db-4fc2-a316-b6a4c8e59d68`.
