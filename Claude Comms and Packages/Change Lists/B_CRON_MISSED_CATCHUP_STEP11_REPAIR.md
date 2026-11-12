@@ -1,7 +1,7 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`4956ea1f4b0551a33d09a3c8532a7ed6c455727b` on branch
+`bbdb7592ad7d81b200ebe260c5011058505eab63` on branch
 `migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 fourth repair complete after Coltrane found that the verifier inherited a permanently stopped execution lane; return to Step 4 review
+Status: Step 3 fifth repair complete after Coltrane found that the durable running transition still preceded the final eligibility check; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -74,9 +74,12 @@ was allowed to leave the draft stage.
    latest successful scheduled boundary across the audit stream and occurrence
    ledger.
 3. **Eligibility could expire before core work began.** The catch-up policy was
-   decided before lock wait and pre-run work. It is now decided under the job
-   lock and rechecked at actual core start; an occurrence that ages out becomes
-   an explicit skip and never enters the job core.
+   decided before lock wait and pre-run work, and an earlier repair still left
+   one awaited durable transition after its final check. It is now decided
+   under the job lock, checked before admission, and checked again after that
+   transition returns with no later await before core entry. An occurrence that
+   ages out is converted from its exact admission attempt to an explicit skip;
+   the durable row preserves both check times and never enters the job core.
 4. **Q-D's business clock had changed accidentally.** The wrapper passed the
    historical scheduled boundary into a job that reads current snapshots. Q-D
    now uses actual start time for market state, freshness and bucketing while
@@ -85,10 +88,11 @@ was allowed to leave the draft stage.
 ## Verification at the repair boundary
 
 - Focused runner, alert-store, verifier and Formula Health suites: 4 files,
-  99 tests passed, including retry, natural-success cleanup, empty-resolve
+  100 tests passed, including retry, natural-success cleanup, empty-resolve
   termination, split-store provenance retry, contradictory-state refusal,
   separate-runner lock ordering, fail-once verifier recovery, stopped-lane
-  independence and fallback recurrence branches.
+  independence, delayed-running-transition expiry and fallback recurrence
+  branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
@@ -125,11 +129,21 @@ closure but gives verifier work a retryable path that does not read or mutate
 the stopped execution-lane state. A failed pass is returned as explicit
 `locked_recheck_fail` blindness, and the next pass retries the lock normally.
 
+Coltrane sent the fourth repair back at exact implementation
+`4956ea1f4b0551a33d09a3c8532a7ed6c455727b` with one blocker. The claimed
+actual-start guard still ran before the awaited durable running transition, so
+that transition could stall across an age, next-boundary or market guard. The
+fifth repair rechecks after the transition returns. If eligibility expired, it
+terminalizes that exact attempt as skipped, clears the running-only fields to
+retain the table's state-shape contract, and never calls the core. The new
+control advances Q-D across its age ceiling inside the running transition and
+proves the terminal skip and zero core calls.
+
 ## Repair change-set census
 
 Across the repair range from the parent of
 `49de4df1d3bb506fc6beb3c25894649beb53b5f3` through implementation object
-`4956ea1f4b0551a33d09a3c8532a7ed6c455727b`, exactly ten tracked paths changed:
+`bbdb7592ad7d81b200ebe260c5011058505eab63`, exactly ten tracked paths changed:
 one new repair record and nine modified paths; zero tracked paths were deleted.
 `.claude/launch.json` remains an unrelated untracked file and is not in the
 review ref.
@@ -239,24 +253,38 @@ FROM (
 GROUP BY task_name
 ```
 
-### 3. MODIFIED — eligibility is rechecked at actual core start
+### 3. MODIFIED — eligibility is rechecked after durable admission
 
-Before, the policy decision preceded the database lock and pre-run work. After,
-the initial decision is made under the lock and the job is refused if it ages
-out before its core can begin:
+Before, the policy decision preceded the database lock and pre-run work. The
+first repair added a pre-admission check but still awaited the durable running
+transition afterward. Now the runner checks again after that await; there is no
+later await before core entry. If eligibility expired, that exact running
+attempt is converted to the schema-valid skipped shape and the core is never
+called:
 
 ```ts
 const decisionAt = this.now();
 let policy = this.evaluatePolicy(job, item, lane, decisionAt);
 // durable claim and pre-run work
-const firedAt = this.now();
-const startPolicy = this.evaluatePolicy(job, item, lane, firedAt);
+const admissionAt = this.now();
+const startPolicy = this.evaluatePolicy(job, item, lane, admissionAt);
 if (!startPolicy.eligible) {
-  await store.markSkipped(claim.row.id, firedAt, startPolicy.reason, {
+  await store.markSkipped(claim.row.id, admissionAt, startPolicy.reason, {
     rechecked_before_start: true,
     initial_lag_ms: policy.lagMs,
   });
   return { status: 'skipped', reason: startPolicy.reason, /* identity */ };
+}
+
+await store.markRunning(claim.row.id, admissionAt, attemptId, ownerInstanceId);
+const firedAt = this.now();
+const coreStartPolicy = this.evaluatePolicy(job, item, lane, firedAt);
+if (!coreStartPolicy.eligible) {
+  await store.markAdmissionExpired(
+    claim.row.id, attemptId, firedAt, coreStartPolicy.reason,
+    { rechecked_after_running_transition: true, /* both lag samples */ },
+  );
+  return { status: 'skipped', reason: coreStartPolicy.reason, /* identity */ };
 }
 ```
 
@@ -311,8 +339,9 @@ separately stopped execution lane does not block later verifier locking.
    without changing ordinary recurring alert behavior?
 3. Does the successful-boundary union reject error rows and late starts while
    retaining truth when the failure-safe audit write is missing?
-4. Can lock wait or pre-run work still let an admitted catch-up enter core after
-   its age/session guard has expired?
+4. Can lock wait, pre-run work or the durable running transition still let a
+   catch-up enter core after its age/session guard has expired, and is the
+   post-admission expiry record truthful and schema-valid?
 5. Does Q-D now retain both truths: scheduled identity for provenance and actual
    start for current-snapshot business logic?
 6. Is the same-process deterministic race, separate-runner lock-order control
