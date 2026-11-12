@@ -18,15 +18,22 @@ const NOW = Date.parse('2026-06-02T15:00:00Z');
 const PAST_BOOT_GRACE = NOW - 10 * 60 * 1000; // 10-min uptime → past the 5-min boot grace
 
 let mockedLastFires: Map<string, Date | null> = new Map();
+let mockedCandidateSucceeded: Map<string, boolean> = new Map();
 const dbCalls: any[] = [];
 
 vi.mock('../../db.js', () => ({
   db: {
     execute: vi.fn(async (q: any) => {
       dbCalls.push(q);
-      const rows = Array.from(mockedLastFires.entries())
-        .filter(([_, v]) => v !== null)
-        .map(([task_name, last_scheduled_for]) => ({ task_name, last_scheduled_for }));
+      const taskNames = new Set([
+        ...mockedLastFires.keys(),
+        ...mockedCandidateSucceeded.keys(),
+      ]);
+      const rows = Array.from(taskNames).map((task_name) => ({
+        task_name,
+        last_scheduled_for: mockedLastFires.get(task_name) ?? null,
+        candidate_succeeded: mockedCandidateSucceeded.get(task_name) ?? false,
+      }));
       return { rows };
     }),
   },
@@ -57,6 +64,7 @@ vi.mock('../../services/cron-occurrence-runner.js', () => ({
 
 beforeEach(() => {
   mockedLastFires = new Map();
+  mockedCandidateSucceeded = new Map();
   dbCalls.length = 0;
   alertCalls.length = 0;
   verifierLockCalls.length = 0;
@@ -94,7 +102,9 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     const source = readFileSync(resolve('server/services/cron-fire-evidence-verifier.ts'), 'utf8');
     expect(source).toMatch(/SELECT task_name, scheduled_for\s+FROM scheduled_tasks_audit\s+WHERE status = 'success'/);
     expect(source).toMatch(/SELECT job_name AS task_name, scheduled_for\s+FROM scheduled_job_occurrences\s+WHERE status = 'succeeded'/);
-    expect(source).toMatch(/MAX\(scheduled_for\) AS last_scheduled_for/);
+    expect(source).toMatch(/MAX\(successful_boundaries\.scheduled_for\) AS last_scheduled_for/);
+    expect(source).toMatch(/successful_boundaries\.scheduled_for = candidates\.candidate_scheduled_for/);
+    expect(source).toMatch(/AS candidate_succeeded/);
     expect(source).not.toMatch(/SELECT task_name,\s*MAX\(fired_at\)/);
   });
 
@@ -118,9 +128,10 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
   it('HEALTHY: weekly job that fired on its most-recent occurrence (old interval×1.5 model would FALSE-flag mid-week)', async () => {
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
-    // Fired just after the 05-30 occurrence → healthy even though it's now Tuesday
+    // The exact 05-30 scheduled identity succeeded → healthy even though it's now Tuesday
     // (3 days later, well past intervalSeconds×1.5 would have flagged it).
-    mockedLastFires.set('weekly_sat', new Date('2026-05-30T00:05:00Z'));
+    mockedLastFires.set('weekly_sat', new Date('2026-05-30T00:00:00Z'));
+    mockedCandidateSucceeded.set('weekly_sat', true);
     const report = await runVerification(NOW);
     expect(report.ok).toBe(true);
     expect(report.stale).toEqual([]);
@@ -167,10 +178,22 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
       `cron_stale:${jobName}:2026-06-02T14:50:00.000Z`,
     );
 
+    // A later success is a different immutable occurrence and cannot erase the
+    // missing 14:50 identity.
+    alertCalls.length = 0;
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:55:00Z'));
+    const laterReport = await runVerification(NOW);
+    expect(laterReport.ok).toBe(false);
+    expect(laterReport.stale).toContain(jobName);
+    expect(alertCalls.at(-1)?.dedupe_key).toBe(
+      `cron_stale:${jobName}:2026-06-02T14:50:00.000Z`,
+    );
+
     // The exact mature boundary is sufficient; no newer-in-grace occurrence
     // is required and no stale alert is offered.
     alertCalls.length = 0;
     mockedLastFires.set(jobName, new Date('2026-06-02T14:50:00Z'));
+    mockedCandidateSucceeded.set(jobName, true);
     const healthyReport = await runVerification(NOW);
     expect(healthyReport).toEqual({ ok: true, stale: [] });
     expect(alertCalls).toHaveLength(0);
@@ -219,9 +242,11 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
       rows: [{
         task_name: 'weekly_sat',
         last_scheduled_for: new Date('2026-05-23T00:00:00Z'),
+        candidate_succeeded: false,
       }],
     });
-    mockedLastFires.set('weekly_sat', new Date('2026-05-30T00:05:00Z'));
+    mockedLastFires.set('weekly_sat', new Date('2026-05-30T00:00:00Z'));
+    mockedCandidateSucceeded.set('weekly_sat', true);
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
 
@@ -275,7 +300,8 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
   it('RUNNING_ISSUES #167 regression-lock — JS-filter keeps only registered jobs', async () => {
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('healthy_registered', '0 0 * * 6', 604800));
-    mockedLastFires.set('healthy_registered', new Date('2026-05-30T00:05:00Z')); // healthy
+    mockedLastFires.set('healthy_registered', new Date('2026-05-30T00:00:00Z')); // exact occurrence healthy
+    mockedCandidateSucceeded.set('healthy_registered', true);
     mockedLastFires.set('boot_state_reconciliation', new Date('2026-01-01T00:00:00Z')); // NOT registered
     mockedLastFires.set('weekend_shutdown', new Date('2026-01-01T00:00:00Z')); // NOT registered
     const report = await runVerification(NOW);
@@ -311,7 +337,7 @@ describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of 
   };
   const staleAlerts = () => alertCalls.filter((a) => String(a.dedupe_key).startsWith('cron_stale:'));
   const blindAlerts = () => alertCalls.filter((a) => String(a.dedupe_key).startsWith('cron_verifier_blind:'));
-  const HEALTHY_FIRE = new Date('2026-05-30T00:05:00Z'); // the weekly_sat fixture's healthy fire (above)
+  const HEALTHY_FIRE = new Date('2026-05-30T00:00:00Z'); // the weekly_sat fixture's exact scheduled identity
 
   it('one failed read: no cron_stale page, and the run reports skipped', async () => {
     await failNextReads(1);
@@ -360,6 +386,7 @@ describe('B-CRON-VERIFIER-QUERY-FAIL — a failed read is skipped, and a run of 
     const { cronRegistry, runVerification } = await loadModules();
     cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
     mockedLastFires.set('weekly_sat', HEALTHY_FIRE);
+    mockedCandidateSucceeded.set('weekly_sat', true);
     for (let i = 0; i < 3; i++) await runVerification(NOW + i * 900_000);
     const back = await runVerification(NOW + 3 * 900_000); // the read is back (falls through to the factory)
     expect(back).toEqual({ ok: true, stale: [] });          // a real, non-empty read judged the job healthy

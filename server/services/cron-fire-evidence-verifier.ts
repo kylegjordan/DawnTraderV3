@@ -11,8 +11,8 @@
  * Mechanism:
  *   1. Every 15 minutes via setInterval (NOT node-cron — independent of the
  *      mechanism being monitored, per scope §1.4 + §2.4 invariant).
- *   2. For each registered cron job, query the latest successful scheduled
- *      boundary across the audit stream and durable occurrence ledger.
+ *   2. For each registered cron job, query whether its exact mature scheduled
+ *      boundary succeeded across the audit stream and durable occurrence ledger.
  *   3. Compare it with the job's cadence-aware previous calendar occurrence.
  *   4. If that occurrence has no successful boundary → write system-alert (severity=warning,
  *      category=breakage).
@@ -39,8 +39,8 @@ const FIRE_GRACE_MULTIPLIER = 1.5;  // interval-fallback only: expected_by = las
 // B-NEW-51 (2026-06-02): cadence-aware staleness constants.
 // FIRE_LATENCY_GRACE_MS — the gap we allow between a schedule's occurrence and
 // its fire-evidence row landing in scheduled_tasks_audit. A schedule is judged
-// stale only if its most-recent scheduled occurrence is older than this grace
-// AND no evidence exists at/after (occurrence − grace).
+// stale only if its newest mature scheduled occurrence has no exact success
+// evidence. A later occurrence cannot erase an earlier missed identity.
 const FIRE_LATENCY_GRACE_MS = 10 * 60 * 1000;  // 10 minutes
 // BOOT_GRACE_MS — don't judge any job until the process has been up this long,
 // so we never race boot-time evidence writes. Replaces the old interval-derived
@@ -68,11 +68,16 @@ export function _setProcessStartForTest(ms: number): void {
   processStartMs = ms;
 }
 
+type FireEvidence = {
+  lastSuccessfulBoundary: Date | null;
+  candidateSucceeded: boolean;
+};
+
 /**
- * Query the latest successfully completed scheduled boundary for each job.
- * The occurrence ledger is included because its durable success is the truth
- * when the failure-safe audit write is unavailable.
- * Returns one row per job name. Job names with no fire-row return null.
+ * Query exact success for each candidate scheduled boundary, plus the latest
+ * successful boundary for interval-fallback diagnostics. The occurrence
+ * ledger is included because its durable success is the truth when the
+ * failure-safe audit write is unavailable.
  *
  * RUNNING_ISSUES #167 fix (2026-05-31): previously used
  * `WHERE task_name = ANY(${jobNames}::text[])` which Drizzle's sql template
@@ -82,19 +87,32 @@ export function _setProcessStartForTest(ms: number): void {
  * filter against the registered job set. Table has ~10-20 distinct task_name
  * values (B-NEW-36 + B-NEW-49 + boot_state_reconciliation), perf negligible.
  */
-async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | null> | null> {
-  const result = new Map<string, Date | null>();
-  // Default all to null so jobs with zero rows get a returned entry.
-  for (const name of jobNames) result.set(name, null);
+async function queryFireEvidence(
+  candidates: Array<{ name: string; scheduledFor: Date | null }>,
+): Promise<Map<string, FireEvidence> | null> {
+  const result = new Map<string, FireEvidence>();
+  for (const candidate of candidates) {
+    result.set(candidate.name, {
+      lastSuccessfulBoundary: null,
+      candidateSucceeded: false,
+    });
+  }
 
-  if (jobNames.length === 0) return result;
+  if (candidates.length === 0) return result;
 
-  const wantedNames = new Set(jobNames);
+  const wantedNames = new Set(candidates.map((candidate) => candidate.name));
 
   try {
     const rows = await db.execute(sql`
-      SELECT task_name, MAX(scheduled_for) AS last_scheduled_for
-        FROM (
+      WITH candidates(task_name, candidate_scheduled_for) AS (
+        VALUES ${sql.join(
+          candidates.map((candidate) => sql`(
+            ${candidate.name}::text,
+            ${candidate.scheduledFor}::timestamptz
+          )`),
+          sql`, `,
+        )}
+      ), successful_boundaries AS (
           SELECT task_name, scheduled_for
             FROM scheduled_tasks_audit
            WHERE status = 'success'
@@ -102,19 +120,29 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
           SELECT job_name AS task_name, scheduled_for
             FROM scheduled_job_occurrences
            WHERE status = 'succeeded'
-        ) successful_boundaries
-       GROUP BY task_name
+      )
+      SELECT candidates.task_name,
+             MAX(successful_boundaries.scheduled_for) AS last_scheduled_for,
+             COALESCE(BOOL_OR(
+               candidates.candidate_scheduled_for IS NOT NULL
+               AND successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+             ), false) AS candidate_succeeded
+        FROM candidates
+        LEFT JOIN successful_boundaries
+          ON successful_boundaries.task_name = candidates.task_name
+       GROUP BY candidates.task_name, candidates.candidate_scheduled_for
     `);
     // Drizzle's execute returns { rows: T[] } for postgres-js / pg, but the
     // result shape varies; normalize both shapes.
     const list: any[] = (rows as any).rows ?? (Array.isArray(rows) ? rows : []);
     for (const row of list) {
-      if (
-        row.task_name &&
-        row.last_scheduled_for &&
-        wantedNames.has(row.task_name)
-      ) {
-        result.set(row.task_name, new Date(row.last_scheduled_for));
+      if (row.task_name && wantedNames.has(row.task_name)) {
+        result.set(row.task_name, {
+          lastSuccessfulBoundary: row.last_scheduled_for
+            ? new Date(row.last_scheduled_for)
+            : null,
+          candidateSucceeded: row.candidate_succeeded === true,
+        });
       }
     }
   } catch (err) {
@@ -164,8 +192,19 @@ export async function runVerification(
     return { ok: true, stale: [] };
   }
 
-  const lastSuccessfulBoundaries = await queryLastFires(jobs.map((j) => j.name));
-  if (lastSuccessfulBoundaries === null) {
+  const candidates = jobs.map((job) => ({
+    job,
+    matureOccurrence: computePrevFire(
+      job.expression,
+      job.timezone,
+      new Date(now - FIRE_LATENCY_GRACE_MS + 1),
+    ),
+  }));
+  const fireEvidence = await queryFireEvidence(candidates.map(({ job, matureOccurrence }) => ({
+    name: job.name,
+    scheduledFor: matureOccurrence,
+  })));
+  if (fireEvidence === null) {
     // The history could not be read: judge nothing (no evidence is not evidence of a missed fire).
     consecutiveSkips += 1;
     totalSkips += 1;
@@ -192,18 +231,12 @@ export async function runVerification(
   consecutiveSkips = 0;
   firstSkipAt = null;
 
-  for (const job of jobs) {
-    const lastSuccessfulBoundary = lastSuccessfulBoundaries.get(job.name) ?? null;
-
-    // Judge the newest boundary whose evidence grace has elapsed. Selecting
-    // the boundary immediately before `now` would make every cadence shorter
-    // than the grace period permanently unjudgeable because each pass would
-    // restart grace at a newer occurrence.
-    const matureOccurrence = computePrevFire(
-      job.expression,
-      job.timezone,
-      new Date(now - FIRE_LATENCY_GRACE_MS + 1),
-    );
+  for (const { job, matureOccurrence } of candidates) {
+    const evidence = fireEvidence.get(job.name) ?? {
+      lastSuccessfulBoundary: null,
+      candidateSucceeded: false,
+    };
+    const { lastSuccessfulBoundary } = evidence;
 
     if (matureOccurrence === null) {
       // Unparseable expression (registry requires a valid one, so this is a
@@ -235,13 +268,9 @@ export async function runVerification(
       continue;
     }
 
-    const matureMs = matureOccurrence.getTime();
-
-    // The mature boundary itself is the evidence floor. Subtracting grace from
-    // this boundary would let an older short-cadence success certify a newer
-    // missed occurrence.
-    const isStale = lastSuccessfulBoundary === null
-      || lastSuccessfulBoundary.getTime() < matureMs;
+    // Success belongs to one immutable scheduled identity. Neither an older
+    // nor a later ordinary occurrence can certify this mature boundary.
+    const isStale = !evidence.candidateSucceeded;
 
     if (isStale) {
       // The first read identifies a candidate. Re-read and mint while holding
@@ -272,12 +301,6 @@ async function emitCadenceStaleIfStillMissing(
 ): Promise<'stale' | 'healthy' | 'blind'> {
   try {
     return await cronOccurrenceRunner.runVerifierLocked(job.name, async () => {
-      const lockedRead = await queryLastFires([job.name]);
-      if (lockedRead === null) {
-        console.warn(`[CRON-FIRE-VERIFIER][LOCKED_RECHECK_SKIPPED] job=${job.name} history read failed`);
-        return 'blind' as const;
-      }
-
       const expectedOccurrence = computePrevFire(
         job.expression,
         job.timezone,
@@ -287,14 +310,24 @@ async function emitCadenceStaleIfStillMissing(
         return 'healthy' as const;
       }
 
-      const lastSuccessfulBoundary = lockedRead.get(job.name) ?? null;
-      if (
-        lastSuccessfulBoundary !== null
-        && lastSuccessfulBoundary.getTime() >= expectedOccurrence.getTime()
-      ) {
+      const lockedRead = await queryFireEvidence([{
+        name: job.name,
+        scheduledFor: expectedOccurrence,
+      }]);
+      if (lockedRead === null) {
+        console.warn(`[CRON-FIRE-VERIFIER][LOCKED_RECHECK_SKIPPED] job=${job.name} history read failed`);
+        return 'blind' as const;
+      }
+
+      const lockedEvidence = lockedRead.get(job.name) ?? {
+        lastSuccessfulBoundary: null,
+        candidateSucceeded: false,
+      };
+      const { lastSuccessfulBoundary } = lockedEvidence;
+      if (lockedEvidence.candidateSucceeded) {
         console.log(
           `[CRON-FIRE-VERIFIER] job=${job.name} recovered_before_locked_recheck ` +
-          `last_successful_boundary=${lastSuccessfulBoundary.toISOString()}`,
+          `exact_successful_boundary=${expectedOccurrence.toISOString()}`,
         );
         return 'healthy' as const;
       }
@@ -348,8 +381,8 @@ async function emitStaleAlert(
       title: `B-NEW-49 cron schedule "${jobName}" missed its scheduled fire (reason=${reason})`,
       body:
         `The cron-fire-evidence verifier found NO successful completion boundary in ` +
-        `scheduled_tasks_audit or scheduled_job_occurrences at or after this schedule's ` +
-        `most recent expected occurrence.\n` +
+        `scheduled_tasks_audit or scheduled_job_occurrences for this schedule's exact ` +
+        `mature expected occurrence.\n` +
         `Schedule: "${jobName}". Most recent expected occurrence: ${expectedOccurrence.toISOString()}. ` +
         `Last successful boundary: ${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'}.\n\n` +
         `B-NEW-51: this check is now CADENCE-AWARE (compares against the schedule's actual calendar ` +
