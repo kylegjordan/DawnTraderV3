@@ -34,6 +34,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   private nextId = 100;
   failClaim = false;
   failTerminal = false;
+  failStaleResolvePersistedOnce = false;
   failLockSession = false;
   failUnlock = false;
   refuseLock = false;
@@ -197,8 +198,12 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   async markStaleResolvePersisted(
     id: string,
     persistedAt: Date,
-    outcome: 'resolved_open_alert' | 'no_open_alert',
+    outcome: 'resolved_open_alert' | 'already_resolved_alert' | 'no_open_alert',
   ): Promise<CronOccurrenceRow> {
+    if (this.failStaleResolvePersistedOnce) {
+      this.failStaleResolvePersistedOnce = false;
+      throw new Error('stale resolve provenance unavailable');
+    }
     const row = this.byId(id);
     if (row.status !== 'succeeded' || row.metadata.stale_resolve_pending !== true) {
       throw new Error(`occurrence ${id} has no pending stale resolve`);
@@ -271,12 +276,14 @@ function fixture(options: {
   const writeFireRow = vi.fn(async () => undefined);
   const addAlert = vi.fn(async () => null);
   const resolveByKey = vi.fn(async () => ['resolved-alert-id'] as string[]);
+  const dedupeStateByKey = vi.fn((): 'absent' | 'nonterminal' | 'resolved' => 'absent');
   const deps: CronOccurrenceRunnerDeps = {
     store,
     getJob: (jobName) => jobs.get(jobName),
     writeFireRow: writeFireRow as CronOccurrenceRunnerDeps['writeFireRow'],
     addAlert: addAlert as unknown as CronOccurrenceRunnerDeps['addAlert'],
     resolveByKey: resolveByKey as CronOccurrenceRunnerDeps['resolveByKey'],
+    dedupeStateByKey,
     now: () => new Date(now),
     randomUUID: () => UUID(uuid++),
     sleep: options.sleep ?? (async () => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, 0))),
@@ -290,6 +297,7 @@ function fixture(options: {
     writeFireRow,
     addAlert,
     resolveByKey,
+    dedupeStateByKey,
     setNow: (value: string) => { now = new Date(value); },
   };
 }
@@ -1016,6 +1024,50 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
       expect.any(String),
       'engine',
     );
+  });
+
+  it('keeps the durable marker if an unresolved row survives an empty resolve', async () => {
+    const f = fixture();
+    f.resolveByKey.mockResolvedValue([]);
+    f.dedupeStateByKey.mockReturnValue('nonterminal');
+
+    await f.runner.runNatural(
+      f.job.name,
+      new Date('2026-11-12T12:01:00.000Z'),
+    );
+
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({
+      stale_resolve_pending: true,
+    });
+    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_outcome');
+  });
+
+  it('preserves an earlier successful alert resolution when its provenance write retries', async () => {
+    const f = fixture();
+    f.store.failStaleResolvePersistedOnce = true;
+    f.resolveByKey
+      .mockResolvedValueOnce(['resolved-alert-id'])
+      .mockResolvedValueOnce([]);
+    f.dedupeStateByKey.mockReturnValue('resolved');
+
+    await f.runner.runNatural(
+      f.job.name,
+      new Date('2026-11-12T12:01:00.000Z'),
+    );
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({
+      stale_resolve_pending: true,
+    });
+
+    await f.runner.runAuxiliary(f.job.name, 'manual', async () => undefined);
+
+    expect(f.resolveByKey).toHaveBeenCalledTimes(2);
+    expect(f.dedupeStateByKey).toHaveBeenCalledWith(
+      'cron_stale:formula_audit_cron:2026-11-12T12:01:00.000Z',
+    );
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({
+      stale_resolve_outcome: 'already_resolved_alert',
+    });
+    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
   });
 
   it('rechecks missed eligibility after pre-run work and refuses a boundary that aged out', async () => {

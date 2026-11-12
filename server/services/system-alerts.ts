@@ -489,6 +489,20 @@ export function readAllAlerts(): SystemAlert[] {
   return result;
 }
 
+export type AlertDedupeState = 'absent' | 'nonterminal' | 'resolved';
+
+/**
+ * Classify the durable history for one exact dedupe key. Callers that already
+ * attempted resolution use this to distinguish "no alert ever existed" from
+ * "a prior attempt resolved it but its downstream provenance write failed".
+ */
+export function getAlertDedupeState(dedupeKey: string): AlertDedupeState {
+  const matching = readAllAlerts().filter((alert) => alert.dedupe_key === dedupeKey);
+  if (matching.some((alert) => alert.state !== 'resolved')) return 'nonterminal';
+  if (matching.some((alert) => alert.state === 'resolved')) return 'resolved';
+  return 'absent';
+}
+
 /**
  * Atomic whole-file rewrite via tmpfile-rename. Always called inside withLock().
  */

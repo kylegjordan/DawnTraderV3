@@ -22,6 +22,7 @@ import { scheduledJobsAudit } from '../services/scheduled-jobs-audit.js';
 import {
   addAlert,
   assertAlertActor,
+  getAlertDedupeState,
   readAllAlerts,
   resolveAlertsByDedupeKey,
 } from '../services/system-alerts.js';
@@ -132,6 +133,7 @@ export async function runCronMissedCatchupHarness(argv: string[]): Promise<Recor
     writeFireRow: (options) => scheduledJobsAudit.writeFireRow(options),
     addAlert,
     resolveByKey: resolveAlertsByDedupeKey,
+    dedupeStateByKey: getAlertDedupeState,
     now: () => new Date(now),
   });
 
