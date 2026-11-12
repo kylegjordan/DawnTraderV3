@@ -483,6 +483,39 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     });
   });
 
+  it('preserves the exact reconciliation alert when advisory release fails afterward', async () => {
+    const store = new MemoryOccurrenceStore();
+    const prior = row({
+      id: UUID(906),
+      status: 'running',
+      startedAt: new Date('2026-11-12T11:59:00.000Z'),
+      ownerInstanceId: UUID(907),
+    });
+    store.seed(prior);
+    store.failUnlock = true;
+    const f = fixture({ store, now: '2026-11-12T12:01:10.000Z' });
+
+    await expect(f.runner.reconcileJob(f.job.name))
+      .rejects.toThrow('phase=startup_reconciliation');
+
+    expect(store.rows.get(`${f.job.name}:${prior.scheduledFor.toISOString()}`)).toMatchObject({
+      id: prior.id,
+      status: 'indeterminate',
+      reason: 'prior_process_died_after_start',
+    });
+    expect(f.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: `cron_recovery:indeterminate:${f.job.name}:${prior.scheduledFor.toISOString()}`,
+      metadata: expect.objectContaining({
+        occurrence_id: prior.id,
+        status: 'indeterminate',
+        reason: 'prior_process_died_after_start',
+      }),
+    }));
+    store.failUnlock = false;
+    await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:02:00.000Z')))
+      .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+  });
+
   it('retains a different scheduled identity through advisory-lock contention', async () => {
     const store = new MemoryOccurrenceStore();
     const first = fixture({ store });

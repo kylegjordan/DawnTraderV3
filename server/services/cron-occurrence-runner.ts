@@ -864,10 +864,22 @@ export class CronOccurrenceRunner {
         value: { indeterminate: CronOccurrenceRow[]; claimed: CronOccurrenceRow[] };
       };
       try {
-        locked = await this.deps.store.withJobLock(jobName, async (store) => ({
-          indeterminate: await store.reconcileRunning(jobName, this.ownerInstanceId, at),
-          claimed: await store.loadClaimed(jobName),
-        }));
+        locked = await this.deps.store.withJobLock(jobName, async (store) => {
+          const indeterminate = await store.reconcileRunning(jobName, this.ownerInstanceId, at);
+          for (const row of indeterminate) {
+            await this.emitDecisionAlert({
+              jobName,
+              scheduledFor: row.scheduledFor,
+              status: 'indeterminate',
+              occurrenceId: row.id,
+              reason: row.reason ?? 'prior_process_died_after_start',
+            });
+          }
+          return {
+            indeterminate,
+            claimed: await store.loadClaimed(jobName),
+          };
+        });
       } catch (err) {
         throw this.stopLane(jobName, 'startup_reconciliation', err);
       }
@@ -879,15 +891,6 @@ export class CronOccurrenceRunner {
       await this.retryContention(jobName, 'startup_reconciliation', contentionAttempt);
     }
 
-    for (const row of reconciled.indeterminate) {
-      await this.emitDecisionAlert({
-        jobName,
-        scheduledFor: row.scheduledFor,
-        status: 'indeterminate',
-        occurrenceId: row.id,
-        reason: row.reason ?? 'prior_process_died_after_start',
-      });
-    }
     for (const row of reconciled.claimed) {
       void this.enqueueScheduled(jobName, row.scheduledFor, 'missed_catchup', true).catch((err) => {
         console.error(`[CRON-RECOVERY][CLAIMED_RESUME_FAIL] job=${jobName} occurrence=${row.id}:`, err);
