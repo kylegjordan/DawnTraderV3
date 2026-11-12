@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `455e93a26b12c69e5f1848e2cd308cb8e50129c8` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
+**READY-AT (implementation object):** `ddecdf22983eba8af679818d5cba139fa95bfe52` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -34,7 +34,7 @@
 
 ## Change-set census
 
-From the current shared base (`54cfd329d60fc5988fff9631204681878c5530f9`) through READY-AT, exactly 24 tracked paths changed: 8 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only, one added path is this Step-4 review package, and the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review.
+From the implementation base (`54cfd329d60fc5988fff9631204681878c5530f9`) through READY-AT, exactly 24 tracked paths changed: 8 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only, one added path is this Step-4 review package, and the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review. Shared subsequently advanced only through PM-memory commits; those unrelated commits are not part of this review object.
 
 ### NEW
 
@@ -432,6 +432,30 @@ client.release();
 
 The corrected matrix proves both `claimed` and `running` with a refused attempt and with immediate first-attempt acquisition. Direct store tests prove both release-query rejection and a false release result propagate and destroy/quarantine the client; a runner-level arm proves that after auxiliary work completes and release fails, later scheduled core work cannot execute.
 
+### 4d. FOURTH SENT-BACK CORRECTION — reconciliation alert precedes uncertain advisory release
+
+Coltrane's fourth substantive round at exact ref `455e93a26b12c69e5f1848e2cd308cb8e50129c8` found one remaining ordering gap. Startup reconciliation durably changed prior-owner `running` rows to `indeterminate` inside the lock callback, but emitted their exact occurrence alerts only after `withJobLock` returned. If advisory release then rejected or returned false, the lock boundary threw before those alerts ran; the rows were already terminal and would not be rediscovered by later startup reconciliation.
+
+READY-AT creates each exact reconciliation alert immediately after the durable row transition and before advisory release. Release failure still propagates, destroys/quarantines the uncertain pooled client, and stops the job lane. Claimed-row resumption remains outside the lock callback and therefore cannot start after an uncertain release:
+
+```ts
+locked = await this.deps.store.withJobLock(jobName, async (store) => {
+  const indeterminate = await store.reconcileRunning(jobName, this.ownerInstanceId, at);
+  for (const row of indeterminate) {
+    await this.emitDecisionAlert({
+      jobName,
+      scheduledFor: row.scheduledFor,
+      status: 'indeterminate',
+      occurrenceId: row.id,
+      reason: row.reason ?? 'prior_process_died_after_start',
+    });
+  }
+  return { indeterminate, claimed: await store.loadClaimed(jobName) };
+});
+```
+
+The requested red-first arm reproduced the prior gap with a durable `indeterminate` row and zero alert calls. It now proves the exact dedupe key, occurrence ID, status and reason survive a post-callback release failure, and separately proves the job lane remains stopped.
+
 ### 5. NEW — exact stale occurrence only, after durable success
 
 ```ts
@@ -474,9 +498,9 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 ## Verification already run for corrected READY-AT
 
-- GitHub CI run `43159627726` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
+- GitHub CI run `43161494593` at READY-AT passed TypeScript Check, Test Suite, Build and Docker Build individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Corrected recovery, alert-store and Formula Health suites: 64/64 passed across the three named files.
+- Corrected recovery, alert-store and Formula Health suites: 65/65 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -493,6 +517,7 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 8. Is the exact-ref harness sufficiently side-effect-free and strong enough to close Step 7 without altering the host clock or waiting for a natural miss?
 9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return while the same identity is unfinished or before persisting a decision for a different identity?
 10. Does every advisory-release failure shape (query rejection or false release result) destroy the affected pooled client, propagate out of the lock boundary, and stop the job lane after work may already have completed?
+11. If startup reconciliation changes a prior-owner `running` row before advisory release fails, is its exact durable alert carrier already present while claimed work remains unable to start?
 
 ## One-pass fresh-reader record
 
@@ -506,4 +531,5 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 - Coltrane's substantive round at implementation ref `0c82f89efef435edaded754b8a7898dbef0762ee` returned three corrections: dormant schedules must not start before reconciliation; reconciliation contention must retry rather than disappear; and a different scheduled identity must remain pending through advisory-lock contention until it can persist a decision. All three are corrected in READY-AT with the three requested red-first proofs.
 - Coltrane's second substantive round at implementation ref `13fecfc11a35ea4f128815aa6a54bacae8d6edee` returned two corrections: an ordinary auxiliary callback failure must not stop the recovery lane, and a same-identity rolling-process contender must remain pending while the row is `claimed` or `running`. Both are corrected in READY-AT with the three requested red-first arms and a separate real lock-session failure arm.
 - Coltrane's third substantive round at implementation ref `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` returned two corrections: unfinished prior-owner identity recovery must not depend on first observing contention, and advisory-unlock failure must propagate, destroy the uncertain pooled client and stop the lane. Both are corrected in READY-AT; the independent reader additionally found and closed the non-throwing false-release arm before redispatch.
+- Coltrane's fourth substantive round at implementation ref `455e93a26b12c69e5f1848e2cd308cb8e50129c8` returned one correction: a post-reconciliation advisory-release failure must not suppress the exact alert for a row already changed to `indeterminate`. READY-AT emits that carrier before release and keeps the release failure fatal; the requested red-first proof covers the durable row, exact alert and stopped lane together.
 - Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
