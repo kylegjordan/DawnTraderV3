@@ -44,8 +44,15 @@ describe.skipIf(!DB)('B-CRON verifier legacy-clock compatibility on real Postgre
       [job('legacy_at_next'), '2026-06-02T14:55:00.000Z', 'success', { trigger_source: 'cron' }],
       [job('legacy_noncron'), '2026-06-02T14:50:00.123Z', 'success', { trigger_source: 'manual' }],
       [job('legacy_error'), '2026-06-02T14:50:00.123Z', 'error', { trigger_source: 'cron' }],
+      [job('legacy_exact_disabled'), '2026-06-02T14:50:00.000Z', 'success', { trigger_source: 'cron' }],
       [job('current_exact'), '2026-06-02T14:50:00.000Z', 'success', {
         trigger_source: 'cron', occurrence_id: '00000000-0000-4000-8000-000000000001',
+      }],
+      [job('current_exact_catchup'), '2026-06-02T14:50:00.000Z', 'success', {
+        trigger_source: 'missed_catchup', occurrence_id: '00000000-0000-4000-8000-000000000003',
+      }],
+      [job('current_exact_noncron'), '2026-06-02T14:50:00.000Z', 'success', {
+        trigger_source: 'manual', occurrence_id: '00000000-0000-4000-8000-000000000004',
       }],
       [job('current_nonexact'), '2026-06-02T14:50:00.123Z', 'success', {
         trigger_source: 'cron', occurrence_id: '00000000-0000-4000-8000-000000000002',
@@ -92,7 +99,10 @@ describe.skipIf(!DB)('B-CRON verifier legacy-clock compatibility on real Postgre
       'legacy_at_next',
       'legacy_noncron',
       'legacy_error',
+      'legacy_exact_disabled',
       'current_exact',
+      'current_exact_catchup',
+      'current_exact_noncron',
       'current_nonexact',
       'legacy_disabled',
       'durable_exact',
@@ -102,17 +112,20 @@ describe.skipIf(!DB)('B-CRON verifier legacy-clock compatibility on real Postgre
       name: job(suffix),
       scheduledFor: candidate,
       nextScheduledFor: next,
-      allowLegacyWindow: suffix !== 'legacy_disabled',
+      allowLegacyWindow: !['legacy_disabled', 'legacy_exact_disabled'].includes(suffix),
     })));
 
     expect(evidence).not.toBeNull();
     const succeeded = (suffix: string) => evidence?.get(job(suffix))?.candidateSucceeded;
     expect(succeeded('legacy_inside')).toBe(true);
     expect(succeeded('current_exact')).toBe(true);
+    expect(succeeded('current_exact_catchup')).toBe(true);
     expect(succeeded('durable_exact')).toBe(true);
     expect(succeeded('legacy_at_next')).toBe(false);
     expect(succeeded('legacy_noncron')).toBe(false);
     expect(succeeded('legacy_error')).toBe(false);
+    expect(succeeded('legacy_exact_disabled')).toBe(false);
+    expect(succeeded('current_exact_noncron')).toBe(false);
     expect(succeeded('current_nonexact')).toBe(false);
     expect(succeeded('legacy_disabled')).toBe(false);
     expect(succeeded('durable_later')).toBe(false);
