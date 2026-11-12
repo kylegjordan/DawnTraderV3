@@ -21,7 +21,12 @@ import {
   type RegisteredCronJob,
 } from './cron-registry.js';
 import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
-import { addAlert, resolveAlertsByDedupeKey } from './system-alerts.js';
+import {
+  addAlert,
+  getAlertDedupeState,
+  resolveAlertsByDedupeKey,
+  type AlertDedupeState,
+} from './system-alerts.js';
 
 export const CRON_RECOVERY_POLICY_VERSION = 'b-cron-missed-catchup/v1';
 export const CRON_RECOVERY_ACTOR = 'cron-recovery';
@@ -90,7 +95,7 @@ export interface LockedOccurrenceStore {
   markStaleResolvePersisted(
     id: string,
     persistedAt: Date,
-    outcome: 'resolved_open_alert' | 'no_open_alert',
+    outcome: 'resolved_open_alert' | 'already_resolved_alert' | 'no_open_alert',
   ): Promise<CronOccurrenceRow>;
   loadClaimed(jobName: string): Promise<CronOccurrenceRow[]>;
 }
@@ -305,7 +310,7 @@ class PgLockedOccurrenceStore implements LockedOccurrenceStore {
   async markStaleResolvePersisted(
     id: string,
     persistedAt: Date,
-    outcome: 'resolved_open_alert' | 'no_open_alert',
+    outcome: 'resolved_open_alert' | 'already_resolved_alert' | 'no_open_alert',
   ): Promise<CronOccurrenceRow> {
     const result = await this.client.query<DbOccurrenceRow>(`
       UPDATE scheduled_job_occurrences
@@ -426,6 +431,7 @@ export interface CronOccurrenceRunnerDeps {
   writeFireRow: typeof scheduledJobsAudit.writeFireRow;
   addAlert: typeof addAlert;
   resolveByKey: typeof resolveAlertsByDedupeKey;
+  dedupeStateByKey: (dedupeKey: string) => AlertDedupeState;
   now?: () => Date;
   randomUUID?: () => string;
   sleep?: (ms: number) => Promise<void>;
@@ -1022,14 +1028,28 @@ export class CronOccurrenceRunner {
           evidence,
           'engine',
         );
+        let outcome: 'resolved_open_alert' | 'already_resolved_alert' | 'no_open_alert';
+        if (resolved.length > 0) {
+          outcome = 'resolved_open_alert';
+        } else {
+          const alertState = this.deps.dedupeStateByKey(key);
+          if (alertState === 'nonterminal') {
+            // Fail closed if the resolver ever reports no IDs while a live row
+            // still exists. Keep the durable carrier for the next lock holder.
+            console.warn(
+              `[CRON-RECOVERY][STALE_RESOLVE_INCOMPLETE] job=${row.jobName} occurrence=${row.id} key=${key}`,
+            );
+            continue;
+          }
+          outcome = alertState === 'resolved' ? 'already_resolved_alert' : 'no_open_alert';
+        }
         // The verifier's final history read and alert write use this same
-        // per-job advisory lock. Therefore an empty resolve is a durable,
-        // honest terminal result: there is no open alert now, and no stale
-        // verifier read can mint one after this lock is released.
+        // per-job advisory lock. Therefore an absent alert is terminal, while
+        // a resolved row preserves the truth of an earlier successful attempt.
         await store.markStaleResolvePersisted(
           row.id,
           this.now(),
-          resolved.length > 0 ? 'resolved_open_alert' : 'no_open_alert',
+          outcome,
         );
       } catch (err) {
         // Alert-store I/O never rewrites a completed occurrence into failure.
@@ -1113,4 +1133,5 @@ export const cronOccurrenceRunner = new CronOccurrenceRunner({
   writeFireRow: (opts) => scheduledJobsAudit.writeFireRow(opts),
   addAlert,
   resolveByKey: resolveAlertsByDedupeKey,
+  dedupeStateByKey: getAlertDedupeState,
 });
