@@ -194,7 +194,11 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
       .sort((left, right) => left.scheduledFor.getTime() - right.scheduledFor.getTime());
   }
 
-  async markStaleResolvePersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+  async markStaleResolvePersisted(
+    id: string,
+    persistedAt: Date,
+    outcome: 'resolved_open_alert' | 'no_open_alert',
+  ): Promise<CronOccurrenceRow> {
     const row = this.byId(id);
     if (row.status !== 'succeeded' || row.metadata.stale_resolve_pending !== true) {
       throw new Error(`occurrence ${id} has no pending stale resolve`);
@@ -202,6 +206,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
     const metadata = { ...row.metadata };
     delete metadata.stale_resolve_pending;
     metadata.stale_resolve_persisted_at = persistedAt.toISOString();
+    metadata.stale_resolve_outcome = outcome;
     row.metadata = metadata;
     return row;
   }
@@ -266,14 +271,12 @@ function fixture(options: {
   const writeFireRow = vi.fn(async () => undefined);
   const addAlert = vi.fn(async () => null);
   const resolveByKey = vi.fn(async () => ['resolved-alert-id'] as string[]);
-  const hasResolvedByKey = vi.fn(() => false);
   const deps: CronOccurrenceRunnerDeps = {
     store,
     getJob: (jobName) => jobs.get(jobName),
     writeFireRow: writeFireRow as CronOccurrenceRunnerDeps['writeFireRow'],
     addAlert: addAlert as unknown as CronOccurrenceRunnerDeps['addAlert'],
     resolveByKey: resolveByKey as CronOccurrenceRunnerDeps['resolveByKey'],
-    hasResolvedByKey,
     now: () => new Date(now),
     randomUUID: () => UUID(uuid++),
     sleep: options.sleep ?? (async () => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, 0))),
@@ -287,7 +290,6 @@ function fixture(options: {
     writeFireRow,
     addAlert,
     resolveByKey,
-    hasResolvedByKey,
     setNow: (value: string) => { now = new Date(value); },
   };
 }
@@ -446,6 +448,22 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
       expect.stringMatching(new RegExp(`cron occurrence ${result.occurrenceId} .* terminal 2026-11-12T12:01:10.000Z`)),
       'engine',
     );
+  });
+
+  it('gives a natural success the same exact stale-alert cleanup as a catch-up success', async () => {
+    const f = fixture();
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    const result = await f.runner.runNatural(f.job.name, boundary);
+
+    expect(f.resolveByKey).toHaveBeenCalledWith(
+      `cron_stale:${f.job.name}:${boundary.toISOString()}`,
+      CRON_RECOVERY_ACTOR,
+      expect.stringContaining(`cron occurrence ${result.occurrenceId}`),
+      'engine',
+    );
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({
+      stale_resolve_outcome: 'resolved_open_alert',
+    });
   });
 
   it.each(['failed', 'skipped', 'indeterminate'] as const)('never resolves a %s occurrence', async (state) => {
@@ -882,6 +900,31 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(store.rows.get(`${second.job.name}:${boundary.toISOString()}`)?.status).toBe('succeeded');
   });
 
+  it('holds a separate runner verifier read behind an in-flight natural core', async () => {
+    const store = new MemoryOccurrenceStore();
+    let releaseCore!: () => void;
+    const coreGate = new Promise<void>((resolveCore) => { releaseCore = resolveCore; });
+    const naturalOwner = fixture({ store, run: async () => coreGate });
+    const verifierOwner = fixture({ store });
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    const natural = naturalOwner.runner.runNatural(naturalOwner.job.name, boundary);
+    await vi.waitFor(() => expect(naturalOwner.run).toHaveBeenCalledTimes(1));
+
+    const lockedRead = vi.fn(async () => 'read-after-core');
+    const verifier = verifierOwner.runner.runAuxiliary(
+      verifierOwner.job.name,
+      'on-read',
+      lockedRead,
+    );
+    await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThanOrEqual(2));
+    expect(lockedRead).not.toHaveBeenCalled();
+
+    releaseCore();
+    await expect(natural).resolves.toMatchObject({ status: 'succeeded' });
+    await expect(verifier).resolves.toBe('read-after-core');
+    expect(lockedRead).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects an auxiliary business failure without stopping later scheduled work', async () => {
     const f = fixture();
     const auxiliaryError = new Error('manual refresh failed');
@@ -954,30 +997,25 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
   });
 
-  it('keeps the durable resolver marker when the exact stale alert has not been minted yet', async () => {
-    const f = fixture();
-    f.resolveByKey.mockResolvedValueOnce([]);
-    const boundary = new Date('2026-11-12T12:01:00.000Z');
-    await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
-    expect([...f.store.rows.values()][0].metadata).toMatchObject({ stale_resolve_pending: true });
-
-    await f.runner.runAuxiliary(f.job.name, 'manual', async () => undefined);
-    expect(f.resolveByKey).toHaveBeenCalledTimes(2);
-    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
-  });
-
-  it('clears a retry marker when the exact row was already resolved before the marker write recovered', async () => {
+  it('records no open alert as a terminal outcome and never retries it forever', async () => {
     const f = fixture();
     f.resolveByKey.mockResolvedValue([]);
-    f.hasResolvedByKey.mockReturnValue(true);
-
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
     await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
-
     expect(f.resolveByKey).toHaveBeenCalledTimes(1);
-    expect(f.hasResolvedByKey).toHaveBeenCalledWith(
-      `cron_stale:${f.job.name}:2026-11-12T12:01:00.000Z`,
-    );
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({
+      stale_resolve_outcome: 'no_open_alert',
+    });
     expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
+
+    await f.runner.runAuxiliary(f.job.name, 'manual', async () => undefined);
+    expect(f.resolveByKey).toHaveBeenCalledTimes(1);
+    expect(f.resolveByKey).toHaveBeenCalledWith(
+      `cron_stale:${f.job.name}:${boundary.toISOString()}`,
+      CRON_RECOVERY_ACTOR,
+      expect.any(String),
+      'engine',
+    );
   });
 
   it('rechecks missed eligibility after pre-run work and refuses a boundary that aged out', async () => {

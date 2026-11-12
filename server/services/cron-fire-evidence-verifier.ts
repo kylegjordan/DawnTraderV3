@@ -28,7 +28,8 @@
 
 import { sql } from 'drizzle-orm';
 import { db } from '../db.js';
-import { cronRegistry } from './cron-registry.js';
+import { cronRegistry, type RegisteredCronJob } from './cron-registry.js';
+import { cronOccurrenceRunner } from './cron-occurrence-runner.js';
 import { addAlert } from './system-alerts.js';
 import { computePrevFire } from './cron-next-fire.js';
 
@@ -205,6 +206,7 @@ export async function runVerification(
         await emitStaleAlert(
           job.name, null, new Date(now), 'no_fires_ever_interval_fallback',
           `cron_stale:${job.name}:no_prev_parse`,
+          false,
         );
       } else if (now > lastSuccessfulBoundary.getTime() + graceWindowMs) {
         stale.push(job.name);
@@ -216,6 +218,7 @@ export async function runVerification(
         await emitStaleAlert(
           job.name, lastSuccessfulBoundary, expectedBy, 'stale_fire_evidence_interval_fallback',
           `cron_stale:${job.name}:${expectedBy.toISOString()}`,
+          false,
         );
       } else {
         console.log(`[CRON-FIRE-VERIFIER] job=${job.name} healthy (interval-fallback)`);
@@ -242,18 +245,11 @@ export async function runVerification(
       || lastSuccessfulBoundary.getTime() < staleThresholdMs;
 
     if (isStale) {
-      stale.push(job.name);
-      const dedupeKey = `cron_stale:${job.name}:${prevOccurrence.toISOString()}`;
-      console.warn(
-        `[CRON-FIRE-VERIFIER] job=${job.name} STALE ` +
-        `last_successful_boundary=${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'} ` +
-        `prev_occurrence=${prevOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
-      );
-      await emitStaleAlert(
-        job.name, lastSuccessfulBoundary, prevOccurrence,
-        lastSuccessfulBoundary === null ? 'no_fires_ever' : 'stale_fire_evidence',
-        dedupeKey,
-      );
+      // The first read identifies a candidate. Re-read and mint while holding
+      // the same cross-process job lock used by natural and catch-up runs. This
+      // closes the old gap where a successful core could resolve an absent
+      // alert, release its lock, and then be paged by an already-stale read.
+      if (await emitCadenceStaleIfStillMissing(job, now)) stale.push(job.name);
     } else {
       console.log(
         `[CRON-FIRE-VERIFIER] job=${job.name} healthy ` +
@@ -266,6 +262,61 @@ export async function runVerification(
   return { ok: stale.length === 0, stale };
 }
 
+async function emitCadenceStaleIfStillMissing(
+  job: RegisteredCronJob,
+  nowMs: number,
+): Promise<boolean> {
+  try {
+    return await cronOccurrenceRunner.runAuxiliary(job.name, 'on-read', async () => {
+      const lockedRead = await queryLastFires([job.name]);
+      if (lockedRead === null) {
+        console.warn(`[CRON-FIRE-VERIFIER][LOCKED_RECHECK_SKIPPED] job=${job.name} history read failed`);
+        return false;
+      }
+
+      const expectedOccurrence = computePrevFire(job.expression, job.timezone, new Date(nowMs));
+      if (!expectedOccurrence || nowMs - expectedOccurrence.getTime() < FIRE_LATENCY_GRACE_MS) {
+        return false;
+      }
+
+      const lastSuccessfulBoundary = lockedRead.get(job.name) ?? null;
+      const staleThresholdMs = expectedOccurrence.getTime() - FIRE_LATENCY_GRACE_MS;
+      if (
+        lastSuccessfulBoundary !== null
+        && lastSuccessfulBoundary.getTime() >= staleThresholdMs
+      ) {
+        console.log(
+          `[CRON-FIRE-VERIFIER] job=${job.name} recovered_before_locked_recheck ` +
+          `last_successful_boundary=${lastSuccessfulBoundary.toISOString()}`,
+        );
+        return false;
+      }
+
+      const dedupeKey = `cron_stale:${job.name}:${expectedOccurrence.toISOString()}`;
+      console.warn(
+        `[CRON-FIRE-VERIFIER] job=${job.name} STALE ` +
+        `last_successful_boundary=${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'} ` +
+        `prev_occurrence=${expectedOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
+      );
+      await emitStaleAlert(
+        job.name,
+        lastSuccessfulBoundary,
+        expectedOccurrence,
+        lastSuccessfulBoundary === null ? 'no_fires_ever' : 'stale_fire_evidence',
+        dedupeKey,
+        true,
+      );
+      return true;
+    });
+  } catch (err) {
+    console.error(
+      `[CRON-FIRE-VERIFIER][LOCKED_RECHECK_FAIL] job=${job.name}: `
+      + (err instanceof Error ? err.message : err),
+    );
+    return false;
+  }
+}
+
 async function emitStaleAlert(
   jobName: string,
   lastSuccessfulBoundary: Date | null,
@@ -276,6 +327,9 @@ async function emitStaleAlert(
   /** B-NEW-51: dedup key — collapses the every-15-min re-check into one alert
    * per missed occurrence. Same key → suppressed by addAlert. */
   dedupeKey: string,
+  /** Only calendar-derived occurrence identities are immutable one-shot keys.
+   * Interval fallback keys represent a reusable condition and may recur. */
+  oneShot: boolean,
 ): Promise<void> {
   try {
     await addAlert({
@@ -283,7 +337,7 @@ async function emitStaleAlert(
       category: 'breakage',
       severity: 'warning',
       dedupe_key: dedupeKey,
-      one_shot: true,
+      ...(oneShot ? { one_shot: true } : {}),
       title: `B-NEW-49 cron schedule "${jobName}" missed its scheduled fire (reason=${reason})`,
       body:
         `The cron-fire-evidence verifier found NO successful completion boundary in ` +
