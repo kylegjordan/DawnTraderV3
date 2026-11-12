@@ -55,7 +55,7 @@ The remaining four were not claimed as fired: their observed next fires were awa
 
 - The post-deploy database population contained **13 occurrence rows / 13 distinct `(job_name, scheduled_for)` identities**: the 11 retained harness identities plus the two due production identities. Duplicate-identity groups were `0`.
 - Production `claimed|running` rows were `0`, against a positive control of one retained harness `indeterminate` row in the same post-deploy population.
-- Across both PM2 streams from `2026-11-12T07:22:00Z` through the log read, the instrument counted 6 registration lines, 6 boot-smoke job lines and 6 boot+5-minute job lines. It found `0` recovery-error, arm-smoke-unhandled or duplicate-registration lines. The same error-stream/window instrument found **765** known `[B79.0f][COLLISION_RESOLVE]` lines as its positive control, so the zero was not an unread stream or empty window.
+- Across both PM2 streams from `2026-11-12T07:22:00Z` through the `2026-11-12T07:28:26Z` log read, the instrument counted 6 registration lines, 6 boot-smoke job lines and 6 boot+5-minute job lines. It found `0` recovery-error, arm-smoke-unhandled or duplicate-registration lines. The same error-stream/window instrument found **765** known `[B79.0f][COLLISION_RESOLVE]` lines as its positive control, so the zero was not an unread stream or empty window.
 - PM2 remained online at restart `695`, matching the deploy record; no later restart occurred during verification.
 
 ## 5. Exact-ref CI
@@ -75,6 +75,89 @@ The claim-only reader identified three load-bearing alternatives that mattered:
 3. A deduplicated summary could hide duplicate business calls. Re-derived from the harness's raw race results, durable rows and call map: the natural/missed race produces one success, one duplicate result, one identity and one core call.
 
 `REVIEWER: claim-only · asked which objects settle Step 7 and what other states remain consistent · found cadence wording, timer-edge and hidden-duplicate alternatives; all three re-derived and the verdict narrowed to the measured population · re-derived y`
+
+## 8. Exact reviewer reproduction commands
+
+Run these on staging unless the command names the local review clone. They are read-only except for the harness command in section 2, whose retained synthetic rows are already present; rerunning that command creates a new isolated run ID and resolves only its own synthetic alerts.
+
+Exact build, deploy record, process restart count and liveness:
+
+```bash
+cd /home/deploy/dawntrader
+git rev-parse HEAD
+cat dist/BUILD_SHA
+cat /home/deploy/dawntrader-deploy.record
+pm2 jlist | jq -c '.[] | select(.name == "dawntrader") | {status:.pm2_env.status,restart_time:.pm2_env.restart_time,pm_uptime:.pm2_env.pm_uptime}'
+curl -sf http://localhost:5000/api/health/liveness
+```
+
+Exact executable registration census at the deployed ref, from a review clone:
+
+```bash
+git grep -n -E '^[[:space:]]*cronRegistry\.register\(\{' 4e66ea904edf690e144035c959cbd335241f7651 -- server ':(exclude)server/tests/**' ':(exclude)server/scripts/**'
+```
+
+Exact durable-identity and audit read-back, after loading `/home/deploy/dawntrader/.env` and invoking `psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1`:
+
+```sql
+SELECT job_name, scheduled_for, first_source, status, claimed_at, started_at,
+       completed_at, lag_ms, reason, metadata->>'harness_run_id' AS harness_run_id
+FROM scheduled_job_occurrences
+WHERE claimed_at >= '2026-11-12T07:22:17Z'::timestamptz
+  AND claimed_at <= '2026-11-12T07:29:14.015Z'::timestamptz
+ORDER BY claimed_at, job_name, scheduled_for;
+
+SELECT count(*) AS rows, count(DISTINCT (job_name, scheduled_for)) AS identities,
+       count(*) FILTER (WHERE status IN ('claimed','running')
+         AND metadata->>'harness_run_id' IS NULL) AS production_unfinished,
+       count(*) FILTER (WHERE status = 'indeterminate'
+         AND metadata->>'harness_run_id' = 'b551a434-9a38-41f9-bcbf-77545ad6adfa') AS harness_indeterminate_control
+FROM scheduled_job_occurrences
+WHERE claimed_at >= '2026-11-12T07:22:17Z'::timestamptz
+  AND claimed_at <= '2026-11-12T07:29:14.015Z'::timestamptz;
+
+SELECT job_name, scheduled_for, count(*) AS n
+FROM scheduled_job_occurrences
+WHERE claimed_at >= '2026-11-12T07:22:17Z'::timestamptz
+  AND claimed_at <= '2026-11-12T07:29:14.015Z'::timestamptz
+GROUP BY job_name, scheduled_for HAVING count(*) > 1;
+
+SELECT task_name, scheduled_for, fired_at, status, meta->>'trigger_source' AS trigger_source
+FROM scheduled_tasks_audit
+WHERE fired_at >= '2026-11-12T07:22:17Z'::timestamptz
+  AND fired_at <= '2026-11-12T07:29:14.015Z'::timestamptz
+  AND (task_name IN ('xstock_qd_probe_cron','feed_integrity_cron')
+       OR task_name LIKE 'b_cron_harness_%')
+ORDER BY fired_at, task_name;
+```
+
+Exact two-stream log instrument. It excludes the harness's one deliberately injected failure from the production-recovery-error count, while retaining the harness in the database proof above:
+
+```python
+from pathlib import Path
+start, end = "2026-11-12 07:22:00", "2026-11-12 07:28:26"
+lines = []
+for path in ("/var/log/dawntrader/out.log", "/var/log/dawntrader/error.log"):
+    with Path(path).open(errors="replace") as stream:
+        lines.extend(line.rstrip("\n") for line in stream if start <= line[:19] <= end)
+checks = {
+    "registration": lambda s: "[CRON-REGISTRY] Registered job=" in s,
+    "boot_jobs": lambda s: "[CRON-ARM-SMOKE] label=boot job=" in s,
+    "boot_plus_5m_jobs": lambda s: "[CRON-ARM-SMOKE] label=boot+5min job=" in s,
+    "production_recovery_errors": lambda s: "[CRON-RECOVERY]" in s and ("FAIL" in s or "ERROR" in s) and "b_cron_harness_" not in s,
+    "arm_smoke_unhandled": lambda s: "[CRON-ARM-SMOKE]" in s and "unhandled" in s.lower(),
+    "duplicate_registration": lambda s: "[CRON-REGISTRY] Duplicate registration" in s,
+    "collision_positive_control": lambda s: "[B79.0f][COLLISION_RESOLVE]" in s,
+}
+for name, predicate in checks.items():
+    print(f"{name}={sum(predicate(line) for line in lines)}")
+```
+
+The exact-ref CI read is:
+
+```bash
+gh run view 43173570525 --json headSha,status,conclusion,jobs
+```
 
 ## Next step
 
