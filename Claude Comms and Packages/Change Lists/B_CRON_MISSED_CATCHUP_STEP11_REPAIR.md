@@ -454,14 +454,20 @@ The landed ref `cd2b794dec63bea0771e32b733263b7ae516e6b8` passed CI run
 running identity and `ENGINE RESUMED`. The verifier's own startup line followed
 at `2026-11-12T12:15:32Z` with its registered 900-second interval.
 
-The same runtime log instrument provides the before/after discriminator. The
-last pre-deploy pass at `12:13:00Z` judged the three valid rows stale:
+The same two-stream runtime log instrument provides the before/after
+discriminator. The `11:13:00Z` pass judged all three valid rows stale:
 
 - `formula_audit_cron`: mature `03:00:00.000Z`, success `03:00:00.023Z`;
 - `xstock_universe_discovery_cron`: mature `06:00:00.000Z`, success
   `06:00:00.018Z`;
 - `awareness_reflection_cron`: mature `06:00:00.000Z`, success
   `06:00:00.020Z`.
+
+At `12:13:00Z`, the last pre-deploy pass judged only universe discovery and
+Formula Health stale (2 of 6 registered jobs). Awareness reflection was no
+longer in that population because its exact current `12:00:00.000Z` durable
+occurrence already existed. The three-row positive control is therefore the
+`11:13:00Z` pass; the `12:13:00Z` pass is the two-row transition state.
 
 The durable-row read independently confirmed those legacy audit shapes. It
 also found the post-repair current awareness occurrence at exactly
@@ -505,12 +511,18 @@ the environment where needed:
 ```bash
 cat /home/deploy/dawntrader-deploy.record
 
-grep '2026-11-12 12:13:00.*CRON-FIRE-VERIFIER' \
-  /var/log/dawntrader/out.log
-grep '2026-11-12 12:30:33.*CRON-FIRE-VERIFIER' \
-  /var/log/dawntrader/out.log
-grep '2026-11-12 12:30:33.*CRON-FIRE-VERIFIER' \
-  /var/log/dawntrader/error.log
+for stream in out error; do
+  grep -h '2026-11-12 11:13:00.*CRON-FIRE-VERIFIER' \
+    "/var/log/dawntrader/${stream}.log"
+done
+for stream in out error; do
+  grep -h '2026-11-12 12:13:00.*CRON-FIRE-VERIFIER' \
+    "/var/log/dawntrader/${stream}.log"
+done
+for stream in out error; do
+  grep -h '2026-11-12 12:30:33.*CRON-FIRE-VERIFIER' \
+    "/var/log/dawntrader/${stream}.log"
+done
 
 psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -P pager=off <<'SQL'
 SELECT task_name, status, scheduled_for, fired_at,
