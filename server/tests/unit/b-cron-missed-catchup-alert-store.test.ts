@@ -35,6 +35,18 @@ describe('cron-recovery alert ownership', () => {
     expect(alerts.readAllAlerts().filter((row) => row.dedupe_key === key)).toHaveLength(1);
   });
 
+  it('allows a resolved reusable fallback condition to create a later episode', async () => {
+    const key = 'cron_stale:formula_audit_cron:no_prev_parse';
+    const first = await alerts.addAlert({ ...base, dedupe_key: key });
+    await alerts.resolveAlertsByDedupeKey(key, 'cron-recovery', EVIDENCE, 'engine');
+
+    const repeated = await alerts.addAlert({ ...base, dedupe_key: key });
+
+    expect(repeated.id).not.toBe(first.id);
+    expect(repeated.state).not.toBe('resolved');
+    expect(alerts.readAllAlerts().filter((row) => row.dedupe_key === key)).toHaveLength(2);
+  });
+
   it('resolves the matching stale row by returned ID and stores the exact actor and transport', async () => {
     const key = 'cron_stale:formula_audit_cron:2026-11-12T12:01:00.000Z';
     const stale = await alerts.addAlert({ ...base, dedupe_key: key });

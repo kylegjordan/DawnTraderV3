@@ -40,10 +40,21 @@ vi.mock('../../services/system-alerts.js', () => ({
   }),
 }));
 
+const auxiliaryCalls: Array<{ jobName: string; source: string }> = [];
+vi.mock('../../services/cron-occurrence-runner.js', () => ({
+  cronOccurrenceRunner: {
+    runAuxiliary: vi.fn(async (jobName: string, source: string, run: () => Promise<unknown>) => {
+      auxiliaryCalls.push({ jobName, source });
+      return run();
+    }),
+  },
+}));
+
 beforeEach(() => {
   mockedLastFires = new Map();
   dbCalls.length = 0;
   alertCalls.length = 0;
+  auxiliaryCalls.length = 0;
   vi.resetModules();
 });
 
@@ -94,6 +105,8 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     // Dedup key is keyed on the missed occurrence (2026-05-30T00:00:00.000Z).
     expect(alertCalls[0].dedupe_key).toBe('cron_stale:weekly_sat:2026-05-30T00:00:00.000Z');
     expect(alertCalls[0].metadata.reason).toBe('stale_fire_evidence');
+    expect(alertCalls[0].one_shot).toBe(true);
+    expect(auxiliaryCalls).toEqual([{ jobName: 'weekly_sat', source: 'on-read' }]);
   });
 
   it('HEALTHY: weekly job that fired on its most-recent occurrence (old interval×1.5 model would FALSE-flag mid-week)', async () => {
@@ -148,6 +161,41 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     expect(report.stale).toContain('bad_expr');
     expect(alertCalls).toHaveLength(1);
     expect(alertCalls[0].metadata.reason).toBe('stale_fire_evidence_interval_fallback');
+    expect(alertCalls[0].one_shot).toBeUndefined();
+  });
+
+  it('re-offers the reusable no-prev-parse fallback after an earlier episode can resolve', async () => {
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('bad_expr', 'NOT A CRON', 300));
+
+    await runVerification(NOW);
+    await runVerification(NOW + 15 * 60 * 1000);
+
+    expect(alertCalls).toHaveLength(2);
+    expect(alertCalls.map((call) => call.dedupe_key)).toEqual([
+      'cron_stale:bad_expr:no_prev_parse',
+      'cron_stale:bad_expr:no_prev_parse',
+    ]);
+    expect(alertCalls.every((call) => call.one_shot === undefined)).toBe(true);
+  });
+
+  it('rechecks under the job lock and suppresses a stale read after natural success', async () => {
+    const dbModule = await import('../../db.js');
+    (dbModule.db.execute as any).mockResolvedValueOnce({
+      rows: [{
+        task_name: 'weekly_sat',
+        last_scheduled_for: new Date('2026-05-23T00:00:00Z'),
+      }],
+    });
+    mockedLastFires.set('weekly_sat', new Date('2026-05-30T00:05:00Z'));
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+
+    const report = await runVerification(NOW);
+
+    expect(report).toEqual({ ok: true, stale: [] });
+    expect(auxiliaryCalls).toEqual([{ jobName: 'weekly_sat', source: 'on-read' }]);
+    expect(alertCalls).toHaveLength(0);
   });
 
   it('skips disabled jobs', async () => {
