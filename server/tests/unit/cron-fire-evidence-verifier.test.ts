@@ -9,6 +9,8 @@
  * mocked) so occurrences are deterministic.
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Fixed reference instant: Tuesday 2026-06-02 15:00:00Z.
@@ -24,7 +26,7 @@ vi.mock('../../db.js', () => ({
       dbCalls.push(q);
       const rows = Array.from(mockedLastFires.entries())
         .filter(([_, v]) => v !== null)
-        .map(([task_name, last_fired_at]) => ({ task_name, last_fired_at }));
+        .map(([task_name, last_scheduled_for]) => ({ task_name, last_scheduled_for }));
       return { rows };
     }),
   },
@@ -71,6 +73,14 @@ function makeJob(name: string, expression: string, intervalSeconds: number, time
 }
 
 describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
+  it('uses successful scheduled boundaries from both completion stores, not fired_at or error rows', () => {
+    const source = readFileSync(resolve('server/services/cron-fire-evidence-verifier.ts'), 'utf8');
+    expect(source).toMatch(/SELECT task_name, scheduled_for\s+FROM scheduled_tasks_audit\s+WHERE status = 'success'/);
+    expect(source).toMatch(/SELECT job_name AS task_name, scheduled_for\s+FROM scheduled_job_occurrences\s+WHERE status = 'succeeded'/);
+    expect(source).toMatch(/MAX\(scheduled_for\) AS last_scheduled_for/);
+    expect(source).not.toMatch(/SELECT task_name,\s*MAX\(fired_at\)/);
+  });
+
   it('STALE: weekly job whose most-recent occurrence has no fire-evidence', async () => {
     const { cronRegistry, runVerification } = await loadModules();
     // Weekly Saturday 00:00 UTC. prev() from Tue 06-02 15:00Z = Sat 05-30 00:00Z.

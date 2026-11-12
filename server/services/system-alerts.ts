@@ -516,6 +516,9 @@ export interface AddAlertOptions {
   /** B-NEW-51: when set, suppress creating a new alert if a non-terminal
    * (scheduled/active/acknowledged) alert with the same key already exists. */
   dedupe_key?: string;
+  /** Immutable event identity: a resolved row also suppresses re-creation.
+   * Use only when the same key can never represent a later recurrence. */
+  one_shot?: boolean;
 }
 
 /**
@@ -524,9 +527,9 @@ export interface AddAlertOptions {
  *
  * B-NEW-51 dedup: when `opts.dedupe_key` is provided and a NON-terminal alert
  * (state !== 'resolved') with the same `dedupe_key` already exists, no new
- * alert is written and the EXISTING one is returned. This collapses a
- * repeating condition into a single alert. Callers that omit `dedupe_key` get
- * the original always-append behavior (backward-compatible).
+ * alert is written and the EXISTING one is returned. `one_shot` extends that
+ * suppression to a resolved row for immutable event identities. Callers that
+ * omit `dedupe_key` get the original always-append behavior.
  */
 export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
   ensureFileExists();
@@ -558,11 +561,11 @@ export async function addAlert(opts: AddAlertOptions): Promise<SystemAlert> {
     const all = readAllAlerts();
     if (opts.dedupe_key) {
       // Dedup: a non-resolved alert with the same key already represents this
-      // condition — return it, write nothing. (`resolved` is terminal and does
-      // NOT block a fresh alert if the condition recurs.)
-      const existing = all.find(
-        (a) => a.dedupe_key === opts.dedupe_key && a.state !== 'resolved',
-      );
+      // condition. A one-shot key represents an immutable event, so its
+      // resolved row also blocks re-creation.
+      const existing = all.find((a) =>
+        a.dedupe_key === opts.dedupe_key
+        && (opts.one_shot === true || a.state !== 'resolved'));
       if (existing) {
         result = existing;
         return;

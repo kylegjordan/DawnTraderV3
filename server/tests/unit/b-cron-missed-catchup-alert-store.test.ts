@@ -23,6 +23,18 @@ const base = {
 };
 
 describe('cron-recovery alert ownership', () => {
+  it('treats an exact scheduled-boundary stale alert as one-shot after resolution', async () => {
+    const key = 'cron_stale:formula_audit_cron:2026-11-12T12:01:00.000Z';
+    const first = await alerts.addAlert({ ...base, dedupe_key: key, one_shot: true });
+    await alerts.resolveAlertsByDedupeKey(key, 'cron-recovery', EVIDENCE, 'engine');
+
+    const repeated = await alerts.addAlert({ ...base, dedupe_key: key, one_shot: true });
+
+    expect(repeated.id).toBe(first.id);
+    expect(repeated.state).toBe('resolved');
+    expect(alerts.readAllAlerts().filter((row) => row.dedupe_key === key)).toHaveLength(1);
+  });
+
   it('resolves the matching stale row by returned ID and stores the exact actor and transport', async () => {
     const key = 'cron_stale:formula_audit_cron:2026-11-12T12:01:00.000Z';
     const stale = await alerts.addAlert({ ...base, dedupe_key: key });

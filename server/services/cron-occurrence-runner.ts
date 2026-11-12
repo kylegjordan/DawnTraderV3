@@ -21,7 +21,7 @@ import {
   type RegisteredCronJob,
 } from './cron-registry.js';
 import { scheduledJobsAudit } from './scheduled-jobs-audit.js';
-import { addAlert, resolveAlertsByDedupeKey } from './system-alerts.js';
+import { addAlert, readAllAlerts, resolveAlertsByDedupeKey } from './system-alerts.js';
 
 export const CRON_RECOVERY_POLICY_VERSION = 'b-cron-missed-catchup/v1';
 export const CRON_RECOVERY_ACTOR = 'cron-recovery';
@@ -86,6 +86,8 @@ export interface LockedOccurrenceStore {
   reconcileRunning(jobName: string, currentOwner: string, at: Date): Promise<CronOccurrenceRow[]>;
   loadPendingDecisionAlerts(jobName: string): Promise<CronOccurrenceRow[]>;
   markDecisionAlertPersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow>;
+  loadPendingStaleResolves(jobName: string): Promise<CronOccurrenceRow[]>;
+  markStaleResolvePersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow>;
   loadClaimed(jobName: string): Promise<CronOccurrenceRow[]>;
 }
 
@@ -285,6 +287,30 @@ class PgLockedOccurrenceStore implements LockedOccurrenceStore {
     return mapDbRow(result.rows[0]);
   }
 
+  async loadPendingStaleResolves(jobName: string): Promise<CronOccurrenceRow[]> {
+    const result = await this.client.query<DbOccurrenceRow>(`
+      SELECT ${ROW_COLUMNS}
+        FROM scheduled_job_occurrences
+       WHERE job_name = $1 AND status = 'succeeded'
+         AND metadata @> '{"stale_resolve_pending":true}'::jsonb
+       ORDER BY scheduled_for ASC
+    `, [jobName]);
+    return result.rows.map(mapDbRow);
+  }
+
+  async markStaleResolvePersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+    const result = await this.client.query<DbOccurrenceRow>(`
+      UPDATE scheduled_job_occurrences
+         SET metadata = (metadata - 'stale_resolve_pending')
+           || jsonb_build_object('stale_resolve_persisted_at', $2::text)
+       WHERE id = $1 AND status = 'succeeded'
+         AND metadata @> '{"stale_resolve_pending":true}'::jsonb
+       RETURNING ${ROW_COLUMNS}
+    `, [id, persistedAt.toISOString()]);
+    if (!result.rows[0]) throw new Error(`occurrence ${id} has no pending stale resolve`);
+    return mapDbRow(result.rows[0]);
+  }
+
   async loadClaimed(jobName: string): Promise<CronOccurrenceRow[]> {
     const result = await this.client.query<DbOccurrenceRow>(`
       SELECT ${ROW_COLUMNS}
@@ -389,6 +415,7 @@ export interface CronOccurrenceRunnerDeps {
   writeFireRow: typeof scheduledJobsAudit.writeFireRow;
   addAlert: typeof addAlert;
   resolveByKey: typeof resolveAlertsByDedupeKey;
+  hasResolvedByKey?: (dedupeKey: string) => boolean;
   now?: () => Date;
   randomUUID?: () => string;
   sleep?: (ms: number) => Promise<void>;
@@ -613,12 +640,13 @@ export class CronOccurrenceRunner {
     let result: CronOccurrenceResult;
     while (true) {
       this.assertLaneRunning(item.jobName);
-      const decisionAt = this.now();
-      const policy = this.evaluatePolicy(job, item, lane, decisionAt);
       let locked: { acquired: false } | { acquired: true; value: CronOccurrenceResult };
       try {
         locked = await this.deps.store.withJobLock<CronOccurrenceResult>(item.jobName, async (store) => {
-        await this.persistPendingDecisionAlerts(store, item.jobName);
+          await this.persistPendingDecisionAlerts(store, item.jobName);
+          await this.persistPendingStaleResolves(store, item.jobName);
+          const decisionAt = this.now();
+          let policy = this.evaluatePolicy(job, item, lane, decisionAt);
         const claim = await store.claim({
           jobName: item.jobName,
           scheduledFor: item.scheduledFor,
@@ -701,6 +729,22 @@ export class CronOccurrenceRunner {
         }
 
         const firedAt = this.now();
+        const startPolicy = this.evaluatePolicy(job, item, lane, firedAt);
+        if (!startPolicy.eligible) {
+          await store.markSkipped(claim.row.id, firedAt, startPolicy.reason, {
+            rechecked_before_start: true,
+            initial_lag_ms: policy.lagMs,
+          });
+          return {
+            jobName: item.jobName,
+            scheduledFor: item.scheduledFor,
+            status: 'skipped' as const,
+            occurrenceId: claim.row.id,
+            completedAt: firedAt,
+            reason: startPolicy.reason,
+          };
+        }
+        policy = startPolicy;
         const attemptId = this.randomUUID();
         await store.markRunning(claim.row.id, firedAt, attemptId, this.ownerInstanceId);
         let status: 'succeeded' | 'failed' = 'succeeded';
@@ -749,6 +793,9 @@ export class CronOccurrenceRunner {
           await store.markTerminal(claim.row.id, status, completedAt, errorMessage, {
             ...beforeMeta,
             ...resultMeta,
+            ...(status === 'succeeded' && item.source === 'missed_catchup'
+              ? { stale_resolve_pending: true }
+              : {}),
           });
         } catch (err) {
           const reason = `terminal_write_failed:${err instanceof Error ? err.message : String(err)}`;
@@ -822,25 +869,7 @@ export class CronOccurrenceRunner {
     }
 
     if (result.status === 'succeeded' && result.occurrenceId) {
-      const evidence =
-        `cron occurrence ${result.occurrenceId} policy ${CRON_RECOVERY_POLICY_VERSION} `
-        + `terminal ${result.completedAt!.toISOString()}`;
-      try {
-        await this.deps.resolveByKey(
-          `cron_stale:${result.jobName}:${result.scheduledFor.toISOString()}`,
-          CRON_RECOVERY_ACTOR,
-          evidence,
-          'engine',
-        );
-      } catch (err) {
-        // The exact stale row remains open and therefore remains the durable
-        // retry signal. Alert-store I/O cannot rewrite a completed occurrence
-        // into a failed execution.
-        console.error(
-          `[CRON-RECOVERY][STALE_RESOLVE_FAIL] job=${result.jobName} occurrence=${result.occurrenceId}:`,
-          err,
-        );
-      }
+      await this.flushPendingStaleResolves(result.jobName);
     } else if (result.status === 'indeterminate') {
       try {
         await this.flushPendingDecisionAlerts(result.jobName);
@@ -864,6 +893,7 @@ export class CronOccurrenceRunner {
       try {
         locked = await this.deps.store.withJobLock(item.jobName, async (store) => {
           await this.persistPendingDecisionAlerts(store, item.jobName);
+          await this.persistPendingStaleResolves(store, item.jobName);
           try {
             return await item.run();
           } catch (err) {
@@ -907,6 +937,7 @@ export class CronOccurrenceRunner {
         locked = await this.deps.store.withJobLock(jobName, async (store) => {
           await store.reconcileRunning(jobName, this.ownerInstanceId, at);
           const indeterminate = await this.persistPendingDecisionAlerts(store, jobName);
+          await this.persistPendingStaleResolves(store, jobName);
           return {
             indeterminate,
             claimed: await store.loadClaimed(jobName),
@@ -963,6 +994,57 @@ export class CronOccurrenceRunner {
       if (locked.acquired) return;
       contentionAttempt += 1;
       await this.retryContention(jobName, 'indeterminate_alert_persistence', contentionAttempt);
+    }
+  }
+
+  private async persistPendingStaleResolves(
+    store: LockedOccurrenceStore,
+    jobName: string,
+  ): Promise<CronOccurrenceRow[]> {
+    const pending = await store.loadPendingStaleResolves(jobName);
+    for (const row of pending) {
+      const key = `cron_stale:${row.jobName}:${row.scheduledFor.toISOString()}`;
+      const evidence =
+        `cron occurrence ${row.id} policy ${row.policyVersion} `
+        + `terminal ${row.completedAt!.toISOString()}`;
+      try {
+        const resolved = await this.deps.resolveByKey(
+          key,
+          CRON_RECOVERY_ACTOR,
+          evidence,
+          'engine',
+        );
+        if (resolved.length > 0 || this.deps.hasResolvedByKey?.(key) === true) {
+          await store.markStaleResolvePersisted(row.id, this.now());
+        } else {
+          // Keep the durable marker. The verifier may still be between its
+          // history read and alert write; the next lane holder must retry.
+          console.warn(
+            `[CRON-RECOVERY][STALE_RESOLVE_PENDING] job=${row.jobName} occurrence=${row.id} key=${key}`,
+          );
+        }
+      } catch (err) {
+        // Alert-store I/O never rewrites a completed occurrence into failure.
+        // Keeping the marker makes the next scheduled/auxiliary holder retry.
+        console.error(
+          `[CRON-RECOVERY][STALE_RESOLVE_FAIL] job=${row.jobName} occurrence=${row.id}:`,
+          err,
+        );
+      }
+    }
+    return pending;
+  }
+
+  private async flushPendingStaleResolves(jobName: string): Promise<void> {
+    try {
+      const locked = await this.deps.store.withJobLock(jobName, async (store) => {
+        await this.persistPendingStaleResolves(store, jobName);
+      });
+      if (!locked.acquired) {
+        console.warn(`[CRON-RECOVERY][STALE_RESOLVE_DEFERRED] job=${jobName} advisory lock unavailable`);
+      }
+    } catch (err) {
+      console.error(`[CRON-RECOVERY][STALE_RESOLVE_RETRY_FAIL] job=${jobName}:`, err);
     }
   }
 
@@ -1023,4 +1105,7 @@ export const cronOccurrenceRunner = new CronOccurrenceRunner({
   writeFireRow: (opts) => scheduledJobsAudit.writeFireRow(opts),
   addAlert,
   resolveByKey: resolveAlertsByDedupeKey,
+  hasResolvedByKey: (dedupeKey) => readAllAlerts().some(
+    (alert) => alert.dedupe_key === dedupeKey && alert.state === 'resolved',
+  ),
 });
