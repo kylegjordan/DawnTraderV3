@@ -25,3 +25,14 @@
 - **Scope:** `Claude Comms and Packages/Scope Files/B_PM_CLAUDE_SCOPE.md`
 - **Completion report:** pending batch close
 - **Supersedes / superseded by:** none
+
+## R-SBT-XSTOCK-PUBLISHED-BASELINE — Defensible SBT xStock starting baseline
+
+- **Owner:** NEW Claude for mechanism/current-setting provenance and plan integration; ANALYST Claude for published-practice and DawnTrader empirical comparison; Coltrane for transferability review
+- **Agreed date and source:** Kyle's original question, PM Desktop transcript 2026-11-06 13:13Z; restored by Kyle in PM Codex chat 2026-11-12 after Coltrane's agreement, KD-73
+- **Kyle's words:** *"look at industry standards, what reputable trading firms are doing, and seeing if there's anything that we could start with that we could provide sensible logic for a start on, and then we're monitoring that and have better data to then calibrate with later."*
+- **PM explanation:** Reconcile the generic August target-geometry research with the narrower question it did not settle: whether reputable published 15-minute equity momentum/trend practice supplies a defensible starting range for strong_bull_trend on xStock after DawnTrader's much higher costs, operating balance, position sizes, slot limits and clean post-entry-gate outcomes are applied. This is evidence for later calibration, not permission to change a live value.
+- **Done means to Kyle:** Each comparable source states its population, timeframe, holding and cost assumptions; the study proves what transfers and what does not; DawnTrader's actual fees, executable spread, volatility and portfolio constraints are applied; the result is a bounded starting range with a pre-stated falsifier, or an honest `not transferable / insufficient` verdict. No live SBT setting changes as part of this research.
+- **Scope:** named prerequisite to sprint row 129 / roadmap 25-17; also gates any row 131 / roadmap 25-20 action touching SBT's xStock `min_rr`; does not gate B-SILENT-STRATEGY-CENSUS O3's four candidates
+- **Completion report:** pending; the transferability verdict cannot close before the registered clean post-entry-gate SBT window ends or returns insufficient evidence
+- **Supersedes / superseded by:** supplements rather than supersedes KD-57; reconciles `TARGET_GEOMETRY_STUDY_PLAN.md` and the generic August industry note in roadmap 25-17
