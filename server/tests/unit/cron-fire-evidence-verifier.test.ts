@@ -19,20 +19,38 @@ const PAST_BOOT_GRACE = NOW - 10 * 60 * 1000; // 10-min uptime → past the 5-mi
 
 let mockedLastFires: Map<string, Date | null> = new Map();
 let mockedCandidateSucceeded: Map<string, boolean> = new Map();
+let legacyWindowSensitiveNames: Set<string> = new Set();
+let queuedCandidateSucceeded: boolean[] = [];
 const dbCalls: any[] = [];
+
+function sqlBooleanParams(value: unknown): boolean[] {
+  if (typeof value === 'boolean') return [value];
+  if (Array.isArray(value)) return value.flatMap(sqlBooleanParams);
+  if (value && typeof value === 'object' && Array.isArray((value as any).queryChunks)) {
+    return (value as any).queryChunks.flatMap(sqlBooleanParams);
+  }
+  return [];
+}
 
 vi.mock('../../db.js', () => ({
   db: {
     execute: vi.fn(async (q: any) => {
       dbCalls.push(q);
+      const legacyWindow = sqlBooleanParams(q)[0] ?? false;
+      const queuedResult = queuedCandidateSucceeded.shift();
       const taskNames = new Set([
         ...mockedLastFires.keys(),
         ...mockedCandidateSucceeded.keys(),
+        ...legacyWindowSensitiveNames,
       ]);
       const rows = Array.from(taskNames).map((task_name) => ({
         task_name,
         last_scheduled_for: mockedLastFires.get(task_name) ?? null,
-        candidate_succeeded: mockedCandidateSucceeded.get(task_name) ?? false,
+        candidate_succeeded: queuedResult ?? (
+          legacyWindowSensitiveNames.has(task_name)
+            ? legacyWindow
+            : mockedCandidateSucceeded.get(task_name) ?? false
+        ),
       }));
       return { rows };
     }),
@@ -65,6 +83,8 @@ vi.mock('../../services/cron-occurrence-runner.js', () => ({
 beforeEach(() => {
   mockedLastFires = new Map();
   mockedCandidateSucceeded = new Map();
+  legacyWindowSensitiveNames = new Set();
+  queuedCandidateSucceeded = [];
   dbCalls.length = 0;
   alertCalls.length = 0;
   verifierLockCalls.length = 0;
@@ -120,6 +140,65 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     expect(source).toMatch(/successful_boundaries\.scheduled_for < candidates\.candidate_next_scheduled_for/);
     expect(source).not.toMatch(/successful_boundaries\.scheduled_for <= candidates\.candidate_next_scheduled_for/);
     expect(source.match(/allowLegacyWindow: [^\n]*processStartMs/g)).toHaveLength(2);
+  });
+
+  it('accepts pre-boot legacy evidence through the production initial read', async () => {
+    const jobName = 'legacy_preboot_initial';
+    legacyWindowSensitiveNames.add(jobName);
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:50:00.123Z'));
+    const { cronRegistry, runVerification, _setProcessStartForTest } = await loadModules();
+    // The mature 14:50 occurrence predates this 14:55 process start. At 15:00
+    // the process is exactly past boot grace, so the verifier must judge it.
+    _setProcessStartForTest(Date.parse('2026-06-02T14:55:00Z'));
+    cronRegistry.register(makeJob(jobName, '*/5 * * * *', 300));
+
+    const report = await runVerification(NOW);
+
+    expect(report).toEqual({ ok: true, stale: [] });
+    expect(dbCalls).toHaveLength(1);
+    expect(dbCalls.map(sqlBooleanParams)).toEqual([[true]]);
+    expect(verifierLockCalls).toHaveLength(0);
+    expect(alertCalls).toHaveLength(0);
+  });
+
+  it('accepts pre-boot legacy evidence through the production locked recheck', async () => {
+    const jobName = 'legacy_preboot_locked';
+    legacyWindowSensitiveNames.add(jobName);
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:50:00.123Z'));
+    queuedCandidateSucceeded.push(false); // first read is stale; locked read sees the legacy row
+    const { cronRegistry, runVerification, _setProcessStartForTest } = await loadModules();
+    _setProcessStartForTest(Date.parse('2026-06-02T14:55:00Z'));
+    cronRegistry.register(makeJob(jobName, '*/5 * * * *', 300));
+
+    const report = await runVerification(NOW);
+
+    expect(report).toEqual({ ok: true, stale: [] });
+    expect(dbCalls).toHaveLength(2);
+    expect(dbCalls.map(sqlBooleanParams)).toEqual([[true], [true]]);
+    expect(verifierLockCalls).toEqual([{ jobName }]);
+    expect(alertCalls).toHaveLength(0);
+  });
+
+  it('rejects post-boot legacy-shaped evidence through both production reads', async () => {
+    const jobName = 'legacy_postboot_rejected';
+    legacyWindowSensitiveNames.add(jobName);
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:50:00.123Z'));
+    const { cronRegistry, runVerification, _setProcessStartForTest } = await loadModules();
+    // The 14:50 occurrence is after this process started at 14:45, so the
+    // callback-time compatibility arm must remain closed in both reads.
+    _setProcessStartForTest(Date.parse('2026-06-02T14:45:00Z'));
+    cronRegistry.register(makeJob(jobName, '*/5 * * * *', 300));
+
+    const report = await runVerification(NOW);
+
+    expect(report).toEqual({ ok: false, stale: [jobName] });
+    expect(dbCalls).toHaveLength(2);
+    expect(dbCalls.map(sqlBooleanParams)).toEqual([[false], [false]]);
+    expect(verifierLockCalls).toEqual([{ jobName }]);
+    expect(alertCalls).toHaveLength(1);
+    expect(alertCalls[0].dedupe_key).toBe(
+      `cron_stale:${jobName}:2026-06-02T14:50:00.000Z`,
+    );
   });
 
   it('STALE: weekly job whose most-recent occurrence has no fire-evidence', async () => {
