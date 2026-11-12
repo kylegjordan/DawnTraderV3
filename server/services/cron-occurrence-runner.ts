@@ -84,6 +84,8 @@ export interface LockedOccurrenceStore {
     metadata?: Record<string, unknown>,
   ): Promise<CronOccurrenceRow>;
   reconcileRunning(jobName: string, currentOwner: string, at: Date): Promise<CronOccurrenceRow[]>;
+  loadPendingDecisionAlerts(jobName: string): Promise<CronOccurrenceRow[]>;
+  markDecisionAlertPersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow>;
   loadClaimed(jobName: string): Promise<CronOccurrenceRow[]>;
 }
 
@@ -248,12 +250,39 @@ class PgLockedOccurrenceStore implements LockedOccurrenceStore {
       UPDATE scheduled_job_occurrences
          SET status = 'indeterminate', completed_at = $3,
              reason = 'prior_process_died_after_start',
-             metadata = metadata || jsonb_build_object('reconciled_by_owner_instance_id', $2::text)
+             metadata = metadata || jsonb_build_object(
+               'reconciled_by_owner_instance_id', $2::text,
+               'decision_alert_pending', true
+             )
        WHERE job_name = $1 AND status = 'running'
          AND owner_instance_id IS DISTINCT FROM $2::uuid
        RETURNING ${ROW_COLUMNS}
     `, [jobName, currentOwner, at]);
     return result.rows.map(mapDbRow);
+  }
+
+  async loadPendingDecisionAlerts(jobName: string): Promise<CronOccurrenceRow[]> {
+    const result = await this.client.query<DbOccurrenceRow>(`
+      SELECT ${ROW_COLUMNS}
+        FROM scheduled_job_occurrences
+       WHERE job_name = $1 AND status = 'indeterminate'
+         AND metadata @> '{"decision_alert_pending":true}'::jsonb
+       ORDER BY scheduled_for ASC
+    `, [jobName]);
+    return result.rows.map(mapDbRow);
+  }
+
+  async markDecisionAlertPersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+    const result = await this.client.query<DbOccurrenceRow>(`
+      UPDATE scheduled_job_occurrences
+         SET metadata = (metadata - 'decision_alert_pending')
+           || jsonb_build_object('decision_alert_persisted_at', $2::text)
+       WHERE id = $1 AND status = 'indeterminate'
+         AND metadata @> '{"decision_alert_pending":true}'::jsonb
+       RETURNING ${ROW_COLUMNS}
+    `, [id, persistedAt.toISOString()]);
+    if (!result.rows[0]) throw new Error(`occurrence ${id} has no pending decision alert`);
+    return mapDbRow(result.rows[0]);
   }
 
   async loadClaimed(jobName: string): Promise<CronOccurrenceRow[]> {
@@ -865,15 +894,17 @@ export class CronOccurrenceRunner {
       };
       try {
         locked = await this.deps.store.withJobLock(jobName, async (store) => {
-          const indeterminate = await store.reconcileRunning(jobName, this.ownerInstanceId, at);
+          await store.reconcileRunning(jobName, this.ownerInstanceId, at);
+          const indeterminate = await store.loadPendingDecisionAlerts(jobName);
           for (const row of indeterminate) {
-            await this.emitDecisionAlert({
+            await this.persistDecisionAlert({
               jobName,
               scheduledFor: row.scheduledFor,
               status: 'indeterminate',
               occurrenceId: row.id,
               reason: row.reason ?? 'prior_process_died_after_start',
             });
+            await store.markDecisionAlertPersisted(row.id, this.now());
           }
           return {
             indeterminate,
@@ -918,29 +949,34 @@ export class CronOccurrenceRunner {
   private async emitDecisionAlert(result: CronOccurrenceResult): Promise<void> {
     const identity = `${result.jobName}:${result.scheduledFor.toISOString()}`;
     try {
-      await this.deps.addAlert({
-        triggers_at: this.now(),
-        category: 'breakage',
-        severity: result.status === 'indeterminate' ? 'critical' : 'warning',
-        dedupe_key: `cron_recovery:${result.status}:${identity}`,
-        title: `Scheduled recovery ${result.status}: ${result.jobName}`,
-        body:
-          `B-CRON-MISSED-CATCHUP recorded ${result.status} for ${identity}. `
-          + `No acknowledgement was performed. Inspect the durable occurrence before any manual retry.`,
-        metadata: {
-          batch: 'B-CRON-MISSED-CATCHUP',
-          job_name: result.jobName,
-          scheduled_for: result.scheduledFor.toISOString(),
-          occurrence_id: result.occurrenceId ?? null,
-          status: result.status,
-          reason: result.reason ?? null,
-          policy_version: CRON_RECOVERY_POLICY_VERSION,
-          owner_instance_id: this.ownerInstanceId,
-        },
-      });
+      await this.persistDecisionAlert(result);
     } catch (err) {
       console.error(`[CRON-RECOVERY][ALERT_WRITE_FAIL] identity=${identity} status=${result.status}:`, err);
     }
+  }
+
+  private async persistDecisionAlert(result: CronOccurrenceResult): Promise<void> {
+    const identity = `${result.jobName}:${result.scheduledFor.toISOString()}`;
+    await this.deps.addAlert({
+      triggers_at: this.now(),
+      category: 'breakage',
+      severity: result.status === 'indeterminate' ? 'critical' : 'warning',
+      dedupe_key: `cron_recovery:${result.status}:${identity}`,
+      title: `Scheduled recovery ${result.status}: ${result.jobName}`,
+      body:
+        `B-CRON-MISSED-CATCHUP recorded ${result.status} for ${identity}. `
+        + `No acknowledgement was performed. Inspect the durable occurrence before any manual retry.`,
+      metadata: {
+        batch: 'B-CRON-MISSED-CATCHUP',
+        job_name: result.jobName,
+        scheduled_for: result.scheduledFor.toISOString(),
+        occurrence_id: result.occurrenceId ?? null,
+        status: result.status,
+        reason: result.reason ?? null,
+        policy_version: CRON_RECOVERY_POLICY_VERSION,
+        owner_instance_id: this.ownerInstanceId,
+      },
+    });
   }
 }
 

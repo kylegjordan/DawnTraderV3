@@ -140,11 +140,36 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
           status: 'indeterminate',
           completedAt: at,
           reason: 'prior_process_died_after_start',
+          metadata: {
+            ...row.metadata,
+            reconciled_by_owner_instance_id: currentOwner,
+            decision_alert_pending: true,
+          },
         });
         changed.push(row);
       }
     }
     return changed;
+  }
+
+  async loadPendingDecisionAlerts(jobName: string): Promise<CronOccurrenceRow[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.jobName === jobName
+        && row.status === 'indeterminate'
+        && row.metadata.decision_alert_pending === true)
+      .sort((left, right) => left.scheduledFor.getTime() - right.scheduledFor.getTime());
+  }
+
+  async markDecisionAlertPersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+    const row = this.byId(id);
+    if (row.status !== 'indeterminate' || row.metadata.decision_alert_pending !== true) {
+      throw new Error(`occurrence ${id} has no pending decision alert`);
+    }
+    const metadata = { ...row.metadata };
+    delete metadata.decision_alert_pending;
+    metadata.decision_alert_persisted_at = persistedAt.toISOString();
+    row.metadata = metadata;
+    return row;
   }
 
   async loadClaimed(jobName: string): Promise<CronOccurrenceRow[]> {
@@ -514,6 +539,50 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     store.failUnlock = false;
     await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:02:00.000Z')))
       .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+  });
+
+  it('retries a durable pending reconciliation alert before replacement startup resumes claimed work', async () => {
+    const store = new MemoryOccurrenceStore();
+    const prior = row({
+      id: UUID(908),
+      status: 'running',
+      startedAt: new Date('2026-11-12T11:59:00.000Z'),
+      ownerInstanceId: UUID(909),
+    });
+    const claimed = row({
+      id: UUID(910),
+      scheduledFor: new Date('2026-11-12T12:01:00.000Z'),
+      ownerInstanceId: UUID(909),
+    });
+    store.seed(prior);
+    store.seed(claimed);
+    const first = fixture({ store, now: '2026-11-12T12:01:10.000Z' });
+    first.addAlert.mockRejectedValueOnce(new Error('alert store unavailable'));
+
+    await expect(first.runner.reconcileJob(first.job.name))
+      .rejects.toThrow('phase=startup_reconciliation');
+
+    expect(store.rows.get(`${first.job.name}:${prior.scheduledFor.toISOString()}`)).toMatchObject({
+      status: 'indeterminate',
+      metadata: expect.objectContaining({ decision_alert_pending: true }),
+    });
+    expect(store.rows.get(`${first.job.name}:${claimed.scheduledFor.toISOString()}`)?.status).toBe('claimed');
+    expect(first.run).not.toHaveBeenCalled();
+
+    const replacement = fixture({ store, now: '2026-11-12T12:01:20.000Z' });
+    await replacement.runner.reconcileJob(replacement.job.name);
+    await vi.waitFor(() => expect(
+      store.rows.get(`${replacement.job.name}:${claimed.scheduledFor.toISOString()}`)?.status,
+    ).toBe('succeeded'));
+
+    expect(replacement.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: `cron_recovery:indeterminate:${replacement.job.name}:${prior.scheduledFor.toISOString()}`,
+      metadata: expect.objectContaining({ occurrence_id: prior.id, status: 'indeterminate' }),
+    }));
+    expect(store.rows.get(`${replacement.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_persisted_at: '2026-11-12T12:01:20.000Z' });
+    expect(store.rows.get(`${replacement.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .not.toHaveProperty('decision_alert_pending');
   });
 
   it('retains a different scheduled identity through advisory-lock contention', async () => {
