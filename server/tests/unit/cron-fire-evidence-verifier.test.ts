@@ -137,14 +137,42 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     expect(alertCalls[0].metadata.reason).toBe('no_fires_ever');
   });
 
-  it('GRACE skip: occurrence within FIRE_LATENCY_GRACE is not yet judged stale', async () => {
+  it('judges the newest mature boundary while newer occurrences remain inside grace', async () => {
     const { cronRegistry, runVerification } = await loadModules();
-    // Every-minute job. At :30s the prev occurrence is :00 of this minute (30s ago)
-    // → inside the 10-min fire-latency grace → skip even with a stale lastFire.
+    // At 15:00:30 the 15:00 occurrence is still in grace, but 14:50 is mature
+    // and must be judged instead of restarting grace at 15:00.
     cronRegistry.register(makeJob('every_min', '* * * * *', 60));
     mockedLastFires.set('every_min', new Date(NOW - 60 * 60 * 1000)); // 1h ago (stale)
     const report = await runVerification(NOW + 30 * 1000);
-    expect(report.ok).toBe(true);
+    expect(report.ok).toBe(false);
+    expect(report.stale).toContain('every_min');
+    expect(alertCalls).toHaveLength(1);
+    expect(alertCalls[0].dedupe_key).toBe('cron_stale:every_min:2026-06-02T14:50:00.000Z');
+  });
+
+  it.each([
+    'feed_integrity_cron',
+    'xstock_qd_probe_cron',
+  ])('requires success at the mature five-minute boundary for %s', async (jobName) => {
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob(jobName, '*/5 * * * *', 300));
+
+    // At 15:00, 14:50 is the newest occurrence whose ten-minute evidence
+    // window has elapsed. A 14:45 success cannot certify it.
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:45:00Z'));
+    const staleReport = await runVerification(NOW);
+    expect(staleReport.ok).toBe(false);
+    expect(staleReport.stale).toContain(jobName);
+    expect(alertCalls.at(-1)?.dedupe_key).toBe(
+      `cron_stale:${jobName}:2026-06-02T14:50:00.000Z`,
+    );
+
+    // The exact mature boundary is sufficient; no newer-in-grace occurrence
+    // is required and no stale alert is offered.
+    alertCalls.length = 0;
+    mockedLastFires.set(jobName, new Date('2026-06-02T14:50:00Z'));
+    const healthyReport = await runVerification(NOW);
+    expect(healthyReport).toEqual({ ok: true, stale: [] });
     expect(alertCalls).toHaveLength(0);
   });
 
