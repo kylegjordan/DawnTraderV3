@@ -1,7 +1,7 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`e505f76a595b6d2dbba72334fd098355f6f0db4b` on branch
+`636937627` on branch
 `migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
@@ -43,8 +43,8 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 seventh repair complete after Coltrane found that a later success could hide an earlier missed mature boundary; return to Step 4 review
-Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
+Status: Step 3 eighth repair complete after staging exposed false stale alerts on legacy callback-time evidence; return to Step 4 review
+Base runtime: `8550ea83e138d2410665df5aa635b932726712a0`
 
 ## Why completion stopped
 
@@ -386,6 +386,41 @@ A 14:45 success and a later 14:55 success both leave 14:50 stale; only exact
 14:50 success is healthy. The same calendar selection and exact-identity query
 are repeated under the shared job lock before minting.
 
+### 7. MODIFIED — legacy callback-time evidence remains readable
+
+The first verifier pass on deployed R7 correctly judged the current five-minute
+boundaries, but falsely minted three stale alerts for slower jobs. Their
+successful pre-deploy audit rows were at `03:00:00.023`, `06:00:00.020` and
+`06:00:00.018`; before this batch, every wrapper passed one callback-start
+timestamp as both `scheduled_for` and `fired_at`, despite the writer contract
+already naming `scheduled_for` as the intended calendar boundary.
+
+R8 preserves both clock contracts without weakening current identity. Exact
+equality remains sufficient for every durable/current row. A row may use the
+legacy compatibility arm only when the candidate predates this process boot,
+the evidence is a successful audit row with `trigger_source=cron` and no
+`occurrence_id`, and its callback timestamp lies in the half-open calendar
+partition `[candidate, next candidate)`. The strict upper bound means a success
+at the next boundary still cannot certify the earlier candidate. The same
+classification runs in the initial read and the recheck under the job lock.
+
+The live six-job population contains 67,464 successful legacy cron rows without
+an occurrence ID; all 67,464 store `scheduled_for=fired_at`, all 67,464 fall
+inside their derived half-open calendar partition, and their observed offsets
+are 6 ms through 33.408 s. The exact production query maps the three false-stale
+rows and a current exact row to success, while a genuine missing 2026-05-30
+feed-integrity boundary remains false even though the same job has many later
+successes.
+
+The new real-Postgres integration fence distinguishes nine states: legacy
+inside-window, exactly-next-boundary, non-cron, error, legacy-disabled, current
+exact/nonexact and durable exact/later. It is registered to run against the
+migrated CI database; the local run skipped honestly because no test database
+was reachable. Six focused unit files passed 120/120, the TypeScript gate is
+324 current / 324 baseline, and the production build passed.
+
+`REVIEWER: claim-only · asked which objects settle the legacy-clock compatibility claim and what other states remain consistent · identified callback delay, historical schedule drift, alternate writers and ambiguous legacy identity; the repair was narrowed to pre-boot cron rows inside a strict half-open calendar partition and re-derived against the full live population · re-derived y`
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
@@ -410,3 +445,6 @@ are repeated under the shared job lock before minting.
 7. Can a verifier lock/session failure still poison later passes or be reported
    as healthy, and does bypassing the stopped execution lane preserve the same
    cross-process advisory-lock exclusion against core execution?
+8. Does the legacy compatibility arm preserve the approved readable-history
+   objective without letting an exactly-next-boundary row, a non-cron/error row,
+   a current nonexact row or any post-boot legacy-shaped row certify a candidate?
