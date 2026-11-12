@@ -85,7 +85,7 @@ The writer is explicitly failure-safe: it catches database errors because the jo
 
 ### 4.4 System alerts
 
-The verifier mints one `cron_stale:<job>:<occurrence>` key. `system-alerts` already supports exact-key resolution with actor/evidence, so no second alert store is needed. Successful execution of the exact occurrence resolves only that key after the terminal ledger and fire-evidence writes. A failed, skipped or indeterminate occurrence remains active and receives recovery metadata/its own failure signal. The `cron_verifier_blind` family is neither queried nor resolved by recovery code.
+The verifier mints one `cron_stale:<job>:<occurrence>` key. `system-alerts` already supports exact-key resolution with canonical actor, evidence and transport, so no second alert store is needed. Add `cron-recovery` as a canonical `machine` actor for this in-process resolver and use `engine` only as its `ResolveTransport`; `engine` is not an actor. Successful execution of the exact occurrence resolves only that key after the terminal ledger and fire-evidence writes. A failed, skipped or indeterminate occurrence remains active and receives recovery metadata/its own failure signal. The `cron_verifier_blind` family is neither queried nor resolved by recovery code.
 
 ## 5. Runtime findings
 
@@ -192,13 +192,13 @@ The best-effort audit write does not decide whether work ran. Ledger terminaliza
 
 ### P7 — Exact stale-alert resolution and failure alerts (← A7)
 
-After the exact occurrence reaches `succeeded`, call `resolveAlertsByDedupeKey` for only `cron_stale:<job>:<scheduled boundary>` with actor `engine` and evidence containing occurrence ID, policy version and terminal time. A different boundary/job, failure, skip or indeterminate state cannot resolve it. Correct the verifier body to say exact successful recovery auto-clears; later ordinary occurrences do not erase an earlier missed row.
+Add canonical alert actor `{ value: 'cron-recovery', tag: 'machine' }` with a reason naming this in-process scheduler recovery owner. After the exact occurrence reaches `succeeded`, call `resolveAlertsByDedupeKey` for only `cron_stale:<job>:<scheduled boundary>` with actor `cron-recovery`, transport `engine`, and evidence containing occurrence ID, policy version and terminal time. A different boundary/job, failure, skip or indeterminate state cannot resolve it. Correct the verifier body to say exact successful recovery auto-clears; later ordinary occurrences do not erase an earlier missed row.
 
-Add exact recovery-failure/indeterminate alert keys with durable occurrence metadata. Do not call ack. Tests fence the `cron_verifier_blind` key/prefix from every recovery resolver.
+Add exact recovery-failure/indeterminate alert keys with durable occurrence metadata. Do not call ack. Tests must mint an exact-key stale row, resolve it through `cron-recovery`/`engine`, and assert the returned ID is the matching alert ID and the stored actor/transport are exact. The same fixture with an unallowlisted actor must throw and leave the row open. Tests also fence the `cron_verifier_blind` key/prefix from every recovery resolver.
 
 ### P8 — Deterministic tests and mutations (← A2–A7)
 
-Add unit/integration tests for: natural context date; missed previous-boundary reconstruction; UTC/non-UTC calendar matches; duplicate event; natural/missed race; adjacent missed/natural ordering; boot/manual versus scheduled contention; two database contenders; FIFO ordering; cross-job independence; all six age/backlog policies; Q-D historical-input refusal; universe market guard; feed jitter boundary; claim DB failure; process restart; crash before claim, after claim, during work and after work/before terminal; advisory-lock contention; terminal audit-write failure; exact alert resolution; and blind-alert non-resolution.
+Add unit/integration tests for: natural context date; missed previous-boundary reconstruction; UTC/non-UTC calendar matches; duplicate event; natural/missed race; adjacent missed/natural ordering; boot/manual versus scheduled contention; two database contenders; FIFO ordering; cross-job independence; all six age/backlog policies; Q-D historical-input refusal; universe market guard; feed jitter boundary; claim DB failure; process restart; crash before claim, after claim, during work and after work/before terminal; advisory-lock contention; terminal audit-write failure; exact alert-ID resolution through canonical `cron-recovery` over `engine`; unallowlisted-actor refusal; and blind-alert non-resolution.
 
 Required mutations must fail: use missed event date directly; remove unique occurrence constraint; let natural callback bypass runner; let recovery bypass FIFO; admit two contenders; write Q-D current input into an old bucket; retry an indeterminate job; count a skip as fire; resolve wrong occurrence; resolve `cron_verifier_blind`; add a seventh ungoverned schedule.
 
@@ -221,7 +221,7 @@ At Step 10 update the System Impact Map, System Manual, Batch Catalog, Running I
 | bounded honest recovery | one eligible synthetic catch-up executes; every old production policy records exact skip | old Q-D uses current input; backlog burst; universe overlap |
 | crash truth | claimed-before-work can resume; running from dead boot becomes indeterminate | any after-start automatic retry |
 | compatible evidence | completed rows carry true boundary and actual start; Formula Health/verifier still select them | claim/skip counted as fire; legacy row unreadable |
-| exact alert recovery | exact succeeded occurrence resolves exact stale key with evidence | wrong job/boundary, skip/fail/indeterminate or blind key clears |
+| exact alert recovery | exact succeeded occurrence returns the matching stale alert ID and stores actor `cron-recovery`, transport `engine` and evidence | unallowlisted actor; wrong job/boundary; skip/fail/indeterminate; or blind key clears |
 | deploy closure | real six-job arm census plus deterministic harness and four green CI jobs at deployed SHA | host clock change, natural multi-day gate, external production side effect in harness |
 
 ## 10. Plain-language summary

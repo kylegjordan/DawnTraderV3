@@ -22,12 +22,16 @@ It settles these implementation boundaries:
 4. explicit six-job age/backlog/input-honesty policy;
 5. no automatic retry after a core reaches `running`; uncertain crash work becomes `indeterminate`;
 6. success/error-only compatibility in `scheduled_tasks_audit`, with corrected boundary/start clocks;
-7. exact-occurrence `cron_stale` resolution only after exact successful recovery, and an invariant that never touches `cron_verifier_blind`;
+7. exact-occurrence `cron_stale` resolution only after exact successful recovery, using canonical machine actor `cron-recovery` over transport `engine`, and an invariant that never touches `cron_verifier_blind`;
 8. a deterministic, side-effect-free staging harness that closes Step 7 without changing the host clock or blocking unrelated deployments.
 
 ## Coltrane Step-1 gate incorporated
 
 Natural callbacks do not keep their old direct execution path. Every natural and missed event enters the same durable admission and serialization runner, so the natural/missed race cannot execute the same occurrence twice.
+
+## Coltrane Step-2 correction incorporated
+
+The first Step-2 review found that `engine` had been placed in the actor argument even though it is a transport class. The plan now adds canonical machine actor `cron-recovery`, passes `engine` only as transport, and requires both a matching returned-ID/store proof and an unallowlisted-actor refusal test.
 
 ## Load-bearing one-pass reader
 
