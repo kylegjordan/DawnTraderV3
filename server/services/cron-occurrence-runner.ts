@@ -338,6 +338,10 @@ type AuxiliaryLaneItem<T = unknown> = {
 type LaneItem = ScheduledLaneItem | AuxiliaryLaneItem;
 type Lane = { queue: LaneItem[]; draining: boolean };
 
+class AuxiliaryCallbackFailure {
+  constructor(readonly error: unknown) {}
+}
+
 export interface CronOccurrenceRunnerDeps {
   store: OccurrenceStore;
   getJob: (name: string) => RegisteredCronJob | undefined;
@@ -565,6 +569,7 @@ export class CronOccurrenceRunner {
     }
     const recovery = job.recovery;
     let contentionAttempt = 0;
+    let contendedUnfinishedIdentity = false;
     let result: CronOccurrenceResult;
     while (true) {
       this.assertLaneRunning(item.jobName);
@@ -587,7 +592,31 @@ export class CronOccurrenceRunner {
           metadata: { source: item.source },
         });
 
-        if (!claim.inserted && !(item.resumeClaimed && claim.row.status === 'claimed')) {
+        if (
+          !claim.inserted
+          && claim.row.status === 'running'
+          && contendedUnfinishedIdentity
+          && claim.row.ownerInstanceId !== this.ownerInstanceId
+        ) {
+          const abandoned = await store.markIndeterminate(
+            claim.row.id,
+            decisionAt,
+            'prior_process_died_after_start',
+            { reconciled_by_owner_instance_id: this.ownerInstanceId },
+          );
+          return {
+            jobName: item.jobName,
+            scheduledFor: item.scheduledFor,
+            status: 'indeterminate' as const,
+            occurrenceId: abandoned.id,
+            completedAt: abandoned.completedAt ?? decisionAt,
+            reason: abandoned.reason ?? 'prior_process_died_after_start',
+          };
+        }
+
+        const resumeClaimed = claim.row.status === 'claimed'
+          && (item.resumeClaimed || contendedUnfinishedIdentity);
+        if (!claim.inserted && !resumeClaimed) {
           return {
             jobName: item.jobName,
             scheduledFor: item.scheduledFor,
@@ -733,15 +762,19 @@ export class CronOccurrenceRunner {
       try {
         const existing = await this.deps.store.find(item.jobName, item.scheduledFor);
         if (existing) {
-          result = {
-            jobName: item.jobName,
-            scheduledFor: item.scheduledFor,
-            status: 'duplicate',
-            occurrenceId: existing.id,
-            completedAt: existing.completedAt ?? undefined,
-            reason: existing.status,
-          };
-          break;
+          if (existing.status === 'claimed' || existing.status === 'running') {
+            contendedUnfinishedIdentity = true;
+          } else {
+            result = {
+              jobName: item.jobName,
+              scheduledFor: item.scheduledFor,
+              status: 'duplicate',
+              occurrenceId: existing.id,
+              completedAt: existing.completedAt ?? undefined,
+              reason: existing.status,
+            };
+            break;
+          }
         }
       } catch (err) {
         throw this.stopLane(item.jobName, 'contended_identity_read', err);
@@ -782,8 +815,15 @@ export class CronOccurrenceRunner {
       this.assertLaneRunning(item.jobName);
       let locked: { acquired: false } | { acquired: true; value: T };
       try {
-        locked = await this.deps.store.withJobLock(item.jobName, async () => item.run());
+        locked = await this.deps.store.withJobLock(item.jobName, async () => {
+          try {
+            return await item.run();
+          } catch (err) {
+            throw new AuxiliaryCallbackFailure(err);
+          }
+        });
       } catch (err) {
+        if (err instanceof AuxiliaryCallbackFailure) throw err.error;
         throw this.stopLane(item.jobName, 'auxiliary_lock_session', err);
       }
       if (locked.acquired) return locked.value;

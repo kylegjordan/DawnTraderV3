@@ -32,6 +32,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   private nextId = 100;
   failClaim = false;
   failTerminal = false;
+  failLockSession = false;
   refuseLock = false;
   refuseLockAttempts = 0;
   lockAttempts = 0;
@@ -53,6 +54,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
     run: (store: LockedOccurrenceStore) => Promise<T>,
   ): Promise<{ acquired: false } | { acquired: true; value: T }> {
     this.lockAttempts += 1;
+    if (this.failLockSession) throw new Error('lock session unavailable');
     if (this.refuseLock || this.refuseLockAttempts-- > 0 || this.locks.has(jobName)) {
       return { acquired: false };
     }
@@ -361,6 +363,10 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(result.status).toBe('claim_unavailable');
     expect(f.run).not.toHaveBeenCalled();
     expect(f.addAlert).toHaveBeenCalledTimes(1);
+    const auxiliaryRun = vi.fn(async () => 'must-not-run');
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', auxiliaryRun))
+      .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+    expect(auxiliaryRun).not.toHaveBeenCalled();
   });
 
   it('resolves only the exact successful occurrence with actor, transport and terminal evidence', async () => {
@@ -499,6 +505,34 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(store.rows.get(`${second.job.name}:${boundary.toISOString()}`)?.status).toBe('succeeded');
   });
 
+  it('rejects an auxiliary business failure without stopping later scheduled work', async () => {
+    const f = fixture();
+    const auxiliaryError = new Error('manual refresh failed');
+
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', async () => {
+      throw auxiliaryError;
+    })).rejects.toBe(auxiliaryError);
+
+    await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z')))
+      .resolves.toMatchObject({ status: 'succeeded' });
+    expect(f.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the lane when the auxiliary lock session itself fails', async () => {
+    const f = fixture();
+    const auxiliaryRun = vi.fn(async () => 'must-not-run');
+    await f.runner.prepareJob(f.job.name);
+    f.store.failLockSession = true;
+
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', auxiliaryRun))
+      .rejects.toThrow('phase=auxiliary_lock_session');
+    f.store.failLockSession = false;
+    await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z')))
+      .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(f.run).not.toHaveBeenCalled();
+  });
+
   it('keeps durable success when the failure-safe audit writer unexpectedly rejects', async () => {
     const f = fixture();
     f.writeFireRow.mockRejectedValueOnce(new Error('audit unavailable'));
@@ -515,23 +549,34 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect([...f.store.rows.values()][0].status).toBe('succeeded');
   });
 
-  it('admits only one process and classifies the same-identity lock contender as a duplicate', async () => {
-    const store = new MemoryOccurrenceStore();
-    let release!: () => void;
-    const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
-    const first = fixture({ store, run: async () => gate });
-    const second = fixture({ store });
-    await first.runner.prepareJob(first.job.name);
-    await second.runner.prepareJob(second.job.name);
-    const boundary = new Date('2026-11-12T12:01:00.000Z');
-    const firstRun = first.runner.runNatural(first.job.name, boundary);
-    await vi.waitFor(() => expect(first.run).toHaveBeenCalledTimes(1));
-    const secondResult = await second.runner.runNatural(second.job.name, boundary);
-    expect(secondResult).toMatchObject({ status: 'duplicate', reason: 'running' });
-    expect(second.run).not.toHaveBeenCalled();
-    release();
-    await expect(firstRun).resolves.toMatchObject({ status: 'succeeded' });
-  });
+  it.each([
+    ['claimed', 'succeeded', 1],
+    ['running', 'indeterminate', 0],
+  ] as const)(
+    'keeps a same-identity rolling-process contender pending for an unfinished %s row',
+    async (unfinishedStatus, expectedStatus, expectedRuns) => {
+      const store = new MemoryOccurrenceStore();
+      const contender = fixture({ store });
+      await contender.runner.prepareJob(contender.job.name);
+      const boundary = new Date('2026-11-12T12:01:00.000Z');
+      store.seed(row({
+        id: UUID(903),
+        scheduledFor: boundary,
+        status: unfinishedStatus,
+        startedAt: unfinishedStatus === 'running' ? new Date('2026-11-12T12:01:05.000Z') : null,
+        attemptId: unfinishedStatus === 'running' ? UUID(904) : null,
+        ownerInstanceId: UUID(905),
+      }));
+      store.refuseLockAttempts = 1;
+
+      const result = await contender.runner.runNatural(contender.job.name, boundary);
+
+      expect(result).toMatchObject({ status: expectedStatus, occurrenceId: UUID(903) });
+      expect(contender.run).toHaveBeenCalledTimes(expectedRuns);
+      expect(store.rows.get(`${contender.job.name}:${boundary.toISOString()}`)?.status).toBe(expectedStatus);
+      if (unfinishedStatus === 'running') expect(contender.addAlert).toHaveBeenCalledTimes(1);
+    },
+  );
 });
 
 describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
