@@ -33,6 +33,8 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   failClaim = false;
   failTerminal = false;
   refuseLock = false;
+  refuseLockAttempts = 0;
+  lockAttempts = 0;
 
   private key(jobName: string, scheduledFor: Date): string {
     return `${jobName}:${scheduledFor.toISOString()}`;
@@ -50,7 +52,10 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
     jobName: string,
     run: (store: LockedOccurrenceStore) => Promise<T>,
   ): Promise<{ acquired: false } | { acquired: true; value: T }> {
-    if (this.refuseLock || this.locks.has(jobName)) return { acquired: false };
+    this.lockAttempts += 1;
+    if (this.refuseLock || this.refuseLockAttempts-- > 0 || this.locks.has(jobName)) {
+      return { acquired: false };
+    }
     this.locks.add(jobName);
     try {
       return { acquired: true, value: await run(this) };
@@ -176,6 +181,7 @@ function fixture(options: {
   beforeRun?: NonNullable<RegisteredCronJob['recovery']>['beforeRun'];
   timezone?: string;
   store?: MemoryOccurrenceStore;
+  sleep?: (ms: number) => Promise<void>;
 } = {}) {
   const store = options.store ?? new MemoryOccurrenceStore();
   const run = vi.fn(options.run ?? (async () => ({ meta: { proof: true } })));
@@ -202,6 +208,7 @@ function fixture(options: {
     resolveByKey: resolveByKey as CronOccurrenceRunnerDeps['resolveByKey'],
     now: () => new Date(now),
     randomUUID: () => UUID(uuid++),
+    sleep: options.sleep ?? (async () => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, 0))),
   };
   return {
     store,
@@ -420,9 +427,76 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     store.seed(row({ id: UUID(902), scheduledFor: new Date('2026-11-12T12:01:00.000Z') }));
     const f = fixture({ store, now: '2026-11-12T12:01:10.000Z' });
     await f.runner.reconcileJob(f.job.name);
-    await vi.waitFor(() => expect(f.run).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(
+      store.rows.get(`${f.job.name}:2026-11-12T12:01:00.000Z`)?.status,
+    ).toBe('succeeded'));
     expect(store.rows.get(`${f.job.name}:2026-11-12T12:00:00.000Z`)?.status).toBe('indeterminate');
     expect(store.rows.get(`${f.job.name}:2026-11-12T12:01:00.000Z`)?.status).toBe('succeeded');
+  });
+
+  it('blocks scheduled and auxiliary startup work until reconciliation completes', async () => {
+    const store = new MemoryOccurrenceStore();
+    store.refuseLock = true;
+    let releaseRetry!: () => void;
+    const retryGate = new Promise<void>((resolveRetry) => { releaseRetry = resolveRetry; });
+    const auxiliaryRun = vi.fn(async () => 'auxiliary-ok');
+    const f = fixture({ store, sleep: async () => retryGate });
+
+    const scheduled = f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+    const auxiliary = f.runner.runAuxiliary(f.job.name, 'boot', auxiliaryRun);
+    await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThan(0));
+    expect(f.run).not.toHaveBeenCalled();
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(store.rows.size).toBe(0);
+
+    store.refuseLock = false;
+    releaseRetry();
+    await expect(Promise.all([scheduled, auxiliary])).resolves.toEqual([
+      expect.objectContaining({ status: 'succeeded' }),
+      'auxiliary-ok',
+    ]);
+  });
+
+  it('retries deferred reconciliation and eventually reconciles the prior process', async () => {
+    const store = new MemoryOccurrenceStore();
+    store.seed(row({ status: 'running', startedAt: new Date('2026-11-12T11:59:00.000Z') }));
+    store.refuseLockAttempts = 1;
+    const f = fixture({ store });
+
+    await f.runner.prepareJob(f.job.name);
+
+    expect(store.lockAttempts).toBe(2);
+    expect([...store.rows.values()][0]).toMatchObject({
+      status: 'indeterminate',
+      reason: 'prior_process_died_after_start',
+    });
+  });
+
+  it('retains a different scheduled identity through advisory-lock contention', async () => {
+    const store = new MemoryOccurrenceStore();
+    const first = fixture({ store });
+    const second = fixture({ store });
+    await first.runner.prepareJob(first.job.name);
+    await second.runner.prepareJob(second.job.name);
+
+    let releaseAuxiliary!: () => void;
+    const auxiliaryGate = new Promise<void>((resolveAuxiliary) => { releaseAuxiliary = resolveAuxiliary; });
+    const auxiliary = first.runner.runAuxiliary(first.job.name, 'manual', async () => auxiliaryGate);
+    await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThanOrEqual(3));
+    const attemptsBeforeScheduled = store.lockAttempts;
+
+    let scheduledSettled = false;
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    const scheduled = second.runner.runNatural(second.job.name, boundary)
+      .finally(() => { scheduledSettled = true; });
+    await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThan(attemptsBeforeScheduled));
+    expect(scheduledSettled).toBe(false);
+    expect(store.rows.size).toBe(0);
+
+    releaseAuxiliary();
+    await auxiliary;
+    await expect(scheduled).resolves.toMatchObject({ status: 'succeeded', scheduledFor: boundary });
+    expect(store.rows.get(`${second.job.name}:${boundary.toISOString()}`)?.status).toBe('succeeded');
   });
 
   it('keeps durable success when the failure-safe audit writer unexpectedly rejects', async () => {
@@ -447,6 +521,8 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     const gate = new Promise<void>((resolveGate) => { release = resolveGate; });
     const first = fixture({ store, run: async () => gate });
     const second = fixture({ store });
+    await first.runner.prepareJob(first.job.name);
+    await second.runner.prepareJob(second.job.name);
     const boundary = new Date('2026-11-12T12:01:00.000Z');
     const firstRun = first.runner.runNatural(first.job.name, boundary);
     await vi.waitFor(() => expect(first.run).toHaveBeenCalledTimes(1));
@@ -479,7 +555,7 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
     expect(emit).toBeGreaterThan(advance);
   });
 
-  it('finds exactly six production schedules, each with recovery and a missed listener', () => {
+  it('finds exactly six dormant production schedules, each reconciled before start', () => {
     const productionTypescript = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
       .flatMap((entry) => {
         const path = resolve(dir, entry.name);
@@ -488,17 +564,36 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
       });
     const files = productionTypescript(resolve('server'));
     let scheduleCalls = 0;
+    let dormantTaskCalls = 0;
     let recoveryProperties = 0;
     let missedListeners = 0;
+    let preparationCalls = 0;
+    let startCalls = 0;
     for (const file of files) {
       let fileScheduleCalls = 0;
+      let fileDormantTaskCalls = 0;
       let fileRecoveryProperties = 0;
       let fileMissedListeners = 0;
+      let filePreparationCalls = 0;
+      let fileStartCalls = 0;
+      const preparationPositions: number[] = [];
+      const startPositions: number[] = [];
       const source = readFileSync(resolve(file), 'utf8');
       const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
       const visit = (node: ts.Node): void => {
         if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-          if (node.expression.name.text === 'schedule') fileScheduleCalls += 1;
+          if (node.expression.name.text === 'schedule' || node.expression.name.text === 'createTask') {
+            fileScheduleCalls += 1;
+          }
+          if (node.expression.name.text === 'createTask') fileDormantTaskCalls += 1;
+          if (node.expression.name.text === 'prepareJob') {
+            filePreparationCalls += 1;
+            preparationPositions.push(node.getStart(tree));
+          }
+          if (node.expression.name.text === 'start') {
+            fileStartCalls += 1;
+            startPositions.push(node.getStart(tree));
+          }
           if (
             node.expression.name.text === 'on'
             && node.arguments[0]
@@ -515,15 +610,37 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
           { recoveryProperties: fileRecoveryProperties, missedListeners: fileMissedListeners },
           `production schedule wiring in ${file}`,
         ).toEqual({ recoveryProperties: fileScheduleCalls, missedListeners: fileScheduleCalls });
+        expect(
+          {
+            dormantTaskCalls: fileDormantTaskCalls,
+            preparationCalls: filePreparationCalls,
+            startCalls: fileStartCalls,
+          },
+          `startup reconciliation gate in ${file}`,
+        ).toEqual({
+          dormantTaskCalls: fileScheduleCalls,
+          preparationCalls: fileScheduleCalls,
+          startCalls: fileScheduleCalls,
+        });
+        expect(
+          Math.min(...startPositions),
+          `every schedule in ${file} must remain dormant until every job in that module is reconciled`,
+        ).toBeGreaterThan(Math.max(...preparationPositions));
         scheduleCalls += fileScheduleCalls;
+        dormantTaskCalls += fileDormantTaskCalls;
         recoveryProperties += fileRecoveryProperties;
         missedListeners += fileMissedListeners;
+        preparationCalls += filePreparationCalls;
+        startCalls += fileStartCalls;
       }
     }
-    expect({ scheduleCalls, recoveryProperties, missedListeners }).toEqual({
+    expect({ scheduleCalls, dormantTaskCalls, recoveryProperties, missedListeners, preparationCalls, startCalls }).toEqual({
       scheduleCalls: 6,
+      dormantTaskCalls: 6,
       recoveryProperties: 6,
       missedListeners: 6,
+      preparationCalls: 6,
+      startCalls: 6,
     });
   });
 });

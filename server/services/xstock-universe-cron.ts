@@ -26,20 +26,18 @@ const INTERVAL_SECONDS = 86400;  // daily
 
 let _cronTask: cron.ScheduledTask | null = null;
 
-export function registerXstockUniverseCron(): void {
+export async function registerXstockUniverseCron(): Promise<void> {
   if (_cronTask) {
     console.warn('[B79.0n.UNIVERSE-DISCOVERY][cron] registerXstockUniverseCron called twice — ignoring second call');
     return;
   }
-  _cronTask = cron.schedule(
+  _cronTask = cron.createTask(
     CRON_06_00_UTC,
     async (context) => {
       await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
     },
     { timezone: 'UTC' },
   );
-  console.log('[B79.0n.UNIVERSE-DISCOVERY][cron] registered daily refresh at 06:00 UTC');
-
   // B-NEW-49: register with cron-registry + emit arm-logger evidence.
   cronRegistry.register({
     name: JOB_NAME,
@@ -58,8 +56,12 @@ export function registerXstockUniverseCron(): void {
   _cronTask.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
   });
+  await cronOccurrenceRunner.prepareJob(JOB_NAME);
+  _cronTask.start();
+  console.log(
+    '[B79.0n.UNIVERSE-DISCOVERY][cron] registered daily refresh at 06:00 UTC after startup reconciliation',
+  );
   logCronArm(cronRegistry.get(JOB_NAME)!);
-  cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
 }
 
 export function stopXstockUniverseCron(): void {

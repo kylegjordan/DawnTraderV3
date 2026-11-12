@@ -217,7 +217,7 @@ export async function runFormulaAudit(runType: 'scheduled' | 'manual' = 'schedul
 /**
  * Register the formula audit cron job
  */
-export function registerFormulaAuditJob() {
+export async function registerFormulaAuditJob(): Promise<void> {
   if (!ENABLED) {
     console.log('[FormulaAuditJob] ❌ Disabled via FORMULA_AUDIT_ENABLED env');
     return;
@@ -225,13 +225,11 @@ export function registerFormulaAuditJob() {
 
   console.log(`[FormulaAuditJob] ⏰ Scheduling daily audit: ${SCHEDULE} (UTC)`);
 
-  const _task = cron.schedule(SCHEDULE, async (context) => {
+  const _task = cron.createTask(SCHEDULE, async (context) => {
     await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
   }, {
     timezone: 'Etc/UTC'
   });
-
-  console.log('[FormulaAuditJob] ✅ Job registered successfully (timezone: UTC)');
 
   cronRegistry.register({
     name: JOB_NAME,
@@ -251,6 +249,8 @@ export function registerFormulaAuditJob() {
   _task.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
   });
+  await cronOccurrenceRunner.prepareJob(JOB_NAME);
+  _task.start();
+  console.log('[FormulaAuditJob] ✅ Job registered after startup reconciliation (timezone: UTC)');
   logCronArm(cronRegistry.get(JOB_NAME)!);
-  cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
 }

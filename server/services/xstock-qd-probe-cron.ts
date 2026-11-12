@@ -59,7 +59,7 @@ export async function registerXstockQdProbeCron(): Promise<void> {
   const expression = `*/${config.cadenceMinutes} * * * *`;
   const intervalSeconds = config.cadenceMinutes * 60;
 
-  _cronTask = cron.schedule(
+  _cronTask = cron.createTask(
     expression,
     async (context) => {
       await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
@@ -73,10 +73,6 @@ export async function registerXstockQdProbeCron(): Promise<void> {
   _cronTask.on('execution:overlap', () => {
     console.warn(`[P19-B5c][qd-probe][cron] fire SKIPPED at ${new Date().toISOString()} — the previous fire is still running (noOverlap); no capture this tick`);
   });
-  console.log(
-    `[P19-B5c][qd-probe][cron] registered (expr=${expression}, freshness_ceiling_ms=${config.freshnessCeilingMs})`,
-  );
-
   cronRegistry.register({
     name: JOB_NAME,
     task: _cronTask,
@@ -103,8 +99,13 @@ export async function registerXstockQdProbeCron(): Promise<void> {
   _cronTask.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
   });
+  await cronOccurrenceRunner.prepareJob(JOB_NAME);
+  _cronTask.start();
+  console.log(
+    `[P19-B5c][qd-probe][cron] registered after startup reconciliation `
+    + `(expr=${expression}, freshness_ceiling_ms=${config.freshnessCeilingMs})`,
+  );
   logCronArm(cronRegistry.get(JOB_NAME)!);
-  cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
 }
 
 export function stopXstockQdProbeCron(): void {

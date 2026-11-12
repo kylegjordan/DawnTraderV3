@@ -92,7 +92,7 @@ try {
 
   // Register daily 06:00 UTC discovery cron (Q-PA-6 ACK same-host shape)
   const { registerXstockUniverseCron } = await import('./services/xstock-universe-cron.js');
-  registerXstockUniverseCron();
+  await registerXstockUniverseCron();
 
   // P19-B5c (#86): start the continuous Q-D (quote-depth) friction probe cron —
   // an always-on every-~5-min sweep that records per-symbol on-venue spread +
@@ -694,8 +694,8 @@ app.use((req, res, next) => {
 
       // Register tasks
       registerLearningFeedbackJob();
-      registerFormulaAuditJob();
-      registerFeedIntegrityJob();
+      await registerFormulaAuditJob();
+      await registerFeedIntegrityJob();
       schedulerRegistry.registerTask({
         name: screenerRecalibrationTask.name,
         description: screenerRecalibrationTask.description,
@@ -1528,7 +1528,7 @@ app.use((req, res, next) => {
     // Phase 8.94: Start Awareness Layer (hourly state updates, 6-hour reflections)
     try {
       const { initializeAwarenessScheduler } = await import('./services/awareness-scheduler');
-      initializeAwarenessScheduler();
+      await initializeAwarenessScheduler();
       console.log('[AwarenessScheduler] ✅ Started successfully');
     } catch (error) {
       console.error('[AwarenessScheduler] ⚠️ Startup failed:', error);

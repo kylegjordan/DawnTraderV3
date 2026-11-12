@@ -23,22 +23,18 @@ let reflectionTask: ScheduledTask | null = null;
  * Initialize awareness scheduler
  * Registers hourly state updates and 6-hour reflections
  */
-export function initializeAwarenessScheduler() {
+export async function initializeAwarenessScheduler(): Promise<void> {
   console.log('[AwarenessScheduler] 🧭 Initializing awareness scheduler...');
 
   // Every hour: Update awareness state
-  stateUpdateTask = cron.schedule('0 * * * *', async (context) => {
+  stateUpdateTask = cron.createTask('0 * * * *', async (context) => {
     await cronOccurrenceRunner.runNatural(STATE_JOB, context.date);
   });
 
   // Every 6 hours: Run deep self-reflection
-  reflectionTask = cron.schedule('0 */6 * * *', async (context) => {
+  reflectionTask = cron.createTask('0 */6 * * *', async (context) => {
     await cronOccurrenceRunner.runNatural(REFLECTION_JOB, context.date);
   });
-
-  console.log('[AwarenessScheduler] ✅ Awareness scheduler initialized');
-  console.log('[AwarenessScheduler] 📅 Hourly state updates scheduled (0 * * * *)');
-  console.log('[AwarenessScheduler] 📅 6-hour reflections scheduled (0 */6 * * *)');
 
   // B-NEW-49: register both schedules with cron-registry + emit arm-logger.
   cronRegistry.register({
@@ -60,8 +56,6 @@ export function initializeAwarenessScheduler() {
   stateUpdateTask.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(STATE_JOB, context.date);
   });
-  logCronArm(cronRegistry.get(STATE_JOB)!);
-  cronOccurrenceRunner.dispatchReconciliation(STATE_JOB);
 
   cronRegistry.register({
     name: REFLECTION_JOB,
@@ -83,8 +77,15 @@ export function initializeAwarenessScheduler() {
   reflectionTask.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(REFLECTION_JOB, context.date);
   });
+  await cronOccurrenceRunner.prepareJob(STATE_JOB);
+  await cronOccurrenceRunner.prepareJob(REFLECTION_JOB);
+  stateUpdateTask.start();
+  reflectionTask.start();
+  console.log('[AwarenessScheduler] ✅ Awareness scheduler initialized after startup reconciliation');
+  console.log('[AwarenessScheduler] 📅 Hourly state updates scheduled (0 * * * *)');
+  console.log('[AwarenessScheduler] 📅 6-hour reflections scheduled (0 */6 * * *)');
+  logCronArm(cronRegistry.get(STATE_JOB)!);
   logCronArm(cronRegistry.get(REFLECTION_JOB)!);
-  cronOccurrenceRunner.dispatchReconciliation(REFLECTION_JOB);
   
   // Run initial state update on startup
   setTimeout(async () => {

@@ -296,7 +296,7 @@ export async function runFeedIntegrityCheck(trigger: 'auto' | 'manual'): Promise
  * Initialize feed integrity auto-check job
  * Runs every 5 minutes with configurable cron schedule
  */
-export function initFeedIntegrityAutoCheck() {
+export async function initFeedIntegrityAutoCheck(): Promise<void> {
   // Check if disabled via env
   if (process.env.DISABLE_FEED_INTEGRITY_CHECK === 'true') {
     console.log('[FeedIntegrity] Auto-check DISABLED via env');
@@ -314,7 +314,7 @@ export function initFeedIntegrityAutoCheck() {
   console.log(`[FeedIntegrity] Initializing auto-check with schedule: ${cronSchedule}`);
   
   // Schedule job with timezone enforcement
-  job = cron.schedule(
+  job = cron.createTask(
     cronSchedule,
     async (context) => {
       await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
@@ -323,9 +323,6 @@ export function initFeedIntegrityAutoCheck() {
       timezone: 'UTC',
     }
   );
-
-  isEnabled = true;
-  console.log('[FeedIntegrity] ✅ Auto-check enabled');
 
   cronRegistry.register({
     name: JOB_NAME,
@@ -350,8 +347,11 @@ export function initFeedIntegrityAutoCheck() {
   job!.on('execution:missed', (context) => {
     cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
   });
+  await cronOccurrenceRunner.prepareJob(JOB_NAME);
+  job!.start();
+  isEnabled = true;
+  console.log('[FeedIntegrity] ✅ Auto-check enabled after startup reconciliation');
   logCronArm(cronRegistry.get(JOB_NAME)!);
-  cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
   
   // PHASE 27.F.21: Listen for engine state changes to clear alerts when trading stops
   clusterBus.on('engine_state_changed', async (data: any) => {
@@ -400,8 +400,8 @@ export function isFeedIntegrityAutoCheckEnabled(): boolean {
 }
 
 // Alias for backward compatibility
-export function registerFeedIntegrityJob() {
-  initFeedIntegrityAutoCheck();
+export async function registerFeedIntegrityJob(): Promise<void> {
+  await initFeedIntegrityAutoCheck();
 }
 
 /**

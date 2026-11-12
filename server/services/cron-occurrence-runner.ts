@@ -346,6 +346,7 @@ export interface CronOccurrenceRunnerDeps {
   resolveByKey: typeof resolveAlertsByDedupeKey;
   now?: () => Date;
   randomUUID?: () => string;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 const POLICY_MAX_LAG_MS: Readonly<Record<CronRecoveryPolicyKey, number>> = {
@@ -360,13 +361,46 @@ const POLICY_MAX_LAG_MS: Readonly<Record<CronRecoveryPolicyKey, number>> = {
 export class CronOccurrenceRunner {
   readonly ownerInstanceId: string;
   private readonly lanes = new Map<string, Lane>();
+  private readonly preparations = new Map<string, Promise<void>>();
+  private readonly stoppedLanes = new Map<string, Error>();
   private readonly now: () => Date;
   private readonly randomUUID: () => string;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(private readonly deps: CronOccurrenceRunnerDeps) {
     this.now = deps.now ?? (() => new Date());
     this.randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
+    this.sleep = deps.sleep ?? ((ms) => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, ms)));
     this.ownerInstanceId = this.randomUUID();
+  }
+
+  private stoppedError(jobName: string): Error | undefined {
+    return this.stoppedLanes.get(jobName);
+  }
+
+  private stopLane(jobName: string, phase: string, cause: unknown): Error {
+    const existing = this.stoppedError(jobName);
+    if (existing) return existing;
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    const error = new Error(`[CRON-RECOVERY][LANE_STOPPED] job=${jobName} phase=${phase} cause=${detail}`);
+    this.stoppedLanes.set(jobName, error);
+    console.error(error.message);
+    return error;
+  }
+
+  private assertLaneRunning(jobName: string): void {
+    const stopped = this.stoppedError(jobName);
+    if (stopped) throw stopped;
+  }
+
+  private async retryContention(jobName: string, phase: string, attempt: number): Promise<void> {
+    if (attempt === 1 || attempt % 20 === 0) {
+      console.warn(
+        `[CRON-RECOVERY][LOCK_DEFERRED] job=${jobName} phase=${phase} attempt=${attempt} advisory lock unavailable`,
+      );
+    }
+    await this.sleep(250);
+    this.assertLaneRunning(jobName);
   }
 
   private lane(jobName: string): Lane {
@@ -406,6 +440,7 @@ export class CronOccurrenceRunner {
       while (lane.queue.length > 0) {
         const item = lane.queue.shift()!;
         try {
+          this.assertLaneRunning(jobName);
           if (item.kind === 'scheduled') {
             item.resolve(await this.executeScheduled(item, lane));
           } else {
@@ -421,7 +456,8 @@ export class CronOccurrenceRunner {
     }
   }
 
-  runNatural(jobName: string, scheduledFor: Date): Promise<CronOccurrenceResult> {
+  async runNatural(jobName: string, scheduledFor: Date): Promise<CronOccurrenceResult> {
+    await this.prepareJob(jobName);
     return this.enqueueScheduled(jobName, scheduledFor, 'natural', false);
   }
 
@@ -430,6 +466,7 @@ export class CronOccurrenceRunner {
     if (!job?.recovery) {
       return this.invalidBoundary(jobName, advancedEventDate, 'recovery_registration_missing');
     }
+    await this.prepareJob(jobName);
     const scheduledFor = computePrevFire(job.expression, job.timezone, advancedEventDate);
     if (!scheduledFor || scheduledFor.getTime() >= advancedEventDate.getTime()) {
       return this.invalidBoundary(jobName, advancedEventDate, 'previous_boundary_unavailable');
@@ -451,7 +488,8 @@ export class CronOccurrenceRunner {
     });
   }
 
-  runAuxiliary<T>(jobName: string, source: CronAuxiliarySource, run: () => Promise<T>): Promise<T> {
+  async runAuxiliary<T>(jobName: string, source: CronAuxiliarySource, run: () => Promise<T>): Promise<T> {
+    await this.prepareJob(jobName);
     return new Promise<T>((resolve, reject) => {
       this.enqueue({
         kind: 'auxiliary',
@@ -526,12 +564,15 @@ export class CronOccurrenceRunner {
       return this.invalidBoundary(item.jobName, item.scheduledFor, 'recovery_registration_missing');
     }
     const recovery = job.recovery;
-    const decisionAt = this.now();
-    const policy = this.evaluatePolicy(job, item, lane, decisionAt);
-
-    let locked: { acquired: false } | { acquired: true; value: CronOccurrenceResult };
-    try {
-      locked = await this.deps.store.withJobLock<CronOccurrenceResult>(item.jobName, async (store) => {
+    let contentionAttempt = 0;
+    let result: CronOccurrenceResult;
+    while (true) {
+      this.assertLaneRunning(item.jobName);
+      const decisionAt = this.now();
+      const policy = this.evaluatePolicy(job, item, lane, decisionAt);
+      let locked: { acquired: false } | { acquired: true; value: CronOccurrenceResult };
+      try {
+        locked = await this.deps.store.withJobLock<CronOccurrenceResult>(item.jobName, async (store) => {
         const claim = await store.claim({
           jobName: item.jobName,
           scheduledFor: item.scheduledFor,
@@ -671,23 +712,28 @@ export class CronOccurrenceRunner {
           completedAt,
           reason: errorMessage ?? undefined,
         };
-      });
-    } catch (err) {
-      const result: CronOccurrenceResult = {
-        jobName: item.jobName,
-        scheduledFor: item.scheduledFor,
-        status: 'claim_unavailable',
-        reason: err instanceof Error ? err.message : String(err),
-      };
-      await this.emitDecisionAlert(result);
-      return result;
-    }
+        });
+      } catch (err) {
+        this.stopLane(item.jobName, 'scheduled_lock_or_admission', err);
+        const unavailable: CronOccurrenceResult = {
+          jobName: item.jobName,
+          scheduledFor: item.scheduledFor,
+          status: 'claim_unavailable',
+          reason: err instanceof Error ? err.message : String(err),
+        };
+        await this.emitDecisionAlert(unavailable);
+        return unavailable;
+      }
 
-    if (!locked.acquired) {
+      if (locked.acquired) {
+        result = locked.value;
+        break;
+      }
+
       try {
         const existing = await this.deps.store.find(item.jobName, item.scheduledFor);
         if (existing) {
-          return {
+          result = {
             jobName: item.jobName,
             scheduledFor: item.scheduledFor,
             status: 'duplicate',
@@ -695,21 +741,15 @@ export class CronOccurrenceRunner {
             completedAt: existing.completedAt ?? undefined,
             reason: existing.status,
           };
+          break;
         }
       } catch (err) {
-        console.error(`[CRON-RECOVERY][CONTENDED_IDENTITY_READ_FAIL] job=${item.jobName}:`, err);
+        throw this.stopLane(item.jobName, 'contended_identity_read', err);
       }
-      const result: CronOccurrenceResult = {
-        jobName: item.jobName,
-        scheduledFor: item.scheduledFor,
-        status: 'claim_unavailable',
-        reason: 'advisory_lock_unavailable',
-      };
-      await this.emitDecisionAlert(result);
-      return result;
+      contentionAttempt += 1;
+      await this.retryContention(item.jobName, 'scheduled_admission', contentionAttempt);
     }
 
-    const result = locked.value;
     if (result.status === 'succeeded' && result.occurrenceId) {
       const evidence =
         `cron occurrence ${result.occurrenceId} policy ${CRON_RECOVERY_POLICY_VERSION} `
@@ -737,27 +777,61 @@ export class CronOccurrenceRunner {
   }
 
   private async executeAuxiliary<T>(item: AuxiliaryLaneItem<T>): Promise<T> {
-    const locked = await this.deps.store.withJobLock(item.jobName, async () => item.run());
-    if (!locked.acquired) {
-      throw new Error(
-        `[CRON-RECOVERY][AUXILIARY_REFUSED] job=${item.jobName} source=${item.source} `
-        + `invocation=${item.invocationId} reason=advisory_lock_unavailable`,
-      );
+    let contentionAttempt = 0;
+    while (true) {
+      this.assertLaneRunning(item.jobName);
+      let locked: { acquired: false } | { acquired: true; value: T };
+      try {
+        locked = await this.deps.store.withJobLock(item.jobName, async () => item.run());
+      } catch (err) {
+        throw this.stopLane(item.jobName, 'auxiliary_lock_session', err);
+      }
+      if (locked.acquired) return locked.value;
+      contentionAttempt += 1;
+      await this.retryContention(item.jobName, `auxiliary_${item.source}`, contentionAttempt);
     }
-    return locked.value;
+  }
+
+  async prepareJob(jobName: string): Promise<void> {
+    let preparation = this.preparations.get(jobName);
+    if (!preparation) {
+      preparation = this.performReconciliation(jobName);
+      this.preparations.set(jobName, preparation);
+    }
+    return preparation;
   }
 
   async reconcileJob(jobName: string): Promise<void> {
-    const at = this.now();
-    const locked = await this.deps.store.withJobLock(jobName, async (store) => ({
-      indeterminate: await store.reconcileRunning(jobName, this.ownerInstanceId, at),
-      claimed: await store.loadClaimed(jobName),
-    }));
-    if (!locked.acquired) {
-      console.warn(`[CRON-RECOVERY][RECONCILE_DEFERRED] job=${jobName} advisory lock unavailable`);
-      return;
+    return this.prepareJob(jobName);
+  }
+
+  private async performReconciliation(jobName: string): Promise<void> {
+    let contentionAttempt = 0;
+    let reconciled: { indeterminate: CronOccurrenceRow[]; claimed: CronOccurrenceRow[] };
+    while (true) {
+      this.assertLaneRunning(jobName);
+      const at = this.now();
+      let locked: { acquired: false } | {
+        acquired: true;
+        value: { indeterminate: CronOccurrenceRow[]; claimed: CronOccurrenceRow[] };
+      };
+      try {
+        locked = await this.deps.store.withJobLock(jobName, async (store) => ({
+          indeterminate: await store.reconcileRunning(jobName, this.ownerInstanceId, at),
+          claimed: await store.loadClaimed(jobName),
+        }));
+      } catch (err) {
+        throw this.stopLane(jobName, 'startup_reconciliation', err);
+      }
+      if (locked.acquired) {
+        reconciled = locked.value;
+        break;
+      }
+      contentionAttempt += 1;
+      await this.retryContention(jobName, 'startup_reconciliation', contentionAttempt);
     }
-    for (const row of locked.value.indeterminate) {
+
+    for (const row of reconciled.indeterminate) {
       await this.emitDecisionAlert({
         jobName,
         scheduledFor: row.scheduledFor,
@@ -766,7 +840,7 @@ export class CronOccurrenceRunner {
         reason: row.reason ?? 'prior_process_died_after_start',
       });
     }
-    for (const row of locked.value.claimed) {
+    for (const row of reconciled.claimed) {
       void this.enqueueScheduled(jobName, row.scheduledFor, 'missed_catchup', true).catch((err) => {
         console.error(`[CRON-RECOVERY][CLAIMED_RESUME_FAIL] job=${jobName} occurrence=${row.id}:`, err);
       });
@@ -774,7 +848,7 @@ export class CronOccurrenceRunner {
   }
 
   dispatchReconciliation(jobName: string): void {
-    void this.reconcileJob(jobName).catch((err) => {
+    void this.prepareJob(jobName).catch((err) => {
       console.error(`[CRON-RECOVERY][RECONCILE_FAIL] job=${jobName}:`, err);
     });
   }
