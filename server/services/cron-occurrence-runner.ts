@@ -237,7 +237,7 @@ class PgLockedOccurrenceStore implements LockedOccurrenceStore {
     const result = await this.client.query<DbOccurrenceRow>(`
       UPDATE scheduled_job_occurrences
          SET status = 'indeterminate', completed_at = $2, reason = $3,
-             metadata = metadata || $4::jsonb
+             metadata = metadata || $4::jsonb || '{"decision_alert_pending":true}'::jsonb
        WHERE id = $1 AND status = 'running' AND started_at IS NOT NULL
        RETURNING ${ROW_COLUMNS}
     `, [id, completedAt, reason, JSON.stringify(metadata)]);
@@ -840,7 +840,16 @@ export class CronOccurrenceRunner {
           err,
         );
       }
-    } else if (result.status === 'failed' || result.status === 'skipped' || result.status === 'indeterminate') {
+    } else if (result.status === 'indeterminate') {
+      try {
+        await this.flushPendingDecisionAlerts(result.jobName);
+      } catch (err) {
+        console.error(
+          `[CRON-RECOVERY][INDETERMINATE_ALERT_PENDING] job=${result.jobName} occurrence=${result.occurrenceId}:`,
+          err,
+        );
+      }
+    } else if (result.status === 'failed' || result.status === 'skipped') {
       await this.emitDecisionAlert(result);
     }
     return result;
@@ -895,17 +904,7 @@ export class CronOccurrenceRunner {
       try {
         locked = await this.deps.store.withJobLock(jobName, async (store) => {
           await store.reconcileRunning(jobName, this.ownerInstanceId, at);
-          const indeterminate = await store.loadPendingDecisionAlerts(jobName);
-          for (const row of indeterminate) {
-            await this.persistDecisionAlert({
-              jobName,
-              scheduledFor: row.scheduledFor,
-              status: 'indeterminate',
-              occurrenceId: row.id,
-              reason: row.reason ?? 'prior_process_died_after_start',
-            });
-            await store.markDecisionAlertPersisted(row.id, this.now());
-          }
+          const indeterminate = await this.persistPendingDecisionAlerts(store, jobName);
           return {
             indeterminate,
             claimed: await store.loadClaimed(jobName),
@@ -926,6 +925,42 @@ export class CronOccurrenceRunner {
       void this.enqueueScheduled(jobName, row.scheduledFor, 'missed_catchup', true).catch((err) => {
         console.error(`[CRON-RECOVERY][CLAIMED_RESUME_FAIL] job=${jobName} occurrence=${row.id}:`, err);
       });
+    }
+  }
+
+  private async persistPendingDecisionAlerts(
+    store: LockedOccurrenceStore,
+    jobName: string,
+  ): Promise<CronOccurrenceRow[]> {
+    const pending = await store.loadPendingDecisionAlerts(jobName);
+    for (const row of pending) {
+      await this.persistDecisionAlert({
+        jobName,
+        scheduledFor: row.scheduledFor,
+        status: 'indeterminate',
+        occurrenceId: row.id,
+        reason: row.reason ?? 'prior_process_died_after_start',
+      });
+      await store.markDecisionAlertPersisted(row.id, this.now());
+    }
+    return pending;
+  }
+
+  private async flushPendingDecisionAlerts(jobName: string): Promise<void> {
+    let contentionAttempt = 0;
+    while (true) {
+      this.assertLaneRunning(jobName);
+      let locked: { acquired: false } | { acquired: true; value: void };
+      try {
+        locked = await this.deps.store.withJobLock(jobName, async (store) => {
+          await this.persistPendingDecisionAlerts(store, jobName);
+        });
+      } catch (err) {
+        throw this.stopLane(jobName, 'indeterminate_alert_persistence', err);
+      }
+      if (locked.acquired) return;
+      contentionAttempt += 1;
+      await this.retryContention(jobName, 'indeterminate_alert_persistence', contentionAttempt);
     }
   }
 
