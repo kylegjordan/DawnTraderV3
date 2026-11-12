@@ -159,6 +159,14 @@ The exact-ref CI read is:
 gh run view 43173570525 --json headSha,status,conclusion,jobs
 ```
 
+## 9. Step 8 independent second-pass verdict
+
+Coltrane returned **CONFIRMED** on Discord message `1570346317614682196` for exact review ref `bc945a098edb5a6d807c6696a6ef20678b4ed11e` and deployed runtime `4e66ea904edf690e144035c959cbd335241f7651`.
+
+His independent reproduction included a fresh staging harness run `a2455966-fe8a-4454-8890-6de0793f7b54`: 11/11 distinct identities, terminal population 6 succeeded / 3 skipped / 1 failed / 1 indeterminate, exactly seven executed-only audit rows and one core call across the same-identity race. He independently found the six executable registration sites and the matching six-job boot and boot+5-minute runtime census; re-ran all four registered SQL reads over the stated population; reproduced 13 rows / 13 identities, zero duplicate groups, zero production unfinished rows and the retained indeterminate positive control; matched both due five-minute durable occurrences to their audit rows; and verified the four slower future next fires.
+
+He also created and checked a fresh stale-alert proof with actor `cron-recovery`, transport `engine`, the expected occurrence and policy evidence; reproduced the controlled log counts over 81,803 lines (`6` registrations, `6` boot jobs, `6` boot+5-minute jobs, zero production recovery errors, zero arm-smoke unhandled errors, zero duplicate registrations, `765` collision positive controls); and rechecked PM2 online at restart `695` plus liveness/build identity at the exact deployed SHA. Exact-review-ref CI `43178206103` was independently acknowledged four-job green. UI remained N/A and was not represented as checked.
+
 ## Next step
 
-Step 8 sends this exact deployed-object proof to Coltrane for an independent second-pass verification.
+Step 9 evaluates every registered objective against the independently confirmed staging evidence and repairs any objective that is not green.
