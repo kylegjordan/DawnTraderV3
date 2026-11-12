@@ -562,6 +562,25 @@ ssh deploy@188.245.193.8 'python3 -' < scripts/due-alerts.py \
 The expected positive control is the still-due `1ae9a06b` row plus a nonzero
 `COUNT`; none of the three resolved target IDs may appear.
 
+## 10. STEP 8 INDEPENDENT STAGING VERIFICATION — PROCEED
+
+Coltrane returned PROCEED at corrected evidence ref
+`3a2097653165c240d80644886a7a1ef80a09426c` and deployed ref
+`cd2b794dec63bea0771e32b733263b7ae516e6b8` at
+`2026-11-12T12:45:14Z`. He independently reproduced the corrected `11:13Z`
+three-of-six stale positive control, the `12:13Z` two-of-six transition state,
+and the post-deploy six-of-six healthy outcome. His fresh authenticated
+readback confirmed exact running identity and engine liveness; all three
+target alerts remained resolved with the deployed SHA, a fresh due-row read
+returned 17 other rows while excluding all three targets, and a complete
+four-state alert read returned zero verifier alerts created after deployment
+against the three `11:13Z` rows as its positive control.
+
+The independent package check matched 29,113 bytes and SHA-256
+`b185456e0a483a6500b6e8cde4b49a1f162975f76f3feca418fc7716c2b3870b`.
+Coltrane confirmed there is no affected UI contract and rendered the existing
+System Alerts surface successfully.
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
