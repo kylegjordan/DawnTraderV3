@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `0c82f89efef435edaded754b8a7898dbef0762ee` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before dispatch)
+**READY-AT (implementation object):** `13fecfc11a35ea4f128815aa6a54bacae8d6edee` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -34,7 +34,7 @@
 
 ## Change-set census
 
-From the shared base immediately before implementation (`ef99534639b9d9dcd5b66ea578e7930f3fdbe556`) through READY-AT, exactly 22 tracked paths changed: 7 added, 15 modified, and 0 deleted. One modified path is the Step-3 memory boundary only; the implementation object is the other 21 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review.
+From the current shared base (`dacbd982562a9aa87cb9eff9af87012ec51700c6`) through READY-AT, exactly 23 tracked paths changed: 7 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only; the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review.
 
 ### NEW
 
@@ -52,6 +52,7 @@ From the shared base immediately before implementation (`ef99534639b9d9dcd5b66ea
 - `.tsc-baseline.json`
 - `drizzle/migrations/MANIFEST.txt`
 - `shared/schema.ts`
+- `server/index.ts`
 - `server/services/cron-registry.ts`
 - `server/services/scheduled-jobs-audit.ts`
 - `server/services/cron-fire-evidence-verifier.ts`
@@ -113,7 +114,8 @@ export const scheduledJobOccurrences = pgTable("scheduled_job_occurrences", {
 `server/services/cron-occurrence-runner.ts` reconstructs the missed boundary, validates it against the schedule, and enqueues all three caller classes without inventing an auxiliary schedule identity:
 
 ```ts
-runNatural(jobName: string, scheduledFor: Date): Promise<CronOccurrenceResult> {
+async runNatural(jobName: string, scheduledFor: Date): Promise<CronOccurrenceResult> {
+  await this.prepareJob(jobName);
   return this.enqueueScheduled(jobName, scheduledFor, 'natural', false);
 }
 
@@ -122,6 +124,7 @@ async runMissed(jobName: string, advancedEventDate: Date): Promise<CronOccurrenc
   if (!job?.recovery) {
     return this.invalidBoundary(jobName, advancedEventDate, 'recovery_registration_missing');
   }
+  await this.prepareJob(jobName);
   const scheduledFor = computePrevFire(job.expression, job.timezone, advancedEventDate);
   if (!scheduledFor || scheduledFor.getTime() >= advancedEventDate.getTime()) {
     return this.invalidBoundary(jobName, advancedEventDate, 'previous_boundary_unavailable');
@@ -133,7 +136,8 @@ async runMissed(jobName: string, advancedEventDate: Date): Promise<CronOccurrenc
   return this.enqueueScheduled(jobName, scheduledFor, 'missed_catchup', false);
 }
 
-runAuxiliary<T>(jobName: string, source: CronAuxiliarySource, run: () => Promise<T>): Promise<T> {
+async runAuxiliary<T>(jobName: string, source: CronAuxiliarySource, run: () => Promise<T>): Promise<T> {
+  await this.prepareJob(jobName);
   return new Promise<T>((resolve, reject) => {
     this.enqueue({ kind: 'auxiliary', jobName, source, invocationId: this.randomUUID(), run,
       resolve: resolve as (value: unknown) => void, reject });
@@ -203,7 +207,7 @@ async () => {
 
 ```ts
 // AFTER — common occurrence path
-job = cron.schedule(
+job = cron.createTask(
   cronSchedule,
   async (context) => {
     await cronOccurrenceRunner.runNatural(JOB_NAME, context.date);
@@ -231,10 +235,11 @@ cronRegistry.register({
 job!.on('execution:missed', (context) => {
   cronOccurrenceRunner.dispatchMissed(JOB_NAME, context.date);
 });
-cronOccurrenceRunner.dispatchReconciliation(JOB_NAME);
+await cronOccurrenceRunner.prepareJob(JOB_NAME);
+job!.start();
 ```
 
-The same registration shape is applied to formula, both awareness schedules, Q-D and universe discovery; manual formula/feed/reflection/universe routes and feed/awareness boot calls use `runAuxiliary`.
+The same dormant-create, reconcile, then start shape is applied to formula, both awareness schedules, Q-D and universe discovery; manual formula/feed/reflection/universe routes and feed/awareness boot calls use `runAuxiliary`, which independently awaits the same one-time preparation.
 
 The one-pass reader found that Formula Health's no-result fallback called the underlying formula audit directly. READY-AT folds that on-read caller into the same auxiliary lane and the source-contract test pins the complete call shape:
 
@@ -250,6 +255,84 @@ report = run;
 ```
 
 The reader also found that the original six-site census named five source files, so a future schedule in a new file could evade it. READY-AT recursively scans every production TypeScript file under `server`, excludes only the test tree, and requires every file containing a schedule call to carry an equal number of recovery registrations and missed listeners; the whole production population must still total six.
+
+### 4a. SENT-BACK CORRECTION — startup and rolling-process contention cannot overtake or drop work
+
+Coltrane's first substantive round found three gaps at exact ref `0c82f89efef435edaded754b8a7898dbef0762ee`: schedules were auto-started before reconciliation, a contended reconciliation returned permanently, and a different scheduled identity returned `claim_unavailable` without a durable decision. READY-AT corrects all three at the shared runner boundary:
+
+```ts
+async prepareJob(jobName: string): Promise<void> {
+  let preparation = this.preparations.get(jobName);
+  if (!preparation) {
+    preparation = this.performReconciliation(jobName);
+    this.preparations.set(jobName, preparation);
+  }
+  return preparation;
+}
+
+private async performReconciliation(jobName: string): Promise<void> {
+  let contentionAttempt = 0;
+  let reconciled: { indeterminate: CronOccurrenceRow[]; claimed: CronOccurrenceRow[] };
+  while (true) {
+    this.assertLaneRunning(jobName);
+    const at = this.now();
+    let locked: { acquired: false } | {
+      acquired: true;
+      value: { indeterminate: CronOccurrenceRow[]; claimed: CronOccurrenceRow[] };
+    };
+    try {
+      locked = await this.deps.store.withJobLock(jobName, async (store) => ({
+        indeterminate: await store.reconcileRunning(jobName, this.ownerInstanceId, at),
+        claimed: await store.loadClaimed(jobName),
+      }));
+    } catch (err) {
+      throw this.stopLane(jobName, 'startup_reconciliation', err);
+    }
+    if (locked.acquired) {
+      reconciled = locked.value;
+      break;
+    }
+    contentionAttempt += 1;
+    await this.retryContention(jobName, 'startup_reconciliation', contentionAttempt);
+  }
+}
+```
+
+Every schedule is now created dormant, registered, reconciled, and only then started. Natural, missed and auxiliary entry also await the cached preparation promise, so a future caller cannot bypass the wrapper ordering. A reconciliation lock-session error latches that job lane stopped; ordinary rolling-process contention stays pending and retries.
+
+Scheduled admission now retains a different identity through contention rather than returning a decision that was never persisted:
+
+```ts
+while (true) {
+  const locked = await this.deps.store.withJobLock(item.jobName, async (store) => {
+    // durable claim / refusal, then core
+  });
+  if (locked.acquired) {
+    result = locked.value;
+    break;
+  }
+  try {
+    const existing = await this.deps.store.find(item.jobName, item.scheduledFor);
+    if (existing) {
+      result = {
+        jobName: item.jobName,
+        scheduledFor: item.scheduledFor,
+        status: 'duplicate',
+        occurrenceId: existing.id,
+        completedAt: existing.completedAt ?? undefined,
+        reason: existing.status,
+      };
+      break;
+    }
+  } catch (err) {
+    throw this.stopLane(item.jobName, 'contended_identity_read', err);
+  }
+  contentionAttempt += 1;
+  await this.retryContention(item.jobName, 'scheduled_admission', contentionAttempt);
+}
+```
+
+The source fence now requires six dormant tasks, six preparation calls, six starts, and proves every start occurs after every preparation in its module. Red-first behavioral tests prove scheduled and auxiliary work remain blocked during startup reconciliation, a deferred reconciliation eventually completes, and a different scheduled identity remains pending until it can persist and execute.
 
 ### 5. NEW — exact stale occurrence only, after durable success
 
@@ -291,11 +374,11 @@ The retained read-back requires 11 unique occurrence identities, exactly one adm
 
 The pre-review branch CI passes caught two packaging/runtime-startup omissions before review. READY-AT now registers the forward migration in `MANIFEST.txt` (and pins the rollback's exclusion in the focused suite), and the standalone staging harness loads the app environment before importing the database pool. The migration manifest now has a one-to-one 214/214 forward-file match, and the existing script-environment suite passes 25/25.
 
-## Verification already run at READY-AT
+## Verification already run for corrected READY-AT
 
-- GitHub CI run `43151969795`: TypeScript Check, Test Suite, Build and Docker Build all passed individually.
+- GitHub CI run `43155519026` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Focused recovery and alert-store suites: 32/32 passed.
+- Corrected recovery, alert-store and Formula Health suites: 56/56 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -310,7 +393,14 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 6. Can any non-success path resolve a stale row, or can any successful occurrence resolve the wrong boundary, job, or `cron_verifier_blind` row?
 7. Does a terminal-write ambiguity remain visible and non-retryable even if the subsequent indeterminate write also fails?
 8. Is the exact-ref harness sufficiently side-effect-free and strong enough to close Step 7 without altering the host clock or waiting for a natural miss?
+9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return before either finding the same durable identity or persisting a decision for a different one?
 
 ## One-pass fresh-reader record
 
 `REVIEWER: claim-only · mechanism claim covering the shared six-job lane, durable scheduled identity, and auxiliary non-identity · HIT: Formula Health's no-result on-read audit bypassed the lane, and the six-site test could miss a future schedule in a new file; both were re-derived at the exact ref and corrected in READY-AT · re-derived yes`
+
+## Step-4 review history
+
+- Coltrane's first invocation returned `SENT BACK` ungraded because the exact objects were not yet in the governed review mirror. The unchanged object was then exposed on `review/b-cron-missed-catchup-step4-codex`.
+- Coltrane's substantive round at implementation ref `0c82f89efef435edaded754b8a7898dbef0762ee` returned three corrections: dormant schedules must not start before reconciliation; reconciliation contention must retry rather than disappear; and a different scheduled identity must remain pending through advisory-lock contention until it can persist a decision. All three are corrected in READY-AT with the three requested red-first proofs.
+- Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
