@@ -59,6 +59,16 @@ describe('cron-recovery alert ownership', () => {
       resolved_by_transport: 'engine',
       resolution_evidence: EVIDENCE,
     });
+    expect(alerts.getAlertDedupeState(key)).toBe('resolved');
+  });
+
+  it('distinguishes absent, live and resolved exact-key history', async () => {
+    const key = 'cron_stale:awareness_state_update_cron:2026-11-12T12:15:00.000Z';
+    expect(alerts.getAlertDedupeState(key)).toBe('absent');
+    await alerts.addAlert({ ...base, dedupe_key: key });
+    expect(alerts.getAlertDedupeState(key)).toBe('nonterminal');
+    await alerts.resolveAlertsByDedupeKey(key, 'cron-recovery', EVIDENCE, 'engine');
+    expect(alerts.getAlertDedupeState(key)).toBe('resolved');
   });
 
   it('refuses an unallowlisted actor and leaves the exact row open', async () => {
