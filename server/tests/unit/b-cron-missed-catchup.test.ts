@@ -919,11 +919,7 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     await vi.waitFor(() => expect(naturalOwner.run).toHaveBeenCalledTimes(1));
 
     const lockedRead = vi.fn(async () => 'read-after-core');
-    const verifier = verifierOwner.runner.runAuxiliary(
-      verifierOwner.job.name,
-      'on-read',
-      lockedRead,
-    );
+    const verifier = verifierOwner.runner.runVerifierLocked(verifierOwner.job.name, lockedRead);
     await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThanOrEqual(2));
     expect(lockedRead).not.toHaveBeenCalled();
 
@@ -931,6 +927,29 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     await expect(natural).resolves.toMatchObject({ status: 'succeeded' });
     await expect(verifier).resolves.toBe('read-after-core');
     expect(lockedRead).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries its own lock failure and stays independent of a permanently stopped execution lane', async () => {
+    const f = fixture();
+    await f.runner.prepareJob(f.job.name);
+    f.store.failLockSession = true;
+
+    await expect(f.runner.runVerifierLocked(f.job.name, async () => 'must-not-run'))
+      .rejects.toThrow('[CRON-RECOVERY][VERIFIER_LOCK_SESSION_FAIL]');
+    f.store.failLockSession = false;
+    await expect(f.runner.runVerifierLocked(f.job.name, async () => 'verifier-recovered'))
+      .resolves.toBe('verifier-recovered');
+
+    f.store.failLockSession = true;
+
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', async () => 'must-not-run'))
+      .rejects.toThrow('phase=auxiliary_lock_session');
+    f.store.failLockSession = false;
+
+    await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z')))
+      .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+    await expect(f.runner.runVerifierLocked(f.job.name, async () => 'verifier-still-independent'))
+      .resolves.toBe('verifier-still-independent');
   });
 
   it('rejects an auxiliary business failure without stopping later scheduled work', async () => {

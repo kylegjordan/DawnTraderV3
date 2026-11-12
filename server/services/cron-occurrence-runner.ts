@@ -591,6 +591,45 @@ export class CronOccurrenceRunner {
     });
   }
 
+  /**
+   * Run the independent fire-evidence verifier under the same cross-process
+   * advisory lock as execution, without inheriting this process's permanently
+   * stopped execution lane. A lock/session failure rejects this pass but does
+   * not poison the next verifier pass; advisory-lock contention remains
+   * retryable and callback failures remain distinguishable from lock failures.
+   */
+  async runVerifierLocked<T>(jobName: string, run: () => Promise<T>): Promise<T> {
+    let contentionAttempt = 0;
+    while (true) {
+      let locked: { acquired: false } | { acquired: true; value: T };
+      try {
+        locked = await this.deps.store.withJobLock(jobName, async (store) => {
+          await this.persistPendingDecisionAlerts(store, jobName);
+          await this.persistPendingStaleResolves(store, jobName);
+          try {
+            return await run();
+          } catch (err) {
+            throw new AuxiliaryCallbackFailure(err);
+          }
+        });
+      } catch (err) {
+        if (err instanceof AuxiliaryCallbackFailure) throw err.error;
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `[CRON-RECOVERY][VERIFIER_LOCK_SESSION_FAIL] job=${jobName} cause=${detail}`,
+        );
+      }
+      if (locked.acquired) return locked.value;
+      contentionAttempt += 1;
+      if (contentionAttempt === 1 || contentionAttempt % 20 === 0) {
+        console.warn(
+          `[CRON-RECOVERY][VERIFIER_LOCK_DEFERRED] job=${jobName} attempt=${contentionAttempt} advisory lock unavailable`,
+        );
+      }
+      await this.sleep(250);
+    }
+  }
+
   private enqueueScheduled(
     jobName: string,
     scheduledFor: Date,

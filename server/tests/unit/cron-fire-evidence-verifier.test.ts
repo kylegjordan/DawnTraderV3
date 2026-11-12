@@ -40,11 +40,16 @@ vi.mock('../../services/system-alerts.js', () => ({
   }),
 }));
 
-const auxiliaryCalls: Array<{ jobName: string; source: string }> = [];
+const verifierLockCalls: Array<{ jobName: string }> = [];
+let failVerifierLockOnce = false;
 vi.mock('../../services/cron-occurrence-runner.js', () => ({
   cronOccurrenceRunner: {
-    runAuxiliary: vi.fn(async (jobName: string, source: string, run: () => Promise<unknown>) => {
-      auxiliaryCalls.push({ jobName, source });
+    runVerifierLocked: vi.fn(async (jobName: string, run: () => Promise<unknown>) => {
+      verifierLockCalls.push({ jobName });
+      if (failVerifierLockOnce) {
+        failVerifierLockOnce = false;
+        throw new Error('simulated verifier lock session failure');
+      }
       return run();
     }),
   },
@@ -54,7 +59,8 @@ beforeEach(() => {
   mockedLastFires = new Map();
   dbCalls.length = 0;
   alertCalls.length = 0;
-  auxiliaryCalls.length = 0;
+  verifierLockCalls.length = 0;
+  failVerifierLockOnce = false;
   vi.resetModules();
 });
 
@@ -106,7 +112,7 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     expect(alertCalls[0].dedupe_key).toBe('cron_stale:weekly_sat:2026-05-30T00:00:00.000Z');
     expect(alertCalls[0].metadata.reason).toBe('stale_fire_evidence');
     expect(alertCalls[0].one_shot).toBe(true);
-    expect(auxiliaryCalls).toEqual([{ jobName: 'weekly_sat', source: 'on-read' }]);
+    expect(verifierLockCalls).toEqual([{ jobName: 'weekly_sat' }]);
   });
 
   it('HEALTHY: weekly job that fired on its most-recent occurrence (old interval×1.5 model would FALSE-flag mid-week)', async () => {
@@ -194,8 +200,30 @@ describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
     const report = await runVerification(NOW);
 
     expect(report).toEqual({ ok: true, stale: [] });
-    expect(auxiliaryCalls).toEqual([{ jobName: 'weekly_sat', source: 'on-read' }]);
+    expect(verifierLockCalls).toEqual([{ jobName: 'weekly_sat' }]);
     expect(alertCalls).toHaveLength(0);
+  });
+
+  it('reports a failed verifier lock as blind, then retries independently and alerts after recovery', async () => {
+    const { cronRegistry, runVerification } = await loadModules();
+    cronRegistry.register(makeJob('weekly_sat', '0 0 * * 6', 604800));
+    mockedLastFires.set('weekly_sat', new Date('2026-05-23T00:00:00Z'));
+    failVerifierLockOnce = true;
+
+    const failed = await runVerification(NOW);
+    expect(failed).toEqual({
+      ok: false,
+      stale: [],
+      skipped: 'locked_recheck_fail',
+      blind: ['weekly_sat'],
+    });
+    expect(alertCalls).toHaveLength(0);
+
+    const recovered = await runVerification(NOW + 1);
+    expect(recovered).toEqual({ ok: false, stale: ['weekly_sat'] });
+    expect(alertCalls).toHaveLength(1);
+    expect(alertCalls[0].dedupe_key).toBe('cron_stale:weekly_sat:2026-05-30T00:00:00.000Z');
+    expect(verifierLockCalls).toEqual([{ jobName: 'weekly_sat' }, { jobName: 'weekly_sat' }]);
   });
 
   it('skips disabled jobs', async () => {
