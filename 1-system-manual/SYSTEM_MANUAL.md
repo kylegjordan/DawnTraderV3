@@ -8242,7 +8242,7 @@ Kyle's Phase 7 Addendum reclassifies all potential legacy findings from "AWAITIN
 | Background Scheduler Tasks (13+ tasks) | FLAGGED — Post-Audit | Which tasks support core trading? Which are autonomy-era? |
 | MicroExecutionService | FLAGGED — Post-Audit | Is it part of active trade path? Experimental? Safe to disable? |
 | AutonomyScheduler | FLAGGED — Post-Audit | Does it mutate trading config, risk settings, or filters? Or read-only? |
-| AwarenessScheduler | FLAGGED — Post-Audit | Does it mutate trading config, risk settings, or filters? Or read-only? |
+| AwarenessScheduler | FLAGGED — Post-Audit | Current reach is known: hourly work inserts an awareness log row and broadcasts; six-hour reflection updates the latest row and broadcasts. The long-term product decision remains post-audit. |
 | LearningCycleService | FLAGGED — Post-Audit | Premature activation during ML refactor? Disable or rebuild after VTS correction? |
 | LATTI/Coherence Residual Flags | FLAGGED — Post-Audit | Do lattiManaged, lockedByUser, manualOverride fields still serve purpose? |
 
@@ -8250,7 +8250,7 @@ Kyle's Phase 7 Addendum reclassifies all potential legacy findings from "AWAITIN
 
 1. **POST-AUDIT:** Consolidate shutdown handlers to prevent ML service shutdown race (BUG-015)
 2. **POST-AUDIT:** Formal investigation of all 9 systems listed above — each requires: scope verification, dependency tracing, mutation impact review, performance impact review, and final decision (retain / disable / refactor / deprecate / remove)
-3. **POST-AUDIT:** Determine whether AutonomyScheduler and AwarenessScheduler have write paths that mutate trading configuration, risk settings, or filters
+3. **POST-AUDIT:** Determine whether AutonomyScheduler mutates trading configuration, risk settings or filters, and decide whether AwarenessScheduler's proved log insert/update plus broadcast side effects belong in the long-term product
 4. **POST-AUDIT:** Evaluate whether LearningCycleService should remain active during ML refactor, be temporarily disabled, or be rebuilt after strategy-specific VTS correction
 5. **POST-AUDIT:** Confirm whether residual LATTI coherence flags (`lattiManaged`, `lockedByUser`, `manualOverride`) serve any active purpose; if LATTI is fully removed, eliminate residual fields
 6. **POST-AUDIT:** Implement actual auto-recovery actions in health-monitor.ts or remove the framework (RISK-046)
@@ -8280,7 +8280,7 @@ The following systems are flagged for formal investigation after audit completio
 | 1 | Background scheduler tasks not on core trading path | Unknown | LOW | AI summaries, weekly insights, semantic ingestion, optimization analysis, diagnostic analysis, audit anomaly |
 | 2 | MicroExecutionService | Unknown | MEDIUM | Receives 1s price updates, wired at boot. May be experimental micro-coin infrastructure. |
 | 3 | AutonomyScheduler | Unknown | MEDIUM | Hourly self-checks, daily optimization. May mutate guardrails or filters. |
-| 4 | AwarenessScheduler | Unknown | MEDIUM | Hourly state updates, 6-hour reflections. Write paths unknown. |
+| 4 | AwarenessScheduler | No direct core-path requirement established | MEDIUM | Hourly state work inserts an awareness log row and broadcasts; six-hour reflection updates the latest row and broadcasts. Product disposition remains open. |
 | 5 | LearningCycleService | Possibly premature | MEDIUM | 24-hour learning cycle running during active ML refactor and VTS correction. |
 | 6 | LATTI/Coherence residual flags | Unknown | LOW | `lattiManaged`, `lockedByUser`, `manualOverride` in boot audit telemetry. |
 | 7 | CLE/CWA Scheduler Tasks | Likely Walter-era | LOW | Continuous Learning Engine and Cognitive Weight Adjustment tasks. |
@@ -13398,8 +13398,8 @@ A low-frequency log line fires every 600 ticks while paused (every ~10 min) so a
 
 Schema:
 - `id SERIAL PK`
-- `task_name VARCHAR(64) NOT NULL` — `'weekend_shutdown'` | `'weekend_restart'` | `'boot_state_reconciliation'`
-- `scheduled_for TIMESTAMPTZ NOT NULL` — when the task was supposed to fire (for boot rows = `fired_at`)
+- `task_name VARCHAR(64) NOT NULL` — lifecycle evidence plus the six current node-cron names (`formula_audit_cron`, `feed_integrity_cron`, `awareness_state_update_cron`, `awareness_reflection_cron`, `xstock_qd_probe_cron`, `xstock_universe_discovery_cron`)
+- `scheduled_for TIMESTAMPTZ NOT NULL` — true schedule boundary for current node-cron rows; boot/poll evidence uses its event time
 - `fired_at TIMESTAMPTZ` — when it actually fired
 - `status VARCHAR(32) NOT NULL` — `'pending'` | `'success'` | `'error'`
 - `error_message TEXT` — populated when `status='error'`
@@ -13408,7 +13408,30 @@ Schema:
 
 Index `idx_scheduled_tasks_audit_name_status_fired` on `(task_name, status, fired_at DESC)` for operator queries like "show me the last 10 weekend_shutdown fires" or "did any boot reconciliation fail recently".
 
-No production code reads this table — it's operator-only. Bounded growth: 2 timers × ~52 weeks + N PM2 boots/year ≈ low hundreds of rows annually.
+This is no longer operator-only. The cadence-aware fire verifier reads completed rows to decide whether a registered job missed a real calendar occurrence, and Formula Health reads completed `formula_audit_cron` results. At the 2026-11-12 Step-10 read the table held 95,472 rows, 95,021 of them across the six active node-cron jobs; feed integrity and Q-D write every five minutes, so retention and indexes must treat this as a high-cadence production evidence stream rather than low-hundreds annual growth.
+
+## Durable node-cron occurrence recovery (`B-CRON-MISSED-CATCHUP`, `#691`)
+
+The six active node-cron jobs are formula audit, feed integrity, awareness state, awareness reflection, xStock Q-D probe and xStock universe discovery. Each registers a recovery contract in the central cron registry. The natural callback supplies node-cron's true task boundary; an `execution:missed` event is translated to the previous exact calendar match because node-cron 4.2.1 advances its event date before emitting that event. Both sources enter the same per-job FIFO and database advisory-lock lane, together with that job's boot/manual callers, so natural, missed and auxiliary work cannot overlap.
+
+`scheduled_job_occurrences` is the correctness ledger. Its durable identity is unique `(job_name, scheduled_for)` at microsecond precision, and its states are `claimed`, `running`, `succeeded`, `failed`, `skipped` and `indeterminate`. A scheduled core starts only after its identity is claimed; a duplicate reads the existing decision and does not run. A prior-process row that was claimed but never started may resume. A row that reached `running` but has no terminal result becomes `indeterminate` and raises a manual-decision alert, because none of the six complete jobs has an end-to-end idempotency proof after side effects may have begun.
+
+The central recovery policy is version `b-cron-missed-catchup/v1`; maximum executable backlog is one for every job:
+
+| job | latest honest missed run | refusal boundary |
+|---|---|---|
+| formula audit | up to 6 hours late | older work or an older member of a missed burst is recorded, not run |
+| feed integrity | up to 4 minutes late, with more than 30 seconds before the next boundary | current-state checks never stack into the next five-minute check |
+| awareness state | up to 30 minutes late | current-state insert/broadcast work is not replayed after it loses meaning |
+| awareness reflection | up to 1 hour late | reflection update/broadcast work is not repeated as backlog |
+| xStock Q-D probe | up to 30 seconds late and before the next boundary | current snapshots are never written into an old historical bucket |
+| xStock universe discovery | up to 4 hours late and at least 30 minutes before the next regular xStock session | provider sweeps never overlap or launch into the session guard |
+
+Every missed identity receives a durable decision even when refused. Admission failure runs no core. Completed work still appends a success/error row to `scheduled_tasks_audit`, but now `scheduled_for` is the true boundary and `fired_at` is the actual core start; metadata carries source, occurrence id, lag, duration and policy version. Claims and skips remain only in the occurrence ledger, so Formula Health and the verifier cannot mistake them for completed work.
+
+After the exact occurrence reaches `succeeded`, machine actor `cron-recovery` resolves only `cron_stale:<job>:<that boundary>` over engine transport, with the occurrence id, policy version and terminal time as evidence. Failure, skip, indeterminate state, a different job or a different boundary cannot resolve it. `cron_verifier_blind` remains manual-only after a human confirms the history read recovered.
+
+Staging closure is deterministic, not a natural multi-day wait: the operator harness registers side-effect-free synthetic jobs through the real registry, admission, ledger, audit and alert path. The reviewed run reconciled 11/11 identities as 6 succeeded, 3 skipped, 1 failed and 1 indeterminate, wrote seven audit rows only for executed cases and admitted one core call in the natural/missed race. The real six-job source/runtime/boot/boot+5-minute census and subsequent due fires remained healthy.
 
 ## Deploy ordering invariant
 
