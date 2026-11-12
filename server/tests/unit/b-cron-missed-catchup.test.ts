@@ -42,6 +42,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   lockAttempts = 0;
   afterUnlockOnce?: (jobName: string) => Promise<void>;
   beforeDecisionAlertPersistedOnce?: () => Promise<void>;
+  beforeMarkRunningOnce?: () => Promise<void>;
 
   private key(jobName: string, scheduledFor: Date): string {
     return `${jobName}:${scheduledFor.toISOString()}`;
@@ -105,9 +106,34 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   }
 
   async markRunning(id: string, startedAt: Date, attemptId: string, ownerInstanceId: string): Promise<CronOccurrenceRow> {
+    const beforeMarkRunning = this.beforeMarkRunningOnce;
+    this.beforeMarkRunningOnce = undefined;
+    if (beforeMarkRunning) await beforeMarkRunning();
     const row = this.byId(id);
     if (row.status !== 'claimed' || row.startedAt !== null) throw new Error('not claimable');
     Object.assign(row, { status: 'running', startedAt, attemptId, ownerInstanceId });
+    return row;
+  }
+
+  async markAdmissionExpired(
+    id: string,
+    attemptId: string,
+    completedAt: Date,
+    reason: string,
+    metadata = {},
+  ): Promise<CronOccurrenceRow> {
+    const row = this.byId(id);
+    if (row.status !== 'running' || row.startedAt === null || row.attemptId !== attemptId) {
+      throw new Error('admission not expirable');
+    }
+    Object.assign(row, {
+      status: 'skipped',
+      startedAt: null,
+      completedAt,
+      reason,
+      attemptId: null,
+      metadata: { ...row.metadata, ...metadata },
+    });
     return row;
   }
 
@@ -1109,6 +1135,34 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect([...f.store.rows.values()][0]).toMatchObject({
       status: 'skipped',
       metadata: expect.objectContaining({ rechecked_before_start: true, initial_lag_ms: 20_000 }),
+    });
+  });
+
+  it('rechecks missed eligibility after the running transition and refuses a boundary that aged out', async () => {
+    const f = fixture({
+      now: '2026-11-12T12:00:20.000Z',
+      name: 'xstock_qd_probe_cron',
+      policyKey: 'xstock_qd_probe_cron',
+      expression: '* * * * *',
+    });
+    f.store.beforeMarkRunningOnce = async () => {
+      f.setNow('2026-11-12T12:00:40.000Z');
+    };
+
+    const result = await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+
+    expect(result).toMatchObject({ status: 'skipped', reason: 'historical_inputs_unreconstructable' });
+    expect(f.run).not.toHaveBeenCalled();
+    expect([...f.store.rows.values()][0]).toMatchObject({
+      status: 'skipped',
+      startedAt: null,
+      attemptId: null,
+      metadata: expect.objectContaining({
+        rechecked_after_running_transition: true,
+        admission_at: '2026-11-12T12:00:20.000Z',
+        initial_lag_ms: 20_000,
+        final_lag_ms: 40_000,
+      }),
     });
   });
 

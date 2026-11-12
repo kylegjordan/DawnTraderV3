@@ -74,6 +74,13 @@ export interface ClaimOccurrenceInput {
 export interface LockedOccurrenceStore {
   claim(input: ClaimOccurrenceInput): Promise<{ inserted: boolean; row: CronOccurrenceRow }>;
   markRunning(id: string, startedAt: Date, attemptId: string, ownerInstanceId: string): Promise<CronOccurrenceRow>;
+  markAdmissionExpired(
+    id: string,
+    attemptId: string,
+    completedAt: Date,
+    reason: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<CronOccurrenceRow>;
   markSkipped(id: string, completedAt: Date, reason: string, metadata?: Record<string, unknown>): Promise<CronOccurrenceRow>;
   markTerminal(
     id: string,
@@ -201,6 +208,24 @@ class PgLockedOccurrenceStore implements LockedOccurrenceStore {
        RETURNING ${ROW_COLUMNS}
     `, [id, startedAt, attemptId, ownerInstanceId]);
     if (!result.rows[0]) throw new Error(`occurrence ${id} was not claimable`);
+    return mapDbRow(result.rows[0]);
+  }
+
+  async markAdmissionExpired(
+    id: string,
+    attemptId: string,
+    completedAt: Date,
+    reason: string,
+    metadata: Record<string, unknown> = {},
+  ): Promise<CronOccurrenceRow> {
+    const result = await this.client.query<DbOccurrenceRow>(`
+      UPDATE scheduled_job_occurrences
+         SET status = 'skipped', started_at = NULL, completed_at = $3,
+             reason = $4, attempt_id = NULL, metadata = metadata || $5::jsonb
+       WHERE id = $1 AND status = 'running' AND attempt_id = $2 AND started_at IS NOT NULL
+       RETURNING ${ROW_COLUMNS}
+    `, [id, attemptId, completedAt, reason, JSON.stringify(metadata)]);
+    if (!result.rows[0]) throw new Error(`occurrence ${id} could not expire its admission`);
     return mapDbRow(result.rows[0]);
   }
 
@@ -783,10 +808,10 @@ export class CronOccurrenceRunner {
           }
         }
 
-        const firedAt = this.now();
-        const startPolicy = this.evaluatePolicy(job, item, lane, firedAt);
+        const admissionAt = this.now();
+        const startPolicy = this.evaluatePolicy(job, item, lane, admissionAt);
         if (!startPolicy.eligible) {
-          await store.markSkipped(claim.row.id, firedAt, startPolicy.reason, {
+          await store.markSkipped(claim.row.id, admissionAt, startPolicy.reason, {
             rechecked_before_start: true,
             initial_lag_ms: policy.lagMs,
           });
@@ -795,13 +820,38 @@ export class CronOccurrenceRunner {
             scheduledFor: item.scheduledFor,
             status: 'skipped' as const,
             occurrenceId: claim.row.id,
-            completedAt: firedAt,
+            completedAt: admissionAt,
             reason: startPolicy.reason,
           };
         }
         policy = startPolicy;
         const attemptId = this.randomUUID();
-        await store.markRunning(claim.row.id, firedAt, attemptId, this.ownerInstanceId);
+        await store.markRunning(claim.row.id, admissionAt, attemptId, this.ownerInstanceId);
+        const firedAt = this.now();
+        const coreStartPolicy = this.evaluatePolicy(job, item, lane, firedAt);
+        if (!coreStartPolicy.eligible) {
+          await store.markAdmissionExpired(
+            claim.row.id,
+            attemptId,
+            firedAt,
+            coreStartPolicy.reason,
+            {
+              rechecked_after_running_transition: true,
+              admission_at: admissionAt.toISOString(),
+              initial_lag_ms: policy.lagMs,
+              final_lag_ms: coreStartPolicy.lagMs,
+            },
+          );
+          return {
+            jobName: item.jobName,
+            scheduledFor: item.scheduledFor,
+            status: 'skipped' as const,
+            occurrenceId: claim.row.id,
+            completedAt: firedAt,
+            reason: coreStartPolicy.reason,
+          };
+        }
+        policy = coreStartPolicy;
         let status: 'succeeded' | 'failed' = 'succeeded';
         let errorMessage: string | null = null;
         let resultMeta: Record<string, unknown> = {};
