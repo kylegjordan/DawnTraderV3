@@ -5,9 +5,9 @@
 **PRODUCTION-PATH PROOF OBJECT:** `555ef3abe`.
 
 **REVIEW REF:** the dispatch names the exact branch-tip commit on
-`migration/b-cron-missed-catchup-step11-repair-r8-codex`. That ref contains the
-application implementation, the real-Postgres proof-fixture correction, and
-this review package.
+`review/b-cron-missed-catchup-step8-r9-codex`. That exact ref contains the
+current-evidence provenance repair, the expanded real-Postgres fence, and this
+review package.
 
 **One gate:** review the Step-11 repair diff against the approved architecture
 and return `APPROVED` or `SENT BACK` with one consolidated list. Deployment,
@@ -26,7 +26,7 @@ runtime proof, governance re-reconciliation and completion are later gates.
 |---|---|
 | scope | **present** — `Claude Comms and Packages/Scope Files/B_CRON_MISSED_CATCHUP_SCOPE.md`; Step-10 reconciliation exists and will be amended after repair verification |
 | pre-audit | **present** — `Claude Comms and Packages/Scope Files/B_CRON_MISSED_CATCHUP_PRE_AUDIT.md`; Step-10 reconciliation exists and will be amended after repair verification |
-| completion report | **absent by design** — the stale draft was withdrawn when the claim-only reader found real defects; Step 11 will recreate it only after this repair completes Steps 4–10 |
+| completion report | **absent at the review ref by design** — a local draft is withheld after the claim-only reader found the exact-evidence defect; Step 11 will correct and commit it only after this repair completes Steps 4–10 |
 | `BATCH_CATALOG.md` | **present** with the prior Step-10-pending lifecycle record; repair outcome is absent until governance re-reconciliation |
 | `PHASE_HISTORY.md` | **present** with the prior Step-10-pending lifecycle record; repair outcome is absent until governance re-reconciliation |
 | `SYSTEM_MANUAL.md` | **present** with the original recovery architecture; durable retry, one-shot exact alerts and successful-boundary verification are absent until governance re-reconciliation |
@@ -46,8 +46,8 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 ninth repair complete after Coltrane found the pre-boot classification was not behaviorally pinned; return to Step 4 review
-Base runtime: `8550ea83e138d2410665df5aa635b932726712a0`
+Status: Step 3 completion-reader repair complete; return to Step 4 review
+Base deployed runtime: `cd2b794dec63bea0771e32b733263b7ae516e6b8`
 
 ## Why completion stopped
 
@@ -597,6 +597,37 @@ arm remains separately limited to a successful legacy cron row without an
 occurrence identity inside the strict candidate partition. The real-database
 fence now distinguishes twelve states, adding exact legacy-shaped refusal,
 exact non-scheduled refusal, and exact missed-catch-up acceptance.
+
+**BEFORE — exact timestamp bypassed provenance:**
+
+```sql
+AND (
+  successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+  OR (
+    candidates.allow_legacy_window
+    AND successful_boundaries.evidence_source = 'audit'
+    AND successful_boundaries.occurrence_id IS NULL
+    AND successful_boundaries.trigger_source = 'cron'
+  )
+)
+```
+
+**AFTER — exact current proof and legacy proxy are separate arms:**
+
+```sql
+AND (
+  (
+    successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+    AND (
+      successful_boundaries.evidence_source = 'occurrence'
+      OR (successful_boundaries.evidence_source = 'audit'
+          AND successful_boundaries.occurrence_id IS NOT NULL
+          AND successful_boundaries.trigger_source IN ('cron', 'missed_catchup'))
+    )
+  )
+  OR (candidates.allow_legacy_window /* existing strict legacy partition */)
+)
+```
 
 The reader also correctly identified the limit of historical evidence: an
 in-partition pre-ledger row is proxy evidence for one successful callback in
