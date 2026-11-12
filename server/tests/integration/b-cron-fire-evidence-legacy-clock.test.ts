@@ -67,8 +67,11 @@ describe.skipIf(!DB)('B-CRON verifier legacy-clock compatibility on real Postgre
     ] as const) {
       await client.query(
         `INSERT INTO scheduled_job_occurrences
-           (job_name, scheduled_for, first_source, policy_version, status, lag_ms, metadata)
-         VALUES ($1, $2::timestamptz, 'natural', 'test/v1', 'succeeded', 0, '{}'::jsonb)`,
+           (job_name, scheduled_for, first_source, policy_version, status,
+            claimed_at, started_at, completed_at, lag_ms, metadata)
+         VALUES ($1, $2::timestamptz, 'natural', 'test/v1', 'succeeded',
+                 $2::timestamptz, $2::timestamptz,
+                 $2::timestamptz + interval '1 millisecond', 0, '{}'::jsonb)`,
         [job(suffix), timestamp],
       );
     }

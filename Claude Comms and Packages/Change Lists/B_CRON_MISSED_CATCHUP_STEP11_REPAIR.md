@@ -1,10 +1,11 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
-**READY-AT (implementation object):**
-`636937627` on branch
-`migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
-branch-tip commit that carries this review package; it changes documentation
-only and has this implementation object as its parent.
+**APPLICATION IMPLEMENTATION OBJECT:** `636937627`.
+
+**REVIEW REF:** the dispatch names the exact branch-tip commit on
+`migration/b-cron-missed-catchup-step11-repair-r8-codex`. That ref contains the
+application implementation, the real-Postgres proof-fixture correction, and
+this review package.
 
 **One gate:** review the Step-11 repair diff against the approved architecture
 and return `APPROVED` or `SENT BACK` with one consolidated list. Deployment,
