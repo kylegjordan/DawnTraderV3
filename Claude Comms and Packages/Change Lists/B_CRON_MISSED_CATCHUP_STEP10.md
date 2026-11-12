@@ -59,3 +59,53 @@ CHANGE-CLASS: architecture
 ## Step 11 handoff
 
 Create the completion report by transcribing this ledger from the Step-10 commit, change the plan/catalog/history/issue/task-list records from Step-10-pending to closed, obtain Coltrane's exact-ref confirmation, move the card to Complete, and preserve every separate alert/window wait.
+
+## Step-11 repair governance reconciliation
+
+The Step-11 close read reopened OBJ-6 because pre-ledger callback-start rows
+were not readable under exact-only verification. Repair runtime
+`cd2b794dec63bea0771e32b733263b7ae516e6b8` now applies a strict pre-boot
+legacy partition only in the evidence reader; current writers and durable
+occurrences retain exact scheduled identity. Coltrane returned PROCEED at
+corrected evidence ref `3a2097653165c240d80644886a7a1ef80a09426c`, and
+Step 9 re-evaluated all seven objectives as green.
+
+CHANGE-CLASS: architecture
+
+| # | document | verdict | one-line reason |
+|---|---|---|---|
+| T1 | `BATCH_CATALOG.md` | ✅ | Replaced the pending original runtime record with the deployed legacy-clock repair, corrected evidence and Step-11 boundary. |
+| T1 | `PHASE_HISTORY.md` | ✅ | Added the strict candidate-before-boot compatibility rule and independently verified repair outcome to the dated lifecycle record. |
+| T1 | active `SPRINT_TO_LIVE_PLAN.md` row | ✅ | Advanced pre-sprint Stage 3 order 7 to Step 10 repair complete with the deployed and evidence refs. |
+| T1 | `PHASE_19_PLAN.md` | N/A | This non-`P19-*` batch has no row there. |
+| T1 | shared `MEMORY.md` + `MEMORY_CC_C.md` | ✅ | Replaced the original runtime invariant with the strict legacy/current split and advanced Analyst position to Step 11. |
+| T1 | batch `SCOPE` | ✅ | Reconciled the reopened OBJ-6 legacy-readability arm, repair boundary and no-window result. |
+| T1 | batch `PRE_AUDIT` | ✅ | Reconciled P6 to the strict candidate-before-boot compatibility design, mutation proof and live outcome. |
+| T1 | `COMPLETION_REPORT` | ✅ | Step 11 creates the final report by transcribing this repair ledger from the governance commit. |
+| T1 | `Observation` column | N/A | The scope still closes through deterministic exact-ref proof and explicitly requires no natural observation window. |
+| T1 | four session task lists | ✅ mine / N/A ×3 | Updated `CC_C_SESSION_TASK_LIST.md`; the OLD, NEW and INFRA lists are not mine. |
+| T1 | Langston `/home/langston/MEMORY.md` | ✅ | Replaced the prior recovery line with the candidate-before-boot compatibility invariant; loaded set fell 142,983 → 142,959 bytes. |
+| T2 | `SYSTEM_MANUAL.md` | ✅ | Added the legacy eligibility predicates, strict calendar partition and independent initial/locked-read rule. |
+| T2 | `SYSTEM_IMPACT_MAP.md` | ✅ | Added the legacy-clock repair component boundary while preserving exact current occurrence identity. |
+| T2 | `RUNNING_ISSUES.md` | ✅ | Recorded the Step-11 compatibility defect, deployed repair, evidence and unchanged Step-11 close condition for `#691`. |
+| T2 | `CHANGES_AND_FIXES.md` | ✅ | Added the false-stale legacy symptom, narrow compatibility repair and independent reproduction. |
+| T2 | `POST_AUDIT_ROADMAP.md` | N/A | The repair changes no phase-level roadmap item or sequence. |
+| T2 | `ADJUSTMENT_FRAMEWORK.md` | N/A | The repair changes no strategy, regime, filter or calibration parameter. |
+| T2 | `AUTHORITY_BASELINE.md` | N/A | The repair changes no constitutional authority or decision boundary. |
+| T2 | `STORAGE_POLICY.md` | N/A | The repair changes only evidence classification and no table tier, retention or deletion policy. |
+| T2 | `MULTI_ASSET_VTS_EXPANSION_PLAN.md` | ✅ | Re-reviewed the 15-minute working list and recorded that the repair changes no status, epoch or calibration input. |
+| T2 | `ASSET_CLASS_ONBOARDING_WORKFLOW.md` | N/A | The repair introduces no asset-class onboarding learning or new class. |
+| T2 | `BUILD_METHOD_PLAYBOOK.md` | N/A | The repair changes no project role, review gate or build method. |
+| T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The repair changes no reviewer model, runtime, invocation, read path or reviewer file. |
+| T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | The repair changes no stable crew rule. |
+| T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | `CLAUDE.md` was not changed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | The repair diff deletes zero components or tracked paths. |
+| T2 | `MISTAKE_PATTERNS.md` | N/A | No `MISTAKE:` trailer was written and no weekly pass ran. |
+| T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | Kyle granted no exception to a governed rule for this repair. |
+| T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | The repair uses the existing evidence-bound resolve process without changing it. |
+| T2 | `DELIVERY_BOARD_PROTOCOL.md` | N/A | Existing board columns and ownership are unchanged; only the batch card moved to Governance. |
+| T2 | `CLAUDE_CODE_FEATURE_WATCH.md` | N/A | The daily model and feature check did not run in this repair. |
+
+Step 11 must create the completion report from this exact ledger, close every
+pending lifecycle record, obtain Coltrane's exact-ref confirmation, move the
+card to Complete and preserve every separate alert/window wait.
