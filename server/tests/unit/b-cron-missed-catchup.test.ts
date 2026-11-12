@@ -459,6 +459,16 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
 });
 
 describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
+  it('registers the forward migration and keeps the rollback out of the manifest', () => {
+    const manifest = readFileSync(resolve('drizzle/migrations/MANIFEST.txt'), 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
+    expect(manifest).toContain('2026-11-12-b-cron-missed-catchup.sql');
+    expect(manifest).not.toContain('2026-11-12-b-cron-missed-catchup-rollback.sql');
+    expect(new Set(manifest).size).toBe(manifest.length);
+  });
+
   it('pins node-cron 4.2.1 advancing the date before emitting a missed execution', () => {
     const packageJson = JSON.parse(readFileSync(resolve('node_modules/node-cron/package.json'), 'utf8')) as { version: string };
     const source = readFileSync(resolve('node_modules/node-cron/dist/cjs/scheduler/runner.js'), 'utf8');
