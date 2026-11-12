@@ -2,6 +2,8 @@
 
 **APPLICATION IMPLEMENTATION OBJECT:** `636937627`.
 
+**PRODUCTION-PATH PROOF OBJECT:** `555ef3abe`.
+
 **REVIEW REF:** the dispatch names the exact branch-tip commit on
 `migration/b-cron-missed-catchup-step11-repair-r8-codex`. That ref contains the
 application implementation, the real-Postgres proof-fixture correction, and
@@ -44,7 +46,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 eighth repair complete after staging exposed false stale alerts on legacy callback-time evidence; return to Step 4 review
+Status: Step 3 ninth repair complete after Coltrane found the pre-boot classification was not behaviorally pinned; return to Step 4 review
 Base runtime: `8550ea83e138d2410665df5aa635b932726712a0`
 
 ## Why completion stopped
@@ -417,10 +419,32 @@ The new real-Postgres integration fence distinguishes nine states: legacy
 inside-window, exactly-next-boundary, non-cron, error, legacy-disabled, current
 exact/nonexact and durable exact/later. It is registered to run against the
 migrated CI database; the local run skipped honestly because no test database
-was reachable. Six focused unit files passed 120/120, the TypeScript gate is
+was reachable. Six focused unit files passed 123/123, the TypeScript gate is
 324 current / 324 baseline, and the production build passed.
 
 `REVIEWER: claim-only · asked which objects settle the legacy-clock compatibility claim and what other states remain consistent · identified callback delay, historical schedule drift, alternate writers and ambiguous legacy identity; the repair was narrowed to pre-boot cron rows inside a strict half-open calendar partition and re-derived against the full live population · re-derived y`
+
+### 8. MODIFIED — the process-start classification is behaviorally pinned
+
+Coltrane's R8 review found that the SQL integration fence supplied
+`allowLegacyWindow` directly, while the unit fence only counted the two source
+comparisons. Reversing both production comparisons could therefore satisfy
+every submitted assertion while rejecting the pre-boot legacy rows and
+admitting post-boot legacy-shaped rows.
+
+The production-path unit fixture now derives its candidate result from the
+actual boolean embedded by `runVerification`. It proves three distinct paths:
+pre-boot legacy evidence succeeds in the initial read; a stale initial read is
+recovered by pre-boot legacy evidence in the locked recheck; and post-boot
+legacy-shaped evidence is rejected by both reads and mints the exact stale key.
+The controls also assert the initial/locked query counts and the boolean passed
+to each query, so one read cannot silently cover for the other.
+
+Mutation proof reversed both process-start comparisons from `<` to `>`. All
+three new behavioral controls failed in the required opposite directions; the
+initial and locked pre-boot cases became stale, while the post-boot case became
+healthy. Restoring the production comparison returned the verifier file to
+24/24 and the six focused files to 123/123.
 
 ## Judgement calls to attack
 
@@ -449,3 +473,5 @@ was reachable. Six focused unit files passed 120/120, the TypeScript gate is
 8. Does the legacy compatibility arm preserve the approved readable-history
    objective without letting an exactly-next-boundary row, a non-cron/error row,
    a current nonexact row or any post-boot legacy-shaped row certify a candidate?
+9. Can either production process-start comparison be inverted or bypassed
+   without making the initial-read and locked-recheck behavioral controls fail?
