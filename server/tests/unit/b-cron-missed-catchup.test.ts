@@ -186,6 +186,26 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
     return row;
   }
 
+  async loadPendingStaleResolves(jobName: string): Promise<CronOccurrenceRow[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.jobName === jobName
+        && row.status === 'succeeded'
+        && row.metadata.stale_resolve_pending === true)
+      .sort((left, right) => left.scheduledFor.getTime() - right.scheduledFor.getTime());
+  }
+
+  async markStaleResolvePersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+    const row = this.byId(id);
+    if (row.status !== 'succeeded' || row.metadata.stale_resolve_pending !== true) {
+      throw new Error(`occurrence ${id} has no pending stale resolve`);
+    }
+    const metadata = { ...row.metadata };
+    delete metadata.stale_resolve_pending;
+    metadata.stale_resolve_persisted_at = persistedAt.toISOString();
+    row.metadata = metadata;
+    return row;
+  }
+
   async loadClaimed(jobName: string): Promise<CronOccurrenceRow[]> {
     return [...this.rows.values()]
       .filter((row) => row.jobName === jobName && row.status === 'claimed' && row.startedAt === null)
@@ -245,13 +265,15 @@ function fixture(options: {
   let uuid = 1;
   const writeFireRow = vi.fn(async () => undefined);
   const addAlert = vi.fn(async () => null);
-  const resolveByKey = vi.fn(async () => [] as string[]);
+  const resolveByKey = vi.fn(async () => ['resolved-alert-id'] as string[]);
+  const hasResolvedByKey = vi.fn(() => false);
   const deps: CronOccurrenceRunnerDeps = {
     store,
     getJob: (jobName) => jobs.get(jobName),
     writeFireRow: writeFireRow as CronOccurrenceRunnerDeps['writeFireRow'],
     addAlert: addAlert as unknown as CronOccurrenceRunnerDeps['addAlert'],
     resolveByKey: resolveByKey as CronOccurrenceRunnerDeps['resolveByKey'],
+    hasResolvedByKey,
     now: () => new Date(now),
     randomUUID: () => UUID(uuid++),
     sleep: options.sleep ?? (async () => new Promise<void>((resolveSleep) => setTimeout(resolveSleep, 0))),
@@ -265,6 +287,7 @@ function fixture(options: {
     writeFireRow,
     addAlert,
     resolveByKey,
+    hasResolvedByKey,
     setNow: (value: string) => { now = new Date(value); },
   };
 }
@@ -416,7 +439,7 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
   it('resolves only the exact successful occurrence with actor, transport and terminal evidence', async () => {
     const f = fixture();
     const boundary = new Date('2026-11-12T12:01:00.000Z');
-    const result = await f.runner.runNatural(f.job.name, boundary);
+    const result = await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
     expect(f.resolveByKey).toHaveBeenCalledWith(
       `cron_stale:${f.job.name}:${boundary.toISOString()}`,
       CRON_RECOVERY_ACTOR,
@@ -913,9 +936,71 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
   it('keeps durable success when exact stale-alert resolution is temporarily unavailable', async () => {
     const f = fixture();
     f.resolveByKey.mockRejectedValueOnce(new Error('alert store unavailable'));
-    const result = await f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    const result = await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
     expect(result.status).toBe('succeeded');
-    expect([...f.store.rows.values()][0].status).toBe('succeeded');
+    expect([...f.store.rows.values()][0]).toMatchObject({
+      status: 'succeeded',
+      metadata: expect.objectContaining({ stale_resolve_pending: true }),
+    });
+
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', async () => 'retried')).resolves.toBe('retried');
+    expect(f.resolveByKey).toHaveBeenLastCalledWith(
+      `cron_stale:${f.job.name}:${boundary.toISOString()}`,
+      CRON_RECOVERY_ACTOR,
+      expect.stringContaining(`cron occurrence ${result.occurrenceId}`),
+      'engine',
+    );
+    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
+  });
+
+  it('keeps the durable resolver marker when the exact stale alert has not been minted yet', async () => {
+    const f = fixture();
+    f.resolveByKey.mockResolvedValueOnce([]);
+    const boundary = new Date('2026-11-12T12:01:00.000Z');
+    await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
+    expect([...f.store.rows.values()][0].metadata).toMatchObject({ stale_resolve_pending: true });
+
+    await f.runner.runAuxiliary(f.job.name, 'manual', async () => undefined);
+    expect(f.resolveByKey).toHaveBeenCalledTimes(2);
+    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
+  });
+
+  it('clears a retry marker when the exact row was already resolved before the marker write recovered', async () => {
+    const f = fixture();
+    f.resolveByKey.mockResolvedValue([]);
+    f.hasResolvedByKey.mockReturnValue(true);
+
+    await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:02:00.000Z'));
+
+    expect(f.resolveByKey).toHaveBeenCalledTimes(1);
+    expect(f.hasResolvedByKey).toHaveBeenCalledWith(
+      `cron_stale:${f.job.name}:2026-11-12T12:01:00.000Z`,
+    );
+    expect([...f.store.rows.values()][0].metadata).not.toHaveProperty('stale_resolve_pending');
+  });
+
+  it('rechecks missed eligibility after pre-run work and refuses a boundary that aged out', async () => {
+    let advanceClock = () => {};
+    const beforeRun = vi.fn(async () => { advanceClock(); });
+    const f = fixture({
+      now: '2026-11-12T12:00:20.000Z',
+      name: 'xstock_qd_probe_cron',
+      policyKey: 'xstock_qd_probe_cron',
+      expression: '* * * * *',
+      beforeRun,
+    });
+    advanceClock = () => f.setNow('2026-11-12T12:00:40.000Z');
+
+    const result = await f.runner.runMissed(f.job.name, new Date('2026-11-12T12:01:00.000Z'));
+
+    expect(beforeRun).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ status: 'skipped', reason: 'historical_inputs_unreconstructable' });
+    expect(f.run).not.toHaveBeenCalled();
+    expect([...f.store.rows.values()][0]).toMatchObject({
+      status: 'skipped',
+      metadata: expect.objectContaining({ rechecked_before_start: true, initial_lag_ms: 20_000 }),
+    });
   });
 
   it.each([
@@ -1002,6 +1087,12 @@ describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
     const emit = source.indexOf('runAsync(this.onMissedExecution, expectedNextExecution');
     expect(advance).toBeGreaterThan(-1);
     expect(emit).toBeGreaterThan(advance);
+  });
+
+  it('keeps the Q-D business clock on actual start while retaining the scheduled occurrence identity', () => {
+    const source = readFileSync(resolve('server/services/xstock-qd-probe-cron.ts'), 'utf8');
+    expect(source).toMatch(/runQdProbeOnce\(context\.firedAt, config\)/);
+    expect(source).not.toMatch(/runQdProbeOnce\(context\.scheduledFor, config\)/);
   });
 
   it('finds exactly six dormant production schedules, each reconciled before start', () => {
