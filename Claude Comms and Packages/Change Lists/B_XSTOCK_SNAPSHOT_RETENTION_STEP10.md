@@ -43,7 +43,7 @@ CHANGE-CLASS: architecture
 | T2 | `LANGSTON_ARCHITECTURE.md` | N/A | The reviewer runtime, invocation and read path are unchanged. |
 | T2 | `CLAUDE.md` / `CONDUCT.md` | N/A | No stable crew rule changed. |
 | T2 | `_archive/CLAUDE_MD_RULE_HISTORY.md` | N/A | `CLAUDE.md` was not changed. |
-| T2 | `DELETED_COMPONENTS_LOG.md` | N/A | No component was removed. |
+| T2 | `DELETED_COMPONENTS_LOG.md` | ✅ | Recorded the retired age-reclaimed/unlinked O_EXCL sweep lock and its checked-in kernel-lock replacement; this ledger omission was found and filled during Step 11. |
 | T2 | `MISTAKE_PATTERNS.md` | N/A | No `MISTAKE:` trailer was written and no weekly pass ran. |
 | T2 | `GOVERNANCE_EXCEPTIONS.md` | N/A | Kyle granted no exception to a governed rule. |
 | T2 | `ALERT_HANDLING_PROTOCOL.md` | N/A | Alert acknowledgement and resolution semantics are unchanged; separate waits remain open. |

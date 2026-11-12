@@ -1597,3 +1597,14 @@ Archive: git history is authoritative (this is a field-retirement within live fi
 **RESTORE PATH:** re-add the function and the two imports from git history at `382c1793f` — but a restored reader is false-fresh on every replay burst; restore only with the frame-type discriminator (`#1222` OBJ-6).
 **ARCHIVE:** none — a 10-line private function, recoverable from git at `382c1793f`; no file was removed.
 **COMMIT:** the increment-0 commit on `review/b-price-feed-coverage-inc0`. **DEPLOY:** after Langston's Step 4, landing byte-identical, CI 4/4 per job, after alert `801330ae` (2026-11-09 21:30Z).
+
+## 2026-11-12 — the age-reclaimed B75 sweep lock — B-XSTOCK-SNAPSHOT-RETENTION (`#1194`), CC-C / ANALYST Codex
+| removed | where (pre-removal, at `10ca27351^`) | what it was |
+|---|---|---|
+| `SWEEP_LOCK_FILE`, `SWEEP_LOCK_STALE_MS`, `acquireSweepLock`, `releaseSweepLock`, `SweepLockDependencies`, and `runWithSweepLock` | `server/scripts/b75-retention-sweep.ts` | An in-process O_EXCL file lock that treated an inode older than six hours as abandoned, unlinked it, and unlinked the path again on release. A live run crossing that age could overlap a successor, and the old owner could later delete the successor's lock path. |
+
+**WHY:** the archive/delete owner must be single-process even when a pass is slow or crashes. Commit `10ca27351` replaced the age/reclaim/release implementation with the checked-in `b75-retention-run.sh`: one stable inode, one inherited kernel `flock`, no unlink or age reclaim, automatic release when the owning process tree exits, and direct unmarked TypeScript invocation refused.
+
+**BLAST RADIUS / LIVE PROOF:** the removing diff deleted the complete in-process lock surface and routed the CLI through the launcher marker; the launcher is the sole supported cron/manual entry. At the Step-11 live read, the root schedule still called the refused direct TypeScript command, so that one line was corrected and read back to the launcher. A harmless private-lock fixture through the deployed launcher (`fbbe0b5e4`, repository and build stamp equal) aged a live lock seven hours; cron-shaped and manual-shaped contenders both refused; killing the holder admitted exactly one of two simultaneous successors; a third contender refused while that successor held the inode. The private fixture was removed in the same command. Source/process tests preserve the same three arms.
+
+**ARCHIVE:** no separate `.removed` file — the deleted lock surface is recoverable from git at `10ca27351^`; restoring it would restore the proven overlap/unlink race.
