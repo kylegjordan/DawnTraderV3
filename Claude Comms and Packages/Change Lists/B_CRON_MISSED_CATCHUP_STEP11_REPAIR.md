@@ -1,8 +1,8 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`52f176e5fa7435b1c740acc8ff776395023faaac` on branch
-`migration/b-cron-missed-catchup-step3-r3-codex`. The dispatch names the later
+`4956ea1f4b0551a33d09a3c8532a7ed6c455727b` on branch
+`migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
 
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 third repair complete after the required fresh reader found a split-store provenance gap; return to Step 4 review
+Status: Step 3 fourth repair complete after Coltrane found that the verifier inherited a permanently stopped execution lane; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -85,9 +85,10 @@ was allowed to leave the draft stage.
 ## Verification at the repair boundary
 
 - Focused runner, alert-store, verifier and Formula Health suites: 4 files,
-  97 tests passed, including retry, natural-success cleanup, empty-resolve
+  99 tests passed, including retry, natural-success cleanup, empty-resolve
   termination, split-store provenance retry, contradictory-state refusal,
-  separate-runner lock ordering and fallback recurrence branches.
+  separate-runner lock ordering, fail-once verifier recovery, stopped-lane
+  independence and fallback recurrence branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
@@ -112,11 +113,23 @@ will be stated as a proof limit rather than represented as covered.
 The reader record identifies the challenge; every defect and repair above was
 independently re-derived from the code before implementation.
 
+## Step-4 review history carried into this request
+
+Coltrane sent the third repair back at exact implementation
+`52f176e5fa7435b1c740acc8ff776395023faaac` with one blocker. The verifier's
+locked recheck used the execution lane's `runAuxiliary` path. A transient
+lock/session failure permanently stops that lane, so every later verifier pass
+could be rejected by the stopped-lane guard and then collapsed to a false
+`{ ok: true, stale: [] }`. This repair keeps the shared advisory-lock race
+closure but gives verifier work a retryable path that does not read or mutate
+the stopped execution-lane state. A failed pass is returned as explicit
+`locked_recheck_fail` blindness, and the next pass retries the lock normally.
+
 ## Repair change-set census
 
 Across the repair range from the parent of
-`21b23b4abaa84ef74f0f7381b93f52b0a092d1d6` through implementation object
-`52f176e5fa7435b1c740acc8ff776395023faaac`, exactly ten tracked paths changed:
+`49de4df1d3bb506fc6beb3c25894649beb53b5f3` through implementation object
+`4956ea1f4b0551a33d09a3c8532a7ed6c455727b`, exactly ten tracked paths changed:
 one new repair record and nine modified paths; zero tracked paths were deleted.
 `.claude/launch.json` remains an unrelated untracked file and is not in the
 review ref.
@@ -193,7 +206,7 @@ The verifier performs its final history recheck and alert mint in the runner's
 cross-process job lock. Only a parsed calendar boundary is marked one-shot:
 
 ```ts
-await cronOccurrenceRunner.runAuxiliary(job.name, 'on-read', async () => {
+await cronOccurrenceRunner.runVerifierLocked(job.name, async () => {
   const lockedRead = await queryLastFires([job.name]);
   // re-evaluate under the lock, then mint only if the boundary is still stale
   await emitStaleAlert(/* exact occurrence */, true);
@@ -264,6 +277,30 @@ await runQdProbeOnce(context.firedAt, config);
 The occurrence ledger and fire audit still receive `scheduledFor`; Q-D uses
 `firedAt` only for its current snapshots, market state, freshness and bucket.
 
+### 5. MODIFIED — verifier lock retry is independent of execution-lane stop
+
+The verifier still uses the occurrence store's per-job advisory lock, so it
+cannot mint while a natural or catch-up core owns that lock. It no longer enters
+the in-process execution FIFO or reads `stoppedLanes`. A lock/session failure
+rejects only that verifier pass; contention retries, and a later pass can obtain
+a fresh pooled session. The report distinguishes blindness from health:
+
+```ts
+const outcome = await cronOccurrenceRunner.runVerifierLocked(job.name, async () => {
+  // final history read and exact alert mint under the shared advisory lock
+});
+if (outcome === 'blind') blind.push(job.name);
+
+if (blind.length > 0) {
+  return { ok: false, stale, skipped: 'locked_recheck_fail', blind };
+}
+```
+
+The fail-once control first receives that explicit blind report, then restores
+the lock session and proves the next pass mints the exact stale alert. The
+runner control also proves its own lock failure is retryable and that a
+separately stopped execution lane does not block later verifier locking.
+
 ## Judgement calls to attack
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
@@ -282,3 +319,6 @@ The occurrence ledger and fire audit still receive `scheduledFor`; Q-D uses
    and database uniqueness proof an honest sufficient scope close while the
    operating-system-process/mid-core-lock-loss behavior remains explicitly
    unclaimed?
+7. Can a verifier lock/session failure still poison later passes or be reported
+   as healthy, and does bypassing the stopped execution lane preserve the same
+   cross-process advisory-lock exclusion against core execution?
