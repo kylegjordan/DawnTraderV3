@@ -1,7 +1,7 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`e716c815b4e64e99510ae06c02ea205cb4be4187` on branch
+`e505f76a595b6d2dbba72334fd098355f6f0db4b` on branch
 `migration/b-cron-missed-catchup-step3-r4-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 sixth repair complete after Coltrane found that sub-grace schedules were permanently unjudgeable; return to Step 4 review
+Status: Step 3 seventh repair complete after Coltrane found that a later success could hide an earlier missed mature boundary; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -70,12 +70,12 @@ was allowed to leave the draft stage.
    durable retry carrier instead of recording a false terminal outcome.
 2. **The verifier could certify the wrong evidence.** It used the latest start
    time without requiring success, so an error or an older boundary starting
-   late could make a missed boundary appear healthy. It now reads only the
-   latest successful scheduled boundary across the audit stream and occurrence
-   ledger. Its ten-minute latency grace now selects the newest calendar
-   boundary whose evidence window has elapsed. This keeps five-minute jobs
-   judgeable and requires evidence at that mature boundary or later; grace is
-   never subtracted from the evidence floor.
+   late could make a missed boundary appear healthy. Its ten-minute latency
+   grace now selects the newest calendar boundary whose evidence window has
+   elapsed. The audit and occurrence stores are queried for success at that
+   exact immutable identity in both the initial read and locked recheck; neither
+   an older nor a later success can certify the missed boundary. The latest
+   successful boundary is retained only for diagnostics and interval fallback.
 3. **Eligibility could expire before core work began.** The catch-up policy was
    decided before lock wait and pre-run work, and an earlier repair still left
    one awaited durable transition after its final check. It is now decided
@@ -95,12 +95,12 @@ was allowed to leave the draft stage.
   termination, split-store provenance retry, contradictory-state refusal,
   separate-runner lock ordering, fail-once verifier recovery, stopped-lane
   independence, delayed-running-transition expiry, mature five-minute
-  boundaries and fallback recurrence branches.
+  boundaries, later-success refusal and fallback recurrence branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
-  start-time expiry, successful-boundary filtering, both five-minute production
-  schedules and the Q-D clock split.
+  start-time expiry, exact successful-boundary identity, both five-minute
+  production schedules and the Q-D clock split.
 - `git diff --check`: clean.
 
 ## Honest residual carried forward
@@ -150,15 +150,23 @@ was inside the ten-minute latency grace. A job running every five minutes could
 therefore never reach an evidence judgement, and subtracting grace from the
 evidence floor could also let the prior five-minute success certify a missed
 boundary. The sixth repair selects the newest occurrence at or before the
-grace cutoff and requires successful scheduled-boundary evidence at that exact
-mature boundary or later. Red/green controls cover both five-minute production
-jobs and the prior every-minute grace-blind case.
+grace cutoff and prevents an older boundary from certifying it. Red/green
+controls cover both five-minute production jobs and the prior every-minute
+grace-blind case.
+
+Coltrane sent the sixth repair back at exact implementation
+`e716c815b4e64e99510ae06c02ea205cb4be4187` with one blocker. Because the query
+retained only `MAX(scheduled_for)` and accepted that value at or after the mature
+boundary, an ordinary 14:55 success could hide a missing 14:50 occurrence. The
+seventh repair queries exact candidate-boundary existence in both the initial
+and locked reads. For both five-minute production jobs, a present 14:55 with an
+absent 14:50 now mints the 14:50 alert; exact 14:50 success is healthy.
 
 ## Repair change-set census
 
 Across the repair range from the parent of
 `49de4df1d3bb506fc6beb3c25894649beb53b5f3` through implementation object
-`e716c815b4e64e99510ae06c02ea205cb4be4187`, exactly ten tracked paths changed:
+`e505f76a595b6d2dbba72334fd098355f6f0db4b`, exactly ten tracked paths changed:
 one new repair record and nine modified paths; zero tracked paths were deleted.
 `.claude/launch.json` remains an unrelated untracked file and is not in the
 review ref.
@@ -244,7 +252,7 @@ await cronOccurrenceRunner.runVerifierLocked(job.name, async () => {
 await emitStaleAlert(/* interval fallback */, false);
 ```
 
-### 2. MODIFIED — verifier health requires a successful scheduled boundary
+### 2. MODIFIED — verifier health requires the exact successful identity
 
 Before:
 
@@ -257,15 +265,24 @@ GROUP BY task_name
 After:
 
 ```sql
-SELECT task_name, MAX(scheduled_for) AS last_scheduled_for
-FROM (
+WITH candidates(task_name, candidate_scheduled_for) AS (
+  VALUES ('feed_integrity_cron', '2026-06-02T14:50:00Z'::timestamptz)
+), successful_boundaries AS (
   SELECT task_name, scheduled_for FROM scheduled_tasks_audit
    WHERE status = 'success'
   UNION ALL
   SELECT job_name AS task_name, scheduled_for FROM scheduled_job_occurrences
    WHERE status = 'succeeded'
-) successful_boundaries
-GROUP BY task_name
+)
+SELECT candidates.task_name,
+       MAX(successful_boundaries.scheduled_for) AS last_scheduled_for,
+       COALESCE(BOOL_OR(
+         successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+       ), false) AS candidate_succeeded
+FROM candidates
+LEFT JOIN successful_boundaries
+  ON successful_boundaries.task_name = candidates.task_name
+GROUP BY candidates.task_name, candidates.candidate_scheduled_for
 ```
 
 ### 3. MODIFIED — eligibility is rechecked after durable admission
@@ -344,14 +361,15 @@ the lock session and proves the next pass mints the exact stale alert. The
 runner control also proves its own lock failure is retryable and that a
 separately stopped execution lane does not block later verifier locking.
 
-### 6. MODIFIED — latency grace advances to a mature boundary
+### 6. MODIFIED — mature boundaries require exact evidence
 
 Before, the verifier always selected the occurrence immediately before `now`
 and skipped it if it was less than ten minutes old. Every five-minute job was
 therefore permanently inside grace. It also subtracted grace from the evidence
-floor, which admitted the prior five-minute success. Now both the candidate
-read and locked recheck select the newest boundary whose evidence window has
-elapsed, and evidence must be at that boundary or later:
+floor, which admitted the prior five-minute success. A second repair still
+accepted any later success. Now both the candidate read and locked recheck
+select the newest boundary whose evidence window has elapsed and query whether
+that exact immutable identity succeeded:
 
 ```ts
 const matureOccurrence = computePrevFire(
@@ -360,14 +378,13 @@ const matureOccurrence = computePrevFire(
   new Date(now - FIRE_LATENCY_GRACE_MS + 1),
 );
 
-const isStale = lastSuccessfulBoundary === null
-  || lastSuccessfulBoundary.getTime() < matureOccurrence.getTime();
+const isStale = !evidence.candidateSucceeded;
 ```
 
 For feed integrity and Q-D at 15:00, the mature five-minute boundary is 14:50.
-A 14:45 success now alerts on 14:50; a 14:50 success is healthy. The same
-calendar selection and exact evidence floor are repeated under the shared job
-lock before minting.
+A 14:45 success and a later 14:55 success both leave 14:50 stale; only exact
+14:50 success is healthy. The same calendar selection and exact-identity query
+are repeated under the shared job lock before minting.
 
 ## Judgement calls to attack
 
@@ -380,7 +397,7 @@ lock before minting.
 3. Does the successful-boundary union reject error rows and late starts while
    retaining truth when the failure-safe audit write is missing, and does the
    mature-boundary grace remain judgeable for every cadence shorter than ten
-   minutes without accepting the prior boundary?
+   minutes without accepting either a prior or later boundary?
 4. Can lock wait, pre-run work or the durable running transition still let a
    catch-up enter core after its age/session guard has expired, and is the
    post-admission expiry record truthful and schema-valid?
