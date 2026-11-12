@@ -294,12 +294,24 @@ export class PgOccurrenceStore implements OccurrenceStore {
       const value = await run(new PgLockedOccurrenceStore(client));
       return { acquired: true, value };
     } finally {
+      let releaseFailure: Error | undefined;
       if (acquired) {
         try {
-          await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lockKey]);
+          const unlock = await client.query<{ released: boolean }>(
+            'SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS released',
+            [lockKey],
+          );
+          if (unlock.rows[0]?.released !== true) {
+            throw new Error('advisory unlock returned false');
+          }
         } catch (err) {
           console.error(`[CRON-RECOVERY][ADVISORY_UNLOCK_FAIL] job=${jobName}:`, err);
+          releaseFailure = err instanceof Error ? err : new Error(String(err));
         }
+      }
+      if (releaseFailure) {
+        client.release(releaseFailure);
+        throw releaseFailure;
       }
       client.release();
     }
@@ -569,7 +581,6 @@ export class CronOccurrenceRunner {
     }
     const recovery = job.recovery;
     let contentionAttempt = 0;
-    let contendedUnfinishedIdentity = false;
     let result: CronOccurrenceResult;
     while (true) {
       this.assertLaneRunning(item.jobName);
@@ -595,7 +606,6 @@ export class CronOccurrenceRunner {
         if (
           !claim.inserted
           && claim.row.status === 'running'
-          && contendedUnfinishedIdentity
           && claim.row.ownerInstanceId !== this.ownerInstanceId
         ) {
           const abandoned = await store.markIndeterminate(
@@ -615,7 +625,7 @@ export class CronOccurrenceRunner {
         }
 
         const resumeClaimed = claim.row.status === 'claimed'
-          && (item.resumeClaimed || contendedUnfinishedIdentity);
+          && (item.resumeClaimed || claim.row.ownerInstanceId !== this.ownerInstanceId);
         if (!claim.inserted && !resumeClaimed) {
           return {
             jobName: item.jobName,
@@ -762,9 +772,7 @@ export class CronOccurrenceRunner {
       try {
         const existing = await this.deps.store.find(item.jobName, item.scheduledFor);
         if (existing) {
-          if (existing.status === 'claimed' || existing.status === 'running') {
-            contendedUnfinishedIdentity = true;
-          } else {
+          if (existing.status !== 'claimed' && existing.status !== 'running') {
             result = {
               jobName: item.jobName,
               scheduledFor: item.scheduledFor,

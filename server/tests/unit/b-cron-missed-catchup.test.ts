@@ -7,10 +7,12 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScheduledTask } from 'node-cron';
+import { pool } from '../../db.js';
 import {
   CRON_RECOVERY_ACTOR,
   CRON_RECOVERY_POLICY_VERSION,
   CronOccurrenceRunner,
+  PgOccurrenceStore,
   type ClaimOccurrenceInput,
   type CronOccurrenceRow,
   type CronOccurrenceRunnerDeps,
@@ -33,6 +35,7 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   failClaim = false;
   failTerminal = false;
   failLockSession = false;
+  failUnlock = false;
   refuseLock = false;
   refuseLockAttempts = 0;
   lockAttempts = 0;
@@ -60,7 +63,9 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
     }
     this.locks.add(jobName);
     try {
-      return { acquired: true, value: await run(this) };
+      const value = await run(this);
+      if (this.failUnlock) throw new Error('advisory unlock unavailable');
+      return { acquired: true, value };
     } finally {
       this.locks.delete(jobName);
     }
@@ -533,6 +538,21 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     expect(f.run).not.toHaveBeenCalled();
   });
 
+  it('stops the lane when auxiliary work completes but advisory release fails', async () => {
+    const f = fixture();
+    const auxiliaryRun = vi.fn(async () => 'callback-completed');
+    await f.runner.prepareJob(f.job.name);
+    f.store.failUnlock = true;
+
+    await expect(f.runner.runAuxiliary(f.job.name, 'manual', auxiliaryRun))
+      .rejects.toThrow('phase=auxiliary_lock_session');
+    expect(auxiliaryRun).toHaveBeenCalledTimes(1);
+    f.store.failUnlock = false;
+    await expect(f.runner.runNatural(f.job.name, new Date('2026-11-12T12:01:00.000Z')))
+      .rejects.toThrow('[CRON-RECOVERY][LANE_STOPPED]');
+    expect(f.run).not.toHaveBeenCalled();
+  });
+
   it('keeps durable success when the failure-safe audit writer unexpectedly rejects', async () => {
     const f = fixture();
     f.writeFireRow.mockRejectedValueOnce(new Error('audit unavailable'));
@@ -550,11 +570,13 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
   });
 
   it.each([
-    ['claimed', 'succeeded', 1],
-    ['running', 'indeterminate', 0],
+    ['claimed', 'lock contention observed', 1, 'succeeded', 1],
+    ['claimed', 'lock released before admission', 0, 'succeeded', 1],
+    ['running', 'lock contention observed', 1, 'indeterminate', 0],
+    ['running', 'lock released before admission', 0, 'indeterminate', 0],
   ] as const)(
-    'keeps a same-identity rolling-process contender pending for an unfinished %s row',
-    async (unfinishedStatus, expectedStatus, expectedRuns) => {
+    'recovers a same-identity rolling-process %s row when %s',
+    async (unfinishedStatus, _overlapShape, refusedAttempts, expectedStatus, expectedRuns) => {
       const store = new MemoryOccurrenceStore();
       const contender = fixture({ store });
       await contender.runner.prepareJob(contender.job.name);
@@ -567,7 +589,7 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
         attemptId: unfinishedStatus === 'running' ? UUID(904) : null,
         ownerInstanceId: UUID(905),
       }));
-      store.refuseLockAttempts = 1;
+      store.refuseLockAttempts = refusedAttempts;
 
       const result = await contender.runner.runNatural(contender.job.name, boundary);
 
@@ -577,6 +599,39 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
       if (unfinishedStatus === 'running') expect(contender.addAlert).toHaveBeenCalledTimes(1);
     },
   );
+});
+
+describe('B-CRON-MISSED-CATCHUP advisory lock session', () => {
+  it.each([
+    ['query rejection', new Error('advisory unlock unavailable'), undefined],
+    ['false result', undefined, { rows: [{ released: false }] }],
+  ] as const)('propagates advisory-unlock %s and destroys the affected pooled client', async (
+    _failureShape,
+    unlockError,
+    unlockResult,
+  ) => {
+    const client = {
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ acquired: true }] }),
+      release: vi.fn(),
+    };
+    if (unlockError) client.query.mockRejectedValueOnce(unlockError);
+    else client.query.mockResolvedValueOnce(unlockResult);
+    const connect = vi.spyOn(pool, 'connect').mockResolvedValue(client as never);
+    const store = new PgOccurrenceStore();
+
+    try {
+      const locked = store.withJobLock('formula_audit_cron', async () => 'callback-completed');
+      if (unlockError) await expect(locked).rejects.toBe(unlockError);
+      else await expect(locked).rejects.toThrow('advisory unlock returned false');
+      expect(client.query).toHaveBeenCalledTimes(2);
+      const releaseFailure = client.release.mock.calls[0]?.[0];
+      expect(releaseFailure).toBeInstanceOf(Error);
+      expect(releaseFailure?.message).toBe(unlockError?.message ?? 'advisory unlock returned false');
+    } finally {
+      connect.mockRestore();
+    }
+  });
 });
 
 describe('B-CRON-MISSED-CATCHUP source and registration fences', () => {
