@@ -39,6 +39,8 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   refuseLock = false;
   refuseLockAttempts = 0;
   lockAttempts = 0;
+  afterUnlockOnce?: (jobName: string) => Promise<void>;
+  beforeDecisionAlertPersistedOnce?: () => Promise<void>;
 
   private key(jobName: string, scheduledFor: Date): string {
     return `${jobName}:${scheduledFor.toISOString()}`;
@@ -62,13 +64,17 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
       return { acquired: false };
     }
     this.locks.add(jobName);
+    let value: T;
     try {
-      const value = await run(this);
+      value = await run(this);
       if (this.failUnlock) throw new Error('advisory unlock unavailable');
-      return { acquired: true, value };
     } finally {
       this.locks.delete(jobName);
     }
+    const afterUnlock = this.afterUnlockOnce;
+    this.afterUnlockOnce = undefined;
+    if (afterUnlock) await afterUnlock(jobName);
+    return { acquired: true, value };
   }
 
   async claim(input: ClaimOccurrenceInput): Promise<{ inserted: boolean; row: CronOccurrenceRow }> {
@@ -166,6 +172,9 @@ class MemoryOccurrenceStore implements OccurrenceStore, LockedOccurrenceStore {
   }
 
   async markDecisionAlertPersisted(id: string, persistedAt: Date): Promise<CronOccurrenceRow> {
+    const beforePersisted = this.beforeDecisionAlertPersistedOnce;
+    this.beforeDecisionAlertPersistedOnce = undefined;
+    if (beforePersisted) await beforePersisted();
     const row = this.byId(id);
     if (row.status !== 'indeterminate' || row.metadata.decision_alert_pending !== true) {
       throw new Error(`occurrence ${id} has no pending decision alert`);
@@ -684,6 +693,80 @@ describe('B-CRON-MISSED-CATCHUP occurrence runner', () => {
     }));
     expect(store.rows.get(`${replacement.job.name}:${boundary.toISOString()}`)?.metadata)
       .not.toHaveProperty('decision_alert_pending');
+  });
+
+  it('makes an overtaking lock holder persist the pending alert before scheduled or auxiliary work', async () => {
+    const store = new MemoryOccurrenceStore();
+    const creator = fixture({ store, now: '2026-11-12T12:01:10.000Z' });
+    const scheduledContender = fixture({ store, now: '2026-11-12T12:01:20.000Z' });
+    const auxiliaryContender = fixture({ store, now: '2026-11-12T12:01:20.000Z' });
+    await creator.runner.prepareJob(creator.job.name);
+    await scheduledContender.runner.prepareJob(scheduledContender.job.name);
+    await auxiliaryContender.runner.prepareJob(auxiliaryContender.job.name);
+    const prior = row({
+      id: UUID(916),
+      status: 'running',
+      startedAt: new Date('2026-11-12T11:59:00.000Z'),
+      ownerInstanceId: UUID(917),
+    });
+    store.seed(prior);
+
+    let releaseCreator!: () => void;
+    let announceWindow!: () => void;
+    const creatorGate = new Promise<void>((resolveCreator) => { releaseCreator = resolveCreator; });
+    const windowOpen = new Promise<void>((resolveWindow) => { announceWindow = resolveWindow; });
+    store.afterUnlockOnce = async () => {
+      announceWindow();
+      await creatorGate;
+    };
+    const creatorResult = creator.runner.runNatural(creator.job.name, prior.scheduledFor);
+    await windowOpen;
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_pending: true });
+
+    let releaseAlert!: () => void;
+    const alertGate = new Promise<void>((resolveAlert) => { releaseAlert = resolveAlert; });
+    scheduledContender.addAlert.mockImplementationOnce(async () => alertGate);
+    const nextBoundary = new Date('2026-11-12T12:01:00.000Z');
+    const scheduled = scheduledContender.runner.runNatural(scheduledContender.job.name, nextBoundary);
+    await vi.waitFor(() => expect(scheduledContender.addAlert).toHaveBeenCalledTimes(1));
+    const auxiliaryRun = vi.fn(async () => 'auxiliary-ok');
+    const auxiliary = auxiliaryContender.runner.runAuxiliary(auxiliaryContender.job.name, 'manual', auxiliaryRun);
+    await vi.waitFor(() => expect(store.lockAttempts).toBeGreaterThanOrEqual(8));
+
+    expect(scheduledContender.run).not.toHaveBeenCalled();
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_pending: true });
+
+    let releaseMarker!: () => void;
+    let announceMarkerBlocked!: () => void;
+    const markerGate = new Promise<void>((resolveMarker) => { releaseMarker = resolveMarker; });
+    const markerBlocked = new Promise<void>((resolveBlocked) => { announceMarkerBlocked = resolveBlocked; });
+    store.beforeDecisionAlertPersistedOnce = async () => {
+      announceMarkerBlocked();
+      await markerGate;
+    };
+    releaseAlert();
+    await markerBlocked;
+    expect(scheduledContender.run).not.toHaveBeenCalled();
+    expect(auxiliaryRun).not.toHaveBeenCalled();
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .toMatchObject({ decision_alert_pending: true });
+    releaseMarker();
+    await expect(Promise.all([scheduled, auxiliary])).resolves.toEqual([
+      expect.objectContaining({ status: 'succeeded' }),
+      'auxiliary-ok',
+    ]);
+    expect(scheduledContender.addAlert).toHaveBeenCalledWith(expect.objectContaining({
+      dedupe_key: `cron_recovery:indeterminate:${creator.job.name}:${prior.scheduledFor.toISOString()}`,
+      metadata: expect.objectContaining({ occurrence_id: prior.id, status: 'indeterminate' }),
+    }));
+    expect(store.rows.get(`${creator.job.name}:${prior.scheduledFor.toISOString()}`)?.metadata)
+      .not.toHaveProperty('decision_alert_pending');
+
+    releaseCreator();
+    await expect(creatorResult).resolves.toMatchObject({ status: 'indeterminate', occurrenceId: prior.id });
   });
 
   it('retains a different scheduled identity through advisory-lock contention', async () => {

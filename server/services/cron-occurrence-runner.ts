@@ -618,6 +618,7 @@ export class CronOccurrenceRunner {
       let locked: { acquired: false } | { acquired: true; value: CronOccurrenceResult };
       try {
         locked = await this.deps.store.withJobLock<CronOccurrenceResult>(item.jobName, async (store) => {
+        await this.persistPendingDecisionAlerts(store, item.jobName);
         const claim = await store.claim({
           jobName: item.jobName,
           scheduledFor: item.scheduledFor,
@@ -861,7 +862,8 @@ export class CronOccurrenceRunner {
       this.assertLaneRunning(item.jobName);
       let locked: { acquired: false } | { acquired: true; value: T };
       try {
-        locked = await this.deps.store.withJobLock(item.jobName, async () => {
+        locked = await this.deps.store.withJobLock(item.jobName, async (store) => {
+          await this.persistPendingDecisionAlerts(store, item.jobName);
           try {
             return await item.run();
           } catch (err) {
