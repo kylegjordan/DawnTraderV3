@@ -1,8 +1,8 @@
 # B-CRON-MISSED-CATCHUP — Step 11 claim-only reader repair
 
 **READY-AT (implementation object):**
-`faa5b4b98efbc47de6278939faa8077ad0bf0be7` on branch
-`migration/b-cron-missed-catchup-step3-codex`. The dispatch names the later
+`52f176e5fa7435b1c740acc8ff776395023faaac` on branch
+`migration/b-cron-missed-catchup-step3-r3-codex`. The dispatch names the later
 branch-tip commit that carries this review package; it changes documentation
 only and has this implementation object as its parent.
 
@@ -43,7 +43,7 @@ Coltrane approved the corrected Step-2 object at
 
 Date: 2026-11-12
 Owner: ANALYST Codex (CC-C stand-in)
-Status: Step 3 second repair complete after Coltrane sent back the first repair; return to Step 4 review
+Status: Step 3 third repair complete after the required fresh reader found a split-store provenance gap; return to Step 4 review
 Base runtime: `4e66ea904edf690e144035c959cbd335241f7651`
 
 ## Why completion stopped
@@ -64,6 +64,10 @@ was allowed to leave the draft stage.
    an honest terminal `no_open_alert` outcome rather than either a leaking marker
    or a window in which a stale read can mint afterward. Exact calendar-boundary
    alerts remain one-shot; interval-fallback keys remain reusable after resolve.
+   If alert resolution succeeds but the occurrence provenance write fails, the
+   retry now distinguishes an already-resolved alert from a key that never
+   existed. A contradictory nonterminal row after an empty resolve keeps the
+   durable retry carrier instead of recording a false terminal outcome.
 2. **The verifier could certify the wrong evidence.** It used the latest start
    time without requiring success, so an error or an older boundary starting
    late could make a missed boundary appear healthy. It now reads only the
@@ -81,8 +85,9 @@ was allowed to leave the draft stage.
 ## Verification at the repair boundary
 
 - Focused runner, alert-store, verifier and Formula Health suites: 4 files,
-  94 tests passed, including retry, natural-success cleanup, empty-resolve
-  termination, separate-runner lock ordering and fallback recurrence branches.
+  97 tests passed, including retry, natural-success cleanup, empty-resolve
+  termination, split-store provenance retry, contradictory-state refusal,
+  separate-runner lock ordering and fallback recurrence branches.
 - TypeScript baseline gate: 324 current known errors versus 324 baseline errors;
   no new or changed error.
 - New controls exercise temporary resolution failure, alert-mint ordering,
@@ -102,15 +107,17 @@ will be stated as a proof limit rather than represented as covered.
 
 `REVIEWER: claim-only · name the objects and alternate states consistent with the completion mechanism · HIT — durable stale-resolve retry absent; verifier used fired-at/error-compatible evidence; eligibility not rechecked at start; Q-D business clock regressed to scheduled boundary; staging race did not establish separate-process/mid-core-lock-loss behavior · re-derived yes`
 
+`REVIEWER: claim-only · name the objects and alternate states consistent with successful exact-alert cleanup · HIT — alert resolution could commit before the occurrence outcome write, and the retry would mislabel that history as no alert existing; persistent dependency failure correctly remains pending rather than falsely terminal · re-derived yes`
+
 The reader record identifies the challenge; every defect and repair above was
 independently re-derived from the code before implementation.
 
 ## Repair change-set census
 
 Across the repair range from the parent of
-`bcdd386385e2dc2eeb51e6ba7e0ad3f669a40242` through implementation object
-`faa5b4b98efbc47de6278939faa8077ad0bf0be7`, exactly nine tracked paths changed:
-one new repair record and eight modified paths; zero tracked paths were deleted.
+`21b23b4abaa84ef74f0f7381b93f52b0a092d1d6` through implementation object
+`52f176e5fa7435b1c740acc8ff776395023faaac`, exactly ten tracked paths changed:
+one new repair record and nine modified paths; zero tracked paths were deleted.
 `.claude/launch.json` remains an unrelated untracked file and is not in the
 review ref.
 
@@ -121,6 +128,7 @@ review ref.
 ### MODIFIED
 
 - `.claude/memory/MEMORY_CC_C.md` — repair workflow boundary only
+- `server/scripts/b-cron-missed-catchup-harness.ts`
 - `server/services/cron-occurrence-runner.ts`
 - `server/services/cron-fire-evidence-verifier.ts`
 - `server/services/system-alerts.ts`
@@ -164,10 +172,20 @@ lock:
 const resolved = await this.deps.resolveByKey(
   key, CRON_RECOVERY_ACTOR, evidence, 'engine',
 );
+let outcome;
+if (resolved.length > 0) {
+  outcome = 'resolved_open_alert';
+} else {
+  const alertState = this.deps.dedupeStateByKey(key);
+  if (alertState === 'nonterminal') continue; // keep the retry carrier
+  outcome = alertState === 'resolved'
+    ? 'already_resolved_alert'
+    : 'no_open_alert';
+}
 await store.markStaleResolvePersisted(
   row.id,
   this.now(),
-  resolved.length > 0 ? 'resolved_open_alert' : 'no_open_alert',
+  outcome,
 );
 ```
 
@@ -250,7 +268,8 @@ The occurrence ledger and fire audit still receive `scheduledFor`; Q-D uses
 
 1. Can any transient alert-store failure, marker-write failure or verifier/resolve
    ordering still leave an exact successful occurrence open or re-created now
-   that both sides use the same cross-process job lock?
+   that both sides use the same cross-process job lock, and does a split write
+   preserve whether an alert was resolved earlier or never existed?
 2. Is `one_shot` correctly limited to immutable scheduled-boundary identities,
    without changing ordinary recurring alert behavior?
 3. Does the successful-boundary union reject error rows and late starts while
