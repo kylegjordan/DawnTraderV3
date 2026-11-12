@@ -1,6 +1,6 @@
 # B-XSTOCK-SNAPSHOT-RETENTION — Completion Report
 
-**Status:** STEP 11 CANDIDATE — awaiting Coltrane confirmation
+**Status:** **CLOSED 2026-11-12** — Coltrane confirmed the exact Step-11 package ref `d121d7bdab5cf00c9b5d5b555bb9e6cc605aeb74` at 2026-11-12T01:06:44Z
 
 **Scope items left open:** **NONE within `#1194`.** All seven objectives are green. The separately registered KD-19, `#1250`, xStock-bar observation/tally, active-fill, snapshot-freshness (`#441`), shadow-censoring (`#1196`), and missed-cron (`#691`) work were neither created nor closed by this batch and remain under their existing owners and closing conditions.
 
@@ -110,14 +110,16 @@ The ledger's future-tense completion-report row is satisfied by this file. The r
 
 ## 7. Delivery reconciliation
 
-The Post-Audit Roadmap, the active Sprint-to-Live Plan and the Delivery Board were reconciled at the Step-11 candidate boundary: this batch has the agreed Stage-3 order-6 plan row and one board card in Governance; no roadmap row owns a different state. The card remains in Governance while Coltrane reviews this exact completion package, then moves to Complete only after his confirmation.
+The Post-Audit Roadmap, the active Sprint-to-Live Plan and the Delivery Board are reconciled at close: this batch has the agreed Stage-3 order-6 plan row, no roadmap row owns a different state, and the card is `Complete` / `Approved` / blocked on `Nothing`. The next sequenced plan row is `B-CRON-MISSED-CATCHUP`; separately named waits remain where they were.
 
 ## 8. Fresh-reader record
 
 `REVIEWER: claim-only · name the objects and alternative states that could leave this seven-objective batch not closable · HIT — captured-at counts did not distinguish inserts from UPSERT updates; the pre-registered live process-lock leg was absent from the retained close evidence; aggregate archive totals did not alone prove per-object equality; current policy needed a fresh five-row read; technical readiness was not workflow closure; and “no unplaced residual” was broader than the named objectives · re-derived yes`
 
-The report now says writes/updates rather than inserts. The root schedule's direct-command drift was corrected and read back, then the live aged-holder/crash/successor fixture passed. A fresh join across all 211 objects found zero per-object identity/count/checksum/selector/digest mismatches, and the fresh policy read returned the five exact current values. The report remains a candidate until its pushed ref, CI, issue close, board move and Coltrane confirmation exist; separately placed `#441`, `#1196`, `#691` and event/window waits are named rather than hidden inside an absence claim.
+The report now says writes/updates rather than inserts. The root schedule's direct-command drift was corrected and read back, then the live aged-holder/crash/successor fixture passed. A fresh join across all 211 objects found zero per-object identity/count/checksum/selector/digest mismatches, and the fresh policy read returned the five exact current values. The pushed ref, four-job CI, issue close, board move and Coltrane confirmation now exist; separately placed `#441`, `#1196`, `#691` and event/window waits remain named rather than hidden inside an absence claim.
 
 ## 9. Final reviewer confirmation
 
-Pending Coltrane review of the exact pushed Step-11 candidate ref. The batch is not closed and the Delivery Board does not move to Complete before that confirmation.
+At 2026-11-12T01:06:44Z, Coltrane **CONFIRMED** exact Step-11 package ref `d121d7bdab5cf00c9b5d5b555bb9e6cc605aeb74`. He independently reproduced the five policy values, all 100/100 fifteen-minute and 111/111 sixty-minute manifest/evidence joins with zero mismatches, the deployed repository/build identity, the corrected scheduled launcher, and the live aged-holder/crash/successor lock behavior. CI run `43130764991` passed TypeScript Check, Test Suite, Build and Docker Build at that exact ref.
+
+`#1194` is closed, the Delivery Board is `Complete` with `Blocked on = Nothing`, and the next sequenced batch is `B-CRON-MISSED-CATCHUP`. Every separately named event/window wait and residual remains open under its existing record.
