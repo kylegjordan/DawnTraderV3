@@ -31,7 +31,7 @@ import { db } from '../db.js';
 import { cronRegistry, type RegisteredCronJob } from './cron-registry.js';
 import { cronOccurrenceRunner } from './cron-occurrence-runner.js';
 import { addAlert } from './system-alerts.js';
-import { computePrevFire } from './cron-next-fire.js';
+import { computeNextFire, computePrevFire } from './cron-next-fire.js';
 
 const VERIFIER_INTERVAL_MS = 15 * 60 * 1000;  // 15 minutes
 const FIRE_GRACE_MULTIPLIER = 1.5;  // interval-fallback only: expected_by = lastFire + intervalSeconds × 1.5
@@ -77,7 +77,11 @@ type FireEvidence = {
  * Query exact success for each candidate scheduled boundary, plus the latest
  * successful boundary for interval-fallback diagnostics. The occurrence
  * ledger is included because its durable success is the truth when the
- * failure-safe audit write is unavailable.
+ * failure-safe audit write is unavailable. Pre-B-CRON-MISSED-CATCHUP audit
+ * rows stored callback start in scheduled_for and had no occurrence_id; for a
+ * candidate before this process boot, that legacy shape is mapped only within
+ * its own [candidate, next candidate) calendar partition. The strict upper
+ * bound prevents a later occurrence from certifying an earlier miss.
  *
  * RUNNING_ISSUES #167 fix (2026-05-31): previously used
  * `WHERE task_name = ANY(${jobNames}::text[])` which Drizzle's sql template
@@ -88,7 +92,12 @@ type FireEvidence = {
  * values (B-NEW-36 + B-NEW-49 + boot_state_reconciliation), perf negligible.
  */
 async function queryFireEvidence(
-  candidates: Array<{ name: string; scheduledFor: Date | null }>,
+  candidates: Array<{
+    name: string;
+    scheduledFor: Date | null;
+    nextScheduledFor: Date | null;
+    allowLegacyWindow: boolean;
+  }>,
 ): Promise<Map<string, FireEvidence> | null> {
   const result = new Map<string, FireEvidence>();
   for (const candidate of candidates) {
@@ -104,20 +113,35 @@ async function queryFireEvidence(
 
   try {
     const rows = await db.execute(sql`
-      WITH candidates(task_name, candidate_scheduled_for) AS (
+      WITH candidates(
+        task_name,
+        candidate_scheduled_for,
+        candidate_next_scheduled_for,
+        allow_legacy_window
+      ) AS (
         VALUES ${sql.join(
           candidates.map((candidate) => sql`(
             ${candidate.name}::text,
-            ${candidate.scheduledFor}::timestamptz
+            ${candidate.scheduledFor}::timestamptz,
+            ${candidate.nextScheduledFor}::timestamptz,
+            ${candidate.allowLegacyWindow}::boolean
           )`),
           sql`, `,
         )}
       ), successful_boundaries AS (
-          SELECT task_name, scheduled_for
+          SELECT task_name,
+                 scheduled_for,
+                 'audit'::text AS evidence_source,
+                 meta->>'occurrence_id' AS occurrence_id,
+                 meta->>'trigger_source' AS trigger_source
             FROM scheduled_tasks_audit
            WHERE status = 'success'
           UNION ALL
-          SELECT job_name AS task_name, scheduled_for
+          SELECT job_name AS task_name,
+                 scheduled_for,
+                 'occurrence'::text AS evidence_source,
+                 id::text AS occurrence_id,
+                 first_source AS trigger_source
             FROM scheduled_job_occurrences
            WHERE status = 'succeeded'
       )
@@ -125,12 +149,26 @@ async function queryFireEvidence(
              MAX(successful_boundaries.scheduled_for) AS last_scheduled_for,
              COALESCE(BOOL_OR(
                candidates.candidate_scheduled_for IS NOT NULL
-               AND successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+               AND (
+                 successful_boundaries.scheduled_for = candidates.candidate_scheduled_for
+                 OR (
+                   candidates.allow_legacy_window
+                   AND candidates.candidate_next_scheduled_for IS NOT NULL
+                   AND successful_boundaries.evidence_source = 'audit'
+                   AND successful_boundaries.occurrence_id IS NULL
+                   AND successful_boundaries.trigger_source = 'cron'
+                   AND successful_boundaries.scheduled_for >= candidates.candidate_scheduled_for
+                   AND successful_boundaries.scheduled_for < candidates.candidate_next_scheduled_for
+                 )
+               )
              ), false) AS candidate_succeeded
         FROM candidates
         LEFT JOIN successful_boundaries
           ON successful_boundaries.task_name = candidates.task_name
-       GROUP BY candidates.task_name, candidates.candidate_scheduled_for
+       GROUP BY candidates.task_name,
+                candidates.candidate_scheduled_for,
+                candidates.candidate_next_scheduled_for,
+                candidates.allow_legacy_window
     `);
     // Drizzle's execute returns { rows: T[] } for postgres-js / pg, but the
     // result shape varies; normalize both shapes.
@@ -156,6 +194,10 @@ async function queryFireEvidence(
   }
   return result;
 }
+
+// Real-Postgres integration seam: the SQL shape is the mechanism under test.
+// Production callers continue to use the private name above.
+export const _queryFireEvidenceForTest = queryFireEvidence;
 
 /**
  * Run the verifier across all registered cron jobs. Returns true if all
@@ -192,17 +234,29 @@ export async function runVerification(
     return { ok: true, stale: [] };
   }
 
-  const candidates = jobs.map((job) => ({
-    job,
-    matureOccurrence: computePrevFire(
+  const candidates = jobs.map((job) => {
+    const matureOccurrence = computePrevFire(
       job.expression,
       job.timezone,
       new Date(now - FIRE_LATENCY_GRACE_MS + 1),
-    ),
-  }));
-  const fireEvidence = await queryFireEvidence(candidates.map(({ job, matureOccurrence }) => ({
+    );
+    return {
+      job,
+      matureOccurrence,
+      nextOccurrence: matureOccurrence
+        ? computeNextFire(job.expression, job.timezone, matureOccurrence)
+        : null,
+    };
+  });
+  const fireEvidence = await queryFireEvidence(candidates.map(({ job, matureOccurrence, nextOccurrence }) => ({
     name: job.name,
     scheduledFor: matureOccurrence,
+    nextScheduledFor: nextOccurrence,
+    // Before B-CRON-MISSED-CATCHUP, all six wrappers stored callback start
+    // in scheduled_for and had no occurrence_id. Keep those pre-boot rows
+    // readable only inside their own [candidate, next-candidate) calendar
+    // partition. Current/durable rows still require exact identity.
+    allowLegacyWindow: matureOccurrence !== null && matureOccurrence.getTime() < processStartMs,
   })));
   if (fireEvidence === null) {
     // The history could not be read: judge nothing (no evidence is not evidence of a missed fire).
@@ -309,10 +363,17 @@ async function emitCadenceStaleIfStillMissing(
       if (!expectedOccurrence) {
         return 'healthy' as const;
       }
+      const nextExpectedOccurrence = computeNextFire(
+        job.expression,
+        job.timezone,
+        expectedOccurrence,
+      );
 
       const lockedRead = await queryFireEvidence([{
         name: job.name,
         scheduledFor: expectedOccurrence,
+        nextScheduledFor: nextExpectedOccurrence,
+        allowLegacyWindow: expectedOccurrence.getTime() < processStartMs,
       }]);
       if (lockedRead === null) {
         console.warn(`[CRON-FIRE-VERIFIER][LOCKED_RECHECK_SKIPPED] job=${job.name} history read failed`);

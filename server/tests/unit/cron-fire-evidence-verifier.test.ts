@@ -100,12 +100,26 @@ function makeJob(name: string, expression: string, intervalSeconds: number, time
 describe('B-NEW-51 cadence-aware cron-fire-evidence verifier', () => {
   it('uses successful scheduled boundaries from both completion stores, not fired_at or error rows', () => {
     const source = readFileSync(resolve('server/services/cron-fire-evidence-verifier.ts'), 'utf8');
-    expect(source).toMatch(/SELECT task_name, scheduled_for\s+FROM scheduled_tasks_audit\s+WHERE status = 'success'/);
-    expect(source).toMatch(/SELECT job_name AS task_name, scheduled_for\s+FROM scheduled_job_occurrences\s+WHERE status = 'succeeded'/);
+    expect(source).toMatch(/SELECT task_name,[\s\S]*?scheduled_for,[\s\S]*?FROM scheduled_tasks_audit\s+WHERE status = 'success'/);
+    expect(source).toMatch(/SELECT job_name AS task_name,[\s\S]*?scheduled_for,[\s\S]*?FROM scheduled_job_occurrences\s+WHERE status = 'succeeded'/);
     expect(source).toMatch(/MAX\(successful_boundaries\.scheduled_for\) AS last_scheduled_for/);
     expect(source).toMatch(/successful_boundaries\.scheduled_for = candidates\.candidate_scheduled_for/);
     expect(source).toMatch(/AS candidate_succeeded/);
     expect(source).not.toMatch(/SELECT task_name,\s*MAX\(fired_at\)/);
+  });
+
+  it('maps only pre-boot legacy cron rows inside the exact candidate calendar partition', () => {
+    const source = readFileSync(resolve('server/services/cron-fire-evidence-verifier.ts'), 'utf8');
+    expect(source).toMatch(/'audit'::text AS evidence_source/);
+    expect(source).toMatch(/meta->>'occurrence_id' AS occurrence_id/);
+    expect(source).toMatch(/meta->>'trigger_source' AS trigger_source/);
+    expect(source).toMatch(/successful_boundaries\.evidence_source = 'audit'/);
+    expect(source).toMatch(/successful_boundaries\.occurrence_id IS NULL/);
+    expect(source).toMatch(/successful_boundaries\.trigger_source = 'cron'/);
+    expect(source).toMatch(/successful_boundaries\.scheduled_for >= candidates\.candidate_scheduled_for/);
+    expect(source).toMatch(/successful_boundaries\.scheduled_for < candidates\.candidate_next_scheduled_for/);
+    expect(source).not.toMatch(/successful_boundaries\.scheduled_for <= candidates\.candidate_next_scheduled_for/);
+    expect(source.match(/allowLegacyWindow: [^\n]*processStartMs/g)).toHaveLength(2);
   });
 
   it('STALE: weekly job whose most-recent occurrence has no fire-evidence', async () => {
