@@ -195,14 +195,17 @@ export async function runVerification(
   for (const job of jobs) {
     const lastSuccessfulBoundary = lastSuccessfulBoundaries.get(job.name) ?? null;
 
-    // B-NEW-51: cadence-aware expected fire — the most recent scheduled
-    // occurrence STRICTLY before now, per the job's actual cron expression +
-    // timezone (cron-parser .prev(), the trusted introspection path). Replaces
-    // the old `lastFire + intervalSeconds × 1.5` model, which judged a weekly
-    // Friday job as "should have fired by Tuesday".
-    const prevOccurrence = computePrevFire(job.expression, job.timezone, new Date(now));
+    // Judge the newest boundary whose evidence grace has elapsed. Selecting
+    // the boundary immediately before `now` would make every cadence shorter
+    // than the grace period permanently unjudgeable because each pass would
+    // restart grace at a newer occurrence.
+    const matureOccurrence = computePrevFire(
+      job.expression,
+      job.timezone,
+      new Date(now - FIRE_LATENCY_GRACE_MS + 1),
+    );
 
-    if (prevOccurrence === null) {
+    if (matureOccurrence === null) {
       // Unparseable expression (registry requires a valid one, so this is a
       // belt-and-suspenders fallback). Retain the legacy interval×1.5 model so
       // we never go blind on a job we can't calendar-evaluate.
@@ -232,23 +235,13 @@ export async function runVerification(
       continue;
     }
 
-    const prevMs = prevOccurrence.getTime();
+    const matureMs = matureOccurrence.getTime();
 
-    // If the most recent scheduled occurrence is within the fire-latency grace
-    // of now, its evidence row may not be written yet — not stale.
-    if (now - prevMs < FIRE_LATENCY_GRACE_MS) {
-      console.log(
-        `[CRON-FIRE-VERIFIER] job=${job.name} prev_occurrence_within_grace ` +
-        `(${prevOccurrence.toISOString()}); skipping`,
-      );
-      continue;
-    }
-
-    // Stale iff there's no fire-evidence at/after the most recent scheduled
-    // occurrence (minus grace for write latency).
-    const staleThresholdMs = prevMs - FIRE_LATENCY_GRACE_MS;
+    // The mature boundary itself is the evidence floor. Subtracting grace from
+    // this boundary would let an older short-cadence success certify a newer
+    // missed occurrence.
     const isStale = lastSuccessfulBoundary === null
-      || lastSuccessfulBoundary.getTime() < staleThresholdMs;
+      || lastSuccessfulBoundary.getTime() < matureMs;
 
     if (isStale) {
       // The first read identifies a candidate. Re-read and mint while holding
@@ -262,7 +255,7 @@ export async function runVerification(
       console.log(
         `[CRON-FIRE-VERIFIER] job=${job.name} healthy ` +
         `last_successful_boundary=${lastSuccessfulBoundary?.toISOString()} ` +
-        `prev_occurrence=${prevOccurrence.toISOString()}`,
+        `mature_occurrence=${matureOccurrence.toISOString()}`,
       );
     }
   }
@@ -285,16 +278,19 @@ async function emitCadenceStaleIfStillMissing(
         return 'blind' as const;
       }
 
-      const expectedOccurrence = computePrevFire(job.expression, job.timezone, new Date(nowMs));
-      if (!expectedOccurrence || nowMs - expectedOccurrence.getTime() < FIRE_LATENCY_GRACE_MS) {
+      const expectedOccurrence = computePrevFire(
+        job.expression,
+        job.timezone,
+        new Date(nowMs - FIRE_LATENCY_GRACE_MS + 1),
+      );
+      if (!expectedOccurrence) {
         return 'healthy' as const;
       }
 
       const lastSuccessfulBoundary = lockedRead.get(job.name) ?? null;
-      const staleThresholdMs = expectedOccurrence.getTime() - FIRE_LATENCY_GRACE_MS;
       if (
         lastSuccessfulBoundary !== null
-        && lastSuccessfulBoundary.getTime() >= staleThresholdMs
+        && lastSuccessfulBoundary.getTime() >= expectedOccurrence.getTime()
       ) {
         console.log(
           `[CRON-FIRE-VERIFIER] job=${job.name} recovered_before_locked_recheck ` +
@@ -307,7 +303,7 @@ async function emitCadenceStaleIfStillMissing(
       console.warn(
         `[CRON-FIRE-VERIFIER] job=${job.name} STALE ` +
         `last_successful_boundary=${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'} ` +
-        `prev_occurrence=${expectedOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
+        `mature_occurrence=${expectedOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
       );
       await emitStaleAlert(
         job.name,
