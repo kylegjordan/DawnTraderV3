@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `5426253c8d178188fc6fc6581cf0cc7bbb4ffc0a` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
+**READY-AT (implementation object):** `1ba9fd36d4e1fafb3bdc3a64c246e40f88ed78be` on branch `migration/b-cron-missed-catchup-step3-codex` (push and exact-ref CI verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -34,7 +34,7 @@
 
 ## Change-set census
 
-From the implementation base (`54cfd329d60fc5988fff9631204681878c5530f9`) through READY-AT, exactly 24 tracked paths changed: 8 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only, one added path is this Step-4 review package, and the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review. Shared subsequently advanced through unrelated crew work; those commits are not part of this review object.
+From the rebased implementation base (`42323397a40ecac7490fb743ccd8c10de8fa3c06`) through READY-AT, exactly 24 tracked paths changed: 8 added, 16 modified, and 0 deleted. One modified path is the Step-3 memory boundary only, one added path is this Step-4 review package, and the implementation object is the other 22 paths. `git status --porcelain` also contains `.claude/launch.json` as an unrelated untracked file; it is not in READY-AT and is not part of this review. The mandatory pull rebased the prior 19 batch patches without a patch-content change (`git range-diff` marked every patch `=`); READY-AT then adds only the fresh-reader proof correction below. Unrelated shared-branch commits are outside this review object.
 
 ### NEW
 
@@ -505,6 +505,35 @@ if (result.status === 'indeterminate') {
 
 The two requested red-first replacement-runner arms cover the rolling foreign-owner path and the terminal-write-failure path separately. In each arm the first alert write is refused, the exact row retains its pending marker, the first runner's job lane stops, a claimed occurrence remains unstarted while replacement alert persistence is deliberately held open, and only after the exact alert persists and the marker clears does the replacement resume the claimed occurrence.
 
+### 4g. SEVENTH SENT-BACK CORRECTION — every lock holder clears carriers before work
+
+Coltrane's seventh substantive round at exact ref `5426253c8d178188fc6fc6581cf0cc7bbb4ffc0a` found an overtaking window between the creator's original job-lock release and its later lock reacquisition for pending-alert persistence. A scheduled or auxiliary contender that had already prepared could win that intervening lock and begin claim or business work without checking the carrier the creator had just installed.
+
+READY-AT closes the window at the shared lock boundary. Every acquired scheduled lock flushes every pending exact carrier before claim or core work, and every acquired auxiliary lock does the same before its callback. The creator still performs its own flush, but correctness no longer depends on it winning the next lock:
+
+```ts
+locked = await this.deps.store.withJobLock<CronOccurrenceResult>(item.jobName, async (store) => {
+  await this.persistPendingDecisionAlerts(store, item.jobName);
+  const claim = await store.claim({
+    jobName: item.jobName,
+    scheduledFor: item.scheduledFor,
+    // ...
+  });
+```
+
+```ts
+locked = await this.deps.store.withJobLock(item.jobName, async (store) => {
+  await this.persistPendingDecisionAlerts(store, item.jobName);
+  try {
+    return await item.run();
+  } catch (err) {
+    throw new AuxiliaryCallbackFailure(err);
+  }
+});
+```
+
+The red-first scheduled-overtaking proof prepares the creator, a scheduled contender and an auxiliary contender before the foreign-owner `running` row is seeded. It pauses the creator after its original unlock, lets the scheduled contender overtake, and first holds exact alert persistence and then marker clearing as separate gates. It proves the new scheduled identity is not even claimed while the prior carrier is pending, and neither core nor callback starts through either gate. A second independent red-first arm lets an auxiliary contender win the same gap and proves its own callback remains blocked through alert persistence and marker clearing. Removing the two pre-work flushes made both arms fail with zero alert-store calls; READY-AT passes both and proceeds only after the exact alert is durable and the pending marker is gone.
+
 ### 5. NEW — exact stale occurrence only, after durable success
 
 ```ts
@@ -547,9 +576,9 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 ## Verification already run for corrected READY-AT
 
-- GitHub CI run `43165132530` at READY-AT passed TypeScript Check, Test Suite, Build and Docker Build individually. Prior runs are not used to certify READY-AT.
+- GitHub CI run `43169385399` at READY-AT passed TypeScript Check, Test Suite, Build and Docker Build individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Corrected recovery, alert-store and Formula Health suites: 68/68 passed across the three named files.
+- Corrected recovery, alert-store and Formula Health suites: 70/70 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -569,12 +598,15 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 11. If startup reconciliation changes a prior-owner `running` row before advisory release fails, is its exact durable alert carrier already present while claimed work remains unable to start?
 12. If the alert store itself rejects after the durable transition, does the pending marker survive for deterministic replacement-startup retry, and can claimed work start before every marker clears?
 13. Do rolling-process takeover and terminal-write ambiguity now inherit that same durable carrier invariant, and does either path retain any best-effort alert route that can swallow failure and leave the lane running?
+14. Can any scheduled or auxiliary job-lock holder enter claim, core or callback work while any exact decision-alert carrier for that job remains pending, including a holder that overtakes the carrier creator between its original unlock and later flush attempt?
 
 ## One-pass fresh-reader record
 
 `REVIEWER: claim-only · mechanism claim covering the shared six-job lane, durable scheduled identity, and auxiliary non-identity · HIT: Formula Health's no-result on-read audit bypassed the lane, and the six-site test could miss a future schedule in a new file; both were re-derived at the exact ref and corrected in READY-AT · re-derived yes`
 
 `REVIEWER: claim-only · direct-acquisition recovery and advisory-release failure guarantees · HIT: a false advisory-release result was not inspected, so the session could be returned as healthy without releasing the lock; re-derived against the store and installed pool contract, then corrected with rejection/false-result proofs · re-derived yes`
+
+`REVIEWER: claim-only · every scheduled and auxiliary acquired lock drains pending exact carriers before work · HIT: current production ordering had no bypass, but the combined proof could pass without the auxiliary preflight and did not pin claim-before-carrier; re-derived against the exact callbacks, then corrected with an independent auxiliary-overtaker arm and a scheduled no-claim assertion · re-derived yes`
 
 ## Step-4 review history
 
@@ -585,4 +617,5 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 - Coltrane's fourth substantive round at implementation ref `455e93a26b12c69e5f1848e2cd308cb8e50129c8` returned one correction: a post-reconciliation advisory-release failure must not suppress the exact alert for a row already changed to `indeterminate`. READY-AT emits that carrier before release and keeps the release failure fatal; the requested red-first proof covers the durable row, exact alert and stopped lane together.
 - Coltrane's fifth substantive round at implementation ref `ddecdf22983eba8af679818d5cba139fa95bfe52` returned one correction: alert-store rejection must leave a durable carrier that replacement startup can rediscover, and claimed work must not resume first. READY-AT adds the pending/persisted marker lifecycle and the requested two-runner red-first proof.
 - Coltrane's sixth substantive round at implementation ref `3c78bd1a57d04b653ab4adf5f289e927f4d4cd0e` returned one correction: the pending carrier must be installed by every durable indeterminate transition, not only startup reconciliation, and both rolling takeover and terminal-write ambiguity must block claimed work through replacement retry. READY-AT centralizes the carrier in the transition and adds both requested red-first replacement-runner proofs.
+- Coltrane's seventh substantive round at implementation ref `5426253c8d178188fc6fc6581cf0cc7bbb4ffc0a` returned one correction: persistence could still be overtaken between the carrier creator's original unlock and its later flush-lock acquisition. READY-AT makes every scheduled and auxiliary acquired-lock callback drain the pending set before any claim or business work, with scheduled and auxiliary red-first overtaking arms.
 - Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
