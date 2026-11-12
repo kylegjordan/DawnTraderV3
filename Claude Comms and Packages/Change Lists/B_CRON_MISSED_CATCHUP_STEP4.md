@@ -1,6 +1,6 @@
 # B-CRON-MISSED-CATCHUP — Step 4 code-review package
 
-**READY-AT (implementation object):** `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
+**READY-AT (implementation object):** `455e93a26b12c69e5f1848e2cd308cb8e50129c8` on branch `migration/b-cron-missed-catchup-step3-codex` (push verified before corrected dispatch)
 
 **One gate:** review the Step-3 code diff against the approved scope and Step-2 plan. Return `APPROVED` or `SENT BACK` with one consolidated list. Deployment, runtime proof, governance and closeout are later gates.
 
@@ -360,7 +360,6 @@ The same review found that a rolling-process contender returned `duplicate` when
 if (
   !claim.inserted
   && claim.row.status === 'running'
-  && contendedUnfinishedIdentity
   && claim.row.ownerInstanceId !== this.ownerInstanceId
 ) {
   const abandoned = await store.markIndeterminate(
@@ -380,10 +379,58 @@ if (
 }
 
 const resumeClaimed = claim.row.status === 'claimed'
-  && (item.resumeClaimed || contendedUnfinishedIdentity);
+  && (item.resumeClaimed || claim.row.ownerInstanceId !== this.ownerInstanceId);
 ```
 
 The three requested red-first behavioral arms failed before the correction and now prove: an auxiliary business error leaves the lane usable; a same-identity `claimed` contender resumes after rolling-process overlap; and a same-identity `running` contender records `indeterminate`. A separate positive proof shows an actual auxiliary lock-session failure still stops the lane.
+
+### 4c. THIRD SENT-BACK CORRECTION — direct lock acquisition recovers prior work and release failure poisons the session
+
+Coltrane's third substantive round at exact ref `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` found two remaining gaps. First, prior-owner `claimed`/`running` recovery still depended on observing a refused lock attempt, so a replacement process that acquired the released lock immediately could strand the unfinished identity. Second, an advisory-unlock failure was logged and swallowed, returning an uncertain session to the pool while allowing the job lane to continue.
+
+READY-AT removes the contention-history dependency. A foreign-owner `claimed` row resumes, and a foreign-owner `running` row becomes exact `indeterminate`, whether the replacement process first waited or acquired the lock immediately:
+
+```ts
+if (
+  !claim.inserted
+  && claim.row.status === 'running'
+  && claim.row.ownerInstanceId !== this.ownerInstanceId
+) {
+  const abandoned = await store.markIndeterminate(
+    claim.row.id,
+    decisionAt,
+    'prior_process_died_after_start',
+    { reconciled_by_owner_instance_id: this.ownerInstanceId },
+  );
+  return { jobName: item.jobName, scheduledFor: item.scheduledFor,
+    status: 'indeterminate' as const, occurrenceId: abandoned.id,
+    completedAt: abandoned.completedAt ?? decisionAt,
+    reason: abandoned.reason ?? 'prior_process_died_after_start' };
+}
+
+const resumeClaimed = claim.row.status === 'claimed'
+  && (item.resumeClaimed || claim.row.ownerInstanceId !== this.ownerInstanceId);
+```
+
+Advisory release now requires both a successful query and a true release result. A rejection or false result destroys the affected pooled client, propagates the failure, and latches the job lane stopped:
+
+```ts
+const unlock = await client.query<{ released: boolean }>(
+  'SELECT pg_advisory_unlock(hashtextextended($1, 0)) AS released',
+  [lockKey],
+);
+if (unlock.rows[0]?.released !== true) {
+  throw new Error('advisory unlock returned false');
+}
+// ... catch into releaseFailure ...
+if (releaseFailure) {
+  client.release(releaseFailure);
+  throw releaseFailure;
+}
+client.release();
+```
+
+The corrected matrix proves both `claimed` and `running` with a refused attempt and with immediate first-attempt acquisition. Direct store tests prove both release-query rejection and a false release result propagate and destroy/quarantine the client; a runner-level arm proves that after auxiliary work completes and release fails, later scheduled core work cannot execute.
 
 ### 5. NEW — exact stale occurrence only, after durable success
 
@@ -427,9 +474,9 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 
 ## Verification already run for corrected READY-AT
 
-- GitHub CI run `43157579095` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
+- GitHub CI run `43159627726` at corrected exact ref: TypeScript Check, Test Suite, Build and Docker Build all passed individually. Prior runs are not used to certify READY-AT.
 - TypeScript baseline: 324 current / 324 baseline across 43 files, no regression.
-- Corrected recovery, alert-store and Formula Health suites: 59/59 passed across the three named files.
+- Corrected recovery, alert-store and Formula Health suites: 64/64 passed across the three named files.
 - Formula Health source-contract suite after its intentional runner update: 21/21 passed.
 - Production build passed; only the repository's existing CSS, chunk-size and duplicate-member warnings appeared.
 - Whitespace check passed with the repository's CRLF-aware setting.
@@ -445,14 +492,18 @@ The pre-review branch CI passes caught two packaging/runtime-startup omissions b
 7. Does a terminal-write ambiguity remain visible and non-retryable even if the subsequent indeterminate write also fails?
 8. Is the exact-ref harness sufficiently side-effect-free and strong enough to close Step 7 without altering the host clock or waiting for a natural miss?
 9. Does the corrected dormant-arm/preparation gate cover every scheduled and auxiliary caller, and can any rolling-process contention still return while the same identity is unfinished or before persisting a decision for a different identity?
+10. Does every advisory-release failure shape (query rejection or false release result) destroy the affected pooled client, propagate out of the lock boundary, and stop the job lane after work may already have completed?
 
 ## One-pass fresh-reader record
 
 `REVIEWER: claim-only · mechanism claim covering the shared six-job lane, durable scheduled identity, and auxiliary non-identity · HIT: Formula Health's no-result on-read audit bypassed the lane, and the six-site test could miss a future schedule in a new file; both were re-derived at the exact ref and corrected in READY-AT · re-derived yes`
+
+`REVIEWER: claim-only · direct-acquisition recovery and advisory-release failure guarantees · HIT: a false advisory-release result was not inspected, so the session could be returned as healthy without releasing the lock; re-derived against the store and installed pool contract, then corrected with rejection/false-result proofs · re-derived yes`
 
 ## Step-4 review history
 
 - Coltrane's first invocation returned `SENT BACK` ungraded because the exact objects were not yet in the governed review mirror. The unchanged object was then exposed on `review/b-cron-missed-catchup-step4-codex`.
 - Coltrane's substantive round at implementation ref `0c82f89efef435edaded754b8a7898dbef0762ee` returned three corrections: dormant schedules must not start before reconciliation; reconciliation contention must retry rather than disappear; and a different scheduled identity must remain pending through advisory-lock contention until it can persist a decision. All three are corrected in READY-AT with the three requested red-first proofs.
 - Coltrane's second substantive round at implementation ref `13fecfc11a35ea4f128815aa6a54bacae8d6edee` returned two corrections: an ordinary auxiliary callback failure must not stop the recovery lane, and a same-identity rolling-process contender must remain pending while the row is `claimed` or `running`. Both are corrected in READY-AT with the three requested red-first arms and a separate real lock-session failure arm.
+- Coltrane's third substantive round at implementation ref `c1aa8ab6afe1aae87050e7362e45897cc5c0562b` returned two corrections: unfinished prior-owner identity recovery must not depend on first observing contention, and advisory-unlock failure must propagate, destroy the uncertain pooled client and stop the lane. Both are corrected in READY-AT; the independent reader additionally found and closed the non-throwing false-release arm before redispatch.
 - Coltrane could not write the private Delivery Board because his review environment reproduced the known Projects-access gap (HTTP 404). The owner set the card to `Implementation / SENT BACK TO OWNER / Blocked on Langston` and will request the final Review-field write again with the corrected object.
