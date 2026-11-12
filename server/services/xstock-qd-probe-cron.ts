@@ -83,7 +83,11 @@ export async function registerXstockQdProbeCron(): Promise<void> {
     recovery: {
       policyKey: JOB_NAME,
       run: async (context) => {
-        const summary: QdProbeFireSummary = await runQdProbeOnce(context.scheduledFor, config);
+        // Q-D reads current snapshots. Use the actual start clock for market
+        // state, freshness and grid bucketing; scheduledFor remains the durable
+        // occurrence/audit identity. The missed policy guarantees an admitted
+        // catch-up still starts before the next Q-D boundary.
+        const summary: QdProbeFireSummary = await runQdProbeOnce(context.firedAt, config);
         return {
           meta: {
             market_open: summary.marketOpen,

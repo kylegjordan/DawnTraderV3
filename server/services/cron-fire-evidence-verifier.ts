@@ -11,10 +11,10 @@
  * Mechanism:
  *   1. Every 15 minutes via setInterval (NOT node-cron — independent of the
  *      mechanism being monitored, per scope §1.4 + §2.4 invariant).
- *   2. For each registered cron job, query MAX(fired_at) from
- *      scheduled_tasks_audit WHERE task_name = job.name.
- *   3. Compute expected_by = lastFire + intervalSeconds × 1.5 (grace window).
- *   4. If NOW > expected_by → write system-alert (severity=warning,
+ *   2. For each registered cron job, query the latest successful scheduled
+ *      boundary across the audit stream and durable occurrence ledger.
+ *   3. Compare it with the job's cadence-aware previous calendar occurrence.
+ *   4. If that occurrence has no successful boundary → write system-alert (severity=warning,
  *      category=breakage).
  *
  * Boot-grace handling: skip a job if (cronRegistry.registeredAt + intervalSeconds)
@@ -68,7 +68,9 @@ export function _setProcessStartForTest(ms: number): void {
 }
 
 /**
- * Query last fire-row from scheduled_tasks_audit for each registered job.
+ * Query the latest successfully completed scheduled boundary for each job.
+ * The occurrence ledger is included because its durable success is the truth
+ * when the failure-safe audit write is unavailable.
  * Returns one row per job name. Job names with no fire-row return null.
  *
  * RUNNING_ISSUES #167 fix (2026-05-31): previously used
@@ -90,9 +92,17 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
 
   try {
     const rows = await db.execute(sql`
-      SELECT task_name, MAX(fired_at) AS last_fired_at
-      FROM scheduled_tasks_audit
-      GROUP BY task_name
+      SELECT task_name, MAX(scheduled_for) AS last_scheduled_for
+        FROM (
+          SELECT task_name, scheduled_for
+            FROM scheduled_tasks_audit
+           WHERE status = 'success'
+          UNION ALL
+          SELECT job_name AS task_name, scheduled_for
+            FROM scheduled_job_occurrences
+           WHERE status = 'succeeded'
+        ) successful_boundaries
+       GROUP BY task_name
     `);
     // Drizzle's execute returns { rows: T[] } for postgres-js / pg, but the
     // result shape varies; normalize both shapes.
@@ -100,10 +110,10 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
     for (const row of list) {
       if (
         row.task_name &&
-        row.last_fired_at &&
+        row.last_scheduled_for &&
         wantedNames.has(row.task_name)
       ) {
-        result.set(row.task_name, new Date(row.last_fired_at));
+        result.set(row.task_name, new Date(row.last_scheduled_for));
       }
     }
   } catch (err) {
@@ -147,8 +157,8 @@ export async function runVerification(
     return { ok: true, stale: [] };
   }
 
-  const lastFires = await queryLastFires(jobs.map((j) => j.name));
-  if (lastFires === null) {
+  const lastSuccessfulBoundaries = await queryLastFires(jobs.map((j) => j.name));
+  if (lastSuccessfulBoundaries === null) {
     // The history could not be read: judge nothing (no evidence is not evidence of a missed fire).
     consecutiveSkips += 1;
     totalSkips += 1;
@@ -176,7 +186,7 @@ export async function runVerification(
   firstSkipAt = null;
 
   for (const job of jobs) {
-    const lastFire = lastFires.get(job.name) ?? null;
+    const lastSuccessfulBoundary = lastSuccessfulBoundaries.get(job.name) ?? null;
 
     // B-NEW-51: cadence-aware expected fire — the most recent scheduled
     // occurrence STRICTLY before now, per the job's actual cron expression +
@@ -190,21 +200,21 @@ export async function runVerification(
       // belt-and-suspenders fallback). Retain the legacy interval×1.5 model so
       // we never go blind on a job we can't calendar-evaluate.
       const graceWindowMs = job.intervalSeconds * 1000 * FIRE_GRACE_MULTIPLIER;
-      if (lastFire === null) {
+      if (lastSuccessfulBoundary === null) {
         stale.push(job.name);
         await emitStaleAlert(
           job.name, null, new Date(now), 'no_fires_ever_interval_fallback',
           `cron_stale:${job.name}:no_prev_parse`,
         );
-      } else if (now > lastFire.getTime() + graceWindowMs) {
+      } else if (now > lastSuccessfulBoundary.getTime() + graceWindowMs) {
         stale.push(job.name);
-        const expectedBy = new Date(lastFire.getTime() + graceWindowMs);
+        const expectedBy = new Date(lastSuccessfulBoundary.getTime() + graceWindowMs);
         console.warn(
           `[CRON-FIRE-VERIFIER] job=${job.name} STALE (interval-fallback) ` +
-          `last_fire=${lastFire.toISOString()} expected_by=${expectedBy.toISOString()}`,
+          `last_successful_boundary=${lastSuccessfulBoundary.toISOString()} expected_by=${expectedBy.toISOString()}`,
         );
         await emitStaleAlert(
-          job.name, lastFire, expectedBy, 'stale_fire_evidence_interval_fallback',
+          job.name, lastSuccessfulBoundary, expectedBy, 'stale_fire_evidence_interval_fallback',
           `cron_stale:${job.name}:${expectedBy.toISOString()}`,
         );
       } else {
@@ -228,23 +238,26 @@ export async function runVerification(
     // Stale iff there's no fire-evidence at/after the most recent scheduled
     // occurrence (minus grace for write latency).
     const staleThresholdMs = prevMs - FIRE_LATENCY_GRACE_MS;
-    const isStale = lastFire === null || lastFire.getTime() < staleThresholdMs;
+    const isStale = lastSuccessfulBoundary === null
+      || lastSuccessfulBoundary.getTime() < staleThresholdMs;
 
     if (isStale) {
       stale.push(job.name);
       const dedupeKey = `cron_stale:${job.name}:${prevOccurrence.toISOString()}`;
       console.warn(
-        `[CRON-FIRE-VERIFIER] job=${job.name} STALE last_fire=${lastFire?.toISOString() ?? 'NEVER'} ` +
+        `[CRON-FIRE-VERIFIER] job=${job.name} STALE ` +
+        `last_successful_boundary=${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'} ` +
         `prev_occurrence=${prevOccurrence.toISOString()} dedupe_key=${dedupeKey}`,
       );
       await emitStaleAlert(
-        job.name, lastFire, prevOccurrence,
-        lastFire === null ? 'no_fires_ever' : 'stale_fire_evidence',
+        job.name, lastSuccessfulBoundary, prevOccurrence,
+        lastSuccessfulBoundary === null ? 'no_fires_ever' : 'stale_fire_evidence',
         dedupeKey,
       );
     } else {
       console.log(
-        `[CRON-FIRE-VERIFIER] job=${job.name} healthy last_fire=${lastFire?.toISOString()} ` +
+        `[CRON-FIRE-VERIFIER] job=${job.name} healthy ` +
+        `last_successful_boundary=${lastSuccessfulBoundary?.toISOString()} ` +
         `prev_occurrence=${prevOccurrence.toISOString()}`,
       );
     }
@@ -255,7 +268,7 @@ export async function runVerification(
 
 async function emitStaleAlert(
   jobName: string,
-  lastFire: Date | null,
+  lastSuccessfulBoundary: Date | null,
   /** The most recent expected occurrence (cadence-aware) OR, for the
    * interval-fallback path, the computed expected-by time. */
   expectedOccurrence: Date,
@@ -270,25 +283,26 @@ async function emitStaleAlert(
       category: 'breakage',
       severity: 'warning',
       dedupe_key: dedupeKey,
+      one_shot: true,
       title: `B-NEW-49 cron schedule "${jobName}" missed its scheduled fire (reason=${reason})`,
       body:
-        `The cron-fire-evidence verifier found NO fire-evidence row in scheduled_tasks_audit ` +
-        `at or after this schedule's most recent expected occurrence.\n` +
+        `The cron-fire-evidence verifier found NO successful completion boundary in ` +
+        `scheduled_tasks_audit or scheduled_job_occurrences at or after this schedule's ` +
+        `most recent expected occurrence.\n` +
         `Schedule: "${jobName}". Most recent expected occurrence: ${expectedOccurrence.toISOString()}. ` +
-        `Last recorded fire: ${lastFire?.toISOString() ?? 'NEVER'}.\n\n` +
+        `Last successful boundary: ${lastSuccessfulBoundary?.toISOString() ?? 'NEVER'}.\n\n` +
         `B-NEW-51: this check is now CADENCE-AWARE (compares against the schedule's actual calendar ` +
         `occurrence via cron-parser, not a fixed interval) and DE-DUPLICATED (one alert per missed ` +
         `occurrence, not one per 15-min cycle). NOTE: a process restart or a later natural fire does NOT ` +
         `erase this missed occurrence. Only successful recovery of this exact scheduled occurrence clears ` +
         `the alert; a skipped, failed or indeterminate recovery remains open. See SIM §9.10.c.\n\n` +
-        `Investigate: SELECT * FROM scheduled_tasks_audit WHERE task_name = '${jobName}' ` +
-        `ORDER BY fired_at DESC LIMIT 5;`,
+        `Investigate both completed audit rows and scheduled_job_occurrences for '${jobName}'.`,
       metadata: {
         batch: 'B-NEW-49',
         kind: 'fire_evidence_verifier',
         job_name: jobName,
         reason,
-        last_fire_iso: lastFire?.toISOString() ?? null,
+        last_successful_boundary_iso: lastSuccessfulBoundary?.toISOString() ?? null,
         expected_occurrence_iso: expectedOccurrence.toISOString(),
         dedupe_key: dedupeKey,
       },
