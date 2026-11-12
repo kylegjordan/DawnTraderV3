@@ -137,10 +137,16 @@ async function queryLastFires(jobNames: string[]): Promise<Map<string, Date | nu
  */
 export async function runVerification(
   nowMs: number = Date.now(),
-): Promise<{ ok: boolean; stale: string[]; skipped?: 'query_fail' }> {
+): Promise<{
+  ok: boolean;
+  stale: string[];
+  skipped?: 'query_fail' | 'locked_recheck_fail';
+  blind?: string[];
+}> {
   const jobs = cronRegistry.getAll().filter((j) => j.enabled);
   const now = nowMs;
   const stale: string[] = [];
+  const blind: string[] = [];
 
   if (jobs.length === 0) {
     console.log('[CRON-FIRE-VERIFIER] No enabled jobs registered; skipping run');
@@ -249,7 +255,9 @@ export async function runVerification(
       // the same cross-process job lock used by natural and catch-up runs. This
       // closes the old gap where a successful core could resolve an absent
       // alert, release its lock, and then be paged by an already-stale read.
-      if (await emitCadenceStaleIfStillMissing(job, now)) stale.push(job.name);
+      const outcome = await emitCadenceStaleIfStillMissing(job, now);
+      if (outcome === 'stale') stale.push(job.name);
+      else if (outcome === 'blind') blind.push(job.name);
     } else {
       console.log(
         `[CRON-FIRE-VERIFIER] job=${job.name} healthy ` +
@@ -259,24 +267,27 @@ export async function runVerification(
     }
   }
 
+  if (blind.length > 0) {
+    return { ok: false, stale, skipped: 'locked_recheck_fail', blind };
+  }
   return { ok: stale.length === 0, stale };
 }
 
 async function emitCadenceStaleIfStillMissing(
   job: RegisteredCronJob,
   nowMs: number,
-): Promise<boolean> {
+): Promise<'stale' | 'healthy' | 'blind'> {
   try {
-    return await cronOccurrenceRunner.runAuxiliary(job.name, 'on-read', async () => {
+    return await cronOccurrenceRunner.runVerifierLocked(job.name, async () => {
       const lockedRead = await queryLastFires([job.name]);
       if (lockedRead === null) {
         console.warn(`[CRON-FIRE-VERIFIER][LOCKED_RECHECK_SKIPPED] job=${job.name} history read failed`);
-        return false;
+        return 'blind' as const;
       }
 
       const expectedOccurrence = computePrevFire(job.expression, job.timezone, new Date(nowMs));
       if (!expectedOccurrence || nowMs - expectedOccurrence.getTime() < FIRE_LATENCY_GRACE_MS) {
-        return false;
+        return 'healthy' as const;
       }
 
       const lastSuccessfulBoundary = lockedRead.get(job.name) ?? null;
@@ -289,7 +300,7 @@ async function emitCadenceStaleIfStillMissing(
           `[CRON-FIRE-VERIFIER] job=${job.name} recovered_before_locked_recheck ` +
           `last_successful_boundary=${lastSuccessfulBoundary.toISOString()}`,
         );
-        return false;
+        return 'healthy' as const;
       }
 
       const dedupeKey = `cron_stale:${job.name}:${expectedOccurrence.toISOString()}`;
@@ -306,14 +317,14 @@ async function emitCadenceStaleIfStillMissing(
         dedupeKey,
         true,
       );
-      return true;
+      return 'stale' as const;
     });
   } catch (err) {
     console.error(
       `[CRON-FIRE-VERIFIER][LOCKED_RECHECK_FAIL] job=${job.name}: `
       + (err instanceof Error ? err.message : err),
     );
-    return false;
+    return 'blind';
   }
 }
 
